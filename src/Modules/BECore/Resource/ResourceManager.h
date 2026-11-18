@@ -12,7 +12,6 @@
 #include <BECore/Resource/IResourceLoader.h>
 #include <BECore/Resource/ResourceCache.h>
 #include <BECore/Resource/ResourceHandle.h>
-#include <BECore/Resource/SerializedResource.h>
 #include <BECore/Resource/XmlResource.h>
 #include <BECore/Types/Types.h>
 #include <TaskSystem/Awaitables.h>
@@ -44,9 +43,12 @@ namespace BECore {
          *
          * A cached resource of another type than T is loaded again and replaces the cached one.
          * The handle is empty when no loader accepts the path, the load fails or the result is not a T.
+         * The path is copied before the call returns: the task starts later, when the caller's string may be gone.
          */
         template <typename T>
-        requires std::derived_from<T, IResource> Task<ResourceHandle<T>> LoadAsync(StringView path);
+        requires std::derived_from<T, IResource> Task<ResourceHandle<T>> LoadAsync(StringView path) {
+            return LoadOwnedPathAsync<T>(String(path));
+        }
 
         /** @brief The blocking form of LoadAsync, with the same cache and failure rules. */
         template <typename T>
@@ -55,10 +57,12 @@ namespace BECore {
         /**
          * @brief Deserializes T from a file opened with OpenDeserializer() (the extension picks XML or binary).
          *
-         * Not cached. A default-constructed T when the file does not open.
+         * Not cached. A default-constructed T when the file does not open. The path is copied before the call returns.
          */
         template <HasReflection T>
-        Task<T> LoadSerializedAsync(StringView path);
+        Task<T> LoadSerializedAsync(StringView path) {
+            return LoadSerializedOwnedPathAsync<T>(String(path));
+        }
 
         /** @brief The blocking form of LoadSerializedAsync. */
         template <HasReflection T>
@@ -74,9 +78,11 @@ namespace BECore {
         template <HasReflection T>
         Optional<T> LoadSerializedPart(StringView path, AssetPurpose part);
 
-        /// LoadSerializedPart on a background thread (the path is copied)
+        /// LoadSerializedPart on a background thread; the path is copied before the call returns
         template <HasReflection T>
-        Task<Optional<T>> LoadSerializedPartAsync(StringView path, AssetPurpose part);
+        Task<Optional<T>> LoadSerializedPartAsync(StringView path, AssetPurpose part) {
+            return LoadSerializedPartOwnedPathAsync<T>(String(path), part);
+        }
 
         /** @brief Loaders are asked in registration order; a null loader is refused. */
         void RegisterLoader(IntrusivePtr<IResourceLoader> loader);
@@ -94,6 +100,17 @@ namespace BECore {
         const ResourceCache& GetCache() const;
 
     private:
+        // A coroutine's body runs only at its first resume, so these take the path by value and the public calls, which are
+        // not coroutines, make the copy while the caller's string is still alive.
+        template <typename T>
+        requires std::derived_from<T, IResource> Task<ResourceHandle<T>> LoadOwnedPathAsync(String path);
+
+        template <HasReflection T>
+        Task<T> LoadSerializedOwnedPathAsync(String path);
+
+        template <HasReflection T>
+        Task<Optional<T>> LoadSerializedPartOwnedPathAsync(String path, AssetPurpose part);
+
         IResourceLoader* FindLoader(StringView extension) const;
 
         /**
@@ -111,7 +128,7 @@ namespace BECore {
     };
 
     template <typename T>
-    requires std::derived_from<T, IResource> Task<ResourceHandle<T>> ResourceManager::LoadAsync(StringView path) {
+    requires std::derived_from<T, IResource> Task<ResourceHandle<T>> ResourceManager::LoadOwnedPathAsync(String path) {
         PoolString pathKey = PoolString::Intern(path);
 
         if (auto cached = _cache.Get(pathKey)) {
@@ -177,7 +194,7 @@ namespace BECore {
     }
 
     template <HasReflection T>
-    Task<T> ResourceManager::LoadSerializedAsync(StringView path) {
+    Task<T> ResourceManager::LoadSerializedOwnedPathAsync(String path) {
         co_await SwitchToBackground(TaskPriority::Normal, BE_TASK_LABEL("Load serialized resource"));
 
         auto opened = OpenDeserializer(path);
@@ -239,11 +256,9 @@ namespace BECore {
     }
 
     template <HasReflection T>
-    Task<Optional<T>> ResourceManager::LoadSerializedPartAsync(StringView path, AssetPurpose part) {
-        // The caller's view may be gone by the time the task resumes on the background thread
-        const String ownedPath(path);
+    Task<Optional<T>> ResourceManager::LoadSerializedPartOwnedPathAsync(String path, AssetPurpose part) {
         co_await SwitchToBackground(TaskPriority::Normal, BE_TASK_LABEL("Load serialized part"));
-        co_return ReadPartObject<T>(ownedPath, part);
+        co_return ReadPartObject<T>(path, part);
     }
 
     template <HasReflection T>

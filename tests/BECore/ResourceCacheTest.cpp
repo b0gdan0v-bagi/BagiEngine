@@ -1,8 +1,11 @@
 #include <BECore/Resource/IResource.h>
 #include <BECore/Resource/ResourceCache.h>
 #include <gtest/gtest.h>
+#include <thread>
 
 namespace BECore::Tests {
+
+    static_assert(std::derived_from<IResource, RefCountedAtomic>);
 
     namespace {
 
@@ -28,6 +31,32 @@ namespace BECore::Tests {
         };
 
     }  // namespace
+
+    TEST(ResourceCacheTest, ConcurrentReadersKeepTheReferenceCountExact) {
+        constexpr int kThreads = 8;
+        constexpr int kCopiesPerThread = 20000;
+
+        ResourceCache cache;
+        const auto path = "cache_test/shared.png"_intern;
+        cache.Put(path, New<FakeResource>(path));
+        const IntrusivePtr<IResource> held = cache.Get(path);
+        const int32_t countBefore = held.GetRefCount();
+
+        Vector<std::thread> readers;
+        readers.reserve(kThreads);
+        for (int thread = 0; thread < kThreads; ++thread) {
+            readers.emplace_back([&cache, path] {
+                for (int copy = 0; copy < kCopiesPerThread; ++copy) {
+                    const IntrusivePtr<IResource> reader = cache.Get(path);
+                }
+            });
+        }
+        for (std::thread& reader : readers) {
+            reader.join();
+        }
+
+        EXPECT_EQ(held.GetRefCount(), countBefore);
+    }
 
     TEST(ResourceCacheTest, RemoveDropsOnePathAndKeepsTheOthers) {
         ResourceCache cache;

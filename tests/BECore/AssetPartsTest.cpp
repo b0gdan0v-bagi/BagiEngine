@@ -230,6 +230,31 @@ namespace BECore::Tests {
         EXPECT_FALSE(Load<PartEditorProbe>("gem.asset.bin", AssetPurpose::Editor).has_value());
     }
 
+    TEST_F(AssetPartsTest, TheAsyncCallsReadThePathAsItWasAtTheCall) {
+        WriteFile("gem.asset.xml", kWholeXml);
+        WriteFile("probe.xml", R"(<root><PartSimProbe value="1"/></root>)");
+        auto& resources = CoreManager::GetResourceManager();
+
+        String partPath = VirtualPath("gem.asset.xml");
+        auto partTask = resources.LoadSerializedPartAsync<PartSimProbe>(partPath, AssetPurpose::Sim);
+        partPath.assign(partPath.size(), 'x');
+
+        String wholePath = VirtualPath("probe.xml");
+        auto wholeTask = resources.LoadSerializedAsync<PartSimProbe>(wholePath);
+        wholePath.assign(wholePath.size(), 'x');
+
+        auto partHandle = CoreManager::GetTaskManager().Run(std::move(partTask));
+        auto wholeHandle = CoreManager::GetTaskManager().Run(std::move(wholeTask));
+        auto part = partHandle->GetResult();
+        auto whole = wholeHandle->GetResult();
+
+        ASSERT_TRUE(part.has_value());
+        ASSERT_TRUE(part->has_value());
+        EXPECT_EQ((*part)->value, kSimValue);
+        ASSERT_TRUE(whole.has_value());
+        EXPECT_EQ(whole->value, kSimValue);
+    }
+
     TEST_F(AssetPartsTest, TheAsyncVersionLoadsTheSamePart) {
         WriteFile("gem.asset.xml", kWholeXml);
 

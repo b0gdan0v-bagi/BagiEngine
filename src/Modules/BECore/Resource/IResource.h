@@ -19,9 +19,10 @@ namespace BECore {
     /**
      * @brief Base of every resource ResourceManager caches (held by IntrusivePtr).
      *
-     * A resource is immutable after loading, so concurrent reads are safe.
+     * A resource is immutable after loading, so concurrent reads are safe. Its count is atomic because loader threads
+     * and the main thread copy the same pointer out of the cache at once.
      */
-    class IResource : public RefCounted {
+    class IResource : public RefCountedAtomic {
         BE_CLASS(IResource, FACTORY_BASE)
     public:
         virtual ~IResource() = default;
