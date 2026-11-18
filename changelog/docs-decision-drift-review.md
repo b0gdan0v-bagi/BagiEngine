@@ -1,6 +1,6 @@
 # Docs drift from the owner's decisions: no review finds statements that later decisions in the todo store replaced
 
-- Version: 0.1.24
+- Version: 0.1.4
 - Entry: docs-decision-drift-review
 - Date: 2026-11-16
 - Bump: patch

@@ -1,6 +1,6 @@
 # Art generation: ComfyUI cannot be set up from the editor, and only on Windows + NVIDIA (general setup pipelines offered by the Generate panel)
 
-- Version: 0.1.8
+- Version: 0.1.23
 - Entry: artgen-setup-pipelines
 - Date: 2026-11-16
 - Bump: patch

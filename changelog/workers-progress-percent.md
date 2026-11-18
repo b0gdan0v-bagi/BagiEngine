@@ -1,6 +1,6 @@
 # Workers panel: an approximate percent instead of stage/slice counts
 
-- Version: 0.1.21
+- Version: 0.1.20
 - Entry: workers-progress-percent
 - Date: 2026-11-16
 - Bump: patch

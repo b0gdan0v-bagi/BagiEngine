@@ -1,6 +1,6 @@
 # Audio: master and bus volumes are linear gains, so a volume slider barely changes the loudness
 
-- Version: 0.3.1
+- Version: 0.2.3
 - Entry: audio-perceptual-volume
 - Date: 2026-11-16
 - Bump: patch

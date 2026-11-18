@@ -1,6 +1,6 @@
 # No record and replay of a game's control API actions: a bug seen by a person cannot be handed over as a file
 
-- Version: 0.1.29
+- Version: 0.1.17
 - Entry: replay
 - Date: 2026-11-16
 - Bump: patch

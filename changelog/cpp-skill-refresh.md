@@ -1,6 +1,6 @@
 # The cpp-senior-programmer skill contradicts CLAUDE.md and teaches APIs the engine does not have
 
-- Version: 0.3.5
+- Version: 0.2.7
 - Entry: cpp-skill-refresh
 - Date: 2026-11-17
 - Bump: patch

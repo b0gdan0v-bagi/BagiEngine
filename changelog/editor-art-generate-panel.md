@@ -1,6 +1,6 @@
 # Editor: no Generate panel: a sprite cannot go from a prompt to the game (variants, accept, PNG + TextureLibrary + provenance, reload)
 
-- Version: 0.1.6
+- Version: 0.1.18
 - Entry: editor-art-generate-panel
 - Date: 2026-11-16
 - Bump: patch

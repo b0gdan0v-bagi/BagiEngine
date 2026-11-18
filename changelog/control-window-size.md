@@ -1,6 +1,6 @@
 # A headless game has one window size: no phone, density, user scale or safe area over the control API
 
-- Version: 0.1.27
+- Version: 0.1.12
 - Entry: control-window-size
 - Date: 2026-11-16
 - Bump: patch

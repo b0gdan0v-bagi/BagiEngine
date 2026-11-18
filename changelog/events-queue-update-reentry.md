@@ -1,6 +1,6 @@
 # Events: EventsQueueRegistry::UpdateAll walks a vector that a delivered event can grow (iterator invalidation)
 
-- Version: 0.1.28
+- Version: 0.1.15
 - Entry: events-queue-update-reentry
 - Date: 2026-11-16
 - Bump: patch

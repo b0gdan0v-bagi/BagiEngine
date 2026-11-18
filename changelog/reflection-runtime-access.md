@@ -1,6 +1,6 @@
 # Reflection: no access by name at run time: no type registry, property paths or callable methods
 
-- Version: 0.1.16
+- Version: 0.1.8
 - Entry: reflection-runtime-access
 - Date: 2026-11-16
 - Bump: patch

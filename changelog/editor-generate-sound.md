@@ -1,6 +1,6 @@
 # Editor: the Generate panel listens to sounds and accepts one as a clip
 
-- Version: 0.1.12
+- Version: 0.1.27
 - Entry: editor-generate-sound
 - Date: 2026-11-16
 - Bump: patch

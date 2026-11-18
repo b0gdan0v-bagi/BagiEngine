@@ -1,6 +1,6 @@
 # Art generation: a generated set can be judged only in the panel's grid, not on the scene where it will live
 
-- Version: 0.3.3
+- Version: 0.2.5
 - Entry: artgen-live-alternatives
 - Date: 2026-11-17
 - Bump: patch

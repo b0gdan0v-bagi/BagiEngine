@@ -1,6 +1,6 @@
 # Art generation: one subject per run, so a set is made by waiting at the panel (no queue, no review of a set)
 
-- Version: 0.3.2
+- Version: 0.2.4
 - Entry: artgen-batch-queue
 - Date: 2026-11-17
 - Bump: patch

@@ -1,6 +1,6 @@
 # Run mode: `--editor` and `--game` choose the mode for one run
 
-- Version: 0.1.13
+- Version: 0.1.28
 - Entry: editor-cli-mode
 - Date: 2026-11-16
 - Bump: patch

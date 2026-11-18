@@ -1,6 +1,6 @@
 # Editor: sprites cannot be packed into an atlas or cut from a sheet; atlas rects are written by hand
 
-- Version: 0.3.10
+- Version: 0.3.3
 - Entry: atlas-pack
 - Date: 2026-11-18
 - Bump: patch

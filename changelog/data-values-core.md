@@ -1,6 +1,6 @@
 # No computed values in data: a field is a literal, never read from a context, for any value type
 
-- Version: 0.1.15
+- Version: 0.1.6
 - Entry: data-values-core
 - Date: 2026-11-16
 - Bump: patch

@@ -1,6 +1,6 @@
 # Editor: UI validator findings, rects, anchors and safe area are not shown over the viewport
 
-- Version: 0.1.23
+- Version: 0.1.21
 - Entry: editor-ui-debug-overlay
 - Date: 2026-11-16
 - Bump: patch

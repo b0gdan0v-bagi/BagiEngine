@@ -1,6 +1,6 @@
 # No autonomous QA: a monkey loop with invariants, shrinking and bug entries
 
-- Version: 0.1.26
+- Version: 0.1.9
 - Entry: qa-loop
 - Date: 2026-11-16
 - Bump: patch

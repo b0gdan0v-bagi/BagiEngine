@@ -1,6 +1,6 @@
 # Todo Workers panel: the queue start trusted the session state alone and started a second loop in a busy worker
 
-- Version: 0.1.17
+- Version: 0.1.7
 - Entry: panel-queue-start-guard
 - Date: 2026-11-16
 - Bump: patch

@@ -1,6 +1,6 @@
 # Todo CLI loader: a new CLI version is smoke-checked before it runs, and a version can be pinned
 
-- Version: 0.1.19
+- Version: 0.1.14
 - Entry: engine-loader-cli-guard
 - Date: 2026-11-16
 - Bump: patch

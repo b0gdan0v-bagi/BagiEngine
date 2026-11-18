@@ -1,6 +1,6 @@
 # Art generation: a finished set cannot get more variants on a new seed, and its review sits on a separate tab
 
-- Version: 0.3.8
+- Version: 0.3.1
 - Entry: artgen-set-more-variants
 - Date: 2026-11-17
 - Bump: patch

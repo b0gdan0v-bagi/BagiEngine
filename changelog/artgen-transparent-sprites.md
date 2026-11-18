@@ -1,6 +1,6 @@
 # Art generation: images have an opaque background (no sprite without a manual cut-out)
 
-- Version: 0.1.7
+- Version: 0.1.19
 - Entry: artgen-transparent-sprites
 - Date: 2026-11-16
 - Bump: patch

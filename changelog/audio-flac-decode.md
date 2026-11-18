@@ -1,6 +1,6 @@
 # Audio: FLAC is not decoded and no code writes a WAV file (generated sounds come from ComfyUI as FLAC)
 
-- Version: 0.1.9
+- Version: 0.1.24
 - Entry: audio-flac-decode
 - Date: 2026-11-16
 - Bump: patch

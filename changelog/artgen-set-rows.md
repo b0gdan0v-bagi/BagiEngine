@@ -1,6 +1,6 @@
 # Art generation: the Set tab takes its subjects as a list of rows instead of free text lines
 
-- Version: 0.3.7
+- Version: 0.2.9
 - Entry: artgen-set-rows
 - Date: 2026-11-17
 - Bump: patch

@@ -1,6 +1,6 @@
 # Art generation: sounds (Stable Audio Open through ComfyUI's own nodes)
 
-- Version: 0.1.11
+- Version: 0.1.26
 - Entry: artgen-audio-kind
 - Date: 2026-11-16
 - Bump: patch

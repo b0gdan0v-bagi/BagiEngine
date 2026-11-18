@@ -1,6 +1,6 @@
 # Skill `/artgen`: an agent generates and accepts art and sounds through the editor
 
-- Version: 0.1.14
+- Version: 0.1.29
 - Entry: artgen-skill
 - Date: 2026-11-16
 - Bump: patch

@@ -1,6 +1,6 @@
 # Control API: no log counters, no batch and no run-until for automated testers
 
-- Version: 0.1.25
+- Version: 0.1.5
 - Entry: control-qa-conveniences
 - Date: 2026-11-16
 - Bump: patch

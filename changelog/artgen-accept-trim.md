@@ -1,6 +1,6 @@
 # Art generation: Accept copies the whole 1024x1024 image (no trim to the object, no target size)
 
-- Version: 0.3.6
+- Version: 0.2.8
 - Entry: artgen-accept-trim
 - Date: 2026-11-17
 - Bump: patch

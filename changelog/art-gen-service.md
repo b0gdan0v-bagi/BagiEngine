@@ -1,6 +1,6 @@
 # Art generation: no service turns a prompt and a game's style preset into images (ComfyUI adapter, control API client, MCP tool)
 
-- Version: 0.1.5
+- Version: 0.1.16
 - Entry: art-gen-service
 - Date: 2026-11-16
 - Bump: patch

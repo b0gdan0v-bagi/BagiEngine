@@ -1,6 +1,6 @@
 # Editor: presets cannot be made or changed in the Generate panel: a game without preset files generates nothing (workflow-driven form, draft, starter presets)
 
-- Version: 0.1.10
+- Version: 0.1.25
 - Entry: artgen-preset-editor
 - Date: 2026-11-16
 - Bump: patch

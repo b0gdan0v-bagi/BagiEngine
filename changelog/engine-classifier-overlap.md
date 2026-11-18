@@ -1,6 +1,6 @@
 # todo-classifier answers the overlap question of a queue start (wait or stack)
 
-- Version: 0.1.20
+- Version: 0.1.13
 - Entry: engine-classifier-overlap
 - Date: 2026-11-16
 - Bump: patch

@@ -1,6 +1,6 @@
 # Editor: the status bar does not show the GPU temperature, load and memory (or the CPU's when there is no GPU reading)
 
-- Version: 0.3.9
+- Version: 0.3.2
 - Entry: editor-hardware-stats
 - Date: 2026-11-17
 - Bump: patch

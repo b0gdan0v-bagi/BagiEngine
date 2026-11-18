@@ -1,6 +1,6 @@
 # Art generation: no documented ComfyUI setup on the Windows PC (portable, local only, SDXL)
 
-- Version: 0.1.4
+- Version: 0.1.11
 - Entry: comfyui-windows-setup
 - Date: 2026-11-16
 - Bump: patch

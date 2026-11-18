@@ -1,6 +1,6 @@
 # Art generation: the Generate panel mixes a single run, the set queue and the review, and never says what reaches the game
 
-- Version: 0.3.4
+- Version: 0.2.6
 - Entry: artgen-panel-ux
 - Date: 2026-11-17
 - Bump: patch

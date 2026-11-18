@@ -1,6 +1,6 @@
 # Todo Workers panel: the next slice of a held entry waited forever, and the CLI's start mark was not read
 
-- Version: 0.1.18
+- Version: 0.1.10
 - Entry: panel-starting-mark
 - Date: 2026-11-16
 - Bump: patch
