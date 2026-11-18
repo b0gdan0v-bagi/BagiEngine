@@ -109,6 +109,35 @@ namespace BECore::Tests {
         EXPECT_FALSE(reference.weight.has_value());
     }
 
+    TEST(ArtGenReferenceTest, OnlyAPictureOfAVariantCanBeAReference) {
+        const auto image = ArtGenReferenceOfVariant("/g/Chess", "image", "/g/Chess/artgen/out/x_1.png");
+        ASSERT_TRUE(image.has_value());
+        EXPECT_EQ(image->mode, "init");
+        EXPECT_EQ(image->image, "artgen/out/x_1.png");
+        EXPECT_FALSE(ArtGenReferenceOfVariant("/g/Chess", "audio", "/g/Chess/artgen/out/x_1.flac").has_value());
+        EXPECT_FALSE(ArtGenReferenceOfVariant("/g/Chess", "image", "").has_value());
+    }
+
+    TEST(ArtGenReferenceTest, TheFilePathIsUnderTheGameRootUnlessAbsolute) {
+        EXPECT_EQ(ArtGenReferenceFilePath("/g/Chess", "assets/artgen/rook.png"), "/g/Chess/assets/artgen/rook.png");
+        EXPECT_EQ(ArtGenReferenceFilePath("D:\\g\\Chess\\", "artgen/out/x.png"), "D:/g/Chess/artgen/out/x.png");
+        EXPECT_EQ(ArtGenReferenceFilePath("/g/Chess", "/tmp/x.png"), "/tmp/x.png");
+        EXPECT_EQ(ArtGenReferenceFilePath("/g/Chess", "E:/Pictures/x.png"), "E:/Pictures/x.png");
+        EXPECT_EQ(ArtGenReferenceFilePath("", "assets/x.png"), "assets/x.png");
+    }
+
+    TEST(ArtGenReferenceTest, TheSlotShowsTheNameOfTheFile) {
+        EXPECT_EQ(ArtGenReferenceFileName("assets/artgen/rook.png"), "rook.png");
+        EXPECT_EQ(ArtGenReferenceFileName("E:\\Pictures\\a b.png"), "a b.png");
+        EXPECT_EQ(ArtGenReferenceFileName("x.png"), "x.png");
+    }
+
+    TEST(ArtGenReferenceTest, TheDefaultWeightIsInsideTheSlidersRange) {
+        const double weight = ArtGenReferenceDefaultWeight("init");
+        EXPECT_GT(weight, kArtGenReferenceWeightMin);
+        EXPECT_LT(weight, kArtGenReferenceWeightMax);
+    }
+
     TEST(ArtGenReferenceTest, InitIsAMode) {
         EXPECT_EQ(kArtGenReferenceModes.size(), 1u);
         EXPECT_EQ(kArtGenReferenceModes[0], "init");

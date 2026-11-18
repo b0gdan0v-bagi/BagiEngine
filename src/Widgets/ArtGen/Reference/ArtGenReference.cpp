@@ -11,6 +11,7 @@ namespace BECore {
         constexpr StringView kWeightKey = "weight";
         constexpr StringView kInitMode = "init";
         constexpr StringView kImageKind = "image";
+        constexpr double kInitDefaultWeight = 0.4;  // `default_weight` of "init" in MODES
 
         String Slashed(StringView path) {
             String result(path);
@@ -94,11 +95,40 @@ namespace BECore {
         return reference;
     }
 
+    Optional<ArtGenReference> ArtGenReferenceOfVariant(StringView gameRoot, StringView kind, StringView realPath) {
+        if (kind != kImageKind || realPath.empty()) {
+            return std::nullopt;
+        }
+        return ArtGenReferenceOfFile(gameRoot, realPath);
+    }
+
     ArtGenReference ArtGenReferenceOfSprite(StringView name) {
         ArtGenReference reference;
         reference.mode = String(kInitMode);
         reference.image = ArtGenGameFile(name, kImageKind);
         return reference;
+    }
+
+    double ArtGenReferenceDefaultWeight(StringView /*mode*/) {
+        return kInitDefaultWeight;
+    }
+
+    String ArtGenReferenceFilePath(StringView gameRoot, StringView image) {
+        const String file = Slashed(image);
+        const bool absolute = !file.empty() && (file[0] == '/' || (file.size() > 1 && file[1] == ':'));
+        if (absolute || gameRoot.empty()) {
+            return file;
+        }
+        String root = Slashed(gameRoot);
+        while (!root.empty() && root.back() == '/') {
+            root.pop_back();
+        }
+        return root + "/" + file;
+    }
+
+    StringView ArtGenReferenceFileName(StringView image) {
+        const size_t slash = image.find_last_of("/\\");
+        return slash == StringView::npos ? image : image.substr(slash + 1);
     }
 
 }  // namespace BECore

@@ -13,6 +13,7 @@
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenLaunch.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
+#include <Widgets/ArtGen/Reference/ArtGenReference.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetPanel.h>
 #include <Widgets/EditorLayout/EditorControls.h>
@@ -126,6 +127,7 @@ namespace BECore {
         StopSound();
         DropThumbnails();
         DropSounds();
+        _referencePanel.DropThumbnail();
     }
 
     bool ArtGenWidget::Initialize(IDeserializer& /*deserializer*/) {
@@ -388,7 +390,18 @@ namespace BECore {
         }
     }
 
+    bool ArtGenWidget::PresetMakesImages(const ArtGenSession& session) const {
+        const ArtGenWorkflow* workflow = session.FindWorkflow(StringView(_form.GetWorkflow()));
+        return workflow == nullptr || workflow->kind != kKindAudio;
+    }
+
     void ArtGenWidget::DrawRunForm(ArtGenSession& session) {
+        const bool images = PresetMakesImages(session);
+        if (images) {
+            _referencePanel.Draw(session);
+        } else {
+            _referencePanel.DropThumbnail();
+        }
         ImGui::InputTextWithHint("Subject", "white knight, a red gem, ...", _subject, sizeof(_subject));
         {
             ScopedMonoFont mono;
@@ -412,8 +425,9 @@ namespace BECore {
         if (IconTextButton(ICON_LC_SPARKLES, "Generate", "Ask the service for the images with the form as it is, saved or not (it may still be starting: the request waits)")) {
             const Optional<int64_t> seed = _randomSeed ? Optional<int64_t>() : Optional<int64_t>(_seed);
             // A saved preset goes by name, so its provenance names the file; anything else goes inline as a draft
-            auto result = _form.IsDirty() ? session.RequestDraft(StringView(_form.name), _form.ToJson(), StringView(_subject), _count, seed, _keepVariants)
-                                          : session.Request(StringView(_form.GetBaseName()), StringView(_subject), _count, seed, _keepVariants);
+            const Optional<ArtGenReference> reference = images ? session.GetReferenceSlot() : Optional<ArtGenReference>();
+            auto result = _form.IsDirty() ? session.RequestDraft(StringView(_form.name), _form.ToJson(), StringView(_subject), _count, seed, _keepVariants, reference)
+                                          : session.Request(StringView(_form.GetBaseName()), StringView(_subject), _count, seed, _keepVariants, reference);
             _requestError = result ? String() : result.error();
         }
         ImGui::EndDisabled();
@@ -567,6 +581,10 @@ namespace BECore {
         const auto& workflows = session.GetServiceStatus().workflows;
         if (ImGui::BeginCombo("Workflow", _form.GetWorkflow().c_str())) {
             for (const auto& workflow : workflows) {
+                // A variant that a map of its base reaches is not picked by hand, unless the preset already names it
+                if (workflow.IsReferenceVariant() && workflow.name != _form.GetWorkflow()) {
+                    continue;
+                }
                 char label[160];
                 std::snprintf(label, sizeof(label), "%s%s  (%s, %s)", workflow.error.empty() ? "" : ICON_LC_CIRCLE_ALERT " ", workflow.name.c_str(), workflow.kind.c_str(), workflow.source.c_str());
                 ImGui::BeginDisabled(!workflow.error.empty());
@@ -814,7 +832,7 @@ namespace BECore {
             DrawSounds(run);
         } else {
             DrawAccept(session);
-            DrawVariants(run);
+            DrawVariants(session, run);
         }
     }
 
@@ -1144,7 +1162,9 @@ namespace BECore {
             const ArtGenImageSettings settings = _form.GetImageAccept();
             auto result = session.Accept(*_selectedSeed, StringView(_spriteName), _useOnSelected, &settings);
             _acceptFailed = !result.has_value();
+            _acceptedSprite.clear();
             if (result) {
+                _acceptedSprite = String(StringView(_spriteName));
                 const auto reloaded = GetJsonInt(*result, "reloadedSprites").value_or(0);
                 const auto texture = GetJsonString(*result, "texturePath").value_or(String());
                 _acceptMessage = Format("Accepted as '{}' ({}); {} sprite(s) reloaded", StringView(_spriteName), texture, reloaded);
@@ -1167,9 +1187,14 @@ namespace BECore {
         if (!_acceptMessage.empty()) {
             ImGui::TextColored(_acceptFailed ? palette.error : palette.success, "%s", _acceptMessage.c_str());
         }
+        if (!_acceptedSprite.empty() && PresetMakesImages(session)) {
+            if (IconTextButton(ICON_LC_IMAGE_PLUS, "Use as reference", kArtGenUseAsReferenceTip)) {
+                session.SetReferenceSlot(ArtGenReferenceOfSprite(StringView(_acceptedSprite)));
+            }
+        }
     }
 
-    void ArtGenWidget::DrawVariants(const ArtGenRun& run) {
+    void ArtGenWidget::DrawVariants(ArtGenSession& session, const ArtGenRun& run) {
         if (run.variants.empty()) {
             return;
         }
@@ -1188,6 +1213,7 @@ namespace BECore {
             if (ImGui::InvisibleButton("##thumb", ImVec2(kThumbnailSize, kThumbnailSize))) {
                 if (_selectedSeed != variant.seed) {
                     _acceptMessage.clear();
+                    _acceptedSprite.clear();
                 }
                 _selectedSeed = variant.seed;
                 if (_spriteName[0] == '\0') {
@@ -1214,6 +1240,14 @@ namespace BECore {
             if (IconButton(ICON_LC_DICES, "Use this seed for the next Generate (with another subject, a close picture)", "##seed")) {
                 _randomSeed = false;
                 _seed = variant.seed;
+            }
+            if (_selectedSeed == variant.seed && !variant.IsAudio()) {
+                ImGui::SameLine();
+                if (IconButton(ICON_LC_IMAGE_PLUS, kArtGenUseAsReferenceTip, "##reference")) {
+                    if (auto reference = ArtGenReferenceOfVariant(StringView(session.GetGameRoot()), kKindImage, StringView(variant.path))) {
+                        session.SetReferenceSlot(std::move(*reference));
+                    }
+                }
             }
             ImGui::SameLine();
             {
