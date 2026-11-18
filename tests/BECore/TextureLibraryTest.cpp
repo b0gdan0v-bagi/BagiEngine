@@ -592,4 +592,48 @@ namespace BECore::Tests {
         EXPECT_EQ(library.GetAll().size(), 1u);
     }
 
+    TEST(TextureLibraryTest, CommentsInSpritesAreSkippedAndTheIndexCountsElements) {
+        pugi::xml_document document;
+        ASSERT_TRUE(document.load_string(R"(<?xml version="1.0"?>
+<!-- header -->
+<root>
+  <sprites>
+    <!-- first -->
+    <sprite name="A" texturePath="a.png" />
+    <!-- between -->
+    <sprite name="B" texturePath="b.png" />
+    <sprite texturePath="no-name.png" />
+    <!-- last -->
+  </sprites>
+</root>)",
+                                         pugi::parse_full));
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromXmlNode(XmlNode(document.document_element())));
+        deserializer.SetDiagnostics(DiagnosticsMode::Error);
+        TextureLibrary library;
+
+        library.Load(deserializer);
+        deserializer.FinishLoad();
+
+        EXPECT_FALSE(deserializer.HasErrors());
+        ASSERT_EQ(library.GetAll().size(), 2u);
+        EXPECT_EQ(library.GetAll()[0].name.ToStringView(), "A");
+        EXPECT_EQ(library.GetAll()[1].name.ToStringView(), "B");
+    }
+
+    TEST(TextureLibraryTest, ABadSpriteNamesItsIndexAmongTheElements) {
+        pugi::xml_document document;
+        ASSERT_TRUE(
+            document.load_string(R"(<root><sprites><!-- c --><sprite name="A"/><!-- c --><sprite name="B"/><!-- c --><sprite name="C"><srcRect x="x"/></sprite></sprites></root>)", pugi::parse_full));
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromXmlNode(XmlNode(document.document_element())));
+        deserializer.SetStrictValues(true);
+        TextureLibrary library;
+
+        library.Load(deserializer);
+
+        ASSERT_EQ(deserializer.GetErrors().size(), 1u);
+        EXPECT_NE(deserializer.GetErrors()[0].path.find("sprites[2]"), String::npos) << deserializer.GetErrors()[0].path.c_str();
+    }
+
 }  // namespace BECore::Tests
