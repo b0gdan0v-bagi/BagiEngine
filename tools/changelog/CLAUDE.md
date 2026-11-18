@@ -9,6 +9,7 @@ python3 <engine>/tools/changelog/changelog.py add --draft FILE --bump minor|patc
 python3 <engine>/tools/changelog/changelog.py render [--check]                # regenerate CHANGELOG.md (--check: only compare)
 python3 <engine>/tools/changelog/changelog.py check                           # ctest BagiChangelogCheck
 python3 <engine>/tools/changelog/changelog.py breaking --since <commit|version|pointer> [--repo E] [--json] [--all] [--check]
+python3 <engine>/tools/changelog/changelog.py renumber --plan|--apply [--floor V] [--ref R ...]
 ```
 
 Every command takes `--root E` (the engine folder; default the one the tool is in); `breaking` calls it `--repo E` (`engine` in a game) too.
@@ -57,5 +58,13 @@ Read-only (`rev-parse`, `log`, `show-superproject-working-tree`; it never fetche
 - `pointer`: the commit the superproject of `E` records for it (`HEAD:<path>` there); not a submodule is an error. A game runs it before taking an engine merge.
 
 A point older than the first fragment adds one line: the log starts at that version and `git log <point>..HEAD` has the rest. `--json` has `since`, `kind`, `commit`, `log_starts`, `before_the_log`, `breaking` (any listed entry has a Breaking section) and `entries` (the fields of a fragment, bullets as lists). `--check` exits 1 when `breaking` is true (a game's CI); without it the exit is 0 whatever is listed.
+
+## `renumber`: the one-off move to the shared counter
+
+Before the counter, `main` and each `games/*` numbered entries on their own, so one number could mean different entries. `renumber` gives every fragment above `--floor` one sequence over `main` and every local `games/*`, ordered by `Date`, then by when the fragment first appeared in git, then by id; each keeps its `Bump`. The order never reads the numbers being replaced, so the plan stays the same while the branches are renumbered one by one.
+
+`--plan` prints the new numbers and `highest:`, and writes nothing. `--apply` rewrites this tree only: the `Version` line of its fragments, the header and `CHANGELOG.md`; it commits nothing and refuses a fragment above the floor that no read branch holds. This is the one sanctioned edit of a merged fragment.
+
+The steps are the owner's, on one PC, with the other PCs pushed first: on `main` and each `games/*` run `--apply` and commit `Changelog: renumber after the shared counter`; then raise the counter to `highest:` when that is above its value (`todo.py version set <highest> --expected <value>`). Do it before the next `todo-merge` of an engine entry: until then `add --version` refuses a number that is not above the tree's fragments.
 
 Exit codes: 0 ok, 1 a refusal of `add`, a failed `check` or `render --check`, or `breaking --check` with a Breaking entry; 2 a file or a point the command needs is not there (no version header, no draft, an unknown commit, not a submodule), for every command including `add` and `check`, and also input that `propose` or `breaking` cannot read (a malformed draft or log).
