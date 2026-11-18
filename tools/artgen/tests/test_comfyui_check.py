@@ -175,13 +175,22 @@ def test_manifest_pins_every_download():
     for model in MANIFEST["models"]:
         # A gated model's hash is shown only to an account with access: the install reads it with the owner's token until it is pinned
         assert (SHA256.match(model["sha256"]) if not model.get("gated") or model["sha256"] else True) and model["size"] > 0, model["name"]
-        assert model.get("kind", "image") in ("image", "audio"), model["name"]
+        assert model.get("kind", "image") in ("image", "audio", "style"), model["name"]
         # A Hugging Face URL names a commit, never a branch: the hash must stay true.
         assert re.search(r"/resolve/[0-9a-f]{40}/", model["url"]), model["url"]
         assert model["url"].endswith(Path(model["name"]).suffix)
         assert model["licence"] and model["source"]
         assert (model["folder"], model["name"]) not in names
         names.add((model["folder"], model["name"]))
+    # A custom node is fetched by git at a pinned commit, never a branch: the commit is its integrity check
+    nodes = set()
+    for node in MANIFEST["customNodes"]:
+        assert node.get("kind", "image") in ("image", "audio", "style"), node["name"]
+        assert re.match(r"^[0-9a-f]{40}$", node["commit"]), node["name"]
+        assert node["repo"].startswith("https://") and node["licence"] and node["source"], node["name"]
+        assert node["nodes"] and all(isinstance(name, str) and name for name in node["nodes"]), node["name"]
+        assert node["name"] not in nodes
+        nodes.add(node["name"])
 
 
 LOADERS = {
@@ -209,12 +218,12 @@ def test_missing_audio_models_only_warn_and_say_what_it_makes(fake):
         if model.get("kind") == "audio":
             fake.models[model["folder"]].remove(model["name"])
     report = comfyui_check.check(fake.url, MANIFEST)
-    assert report["ready"] and report["kinds"] == ["image"]
+    assert report["ready"] and report["kinds"] == ["image", "style"]
     assert any("install --audio" in w for w in report["warnings"])
 
 
 def test_with_every_model_it_makes_images_and_sounds(fake):
-    assert comfyui_check.check(fake.url, MANIFEST)["kinds"] == ["audio", "image"]
+    assert comfyui_check.check(fake.url, MANIFEST)["kinds"] == ["audio", "image", "style"]
 
 
 def test_the_sound_workflow_is_a_valid_graph():
