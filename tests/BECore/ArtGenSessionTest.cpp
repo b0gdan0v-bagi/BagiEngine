@@ -760,4 +760,95 @@ namespace BECore::Tests {
         EXPECT_EQ(gSoundAccepted.calls, 1);
     }
 
+    TEST_F(ArtGenSessionTest, ARequestWithAReferenceGoesOutInThePollAndIsInTheState) {
+        Call("artgen_poll", ReadyPoll());
+        Json params = Json{{"preset", "wood"}, {"subject", "rook"}, {"count", 1}, {"reference", Json{{"mode", "init"}, {"image", "assets/artgen/rook.png"}, {"weight", 0.3}}}};
+        ASSERT_TRUE(GetJsonInt(Result(Call("artgen_generate", params)), "id").has_value());
+        ASSERT_TRUE(session.GetRun().reference.has_value());
+        EXPECT_EQ(session.GetRun().reference->image, "assets/artgen/rook.png");
+
+        const Json state = Call("artgen_state");
+        EXPECT_EQ(*FindJsonMember(*FindJsonMember(Result(state), "run"), "reference"), params["reference"]);
+
+        const Json poll = Call("artgen_poll", ReadyPoll());
+        const Json* request = FindJsonMember(Result(poll), "request");
+        ASSERT_NE(request, nullptr);
+        const Json* reference = FindJsonMember(*request, "reference");
+        ASSERT_NE(reference, nullptr);
+        EXPECT_EQ(*reference, params["reference"]);
+    }
+
+    TEST_F(ArtGenSessionTest, ARequestWithoutAReferenceLeavesTheKeyOut) {
+        Call("artgen_poll", ReadyPoll());
+        ASSERT_TRUE(session.Request("wood", "rook", 1, Optional<int64_t>(1)).has_value());
+        const Json poll = Call("artgen_poll", ReadyPoll());
+        const Json* request = FindJsonMember(Result(poll), "request");
+        ASSERT_NE(request, nullptr);
+        EXPECT_EQ(FindJsonMember(*request, "reference"), nullptr);
+        const Json state = Call("artgen_state");
+        EXPECT_TRUE(FindJsonMember(*FindJsonMember(Result(state), "run"), "reference")->is_null());
+    }
+
+    TEST_F(ArtGenSessionTest, ADraftTakesAReferenceToo) {
+        const auto id = session.RequestDraft("wood", Json{{"preset", 1}, {"workflow", "sdxl_basic"}, {"prompt", "{subject}"}}, "rook", 1, Optional<int64_t>(), false,
+                                             ArtGenReference{"init", "artgen/out/x.png", Optional<double>()});
+        ASSERT_TRUE(id.has_value()) << id.error().c_str();
+        const Json poll = Call("artgen_poll", ReadyPoll());
+        const Json* reference = FindJsonMember(*FindJsonMember(Result(poll), "request"), "reference");
+        ASSERT_NE(reference, nullptr);
+        EXPECT_EQ(GetJsonString(*reference, "image"), Optional<String>("artgen/out/x.png"));
+        EXPECT_EQ(FindJsonMember(*reference, "weight"), nullptr);
+    }
+
+    TEST_F(ArtGenSessionTest, ANewRunClearsTheReferenceOfTheOldOne) {
+        Call("artgen_poll", ReadyPoll());
+        const uint32_t id = session.Request("wood", "rook", 1, Optional<int64_t>(1), false, ArtGenReference{"init", "a.png", Optional<double>(0.5)}).value();
+        Call("artgen_poll", ReadyPoll());
+        Json done = Report(id);
+        done["status"] = "ok";
+        Call("artgen_done", done);
+        EXPECT_TRUE(session.GetRun().reference.has_value());
+        ASSERT_TRUE(session.Request("wood", "rook", 1, Optional<int64_t>(2)).has_value());
+        EXPECT_FALSE(session.GetRun().reference.has_value());
+    }
+
+    TEST_F(ArtGenSessionTest, TheSlotSurvivesARunAndIsClearedOnRequest) {
+        const uint64_t before = session.Version();
+        EXPECT_FALSE(session.GetReferenceSlot().has_value());
+        session.SetReferenceSlot(ArtGenReference{"init", "a.png", Optional<double>(0.5)});
+        ASSERT_TRUE(session.GetReferenceSlot().has_value());
+        EXPECT_GT(session.Version(), before);
+
+        const uint64_t afterSet = session.Version();
+        session.SetReferenceSlot(ArtGenReference{"init", "a.png", Optional<double>(0.5)});
+        EXPECT_EQ(session.Version(), afterSet) << "the same picture changes nothing";
+
+        RunWithImages({1});
+        ASSERT_TRUE(session.GetReferenceSlot().has_value()) << "a run does not take the slot by itself";
+        EXPECT_EQ(session.GetReferenceSlot()->image, "a.png");
+
+        session.ClearReferenceSlot();
+        EXPECT_FALSE(session.GetReferenceSlot().has_value());
+        const uint64_t afterClear = session.Version();
+        session.ClearReferenceSlot();
+        EXPECT_EQ(session.Version(), afterClear);
+    }
+
+    TEST_F(ArtGenSessionTest, AMalformedReferenceIsInvalidParamsAndChangesNothing) {
+        Call("artgen_poll", ReadyPoll());
+        Json params = Json{{"preset", "wood"}, {"subject", "rook"}, {"reference", Json{{"mode", "init"}, {"image", "a.png"}, {"weight", "x"}}}};
+        const Json response = Call("artgen_generate", params);
+        EXPECT_EQ(ErrorCode(response), "invalid_params");
+        EXPECT_NE(DumpJson(response).find("reference.weight"), String::npos);
+        EXPECT_EQ(session.GetRun().state, ArtGenRunState::Idle);
+
+        for (const Json& bad : {Json("a.png"), Json::array(), Json{{"mode", "init"}}, Json{{"image", "a.png"}}, Json{{"mode", "init"}, {"image", ""}}}) {
+            params["reference"] = bad;
+            EXPECT_EQ(ErrorCode(Call("artgen_generate", params)), "invalid_params") << DumpJson(bad).c_str();
+        }
+        params["reference"] = Json();
+        EXPECT_TRUE(Call("artgen_generate", params).contains("result")) << "null is no reference";
+        EXPECT_FALSE(session.GetRun().reference.has_value());
+    }
+
 }  // namespace BECore::Tests

@@ -1,0 +1,117 @@
+#include <BECore/Control/Json.h>
+#include <Common/Printers.h>
+#include <Widgets/ArtGen/Reference/ArtGenReference.h>
+#include <gtest/gtest.h>
+
+namespace BECore::Tests {
+
+    namespace {
+
+        Json ReferenceJson() {
+            return Json{{"mode", "init"}, {"image", "assets/artgen/rook.png"}, {"weight", 0.4}};
+        }
+
+        String ErrorOf(const Json& value) {
+            const auto read = ReadArtGenReference(value);
+            return read ? String() : read.error();
+        }
+
+    }  // namespace
+
+    TEST(ArtGenReferenceTest, AReferenceReadFromJsonWritesBackTheSame) {
+        const auto read = ReadArtGenReference(ReferenceJson());
+        ASSERT_TRUE(read.has_value());
+        EXPECT_EQ(read->mode, "init");
+        EXPECT_EQ(read->image, "assets/artgen/rook.png");
+        EXPECT_EQ(read->weight, Optional<double>(0.4));
+        EXPECT_EQ(ArtGenReferenceToJson(*read), ReferenceJson());
+    }
+
+    TEST(ArtGenReferenceTest, AMissingOrNullWeightIsLeftOutOfTheJson) {
+        Json json = ReferenceJson();
+        json.erase("weight");
+        auto read = ReadArtGenReference(json);
+        ASSERT_TRUE(read.has_value());
+        EXPECT_FALSE(read->weight.has_value());
+        EXPECT_EQ(FindJsonMember(ArtGenReferenceToJson(*read), "weight"), nullptr);
+
+        json["weight"] = Json();
+        read = ReadArtGenReference(json);
+        ASSERT_TRUE(read.has_value());
+        EXPECT_FALSE(read->weight.has_value());
+    }
+
+    TEST(ArtGenReferenceTest, AnIntegerWeightIsANumber) {
+        Json json = ReferenceJson();
+        json["weight"] = 1;
+        const auto read = ReadArtGenReference(json);
+        ASSERT_TRUE(read.has_value());
+        EXPECT_EQ(read->weight, Optional<double>(1.0));
+    }
+
+    TEST(ArtGenReferenceTest, ShapeErrorsNameTheKey) {
+        EXPECT_NE(ErrorOf(Json::array()).find("'reference' must be an object"), String::npos);
+        EXPECT_NE(ErrorOf(Json::object()).find("reference.mode"), String::npos);
+
+        Json json = ReferenceJson();
+        json["mode"] = 3;
+        EXPECT_NE(ErrorOf(json).find("reference.mode"), String::npos);
+        json["mode"] = "";
+        EXPECT_NE(ErrorOf(json).find("reference.mode"), String::npos);
+
+        json = ReferenceJson();
+        json.erase("image");
+        EXPECT_NE(ErrorOf(json).find("reference.image"), String::npos);
+        json["image"] = "";
+        EXPECT_NE(ErrorOf(json).find("reference.image"), String::npos);
+        json["image"] = 7;
+        EXPECT_NE(ErrorOf(json).find("reference.image"), String::npos);
+
+        json = ReferenceJson();
+        json["weight"] = "x";
+        EXPECT_NE(ErrorOf(json).find("reference.weight"), String::npos);
+    }
+
+    TEST(ArtGenReferenceTest, TheServiceNotTheShapeCheckJudgesTheModeAndTheRange) {
+        Json json = ReferenceJson();
+        json["mode"] = "style";
+        json["weight"] = 7.5;
+        EXPECT_TRUE(ReadArtGenReference(json).has_value());
+    }
+
+    TEST(ArtGenReferenceTest, AFileInsideTheGameRootIsRelativeWithSlashes) {
+        const auto reference = ArtGenReferenceOfFile("D:/Games/Chess", "D:/Games/Chess/artgen/out/set/rook/x_123.png");
+        EXPECT_EQ(reference.mode, "init");
+        EXPECT_EQ(reference.image, "artgen/out/set/rook/x_123.png");
+        EXPECT_FALSE(reference.weight.has_value());
+    }
+
+    TEST(ArtGenReferenceTest, BackslashesOfAWindowsPathAreTurned) {
+        EXPECT_EQ(ArtGenReferenceOfFile("D:\\Games\\Chess\\", "D:\\Games\\Chess\\artgen\\out\\x.png").image, "artgen/out/x.png");
+        EXPECT_EQ(ArtGenReferenceOfFile("D:\\Games\\Chess", "E:\\Pictures\\a b.png").image, "E:/Pictures/a b.png");
+    }
+
+    TEST(ArtGenReferenceTest, AFileOutsideTheGameRootStaysAbsolute) {
+        EXPECT_EQ(ArtGenReferenceOfFile("/home/u/Chess", "/home/u/Chess2/x.png").image, "/home/u/Chess2/x.png");
+        EXPECT_EQ(ArtGenReferenceOfFile("/home/u/Chess", "/tmp/x.png").image, "/tmp/x.png");
+        EXPECT_EQ(ArtGenReferenceOfFile("", "/tmp/x.png").image, "/tmp/x.png");
+        EXPECT_EQ(ArtGenReferenceOfFile("/home/u/Chess", "/home/u/Chess").image, "/home/u/Chess");
+    }
+
+    TEST(ArtGenReferenceTest, AParentStepKeepsThePathAbsolute) {
+        EXPECT_EQ(ArtGenReferenceOfFile("/home/u/Chess", "/home/u/Chess/a/../../x.png").image, "/home/u/Chess/a/../../x.png");
+    }
+
+    TEST(ArtGenReferenceTest, ASpriteIsItsAcceptedFile) {
+        const auto reference = ArtGenReferenceOfSprite("rook");
+        EXPECT_EQ(reference.mode, "init");
+        EXPECT_EQ(reference.image, "assets/artgen/rook.png");
+        EXPECT_FALSE(reference.weight.has_value());
+    }
+
+    TEST(ArtGenReferenceTest, InitIsAMode) {
+        EXPECT_EQ(kArtGenReferenceModes.size(), 1u);
+        EXPECT_EQ(kArtGenReferenceModes[0], "init");
+    }
+
+}  // namespace BECore::Tests
