@@ -68,7 +68,7 @@ if(Python3_FOUND)
             ${HEADERS_STANDALONE_EXCLUDE} --jobs 4)
     set_tests_properties(BagiHeadersStandalone PROPERTIES
         SKIP_RETURN_CODE 77
-        TIMEOUT 300)
+        TIMEOUT 1800)  # it compiles every header beside the other tests: only a hang may end it
 endif()
 
 # A real TLS handshake of the platform's backend against local servers: tls_local_check.py starts a Python `ssl` WebSocket echo server
