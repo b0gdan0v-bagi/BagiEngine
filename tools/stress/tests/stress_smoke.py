@@ -49,6 +49,8 @@ ENGINE_CONFIG_BINDINGS = {
     "AudioConfig": Binding("AudioSettings"),
 }
 ENGINE_CONFIG_BY_HAND = {"TextConfig", "UIConfig"}  # read by hand: no reflected type, so no XSD
+EDITOR_WIDGETS_CONFIG = "WidgetsConfig"  # the widgets of the Editor run mode
+EDITOR_WIDGET_TYPE = "EditorLayoutWidget"  # in the live schema only when the build has the editor
 
 
 def last_frame(client: BagiControlClient) -> dict:
@@ -268,7 +270,10 @@ def check_config_files(schema: dict) -> None:
         covered = len(results) - len(uncovered)
         print(f"reflection: config/*.xml against the schema: {covered} covered, {len(uncovered)} not covered ({', '.join(sorted(uncovered))})", flush=True)
         check(uncovered == ENGINE_CONFIG_BY_HAND, f"the config files without an XSD are {sorted(uncovered)}, expected {sorted(ENGINE_CONFIG_BY_HAND)}: " + "; ".join(f"{result.stem}: {result.reason}" for result in results if result.xsd is None))
-        findings = check_files(results, ENGINE_CONFIG_DIR)
+        # The editor's widgets are not reflected in a build without the editor, and such a build only ever runs the Game mode, which never reads this file
+        editor_built = any(entry["name"] == EDITOR_WIDGET_TYPE for entry in schema["types"])
+        checked = [result for result in results if editor_built or result.stem != EDITOR_WIDGETS_CONFIG]
+        findings = check_files(checked, ENGINE_CONFIG_DIR)
         for stem, lines in findings.items():
             raise SmokeFailure(f"config/{stem}.xml does not match its XSD: {lines[0]}")
 
