@@ -1,5 +1,7 @@
 """The checks of a cut-out (tools/artgen/CLAUDE.md, "The service"): the PNG alpha reader and, below it, the checks over the alpha."""
 
+import json
+import math
 import struct
 import sys
 import zlib
@@ -10,7 +12,9 @@ import pytest
 ARTGEN_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ARTGEN_DIR))
 
+import artgen_checks  # noqa: E402
 from artgen_alpha import Alpha, AlphaError, read_alpha  # noqa: E402
+from artgen_checks import DEFAULTS, check_alpha, check_png  # noqa: E402
 
 SIGNATURE = b"\x89PNG\r\n\x1a\n"
 GREY, RGB, PALETTE, GREY_ALPHA, RGBA = 0, 2, 3, 4, 6
@@ -178,3 +182,166 @@ def test_alpha_of_a_larger_picture_with_every_filter():
     rows = pattern(width, height, 4)
     alpha = read_alpha(encode(width, height, RGBA, 8, rows, filters=FILTERS))
     assert alpha.pixels == expected_alpha(rows, width, 4)
+
+
+# ---- the checks over drawn masks ----
+
+SIDE = 200
+
+
+def draw(side, *shapes):
+    """An Alpha of `side` squared drawn by the shapes: each is a function (x, y) -> alpha or None; the last that answers wins."""
+    pixels = bytearray(side * side)
+    for y in range(side):
+        for x in range(side):
+            for shape in shapes:
+                value = shape(x, y)
+                if value is not None:
+                    pixels[y * side + x] = value
+    return Alpha(side, side, bytes(pixels))
+
+
+def disc(cx, cy, radius, alpha=255):
+    return lambda x, y: alpha if math.hypot(x - cx, y - cy) <= radius else None
+
+
+def square(left, top, right, bottom, alpha=255):
+    return lambda x, y: alpha if left <= x < right and top <= y < bottom else None
+
+
+def ring(cx, cy, inner, outer, alpha):
+    return lambda x, y: alpha if inner < math.hypot(x - cx, y - cy) <= outer else None
+
+
+def failed_of(alpha, thresholds=None):
+    return check_alpha(alpha, thresholds)["failed"]
+
+
+def test_checks_a_clean_disc_passes():
+    verdict = check_alpha(draw(SIDE, disc(100, 100, 60)))
+    assert verdict["passed"] is True
+    assert verdict["failed"] == []
+    assert verdict["thresholds"] == DEFAULTS
+    assert 0.27 < verdict["metrics"]["fill"] < 0.30
+    assert verdict["metrics"]["pieces"] == 1
+    assert verdict["metrics"]["halo"] == 0.0
+
+
+def test_checks_a_soft_edge_of_a_few_pixels_passes():
+    assert failed_of(draw(SIDE, ring(100, 100, 60, 63, 60), disc(100, 100, 60))) == []
+
+
+def test_checks_empty():
+    assert failed_of(Alpha(SIDE, SIDE, bytes(SIDE * SIDE))) == ["empty"]
+    assert failed_of(draw(SIDE, disc(100, 100, 60, alpha=100))) == ["empty"]
+
+
+def test_checks_an_object_cut_by_a_frame_edge():
+    assert failed_of(draw(SIDE, disc(100, 50, 60))) == ["edge"]
+    assert failed_of(draw(SIDE, disc(50, 100, 60))) == ["edge"]
+    assert failed_of(draw(SIDE, disc(100, 150, 60))) == ["edge"]
+    assert failed_of(draw(SIDE, disc(150, 100, 60))) == ["edge"]
+
+
+def test_checks_a_disc_that_only_touches_an_edge_is_not_cut():
+    verdict = check_alpha(draw(SIDE, disc(100, 60, 60)))
+    assert "edge" not in verdict["failed"]
+
+
+def test_checks_two_pieces_and_a_speck():
+    two = draw(SIDE, disc(60, 100, 30), disc(140, 100, 30))
+    assert failed_of(two) == ["pieces"]
+    speck = draw(SIDE, disc(100, 100, 60), disc(10, 10, 1))
+    assert failed_of(speck) == []
+    assert check_alpha(speck)["metrics"]["pieces"] == 1
+
+
+def test_checks_pieces_touching_at_a_corner_are_two():
+    touching = draw(SIDE, square(40, 40, 100, 100), square(100, 100, 160, 160))
+    assert check_alpha(touching)["metrics"]["pieces"] == 2
+
+
+def test_checks_a_wide_soft_ring_is_a_halo():
+    verdict = check_alpha(draw(SIDE, ring(100, 100, 50, 80, 100), disc(100, 100, 50)))
+    assert verdict["failed"] == ["halo"]
+    assert verdict["metrics"]["halo"] > 0.5
+
+
+def test_checks_a_background_that_was_not_removed():
+    assert failed_of(draw(SIDE, square(3, 3, SIDE - 3, SIDE - 3))) == ["background"]
+    # Opaque corners around a hole: the fill is below the limit, the corners say the same.
+    framed = draw(SIDE, square(0, 0, SIDE, SIDE), lambda x, y: 0 if math.hypot(x - 100, y - 100) <= 70 else None)
+    assert "background" in failed_of(framed)
+    assert check_alpha(framed)["metrics"]["fill"] < DEFAULTS["maxFill"]
+
+
+def test_checks_a_dot_is_small():
+    assert failed_of(draw(SIDE, disc(100, 100, 5))) == ["small"]
+
+
+def test_checks_an_object_in_a_corner_is_off_centre():
+    assert failed_of(draw(SIDE, disc(50, 50, 40))) == ["offCentre"]
+
+
+def test_checks_a_picture_larger_than_the_reduced_side_gives_the_same_verdicts():
+    big = 600
+    assert failed_of(draw(big, disc(300, 300, 180))) == []
+    assert failed_of(draw(big, disc(180, 300, 90), disc(420, 300, 90))) == ["pieces"]
+    assert failed_of(draw(big, disc(300, 150, 180))) == ["edge"]
+    assert failed_of(draw(big, disc(300, 300, 15))) == ["small"]
+    verdict = check_alpha(draw(big, disc(300, 300, 180)))
+    assert verdict["metrics"]["fill"] == pytest.approx(math.pi * 180 ** 2 / big ** 2, abs=0.01)
+    assert verdict["metrics"]["cover"] == pytest.approx(0.36, abs=0.02)
+
+
+def test_checks_a_picture_whose_side_is_not_a_multiple_of_the_scale():
+    alpha = Alpha(301, 199, bytes([255]) * (301 * 199))
+    assert "background" in failed_of(alpha)
+
+
+def test_checks_each_threshold_can_be_replaced():
+    clean = draw(SIDE, disc(100, 100, 60))
+    assert failed_of(clean, {"maxFill": 0.1}) == ["background"]
+    assert failed_of(clean, {"minCover": 0.5}) == ["small"]
+    assert failed_of(draw(SIDE, disc(100, 100, 60, alpha=200)), {"cut": 201}) == ["empty"]
+    two = draw(SIDE, disc(60, 100, 30), disc(140, 100, 30))
+    assert failed_of(two, {"maxPieces": 2}) == []
+    speck = draw(SIDE, disc(100, 100, 60), disc(10, 10, 3))
+    assert failed_of(speck, {"minPieceArea": 0.0001}) == ["pieces"]
+    assert failed_of(draw(SIDE, disc(100, 50, 60)), {"maxEdgeRun": 0.5}) == []
+    assert failed_of(draw(SIDE, disc(50, 50, 40)), {"maxOffset": 0.5}) == []
+    assert failed_of(draw(SIDE, ring(100, 100, 50, 80, 100), disc(100, 100, 50)), {"maxHalo": 0.9}) == []
+    verdict = check_alpha(clean, {"maxFill": 0.5})
+    assert verdict["thresholds"]["maxFill"] == 0.5 and verdict["thresholds"]["cut"] == DEFAULTS["cut"]
+
+
+def test_checks_the_names_of_the_thresholds_and_of_the_checks():
+    assert set(DEFAULTS) == {"cut", "maxEdgeRun", "maxPieces", "minPieceArea", "maxHalo", "maxFill", "minCover", "maxOffset"}
+    assert set(artgen_checks.CHECK_NAMES) == {"empty", "edge", "pieces", "halo", "background", "small", "offCentre"}
+
+
+def png_of(alpha):
+    rows = []
+    for y in range(alpha.height):
+        row = bytearray()
+        for value in alpha.pixels[y * alpha.width:(y + 1) * alpha.width]:
+            row += bytes([20, 40, 60, value])
+        rows.append(bytes(row))
+    return encode(alpha.width, alpha.height, RGBA, 8, rows)
+
+
+def test_check_png_gives_the_verdict_of_the_alpha_in_plain_data():
+    clean = check_png(png_of(draw(SIDE, disc(100, 100, 60))))
+    assert clean["passed"] is True
+    cut_off = check_png(png_of(draw(SIDE, disc(100, 50, 60))))
+    assert cut_off["passed"] is False and cut_off["failed"] == ["edge"]
+    assert json.loads(json.dumps(cut_off)) == cut_off
+    assert check_png(png_of(draw(SIDE, disc(100, 100, 60))), {"minCover": 0.9})["failed"] == ["small"]
+
+
+def test_check_png_none_without_alpha_and_an_error_for_a_picture_that_cannot_be_read():
+    assert check_png(encode(4, 3, RGB, 8, pattern(4, 3, 3))) is None
+    assert check_png(b"not a picture") == {"passed": None, "error": "not a PNG picture"}
+    truncated = png_of(draw(SIDE, disc(100, 100, 60)))[:-30]
+    verdict = check_png(truncated)
+    assert verdict["passed"] is None and "truncated" in verdict["error"]
