@@ -34,10 +34,21 @@ namespace BECore {
     /// after the remove button) is less than the two
     [[nodiscard]] ArtGenRowWidths ArtGenRowFieldWidths(float available, float fontSize);
 
+    /// The reference Queue sends with a set: the panel's slot for an image preset, none for a sound (it has no reference)
+    [[nodiscard]] Optional<ArtGenReference> ArtGenQueueReference(const Optional<ArtGenReference>& slot, bool makesImages);
+
+    /// The line under the subject rows: what Queue will send as the set's reference (the slot's file name, mode and weight), or that none goes and
+    /// whose reference applies instead. Written into @p out, so the frame builds no string
+    void FormatArtGenQueueReference(const Optional<ArtGenReference>& slot, bool makesImages, char* out, size_t size);
+
+    /// `<file name> (<mode>, weight <w>)` of @p reference, the weight being the mode's default when the reference names none
+    void FormatArtGenReferenceSummary(const ArtGenReference& reference, char* out, size_t size);
+
     /// What the Set tab shares with the Generate tab: the preset it queues with (by name when saved and unchanged, else as a draft, as Generate
-    /// decides). The count and seed are the Set tab's own
+    /// decides) and whether it makes images (the slot goes only with those). The count and seed are the Set tab's own
     struct ArtGenSetPanelForm {
         const ArtGenPresetForm& preset;
+        bool makesImages = true;
     };
 
     /// How the Set tab plays a sound variant: the widget's own player, so one sound plays at a time

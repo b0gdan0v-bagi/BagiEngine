@@ -78,7 +78,7 @@ namespace BECore::Tests {
             ImGui::Begin(kHostName, nullptr, hostFlags);
             const auto play = [](const AudioClip&) {};
             const auto stop = [] {};
-            panel.DrawSetTab(session, ArtGenSetPanelForm{form}, ArtGenSetPanelSound{play, stop, false});
+            panel.DrawSetTab(session, ArtGenSetPanelForm{form, makesImages}, ArtGenSetPanelSound{play, stop, false});
             ImGui::End();
             ImGui::Render();
         }
@@ -245,6 +245,7 @@ namespace BECore::Tests {
         }
 
         double now = 0.0;
+        bool makesImages = true;  // what the preset of the form makes, as the widget tells the tab
         ArtGenSession session;
         ArtGenPresetForm form;
         ArtGenSetPanel panel;
@@ -258,6 +259,41 @@ namespace BECore::Tests {
     private:
         std::filesystem::path _root;
     };
+
+    TEST_F(ArtGenSetPanelTest, QueueSendsTheSlotOfAnImagePresetAndNothingForASound) {
+        const ArtGenReference slot{"style", "assets/artgen/white_knight.png", Optional<double>(0.7)};
+        session.SetReferenceSlot(slot);
+        TypeSubject("queen");
+        ASSERT_TRUE(PressQueue());
+        EXPECT_EQ(session.GetSets()[0].reference, Optional<ArtGenReference>(slot));
+
+        makesImages = false;
+        TypeSubject("a gong");
+        ASSERT_TRUE(PressQueue());
+        EXPECT_FALSE(session.GetSets()[1].reference.has_value()) << "a sound has no reference";
+
+        makesImages = true;
+        session.ClearReferenceSlot();
+        TypeSubject("king");
+        ASSERT_TRUE(PressQueue());
+        EXPECT_FALSE(session.GetSets()[2].reference.has_value()) << "an empty slot sends nothing: the preset's own applies";
+    }
+
+    TEST_F(ArtGenSetPanelTest, AReferenceOfTheQueueAndOfTheSelectedSetCostsAFrameNoAllocation) {
+        ArtGenSet set = MakeSet("styled", "2026-11-17T12:00:00Z", ArtGenSetJobState::Done);
+        set.reference = ArtGenReference{"style", "assets/artgen/white_knight.png", {}};
+        LoadSets({set});
+        session.SetReferenceSlot(ArtGenReference{"init", "assets/artgen/a_rather_long_file_name_for_the_slot.png", {}});
+        Frame();
+        const AllocTracker::ThreadCounters before = AllocTracker::GetThreadCounters();
+        for (int i = 0; i < 3; ++i) {
+            Frame();
+        }
+        const AllocTracker::ThreadCounters after = AllocTracker::GetThreadCounters();
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_EQ(after.count, before.count);
+        }
+    }
 
     TEST_F(ArtGenSetPanelTest, ASecondSetCanBeQueuedAfterTheFirst) {
         TypeSubject("queen");
@@ -470,6 +506,36 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(ArtGenFieldWidth(10.0f, 15.0f, 1000.0f), 150.0f);
         EXPECT_FLOAT_EQ(ArtGenFieldWidth(10.0f, 15.0f, 90.0f), 90.0f);
         EXPECT_FLOAT_EQ(ArtGenFieldWidth(10.0f, 15.0f, -5.0f), 1.0f);
+    }
+
+    TEST(ArtGenSetPanelLayoutTest, QueueSendsTheSlotOnlyWithAnImagePreset) {
+        const Optional<ArtGenReference> slot = ArtGenReference{"style", "assets/artgen/white_knight.png", {}};
+        EXPECT_EQ(ArtGenQueueReference(slot, true), slot);
+        EXPECT_FALSE(ArtGenQueueReference(slot, false).has_value()) << "a sound has no reference";
+        EXPECT_FALSE(ArtGenQueueReference({}, true).has_value());
+    }
+
+    TEST(ArtGenSetPanelLayoutTest, TheQueueLineSaysWhatGoesOutAndWhatAppliesInstead) {
+        char line[160];
+        FormatArtGenQueueReference({}, true, line, sizeof(line));
+        EXPECT_NE(StringView(line).find("preset's own reference"), StringView::npos) << "no slot: the preset's own applies";
+        FormatArtGenQueueReference(ArtGenReference{"style", "assets/artgen/white_knight.png", {}}, true, line, sizeof(line));
+        EXPECT_NE(StringView(line).find("white_knight.png (style, weight 0.80)"), StringView::npos) << line;
+        EXPECT_EQ(StringView(line).find("assets/"), StringView::npos) << "the file name, not the path";
+        FormatArtGenQueueReference(ArtGenReference{"style", "a.png", {}}, false, line, sizeof(line));
+        EXPECT_NE(StringView(line).find("sound"), StringView::npos) << "a sound sends none, whatever the slot holds";
+        EXPECT_EQ(StringView(line).find("a.png"), StringView::npos);
+    }
+
+    TEST(ArtGenSetPanelLayoutTest, AReferenceSummaryHasTheFileTheModeAndTheWeight) {
+        char summary[160];
+        FormatArtGenReferenceSummary(ArtGenReference{"init", "C:/pictures/knight.png", Optional<double>(0.25)}, summary, sizeof(summary));
+        EXPECT_STREQ(summary, "knight.png (init, weight 0.25)");
+        FormatArtGenReferenceSummary(ArtGenReference{"init", "knight.png", {}}, summary, sizeof(summary));
+        EXPECT_STREQ(summary, "knight.png (init, weight 0.40)") << "the mode's default weight";
+        char tiny[8];
+        FormatArtGenReferenceSummary(ArtGenReference{"init", "knight.png", {}}, tiny, sizeof(tiny));
+        EXPECT_EQ(std::strlen(tiny), 7u) << "a small buffer is cut, never overrun";
     }
 
     TEST(ArtGenSetPanelLayoutTest, QueueSaysWhyItIsOff) {
