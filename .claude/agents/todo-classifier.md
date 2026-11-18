@@ -25,6 +25,7 @@ For each candidate read it with `python3 <engine>/tools/todo/todo.py show <id>` 
   - `other area`: the candidate's `area` is not a row of the rules file (another game's entry in the shared store). Never `eligible`, whatever it says; the conductor should not have sent it, so say so in its `reason`.
   - `needs detail`: the entry is an idea without a clear place in the code or without an outcome you could check.
   - `owner decision`: the entry says the owner decides, or the choice between approaches is open (the rules file gives examples for this repository).
+  - for `owner step` and `owner decision`, read `todo.py list --area owner --status open,deferred` once and, when one of its entries is that step or decision, write `owner step: <owner id>` (or `owner decision: <owner id>`): the conductor links the entry to it instead of filing a second one.
   - the extra skip reasons of the rules file (for example a game entry that waits for an engine entry), with the wording it gives
   - `needs platform`: the work can be checked only on Windows, on Vulkan, with a GPU, a device or a browser.
   - `blocked by <id>`: `todo.py show` prints a line `blocked by: <id> (<status>)` with a blocker that is not `closed` and is not the candidate's `stackedOn` or `pairedOn` (the conductor leaves such entries out; this is the safety net).
