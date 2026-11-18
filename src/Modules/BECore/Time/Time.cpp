@@ -13,8 +13,12 @@ namespace BECore {
     }
 
     void Time::Advance(double seconds) {
+        AdvanceAt(seconds, Clock::now());
+    }
+
+    void Time::AdvanceAt(double seconds, Clock::time_point now) {
         if (_lastTick) {
-            _lastTick = Clock::now();
+            _lastTick = now;
         }
         AdvanceBy(seconds);
     }

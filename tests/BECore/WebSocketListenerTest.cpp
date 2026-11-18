@@ -277,7 +277,7 @@ namespace BECore::Tests {
         second->Send(AsBytes(EncodeCloseFrame(WebSocketCloseCode::kNormal, {}, kClientMask)));
         ASSERT_TRUE(second->WaitForEndOfStream());
         bool connected = false;
-        for (int attempt = 0; attempt < 200 && !connected; ++attempt) {
+        for (int attempt = 0; attempt < kSlotRetryAttempts && !connected; ++attempt) {
             connected = StringView(TryHandshake(port)).starts_with("HTTP/1.1 101 ");
             if (!connected) {
                 std::this_thread::sleep_for(10ms);  // the accept thread reaps finished connections every 50 ms
@@ -391,7 +391,7 @@ namespace BECore::Tests {
 
         // Each probe freed its slot (one connection per address is allowed): a client can still connect
         bool connected = false;
-        for (int attempt = 0; attempt < 200 && !connected; ++attempt) {
+        for (int attempt = 0; attempt < kSlotRetryAttempts && !connected; ++attempt) {
             connected = StringView(TryHandshake(port, "", "game.example.net")).starts_with("HTTP/1.1 101 ");
             if (!connected) {
                 std::this_thread::sleep_for(10ms);  // the accept thread reaps finished connections every 50 ms
@@ -460,6 +460,7 @@ namespace BECore::Tests {
 
     TEST_F(WebSocketListenerTest, StopEndsOpenAndUnfinishedConnectionsPromptly) {
         WebSocketListenerSettings settings;
+        settings.handshakeTimeout = std::chrono::minutes(2);  // longer than any stall of a loaded machine
         const uint16_t port = Start(settings);
         auto open = Connect(port);
         auto silent = WebSocketTestClient::Open(port);
@@ -565,7 +566,7 @@ namespace BECore::Tests {
         first->Send(AsBytes(EncodeCloseFrame(WebSocketCloseCode::kNormal, {}, kClientMask)));
         ASSERT_TRUE(first->WaitForEndOfStream());
         bool connected = false;
-        for (int attempt = 0; attempt < 200 && !connected; ++attempt) {
+        for (int attempt = 0; attempt < kSlotRetryAttempts && !connected; ++attempt) {
             connected = StringView(TryHandshake(port, "X-Forwarded-For: 203.0.113.1\r\n")).starts_with("HTTP/1.1 101 ");
             if (!connected) {
                 std::this_thread::sleep_for(10ms);

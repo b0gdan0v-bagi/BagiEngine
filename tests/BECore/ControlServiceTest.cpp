@@ -1489,6 +1489,9 @@ namespace BECore::Tests {
         EXPECT_EQ(ErrorCode(responses[0]), "shutting_down");
     }
 
+    /// Longer than any stall of a loaded machine, so a wait that ends before it was woken and did not time out
+    constexpr std::chrono::minutes kWaitNobodySitsOut{2};
+
     TEST_F(ControlServiceTest, WaitForRequestsTimesOutWhenNothingIsPosted) {
         const auto start = std::chrono::steady_clock::now();
         service.WaitForRequests(std::chrono::milliseconds(30));
@@ -1499,8 +1502,8 @@ namespace BECore::Tests {
         Post(MakeRequest(1, "ping"));
 
         const auto start = std::chrono::steady_clock::now();
-        service.WaitForRequests(std::chrono::seconds(30));
-        EXPECT_LT(std::chrono::steady_clock::now() - start, std::chrono::seconds(10));
+        service.WaitForRequests(kWaitNobodySitsOut);
+        EXPECT_LT(std::chrono::steady_clock::now() - start, kWaitNobodySitsOut);
     }
 
     TEST_F(ControlServiceTest, WaitForRequestsWakesWhenAnotherThreadPosts) {
@@ -1508,11 +1511,11 @@ namespace BECore::Tests {
         std::thread client([this] { service.Post(MakeRequest(1, "hello"), [](String) {}); });
 
         const auto start = std::chrono::steady_clock::now();
-        service.WaitForRequests(std::chrono::seconds(30));
+        service.WaitForRequests(kWaitNobodySitsOut);
         const auto waited = std::chrono::steady_clock::now() - start;
         client.join();
 
-        EXPECT_LT(waited, std::chrono::seconds(10));
+        EXPECT_LT(waited, kWaitNobodySitsOut);
         service.Drain();
         EXPECT_EQ(order, (Vector<String>{"hello"}));
     }

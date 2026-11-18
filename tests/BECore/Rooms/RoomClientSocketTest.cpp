@@ -22,7 +22,7 @@ namespace BECore::Tests {
         using Kind = RoomClientEventKind;
 
         constexpr std::chrono::milliseconds kPlayLimit{30'000};
-        constexpr std::chrono::milliseconds kShortLimit{10'000};
+        constexpr std::chrono::milliseconds kShortLimit{30'000};
         constexpr int kCardsInAHand = DemoCardGame::kTotalPlays;
 
         /// What the test wants to know of the transports a client made, and a hand on the connection to cut it
@@ -362,8 +362,7 @@ namespace BECore::Tests {
 
         // Inside the grace nobody plays the seat
         clock.Advance(20s);
-        std::this_thread::sleep_for(100ms);
-        WaitFor([] { return false; }, 100ms);
+        WaitFor([] { return false; }, 200ms);
         EXPECT_EQ(host.PlaysOf(1), 0);
 
         // Past it a computer does

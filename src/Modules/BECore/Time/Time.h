@@ -51,6 +51,9 @@ namespace BECore {
          */
         void Advance(double seconds);
 
+        /// Advance() with the wall clock read by the caller
+        void AdvanceAt(double seconds, Clock::time_point now);
+
         /**
          * @brief A frame in which the game does not move (GamePause, Held): nothing advances.
          *

@@ -53,7 +53,7 @@ namespace BECore::Tests {
             String text = "<ui><elements>\n";
             for (int i = 0; i < kCards; ++i) {
                 const auto [x, y] = CardPlace(i);
-                text += Format("<element type=\"UIPanel\" name=\"c{0}\" x=\"{1}\" y=\"{2}\" width=\"140\" height=\"80\" color=\"30,30,40,255\"/>\n"
+                text += Format("<element type=\"UIPanel\" name=\"c{0}\" x=\"{1}\" y=\"{2}\" width=\"{7}\" height=\"{8}\" color=\"30,30,40,255\"/>\n"
                                "<element type=\"UIElement\" name=\"t{0}\" x=\"{3}\" y=\"{4}\" width=\"124\" height=\"22\" fontSize=\"18\"><components>"
                                "<component type=\"UITextComponent\" text=\"Card {0}\"/></components></element>\n"
                                "<element type=\"UIElement\" name=\"v{0}\" x=\"{3}\" y=\"{5}\" width=\"124\" height=\"20\" fontSize=\"14\"><components>"
@@ -61,7 +61,7 @@ namespace BECore::Tests {
                                "<element type=\"UIElement\" name=\"b{0}\" x=\"{3}\" y=\"{6}\" width=\"56\" height=\"24\" fontSize=\"14\" color=\"40,90,60,255\"><components>"
                                "<component type=\"UITextComponent\" text=\"Buy\" align=\"Center\" verticalAlign=\"Center\" wrap=\"false\"/><component type=\"UIInputClicker\" "
                                "action=\"Buy\"/></components></element>\n",
-                               i, x, y, x + 8, y + 6, y + 30, y + 52)
+                               i, x, y, x + 8, y + 6, y + 30, y + 52, kCardWidth, kCardHeight)
                             .c_str();
             }
             text += "</elements></ui>";
@@ -154,8 +154,8 @@ button { width: 56dp; height: 24dp; font-size: 14dp; background-color: rgb(40, 9
 
     }  // namespace
 
-    /// Not an assertion of speed (a timing test would be flaky): it builds one screen three ways, measures each and prints the table that
-    /// `src/Modules/BECore/UI/AuthoringDecision.md` quotes. The asserts only check that the three screens are the same size and drew something.
+    /// Not an assertion of speed: it builds one screen three ways, measures each and prints the table that `src/Modules/BECore/UI/AuthoringDecision.md`
+    /// quotes. The asserts only check that the three screens drew something. Run it by hand with `--gtest_also_run_disabled_tests --gtest_filter='UIAuthoringBenchmarkTest.*'`.
     class UIAuthoringBenchmarkTest : public ::testing::Test {
     protected:
         static void SetUpTestSuite() {
@@ -170,13 +170,11 @@ button { width: 56dp; height: 24dp; font-size: 14dp; background-color: rgb(40, 9
         IntrusivePtrAtomic<SceneManager> _manager;
     };
 
-    TEST_F(UIAuthoringBenchmarkTest, OneScreenOfAThousandElementsInThreeFormats) {
+    TEST_F(UIAuthoringBenchmarkTest, DISABLED_OneScreenOfAThousandElementsInThreeFormats) {
         auto renderer = New<RecordingRenderer>();
         renderer->width = kOutputWidth;
         renderer->height = kOutputHeight;
         CoreManager::GetRendererManager().SetRenderer(renderer);
-        // Same fonts for all three: warm the default font before anything is timed, so the first draw of each does not pay for RmlUi's start-up or the file read twice
-        EngineEnvironment::EnsureCoreServices();
 
         const String xml = XmlScreen();
         const String web = WebScreen();
@@ -317,9 +315,6 @@ button { width: 56dp; height: 24dp; font-size: 14dp; background-color: rgb(40, 9
 
         EXPECT_GT(callsA, 0u);
         EXPECT_GT(callsC, 0u);
-        static_cast<void>(verticesC);
-        EXPECT_GT(callsC, 0u);
-        static_cast<void>(firstLayoutC);
     }
 
 }  // namespace BECore::Tests

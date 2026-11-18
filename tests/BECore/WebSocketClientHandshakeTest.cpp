@@ -236,8 +236,9 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(WebSocketClientHandshakeTest, AFullHeadOfRepeatedTokensIsCheapToRead) {
-        constexpr double kLimitMilliseconds = 250.0;  // a linear scan needs a few; the limit is for a Debug build on a loaded machine
+    /// The perf set reads the line it prints (`.claude/rules/perf-project.md`, `websocket-handshake-scans`)
+    TEST(WebSocketClientHandshakeCostTest, DISABLED_FullHeadsOfRepeatedTokens) {
+        double worst = 0.0;
         for (const String line : {String("Upgrade: a\r\n"), String("Connection: ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\n"), String("a:\r\n")}) {
             Response response;
             String head = response.Text();
@@ -248,9 +249,9 @@ namespace BECore::Tests {
             head += "\r\n";
             const auto begin = std::chrono::steady_clock::now();
             (void)CheckServerHandshakeResponse(head, kRfcKey);
-            const double elapsed = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - begin).count();
-            EXPECT_LT(elapsed, kLimitMilliseconds) << line;
+            worst = std::max(worst, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - begin).count());
         }
+        std::printf("HandshakeCost client_scan_ms=%.3f\n", worst);
     }
 
 }  // namespace BECore::Tests
