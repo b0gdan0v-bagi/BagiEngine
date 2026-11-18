@@ -129,6 +129,25 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
       }
     },
     {
+      "name": "websocket-handshake-scans",
+      "about": "The slowest read of a request or response head of the largest allowed size, built of repeated tokens: the scan has to stay linear",
+      "fast": false,
+      "command": ["{bin}/BagiEngineTests", "--gtest_also_run_disabled_tests", "--gtest_filter=*HandshakeCostTest.DISABLED_*"],
+      "metrics": {
+        "server_scan_ms": {"source": "regex", "pattern": "^HandshakeCost server_scan_ms=([0-9.]+)", "unit": "ms", "better": "lower", "gate": false},
+        "client_scan_ms": {"source": "regex", "pattern": "^HandshakeCost client_scan_ms=([0-9.]+)", "unit": "ms", "better": "lower", "gate": false}
+      }
+    },
+    {
+      "name": "ui-web-limits",
+      "about": "The web-style UI compiler on documents far over its limits (depth, nodes, a 10 MiB sheet, the cascade work, a descendant selector over a deep chain): the limits have to keep hostile files cheap",
+      "fast": false,
+      "command": ["{bin}/BagiEngineTests", "--gtest_also_run_disabled_tests", "--gtest_filter=UIWebTest.DISABLED_TheDocumentsAtTheLimitsCost"],
+      "metrics": {
+        "total_ms": {"source": "regex", "pattern": "^UIWebLimits total_ms=([0-9.]+)", "unit": "ms", "better": "lower", "gate": false}
+      }
+    },
+    {
       "name": "engine-tests",
       "about": "BagiEngineTests in one process (it waits on threads and sockets, so wall time, not CPU)",
       "command": ["{bin}/BagiEngineTests", "--gtest_brief=1"],

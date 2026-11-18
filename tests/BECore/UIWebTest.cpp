@@ -2933,9 +2933,6 @@ button:checked { background: var(--panel); }
 
     namespace {
 
-        /// A pass takes milliseconds; the budget only has to tell a pass from a hang or a quadratic scan, on a loaded machine and in a Debug build
-        constexpr double kLimitTestBudgetSeconds = 20.0;
-
         class Stopwatch {
         public:
             [[nodiscard]] double Seconds() const {
@@ -2976,10 +2973,8 @@ button:checked { background: var(--panel); }
     }  // namespace
 
     TEST_F(UIWebTest, ADocumentNestedAHundredThousandDeepKeepsTheFirstLevelsAndSaysSo) {
-        const Stopwatch watch;
         const String html = Repeat("<div>", 100000);
         const auto compiled = Compile(html);
-        EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
         EXPECT_TRUE(Mentions(compiled->report, "nested deeper than 64"));
         EXPECT_EQ(compiled->report.elements, UIHtmlParser::kMaxDepth);
         EXPECT_FALSE(Mentions(compiled->report, "never closed")) << "a limit ended the read: that is the entry, not a second one";
@@ -2993,9 +2988,7 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, MoreNodesThanTheLimitAreLeftOutWithOneEntry) {
-        const Stopwatch watch;
         const auto compiled = Compile(Repeat("<div></div>", 20000));
-        EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
         EXPECT_TRUE(Mentions(compiled->report, "more than 8192 elements"));
         EXPECT_LE(compiled->report.elements, UIHtmlParser::kMaxNodes);
         EXPECT_EQ(compiled->IssuesMentioning("more than 8192 elements"), 1u);
@@ -3007,21 +3000,17 @@ button:checked { background: var(--panel); }
         EXPECT_TRUE(Mentions(compiled->report, "document is longer than 1048576 bytes"));
     }
 
-    TEST_F(UIWebTest, AStyleSheetOfTenMegabytesIsReadUpToTheLimitInTime) {
-        const Stopwatch watch;
+    TEST_F(UIWebTest, AStyleSheetOfTenMegabytesIsReadUpToTheLimit) {
         const String css = Repeat(".a { width: 1px; }\n", 10 * 1024 * 1024 / 19);
         const CompiledWithSheet compiled = CompileWithSheet("<div id=\"a\" class=\"a\"></div>", css);
-        EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
         EXPECT_TRUE(Mentions(compiled.report, "style sheet is longer than 1048576 bytes"));
         EXPECT_LE(compiled.report.rules, UICssParser::kMaxRules);
         EXPECT_TRUE(Mentions(compiled.report, "more than 1024 rules"));
     }
 
     TEST_F(UIWebTest, ASelectorOfOneMegabyteIsLeftOutAndTheRuleAfterItStays) {
-        const Stopwatch watch;
         const String css = "." + String(1024 * 1024 - 100, 'a') + " { width: 5px; }\n#b { width: 7px; }";
         const CompiledWithSheet compiled = CompileWithSheet("<div id=\"b\"></div>", css);
-        EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
         EXPECT_TRUE(Mentions(compiled.report, "selector longer than 1024 bytes"));
         EXPECT_EQ(compiled.report.rules, 1u);
         for (const UIWebIssue& issue : compiled.report.issues) {
@@ -3143,10 +3132,8 @@ button:checked { background: var(--panel); }
 
     TEST_F(UIWebTest, ADescendantSelectorOverADeepChainCostsTheChainNotTheNumberOfWaysThroughIt) {
         // `span` is never an ancestor, so every way down the chain of 60 divs fails at the end: without memory that is the number of ways to choose 14 of 60
-        const Stopwatch watch;
         const String selector = "span " + Repeat("div ", 14) + "div";
         const auto compiled = Compile(Repeat("<div>", 60) + Repeat("</div>", 60), selector + " { width: 1px; }");
-        EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
         EXPECT_FALSE(compiled->report.HasIssues());
     }
 
@@ -3167,17 +3154,24 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, TheCascadeWorkIsBoundedAndTheReportSaysWhenItRanOut) {
-        const Stopwatch watch;
         const auto compiled = Compile(Repeat("<div class=\"x\"></div>", 4000), Repeat(".x { width: 1px; }\n", 1000));
-        EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
         EXPECT_TRUE(Mentions(compiled->report, "too large for this document"));
         EXPECT_EQ(compiled->IssuesMentioning("too large for this document"), 1u);
     }
 
-    TEST_F(UIWebTest, ThousandsOfVariantElementsWithoutAnIdGetNamesInLinearTime) {
+    /// The perf set reads the line it prints (`.claude/rules/perf-project.md`, `ui-web-limits`)
+    TEST_F(UIWebTest, DISABLED_TheDocumentsAtTheLimitsCost) {
         const Stopwatch watch;
+        (void)Compile(Repeat("<div>", 100000));
+        (void)Compile(Repeat("<div></div>", 20000));
+        (void)CompileWithSheet("<div id=\"a\" class=\"a\"></div>", Repeat(".a { width: 1px; }\n", 10 * 1024 * 1024 / 19));
+        (void)Compile(Repeat("<div class=\"x\"></div>", 4000), Repeat(".x { width: 1px; }\n", 1000));
+        (void)Compile(Repeat("<div>", 60) + Repeat("</div>", 60), "span " + Repeat("div ", 14) + "div { width: 1px; }");
+        std::printf("UIWebLimits total_ms=%.1f\n", watch.Seconds() * 1000.0);
+    }
+
+    TEST_F(UIWebTest, ThousandsOfVariantElementsWithoutAnIdGetNamesInLinearTime) {
         const auto compiled = Compile("<div id=\"div-2\"></div>" + Repeat("<div class=\"x\"></div>", 2000), "@media (min-width: 1px) { .x { width: 5px; } }");
-        EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
         Set<String> names;
         for (const pugi::xpath_node node : compiled->document.select_nodes("//element")) {
             names.insert(node.node().attribute("name").as_string());

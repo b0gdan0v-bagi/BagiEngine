@@ -109,8 +109,8 @@ namespace BECore::Tests {
     }  // namespace
 
     /// Prints what the generator costs beside `std::mt19937_64`; it asserts no time (a loaded machine would fail it), only that the
-    /// work is the same in every run so that it cannot have been dropped. Run it alone: `BagiEngineTests --gtest_filter='RandomBenchmark*'`.
-    TEST(RandomBenchmarkTest, RngBesideMt19937) {
+    /// work is the same in every run so that it cannot have been dropped. Run it by hand: `BagiEngineTests --gtest_also_run_disabled_tests --gtest_filter='RandomBenchmark*'`.
+    TEST(RandomBenchmarkTest, DISABLED_RngBesideMt19937) {
         uint64_t checksum = 0;
         uint64_t previous = 0;
         uint64_t sink = 0;

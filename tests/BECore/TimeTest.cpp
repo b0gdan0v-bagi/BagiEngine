@@ -212,10 +212,11 @@ namespace BECore::Tests {
         Time time;
         time.TickAt(Time::Clock::now() - std::chrono::hours(1));
 
-        time.Advance(kFixedStep);
-        time.TickAt(Time::Clock::now());
+        const Time::Clock::time_point now = Time::Clock::now();
+        time.AdvanceAt(kFixedStep, now);
+        time.TickAt(now);
 
-        EXPECT_LT(time.GetDeltaTime(), 0.1f);
+        EXPECT_EQ(time.GetDeltaTime(), 0.0f);
     }
 
     TEST(TimeTest, AdvanceDoesNotStartTheWallClock) {

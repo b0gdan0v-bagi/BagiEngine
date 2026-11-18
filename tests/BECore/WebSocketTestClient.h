@@ -15,6 +15,8 @@ namespace BECore::Tests {
     inline constexpr WebSocketMask kClientMask = {0x12, 0x34, 0x56, 0x78};
     inline constexpr const char* kClientKey = "dGhlIHNhbXBsZSBub25jZQ==";
     inline constexpr std::chrono::seconds kClientWaitLimit{30};
+    /// Tries of a client that waits for a free connection slot, 10 ms apart: the accept thread may be starved on a loaded machine
+    inline constexpr int kSlotRetryAttempts = 3000;
 
     /// Something a test thread does while it waits (the server tests drain the control service); may be empty. A client owns its pump:
     /// a test that gives one pump to several clients passes the lambda itself each time, not a `WaitPump` it made once

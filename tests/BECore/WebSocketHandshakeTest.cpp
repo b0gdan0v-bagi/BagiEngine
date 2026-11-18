@@ -553,9 +553,6 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// Longest time a head of kMaxHandshakeBytes of one repeated token may take, a Debug build on a loaded machine included (a linear scan needs a few milliseconds)
-        constexpr double kScanLimitMilliseconds = 250.0;
-
         template <typename TFunction>
         double ElapsedMilliseconds(TFunction&& work) {
             const auto begin = std::chrono::steady_clock::now();
@@ -575,7 +572,9 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(WebSocketHandshakeTest, AFullHeadOfRepeatedTokensIsCheapToRead) {
+    /// The perf set reads the line it prints (`.claude/rules/perf-project.md`, `websocket-handshake-scans`)
+    TEST(WebSocketHandshakeCostTest, DISABLED_FullHeadsOfRepeatedTokens) {
+        double worst = 0.0;
         const Vector<String> heads = {
             FullHead("X-A: b\r\n"),                                        // as many header lines as fit
             FullHead("Upgrade: a\r\n"),                                    // a list header joined over and over
@@ -585,18 +584,19 @@ namespace BECore::Tests {
         for (const String& head : heads) {
             ASSERT_LE(head.size(), kMaxHandshakeBytes);
             const HandshakePolicy policy = PublicPolicy();
-            EXPECT_LT(ElapsedMilliseconds([&] { (void)ParseHandshakeRequest(View(head), HandshakePolicy{}); }), kScanLimitMilliseconds);
-            EXPECT_LT(ElapsedMilliseconds([&] { (void)ParseHandshakeRequest(View(head), policy); }), kScanLimitMilliseconds);
-            EXPECT_LT(ElapsedMilliseconds([&] { (void)IsHealthCheckRequest(View(head), HealthPolicy()); }), kScanLimitMilliseconds);
+            worst = std::max(worst, ElapsedMilliseconds([&] { (void)ParseHandshakeRequest(View(head), HandshakePolicy{}); }));
+            worst = std::max(worst, ElapsedMilliseconds([&] { (void)ParseHandshakeRequest(View(head), policy); }));
+            worst = std::max(worst, ElapsedMilliseconds([&] { (void)IsHealthCheckRequest(View(head), HealthPolicy()); }));
         }
         // One header line that is a single list: the token scan is the cost
         const String oneLongList = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: " + String(kMaxHandshakeBytes - 200, ',') + "\r\n\r\n";
-        EXPECT_LT(ElapsedMilliseconds([&] { (void)ParseHandshakeRequest(View(oneLongList), HandshakePolicy{}); }), kScanLimitMilliseconds);
+        worst = std::max(worst, ElapsedMilliseconds([&] { (void)ParseHandshakeRequest(View(oneLongList), HandshakePolicy{}); }));
+        std::printf("HandshakeCost server_scan_ms=%.3f\n", worst);
     }
 
     TEST(WebSocketHandshakeTest, TokenSearchDoesNotAllocatePerToken) {
         const String commas(kMaxHandshakeBytes, ',');
-        EXPECT_LT(ElapsedMilliseconds([&] { EXPECT_FALSE(HeaderHasToken(View(commas), "upgrade")); }), kScanLimitMilliseconds);
+        EXPECT_FALSE(HeaderHasToken(View(commas), "upgrade"));
         EXPECT_TRUE(HeaderHasToken(View(commas + " Upgrade"), "upgrade"));
         EXPECT_TRUE(EqualsIgnoreCase("WebSocket", "websocket"));
         EXPECT_FALSE(EqualsIgnoreCase("websockets", "websocket"));

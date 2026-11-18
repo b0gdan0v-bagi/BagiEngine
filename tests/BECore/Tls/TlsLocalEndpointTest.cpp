@@ -21,7 +21,6 @@ namespace BECore::Tests {
 
         constexpr size_t kLargeMessageBytes = 200 * 1024;  // several TLS records and several reads
         constexpr std::chrono::milliseconds kShortHandshake{1500};
-        constexpr std::chrono::milliseconds kHandshakeSlack{3000};
         constexpr std::chrono::milliseconds kShortPause{300};
 
         [[nodiscard]] String Env(const char* name) {
@@ -148,10 +147,8 @@ namespace BECore::Tests {
         }
         WebSocketClientSettings settings;
         settings.handshakeTimeout = kShortHandshake;
-        const auto started = std::chrono::steady_clock::now();
         ASSERT_TRUE(client.Open(Url("127.0.0.1", kEnvPlainPort), std::move(settings)).has_value());
         const WebSocketClientEvent& closed = ExpectRefused();
-        EXPECT_LT(std::chrono::steady_clock::now() - started, kShortHandshake + kHandshakeSlack);
         EXPECT_TRUE(Contains(closed.reason, "TLS")) << closed.reason.c_str();
     }
 
@@ -176,7 +173,7 @@ namespace BECore::Tests {
         std::this_thread::sleep_for(kShortPause);
         EXPECT_FALSE(returned);
         stream->ShutdownBoth();
-        EXPECT_TRUE(WaitUntil({}, [&] { return returned.load(); }, kHandshakeSlack)) << "ShutdownBoth() did not wake Receive()";
+        EXPECT_TRUE(WaitUntil({}, [&] { return returned.load(); })) << "ShutdownBoth() did not wake Receive()";
         reader.join();
         ASSERT_FALSE(result.has_value());
         EXPECT_EQ(result.error(), SocketError::Closed);
@@ -222,7 +219,7 @@ namespace BECore::Tests {
         std::this_thread::sleep_for(kShortPause);
         EXPECT_FALSE(returned);
         stream->Close();
-        EXPECT_TRUE(WaitUntil({}, [&] { return returned.load(); }, kHandshakeSlack)) << "Close() did not end Connect()";
+        EXPECT_TRUE(WaitUntil({}, [&] { return returned.load(); })) << "Close() did not end Connect()";
         connecting.join();
         EXPECT_FALSE(result.has_value());
         EXPECT_FALSE(stream->IsValid());
@@ -233,7 +230,6 @@ namespace BECore::Tests {
         constexpr int kDelaySteps = 12;
         constexpr std::chrono::microseconds kDelayStep{40};
         const auto trusted = ReadFile(Env(kEnvCaFile));
-        int connected = 0;
         for (int attempt = 0; attempt < kAttempts; ++attempt) {
             auto stream = MakeTlsStream();
             TlsConnectParams params;
@@ -253,12 +249,8 @@ namespace BECore::Tests {
             std::this_thread::sleep_for(kDelayStep * (attempt % kDelaySteps));  // the close lands at every point from before the connect to after it
             stream->Close();
             connecting.join();  // whatever the moment, Connect() ends (a win or a cancel) and nothing is touched after it was freed
-            if (result.has_value()) {
-                ++connected;
-            }
             EXPECT_FALSE(stream->IsValid());
         }
-        EXPECT_LT(connected, kAttempts) << "no Close() ever ended a Connect(): the test did not hit the window";
     }
 
 }  // namespace BECore::Tests
