@@ -8,6 +8,7 @@
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetPanel.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetStore.h>
+#include <Widgets/EditorLayout/UserFileIo.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
@@ -244,6 +245,94 @@ namespace BECore::Tests {
             return session.GetSets().size() > before;
         }
 
+        /// The folder of a job's files in the set `chess` of the second game root that LoadSets makes
+        std::filesystem::path VariantFolder(const char* job) const {
+            return _root / "second" / "artgen" / "out" / "chess" / job;
+        }
+
+        static void WritePicture(const std::filesystem::path& file) {
+            std::filesystem::create_directories(file.parent_path());
+            ArtGenPixels pixels;
+            pixels.width = 2;
+            pixels.height = 2;
+            pixels.rgba.assign(2 * 2 * 4, 255);
+            ASSERT_TRUE(WriteArtGenPng(file, pixels).has_value());
+        }
+
+        static void WriteProvenance(const std::filesystem::path& file, StringView text) {
+            ASSERT_TRUE(WriteTextFileAtomically(file, text).has_value());
+        }
+
+        static constexpr StringView kPassedChecks = R"({"seed":5,"checks":{"passed":true,"failed":[]}})";
+        static constexpr StringView kFailedChecks = R"({"seed":6,"checks":{"passed":false,"failed":["edge","halo"]}})";
+        static constexpr StringView kUnreadableChecks = R"({"seed":7,"checks":{"passed":null,"error":"not a PNG"}})";
+
+        /// A finished set of two rows. King has three variants with a picture and a provenance file each: checks passed (seed 5), failed with
+        /// edge and halo (6), unreadable (7). Queen has one with a picture and no provenance in the manifest (5), one whose provenance file has
+        /// no checks (6) and one whose picture is gone though its provenance file is there (7)
+        ArtGenSet MakeVerdictSet() {
+            ArtGenSet set = MakeSet("chess", "2026-11-17T12:00:00Z", ArtGenSetJobState::Done);
+            ArtGenSetJob& king = set.jobs[0];
+            king.variants.clear();
+            for (int64_t seed : {5, 6, 7}) {
+                ArtGenSetVariant variant;
+                variant.seed = seed;
+                variant.file = Format("king/king_{}.png", seed);
+                variant.provenance = Format("king/king_{}.artgen.json", seed);
+                king.variants.push_back(variant);
+                WritePicture(VariantFolder("king") / Format("king_{}.png", seed).c_str());
+            }
+            WriteProvenance(VariantFolder("king") / "king_5.artgen.json", kPassedChecks);
+            WriteProvenance(VariantFolder("king") / "king_6.artgen.json", kFailedChecks);
+            WriteProvenance(VariantFolder("king") / "king_7.artgen.json", kUnreadableChecks);
+
+            ArtGenSetJob queen = king;
+            queen.name = "queen";
+            queen.subject = "queen";
+            queen.variants.clear();
+            ArtGenSetVariant bare;
+            bare.seed = 5;
+            bare.file = "queen/queen_5.png";
+            queen.variants.push_back(bare);
+            WritePicture(VariantFolder("queen") / "queen_5.png");
+            ArtGenSetVariant noChecks;
+            noChecks.seed = 6;
+            noChecks.file = "queen/queen_6.png";
+            noChecks.provenance = "queen/queen_6.artgen.json";
+            queen.variants.push_back(noChecks);
+            WritePicture(VariantFolder("queen") / "queen_6.png");
+            WriteProvenance(VariantFolder("queen") / "queen_6.artgen.json", R"({"seed":6})");
+            ArtGenSetVariant gone;
+            gone.seed = 7;
+            gone.file = "queen/queen_7.png";
+            gone.provenance = "queen/queen_7.artgen.json";
+            queen.variants.push_back(gone);
+            WriteProvenance(VariantFolder("queen") / "queen_7.artgen.json", kFailedChecks);
+            queen.pick = 5;
+            set.jobs.push_back(queen);
+            return set;
+        }
+
+        /// The pick button of a variant: the cell's own item, which the mouse is over anywhere on the tile
+        static ImGuiID PickId(size_t row, int32_t variant) {
+            return ImHashStr("##pick", 0, ImHashData(&variant, sizeof(variant), RowId(row)));
+        }
+
+        /// Puts the mouse over the mark of a variant's tile (its top-right corner) and draws two frames
+        void HoverMarkOf(size_t row, int32_t variant) {
+            const ImVec2 corner = Locate(PickId(row, variant));
+            constexpr float kToMarkX = 104.0f;
+            constexpr float kToMarkY = 10.0f;
+            ImGui::GetIO().AddMousePosEvent(corner.x + kToMarkX, corner.y + kToMarkY);
+            Frame();
+            Frame();
+        }
+
+        static bool IsTooltipShown() {
+            const ImGuiWindow* tooltip = ImGui::FindWindowByName("##Tooltip_00");
+            return tooltip != nullptr && tooltip->Active;
+        }
+
         double now = 0.0;
         ArtGenSession session;
         ArtGenPresetForm form;
@@ -421,6 +510,100 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(session.GetReferenceSlot().has_value());
         EXPECT_EQ(session.GetReferenceSlot()->image, "assets/artgen/queen.png");
+    }
+
+    TEST_F(ArtGenSetPanelTest, ThePanelHoldsTheVerdictOfEachVariantFromItsProvenanceFile) {
+        ASSERT_NO_FATAL_FAILURE(LoadSets({MakeVerdictSet()}));
+        constexpr size_t kKing = 0;
+        constexpr size_t kQueen = 1;
+
+        const ArtGenVerdict* passed = panel.VerdictOf(kKing, 5);
+        ASSERT_NE(passed, nullptr);
+        EXPECT_EQ(passed->kind, ArtGenVerdictKind::Passed);
+
+        const ArtGenVerdict* failed = panel.VerdictOf(kKing, 6);
+        ASSERT_NE(failed, nullptr);
+        EXPECT_EQ(failed->kind, ArtGenVerdictKind::Failed);
+        EXPECT_NE(failed->tip.find("edge"), String::npos);
+        EXPECT_NE(failed->tip.find("halo"), String::npos);
+
+        ASSERT_NE(panel.VerdictOf(kKing, 7), nullptr);
+        EXPECT_EQ(panel.VerdictOf(kKing, 7)->kind, ArtGenVerdictKind::Unreadable);
+        ASSERT_NE(panel.VerdictOf(kQueen, 5), nullptr);
+        EXPECT_EQ(panel.VerdictOf(kQueen, 5)->kind, ArtGenVerdictKind::None) << "the manifest names no provenance";
+        ASSERT_NE(panel.VerdictOf(kQueen, 6), nullptr);
+        EXPECT_EQ(panel.VerdictOf(kQueen, 6)->kind, ArtGenVerdictKind::None) << "a provenance file without checks";
+        ASSERT_NE(panel.VerdictOf(kQueen, 7), nullptr);
+        EXPECT_EQ(panel.VerdictOf(kQueen, 7)->kind, ArtGenVerdictKind::None) << "the picture is gone, so the file is not read";
+        EXPECT_EQ(panel.VerdictOf(kKing, 99), nullptr) << "no such variant";
+        EXPECT_EQ(panel.VerdictOf(kQueen + 5, 5), nullptr) << "no such row";
+    }
+
+    TEST_F(ArtGenSetPanelTest, TheProvenanceFileIsReadWhenTheThumbnailLoadsAndNotAgain) {
+        ASSERT_NO_FATAL_FAILURE(LoadSets({MakeVerdictSet()}));
+        ASSERT_EQ(panel.VerdictOf(0, 5)->kind, ArtGenVerdictKind::Passed);
+
+        ASSERT_NO_FATAL_FAILURE(WriteProvenance(VariantFolder("king") / "king_5.artgen.json", kFailedChecks));
+        Frame();
+        Frame();
+        EXPECT_EQ(panel.VerdictOf(0, 5)->kind, ArtGenVerdictKind::Passed) << "a frame does not read the file";
+
+        panel.DropThumbnails();
+        Frame();
+        ASSERT_NE(panel.VerdictOf(0, 5), nullptr);
+        EXPECT_EQ(panel.VerdictOf(0, 5)->kind, ArtGenVerdictKind::Failed) << "a thumbnail loaded again reads it again";
+    }
+
+    TEST_F(ArtGenSetPanelTest, TheTooltipOfTheMarkShowsOverTheMarkAndNotOverTheRestOfTheTile) {
+        ASSERT_NO_FATAL_FAILURE(LoadSets({MakeVerdictSet()}));
+        constexpr int32_t kFailedVariant = 1;
+
+        const ImVec2 corner = Locate(PickId(0, kFailedVariant));
+        constexpr float kMiddle = 56.0f;
+        ImGui::GetIO().AddMousePosEvent(corner.x + kMiddle, corner.y + kMiddle);
+        Frame();
+        Frame();
+        EXPECT_FALSE(IsTooltipShown()) << "the tile's own tooltip waits for a hover delay";
+
+        ASSERT_NO_FATAL_FAILURE(HoverMarkOf(0, kFailedVariant));
+        EXPECT_TRUE(IsTooltipShown());
+    }
+
+    TEST(ArtGenSetPanelVerdictTest, EveryKindButNoneHasItsOwnIcon) {
+        EXPECT_EQ(ArtGenVerdictIcon(ArtGenVerdictKind::None), nullptr);
+        const char* passed = ArtGenVerdictIcon(ArtGenVerdictKind::Passed);
+        const char* failed = ArtGenVerdictIcon(ArtGenVerdictKind::Failed);
+        const char* unreadable = ArtGenVerdictIcon(ArtGenVerdictKind::Unreadable);
+        ASSERT_NE(passed, nullptr);
+        ASSERT_NE(failed, nullptr);
+        ASSERT_NE(unreadable, nullptr);
+        EXPECT_STRNE(passed, failed);
+        EXPECT_STRNE(passed, unreadable);
+        EXPECT_STRNE(failed, unreadable);
+    }
+
+    TEST_F(ArtGenSetPanelTest, ASteadyFrameWithVerdictsOnTheScreenAllocatesNothing) {
+        ASSERT_NO_FATAL_FAILURE(LoadSets({MakeVerdictSet()}));
+        ASSERT_EQ(panel.VerdictOf(0, 7)->kind, ArtGenVerdictKind::Unreadable);
+        constexpr int kWarmupFrames = 10;
+        constexpr int kSteadyFrames = 5;
+        constexpr int32_t kFailedVariant = 1;
+        for (int i = 0; i < kWarmupFrames; ++i) {
+            Frame();
+        }
+        ASSERT_NO_FATAL_FAILURE(HoverMarkOf(0, kFailedVariant));
+        ASSERT_TRUE(IsTooltipShown());
+
+        const AllocTracker::ThreadCounters before = AllocTracker::GetThreadCounters();
+        for (int i = 0; i < kSteadyFrames; ++i) {
+            Frame();
+        }
+        const AllocTracker::ThreadCounters after = AllocTracker::GetThreadCounters();
+
+        // The counters stay zero without ENGINE_PROFILER_ALLOC, so the check only bites in the profile preset
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_EQ(after.count, before.count);
+        }
     }
 
     TEST_F(ArtGenSetPanelTest, ASteadyFrameWithASetSelectedAllocatesNothing) {

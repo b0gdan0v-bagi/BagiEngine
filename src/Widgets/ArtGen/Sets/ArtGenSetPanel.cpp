@@ -53,6 +53,10 @@ namespace BECore {
         constexpr size_t kTipSize = 256;
         // A row's thumbnail is smaller than the Generate grid's, so a row of four fits the panel
         constexpr float kThumbnailSize = 112.0f;
+        // The verdict's mark: a square of this many ems in the thumbnail's top-right corner, over a backing of the window colour
+        constexpr float kVerdictMarkEm = 1.5f;
+        constexpr float kVerdictMarkBackingAlpha = 0.7f;
+        constexpr float kVerdictMarkRounding = 3.0f;
 
         const char* IconOfState(ArtGenSetJobState state) {
             switch (state) {
@@ -163,6 +167,38 @@ namespace BECore {
                 const ImVec2 min(origin.x + static_cast<float>(x) * kCheckerCell, origin.y + static_cast<float>(y) * kCheckerCell);
                 drawList->AddRectFilled(min, ImVec2(min.x + kCheckerCell, min.y + kCheckerCell), dark);
             }
+        }
+    }
+
+    const char* ArtGenVerdictIcon(ArtGenVerdictKind kind) {
+        switch (kind) {
+            case ArtGenVerdictKind::Passed:
+                return ICON_LC_CIRCLE_CHECK;
+            case ArtGenVerdictKind::Failed:
+                return ICON_LC_TRIANGLE_ALERT;
+            case ArtGenVerdictKind::Unreadable:
+                return ICON_LC_CIRCLE_HELP;
+            default:
+                return nullptr;
+        }
+    }
+
+    void DrawArtGenVerdictMark(ImDrawList* drawList, ImVec2 origin, float size, const ArtGenVerdict& verdict) {
+        const char* icon = ArtGenVerdictIcon(verdict.kind);
+        if (icon == nullptr) {
+            return;
+        }
+        const auto& palette = GetImGuiPalette();
+        const ImVec4& color = verdict.kind == ArtGenVerdictKind::Passed ? palette.success : (verdict.kind == ArtGenVerdictKind::Failed ? palette.error : palette.textDisabled);
+        const float side = ImGui::GetFontSize() * kVerdictMarkEm;
+        const ImVec2 min(origin.x + size - side, origin.y);
+        const ImVec2 max(origin.x + size, origin.y + side);
+        const ImVec4 backing(palette.windowBg.x, palette.windowBg.y, palette.windowBg.z, kVerdictMarkBackingAlpha);
+        drawList->AddRectFilled(min, max, ImGui::ColorConvertFloat4ToU32(backing), kVerdictMarkRounding);
+        const ImVec2 iconSize = ImGui::CalcTextSize(icon);
+        drawList->AddText(ImVec2(min.x + (side - iconSize.x) * 0.5f, min.y + (side - iconSize.y) * 0.5f), ImGui::GetColorU32(color), icon);
+        if (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(min, max)) {
+            ImGui::SetTooltip("%s", verdict.tip.c_str());
         }
     }
 
@@ -428,6 +464,14 @@ namespace BECore {
         _loadedSet.clear();
     }
 
+    const ArtGenVerdict* ArtGenSetPanel::VerdictOf(size_t jobIndex, int64_t seed) const {
+        if (jobIndex >= _rows.size()) {
+            return nullptr;
+        }
+        const Thumb* thumb = FindThumb(_rows[jobIndex], seed);
+        return thumb != nullptr ? &thumb->verdict : nullptr;
+    }
+
     void ArtGenSetPanel::SyncRow(const ArtGenSession& session, const ArtGenSet& set, size_t index) {
         RowThumbs& row = _rows[index];
         const ArtGenSetJob& job = set.jobs[index];
@@ -458,6 +502,10 @@ namespace BECore {
                     thumb.clip = resources.Load<AudioClip>(StringView(thumb.path));
                 } else {
                     thumb.texture = resources.Load<ITexture>(StringView(thumb.path));
+                    // A name AbsoluteInSet refuses (`..`) gives an empty path, which reads as no verdict
+                    if (!variant.provenance.empty()) {
+                        thumb.verdict = ReadArtGenVerdict(AbsoluteInSet(root, StringView(set.name), StringView(variant.provenance)));
+                    }
                 }
             }
             row.thumbs.push_back(std::move(thumb));
@@ -739,6 +787,9 @@ namespace BECore {
                 }
             }
             ImGui::SetCursorScreenPos(ImVec2(origin.x, corner.y + ImGui::GetStyle().ItemSpacing.y));
+        }
+        if (!audio && thumb != nullptr) {
+            DrawArtGenVerdictMark(drawList, origin, kThumbnailSize, thumb->verdict);
         }
         if (audio) {
             const bool loaded = thumb != nullptr && thumb->clip && thumb->clip->GetState() == ResourceState::Loaded;

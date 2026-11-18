@@ -5,6 +5,7 @@
 #include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
+#include <Widgets/ArtGen/ArtGenVerdict.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <cstdint>
 #include <imgui.h>
@@ -20,6 +21,17 @@ namespace BECore {
 
     /// A checkerboard over a square, so an image with a transparent background shows as transparent
     void DrawArtGenChecker(ImDrawList* drawList, ImVec2 origin, float size, ImU32 light, ImU32 dark);
+
+    /// The icon of a verdict's mark; null for None, which draws nothing
+    [[nodiscard]] const char* ArtGenVerdictIcon(ArtGenVerdictKind kind);
+
+    /**
+     * @brief Draws the mark of @p verdict in the top-right corner of the square thumbnail at @p origin of side @p size, over a dim backing so it reads on
+     * the checkerboard and on a bright picture, and shows `verdict.tip` as the tooltip while the mouse is over the mark. Nothing for None.
+     *
+     * Call it after the cell's own tooltip: ImGui keeps one tooltip per frame and this one must win over the hover of the whole cell. Builds no string.
+     */
+    void DrawArtGenVerdictMark(ImDrawList* drawList, ImVec2 origin, float size, const ArtGenVerdict& verdict);
 
     /// The widths of the Subject and Name fields of a row, in pixels
     struct ArtGenRowWidths {
@@ -63,12 +75,17 @@ namespace BECore {
         /// Evicts every picture and clip the rows loaded (the tab is hidden, the set changed, the panel dies)
         void DropThumbnails();
 
+        /// The verdict the row @p jobIndex holds for the variant of @p seed; null when no thumbnail of it is loaded. A seam for the tests: the cache is read
+        /// once when the thumbnail loads, so a test can see what was read
+        [[nodiscard]] const ArtGenVerdict* VerdictOf(size_t jobIndex, int64_t seed) const;
+
     private:
         /// One variant of a row: its picture, or its clip for a sound. A file that is gone is kept as a gap
         struct Thumb {
             int64_t seed = 0;
             String path;
             bool missing = false;
+            ArtGenVerdict verdict;  // read with the picture; None for a sound, a gap or a file without checks
             ResourceHandle<ITexture> texture;
             ResourceHandle<AudioClip> clip;
         };
