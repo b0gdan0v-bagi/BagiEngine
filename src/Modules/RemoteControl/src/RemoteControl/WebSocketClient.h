@@ -135,7 +135,13 @@ namespace BECore {
             bool isClose = false;
         };
 
-        bool QueueFrame(uint8_t opcode, Vector<uint8_t> payload, bool isClose);
+        struct EndOfConnection {
+            uint16_t code = WebSocketCloseCode::kAbnormalClosure;
+            StringView reason;
+        };
+
+        /// @p endIfQueued is recorded under the lock that queues the frame: once it is queued the server's answer can reach the reader at any moment
+        bool QueueFrame(uint8_t opcode, Vector<uint8_t> payload, bool isClose, const EndOfConnection* endIfQueued = nullptr);
         void AbortConnection(uint16_t code, StringView reason);
         /// Records how the connection ended unless something did already (the first reason is the true one); _mutex held
         void SetEndLocked(uint16_t code, StringView reason);

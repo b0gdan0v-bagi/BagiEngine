@@ -93,8 +93,9 @@ namespace BECore {
         }
         if (connecting) {
             AbortConnection(code, reason);
-        } else if (QueueFrame(WebSocketOpcode::kClose, MakeClosePayload(code, reason), /*isClose=*/true)) {
-            SetEnd(code, reason);
+        } else {
+            const EndOfConnection end{code, reason};
+            QueueFrame(WebSocketOpcode::kClose, MakeClosePayload(code, reason), /*isClose=*/true, &end);
         }
     }
 
@@ -121,7 +122,7 @@ namespace BECore {
         return _state == WebSocketClientState::Open && !_aborted;
     }
 
-    bool WebSocketClient::QueueFrame(uint8_t opcode, Vector<uint8_t> payload, bool isClose) {
+    bool WebSocketClient::QueueFrame(uint8_t opcode, Vector<uint8_t> payload, bool isClose, const EndOfConnection* endIfQueued) {
         enum class Outcome : uint8_t { Refused, Queued, Overflow };
         Outcome outcome = Outcome::Refused;
         {
@@ -135,6 +136,9 @@ namespace BECore {
                 outcome = bytes > _settings.maxOutboxBytes || _outbox.empty() ? Outcome::Refused : Outcome::Overflow;
             } else {
                 _outboxBytes += bytes;
+                if (endIfQueued != nullptr) {
+                    SetEndLocked(endIfQueued->code, endIfQueued->reason);
+                }
                 if (isClose) {
                     _state = WebSocketClientState::Closing;  // nothing may follow the close frame
                 }
