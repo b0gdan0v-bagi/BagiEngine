@@ -81,6 +81,8 @@ namespace BECore {
 
         constexpr int kSendFlags = 0;
         constexpr int kShutdownBoth = SD_BOTH;
+        constexpr int kShutdownSend = SD_SEND;
+        constexpr int kNoWaitFlags = 0;  // a connected socket is non-blocking here
 #else
         using NativeSocket = int;
         constexpr NativeSocket kNativeInvalid = -1;
@@ -129,7 +131,11 @@ namespace BECore {
         constexpr int kSendFlags = MSG_NOSIGNAL;
 #endif
         constexpr int kShutdownBoth = SHUT_RDWR;
+        constexpr int kShutdownSend = SHUT_WR;
+        constexpr int kNoWaitFlags = MSG_DONTWAIT;
 #endif
+
+        constexpr size_t kDiscardChunkBytes = 4096;
 
         NativeSocket ToNative(intptr_t handle) {
             return static_cast<NativeSocket>(handle);
@@ -497,6 +503,37 @@ namespace BECore {
         if (IsValid()) {
             _shutDown = true;
             shutdown(ToNative(_handle), kShutdownBoth);
+        }
+    }
+
+    void Socket::FinishSending(std::chrono::milliseconds limit) {
+        if (!IsValid()) {
+            return;
+        }
+        shutdown(ToNative(_handle), kShutdownSend);
+
+        const auto deadline = std::chrono::steady_clock::now() + limit;
+        Array<char, kDiscardChunkBytes> discarded;
+        while (!_shutDown) {
+            const auto left = std::chrono::ceil<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
+            if (left <= std::chrono::milliseconds::zero()) {
+                return;
+            }
+            const auto received = recv(ToNative(_handle), discarded.data(), static_cast<int>(discarded.size()), kNoWaitFlags);
+            if (received == 0) {
+                return;
+            }
+            if (received > 0) {
+                continue;
+            }
+            const int error = LastError();
+            if (IsInterrupted(error)) {
+                continue;
+            }
+            if (!IsTimeout(error)) {
+                return;
+            }
+            WaitFor(ToNative(_handle), POLLIN, std::min(kWakeInterval, left));
         }
     }
 
