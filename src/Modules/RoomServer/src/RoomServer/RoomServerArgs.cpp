@@ -289,7 +289,7 @@ namespace BECore {
                       "  --ping-interval-ms N     a ping after this much silence, a drop after twice that, 0 is off (default {})\n"
                       "  --stats-interval-ms N    log the connections and rooms at most this often, when they changed, 0 is off (default {})\n"
                       "  --shutdown-grace-ms N    on SIGTERM, how long to wait for the clients to answer the close 1001 before stopping, 0 is off (default {})\n"
-                      "  --test-games             register the test games (cards-leaky) next to cards\n"
+                      "  --test-games             register the demo games cards and cards-leaky (without it there is no game)\n"
                       "  --help                   this text\n"
                       "\n"
                       "Environment (a flag wins over its variable, a variable over the default; an empty variable is unset):\n"

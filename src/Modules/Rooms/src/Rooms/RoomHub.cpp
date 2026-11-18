@@ -10,12 +10,6 @@ namespace BECore {
         /// How many room codes MakeUnusedRoomCode draws before it gives up: a constant RandomFn must not hang the server
         constexpr int kMaxCodeAttempts = 16;
 
-        constexpr StringView kReasonLeft = "left";
-        constexpr StringView kReasonReplaced = "replaced";
-        constexpr StringView kReasonRoomClosed = "room_closed";
-        constexpr StringView kReasonRoomFinished = "room_finished";
-        constexpr StringView kReasonLobbyTimeout = "lobby_timeout";
-
         /// Tokens per second of a bucket that gives one back per @p refill (none for a refill of zero)
         double RefillRate(std::chrono::milliseconds refill) {
             return refill.count() > 0 ? 1000.0 / static_cast<double>(refill.count()) : 0.0;
@@ -88,14 +82,14 @@ namespace BECore {
         }
         SendError(id, error, RoomMessageTypes::kJoinRoom);
         if (++connection.failedJoinsInRow >= _settings.maxFailedJoinsInRow) {
-            CloseConnection(id, "too_many_failed_joins", now);
+            CloseConnection(id, RoomCloseReasons::kTooManyFailedJoins, now);
         }
     }
 
     void RoomHub::OnConnected(ConnectionId connection, RoomTime now, StringView address) {
         if (_connections.size() >= _settings.maxConnections || _connections.find(connection) != _connections.end()) {
             if (_sink.close) {
-                _sink.close(connection, "server_full");
+                _sink.close(connection, String(RoomCloseReasons::kServerFull));
             }
             return;
         }
@@ -173,7 +167,7 @@ namespace BECore {
         if (!connection.limiter.TryTake(now)) {
             SendError(id, RoomErrors::kRateLimited, "Too many messages: slow down", {});
             if (++connection.rateLimitedInRow >= _settings.maxRateLimitedInRow) {
-                CloseConnection(id, RoomErrors::kRateLimited, now);
+                CloseConnection(id, RoomCloseReasons::kRateLimited, now);
             }
             return;
         }
@@ -358,9 +352,9 @@ namespace BECore {
             for (const ConnectionId other : entry->connections) {
                 const auto otherFound = _connections.find(other);
                 if (otherFound != _connections.end() && otherFound->second.player == *player) {
-                    SendText(other, MakeLeftMessage(kReasonReplaced));
+                    SendText(other, MakeLeftMessage(RoomCloseReasons::kReplaced));
                     Detach(other, otherFound->second);
-                    CloseConnection(other, kReasonReplaced, now);
+                    CloseConnection(other, RoomCloseReasons::kReplaced, now);
                     break;
                 }
             }
@@ -444,7 +438,7 @@ namespace BECore {
         }
         const String code = connection.roomCode;
         entry->room->Leave(connection.player);
-        SendText(id, MakeLeftMessage(kReasonLeft));
+        SendText(id, MakeLeftMessage(RoomCloseReasons::kLeft));
         Detach(id, connection);
         connection.lastActivity = now;
         if (!CloseIfDone(code, now)) {
@@ -472,13 +466,13 @@ namespace BECore {
             entry.finished = true;
             entry.finishedAt = now;
         }
-        const LobbySnapshot lobby = room.GetLobbySnapshot();
         const uint64_t revision = room.GetLobbyRevision();
         const bool started = room.GetPhase() != RoomPhase::Lobby;
-        const String lobbyText = MakeLobbyMessage(lobby);
+        // Made for the first connection that is behind: a room in which nothing changed costs no snapshot on every tick
+        Optional<String> lobbyText;
         // Copy: a sink is not allowed to call back, but the loop must not depend on that
-        const Vector<ConnectionId> ids = entry.connections;
-        for (const ConnectionId id : ids) {
+        _flushIds = entry.connections;
+        for (const ConnectionId id : _flushIds) {
             const auto found = _connections.find(id);
             if (found == _connections.end()) {
                 continue;
@@ -486,7 +480,10 @@ namespace BECore {
             Connection& connection = found->second;
             if (connection.sentLobbyRevision != revision) {
                 connection.sentLobbyRevision = revision;
-                SendText(id, lobbyText);
+                if (!lobbyText) {
+                    lobbyText = MakeLobbyMessage(room.GetLobbySnapshot());
+                }
+                SendText(id, *lobbyText);
             }
             if (started) {
                 const Optional<int> seat = room.GetSeatOf(connection.player);
@@ -525,19 +522,19 @@ namespace BECore {
         if (!entry || !entry->room->ShouldClose(now)) {
             return false;
         }
-        CloseRoom(code, kReasonRoomClosed, now);
+        CloseRoom(code, RoomCloseReasons::kRoomClosed, now);
         return true;
     }
 
     void RoomHub::Tick(RoomTime now) {
-        Vector<ConnectionId> idle;
+        _tickIdle.clear();
         for (const auto& [id, connection] : _connections) {
             if (connection.roomCode.empty() && now - connection.lastActivity >= _settings.idleTimeout) {
-                idle.push_back(id);
+                _tickIdle.push_back(id);
             }
         }
-        for (const ConnectionId id : idle) {
-            CloseConnection(id, "idle", now);
+        for (const ConnectionId id : _tickIdle) {
+            CloseConnection(id, RoomCloseReasons::kIdle, now);
         }
 
         // An address with no connection and a full budget is forgotten, so the map cannot grow with the clients that came and went.
@@ -550,17 +547,17 @@ namespace BECore {
             }
         }
 
-        Vector<String> codes;
+        _tickCodes.clear();
         for (const auto& [code, entry] : _rooms) {
-            codes.push_back(code);
+            _tickCodes.push_back(code);
         }
-        for (const String& code : codes) {
+        for (const String& code : _tickCodes) {
             RoomEntry* entry = FindRoom(code);
             if (!entry) {
                 continue;
             }
             if (_settings.lobbyTimeout.count() > 0 && entry->room->GetPhase() == RoomPhase::Lobby && now - entry->lastActivity >= _settings.lobbyTimeout) {
-                CloseRoom(code, kReasonLobbyTimeout, now);
+                CloseRoom(code, RoomCloseReasons::kLobbyTimeout, now);
                 continue;
             }
             entry->room->StepComputers(now);
@@ -569,7 +566,7 @@ namespace BECore {
             }
             Flush(*entry, now);
             if (entry->finished && now - entry->finishedAt >= _settings.timings.abandonedTimeout) {
-                CloseRoom(code, kReasonRoomFinished, now);
+                CloseRoom(code, RoomCloseReasons::kRoomFinished, now);
             }
         }
     }

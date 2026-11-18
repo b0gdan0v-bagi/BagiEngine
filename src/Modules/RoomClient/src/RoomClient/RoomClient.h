@@ -3,6 +3,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <RoomClient/RoomTransport.h>
+#include <Rooms/RoomErrors.h>
 #include <Rooms/RoomProtocol.h>
 #include <chrono>
 #include <cstddef>
@@ -30,10 +31,10 @@ namespace BECore {
         /// The server does not know the room or the token any more (`unknown_room`, `bad_token`): it was closed, or the player left
         inline constexpr StringView kRoomGone = "room_gone";
         /// Another device took the seat (`left {replaced}`); this one does not fight for it
-        inline constexpr StringView kReplaced = "replaced";
+        inline constexpr StringView kReplaced = RoomCloseReasons::kReplaced;
         /// The server closed with 1008 (the code is the server's own reason, `rate_limited` or `too_many_failed_joins`, when it gave one):
         /// the client broke its limits, and trying again would be the same abuse
-        inline constexpr StringView kRateLimited = "rate_limited";
+        inline constexpr StringView kRateLimited = RoomCloseReasons::kRateLimited;
         /// The connection was not back within `reconnectGiveUp`
         inline constexpr StringView kGaveUp = "gave_up";
         /// The first connection did not open within `connectTimeout`
@@ -303,8 +304,9 @@ namespace BECore {
         RoomClientSettings _settings;
 
         UniquePtr<IRoomTransport> _transport;
-        /// A transport that was told to close: polled until its Closed, then freed
-        UniquePtr<IRoomTransport> _retired;
+        /// Transports that were told to close: polled until their Closed, then freed. Never freed earlier, because the destructor of one
+        /// waits for its reader, which may be inside a name lookup that nothing can interrupt
+        Vector<UniquePtr<IRoomTransport>> _retired;
         RoomClientState _state = RoomClientState::Disconnected;
         String _url;
         /// Sent when the transport opens

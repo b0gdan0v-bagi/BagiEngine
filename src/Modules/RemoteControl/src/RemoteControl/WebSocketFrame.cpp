@@ -78,11 +78,16 @@ namespace BECore {
         return EncodeFrame(WebSocketOpcode::kText, Span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size()), mask);
     }
 
-    Vector<uint8_t> EncodeCloseFrame(uint16_t code, StringView reason, Optional<WebSocketMask> mask) {
+    Vector<uint8_t> EncodeClosePayload(uint16_t code, StringView reason) {
         Vector<uint8_t> payload;
         AppendBigEndian(payload, code, kCloseCodeSize);
         const size_t reasonSize = std::min(reason.size(), kMaxControlPayload - kCloseCodeSize);
         payload.insert(payload.end(), reinterpret_cast<const uint8_t*>(reason.data()), reinterpret_cast<const uint8_t*>(reason.data()) + reasonSize);
+        return payload;
+    }
+
+    Vector<uint8_t> EncodeCloseFrame(uint16_t code, StringView reason, Optional<WebSocketMask> mask) {
+        const Vector<uint8_t> payload = EncodeClosePayload(code, reason);
         return EncodeFrame(WebSocketOpcode::kClose, Span<const uint8_t>(payload.data(), payload.size()), mask);
     }
 

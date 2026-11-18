@@ -112,8 +112,9 @@ namespace BECore {
      * @brief A player name as the server keeps it, or nullopt when it cannot be one.
      *
      * Valid UTF-8 (no overlong forms, surrogates or values above U+10FFFF), no control characters (U+0000 to U+001F, U+007F to U+009F,
-     * the line and paragraph separators, zero-width and bidirectional control characters, the byte order mark), then the spaces at
-     * both ends removed, and kMinNameBytes to kMaxNameBytes bytes left.
+     * the line and paragraph separators) and no format characters (General_Category Cf: zero-width and bidirectional controls, the byte
+     * order mark, tags), at least one character that shows something, then the spaces at both ends removed, and kMinNameBytes to
+     * kMaxNameBytes bytes left.
      */
     [[nodiscard]] Optional<String> SanitizePlayerName(StringView text);
 

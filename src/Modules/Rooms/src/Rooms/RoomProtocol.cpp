@@ -62,14 +62,29 @@ namespace BECore {
             return DecodedChar{codePoint, length};
         }
 
-        /// Characters that are no part of a printable name: controls, line breaks, invisible and direction-changing characters
+        /// Characters that are no part of a printable name: controls, line breaks, and the format characters of Unicode (General_Category Cf), which are invisible or change the direction of the text
+        /// around them
         [[nodiscard]] bool IsForbiddenInName(uint32_t codePoint) {
-            return codePoint < 0x20 || (codePoint >= 0x7F && codePoint <= 0x9F)  // C0, DEL and C1 controls
-                   || (codePoint >= 0x200B && codePoint <= 0x200F)               // zero-width characters and direction marks
-                   || codePoint == 0x2028 || codePoint == 0x2029                 // line and paragraph separators
-                   || (codePoint >= 0x202A && codePoint <= 0x202E)               // embedding and override of direction
-                   || (codePoint >= 0x2066 && codePoint <= 0x2069)               // isolates of direction
-                   || codePoint == 0xFEFF;                                       // byte order mark
+            return codePoint < 0x20 || (codePoint >= 0x7F && codePoint <= 0x9F)                                                     // C0, DEL and C1 controls
+                   || codePoint == 0xAD                                                                                             // soft hyphen
+                   || (codePoint >= 0x600 && codePoint <= 0x605) || codePoint == 0x61C || codePoint == 0x6DD || codePoint == 0x70F  // Arabic and Syriac format marks
+                   || (codePoint >= 0x890 && codePoint <= 0x891) || codePoint == 0x8E2                                              // Arabic number marks
+                   || codePoint == 0x180E                                                                                           // Mongolian vowel separator
+                   || (codePoint >= 0x200B && codePoint <= 0x200F)                                                                  // zero-width characters and direction marks
+                   || codePoint == 0x2028 || codePoint == 0x2029                                                                    // line and paragraph separators
+                   || (codePoint >= 0x202A && codePoint <= 0x202E)                                                                  // embedding and override of direction
+                   || (codePoint >= 0x2060 && codePoint <= 0x206F)                                                                  // word joiner, invisible operators, isolates of direction
+                   || codePoint == 0xFEFF                                                                                           // byte order mark
+                   || (codePoint >= 0xFFF9 && codePoint <= 0xFFFB)                                                                  // interlinear annotation
+                   || codePoint == 0x110BD || codePoint == 0x110CD || (codePoint >= 0x13430 && codePoint <= 0x1343F)                // format marks of historic scripts
+                   || (codePoint >= 0x1BCA0 && codePoint <= 0x1BCA3) || (codePoint >= 0x1D173 && codePoint <= 0x1D17A) || (codePoint >= 0xE0000 && codePoint <= 0xE007F);  // tag characters
+        }
+
+        /// Characters that show nothing by themselves: a name of these alone would be an invisible player
+        [[nodiscard]] bool IsBlankInName(uint32_t codePoint) {
+            return codePoint == 0x20 || codePoint == 0xA0 || codePoint == 0x34F || codePoint == 0x115F || codePoint == 0x1160 || codePoint == 0x1680 || (codePoint >= 0x17B4 && codePoint <= 0x17B5) ||
+                   (codePoint >= 0x2000 && codePoint <= 0x200A) || codePoint == 0x202F || codePoint == 0x205F || codePoint == 0x2800 || codePoint == 0x3000 || codePoint == 0x3164 ||
+                   (codePoint >= 0xFE00 && codePoint <= 0xFE0F) || codePoint == 0xFFA0 || (codePoint >= 0xE0100 && codePoint <= 0xE01EF);
         }
 
         [[nodiscard]] std::unexpected<ControlError> Fail(StringView code, String message) {
@@ -615,12 +630,17 @@ namespace BECore {
     }
 
     Optional<String> SanitizePlayerName(StringView text) {
+        bool visible = false;
         for (size_t pos = 0; pos < text.size();) {
             const auto decoded = DecodeUtf8(text, pos);
             if (!decoded || IsForbiddenInName(decoded->codePoint)) {
                 return std::nullopt;
             }
+            visible = visible || !IsBlankInName(decoded->codePoint);
             pos += decoded->length;
+        }
+        if (!visible) {
+            return std::nullopt;
         }
         // Spaces at both ends go. Other characters are all printable by now, so only the ASCII space can be trimmed.
         size_t first = 0;

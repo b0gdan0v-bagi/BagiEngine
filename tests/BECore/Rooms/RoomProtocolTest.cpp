@@ -419,6 +419,20 @@ namespace BECore::Tests {
         EXPECT_EQ(SanitizePlayerName("a"), "a");
     }
 
+    TEST(RoomProtocolTest, SanitizePlayerNameRefusesEveryFormatCharacter) {
+        for (const char* formatCharacter : {"\xC2\xAD", "\xD8\x9C", "\xE1\xA0\x8E", "\xE2\x81\xA0", "\xE2\x81\xA4", "\xE2\x81\xA6", "\xEF\xBF\xB9", "\xF3\xA0\x80\x81", "\xF3\xA0\x81\xBF"}) {
+            EXPECT_FALSE(SanitizePlayerName(Format("An{}n", formatCharacter)).has_value()) << formatCharacter;
+        }
+    }
+
+    TEST(RoomProtocolTest, SanitizePlayerNameRefusesANameThatShowsNothing) {
+        for (const char* blank : {"\xC2\xA0", "\xE3\x80\x80", "\xE3\x85\xA4", "\xE2\xA0\x80", "\xEF\xBE\xA0", " \xC2\xA0 \xE3\x80\x80"}) {
+            EXPECT_FALSE(SanitizePlayerName(blank).has_value()) << blank;
+        }
+        EXPECT_EQ(SanitizePlayerName("Ann\xC2\xA0Lee"), "Ann\xC2\xA0Lee") << "a blank between visible characters is a name";
+        EXPECT_TRUE(SanitizePlayerName("\xE2\x9D\xA4\xEF\xB8\x8F").has_value()) << "an emoji with its variation selector";
+    }
+
     TEST(RoomProtocolTest, SanitizePlayerNameRefusesWhatCannotBeAName) {
         EXPECT_FALSE(SanitizePlayerName("").has_value());
         EXPECT_FALSE(SanitizePlayerName("   ").has_value());

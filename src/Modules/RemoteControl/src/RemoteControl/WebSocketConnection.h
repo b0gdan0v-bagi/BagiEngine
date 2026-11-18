@@ -26,6 +26,9 @@ namespace BECore {
         /// What the send queue may hold before the connection is dropped
         size_t maxOutboxBytes = 1024 * 1024;
 
+        /// How long a queued close frame may take to reach the client before the connection is cut
+        std::chrono::milliseconds closeTimeout{10'000};
+
         /// The prefix of the log lines of this connection
         String logName = "WebSocket";
 
@@ -143,6 +146,9 @@ namespace BECore {
         /// Drops what is queued and ends both directions now; wakes the threads that wait on the socket or the queue
         void Abort();
 
+        /// Abort() when a close frame was queued closeTimeout or more before @p now: a client that does not read it must not keep the threads and the slot
+        void AbortIfCloseIsOverdue(std::chrono::steady_clock::time_point now);
+
     private:
         struct OutgoingFrame {
             Vector<uint8_t> bytes;
@@ -169,6 +175,7 @@ namespace BECore {
         bool _open = false;     // handshake done, the writer runs
         bool _closing = false;  // a close frame is queued: nothing may follow it
         bool _aborted = false;
+        Optional<std::chrono::steady_clock::time_point> _closeDeadline;
         String _clientAddress;  // empty: the peer address
     };
 

@@ -16,7 +16,7 @@ namespace BECore {
         /// A text message for a connection
         MoveOnlyFunction<void(ConnectionId, String)> send;
         /// The hub is done with the connection: the transport closes it (and need not report it with OnDisconnected, which would be
-        /// ignored). The reason is for the log: `rate_limited`, `too_many_failed_joins`, `idle`, `replaced`, `server_full`.
+        /// ignored). The reason is one of RoomCloseReasons: the transport sends it as the close reason and picks the close code by it.
         MoveOnlyFunction<void(ConnectionId, String)> close;
     };
 
@@ -166,6 +166,10 @@ namespace BECore {
         HashMap<String, AddressState> _addresses;
         HashMap<ConnectionId, Connection> _connections;
         HashMap<String, UniquePtr<RoomEntry>> _rooms;
+        // Lists of Tick and Flush, kept so that a tick of a server with nothing to do allocates nothing
+        Vector<ConnectionId> _tickIdle;
+        Vector<String> _tickCodes;
+        Vector<ConnectionId> _flushIds;
     };
 
 }  // namespace BECore

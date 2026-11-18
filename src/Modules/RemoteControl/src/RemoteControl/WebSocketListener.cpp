@@ -6,17 +6,18 @@ namespace BECore {
 
         constexpr std::chrono::milliseconds kAcceptPollInterval{50};  // how soon Stop() is noticed by the accept thread
         constexpr std::chrono::milliseconds kBusyDrainTimeout{100};   // how long a refused client gets to send its request before the 503
+        constexpr size_t kMaxQueuedRefusals = 32;                     // more refused clients at once are closed without an answer
         constexpr size_t kReadChunkSize = 16 * 1024;
         constexpr int kServiceUnavailable = 503;
 
-        /// Answers a client that cannot be served now. The request is read first: closing a socket with unread data
-        /// makes the system reset the connection, and the client could lose the answer
+        /// Answers a client that cannot be served now. The request is read before the socket closes: closing with unread data makes the
+        /// system reset the connection, and the client could lose the answer
         void RejectBusy(Socket socket, const String& message) {
+            const String response = BuildRejectResponse(HandshakeError{kServiceUnavailable, message});
+            (void)socket.SendAll(AsBytes(response));
             socket.SetReceiveTimeout(kBusyDrainTimeout);
             Array<uint8_t, kMaxHandshakeBytes> discarded;
             (void)socket.Receive(Span<uint8_t>(discarded.data(), discarded.size()));
-            const String response = BuildRejectResponse(HandshakeError{kServiceUnavailable, message});
-            (void)socket.SendAll(AsBytes(response));
         }
 
         [[nodiscard]] String MakeThreadName(const WebSocketListenerSettings& settings, StringView role) {
@@ -46,6 +47,7 @@ namespace BECore {
         _stopping = false;
 
         _acceptThread = Thread(MakeThreadName(_settings, "accept").c_str(), _settings.threadOrder, [this] { AcceptLoop(); });
+        _refusalThread = Thread(MakeThreadName(_settings, "refusal").c_str(), _settings.threadOrder, [this] { RefusalLoop(); });
         return _port;
     }
 
@@ -54,10 +56,19 @@ namespace BECore {
             return;
         }
 
-        _stopping = true;
+        {
+            // The flag is part of the predicate of the refusal thread's wait
+            LockGuard lock(_refusalsMutex);
+            _stopping = true;
+        }
+        _refusalWake.notify_all();
         if (_acceptThread.joinable()) {
             _acceptThread.join();  // no connection is added after this
         }
+        if (_refusalThread.joinable()) {
+            _refusalThread.join();
+        }
+        _refusals.clear();
         _listener.Close();
 
         Vector<ConnectionPtr> connections;
@@ -92,6 +103,7 @@ namespace BECore {
             String peerAddress;
             auto accepted = _listener.Accept(kAcceptPollInterval, &peerAddress);
             ReapFinishedConnections();
+            CutOverdueCloses();
             if (accepted) {
                 AddConnection(std::move(*accepted), std::move(peerAddress));
             } else if (accepted.error() == SocketError::Failed) {
@@ -100,6 +112,43 @@ namespace BECore {
                 }
                 return;
             }
+        }
+    }
+
+    void WebSocketListener::CutOverdueCloses() {
+        const auto now = std::chrono::steady_clock::now();
+        LockGuard lock(_connectionsMutex);
+        for (const auto& connection : _connections) {
+            if (!connection->IsFinished()) {
+                connection->AbortIfCloseIsOverdue(now);
+            }
+        }
+    }
+
+    void WebSocketListener::QueueRefusal(Socket socket) {
+        {
+            LockGuard lock(_refusalsMutex);
+            if (_refusals.size() >= kMaxQueuedRefusals) {
+                return;
+            }
+            _refusals.push_back(std::move(socket));
+        }
+        _refusalWake.notify_one();
+    }
+
+    void WebSocketListener::RefusalLoop() {
+        for (;;) {
+            Socket socket;
+            {
+                UniqueLock lock(_refusalsMutex);
+                _refusalWake.wait(lock, [this] { return _stopping.load() || !_refusals.empty(); });
+                if (_stopping) {
+                    return;
+                }
+                socket = std::move(_refusals.front());
+                _refusals.pop_front();
+            }
+            RejectBusy(std::move(socket), _settings.busyMessage);
         }
     }
 
@@ -120,6 +169,7 @@ namespace BECore {
             if (open < _settings.maxConnections && !perAddressLimit) {
                 WebSocketConnectionSettings connectionSettings;
                 connectionSettings.maxOutboxBytes = _settings.maxOutboxBytes;
+                connectionSettings.closeTimeout = _settings.closeTimeout;
                 connectionSettings.logName = _settings.logName;
                 connectionSettings.busyMessage = _settings.busyMessage;
                 connectionSettings.writerThreadName = MakeThreadName(_settings, "writer");
@@ -136,7 +186,7 @@ namespace BECore {
         } else {
             LOG_WARNING("{}: a client was refused, {} connections are open"_format(_settings.logName, _settings.maxConnections));
         }
-        RejectBusy(std::move(socket), _settings.busyMessage);
+        QueueRefusal(std::move(socket));
     }
 
     bool WebSocketListener::AdmitByClientAddress(WebSocketConnection& connection, const String& clientAddress) {

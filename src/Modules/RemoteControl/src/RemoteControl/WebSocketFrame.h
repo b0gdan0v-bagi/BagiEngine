@@ -51,6 +51,9 @@ namespace BECore {
     [[nodiscard]] Vector<uint8_t> EncodeTextFrame(StringView text, Optional<WebSocketMask> mask = std::nullopt);
 
     /// A close frame with @p code and @p reason (the reason is cut to fit a control frame)
+    /// The payload of a close frame: the code, then @p reason cut to fit a control frame
+    [[nodiscard]] Vector<uint8_t> EncodeClosePayload(uint16_t code, StringView reason = {});
+
     [[nodiscard]] Vector<uint8_t> EncodeCloseFrame(uint16_t code, StringView reason = {}, Optional<WebSocketMask> mask = std::nullopt);
 
     CORE_ENUM(WebSocketMessageKind, uint8_t, Text, Binary, Ping, Pong, Close)

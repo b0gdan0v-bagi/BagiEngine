@@ -51,7 +51,7 @@ namespace BECore {
         /// On SIGTERM how long the server waits for its clients to end after the close 1001 before it stops anyway (RoomServerSettings::shutdownGrace); 0..60000, 0 is off
         std::chrono::milliseconds shutdownGrace{1000};
 
-        /// Registers the test games (`cards-leaky`, the negative control) next to `cards`
+        /// Registers the demo games `cards` and `cards-leaky` (the negative control); the executable has no game without it
         bool testGames = false;
 
         /// `--help` was given: print GetRoomServerUsage() and exit
