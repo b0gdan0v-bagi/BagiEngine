@@ -106,7 +106,7 @@ namespace BECore {
         Optional<ArtGenImageFrame> frame;
     };
 
-    /// Decodes a PNG (any format SDL_image reads) into 8-bit RGBA; `hasAlpha` follows the file's format. The surface is freed on every path
+    /// Decodes a PNG (any format `LoadRgbaImage` reads) into 8-bit straight RGBA; `hasAlpha` follows the file's format
     [[nodiscard]] std::expected<ArtGenPixels, String> ReadArtGenPng(const std::filesystem::path& file);
 
     /// Writes @p pixels as an RGBA PNG to a temporary file beside @p file and renames it over, so a failure keeps the old file

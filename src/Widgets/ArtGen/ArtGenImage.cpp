@@ -3,6 +3,7 @@
 #include <BECore/Utils/ScopeGuard.h>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
+#include <Widgets/TextureEditor/SpriteImage.h>
 #include <cmath>
 #include <system_error>
 
@@ -305,34 +306,15 @@ namespace BECore {
     }
 
     std::expected<ArtGenPixels, String> ReadArtGenPng(const std::filesystem::path& file) {
-        SDL_Surface* loaded = IMG_Load(file.string().c_str());
-        if (loaded == nullptr) {
-            return std::unexpected(Format("cannot read '{}': {}", file.generic_string(), SDL_GetError()));
+        auto image = LoadRgbaImage(file);
+        if (!image) {
+            return std::unexpected(Format("cannot read '{}': {}", file.generic_string(), image.error()));
         }
-        ScopeGuard loadedGuard([&loaded] { SDL_DestroySurface(loaded); });
-
-        bool hasAlpha = SDL_ISPIXELFORMAT_ALPHA(loaded->format) || SDL_SurfaceHasColorKey(loaded);
-        if (const SDL_Palette* palette = SDL_GetSurfacePalette(loaded); palette != nullptr) {
-            for (int i = 0; i < palette->ncolors; ++i) {
-                hasAlpha = hasAlpha || palette->colors[i].a != SDL_ALPHA_OPAQUE;
-            }
-        }
-        SDL_Surface* converted = SDL_ConvertSurface(loaded, SDL_PIXELFORMAT_RGBA32);
-        if (converted == nullptr) {
-            return std::unexpected(Format("cannot convert '{}': {}", file.generic_string(), SDL_GetError()));
-        }
-        ScopeGuard convertedGuard([&converted] { SDL_DestroySurface(converted); });
-
         ArtGenPixels pixels;
-        pixels.width = static_cast<uint32_t>(converted->w);
-        pixels.height = static_cast<uint32_t>(converted->h);
-        pixels.hasAlpha = hasAlpha;
-        pixels.rgba.resize(ByteCountOf(pixels.width, pixels.height));
-        const size_t rowBytes = static_cast<size_t>(pixels.width) * kChannels;
-        const auto* source = static_cast<const uint8_t*>(converted->pixels);
-        for (uint32_t y = 0; y < pixels.height; ++y) {
-            std::memcpy(pixels.rgba.data() + y * rowBytes, source + static_cast<size_t>(y) * static_cast<size_t>(converted->pitch), rowBytes);
-        }
+        pixels.width = image->width;
+        pixels.height = image->height;
+        pixels.hasAlpha = image->hasAlpha;
+        pixels.rgba = std::move(image->pixels);
         return pixels;
     }
 

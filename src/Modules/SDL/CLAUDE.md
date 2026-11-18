@@ -16,6 +16,7 @@ On the web (Emscripten) there is no Vulkan: the window config and the renderer c
 | `SDLEventsProvider` / `SDLEvents.h` | SDL event polling and conversion to engine events; see "Input and window metrics" |
 | `SDLScreenshot` | `EncodePng()` (scale down, PNG in memory) and `RegisterScreenshotControl()`: the `screenshot` method of the control API |
 | `SDLTexture` / `SDLTextureLoader` | `ITexture` implementation and its `IResourceLoader` |
+| `ImageFile` | `ReadImageFile()`: straight RGBA for the texture loaders and the editor. A PNG goes through `stb_image`: SDL_image on Apple uses ImageIO, which premultiplies the alpha |
 | `SDLWindowConfig` | Window settings (`config/SDLWindowConfig.xml`: size, `windowFlags`, an optional `title` the shipped files omit (the title is composed, see below); the shipped file asks for `SDL_WINDOW_HIGH_PIXEL_DENSITY`: two output pixels per unit on a Retina display, 1 on the headless dummy driver) |
 | `SDLWebCanvas` | `FitWindowSize()` and `SafeAreaFromInsets()` (pure, every platform: the window size for a browser window, rounded, never below a minimum; the safe area from the four CSS insets) and, Emscripten only, `InstallWebCanvasResize()` and `GetWebSafeArea()`; see "Web build" |
 | `SDLAudioBackend` | `BECore/Audio/CLAUDE.md` |

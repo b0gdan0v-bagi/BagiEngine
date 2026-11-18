@@ -1,5 +1,7 @@
 #include <Common/TempPath.h>
+#include <SDL3/SDL.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/ArtGen/ArtGenImage.h>
 #include <Widgets/TextureEditor/SpriteImage.h>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -199,6 +201,63 @@ namespace BECore::Tests {
         const auto loaded = LoadRgbaImage(file.Path());
         ASSERT_TRUE(loaded.has_value()) << loaded.error().c_str();
         EXPECT_EQ(loaded->height, kMaxSpriteImageSide);
+    }
+
+    TEST(SpriteImage, APartlyTransparentPixelKeepsItsColour) {
+        RgbaImage image;
+        image.width = 3;
+        image.height = 1;
+        image.pixels = {200, 100, 50, 128, 200, 100, 50, 1, 200, 100, 50, 254};
+        TempFile file;
+        ASSERT_TRUE(SaveRgbaPng(file.Path(), image).has_value());
+        const auto loaded = LoadRgbaImage(file.Path());
+        ASSERT_TRUE(loaded.has_value()) << loaded.error().c_str();
+        EXPECT_TRUE(loaded->pixels == image.pixels);
+        EXPECT_TRUE(loaded->hasAlpha);
+    }
+
+    TEST(SpriteImage, TheGeneratePanelReadsThePixelsOfTheFileToo) {
+        ArtGenPixels pixels;
+        pixels.width = 2;
+        pixels.height = 1;
+        pixels.rgba = {200, 100, 50, 128, 200, 100, 50, 1};
+        TempFile file;
+        ASSERT_TRUE(WriteArtGenPng(file.Path(), pixels).has_value());
+        const auto loaded = ReadArtGenPng(file.Path());
+        ASSERT_TRUE(loaded.has_value()) << loaded.error().c_str();
+        EXPECT_TRUE(loaded->rgba == pixels.rgba);
+        EXPECT_TRUE(loaded->hasAlpha);
+    }
+
+    TEST(SpriteImage, AFileThatIsNotAPngIsStillDecoded) {
+        Array<uint8_t, 8> rows = {10, 20, 30, 0, 40, 50, 60, 0};
+        SDL_Surface* surface = SDL_CreateSurfaceFrom(1, 2, SDL_PIXELFORMAT_RGB24, rows.data(), 4);
+        ASSERT_NE(surface, nullptr);
+        TempFile file(".bmp");
+        const auto utf8 = file.Path().u8string();  //-NoStd: SDL takes the path as UTF-8 chars
+        const bool saved = SDL_SaveBMP(surface, reinterpret_cast<const char*>(utf8.c_str()));
+        SDL_DestroySurface(surface);
+        ASSERT_TRUE(saved);
+
+        const auto loaded = LoadRgbaImage(file.Path());
+        ASSERT_TRUE(loaded.has_value()) << loaded.error().c_str();
+        const Vector<uint8_t> expected = {10, 20, 30, 255, 40, 50, 60, 255};
+        EXPECT_TRUE(loaded->pixels == expected);
+        EXPECT_FALSE(loaded->hasAlpha);
+    }
+
+    TEST(SpriteImage, APngCutInHalfIsAnError) {
+        TempFile whole;
+        ASSERT_TRUE(SaveRgbaPng(whole.Path(), MakeImage(16, 16)).has_value());
+        const auto bytes = ReadBytes(whole.Path());
+        TempFile cut;
+        {
+            std::ofstream stream(cut.Path(), std::ios::binary);  //-NoStd: a test writes the file
+            stream.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size() / 2));
+        }
+        const auto loaded = LoadRgbaImage(cut.Path());
+        ASSERT_FALSE(loaded.has_value());
+        EXPECT_FALSE(loaded.error().empty());
     }
 
 }  // namespace BECore::Tests

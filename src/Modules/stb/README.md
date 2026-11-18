@@ -5,3 +5,5 @@
 `stb_vorbis.c` is compiled in one translation unit, `BECore/Audio/AudioDecode.cpp` (`STB_VORBIS_NO_STDIO`, `STB_VORBIS_NO_PUSHDATA_API`). It decodes Ogg Vorbis clips of the engine's and the games' `assets/` only: it is not fuzzed here and is not for files from players or the network.
 
 The header says it must not be used on untrusted font files (it does no range checking of offsets in the file). The engine loads fonts only from its own and the game's `assets/`.
+
+`stb_image.h` v2.32 comes from the same commit 9600522 and is not edited (the copy inside SDL_image has most of its API cut out, so it cannot be used here). It is compiled in one translation unit, `CoreSDL/ImageFile.cpp`, for PNG only and with every function static. It reads the textures of the engine's and the game's `assets/`: it is not fuzzed here and is not for files from players or the network.

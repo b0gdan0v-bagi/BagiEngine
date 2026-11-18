@@ -3,11 +3,11 @@
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <CoreSDL/ImageFile.h>
 #include <CoreSDL/SDLRendererBackend.h>
 #include <CoreSDL/SDLTexture.h>
 #include <Generated/SDLTextureLoader.gen.hpp>
 #include <SDL3/SDL.h>
-#include <SDL3_image/SDL_image.h>
 
 namespace BECore {
 
@@ -40,9 +40,17 @@ namespace BECore {
         }
 
         const auto realPath = CoreManager::GetFileSystem().ResolvePath(path.ToStringView());
-        SDL_Surface* surface = IMG_Load(realPath.string().c_str());
+        auto image = ReadImageFile(realPath);
+        if (!image) {
+            LOG_ERROR(Format("SDLTextureLoader: failed to load image '{}': {}", path.ToStringView(), image.error()).c_str());
+            texture->SetFailed(path);
+            return texture;
+        }
+
+        const int width = static_cast<int>(image->width);
+        SDL_Surface* surface = SDL_CreateSurfaceFrom(width, static_cast<int>(image->height), SDL_PIXELFORMAT_RGBA32, image->pixels.data(), width * static_cast<int>(kBytesPerPixel));
         if (!surface) {
-            LOG_ERROR(Format("SDLTextureLoader: failed to load image '{}': {}", path.ToStringView(), SDL_GetError()).c_str());
+            LOG_ERROR(Format("SDLTextureLoader: failed to wrap the pixels of '{}': {}", path.ToStringView(), SDL_GetError()).c_str());
             texture->SetFailed(path);
             return texture;
         }
