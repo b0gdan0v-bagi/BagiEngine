@@ -55,8 +55,8 @@ namespace BECore {
      * with the click, the pair of the `ActionEvent`; a disabled control or option answers both empty (it emitted nothing), and a choice group does not change by the click: the game answers by setting
      * the variable. A click on a dropdown's header toggles the list and answers neither; one on an option of an open list answers the dropdown's "action" and the option's "value", and the list closes
      * at the next frame (`ui_click` the header, `step`, `ui_tree`, `ui_click` the option, `step`). A press elsewhere while a list is open closes it and is consumed, so "consumed" is true with
-     * "action" and "value" empty, whatever the element. A toggle answers its "action" and the value it asks for (`offValue` while it is on, `onValue` while it is off, read before the click), a slider
-     * its "action" and the text of the value the press emitted ("" when nothing was).
+     * "action" and "value" empty, whatever the element. A toggle that emits answers its "action" and the value it asks for (`offValue` while it is on, `onValue` while it is off, read before the
+     * click; both "" when disabled or without an "action"), a slider its "action" and the text of the value the press emitted (both "" when nothing was).
      *
      * "at" is a number from 0 to 1, the horizontal position of the press inside the element's rect (default 0.5; 0 and 1 are a hair inside the left and the right edge, so the
      * point still hits the element); the vertical position is always the middle. It sets a slider with one click: 0 asks for the minimum, 1 for the maximum, and the answer's

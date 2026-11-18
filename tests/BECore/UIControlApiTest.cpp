@@ -11,6 +11,7 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIControl.h>
 #include <BECore/UI/UIDropdown.h>
+#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UITextComponent.h>
@@ -39,7 +40,7 @@ namespace BECore::Tests {
         //   and 150 x 56 at x = 100, 252, y = 100), and Plain (100, 300, 80 x 40) is a button without a value.
         // "Values": 800 x 600 in window pixels. Loading is a UIProgressBar (100, 300, 400 x 24, `uiApiLoad`, range 0..100); CSound a
         //   toggle row (100, 500, 300 x 56; `uiApiCSound`, values "on" / "off", the caption child CSoundCaption and the switch child CSoundSwitch), CLocked a disabled one (520, 300, 240 x 56),
-        //   CVolume a slider (450, 100, 340 x 56; `uiApiCVolume`, range 0..1, steps of 0.1) and CQuiet a disabled one (450, 500, 300 x 56).
+        //   CSilent one without an action (520, 400, 240 x 56), CVolume a slider (450, 100, 340 x 56; `uiApiCVolume`, range 0..1, steps of 0.1) and CQuiet a disabled one (450, 500, 300 x 56).
         // "Pick": 800 x 600 in window pixels. Level is a UIDropdown (100, 100, 240 x 56, `uiApiLevel`, action UIControlApiLevel, options 56 high: Easy, Normal, Hard and Locked, a
         //   disabled option), Below (500, 200, 80 x 40) is a button the open list does not cover, PickToggle (500, 300, 200 x 56) a composed toggle and PickSlide (500, 400, 200 x 56) a composed
         //   slider, Frozen (100, 450, 240 x 56) a disabled dropdown with one option.
@@ -224,6 +225,12 @@ namespace BECore::Tests {
                 <components><component type="UISwitchComponent"/></components>
               </element>
             </children>
+          </element>
+          <element type="UIElement" name="CSilent" x="520" y="400" width="240" height="56">
+            <components>
+              <component type="UIInputClicker" stateLook="false"/>
+              <component type="UIToggleComponent" bind="uiApiCSilent"/>
+            </components>
           </element>
           <element type="UIElement" name="CVolume" x="450" y="100" width="340" height="56">
             <components>
@@ -1775,7 +1782,21 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
         EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
-        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "UIControlApiCLocked");
+        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "");
+        EXPECT_EQ(StringMember(*Member(response, "result"), "value"), "");
+        EXPECT_EQ(recorder.Total(), 0u);
+    }
+
+    TEST_F(UIControlApiTest, AToggleWithoutAnActionAnswersNothing) {
+        Show("Values");
+        Recorder recorder;
+
+        const Json response = Call("ui_click", Click("CSilent"));
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
+        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "");
+        EXPECT_EQ(StringMember(*Member(response, "result"), "value"), "");
         EXPECT_EQ(recorder.Total(), 0u);
     }
 
@@ -1810,7 +1831,28 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
         EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
-        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "UIControlApiCQuiet");
+        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "");
+        EXPECT_EQ(StringMember(*Member(response, "result"), "value"), "");
+        EXPECT_EQ(recorder.Total(), 0u);
+    }
+
+    TEST_F(UIControlApiTest, ASliderDisabledAfterAPressDoesNotAnswerWithThatPress) {
+        Show("Values");
+        ASSERT_TRUE(IsOk(Call("ui_click", Click("CVolume"))));
+        UIElement* volume = nullptr;
+        for (const auto& child : Canvas("Values", "Settings")->GetLayout().root->children) {
+            if (child->name == "CVolume"_intern) {
+                volume = child.Get();
+            }
+        }
+        ASSERT_NE(volume, nullptr);
+        volume->GetComponent<UIInputClicker>()->disabled = true;
+        Recorder recorder;
+
+        const Json response = Call("ui_click", Click("CVolume"));
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "");
         EXPECT_EQ(StringMember(*Member(response, "result"), "value"), "");
         EXPECT_EQ(recorder.Total(), 0u);
     }
