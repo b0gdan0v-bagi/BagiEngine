@@ -329,8 +329,11 @@ namespace BECore::Tests {
         }
         EXPECT_EQ(Profiler::GetBackend(), nullptr);
         std::ifstream stream(file);
-        const String text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
-        const Json events = ParseEvents(String(text.c_str()));
+        String text;
+        for (char symbol = 0; stream.get(symbol);) {
+            text.push_back(symbol);
+        }
+        const Json events = ParseEvents(text);
         EXPECT_EQ(CountPhase(events, "B"), 2u);
         ExpectBalanced(events);
         std::filesystem::remove_all(folder);
