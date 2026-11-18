@@ -16,7 +16,7 @@ Coroutine-based asynchronous task execution (C++20 coroutines, no exceptions: re
 | `TaskLabel` | `BE_TASK_LABEL("name")` (a literal), the last argument of `Run*` and of `SwitchToBackground` / `SwitchToMainThread`: the slice opens a zone of that name inside the pool's `Task` zone, so a trace says what a thread works on. Empty without the profiler. The pool's busy graphs and queue counters: `Profiler/CLAUDE.md` |
 | `CancellationToken` | Cancellation support (`Create()`, `CreateLinked()`, `IsCancelled()`). A linked child sees its parent's cancellation (checked by polling up the chain); cancelling the child does not touch the parent |
 | `TaskGroup` | Manages related tasks: `Add()`, `WaitAll()`, `CancelAll()` |
-| `EventAwaiter<E>` | Awaits an `EventBase` event once; `EventAwaiterWithTimeout` has no timeout yet |
+| `EventAwaiter<E>` | Awaits an `EventBase` event once; `WaitForEventWithTimeout<E>(time)` gives an empty `Optional` when the wall-clock time runs out first (main thread only: `TaskManager::Update` releases the timeout) |
 
 `TaskPriority`: `Low`, `Normal`, `High`, `Critical`. `ThreadType`: `MainThread`, `Background`, `IO`, `Custom`. `Run()` defaults to `Normal` priority on `Background`.
 

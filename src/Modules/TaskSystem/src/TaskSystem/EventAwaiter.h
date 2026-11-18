@@ -1,9 +1,18 @@
 #pragma once
 
+#include <BECore/Assert/AssertMacros.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/RefCounted/New.h>
+#include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Types/Types.h>
 #include <Events/EventBase.h>
 #include <Events/SubscriptionHolder.h>
+#include <TaskSystem/TaskManager.h>
+#include <TaskSystem/TaskScheduler.h>
+#include <algorithm>
 #include <chrono>
 #include <coroutine>
+#include <utility>
 
 namespace BECore {
 
@@ -62,7 +71,11 @@ namespace BECore {
     }
 
     /**
-     * Awaits an event with a timeout; the timeout is not scheduled yet, so it waits for the event only.
+     * Awaits one event of `EventType` for at most a wall-clock time: `co_await` gives the event, or an empty Optional when the time ran out first.
+     *
+     * The coroutine resumes once, by whichever comes first, and the other one then does nothing. Await and emit on the main thread: the timeout
+     * is released by TaskManager::Update there, and the event channel belongs to one thread. A non-positive timeout does not suspend, and neither
+     * does an await without a running TaskManager, which has nothing to release the timeout.
      */
     template <typename EventType>
     class EventAwaiterWithTimeout : public SubscriptionHolder {
@@ -70,17 +83,41 @@ namespace BECore {
         using Duration = std::chrono::steady_clock::duration;
         using Result = Optional<EventType>;
 
-        explicit EventAwaiterWithTimeout(Duration timeout) : _timeout(timeout) {}
+        /// A longer timeout waits this long: the scheduler adds the delay to the clock's current time, which must not overflow
+        static constexpr Duration kMaxTimeout = std::chrono::duration_cast<Duration>(std::chrono::hours(24 * 365 * 100));
 
-        bool await_ready() const noexcept {
-            return false;
+        explicit EventAwaiterWithTimeout(Duration timeout) : _timeout(std::min(timeout, kMaxTimeout)) {}
+
+        // The scheduled timeout and the subscription both point at this object
+        EventAwaiterWithTimeout(EventAwaiterWithTimeout&&) = delete;
+        EventAwaiterWithTimeout& operator=(EventAwaiterWithTimeout&&) = delete;
+
+        ~EventAwaiterWithTimeout() override {
+            DetachTimer();
         }
 
-        void await_suspend(std::coroutine_handle<> handle) noexcept {
-            _handle = handle;
-            _startTime = std::chrono::steady_clock::now();
+        bool await_ready() const noexcept {
+            return _timeout <= Duration::zero();
+        }
 
+        bool await_suspend(std::coroutine_handle<> handle) noexcept {
+            TaskScheduler* scheduler = TaskManager::GetInstance().GetScheduler();
+            if (scheduler == nullptr) {
+                return false;
+            }
+            ASSERT(TaskManager::GetInstance().IsMainThread());
+            _handle = handle;
             Subscribe<EventType, &EventAwaiterWithTimeout::OnEvent>(this);
+            _timer = New<TimerLink>();
+            _timer->owner = this;
+            scheduler->ScheduleDelayed(
+                [timer = _timer]() {
+                    if (timer->owner != nullptr) {
+                        timer->owner->Finish();
+                    }
+                },
+                _timeout, TaskPriority::Normal, ThreadType::MainThread);
+            return true;
         }
 
         Result await_resume() noexcept {
@@ -88,41 +125,59 @@ namespace BECore {
         }
 
     private:
-        void OnEvent(const EventType& event) {
-            if (!_timedOut) {
-                _receivedEvent = event;
-                UnsubscribeAll();
+        // Outlives the awaiter in the scheduler's queue, so a timeout that comes due after the coroutine is gone finds no owner
+        struct TimerLink : RefCountedAtomic {
+            EventAwaiterWithTimeout* owner = nullptr;
+        };
 
-                if (const auto handle = _handle) {
-                    handle.resume();
-                }
+        void OnEvent(const EventType& event) {
+            _receivedEvent = event;
+            Finish();
+        }
+
+        void Finish() {
+            UnsubscribeAll();
+            DetachTimer();
+
+            // The coroutine frame owns this awaiter and may destroy it: nothing is touched after the resume.
+            if (const auto handle = _handle) {
+                handle.resume();
             }
         }
 
-        void OnTimeout() {
-            if (!_receivedEvent.has_value()) {
-                _timedOut = true;
-                UnsubscribeAll();
-
-                if (const auto handle = _handle) {
-                    handle.resume();
-                }
+        void DetachTimer() {
+            if (_timer) {
+                _timer->owner = nullptr;
+                _timer.Reset();
             }
         }
 
         Duration _timeout;
-        std::chrono::steady_clock::time_point _startTime;
         std::coroutine_handle<> _handle;
         Optional<EventType> _receivedEvent;
-        bool _timedOut = false;
+        IntrusivePtrAtomic<TimerLink> _timer;
     };
 
     /**
-     * Event awaiter with a timeout (see EventAwaiterWithTimeout: the timeout does not fire yet).
+     * Awaits one event of `EventType` for at most @p timeout (see EventAwaiterWithTimeout). A NaN counts as no time at all.
+     *
+     * @example
+     * auto keyEvent = co_await WaitForEventWithTimeout<KeyPressEvent>(std::chrono::seconds(5));
+     * if (!keyEvent) { LOG_INFO("Nobody pressed a key"); }
      */
     template <typename EventType, typename Rep, typename Period>
     EventAwaiterWithTimeout<EventType> WaitForEventWithTimeout(std::chrono::duration<Rep, Period> timeout) {
-        return EventAwaiterWithTimeout<EventType>{std::chrono::duration_cast<std::chrono::steady_clock::duration>(timeout)};
+        using Awaiter = EventAwaiterWithTimeout<EventType>;
+        using Seconds = std::chrono::duration<double>;
+        // Compared as floating point: the conversion to the clock's integer ticks overflows for a very long timeout
+        const Seconds seconds = std::chrono::duration_cast<Seconds>(timeout);
+        if (!(seconds > Seconds::zero())) {
+            return Awaiter{Awaiter::Duration::zero()};
+        }
+        if (seconds >= std::chrono::duration_cast<Seconds>(Awaiter::kMaxTimeout)) {
+            return Awaiter{Awaiter::kMaxTimeout};
+        }
+        return Awaiter{std::chrono::duration_cast<typename Awaiter::Duration>(timeout)};
     }
 
 }  // namespace BECore
