@@ -3,7 +3,7 @@ Standard library only, Python 3.10+. The contract is `tools/changelog/CLAUDE.md`
 
     python3 <engine>/tools/changelog/changelog.py current   [--root E]
     python3 <engine>/tools/changelog/changelog.py propose   --draft FILE
-    python3 <engine>/tools/changelog/changelog.py add       --draft FILE --bump minor|patch|auto [--date D] [--content-version N] [--dry-run] [--root E]
+    python3 <engine>/tools/changelog/changelog.py add       --draft FILE --bump minor|patch|auto [--version X] [--date D] [--content-version N] [--dry-run] [--root E]
     python3 <engine>/tools/changelog/changelog.py render    [--check] [--root E]
     python3 <engine>/tools/changelog/changelog.py check     [--root E]
     python3 <engine>/tools/changelog/changelog.py breaking  --since <commit|version|pointer> [--repo E] [--json] [--all] [--check]
@@ -330,11 +330,14 @@ def highest_content_version(fragments: list[Fragment]) -> int:
     return max((f.content_version for f in fragments if f.content_version is not None), default=0)
 
 
-def prepare_add(root: Path, draft: Fragment, bump: str, date: str, content_version: int | None = None) -> tuple[Fragment, Version]:
+def prepare_add(root: Path, draft: Fragment, bump: str, date: str, content_version: int | None = None, version: Version | None = None) -> tuple[Fragment, Version]:
     """The fragment `add` would write and the new header version; raises ChangelogError for every refusal.
 
     `content_version` stands for kContentVersion when it is not the one of `root`: the dry run of `todo-merge` runs on the base
-    before the merge, while the draft describes the branch."""
+    before the merge, while the draft describes the branch.
+
+    `version` is the number the store's counter handed out. The bump is not compared with it: this tree may lack the numbers
+    given to other `games/*` branches in between."""
     if draft.version is not None or draft.date:
         raise ChangelogError("the draft must not carry `Version` or `Date` lines: `add` decides them")
     if bump == AUTO:
@@ -363,9 +366,12 @@ def prepare_add(root: Path, draft: Fragment, bump: str, date: str, content_versi
         highest = max(fragment.version for fragment in existing)
         if highest != header:
             raise ChangelogError(f"{VERSION_HEADER} says {version_text(header)} but the highest fragment is {version_text(highest)}: fix that first")
-        new_version = bumped(header, bump)
+        if version is not None and version <= highest:
+            raise ChangelogError(f"--version {version_text(version)} is not above the highest fragment {version_text(highest)}")
+        new_version = bumped(header, bump) if version is None else version
     else:
-        new_version = header  # the first fragment records where the log starts, it does not move the number
+        # the first fragment records where the log starts, it does not move the number
+        new_version = header if version is None else version
     engine_content = read_content_version(root) if content_version is None else content_version
     known_content = highest_content_version(existing)
     if draft.content_version is None:
@@ -381,7 +387,8 @@ def prepare_add(root: Path, draft: Fragment, bump: str, date: str, content_versi
 
 def command_add(root: Path, args: argparse.Namespace) -> int:
     draft = parse_fragment(read_draft(args.draft))
-    fragment, version = prepare_add(root, draft, args.bump, args.date or datetime.date.today().isoformat(), args.content_version)
+    given = parse_version(args.version) if args.version else None
+    fragment, version = prepare_add(root, draft, args.bump, args.date or datetime.date.today().isoformat(), args.content_version, given)
     loaded, _ = load_fragments(root)
     rendered = render_changelog([*(f for _, f in loaded), fragment])
     target = root / FRAGMENT_DIR / f"{fragment.entry}.md"
@@ -573,6 +580,7 @@ def build_parser() -> argparse.ArgumentParser:
     add = command("add", "write the fragment of a draft, bump the header, regenerate CHANGELOG.md")
     add.add_argument("--draft", required=True)
     add.add_argument("--bump", required=True, choices=[MINOR, PATCH, AUTO])
+    add.add_argument("--version", help="the number `todo.py version next` gave this entry (default: the header plus the bump, for a repository without a store)")
     add.add_argument("--date", help="YYYY-MM-DD (default: today)")
     add.add_argument("--content-version", type=int, help="kContentVersion to compare the draft with (default: the one of --root); for the dry run before a merge")
     add.add_argument("--dry-run", action="store_true", help="write nothing, print what would be written")
