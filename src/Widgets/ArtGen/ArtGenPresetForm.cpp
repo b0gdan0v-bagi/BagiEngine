@@ -10,7 +10,7 @@ namespace BECore {
 
         constexpr StringView kReferenceImageInput = "reference_image";
         constexpr StringView kServiceInputs[] = {"prompt", "negative", "seed", "width", "height", "output", kReferenceImageInput};
-        // The keys the form shows, in the order of a written file; any other key of the file follows them
+        // The keys of a written file in order, `reference` last: the form keeps it as the file has it and does not edit it; any other key follows them
         constexpr StringView kFileOrder[] = {"preset", "title", "workflow", "prompt", "negative", "size", "params", "accept", "reference"};
         constexpr StringView kCopySuffix = "_copy";
 

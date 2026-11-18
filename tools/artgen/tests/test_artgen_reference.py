@@ -326,6 +326,12 @@ def test_an_absolute_path_of_any_picture_is_taken(game, tmp_path):
     assert artgen_reference.resolve_image(None, str(path)).data == PNG, "an absolute path needs no game root"
 
 
+@pytest.mark.parametrize("image", ["//server/share/x.png", r"\\server\share\x.png", r"\\?\C:\x.png", r"\\.\C:\x.png", "//?/C:/x.png"])
+def test_a_network_or_device_path_is_refused_before_it_is_opened(game, image):
+    with pytest.raises(artgen_reference.ReferenceImageError, match="network or device path"):
+        artgen_reference.resolve_image(game, image)
+
+
 def test_a_relative_path_needs_the_game_root(game):
     with pytest.raises(artgen_reference.ReferenceImageError, match="no game root"):
         artgen_reference.resolve_image(None, "assets/x.png")

@@ -23,6 +23,15 @@ namespace BECore {
             return result;
         }
 
+        /// @p root with '/' steps and no trailing '/', so that a file inside it is `root + '/' + name`
+        String SlashedRoot(StringView root) {
+            String result = Slashed(root);
+            while (!result.empty() && result.back() == '/') {
+                result.pop_back();
+            }
+            return result;
+        }
+
         /// True when a `..` step is in @p path: it would leave the folder the path was made relative to
         bool HasParentStep(StringView path) {
             size_t start = 0;
@@ -79,10 +88,7 @@ namespace BECore {
         ArtGenReference reference;
         reference.mode = String(kInitMode);
         const String file = Slashed(realPath);
-        String root = Slashed(gameRoot);
-        while (!root.empty() && root.back() == '/') {
-            root.pop_back();
-        }
+        const String root = SlashedRoot(gameRoot);
         const StringView fileView(file.data(), file.size());
         if (!root.empty() && fileView.size() > root.size() + 1 && fileView.substr(0, root.size()) == StringView(root.data(), root.size()) && fileView[root.size()] == '/') {
             const StringView inside = fileView.substr(root.size() + 1);
@@ -119,11 +125,8 @@ namespace BECore {
         if (absolute || gameRoot.empty()) {
             return file;
         }
-        String root = Slashed(gameRoot);
-        while (!root.empty() && root.back() == '/') {
-            root.pop_back();
-        }
-        return root + "/" + file;
+        const String root = SlashedRoot(gameRoot);
+        return Format("{}/{}", root, file);
     }
 
     StringView ArtGenReferenceFileName(StringView image) {

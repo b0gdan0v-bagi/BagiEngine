@@ -119,7 +119,10 @@ def _image_extension(head):
 def _image_path(game_root, image):
     """The file `image` names. A relative path is read from the game root and may never leave it: a request of the control API
     chooses it, and what it names is sent to another program. The `..` segments are refused by name, a link out of the root and
-    a drive-relative path by where they end up."""
+    a drive-relative path by where they end up. A path that starts with two slashes (UNC and device paths) is refused: reading it
+    would make Windows connect to a host the client picked."""
+    if image.replace("\\", "/").startswith("//"):
+        raise ReferenceImageError(f"the reference image '{image}' is a network or device path; name a local file")
     candidate = Path(image)
     if candidate.is_absolute():
         return candidate
