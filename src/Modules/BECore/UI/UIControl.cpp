@@ -498,16 +498,17 @@ namespace BECore {
                 const bool clickerEmits = clicker != nullptr && !target.element->IsDisabled();
                 const PoolString clickerAction = clickerEmits ? clicker->action : PoolString{};
                 const PoolString clickerValue = clickerEmits ? clicker->value : PoolString{};
-                // A toggle reports the value it asks for, read before the click (a handler may set the variable at once)
+                // A toggle reports the value it asks for, read before the click (a handler may set the variable at once); one that emits nothing reports nothing
                 const auto* toggleComponent = target.element->GetComponent<UIToggleComponent>();
                 PoolString toggleAction;
                 PoolString toggleValue;
-                if (toggleComponent != nullptr) {
+                if (toggleComponent != nullptr && !target.element->IsDisabled() && !toggleComponent->action.Empty()) {
                     toggleAction = toggleComponent->action;
                     toggleValue = toggleComponent->IsOn() ? toggleComponent->offValue : toggleComponent->onValue;
                 }
-                // The slider: what the press emitted is read after the click
+                // The slider: what the press emitted is read after the click. A disabled one is not asked, its last value is of an earlier press
                 const auto* sliderComponent = target.element->GetComponent<UISliderComponent>();
+                const bool sliderCanEmit = sliderComponent != nullptr && !target.element->IsDisabled();
                 // An option of a dropdown emits the dropdown's action with its own value (the option's `action` is empty), nothing when the choice is refused; the header emits nothing
                 const UIDropdown* owner = UIChoice::IsOption(*target.element) ? FindDropdownOf(*target.canvas->GetLayout().root, target.element.Get()) : nullptr;
                 const bool optionEmits = owner != nullptr && owner->EmitsOnChoice(*target.element);
@@ -535,8 +536,9 @@ namespace BECore {
                     result["action"] = MakeJsonString(toggleAction.ToStringView());
                     result["value"] = MakeJsonString(toggleValue.ToStringView());
                 } else if (sliderComponent != nullptr) {
-                    result["action"] = MakeJsonString(sliderComponent->action.ToStringView());
-                    result["value"] = MakeJsonString(sliderComponent->GetLastEmittedValue().ToStringView());
+                    const PoolString emitted = sliderCanEmit ? sliderComponent->GetLastEmittedValue() : PoolString{};
+                    result["action"] = MakeJsonString(emitted.Empty() ? StringView{} : sliderComponent->action.ToStringView());
+                    result["value"] = MakeJsonString(emitted.ToStringView());
                 } else if (clicker != nullptr) {
                     // After the toggle and the slider: their clicker has no action of its own, and must not shadow them
                     result["action"] = MakeJsonString(clickerAction.ToStringView());
