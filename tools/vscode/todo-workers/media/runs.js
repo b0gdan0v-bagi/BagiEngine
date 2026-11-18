@@ -130,7 +130,7 @@
         // start allows a held branch of the head itself, start_refusal)
         const head = w.queue[0];
         const own = w.entry && w.entry.id === head;
-        if (w.entry && !own && w.entry.status !== "review") return `holds ${w.entry.id} (${w.entry.status})`;
+        if (w.entry && !own && w.entry.status !== "review") return `holds ${entryLabel(w.entry)}`;
         const branch = heldBranch(w);
         if (branch && !own && branch !== `todo/${head}` && !(w.entry && w.entry.status === "review")) return `holds ${branch}`;
         const started = w.session && Number(w.session.startedAt);
@@ -139,5 +139,38 @@
         return null;
     }
 
-    return { NO_REASON, progressOf, progressText, progressDetail, unlinkedWaitsOf, queueRefusal, startedEntry, queueNotes, queueStartBlock, START_GRACE_MS, FREE_SETTLE_MS };
+    // An entry in a line of text. `worker.py list` names a held entry from its branch alone when the store was not read
+    // (`fromBranch`: an id and a branch, no status), so the branch stands in for the status.
+    function entryLabel(entry) {
+        const detail = entry.status || entry.branch;
+        return detail ? `${entry.id} (${detail})` : entry.id;
+    }
+
+    function ageText(seconds) {
+        if (seconds < 60) return `${Math.max(0, Math.round(seconds))} s`;
+        if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
+        return `${Math.round(seconds / 3600)} h`;
+    }
+
+    // The line of the PC's agent service from `worker.py agent status --json`; null when the service is not installed.
+    function agentServiceLine(status) {
+        if (!status || !status.system || !status.system.installed) return null;
+        const running = Boolean(status.system.running);
+        const checkouts = status.checkouts || [];
+        const count = (state) => checkouts.filter((c) => c.state === state).length;
+        const parts = [["served", count("served")], ["waiting", count("waiting")], ["paused", count("paused")], ["with a problem", count("problem")]].filter(([, n]) => n).map(([word, n]) => `${n} ${word}`);
+        const age = status.rounds && status.rounds.ageSeconds;
+        if (running && typeof age === "number") parts.push(`last round ${ageText(age)} ago`);
+        const word = running ? "running" : status.system.disabled ? "stopped" : "not running";
+        const problems = checkouts.filter((c) => c.state === "problem").map((c) => `${c.machine || c.path}: ${c.problem || c.error || "a problem"}`);
+        return {
+            running,
+            warn: count("problem") > 0 || (!running && !status.system.disabled),
+            text: `agent service ${word}${parts.length ? `: ${parts.join(", ")}` : ""}`,
+            title: [status.system.text, ...problems].filter(Boolean).join("\n"),
+            verb: running ? "stop" : "start",
+        };
+    }
+
+    return { NO_REASON, entryLabel, agentServiceLine, progressOf, progressText, progressDetail, unlinkedWaitsOf, queueRefusal, startedEntry, queueNotes, queueStartBlock, START_GRACE_MS, FREE_SETTLE_MS };
 });

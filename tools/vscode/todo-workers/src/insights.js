@@ -231,7 +231,7 @@ function attach(ctx) {
     }
 
     // A push to a phone (ntfy-style: the text POSTed to the URL, the title in a header) for what stops a worker: it
-    // waits for an answer, it hit the usage limit, an entry reached review. Off while todoWorkers.pushUrl is empty.
+    // waits for an answer, it hit the usage limit. Off while todoWorkers.pushUrl is empty.
     function pushNotify(title, text) {
         const target = config().pushUrl;
         if (!target) return;
