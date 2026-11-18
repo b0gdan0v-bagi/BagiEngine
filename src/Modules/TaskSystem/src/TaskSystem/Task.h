@@ -60,10 +60,20 @@ namespace BECore {
                 return std::move(_keepAlive);
             }
 
-            /** Wakes waiters without finishing the task, so they re-check their own predicate (used by Cancel). */
-            void Wake() {
+            /**
+             * Runs @p interrupt and wakes the waiters unless the task has finished. One decision under the mutex of Signal(), so a task that
+             * finishes at the same moment is either interrupted before it or not at all.
+             * @return Whether @p interrupt ran
+             */
+            template <typename TInterrupt>
+            bool InterruptUnlessSignaled(TInterrupt&& interrupt) {
                 LockGuard lock(_mutex);
+                if (_signaled.load(std::memory_order_acquire)) {
+                    return false;
+                }
+                interrupt();
                 _condition.notify_all();
+                return true;
             }
 
             [[nodiscard]] bool IsSignaled() const noexcept {
@@ -184,8 +194,10 @@ namespace BECore {
      * }
      *
      * Task<void> DoWorkAsync() {
-     *     int result = co_await ComputeAsync();
-     *     LOG_INFO("Result: {}"_format(result));
+     *     auto result = co_await ComputeAsync();  // std::expected<int, TaskError>
+     *     if (result) {
+     *         LOG_INFO("Result: {}"_format(*result));
+     *     }
      * }
      */
     template <typename T = void>

@@ -66,6 +66,12 @@ namespace BECore::Tests {
 
     }  // namespace
 
+    TEST_F(TaskSchedulerGameTimeTest, AHugeWallClockDelayIsNotDueAtOnce) {
+        ScheduleWall(TaskScheduler::Duration::max());
+
+        EXPECT_EQ(Pump(), 0);
+    }
+
     TEST_F(TaskSchedulerGameTimeTest, NotReleasedBeforeTheGameTimeReachesTheDelay) {
         ScheduleGame(seconds(2));
 

@@ -61,7 +61,7 @@ namespace BECore {
             return;
         }
 
-        auto executeTime = Clock::now() + delay;
+        const TimePoint executeTime(SaturatingAdd(Clock::now().time_since_epoch(), delay));
 
         LockGuard lock(_delayedMutex);
         _delayedTasks.Push({std::move(task), executeTime, priority, threadType});

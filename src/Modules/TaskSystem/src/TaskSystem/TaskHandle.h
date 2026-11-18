@@ -90,12 +90,15 @@ namespace BECore {
          * Cancels the handle. A task that has already finished stays Completed and keeps its result.
          */
         void Cancel() override {
-            const TaskStatus status = GetStatus();
-            if (status == TaskStatus::Pending || status == TaskStatus::Running) {
-                SetStatus(TaskStatus::Cancelled);
-                _cancelled.store(true, std::memory_order_release);
-                _completion.Wake();
-            }
+            _completion.InterruptUnlessSignaled([this] {
+                TaskStatus status = _status.load(std::memory_order_acquire);
+                while (status == TaskStatus::Pending || status == TaskStatus::Running) {
+                    if (_status.compare_exchange_weak(status, TaskStatus::Cancelled, std::memory_order_acq_rel)) {
+                        _cancelled.store(true, std::memory_order_release);
+                        return;
+                    }
+                }
+            });
         }
 
         /**
@@ -111,13 +114,20 @@ namespace BECore {
             _completion.WaitUntil([this] { return IsCancelled(); });
         }
 
-        /** Blocks until the task has finished; the `Cancelled` error when the handle was cancelled. */
+        /**
+         * Blocks until the task has finished; the `Cancelled` error when the handle was cancelled. A copyable result can be read again and
+         * from several threads; a move-only one is handed out by the first call.
+         */
         std::expected<T, TaskError> GetResult() requires(!std::is_void_v<T>) {
             Wait();
             if (IsCancelled()) {
                 return std::unexpected(TaskError::Cancelled);
             }
-            return _task.GetResult();
+            if constexpr (std::is_copy_constructible_v<T>) {
+                return _task.GetHandle().promise().GetResult();
+            } else {
+                return _task.GetResult();
+            }
         }
 
         std::expected<void, TaskError> GetResult() requires(std::is_void_v<T>) {

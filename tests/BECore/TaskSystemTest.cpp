@@ -894,4 +894,126 @@ namespace BECore::Tests {
         EXPECT_EQ(snapshot.totalTasksCompleted, 0u) << "After reset, completed should be 0";
     }
 
+    TEST(TaskSystemTest, AnIdleWorkerTakesAJobQueuedBehindABusyWorker) {
+        constexpr auto kSettle = std::chrono::milliseconds(50);  // both workers reach their idle wait; load only makes the check weaker
+        // Declared before the pool: its workers read them until the pool is gone
+        std::atomic<bool> release{false};
+        std::atomic<bool> started{false};
+        std::atomic<bool> followUpRan{false};
+        ThreadPool pool(2);
+        std::this_thread::sleep_for(kSettle);
+
+        pool.SubmitToThread(0, [&] {
+            started.store(true, std::memory_order_release);
+            while (!release.load(std::memory_order_acquire)) {
+                std::this_thread::yield();
+            }
+        });
+        const bool longJobStarted = WaitUntil([&] { return started.load(std::memory_order_acquire); });
+        std::this_thread::sleep_for(kSettle);
+
+        pool.SubmitToThread(0, [&] { followUpRan.store(true, std::memory_order_release); });
+
+        const bool ranBesideTheLongJob = WaitUntil([&] { return followUpRan.load(std::memory_order_acquire); });
+        release.store(true, std::memory_order_release);
+        EXPECT_TRUE(longJobStarted);
+        EXPECT_TRUE(ranBesideTheLongJob) << "the job waited for the long one although the other worker was idle";
+    }
+
+    TEST(TaskSystemTest, ShutdownWakesEveryIdleWorker) {
+        ThreadPool pool(4);
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        pool.Shutdown();
+
+        EXPECT_TRUE(pool.IsStopped());
+    }
+
+    namespace {
+
+        Task<String> LongTextTask() {
+            co_return String(128, 'x');
+        }
+
+        Task<UniquePtr<int>> MoveOnlyTask() {
+            co_return MakeUnique<int>(7);
+        }
+
+    }  // namespace
+
+    TEST(TaskSystemTest, ACopyableResultCanBeReadAgain) {
+        auto handle = MakeIntrusive<TaskHandle<String>>(LongTextTask());
+        handle->Start();
+
+        const auto first = handle->GetResult();
+        const auto second = handle->GetResult();
+
+        ASSERT_TRUE(first.has_value());
+        ASSERT_TRUE(second.has_value());
+        EXPECT_EQ(first->size(), 128u);
+        EXPECT_EQ(*first, *second);
+    }
+
+    TEST(TaskSystemTest, AMoveOnlyResultIsHandedOut) {
+        auto handle = MakeIntrusive<TaskHandle<UniquePtr<int>>>(MoveOnlyTask());
+        handle->Start();
+
+        auto result = handle->GetResult();
+
+        ASSERT_TRUE(result.has_value());
+        ASSERT_TRUE(*result);
+        EXPECT_EQ(**result, 7);
+    }
+
+    TEST(TaskSystemTest, AFinishedTaskIsNotInterrupted) {
+        Detail::CompletionEvent event;
+        event.Signal();
+        bool interrupted = false;
+
+        EXPECT_FALSE(event.InterruptUnlessSignaled([&] { interrupted = true; }));
+        EXPECT_FALSE(interrupted);
+    }
+
+    TEST(TaskSystemTest, AnInterruptNeverRunsAfterTheTaskFinished) {
+        constexpr int kRounds = 500;
+        for (int round = 0; round < kRounds; ++round) {
+            Detail::CompletionEvent event;
+            std::atomic<bool> go{false};
+            std::thread finisher([&] {
+                while (!go.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+                event.Signal();
+            });
+            go.store(true, std::memory_order_release);
+            bool finishedInside = false;
+            event.InterruptUnlessSignaled([&] { finishedInside = event.IsSignaled(); });
+            finisher.join();
+            ASSERT_FALSE(finishedInside) << "round " << round;
+        }
+    }
+
+    TEST(TaskSystemTest, ACancelAfterTheTaskFinishedKeepsItsResult) {
+        auto handle = MakeIntrusive<TaskHandle<int>>(SimpleIntTask(21));
+        handle->Start();
+
+        handle->Cancel();
+
+        EXPECT_FALSE(handle->IsCancelled());
+        EXPECT_TRUE(handle->GetStatus() == TaskStatus::Completed);
+        const auto result = handle->GetResult();
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, 42);
+    }
+
+    TEST(TaskSystemTest, DelaySecTakesAnyNumber) {
+        using Duration = std::chrono::steady_clock::duration;
+
+        EXPECT_EQ(DelaySec(std::numeric_limits<double>::quiet_NaN()).delay, Duration::zero());
+        EXPECT_EQ(DelaySec(-1.0).delay, Duration::zero());
+        EXPECT_EQ(DelaySec(std::numeric_limits<double>::infinity()).delay, Duration::max());
+        EXPECT_EQ(DelaySec(1e300).delay, Duration::max());
+        EXPECT_EQ(DelaySec(0.5).delay, std::chrono::duration_cast<Duration>(std::chrono::milliseconds(500)));
+    }
+
 }  // namespace BECore::Tests

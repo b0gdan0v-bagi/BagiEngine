@@ -55,6 +55,7 @@ namespace BECore {
 
         size_t index = _nextQueue.fetch_add(1, std::memory_order_relaxed) % _queues.size();
         _queues[index]->Push(std::move(task));
+        AnnounceWork();
     }
 
     void ThreadPool::SubmitToThread(size_t threadIndex, TaskQueue::TaskFunc task) {
@@ -73,6 +74,20 @@ namespace BECore {
         }
 
         _queues[threadIndex]->Push(std::move(task));
+        AnnounceWork();
+    }
+
+    void ThreadPool::AnnounceWork() {
+        {
+            LockGuard lock(_idleMutex);
+            _workEpoch.fetch_add(1, std::memory_order_release);
+        }
+        _workAvailable.notify_one();
+    }
+
+    void ThreadPool::WaitForWork(uint64_t seenWork) {
+        UniqueLock lock(_idleMutex);
+        _workAvailable.wait(lock, [&] { return _workEpoch.load(std::memory_order_acquire) != seenWork || _stopped.load(std::memory_order_acquire); });
     }
 
     void ThreadPool::RunInline(TaskQueue::TaskFunc task) {
@@ -104,6 +119,12 @@ namespace BECore {
         for (auto& queue : _queues) {
             queue->Stop();
         }
+
+        {
+            // The flag is part of the predicate of the idle wait: a worker between that check and the block has to be past it before the notify
+            LockGuard lock(_idleMutex);
+        }
+        _workAvailable.notify_all();
 
         for (auto& thread : _threads) {
             if (thread.joinable()) {
@@ -170,6 +191,8 @@ namespace BECore {
         };
 
         while (!_stopped.load(std::memory_order_acquire)) {
+            const uint64_t seenWork = _workEpoch.load(std::memory_order_acquire);
+
             if (_queues[threadIndex]->TryPop(task)) {
                 run();
                 continue;
@@ -182,14 +205,8 @@ namespace BECore {
             }
 
             // The wait is a zone, so a trace tells an idle worker from a busy one
-            bool gotTask = false;
-            {
-                BE_PROFILE_SCOPE("Idle");
-                gotTask = _queues[threadIndex]->Pop(task);
-            }
-            if (gotTask) {
-                run();
-            }
+            BE_PROFILE_SCOPE("Idle");
+            WaitForWork(seenWork);
         }
 
         // A job queued before the stop still runs
