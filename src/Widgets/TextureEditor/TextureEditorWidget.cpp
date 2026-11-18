@@ -13,9 +13,16 @@
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
+#include <Widgets/TextureEditor/SpriteAtlas.h>
 #include <imgui.h>
 
 namespace BECore {
+
+    namespace {
+
+        constexpr float kLibraryListWidth = 300.0f;
+
+    }  // namespace
 
     bool TextureEditorWidget::Initialize(IDeserializer& /*deserializer*/) {
         Subscribe<EditorCommandEvent, &TextureEditorWidget::OnCommand>(this);
@@ -61,8 +68,7 @@ namespace BECore {
 
         ImGui::Separator();
 
-        const float leftWidth = 200.0f;
-        ImGui::BeginChild("##sprite_list", ImVec2(leftWidth, 0.0f), true);
+        ImGui::BeginChild("##sprite_list", ImVec2(kLibraryListWidth, 0.0f), true);
         RenderLeftPanel();
         ImGui::EndChild();
 
@@ -104,13 +110,10 @@ namespace BECore {
 
     void TextureEditorWidget::RenderLeftPanel() {
         auto& lib = CoreManager::GetTextureLibrary();
-        const auto& entries = lib.GetAll();
 
-        for (int i = 0; i < static_cast<int>(entries.size()); ++i) {
-            const bool selected = (_selectedIndex == i);
-            if (ImGui::Selectable(entries[i].name.CStr(), selected)) {
-                Select(i);
-            }
+        const int clicked = _libraryPanel.Render(lib, _selectedIndex, _textures);
+        if (clicked >= 0) {
+            Select(clicked);
         }
 
         ImGui::Separator();
@@ -119,6 +122,7 @@ namespace BECore {
             newEntry.name = lib.MakeUniqueName("new_sprite");
             const PoolString addedName = newEntry.name;
             lib.AddOrUpdate(eastl::move(newEntry));
+            _libraryPanel.ResetFilter();
             SelectByName(addedName);
             _isDirty = true;
         }
@@ -134,6 +138,8 @@ namespace BECore {
         }
 
         SpriteEntry entry = entries[static_cast<size_t>(_selectedIndex)];
+        // A packed sprite's texture and rect point into its atlas: editing them would break the link, so they wait for Unpack
+        const bool packed = IsPackedSprite(entry);
 
         ImGui::TextUnformatted("Name:");
         ImGui::SameLine();
@@ -180,6 +186,7 @@ namespace BECore {
 
         ImGui::TextUnformatted("Texture:");
         ImGui::SameLine();
+        ImGui::BeginDisabled(packed);
         ImGui::SetNextItemWidth(300.0f);
         const char* previewTex = currentTexIndex >= 0 ? _cachedAssets[currentTexIndex].CStr() : "(none)";
         if (ImGui::BeginCombo("##tex_path", previewTex)) {
@@ -201,16 +208,26 @@ namespace BECore {
             }
             ImGui::EndCombo();
         }
+        ImGui::EndDisabled();
 
         ImGui::SameLine();
         if (IconButton(ICON_LC_REFRESH_CW, "Rescan the assets folder for textures", "tex_refresh")) {
             _assetsLoaded = false;
+            _textures.ForgetFailed();
+        }
+        if (packed) {
+            ImGui::TextDisabled("Packed into an atlas: Unpack (Atlas section) to change the texture or the rect");
         }
 
         ImGui::Separator();
 
+        // Pixels of the sheet when its texture is loaded, else 0: the slice section shows only for a loaded texture
+        int sheetWidth = 0;
+        int sheetHeight = 0;
         if (!entry.texturePath.Empty()) {
-            if (entry.texturePath != _previewLoadedPath) {
+            // A file rewritten on disk is evicted from the cache (the Generate panel's Accept and switch do): the handle held here is the old picture
+            const bool evicted = _previewTexture && !CoreManager::GetResourceManager().GetCache().Holds(_previewLoadedPath, _previewTexture.Get());
+            if (entry.texturePath != _previewLoadedPath || evicted) {
                 _previewTexture = CoreManager::GetResourceManager().Load<ITexture>(entry.texturePath.ToStringView());
                 _previewLoadedPath = entry.texturePath;
                 _isDragging = false;
@@ -234,6 +251,8 @@ namespace BECore {
                     }
                 }
 
+                sheetWidth = static_cast<int>(texW);
+                sheetHeight = static_cast<int>(texH);
                 _imageScaleX = texW / displayW;
                 _imageScaleY = texH / displayH;
 
@@ -246,6 +265,9 @@ namespace BECore {
                 ImDrawList* drawList = ImGui::GetWindowDrawList();
                 const ImTextureID texId = static_cast<ImTextureID>(reinterpret_cast<std::uintptr_t>(_previewTexture->GetNativeHandle()));
                 drawList->AddImage(texId, _imageOrigin, imageMax, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+                if (!packed) {
+                    _slicePanel.DrawOverlay(drawList, entry.texturePath, _imageOrigin, _imageScaleX, _imageScaleY);
+                }
 
                 if (!entry.srcRect.IsEmpty()) {
                     const ImVec2 rectMin(_imageOrigin.x + entry.srcRect.x / _imageScaleX, _imageOrigin.y + entry.srcRect.y / _imageScaleY);
@@ -254,7 +276,10 @@ namespace BECore {
                 }
 
                 // Drag-to-select: start when preview item is activated (click), track while dragging, finish on release.
-                if (ImGui::IsItemActivated()) {
+                if (packed) {
+                    _isDragging = false;
+                }
+                if (!packed && ImGui::IsItemActivated()) {
                     _isDragging = true;
                     const ImVec2 mouseScreenPos = ImGui::GetMousePos();
                     _dragStartPos.x = (mouseScreenPos.x - _imageOrigin.x) * _imageScaleX;
@@ -294,7 +319,9 @@ namespace BECore {
                     }
                 }
 
-                ImGui::TextUnformatted("Click and drag on the texture to select the sprite area.");
+                if (!packed) {
+                    ImGui::TextUnformatted("Click and drag on the texture to select the sprite area.");
+                }
             }
         }
 
@@ -304,6 +331,8 @@ namespace BECore {
 
         Rect rect = entry.srcRect;
         bool rectChanged = false;
+
+        ImGui::BeginDisabled(packed);
 
         {
             const ScopedMonoFont mono;
@@ -329,12 +358,39 @@ namespace BECore {
             ImGui::PopItemWidth();
         }
 
+        ImGui::EndDisabled();
+
         if (rectChanged) {
             entry.srcRect = rect;
             lib.AddOrUpdate(entry);
             _isDirty = true;
         }
 
+        ImGui::Separator();
+
+        if (sheetWidth > 0 && sheetHeight > 0 && !packed) {
+            const PoolString firstAdded = _slicePanel.Render(lib, entry.texturePath, sheetWidth, sheetHeight);
+            if (!firstAdded.Empty()) {
+                _libraryPanel.ResetFilter();
+                SelectByName(firstAdded);
+                _isDirty = true;
+                return;
+            }
+            ImGui::Separator();
+        }
+
+        if (_atlasPanel.Render(lib, entry)) {
+            _textures.ForgetFailed();
+            _isDirty = true;
+            return;
+        }
+        ImGui::Separator();
+
+        const PoolString previewClicked = _atlasPreviewPanel.Render(lib, entry, _atlasPanel.Settings(), _textures);
+        if (!previewClicked.Empty()) {
+            SelectByName(previewClicked);
+            return;
+        }
         ImGui::Separator();
 
         if (IconTextButton(ICON_LC_TRASH_2, "Delete Entry", "Remove this sprite from the library")) {

@@ -2,6 +2,7 @@
 
 #include <BECore/Control/Json.h>
 #include <BECore/Types/Types.h>
+#include <Widgets/ArtGen/ArtGenImage.h>
 #include <cstdint>
 #include <expected>
 
@@ -41,12 +42,12 @@ namespace BECore {
     /// The named inputs the service fills itself, never a param of a preset (tools/artgen/CLAUDE.md, "Presets")
     [[nodiscard]] bool IsArtGenServiceInput(StringView input);
 
-    /// A preset as the text of its file: the keys in the order of the docs (preset, title, workflow, prompt, negative, size, params, then any
-    /// other), two-space indented, a newline at the end
+    /// A preset as the text of its file: the keys in the order of the docs (preset, title, workflow, prompt, negative, size, params, accept,
+    /// then any other), two-space indented, a newline at the end
     [[nodiscard]] String FormatArtGenPresetFile(const Json& preset);
 
     /// Checks the shape the C++ side owns before a save: an object with `preset` 1, `workflow` and `prompt` text, `size` [w, h] of positive
-    /// integers, `params` an object. Everything else (does the workflow have the input) is the service's to say
+    /// integers, `params` an object, `accept` image settings in range. Everything else (does the workflow have the input) is the service's to say
     [[nodiscard]] std::expected<void, String> CheckArtGenPresetShape(const Json& preset);
 
     /**
@@ -112,6 +113,18 @@ namespace BECore {
             return _params;
         }
 
+        /// What Accept does to an image of this preset (trim, padding, max size); the defaults when the preset has no `accept`
+        [[nodiscard]] const ArtGenImageSettings& GetImageAccept() const {
+            return _accept;
+        }
+        void SetImageAccept(const ArtGenImageSettings& settings);
+        /// Drops the key: the defaults apply again
+        void ClearImageAccept();
+        /// The file gets an `accept` key: it had one, or the settings differ from the defaults
+        [[nodiscard]] bool HasImageAccept() const {
+            return _acceptInFile || _accept != ArtGenImageSettings{};
+        }
+
         /// Call after an edit of a field: the dirty check is made again only then
         void Touch() {
             ++_revision;
@@ -126,11 +139,17 @@ namespace BECore {
 
     private:
         void FromJson(const Json& data);
+        /// Takes a valid `accept` object; false (nothing changed) for one that is not, which the caller keeps among the extra keys
+        bool ReadAccept(const Json& value);
 
         String _workflow;
         Vector<Param> _params;
-        Json _extra = Json::object();  // keys of the file the form does not show
-        Json _base;                    // the saved content; null for a new one
+        Json _extra = Json::object();  // keys of the file the form does not show, a malformed `accept` among them
+        ArtGenImageSettings _accept;
+        bool _acceptInFile = false;         // the loaded file had a valid `accept`, or the person set one
+        Json _acceptAsLoaded;               // its text, written back while the settings are as loaded, so an untouched file stays as it was
+        ArtGenImageSettings _acceptLoaded;  // the settings _acceptAsLoaded reads as
+        Json _base;                         // the saved content; null for a new one
         String _baseName;
         String _baseSource;
         uint64_t _revision = 0;

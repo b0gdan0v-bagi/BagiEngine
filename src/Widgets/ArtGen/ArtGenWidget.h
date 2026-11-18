@@ -8,8 +8,10 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
 #include <BECore/Widgets/IWidget.h>
+#include <Widgets/ArtGen/ArtGenImage.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
+#include <Widgets/ArtGen/Sets/ArtGenSetPanel.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <cstdint>
 
@@ -18,6 +20,7 @@ namespace BECore {
     class ArtGenSession;
     struct ArtGenRun;
     struct ArtGenSetup;
+    struct ArtGenVariant;
     struct SceneSelectionChangedEvent;
 
     /**
@@ -46,7 +49,10 @@ namespace BECore {
         void DrawSetup(ArtGenSession& session);
         void DrawPlan(ArtGenSession& session, const ArtGenSetup& setup);
         void StartBridge(uint16_t port);
-        void DrawForm(ArtGenSession& session);
+        /// The preset section above the tabs: what Generate and Set both use
+        void DrawPreset(ArtGenSession& session);
+        /// Subject, count, seed and Generate: the Generate tab's own controls
+        void DrawRunForm(ArtGenSession& session);
         void DrawPresetBar(ArtGenSession& session);
         void DrawPresetFields(ArtGenSession& session);
         void DrawSizeFields(const ArtGenWorkflow& workflow);
@@ -56,6 +62,10 @@ namespace BECore {
         void DrawRun(ArtGenSession& session);
         void DrawVariants(const ArtGenRun& run);
         void DrawAccept(ArtGenSession& session);
+        /// Trim, padding and max size of the form's `accept`: one drawing for the preset's Settings and the Accept section (@p id keeps the two apart)
+        void DrawImageAcceptFields(const char* id);
+        /// Reads the selected image's drawn box when the selection changes and makes the summary line again when that or a setting changed
+        void RefreshAcceptSummary(const ArtGenRun& run, const ArtGenVariant& variant);
         void SyncThumbnails(const ArtGenRun& run);
         void DropThumbnails();
         void DrawSounds(const ArtGenRun& run);
@@ -65,8 +75,13 @@ namespace BECore {
         void DropSounds();
         void PlaySound(const AudioClip& clip, int32_t row);
         void StopSound();
+        /// Forgets a sound that ended by itself
+        void RefreshPlaying();
+        /// The Set tab is not on screen: stops its sound and gives its pictures back
+        void ReleaseSetTab();
 
         bool _open = false;
+        ArtGenSetPanel _setPanel;
 
         // The preset being edited: loaded from the service's list, a new one, or a copy; Generate sends it inline while it is unsaved
         ArtGenPresetForm _form;
@@ -106,6 +121,19 @@ namespace BECore {
         bool _useOnSelected = false;
         String _acceptMessage;
         bool _acceptFailed = false;
+
+        // What Accept would make of the selected image. The file is decoded once per selection (a slider drag must not decode it per frame),
+        // the line is made again only when the box or a setting changes
+        uint32_t _boundsRun = 0;
+        String _boundsPath;
+        bool _boundsRead = false;
+        Optional<ArtGenIntRect> _drawn;
+        int32_t _imageWidth = 0;
+        int32_t _imageHeight = 0;
+        ArtGenImageSettings _summarySettings;
+        bool _summaryValid = false;
+        String _summaryText;
+        bool _summaryIsError = false;
 
         // The bridge this panel started: when (ImGui time), so the line says "starting" until it polls; why it could not start
         double _bridgeStartedAt = -1.0;

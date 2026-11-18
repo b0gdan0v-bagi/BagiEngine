@@ -13,6 +13,8 @@
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenLaunch.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
+#include <Widgets/ArtGen/Sets/ArtGenSet.h>
+#include <Widgets/ArtGen/Sets/ArtGenSetPanel.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/EditorLayout/EditorSettings.h>
 #include <Widgets/Icons/IconsLucide.h>
@@ -27,11 +29,12 @@ namespace BECore {
     namespace {
 
         constexpr float kThumbnailSize = 160.0f;
-        constexpr float kSelectedBorder = 3.0f;
+        constexpr const char* kPresetSectionLabel = "Preset: used by Generate and Set";
+        constexpr const char* kSetRunningNote = "A set is running (see the Set tab); Generate is off until it ends";
+        constexpr const char* kDraftNote = "The variants are drafts in artgen/out/ (git ignores that folder). Accept below copies one into the game.";
+        constexpr const char* kPlaceholderName = "<name>";
         constexpr float kDefaultWidth = 520.0f;
         constexpr float kDefaultHeight = 700.0f;
-        // Squares behind a thumbnail, so a transparent background (a cut-out sprite) shows as transparent
-        constexpr float kCheckerCell = 10.0f;
         // Seconds a started bridge gets to make its first poll before the panel says it did not come
         constexpr double kBridgeStartSeconds = 15.0;
         constexpr double kBytesPerGigabyte = 1e9;
@@ -44,18 +47,33 @@ namespace BECore {
         constexpr float kWaveformHeight = 40.0f;
         constexpr size_t kWaveformBuckets = 110;
         constexpr int32_t kPreviewRow = -2;
+        constexpr int32_t kSetTabRow = -3;  // the sound of the Set tab
         constexpr float kFieldWidth = 140.0f;
         constexpr float kMinTrimDb = -90.0f;
         constexpr float kMinPeakDb = -24.0f;
         constexpr float kMaxFadeMs = 1000.0f;
         constexpr float kMaxSeconds = 60.0f;
         constexpr Array<uint32_t, 5> kRates{0, 22050, 32000, 44100, 48000};
+        constexpr Array<int32_t, 7> kMaxSizes{0, 64, 128, 256, 512, 1024, 2048};  // 0: no downscale
 
         DecodedAudio DecodedOf(const AudioClip& clip) {
             DecodedAudio audio;
             audio.format = clip.GetFormat();
             audio.samples.assign(clip.GetSamples().begin(), clip.GetSamples().end());
             return audio;
+        }
+
+        /// What Accept of an image writes, named once: the same path the acceptor builds (`ArtGenGameFile`)
+        const char* AcceptImageNote() {
+            static const String note = Format("Trim and downscale the image as set above and write it into the game: {} + .artgen.json and the sprite in config/TextureLibrary.xml. Both are in git.",
+                                              ArtGenGameFile(kPlaceholderName, kKindImage));
+            return note.c_str();
+        }
+
+        const char* AcceptSoundNote() {
+            static const String note =
+                Format("Process the sound and write it into the game as a 16-bit WAV: {} + .artgen.json. Both are in git. Then reload what plays it.", ArtGenGameFile(kPlaceholderName, kKindAudio));
+            return note.c_str();
         }
 
         void DrawWaveform(ImDrawList* drawList, ImVec2 origin, const Vector<float>& waveform, ImU32 background, ImU32 color) {
@@ -68,17 +86,6 @@ namespace BECore {
                 const float low = std::clamp(waveform[i * 2], -1.0f, 1.0f);
                 const float high = std::clamp(waveform[i * 2 + 1], -1.0f, 1.0f);
                 drawList->AddLine(ImVec2(x, middle - high * half), ImVec2(x, middle - low * half + 1.0f), color);
-            }
-        }
-
-        void DrawChecker(ImDrawList* drawList, ImVec2 origin, float size, ImU32 light, ImU32 dark) {
-            drawList->AddRectFilled(origin, ImVec2(origin.x + size, origin.y + size), light);
-            const int cells = static_cast<int>(size / kCheckerCell);
-            for (int y = 0; y < cells; ++y) {
-                for (int x = (y % 2); x < cells; x += 2) {
-                    const ImVec2 min(origin.x + static_cast<float>(x) * kCheckerCell, origin.y + static_cast<float>(y) * kCheckerCell);
-                    drawList->AddRectFilled(min, ImVec2(min.x + kCheckerCell, min.y + kCheckerCell), dark);
-                }
             }
         }
 
@@ -98,23 +105,19 @@ namespace BECore {
             }
         }
 
-        /// A sprite name from the subject: "White Knight!" -> "white_knight"; the user edits it before Accept
-        void SpriteNameFromSubject(const char* subject, char* out, size_t size) {
-            size_t length = 0;
-            bool underscore = false;
-            for (const char* c = subject; *c != '\0' && length + 1 < size; ++c) {
-                const char lower = (*c >= 'A' && *c <= 'Z') ? static_cast<char>(*c - 'A' + 'a') : *c;
-                if ((lower >= 'a' && lower <= 'z') || (lower >= '0' && lower <= '9')) {
-                    if (underscore && length > 0 && length + 2 < size) {
-                        out[length++] = '_';
-                    }
-                    out[length++] = lower;
-                    underscore = false;
-                } else {
-                    underscore = true;
-                }
+        /// The Sprite / Name field filled from the subject of the run ("White Knight!" -> "white_knight"); the user edits it before Accept
+        void FillNameFromSubject(const String& subject, char* out, size_t size) {
+            const String name = ArtGenNameFromSubject(StringView(subject));
+            std::snprintf(out, size, "%s", name.c_str());
+        }
+
+        /// The Max size option as shown: 0 is "no downscale"
+        void FormatMaxSize(int32_t maxSize, char* out, size_t size) {
+            if (maxSize == 0) {
+                std::snprintf(out, size, "original size");
+            } else {
+                std::snprintf(out, size, "%d px", static_cast<int>(maxSize));
             }
-            out[length] = '\0';
         }
 
     }  // namespace
@@ -133,6 +136,8 @@ namespace BECore {
         session.SetGameRoot(StringView(root.data(), root.size()));
         session.SetAcceptor(&AcceptForControl);
         session.SetSoundAcceptor(&AcceptSoundForControl);
+        session.SetKeeper(&KeepForControl);
+        session.SetFrameMeasurer(&MeasureFrameForControl);
         session.RegisterControl(CoreManager::GetControlService());
         return true;
     }
@@ -152,20 +157,38 @@ namespace BECore {
 
     void ArtGenWidget::Update() {
         if (!_open) {
+            ReleaseSetTab();
             return;
         }
         ImGui::SetNextWindowSize(ImVec2(kDefaultWidth, kDefaultHeight), ImGuiCond_FirstUseEver);
         if (!ImGui::Begin(ICON_LC_WAND_SPARKLES " Generate###Generate", &_open)) {
             ImGui::End();
+            ReleaseSetTab();
             return;
         }
+        RefreshPlaying();
         auto& session = ArtGenSession::GetInstance();
         DrawServiceLine(session);
         DrawSetup(session);
+        DrawPreset(session);
         ImGui::Separator();
-        DrawForm(session);
-        ImGui::Separator();
-        DrawRun(session);
+        if (ImGui::BeginTabBar("##ArtGenTabs")) {
+            if (ImGui::BeginTabItem(ICON_LC_IMAGE " Generate")) {
+                DrawRunForm(session);
+                DrawRun(session);
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem(ICON_LC_LIST_CHECKS " Set")) {
+                const ArtGenSetPanelForm form{_form};
+                const auto play = [this](const AudioClip& clip) { PlaySound(clip, kSetTabRow); };
+                const auto stop = [this] { StopSound(); };
+                _setPanel.DrawSetTab(session, form, ArtGenSetPanelSound{play, stop, _playingRow == kSetTabRow});
+                ImGui::EndTabItem();
+            } else {
+                ReleaseSetTab();
+            }
+            ImGui::EndTabBar();
+        }
         ImGui::End();
     }
 
@@ -223,7 +246,8 @@ namespace BECore {
         }
         _bridgeStartedAt = -1.0;
         const auto& status = session.GetServiceStatus();
-        if (status.state == "ready") {
+        const bool ready = session.IsGeneratorReady();
+        if (ready) {
             ImGui::TextColored(palette.success, ICON_LC_PLUG " Service ready (%s)", status.generator.c_str());
         } else {
             ImGui::TextColored(palette.warning, ICON_LC_CIRCLE_ALERT " Generator %s", status.state.c_str());
@@ -232,7 +256,7 @@ namespace BECore {
         if (IconTextButton(ICON_LC_UNPLUG, "Disconnect", "Stop the generation service (a run or an install in work is cancelled); Start the service runs it again")) {
             session.RequestServiceStop();
         }
-        if (status.state != "ready") {
+        if (!ready) {
             if (!status.reason.empty()) {
                 ImGui::TextWrapped("%s", status.reason.c_str());
             }
@@ -356,13 +380,15 @@ namespace BECore {
         ImGui::TextColored(palette.textDisabled, ICON_LC_CLOUD " Or a generator on another machine: not available yet (comfyui-remote-via-todo)");
     }
 
-    void ArtGenWidget::DrawForm(ArtGenSession& session) {
+    void ArtGenWidget::DrawPreset(ArtGenSession& session) {
+        ImGui::SeparatorText(kPresetSectionLabel);
         DrawPresetBar(session);
         if (!_form.IsEmpty()) {
             DrawPresetFields(session);
         }
-        ImGui::Spacing();
+    }
 
+    void ArtGenWidget::DrawRunForm(ArtGenSession& session) {
         ImGui::InputTextWithHint("Subject", "white knight, a red gem, ...", _subject, sizeof(_subject));
         {
             ScopedMonoFont mono;
@@ -391,7 +417,9 @@ namespace BECore {
             _requestError = result ? String() : result.error();
         }
         ImGui::EndDisabled();
-        if (busy) {
+        // The job of a set is no run of this tab: its Cancel is on the Set tab
+        const bool singleRunInWork = session.IsSingleRunInWork();
+        if (singleRunInWork) {
             ImGui::SameLine();
             ImGui::BeginDisabled(session.GetRun().cancelRequested);
             if (IconTextButton(ICON_LC_X, "Cancel", "Stop the run; the images already made stay")) {
@@ -399,9 +427,15 @@ namespace BECore {
             }
             ImGui::EndDisabled();
         }
+        if (busy && !singleRunInWork) {
+            ImGui::TextDisabled("%s", kSetRunningNote);
+        }
         if (!_requestError.empty()) {
             ImGui::TextColored(GetImGuiPalette().error, "%s", _requestError.c_str());
         }
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", kDraftNote);
+        ImGui::PopTextWrapPos();
     }
 
     void ArtGenWidget::DrawPresetBar(ArtGenSession& session) {
@@ -426,8 +460,8 @@ namespace BECore {
         if (ImGui::BeginCombo("Preset", preview)) {
             for (const auto& preset : presets) {
                 char label[192];
-                std::snprintf(label, sizeof(label), "%s%s%s  (%s%s)", preset.error.empty() ? "" : ICON_LC_CIRCLE_ALERT " ", preset.kind == "audio" ? ICON_LC_AUDIO_LINES " " : "", preset.title.c_str(),
-                              preset.name.c_str(), preset.source == "engine" ? ", engine" : "");
+                std::snprintf(label, sizeof(label), "%s%s%s  (%s%s)", preset.error.empty() ? "" : ICON_LC_CIRCLE_ALERT " ", StringView(preset.kind) == kKindAudio ? ICON_LC_AUDIO_LINES " " : "",
+                              preset.title.c_str(), preset.name.c_str(), preset.source == "engine" ? ", engine" : "");
                 ImGui::BeginDisabled(!preset.data.is_object());
                 if (ImGui::Selectable(label, preset.name == _form.GetBaseName())) {
                     // Picking another preset drops what the form had unsaved
@@ -458,7 +492,7 @@ namespace BECore {
         ImGui::SameLine();
         const bool savedHere = !dirty && _form.GetBaseSource() == "game";
         ImGui::BeginDisabled(savedHere);
-        if (IconButton(ICON_LC_SAVE, "Save as artgen/presets/<name>.json of the game (an engine starter becomes the game's own copy)", "##SavePreset")) {
+        if (IconButton(ICON_LC_SAVE, "Save as artgen/presets/<name>.json of the game, which is tracked in git (an engine starter becomes the game's own copy)", "##SavePreset")) {
             SaveForm(session, StringView(_form.name));
         }
         ImGui::EndDisabled();
@@ -479,7 +513,7 @@ namespace BECore {
             ImGui::InputTextWithHint("##SaveAsName", "preset_name", _saveAsName, sizeof(_saveAsName));
             const bool valid = IsValidSpriteName(StringView(_saveAsName));
             ImGui::BeginDisabled(!valid);
-            if (IconTextButton(ICON_LC_SAVE, "Save", "Write artgen/presets/<name>.json of the game")) {
+            if (IconTextButton(ICON_LC_SAVE, "Save", "Write artgen/presets/<name>.json of the game (tracked in git)")) {
                 SaveForm(session, StringView(_saveAsName));
                 ImGui::CloseCurrentPopup();
             }
@@ -561,7 +595,7 @@ namespace BECore {
             ImGui::TextColored(palette.warning, "The service does not know the workflow '%s'", _form.GetWorkflow().c_str());
             return;
         }
-        if (ImGui::TreeNodeEx("Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::TreeNodeEx("Settings")) {
             if (workflow->HasSize()) {
                 DrawSizeFields(*workflow);
             }
@@ -570,8 +604,88 @@ namespace BECore {
                     DrawInputField(input);
                 }
             }
+            if (workflow->kind != kKindAudio && ImGui::TreeNodeEx("Accept (image)")) {
+                DrawImageAcceptFields("##presetAccept");
+                ImGui::TreePop();
+            }
             ImGui::TreePop();
         }
+    }
+
+    void ArtGenWidget::DrawImageAcceptFields(const char* id) {
+        ImGui::PushID(id);
+        ArtGenImageSettings settings = _form.GetImageAccept();
+        bool changed = ImGui::Checkbox("Trim to the drawn object", &settings.trim);
+        ItemTooltip("Cut the file to the box of what is drawn (alpha above the haze). A set is cut to the box of all its pictures together, so a pawn stays smaller than a king");
+        ImGui::BeginDisabled(!settings.trim);
+        ImGui::SetNextItemWidth(kFieldWidth);
+        {
+            ScopedMonoFont mono;
+            changed |= ImGui::SliderInt("Padding", &settings.padding, ArtGenImageSettings::kMinPadding, ArtGenImageSettings::kMaxPadding, "%d %%", ImGuiSliderFlags_AlwaysClamp);
+        }
+        ImGui::EndDisabled();
+        ItemTooltip("The margin kept around the drawn box, in percent of its longer side");
+        char current[32];
+        FormatMaxSize(settings.maxSize, current, sizeof(current));
+        ImGui::SetNextItemWidth(kFieldWidth);
+        if (ImGui::BeginCombo("Max size", current)) {
+            for (const int32_t option : kMaxSizes) {
+                char label[32];
+                FormatMaxSize(option, label, sizeof(label));
+                if (ImGui::Selectable(label, option == settings.maxSize)) {
+                    settings.maxSize = option;
+                    changed = true;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ItemTooltip("The longer side of the file in pixels; a bigger picture is scaled down, a smaller one is never scaled up");
+        if (changed) {
+            _form.SetImageAccept(settings);
+        }
+        if (_form.HasImageAccept()) {
+            ImGui::SameLine();
+            if (IconTextButton(ICON_LC_ROTATE_CCW, "Defaults", "Back to the defaults of Accept; the preset file then has no accept key")) {
+                _form.ClearImageAccept();
+            }
+        }
+        ImGui::PopID();
+    }
+
+    void ArtGenWidget::RefreshAcceptSummary(const ArtGenRun& run, const ArtGenVariant& variant) {
+        if (!_boundsRead || _boundsRun != run.id || _boundsPath != variant.path) {
+            _boundsRead = true;
+            _boundsRun = run.id;
+            _boundsPath = variant.path;
+            _summaryValid = false;
+            _drawn.reset();
+            _summaryText.clear();
+            auto pixels = ReadArtGenPng(std::filesystem::path(variant.path.c_str()));
+            if (pixels) {
+                _imageWidth = static_cast<int32_t>(pixels->width);
+                _imageHeight = static_cast<int32_t>(pixels->height);
+                _drawn = DrawnBounds(*pixels);
+                if (!_drawn) {
+                    _summaryText = "Nothing is drawn: Accept would refuse this picture";
+                    _summaryIsError = true;
+                    _summaryValid = true;
+                }
+            } else {
+                _summaryText = pixels.error();
+                _summaryIsError = true;
+                _summaryValid = true;
+            }
+        }
+        const ArtGenImageSettings& settings = _form.GetImageAccept();
+        if (_summaryValid && (!_drawn || _summarySettings == settings)) {
+            return;
+        }
+        _summarySettings = settings;
+        _summaryValid = true;
+        const ArtGenIntRect bounds = *_drawn;
+        auto frame = MakeArtGenFrame(Span<const ArtGenIntRect>(&bounds, 1), _imageWidth, _imageHeight, settings);
+        _summaryIsError = !frame.has_value();
+        _summaryText = frame ? Format("drawn {} x {}, written {} x {}", bounds.w, bounds.h, frame->outWidth, frame->outHeight) : frame.error();
     }
 
     void ArtGenWidget::DrawSizeFields(const ArtGenWorkflow& workflow) {
@@ -655,6 +769,12 @@ namespace BECore {
 
     void ArtGenWidget::DrawRun(ArtGenSession& session) {
         const ArtGenRun& run = session.GetRun();
+        if (!run.setName.empty()) {
+            // The last job of a set stays in the run: its variants are the set's drafts, judged and accepted on the Set tab
+            DropThumbnails();
+            ImGui::TextDisabled("job %s of set %s (see the Set tab)", run.jobName.c_str(), run.setName.c_str());
+            return;
+        }
         SyncThumbnails(run);
         const auto& palette = GetImGuiPalette();
         switch (run.state) {
@@ -705,6 +825,20 @@ namespace BECore {
         _playingRow = row;
     }
 
+    void ArtGenWidget::RefreshPlaying() {
+        if (_playing.IsValid() && !CoreManager::GetAudio().IsPlaying(_playing)) {
+            _playing = AudioHandle{};
+            _playingRow = -1;
+        }
+    }
+
+    void ArtGenWidget::ReleaseSetTab() {
+        if (_playingRow == kSetTabRow) {
+            StopSound();
+        }
+        _setPanel.DropThumbnails();
+    }
+
     void ArtGenWidget::StopSound() {
         if (_playing.IsValid()) {
             CoreManager::GetAudio().Stop(_playing);
@@ -739,10 +873,7 @@ namespace BECore {
                 row.measured = true;
             }
         }
-        if (_playing.IsValid() && !CoreManager::GetAudio().IsPlaying(_playing)) {
-            _playing = AudioHandle{};
-            _playingRow = -1;
-        }
+        RefreshPlaying();
     }
 
     void ArtGenWidget::DropSounds() {
@@ -787,7 +918,7 @@ namespace BECore {
                 }
                 _selectedSeed = variant.seed;
                 if (_spriteName[0] == '\0') {
-                    SpriteNameFromSubject(run.subject.c_str(), _spriteName, sizeof(_spriteName));
+                    FillNameFromSubject(run.subject, _spriteName, sizeof(_spriteName));
                 }
             }
             ItemTooltip("Click to pick it for Accept");
@@ -951,8 +1082,14 @@ namespace BECore {
         ImGui::Checkbox("Use on the selected node", &_useOnSelected);
         ImGui::EndDisabled();
         ItemTooltip(haveNode ? "Put the clip on the AudioSourceComponent of the node selected in the Scene Editor" : "Select a node in the Scene Editor first");
+        char replaceTip[kInputTextSize];
+        const char* acceptTip = AcceptSoundNote();
+        if (_replaceClip) {
+            std::snprintf(replaceTip, sizeof(replaceTip), "Process the sound and write it over the game's clip %s + .artgen.json. Both are in git. Then reload what plays it.", _clipPath);
+            acceptTip = replaceTip;
+        }
         ImGui::BeginDisabled(!valid);
-        if (IconTextButton(ICON_LC_CHECK, "Accept", "Process the sound, write it as a 16-bit WAV with its .artgen.json and reload what plays it")) {
+        if (IconTextButton(ICON_LC_CHECK, "Accept", acceptTip)) {
             if (_playingRow == kPreviewRow) {
                 StopSound();
             }
@@ -974,7 +1111,8 @@ namespace BECore {
 
     void ArtGenWidget::DrawAccept(ArtGenSession& session) {
         const auto& palette = GetImGuiPalette();
-        if (!_selectedSeed || session.FindVariant(*_selectedSeed) == nullptr) {
+        const ArtGenVariant* variant = _selectedSeed ? session.FindVariant(*_selectedSeed) : nullptr;
+        if (variant == nullptr) {
             ImGui::TextDisabled("Click an image to accept it into the game");
             return;
         }
@@ -982,6 +1120,12 @@ namespace BECore {
         {
             ScopedMonoFont mono;
             ImGui::TextDisabled("seed %lld", static_cast<long long>(*_selectedSeed));
+        }
+        RefreshAcceptSummary(session.GetRun(), *variant);
+        DrawImageAcceptFields("##acceptImage");
+        if (!_summaryText.empty()) {
+            ScopedMonoFont mono;
+            ImGui::TextColored(_summaryIsError ? palette.error : palette.textDisabled, "%s", _summaryText.c_str());
         }
         ImGui::InputTextWithHint("Sprite", "white_knight", _spriteName, sizeof(_spriteName));
         ItemTooltip("The TextureLibrary name; the file goes to assets/artgen/<name>.png with its .artgen.json");
@@ -996,13 +1140,18 @@ namespace BECore {
         ItemTooltip(haveNode ? "Put the sprite on the SpriteRendererComponent of the node selected in the Scene Editor" : "Select a node in the Scene Editor first");
 
         ImGui::BeginDisabled(!validName);
-        if (IconTextButton(ICON_LC_CHECK, "Accept", "Copy the image into the game's assets, add or replace the sprite and reload it")) {
-            auto result = session.Accept(*_selectedSeed, StringView(_spriteName), _useOnSelected);
+        if (IconTextButton(ICON_LC_CHECK, "Accept", AcceptImageNote())) {
+            const ArtGenImageSettings settings = _form.GetImageAccept();
+            auto result = session.Accept(*_selectedSeed, StringView(_spriteName), _useOnSelected, &settings);
             _acceptFailed = !result.has_value();
             if (result) {
                 const auto reloaded = GetJsonInt(*result, "reloadedSprites").value_or(0);
                 const auto texture = GetJsonString(*result, "texturePath").value_or(String());
                 _acceptMessage = Format("Accepted as '{}' ({}); {} sprite(s) reloaded", StringView(_spriteName), texture, reloaded);
+                if (const Json* atlas = FindJsonMember(*result, "atlas"); atlas != nullptr && atlas->is_object()) {
+                    _acceptMessage +=
+                        Format("; atlas '{}' repacked ({}x{})", GetJsonString(*atlas, "name").value_or(String()), GetJsonInt(*atlas, "width").value_or(0), GetJsonInt(*atlas, "height").value_or(0));
+                }
             } else {
                 _acceptMessage = result.error().message;
             }
@@ -1012,6 +1161,9 @@ namespace BECore {
             ImGui::SameLine();
             ImGui::TextColored(palette.warning, "1 to 64 of A-Z a-z 0-9 _ -");
         }
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", AcceptImageNote());
+        ImGui::PopTextWrapPos();
         if (!_acceptMessage.empty()) {
             ImGui::TextColored(_acceptFailed ? palette.error : palette.success, "%s", _acceptMessage.c_str());
         }
@@ -1039,7 +1191,7 @@ namespace BECore {
                 }
                 _selectedSeed = variant.seed;
                 if (_spriteName[0] == '\0') {
-                    SpriteNameFromSubject(run.subject.c_str(), _spriteName, sizeof(_spriteName));
+                    FillNameFromSubject(run.subject, _spriteName, sizeof(_spriteName));
                 }
             }
             ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -1051,7 +1203,7 @@ namespace BECore {
                 drawList->AddText(ImVec2(origin.x + (kThumbnailSize - iconSize.x) * 0.5f, origin.y + (kThumbnailSize - iconSize.y) * 0.5f), ImGui::GetColorU32(palette.accent), ICON_LC_AUDIO_LINES);
             } else if (texture != nullptr && texture->GetState() == ResourceState::Loaded) {
                 const auto id = static_cast<ImTextureID>(reinterpret_cast<std::uintptr_t>(texture->GetNativeHandle()));
-                DrawChecker(drawList, origin, kThumbnailSize, ImGui::GetColorU32(palette.panelBg), ImGui::GetColorU32(palette.frameBg));
+                DrawArtGenChecker(drawList, origin, kThumbnailSize, ImGui::GetColorU32(palette.panelBg), ImGui::GetColorU32(palette.frameBg));
                 drawList->AddImage(id, origin, corner);
             } else {
                 drawList->AddRectFilled(origin, corner, ImGui::GetColorU32(palette.frameBg));

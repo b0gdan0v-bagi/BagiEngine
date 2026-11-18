@@ -341,6 +341,227 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(read.srcRect.h, 4.5f);
     }
 
+    namespace {
+
+        /// A group member that is not packed
+        SpriteEntry MakeGroupMember(const char* name, const char* path, Rect rect, const char* group) {
+            SpriteEntry entry = MakeEntry(name, path, rect);
+            SpriteAtlasLink link;
+            link.name = PoolString::Intern(group);
+            entry.atlas = link;
+            return entry;
+        }
+
+        /// A packed sprite: its own path and rect are the atlas's, `source` is where the pixels came from
+        SpriteEntry MakePacked(const char* name, const char* group, Rect placed, const char* sourcePath, Rect sourceRect) {
+            SpriteEntry entry = MakeGroupMember(name, "assets/atlases/ui.png", placed, group);
+            SpriteSource source;
+            source.texturePath = PoolString::Intern(sourcePath);
+            source.rect = sourceRect;
+            entry.atlas->source = source;
+            return entry;
+        }
+
+        String WriteToString(const TextureLibrary& library) {
+            XmlSerializer serializer;
+            library.Write(serializer);
+            return serializer.SaveToString();
+        }
+
+        void ExpectSameRect(const Rect& a, const Rect& b) {
+            EXPECT_FLOAT_EQ(a.x, b.x);
+            EXPECT_FLOAT_EQ(a.y, b.y);
+            EXPECT_FLOAT_EQ(a.w, b.w);
+            EXPECT_FLOAT_EQ(a.h, b.h);
+        }
+
+    }  // namespace
+
+    TEST(TextureLibraryTest, AFileWithoutAtlasesLoadsWithNoLinkAndWritesNone) {
+        TextureLibrary library;
+        Vector<DeserializeError> errors;
+        ASSERT_NO_FATAL_FAILURE(LoadInto(library, kChessShaped, &errors));
+        EXPECT_TRUE(errors.empty());
+        for (const SpriteEntry& entry : library.GetAll()) {
+            EXPECT_FALSE(entry.atlas.has_value()) << entry.name.ToStringView().data();
+        }
+
+        const String written = WriteToString(library);
+        EXPECT_EQ(written.find("atlas"), String::npos) << written.c_str();
+        EXPECT_EQ(written.find("source"), String::npos) << written.c_str();
+
+        // The same text as for entries built by hand, which never had the field
+        TextureLibrary byHand;
+        byHand.AddOrUpdate(MakeEntry("WhiteKing", "assets/chess_test.png", Rect(0, 0, 116.67f, 190.5f)));
+        byHand.AddOrUpdate(MakeEntry("WhiteQueen", "assets/chess_test.png", Rect(116.67f, 0, 116.67f, 190.5f)));
+        byHand.AddOrUpdate(MakeEntry("BlackKing", "assets/chess_test.png", Rect(0, 190.5f, 116.67f, 190.5f)));
+        EXPECT_EQ(written, WriteToString(byHand));
+    }
+
+    TEST(TextureLibraryTest, AtlasLinksRoundTripInOrder) {
+        TextureLibrary library;
+        library.AddOrUpdate(MakeEntry("Plain", "assets/p.png", Rect(1, 2, 3, 4)));
+        library.AddOrUpdate(MakeGroupMember("Member", "assets/m.png", Rect(5, 6, 7, 8), "ui"));
+        library.AddOrUpdate(MakePacked("Packed", "ui", Rect(0, 8.5f, 12.25f, 9), "assets/artgen/a.png", Rect(116.67f, 190.5f, 12.25f, 9)));
+
+        TextureLibrary copy;
+        ASSERT_NO_FATAL_FAILURE(LoadInto(copy, WriteToString(library)));
+
+        ASSERT_EQ(copy.GetAll().size(), 3u);
+        EXPECT_EQ(copy.GetAll()[0].name.ToStringView(), "Plain");
+        EXPECT_FALSE(copy.GetAll()[0].atlas.has_value());
+
+        EXPECT_EQ(copy.GetAll()[1].name.ToStringView(), "Member");
+        ASSERT_TRUE(copy.GetAll()[1].atlas.has_value());
+        EXPECT_EQ(copy.GetAll()[1].atlas->name.ToStringView(), "ui");
+        EXPECT_FALSE(copy.GetAll()[1].atlas->source.has_value());
+
+        const SpriteEntry& packed = copy.GetAll()[2];
+        EXPECT_EQ(packed.name.ToStringView(), "Packed");
+        EXPECT_EQ(packed.texturePath.ToStringView(), "assets/atlases/ui.png");
+        ExpectSameRect(packed.srcRect, Rect(0, 8.5f, 12.25f, 9));
+        ASSERT_TRUE(packed.atlas.has_value());
+        EXPECT_EQ(packed.atlas->name.ToStringView(), "ui");
+        ASSERT_TRUE(packed.atlas->source.has_value());
+        EXPECT_EQ(packed.atlas->source->texturePath.ToStringView(), "assets/artgen/a.png");
+        ExpectSameRect(packed.atlas->source->rect, Rect(116.67f, 190.5f, 12.25f, 9));
+    }
+
+    TEST(TextureLibraryTest, WriteGivesTheShapeOfAnAtlasLink) {
+        TextureLibrary library;
+        library.AddOrUpdate(MakeGroupMember("Member", "assets/m.png", Rect(5, 6, 7, 8), "ui"));
+        library.AddOrUpdate(MakePacked("Packed", "ui", Rect(0, 0, 2, 3), "assets/artgen/a.png", Rect(10, 20, 2, 3)));
+
+        XmlSerializer serializer;
+        library.Write(serializer);
+        const pugi::xml_node sprites = serializer.GetRootNode().child("sprites");
+
+        const pugi::xml_node member = sprites.first_child();
+        ASSERT_TRUE(member);
+        const pugi::xml_node memberAtlas = member.child("atlas");
+        ASSERT_TRUE(memberAtlas);
+        EXPECT_STREQ(memberAtlas.attribute("name").value(), "ui");
+        EXPECT_FALSE(memberAtlas.child("source"));
+
+        const pugi::xml_node packed = member.next_sibling();
+        const pugi::xml_node packedAtlas = packed.child("atlas");
+        ASSERT_TRUE(packedAtlas);
+        EXPECT_STREQ(packedAtlas.attribute("name").value(), "ui");
+        const pugi::xml_node source = packedAtlas.child("source");
+        ASSERT_TRUE(source);
+        EXPECT_STREQ(source.attribute("texturePath").value(), "assets/artgen/a.png");
+        const pugi::xml_node rect = source.child("rect");
+        ASSERT_TRUE(rect);
+        EXPECT_FLOAT_EQ(rect.attribute("x").as_float(), 10.0f);
+        EXPECT_FLOAT_EQ(rect.attribute("y").as_float(), 20.0f);
+        EXPECT_FLOAT_EQ(rect.attribute("w").as_float(), 2.0f);
+        EXPECT_FLOAT_EQ(rect.attribute("h").as_float(), 3.0f);
+    }
+
+    TEST(TextureLibraryTest, APackRecordRoundTripsBesideTheSource) {
+        SpriteEntry packed = MakePacked("Packed", "ui", Rect(0, 0, 2, 3), "assets/artgen/a.png", Rect(10, 20, 2, 3));
+        AtlasPackRecord record;
+        record.padding = 3;
+        record.sizeMode = "Tight"_intern;
+        record.maxSide = 2048;
+        packed.atlas->pack = record;
+        SpriteEntry member = MakeGroupMember("Member", "assets/m.png", Rect(5, 6, 7, 8), "ui");
+        member.atlas->pack = record;
+
+        TextureLibrary library;
+        library.AddOrUpdate(member);
+        library.AddOrUpdate(packed);
+
+        TextureLibrary copy;
+        ASSERT_NO_FATAL_FAILURE(LoadInto(copy, WriteToString(library)));
+
+        const SpriteEntry* readMember = copy.GetSprite("Member"_intern);
+        ASSERT_NE(readMember, nullptr);
+        ASSERT_TRUE(readMember->atlas.has_value());
+        EXPECT_FALSE(readMember->atlas->source.has_value());
+        ASSERT_TRUE(readMember->atlas->pack.has_value());
+        EXPECT_EQ(readMember->atlas->pack->padding, 3);
+        EXPECT_EQ(readMember->atlas->pack->sizeMode.ToStringView(), "Tight");
+        EXPECT_EQ(readMember->atlas->pack->maxSide, 2048u);
+
+        const SpriteEntry* readPacked = copy.GetSprite("Packed"_intern);
+        ASSERT_NE(readPacked, nullptr);
+        EXPECT_EQ(readPacked->atlas->name.ToStringView(), "ui");
+        ASSERT_TRUE(readPacked->atlas->source.has_value());
+        EXPECT_EQ(readPacked->atlas->source->texturePath.ToStringView(), "assets/artgen/a.png");
+        ExpectSameRect(readPacked->atlas->source->rect, Rect(10, 20, 2, 3));
+        ASSERT_TRUE(readPacked->atlas->pack.has_value());
+        EXPECT_EQ(readPacked->atlas->pack->padding, 3);
+        EXPECT_EQ(readPacked->atlas->pack->sizeMode.ToStringView(), "Tight");
+        EXPECT_EQ(readPacked->atlas->pack->maxSide, 2048u);
+    }
+
+    TEST(TextureLibraryTest, AnAtlasWithoutAPackRecordWritesNoPackElement) {
+        TextureLibrary library;
+        library.AddOrUpdate(MakeGroupMember("Member", "assets/m.png", Rect(5, 6, 7, 8), "ui"));
+        library.AddOrUpdate(MakePacked("Packed", "ui", Rect(0, 0, 2, 3), "assets/artgen/a.png", Rect(10, 20, 2, 3)));
+
+        const String written = WriteToString(library);
+        EXPECT_EQ(written.find("pack"), String::npos) << written.c_str();
+
+        TextureLibrary copy;
+        ASSERT_NO_FATAL_FAILURE(LoadInto(copy, written));
+        for (const SpriteEntry& entry : copy.GetAll()) {
+            ASSERT_TRUE(entry.atlas.has_value());
+            EXPECT_FALSE(entry.atlas->pack.has_value());
+        }
+    }
+
+    TEST(TextureLibraryTest, ASourceWithoutARectLoadsWithAZeroRect) {
+        TextureLibrary library;
+        Vector<DeserializeError> errors;
+        ASSERT_NO_FATAL_FAILURE(LoadInto(library, R"(<root><sprites>
+            <sprite name="Odd" texturePath="a.png">
+                <atlas name="ui"><source texturePath="b.png"/></atlas>
+            </sprite>
+        </sprites></root>)",
+                                         &errors));
+
+        const SpriteEntry* odd = library.GetSprite("Odd"_intern);
+        ASSERT_NE(odd, nullptr);
+        ASSERT_TRUE(odd->atlas.has_value());
+        EXPECT_EQ(odd->atlas->name.ToStringView(), "ui");
+        ASSERT_TRUE(odd->atlas->source.has_value());
+        EXPECT_EQ(odd->atlas->source->texturePath.ToStringView(), "b.png");
+        EXPECT_TRUE(odd->atlas->source->rect.IsEmpty());
+    }
+
+    TEST(TextureLibraryTest, AnAtlasWithoutANameIsReadAsTheEmptyGroup) {
+        TextureLibrary library;
+        ASSERT_NO_FATAL_FAILURE(LoadInto(library, R"(<root><sprites>
+            <sprite name="Odd" texturePath="a.png"><atlas/></sprite>
+        </sprites></root>)"));
+
+        const SpriteEntry* odd = library.GetSprite("Odd"_intern);
+        ASSERT_NE(odd, nullptr);
+        ASSERT_TRUE(odd->atlas.has_value());
+        EXPECT_TRUE(odd->atlas->name.Empty());
+    }
+
+    TEST(TextureLibraryTest, AddOrUpdateAndCopiesKeepTheLink) {
+        TextureLibrary library;
+        library.AddOrUpdate(MakeEntry("Sprite", "a.png", Rect(1, 2, 3, 4)));
+        library.AddOrUpdate(MakePacked("Sprite", "ui", Rect(0, 0, 3, 4), "a.png", Rect(1, 2, 3, 4)));
+
+        ASSERT_EQ(library.GetAll().size(), 1u);
+        const SpriteEntry* stored = library.GetSprite("Sprite"_intern);
+        ASSERT_NE(stored, nullptr);
+        ASSERT_TRUE(stored->atlas.has_value());
+        ASSERT_TRUE(stored->atlas->source.has_value());
+
+        const SpriteEntry copy = *stored;
+        ASSERT_TRUE(copy.atlas.has_value());
+        EXPECT_EQ(copy.atlas->name.ToStringView(), "ui");
+        ASSERT_TRUE(copy.atlas->source.has_value());
+        EXPECT_EQ(copy.atlas->source->texturePath.ToStringView(), "a.png");
+        ExpectSameRect(copy.atlas->source->rect, Rect(1, 2, 3, 4));
+    }
+
     /// Initialize and Save go through the config manager, which needs the engine services. The engine ships no TextureLibrary.xml
     /// in config/ (the active game does), so the library is empty here; if the engine ever ships one, drop the "empty" expectations.
     class TextureLibraryConfigTest : public ::testing::Test {

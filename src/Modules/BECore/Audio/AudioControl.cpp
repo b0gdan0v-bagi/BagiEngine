@@ -140,7 +140,9 @@ namespace BECore {
 
         service.DescribeMethod("audio_state", {"The audio backend, the levels and the last sounds the game asked for", {}});
         service.DescribeMethod("audio_set", {"Sets the volume or the mute of the master or a bus",
-                                             {{"bus", "string", true, "master, sfx, music or ui"}, {"volume", "number", false, "0 to 1"}, {"muted", "boolean", false, "true mutes, false unmutes"}}});
+                                             {{"bus", "string", true, "master, sfx, music or ui"},
+                                              {"volume", "number", false, "slider position 0 to 1 (the gain is its cube)"},
+                                              {"muted", "boolean", false, "true mutes, false unmutes"}}});
     }
 
 }  // namespace BECore

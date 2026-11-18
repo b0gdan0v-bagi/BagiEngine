@@ -29,9 +29,9 @@ class FakeEditor:
         self.run = None
         self.cancel_requested = False
 
-    def request(self, preset, subject, count=2, seed=5):
+    def request(self, preset, subject, count=2, seed=5, **extra):
         self.run = {"id": (self.run or {"id": 0})["id"] + 1, "state": "Queued", "preset": preset, "subject": subject, "count": count,
-                    "seed": seed, "variants": [], "steps": [], "error": ""}
+                    "seed": seed, "variants": [], "steps": [], "error": "", **extra}
         self.cancel_requested = False
 
     def call(self, method, params=None):
@@ -40,7 +40,7 @@ class FakeEditor:
             self.polls.append(params)
             answer = {"gameRoot": self.game_root}
             if self.run and self.run["state"] == "Queued":
-                answer["request"] = {k: self.run[k] for k in ("id", "preset", "presetName", "subject", "count", "seed") if k in self.run}
+                answer["request"] = {k: self.run[k] for k in ("id", "preset", "presetName", "subject", "count", "seed", "outDir", "name") if k in self.run}
                 self.run["state"] = "Running"
             elif self.run and self.run["state"] == "Running" and self.cancel_requested:
                 answer["cancel"] = self.run["id"]
@@ -131,6 +131,69 @@ def test_a_request_runs_and_reports_back(game):
     assert (0, 2, 2) in editor.run["steps"] and (1, 1, 2) in editor.run["steps"]
     assert not bridge.busy
     assert len(generator.graphs) == 2
+
+
+def test_a_request_with_a_folder_and_a_name_writes_there(game):
+    editor = FakeEditor(game)
+    bridge = artgen_bridge.Bridge(editor, FakeGenerator(), log=lambda *a: None)
+    bridge.tick()
+    editor.request("wood", "white knight", count=2, seed=7, outDir="set_1/white-knight", name="white-knight")
+    run_until(bridge, editor, lambda: editor.run["state"] not in ("Queued", "Running"))
+    assert editor.run["state"] == "Done", editor.run["error"]
+    folder = game / "artgen" / "out" / "set_1" / "white-knight"
+    assert [Path(v["path"]) for v in editor.run["variants"]] == [folder / "white-knight_7.png", folder / "white-knight_8.png"]
+    for variant in editor.run["variants"]:
+        assert Path(variant["path"]).is_file() and Path(variant["provenance"]) == folder / (Path(variant["path"]).stem + ".artgen.json")
+        assert Path(variant["provenance"]).is_file()
+    assert [p.name for p in (game / "artgen" / "out").iterdir()] == ["set_1"], "nothing beside the set's folder"
+
+
+def test_a_name_alone_keeps_the_default_folder(game):
+    editor = FakeEditor(game)
+    bridge = artgen_bridge.Bridge(editor, FakeGenerator(), log=lambda *a: None)
+    bridge.tick()
+    editor.request("wood", "knight", count=1, seed=3, name="piece")
+    run_until(bridge, editor, lambda: editor.run["state"] == "Done")
+    assert Path(editor.run["variants"][0]["path"]) == game / "artgen" / "out" / "piece_3.png"
+
+
+BAD_OUT_DIRS = ["..", "a/../b", "../out2", "/abs", "C:/x", "C:\\x", "a\\b", "a//b", "a/", "", "a b", "a.b", "x" * 65, 5]
+BAD_NAMES = ["", "a b", "../x", "a/b", "a\\b", "x" * 65, "knight.png", 7]
+
+
+@pytest.mark.parametrize("bad", BAD_OUT_DIRS)
+def test_a_bad_out_dir_fails_the_run_and_writes_nothing(game, bad):
+    editor = FakeEditor(game)
+    generator = FakeGenerator()
+    bridge = artgen_bridge.Bridge(editor, generator, log=lambda *a: None)
+    bridge.tick()
+    editor.request("wood", "knight", count=1, outDir=bad)
+    run_until(bridge, editor, lambda: editor.run["state"] == "Failed")
+    assert "outDir" in editor.run["error"]
+    assert generator.graphs == [] and not (game / "artgen" / "out").exists()
+    assert not (game.parent / "out2").exists()
+
+
+@pytest.mark.parametrize("bad", BAD_NAMES)
+def test_a_bad_name_fails_the_run_and_writes_nothing(game, bad):
+    editor = FakeEditor(game)
+    generator = FakeGenerator()
+    bridge = artgen_bridge.Bridge(editor, generator, log=lambda *a: None)
+    bridge.tick()
+    editor.request("wood", "knight", count=1, outDir="set/job", name=bad)
+    run_until(bridge, editor, lambda: editor.run["state"] == "Failed")
+    assert "name" in editor.run["error"]
+    assert generator.graphs == [] and not (game / "artgen" / "out").exists()
+
+
+def test_a_bad_request_does_not_stop_the_next_one(game):
+    editor = FakeEditor(game)
+    bridge = artgen_bridge.Bridge(editor, FakeGenerator(), log=lambda *a: None)
+    bridge.tick()
+    editor.request("wood", "knight", count=1, outDir="..")
+    run_until(bridge, editor, lambda: editor.run["state"] == "Failed")
+    editor.request("wood", "knight", count=1, outDir="ok/job", name="job")
+    run_until(bridge, editor, lambda: editor.run["state"] == "Done")
 
 
 def test_a_cancel_from_the_editor_stops_the_generator(game):

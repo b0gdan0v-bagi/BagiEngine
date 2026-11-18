@@ -58,6 +58,7 @@ namespace BECore {
         _settings->Load();
         ApplyPreferences(_settings->GetPreferences());
         _statusBar.SetBranch(ReadGitBranch(BranchSearchStart()));
+        _statusBar.StartHardwareMonitor();
 
         Subscribe<EditorCommandEvent, &EditorLayoutWidget::OnCommand>(this);
         Subscribe<ViewportPreviewChangedEvent, &EditorLayoutWidget::OnViewportPreviewChanged>(this);

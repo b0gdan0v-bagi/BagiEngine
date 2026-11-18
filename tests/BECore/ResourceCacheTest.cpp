@@ -54,4 +54,21 @@ namespace BECore::Tests {
         EXPECT_FALSE(cache.Get(path));
     }
 
+    TEST(ResourceCacheTest, HoldsIsFalseForAHandleTheCacheNoLongerHas) {
+        ResourceCache cache;
+        const auto path = "cache_test/preview.png"_intern;
+        cache.Put(path, New<FakeResource>(path));
+        const IntrusivePtr<IResource> held = cache.Get(path);
+
+        EXPECT_TRUE(cache.Holds(path, held.Get()));
+
+        // Evicted: the panel's handle is the old picture, the next load is a new resource
+        cache.Remove(path);
+        EXPECT_FALSE(cache.Holds(path, held.Get()));
+        cache.Put(path, New<FakeResource>(path));
+        EXPECT_FALSE(cache.Holds(path, held.Get()));
+        EXPECT_TRUE(cache.Holds(path, cache.Get(path).Get()));
+        EXPECT_FALSE(cache.Holds("cache_test/none.png"_intern, held.Get()));
+    }
+
 }  // namespace BECore::Tests

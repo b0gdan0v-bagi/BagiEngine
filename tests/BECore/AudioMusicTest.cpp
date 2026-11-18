@@ -199,9 +199,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(manager.PlayMusic(Tone(), 0.5f));
         const uint32_t voice = backend->streamStarts.front();
         manager.SetBusVolume(AudioBus::Music, 0.5f);
-        EXPECT_FLOAT_EQ(backend->gains[voice], 0.25f);
+        EXPECT_FLOAT_EQ(backend->gains[voice], 0.5f * 0.125f);
         manager.SetBusVolume(AudioBus::Sfx, 0.0f);
-        EXPECT_FLOAT_EQ(backend->gains[voice], 0.25f) << "not the bus of the music";
+        EXPECT_FLOAT_EQ(backend->gains[voice], 0.5f * 0.125f) << "not the bus of the music";
         manager.SetMasterMuted(true);
         EXPECT_FLOAT_EQ(backend->gains[voice], 0.0f);
     }

@@ -7,51 +7,20 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNode.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/ArtGen/ArtGenSessionControl.h>
 #include <Widgets/EditorLayout/UserFileIo.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
-#include <algorithm>
 #include <chrono>
-#include <filesystem>
 
 namespace BECore {
 
-    namespace {
+    using namespace ArtGenControl;
 
-        constexpr StringView kBusyCode = "artgen_busy";
-        constexpr StringView kNoRunCode = "artgen_no_run";
-        constexpr StringView kNoVariantCode = "artgen_no_variant";
-        constexpr StringView kAcceptFailedCode = "artgen_accept_failed";
-        constexpr StringView kNoSetupCode = "artgen_no_setup";
+    namespace {
 
         double SteadySeconds() {
             const auto now = std::chrono::steady_clock::now().time_since_epoch();
             return std::chrono::duration<double>(now).count();
-        }
-
-        ControlError InvalidParams(StringView message) {
-            return ControlError{String(ControlErrors::kInvalidParams), String(message)};
-        }
-
-        String StringOr(const Json& object, StringView key, StringView fallback = {}) {
-            const auto value = GetJsonString(object, key);
-            return value ? *value : String(fallback);
-        }
-
-        Json ToJsonString(const String& text) {
-            return MakeJsonString(StringView(text.data(), text.size()));
-        }
-
-        /// Wraps a handler of the session as a control method: a value is the reply, an error the failure
-        template <auto Method>
-        void Register(ControlService& service, ArtGenSession& session, StringView name) {
-            service.RegisterHandler(name, [&session](ControlCall& call) {
-                auto result = (session.*Method)(call.Params());
-                if (result) {
-                    call.Reply(std::move(*result));
-                } else {
-                    call.Fail(result.error());
-                }
-            });
         }
 
     }  // namespace
@@ -81,7 +50,24 @@ namespace BECore {
         return nullptr;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::Accept(int64_t seed, StringView sprite, bool useOnSelected) {
+    ArtGenImageSettings ArtGenSession::ImageSettingsOf(const Json& presetData, StringView preset) const {
+        const Json* data = &presetData;
+        if (presetData.is_null()) {
+            const ArtGenPreset* saved = FindPreset(preset);
+            data = saved != nullptr ? &saved->data : nullptr;
+        }
+        const Json* accept = data != nullptr ? FindJsonMember(*data, "accept") : nullptr;
+        if (accept == nullptr) {
+            return {};
+        }
+        return ArtGenImageSettingsFromJson(*accept).value_or(ArtGenImageSettings{});
+    }
+
+    ArtGenImageSettings ArtGenSession::ImageSettingsOfRun() const {
+        return ImageSettingsOf(_run.presetData, StringView(_run.preset));
+    }
+
+    std::expected<Json, ControlError> ArtGenSession::Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings) {
         const ArtGenVariant* variant = FindVariant(seed);
         if (variant == nullptr) {
             return std::unexpected(ControlError{String(kNoVariantCode), Format("the current run has no image of seed {}", seed)});
@@ -99,7 +85,7 @@ namespace BECore {
                 return std::unexpected(ControlError{String(kAcceptFailedCode), String("no node is selected in the scene editor")});
             }
         }
-        return _acceptor(*variant, sprite, node);
+        return _acceptor(*variant, sprite, ArtGenImagePlan{settings != nullptr ? *settings : ImageSettingsOfRun(), {}}, node);
     }
 
     std::expected<Json, ControlError> ArtGenSession::AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected) {
@@ -138,6 +124,7 @@ namespace BECore {
         Register<&ArtGenSession::HandleSetupReport>(service, *this, "artgen_setup_report");
         Register<&ArtGenSession::HandleSetup>(service, *this, "artgen_setup");
         service.RegisterHandler("artgen_state", [this](ControlCall& call) { call.Reply(StateJson()); });
+        RegisterSetControl(service);
 
         service.DescribeMethod("artgen_generate",
                                ControlMethodInfo{"Asks the art generation service for images of a style preset of the game (the Generate panel's button)",
@@ -146,23 +133,34 @@ namespace BECore {
                                                   ControlParamInfo{"subject", "string", true, "what to draw; replaces {subject} in the preset's prompt"},
                                                   ControlParamInfo{"count", "integer", false, "images, 1 to 16 (default 4)"},
                                                   ControlParamInfo{"seed", "integer", false, "the first seed; image i takes seed + i (default random)"}}});
-        service.DescribeMethod("artgen_accept", ControlMethodInfo{"Makes an image of the current run a sprite of the game (PNG into assets/artgen, TextureLibrary entry, reload), "
-                                                                  "or a sound a clip (processed, a WAV into assets/artgen or over a clip path of the game, reload)",
-                                                                  {ControlParamInfo{"seed", "integer", true, "the seed of the image or sound (artgen_state.run.variants)"},
-                                                                   ControlParamInfo{"sprite", "string", false, "an image: the sprite name, 1 to 64 of A-Z a-z 0-9 _ -"},
-                                                                   ControlParamInfo{"name", "string", false, "a sound: the clip assets/artgen/<name>.wav"},
-                                                                   ControlParamInfo{"clip", "string", false, "a sound: instead of name, the game's clip to replace (assets/.../x.wav)"},
-                                                                   ControlParamInfo{"sound", "object", false, "a sound: mono, trimDb, maxSeconds, sampleRate, fadeInMs, fadeOutMs, peakDb (null: off)"},
-                                                                   ControlParamInfo{"useOnSelected", "boolean", false, "also put it on the node selected in the scene editor"}}});
-        service.DescribeMethod("artgen_cancel", ControlMethodInfo{"Stops the run of the art generation service; the images made stay", {}});
-        service.DescribeMethod("artgen_state", ControlMethodInfo{"The art generation service as the editor sees it, and the current run with its images", {}});
+        service.DescribeMethod(
+            "artgen_accept",
+            ControlMethodInfo{"Makes an image of the current run a sprite of the game (trimmed to what is drawn and downscaled, a PNG into assets/artgen, "
+                              "TextureLibrary entry, reload), or a sound a clip (processed, a WAV into assets/artgen or over a clip path of the game, reload)",
+                              {ControlParamInfo{"seed", "integer", true, "the seed of the image or sound (artgen_state.run.variants)"},
+                               ControlParamInfo{"sprite", "string", false, "an image: the sprite name, 1 to 64 of A-Z a-z 0-9 _ -"},
+                               ControlParamInfo{"image", "object", false,
+                                                "an image: trim, padding (percent, 0 to 25), maxSize (pixels, 0 or 16 to 4096); a missing key keeps the preset's value (its accept key, else the "
+                                                "defaults)"},
+                               ControlParamInfo{"name", "string", false, "a sound: the clip assets/artgen/<name>.wav"},
+                               ControlParamInfo{"clip", "string", false, "a sound: instead of name, the game's clip to replace (assets/.../x.wav)"},
+                               ControlParamInfo{"sound", "object", false, "a sound: mono, trimDb, maxSeconds, sampleRate, fadeInMs, fadeOutMs, peakDb (null: off)"},
+                               ControlParamInfo{"useOnSelected", "boolean", false, "also put it on the node selected in the scene editor"}}});
+        service.DescribeMethod(
+            "artgen_cancel",
+            ControlMethodInfo{"Stops the run of the art generation service (a set's running job; the set goes on); the images made stay. With job or set, cancels that job, or every job of the set",
+                              {ControlParamInfo{"job", "string", false, "a job of a set: cancel it (a pending one at once, the running one through the service)"},
+                               ControlParamInfo{"set", "string", false, "the set of the job (default: the only active set that has the job), or with all the set to cancel"},
+                               ControlParamInfo{"all", "boolean", false, "with set: cancel every pending job and the running one"}}});
+        service.DescribeMethod("artgen_state", ControlMethodInfo{"The art generation service as the editor sees it, the current run with its images, and a summary of each set", {}});
         service.DescribeMethod("artgen_setup", ControlMethodInfo{"Asks the art generation service to plan, install, start or stop its generator (the panel's Set up / Start / Stop)",
                                                                  {ControlParamInfo{"action", "string", true, "Plan, Install, Start, Stop, or cancel (an install in work)"}}});
         Register<&ArtGenSession::HandleSavePreset>(service, *this, "artgen_save_preset");
         service.DescribeMethod("artgen_save_preset", ControlMethodInfo{"Writes a style preset of the game (artgen/presets/<name>.json), as the panel's Save does",
                                                                        {ControlParamInfo{"name", "string", true, "1 to 64 of A-Z a-z 0-9 _ -"},
                                                                         ControlParamInfo{"preset", "object", true, "the preset (tools/artgen/CLAUDE.md, \"Presets\")"}}});
-        service.DescribeMethod("artgen_poll", ControlMethodInfo{"Called by the art generation service: its status in, the game root and a new request or a cancel out", {}});
+        service.DescribeMethod("artgen_poll",
+                               ControlMethodInfo{"Called by the art generation service: its status in, the game root and a new request (with outDir and name for a job of a set) or a cancel out", {}});
     }
 
     std::expected<uint32_t, String> ArtGenSession::Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants) {
@@ -220,6 +218,8 @@ namespace BECore {
             // The service never saw it: nothing to stop there
             _run.state = ArtGenRunState::Cancelled;
             ++_version;
+            EndSetJob("cancelled");
+            PumpSets();
         } else if (_run.state == ArtGenRunState::Running && !_run.cancelRequested) {
             _run.cancelRequested = true;
             ++_version;
@@ -340,12 +340,16 @@ namespace BECore {
         return _lastPollSeconds >= 0.0 && _clock() - _lastPollSeconds <= kServiceTimeoutSeconds;
     }
 
+    bool ArtGenSession::IsGeneratorReady() const {
+        return IsServiceConnected() && StringView(_status.state) == kGeneratorReady;
+    }
+
     std::expected<Json, ControlError> ArtGenSession::HandlePoll(const Json& params) {
         if (!params.is_object()) {
             return std::unexpected(InvalidParams("params must be an object"));
         }
         ArtGenServiceStatus status;
-        status.state = StringOr(params, "state", "ready");
+        status.state = StringOr(params, "state", kGeneratorReady);
         status.reason = StringOr(params, "reason");
         status.generator = StringOr(params, "generator");
         status.startedHere = GetJsonBool(params, "startedHere").value_or(false);
@@ -374,6 +378,8 @@ namespace BECore {
             if (_run.state == ArtGenRunState::Running) {
                 _run.state = ArtGenRunState::Cancelled;
                 _run.step = 0;
+                // Only the running job ends; the others stay Pending and go on when a service polls again
+                EndSetJob("the service was stopped");
             }
             if (_setup.state == ArtGenSetupState::Running) {
                 _setup.state = ArtGenSetupState::Failed;
@@ -383,6 +389,7 @@ namespace BECore {
             ++_version;
             return reply;
         }
+        PumpSets();
         if (_run.state == ArtGenRunState::Queued) {
             Json request = Json::object();
             request["id"] = _run.id;
@@ -393,6 +400,10 @@ namespace BECore {
             request["subject"] = ToJsonString(_run.subject);
             request["count"] = _run.count;
             request["seed"] = _run.seed ? Json(*_run.seed) : Json();
+            if (!_run.outDir.empty()) {
+                request["outDir"] = ToJsonString(_run.outDir);
+                request["name"] = ToJsonString(_run.name);
+            }
             reply["request"] = std::move(request);
             _run.state = ArtGenRunState::Running;
             ++_version;
@@ -512,6 +523,7 @@ namespace BECore {
         run->variants.push_back(std::move(variant));
         run->image = static_cast<int32_t>(run->variants.size());
         run->step = 0;
+        RecordSetImage(run->variants.back());
         ++_version;
         return reply;
     }
@@ -536,6 +548,8 @@ namespace BECore {
         }
         run->step = 0;
         ++_version;
+        EndSetJob("cancelled");
+        PumpSets();
         return reply;
     }
 
@@ -597,7 +611,22 @@ namespace BECore {
         if (!sprite) {
             return std::unexpected(InvalidParams("'sprite' (string) is required for an image"));
         }
-        return Accept(*seed, *sprite, useOnSelected);
+        ArtGenImageSettings settings = ImageSettingsOfRun();
+        if (const Json* image = FindJsonMember(params, "image"); image != nullptr && !image->is_null()) {
+            if (!image->is_object()) {
+                return std::unexpected(InvalidParams("'image' must be an object {trim, padding, maxSize}"));
+            }
+            Json merged = ArtGenImageSettingsToJson(settings);
+            for (const auto& [key, value] : image->items()) {
+                merged[key] = value;
+            }
+            auto parsed = ArtGenImageSettingsFromJson(merged);
+            if (!parsed) {
+                return std::unexpected(InvalidParams(Format("'image': {}", parsed.error())));
+            }
+            settings = *parsed;
+        }
+        return Accept(*seed, *sprite, useOnSelected, &settings);
     }
 
     std::expected<Json, ControlError> ArtGenSession::HandleSetupReport(const Json& params) {
@@ -695,9 +724,12 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::HandleCancel(const Json& /*params*/) {
-        if (!IsBusy()) {
-            return std::unexpected(ControlError{String(kNoRunCode), String("no run in work")});
+    std::expected<Json, ControlError> ArtGenSession::HandleCancel(const Json& params) {
+        if (IsGiven(params, "job") || IsGiven(params, "set") || IsGiven(params, "all")) {
+            return CancelFromParams(params);
+        }
+        if (!IsRunInWork()) {
+            return std::unexpected(MakeError(kNoRunCode, String("no run in work")));
         }
         Cancel();
         return Json::object();
@@ -789,6 +821,7 @@ namespace BECore {
         state["service"] = std::move(service);
         state["run"] = std::move(run);
         state["setup"] = std::move(setup);
+        state["sets"] = SetsJson();
         state["gameRoot"] = ToJsonString(_gameRoot);
         return state;
     }

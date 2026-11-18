@@ -1,292 +1,68 @@
 ---
 name: cpp-senior-programmer
-description: Provides expert-level C++23 guidance for BagiEngine game engine development. Covers code quality, performance optimization, modern C++ idioms, and architecture. Use when writing C++ code, reviewing code, optimizing performance, designing APIs, or asking about C++ best practices.
+description: A map for writing C++ in BagiEngine and in a game on it - which nested CLAUDE.md or rule to read for a task, a real file to copy the idiom from, the traps, a self-check of a diff and the steps that end a plan. It restates nothing of CLAUDE.md. Use when writing or reviewing C++ code here, designing an API, planning a C++ change, or asking how the engine does something in C++.
 ---
 
-# C++ Senior Programmer
-
-Expert guidance for modern C++23 game engine development with emphasis on performance, clean code, and maintainability.
-
-## Project-Specific Requirements (MUST FOLLOW)
-
-| Requirement | Details |
-|-------------|---------|
-| **Smart Pointers** | Use `IntrusivePtr<T>` with `BECore::New<T>()`. NEVER use `std::unique_ptr` or `std::shared_ptr` |
-| **Containers** | Use the `BECore` names (`Vector`, `HashMap`, `String`, `Optional`, `Array`: `BECore/Types/CLAUDE.md`), not `eastl::` or `std::` spelled out |
-| **Strings** | Use `PoolString` for identifiers and keys, `String` / `StringView` otherwise |
-| **Casts** | C-style casts are **FORBIDDEN**. Use `static_cast`, `reinterpret_cast`, `std::bit_cast`. `dynamic_cast` only as last resort |
-| **Type Aliases** | Always `using` aliases, NEVER `typedef` |
-| **Assertions** | Always `BE_ASSERT()`, NEVER `assert()` |
-| **Static Polymorphism** | Use **deducing this (C++23)** instead of CRTP |
-| **Object Creation** | Use `BECore::New<T>()` instead of `new`. Use `BECore::NewAtomic<T>()` for thread-safe ref counting |
-| **Exceptions** | **FORBIDDEN** - use `std::expected`, error codes, or `BE_ASSERT` |
-
-## Core Principles
-
-### 1. Modern C++23 First
-
-Prefer modern constructs: `IntrusivePtr<T>`, the `BECore` containers (`Vector`, `HashMap`), `PoolString`, deducing this over CRTP, `constexpr`/`consteval`, concepts, `std::expected` for errors.
-
-### 2. Zero-Cost Abstractions
-
-Use deducing this for static polymorphism, concepts for constraints, `constexpr` for compile-time computation. See [patterns.md](patterns.md) for examples.
-
-### 3. Performance by Default
-
-- **Data-oriented design**: Prefer SoA over AoS for cache efficiency
-- **Avoid virtual dispatch** in hot paths (use deducing this, `Variant`)
-- **Pre-allocate containers**: `reserve()` before loops
-- **Move semantics**: Pass by value and move, or use `&&` explicitly
-- **Avoid heap allocations**: Use stack, arenas, or pool allocators
-
-## Memory Management
-
-**Ownership hierarchy**:
-1. **Automatic storage** (stack) - default choice
-2. **`IntrusivePtr<T>`** - heap-allocated objects with ref counting
-3. **Raw pointers** - non-owning observers only
-
-```cpp
-// Correct usage
-class MyObject : public RefCounted { /* ... */ };
-
-IntrusivePtr<MyObject> obj = BECore::New<MyObject>();  // Single-threaded
-IntrusivePtr<MyObject> atomicObj = BECore::NewAtomic<MyObject>();  // Thread-safe
-
-Vector<IntrusivePtr<Entity>> entities;
-HashMap<PoolString, IntrusivePtr<Resource>> resources;
-```
-
-**NEVER use**: `std::unique_ptr`, `std::shared_ptr`, naked `new`/`delete`, `std::` containers.
-
-## Error Handling
-
-BagiEngine is built **without exceptions** (no-exceptions policy). Use:
-
-1. **Compile-time errors**: `static_assert`, concepts, SFINAE
-2. **Expected failures**: `std::expected<T, E>` (C++23) — I/O, loading, TaskSystem results
-3. **Programming errors**: `BE_ASSERT()` (NEVER use `assert()`)
-4. **Critical failures**: `FATALERROR()` — unrecoverable errors
-
-**Exceptions are FORBIDDEN** — use `std::expected`, error codes, or `BE_ASSERT` instead.
-
-```cpp
-auto LoadTexture(StringView path) -> std::expected<Texture, LoadError> {
-    if (!FileExists(path)) 
-        return std::unexpected(LoadError::FileNotFound);
-    return texture;
-}
-
-void ProcessEntity(Entity* entity) {
-    BE_ASSERT(entity != nullptr);  // Correct
-}
-```
-
-## C++23 Features
-
-### Deducing This (Preferred over CRTP)
-
-```cpp
-class Widget {
-public:
-    template<typename Self>
-    auto& GetChild(this Self&& self, size_t index) {
-        return std::forward<Self>(self)._children[index];
-    }
-    
-    template<typename Self>
-    void UpdateRecursive(this Self&& self) {
-        self.Update();
-        for (auto& child : self._children) {
-            child.UpdateRecursive();
-        }
-    }
-private:
-    Vector<Widget> _children;
-};
-```
-
-For more deducing this patterns, see [patterns.md](patterns.md).
-
-### Other Key Features
-
-- **`if consteval`**: Compile-time vs runtime paths
-- **Multidimensional subscript**: `auto& operator[](size_t x, size_t y)`
-- **`std::unreachable()`**: Mark unreachable code paths
-- **`std::expected`**: Error handling without exceptions
-- **`std::ranges`**: Works with EASTL containers
-- **`std::mdspan`**: Multidimensional array views
-
-## Game Development Patterns
-
-### Entity Component System (ECS)
-
-```cpp
-struct Transform { Vec3 position, rotation, scale; };
-struct Velocity { Vec3 linear, angular; };
-
-void PhysicsSystem(entt::registry& registry) {
-    auto view = registry.view<Transform, Velocity>();
-    for (auto [entity, transform, velocity] : view.each()) {
-        transform.position += velocity.linear * deltaTime;
-    }
-}
-```
-
-### Resource Management
-
-Use handle-based resources (avoid raw pointers to GPU objects):
-
-```cpp
-using TextureHandle = StrongTypedef<uint32_t, struct TextureTag>;
-
-class TextureManager {
-    HashMap<TextureHandle, IntrusivePtr<Texture>> _textures;
-public:
-    TextureHandle Create(const TextureDesc& desc);
-    Texture* Get(TextureHandle handle);  // Returns nullptr if invalid
-};
-```
-
-### Event-Driven Architecture
-
-Prefer event-driven design for loose coupling between systems. Use events instead of direct function calls for cross-system communication.
-
-**Principles**:
-- **Decouple systems**: Systems communicate through events, not direct dependencies
-- **One source, many listeners**: One system emits, multiple systems can react
-- **Asynchronous processing**: Use `Enqueue()` for deferred event processing
-- **Type safety**: Events are strongly typed via `EventBase<T>` CRTP pattern
-
-**Basic Usage**:
-```cpp
-// Define event
-struct PlayerDiedEvent : EventBase<PlayerDiedEvent> {
-    EntityId playerId;
-    Vec3 position;
-};
-
-// Subscribe to event
-class GameManager {
-public:
-    void Initialize() {
-        PlayerDiedEvent::Subscribe<&GameManager::OnPlayerDied>(this);
-    }
-    
-private:
-    void OnPlayerDied(const PlayerDiedEvent& event) {
-        // Handle player death
-    }
-};
-
-// Emit event (immediate dispatch)
-PlayerDiedEvent::Emit({playerId, position});
-
-// Enqueue event (deferred processing)
-PlayerDiedEvent::Enqueue({playerId, position});
-```
-
-**When to Use Events**:
-- Cross-system communication (physics → audio, gameplay → UI)
-- Decoupling unrelated systems
-- Broadcasting state changes to multiple listeners
-- Deferred processing (queue events for later)
-
-**When NOT to Use Events**:
-- Direct parent-child relationships (use method calls)
-- Performance-critical hot paths (use direct calls)
-- Simple data flow within same system
-
-See `src/Modules/Events/` for implementation details.
-
-## Performance Guidelines
-
-### Hot Path Optimization
-
-**Avoid**: Virtual calls, heap allocations, cache misses, branching in tight loops.
-
-**Prefer**: Inline functions/deducing this, contiguous memory (`Vector`), SIMD, branch-free algorithms.
-
-### Memory Access Patterns
-
-**Bad (AoS)**: `Vector<Entity>` where `Entity` has mixed data types.
-
-**Good (SoA)**: Separate vectors for each component type:
-```cpp
-struct EntityData {
-    Vector<Vec3> positions;
-    Vector<Quaternion> rotations;
-    Vector<Mesh*> meshes;
-};
-```
-
-### Compile-Time Computation
-
-```cpp
-constexpr auto SinTable = []() {
-    Array<float, 360> table{};
-    for (int i = 0; i < 360; ++i)
-        table[i] = std::sin(i * std::numbers::pi / 180.0f);
-    return table;
-}();
-```
-
-## Code Review Checklist
-
-- [ ] **IntrusivePtr**: Using `IntrusivePtr<T>`, not `std::unique_ptr`/`std::shared_ptr`
-- [ ] **BECore types**: Using `Vector`, `HashMap`, `String`, ..., not `eastl::` or `std::` spelled out
-- [ ] **No C-style casts**: Using `static_cast`, `reinterpret_cast`, `std::bit_cast`
-- [ ] **BE_ASSERT**: Using `BE_ASSERT()`, not `assert()`
-- [ ] **using aliases**: No `typedef`, only `using`
-- [ ] **Deducing this**: Prefer over CRTP for static polymorphism
-- [ ] **RAII**: Resources managed by constructors/destructors
-- [ ] **Const correctness**: `const` used appropriately
-- [ ] **Move semantics**: Unnecessary copies avoided
-- [ ] **Error handling**: Failures handled gracefully (no exceptions)
-- [ ] **Performance**: No obvious bottlenecks in hot paths
-
-## Anti-Patterns to Avoid
-
-### Forbidden Patterns
-
-- `std::unique_ptr`, `std::shared_ptr` → use `IntrusivePtr<T>`
-- `std::vector`, `std::map`, `std::string` → use `Vector`, `Map`, `String`
-- C-style casts `(Type)value` → use `static_cast<Type>(value)`
-- `typedef` → use `using`
-- `assert()` → use `BE_ASSERT()`
-- CRTP → use deducing this (C++23)
-- Exceptions → use `std::expected` or error codes
-
-### Memory Anti-Patterns
-
-- Raw `new`/`delete` without RAII wrapper
-- Circular `IntrusivePtr` references (use weak references)
-- Returning references to temporaries
-- `std::move` on const objects
-
-### Performance Anti-Patterns
-
-- Virtual calls in tight loops
-- String operations in hot paths
-- Repeated container reallocations
-- Cache-unfriendly access patterns
-
-## Planning and Final Tasks
-
-When creating a plan that involves a large amount of C++ changes, add at the **end of the plan** these tasks (so they are executed after code changes):
-
-1. **Apply formatting:** Run the **clang-format** skill (changed or all depending on scope of edits).
-2. **Remove redundant PCH includes:** Run the **strip-pch-includes** skill; if processing in parts, use a subfolder and run with dry-run first, then without dry-run.
-
-Example task wording in a plan:
-- "Apply code style: run clang-format skill (changed or all as appropriate)."
-- "Strip PCH includes: run strip-pch-includes skill (by subfolder if needed; use dry-run first)."
-
-## Additional Resources
-
-- **Design patterns**: See [patterns.md](patterns.md) for detailed pattern implementations
-- **Module-specific rules**: nested `CLAUDE.md` next to the code, plus `.claude/rules/` for guidance that spans directories:
-  - Core module: `src/Modules/BECore/CLAUDE.md`
-  - Event system: `src/Modules/Events/CLAUDE.md`
-  - Widget system: `.claude/rules/widgets-module.md`
-  - SDL integration: `src/Modules/SDL/CLAUDE.md`
+# C++ in BagiEngine
+
+The rules are `CLAUDE.md` ("Code style": DO, DON'T, the comment rule, zero allocations in a steady frame) and the nested `CLAUDE.md` of the folder you touch; this skill does not repeat them. It says where to read and which file to copy. The idioms with their files: [patterns.md](patterns.md).
+
+## Before the first line
+
+1. Read `CLAUDE.md` "Code style" and the nested `CLAUDE.md` of every folder the change touches.
+2. Find two or three neighbours of the same kind (a component, a loader, a widget, a control method) and copy their shape: names, includes, the order of the class.
+3. Take the row of the task below.
+
+## Task -> what to read -> a file to copy
+
+Paths are from the engine root (`engine/` in a game).
+
+| Task | Read | Copy from |
+|------|------|-----------|
+| Types, containers, strings as keys | `src/Modules/BECore/Types/CLAUDE.md` | any `BECore` header; `Vector`, `HashMap`, `String`, `UniquePtr` |
+| An enum | `CLAUDE.md` DO (`CORE_ENUM`) | `src/Modules/BECore/Save/SaveGame.h` (`SaveErrorKind`), `src/Modules/BECore/Utils/EnumUtils.h` |
+| A callback (stored, a parameter, never allocating) | `src/Modules/BECore/Utils/CLAUDE.md` "The callable types" | `src/Modules/BECore/Save/SaveGame.h` (`FunctionRef`), `src/Modules/BECore/Animation/Tween.h` (`FixedFunction`) |
+| An event, a subscription | `src/Modules/Events/CLAUDE.md` | `src/Application/Application.cpp` (`Subscribe`), `src/Modules/BECore/Scene/Components/ClickableComponent.cpp` (`SubscribeInScene`) |
+| A component | `src/Modules/BECore/Scene/CLAUDE.md` "Adding a component", "Gotchas" | `src/Modules/BECore/Scene/Components/ClickableComponent.cpp`; one that rebuilds from a model: [patterns.md](patterns.md) "Rebuild only when the key moved" |
+| Reflection (`BE_CLASS`, `BE_REFLECT_FIELD`, `BE_EVENT`) | `.claude/rules/reflection-module.md`, `src/Modules/BECore/Reflection/CLAUDE.md` | the component above |
+| A background job, a coroutine | `src/Modules/TaskSystem/CLAUDE.md` "Best Practices" | `src/Modules/BECore/Text/FontLoader.cpp` (`Task<>`, `co_await SwitchToBackground`) |
+| Locks and threads | `src/Modules/BECore/Threading/CLAUDE.md` | `src/Modules/BECore/PoolString/PoolString.cpp` (`SharedMutex` + `BE_LOCK_SITE`) |
+| Text out of numbers | `src/Modules/BECore/Format/CLAUDE.md` | `src/Widgets/EditorLayout/StatusBar.cpp` (a fixed buffer, formatted on a change) |
+| A recoverable error | `CLAUDE.md` DO (`std::expected`) | `src/Modules/BECore/Save/SaveGame.cpp` (`Load`) |
+| Access control, a global service | `CLAUDE.md` DO (`PassKey`, `Singleton`) | `src/Modules/BECore/Time/Time.h` (`Tick(PassKey<Application>)`), `src/Modules/Games/src/Games/GameManager.h` |
+| Steady-frame allocations, zones | `src/Modules/BECore/Profiler/CLAUDE.md` | `tests/BECore/EditorBarsTest.cpp` (`AllocTracker::GetThreadCounters()`) |
+| UI (canvases, controls, layout) | `src/Modules/BECore/UI/CLAUDE.md` "Where to read", `.claude/rules/ui-*.md` | the files that doc names |
+| An editor panel | `.claude/rules/widgets-module.md` | `src/Widgets/Console/ConsoleWidget.cpp` |
+| Saves | `src/Modules/BECore/Save/CLAUDE.md` | `src/Modules/BECore/Save/SaveGame.cpp` |
+| A control API method | `src/Modules/BECore/Control/CLAUDE.md`, `.claude/rules/ui-control-api.md` | the methods that doc names |
+| Tests | `.claude/rules/tests-module.md` | a test of the same module in `tests/` |
+
+## Traps
+
+Each is written where it lives; these are the ones a change outside that folder walks into.
+
+- `MyEvent::Subscribe<...>(this)` does not compile: subscribe through `SubscriptionHolder` (`Events/CLAUDE.md`). A component subscribes with `SubscribeInScene`, or it reacts while its scene is inactive (`Scene/CLAUDE.md` "Gotchas").
+- `"x"_intern` / `PoolString::Intern` on text from outside (a client, a file, input) grows a table that never frees: look it up with `PoolString::Find` (`Reflection/CLAUDE.md`).
+- `Format(...)` and `_format` make a `String`, so one per frame breaks the steady frame: format into a member buffer (`FormatToN`, `Format/CLAUDE.md`) and only when the value changed.
+- `MoveOnlyFunction` allocates once its capture is above the inline buffer; a callable that must never allocate is a `FixedFunction`, which rejects what does not fit (`Utils/CLAUDE.md`). A `FunctionRef` is never stored.
+- `co_await` with a lock held or `Wait()` on the main thread hangs; a background loop without `YieldIfNeeded()` freezes the single-thread (browser) build until it ends (`TaskSystem/CLAUDE.md` "DON'T").
+- A header with `BE_CLASS` / `BE_EVENT` whose `Generated/<Stem>.gen.hpp` no `.cpp` includes fails to link (`reflection-module.md`).
+- A change to what a content file may say adds a migration step (`CLAUDE.md` "After making changes").
+
+## Self-check of a diff
+
+- [ ] Every name it uses exists (grep); nothing is copied from memory of another engine
+- [ ] The ctests `BagiTypesCheck`, `BagiIncludeStyle`, `BagiHeadersStandalone` pass (aliases, callables, raw locks and threads, `fmt::`, includes)
+- [ ] No `enum class` is left: no check catches it, `CORE_ENUM` is the rule
+- [ ] Subscriptions go through `SubscriptionHolder`; an order that matters is an explicit call, not an event
+- [ ] An operation that fails changes nothing; a choice that changes nothing does nothing
+- [ ] A steady frame allocates nothing: derived things rebuild on a moved key, lists are members, no per-frame `Format`
+- [ ] Comments follow the comment rule; no abstraction the task does not need
+- [ ] A test of the behaviour, safe beside others (`tests-module.md`)
+
+## The end of a plan
+
+A plan with more than a few lines of C++ ends with these tasks, after the code:
+
+1. **Format:** the `clang-format` skill (changed files, or all for a broad change).
+2. **PCH includes:** the `strip-pch-includes` skill after include changes (`.cpp` only; by subfolder with a dry run first when the change is broad).
