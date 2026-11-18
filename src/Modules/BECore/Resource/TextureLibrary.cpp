@@ -14,6 +14,7 @@ namespace BECore {
 
         struct Ids {
             static constexpr auto config = "TextureLibrary"_intern;
+            static constexpr const char* sprites = "sprites";
         };
 
     }  // namespace
@@ -119,6 +120,26 @@ namespace BECore {
         return candidate;
     }
 
+    bool TextureLibrary::WriteInto(pugi::xml_node root) const {
+        if (!root) {
+            return false;
+        }
+
+        XmlSerializer serializer;
+        Write(serializer);
+        const pugi::xml_node written = serializer.GetRootNode().child(Ids::sprites);
+
+        // Replaced where it stands: other children of the root may follow it
+        const pugi::xml_node previous = root.child(Ids::sprites);
+        if (previous) {
+            root.insert_copy_before(written, previous);
+            root.remove_child(previous);
+        } else {
+            root.append_copy(written);
+        }
+        return true;
+    }
+
     bool TextureLibrary::Save() {
         auto& configManager = CoreManager::GetConfigManager();
         auto xmlRoot = configManager.GetConfig(Ids::config);
@@ -127,13 +148,9 @@ namespace BECore {
             return false;
         }
 
-        XmlSerializer serializer;
-        Write(serializer);
-
-        // Replace only the `sprites` child, so the file's other children and comments survive.
-        pugi::xml_node pugiRoot = xmlRoot.GetPugiNode();
-        pugiRoot.remove_child("sprites");
-        pugiRoot.append_copy(serializer.GetRootNode().child("sprites"));
+        if (!WriteInto(xmlRoot.GetPugiNode())) {
+            return false;
+        }
 
         return configManager.SaveConfig(Ids::config);
     }
