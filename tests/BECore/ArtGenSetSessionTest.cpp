@@ -211,6 +211,24 @@ namespace BECore::Tests {
             Call("artgen_done", done);
         }
 
+        /// What the service does when it makes @p images images for a request that asked for fewer (extra images of a regenerating run): seeds from the request's, then the end
+        void FinishWithImages(const Json& request, int64_t images) {
+            const uint32_t id = static_cast<uint32_t>(GetJsonInt(request, "id").value());
+            const int64_t seed = GetJsonInt(request, "seed").value();
+            const String outDir = GetJsonString(request, "outDir").value();
+            const String name = GetJsonString(request, "name").value();
+            for (int64_t i = 0; i < images; ++i) {
+                Json image = Report(id);
+                image["seed"] = seed + i;
+                image["path"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.png", PathText(_root), outDir, name, seed + i));
+                image["provenance"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.artgen.json", PathText(_root), outDir, name, seed + i));
+                Call("artgen_image", image);
+            }
+            Json done = Report(id);
+            done["status"] = "ok";
+            Call("artgen_done", done);
+        }
+
         /// Runs every job of the set to its end (the service made all the images) and picks the second variant of each
         void RunAndPickAll(StringView set, StringView kind = "image") {
             while (const Json* request = RequestOf(pollReply = Poll())) {
@@ -2476,6 +2494,70 @@ namespace BECore::Tests {
         ASSERT_EQ(skipped.size(), 1u);
         EXPECT_EQ(GetJsonString(skipped[0], "job"), Optional<String>("a"));
         EXPECT_EQ(GetJsonString(skipped[0], "reason"), Optional<String>("full"));
+    }
+
+    // The service regenerates what failed its checks: a job asked for `count` images may come back with more, on the seeds after its own
+
+    TEST_F(ArtGenSetSessionTest, AJobThatGetsMoreImagesThanItsCountEndsDoneWithAllOfThem) {
+        ASSERT_TRUE(Enqueue("m", "a", 2).has_value());
+        const Json* request = RequestOf(pollReply = Poll());
+        ASSERT_NE(request, nullptr);
+        ASSERT_EQ(GetJsonInt(*request, "count"), Optional<int64_t>(2));
+        FinishWithImages(*request, 4);
+
+        EXPECT_FALSE(session.IsBusy());
+        for (const ArtGenSet& set : {*session.FindSet("m"), OnDisk("m")}) {
+            const ArtGenSetJob& job = set.jobs[0];
+            EXPECT_EQ(job.state, ArtGenSetJobState::Done);
+            EXPECT_TRUE(job.error.empty());
+            ASSERT_EQ(job.variants.size(), 4u);
+            for (size_t i = 0; i < job.variants.size(); ++i) {
+                EXPECT_EQ(job.variants[i].seed, kSetSeed + static_cast<int64_t>(i));
+                EXPECT_EQ(job.variants[i].file, Format("a/a_{}.png", kSetSeed + static_cast<int64_t>(i)));
+            }
+        }
+    }
+
+    TEST_F(ArtGenSetSessionTest, MoreAfterExtraImagesKeepsOffTheirSeeds) {
+        ASSERT_TRUE(Enqueue("m", "a", 2).has_value());
+        FinishWithImages(*RequestOf(pollReply = Poll()), 4);  // seeds 40..43, the last two are extras
+        const ArtGenSetJob& job = session.FindSet("m")->jobs[0];
+        ASSERT_EQ(job.variants.size(), 4u);
+
+        // An explicit seed whose range meets an extra is refused and changes nothing
+        const Pair<int64_t, int64_t> meeting[] = {{42, 1}, {43, 2}, {41, 3}, {39, 5}};
+        for (const auto& [seed, count] : meeting) {
+            Json extra = Json::object();
+            extra["seed"] = seed;
+            extra["count"] = count;
+            EXPECT_EQ(ErrorCode(MoreCall("m", extra)), "invalid_params") << seed << " x " << count;
+            EXPECT_FALSE(session.IsBusy());
+            EXPECT_FALSE(job.more.has_value());
+            EXPECT_EQ(job.variants.size(), 4u);
+        }
+
+        // One that does not is queued
+        Json clear = Json::object();
+        clear["seed"] = 44;
+        clear["count"] = 2;
+        ASSERT_EQ(ErrorCode(MoreCall("m", clear)), "");
+        EXPECT_TRUE(job.more.has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAll());
+        ASSERT_EQ(job.variants.size(), 6u);
+        EXPECT_EQ(job.variants[4].seed, 44);
+        EXPECT_EQ(job.variants[5].seed, 45);
+
+        // A drawn seed meets no variant the row holds, the extras among them
+        for (int round = 0; round < 5; ++round) {
+            Json two = Json::object();
+            two["count"] = 2;
+            const Json answer = Result(MoreCall("m", two));
+            const Optional<int64_t> seed = GetJsonInt(answer, "seed");
+            ASSERT_TRUE(seed.has_value()) << round;
+            EXPECT_TRUE(ArtGenSeedRangeFree(job, *seed, 2)) << "round " << round << " drew " << *seed;
+            ASSERT_NO_FATAL_FAILURE(RunAll());
+        }
+        EXPECT_EQ(job.variants.size(), 16u);
     }
 
     TEST_F(ArtGenSetSessionTest, ASoundSetGetsMoreVariantsToo) {
