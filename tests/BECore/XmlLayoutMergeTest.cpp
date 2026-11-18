@@ -95,6 +95,25 @@ namespace BECore::Tests {
         EXPECT_EQ(*merged, Replaced(kHandLaid, "x=\"2\"", "x=\"20\""));
     }
 
+    TEST(XmlLayoutMergeTest, AChangedLineKeepsTheIndentOfTheFileWhileItStaysAtItsDepth) {
+        const String original = Joined({"<root>", "    <a x=\"1\" />", "    <b x=\"1\" />", "</root>"});
+        const String baseline = Joined({"<root>", "  <a x=\"1\" />", "  <b x=\"1\" />", "</root>"});
+
+        const Optional<String> changed = Merge(original, baseline, Joined({"<root>", "  <a x=\"2\" />", "  <b x=\"1\" />", "</root>"}));
+        ASSERT_TRUE(changed.has_value());
+        EXPECT_EQ(*changed, Joined({"<root>", "    <a x=\"2\" />", "    <b x=\"1\" />", "</root>"}));
+    }
+
+    TEST(XmlLayoutMergeTest, AReplacementOfADifferentNumberOfLinesTakesTheCanonicalLines) {
+        const String original = Joined({"<root>", "    <a />", "</root>"});
+        const String baseline = Joined({"<root>", "  <a />", "</root>"});
+        const String updated = Joined({"<root>", "  <a>", "    <b />", "  </a>", "</root>"});
+
+        const Optional<String> merged = Merge(original, baseline, updated);
+        ASSERT_TRUE(merged.has_value());
+        EXPECT_EQ(*merged, updated);
+    }
+
     TEST(XmlLayoutMergeTest, ALineInsertedAtTheStartGoesBeforeTheFirstLine) {
         const String updated = Joined(
             {"<!-- header -->", "<root>", "  <sprites>", "    <sprite name=\"A\" x=\"1\" />", "    <sprite name=\"B\" x=\"2\" />", "    <sprite name=\"C\" x=\"3\" />", "  </sprites>", "</root>"});
@@ -167,6 +186,10 @@ namespace BECore::Tests {
         EXPECT_FALSE(Merge("<root>\n  <a x='1' />\n</root>\n", "<root>\n  <a x=\"1\" />\n</root>\n", "<root>\n  <a x=\"2\" />\n</root>\n").has_value());
         EXPECT_FALSE(Merge("<root>\n  <a\n     x=\"1\" />\n</root>\n", "<root>\n  <a x=\"1\" />\n</root>\n", "<root>\n  <a x=\"2\" />\n</root>\n").has_value());
         EXPECT_FALSE(Merge("<root>\n  <a x=\"1\" />\n</root>\n", kCanonical, updated).has_value());
+    }
+
+    TEST(XmlLayoutMergeTest, AnUnchangedTextThatDoesNotMatchTheBaselineIsRefusedToo) {
+        EXPECT_FALSE(Merge("<root>\n  <a/>\n</root>\n", "<root>\n  <a />\n</root>\n", "<root>\n  <a />\n</root>\n").has_value());
     }
 
     TEST(XmlLayoutMergeTest, ALineBreakWithACarriageReturnIsRefused) {

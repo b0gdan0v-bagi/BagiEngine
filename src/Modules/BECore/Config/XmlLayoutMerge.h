@@ -15,8 +15,10 @@ namespace BECore {
      *
      * The result is @p updated with every line that @p baseline and @p updated share kept where it is in @p original, with
      * its original bytes (blank lines, indentation, trailing spaces); a changed or deleted line is replaced by the lines of
-     * @p updated (two-space indent), a new line goes directly before the original line that follows it. The final line break
-     * follows @p original unless the last line is new. @p baseline equal to @p updated returns @p original itself.
+     * @p updated (two-space indent; a changed line that stays at its depth keeps the indentation of the line it replaces), a
+     * new line goes directly before the original line that follows it. The final line break
+     * follows @p original unless the last line is new. @p baseline equal to @p updated returns @p original itself, once its
+     * lines match @p baseline.
      *
      * Pure: no engine services, no file system, no XML parser. It trusts nothing about the parser: the caller checks that the
      * result parses to the document it saves.

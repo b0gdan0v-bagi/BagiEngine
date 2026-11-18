@@ -213,16 +213,29 @@ namespace BECore {
             out.push_back(kLineBreak);
         }
 
+        StringView Indentation(StringView line) {
+            return line.substr(0, line.find_first_not_of(" \t"));
+        }
+
+        /// A line that replaces @p replaced, where @p baselineLine stood for @p replaced in the canonical text: when the
+        /// edit did not move it to another depth it keeps the indentation the file has, whatever the file's indent is
+        void AppendReplacement(String& out, StringView replaced, StringView baselineLine, StringView line) {
+            const StringView indentation = Indentation(line);
+            if (indentation != Indentation(baselineLine)) {
+                AppendLine(out, line);
+                return;
+            }
+            const StringView kept = Indentation(replaced);
+            out.append(kept.data(), kept.size());
+            AppendLine(out, line.substr(indentation.size()));
+        }
+
     }  // namespace
 
     Optional<String> MergeXmlLayout(StringView original, StringView baseline, StringView updated) {
         if (original.empty() || original.find('\r') != StringView::npos || baseline.find('\r') != StringView::npos || updated.find('\r') != StringView::npos) {
             return std::nullopt;
         }
-        if (baseline == updated) {
-            return String(original);
-        }
-
         const Lines originalLines = SplitLines(original);
         const Lines baselineLines = SplitLines(baseline);
         const Lines updatedLines = SplitLines(updated);
@@ -233,6 +246,9 @@ namespace BECore {
         const Optional<Vector<size_t>> map = MapBaselineToOriginal(originalLines.lines, baselineLines.lines);
         if (!map) {
             return std::nullopt;
+        }
+        if (baseline == updated) {
+            return String(original);
         }
         const Optional<Vector<Hunk>> hunks = DiffLines(baselineLines.lines, updatedLines.lines);
         if (!hunks) {
@@ -258,8 +274,14 @@ namespace BECore {
                 AppendLine(result, originalLines.lines[next]);
                 lastFromUpdated = false;
             }
+            const bool inPlace = hunk.baselineEnd - hunk.baselineBegin == hunk.updatedEnd - hunk.updatedBegin;
             for (size_t i = hunk.updatedBegin; i < hunk.updatedEnd; ++i) {
-                AppendLine(result, updatedLines.lines[i]);
+                if (inPlace) {
+                    const size_t baselineIndex = hunk.baselineBegin + (i - hunk.updatedBegin);
+                    AppendReplacement(result, originalLines.lines[(*map)[baselineIndex]], baselineLines.lines[baselineIndex], updatedLines.lines[i]);
+                } else {
+                    AppendLine(result, updatedLines.lines[i]);
+                }
                 lastFromUpdated = true;
             }
             next = replaceEnd;

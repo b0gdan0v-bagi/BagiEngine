@@ -134,4 +134,155 @@ namespace BECore::Tests {
         EXPECT_FALSE(document.SaveToFile(std::filesystem::temp_directory_path()));
     }
 
+    namespace {
+
+        /// The shape of a hand-written TextureLibrary.xml: a blank line between the rows
+        constexpr StringView kHandLaidLibrary = R"(<?xml version="1.0"?>
+<!-- Sprite atlas -->
+<root>
+  <sprites>
+    <sprite name="A" texturePath="a.png">
+      <srcRect x="0" y="0" w="10" h="10" />
+    </sprite>
+
+    <sprite name="B" texturePath="a.png">
+      <srcRect x="10" y="0" w="10" h="10" />
+    </sprite>
+  </sprites>
+</root>
+)";
+
+        /// The shape of LoggerConfig.xml: a four-space indent and a blank line between the sinks
+        constexpr StringView kFourSpaceConfig = R"(<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <!-- Logger Sinks Configuration -->
+    <sinks>
+        <sink type="OutputSink" priority="7" />
+
+        <!-- File sink runs after Output -->
+        <sink type="FileSink" priority="100" />
+    </sinks>
+</root>
+)";
+
+        /// The lines of @p text, a final line break not counted
+        Vector<String> LinesOf(StringView text) {
+            Vector<String> lines;
+            size_t begin = 0;
+            while (begin < text.size()) {
+                size_t end = text.find('\n', begin);
+                if (end == StringView::npos) {
+                    end = text.size();
+                }
+                lines.push_back(String(text.substr(begin, end - begin)));
+                begin = end + 1;
+            }
+            return lines;
+        }
+
+        /// A time far from now, so that a write shows in the modification time at any clock resolution
+        std::filesystem::file_time_type LongAgo() {
+            return std::filesystem::file_time_type::clock::now() - std::chrono::hours(24 * 30);
+        }
+
+    }  // namespace
+
+    TEST_F(XmlDocumentTest, AHandLaidFileSavedUnchangedIsLeftAloneByteForByteAndInTime) {
+        for (const StringView text : {kHandLaidLibrary, kFourSpaceConfig}) {
+            WriteFile(text);
+            const auto before = LongAgo();
+            std::filesystem::last_write_time(_path, before);
+
+            XmlDocument document;
+            ASSERT_TRUE(document.LoadFromFile(_path));
+            ASSERT_TRUE(document.SaveToFile(_path));
+
+            EXPECT_EQ(ReadFile(), String(text));
+            EXPECT_EQ(std::filesystem::last_write_time(_path), before);
+        }
+    }
+
+    TEST_F(XmlDocumentTest, AnEditChangesOnlyTheLinesItTouches) {
+        WriteFile(kHandLaidLibrary);
+        XmlDocument document;
+        ASSERT_TRUE(document.LoadFromFile(_path));
+        document.GetRoot().GetChild("sprites").GetPugiNode().first_child().attribute("name").set_value("Renamed");
+        ASSERT_TRUE(document.SaveToFile(_path));
+
+        Vector<String> expected = LinesOf(kHandLaidLibrary);
+        ASSERT_EQ(expected[4], "    <sprite name=\"A\" texturePath=\"a.png\">");
+        expected[4] = "    <sprite name=\"Renamed\" texturePath=\"a.png\">";
+        EXPECT_EQ(LinesOf(ReadFile()), expected);
+    }
+
+    TEST_F(XmlDocumentTest, ANewElementKeepsTheBlankLinesAndTheIndentOfTheFile) {
+        WriteFile(kFourSpaceConfig);
+        XmlDocument document;
+        ASSERT_TRUE(document.LoadFromFile(_path));
+        pugi::xml_node sinks = document.GetRoot().GetChild("sinks").GetPugiNode();
+        sinks.append_child("sink").append_attribute("type").set_value("ConsoleSink");
+        ASSERT_TRUE(document.SaveToFile(_path));
+
+        Vector<String> expected = LinesOf(kFourSpaceConfig);
+        expected.insert(expected.end() - 2, "    <sink type=\"ConsoleSink\" />");
+        EXPECT_EQ(LinesOf(ReadFile()), expected);
+    }
+
+    TEST_F(XmlDocumentTest, AFileThatCannotCarryTheLayoutIsRewrittenCanonicalAndThenStable) {
+        constexpr StringView text = "<root>\n  <a x='1'/>\n  <b\n     y=\"2\" />\n</root>\n";
+        WriteFile(text);
+        XmlDocument document;
+        ASSERT_TRUE(document.LoadFromFile(_path));
+        ASSERT_TRUE(document.SaveToFile(_path));
+
+        const String canonical = ReadFile();
+        EXPECT_EQ(canonical, "<root>\n  <a x=\"1\" />\n  <b y=\"2\" />\n</root>\n");
+
+        const auto before = LongAgo();
+        std::filesystem::last_write_time(_path, before);
+        XmlDocument again;
+        ASSERT_TRUE(again.LoadFromFile(_path));
+        ASSERT_TRUE(again.SaveToFile(_path));
+        EXPECT_EQ(ReadFile(), canonical);
+        EXPECT_EQ(std::filesystem::last_write_time(_path), before);
+    }
+
+    TEST_F(XmlDocumentTest, AFileChangedOnDiskAfterTheLoadIsOverwrittenByTheDocument) {
+        WriteFile(kHandLaidLibrary);
+        XmlDocument document;
+        ASSERT_TRUE(document.LoadFromFile(_path));
+
+        WriteFile("<root>\n  <other />\n</root>\n");
+        document.GetRoot().GetChild("sprites").GetPugiNode().first_child().attribute("name").set_value("Renamed");
+        ASSERT_TRUE(document.SaveToFile(_path));
+
+        const String saved = ReadFile();
+        EXPECT_EQ(saved.find("other"), String::npos);
+        EXPECT_NE(saved.find("name=\"Renamed\""), String::npos);
+    }
+
+    TEST_F(XmlDocumentTest, AFileThatDoesNotParseIsReplacedByTheDocument) {
+        WriteFile("<root><unclosed>");
+        XmlDocument document;
+        ASSERT_TRUE(document.LoadFromString("<root>\n  <a />\n</root>\n"));
+        ASSERT_TRUE(document.SaveToFile(_path));
+        EXPECT_EQ(ReadFile(), "<root>\n  <a />\n</root>\n");
+    }
+
+    TEST_F(XmlDocumentTest, TheByteOrderMarkSurvivesTheLayoutMerge) {
+        const String withMark = String(kByteOrderMark) + String(kHandLaidLibrary);
+        WriteFile(withMark);
+        XmlDocument document;
+        ASSERT_TRUE(document.LoadFromFile(_path));
+        ASSERT_TRUE(document.SaveToFile(_path));
+        EXPECT_EQ(ReadFile(), withMark);
+
+        document.GetRoot().GetChild("sprites").GetPugiNode().first_child().attribute("name").set_value("Renamed");
+        ASSERT_TRUE(document.SaveToFile(_path));
+        const String saved = ReadFile();
+        EXPECT_EQ(saved.substr(0, kByteOrderMark.size()), String(kByteOrderMark));
+        EXPECT_NE(saved.find("\n\n    <sprite name=\"B\""), String::npos);
+        EXPECT_NE(saved.find("name=\"Renamed\""), String::npos);
+    }
+
 }  // namespace BECore::Tests

@@ -1,5 +1,8 @@
 #include "XmlDocument.h"
 
+#include <BECore/Config/XmlLayoutMerge.h>
+#include <BECore/Reflection/ReaderLimits.h>
+
 namespace BECore {
 
     namespace {
@@ -28,6 +31,65 @@ namespace BECore {
 
         bool StartsWithByteOrderMark(StringView text) {
             return text.size() >= kByteOrderMark.size() && text.substr(0, kByteOrderMark.size()) == kByteOrderMark;
+        }
+
+        StringView WithoutByteOrderMark(StringView text) {
+            return StartsWithByteOrderMark(text) ? text.substr(kByteOrderMark.size()) : text;
+        }
+
+        /// The canonical text of @p document, the one every save without a layout to keep writes
+        String SerializeCanonical(const pugi::xml_document& document, bool withByteOrderMark) {
+            String text;
+            StringWriter writer(text);
+            document.save(writer, kIndent, kWriteFlags | (withByteOrderMark ? pugi::format_write_bom : 0u), pugi::encoding_utf8);
+            return text;
+        }
+
+        /// The bytes of the file at @p path, or nothing when it is not a regular file, is bigger than the limit of an XML
+        /// document or cannot be read: the layout of such a file is not worth keeping
+        Optional<String> ReadExistingFile(const std::filesystem::path& path) {
+            std::error_code error;
+            if (!std::filesystem::is_regular_file(path, error)) {
+                return std::nullopt;
+            }
+            const uintmax_t size = std::filesystem::file_size(path, error);
+            if (error || size > ReaderLimits::kMaxXmlDocumentBytes) {
+                return std::nullopt;
+            }
+            std::ifstream in(path, std::ios::in | std::ios::binary);  //-NoStd: the document's own file, read byte for byte before it is replaced
+            if (!in.is_open()) {
+                return std::nullopt;
+            }
+            String bytes;
+            bytes.resize(static_cast<size_t>(size));
+            in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+            if (in.gcount() != static_cast<std::streamsize>(bytes.size())) {
+                return std::nullopt;
+            }
+            return bytes;
+        }
+
+        /// @p updated laid out like @p onDisk, or nothing when that is not possible or does not give the same document
+        ///
+        /// The merge only moves lines, so the check is made on the document: the laid-out text must parse to what @p updated
+        /// serializes to, and a mistake of the merge costs the layout, never the content.
+        Optional<String> LayOutLikeFile(StringView onDisk, StringView updated) {
+            pugi::xml_document diskDocument;
+            if (!diskDocument.load_buffer(onDisk.data(), onDisk.size(), kParseFlags, pugi::encoding_utf8)) {
+                return std::nullopt;
+            }
+            const String baseline = SerializeCanonical(diskDocument, false);
+            Optional<String> merged = MergeXmlLayout(onDisk, baseline, updated);
+            if (!merged) {
+                return std::nullopt;
+            }
+
+            pugi::xml_document mergedDocument;
+            if (!mergedDocument.load_buffer(merged->data(), merged->size(), kParseFlags, pugi::encoding_utf8) || SerializeCanonical(mergedDocument, false) != updated) {
+                LOG_DEBUG("XmlDocument: the merged layout does not give the document, the canonical text is written");
+                return std::nullopt;
+            }
+            return merged;
         }
 
     }  // namespace
@@ -67,10 +129,7 @@ namespace BECore {
     }
 
     String XmlDocument::Serialize() const {
-        String text;
-        StringWriter writer(text);
-        _doc.save(writer, kIndent, kWriteFlags | (_hasByteOrderMark ? pugi::format_write_bom : 0u), pugi::encoding_utf8);
-        return text;
+        return SerializeCanonical(_doc, _hasByteOrderMark);
     }
 
     bool XmlDocument::SaveToFile(const std::filesystem::path& filepath) const {
@@ -85,7 +144,20 @@ namespace BECore {
         }
 
         // The text is built before the file is opened, which truncates it
-        const String text = Serialize();
+        String text = Serialize();
+
+        // The DOM wins over the file: what is on disk only lends its layout (blank lines, indentation)
+        if (const Optional<String> onDisk = ReadExistingFile(filepath)) {
+            const StringView updatedBody = WithoutByteOrderMark(text);
+            const size_t markSize = text.size() - updatedBody.size();
+            if (const Optional<String> laidOut = LayOutLikeFile(WithoutByteOrderMark(*onDisk), updatedBody)) {
+                text.resize(markSize);
+                text.append(laidOut->data(), laidOut->size());
+            }
+            if (*onDisk == text) {
+                return true;
+            }
+        }
 
         // Binary: a text-mode stream on Windows would turn every '\n' into "\r\n"
         std::ofstream out(filepath, std::ios::out | std::ios::binary | std::ios::trunc);

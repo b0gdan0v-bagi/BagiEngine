@@ -755,6 +755,74 @@ namespace BECore::Tests {
         EXPECT_EQ(saved, String("<root>\n  <groups />\n  <sprites>\n") + String(kRookLines) + "  </sprites>\n</root>\n");
     }
 
+    namespace {
+
+        /// A file as a person lays it out: a blank line between the rows
+        constexpr StringView kHandLaidFile = R"(<?xml version="1.0"?>
+<!-- header -->
+<root>
+  <sprites>
+    <sprite name="WhiteKing" texturePath="assets/chess_test.png">
+      <srcRect x="0" y="0" w="116.67" h="190.5" />
+    </sprite>
+
+    <sprite name="WhiteQueen" texturePath="assets/chess_test.png">
+      <srcRect x="116.67" y="0" w="116.67" h="190.5" />
+    </sprite>
+  </sprites>
+  <groups />
+</root>
+)";
+
+        /// The Accept of the Generate panel on a file on disk: load, edit the library, WriteInto, SaveToFile over the same file
+        template <typename Edit>
+        String AcceptedOnDisk(Edit edit) {
+            const std::filesystem::path path = TestTempPath("TextureLibraryTest_HandLaid.xml");
+            {
+                std::ofstream out(path, std::ios::out | std::ios::binary);  //-NoStd: the test writes its own temporary file byte for byte
+                out.write(kHandLaidFile.data(), static_cast<std::streamsize>(kHandLaidFile.size()));
+            }
+
+            XmlDocument document;
+            EXPECT_TRUE(document.LoadFromFile(path));
+            XmlDeserializer deserializer;
+            EXPECT_TRUE(deserializer.LoadFromXmlNode(document.GetRoot()));
+            TextureLibrary library;
+            library.Load(deserializer);
+            edit(library);
+            EXPECT_TRUE(library.WriteInto(document.GetRoot().GetPugiNode()));
+            EXPECT_TRUE(document.SaveToFile(path));
+
+            std::ifstream in(path, std::ios::in | std::ios::binary);  //-NoStd: the test reads its own temporary file byte for byte
+            String bytes;
+            bytes.resize(static_cast<size_t>(std::filesystem::file_size(path)));
+            in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+            in.close();
+            std::error_code error;
+            std::filesystem::remove(path, error);
+            return bytes;
+        }
+
+    }  // namespace
+
+    TEST(TextureLibraryTest, AnAcceptOnAHandLaidFileChangesTheSpriteLinesAndNothingElse) {
+        const String saved = AcceptedOnDisk([](TextureLibrary& library) { library.AddOrUpdate(MakeEntry("WhiteRook", "assets/chess_test.png", Rect(233, 0, 116, 190))); });
+
+        EXPECT_EQ(saved, Replaced(kHandLaidFile, "  </sprites>\n", String(kRookLines) + "  </sprites>\n"));
+    }
+
+    TEST(TextureLibraryTest, AnUpdateOnAHandLaidFileKeepsTheBlankLineBetweenTheRows) {
+        const String saved = AcceptedOnDisk([](TextureLibrary& library) { library.AddOrUpdate(MakeEntry("WhiteQueen", "assets/chess_test.png", Rect(233, 0, 116, 190))); });
+
+        EXPECT_EQ(saved, Replaced(kHandLaidFile, kQueenLines, Replaced(kRookLines, "WhiteRook", "WhiteQueen")));
+    }
+
+    TEST(TextureLibraryTest, ARemoveOnAHandLaidFileTakesTheLinesOfTheRowOnly) {
+        const String saved = AcceptedOnDisk([](TextureLibrary& library) { library.Remove("WhiteKing"_intern); });
+
+        EXPECT_EQ(saved, Replaced(kHandLaidFile, kKingLines, ""));
+    }
+
     TEST(TextureLibraryTest, WriteIntoAnInvalidNodeIsRefused) {
         TextureLibrary library;
         EXPECT_FALSE(library.WriteInto(pugi::xml_node()));
