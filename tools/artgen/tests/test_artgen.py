@@ -2,6 +2,8 @@
 real WebSocket progress stream, the generator states and the command line."""
 
 import base64
+import email.parser
+import email.policy
 import hashlib
 import json
 import queue
@@ -277,6 +279,9 @@ class FakeComfy:
         self.cancels = []
         self.streams = {}
         self.history = {}
+        self.uploads = []  # (filename, bytes, {field: text}) of each POST /upload/image
+        self.upload_refusal = None  # the text of a 400 answer to an upload
+        self.upload_answer = None  # replaces the answer of an upload
 
     def events_for(self, prompt_id):
         progress = [{"type": "progress", "data": {"value": v, "max": 3, "prompt_id": prompt_id}} for v in (1, 2, 3)]
@@ -337,13 +342,30 @@ def comfy(monkeypatch):
 
         def do_POST(self):
             length = int(self.headers.get("Content-Length") or 0)
-            body = json.loads(self.rfile.read(length)) if length else {}
+            raw = self.rfile.read(length)
+            if self.path == "/upload/image":
+                return self._upload(raw)
+            body = json.loads(raw) if raw else {}
             if self.path == "/prompt":
                 return self._json(state.queue_prompt(body))
             if self.path in ("/queue", "/interrupt"):
                 state.cancels.append((self.path, body))
                 return self._json(None, raw=b"")
             return self._json({"error": self.path}, 404)
+
+        def _upload(self, raw):
+            if state.upload_refusal:
+                return self._json(None, 400, raw=state.upload_refusal.encode())
+            message = email.parser.BytesParser(policy=email.policy.HTTP).parsebytes(
+                b"Content-Type: " + self.headers["Content-Type"].encode() + b"\r\n\r\n" + raw)
+            filename, content, fields = None, None, {}
+            for part in message.iter_parts():
+                if part.get_filename():
+                    filename, content = part.get_filename(), part.get_payload(decode=True)
+                else:
+                    fields[part.get_param("name", header="content-disposition")] = part.get_content()
+            state.uploads.append((filename, content, fields))
+            return self._json(state.upload_answer or {"name": filename, "subfolder": "", "type": fields.get("type")})
 
         def _websocket(self):
             if not state.ws:
@@ -428,6 +450,38 @@ def test_comfyui_timeout_cancels_too(comfy):
     with pytest.raises(GenerationError, match="no image"):
         ComfyUIGenerator(comfy.url).run({}, timeout_s=10, clock=clock)
     assert [path for path, _ in comfy.cancels] == ["/queue", "/interrupt"]
+
+
+def test_comfyui_upload_gives_back_the_name_it_stored(comfy):
+    assert ComfyUIGenerator(comfy.url).upload_image(b"\x89PNG-bytes", "artgen_ref_0123.png") == "artgen_ref_0123.png"
+    comfy.upload_answer = {"name": "x_1.png", "subfolder": "refs", "type": "input"}
+    assert ComfyUIGenerator(comfy.url).upload_image(b"data", "x.png") == "refs/x_1.png"
+
+
+def test_comfyui_upload_is_a_multipart_form_of_the_file_and_its_input_folder(comfy):
+    data = bytes(range(256)) + b"\r\n--boundary-like\r\n"
+    ComfyUIGenerator(comfy.url).upload_image(data, "artgen_ref_0123.png")
+    assert comfy.uploads == [("artgen_ref_0123.png", data, {"type": "input", "overwrite": "true"})]
+
+
+def test_comfyui_refusing_an_upload_is_a_generation_error_with_its_text(comfy):
+    comfy.upload_refusal = "invalid image file"
+    with pytest.raises(GenerationError, match="/upload/image: HTTP 400: invalid image file"):
+        ComfyUIGenerator(comfy.url).upload_image(b"x", "a.png")
+    comfy.upload_refusal = None
+    comfy.upload_answer = {"subfolder": ""}
+    with pytest.raises(GenerationError, match="without a name"):
+        ComfyUIGenerator(comfy.url).upload_image(b"x", "a.png")
+    with pytest.raises(GenerationError, match="not a file name"):
+        ComfyUIGenerator(comfy.url).upload_image(b"x", 'a"\r\nb.png')
+    assert [upload[0] for upload in comfy.uploads] == ["a.png"], "a bad name never reaches the server"
+
+
+def test_a_generator_without_uploads_says_so_and_the_fake_records_them():
+    with pytest.raises(GenerationError, match="the generator generator cannot take a reference picture"):
+        artgen_generators.Generator().upload_image(b"x", "a.png")
+    fake = FakeGenerator()
+    assert fake.upload_image(b"abc", "r.png") == "r.png" and fake.uploads == [("r.png", b"abc")]
 
 
 def test_status_ready_and_missing_model(comfy):
