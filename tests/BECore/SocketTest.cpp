@@ -223,6 +223,43 @@ namespace BECore::Tests {
         EXPECT_TRUE(client.has_value());
     }
 
+    // Unread data at the close turns the end of the stream into a reset, which on Windows destroys what the peer has not read yet
+    TEST(SocketTest, FinishSendingKeepsTheLastBytesOfAPeerThatIsStillSending) {
+        SocketPair pair;
+        ASSERT_NO_FATAL_FAILURE(MakePair(pair));
+        constexpr StringView kLastWords = "bye";
+        const String flood(64 * 1024, 'x');
+
+        ASSERT_TRUE(pair.client.SendAll(AsBytes(flood)));
+        ASSERT_TRUE(pair.accepted.SendAll(AsBytes(kLastWords)));
+        pair.client.FinishSending(0ms);  // ends the flood, so the wait below ends with the stream and not with its limit
+        pair.accepted.FinishSending(kWaitLimit);
+        pair.accepted.Close();
+
+        String received;
+        Array<uint8_t, 16> buffer;
+        pair.client.SetReceiveTimeout(kWaitLimit);
+        for (;;) {
+            const auto count = pair.client.Receive(Span<uint8_t>(buffer.data(), buffer.size()));
+            if (!count) {
+                EXPECT_EQ(count.error(), SocketError::Closed);
+                break;
+            }
+            received.append(reinterpret_cast<const char*>(buffer.data()), *count);
+        }
+        EXPECT_EQ(StringView(received), kLastWords);
+    }
+
+    TEST(SocketTest, FinishSendingEndsWhenThePeerCloses) {
+        SocketPair pair;
+        ASSERT_NO_FATAL_FAILURE(MakePair(pair));
+        pair.client.Close();
+
+        const auto started = std::chrono::steady_clock::now();
+        pair.accepted.FinishSending(kWaitLimit);
+        EXPECT_LT(std::chrono::steady_clock::now() - started, kWaitLimit);
+    }
+
     TEST(SocketTest, ConnectToTheLoopbackByPortOnlyStillWorks) {
         auto listener = Socket::Listen(0);
         ASSERT_TRUE(listener.has_value());

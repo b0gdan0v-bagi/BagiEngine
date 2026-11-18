@@ -41,7 +41,7 @@ Run: `build/<preset>/bin/BagiRoomServer --test-games --port 0`.
 
 Numbers are range-checked; an unknown flag or a bad number or variable is an error with a message (naming the flag or the variable) and exit code 1.
 
-**Log** (what a hosting platform shows): `RunRoomServer` makes stdout line-buffered first, since a piped stdout is block-buffered and the platform would see the lines in chunks or at exit. Lines: the listening line, `Room server settings: ...` (the effective values, nothing secret), a line per connection, refusal and close, and `Room server: <n> connections, <m> rooms` from the hub thread when the pair changed and `statsLogInterval` (the server's `clock`) has passed since the last such line. No name, code or token is ever logged.
+**Log** (what a hosting platform shows): `RunRoomServer` makes stdout line-buffered first and flushes it after each delivery of the log (the Windows CRT has no line buffering), since a piped stdout is block-buffered and the platform would see the lines in chunks or at exit. Lines: the listening line, `Room server settings: ...` (the effective values, nothing secret), a line per connection, refusal and close, and `Room server: <n> connections, <m> rooms` from the hub thread when the pair changed and `statsLogInterval` (the server's `clock`) has passed since the last such line. No name, code or token is ever logged.
 
 **Health:** `ToSettings` sets `policy.healthPath` to `/healthz`, so a plain `GET /healthz` gets 200 `ok` (`RemoteControl/CLAUDE.md`, "Security"); the platform's health check needs it.
 

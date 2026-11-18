@@ -39,7 +39,7 @@ namespace BECore {
 
     int RunRoomServer(const SeatedGameRegistry& registry, const RoomServerArgs& args) {
         // A piped stdout (a container, a test) is block-buffered by default: the platform would see the log in chunks or at exit.
-        // Line buffering fixes that on POSIX (the hosted server runs on Linux); the Windows CRT treats _IOLBF as full buffering, so there the log still comes in chunks
+        // Line buffering fixes that on POSIX; the Windows CRT treats _IOLBF as full buffering, which is why the loop below also flushes
         std::setvbuf(stdout, nullptr, _IOLBF, kStdoutBufferBytes);
 
         auto console = New<ConsoleSink>();
@@ -64,6 +64,7 @@ namespace BECore {
 
         while (!g_stopRequested.load()) {
             LogEvent::Flush();
+            std::fflush(stdout);
             std::this_thread::sleep_for(kLogFlushInterval);
         }
 
