@@ -29,11 +29,14 @@ A **set** is one preset applied to a list of subjects: one **job** per subject, 
 ```
 {"manifest": 1, "set", "created", "kind" ("image"|"audio"), "preset", "presetData" (a draft's content, else null),
  "count", "seed" (the first seed of every job), "processing" (an image set: null | {"settings", "frame"}),
+ "reference" (null | {"mode", "image", "weight"?}),
  "jobs": [{"name", "subject", "state", "error", "variants": [{"seed", "file", "provenance", "kind"}],
            "pick": seed|null, "accepted": null | {"as", "date", "kept"}, "more": null | {"seed", "count" (1..16)}}]}
 ```
 
 `processing` is the frame of an image set (`ArtGenSetProcessing`), null until the first Accept all ("Accept all"); a manifest without the key reads as null.
+
+`reference` is the picture every job's run starts from or is drawn in the style of (`Reference/CLAUDE.md`), set at `artgen_enqueue` and never changed. It is an additive key like `processing`, so the format stays 1: an older manifest reads as none, an older editor ignores it. A malformed one is an error that names `reference` and its key.
 
 A job with `accepted` and not `kept` is **live**: the game holds its pick and the other variants are alternatives to switch to. `kept` is written always; a manifest from before it existed has `accepted` without the key and reads as **kept**, so nothing becomes live by itself. `KeepJob` fixes a live job (`kept`, the date, the variants cut to the pick; the files stay on disk).
 
@@ -51,7 +54,7 @@ A job with `accepted` and not `kept` is **live**: the game holds its pick and th
 
 The session (`ArtGenSessionSets.cpp`) runs the sets through the one run it already has; the service's poll gets the usual `request` with `outDir` and `name`.
 
-- **One job at a time, first in first out.** `PumpSets` starts the first `Pending` job of the first set in the queue (`_setQueue`: sets in the order they were enqueued or retried; a retried set with nothing waiting goes behind the others) as an ordinary `_run` (`outDir` `<set>/<job>`, `name` the job's name, the set's preset, count and shared seed; a job with `more` its `more`'s count and seed). It runs from the poll (before the hand-over) and from the end of a run, never from `EnqueueSet`: **no poll, no job**. It also waits for a run, a setup action or a service that is silent or whose generator is not `ready`: the jobs stay `Pending`.
+- **One job at a time, first in first out.** `PumpSets` starts the first `Pending` job of the first set in the queue (`_setQueue`: sets in the order they were enqueued or retried; a retried set with nothing waiting goes behind the others) as an ordinary `_run` (`outDir` `<set>/<job>`, `name` the job's name, the set's preset, count, shared seed and `reference`, so Retry and More run with it too; a job with `more` its `more`'s count and seed). A set queued while the panel's slot holds a picture gets it only when the panel passes it. It runs from the poll (before the hand-over) and from the end of a run, never from `EnqueueSet`: **no poll, no job**. It also waits for a run, a setup action or a service that is silent or whose generator is not `ready`: the jobs stay `Pending`.
 - `IsBusy()` is true while a run is in work or any set is active: `Request`, `RequestSetup` and `artgen_generate` refuse meanwhile, `EnqueueSet` does not.
 - **A run ends a job** (`EndSetJob`): `Done`, `Failed` (the service's reason) or `Cancelled`, the manifest is written and the next job is pumped. A report of an older run is stale and touches no job. `artgen_image` appends the variant to the job (a seed seen again replaces) and writes the manifest.
 - **Cancel.** A `Pending` job is cancelled at once; the running job through `Cancel` (`ArtGen/CLAUDE.md`, "The contract"); cancelling a set cancels its pending jobs first and then the running one, so the line moves on to the next set. **Disconnect** ends only the running job (`Cancelled`, "the service was stopped"); the others stay `Pending` and go when a service polls again.

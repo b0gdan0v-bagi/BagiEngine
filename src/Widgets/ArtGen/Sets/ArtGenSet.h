@@ -4,6 +4,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <Widgets/ArtGen/ArtGenImage.h>
+#include <Widgets/ArtGen/Reference/ArtGenReference.h>
 #include <chrono>
 #include <cstdint>
 #include <expected>
@@ -85,6 +86,7 @@ namespace BECore {
         int64_t seed = 0;  // the first seed of every job
         Vector<ArtGenSetJob> jobs;
         Optional<ArtGenSetProcessing> processing;  // an image set: none until the first Accept all (or for good, see IsLegacyAccepted)
+        Optional<ArtGenReference> reference;       // the picture every job's run is given (a style source); none: the preset's own `reference` applies
     };
 
     /// The set name or job name from a subject: "White Knight!" -> "white_knight". Lowercase letters and digits, one `_` between words,

@@ -97,7 +97,7 @@ namespace BECore {
         String error;
         Vector<ArtGenVariant> variants;
         int32_t keptVariants = 0;             // the variants of the last run it started with (Request with keepVariants)
-        Optional<ArtGenReference> reference;  // the picture the run starts from, sent in the request; a job of a set has none
+        Optional<ArtGenReference> reference;  // the picture the run starts from, sent in the request; a job of a set has its set's
         bool cancelRequested = false;
     };
 
@@ -107,9 +107,10 @@ namespace BECore {
         Json presetData;  // a draft sent inline; null: the preset by name
         Vector<ArtGenSubject> subjects;
         int32_t count = kArtGenSetDefaultCount;
-        Optional<int64_t> seed;  // the first seed of every job; none: one is drawn and recorded, so the style of the set matches
-        String name;             // the set's folder name; empty: DefaultArtGenSetName
-        String frameOf;          // an image set whose frame this set takes over (a replacement of one of its rows); empty: its own frame
+        Optional<int64_t> seed;               // the first seed of every job; none: one is drawn and recorded, so the style of the set matches
+        String name;                          // the set's folder name; empty: DefaultArtGenSetName
+        String frameOf;                       // an image set whose frame this set takes over (a replacement of one of its rows); empty: its own frame
+        Optional<ArtGenReference> reference;  // the picture every job starts from (the set keeps it); none: the preset's own `reference`
     };
 
     /// What an edit of a set found: the set (or job) unknown, a pick of a seed the job has not, or a switch of a live row whose write failed

@@ -2079,6 +2079,112 @@ namespace BECore::Tests {
         EXPECT_FALSE(session.FindSet("sounds")->processing.has_value());
     }
 
+    namespace {
+
+        constexpr StringView kStyleSource = "assets/artgen/white_knight.png";
+
+        Json StyleReferenceJson() {
+            return Json{{"mode", "style"}, {"image", ToStdString(kStyleSource)}, {"weight", 0.7}};
+        }
+
+    }  // namespace
+
+    TEST_F(ArtGenSetSessionTest, AReferenceOfAnEnqueuedSetGoesOutWithEveryJobAndIsKeptInTheSet) {
+        Json params = Json::object();
+        params["preset"] = "wood";
+        params["subjects"] = "a\nb";
+        params["set"] = "styled";
+        params["seed"] = kSetSeed;
+        params["reference"] = StyleReferenceJson();
+        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", params)), "");
+
+        const Json first = Poll();
+        const Json* sent = RequestOf(first);
+        ASSERT_NE(sent, nullptr);
+        EXPECT_EQ(*FindJsonMember(*sent, "reference"), StyleReferenceJson());
+        EXPECT_EQ(*FindJsonMember(*FindJsonMember(Result(Call("artgen_state")), "run"), "reference"), StyleReferenceJson()) << "the run in work shows it";
+        Finish(*sent, "ok");
+        const Json second = Poll();
+        ASSERT_NE(RequestOf(second), nullptr);
+        EXPECT_EQ(*FindJsonMember(*RequestOf(second), "reference"), StyleReferenceJson()) << "every job, not only the first";
+        Finish(*RequestOf(second), "ok");
+
+        const Json state = Result(Call("artgen_state"));
+        EXPECT_EQ(*FindJsonMember((*FindJsonMember(state, "sets"))[0], "reference"), StyleReferenceJson());
+        Json setParams = Json::object();
+        setParams["set"] = "styled";
+        EXPECT_EQ(*FindJsonMember(Result(Call("artgen_set", setParams)), "reference"), StyleReferenceJson());
+        ASSERT_TRUE(OnDisk("styled").reference.has_value());
+        EXPECT_EQ(OnDisk("styled").reference->image, String(kStyleSource));
+
+        ReloadFromDisk();
+        ASSERT_TRUE(session.FindSet("styled")->reference.has_value()) << "a reload of the sets keeps it";
+        EXPECT_EQ(session.FindSet("styled")->reference->mode, "style");
+        EXPECT_EQ(session.FindSet("styled")->reference->weight, Optional<double>(0.7));
+    }
+
+    TEST_F(ArtGenSetSessionTest, RetryAndMoreVariantsRunWithTheReferenceOfTheSet) {
+        ArtGenSetRequest request;
+        request.preset = "wood";
+        request.subjects = ParseArtGenSubjects("a\nb").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "styled";
+        request.reference = ArtGenReference{"style", String(kStyleSource), {}};
+        ASSERT_TRUE(session.EnqueueSet(std::move(request)).has_value());
+
+        const Json first = Poll();
+        Finish(*RequestOf(first), "failed", "the generator fell over");
+        const Json second = Poll();
+        Finish(*RequestOf(second), "ok");
+        ASSERT_EQ(session.RetryJobs("styled", {}), ArtGenSetEdit::Ok);
+        const Json retried = Poll();
+        const Json* retriedRequest = RequestOf(retried);
+        ASSERT_NE(retriedRequest, nullptr);
+        EXPECT_EQ(GetJsonString(*retriedRequest, "name"), Optional<String>("a"));
+        const Json* retriedReference = FindJsonMember(*retriedRequest, "reference");
+        ASSERT_NE(retriedReference, nullptr) << "a Retry runs with the set's reference";
+        EXPECT_EQ(GetJsonString(*retriedReference, "image"), Optional<String>(String(kStyleSource)));
+        EXPECT_EQ(FindJsonMember(*retriedReference, "weight"), nullptr) << "no weight: the mode's default, as the set was made";
+        Finish(*retriedRequest, "ok");
+
+        ASSERT_EQ(ErrorCode(MoreCall("styled")), "");
+        const Json more = Poll();
+        const Json* moreRequest = RequestOf(more);
+        ASSERT_NE(moreRequest, nullptr);
+        EXPECT_NE(GetJsonInt(*moreRequest, "seed"), Optional<int64_t>(kSetSeed)) << "this is the more-run";
+        EXPECT_EQ(GetJsonString(*FindJsonMember(*moreRequest, "reference"), "mode"), Optional<String>("style"));
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASetWithNoReferenceSendsNoneAndTheSlotIsNotTakenForOne) {
+        session.SetReferenceSlot(ArtGenReference{"init", String(kStyleSource), {}});
+        ASSERT_TRUE(Enqueue("plain", "a").has_value());
+        EXPECT_FALSE(session.FindSet("plain")->reference.has_value()) << "only the panel passes the slot";
+        const Json first = Poll();
+        ASSERT_NE(RequestOf(first), nullptr);
+        EXPECT_EQ(FindJsonMember(*RequestOf(first), "reference"), nullptr);
+        EXPECT_TRUE(FindJsonMember((*FindJsonMember(Result(Call("artgen_state")), "sets"))[0], "reference")->is_null());
+        const Json manifest = ParseJson(ReadTextFile(ManifestPath(_root, "plain")).value()).value();
+        EXPECT_TRUE(FindJsonMember(manifest, "reference")->is_null());
+    }
+
+    TEST_F(ArtGenSetSessionTest, ABadReferenceOfEnqueueIsInvalidParamsThatNamesTheKey) {
+        Json good = Json::object();
+        good["preset"] = "wood";
+        good["subjects"] = "a";
+        const Json bad = Json::array({Json("yes"), Json{{"image", "a.png"}}, Json{{"mode", "style"}}, Json{{"mode", "style"}, {"image", "a.png"}, {"weight", "x"}}});
+        for (const Json& reference : bad) {
+            Json params = good;
+            params["reference"] = reference;
+            const Json response = Call("artgen_enqueue", params);
+            EXPECT_EQ(ErrorCode(response), "invalid_params") << DumpJson(reference).c_str();
+            EXPECT_TRUE(ErrorMessage(response).find("'reference") != String::npos) << ErrorMessage(response);
+        }
+        EXPECT_TRUE(session.GetSets().empty()) << "a refusal keeps nothing";
+        good["reference"] = nullptr;
+        EXPECT_EQ(ErrorCode(Call("artgen_enqueue", good)), "") << "a null reference is none";
+    }
+
     TEST_F(ArtGenSetSessionTest, MoreQueuesEveryDoneRowOnTheGivenSeedAndTheRunAppendsToTheVariants) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a\nb"));
         constexpr int64_t kMoreSeed = 5000;

@@ -1,12 +1,10 @@
 #include <BECore/Control/Json.h>
-#include <BECore/Format/Format.h>
 #include <Common/Printers.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <chrono>
 #include <cstdio>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -154,6 +152,57 @@ namespace BECore::Tests {
             json["processing"] = Manifest(item.processing);
             const String error = ErrorOf(ArtGenSetFromJson(json));
             EXPECT_TRUE(Contains(error, item.where)) << item.processing << " -> " << error;
+        }
+    }
+
+    TEST(ArtGenSetTest, AReferenceRoundTripsWithAndWithoutAWeight) {
+        ArtGenSet set = MakeSet();
+        EXPECT_TRUE(FindJsonMember(ArtGenSetToJson(set), "reference")->is_null()) << "no reference: the key is there, null";
+
+        for (const Optional<double> weight : {Optional<double>(), Optional<double>(0.6)}) {
+            set.reference = ArtGenReference{"style", "assets/artgen/white_knight.png", weight};
+            const Json json = ArtGenSetToJson(set);
+            EXPECT_EQ(GetJsonString(*FindJsonMember(json, "reference"), "mode"), Optional<String>("style"));
+            EXPECT_EQ(FindJsonMember(*FindJsonMember(json, "reference"), "weight") != nullptr, weight.has_value());
+            const auto back = ArtGenSetFromJson(json);
+            ASSERT_TRUE(back.has_value()) << back.error();
+            EXPECT_EQ(back->reference, set.reference);
+            EXPECT_EQ(ArtGenSetToJson(*back), json);
+        }
+    }
+
+    TEST(ArtGenSetTest, AManifestWithoutAReferenceOrWithANullOneReadsAsNone) {
+        Json json = ArtGenSetToJson(MakeSet());
+        json.erase("reference");
+        const auto without = ArtGenSetFromJson(json);
+        ASSERT_TRUE(without.has_value()) << without.error();
+        EXPECT_FALSE(without->reference.has_value());
+        EXPECT_EQ(kArtGenManifestFormat, 1) << "an additive key: the format number stays";
+
+        const auto minimal = ArtGenSetFromJson(Manifest(kMinimalManifest));
+        ASSERT_TRUE(minimal.has_value()) << minimal.error();
+        EXPECT_FALSE(minimal->reference.has_value());
+        EXPECT_TRUE(FindJsonMember(ArtGenSetToJson(*minimal), "reference")->is_null()) << "rewritten as none, nothing invented";
+
+        json["reference"] = Json(nullptr);
+        const auto nulled = ArtGenSetFromJson(json);
+        ASSERT_TRUE(nulled.has_value()) << nulled.error();
+        EXPECT_FALSE(nulled->reference.has_value());
+    }
+
+    TEST(ArtGenSetTest, AReferenceOfTheWrongShapeIsAnErrorThatNamesItsKey) {
+        struct Case {
+            const char* reference;
+            const char* where;
+        };
+        const Array<Case, 5> cases{Case{R"("yes")", "'reference'"}, Case{R"({"image":"a.png"})", "'reference.mode'"}, Case{R"({"mode":"init"})", "'reference.image'"},
+                                   Case{R"({"mode":"style","image":""})", "'reference.image'"}, Case{R"({"mode":"style","image":"a.png","weight":"x"})", "'reference.weight'"}};
+        for (const Case& item : cases) {
+            Json json = ArtGenSetToJson(MakeSet());
+            json["reference"] = Manifest(item.reference);
+            const String error = ErrorOf(ArtGenSetFromJson(json));
+            EXPECT_TRUE(Contains(error, "manifest: ")) << error;
+            EXPECT_TRUE(Contains(error, item.where)) << item.reference << " -> " << error;
         }
     }
 
