@@ -44,6 +44,15 @@ namespace BECore::Tests {
         EXPECT_EQ(verdict.tip, "Checks passed");
     }
 
+    TEST(ArtGenVerdictTest, ARecordOfAReferenceRunHasTheVerdictOfItsChecks) {
+        const ArtGenVerdict style =
+            VerdictOf(R"({"seed":6,"reference":{"mode":"style","image":"a.png","hash":"h","weight":0.8,"workflow":"sdxl_ipadapter_cutout"},"checks":{"passed":false,"failed":["edge"]}})");
+        EXPECT_EQ(style.kind, ArtGenVerdictKind::Failed);
+        EXPECT_TRUE(Contains(style.tip, "touches the edge"));
+        const ArtGenVerdict init = VerdictOf(R"({"seed":6,"reference":{"mode":"init","image":"a.png"},"checks":{"passed":true,"failed":[]}})");
+        EXPECT_EQ(init.kind, ArtGenVerdictKind::Passed);
+    }
+
     TEST(ArtGenVerdictTest, FailedNamesBothChecksWithTheirMeaning) {
         const ArtGenVerdict verdict = VerdictOf(R"({"checks":{"passed":false,"failed":["edge","halo"]}})");
         EXPECT_EQ(verdict.kind, ArtGenVerdictKind::Failed);

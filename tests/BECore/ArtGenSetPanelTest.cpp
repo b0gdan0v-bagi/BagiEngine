@@ -575,6 +575,30 @@ namespace BECore::Tests {
         EXPECT_EQ(panel.VerdictOf(kQueen + 5, 5), nullptr) << "no such row";
     }
 
+    TEST_F(ArtGenSetPanelTest, ASetWithAStyleReferenceShowsTheVerdictOfItsVariantsLikeAnyOther) {
+        ArtGenSet set = MakeVerdictSet();
+        set.reference = ArtGenReference{"style", "assets/artgen/white_knight.png", Optional<double>(0.8)};
+        // What the service writes for a style run: the reference block beside the checks
+        constexpr StringView kStyleFailed =
+            R"({"seed":6,"reference":{"mode":"style","image":"assets/artgen/white_knight.png","weight":0.8,"workflow":"sdxl_ipadapter_cutout"},"checks":{"passed":false,"failed":["edge"]}})";
+        constexpr StringView kStylePassed =
+            R"({"seed":5,"reference":{"mode":"style","image":"assets/artgen/white_knight.png","weight":0.8,"workflow":"sdxl_ipadapter_cutout"},"checks":{"passed":true,"failed":[]}})";
+        ASSERT_NO_FATAL_FAILURE(LoadSets({set}));
+        ASSERT_NO_FATAL_FAILURE(WriteProvenance(VariantFolder("king") / "king_5.artgen.json", kStylePassed));
+        ASSERT_NO_FATAL_FAILURE(WriteProvenance(VariantFolder("king") / "king_6.artgen.json", kStyleFailed));
+        panel.DropThumbnails();
+        Frame();
+
+        ASSERT_TRUE(session.GetSets()[0].reference.has_value());
+        ASSERT_NE(panel.VerdictOf(0, 5), nullptr);
+        EXPECT_EQ(panel.VerdictOf(0, 5)->kind, ArtGenVerdictKind::Passed);
+        ASSERT_NE(panel.VerdictOf(0, 6), nullptr);
+        EXPECT_EQ(panel.VerdictOf(0, 6)->kind, ArtGenVerdictKind::Failed);
+        constexpr int32_t kFailedVariant = 1;
+        ASSERT_NO_FATAL_FAILURE(HoverMarkOf(0, kFailedVariant));
+        EXPECT_TRUE(IsTooltipShown()) << "the mark of a style run's variant is drawn and has its tooltip";
+    }
+
     TEST_F(ArtGenSetPanelTest, TheProvenanceFileIsReadWhenTheThumbnailLoadsAndNotAgain) {
         ASSERT_NO_FATAL_FAILURE(LoadSets({MakeVerdictSet()}));
         ASSERT_EQ(panel.VerdictOf(0, 5)->kind, ArtGenVerdictKind::Passed);

@@ -1267,3 +1267,34 @@ def test_cli_generate_refuses_a_bad_flag_like_any_request_error(game, tmp_path, 
             assert artgen.main(argv) == artgen.EXIT_FAILED
             assert message in capsys.readouterr().err
     assert generator.graphs == [] and not (tmp_path / "o").exists()
+
+
+# --- a run with a reference gets the checks and the extra images like any other
+
+@pytest.mark.parametrize("reference", [REFERENCE, STYLE], ids=["init", "style"])
+def test_a_reference_run_gets_the_verdicts_and_the_extra_images_of_its_request(game, picture, tmp_path, reference):
+    generator = CutOutGenerator()
+    events = []
+    request = artgen_service.Request(preset_of(game), "pawn", 2, 11, tmp_path, reference=reference, game_root=game, min_pass=2, extra=3)
+    results = artgen_service.generate(request, generator, events.append)
+    assert seeds_of(results) == [11, 12, 13, 14], "11 and 13 are cut, 12 and 14 pass"
+    assert [r.extra for r in results] == [False, False, True, True]
+    assert [r.provenance["checks"]["passed"] for r in results] == [False, True, False, True]
+    assert {r.provenance["reference"]["mode"] for r in results} == {reference["mode"]}
+    assert [e["checks"]["passed"] for e in events if e["kind"] == "image"] == [False, True, False, True]
+    assert len(generator.uploads) == 1, "the extra images reuse the one upload"
+
+
+def test_a_style_run_of_a_cut_out_workflow_is_checked_and_regenerated_by_the_preset(game, picture, tmp_path):
+    write_preset(game, "cut", {**PRESET, "workflow": "sdxl_cutout", "regenerate": {"extra": 3, "minPass": 2}})
+    results = artgen_service.generate(reference_request(game, tmp_path, STYLE, preset="cut"), CutOutGenerator())
+    assert seeds_of(results) == [40, 41, 42], "41 is cut, so the preset's regenerate adds 42, which passes"
+    assert {r.provenance["workflow"] for r in results} == {"sdxl_ipadapter_cutout"}
+    assert [r.provenance["checks"]["passed"] for r in results] == [True, False, True]
+    assert results[0].provenance["checks"]["thresholds"] == artgen_checks.DEFAULTS
+
+
+def test_a_style_run_that_cannot_pass_ends_ok_after_the_extra_limit(game, picture, tmp_path):
+    request = artgen_service.Request(preset_of(game), "pawn", 1, 20, tmp_path, reference=STYLE, game_root=game, min_pass=1, extra=2)
+    results = artgen_service.generate(request, AlwaysCut())
+    assert seeds_of(results) == [20, 21, 22] and artgen_service.count_passing(results) == 0

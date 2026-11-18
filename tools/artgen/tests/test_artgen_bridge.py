@@ -549,3 +549,20 @@ def test_a_sound_reaches_the_editor_as_audio(game):
     assert editor.run["state"] == "Done", editor.run["error"]
     variant = editor.run["variants"][0]
     assert variant["kind"] == "audio" and variant["path"].endswith("pawn_2.flac")
+
+
+def test_a_style_request_with_min_pass_and_extra_writes_the_verdicts_the_editor_reads(game):
+    (game / "assets").mkdir()
+    (game / "assets" / "rook.png").write_bytes(tiny_png(4, 4, (9, 9, 200)))
+    editor = FakeEditor(game)
+    generator = CutOutGenerator()
+    bridge = artgen_bridge.Bridge(editor, generator, log=lambda *a: None)
+    bridge.tick()
+    editor.request("wood", "knight", count=2, seed=5, minPass=2, extra=3, reference={"mode": "style", "image": "assets/rook.png"})
+    run_until(bridge, editor, lambda: editor.run["state"] not in ("Queued", "Running"))
+    assert editor.run["state"] == "Done", editor.run["error"]
+    assert [v["seed"] for v in editor.run["variants"]] == [5, 6, 7, 8], "5 and 7 are cut, 6 and 8 pass"
+    provenances = [json.loads(Path(v["provenance"]).read_text(encoding="utf-8")) for v in editor.run["variants"]]
+    assert [p["checks"]["passed"] for p in provenances] == [False, True, False, True], "the editor reads the verdict from these files"
+    assert {p["reference"]["mode"] for p in provenances} == {"style"}
+    assert len(generator.uploads) == 1
