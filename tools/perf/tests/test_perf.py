@@ -178,3 +178,98 @@ def test_a_whole_run_compares_with_a_local_baseline_and_exits_3_on_a_regression(
     report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
     assert report["report"]["fake"]["metrics"]["ms"]["deltaPercent"] == pytest.approx(20.0)
     assert run("--only", "missing").returncode == 1
+
+
+FAKE_TODO = """
+import os, sys
+args = sys.argv[1:]
+with open(os.environ["FAKE_TODO_LOG"], "a", encoding="utf-8") as log:
+    log.write(" ".join(args) + "\\n")
+if "ping" in args:
+    print("ok: http://store, areas " + os.environ["FAKE_TODO_AREAS"] + ", live updates on")
+elif "get" in args:
+    sys.exit(2)
+elif "put" in args:
+    sys.stdin.read()
+    error = os.environ.get("FAKE_TODO_PUT_ERROR")
+    if error:
+        print(error, file=sys.stderr)
+        sys.exit(1)
+    print("written")
+"""
+
+
+@pytest.fixture
+def fake_store(tmp_path, monkeypatch):
+    script = tmp_path / "fake_todo.py"
+    script.write_text(FAKE_TODO, encoding="utf-8")
+    log = tmp_path / "todo.log"
+    log.write_text("", encoding="utf-8")
+    monkeypatch.setattr(perf_baseline, "TODO_CLI", script)
+    monkeypatch.setenv("FAKE_TODO_LOG", str(log))
+    monkeypatch.setenv("FAKE_TODO_AREAS", "engine, inbox, owner")
+    monkeypatch.delenv("FAKE_TODO_PUT_ERROR", raising=False)
+    return log
+
+
+def run_update(tmp_path, monkeypatch, *extra: str) -> tuple[int, Path]:
+    """A whole `--update-baseline` run of area `engine`; the marker file exists once the benchmark has been measured."""
+    marker = tmp_path / "measured.txt"
+    bench_set = {
+        "area": "engine",
+        "preset": "none",
+        "repetitions": 2,
+        "benchmarks": [
+            {
+                "name": "fake",
+                "warmup": 0,
+                "command": ["{python}", "-c", f"open({str(marker)!r}, 'a').close(); print('{{\"ms\": 5}}')"],
+                "metrics": {"ms": {"source": "json", "key": "ms", "unit": "ms", "better": "lower"}},
+            }
+        ],
+    }
+    rules = write_rules(tmp_path / "perf-project.md", bench_set)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["perf.py", "--rules", str(rules), "--no-build", "--update-baseline", "--allow-dirty", *extra])
+    return perf.main(), marker
+
+
+def test_a_token_without_the_area_stops_before_measuring(tmp_path, monkeypatch, capsys, fake_store):
+    monkeypatch.setenv("FAKE_TODO_AREAS", "match3, inbox")
+    code, marker = run_update(tmp_path, monkeypatch)
+    err = capsys.readouterr().err
+    assert code == 1 and not marker.exists()
+    assert "not `engine`" in err and "--env-file" in err and "--baseline-file" in err
+    assert "put" not in fake_store.read_text(encoding="utf-8")
+
+
+def test_a_token_with_the_area_measures_and_writes(tmp_path, monkeypatch, capsys, fake_store):
+    code, marker = run_update(tmp_path, monkeypatch)
+    assert code == 0 and marker.exists()
+    assert "baseline: written" in capsys.readouterr().out
+
+
+def test_the_env_file_reaches_every_call_of_the_store(tmp_path, monkeypatch, fake_store):
+    code, _ = run_update(tmp_path, monkeypatch, "--env-file", "other.env")
+    calls = fake_store.read_text(encoding="utf-8").splitlines()
+    assert code == 0 and len(calls) == 3 and all(call.startswith("--env-file other.env ") for call in calls)
+
+
+def test_a_local_baseline_file_needs_no_area(tmp_path, monkeypatch, fake_store):
+    monkeypatch.setenv("FAKE_TODO_AREAS", "match3")
+    code, marker = run_update(tmp_path, monkeypatch, "--baseline-file", str(tmp_path / "local.md"))
+    assert code == 0 and marker.exists() and fake_store.read_text(encoding="utf-8") == ""
+
+
+@pytest.mark.parametrize("status", [403, 404])
+def test_a_refused_write_is_reported_as_a_missing_right(tmp_path, monkeypatch, capsys, fake_store, status):
+    monkeypatch.setenv("FAKE_TODO_PUT_ERROR", f"error: PUT /plans/x: HTTP {status}: no plan")
+    code, _ = run_update(tmp_path, monkeypatch)
+    assert code == 1 and "a missing right, not a missing plan" in capsys.readouterr().err
+
+
+def test_another_failure_of_the_write_stays_as_it_is(tmp_path, monkeypatch, capsys, fake_store):
+    monkeypatch.setenv("FAKE_TODO_PUT_ERROR", "error: the service does not answer")
+    code, _ = run_update(tmp_path, monkeypatch)
+    err = capsys.readouterr().err
+    assert code == 1 and "the service does not answer" in err and "missing right" not in err

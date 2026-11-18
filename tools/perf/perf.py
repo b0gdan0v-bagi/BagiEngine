@@ -1,6 +1,6 @@
 """The benchmark runner of the perf skill (`.claude/skills/perf/SKILL.md`). Standard library only.
 
-    python3 <engine>/tools/perf/perf.py [--fast] [--only NAME,...] [--repetitions N] [--no-build] [--update-baseline] [--json FILE]
+    python3 <engine>/tools/perf/perf.py [--fast] [--only NAME,...] [--repetitions N] [--no-build] [--update-baseline] [--env-file F] [--json FILE]
 
 Run from the root of a repository whose `.claude/rules/perf-project.md` holds the benchmark set (a fenced JSON block under
 "## Benchmark set"; the format is in `tools/perf/CLAUDE.md`). It builds the set's preset and targets, runs each benchmark N times after
@@ -215,6 +215,7 @@ def main() -> int:
     parser.add_argument("--no-build", action="store_true", help="use the executables as they are")
     parser.add_argument("--baseline-file", help="compare with this local baseline plan instead of the store's (offline, tests)")
     parser.add_argument("--update-baseline", action="store_true", help="append the results to the baseline in the store (the owner's word only)")
+    parser.add_argument("--env-file", help="the .env whose token reads and writes the baseline in the store (default: the checkout's)")
     parser.add_argument("--allow-dirty", action="store_true", help="let --update-baseline record a commit with uncommitted changes")
     parser.add_argument("--json", help="write the full report to this file")
     parser.add_argument("--list", action="store_true", help="print the benchmarks of the set and stop")
@@ -261,13 +262,15 @@ def main() -> int:
         commit = commit_of(root)
         if args.update_baseline and "dirty" in commit and not args.allow_dirty:
             raise PerfError(f"the tree has uncommitted changes ({commit}): a baseline names a commit (--allow-dirty to record it anyway)")
+        if args.update_baseline and not args.baseline_file:
+            perf_baseline.require_area(bench_set["area"], args.env_file)
         fingerprint = perf_baseline.machine_fingerprint()
         name = perf_baseline.baseline_name(bench_set["area"], perf_baseline.machine_slug(fingerprint))
         if args.baseline_file:
             path = Path(args.baseline_file)
             content = path.read_text(encoding="utf-8") if path.is_file() else None
         else:
-            content = perf_baseline.read_store(name)
+            content = perf_baseline.read_store(name, args.env_file)
         baseline = perf_baseline.latest_record(content) if content else None
 
         if not args.no_build:
@@ -296,7 +299,7 @@ def main() -> int:
                 Path(args.baseline_file).write_text(updated, encoding="utf-8")
                 print(f"baseline written to {args.baseline_file}")
             else:
-                print(f"baseline: {perf_baseline.write_store(name, updated)}")
+                print(f"baseline: {perf_baseline.write_store(name, updated, args.env_file)}")
         regressed = [name for name, bench in report.items() if bench["verdict"] == perf_stats.REGRESSION]
         return EXIT_REGRESSION if regressed else 0
     except (PerfError, perf_baseline.StoreError, subprocess.CalledProcessError) as error:

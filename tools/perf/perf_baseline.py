@@ -18,6 +18,8 @@ RECORD_RE = re.compile(r"```json\n(.*?)\n```", re.DOTALL)
 TODO_CLI = Path(__file__).resolve().parents[1] / "todo" / "todo.py"
 PLAN_KIND = "owner"  # the store has no kind of its own for it; the name `perf-baseline-*.md` tells it apart
 EXIT_STORE_REFUSED = 2  # todo.py: the store refused (404 for a plan that does not exist)
+AREAS_RE = re.compile(r"\bareas (.*?), live updates\b")
+NO_RIGHT_RE = re.compile(r"\bHTTP (?:403|404)\b")  # the store answers 404 to a token that may not see the plan
 
 
 def _run(command: list[str]) -> str:
@@ -91,9 +93,34 @@ class StoreError(Exception):
     pass
 
 
-def read_store(name: str) -> str | None:
+def _todo(env_file: str | None, *args: str) -> list[str]:
+    return [sys.executable, str(TODO_CLI), *(["--env-file", env_file] if env_file else []), *args]
+
+
+def token_areas(env_file: str | None = None) -> list[str]:
+    """The areas the checkout's token holds, as `todo.py ping` names them."""
+    done = subprocess.run(_todo(env_file, "ping"), capture_output=True, text=True)
+    if done.returncode != 0:
+        raise StoreError(f"todo.py ping: {done.stderr.strip() or done.stdout.strip()}")
+    match = AREAS_RE.search(done.stdout)
+    if not match:
+        raise StoreError(f"todo.py ping does not name the token's areas: {done.stdout.strip()}")
+    return [area.strip() for area in match.group(1).split(",")]
+
+
+def require_area(area: str, env_file: str | None = None) -> None:
+    """Stops before a measurement whose baseline this token could not write: the numbers of a run are never written later."""
+    areas = token_areas(env_file)
+    if area not in areas:
+        raise StoreError(
+            f"the token holds the areas {', '.join(areas)}, not `{area}`, so it cannot write this baseline: "
+            f"pass --env-file with a token that holds `{area}`, or --baseline-file for a local file"
+        )
+
+
+def read_store(name: str, env_file: str | None = None) -> str | None:
     """The text of the plan `name` in the todo store, None when it does not exist."""
-    done = subprocess.run([sys.executable, str(TODO_CLI), "plan", "get", name, "--stdout"], capture_output=True, text=True)
+    done = subprocess.run(_todo(env_file, "plan", "get", name, "--stdout"), capture_output=True, text=True)
     if done.returncode == EXIT_STORE_REFUSED:
         return None
     if done.returncode != 0:
@@ -101,13 +128,16 @@ def read_store(name: str) -> str | None:
     return done.stdout
 
 
-def write_store(name: str, content: str) -> str:
+def write_store(name: str, content: str, env_file: str | None = None) -> str:
     done = subprocess.run(
-        [sys.executable, str(TODO_CLI), "--actor", "perf", "plan", "put", name, "--file", "-", "--kind", PLAN_KIND],
+        _todo(env_file, "--actor", "perf", "plan", "put", name, "--file", "-", "--kind", PLAN_KIND),
         input=content,
         capture_output=True,
         text=True,
     )
     if done.returncode != 0:
-        raise StoreError(f"todo.py plan put {name}: {done.stderr.strip() or done.stdout.strip()}")
+        detail = done.stderr.strip() or done.stdout.strip()
+        if NO_RIGHT_RE.search(detail):
+            raise StoreError(f"the token has no right to write the baseline {name} (a missing right, not a missing plan): {detail}")
+        raise StoreError(f"todo.py plan put {name}: {detail}")
     return done.stdout.strip()
