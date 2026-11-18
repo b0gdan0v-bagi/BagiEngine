@@ -16,6 +16,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import artgen_checks
 import artgen_reference
 
 ENGINE_WORKFLOWS = Path(__file__).resolve().parent / "workflows"
@@ -37,6 +38,12 @@ KIND_IMAGE = "image"
 KIND_AUDIO = "audio"
 KINDS = (KIND_IMAGE, KIND_AUDIO)
 RESERVED_KEYS = (OUTPUT_INPUT, KIND_KEY, REFERENCE_KEY)
+# A preset's key: false, or the thresholds of artgen_checks.DEFAULTS to change
+CHECKS_KEY = "checks"
+# A preset's key: how many extra images the service may make when too few pass their checks (artgen_service.py), at most MAX_EXTRA
+REGENERATE_KEY = "regenerate"
+REGENERATE_NAMES = ("extra", "minPass")
+MAX_EXTRA = 16
 # The length of a sound in seconds: an input of an audio workflow, refused for an image
 DURATION_INPUT = "duration"
 # Inputs whose values are model files: they go into the provenance.
@@ -106,6 +113,8 @@ class Preset:
     data: dict = field(default_factory=dict)  # the preset as written, for the form and the provenance
     kind: str = KIND_IMAGE  # the workflow's: what the preset makes
     reference: dict | None = None  # the checked `reference` of the file (artgen_reference.parse_reference), None when it has none
+    checks: dict | None = None  # the thresholds of the cut-out checks (defaults merged with the file's), None when off or for a sound
+    regenerate: dict | None = None  # {"minPass": int | None, "extra": int} of the file, None when it has none
 
     @property
     def duration(self):
@@ -216,6 +225,22 @@ def content_hash(data):
     return hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
+def _parse_regenerate(value, label):
+    where = f"{label}: \"{REGENERATE_KEY}\""
+    if not isinstance(value, dict):
+        raise PresetError(f"{where} must be an object with \"extra\" and optionally \"minPass\"")
+    for name in value:
+        if name not in REGENERATE_NAMES:
+            raise PresetError(f"{where} has no key '{name}' (it has: {', '.join(REGENERATE_NAMES)})")
+    extra = value.get("extra")
+    if type(extra) is not int or not 1 <= extra <= MAX_EXTRA:
+        raise PresetError(f"{where}: \"extra\" is required and must be an integer from 1 to {MAX_EXTRA}")
+    min_pass = value.get("minPass")
+    if "minPass" in value and (type(min_pass) is not int or min_pass < 1):
+        raise PresetError(f"{where}: \"minPass\" must be an integer 1 or more")
+    return {"minPass": min_pass, "extra": extra}
+
+
 def parse_preset(data, name, game_root=None, label=None, path=None, source=SOURCE_GAME, file_hash=None):
     """Checks a preset's content (from a file or a draft of the editor) and makes the Preset. `label` names it in every error."""
     label = label or str(path or name)
@@ -256,6 +281,21 @@ def parse_preset(data, name, game_root=None, label=None, path=None, source=SOURC
             artgen_reference.effective_workflow(workflow, reference["mode"], game_root)
         except PresetError as error:
             raise PresetError(f"{label}: {error}") from error
+    checks = None
+    if kind == KIND_IMAGE and data.get(CHECKS_KEY) is not False:
+        try:
+            checks = artgen_checks.merge_thresholds(data.get(CHECKS_KEY, {}))
+        except ValueError as error:
+            raise PresetError(f"{label}: \"{CHECKS_KEY}\" {error}") from error
+    elif kind == KIND_AUDIO and CHECKS_KEY in data:
+        raise PresetError(f"{label}: a sound has no \"{CHECKS_KEY}\"")
+    regenerate = None
+    if REGENERATE_KEY in data:
+        if kind != KIND_IMAGE:
+            raise PresetError(f"{label}: a sound has no \"{REGENERATE_KEY}\" (it has no checks that could fail)")
+        if checks is None:
+            raise PresetError(f"{label}: \"{REGENERATE_KEY}\" needs the checks, and \"{CHECKS_KEY}\" is false")
+        regenerate = _parse_regenerate(data[REGENERATE_KEY], label)
     params = data.get("params", {})
     if not isinstance(params, dict):
         raise PresetError(f"{label}: \"params\" must be an object")
@@ -284,6 +324,8 @@ def parse_preset(data, name, game_root=None, label=None, path=None, source=SOURC
         data=data,
         kind=kind,
         reference=reference,
+        checks=checks,
+        regenerate=regenerate,
     )
 
 

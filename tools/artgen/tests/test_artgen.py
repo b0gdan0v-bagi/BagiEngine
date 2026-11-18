@@ -21,14 +21,16 @@ ARTGEN_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ARTGEN_DIR))
 
 import artgen  # noqa: E402
+import artgen_checks  # noqa: E402
 import artgen_generators  # noqa: E402
 import artgen_preset  # noqa: E402
 import artgen_reference  # noqa: E402
 import artgen_service  # noqa: E402
 import comfyui_check  # noqa: E402
 from artgen_generators import (  # noqa: E402
-    Cancelled, ComfyUIGenerator, FakeGenerator, GenerationError, GeneratorState, tiny_png,
+    Cancelled, ComfyUIGenerator, FakeGenerator, GenerationError, GeneratorState, Image, tiny_png,
 )
+from test_artgen_checks import disc, draw, png_of  # noqa: E402
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 PRESET = {
@@ -773,3 +775,449 @@ def test_the_fake_flac_is_a_real_stream():
     data = artgen_generators.tiny_flac(0.2)
     assert artgen_generators.flac_info(data) == (44100, 2, pytest.approx(0.2))
     assert artgen_generators.flac_info(b"RIFF....") is None
+
+
+# --- the checks of a cut-out
+
+CLEAN_CUTOUT = png_of(draw(200, disc(100, 100, 60)))
+CUT_BY_EDGE = png_of(draw(200, disc(100, 40, 60)))
+
+
+class CutOutGenerator(FakeGenerator):
+    """Answers with RGBA pictures in turn: a clean cut-out for an even seed, one cut by the frame's top edge for an odd one."""
+
+    def run(self, graph, on_progress=None, cancel=None, timeout_s=0):
+        super().run(graph, on_progress, cancel)
+        seed = next(n["inputs"]["seed"] for n in graph.values() if "seed" in n.get("inputs", {}))
+        return [Image(CLEAN_CUTOUT if seed % 2 == 0 else CUT_BY_EDGE, f"fake_{seed}.png")]
+
+
+def generate_cutouts(game, out, generator=None, preset="wood", count=2):
+    events = []
+    request = artgen_service.Request(preset_of(game, preset), "pawn", count, 10, out)
+    results = artgen_service.generate(request, generator or CutOutGenerator(), events.append)
+    return results, [e for e in events if e["kind"] == "image"]
+
+
+def test_a_preset_has_the_default_checks_none_or_the_thresholds_it_names(game):
+    assert preset_of(game).checks == artgen_checks.DEFAULTS
+    write_preset(game, "off", {**PRESET, "checks": False})
+    assert preset_of(game, "off").checks is None
+    write_preset(game, "own", {**PRESET, "checks": {"maxFill": 0.5, "cut": 100}})
+    own = preset_of(game, "own")
+    assert own.checks == {**artgen_checks.DEFAULTS, "maxFill": 0.5, "cut": 100}
+    assert own.data["checks"] == {"maxFill": 0.5, "cut": 100}, "the provenance names what the file says"
+    write_preset(game, "empty", {**PRESET, "checks": {}})
+    assert preset_of(game, "empty").checks == artgen_checks.DEFAULTS
+
+
+@pytest.mark.parametrize("checks, message", [
+    (True, "false or an object"),
+    (None, "false or an object"),
+    ([0.5], "false or an object"),
+    ({"maxFil": 0.5}, "no threshold 'maxFil'"),
+    ({"maxFill": "high"}, "'maxFill' must be a number from 0 to 1"),
+    ({"maxFill": True}, "'maxFill' must be a number from 0 to 1"),
+    ({"maxFill": 1.5}, "'maxFill' must be a number from 0 to 1"),
+    ({"maxOffset": -0.1}, "'maxOffset' must be a number from 0 to 1"),
+    ({"cut": 0}, "'cut' must be an integer from 1 to 255"),
+    ({"cut": 128.5}, "'cut' must be an integer from 1 to 255"),
+    ({"maxPieces": 0}, "'maxPieces' must be an integer 1 or more"),
+])
+def test_a_bad_checks_key_is_refused_naming_the_file(game, checks, message):
+    path = write_preset(game, "wood", {**PRESET, "checks": checks})
+    with pytest.raises(artgen_preset.PresetError, match=message) as error:
+        preset_of(game)
+    assert str(path) in str(error.value) and '"checks"' in str(error.value)
+
+
+def test_a_draft_with_bad_checks_is_named_by_its_form(game):
+    with pytest.raises(artgen_preset.PresetError, match="the draft of 'form'.*no threshold 'x'"):
+        artgen_preset.parse_preset({**PRESET, "checks": {"x": 1}}, "draft", game, label="the draft of 'form'")
+
+
+@pytest.mark.parametrize("checks", [False, {}])
+def test_a_sound_preset_has_no_checks(game, checks):
+    write_preset(game, "knock", {**AUDIO, "checks": checks})
+    with pytest.raises(artgen_preset.PresetError, match='a sound has no "checks"'):
+        preset_of(game, "knock")
+    write_preset(game, "knock", AUDIO)
+    assert preset_of(game, "knock").checks is None
+
+
+def test_the_verdict_of_each_variant_is_in_its_provenance_and_its_event(game, tmp_path):
+    results, events = generate_cutouts(game, tmp_path)
+    passing, failing = results
+    assert passing.provenance["checks"]["passed"] is True and passing.provenance["checks"]["failed"] == []
+    assert failing.provenance["checks"]["passed"] is False and failing.provenance["checks"]["failed"] == ["edge"]
+    assert failing.provenance["checks"]["thresholds"] == artgen_checks.DEFAULTS and "edgeRun" in failing.provenance["checks"]["metrics"]
+    assert json.loads(failing.provenance_path.read_text(encoding="utf-8"))["checks"] == failing.provenance["checks"]
+    assert [e["checks"] for e in events] == [{"passed": True, "failed": []}, {"passed": False, "failed": ["edge"]}]
+
+
+def test_the_thresholds_of_the_preset_decide_the_verdict(game, tmp_path):
+    write_preset(game, "loose", {**PRESET, "checks": {"maxEdgeRun": 0.9}})
+    results, _ = generate_cutouts(game, tmp_path, preset="loose")
+    assert [r.provenance["checks"]["passed"] for r in results] == [True, True]
+    assert results[1].provenance["checks"]["thresholds"]["maxEdgeRun"] == 0.9
+    assert results[1].provenance["presetData"]["checks"] == {"maxEdgeRun": 0.9}
+
+
+def test_no_checks_for_an_opaque_picture_for_checks_false_and_for_a_sound(game, tmp_path):
+    results, events = generate_cutouts(game, tmp_path / "a", FakeGenerator())
+    assert all("checks" not in r.provenance for r in results) and all("checks" not in e for e in events)
+    write_preset(game, "off", {**PRESET, "checks": False})
+    results, events = generate_cutouts(game, tmp_path / "b", preset="off")
+    assert all("checks" not in r.provenance for r in results) and all("checks" not in e for e in events)
+    write_preset(game, "knock", AUDIO)
+    results, events = generate_cutouts(game, tmp_path / "c", FakeGenerator(), preset="knock", count=1)
+    assert "checks" not in results[0].provenance and "checks" not in events[0]
+
+
+def test_a_picture_that_cannot_be_read_is_a_verdict_with_an_error_and_not_a_failed_run(game, tmp_path):
+    class Truncated(FakeGenerator):
+        def run(self, graph, on_progress=None, cancel=None, timeout_s=0):
+            return [Image(CLEAN_CUTOUT[:-40], "fake_1.png")]
+
+    results, events = generate_cutouts(game, tmp_path, Truncated(), count=1)
+    verdict = results[0].provenance["checks"]
+    assert verdict["passed"] is None and "truncated" in verdict["error"]
+    assert events[0]["checks"] == {"passed": None, "error": verdict["error"]}
+
+
+# --- the check command
+
+
+def test_cli_check_exit_codes_and_output(tmp_path, capsys):
+    clean, cut, opaque, broken = (tmp_path / name for name in ("clean.png", "cut.png", "opaque.png", "broken.png"))
+    clean.write_bytes(CLEAN_CUTOUT)
+    cut.write_bytes(CUT_BY_EDGE)
+    opaque.write_bytes(tiny_png(8, 8, (1, 2, 3)))
+    broken.write_bytes(CLEAN_CUTOUT[:-40])
+    assert artgen.main(["check", str(clean), str(opaque)]) == artgen.EXIT_OK
+    assert capsys.readouterr().out.splitlines() == [f"{clean}: passed", f"{opaque}: not applicable (no alpha channel)"]
+    assert artgen.main(["check", str(clean), str(cut)]) == artgen.EXIT_FAILED
+    assert capsys.readouterr().out.splitlines()[-1] == f"{cut}: FAILED edge"
+    assert artgen.main(["check", str(broken)]) == artgen.EXIT_FAILED
+    assert "cannot be read" in capsys.readouterr().out
+
+
+def test_cli_check_json_and_the_thresholds_of_a_preset(game, tmp_path, capsys):
+    cut = tmp_path / "cut.png"
+    cut.write_bytes(CUT_BY_EDGE)
+    write_preset(game, "loose", {**PRESET, "checks": {"maxEdgeRun": 0.9}})
+    assert artgen.main(["check", str(cut), "--preset", "loose", "--game-root", str(game), "--json"]) == artgen.EXIT_OK
+    report = json.loads(capsys.readouterr().out)
+    assert report[0]["path"] == str(cut) and report[0]["checks"]["passed"] is True
+    assert report[0]["checks"]["thresholds"]["maxEdgeRun"] == 0.9
+    write_preset(game, "off", {**PRESET, "checks": False})
+    assert artgen.main(["check", str(cut), "--preset", "off", "--game-root", str(game)]) == artgen.EXIT_FAILED, "off in the preset: the defaults"
+
+
+def test_cli_check_bad_arguments_exit_2(game, tmp_path, capsys):
+    assert artgen.main(["check", str(tmp_path / "nope.png")]) == 2
+    assert "nope.png" in capsys.readouterr().err
+    cut = tmp_path / "cut.png"
+    cut.write_bytes(CUT_BY_EDGE)
+    assert artgen.main(["check", str(cut), "--preset", "missing", "--game-root", str(game)]) == 2
+    assert "no preset 'missing'" in capsys.readouterr().err
+    with pytest.raises(SystemExit) as exit_info:
+        artgen.main(["check"])
+    assert exit_info.value.code == 2
+
+
+# --- the extra images of a run that fails its checks
+
+
+class AlwaysCut(CutOutGenerator):
+    """Every picture is cut by the frame's edge: no seed can pass."""
+
+    def run(self, graph, on_progress=None, cancel=None, timeout_s=0):
+        FakeGenerator.run(self, graph, on_progress, cancel)
+        return [Image(CUT_BY_EDGE, "fake.png")]
+
+
+class FirstCut(CutOutGenerator):
+    """Only the first picture is cut; the rest are clean whatever the seed."""
+
+    def run(self, graph, on_progress=None, cancel=None, timeout_s=0):
+        first = not self.graphs
+        FakeGenerator.run(self, graph, on_progress, cancel)
+        return [Image(CUT_BY_EDGE if first else CLEAN_CUTOUT, "fake.png")]
+
+
+def regenerate_cutouts(game, out, generator, count=2, seed=11, preset="wood", **keys):
+    events = []
+    request = artgen_service.Request(preset_of(game, preset), "pawn", count, seed, out, **keys)
+    results = artgen_service.generate(request, generator, events.append)
+    return results, events
+
+
+def seeds_of(results):
+    return [r.seed for r in results]
+
+
+def test_nothing_extra_when_enough_pass_or_nothing_is_asked(game, tmp_path):
+    generator = CutOutGenerator()
+    results, events = regenerate_cutouts(game, tmp_path / "a", generator, count=2, seed=10, min_pass=1, extra=3)
+    assert seeds_of(results) == [10, 11] and len(generator.graphs) == 2, "seed 10 passes, so one is enough"
+    assert not any(r.extra for r in results) and all("extra" not in e for e in events)
+    generator = CutOutGenerator()
+    results, _ = regenerate_cutouts(game, tmp_path / "b", generator, count=2, seed=10, min_pass=2, extra=0)
+    assert seeds_of(results) == [10, 11] and len(generator.graphs) == 2, "extra 0 is off"
+    generator = CutOutGenerator()
+    results, _ = regenerate_cutouts(game, tmp_path / "c", generator, count=2, seed=10)
+    assert seeds_of(results) == [10, 11] and len(generator.graphs) == 2, "a preset that says nothing behaves as before"
+
+
+def test_extra_images_go_on_the_next_seeds_until_enough_pass(game, tmp_path):
+    results, events = regenerate_cutouts(game, tmp_path, CutOutGenerator(), count=2, seed=11, min_pass=2, extra=3)
+    assert seeds_of(results) == [11, 12, 13, 14]
+    assert [r.extra for r in results] == [False, False, True, True]
+    assert [r.provenance["checks"]["passed"] for r in results] == [False, True, False, True]
+    marked = [(e["kind"], e["image"], e["count"], e.get("extra")) for e in events if e["seed"] in (13, 14)]
+    assert marked == [("step", 2, 3, True)] * 3 + [("image", 2, 3, True)] + [("step", 3, 4, True)] * 3 + [("image", 3, 4, True)]
+    assert all("extra" not in e and e["count"] == 2 for e in events if e["seed"] in (11, 12))
+    assert sorted(p.name for p in tmp_path.glob("*.png")) == [f"pawn_{seed}.png" for seed in (11, 12, 13, 14)]
+
+
+def test_a_run_that_cannot_pass_ends_ok_after_exactly_the_extra_limit(game, tmp_path):
+    generator = AlwaysCut()
+    results, events = regenerate_cutouts(game, tmp_path, generator, count=2, seed=20, min_pass=1, extra=3)
+    assert seeds_of(results) == [20, 21, 22, 23, 24] and len(generator.graphs) == 5
+    assert [r.extra for r in results] == [False, False, True, True, True]
+    assert artgen_service.count_passing(results) == 0
+    assert [e["count"] for e in events if e["kind"] == "image"] == [2, 2, 3, 4, 5]
+
+
+def test_the_first_extra_that_passes_ends_the_run(game, tmp_path):
+    generator = FirstCut()
+    results, _ = regenerate_cutouts(game, tmp_path, generator, count=2, seed=20, min_pass=2, extra=5)
+    assert [(r.seed, r.extra) for r in results] == [(20, False), (21, False), (22, True)], "20 is cut, 21 passes, the extra 22 makes two"
+    assert len(generator.graphs) == 3
+
+
+def test_a_picture_without_alpha_or_unreadable_never_asks_for_an_extra(game, tmp_path):
+    results, _ = regenerate_cutouts(game, tmp_path / "icon", FakeGenerator(), count=2, min_pass=2, extra=3)
+    assert len(results) == 2 and artgen_service.count_passing(results) == 2
+
+    class Truncated(FakeGenerator):
+        def run(self, graph, on_progress=None, cancel=None, timeout_s=0):
+            return [Image(CLEAN_CUTOUT[:-40], "fake.png")]
+
+    results, _ = regenerate_cutouts(game, tmp_path / "broken", Truncated(), count=2, min_pass=2, extra=3)
+    assert len(results) == 2 and all(r.provenance["checks"]["passed"] is None for r in results)
+    assert artgen_service.count_passing(results) == 2, "regenerating cannot cure an unreadable file"
+
+
+def test_a_seed_whose_file_exists_is_skipped_and_its_file_is_left_alone(game, tmp_path):
+    taken = tmp_path / "pawn_13.png"
+    taken.write_bytes(b"an earlier image")
+    (tmp_path / "pawn_14.artgen.json").write_text("{}", encoding="utf-8")
+    results, _ = regenerate_cutouts(game, tmp_path, AlwaysCut(), count=2, seed=11, min_pass=2, extra=2)
+    assert seeds_of(results) == [11, 12, 15, 16]
+    assert taken.read_bytes() == b"an earlier image" and (tmp_path / "pawn_14.artgen.json").read_text(encoding="utf-8") == "{}"
+    assert not (tmp_path / "pawn_14.png").exists()
+
+
+def test_the_seed_picker_skips_files_stops_at_the_int64_limit_and_gives_up_after_the_probe_limit(tmp_path):
+    assert artgen_service.free_seed(tmp_path, "s", 5) == 5
+    (tmp_path / "s_5.png").write_bytes(b"")
+    (tmp_path / "s_6.flac").write_bytes(b"")
+    (tmp_path / "s_7.artgen.json").write_text("{}", encoding="utf-8")
+    assert artgen_service.free_seed(tmp_path, "s", 5) == 8
+    (tmp_path / "other_8.png").write_bytes(b"")
+    assert artgen_service.free_seed(tmp_path, "s", 5) == 8, "another stem's file is not in the way"
+    top = artgen_service.SEED_LIMIT
+    assert artgen_service.free_seed(tmp_path, "s", top - 1) == top - 1
+    assert artgen_service.free_seed(tmp_path, "s", top) is None
+    (tmp_path / f"s_{top - 1}.png").write_bytes(b"")
+    assert artgen_service.free_seed(tmp_path, "s", top - 1) is None, "never a seed of 2**63 or more"
+    for seed in range(100, 100 + artgen_service.MAX_SEED_PROBES):
+        (tmp_path / f"s_{seed}.png").write_bytes(b"")
+    assert artgen_service.free_seed(tmp_path, "s", 100) is None
+    assert artgen_service.free_seed(tmp_path, "s", 101) == 100 + artgen_service.MAX_SEED_PROBES
+
+
+def test_extra_images_stop_when_no_seed_is_free(game, tmp_path, monkeypatch):
+    monkeypatch.setattr(artgen_service, "free_seed", lambda *args: None)
+    results, _ = regenerate_cutouts(game, tmp_path, AlwaysCut(), count=2, min_pass=2, extra=3)
+    assert len(results) == 2
+
+
+def test_the_requests_keys_override_the_presets_and_its_defaults_apply_without_them(game, tmp_path):
+    write_preset(game, "again", {**PRESET, "regenerate": {"extra": 2, "minPass": 2}})
+    assert preset_of(game, "again").regenerate == {"minPass": 2, "extra": 2}
+    results, _ = regenerate_cutouts(game, tmp_path / "a", AlwaysCut(), preset="again")
+    assert len(results) == 4, "the preset's extra 2 on top of the count 2"
+    results, _ = regenerate_cutouts(game, tmp_path / "b", AlwaysCut(), preset="again", extra=0)
+    assert len(results) == 2, "extra 0 of the request switches it off"
+    results, _ = regenerate_cutouts(game, tmp_path / "c", AlwaysCut(), preset="again", extra=1)
+    assert len(results) == 3
+    results, _ = regenerate_cutouts(game, tmp_path / "d", CutOutGenerator(), preset="again", seed=10, min_pass=1)
+    assert len(results) == 2, "min_pass 1 replaces the preset's 2: seed 10 passes"
+    write_preset(game, "default-min", {**PRESET, "regenerate": {"extra": 3}})
+    results, _ = regenerate_cutouts(game, tmp_path / "e", CutOutGenerator(), preset="default-min", seed=11)
+    assert seeds_of(results) == [11, 12, 13, 14], "no minPass: the count wanted"
+    write_preset(game, "big-min", {**PRESET, "regenerate": {"extra": 1, "minPass": 9}})
+    results, _ = regenerate_cutouts(game, tmp_path / "f", AlwaysCut(), preset="big-min")
+    assert len(results) == 3
+    assert artgen_service.regeneration_of(artgen_service.Request(preset_of(game, "big-min"), "x", 2)) == (2, 1), "a minPass above the count is the count"
+
+
+def test_a_request_with_an_extra_on_a_preset_with_none_regenerates(game, tmp_path):
+    results, _ = regenerate_cutouts(game, tmp_path, AlwaysCut(), extra=2)
+    assert len(results) == 4, "min_pass defaults to the count"
+
+
+@pytest.mark.parametrize("regenerate, message", [
+    (True, "must be an object"),
+    ([2], "must be an object"),
+    ({}, "\"extra\" is required"),
+    ({"minPass": 1}, "\"extra\" is required"),
+    ({"extra": 0}, "from 1 to 16"),
+    ({"extra": 17}, "from 1 to 16"),
+    ({"extra": True}, "from 1 to 16"),
+    ({"extra": 2.0}, "from 1 to 16"),
+    ({"extra": "2"}, "from 1 to 16"),
+    ({"extra": 2, "minPass": 0}, "\"minPass\" must be an integer 1 or more"),
+    ({"extra": 2, "minPass": True}, "\"minPass\" must be an integer 1 or more"),
+    ({"extra": 2, "minPass": 1.5}, "\"minPass\" must be an integer 1 or more"),
+    ({"extra": 2, "minPass": None}, "\"minPass\" must be an integer 1 or more"),
+    ({"extra": 2, "min": 1}, "no key 'min'"),
+])
+def test_a_bad_regenerate_key_is_refused_naming_the_file(game, regenerate, message):
+    path = write_preset(game, "wood", {**PRESET, "regenerate": regenerate})
+    with pytest.raises(artgen_preset.PresetError, match=message) as error:
+        preset_of(game)
+    assert str(path) in str(error.value) and '"regenerate"' in str(error.value)
+
+
+def test_regenerate_is_refused_for_a_draft_a_sound_and_a_preset_without_checks(game):
+    with pytest.raises(artgen_preset.PresetError, match="the draft of 'form'.*\"extra\" is required"):
+        artgen_preset.parse_preset({**PRESET, "regenerate": {}}, "draft", game, label="the draft of 'form'")
+    write_preset(game, "knock", {**AUDIO, "regenerate": {"extra": 2}})
+    with pytest.raises(artgen_preset.PresetError, match='a sound has no "regenerate"'):
+        preset_of(game, "knock")
+    write_preset(game, "off", {**PRESET, "checks": False, "regenerate": {"extra": 2}})
+    with pytest.raises(artgen_preset.PresetError, match='"regenerate" needs the checks, and "checks" is false'):
+        preset_of(game, "off")
+    write_preset(game, "ok", {**PRESET, "regenerate": {"extra": 2}})
+    assert preset_of(game, "ok").regenerate == {"minPass": None, "extra": 2}
+    assert preset_of(game).regenerate is None
+
+
+@pytest.mark.parametrize("keys, message", [
+    ({"extra": True}, "extra must be an integer"),
+    ({"extra": 2.0}, "extra must be an integer"),
+    ({"extra": "2"}, "extra must be an integer"),
+    ({"extra": -1}, "extra must be 0 to 16"),
+    ({"extra": 17}, "extra must be 0 to 16"),
+    ({"min_pass": True}, "min_pass must be an integer"),
+    ({"min_pass": 1.5}, "min_pass must be an integer"),
+    ({"min_pass": 0}, r"min_pass must be 1 to the count \(2\)"),
+    ({"min_pass": 3}, r"min_pass must be 1 to the count \(2\)"),
+])
+def test_a_bad_extra_or_min_pass_of_a_request_is_refused_before_the_generator_is_touched(game, tmp_path, keys, message):
+    generator = CutOutGenerator()
+    request = artgen_service.Request(preset_of(game), "x", 2, 1, tmp_path / "out", **keys)
+    with pytest.raises(artgen_service.RequestError, match=message):
+        artgen_service.generate(request, generator)
+    assert generator.graphs == [] and not (tmp_path / "out").exists()
+
+
+def test_an_explicit_extra_is_refused_for_a_sound_and_for_a_preset_without_checks(game, tmp_path):
+    write_preset(game, "knock", AUDIO)
+    write_preset(game, "off", {**PRESET, "checks": False})
+    for name, message in (("knock", "extra is for an image"), ("off", "extra needs the checks")):
+        generator = FakeGenerator()
+        request = artgen_service.Request(preset_of(game, name), "x", 1, 1, tmp_path / name, extra=2)
+        with pytest.raises(artgen_service.RequestError, match=message):
+            artgen_service.generate(request, generator)
+        assert generator.graphs == [] and not (tmp_path / name).exists()
+        request = artgen_service.Request(preset_of(game, name), "x", 1, 1, tmp_path / name, extra=0)
+        assert len(artgen_service.generate(request, generator)) == 1, "extra 0 is not a request for one"
+
+
+def test_a_cancel_during_an_extra_keeps_the_images_written(game, tmp_path):
+    cancel = threading.Event()
+
+    def progress(event):
+        if event["kind"] == "step" and event.get("extra"):
+            cancel.set()
+
+    out = tmp_path / "o"
+    request = artgen_service.Request(preset_of(game), "pawn", 1, 11, out, min_pass=1, extra=3)
+    with pytest.raises(Cancelled):
+        artgen_service.generate(request, AlwaysCut(), progress, cancel)
+    assert sorted(p.name for p in out.iterdir()) == ["pawn_11.artgen.json", "pawn_11.png"]
+
+
+def test_a_failure_of_the_generator_during_an_extra_passes_through(game, tmp_path):
+    class FailsOnExtra(AlwaysCut):
+        def run(self, graph, on_progress=None, cancel=None, timeout_s=0):
+            if self.graphs:
+                raise GenerationError("boom")
+            return super().run(graph, on_progress, cancel)
+
+    out = tmp_path / "o"
+    request = artgen_service.Request(preset_of(game), "pawn", 1, 11, out, extra=3)
+    with pytest.raises(GenerationError, match="boom"):
+        artgen_service.generate(request, FailsOnExtra())
+    assert [p.name for p in out.glob("*.png")] == ["pawn_11.png"]
+
+
+def cli_cutouts(game, tmp_path, monkeypatch, generator, *flags):
+    monkeypatch.setattr(artgen, "make_generator", lambda kind, url: generator)
+    return ["generate", "--game-root", str(game), "--preset", "wood", "--subject", "pawn", "--count", "2", "--seed", "11",
+            "--out", str(tmp_path / "o"), *flags]
+
+
+def test_cli_generate_regenerates_with_its_flags_and_marks_the_extra_images(game, tmp_path, monkeypatch, capsys):
+    argv = cli_cutouts(game, tmp_path, monkeypatch, CutOutGenerator(), "--min-pass", "2", "--extra", "3")
+    assert artgen.main(argv) == artgen.EXIT_OK
+    lines = capsys.readouterr().out.splitlines()
+    images = [line for line in lines if line.startswith("[")]
+    assert [line.split("]")[0] for line in images if "seed" not in line] == ["[1/2", "[2/2", "[3/3", "[4/4"]
+    assert [line.endswith("(extra)") for line in images if "seed" not in line] == [False, False, True, True]
+    assert len(lines) == len(images) and not any("wanted" in line for line in lines), "enough pass: no short line"
+
+
+def test_cli_generate_json_lists_extra_and_passed_per_image_and_the_passing_count(game, tmp_path, monkeypatch, capsys):
+    argv = cli_cutouts(game, tmp_path, monkeypatch, CutOutGenerator(), "--min-pass", "2", "--extra", "3", "--json")
+    assert artgen.main(argv) == artgen.EXIT_OK
+    events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert [e.get("extra", False) for e in events if e["kind"] == "image"] == [False, False, True, True]
+    done = events[-1]
+    assert [(i["seed"], i["extra"], i["passed"]) for i in done["images"]] == [(11, False, False), (12, False, True), (13, True, False), (14, True, True)]
+    assert done["passing"] == 2
+    argv = cli_cutouts(game, tmp_path / "icons", monkeypatch, FakeGenerator(), "--json")
+    assert artgen.main(argv) == artgen.EXIT_OK
+    done = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert [i["passed"] for i in done["images"]] == [None, None] and done["passing"] == 2, "no verdict is not failing"
+
+
+def test_cli_generate_says_when_the_run_is_short_and_still_exits_0(game, tmp_path, monkeypatch, capsys):
+    argv = cli_cutouts(game, tmp_path, monkeypatch, AlwaysCut(), "--min-pass", "2", "--extra", "1")
+    assert artgen.main(argv) == artgen.EXIT_OK
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-1] == "only 0 of the 2 wanted images pass their checks"
+    assert [line for line in lines if line.startswith("[3/3] ")][-1].endswith("(extra)")
+    argv = cli_cutouts(game, tmp_path / "again", monkeypatch, CutOutGenerator(), "--min-pass", "2")
+    assert artgen.main(argv) == artgen.EXIT_OK
+    assert capsys.readouterr().out.splitlines()[-1] == "only 1 of the 2 wanted images pass their checks", "no extra asked: short is still said"
+
+
+def test_cli_generate_refuses_a_bad_flag_like_any_request_error(game, tmp_path, monkeypatch, capsys):
+    generator = CutOutGenerator()
+    for flags, message in ((("--extra", "17"), "extra must be 0 to 16"), (("--min-pass", "3"), "min_pass must be 1 to the count"),
+                           (("--extra", "x"), None)):
+        argv = cli_cutouts(game, tmp_path, monkeypatch, generator, *flags)
+        if message is None:
+            with pytest.raises(SystemExit) as exit_info:
+                artgen.main(argv)
+            assert exit_info.value.code == 2
+        else:
+            assert artgen.main(argv) == artgen.EXIT_FAILED
+            assert message in capsys.readouterr().err
+    assert generator.graphs == [] and not (tmp_path / "o").exists()
