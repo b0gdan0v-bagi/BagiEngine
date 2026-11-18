@@ -131,6 +131,13 @@ def generate(request, generator, on_progress=None, cancel=None, rng=random):
     kinds = status.details.get("kinds")
     if kinds is not None and request.preset.kind not in kinds:
         raise RequestError(f"the generator makes no {request.preset.kind}: its models are missing (artgen_setup.py install --{request.preset.kind})")
+    if reference and kinds is not None:
+        needed = artgen_reference.MODES[reference["mode"]].kind
+        if needed is not None and needed not in kinds:
+            raise RequestError(
+                f"the generator cannot run the reference mode '{reference['mode']}': its models or custom node are missing "
+                f"(python tools/artgen/artgen_setup.py install --{needed})"
+            )
     first_seed = request.seed if request.seed is not None else rng.randrange(SEED_RANGE)
     use = None
     if reference:

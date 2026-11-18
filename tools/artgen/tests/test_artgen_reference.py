@@ -83,6 +83,23 @@ def test_a_malformed_reference_is_refused_by_its_key(data, message):
     assert str(error.value).startswith("the request:")
 
 
+def test_style_takes_its_default_weight_and_a_weight_in_its_open_range():
+    assert artgen_reference.parse_reference({"mode": "style", "image": "a.png"}, "x") == {"mode": "style", "image": "a.png", "weight": 0.8}
+    assert artgen_reference.parse_reference({"mode": "style", "image": "a.png", "weight": 1.5}, "x")["weight"] == 1.5
+    for weight in (0, 2, 2.5, -0.5):
+        with pytest.raises(artgen_preset.PresetError, match="reference.weight\" of the mode 'style' must be a number above 0.0 and below 2.0"):
+            artgen_reference.parse_reference({"mode": "style", "image": "a.png", "weight": weight}, "x")
+
+
+def test_the_weight_of_style_goes_to_the_adapter_as_it_is():
+    assert artgen_reference.weight_value("style", 1.3) == 1.3
+
+
+def test_only_a_mode_beyond_the_image_models_names_a_kind():
+    assert artgen_reference.MODES["init"].kind is None
+    assert artgen_reference.MODES["style"].kind == "style"
+
+
 def test_the_weight_of_init_is_the_part_that_stays():
     assert artgen_reference.weight_value("init", 0.4) == 0.6
     assert artgen_reference.weight_value("init", 0.25) == 0.75

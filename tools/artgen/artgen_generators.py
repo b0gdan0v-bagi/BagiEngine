@@ -348,7 +348,7 @@ def flac_info(data):
 
 class FakeGenerator(Generator):
     """Records the graphs and answers each with a small PNG whose colour follows the seed, or a short FLAC tone for a graph that saves
-    audio; `state` and `fail` steer it."""
+    audio; `state`, `fail` and `kinds` steer it."""
 
     name = "fake"
 
@@ -356,11 +356,12 @@ class FakeGenerator(Generator):
         self.steps = steps
         self.state = state
         self.fail = fail
+        self.kinds = ["audio", "image", "style"]  # what status() says the models make; a test removes one
         self.graphs = []
         self.uploads = []  # (name, data) of every upload_image
 
     def status(self):
-        return GeneratorStatus(self.state, "" if self.state == GeneratorState.READY else f"fake: {self.state}", {"kinds": ["audio", "image"]})
+        return GeneratorStatus(self.state, "" if self.state == GeneratorState.READY else f"fake: {self.state}", {"kinds": list(self.kinds)})
 
     def info(self):
         return {"name": self.name, "version": "1"}

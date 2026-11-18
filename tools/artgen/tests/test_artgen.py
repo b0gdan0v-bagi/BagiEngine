@@ -294,6 +294,52 @@ def test_a_request_with_a_reference_uploads_the_picture_once_and_runs_the_mapped
     assert provenance["models"]["ckpt_name"] == ["sd_xl_base_1.0.safetensors"]
 
 
+STYLE = {"mode": "style", "image": "assets/artgen/rook.png", "weight": 1.2}
+
+
+def test_a_style_request_runs_the_style_workflow_and_records_it(game, picture, tmp_path):
+    generator = FakeGenerator()
+    results = artgen_service.generate(reference_request(game, tmp_path / "o", STYLE), generator)
+    name = f"artgen_ref_{hashlib.sha256(REFERENCE_PNG).hexdigest()[:16]}.png"
+    for graph in generator.graphs:
+        assert graph["20"]["inputs"]["image"] == name and graph["32"]["inputs"]["weight"] == 1.2 and graph["3"]["inputs"]["denoise"] == 1.0
+    provenance = results[0].provenance
+    assert provenance["reference"]["mode"] == "style" and provenance["reference"]["workflow"] == "sdxl_ipadapter"
+    assert provenance["workflow"] == "sdxl_ipadapter"
+    assert provenance["models"]["ipadapter_file"] == ["ip-adapter-plus_sdxl_vit-h.safetensors"]
+    assert provenance["models"]["clip_name"] == ["CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"]
+
+
+def test_a_generator_without_the_style_kind_refuses_a_style_run_and_writes_nothing(game, picture, tmp_path):
+    generator = FakeGenerator()
+    generator.kinds = ["audio", "image"]
+    out = tmp_path / "o"
+    with pytest.raises(artgen_service.RequestError, match=r"cannot run the reference mode 'style'.*\(python tools/artgen/artgen_setup.py install --style\)"):
+        artgen_service.generate(reference_request(game, out, STYLE), generator)
+    assert generator.graphs == [] and generator.uploads == [] and not out.exists()
+    assert artgen_service.generate(reference_request(game, out), generator), "an init run does not need the style parts"
+    assert artgen_service.generate(artgen_service.Request(preset_of(game), "x", 1, 1, tmp_path / "p"), generator), "nor does a run with no reference"
+
+
+def test_a_generator_that_does_not_list_kinds_is_not_refused(game, picture, tmp_path):
+    class Unlisted(FakeGenerator):
+        def status(self):
+            status = super().status()
+            del status.details["kinds"]
+            return status
+
+    assert artgen_service.generate(reference_request(game, tmp_path / "o", STYLE), Unlisted())
+
+
+def test_a_preset_of_the_style_workflow_serves_style_and_is_refused_for_init(game, picture, tmp_path):
+    write_preset(game, "direct", {**PRESET, "workflow": "sdxl_ipadapter"})
+    generator = FakeGenerator()
+    results = artgen_service.generate(reference_request(game, tmp_path / "o", STYLE, preset="direct"), generator)
+    assert results[0].provenance["workflow"] == "sdxl_ipadapter"
+    with pytest.raises(artgen_preset.PresetError, match=r"'sdxl_ipadapter' cannot run the reference mode 'init' \(its modes: style\)"):
+        artgen_service.generate(reference_request(game, tmp_path / "p", REFERENCE, preset="direct"), generator)
+
+
 def test_a_run_without_a_reference_has_no_reference_block(game, tmp_path):
     results = artgen_service.generate(artgen_service.Request(preset_of(game), "x", 1, 1, tmp_path), FakeGenerator())
     assert "reference" not in results[0].provenance

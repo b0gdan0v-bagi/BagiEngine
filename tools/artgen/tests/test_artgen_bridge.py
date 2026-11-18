@@ -232,6 +232,20 @@ def test_a_bad_reference_fails_the_run_with_the_reason_and_writes_nothing(game, 
     run_until(bridge, editor, lambda: editor.run["state"] == "Done")
 
 
+def test_a_style_run_on_a_generator_without_the_style_kind_fails_with_the_install_command(game):
+    (game / "assets").mkdir()
+    (game / "assets" / "rook.png").write_bytes(tiny_png(4, 4, (9, 9, 200)))
+    editor = FakeEditor(game)
+    generator = FakeGenerator()
+    generator.kinds = ["audio", "image"]
+    bridge = artgen_bridge.Bridge(editor, generator, log=lambda *a: None)
+    bridge.tick()
+    editor.request("wood", "rook", count=1, reference={"mode": "style", "image": "assets/rook.png"})
+    run_until(bridge, editor, lambda: editor.run["state"] == "Failed")
+    assert "install --style" in editor.run["error"]
+    assert generator.graphs == [] and generator.uploads == [] and not (game / "artgen" / "out").exists()
+
+
 def test_a_cancel_from_the_editor_stops_the_generator(game):
     editor = FakeEditor(game)
     started = threading.Event()
