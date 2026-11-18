@@ -239,6 +239,46 @@ namespace BECore::Tests {
         }
     }
 
+    /// The shape of LoadTemplate in a DOM that keeps its comments, as a config document does once it is loaded with them
+    TEST_F(ConfigEditorSaveTest, AStagedEditOfACommentedDocumentKeepsEveryComment) {
+        pugi::xml_document document;
+        ASSERT_TRUE(document.load_string(R"(<root>
+    <!-- Logger Sinks Configuration -->
+    <sinks>
+        <!-- Output sink runs first -->
+        <sink type="OutputSink" priority="7" />
+        <!-- Console sink disabled -->
+        <sink type="ConsoleSink" enabled="false" />
+        <!-- File sink runs after Output -->
+        <sink type="FileSink" priority="100" />
+    </sinks>
+</root>)",
+                                         pugi::parse_full));
+
+        // The keys the editor gives the sinks count the elements only: a comment is no sink[0]
+        const XmlNode sinks = XmlNode(document.document_element()).GetChild("sinks");
+        Vector<String> keys;
+        Vector<pugi::xml_node> elements;
+        for (const XmlNode sink : sinks.Children()) {
+            keys.push_back(Format("root/sinks/sink[{}]@type", keys.size()));
+            elements.push_back(sink.GetPugiNode());
+        }
+        ASSERT_EQ(keys.size(), 3u);
+        EXPECT_EQ(keys[0], kFirstSinkTypeKey);
+
+        StagedChanges staged;
+        staged.Set(keys[0], elements[0].attribute("type"), "FileSink");
+        staged.ApplyTo(document.document_element());
+
+        EXPECT_STREQ(elements[0].attribute("type").value(), "FileSink");
+        size_t comments = 0;
+        for (const pugi::xml_node node : document.document_element().child("sinks").children()) {
+            comments += node.type() == pugi::node_comment ? 1u : 0u;
+        }
+        EXPECT_EQ(comments, 3u);
+        EXPECT_EQ(document.document_element().first_child().type(), pugi::node_comment);
+    }
+
     TEST_F(ConfigEditorSaveTest, AValueOutsideTheDropdownIsReportedOnReload) {
         const FieldHint offered = OfferedSinkTypes();
         // The old, wrong enum name: it is not offered, and the loader cannot resolve it

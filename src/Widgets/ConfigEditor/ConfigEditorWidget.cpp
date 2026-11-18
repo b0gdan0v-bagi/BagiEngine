@@ -19,6 +19,16 @@ namespace BECore {
 
     namespace {
         constexpr float kCancelButtonWidth = 100.0f;
+
+        /// A comment before the first element must not turn a branch into a leaf
+        bool HasElementChild(pugi::xml_node node) {
+            for (pugi::xml_node child = node.first_child(); child; child = child.next_sibling()) {
+                if (child.type() == pugi::node_element) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }  // namespace
 
     bool ConfigEditorWidget::Initialize(IDeserializer& /*deserializer*/) {
@@ -201,7 +211,7 @@ namespace BECore {
             return;
         }
 
-        const bool hasChildren = node.first_child() && node.first_child().type() == pugi::node_element;
+        const bool hasChildren = HasElementChild(node);
         const bool hasAttributes = static_cast<bool>(node.first_attribute());
 
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen;
