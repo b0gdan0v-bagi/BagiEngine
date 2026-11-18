@@ -1,9 +1,11 @@
+#include <BECore/Config/XmlDocument.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Resource/TextureLibrary.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/TempPath.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -634,6 +636,128 @@ namespace BECore::Tests {
 
         ASSERT_EQ(deserializer.GetErrors().size(), 1u);
         EXPECT_NE(deserializer.GetErrors()[0].path.find("sprites[2]"), String::npos) << deserializer.GetErrors()[0].path.c_str();
+    }
+
+    namespace {
+
+        /// Canonical (what XmlDocument writes), with a `groups` element after `sprites` that a replace must leave where it is
+        constexpr StringView kWithNeighbours = R"(<?xml version="1.0"?>
+<!-- header -->
+<root>
+  <sprites>
+    <sprite name="WhiteKing" texturePath="assets/chess_test.png">
+      <srcRect x="0" y="0" w="116.67" h="190.5" />
+    </sprite>
+    <sprite name="WhiteQueen" texturePath="assets/chess_test.png">
+      <srcRect x="116.67" y="0" w="116.67" h="190.5" />
+    </sprite>
+  </sprites>
+  <groups />
+</root>
+)";
+
+        constexpr StringView kKingLines = R"(    <sprite name="WhiteKing" texturePath="assets/chess_test.png">
+      <srcRect x="0" y="0" w="116.67" h="190.5" />
+    </sprite>
+)";
+
+        constexpr StringView kQueenLines = R"(    <sprite name="WhiteQueen" texturePath="assets/chess_test.png">
+      <srcRect x="116.67" y="0" w="116.67" h="190.5" />
+    </sprite>
+)";
+
+        constexpr StringView kRookLines = R"(    <sprite name="WhiteRook" texturePath="assets/chess_test.png">
+      <srcRect x="233" y="0" w="116" h="190" />
+    </sprite>
+)";
+
+        /// The file is loaded into an XmlDocument, the library is read from its root, @p edit changes the library, WriteInto and a
+        /// save to a temporary file give the text that is returned
+        template <typename Edit>
+        String SavedAfter(StringView fileText, Edit edit) {
+            XmlDocument document;
+            EXPECT_TRUE(document.LoadFromString(fileText));
+            XmlDeserializer deserializer;
+            EXPECT_TRUE(deserializer.LoadFromXmlNode(document.GetRoot()));
+            TextureLibrary library;
+            library.Load(deserializer);
+
+            edit(library);
+            EXPECT_TRUE(library.WriteInto(document.GetRoot().GetPugiNode()));
+
+            const std::filesystem::path path = TestTempPath("TextureLibraryTest_Saved.xml");
+            EXPECT_TRUE(document.SaveToFile(path));
+            std::ifstream in(path, std::ios::in | std::ios::binary);  //-NoStd: the test reads its own temporary file byte for byte
+            String bytes;
+            bytes.resize(static_cast<size_t>(std::filesystem::file_size(path)));
+            in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+            in.close();
+            std::error_code error;
+            std::filesystem::remove(path, error);
+            return bytes;
+        }
+
+        /// @p text with the first @p from replaced by @p to
+        String Replaced(StringView text, StringView from, StringView to) {
+            String result(text);
+            const size_t at = result.find(String(from));
+            EXPECT_NE(at, String::npos) << from.data();
+            if (at != String::npos) {
+                result.replace(at, from.size(), String(to));
+            }
+            return result;
+        }
+
+    }  // namespace
+
+    TEST(TextureLibraryTest, SavingTheLibraryAsLoadedChangesNothingInTheFile) {
+        EXPECT_EQ(SavedAfter(kWithNeighbours, [](TextureLibrary&) {}), String(kWithNeighbours));
+    }
+
+    TEST(TextureLibraryTest, AnAcceptedSpriteAddsItsLinesAndNothingElse) {
+        const String saved = SavedAfter(kWithNeighbours, [](TextureLibrary& library) { library.AddOrUpdate(MakeEntry("WhiteRook", "assets/chess_test.png", Rect(233, 0, 116, 190))); });
+
+        EXPECT_EQ(saved, Replaced(kWithNeighbours, "  </sprites>\n", String("") + String(kRookLines) + "  </sprites>\n"));
+    }
+
+    TEST(TextureLibraryTest, AnUpdatedSpriteChangesItsOwnLinesOnly) {
+        const String saved = SavedAfter(kWithNeighbours, [](TextureLibrary& library) { library.AddOrUpdate(MakeEntry("WhiteQueen", "assets/chess_test.png", Rect(233, 0, 116, 190))); });
+
+        EXPECT_EQ(saved, Replaced(kWithNeighbours, kQueenLines, Replaced(kRookLines, "WhiteRook", "WhiteQueen")));
+    }
+
+    TEST(TextureLibraryTest, ARemovedSpriteTakesOnlyItsLines) {
+        const String saved = SavedAfter(kWithNeighbours, [](TextureLibrary& library) { library.Remove("WhiteKing"_intern); });
+
+        EXPECT_EQ(saved, Replaced(kWithNeighbours, kKingLines, ""));
+    }
+
+    TEST(TextureLibraryTest, ARenamedSpriteChangesTheNameLineOnly) {
+        const String saved = SavedAfter(kWithNeighbours, [](TextureLibrary& library) { EXPECT_TRUE(library.Rename("WhiteKing"_intern, "BlackKing"_intern)); });
+
+        EXPECT_EQ(saved, Replaced(kWithNeighbours, "name=\"WhiteKing\"", "name=\"BlackKing\""));
+    }
+
+    TEST(TextureLibraryTest, SpritesStayBeforeTheElementsThatFollowThem) {
+        const String saved = SavedAfter(kWithNeighbours, [](TextureLibrary& library) { library.Remove("WhiteKing"_intern); });
+
+        EXPECT_LT(saved.find("</sprites>"), saved.find("<groups />"));
+        EXPECT_LT(saved.find("<!-- header -->"), saved.find("<root>"));
+    }
+
+    TEST(TextureLibraryTest, AFileWithoutSpritesGetsThemAfterItsOtherChildren) {
+        constexpr StringView noSprites = R"(<root>
+  <groups />
+</root>
+)";
+        const String saved = SavedAfter(noSprites, [](TextureLibrary& library) { library.AddOrUpdate(MakeEntry("WhiteRook", "assets/chess_test.png", Rect(233, 0, 116, 190))); });
+
+        EXPECT_EQ(saved, String("<root>\n  <groups />\n  <sprites>\n") + String(kRookLines) + "  </sprites>\n</root>\n");
+    }
+
+    TEST(TextureLibraryTest, WriteIntoAnInvalidNodeIsRefused) {
+        TextureLibrary library;
+        EXPECT_FALSE(library.WriteInto(pugi::xml_node()));
     }
 
 }  // namespace BECore::Tests

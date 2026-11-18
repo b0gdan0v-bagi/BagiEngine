@@ -2,6 +2,17 @@
 
 namespace BECore {
 
+    namespace {
+
+        /// The shortest text that reads back to the same number. pugixml's own `set_value(float)` is `%.9g` (116.67f becomes
+        /// 116.669998), which rewrites every number a person typed in a file the editors save.
+        template <typename T>
+        String ShortestText(T value) {
+            return Format("{}", value);
+        }
+
+    }  // namespace
+
     XmlSerializer::XmlSerializer() {
         _nodeStack.push_back(_document.append_child("root"));
     }
@@ -103,12 +114,12 @@ namespace BECore {
 
     void XmlSerializer::Write(StringView name, float value) {
         pugi::xml_node node = GetOrCreateChild(name);
-        node.text().set(value);
+        node.text().set(ShortestText(value).c_str());
     }
 
     void XmlSerializer::Write(StringView name, double value) {
         pugi::xml_node node = GetOrCreateChild(name);
-        node.text().set(value);
+        node.text().set(ShortestText(value).c_str());
     }
 
     void XmlSerializer::Write(StringView name, StringView value) {
@@ -173,12 +184,12 @@ namespace BECore {
 
     void XmlSerializer::WriteAttribute(StringView name, float value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
-        attr.set_value(value);
+        attr.set_value(ShortestText(value).c_str());
     }
 
     void XmlSerializer::WriteAttribute(StringView name, double value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
-        attr.set_value(value);
+        attr.set_value(ShortestText(value).c_str());
     }
 
     void XmlSerializer::WriteAttribute(StringView name, StringView value) {
