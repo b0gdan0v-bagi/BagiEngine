@@ -40,7 +40,7 @@ RESERVED_KEYS = (OUTPUT_INPUT, KIND_KEY, REFERENCE_KEY)
 # The length of a sound in seconds: an input of an audio workflow, refused for an image
 DURATION_INPUT = "duration"
 # Inputs whose values are model files: they go into the provenance.
-MODEL_INPUT_NAMES = ("ckpt_name", "vae_name", "lora_name", "unet_name", "clip_name", "control_net_name", "bg_removal_name")
+MODEL_INPUT_NAMES = ("ckpt_name", "vae_name", "lora_name", "unet_name", "clip_name", "ipadapter_file", "control_net_name", "bg_removal_name")
 # What a preset is called on disk and in a request: a safe file name on every platform
 PRESET_NAME = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 DRAFT = "draft"

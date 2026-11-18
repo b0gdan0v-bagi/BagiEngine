@@ -205,6 +205,8 @@ LOADERS = {
     "CheckpointLoaderSimple": ("checkpoints", "ckpt_name"),
     "VAELoader": ("vae", "vae_name"),
     "LoadBackgroundRemovalModel": ("background_removal", "bg_removal_name"),
+    "IPAdapterModelLoader": ("ipadapter", "ipadapter_file"),
+    "CLIPVisionLoader": ("clip_vision", "clip_name"),
 }
 
 
@@ -219,6 +221,15 @@ def test_every_engine_workflow_loads_only_manifest_models(workflow_file):
     for node in loaders:
         folder, field = LOADERS[node["class_type"]]
         assert (folder, node["inputs"][field]) in available
+
+
+def test_the_style_models_of_the_manifest_are_the_ones_the_style_workflows_load():
+    loaded = set()
+    for name in ("sdxl_ipadapter", "sdxl_ipadapter_cutout"):
+        workflow = json.loads((comfyui_check.WORKFLOW.parent / f"{name}.json").read_text(encoding="utf-8"))
+        loaded |= {(LOADERS[n["class_type"]][0], n["inputs"][LOADERS[n["class_type"]][1]]) for n in workflow.values() if n["class_type"] in LOADERS}
+    style = {(m["folder"], m["name"]) for m in MANIFEST["models"] if m.get("kind") == "style"}
+    assert style and {pair for pair in loaded if pair[0] in ("ipadapter", "clip_vision")} == style
 
 
 def test_missing_audio_models_only_warn_and_say_what_it_makes(fake):
