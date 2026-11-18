@@ -18,7 +18,7 @@ namespace BECore {
         constexpr float kPictureSize = 72.0f;
         constexpr size_t kLabelSize = 64;
         constexpr const char* kSectionLabel = "Reference (optional)";
-        constexpr const char* kWeightTip = "How strongly the picture holds: higher keeps more of it, lower redraws more";
+        constexpr const char* kWeightTip = "How strongly the picture counts: higher keeps more of it (init) or of its style (style)";
         constexpr const char* kEmptyNote = "No reference. Use as reference on a variant or an accepted sprite fills it; a preset's own reference applies while it is empty.";
         constexpr const char* kFilledNote = "Sent with the next single Generate; it replaces the preset's own reference.";
 
@@ -84,20 +84,23 @@ namespace BECore {
         char label[kLabelSize];
         std::snprintf(label, sizeof(label), "%.*s", static_cast<int>(name.size()), name.data());
         ImGui::TextUnformatted(label);
+        const ArtGenReferenceModeRow& row = ArtGenReferenceModeOf(StringView(slot->mode));
         if (ImGui::BeginCombo("Mode##reference", slot->mode.c_str())) {
-            for (const StringView mode : kArtGenReferenceModes) {
-                std::snprintf(label, sizeof(label), "%.*s", static_cast<int>(mode.size()), mode.data());
-                if (ImGui::Selectable(label, StringView(slot->mode) == mode) && StringView(slot->mode) != mode) {
+            for (const ArtGenReferenceModeRow& option : kArtGenReferenceModes) {
+                std::snprintf(label, sizeof(label), "%.*s", static_cast<int>(option.mode.size()), option.mode.data());
+                if (ImGui::Selectable(label, StringView(slot->mode) == option.mode) && StringView(slot->mode) != option.mode) {
                     ArtGenReference changed = *slot;
-                    changed.mode = String(mode);
+                    changed.mode = String(option.mode);
                     changed.weight.reset();  // the default of the new mode
                     session.SetReferenceSlot(std::move(changed));
                 }
+                ItemTooltip(option.tip);
             }
             ImGui::EndCombo();
         }
-        float weight = static_cast<float>(slot->weight ? *slot->weight : ArtGenReferenceDefaultWeight(StringView(slot->mode)));
-        if (ImGui::SliderFloat("Weight##reference", &weight, kArtGenReferenceWeightMin, kArtGenReferenceWeightMax, "%.2f")) {
+        ItemTooltip(row.tip);
+        float weight = static_cast<float>(slot->weight ? *slot->weight : row.defaultWeight);
+        if (ImGui::SliderFloat("Weight##reference", &weight, row.minWeight, row.maxWeight, "%.2f")) {
             ArtGenReference changed = *slot;
             changed.weight = static_cast<double>(weight);
             session.SetReferenceSlot(std::move(changed));

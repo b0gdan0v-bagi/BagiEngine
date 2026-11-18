@@ -4,6 +4,7 @@ a preset."""
 import copy
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -103,6 +104,35 @@ def test_only_a_mode_beyond_the_image_models_names_a_kind():
 def test_the_weight_of_init_is_the_part_that_stays():
     assert artgen_reference.weight_value("init", 0.4) == 0.6
     assert artgen_reference.weight_value("init", 0.25) == 0.75
+
+
+# --- the editor's table of modes
+
+PANEL_MODES_HEADER = ARTGEN_DIR.parents[1] / "src" / "Widgets" / "ArtGen" / "Reference" / "ArtGenReference.h"
+PANEL_ROW = re.compile(r'\{"(?P<mode>\w+)",\s*(?P<default>[\d.]+),\s*(?P<min>[\d.]+)f,\s*(?P<max>[\d.]+)f,')
+
+
+def panel_modes():
+    """The rows of kArtGenReferenceModes in the editor's header, as {mode: (default, min, max)}: the one place the two sides meet."""
+    text = PANEL_MODES_HEADER.read_text(encoding="utf-8")
+    block = text[text.index("kArtGenReferenceModes"):]
+    block = block[:block.index("}};")]
+    return {row["mode"]: (float(row["default"]), float(row["min"]), float(row["max"])) for row in PANEL_ROW.finditer(block)}
+
+
+def test_the_panels_modes_are_the_modes_of_the_service_in_the_same_order():
+    assert list(panel_modes()) == list(artgen_reference.MODES)
+
+
+def test_the_panels_default_weights_are_the_services():
+    for mode, (default, _, _) in panel_modes().items():
+        assert default == artgen_reference.MODES[mode].default_weight, mode
+
+
+def test_the_panels_slider_lies_inside_the_open_range_of_the_service_and_holds_its_default():
+    for mode, (default, low, high) in panel_modes().items():
+        service_low, service_high = artgen_reference.MODES[mode].weight_range
+        assert service_low < low < default < high < service_high, mode
 
 
 # --- the preset's and the request's reference

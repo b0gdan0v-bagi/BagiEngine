@@ -6,8 +6,22 @@
 
 namespace BECore {
 
-    /// The reference modes the panel offers: the keys of `MODES` in tools/artgen/artgen_reference.py (the service owns what each one does)
-    inline constexpr Array<StringView, 1> kArtGenReferenceModes = {"init"};
+    /// What the panel knows of one reference mode: the key of `MODES` in tools/artgen/artgen_reference.py, its `default_weight`, the range of
+    /// its slider (inside the open interval `weight_range` of the service, which owns what the mode does) and what it does, for a tooltip.
+    /// A Python test holds the modes and defaults to `MODES`, so a mode is added there and here together
+    struct ArtGenReferenceModeRow {
+        StringView mode;
+        double defaultWeight;
+        float minWeight;
+        float maxWeight;
+        const char* tip;
+    };
+
+    /// The modes the panel offers, in the combo's order; the first is the fallback for a mode the table does not know
+    inline constexpr Array<ArtGenReferenceModeRow, 2> kArtGenReferenceModes = {{
+        {"init", 0.4, 0.05f, 0.95f, "Redraw this picture: the weight is how much of it is kept"},
+        {"style", 0.8, 0.1f, 1.5f, "Draw something new in the style of this picture: the weight is how strongly the style is applied"},
+    }};
 
     /// The reference picture of a run: `{"mode", "image", "weight"}` of tools/artgen/CLAUDE.md, "Presets". Only the shape is held here;
     /// whether the mode exists, the weight is in its range and the file is a picture is the service's to check, which fails the run
@@ -35,12 +49,11 @@ namespace BECore {
     /// The reference to the accepted sprite @p name (`assets/artgen/<name>.png`, init, the default weight); the name is not checked here
     [[nodiscard]] ArtGenReference ArtGenReferenceOfSprite(StringView name);
 
-    /// The weight of a mode when the reference names none: `default_weight` of its row in `MODES`. An unknown mode gets the first mode's
-    [[nodiscard]] double ArtGenReferenceDefaultWeight(StringView mode);
+    /// The row of @p mode in kArtGenReferenceModes; the first row for a mode the table does not know
+    [[nodiscard]] const ArtGenReferenceModeRow& ArtGenReferenceModeOf(StringView mode);
 
-    /// The slider's range for a weight; the service checks the range of the mode itself
-    inline constexpr float kArtGenReferenceWeightMin = 0.05f;
-    inline constexpr float kArtGenReferenceWeightMax = 0.95f;
+    /// The weight of a mode when the reference names none (its row's `defaultWeight`)
+    [[nodiscard]] double ArtGenReferenceDefaultWeight(StringView mode);
 
     /// The real path of a reference's picture: @p image as it is when absolute (a `/` or a drive letter first), else under @p gameRoot
     [[nodiscard]] String ArtGenReferenceFilePath(StringView gameRoot, StringView image);
