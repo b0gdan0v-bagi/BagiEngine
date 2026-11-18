@@ -817,6 +817,10 @@ namespace BECore {
         ctx.parentNode = node;
         ctx.currentIndex = 0;
         for (pugi::xml_node child : node.children()) {
+            // A comment between the elements is no element: it would shift every index after it
+            if (child.type() != pugi::node_element) {
+                continue;
+            }
             if (ctx.elements.size() == ReaderLimits::kMaxArrayElements) {
                 ReportError(name, "Array has more elements than the limit");
                 return false;

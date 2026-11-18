@@ -11,7 +11,8 @@ namespace BECore {
      * an absent attribute reads as empty).
      *
      * The other `<scene>` elements, their order and the comments around them are not touched; a scene without an element is
-     * appended to `<scenes>`, a missing `<scenes>` is created. The attributes come from Scene::Serialize (a new reflected
+     * appended to `<scenes>`, a missing `<scenes>` is created. The replaced `<scene>` is rebuilt from the live scene, so the
+     * comments **inside** it are lost. The attributes come from Scene::Serialize (a new reflected
      * field of Scene is saved without a change here), `type` from the scene's type name, the `<nodes>` from the live
      * hierarchy as Scene::PrepareForSave() (called here) leaves it.
      *
