@@ -302,7 +302,7 @@ namespace BECore::Tests {
         ExpectRect(resolved.contentBounds, -380.0f, 0.0f, 1760.0f, 1000.0f);
     }
 
-    TEST(UICanvasScalerTest, WithoutTheFlagTheNumbersAreTheOldOnes) {
+    TEST(UICanvasScalerTest, WithoutTheFlagTheCanvasIsTheSceneViewAndTheSafeAreaIsClippedToIt) {
         UILayoutContext context = ViewInOutput(1000.0f, 1000.0f, 2000.0f, 1000.0f);
         context.safeArea = {0.0f, 100.0f, 2000.0f, 900.0f};
 

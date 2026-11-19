@@ -24,7 +24,7 @@ Default to GoogleTest. Add an `ITest` only when the check cannot run in the test
 tests/
 ├── CMakeLists.txt      # target BagiEngineTests via be_add_game_tests
 ├── Common/             # BagiEngineTestSupport (static lib): TestMain.cpp, EngineEnvironment, AssertBridge, Printers.h, RecordingRenderer.h
-└── BECore/             # engine tests (+ ReflectionTest.h / ReflectionEventTest.h / SceneEventsTest.h / TimeTest.h: reflected test data)
+└── BECore/             # engine tests of every module (+ ReflectionTest.h / ReflectionEventTest.h / SceneEventsTest.h / TimeTest.h: reflected test data)
     └── Rooms/          # the Rooms module and Games' ISeatedGame: FakeSeatedGame, HubHarness (TestClient.h), RoomsScenarioTest.cpp, and the socket tests over `RoomServer`: RoomSocketClient.h, WireJudge.h, ManualClock.h, RoomServerScenarioTest.cpp, RoomHostileTest.cpp, RoomServerHostileTest.cpp, RoomTableDriver.h (src/Modules/Rooms/CLAUDE.md and src/Modules/RoomServer/CLAUDE.md, "Tests"), and the client: FakeRoomTransport.h, HubTransport.h, JudgedTransport.h, RoomClientPlayer.h, RoomClientTest.cpp, RoomClientHubTest.cpp, RoomClientSocketTest.cpp (src/Modules/RoomClient/CLAUDE.md)
 tools/stress/tests/     # StressTests (be_add_game_tests in tools/stress/CMakeLists.txt); a game's tests are in its repository: tests/, built as <Name>Tests
 ```
@@ -39,7 +39,7 @@ ctest --preset macos-debug -j1                                   # one at a time
 
 ### Adding a test
 
-1. Add `tests/<Module>/<Name>Test.cpp` for the engine, or `tests/<Name>Test.cpp` of a game's repository (the CMake globs pick it up, so re-run `cmake --preset ...`).
+1. Add `tests/BECore/<Name>Test.cpp` for an engine test of any module (TaskSystem, RemoteControl and the Widgets included: one executable; a subfolder such as `BECore/Rooms/` keeps one module's helpers together), or `tests/<Name>Test.cpp` of a game's repository (the CMake globs pick it up, so re-run `cmake --preset ...`).
 2. Write `TEST(<Name>Test, <Case>)` inside `namespace BECore::Tests`. One case per behavior, not one big `Run()`.
 3. Compile-time checks are `static_assert` at file scope, plus an empty `TEST(<Name>Test, CompileTimeChecks)` so they show up in the report.
 4. Include `<Common/Printers.h>` when comparing EASTL strings or `PoolString` with `EXPECT_EQ`; it makes failures readable.

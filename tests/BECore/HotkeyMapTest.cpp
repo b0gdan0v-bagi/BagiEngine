@@ -66,6 +66,25 @@ namespace BECore::Tests {
         }
     }
 
+    TEST(HotkeyMapTest, EveryCommandHasATitleAndAUniqueId) {
+        const auto commands = GetEditorCommands();
+        ASSERT_FALSE(commands.empty());
+        for (size_t i = 0; i < commands.size(); ++i) {
+            EXPECT_FALSE(commands[i].title.empty());
+            EXPECT_FALSE(commands[i].id.Empty());
+            for (size_t j = i + 1; j < commands.size(); ++j) {
+                EXPECT_NE(commands[i].id, commands[j].id);
+            }
+        }
+    }
+
+    TEST(HotkeyMapTest, FindEditorCommandByIdOnly) {
+        const EditorCommand* toggle = FindEditorCommand(EditorCommandIds::kModeToggle);
+        ASSERT_NE(toggle, nullptr);
+        EXPECT_FALSE(toggle->rebindable);
+        EXPECT_EQ(FindEditorCommand("no.such"_intern), nullptr);
+    }
+
     TEST(HotkeyMapTest, AssignChangesTheChord) {
         HotkeyMap map;
         const AssignResult result = map.Assign(kSceneSave, kCtrlK);

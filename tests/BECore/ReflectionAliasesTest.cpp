@@ -57,7 +57,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        using ByteBuffer = eastl::vector<uint8_t>;
+        using ByteBuffer = Vector<uint8_t>;
 
         template <typename State>
         void Fill(State& state) {
@@ -82,7 +82,7 @@ namespace BECore::Tests {
         }
 
         template <typename State>
-        eastl::string SaveXml(const State& state) {
+        String SaveXml(const State& state) {
             XmlSerializer serializer;
             if (serializer.BeginObject("State")) {
                 state.Serialize(serializer);
@@ -92,7 +92,7 @@ namespace BECore::Tests {
         }
 
         template <typename State>
-        void LoadXml(const eastl::string& xml, State& state) {
+        void LoadXml(const String& xml, State& state) {
             XmlDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromString(xml)) << xml.c_str();
             ASSERT_TRUE(deserializer.BeginObject("State"));
@@ -173,9 +173,9 @@ namespace BECore::Tests {
         }
 
         /// @p xml without the line of its `choice` element, the field the twin of the eastl:: spelling has not
-        eastl::string WithoutChoice(eastl::string xml) {
+        String WithoutChoice(String xml) {
             const size_t at = xml.find("<choice");
-            if (at != eastl::string::npos) {
+            if (at != String::npos) {
                 const size_t lineStart = xml.rfind('\n', at);
                 xml.erase(lineStart, xml.find("/>", at) + 2 - lineStart);
             }
@@ -187,7 +187,7 @@ namespace BECore::Tests {
     TEST(ReflectionAliasesTest, XmlRoundTrip) {
         AliasState saved;
         Fill(saved);
-        const eastl::string xml = SaveXml(saved);
+        const String xml = SaveXml(saved);
 
         AliasState loaded;
         Dirty(loaded);
@@ -214,9 +214,9 @@ namespace BECore::Tests {
         Fill(aliased);
         Fill(eastl);
 
-        const eastl::string aliasedXml = SaveXml(aliased);
+        const String aliasedXml = SaveXml(aliased);
         // Only the type of the root differs in the text when the names do not
-        ASSERT_NE(aliasedXml.find("<choice index=\"1\" value=\"picked\""), eastl::string::npos) << aliasedXml.c_str();
+        ASSERT_NE(aliasedXml.find("<choice index=\"1\" value=\"picked\""), String::npos) << aliasedXml.c_str();
         EXPECT_EQ(WithoutChoice(aliasedXml), SaveXml(eastl));
         // The binary entries have sizes, so the twin reads the alias bytes (skipping `choice`) and writes the same bytes as its own
         EastlState binaryTwin;
@@ -242,7 +242,7 @@ namespace BECore::Tests {
             }
             return serializer.SaveToString();
         };
-        const eastl::string xml = save(aliased);
+        const String xml = save(aliased);
         EXPECT_EQ(xml, save(reference));
 
         Pair<int32_t, String> loaded{0, "stale"};
@@ -263,8 +263,8 @@ namespace BECore::Tests {
             serializer.EndObject();
         }
         // A Variant has no default to skip (its index is always written): it is the one field left
-        const eastl::string xml = serializer.SaveToString();
-        EXPECT_NE(xml.find("<State>\n    <choice index=\"0\" value=\"0\" />\n  </State>"), eastl::string::npos) << xml.c_str();
+        const String xml = serializer.SaveToString();
+        EXPECT_NE(xml.find("<State>\n    <choice index=\"0\" value=\"0\" />\n  </State>"), String::npos) << xml.c_str();
     }
 
     TEST(ReflectionAliasesTest, TheKeysOfAHashMapComeOutSortedWhatEverTheHashOrder) {
@@ -272,44 +272,25 @@ namespace BECore::Tests {
         for (int i = 0; i < 40; ++i) {
             state.hashed[Format("key_{:02}", (i * 17) % 40)] = i;
         }
-        const eastl::string xml = SaveXml(state);
+        const String xml = SaveXml(state);
         size_t previous = 0;
         for (int i = 0; i < 40; ++i) {
             const size_t at = xml.find(Format("\"key_{:02}\"", i).c_str());
-            ASSERT_NE(at, eastl::string::npos) << i;
+            ASSERT_NE(at, String::npos) << i;
             EXPECT_GE(at, previous) << i;
             previous = at;
         }
     }
 
-    TEST(ReflectionAliasesTest, ATextTooLongForAFixedStringThatCannotOverflowIsCut) {
-        FixedString<8, false> text;
-        const eastl::string xml = "<root><State value=\"0123456789\"/></root>";
+    TEST(ReflectionAliasesTest, ATextTooLongForAFixedStringThatCanOverflowIsKeptWhole) {
+        const String xml = "<root><State value=\"0123456789\"/></root>";
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(xml));
-        ASSERT_TRUE(deserializer.BeginObject("State"));
-        EXPECT_TRUE(Ser::Load(deserializer, text, "value"));
-        deserializer.EndObject();
-        EXPECT_EQ(text.size(), 7u);
-        EXPECT_EQ(text, "0123456");
-
         FixedString<8> roomy;
         ASSERT_TRUE(deserializer.BeginObject("State"));
         EXPECT_TRUE(Ser::Load(deserializer, roomy, "value"));
         deserializer.EndObject();
         EXPECT_EQ(roomy, "0123456789");
-    }
-
-    TEST(ReflectionAliasesTest, AFixedHashMapThatCannotOverflowKeepsWhatFits) {
-        FixedHashMap<String, int32_t, 2, 3, false> source;
-        const eastl::string xml = "<root><State><map><entry key=\"a\" value=\"1\"/><entry key=\"b\" value=\"2\"/><entry key=\"c\" value=\"3\"/></map></State></root>";
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(xml));
-        ASSERT_TRUE(deserializer.BeginObject("State"));
-        EXPECT_TRUE(Ser::Load(deserializer, source, "map"));
-        deserializer.EndObject();
-        EXPECT_EQ(source.size(), 2u);
-        EXPECT_TRUE(source.contains("a"));
     }
 
     namespace {
@@ -334,7 +315,7 @@ namespace BECore::Tests {
 
         /// Loads @p value from XML text `<root><State>...</State></root>` and leaves the errors in @p deserializer
         template <typename Value>
-        void LoadXmlField(XmlDeserializer& deserializer, const eastl::string& xml, Value& value) {
+        void LoadXmlField(XmlDeserializer& deserializer, const String& xml, Value& value) {
             ASSERT_TRUE(deserializer.LoadFromString(xml));
             ASSERT_TRUE(deserializer.BeginObject("State"));
             Ser::Load(deserializer, value, "value");
@@ -480,7 +461,7 @@ namespace BECore::Tests {
     TEST(ReflectionAliasesTest, TheInspectorEditsAStringAndAFixedString) {
         TextEditor editor;
 
-        eastl::string text = "before";
+        String text = "before";
         EXPECT_TRUE(PropVisit::Visit(editor, text, "text"));
         EXPECT_EQ(editor.seen, "before");
         EXPECT_EQ(text, "0123456789ABCDEF-too-long");

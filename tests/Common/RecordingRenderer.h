@@ -224,4 +224,12 @@ namespace BECore::Tests {
         Vector<GeometryStorage> _spareGeometry;
     };
 
+    /// An opaque white texture of @p width by @p height made by @p renderer
+    inline IntrusivePtr<ITexture> MakeTexture(RecordingRenderer& renderer, uint32_t width = 1, uint32_t height = 1) {
+        constexpr uint8_t kWhite = 255;
+        constexpr size_t kBytesPerPixel = 4;
+        const Vector<uint8_t> pixels(static_cast<size_t>(width) * height * kBytesPerPixel, kWhite);
+        return renderer.CreateTexture(pixels.data(), width, height);
+    }
+
 }  // namespace BECore::Tests

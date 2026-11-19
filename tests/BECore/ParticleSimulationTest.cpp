@@ -1,6 +1,7 @@
 #include <BECore/Particles/ParticleRandom.h>
 #include <BECore/Particles/ParticleSimulation.h>
-#include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/UI/UIColor.h>
+#include <Common/AllocCheck.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
 
@@ -85,13 +86,6 @@ namespace BECore::Tests {
         void ExpectNear(Vec2 actual, float x, float y, float tolerance = kTolerance) {
             EXPECT_NEAR(actual.x, x, tolerance);
             EXPECT_NEAR(actual.y, y, tolerance);
-        }
-
-        void ExpectColorEq(Color actual, Color expected) {
-            EXPECT_EQ(actual.r, expected.r);
-            EXPECT_EQ(actual.g, expected.g);
-            EXPECT_EQ(actual.b, expected.b);
-            EXPECT_EQ(actual.a, expected.a);
         }
 
         static_assert(ParticleRandom::SplitMix64(0) == 0xE220A8397B1DCDAFull);
@@ -369,17 +363,17 @@ namespace BECore::Tests {
         const ParticleLook start = ParticleSimulation::SampleLook(effect, 0.0f);
         EXPECT_EQ(start.size, 10.0f);
         EXPECT_EQ(start.rotation, 0.0f);
-        ExpectColorEq(start.color, Color(255, 0, 0, 255));
+        EXPECT_PRED2(ColorsEqual, start.color, Color(255, 0, 0, 255));
 
         const ParticleLook middle = ParticleSimulation::SampleLook(effect, 0.5f);
         EXPECT_FLOAT_EQ(middle.size, 8.0f);  // QuadIn(0.5) = 0.25
         EXPECT_FLOAT_EQ(middle.rotation, 45.0f);
-        ExpectColorEq(middle.color, Color(128, 0, 128, 128));
+        EXPECT_PRED2(ColorsEqual, middle.color, Color(128, 0, 128, 128));
 
         const ParticleLook end = ParticleSimulation::SampleLook(effect, 1.0f);
         EXPECT_EQ(end.size, 2.0f);
         EXPECT_EQ(end.rotation, 90.0f);
-        ExpectColorEq(end.color, Color(0, 0, 255, 0));
+        EXPECT_PRED2(ColorsEqual, end.color, Color(0, 0, 255, 0));
 
         // An overshooting ease never gives a negative size
         effect.size = ParticleCurve(1.0f, 0.0f, EaseType::BackOut);
@@ -418,7 +412,7 @@ namespace BECore::Tests {
         EXPECT_NEAR(vertices[1].y, 205.0f, kTolerance);
         EXPECT_NEAR(vertices[2].x, 95.0f, kTolerance);
         EXPECT_NEAR(vertices[2].y, 205.0f, kTolerance);
-        ExpectColorEq(vertices[0].color, kWhite);
+        EXPECT_PRED2(ColorsEqual, vertices[0].color, kWhite);
         EXPECT_EQ(vertices[0].u, 0.0f);  // untextured
         EXPECT_EQ(vertices[0].v, 0.0f);
 
@@ -686,17 +680,17 @@ namespace BECore::Tests {
         sim.Burst(effect, Vec2(10.0f, 20.0f), 2);
         ASSERT_EQ(sim.GetLiveCount(), 5u);
         for (size_t i = 0; i < 3; ++i) {
-            ExpectColorEq(sim.GetParticles()[i].tint, red);
+            EXPECT_PRED2(ColorsEqual, sim.GetParticles()[i].tint, red);
         }
         for (size_t i = 3; i < 5; ++i) {
-            ExpectColorEq(sim.GetParticles()[i].tint, kWhite);
+            EXPECT_PRED2(ColorsEqual, sim.GetParticles()[i].tint, kWhite);
         }
 
         Vector<GeometryVertex> vertices;
         Vector<int> indices;
         sim.BuildGeometry(effect, Rect{}, Vec2{}, vertices, indices);
-        ExpectColorEq(vertices[0].color, red);         // the first particle: white times red
-        ExpectColorEq(vertices[3 * 4].color, kWhite);  // the fourth is not tinted
+        EXPECT_PRED2(ColorsEqual, vertices[0].color, red);         // the first particle: white times red
+        EXPECT_PRED2(ColorsEqual, vertices[3 * 4].color, kWhite);  // the fourth is not tinted
         ExpectNear(sim.PositionOf(sim.GetParticles()[0], effect), 10.0f, 20.0f);
     }
 
@@ -792,32 +786,24 @@ namespace BECore::Tests {
         const size_t poolCapacity = sim.GetCapacity();
         const size_t vertexCapacity = vertices.capacity();
         const size_t indexCapacity = indices.capacity();
-#if BE_PROFILER_ALLOC
-        const uint64_t before = AllocTracker::GetThreadCounters().count;
-#endif
-        for (int frame = 0; frame < 1000; ++frame) {
-            sim.Update(effect, kPointArea, 1.0f / 60.0f);
-            ASSERT_EQ(sim.BuildGeometry(effect, Rect{}, Vec2(64.0f, 64.0f), vertices, indices), 64u);
-        }
-#if BE_PROFILER_ALLOC
-        EXPECT_EQ(AllocTracker::GetThreadCounters().count, before);
-#endif
+        ExpectNoAllocations([&] {
+            for (int frame = 0; frame < 1000; ++frame) {
+                sim.Update(effect, kPointArea, 1.0f / 60.0f);
+                ASSERT_EQ(sim.BuildGeometry(effect, Rect{}, Vec2(64.0f, 64.0f), vertices, indices), 64u);
+            }
+        });
         EXPECT_EQ(sim.GetCapacity(), poolCapacity);
         EXPECT_EQ(vertices.capacity(), vertexCapacity);
         EXPECT_EQ(indices.capacity(), indexCapacity);
         EXPECT_GT(sim.GetDroppedCount(), 0u);
 
         sim.Clear();
-#if BE_PROFILER_ALLOC
-        const uint64_t emptyBefore = AllocTracker::GetThreadCounters().count;
-#endif
-        for (int frame = 0; frame < 100; ++frame) {
-            sim.Update(effect, kPointArea, 1.0f / 60.0f);
-            EXPECT_EQ(sim.BuildGeometry(effect, Rect{}, Vec2{}, vertices, indices), 0u);
-        }
-#if BE_PROFILER_ALLOC
-        EXPECT_EQ(AllocTracker::GetThreadCounters().count, emptyBefore);
-#endif
+        ExpectNoAllocations([&] {
+            for (int frame = 0; frame < 100; ++frame) {
+                sim.Update(effect, kPointArea, 1.0f / 60.0f);
+                EXPECT_EQ(sim.BuildGeometry(effect, Rect{}, Vec2{}, vertices, indices), 0u);
+            }
+        });
         EXPECT_EQ(sim.GetCapacity(), poolCapacity);
     }
 

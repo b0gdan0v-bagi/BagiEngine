@@ -421,7 +421,7 @@ namespace BECore::Tests {
     TEST_F(UIInputClickerTest, WithStateLookOffTheElementIsStillAClickerAndDisabledWorks) {
         EXPECT_FALSE(El("Still").GivesStateLook());
         EXPECT_TRUE(El("Still").IsInteractive());
-        EXPECT_TRUE(El("Box").GivesStateLook()) << "the default is as before";
+        EXPECT_TRUE(El("Box").GivesStateLook()) << "an element gives its state look by default";
         EXPECT_TRUE(El("StillOff").IsDisabled());
         EXPECT_TRUE(El("StillOff").GetVisualState().disabled);
 

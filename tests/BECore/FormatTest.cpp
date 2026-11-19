@@ -1,4 +1,4 @@
-#include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <Common/AllocCheck.h>
 #include <Common/Printers.h>
 
 namespace BECore::Tests {
@@ -99,12 +99,8 @@ namespace BECore::Tests {
         char buffer[kCapacity];
         std::fill(std::begin(buffer), std::end(buffer), '#');
 
-        const AllocTracker::ThreadCounters before = AllocTracker::GetThreadCounters();
-        const FormatResult fits = FormatToN(buffer, kCapacity, "{}-{}", 12, 34);
-        const AllocTracker::ThreadCounters after = AllocTracker::GetThreadCounters();
-        if constexpr (AllocTracker::kEnabled) {
-            EXPECT_EQ(after.count, before.count);
-        }
+        FormatResult fits;
+        ExpectNoAllocations([&] { fits = FormatToN(buffer, kCapacity, "{}-{}", 12, 34); });
 
         EXPECT_EQ(fits.size, 5U);
         EXPECT_FALSE(fits.truncated);

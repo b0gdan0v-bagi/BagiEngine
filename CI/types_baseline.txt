@@ -26,7 +26,6 @@ tests/BECore/FileSinkTest.cpp fstream 1
 tests/BECore/FileSinkTest.cpp getline 1
 tests/BECore/FuzzCorpusTest.cpp directory-iterator 1
 tests/BECore/FuzzCorpusTest.cpp fstream 1
-tests/BECore/IconTableTest.cpp directory-iterator 1
 tests/BECore/IconTableTest.cpp fstream 1
 tests/BECore/IconTableTest.cpp getline 1
 tests/BECore/ParticleCaptureTest.cpp fstream 1

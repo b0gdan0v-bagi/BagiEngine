@@ -160,9 +160,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(roll.outcome.has_value());
         const int value = static_cast<int>(GetJsonInt(*roll.outcome, "value").value_or(0));
         (*roll.outcome)["value"] = value % 6 + 1;
-        String edited = FormatReplayHeader(parsed->header) + "\n";
+        String edited = Format("{}\n", FormatReplayHeader(parsed->header));
         for (const ReplayEntry& entry : parsed->entries) {
-            edited += FormatReplayEntry(entry) + "\n";
+            AppendFormat(edited, "{}\n", FormatReplayEntry(entry));
         }
 
         ReplayPlayer player;

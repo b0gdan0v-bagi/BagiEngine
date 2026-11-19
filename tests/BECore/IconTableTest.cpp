@@ -11,6 +11,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/Text/TextComponent.h>
+#include <BECore/Text/Utf8.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -18,8 +19,6 @@
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
 #include <imgui.h>
-#include <map>
-#include <set>
 
 namespace BECore::Tests {
 
@@ -31,33 +30,11 @@ namespace BECore::Tests {
         constexpr const char* kWidgetsPath = "src/Widgets";
         constexpr const char* kIconTokenPrefix = "ICON_LC_";
 
-        /// The codepoint of the one UTF-8 character in @p glyph, or 0 when it is not exactly one character
-        unsigned int DecodeSingleCharacter(const char* glyph) {
-            const auto* bytes = reinterpret_cast<const unsigned char*>(glyph);
-            size_t length = 0;
-            unsigned int codepoint = 0;
-            if (bytes[0] < 0x80) {
-                length = 1;
-                codepoint = bytes[0];
-            } else if ((bytes[0] & 0xE0) == 0xC0) {
-                length = 2;
-                codepoint = bytes[0] & 0x1Fu;
-            } else if ((bytes[0] & 0xF0) == 0xE0) {
-                length = 3;
-                codepoint = bytes[0] & 0x0Fu;
-            } else if ((bytes[0] & 0xF8) == 0xF0) {
-                length = 4;
-                codepoint = bytes[0] & 0x07u;
-            } else {
-                return 0;
-            }
-            for (size_t i = 1; i < length; ++i) {
-                if ((bytes[i] & 0xC0) != 0x80) {
-                    return 0;
-                }
-                codepoint = (codepoint << 6) | (bytes[i] & 0x3Fu);
-            }
-            return std::strlen(glyph) == length ? codepoint : 0;
+        /// The code point of the one well-formed UTF-8 character in @p glyph, or 0 when it is not exactly one
+        unsigned int DecodeSingleCharacter(StringView glyph) {
+            size_t pos = 0;
+            const char32_t codepoint = Utf8::DecodeNext(glyph, pos);
+            return pos == glyph.size() && codepoint != Utf8::kReplacement ? static_cast<unsigned int>(codepoint) : 0;
         }
 
         bool IsTokenCharacter(char c) {
@@ -96,8 +73,12 @@ namespace BECore::Tests {
                 if (nameEnd == String::npos || comment == String::npos) {
                     continue;
                 }
-                const unsigned long value = std::strtoul(line.c_str() + comment + std::strlen("// U+"), nullptr, 16);
-                codepoints[line.substr(nameStart, nameEnd - nameStart)] = static_cast<unsigned int>(value);
+                const char* hexStart = line.c_str() + comment + std::strlen("// U+");
+                unsigned int value = 0;
+                if (std::from_chars(hexStart, line.c_str() + line.size(), value, 16).ec != std::errc{}) {
+                    continue;
+                }
+                codepoints[line.substr(nameStart, nameEnd - nameStart)] = value;
             }
             return codepoints;
         }
@@ -108,7 +89,10 @@ namespace BECore::Tests {
             if (root.empty()) {
                 return false;
             }
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
+            std::error_code error;
+            const std::filesystem::recursive_directory_iterator finished;                                                         //-NoStd: a test walks the widget sources once, outside the file layer
+            for (std::filesystem::recursive_directory_iterator it(root, error); !error && it != finished; it.increment(error)) {  //-NoStd: see above
+                const std::filesystem::directory_entry& entry = *it;
                 if (!entry.is_regular_file() || (entry.path().extension() != ".cpp" && entry.path().extension() != ".h")) {
                     continue;
                 }
@@ -135,7 +119,7 @@ namespace BECore::Tests {
                     }
                 }
             }
-            return true;
+            return !error;
         }
 
         /// A context with no backend and the UI font as the editor builds it, beside a font of the icon file alone
@@ -260,7 +244,7 @@ namespace BECore::Tests {
 
         ClassMeta unknown{2, "UnknownIcon", "no-such-icon"};
         EXPECT_EQ(IconOfClass(unknown), GetNodeIcon());
-        EXPECT_EQ(IconOfClass(unknown), GetNodeIcon());  // the second call finds the name already reported
+        EXPECT_EQ(IconOfClass(unknown), GetNodeIcon());  // the answer does not depend on whether the name was reported before
     }
 
     TEST(IconTableTest, ANodeShowsTheIconOfItsFirstComponentThatNamesOne) {

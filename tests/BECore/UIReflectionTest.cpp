@@ -270,7 +270,7 @@ namespace BECore::Tests {
         ExpectSameCanvas(*canvas, *loaded);
     }
 
-    TEST(UIReflectionTest, AnOffsetIsALengthInUnitsOrPercentAndAPlainNumberSavesAsBefore) {
+    TEST(UIReflectionTest, AnOffsetIsALengthInUnitsOrPercentAndAPlainNumberSavesAsAPlainNumber) {
         const String xml = "<root><component><elements><element type=\"UIElement\" name=\"A\" x=\"12\" y=\"5%\"/></elements></component></root>";
         const auto canvas = FromXml(xml);
 
@@ -308,10 +308,10 @@ namespace BECore::Tests {
         EXPECT_EQ(ToXml(*again, true), saved);
 
         // A file that never names them gets none of them back: its second save is its first
-        const String legacy = ToXml(*MakeCanvas(), true);
-        EXPECT_EQ(legacy.find("anchorMin"), String::npos);
-        EXPECT_EQ(legacy.find("anchorMax"), String::npos);
-        EXPECT_EQ(legacy.find("pivot"), String::npos);
+        const String unnamed = ToXml(*MakeCanvas(), true);
+        EXPECT_EQ(unnamed.find("anchorMin"), String::npos);
+        EXPECT_EQ(unnamed.find("anchorMax"), String::npos);
+        EXPECT_EQ(unnamed.find("pivot"), String::npos);
         // A value equal to the shorthand's is still a choice of the author: a set field is written, even a zero one
         auto zero = New<UICanvasComponent>();
         auto element = MakeElement("Zero");

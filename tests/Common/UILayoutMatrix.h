@@ -43,7 +43,7 @@ namespace BECore::Tests {
             float height;
         };
 
-        // The aspect ratios of the plan: wide and ultrawide monitors, laptops, tablets, phones in both shapes
+        // The aspect ratios: wide and ultrawide monitors, laptops, tablets, phones in both shapes
         constexpr Aspect kAspects[] = {{"16:9", 16, 9}, {"16:10", 16, 10}, {"3:2", 3, 2},   {"4:3", 4, 3},        {"1:1", 1, 1},
                                        {"21:9", 21, 9}, {"32:9", 32, 9},   {"9:16", 9, 16}, {"9:19.5", 9, 19.5f}, {"3:4", 3, 4}};
 

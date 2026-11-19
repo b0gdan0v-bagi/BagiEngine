@@ -245,7 +245,7 @@ namespace BECore::Tests {
 
     TEST_F(ConfigEditorSaveTest, AValueOutsideTheDropdownIsReportedOnReload) {
         const FieldHint offered = OfferedSinkTypes();
-        // The old, wrong enum name: it is not offered, and the loader cannot resolve it
+        // A name that is not a class name: it is not offered, and the loader cannot resolve it
         ASSERT_FALSE(Contains(offered.options, "Console"));
 
         XmlDocument edited;

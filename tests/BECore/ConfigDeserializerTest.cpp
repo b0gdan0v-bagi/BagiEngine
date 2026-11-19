@@ -7,9 +7,8 @@
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Resource/ResourceManager.h>
-#include <Common/EngineEnvironment.h>
+#include <Common/MountedFolderTest.h>
 #include <Common/Printers.h>
-#include <Common/TempPath.h>
 #include <Generated/ConfigDeserializerTest.gen.hpp>
 
 namespace BECore::Tests {
@@ -35,25 +34,9 @@ namespace BECore::Tests {
     }  // namespace
 
     /// Needs FileSystem and ConfigManager. A temp directory is mounted as a virtual path for the file cases.
-    class ConfigDeserializerTest : public ::testing::Test {
+    class ConfigDeserializerTest : public MountedFolderTest {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
-        void SetUp() override {
-            // One directory per test: ctest runs every test in its own process
-            _dir = TestTempDirectory("BagiConfigDeserializerTest");
-            std::filesystem::remove_all(_dir);
-            std::filesystem::create_directories(_dir);
-            ASSERT_TRUE(CoreManager::GetFileSystem().Mount(PoolString::Intern(kMountPoint), _dir));
-        }
-
-        void TearDown() override {
-            CoreManager::GetFileSystem().Unmount(PoolString::Intern(kMountPoint));
-            std::error_code ec;
-            std::filesystem::remove_all(_dir, ec);
-        }
+        ConfigDeserializerTest() : MountedFolderTest(kMountPoint) {}
 
         void WriteProbeXml(const char* fileName) const {
             XmlSerializer serializer;
@@ -70,12 +53,6 @@ namespace BECore::Tests {
             serializer.EndObject();
             ASSERT_TRUE(serializer.SaveToFile(_dir / fileName));
         }
-
-        static String VirtualPath(const char* fileName) {
-            return Format("{}/{}", kMountPoint, fileName);
-        }
-
-        std::filesystem::path _dir;
     };
 
     TEST_F(ConfigDeserializerTest, CreateDeserializerReadsKnownConfig) {

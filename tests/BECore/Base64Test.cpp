@@ -35,7 +35,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Encode({0xFF}), "/w==");
     }
 
-    TEST(Base64Test, EmptyInputGivesAnEmptyString) {
+    TEST(Base64Test, AnEmptySpanWithANullDataPointerGivesAnEmptyString) {
         const String encoded = Base64Encode(Span<const uint8_t>());
 
         EXPECT_TRUE(encoded.empty());

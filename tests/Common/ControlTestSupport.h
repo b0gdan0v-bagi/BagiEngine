@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/Types/Types.h>
 #include <Common/Require.h>
@@ -15,6 +16,18 @@ namespace BECore::Tests {
             request["params"] = params;
         }
         return DumpJson(request);
+    }
+
+    /// Posts the request @p id of @p method to @p service, runs the main-thread side and returns the parsed response; a null Json when
+    /// nothing was answered or the answer did not parse
+    inline Json CallControl(ControlService& service, int64_t id, StringView method, const Json& params = Json()) {
+        Json response;
+        service.Post(MakeRequest(id, method, params), [&response](String text) {
+            auto parsed = ParseJson(text);
+            response = parsed ? std::move(*parsed) : Json();
+        });
+        service.Drain();
+        return response;
     }
 
     // The readers below go through the checked accessors of Json.h: nlohmann's throwing ones would abort the whole test process on a bad answer

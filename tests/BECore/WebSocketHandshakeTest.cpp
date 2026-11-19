@@ -57,11 +57,12 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] String Text() const {
-                String text = requestLine + "\r\n";
+                String text = Format("{}\r\n", requestLine);
                 for (const String& line : headers) {
-                    text += line + "\r\n";
+                    AppendFormat(text, "{}\r\n", line);
                 }
-                return text + "\r\n";
+                text += "\r\n";
+                return text;
             }
         };
 
@@ -511,7 +512,7 @@ namespace BECore::Tests {
         const HandshakePolicy policy = HealthPolicy();
         for (const char* line : {"GET / HTTP/1.1", "GET /healthz/ HTTP/1.1", "GET /health HTTP/1.1", "GET /healthzz HTTP/1.1", "GET /HEALTHZ HTTP/1.1", "GET /control HTTP/1.1",
                                  "POST /healthz HTTP/1.1", "HEAD /healthz HTTP/1.1", "GET /healthz HTTP/2", "GET /healthz", "GET  HTTP/1.1", ""}) {
-            EXPECT_FALSE(IsHealth(String(line) + "\r\nHost: a\r\n\r\n", policy)) << line;
+            EXPECT_FALSE(IsHealth(Format("{}\r\nHost: a\r\n\r\n", line), policy)) << line;
         }
     }
 
@@ -570,7 +571,8 @@ namespace BECore::Tests {
             while (text.size() + padding.size() + tail.size() <= kMaxHandshakeBytes) {
                 text += padding;
             }
-            return text + tail;
+            text += tail;
+            return text;
         }
 
     }  // namespace
@@ -615,7 +617,7 @@ namespace BECore::Tests {
     }
 
     TEST(WebSocketHandshakeTest, RefusalMessagesQuoteWhatThePeerSent) {
-        const String longHost = String(1000, 'h') + "\x01";
+        const String longHost = Format("{}\x01", String(1000, 'h'));
         const auto refusedHost = Parse(Request().Set("Host", longHost));
         ExpectRefused(refusedHost, 403);
         EXPECT_LT(refusedHost.error().message.size(), 200u) << "a loopback refusal repeats the Host cut like a public one repeats the Origin";

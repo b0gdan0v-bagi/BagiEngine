@@ -435,7 +435,7 @@ namespace BECore::Tests {
 
         EXPECT_EQ(canvas.PickElement(500.0f, 400.0f), nullptr);
         EXPECT_EQ(canvas.PickElement(150.0f, 150.0f), panel.Get());
-        EXPECT_EQ(canvas.HitTest(500.0f, 400.0f), canvas.root.Get());  // the game's hit test is as it was
+        EXPECT_EQ(canvas.HitTest(500.0f, 400.0f), canvas.root.Get());  // the game's hit test still answers the input-blocking root
     }
 
     TEST(UICanvasLayoutTest, PickElementTakesTheTopmostChildBeforeItsParentAndALaterSiblingFirst) {

@@ -700,7 +700,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        enum class HeaderState { Idle, Hover, Press, Disabled };
+        CORE_ENUM(HeaderState, uint8_t, Idle, Hover, Press, Disabled)
 
         void SetState(UIDropdown& dropdown, HeaderState state) {
             dropdown.disabled = state == HeaderState::Disabled;

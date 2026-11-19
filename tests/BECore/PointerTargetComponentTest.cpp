@@ -496,7 +496,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(PointerTargetComponentTest, ATargetDrawnAboveTakesThePointerAndTheOneBelowExitsOnce) {
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(TargetNode("Low", 0, 0, kBoxSize, kBoxSize) + TargetNode("High", kBoxSize / 2, 0, kBoxSize, kBoxSize)));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", TargetNode("Low", 0, 0, kBoxSize, kBoxSize), TargetNode("High", kBoxSize / 2, 0, kBoxSize, kBoxSize))));
         Draw();
         Bind("Low", _a);
         Bind("High", _b);
@@ -515,7 +515,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(PointerTargetComponentTest, TwoPointersKeepTheirOwnPressHoverAndRelease) {
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(TargetNode("A", 0, 0, kBoxSize, kBoxSize) + TargetNode("B", 200, 0, kBoxSize, kBoxSize)));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", TargetNode("A", 0, 0, kBoxSize, kBoxSize), TargetNode("B", 200, 0, kBoxSize, kBoxSize))));
         Draw();
         Bind("A", _a);
         Bind("B", _b);
@@ -743,7 +743,7 @@ namespace BECore::Tests {
   <component type="ClipPopTestComponent"/>
 </components></node>)",
                                       kBoxSize / 2, kBoxSize, kBoxSize, kBoxSize);
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(TargetNode("Under", 0, 0, kBoxSize, kBoxSize) + clipped));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", TargetNode("Under", 0, 0, kBoxSize, kBoxSize), clipped)));
         Draw();
         Bind("Under", _a);
         Bind("Clipped", _b);

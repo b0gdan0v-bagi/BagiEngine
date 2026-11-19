@@ -294,7 +294,7 @@ namespace BECore::Tests {
         ExpectRect(inner->rect, 150.0f, 240.0f, 50.0f, 10.0f);
     }
 
-    TEST(UIRegionLayoutTest, WithoutARegionSetTheThreeArgumentRunLaysOutAsBefore) {
+    TEST(UIRegionLayoutTest, WithoutARegionSetTheThreeArgumentRunLaysOutInTheCanvas) {
         auto root = New<UIElement>();
         auto element = AddInRegion(*root, "Plate", kLeft, 40.0f, 20.0f);
         UIVariants::Apply(*root, {}, kCanvas);

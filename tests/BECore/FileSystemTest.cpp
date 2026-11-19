@@ -1,4 +1,5 @@
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/Utils/ScopeGuard.h>
 #include <Common/FreshText.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
@@ -19,18 +20,17 @@ namespace BECore::Tests {
     class FileSystemTest : public ::testing::Test {
     protected:
         void SetUp() override {
-            // One directory per test: ctest runs every test in its own process
+            // One directory per test and per process: ctest runs the tests in parallel processes, two checkouts may run the same one (TempPath.h)
             _base = TestTempDirectory("BagiFileSystemTest");
-            std::filesystem::remove_all(_base);
+            RemoveDirectory(_base);
             _engine = _base / "engine";
             _game = _base / "game";
-            std::filesystem::create_directories(_engine);
-            std::filesystem::create_directories(_game);
+            MakeDirectory(_engine);
+            MakeDirectory(_game);
         }
 
         void TearDown() override {
-            std::error_code ec;
-            std::filesystem::remove_all(_base, ec);
+            RemoveDirectory(_base);
         }
 
         std::filesystem::path _base;
@@ -94,7 +94,7 @@ namespace BECore::Tests {
 
     TEST_F(FileSystemTest, RootWithoutDirectoryAddsNoLayer) {
         Touch(_engine / "assets" / "a.png");
-        std::filesystem::create_directories(_game / "config");
+        MakeDirectory(_game / "config");
 
         FileSystem fs;
         fs.AddContentRoot(_engine);
@@ -205,11 +205,24 @@ namespace BECore::Tests {
 #endif
 
     TEST_F(FileSystemTest, WithoutContentRootsTheProjectRootIsFoundFromTheWorkingDirectory) {
+        // A working directory two levels below a folder with config/, whatever folder the run started in
+        MakeDirectory(_engine / "config");
+        const std::filesystem::path deep = _engine / "a" / "b";
+        MakeDirectory(deep);
+        std::error_code error;
+        const std::filesystem::path started = std::filesystem::current_path(error);
+        ASSERT_FALSE(error) << error.message();
+        std::filesystem::current_path(deep, error);
+        ASSERT_FALSE(error) << error.message();
+        const ScopeGuard restore([&started] {
+            std::error_code ignored;
+            std::filesystem::current_path(started, ignored);
+        });
+
         FileSystem fs;
         fs.Initialize();
 
-        // The test runs inside the repository, which has a config/ folder
-        EXPECT_FALSE(fs.GetRootPath().empty());
+        EXPECT_TRUE(std::filesystem::equivalent(fs.GetRootPath(), _engine, error)) << fs.GetRootPath().string() << " is not " << _engine.string();
         EXPECT_FALSE(fs.GetMountLayers("config"_intern).empty());
     }
 

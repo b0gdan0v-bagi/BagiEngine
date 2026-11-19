@@ -13,53 +13,6 @@ namespace BECore::Tests {
 
     using namespace AssetPurposeTestTypes;
 
-    TEST(AssetPurpose, TheOptionIsCarriedByTheStaticMetaAndTheTraits) {
-        EXPECT_EQ(PurposeSimProbe::GetStaticTypeMeta().purpose, AssetPurpose::Sim);
-        EXPECT_EQ(PurposeVisualProbe::GetStaticTypeMeta().purpose, AssetPurpose::Visual);
-        EXPECT_EQ(PurposeEditorProbe::GetStaticTypeMeta().purpose, AssetPurpose::Editor);
-        EXPECT_EQ(ReflectionTraits<PurposeSimProbe>::purpose, AssetPurpose::Sim);
-        EXPECT_EQ(ReflectionTraits<PurposeVisualProbe>::purpose, AssetPurpose::Visual);
-        EXPECT_EQ(ReflectionTraits<PurposeEditorProbe>::purpose, AssetPurpose::Editor);
-    }
-
-    TEST(AssetPurpose, AClassWithoutTheOptionIsCommon) {
-        EXPECT_EQ(PurposeCommonProbe::GetStaticTypeMeta().purpose, AssetPurpose::Common);
-        EXPECT_EQ(ReflectionTraits<PurposeCommonProbe>::purpose, AssetPurpose::Common);
-    }
-
-    TEST(AssetPurpose, ThePurposeIsReadThroughTheVirtualMeta) {
-        const PurposeVisualProbe probe;
-        EXPECT_EQ(probe.GetTypeMeta().purpose, AssetPurpose::Visual);
-    }
-
-    TEST(AssetPurpose, AMetaMadeByHandIsCommon) {
-        constexpr ClassMeta meta{1, "X"};
-        EXPECT_EQ(meta.purpose, AssetPurpose::Common);
-    }
-
-    TEST(AssetPurpose, NamesParseBack) {
-        EXPECT_EQ(PurposeName(AssetPurpose::Sim), "sim");
-        EXPECT_EQ(PurposeName(AssetPurpose::Visual), "visual");
-        EXPECT_EQ(PurposeName(AssetPurpose::Editor), "editor");
-        EXPECT_EQ(TryParsePurpose("sim"), AssetPurpose::Sim);
-        EXPECT_EQ(TryParsePurpose("visual"), AssetPurpose::Visual);
-        EXPECT_EQ(TryParsePurpose("editor"), AssetPurpose::Editor);
-        EXPECT_FALSE(TryParsePurpose("common").has_value());
-        EXPECT_FALSE(TryParsePurpose("Sim").has_value());
-        EXPECT_FALSE(TryParsePurpose("").has_value());
-    }
-
-    TEST(AssetPurpose, IsAllowedInTable) {
-        constexpr AssetPurpose kTypes[] = {AssetPurpose::Common, AssetPurpose::Sim, AssetPurpose::Visual, AssetPurpose::Editor};
-        constexpr AssetPurpose kParts[] = {AssetPurpose::Sim, AssetPurpose::Visual, AssetPurpose::Editor};
-        for (const AssetPurpose type : kTypes) {
-            for (const AssetPurpose part : kParts) {
-                const bool expected = type == AssetPurpose::Common || type == part;
-                EXPECT_EQ(IsAllowedIn(type, part), expected) << PurposeName(type).data() << " in " << PurposeName(part).data();
-            }
-        }
-    }
-
     namespace {
 
         constexpr int32_t kSimValue = 11;
@@ -124,14 +77,61 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class AssetPurposeFilter : public ::testing::Test {
+    class AssetPurposeTest : public ::testing::Test {
     protected:
         void SetUp() override {
             ResetCounters();
         }
     };
 
-    TEST_F(AssetPurposeFilter, SimFilterLoadsTheSimAndCommonDataOfAnXmlDocumentAndRefusesTheRest) {
+    TEST_F(AssetPurposeTest, TheOptionIsCarriedByTheStaticMetaAndTheTraits) {
+        EXPECT_EQ(PurposeSimProbe::GetStaticTypeMeta().purpose, AssetPurpose::Sim);
+        EXPECT_EQ(PurposeVisualProbe::GetStaticTypeMeta().purpose, AssetPurpose::Visual);
+        EXPECT_EQ(PurposeEditorProbe::GetStaticTypeMeta().purpose, AssetPurpose::Editor);
+        EXPECT_EQ(ReflectionTraits<PurposeSimProbe>::purpose, AssetPurpose::Sim);
+        EXPECT_EQ(ReflectionTraits<PurposeVisualProbe>::purpose, AssetPurpose::Visual);
+        EXPECT_EQ(ReflectionTraits<PurposeEditorProbe>::purpose, AssetPurpose::Editor);
+    }
+
+    TEST_F(AssetPurposeTest, AClassWithoutTheOptionIsCommon) {
+        EXPECT_EQ(PurposeCommonProbe::GetStaticTypeMeta().purpose, AssetPurpose::Common);
+        EXPECT_EQ(ReflectionTraits<PurposeCommonProbe>::purpose, AssetPurpose::Common);
+    }
+
+    TEST_F(AssetPurposeTest, ThePurposeIsReadThroughTheVirtualMeta) {
+        const PurposeVisualProbe probe;
+        EXPECT_EQ(probe.GetTypeMeta().purpose, AssetPurpose::Visual);
+    }
+
+    TEST_F(AssetPurposeTest, AMetaMadeByHandIsCommon) {
+        constexpr ClassMeta meta{1, "X"};
+        EXPECT_EQ(meta.purpose, AssetPurpose::Common);
+    }
+
+    TEST_F(AssetPurposeTest, NamesParseBack) {
+        EXPECT_EQ(PurposeName(AssetPurpose::Sim), "sim");
+        EXPECT_EQ(PurposeName(AssetPurpose::Visual), "visual");
+        EXPECT_EQ(PurposeName(AssetPurpose::Editor), "editor");
+        EXPECT_EQ(TryParsePurpose("sim"), AssetPurpose::Sim);
+        EXPECT_EQ(TryParsePurpose("visual"), AssetPurpose::Visual);
+        EXPECT_EQ(TryParsePurpose("editor"), AssetPurpose::Editor);
+        EXPECT_FALSE(TryParsePurpose("common").has_value());
+        EXPECT_FALSE(TryParsePurpose("Sim").has_value());
+        EXPECT_FALSE(TryParsePurpose("").has_value());
+    }
+
+    TEST_F(AssetPurposeTest, IsAllowedInTable) {
+        constexpr AssetPurpose kTypes[] = {AssetPurpose::Common, AssetPurpose::Sim, AssetPurpose::Visual, AssetPurpose::Editor};
+        constexpr AssetPurpose kParts[] = {AssetPurpose::Sim, AssetPurpose::Visual, AssetPurpose::Editor};
+        for (const AssetPurpose type : kTypes) {
+            for (const AssetPurpose part : kParts) {
+                const bool expected = type == AssetPurpose::Common || type == part;
+                EXPECT_EQ(IsAllowedIn(type, part), expected) << PurposeName(type).data() << " in " << PurposeName(part).data();
+            }
+        }
+    }
+
+    TEST_F(AssetPurposeTest, SimFilterLoadsTheSimAndCommonDataOfAnXmlDocumentAndRefusesTheRest) {
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(kXml));
         deserializer.SetPurposeFilter(AssetPurpose::Sim);
@@ -148,7 +148,7 @@ namespace BECore::Tests {
         EXPECT_EQ(deserializer.GetErrors()[2].path, "single");
     }
 
-    TEST_F(AssetPurposeFilter, WithoutAFilterTheSameDocumentLoadsWholeAsBefore) {
+    TEST_F(AssetPurposeTest, WithoutAFilterTheSameDocumentLoadsWhole) {
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(kXml));
         EXPECT_FALSE(deserializer.GetPurposeFilter().has_value());
@@ -165,7 +165,7 @@ namespace BECore::Tests {
         EXPECT_EQ(PurposeVisualDerived::constructed, 2);
     }
 
-    TEST_F(AssetPurposeFilter, TheSameHoldsForABinaryDocument) {
+    TEST_F(AssetPurposeTest, TheSimFilterHoldsForABinaryDocument) {
         BinarySerializer serializer;
         MakeContent().Serialize(serializer);
         ResetCounters();
@@ -191,7 +191,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(everything.single);
     }
 
-    TEST_F(AssetPurposeFilter, ARefusedClassReadsNoFieldAtItsRoot) {
+    TEST_F(AssetPurposeTest, AClassTheFilterRefusesReadsNoFieldAtItsRoot) {
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(kXml));
         deserializer.SetPurposeFilter(AssetPurpose::Visual);
@@ -205,7 +205,7 @@ namespace BECore::Tests {
         ExpectOneRefusal(deserializer, "", "Type 'PurposeSimHolder' (purpose sim) is not allowed in the visual part");
     }
 
-    TEST_F(AssetPurposeFilter, ACommonTypeIsAcceptedInEveryPart) {
+    TEST_F(AssetPurposeTest, TheFilterAcceptsACommonTypeInEveryPart) {
         for (const AssetPurpose part : {AssetPurpose::Sim, AssetPurpose::Visual, AssetPurpose::Editor}) {
             XmlDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromString(R"(<root><commonPart value="33"/></root>)"));
@@ -217,7 +217,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST_F(AssetPurposeFilter, AcceptsPurposeAnswersAndReportsAtTheCurrentPath) {
+    TEST_F(AssetPurposeTest, TheFilterAcceptsPurposeAnswersAndReportsAtTheCurrentPath) {
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString("<root><a><b/></a></root>"));
         EXPECT_TRUE(deserializer.AcceptsPurpose(AssetPurpose::Visual, "X"));
@@ -235,7 +235,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(deserializer.AcceptsPurpose(AssetPurpose::Editor, "X"));
     }
 
-    TEST_F(AssetPurposeFilter, TheFilterSurvivesLoadingAnotherDocumentAndFactoryMetaIsFound) {
+    TEST_F(AssetPurposeTest, TheFilterSurvivesLoadingAnotherDocumentAndFactoryMetaIsFound) {
         XmlDeserializer deserializer;
         deserializer.SetPurposeFilter(AssetPurpose::Sim);
         ASSERT_TRUE(deserializer.LoadFromString("<root/>"));

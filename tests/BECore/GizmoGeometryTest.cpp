@@ -1,38 +1,17 @@
+#include <BECore/GizmoTestSupport.h>
 #include <Widgets/Viewport/GizmoGeometry.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
 
     using namespace Gizmo;
+    using namespace GizmoTest;
 
     namespace {
-
-        constexpr float kTolerance = 1e-3f;
-
-        void ExpectVec(Vec2 expected, Vec2 actual) {
-            EXPECT_NEAR(expected.x, actual.x, kTolerance);
-            EXPECT_NEAR(expected.y, actual.y, kTolerance);
-        }
-
-        Item MakeItem(float x, float y, float width, float height, float rotation = 0.0f, float pivotX = 0.5f, float pivotY = 0.5f) {
-            Item item;
-            item.x = x;
-            item.y = y;
-            item.width = width;
-            item.height = height;
-            item.rotation = rotation;
-            item.pivotX = pivotX;
-            item.pivotY = pivotY;
-            return item;
-        }
 
         Frame FrameOf(const Item& item, Space space = Space::World) {
             return MakeFrame(Span<const Item>(&item, 1), space);
         }
-
-        // A 100 x 50 item at the origin: its centre is (50, 25)
-        const Item kFlat = MakeItem(0.0f, 0.0f, 100.0f, 50.0f);
-        constexpr Vec2 kFlatCenter{50.0f, 25.0f};
 
         // A 40 x 20 item turned a quarter about its centre (120, 110): it stands 20 wide and 40 tall, corners (130, 90) (130, 130) (110, 130) (110, 90)
         const Item kQuarter = MakeItem(100.0f, 100.0f, 40.0f, 20.0f, 90.0f);
@@ -179,10 +158,8 @@ namespace BECore::Tests {
     TEST(GizmoGeometryTest, LocalFrameTurnsTheArrowsByThirtyDegrees) {
         const Item turned = MakeItem(0.0f, 0.0f, 20.0f, 20.0f, 30.0f);
         const Frame frame = FrameOf(turned, Space::Local);
-        const float cosine = 0.8660254f;  // cos 30 degrees
-        const float sine = 0.5f;          // sin 30 degrees
-        ExpectVec({10.0f + kArrowLength * cosine, 10.0f + kArrowLength * sine}, HandlePosition(frame, Handle::AxisX, 1.0f));
-        ExpectVec({10.0f - kArrowLength * sine, 10.0f + kArrowLength * cosine}, HandlePosition(frame, Handle::AxisY, 1.0f));
+        ExpectVec({10.0f + kArrowLength * kThirtyDegreesCos, 10.0f + kArrowLength * kThirtyDegreesSin}, HandlePosition(frame, Handle::AxisX, 1.0f));
+        ExpectVec({10.0f - kArrowLength * kThirtyDegreesSin, 10.0f + kArrowLength * kThirtyDegreesCos}, HandlePosition(frame, Handle::AxisY, 1.0f));
     }
 
     TEST(GizmoGeometryTest, HandleSizeFollowsUnitsPerScreenPixel) {

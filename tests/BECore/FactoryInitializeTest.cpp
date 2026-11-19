@@ -101,7 +101,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(list->probes[0]->Is<InitProbeReads>());
     }
 
-    TEST_F(FactoryInitializeTest, ABaseWithoutTheMethodLoadsAsBefore) {
+    TEST_F(FactoryInitializeTest, ABaseWithoutTheHookLoadsItsElementsWithoutACall) {
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(
             R"(<root><items>

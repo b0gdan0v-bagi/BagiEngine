@@ -212,7 +212,7 @@ namespace BECore::Tests {
             std::filesystem::remove_all(_dir);
             std::filesystem::create_directories(_dir);
             for (int i = 0; i < 3; ++i) {
-                WriteFile(_dir / "nodes" / ToStd(String(kNodeNames[i]) + ".xml"), kNodeTexts[i]);
+                WriteFile(_dir / "nodes" / ToStd(Format("{}.xml", kNodeNames[i])), kNodeTexts[i]);
             }
             _renderer = New<RecordingRenderer>();
             _renderer->width = 800.0f;
@@ -362,7 +362,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneSplitTest, AMissingReferenceLeavesTheOtherNodesInOrder) {
         pugi::xml_document doc;
-        const auto manager = Load(SceneConfigText(String("<node ref=\"nodes/Board\"/><node ref=\"nodes/Nowhere\"/>") + "<node ref=\"nodes/Menu\"/>", kMainSceneView800x600), doc);
+        const auto manager = Load(SceneConfigText("<node ref=\"nodes/Board\"/><node ref=\"nodes/Nowhere\"/><node ref=\"nodes/Menu\"/>", kMainSceneView800x600), doc);
 
         EXPECT_EQ(NodeNamesOf(Main(manager)), (Vector<String>{"Board", "Menu"}));
     }
@@ -430,7 +430,7 @@ namespace BECore::Tests {
     TEST_F(SceneSplitOverrideTest, InstancesWithOverridesLoadAsTheInlineScene) {
         pugi::xml_document inlineDoc;
         pugi::xml_document splitDoc;
-        const auto inlined = Load(SceneConfigText(PanelInlineA() + PanelInlineB() + PanelInlineC(), kMainSceneView800x600), inlineDoc);
+        const auto inlined = Load(SceneConfigText(Format("{}{}{}", PanelInlineA(), PanelInlineB(), PanelInlineC()), kMainSceneView800x600), inlineDoc);
         const auto split = Load(SceneConfigText(Format("{}{}{}", PanelRefA(), PanelRefB(), PanelRefC()), kMainSceneView800x600), splitDoc);
 
         ExpectSameScene(Main(inlined), Main(split));
@@ -479,7 +479,7 @@ namespace BECore::Tests {
         pugi::xml_document inlineDoc;
         pugi::xml_document splitDoc;
         pugi::xml_document plainDoc;
-        const auto inlined = Load(SceneConfigText(PanelInlineA() + PanelInlineB() + PanelInlineC(), kMainSceneView800x600), inlineDoc);
+        const auto inlined = Load(SceneConfigText(Format("{}{}{}", PanelInlineA(), PanelInlineB(), PanelInlineC()), kMainSceneView800x600), inlineDoc);
         const auto split = Load(SceneConfigText(Format("{}{}{}", PanelRefA(), PanelRefB(), PanelRefC()), kMainSceneView800x600), splitDoc);
         const auto plain = Load(SceneConfigText("<node ref=\"nodes/Panel\"/>", kMainSceneView800x600), plainDoc);
 
@@ -544,7 +544,7 @@ namespace BECore::Tests {
         const NodeExpansion result = LoadSceneDocument(_dir / "SceneConfig.xml", split);
 
         pugi::xml_document inlined;
-        ASSERT_TRUE(inlined.load_string(SceneConfigText(PanelInlineA() + PanelInlineB() + PanelInlineC(), kMainSceneView800x600).c_str()));
+        ASSERT_TRUE(inlined.load_string(SceneConfigText(Format("{}{}{}", PanelInlineA(), PanelInlineB(), PanelInlineC()), kMainSceneView800x600).c_str()));
         EXPECT_TRUE(result.Ok()) << (result.errors.empty() ? "" : result.errors[0].c_str());
         EXPECT_EQ(result.expanded, 3u);
         EXPECT_EQ(XmlText(split.document_element()), XmlText(inlined.document_element()));

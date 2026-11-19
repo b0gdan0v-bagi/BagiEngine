@@ -24,7 +24,7 @@ namespace BECore::Fuzz {
             return bytes;
         }
 
-        // The screens of tests/BECore/UIWebTest.cpp (the HUD of the plan's sketch, a game's menu and HUD, the settings panel), as a game writes them
+        // The screens of tests/BECore/UIWebTest.cpp (a HUD, a game's menu and HUD, the settings panel), as a game writes them
 
         constexpr StringView kHudHtml = R"xml(<link rel="stylesheet" href="hud.css">
 <div id="Hud" class="hud">

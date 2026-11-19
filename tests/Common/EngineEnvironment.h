@@ -5,6 +5,11 @@
 #include <Common/AssertBridge.h>
 #include <gtest/gtest.h>
 
+// Defined by the generated source of BagiEngineTestSupport (be_link_content_roots): no ordinary source names the checkout path
+namespace BagiContentRoots {
+    extern const char* const kEngine;
+}  // namespace BagiContentRoots
+
 namespace BECore {
 
     class SceneManager;

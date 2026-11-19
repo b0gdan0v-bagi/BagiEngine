@@ -21,6 +21,8 @@ namespace BECore {
         /// The range `capacity` is clamped to when the history is built
         static constexpr int kMinCapacity = 64;
         static constexpr int kMaxCapacity = 65536;
+        /// The capacity of a sink whose config names none
+        static constexpr int kDefaultCapacity = 2048;
 
         LogHistorySink() = default;
         ~LogHistorySink() override = default;
@@ -51,7 +53,7 @@ namespace BECore {
         }
 
     private:
-        BE_REFLECT_FIELD int _capacity = 2048;
+        BE_REFLECT_FIELD int _capacity = kDefaultCapacity;
         UniquePtr<LogHistory> _history;
         bool _initialized = false;
     };

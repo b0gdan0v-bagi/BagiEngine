@@ -1,7 +1,6 @@
 #include <Common/Printers.h>
 #include <Widgets/ImGuiTheme.h>
 #include <cmath>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -129,7 +128,7 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(style.FontScaleDpi, 1.5f);
     }
 
-    TEST(ImGuiThemeTest, AScaleThatCannotBeOneCountsAsOne) {
+    TEST(ImGuiThemeTest, AScaleThatIsNotAScaleCountsAsOne) {
         ImGuiStyle reference;
         ApplyImGuiTheme(reference, 1.0f);
 

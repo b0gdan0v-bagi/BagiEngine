@@ -1,9 +1,7 @@
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/Logger/LogHistorySink.h>
-#include <BECore/Logger/Logger.h>
 #include <BECore/Logger/LoggerManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Threading/Thread.h>
 #include <Common/Printers.h>
 
 namespace BECore::Tests {
@@ -46,7 +44,7 @@ namespace BECore::Tests {
         ASSERT_NE(sink, nullptr);
         manager->Initialize();
         ASSERT_NE(sink->GetHistory(), nullptr);
-        EXPECT_EQ(sink->GetHistory()->GetCapacity(), 2048U);
+        EXPECT_EQ(sink->GetHistory()->GetCapacity(), static_cast<size_t>(LogHistorySink::kDefaultCapacity));
     }
 
     TEST(LogHistorySinkTest, ALineFromAWorkerThreadIsInTheHistoryAfterFlush) {

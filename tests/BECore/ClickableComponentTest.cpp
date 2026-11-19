@@ -234,7 +234,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ClickableComponentTest, TheLaterSiblingWinsAndTheLowerOneGetsNothing) {
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Low", "ActLow", 0.0f) + ClickableNode("High", "ActHigh", 0.0f)));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("Low", "ActLow", 0.0f), ClickableNode("High", "ActHigh", 0.0f))));
         Draw();
         InputRecorder recorder;
 
@@ -245,7 +245,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ClickableComponentTest, AHigherLayerWinsOverALaterSibling) {
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Front", "ActFront", 0.0f, 1) + ClickableNode("Later", "ActLater", 0.0f)));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("Front", "ActFront", 0.0f, 1), ClickableNode("Later", "ActLater", 0.0f))));
         Draw();
         InputRecorder recorder;
 
@@ -256,7 +256,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ClickableComponentTest, TheLowerOneTakesAPressOutsideTheOneAboveIt) {
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Low", "ActLow", 0.0f) + ClickableNode("High", "ActHigh", kBoxSize / 2)));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("Low", "ActLow", 0.0f), ClickableNode("High", "ActHigh", kBoxSize / 2))));
         Draw();
         InputRecorder recorder;
 
@@ -267,7 +267,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ClickableComponentTest, APressHeldOnOneAndReleasedOverTheOtherEmitsOnlyTheFirst) {
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("A", "ActA", 0.0f) + ClickableNode("B", "ActB", 200.0f)));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("A", "ActA", 0.0f), ClickableNode("B", "ActB", 200.0f))));
         Draw();
         InputRecorder recorder;
 
@@ -287,7 +287,7 @@ namespace BECore::Tests {
   <component type="ClipPopTestComponent"/>
 </components></node>)",
                                       kBoxSize / 2, kBoxSize, kBoxSize, kBoxSize);
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Under", "ActUnder", 0.0f) + clipped));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("Under", "ActUnder", 0.0f), clipped)));
         Draw();
         InputRecorder recorder;
 
@@ -305,7 +305,7 @@ namespace BECore::Tests {
   <component type="TransformComponent" x="0" y="0" width="100" height="100"/>
   <component type="ClickableComponent"/>
 </components></node>)";
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Under", "ActUnder", 0.0f) + silent));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("Under", "ActUnder", 0.0f), silent)));
         Draw();
         InputRecorder recorder;
 
@@ -319,7 +319,7 @@ namespace BECore::Tests {
         const String bare = R"(<node name="Bare"><components>
   <component type="ClickableComponent" actionName="ActBare"/>
 </components></node>)";
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Under", "ActUnder", 0.0f) + bare));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("Under", "ActUnder", 0.0f), bare)));
         Draw();
         InputRecorder recorder;
 
@@ -463,7 +463,7 @@ namespace BECore::Tests {
   <component type="TransformComponent" x="0" y="0" width="100" height="100"/>
   <component type="ClickableComponent" actionName="ActRound" shape="Ellipse"/>
 </components></node>)";
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Under", "ActUnder", 0.0f) + ellipse));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("Under", "ActUnder", 0.0f), ellipse)));
         Draw();
         InputRecorder recorder;
 
@@ -494,7 +494,7 @@ namespace BECore::Tests {
   <component type="TransformComponent" x="0" y="0" width="100" height="100"/>
   <component type="ClickableComponent" blocksInput="true"/>
 </components></node>)";
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Under", "ActUnder", 0.0f) + shield));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("Under", "ActUnder", 0.0f), shield)));
         Draw();
         InputRecorder recorder;
 

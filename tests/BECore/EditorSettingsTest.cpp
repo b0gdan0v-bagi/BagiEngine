@@ -1,4 +1,5 @@
 #include <BECore/Control/Json.h>
+#include <BECore/Utils/ScopeGuard.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
@@ -463,7 +464,14 @@ namespace BECore::Tests {
         EXPECT_EQ(file["futureOption"]["a"], 1);
         EXPECT_EQ(file["externalEditor"], "code");
         EXPECT_EQ(file["consoleHistory"].size(), 1u);
-        EXPECT_EQ(file.size(), 9u);  // version, the seven known keys, futureOption: no key is written twice
+
+        // Every key the file had is written once: the unknown keys that are carried over do not repeat a known one
+        const String text = ReadFile("preferences.json");
+        for (const StringView key : {"\"version\"", "\"externalEditor\"", "\"consoleHistory\"", "\"futureOption\""}) {
+            const size_t first = text.find(key.data(), 0, key.size());
+            ASSERT_NE(first, String::npos) << key.data();
+            EXPECT_EQ(text.find(key.data(), first + 1, key.size()), String::npos) << key.data() << " is written twice";
+        }
     }
 
     TEST_F(EditorSettingsTest, AnExternalEditorOverTheLimitIsCutAtACharacter) {
@@ -475,7 +483,7 @@ namespace BECore::Tests {
 
         // A two-byte character that straddles the limit goes whole
         EditorPreferences wild;
-        wild.externalEditor = String(kMaxExternalEditorLength - 1, 'x') + "\xC3\xA9" + "yyy";
+        wild.externalEditor = Format("{}\xC3\xA9yyy", String(kMaxExternalEditorLength - 1, 'x'));
         settings.SetPreferences(wild);
         EXPECT_EQ(settings.GetPreferences().externalEditor, String(kMaxExternalEditorLength - 1, 'x'));
     }
@@ -490,15 +498,17 @@ namespace BECore::Tests {
         ASSERT_EQ(settings.GetPreferences().consoleHistory.size(), 1u);
         EXPECT_EQ(settings.GetPreferences().consoleHistory[0].size(), kMaxConsoleCommandLength);
 
+        constexpr size_t kCommands = 100;
+        static_assert(kCommands > kMaxConsoleHistory, "more commands than the history keeps");
         wild.consoleHistory.clear();
-        for (size_t i = 0; i < 100; ++i) {
+        for (size_t i = 0; i < kCommands; ++i) {
             wild.consoleHistory.push_back(Format("cmd{}", i));
         }
         settings.SetPreferences(wild);
         const Vector<String>& kept = settings.GetPreferences().consoleHistory;
         ASSERT_EQ(kept.size(), kMaxConsoleHistory);
-        EXPECT_EQ(kept.front(), "cmd36");
-        EXPECT_EQ(kept.back(), "cmd99");
+        EXPECT_EQ(kept.front(), Format("cmd{}", kCommands - kMaxConsoleHistory));
+        EXPECT_EQ(kept.back(), Format("cmd{}", kCommands - 1));
     }
 
     TEST_F(EditorSettingsTest, AddConsoleHistoryMovesAnEqualCommandToTheEndAndBoundsTheList) {
@@ -602,6 +612,21 @@ namespace BECore::Tests {
     }
 
     TEST_F(EditorSettingsTest, TheEnvironmentVariableMovesTheFolder) {
+        // The developer's own value comes back however the case ends
+        const char* before = std::getenv(kEditorDirectoryEnvironmentVariable);
+        const Optional<String> previous = before != nullptr ? Optional<String>(String(before)) : Optional<String>();
+        const ScopeGuard restore([&previous] {
+#if defined(_WIN32)
+            _putenv_s(kEditorDirectoryEnvironmentVariable, previous ? previous->c_str() : "");
+#else
+            if (previous) {
+                setenv(kEditorDirectoryEnvironmentVariable, previous->c_str(), 1);
+            } else {
+                unsetenv(kEditorDirectoryEnvironmentVariable);
+            }
+#endif
+        });
+
         const String value = FromStdString(_directory.string());
 #if defined(_WIN32)
         ASSERT_EQ(_putenv_s(kEditorDirectoryEnvironmentVariable, value.c_str()), 0);
@@ -609,11 +634,6 @@ namespace BECore::Tests {
         ASSERT_EQ(setenv(kEditorDirectoryEnvironmentVariable, value.c_str(), 1), 0);
 #endif
         EXPECT_EQ(EditorUserDirectory(), _directory);
-#if defined(_WIN32)
-        _putenv_s(kEditorDirectoryEnvironmentVariable, "");
-#else
-        unsetenv(kEditorDirectoryEnvironmentVariable);
-#endif
     }
 
 }  // namespace BECore::Tests

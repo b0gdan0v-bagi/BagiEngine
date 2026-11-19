@@ -45,8 +45,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            auto handle = CoreManager::GetResourceManager().Load<Font>(kTestRegularPath);
-            font = IntrusivePtr<Font>(handle ? &*handle : nullptr);
+            font = LoadTestFont();
             ASSERT_TRUE(font);
             ASSERT_EQ(font->GetState(), ResourceState::Loaded);
             options.fontSize = kSize;

@@ -281,7 +281,7 @@ namespace BECore::Tests {
         EXPECT_EQ(AlphaAt(rect), kAuthoredAlpha);
     }
 
-    TEST_F(UITransitionComponentTest, ANoDurationIsTheOldPop) {
+    TEST_F(UITransitionComponentTest, AZeroDurationShowsTheChangeInTheSameFrame) {
         const Rect rect = Get("Pop").rect;
         ASSERT_TRUE(AlphaAt(rect).has_value());
         Hide("Pop");
@@ -598,7 +598,7 @@ namespace BECore::Tests {
         EXPECT_EQ(AlphaAt(box), 175);
     }
 
-    TEST_F(UICanvasTransitionTest, ANoDurationIsTheOldPop) {
+    TEST_F(UICanvasTransitionTest, AZeroDurationShowsTheChangeInTheSameFrame) {
         _dialog->_transitionDuration = 0.0f;
         const Rect box = Get(*_dialog, "Box").rect;
         SetDialogVisible(false);

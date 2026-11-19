@@ -670,19 +670,7 @@ namespace BECore::Tests {
 
         /// Sends a request, runs the frame stage that answers it and returns the whole response
         Json Call(StringView method, const Json& params = Json()) {
-            Json request = Json::object();
-            request["id"] = ++_nextId;
-            request["method"] = ToStdString(method);
-            if (!params.is_null()) {
-                request["params"] = params;
-            }
-            Json response;
-            _service.Post(DumpJson(request), [&response](String text) {
-                auto parsed = ParseJson(text);
-                response = parsed ? std::move(*parsed) : Json();
-            });
-            _service.Drain();
-            return response;
+            return CallControl(_service, ++_nextId, method, params);
         }
 
         static Json Click(const char* name) {
@@ -1023,7 +1011,7 @@ namespace BECore::Tests {
         ASSERT_NE(words, nullptr);
         EXPECT_FALSE(words->contains("icon"));
         EXPECT_FALSE(words->contains("tooltip"));
-        EXPECT_EQ(StringMember(*words, "action"), "UIControlApiWords") << "the rest of a button's entry is as before";
+        EXPECT_EQ(StringMember(*words, "action"), "UIControlApiWords") << "a button without words still names its action";
     }
 
     TEST_F(UIControlApiTest, ACanvasWithNoRegionsHasAnEmptyObjectAndItsElementsHaveNoRegionMember) {
@@ -1868,7 +1856,7 @@ namespace BECore::Tests {
         EXPECT_EQ(recorder.Total(), 0u);
     }
 
-    TEST_F(UIControlApiTest, AButtonAndASegmentStillAnswerAsBeforeWhenAtIsGiven) {
+    TEST_F(UIControlApiTest, AButtonAndASegmentAreClickedInTheirMiddleWhenAtIsGiven) {
         Show("Choice");
         Recorder recorder;
         Json params = Click("Right");
@@ -2298,7 +2286,7 @@ namespace BECore::Tests {
 
         const Json* bare = FindElement(*bar, "Bare");
         ASSERT_NE(bare, nullptr);
-        EXPECT_FALSE(bare->contains("components")) << "the entry of an element with none is as before";
+        EXPECT_FALSE(bare->contains("components")) << "an element with no components has no components member";
         EXPECT_FALSE(bare->contains("icon"));
         EXPECT_FALSE(bare->contains("tooltip"));
     }

@@ -5,10 +5,10 @@
 #include <BECore/Profiler/ScopedTrace.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <chrono>
 #include <cstdio>
 #include <gtest/gtest.h>
-#include <map>
 #include <thread>
 
 namespace BECore::Tests {
@@ -347,7 +347,7 @@ namespace BECore::Tests {
 
     TEST(ScopedTraceTest, WritesTheZonesOfItsScope) {
         const std::filesystem::path folder = TestTempDirectory("profiler");
-        std::filesystem::create_directories(folder);
+        MakeDirectory(folder);
         const std::filesystem::path file = folder / "trace.json";
         {
             ScopedTrace trace(String(file.string().c_str()));
@@ -362,8 +362,7 @@ namespace BECore::Tests {
         const Json events = ParseEvents(text);
         EXPECT_EQ(CountPhase(events, "B"), 2u);
         ExpectBalanced(events);
-        std::error_code error;
-        std::filesystem::remove_all(folder, error);
+        RemoveDirectory(folder);
     }
 
 #else

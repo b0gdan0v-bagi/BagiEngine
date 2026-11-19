@@ -1,6 +1,7 @@
 #include <Common/Printers.h>
+#include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Widgets/Console/EditorLauncher.h>
-#include <filesystem>
 
 namespace BECore::Tests {
 
@@ -86,16 +87,26 @@ namespace BECore::Tests {
     }
 
     TEST(EditorLauncherTest, ASiteIsOpenableOnlyForAnExistingAbsolutePath) {
+        // The answer is cached per pointer for the life of the process, so every path asked about lives as long
+        static const String missing((TestTempPath("BagiEditorLauncherMissing") / "nothing.cpp").string().c_str());
         EXPECT_FALSE(IsSiteOpenable(nullptr));
         EXPECT_FALSE(IsSiteOpenable("relative/path.cpp"));
-        EXPECT_FALSE(IsSiteOpenable("Z:/definitely/not/here/nothing.cpp"));
+        EXPECT_FALSE(IsSiteOpenable(missing.c_str()));
 
         const char* thisFile = __FILE__;
         std::error_code ec;
         if (std::filesystem::path(thisFile).is_absolute() && std::filesystem::exists(thisFile, ec)) {
             EXPECT_TRUE(IsSiteOpenable(thisFile));
-            EXPECT_TRUE(IsSiteOpenable(thisFile));  // the cached answer is the same
         }
+    }
+
+    TEST(EditorLauncherTest, TheAnswerForASiteIsAskedOfTheDiskOnce) {
+        const std::filesystem::path folder = TestTempPath("BagiEditorLauncherSite");
+        static const String site((folder / "site.cpp").string().c_str());
+        WriteFile(folder / "site.cpp", "x");
+        EXPECT_TRUE(IsSiteOpenable(site.c_str()));
+        RemoveDirectory(folder);
+        EXPECT_TRUE(IsSiteOpenable(site.c_str()));
     }
 
 }  // namespace BECore::Tests

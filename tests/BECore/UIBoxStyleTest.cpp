@@ -83,7 +83,7 @@ namespace BECore::Tests {
 
     // ---- drawing -----------------------------------------------------------------------------------------------------------
 
-    TEST(UIBoxStyleTest, ADefaultStyleIsOneRectCallAsBefore) {
+    TEST(UIBoxStyleTest, ADefaultStyleIsOneRectCall) {
         auto element = MakeElement();
         RecordingRenderer renderer;
         EXPECT_FALSE(element->box.HasEffect());

@@ -5,7 +5,6 @@
 #include <chrono>
 #include <cstdio>
 #include <thread>
-#include <vector>
 
 namespace BECore::Tests {
 

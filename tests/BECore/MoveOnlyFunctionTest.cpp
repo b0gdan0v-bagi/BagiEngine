@@ -1,4 +1,4 @@
-#include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <Common/AllocCheck.h>
 #include <EASTL/deque.h>
 #include <gtest/gtest.h>
 
@@ -122,17 +122,19 @@ namespace BECore::Tests {
         {
             Task small(Small{&calls});
             Task large(Large{&calls});
-            const AllocTracker::ThreadCounters before = AllocTracker::GetThreadCounters();
-            small();
-            large();
-            const AllocTracker::ThreadCounters after = AllocTracker::GetThreadCounters();
+            ExpectNoAllocations([&] {
+                small();
+                large();
+            });
             EXPECT_EQ(calls, 2);
-            EXPECT_EQ(after.count, before.count);
         }
         EXPECT_EQ(LifeCounter::alive, 0);
     }
 
     TEST_F(MoveOnlyFunctionTest, ConstructionAllocatesOnlyForACaptureAboveTheBuffer) {
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
         int calls = 0;
         const AllocTracker::ThreadCounters start = AllocTracker::GetThreadCounters();
         Task small(Small{&calls});
@@ -143,13 +145,9 @@ namespace BECore::Tests {
         const AllocTracker::ThreadCounters afterLarge = AllocTracker::GetThreadCounters();
         Task moved = std::move(large);
         const AllocTracker::ThreadCounters afterMove = AllocTracker::GetThreadCounters();
-        if (AllocTracker::kEnabled) {
-            EXPECT_EQ(afterSmall.count, start.count);
-            EXPECT_EQ(afterLarge.count, afterSmall.count + 1);
-            EXPECT_EQ(afterMove.count, afterLarge.count);
-        } else {
-            EXPECT_EQ(afterLarge.count, start.count);
-        }
+        EXPECT_EQ(afterSmall.count, start.count);
+        EXPECT_EQ(afterLarge.count, afterSmall.count + 1);
+        EXPECT_EQ(afterMove.count, afterLarge.count);
     }
 
     TEST_F(MoveOnlyFunctionTest, ACallableThatMayThrowWhileMovingOrNeedsMoreAlignmentWorks) {

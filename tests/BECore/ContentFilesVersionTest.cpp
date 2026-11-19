@@ -40,12 +40,12 @@ namespace BECore::Tests {
         std::filesystem::remove_all(dir, ignored);
 
         ASSERT_EQ(stale.size(), 3u);
-        const String base = FromStdString(dir.generic_string()) + "/nodes/";
-        EXPECT_TRUE(StringView(stale[0]).starts_with(base + "Bad.xml: ")) << stale[0];
+        const String base = Format("{}/nodes/", dir.generic_string());
+        EXPECT_TRUE(StringView(stale[0]).starts_with(Format("{}Bad.xml: ", base))) << stale[0];
         EXPECT_NE(stale[0].find("is not a whole number"), String::npos) << stale[0];
-        EXPECT_TRUE(StringView(stale[1]).starts_with(base + "New.xml: ")) << stale[1];
+        EXPECT_TRUE(StringView(stale[1]).starts_with(Format("{}New.xml: ", base))) << stale[1];
         EXPECT_NE(stale[1].find("newer than this engine reads"), String::npos) << stale[1];
-        EXPECT_TRUE(StringView(stale[2]).starts_with(base + "Old.xml: ")) << stale[2];
+        EXPECT_TRUE(StringView(stale[2]).starts_with(Format("{}Old.xml: ", base))) << stale[2];
         EXPECT_NE(stale[2].find("content version 0"), String::npos) << stale[2];
         EXPECT_NE(stale[2].find("python3 engine/tools/migrate/migrate.py"), String::npos) << stale[2];
     }

@@ -162,9 +162,17 @@ namespace BECore::Tests {
 
     namespace {
 
+        /// The output size the fixture's renderer reports, and a wider one a case switches to
+        constexpr uint32_t kOutputWidth = 800;
+        constexpr uint32_t kOutputHeight = 600;
+        constexpr uint32_t kWiderWidth = 1024;
+        constexpr float kOutputAspect = static_cast<float>(kOutputWidth) / static_cast<float>(kOutputHeight);
+
         /// A renderer with a recording device, and a scene of one lit cube lit from a known side
         struct Renderer3DFixture {
             Renderer3DFixture() : device(New<RecordingGpuDevice>()) {
+                renderer.width = static_cast<float>(kOutputWidth);
+                renderer.height = static_cast<float>(kOutputHeight);
                 renderer.SetGpuDevice(device);
                 cube = Mesh::Create(*device, MakeUnitCube(), "cube"_intern);
                 scene.light.direction = Vec3{-1.0f, -2.0f, -2.0f};
@@ -244,8 +252,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(pass.depth.has_value());
         EXPECT_EQ(pass.depth->loadOp, PassLoadOp::Clear);
         EXPECT_FLOAT_EQ(pass.depth->clearValue, 1.0f);
-        EXPECT_EQ(pass.depth->texture->GetWidth(), 800u);
-        EXPECT_EQ(pass.depth->texture->GetHeight(), 600u);
+        EXPECT_EQ(pass.depth->texture->GetWidth(), kOutputWidth);
+        EXPECT_EQ(pass.depth->texture->GetHeight(), kOutputHeight);
         EXPECT_EQ(pass.target, nullptr);
         EXPECT_EQ(pass.clearColor.b, 30);
     }
@@ -290,9 +298,9 @@ namespace BECore::Tests {
 
         const FrameConstants frame = f.device->draws[0].ConstantsAs<FrameConstants>(ConstantsSlot::Frame);
         const Camera3D& camera = f.scene.camera;
-        // Built here from the pieces, not through Camera3D: the aspect is the 800 x 600 output
+        // Built here from the pieces, not through Camera3D: the aspect is the one of the fixture's output
         const Mat4 expected =
-            Mat4::Perspective(camera.fovYRadians, 800.0f / 600.0f, camera.nearPlane, camera.farPlane) * Mat4::LookAt(Vec3{2.0f, 3.0f, 6.0f}, Vec3{0.0f, 0.5f, 0.0f}, Vec3{0.0f, 1.0f, 0.0f});
+            Mat4::Perspective(camera.fovYRadians, kOutputAspect, camera.nearPlane, camera.farPlane) * Mat4::LookAt(Vec3{2.0f, 3.0f, 6.0f}, Vec3{0.0f, 0.5f, 0.0f}, Vec3{0.0f, 1.0f, 0.0f});
         ExpectNear(frame.viewProjection, expected);
         // The light travels along (-1, -2, -2), so the direction TO it is the opposite, unit
         ExpectNear(frame.lightDirection, Vec4(1.0f / 3.0f, 2.0f / 3.0f, 2.0f / 3.0f, 0.0f));
@@ -373,15 +381,15 @@ namespace BECore::Tests {
     TEST(Renderer3DRenderTest, AResizeMakesANewDepthTexture) {
         Renderer3DFixture f;
         ASSERT_TRUE(f.renderer3D.Render(f.renderer, f.scene, PassDesc{}).has_value());
-        f.renderer.width = 1024.0f;
+        f.renderer.width = static_cast<float>(kWiderWidth);
         ASSERT_TRUE(f.renderer3D.Render(f.renderer, f.scene, PassDesc{}).has_value());
         EXPECT_EQ(f.device->depthTexturesCreated, 2u);
         EXPECT_EQ(f.device->pipelinesCreated, 1u);
         const PassDesc& pass = f.device->CommandsOf(GpuCommandKind::BeginPass)[1]->pass;
-        EXPECT_EQ(pass.depth->texture->GetWidth(), 1024u);
+        EXPECT_EQ(pass.depth->texture->GetWidth(), kWiderWidth);
         // The aspect of the frame constants follows the size
         const FrameConstants frame = f.device->draws[1].ConstantsAs<FrameConstants>(ConstantsSlot::Frame);
-        ExpectNear(frame.viewProjection, Renderer3D::ViewProjection(f.scene.camera, 1024.0f / 600.0f));
+        ExpectNear(frame.viewProjection, Renderer3D::ViewProjection(f.scene.camera, static_cast<float>(kWiderWidth) / static_cast<float>(kOutputHeight)));
     }
 
     TEST(Renderer3DRenderTest, AnotherDeviceGetsItsOwnPipeline) {
@@ -430,7 +438,7 @@ namespace BECore::Tests {
 
     TEST(Renderer3DShaderMathTest, EveryCubeVertexIsInsideTheClipVolumeAndTheLightHitsThreeFaces) {
         Renderer3DFixture f;
-        const FrameConstants frame = Renderer3D::MakeFrameConstants(f.scene, 800.0f / 600.0f);
+        const FrameConstants frame = Renderer3D::MakeFrameConstants(f.scene, kOutputAspect);
         const Vec3 toLight = frame.lightDirection.XYZ();
         size_t lit = 0;
         size_t dark = 0;

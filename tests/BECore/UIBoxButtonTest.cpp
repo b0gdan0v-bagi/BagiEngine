@@ -25,7 +25,7 @@ namespace BECore::Tests {
         constexpr Color kBorder{200, 150, 100, 255};
         constexpr Color kText{250, 240, 230, 255};
 
-        enum class State : uint8_t { Normal, Hover, Pressed, Selected, Disabled };
+        CORE_ENUM(State, uint8_t, Normal, Hover, Pressed, Selected, Disabled)
 
         /// An element with a clicker and a text of the colour `kText` (the colour of the selection), in @p state; its box has every field set when @p styled
         IntrusivePtr<UIElement> MakeElement(State state, bool styled = true) {
@@ -139,7 +139,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(outside(glowOn[0]));
     }
 
-    TEST(UIBoxButtonTest, ADefaultStyleElementDrawsTheCallsItDidBefore) {
+    TEST(UIBoxButtonTest, ADefaultStyleElementDrawsItsStateFillAndTheSelectedBar) {
         const Color expected[] = {kFill, ShiftColor(kFill, kHoverBrighten), ShiftColor(kFill, -kPressDarken), ShiftColor(kFill, UIStateLook::kSelectedBrighten), WithAlpha(kFill, kDisabledAlpha)};
         for (size_t i = 0; i < std::size(kAllStates); ++i) {
             const auto button = MakeElement(kAllStates[i], false);

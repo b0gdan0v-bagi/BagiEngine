@@ -4,6 +4,7 @@
 #include <BECore/Audio/IAudioBackend.h>
 #include <BECore/Types/Types.h>
 #include <cstdint>
+#include <gtest/gtest.h>
 
 namespace BECore::Tests {
 
@@ -24,6 +25,9 @@ namespace BECore::Tests {
 
         /// The device took @p frames of the stream of @p voice; a stream that ended and has nothing left stops
         void Drain(uint32_t voice, uint64_t frames) {
+            if (!HasVoice(voice, "Drain")) {
+                return;
+            }
             queuedFrames[voice] -= eastl::min(queuedFrames[voice], frames);
             if (ended[voice] && queuedFrames[voice] == 0) {
                 playing[voice] = false;
@@ -47,6 +51,10 @@ namespace BECore::Tests {
             ++closes;
             playing.clear();
             gains.clear();
+            streamFormats.clear();
+            queuedFrames.clear();
+            totalFrames.clear();
+            ended.clear();
         }
 
         [[nodiscard]] uint32_t GetVoiceCount() const override {
@@ -55,17 +63,27 @@ namespace BECore::Tests {
 
         bool Start(uint32_t voice, const AudioClip& /*clip*/, float gain) override {
             starts.push_back(voice);
+            if (!HasVoice(voice, "Start")) {
+                return false;
+            }
             playing[voice] = true;
             gains[voice] = gain;
+            streamFormats[voice] = AudioFormat{};  // a clip voice is not a stream: QueueStream on it is a wrong call
             return true;
         }
 
         void Stop(uint32_t voice) override {
+            if (!HasVoice(voice, "Stop")) {
+                return;
+            }
             playing[voice] = false;
             queuedFrames[voice] = 0;
         }
 
         void SetGain(uint32_t voice, float gain) override {
+            if (!HasVoice(voice, "SetGain")) {
+                return;
+            }
             gains[voice] = gain;
         }
 
@@ -75,6 +93,9 @@ namespace BECore::Tests {
 
         bool StartStream(uint32_t voice, AudioFormat format, float gain) override {
             streamStarts.push_back(voice);
+            if (!HasVoice(voice, "StartStream")) {
+                return false;
+            }
             playing[voice] = true;
             gains[voice] = gain;
             streamFormats[voice] = format;
@@ -88,6 +109,13 @@ namespace BECore::Tests {
             if (!queues) {
                 return false;
             }
+            if (!HasVoice(voice, "QueueStream")) {
+                return false;
+            }
+            if (streamFormats[voice].channels == 0) {
+                ADD_FAILURE() << "QueueStream on voice " << voice << ", which is not a stream";
+                return false;
+            }
             const uint64_t frames = samples.size() / streamFormats[voice].channels;
             queuedFrames[voice] += frames;
             totalFrames[voice] += frames;
@@ -95,11 +123,24 @@ namespace BECore::Tests {
         }
 
         void EndStream(uint32_t voice) override {
+            if (!HasVoice(voice, "EndStream")) {
+                return;
+            }
             ended[voice] = true;
         }
 
         [[nodiscard]] uint64_t GetQueuedFrames(uint32_t voice) const override {
             return voice < queuedFrames.size() ? queuedFrames[voice] : 0;
+        }
+
+    private:
+        /// A wrong voice from AudioManager fails the case instead of indexing past the vectors
+        bool HasVoice(uint32_t voice, const char* call) const {
+            if (voice < playing.size()) {
+                return true;
+            }
+            ADD_FAILURE() << call << " on voice " << voice << " of " << playing.size();
+            return false;
         }
     };
 
