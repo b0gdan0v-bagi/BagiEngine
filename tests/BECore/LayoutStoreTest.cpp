@@ -128,7 +128,7 @@ namespace BECore::Tests {
         WriteFile(folder / "bad.name.ini", "x");
         WriteFile(folder / "CON.ini", "x");
         WriteFile(folder / "sub" / "inner.ini", "x");
-        std::filesystem::create_directories(folder / "folder.ini");
+        MakeDirectory(folder / "folder.ini");
         EXPECT_EQ(Joined(store.List()), "alpha|mid dle|zeta");
     }
 

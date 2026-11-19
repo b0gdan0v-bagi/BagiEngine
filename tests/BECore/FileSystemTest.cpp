@@ -21,16 +21,15 @@ namespace BECore::Tests {
         void SetUp() override {
             // One directory per test: ctest runs every test in its own process
             _base = TestTempDirectory("BagiFileSystemTest");
-            std::filesystem::remove_all(_base);
+            RemoveDirectory(_base);
             _engine = _base / "engine";
             _game = _base / "game";
-            std::filesystem::create_directories(_engine);
-            std::filesystem::create_directories(_game);
+            MakeDirectory(_engine);
+            MakeDirectory(_game);
         }
 
         void TearDown() override {
-            std::error_code ec;
-            std::filesystem::remove_all(_base, ec);
+            RemoveDirectory(_base);
         }
 
         std::filesystem::path _base;
@@ -94,7 +93,7 @@ namespace BECore::Tests {
 
     TEST_F(FileSystemTest, RootWithoutDirectoryAddsNoLayer) {
         Touch(_engine / "assets" / "a.png");
-        std::filesystem::create_directories(_game / "config");
+        MakeDirectory(_game / "config");
 
         FileSystem fs;
         fs.AddContentRoot(_engine);

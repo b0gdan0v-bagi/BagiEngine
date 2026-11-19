@@ -3,6 +3,7 @@
 #include <BECore/Profiler/Ring/FrameRingBackend.h>
 #include <BECore/Profiler/ScopedTrace.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <chrono>
 #include <gtest/gtest.h>
 #include <thread>
@@ -596,7 +597,7 @@ namespace BECore::Tests {
         Profiler::SetRingEnabled(true);
 
         const std::filesystem::path folder = TestTempDirectory("profiler_ring");
-        std::filesystem::create_directories(folder);
+        MakeDirectory(folder);
         {
             const ScopedTrace trace(String((folder / "trace.json").string().c_str()));
             EXPECT_EQ(Profiler::GetPrimaryBackend(), &Profiler::GetChromeTrace());
@@ -604,7 +605,7 @@ namespace BECore::Tests {
         }
         EXPECT_EQ(Profiler::GetPrimaryBackend(), &original);
         EXPECT_TRUE(Profiler::IsRingEnabled());
-        std::filesystem::remove_all(folder);
+        RemoveDirectory(folder);
     }
 
 #if BE_PROFILER

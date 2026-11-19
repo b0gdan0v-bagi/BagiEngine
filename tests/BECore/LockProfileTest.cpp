@@ -7,9 +7,7 @@
 #include <Common/Wait.h>
 #include <chrono>
 #include <gtest/gtest.h>
-#include <map>
 #include <thread>
-#include <vector>
 
 #if defined(__APPLE__)
 #include <mach/mach.h>

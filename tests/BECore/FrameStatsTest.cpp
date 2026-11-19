@@ -14,7 +14,6 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
 #include <gtest/gtest.h>
-#include <vector>
 
 namespace BECore::Tests {
 

@@ -64,7 +64,7 @@ namespace BECore::Tests {
 
         std::filesystem::path SeededFolder() {
             const std::filesystem::path dir = TestTempDirectory("BagiConfigFilesCheck");
-            std::filesystem::remove_all(dir);
+            RemoveDirectory(dir);
             return dir;
         }
 
@@ -100,8 +100,7 @@ namespace BECore::Tests {
         const Vector<ConfigReader> readers{ApplicationConfigReader(), {"TestsConfig", [](IDeserializer& d) { New<Tests::TestList>()->Deserialize(d); }}, {"Ghost", [](IDeserializer&) {}}};
         const Vector<HandReadConfig> byHand{{"Hand", "by hand"}, {"AlsoGhost", "by hand"}};
         const Vector<String> messages = FindConfigFindings(dir, readers, byHand);
-        std::error_code ignored;
-        std::filesystem::remove_all(dir, ignored);
+        RemoveDirectory(dir);
 
         const auto has = [&](StringView text) {
             for (const String& message : messages) {
@@ -127,8 +126,7 @@ namespace BECore::Tests {
 
         const Vector<ConfigReader> readers{SceneConfigReader()};
         const Vector<String> messages = FindConfigFindings(dir, readers, {});
-        std::error_code ignored;
-        std::filesystem::remove_all(dir, ignored);
+        RemoveDirectory(dir);
 
         ASSERT_EQ(messages.size(), 1u) << ::testing::PrintToString(messages);
         EXPECT_NE(messages[0].find("SceneConfig.xml: scenes[0].nodes[0].layerr: Unknown attribute 'layerr'"), String::npos) << messages[0];
@@ -139,8 +137,7 @@ namespace BECore::Tests {
         WriteFile(dir / "ApplicationConfig.xml", "<root type=\"A\"/>");
         const Vector<ConfigReader> readers{ApplicationConfigReader()};
         EXPECT_TRUE(FindConfigFindings(dir, readers, {}).empty());
-        std::error_code ignored;
-        std::filesystem::remove_all(dir, ignored);
+        RemoveDirectory(dir);
     }
 
 }  // namespace BECore::Tests

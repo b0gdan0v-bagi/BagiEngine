@@ -3,6 +3,7 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 
 namespace BECore::Tests {
 
@@ -21,8 +22,7 @@ namespace BECore::Tests {
     /// The text of a log line in a file is "[Level] [date time.ms] message": the layer's Format must write it so.
     TEST(FileSinkTest, WritesTheLevelTheTimeAndTheMessage) {
         const std::filesystem::path dir = TestTempDirectory("BagiFileSinkTest");
-        std::filesystem::remove_all(dir);
-        std::filesystem::create_directories(dir);
+        MakeEmptyDirectory(dir);
         const std::filesystem::path file = dir / "sink.log";
 
         const String xml = Format("<root><sinks><sink type=\"FileSink\" enabled=\"true\" minLevel=\"Warning\" filename=\"{}\" append=\"false\"/></sinks></root>", file.generic_string().c_str());
@@ -59,8 +59,7 @@ namespace BECore::Tests {
     /// The sink prints the view it is given, not the characters up to a terminator that may lie past the view.
     TEST(FileSinkTest, WritesOnlyTheViewItIsGiven) {
         const std::filesystem::path dir = TestTempDirectory("BagiFileSinkViewTest");
-        std::filesystem::remove_all(dir);
-        std::filesystem::create_directories(dir);
+        MakeEmptyDirectory(dir);
         const std::filesystem::path file = dir / "sink.log";
 
         const String xml = Format("<root><sinks><sink type=\"FileSink\" enabled=\"true\" minLevel=\"Warning\" filename=\"{}\" append=\"false\"/></sinks></root>", file.generic_string().c_str());
