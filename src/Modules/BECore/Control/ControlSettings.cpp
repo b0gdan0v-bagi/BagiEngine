@@ -1,6 +1,7 @@
 #include "ControlSettings.h"
 
 #include <BECore/Application/ApplicationConfig.h>
+#include <BECore/Application/CommandLine.h>
 
 namespace BECore {
 
@@ -83,51 +84,60 @@ namespace BECore {
         settings.manualClock = file.config._manualClock;
         settings.headless = file.config._headless;
 
-        bool portOnCommandLine = false;
-        for (const String& arg : args) {
-            const StringView argument(arg.data(), arg.size());
-            if (argument == ControlArguments::kControl) {
-                settings.enabled = true;
-            } else if (argument == ControlArguments::kManualClock) {
-                settings.manualClock = true;
-            } else if (argument == ControlArguments::kHeadless) {
-                settings.headless = true;
-            } else if (argument.starts_with(ControlArguments::kControlPortPrefix)) {
-                const StringView value = argument.substr(ControlArguments::kControlPortPrefix.size());
-                const auto port = ParsePort(value);
-                if (!port) {
-                    return std::unexpected(InvalidSetting(Format("'{}' is not a port (0 to 65535)", argument)));
-                }
-                settings.port = *port;
-                portOnCommandLine = true;
-            } else if (argument == FlagName(ControlArguments::kControlPortPrefix)) {
-                return std::unexpected(InvalidSetting(Format("'{}' needs a value: {}N", argument, ControlArguments::kControlPortPrefix)));
-            } else if (argument.starts_with(ControlArguments::kReplayPrefix)) {
-                const StringView value = argument.substr(ControlArguments::kReplayPrefix.size());
-                if (value.empty()) {
-                    return std::unexpected(InvalidSetting(Format("'{}' has no file: {}FILE", argument, ControlArguments::kReplayPrefix)));
-                }
-                settings.replayPath = String(value);
-            } else if (argument == FlagName(ControlArguments::kReplayPrefix)) {
-                return std::unexpected(InvalidSetting(Format("'{}' needs a file: {}FILE", argument, ControlArguments::kReplayPrefix)));
-            } else if (argument == ControlArguments::kReplayExit) {
-                settings.replayExit = true;
-            } else if (argument.starts_with(ControlArguments::kWindowPrefix)) {
-                settings.windowSize = ParseWindowSize(argument.substr(ControlArguments::kWindowPrefix.size()));
-                if (!settings.windowSize) {
-                    return std::unexpected(
-                        InvalidSetting(Format("'{}' is not a window size: two integers, {}WxH (for example {}480x480)", argument, ControlArguments::kWindowPrefix, ControlArguments::kWindowPrefix)));
-                }
-            } else if (argument == FlagName(ControlArguments::kWindowPrefix)) {
-                return std::unexpected(InvalidSetting(Format("'{}' needs a value: {}WxH", argument, ControlArguments::kWindowPrefix)));
-            } else if (argument.starts_with(ControlArguments::kDensityPrefix)) {
-                settings.density = StringUtils::ParseNumber<float>(argument.substr(ControlArguments::kDensityPrefix.size()));
-                if (!settings.density) {
-                    return std::unexpected(InvalidSetting(Format("'{}' is not a number: {}D", argument, ControlArguments::kDensityPrefix)));
-                }
-            } else if (argument == FlagName(ControlArguments::kDensityPrefix)) {
-                return std::unexpected(InvalidSetting(Format("'{}' needs a value: {}D", argument, ControlArguments::kDensityPrefix)));
+        // Through CommandLine, as every reader of the arguments: a flag given twice takes its first value everywhere (Control/CLAUDE.md)
+        CommandLine commandLine;
+        commandLine.Set(args);
+        // A bare `--name` of a flag that takes a value is an error that shows the form, not an unknown argument
+        const auto bareFlag = [&commandLine](StringView prefix, StringView what, StringView form) -> Optional<ControlError> {
+            if (commandLine.HasFlag(FlagName(prefix))) {
+                return InvalidSetting(Format("'{}' needs {}: {}{}", FlagName(prefix), what, prefix, form));
             }
+            return std::nullopt;
+        };
+
+        settings.enabled = settings.enabled || commandLine.HasFlag(ControlArguments::kControl);
+        settings.manualClock = settings.manualClock || commandLine.HasFlag(ControlArguments::kManualClock);
+        settings.headless = settings.headless || commandLine.HasFlag(ControlArguments::kHeadless);
+        settings.replayExit = commandLine.HasFlag(ControlArguments::kReplayExit);
+
+        const Optional<StringView> portValue = commandLine.FindValue(FlagName(ControlArguments::kControlPortPrefix));
+        const bool portOnCommandLine = portValue.has_value();
+        if (portValue) {
+            const auto port = ParsePort(*portValue);
+            if (!port) {
+                return std::unexpected(InvalidSetting(Format("'{}{}' is not a port (0 to 65535)", ControlArguments::kControlPortPrefix, *portValue)));
+            }
+            settings.port = *port;
+        } else if (auto error = bareFlag(ControlArguments::kControlPortPrefix, "a value", "N")) {
+            return std::unexpected(std::move(*error));
+        }
+
+        if (const Optional<StringView> replay = commandLine.FindValue(FlagName(ControlArguments::kReplayPrefix))) {
+            if (replay->empty()) {
+                return std::unexpected(InvalidSetting(Format("'{}' has no file: {}FILE", ControlArguments::kReplayPrefix, ControlArguments::kReplayPrefix)));
+            }
+            settings.replayPath = String(*replay);
+        } else if (auto error = bareFlag(ControlArguments::kReplayPrefix, "a file", "FILE")) {
+            return std::unexpected(std::move(*error));
+        }
+
+        if (const Optional<StringView> window = commandLine.FindValue(FlagName(ControlArguments::kWindowPrefix))) {
+            settings.windowSize = ParseWindowSize(*window);
+            if (!settings.windowSize) {
+                return std::unexpected(InvalidSetting(Format("'{}{}' is not a window size: two integers, {}WxH (for example {}480x480)", ControlArguments::kWindowPrefix, *window,
+                                                             ControlArguments::kWindowPrefix, ControlArguments::kWindowPrefix)));
+            }
+        } else if (auto error = bareFlag(ControlArguments::kWindowPrefix, "a value", "WxH")) {
+            return std::unexpected(std::move(*error));
+        }
+
+        if (const Optional<StringView> density = commandLine.FindValue(FlagName(ControlArguments::kDensityPrefix))) {
+            settings.density = StringUtils::ParseNumber<float>(*density);
+            if (!settings.density) {
+                return std::unexpected(InvalidSetting(Format("'{}{}' is not a number: {}D", ControlArguments::kDensityPrefix, *density, ControlArguments::kDensityPrefix)));
+            }
+        } else if (auto error = bareFlag(ControlArguments::kDensityPrefix, "a value", "D")) {
+            return std::unexpected(std::move(*error));
         }
 
         if (portOnCommandLine && !settings.enabled) {

@@ -9,7 +9,8 @@ namespace BECore {
      *
      * `Application::SetArguments` stores them in `CoreManager::GetCommandLine()`; a game reads its own flags there
      * and never asks `Application`, so it can be built and tested without the runtime module. A flag the engine
-     * does not know is ignored by the engine's own parsers, so a game's flags need nothing else.
+     * does not know is ignored by the engine's own parsers, so a game's flags need nothing else. The engine's readers
+     * (ResolveControlSettings among them) all go through this class, so a repeated flag means one thing everywhere.
      */
     class CommandLine {
     public:

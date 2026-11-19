@@ -136,10 +136,11 @@ namespace BECore::Tests {
         EXPECT_EQ(settings->port, 9100);
     }
 
-    TEST(ControlSettingsTest, LastPortOnTheCommandLineWins) {
+    // The rule of CommandLine::FindValue, which every reader of the arguments shares (CommandLineTest.TheFirstMatchWinsWhenRepeated)
+    TEST(ControlSettingsTest, TheFirstPortOnTheCommandLineWins) {
         const auto settings = Resolve({"--control", "--control-port=9001", "--control-port=9002"});
         ASSERT_TRUE(settings.has_value());
-        EXPECT_EQ(settings->port, 9002);
+        EXPECT_EQ(settings->port, 9001);
     }
 
     TEST(ControlSettingsTest, PortThatIsNotAPortIsAnError) {
@@ -405,8 +406,8 @@ namespace BECore::Tests {
         EXPECT_EQ(settings->windowSize->width, 480);
     }
 
-    TEST(ControlSettingsTest, TheLastWindowFlagWins) {
-        const auto settings = Resolve({"--control", "--headless", "--window=100x100", "--window=200x300"});
+    TEST(ControlSettingsTest, TheFirstWindowFlagWins) {
+        const auto settings = Resolve({"--control", "--headless", "--window=200x300", "--window=100x100"});
         ASSERT_TRUE(settings.has_value());
         EXPECT_EQ(settings->windowSize->width, 200);
         EXPECT_EQ(settings->windowSize->height, 300);
