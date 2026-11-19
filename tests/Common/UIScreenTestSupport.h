@@ -22,7 +22,6 @@
 #include <CoreSDL/SDLEvents.h>
 #include <Events/SubscriptionHolder.h>
 #include <gtest/gtest.h>
-#include <type_traits>
 
 namespace BECore::Tests {
 
@@ -95,38 +94,24 @@ namespace BECore::Tests {
 
     /**
      * @brief The fixture of a screen test of a panel (`ui-layout.md`, "A screen test"): a scene `Main` with a canvas `Hud` and the panel's canvas on the node the derived
-     * fixture names, loaded from XML into a RecordingRenderer whose output is the view, so a point of the view is a pixel.
+     * fixture names, drawn into a RecordingRenderer whose output is the view, so a point of the view is a pixel. The lookups of UISceneFixture search the panel.
      *
      * The derived fixture owns the part of the game (it answers the actions) and makes it after LoadPanelScene(). A table of strings loaded with LoadStrings() makes the
-     * matrix helpers run once per language; with none they run once. The lookups El() and Get() never end the process: a missing name is a fatal failure of the case
-     * and the answer is a blank stand-in, so a case that reads further through it is `ASSERT_NO_FATAL_FAILURE`.
+     * matrix helpers run once per language; with none they run once.
      */
-    class UIPanelScreenTest : public ::testing::Test {
+    class UIPanelScreenTest : public UISceneFixture {
     protected:
         explicit UIPanelScreenTest(PoolString panelNode) : _panelNode(panelNode) {}
 
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
-            CoreManager::GetUIVars().Clear();
+            UISceneFixture::SetUp();
             CoreManager::GetUIStrings().Clear();
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
         }
 
         void TearDown() override {
             _hud.Reset();
             _panel.Reset();
-            _manager.Reset();
-            _standIns.clear();
-            _standInComponents.clear();
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetUIStrings().Clear();  // the table is global: the next test starts with none, and with no current language
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
+            UISceneFixture::TearDown();
         }
 
         /// The table of the screen, through the reader of the file, so the test covers the file format as well; the first language is the default one and the current one
@@ -144,36 +129,20 @@ namespace BECore::Tests {
         void LoadPanelScene(const String& sceneText, float viewWidth, float viewHeight) {
             _hud.Reset();
             _panel.Reset();
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(sceneText));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(sceneText));
             _renderer->width = viewWidth;
             _renderer->height = viewHeight;
-
-            for (const auto& node : GetScene().GetRootNode().GetChildren()) {
-                if (node->GetName() == "Hud"_intern) {
-                    _hud = node->GetComponent<UICanvasComponent>();
-                } else if (node->GetName() == _panelNode) {
-                    _panel = node->GetComponent<UICanvasComponent>();
-                }
-            }
+            _hud = Canvas("Hud"_intern);
+            _panel = Canvas(_panelNode);
             ASSERT_TRUE(_hud);
             ASSERT_TRUE(_panel);
+            _canvas = _panel;
             _hud->UpdateLayout(kFirstLayoutWidth, kFirstLayoutHeight);  // the reflected fields of the component reach the layout on its first update
             _panel->UpdateLayout(kFirstLayoutWidth, kFirstLayoutHeight);
         }
 
         Scene& GetScene() const {
             return *_manager->GetSceneByName("Main"_intern);
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
         }
 
         void Show() {
@@ -186,42 +155,6 @@ namespace BECore::Tests {
             context.sceneViewWidth = GetScene().GetViewWidth();
             context.sceneViewHeight = GetScene().GetViewHeight();
             return context;
-        }
-
-        /// The element @p name of the panel, null when there is none
-        UIElement* FindElement(const char* name) const {
-            return _panel ? _panel->GetRoot().FindByName(PoolString::Intern(name)) : nullptr;
-        }
-
-        UIElement& El(const char* name) const {
-            UIElement* element = FindElement(name);
-            if (element == nullptr) {
-                [&] { FAIL() << name << " is not in the panel"; }();
-                return StandIn<UIElement>();
-            }
-            return *element;
-        }
-
-        template <typename T>
-        T& Get(const char* name) const {
-            UIElement* element = FindElement(name);
-            T* typed = element ? element->Cast<T>() : nullptr;
-            if (typed == nullptr) {
-                [&] { FAIL() << name << (element ? " is not the expected control" : " is not in the panel"); }();
-                return StandIn<T>();
-            }
-            return *typed;
-        }
-
-        /// The component @p T of the element @p name
-        template <typename T>
-        const T& ComponentOf(const char* name) const {
-            const T* component = El(name).template GetComponent<T>();
-            if (component == nullptr) {
-                [&] { FAIL() << name << " lacks the component asked for"; }();
-                return StandIn<T>();
-            }
-            return *component;
         }
 
         static Pair<float, float> CenterOf(const UIElement& element) {
@@ -317,8 +250,6 @@ namespace BECore::Tests {
             return report;
         }
 
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
         IntrusivePtr<UICanvasComponent> _hud;
         IntrusivePtr<UICanvasComponent> _panel;
 
@@ -327,22 +258,7 @@ namespace BECore::Tests {
         static constexpr float kFirstLayoutWidth = 1280.0f;
         static constexpr float kFirstLayoutHeight = 720.0f;
 
-        /// A blank object for a lookup that failed, alive until TearDown
-        template <typename T>
-        T& StandIn() const {
-            auto standIn = New<T>();
-            T& object = *standIn;
-            if constexpr (std::is_base_of_v<UIElement, T>) {
-                _standIns.push_back(standIn);
-            } else {
-                _standInComponents.push_back(standIn);
-            }
-            return object;
-        }
-
         PoolString _panelNode;
-        mutable Vector<IntrusivePtrNonAtomic<UIElement>> _standIns;
-        mutable Vector<IntrusivePtrNonAtomic<UIComponent>> _standInComponents;
     };
 
 }  // namespace BECore::Tests
