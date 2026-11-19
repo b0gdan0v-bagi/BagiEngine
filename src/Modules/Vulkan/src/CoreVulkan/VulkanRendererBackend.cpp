@@ -675,8 +675,7 @@ namespace BECore {
 
     IntrusivePtr<IRenderTarget> VulkanRendererBackend::CreateRenderTarget(uint32_t width, uint32_t height) {
         auto target = New<VulkanRenderTarget>();
-        if (!target->Initialize(_device.GetDevice(), _device.GetPhysicalDevice(),
-                                 _swapchain.GetImageFormat(), width, height)) {
+        if (!target->Initialize(_device, _swapchain.GetImageFormat(), width, height)) {
             LOG_ERROR("VulkanRendererBackend: CreateRenderTarget failed");
             return {};
         }

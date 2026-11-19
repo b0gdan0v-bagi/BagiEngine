@@ -40,8 +40,6 @@ namespace BECore {
                   const Color& color, VkExtent2D extent, const VkRect2D& scissor) const;
 
     private:
-        VkShaderModule CreateShaderModule(VkDevice device, const uint32_t* code, uint32_t sizeInBytes) const;
-
         VkPipelineLayout _pipelineLayout = VK_NULL_HANDLE;
         VkPipeline _pipeline = VK_NULL_HANDLE;
     };

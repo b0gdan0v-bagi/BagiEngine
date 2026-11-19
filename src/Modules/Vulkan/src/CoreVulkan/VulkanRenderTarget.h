@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Renderer/IRenderTarget.h>
+#include <CoreVulkan/VulkanDevice.h>
 #include <vulkan/vulkan.h>
 
 namespace BECore {
@@ -12,8 +13,7 @@ namespace BECore {
         VulkanRenderTarget() = default;
         ~VulkanRenderTarget() override;
 
-        bool Initialize(VkDevice device, VkPhysicalDevice physDevice,
-                        VkFormat format, uint32_t width, uint32_t height);
+        bool Initialize(const VulkanDevice& vulkanDevice, VkFormat format, uint32_t width, uint32_t height);
 
         uint32_t GetWidth()  const override { return _width; }
         uint32_t GetHeight() const override { return _height; }
@@ -25,10 +25,6 @@ namespace BECore {
         VkExtent2D    GetExtent()      const { return {_width, _height}; }
 
     private:
-        static uint32_t FindMemoryType(VkPhysicalDevice physDevice,
-                                       uint32_t typeFilter,
-                                       VkMemoryPropertyFlags properties);
-
         VkDevice      _device      = VK_NULL_HANDLE;
         VkImage       _image       = VK_NULL_HANDLE;
         VkDeviceMemory _memory     = VK_NULL_HANDLE;

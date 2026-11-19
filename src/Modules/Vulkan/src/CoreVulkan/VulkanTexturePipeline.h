@@ -51,8 +51,6 @@ namespace BECore {
         void Draw(VkCommandBuffer cmd, VkDescriptorSet descriptorSet, const PushConstants& pc, const VkRect2D& scissor) const;
 
     private:
-        VkShaderModule CreateShaderModule(VkDevice device, const uint32_t* code, uint32_t sizeInBytes) const;
-
         VkDescriptorSetLayout _descriptorSetLayout = VK_NULL_HANDLE;
         VkDescriptorPool _descriptorPool = VK_NULL_HANDLE;
         VkPipelineLayout _pipelineLayout = VK_NULL_HANDLE;
