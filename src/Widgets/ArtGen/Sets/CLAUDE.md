@@ -29,12 +29,14 @@ A **set** is one preset applied to a list of subjects: one **job** per subject, 
 ```
 {"manifest": 1, "set", "created", "kind" ("image"|"audio"), "preset", "presetData" (a draft's content, else null),
  "count", "seed" (the first seed of every job), "processing" (an image set: null | {"settings", "frame"}),
- "reference" (null | {"mode", "image", "weight"?}),
+ "reference" (null | {"mode", "image", "weight"?}), "atlas" (null | a group name),
  "jobs": [{"name", "subject", "state", "error", "variants": [{"seed", "file", "provenance", "kind"}],
            "pick": seed|null, "accepted": null | {"as", "date", "kept"}, "more": null | {"seed", "count" (1..16)}}]}
 ```
 
 `processing` is the frame of an image set (`ArtGenSetProcessing`), null until the first Accept all ("Accept all"); a manifest without the key reads as null.
+
+`atlas` is the atlas group an image set's sprites join: `artgen_enqueue`'s `atlas`, else the preset's, taken at enqueue and never changed (an additive key, format 1; a manifest without it reads as none; a sound set has none).
 
 `reference` is the picture every job's run starts from or is drawn in the style of (`Reference/CLAUDE.md`), set at `artgen_enqueue` and never changed. It is an additive key like `processing`, so the format stays 1: an older manifest reads as none, an older editor ignores it. A malformed one is an error that names `reference` and its key.
 
@@ -74,6 +76,8 @@ The table is in `ArtGen/CLAUDE.md`; the handlers are in `ArtGenSessionSets.cpp`.
 1. The set exists and is not active (`artgen_busy`); every row that is neither kept nor replaced has a candidate and is not failed or cancelled (`artgen_set_incomplete` names them: a job cannot be dropped, it is retried first).
 2. Every row to write: a valid name, the candidate's file of the set's kind, its provenance when the manifest names one (the file system is asked, the manifest is not trusted), and an acceptor installed (`artgen_accept_failed`).
 3. Then the rows in order, each through the set's frame (below); after each one the job gets its pick, `accepted{as, date, kept=false}` and the manifest is written. A failure halfway returns the row, its position and the rows done, and stops: the marks of the rows done stay, and **calling it again is the repair** (an accept replaces the same name). A **kept** row is skipped (`{job, kept: true}` in the answer), and so is a **replaced** one (`{job, replacedBy: <set>}`, see below): skipped, not refused, so the other rows still go in. A row already live is written again from its current pick.
+
+**An atlas group.** A set with `atlas` writes each row into the group without packing it and, with the packer installed (`SetAtlasPacker`; the editor's is `PackAtlasForControl`), packs the group once after the last row; the answer's `atlas` is that pack (null with no group, no row written or no packer, when each row packs by itself). The rows are marked before the pack, so a failed pack (`artgen_accept_failed`, the group is not packed) leaves them accepted and in the game; calling again or Pack in the Sprite Library repairs it, and a failed row packs nothing. A switch of a live row repacks at once.
 
 **One frame for an image set.** The files of a set keep their relative size (a pawn smaller than a king), so one frame cuts and scales them all. At the **first Accept all** the session measures every variant of every Done job (the alternatives too), through its `FrameMeasurer`, with the settings of the set's preset (a draft: its own `accept` or the defaults; by name: the saved preset's), and stores `processing {settings, frame}` with the first row written (a refusal or a failed first row stores nothing). **From then on the frame never moves** (it is a set field: it survives Keep and a reload): Accept all again, a switch and Keep write through it, so every alternative has the same output size. Editing the preset afterwards does not reach the set; the way to another frame is a new set. One alternative far bigger than the rest sets the scale for everyone; a variant whose drawn box is outside the stored frame fails in the acceptor (only possible with `frameOf`).
 
