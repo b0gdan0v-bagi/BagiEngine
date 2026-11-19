@@ -276,14 +276,7 @@ namespace BECore::Tests {
         // The two are not affected, and when one leaves the slot is free again
         second->Send(AsBytes(EncodeCloseFrame(WebSocketCloseCode::kNormal, {}, kClientMask)));
         ASSERT_TRUE(second->WaitForEndOfStream());
-        bool connected = false;
-        for (int attempt = 0; attempt < kSlotRetryAttempts && !connected; ++attempt) {
-            connected = StringView(TryHandshake(port)).starts_with("HTTP/1.1 101 ");
-            if (!connected) {
-                std::this_thread::sleep_for(10ms);  // the accept thread reaps finished connections every 50 ms
-            }
-        }
-        EXPECT_TRUE(connected);
+        EXPECT_TRUE(WaitForHandshakeAccepted(port));
         first->SendText("still here");
         EXPECT_TRUE(first->WaitForFrame().has_value());
     }
@@ -390,14 +383,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(recorder.Events().empty()) << "the handler must never hear of a health check";
 
         // Each probe freed its slot (one connection per address is allowed): a client can still connect
-        bool connected = false;
-        for (int attempt = 0; attempt < kSlotRetryAttempts && !connected; ++attempt) {
-            connected = StringView(TryHandshake(port, "", "game.example.net")).starts_with("HTTP/1.1 101 ");
-            if (!connected) {
-                std::this_thread::sleep_for(10ms);  // the accept thread reaps finished connections every 50 ms
-            }
-        }
-        EXPECT_TRUE(connected);
+        EXPECT_TRUE(WaitForHandshakeAccepted(port, "", "game.example.net"));
     }
 
     TEST_F(WebSocketListenerTest, OtherRequestsOfAPublicListenerWithAHealthPathAreJudgedAsBefore) {
@@ -505,7 +491,7 @@ namespace BECore::Tests {
         }
         occupant->Drop();
 
-        EXPECT_TRUE(WaitUntil({}, [&] { return StringView(TryHandshake(port)).starts_with("HTTP/1.1 101 "); })) << "the free slot was never given out";
+        EXPECT_TRUE(WaitForHandshakeAccepted(port)) << "the free slot was never given out";
     }
 
     TEST_F(WebSocketListenerTest, StopEndsOpenAndUnfinishedConnectionsPromptly) {
@@ -615,14 +601,7 @@ namespace BECore::Tests {
         // The slot of a client that leaves is free again
         first->Send(AsBytes(EncodeCloseFrame(WebSocketCloseCode::kNormal, {}, kClientMask)));
         ASSERT_TRUE(first->WaitForEndOfStream());
-        bool connected = false;
-        for (int attempt = 0; attempt < kSlotRetryAttempts && !connected; ++attempt) {
-            connected = StringView(TryHandshake(port, "X-Forwarded-For: 203.0.113.1\r\n")).starts_with("HTTP/1.1 101 ");
-            if (!connected) {
-                std::this_thread::sleep_for(10ms);
-            }
-        }
-        EXPECT_TRUE(connected);
+        EXPECT_TRUE(WaitForHandshakeAccepted(port, "X-Forwarded-For: 203.0.113.1\r\n"));
     }
 
     TEST_F(WebSocketListenerTest, TrustedProxyHopsFallsBackToThePeerAddressWithoutAUsableEntry) {

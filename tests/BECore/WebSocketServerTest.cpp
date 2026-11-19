@@ -428,19 +428,7 @@ namespace BECore::Tests {
 
         // More sequential clients than there are slots: every one has to find its slot free again
         for (size_t round = 0; round < WebSocketServer::kMaxConnections * 3; ++round) {
-            bool connected = false;
-            for (int attempt = 0; attempt < kSlotRetryAttempts && !connected; ++attempt) {
-                auto client = OpenClient(port);
-                ASSERT_TRUE(client.has_value());
-                client->Send(HandshakeRequest(port));
-                const String response = client->ReadHttpResponse();
-                if (StringView(response).starts_with("HTTP/1.1 101 ")) {
-                    connected = true;
-                } else {
-                    std::this_thread::sleep_for(10ms);  // the accept thread reaps finished connections every 50 ms
-                }
-            }
-            ASSERT_TRUE(connected) << "round " << round;
+            ASSERT_TRUE(WaitForHandshakeAccepted(port)) << "round " << round;
         }
     }
 

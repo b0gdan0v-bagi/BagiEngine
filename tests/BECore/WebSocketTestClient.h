@@ -17,8 +17,6 @@ namespace BECore::Tests {
     inline constexpr WebSocketMask kClientMask = {0x12, 0x34, 0x56, 0x78};
     inline constexpr const char* kClientKey = "dGhlIHNhbXBsZSBub25jZQ==";
     inline constexpr std::chrono::seconds kClientWaitLimit = kWaitLimit;
-    /// Tries of a client that waits for a free connection slot, 10 ms apart: the accept thread may be starved on a loaded machine
-    inline constexpr int kSlotRetryAttempts = 3000;
 
     /// Something a test thread does while it waits (the server tests drain the control service); may be empty. A client owns its pump:
     /// a test that gives one pump to several clients passes the lambda itself each time, not a `WaitPump` it made once
@@ -195,7 +193,9 @@ namespace BECore::Tests {
             Send(AsBytes(EncodeTextFrame(text, kClientMask)));
         }
 
-        /// The response head of the handshake, and the body when it says Content-Length. Empty when nothing came in time
+        /// The response head of the handshake, and the body when it says Content-Length. Empty when nothing came in time, or when the
+        /// server ended the connection before a whole answer: a listener closes a refused client without an answer when its queue of
+        /// refusals is full, and a client that waited the full limit for that would outlast the poll of the test that retries it
         String ReadHttpResponse() {
             constexpr StringView kHeadEnd = "\r\n\r\n";
             String response;
@@ -205,7 +205,7 @@ namespace BECore::Tests {
                 String& text = _reader.Buffered();
                 const size_t headEnd = text.find(kHeadEnd.data(), 0, kHeadEnd.size());
                 if (headEnd == String::npos) {
-                    return false;
+                    return _reader.HasEnded();
                 }
                 const size_t lengthAt = text.find("Content-Length: ");
                 if (lengthAt == String::npos || lengthAt > headEnd) {
@@ -215,7 +215,7 @@ namespace BECore::Tests {
                     bodyExpected = StringUtils::ParseNumber<size_t>(value.substr(0, value.find('\r'))).value_or(0);
                 }
                 if (text.size() < headEnd + kHeadEnd.size() + bodyExpected) {
-                    return false;
+                    return _reader.HasEnded();
                 }
                 response = text.substr(0, headEnd + kHeadEnd.size() + bodyExpected);
                 text.erase(0, response.size());
@@ -273,5 +273,19 @@ namespace BECore::Tests {
         WaitPump _pump;
         RawFrameReader _reader;
     };
+
+    /// Whether a new client of @p port has its handshake accepted within kWaitLimit. The slot of a client that left is free only
+    /// once the server's reader of that client has finished, a moment after the client saw the end of its stream: a client that comes
+    /// before is refused, and the next one tries again
+    inline bool WaitForHandshakeAccepted(uint16_t port, const String& extraHeaders = "", const String& host = "") {
+        return WaitUntil([&] {
+            auto client = WebSocketTestClient::Open(port);
+            if (!client) {
+                return false;
+            }
+            client->Send(HandshakeRequest(port, extraHeaders, host));
+            return StringView(client->ReadHttpResponse()).starts_with("HTTP/1.1 101 ");
+        });
+    }
 
 }  // namespace BECore::Tests
