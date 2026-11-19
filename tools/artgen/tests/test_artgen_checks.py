@@ -390,6 +390,21 @@ def test_checks_the_names_of_the_thresholds_and_of_the_checks():
     assert set(artgen_checks.CHECK_NAMES) == {"empty", "edge", "pieces", "bodies", "halo", "background", "small", "offCentre"}
 
 
+# Silhouettes of the Chess game's art, reduced to a 0/255 alpha (no colour): `accept/` holds pictures that are one piece (the
+# game's accepted set, a horn or a glass on a stand), `reject/` pictures of several objects that stand together on a thin base.
+SILHOUETTES = Path(__file__).resolve().parent / "fixtures" / "silhouettes"
+
+
+def silhouettes(kind):
+    return sorted((SILHOUETTES / kind).glob("*.png"))
+
+
+@pytest.mark.parametrize("path", silhouettes("accept"), ids=lambda path: path.stem)
+def test_checks_the_accepted_silhouettes_pass(path):
+    verdict = check_png(path.read_bytes())
+    assert verdict["failed"] == [], verdict["metrics"]
+
+
 def png_of(alpha):
     rows = []
     for y in range(alpha.height):
