@@ -274,13 +274,13 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(LockProfileTest, TheDefaultThresholdIsFiftyMicroseconds) {
-        EXPECT_EQ(Profiler::GetLockWaitThresholdUs(), 50u);
+    TEST(LockProfileTest, AScopedThresholdRestoresTheDefaultOnExit) {
+        EXPECT_EQ(Profiler::GetLockWaitThresholdUs(), Profiler::kDefaultLockWaitThresholdUs);
         {
             const ScopedThreshold threshold(7);
             EXPECT_EQ(Profiler::GetLockWaitThresholdUs(), 7u);
         }
-        EXPECT_EQ(Profiler::GetLockWaitThresholdUs(), 50u);
+        EXPECT_EQ(Profiler::GetLockWaitThresholdUs(), Profiler::kDefaultLockWaitThresholdUs);
     }
 
     TEST(LockProfileTest, AContendedMutexRecordsALockWaitZoneOnTheWaitingThread) {

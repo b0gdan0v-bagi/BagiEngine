@@ -1,3 +1,4 @@
+#include <BECore/GizmoTestSupport.h>
 #include <Common/Require.h>
 #include <Widgets/Viewport/GizmoDrag.h>
 #include <gtest/gtest.h>
@@ -5,17 +6,9 @@
 namespace BECore::Tests {
 
     using namespace Gizmo;
+    using namespace GizmoTest;
 
     namespace {
-
-        constexpr float kTolerance = 1e-3f;
-        constexpr float kThirtyDegreesCos = 0.8660254f;
-        constexpr float kThirtyDegreesSin = 0.5f;
-
-        void ExpectVec(Vec2 expected, Vec2 actual) {
-            EXPECT_NEAR(expected.x, actual.x, kTolerance);
-            EXPECT_NEAR(expected.y, actual.y, kTolerance);
-        }
 
         void ExpectItem(const Item& expected, const Item& actual) {
             EXPECT_NEAR(expected.x, actual.x, kTolerance);
@@ -25,18 +18,6 @@ namespace BECore::Tests {
             EXPECT_NEAR(expected.rotation, actual.rotation, kTolerance);
             EXPECT_NEAR(expected.pivotX, actual.pivotX, kTolerance);
             EXPECT_NEAR(expected.pivotY, actual.pivotY, kTolerance);
-        }
-
-        Item MakeItem(float x, float y, float width, float height, float rotation = 0.0f, float pivotX = 0.5f, float pivotY = 0.5f) {
-            Item item;
-            item.x = x;
-            item.y = y;
-            item.width = width;
-            item.height = height;
-            item.rotation = rotation;
-            item.pivotX = pivotX;
-            item.pivotY = pivotY;
-            return item;
         }
 
         /// Where the point (u, v) of the item's rect is on the scene, rotation and pivot applied
@@ -65,9 +46,6 @@ namespace BECore::Tests {
             const Item items[] = {item};
             return Drag(tool, space, handle, items, from, to, snap, snapModifier, keepAspect);
         }
-
-        const Item kFlat = MakeItem(0.0f, 0.0f, 100.0f, 50.0f);
-        constexpr Vec2 kFlatCenter{50.0f, 25.0f};
 
         /// A point @p radius from @p center at @p degrees (clockwise from the right on a screen with y down)
         Vec2 OnCircle(Vec2 center, float radius, float degrees) {
@@ -176,7 +154,7 @@ namespace BECore::Tests {
         const Item items[] = {MakeItem(1.0f, 2.0f, 30.0f, 40.0f, 25.0f), MakeItem(50.0f, 60.0f, 30.0f, 40.0f)};
         GizmoDrag drag;
         drag.Begin(Tool::Translate, Space::World, Handle::Free, items, {7.0f, 9.0f}, {});
-        [[maybe_unused]] const auto away = drag.Update({70.0f, -90.0f}, false);
+        static_cast<void>(drag.Update({70.0f, -90.0f}, false));
         const auto back = drag.Update({7.0f, 9.0f}, false);
         ExpectItem(items[0], back[0]);
         ExpectItem(items[1], back[1]);
@@ -429,7 +407,7 @@ namespace BECore::Tests {
         const Item items[] = {MakeItem(1.1f, 2.2f, 33.3f, 44.4f, 12.5f, 0.3f, 0.7f), MakeItem(5.5f, 6.6f, 7.7f, 8.8f)};
         GizmoDrag drag;
         drag.Begin(Tool::Scale, Space::World, Handle::Corner2, items, {0.0f, 0.0f}, SnapAll());
-        [[maybe_unused]] const auto moved = drag.Update({17.0f, 31.0f}, false);
+        static_cast<void>(drag.Update({17.0f, 31.0f}, false));
         EXPECT_NE(drag.Current()[0], items[0]);
         const auto snapshot = drag.Cancel();
         ASSERT_EQ(snapshot.size(), 2u);
@@ -444,7 +422,7 @@ namespace BECore::Tests {
         const Item items[] = {kFlat};
         GizmoDrag drag;
         drag.Begin(Tool::Translate, Space::World, Handle::Free, items, {0.0f, 0.0f}, {});
-        [[maybe_unused]] const auto moved = drag.Update({10.0f, 20.0f}, false);
+        static_cast<void>(drag.Update({10.0f, 20.0f}, false));
         drag.End();
         EXPECT_FALSE(drag.IsActive());
         EXPECT_FLOAT_EQ(drag.Current()[0].x, 10.0f);

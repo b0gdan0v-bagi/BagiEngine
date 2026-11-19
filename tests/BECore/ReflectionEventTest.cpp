@@ -16,6 +16,10 @@ namespace BECore::Tests {
     static_assert(std::is_default_constructible_v<TestDataEvent>);
     static_assert(std::is_default_constructible_v<TestMessageEvent>);
 
+    // BE_EVENT adds no member and no vptr: an empty event is the one byte of an empty struct, a data event its fields
+    static_assert(sizeof(TestEmptyEvent) == 1);
+    static_assert(sizeof(TestDataEvent) == sizeof(int32_t) + sizeof(float));
+
     TEST(ReflectionEventTest, CompileTimeChecks) {
         SUCCEED() << "The static_asserts above are the check";
     }
@@ -65,14 +69,6 @@ namespace BECore::Tests {
 
         auto field1 = GetFieldInfo<TestDataEvent, 1>();
         EXPECT_EQ(field1.name, "multiplier");
-    }
-
-    TEST(ReflectionEventTest, ZeroOverhead) {
-        // sizeof(empty struct) is 1 in C++ (cannot be 0); no vptr
-        EXPECT_EQ(sizeof(TestEmptyEvent), 1u) << "Empty event should have size 1 (no overhead)";
-
-        // int32_t (4) + float (4) = 8 bytes, no vptr
-        EXPECT_EQ(sizeof(TestDataEvent), 8u) << "TestDataEvent should be 8 bytes (no overhead)";
     }
 
     TEST(ReflectionEventTest, FieldIteration) {

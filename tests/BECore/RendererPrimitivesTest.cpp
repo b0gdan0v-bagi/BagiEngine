@@ -15,11 +15,6 @@ namespace BECore::Tests {
         const Color kRed{kOpaque, 0, 0, kOpaque};
         constexpr uint32_t kBytesPerPixel = 4;
 
-        IntrusivePtr<ITexture> MakeTexture(RecordingRenderer& renderer, uint32_t width, uint32_t height) {
-            const Vector<uint8_t> pixels(static_cast<size_t>(width) * height * kBytesPerPixel, kOpaque);
-            return renderer.CreateTexture(pixels.data(), width, height);
-        }
-
     }  // namespace
 
     TEST(RendererClipTest, NoClipByDefault) {

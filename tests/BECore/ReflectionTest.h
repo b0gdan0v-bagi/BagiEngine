@@ -19,34 +19,22 @@ namespace BECore {
         struct Player {
             BE_CLASS(Player)
 
-            BE_REFLECT_FIELD int32_t health = 100;
+            static constexpr int32_t kFullHealth = 100;
+            static constexpr float kPercent = 100.0f;
+
+            BE_REFLECT_FIELD int32_t health = kFullHealth;
             BE_REFLECT_FIELD float speed = 5.0f;
             BE_REFLECT_FIELD PoolString name;
             BE_REFLECT_FIELD bool isAlive = true;
 
-            /**
-             * @brief Take damage and update health
-             * @param amount Damage amount
-             * @return Remaining health
-             */
+            /// The health left
             BE_FUNCTION int32_t TakeDamage(int32_t amount);
 
-            /**
-             * @brief Heal the player
-             * @param amount Heal amount
-             */
             BE_FUNCTION void Heal(int32_t amount);
 
-            /**
-             * @brief Check if player is dead
-             * @return true if health <= 0
-             */
             BE_FUNCTION bool IsDead() const;
 
-            /**
-             * @brief Get current health percentage
-             * @return Health as percentage (0-100)
-             */
+            /// Health as a percentage of kFullHealth; above 100 after a Heal past it
             BE_FUNCTION float GetHealthPercent() const;
         };
 

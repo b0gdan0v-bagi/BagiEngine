@@ -30,11 +30,6 @@ namespace BECore::Tests {
             g_fakeNow += ms * kNanosecondsPerMs;
         }
 
-        IntrusivePtr<ITexture> MakeTexture(RecordingRenderer& renderer) {
-            const uint8_t pixels[4] = {255, 255, 255, 255};
-            return renderer.CreateTexture(pixels, 1, 1);
-        }
-
         // Three quads and two sprites (the sprites get their textures from the test)
         constexpr const char* kCountedSceneXml = R"(
 <SceneManager><scenes>

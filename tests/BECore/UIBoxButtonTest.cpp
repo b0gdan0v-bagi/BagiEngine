@@ -25,7 +25,7 @@ namespace BECore::Tests {
         constexpr Color kBorder{200, 150, 100, 255};
         constexpr Color kText{250, 240, 230, 255};
 
-        enum class State : uint8_t { Normal, Hover, Pressed, Selected, Disabled };
+        CORE_ENUM(State, uint8_t, Normal, Hover, Pressed, Selected, Disabled)
 
         /// An element with a clicker and a text of the colour `kText` (the colour of the selection), in @p state; its box has every field set when @p styled
         IntrusivePtr<UIElement> MakeElement(State state, bool styled = true) {

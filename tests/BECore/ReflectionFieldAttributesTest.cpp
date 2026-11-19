@@ -44,7 +44,7 @@ namespace BECore::Tests {
             }
         };
 
-        enum class EventKind { Begin, Visit, BeginCompound, EndCompound, End };
+        CORE_ENUM(EventKind, uint8_t, Begin, Visit, BeginCompound, EndCompound, End)
 
         struct Event {
             EventKind kind;

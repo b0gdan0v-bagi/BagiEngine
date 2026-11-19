@@ -1,4 +1,6 @@
 #include <BECore/Renderer/DrawTransform.h>
+#include <BECore/UI/UIColor.h>
+#include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
 #include <gtest/gtest.h>
@@ -13,7 +15,6 @@ namespace BECore::Tests {
 
         constexpr float kTolerance = 1e-4f;
         constexpr uint8_t kOpaque = 255;
-        constexpr uint32_t kBytesPerPixel = 4;
         const Color kRed{kOpaque, 0, 0, kOpaque};
         const Color kTint{10, 20, 30, 40};
         const Vector<int> kExpectedIndices = {0, 1, 2, 2, 1, 3};
@@ -28,18 +29,6 @@ namespace BECore::Tests {
             EXPECT_NEAR(vertex.y, y, kTolerance);
             EXPECT_NEAR(vertex.u, u, kTolerance);
             EXPECT_NEAR(vertex.v, v, kTolerance);
-        }
-
-        void ExpectColor(const Color& actual, const Color& expected) {
-            EXPECT_EQ(actual.r, expected.r);
-            EXPECT_EQ(actual.g, expected.g);
-            EXPECT_EQ(actual.b, expected.b);
-            EXPECT_EQ(actual.a, expected.a);
-        }
-
-        IntrusivePtr<ITexture> MakeTexture(RecordingRenderer& renderer, uint32_t width, uint32_t height) {
-            const Vector<uint8_t> pixels(static_cast<size_t>(width) * height * kBytesPerPixel, kOpaque);
-            return renderer.CreateTexture(pixels.data(), width, height);
         }
 
     }  // namespace
@@ -107,7 +96,7 @@ namespace BECore::Tests {
         EXPECT_EQ(At(renderer.calls, 0).kind, DrawKind::Rect);
         EXPECT_FLOAT_EQ(At(renderer.calls, 0).rect.x, 10.0f);
         EXPECT_FLOAT_EQ(At(renderer.calls, 0).rect.h, 40.0f);
-        ExpectColor(At(renderer.calls, 0).color, kRed);
+        EXPECT_PRED2(ColorsEqual, At(renderer.calls, 0).color, kRed);
     }
 
     TEST(RendererTransformTest, AnIdentityTextureIsThePlainTextureCall) {
@@ -120,7 +109,7 @@ namespace BECore::Tests {
         ASSERT_EQ(renderer.calls.size(), 1u);
         EXPECT_EQ(At(renderer.calls, 0).kind, DrawKind::Texture);
         EXPECT_EQ(At(renderer.calls, 0).texture, texture.Get());
-        ExpectColor(At(renderer.calls, 0).color, kTint);
+        EXPECT_PRED2(ColorsEqual, At(renderer.calls, 0).color, kTint);
         ASSERT_TRUE(At(renderer.calls, 0).source.has_value());
         EXPECT_FLOAT_EQ(At(renderer.calls, 0).source->w, 2.0f);
     }
@@ -143,7 +132,7 @@ namespace BECore::Tests {
         ExpectVertex(call.vertices[2], 60.0f, -30.0f, 0.0f, 1.0f);
         ExpectVertex(call.vertices[3], 60.0f, 170.0f, 1.0f, 1.0f);
         for (const GeometryVertex& vertex : call.vertices) {
-            ExpectColor(vertex.color, kRed);
+            EXPECT_PRED2(ColorsEqual, vertex.color, kRed);
         }
     }
 
@@ -162,7 +151,7 @@ namespace BECore::Tests {
         ExpectVertex(call.vertices[0], 75.0f, -25.0f, 0.0f, 0.0f);
         ExpectVertex(call.vertices[3], 25.0f, 75.0f, 1.0f, 1.0f);
         for (const GeometryVertex& vertex : call.vertices) {
-            ExpectColor(vertex.color, kTint);
+            EXPECT_PRED2(ColorsEqual, vertex.color, kTint);
         }
     }
 

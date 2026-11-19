@@ -15,16 +15,10 @@ namespace BECore::Tests {
 
     namespace ReflectionTestEvents {
 
-        /**
-         * @brief Empty event for testing zero overhead
-         */
         struct TestEmptyEvent {
             BE_EVENT(TestEmptyEvent)
         };
 
-        /**
-         * @brief Event with data fields for testing reflection
-         */
         struct TestDataEvent {
             BE_EVENT(TestDataEvent)
 
@@ -35,9 +29,7 @@ namespace BECore::Tests {
             constexpr explicit TestDataEvent(int32_t v, float m = 1.0f) : value(v), multiplier(m) {}
         };
 
-        /**
-         * @brief Event with string data for testing PoolString reflection
-         */
+        /// A PoolString field next to a plain one
         struct TestMessageEvent {
             BE_EVENT(TestMessageEvent)
 

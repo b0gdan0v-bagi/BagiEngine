@@ -8,6 +8,7 @@
 #include <BECore/Scene/Components/ParticleEmitterComponent.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Time/Time.h>
+#include <BECore/UI/UIColor.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/NullPropertyVisitor.h>
 #include <Common/Printers.h>
@@ -97,13 +98,6 @@ namespace BECore::Tests {
 
             Vector<String> _names;
         };
-
-        void ExpectColor(const Color& actual, const Color& expected) {
-            EXPECT_EQ(actual.r, expected.r);
-            EXPECT_EQ(actual.g, expected.g);
-            EXPECT_EQ(actual.b, expected.b);
-            EXPECT_EQ(actual.a, expected.a);
-        }
 
         IntrusivePtr<SceneNode> FindNodeByName(Scene& scene, const char* name) {
             for (const auto& node : scene.GetRootNode().GetChildren()) {
@@ -268,7 +262,7 @@ namespace BECore::Tests {
         EXPECT_NEAR(calls[0].rect.y, 115.0f, kTolerance);
         EXPECT_NEAR(calls[0].rect.w, 10.0f, kTolerance);
         EXPECT_NEAR(calls[0].rect.h, 10.0f, kTolerance);
-        ExpectColor(calls[0].vertices[0].color, Color(255, 0, 0, 255));
+        EXPECT_PRED2(ColorsEqual, calls[0].vertices[0].color, Color(255, 0, 0, 255));
     }
 
     TEST_F(ParticleEmitterComponentTest, ABurstWithoutACountUsesTheEffectsBurstCount) {
@@ -422,7 +416,7 @@ namespace BECore::Tests {
         EXPECT_EQ(copy->_effect.shape, ParticleShape::Rect);
         EXPECT_FLOAT_EQ(copy->_effect.size.from, 30.0f);
         EXPECT_EQ(copy->_effect.size.ease, EaseType::QuadOut);
-        ExpectColor(copy->_effect.color.to, Color(1, 2, 3, 4));
+        EXPECT_PRED2(ColorsEqual, copy->_effect.color.to, Color(1, 2, 3, 4));
         EXPECT_EQ(copy->_effect.spriteId, PoolString::Intern(kSparkSprite));
     }
 
