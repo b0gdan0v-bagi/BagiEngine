@@ -1,3 +1,4 @@
+#include <Common/Wait.h>
 #include <RemoteControl/Socket.h>
 #include <gtest/gtest.h>
 #include <thread>
@@ -7,8 +8,6 @@ namespace BECore::Tests {
     namespace {
 
         using namespace std::chrono_literals;
-
-        constexpr auto kWaitLimit = 30s;
 
         /// A connected pair: the client end and the end the server accepted
         struct SocketPair {
@@ -25,18 +24,6 @@ namespace BECore::Tests {
             ASSERT_TRUE(accepted.has_value());
             pair.client = std::move(*client);
             pair.accepted = std::move(*accepted);
-        }
-
-        template <typename Predicate>
-        bool WaitUntil(Predicate done) {
-            const auto deadline = std::chrono::steady_clock::now() + kWaitLimit;
-            while (std::chrono::steady_clock::now() < deadline) {
-                if (done()) {
-                    return true;
-                }
-                std::this_thread::sleep_for(1ms);
-            }
-            return false;
         }
 
     }  // namespace

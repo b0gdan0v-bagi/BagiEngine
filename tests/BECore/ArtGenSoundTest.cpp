@@ -1,4 +1,5 @@
 #include <BECore/Audio/AudioDecode.h>
+#include <BECore/AudioTestSupport.h>
 #include <BECore/Control/Json.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
@@ -7,7 +8,6 @@
 #include <Widgets/EditorLayout/UserFileIo.h>
 #include <cmath>
 #include <cstdio>
-#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -40,7 +40,7 @@ namespace BECore::Tests {
         }
 
         std::filesystem::path Fixture(const char* name) {
-            return std::filesystem::path(__FILE__).parent_path() / "AudioData" / name;
+            return AudioFixtureFolder() / name;
         }
 
     }  // namespace

@@ -2,6 +2,7 @@
 #include <BECore/Scene/SceneNodeFiles.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 
 namespace BECore::Tests {
 
@@ -15,11 +16,6 @@ namespace BECore::Tests {
         constexpr const char* kPlainNode = R"(<node name="B"><components>
   <component type="TransformComponent" x="5" y="6" width="7" height="8"/>
 </components></node>)";
-
-        void WriteFile(const std::filesystem::path& path, const String& text) {
-            std::filesystem::create_directories(path.parent_path());
-            std::ofstream(path) << text;
-        }
 
         pugi::xml_document Parse(const char* text) {
             pugi::xml_document doc;

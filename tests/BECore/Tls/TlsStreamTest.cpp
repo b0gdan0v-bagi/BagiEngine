@@ -1,4 +1,5 @@
 #include <BECore/Tls/FakeTlsStream.h>
+#include <Common/Wait.h>
 #include <RemoteControl/Tls/TlsStream.h>
 #include <gtest/gtest.h>
 #include <thread>
@@ -8,8 +9,6 @@ namespace BECore::Tests {
     namespace {
 
         using namespace std::chrono_literals;
-
-        constexpr auto kWaitLimit = 20s;
 
         /// The server end of the fake backend: a listener whose first connection does the fake handshake on a thread of its own
         class FakeServer {
@@ -120,18 +119,6 @@ namespace BECore::Tests {
             ASSERT_TRUE(connected.has_value()) << connected.error().c_str();
             ASSERT_TRUE(server.Accepted());
             ASSERT_TRUE(stream.IsValid());
-        }
-
-        template <typename Predicate>
-        bool WaitUntil(Predicate done) {
-            const auto deadline = std::chrono::steady_clock::now() + kWaitLimit;
-            while (std::chrono::steady_clock::now() < deadline) {
-                if (done()) {
-                    return true;
-                }
-                std::this_thread::sleep_for(1ms);
-            }
-            return false;
         }
 
     }  // namespace

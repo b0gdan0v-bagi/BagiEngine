@@ -9,6 +9,7 @@
 #include <BECore/Widgets/WidgetList.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/TestText.h>
 #include <Generated/WidgetListTest.gen.hpp>
 
 namespace BECore::Tests {
@@ -23,10 +24,6 @@ namespace BECore::Tests {
 
         constexpr int32_t kFirstId = 1;
         constexpr int32_t kLastId = 4;
-
-        bool Contains(StringView text, StringView part) {
-            return text.find(part) != StringView::npos;
-        }
 
         /// Loads the XML into a fresh holder; the deserializer stays with the caller to read its errors
         template <typename TList>

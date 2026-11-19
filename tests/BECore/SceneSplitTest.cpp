@@ -18,6 +18,7 @@
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Common/UILayoutMatrix.h>
 #include <Common/UITreeCompare.h>
 #include <gtest/gtest.h>
@@ -148,11 +149,6 @@ namespace BECore::Tests {
         }
         String PanelInlineC() {
             return PanelNode("PanelC", 1, 10, 20, PanelElements("C"));
-        }
-
-        void WriteFile(const std::filesystem::path& path, const String& text) {
-            std::filesystem::create_directories(path.parent_path());
-            std::ofstream(path) << text;
         }
 
         String Printed(const pugi::xml_node& node) {

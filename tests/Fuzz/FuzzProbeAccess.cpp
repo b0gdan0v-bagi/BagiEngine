@@ -1,5 +1,6 @@
 #include "FuzzProbeAccess.h"
 
+#include <Fuzz/FuzzChecks.h>
 #include <Generated/FuzzProbe.gen.hpp>
 
 namespace BECore::Fuzz {
@@ -14,37 +15,7 @@ namespace BECore::Fuzz {
 
     namespace {
 
-        constexpr uint64_t kFnvOffset = 0xCBF29CE484222325ull;
-        constexpr uint64_t kFnvPrime = 0x100000001B3ull;
-
-        class Hasher {
-        public:
-            void AddBytes(const void* data, size_t size) {
-                const auto* bytes = static_cast<const uint8_t*>(data);
-                for (size_t i = 0; i < size; ++i) {
-                    _value = (_value ^ bytes[i]) * kFnvPrime;
-                }
-            }
-
-            template <typename T>
-            void Add(const T& value) {
-                AddBytes(&value, sizeof(T));
-            }
-
-            void AddText(StringView text) {
-                Add(text.size());
-                AddBytes(text.data(), text.size());
-            }
-
-            uint64_t Value() const {
-                return _value;
-            }
-
-        private:
-            uint64_t _value = kFnvOffset;
-        };
-
-        void AddNode(Hasher& hasher, const FuzzProbeData::ProbeNode& node) {
+        void AddNode(FuzzDigest& hasher, const FuzzProbeData::ProbeNode& node) {
             hasher.Add(node.id);
             hasher.Add(node.children.size());
             for (const FuzzProbeData::ProbeNode& child : node.children) {
@@ -52,7 +23,7 @@ namespace BECore::Fuzz {
             }
         }
 
-        void AddLeaf(Hasher& hasher, const FuzzProbeData::ProbeLeaf& leaf) {
+        void AddLeaf(FuzzDigest& hasher, const FuzzProbeData::ProbeLeaf& leaf) {
             hasher.Add(leaf.id);
             hasher.Add(leaf.weight);
             hasher.AddText(leaf.label);
@@ -63,7 +34,7 @@ namespace BECore::Fuzz {
         uint64_t UnorderedDigest(const Map& map, Entry entryHasher) {
             uint64_t sum = 0;
             for (const auto& entry : map) {
-                Hasher hasher;
+                FuzzDigest hasher;
                 entryHasher(hasher, entry);
                 sum += hasher.Value();
             }
@@ -129,13 +100,13 @@ namespace BECore::Fuzz {
     }
 
     uint64_t DigestProbe(const FuzzProbeData::ProbeNode& node) {
-        Hasher hasher;
+        FuzzDigest hasher;
         AddNode(hasher, node);
         return hasher.Value();
     }
 
     uint64_t DigestProbe(const ProbeShapes& shapes) {
-        Hasher hasher;
+        FuzzDigest hasher;
         hasher.Add(shapes.maybe.has_value());
         hasher.Add(shapes.maybe.value_or(0));
         hasher.Add(shapes.maybeLeaf.has_value());
@@ -156,7 +127,7 @@ namespace BECore::Fuzz {
             hasher.AddText(entry.second);
         }
         hasher.Add(shapes.table.size());
-        hasher.Add(UnorderedDigest(shapes.table, [](Hasher& entryHasher, const auto& entry) {
+        hasher.Add(UnorderedDigest(shapes.table, [](FuzzDigest& entryHasher, const auto& entry) {
             entryHasher.AddText(entry.first);
             entryHasher.Add(entry.second);
         }));
@@ -173,14 +144,14 @@ namespace BECore::Fuzz {
     }
 
     uint64_t DigestProbe(const ProbeCalls& calls) {
-        Hasher hasher;
+        FuzzDigest hasher;
         hasher.Add(calls.calls);
         hasher.AddText(calls.last);
         return hasher.Value();
     }
 
     uint64_t DigestProbe(const ProbeState& state) {
-        Hasher hasher;
+        FuzzDigest hasher;
         hasher.Add(state.flag);
         hasher.Add(state.i8);
         hasher.Add(state.u8);

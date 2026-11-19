@@ -2,6 +2,7 @@
 
 #include <BECore/Reflection/IPropertyVisitor.h>
 #include <BECore/Reflection/PropertyVisitorDispatch.h>
+#include <Common/NullPropertyVisitor.h>
 #include <Common/Printers.h>
 #include <Generated/PropertyVisitorContainersTest.gen.hpp>
 
@@ -11,54 +12,10 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// Every Visit does nothing and no hook is overridden: the shape of a visitor that knows no container hook
-        class NullVisitor : public IPropertyVisitor {
-        public:
-            bool Visit(StringView, bool&) override {
-                return false;
-            }
-            bool Visit(StringView, int8_t&) override {
-                return false;
-            }
-            bool Visit(StringView, uint8_t&) override {
-                return false;
-            }
-            bool Visit(StringView, int16_t&) override {
-                return false;
-            }
-            bool Visit(StringView, uint16_t&) override {
-                return false;
-            }
-            bool Visit(StringView, int32_t&) override {
-                return false;
-            }
-            bool Visit(StringView, uint32_t&) override {
-                return false;
-            }
-            bool Visit(StringView, int64_t&) override {
-                return false;
-            }
-            bool Visit(StringView, uint64_t&) override {
-                return false;
-            }
-            bool Visit(StringView, float&) override {
-                return false;
-            }
-            bool Visit(StringView, double&) override {
-                return false;
-            }
-            bool Visit(StringView, PoolString&) override {
-                return false;
-            }
-            bool Visit(StringView, String&) override {
-                return false;
-            }
-        };
-
         /// Adds one to every int32_t and overrides no hook at all
-        class IncrementingVisitor final : public NullVisitor {
+        class IncrementingVisitor final : public NullPropertyVisitor {
         public:
-            using NullVisitor::Visit;
+            using NullPropertyVisitor::Visit;
             bool Visit(StringView, int32_t& value) override {
                 ++value;
                 return true;
@@ -66,9 +23,9 @@ namespace BECore::Tests {
         };
 
         /// Overrides the compound hooks only: a container must reach it as a compound of its elements
-        class CompoundVisitor final : public NullVisitor {
+        class CompoundVisitor final : public NullPropertyVisitor {
         public:
-            using NullVisitor::Visit;
+            using NullPropertyVisitor::Visit;
 
             String trace;
 
@@ -97,9 +54,9 @@ namespace BECore::Tests {
          * Tokens: `{` `}` a field, `<name>` `</>` a compound, `name(size+-)` a list (`+` can add, `-` can remove), `~i` the end of
          * element i, `key?` / `key?n` a new key, `/list` its end, `name=value` a value, `name?1` a presence, `name#i/n` an alternative.
          */
-        class Recorder final : public NullVisitor {
+        class Recorder final : public NullPropertyVisitor {
         public:
-            using NullVisitor::Visit;
+            using NullPropertyVisitor::Visit;
 
             bool showsHidden = false;
             bool add = false;
@@ -319,9 +276,9 @@ namespace BECore::Tests {
     }
 
     TEST(PropertyVisitorContainersTest, AListTheVisitorDoesNotOpenIsNotVisitedOrChanged) {
-        class Closed final : public NullVisitor {
+        class Closed final : public NullPropertyVisitor {
         public:
-            using NullVisitor::Visit;
+            using NullPropertyVisitor::Visit;
             int32_t visits = 0;
             int32_t ends = 0;
             bool Visit(StringView, int32_t&) override {
@@ -578,7 +535,7 @@ namespace BECore::Tests {
         EXPECT_EQ(state.hashed.at("h"), 4);
         EXPECT_TRUE(state.weights.empty());
 
-        NullVisitor nothing;
+        NullPropertyVisitor nothing;
         EXPECT_FALSE(state.AcceptPropertyVisitor(nothing));
     }
 

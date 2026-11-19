@@ -7,11 +7,11 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Generated/AssetPartsTest.gen.hpp>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskManager.h>
 #include <chrono>
-#include <fstream>
 
 namespace BECore::Tests {
 
@@ -63,8 +63,8 @@ namespace BECore::Tests {
             std::filesystem::remove_all(_dir, ec);
         }
 
-        void WriteFile(const char* fileName, const char* text) const {
-            std::ofstream(_dir / fileName) << text;  //-NoStd: the test writes the file below its own mounted temp folder, outside the engine's file layer
+        void WriteFile(const char* fileName, StringView text) const {
+            Tests::WriteFile(_dir / fileName, text);
         }
 
         void Age(const char* fileName, std::chrono::hours age) const {

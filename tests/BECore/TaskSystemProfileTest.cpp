@@ -2,6 +2,7 @@
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
 #include <BECore/Profiler/IProfilerBackend.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/Wait.h>
 #include <TaskSystem/Awaitables.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskHandle.h>
@@ -92,18 +93,6 @@ namespace BECore::Tests {
             ScopedBackend& operator=(const ScopedBackend&) = delete;
         };
 
-        template <typename TCondition>
-        bool WaitFor(TCondition condition) {
-            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-            while (!condition()) {
-                if (std::chrono::steady_clock::now() > deadline) {
-                    return false;
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
-            return true;
-        }
-
         Task<void> NothingTask() {
             co_return;
         }
@@ -140,7 +129,7 @@ namespace BECore::Tests {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         });
-        ASSERT_TRUE(WaitFor([&] { return running.load(); }));
+        ASSERT_TRUE(WaitUntil([&] { return running.load(); }));
 
         EXPECT_EQ(pool.GetBusyWorkerCount(), 1u);
         // The busy graphs are reported by the workers on every change, the queues are sampled
@@ -151,13 +140,13 @@ namespace BECore::Tests {
         EXPECT_TRUE(backend.HasCounter("Pool: steals"));
 
         // Both workers started, so both have a graph; exactly one of them is at 1 while the job runs
-        ASSERT_TRUE(WaitFor([&] { return backend.HasCounter("Worker 0: busy") && backend.HasCounter("Worker 1: busy"); }));
+        ASSERT_TRUE(WaitUntil([&] { return backend.HasCounter("Worker 0: busy") && backend.HasCounter("Worker 1: busy"); }));
         const double lastOfFirst = backend.Values("Worker 0: busy").back();
         const double lastOfSecond = backend.Values("Worker 1: busy").back();
         EXPECT_EQ(lastOfFirst + lastOfSecond, 1.0);
 
         release.store(true);
-        ASSERT_TRUE(WaitFor([&] { return pool.GetBusyWorkerCount() == 0; }));
+        ASSERT_TRUE(WaitUntil([&] { return pool.GetBusyWorkerCount() == 0; }));
         pool.Shutdown();
         EXPECT_EQ(backend.Values("Pool: busy workers").back(), 0.0);
 
@@ -174,7 +163,7 @@ namespace BECore::Tests {
         ScopedBackend installed(backend);
         ThreadPool pool(2);
 
-        EXPECT_TRUE(WaitFor([&] { return backend.HasZone("Idle"); }));
+        EXPECT_TRUE(WaitUntil([&] { return backend.HasZone("Idle"); }));
         pool.Shutdown();
     }
 
@@ -185,7 +174,7 @@ namespace BECore::Tests {
 
         std::atomic<bool> done{false};
         pool.Submit([&] { done.store(true); });
-        ASSERT_TRUE(WaitFor([&] { return done.load(); }));
+        ASSERT_TRUE(WaitUntil([&] { return done.load(); }));
         pool.Shutdown();
 
         EXPECT_TRUE(backend.HasZone("Task"));
@@ -201,7 +190,7 @@ namespace BECore::Tests {
             std::atomic<int> ran{0};
             pool.SubmitToThread(0, [&] { ran.fetch_add(1); });
             pool.SubmitToThread(1, [&] { ran.fetch_add(1); });
-            ASSERT_TRUE(WaitFor([&] { return ran.load() == 2; }));
+            ASSERT_TRUE(WaitUntil([&] { return ran.load() == 2; }));
             pool.Shutdown();
         }
 

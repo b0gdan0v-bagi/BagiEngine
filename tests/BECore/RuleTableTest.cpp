@@ -1,6 +1,7 @@
 #include <BECore/RuleTestSupport.h>
 #include <BECore/Rules/RuleTable.h>
 #include <Common/Printers.h>
+#include <Common/TestText.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -30,10 +31,6 @@ namespace BECore::Tests {
             int power;
             bool pierce;
         };
-
-        bool Contains(const String& text, StringView part) {
-            return text.find(String(part)) != String::npos;
-        }
 
         RuleTable<String> MakeComboTable() {
             RuleTable<String> table(ComboAxes());

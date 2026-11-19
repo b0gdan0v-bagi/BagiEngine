@@ -1,4 +1,5 @@
 #include <BECore/Reflection/BinaryDeserializer.h>
+#include <Fuzz/FuzzChecks.h>
 #include <Fuzz/FuzzTargets.h>
 
 namespace BECore::Fuzz {
@@ -10,37 +11,6 @@ namespace BECore::Fuzz {
 
         /// How many elements of one array the walk enters
         constexpr size_t kWalkArrayElementLimit = 4;
-
-        constexpr uint64_t kFnvOffset = 0xCBF29CE484222325ull;
-        constexpr uint64_t kFnvPrime = 0x100000001B3ull;
-
-        /// What a walk saw, as one number: two walks of the same buffer must agree on it
-        class Digest {
-        public:
-            void AddBytes(const void* data, size_t size) {
-                const auto* bytes = static_cast<const uint8_t*>(data);
-                for (size_t i = 0; i < size; ++i) {
-                    _value = (_value ^ bytes[i]) * kFnvPrime;
-                }
-            }
-
-            template <typename T>
-            void Add(const T& value) {
-                AddBytes(&value, sizeof(T));
-            }
-
-            void AddText(StringView text) {
-                Add(text.size());
-                AddBytes(text.data(), text.size());
-            }
-
-            uint64_t Value() const {
-                return _value;
-            }
-
-        private:
-            uint64_t _value = kFnvOffset;
-        };
 
         template <typename T>
         constexpr bool IsTextType = std::is_same_v<T, String> || std::is_same_v<T, PoolString>;
@@ -78,7 +48,7 @@ namespace BECore::Fuzz {
         }
 
         template <typename T>
-        void AddValue(Digest& digest, const T& value) {
+        void AddValue(FuzzDigest& digest, const T& value) {
             if constexpr (IsTextType<T>) {
                 digest.AddText(TextOf(value));
             } else {
@@ -144,7 +114,7 @@ namespace BECore::Fuzz {
                 }
             }
 
-            Digest& GetDigest() {
+            FuzzDigest& GetDigest() {
                 return _digest;
             }
 
@@ -220,7 +190,7 @@ namespace BECore::Fuzz {
 
             IDeserializer& _reader;
             const uint8_t* _data;
-            Digest _digest;
+            FuzzDigest _digest;
             size_t _budget = kWalkEntryBudget;
         };
 

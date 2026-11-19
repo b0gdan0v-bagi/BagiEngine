@@ -15,11 +15,6 @@ namespace BECore::Fuzz {
         /// The length of the long attribute and the long selector seeds
         constexpr size_t kLongTextBytes = 4096;
 
-        FuzzBytes TextBytes(StringView text) {
-            const auto* begin = reinterpret_cast<const uint8_t*>(text.data());
-            return FuzzBytes(begin, begin + text.size());
-        }
-
         /// The input of FuzzWebUi: the html, a NUL byte, the style sheet
         FuzzBytes HtmlAndCss(StringView html, StringView css) {
             FuzzBytes bytes = TextBytes(html);

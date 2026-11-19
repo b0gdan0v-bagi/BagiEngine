@@ -1,48 +1,15 @@
 #include <BECore/Audio/AudioClip.h>
 #include <BECore/Audio/AudioControl.h>
 #include <BECore/Audio/AudioManager.h>
+#include <BECore/AudioTestSupport.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/FakeAudioBackend.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
-
-    namespace {
-
-        String MakeRequest(int64_t id, StringView method, const Json& params = Json()) {
-            Json request = Json::object();
-            request["id"] = id;
-            request["method"] = ToStdString(method);
-            if (!params.is_null()) {
-                request["params"] = params;
-            }
-            return DumpJson(request);
-        }
-
-        IntrusivePtr<AudioClip> MakeClip(const char* path) {
-            DecodedAudio audio;
-            audio.format = AudioFormat{22050, 1};
-            audio.samples.assign(16, 0.5f);
-            return AudioClip::Create(PoolString::Intern(path), std::move(audio));
-        }
-
-        double NumberOf(const Json* object, StringView key) {
-            const auto value = object != nullptr ? GetJsonNumber(*object, key) : Optional<double>();
-            return value ? *value : -1.0;
-        }
-
-        Optional<bool> BoolOf(const Json* object, StringView key) {
-            return object != nullptr ? GetJsonBool(*object, key) : Optional<bool>();
-        }
-
-        String StringOf(const Json* object, StringView key) {
-            const auto value = object != nullptr ? GetJsonString(*object, key) : Optional<String>();
-            return value ? *value : String();
-        }
-
-    }  // namespace
 
     /// A ControlService and an AudioManager of its own over a fake backend: no transport, no engine services
     class AudioControlTest : public ::testing::Test {
@@ -73,7 +40,7 @@ namespace BECore::Tests {
     };
 
     TEST_F(AudioControlTest, TheStateWithoutABackendStillShowsTheRequests) {
-        manager.Play(*MakeClip("sfx/move.wav"), AudioBus::Sfx, 0.5f);
+        manager.Play(*MakeTestClip("sfx/move.wav"_intern), AudioBus::Sfx, 0.5f);
 
         const Json* state = Call("audio_state");
         ASSERT_NE(state, nullptr) << lastError.c_str();
@@ -108,7 +75,7 @@ namespace BECore::Tests {
         auto backend = New<FakeAudioBackend>();
         manager.SetBackend(backend);
         manager.SetBusMuted(AudioBus::Music, true);
-        manager.Play(*MakeClip("ui/click.wav"), AudioBus::Ui);
+        manager.Play(*MakeTestClip("ui/click.wav"_intern), AudioBus::Ui);
 
         const Json* state = Call("audio_state");
         ASSERT_NE(state, nullptr) << lastError.c_str();

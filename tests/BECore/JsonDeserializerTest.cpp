@@ -13,6 +13,7 @@
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/TypeRegistryTest.h>
 #include <Common/Printers.h>
+#include <Common/TestText.h>
 #include <Fuzz/FuzzProbeAccess.h>
 #include <gtest/gtest.h>
 
@@ -58,10 +59,6 @@ namespace BECore::Tests {
                 text += '\n';
             }
             return text;
-        }
-
-        bool Contains(const String& text, StringView part) {
-            return text.find(part.data(), 0, part.size()) != String::npos;
         }
 
         /// Loads `{"k": <valueJson>}` into @p value as the field `k`; true when the load answered true

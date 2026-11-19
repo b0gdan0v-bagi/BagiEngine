@@ -2,15 +2,12 @@
 
 #include <BECore/Values/Programs/ExprAst.h>
 #include <BECore/Values/Programs/ExprParser.h>
+#include <Common/TestText.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
 
     namespace {
-
-        bool Contains(const String& text, StringView part) {
-            return text.find(part.data(), 0, part.size()) != String::npos;
-        }
 
         ExprAst Parse(StringView text) {
             auto parsed = ParseExpression(text);

@@ -109,7 +109,7 @@ namespace BECore::Fuzz {
         class Recorder {
         public:
             Recorder() : _hub(_registry, RoomHubInput::MakeSettings(), RoomHubInput::MakeRandom(), MakeSink()) {
-                _registry.Register(SeatedGameInfo{"demo", DemoCardGame::kSeatCount}, [] { return UniquePtr<ISeatedGame>(MakeUnique<DemoCardGame>()); });
+                RoomHubInput::RegisterDemoGame(_registry);
             }
 
             void Connect(uint8_t number) {

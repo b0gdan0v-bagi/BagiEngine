@@ -1,3 +1,4 @@
+#include <Fuzz/FuzzChecks.h>
 #include <Fuzz/FuzzTargets.h>
 #include <Fuzz/FuzzWebSocketInput.h>
 #include <RemoteControl/WebSocketClientHandshake.h>
@@ -12,13 +13,9 @@ namespace BECore::Fuzz {
         constexpr StringView kHealthPath = "/healthz";
         constexpr StringView kHeadEnd = "\r\n\r\n";
 
-        /// Longest message a refusal may carry: a quoted piece of the peer's text (kMaxQuotedBytes and the three dots) in a sentence of ours
-        constexpr size_t kMaxRefusalBytes = kMaxQuotedBytes + 3 + 100;
-
-        /// A message for a log or a reject body that repeats the peer's text: printable ASCII and short, whatever the peer sent
-        bool IsTidyMessage(StringView message) {
-            return !message.empty() && message.size() <= kMaxRefusalBytes && std::all_of(message.begin(), message.end(), [](char letter) { return letter >= ' ' && letter <= '~'; });
-        }
+        /// Longest message a refusal of the handshake may carry: a quoted piece of the peer's text (kMaxQuotedBytes and the three dots) in a sentence of
+        /// ours, so a little over kMaxRefusalBytes
+        constexpr size_t kMaxQuotingRefusalBytes = kMaxQuotedBytes + 3 + 100;
 
         /// The statuses ParseHandshakeRequest documents
         bool IsKnownRefusalStatus(int status) {
@@ -64,7 +61,7 @@ namespace BECore::Fuzz {
             }
             if (!parsed.has_value()) {
                 FUZZ_CHECK(IsKnownRefusalStatus(parsed.error().httpStatus));
-                FUZZ_CHECK(IsTidyMessage(parsed.error().message));
+                FUZZ_CHECK(IsTidyMessage(parsed.error().message, kMaxQuotingRefusalBytes));
                 const String reject = BuildRejectResponse(parsed.error());
                 FUZZ_CHECK(StringView(reject).starts_with("HTTP/1.1 "));
                 FUZZ_CHECK(!CheckServerHandshakeResponse(reject, WebSocketInput::kHandshakeKey).has_value());
@@ -86,7 +83,7 @@ namespace BECore::Fuzz {
         void CheckResponse(StringView text) {
             const auto checked = CheckServerHandshakeResponse(text, WebSocketInput::kHandshakeKey);
             if (!checked.has_value()) {
-                FUZZ_CHECK(IsTidyMessage(checked.error()));
+                FUZZ_CHECK(IsTidyMessage(checked.error(), kMaxQuotingRefusalBytes));
                 return;
             }
             // Accepted: nothing but a well-formed 101 for this key can be, so the answer must name the right accept value
@@ -99,7 +96,7 @@ namespace BECore::Fuzz {
         void CheckUrl(StringView text) {
             const auto parsed = ParseWebSocketUrl(text);
             if (!parsed.has_value()) {
-                FUZZ_CHECK(IsTidyMessage(parsed.error()));
+                FUZZ_CHECK(IsTidyMessage(parsed.error(), kMaxQuotingRefusalBytes));
                 return;
             }
             const WebSocketUrl& url = *parsed;

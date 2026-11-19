@@ -10,6 +10,7 @@
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
 #include <gtest/gtest.h>
@@ -279,12 +280,6 @@ namespace BECore::Tests {
             });
             service.Drain();
             return response;
-        }
-
-        static String ErrorCode(const Json& response) {
-            const Json* error = FindJsonMember(response, "error");
-            const auto code = error != nullptr ? GetJsonString(*error, "code") : std::nullopt;
-            return code ? String(code->c_str()) : String();
         }
 
         ControlService service;

@@ -4,6 +4,7 @@
 #include <BECore/Control/JsonSerializer.h>
 #include <BECore/Reflection/MethodCall.h>
 #include <BECore/Reflection/TypedRef.h>
+#include <Fuzz/FuzzChecks.h>
 #include <Fuzz/FuzzProbeAccess.h>
 #include <Fuzz/FuzzTargets.h>
 
@@ -13,21 +14,8 @@ namespace BECore::Fuzz {
 
         using FuzzProbeData::ProbeNode;
 
-        constexpr uint8_t kLastControlCharacter = 0x1F;
-        constexpr uint8_t kDelete = 0x7F;
-
         /// A name no type has: the call must be refused whatever the document says
         constexpr StringView kUnknownMethod = "FuzzNoSuchMethod";
-
-        bool HasControlCharacter(StringView text) {
-            for (const char c : text) {
-                const auto byte = static_cast<uint8_t>(c);
-                if (byte <= kLastControlCharacter || byte == kDelete) {
-                    return true;
-                }
-            }
-            return false;
-        }
 
         /// What one load of a type gave: the state it reached (as a digest), and what it reported
         struct Reading {

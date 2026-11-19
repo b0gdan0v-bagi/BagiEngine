@@ -1,12 +1,11 @@
 #include <BECore/Control/Json.h>
-#include <BECore/Format/Format.h>
 #include <Common/Printers.h>
+#include <Common/TestText.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <chrono>
 #include <cstdio>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -48,10 +47,6 @@ namespace BECore::Tests {
         String ErrorOf(const std::expected<ArtGenSet, String>& result) {
             EXPECT_FALSE(result.has_value());
             return result ? String() : result.error();
-        }
-
-        bool Contains(const String& text, StringView part) {
-            return StringView(text).find(part) != StringView::npos;
         }
 
     }  // namespace

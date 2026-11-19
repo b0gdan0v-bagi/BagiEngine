@@ -16,6 +16,7 @@
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIVars.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -696,20 +697,6 @@ namespace BECore::Tests {
             Json params = Json::object();
             params["name"] = ToStdString(name);
             return params;
-        }
-
-        static bool IsOk(const Json& response) {
-            return BoolMember(response, "ok");
-        }
-
-        static String ErrorCode(const Json& response) {
-            const Json* error = Member(response, "error");
-            return error != nullptr ? StringMember(*error, "code") : String("<no error>");
-        }
-
-        static String ErrorMessage(const Json& response) {
-            const Json* error = Member(response, "error");
-            return error != nullptr ? StringMember(*error, "message") : String("<no error>");
         }
 
         /// The canvas of the result named after a scene node

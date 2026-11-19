@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Games/SeatedGameRegistry.h>
+#include <RoomServer/DemoCardGame.h>
 #include <Rooms/RoomHub.h>
 
 namespace BECore::Fuzz {
@@ -79,6 +81,12 @@ namespace BECore::Fuzz {
 
         inline void AppendMessage(Vector<uint8_t>& bytes, uint8_t connection, StringView text) {
             AppendOperation(bytes, Op::Message, connection, static_cast<uint16_t>(text.size()), text);
+        }
+
+        /// The demo card game, the only game of the hub of the target (the leaky one is left out): the target and the recorder of the seeds
+        /// register it the same way, so a recorded session replays
+        inline bool RegisterDemoGame(SeatedGameRegistry& registry) {
+            return registry.Register(SeatedGameInfo{"demo", DemoCardGame::kSeatCount}, [] { return UniquePtr<ISeatedGame>(MakeUnique<DemoCardGame>()); });
         }
 
     }  // namespace RoomHubInput

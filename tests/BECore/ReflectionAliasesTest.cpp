@@ -6,6 +6,7 @@
 #include <BECore/Reflection/PropertyVisitorDispatch.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <Common/NullPropertyVisitor.h>
 #include <Common/Printers.h>
 #include <Common/SharedPtr.h>
 #include <EASTL/optional.h>
@@ -461,52 +462,17 @@ namespace BECore::Tests {
     namespace {
 
         /// A visitor that replaces every String it is shown
-        class TextEditor : public IPropertyVisitor {
+        class TextEditor : public NullPropertyVisitor {
         public:
-            bool Visit(eastl::string_view, bool&) override {
-                return false;
-            }
-            bool Visit(eastl::string_view, int8_t&) override {
-                return false;
-            }
-            bool Visit(eastl::string_view, uint8_t&) override {
-                return false;
-            }
-            bool Visit(eastl::string_view, int16_t&) override {
-                return false;
-            }
-            bool Visit(eastl::string_view, uint16_t&) override {
-                return false;
-            }
-            bool Visit(eastl::string_view, int32_t&) override {
-                return false;
-            }
-            bool Visit(eastl::string_view, uint32_t&) override {
-                return false;
-            }
-            bool Visit(eastl::string_view, int64_t&) override {
-                return false;
-            }
-            bool Visit(eastl::string_view, uint64_t&) override {
-                return false;
-            }
-            bool Visit(eastl::string_view, float&) override {
-                return false;
-            }
-            bool Visit(eastl::string_view, double&) override {
-                return false;
-            }
-            bool Visit(eastl::string_view, PoolString&) override {
-                return false;
-            }
-            bool Visit(eastl::string_view, eastl::string& value) override {
+            using NullPropertyVisitor::Visit;
+            bool Visit(StringView, String& value) override {
                 seen = value;
                 value = replacement;
                 return true;
             }
 
-            eastl::string replacement = "0123456789ABCDEF-too-long";
-            eastl::string seen;
+            String replacement = "0123456789ABCDEF-too-long";
+            String seen;
         };
 
     }  // namespace

@@ -6,6 +6,7 @@
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIEnvironment.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/DestroyTally.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -189,12 +190,6 @@ namespace BECore::Tests {
         }
 
         constexpr int kBlendTolerance = 4;
-
-        String ErrorCode(const Json& response) {
-            const Json* error = FindJsonMember(response, "error");
-            const auto code = error != nullptr ? GetJsonString(*error, "code") : std::nullopt;
-            return code ? String(code->c_str(), code->size()) : String();
-        }
 
         /// A ControlService of its own with the `screenshot` method, answering from the window and renderer of SDLCaptureTest
         class ScreenshotControlTest : public SDLCaptureTest {

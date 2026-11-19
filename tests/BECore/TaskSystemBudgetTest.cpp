@@ -1,4 +1,5 @@
 #include <Common/EngineEnvironment.h>
+#include <Common/Wait.h>
 #include <TaskSystem/Awaitables.h>
 #include <TaskSystem/CancellationToken.h>
 #include <TaskSystem/LiveTasks.h>
@@ -136,17 +137,6 @@ namespace BECore::Tests {
 
         Handle MakeHandle(Task<void> task) {
             return MakeIntrusive<TaskHandle<void>>(std::move(task));
-        }
-
-        bool WaitFor(FunctionRef<bool()> condition) {
-            const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds(20);
-            while (!condition()) {
-                if (std::chrono::steady_clock::now() > limit) {
-                    return false;
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
-            return true;
         }
 
         /// A scheduler of its own over an inline pool, with a fake clock for the budget.
@@ -454,7 +444,7 @@ namespace BECore::Tests {
                 ++ranOnPool;
             },
             TaskPriority::Normal, ThreadType::Background);
-        ASSERT_TRUE(WaitFor([&]() { return ranOnPool.load() == 2; }));
+        ASSERT_TRUE(WaitUntil([&]() { return ranOnPool.load() == 2; }));
         EXPECT_FALSE(shouldYieldOnPool.load());
         EXPECT_EQ(scheduler.GetBackgroundSliceCount(), 0u);
 
@@ -607,7 +597,7 @@ namespace BECore::Tests {
 
         // Nothing but the pool runs the task; the cooperative queue stays empty the whole time
         size_t parkedMax = 0;
-        EXPECT_TRUE(WaitFor([&]() {
+        EXPECT_TRUE(WaitUntil([&]() {
             parkedMax = std::max(parkedMax, Scheduler().GetBackgroundSliceCount());
             return handle->IsDone();
         }));

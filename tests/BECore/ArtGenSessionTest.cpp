@@ -1,5 +1,6 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
@@ -128,11 +129,6 @@ namespace BECore::Tests {
             static const Json kNull;
             const Json* result = FindJsonMember(response, "result");
             return result != nullptr ? *result : kNull;
-        }
-
-        static String ErrorCode(const Json& response) {
-            const Json* error = FindJsonMember(response, "error");
-            return error != nullptr ? GetJsonString(*error, "code").value_or(String()) : String();
         }
 
         void SetUp() override {

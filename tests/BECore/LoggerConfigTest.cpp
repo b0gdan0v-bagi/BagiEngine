@@ -5,6 +5,7 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/LogRecorder.h>
 #include <Common/Printers.h>
+#include <Common/TestText.h>
 
 namespace BECore::Tests {
 
@@ -20,10 +21,6 @@ namespace BECore::Tests {
                                               "<sink type=\"OutputSink\" enabled=\"true\" minLevel=\"Fatal\"/>"
                                               "<sink type=\"ConsoleSink\" enabled=\"true\" minLevel=\"Fatal\" colorEnabled=\"false\"/>"
                                               "</sinks></root>";
-
-        bool Contains(StringView text, StringView part) {
-            return text.find(part) != StringView::npos;
-        }
 
     }  // namespace
 

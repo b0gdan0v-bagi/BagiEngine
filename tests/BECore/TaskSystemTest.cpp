@@ -2,6 +2,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/SharedPtr.h>
+#include <Common/Wait.h>
 #include <TaskSystem/Awaitables.h>
 #include <TaskSystem/CancellationToken.h>
 #include <TaskSystem/LiveTasks.h>
@@ -50,21 +51,6 @@ namespace BECore::Tests {
             }
 
             co_return* resultA + *resultB;
-        }
-
-        /// Polls @p predicate until it holds or @p timeout expires. Replaces a fixed sleep, which is
-        /// either flaky on a loaded machine or needlessly slow. The limit only costs time when a test fails, so it is generous
-        /// (ctest -j runs many test processes on the cores of one machine).
-        template <typename Predicate>
-        bool WaitUntil(Predicate&& predicate, std::chrono::milliseconds timeout = std::chrono::milliseconds(20000)) {
-            const auto deadline = std::chrono::steady_clock::now() + timeout;
-            while (!predicate()) {
-                if (std::chrono::steady_clock::now() >= deadline) {
-                    return false;
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
-            return true;
         }
 
         /// Spins until @p gate opens, then raises @p finished. Lets a test hold a task "running" on a worker

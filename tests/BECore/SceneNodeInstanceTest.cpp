@@ -11,6 +11,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -58,11 +59,6 @@ namespace BECore::Tests {
     </elements>
   </component>
 </components></node>)";
-
-        void WriteFile(const std::filesystem::path& path, const String& text) {
-            std::filesystem::create_directories(path.parent_path());
-            std::ofstream(path) << text;
-        }
 
         String Printed(pugi::xml_node node) {
             std::ostringstream out;

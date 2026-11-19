@@ -16,6 +16,7 @@
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Widgets/SceneEditor/SceneConfigWriter.h>
 #include <Widgets/Viewport/ViewportUIGizmos.h>
 
@@ -150,11 +151,6 @@ namespace BECore::Tests {
 
         constexpr float kEditedX = 77.0f;
         constexpr int32_t kEditedLayer = 5;
-
-        void WriteFile(const std::filesystem::path& path, const char* text) {
-            std::filesystem::create_directories(path.parent_path());
-            std::ofstream(path) << text;
-        }
 
         /// The element in the compact form, for comparing a node with the text it should have
         String Raw(pugi::xml_node node) {

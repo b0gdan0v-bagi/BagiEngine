@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Time/Time.h>
+#include <Common/ControlTestSupport.h>
 #include <Events/ApplicationEvents.h>
 #include <gtest/gtest.h>
 
@@ -12,31 +13,6 @@ namespace BECore::Tests {
 
         StringView View(StringView text) {
             return text;
-        }
-
-        /// A request text built through Json, so that the test data is always valid
-        String MakeRequest(int64_t id, StringView method, const Json& params = Json()) {
-            Json request = Json::object();
-            request["id"] = id;
-            request["method"] = ToStdString(method);
-            if (!params.is_null()) {
-                request["params"] = params;
-            }
-            return DumpJson(request);
-        }
-
-        bool IsOk(const Json& response) {
-            return GetJsonBool(response, "ok").value_or(false);
-        }
-
-        int64_t IdOf(const Json& response) {
-            return GetJsonInt(response, "id").value_or(-1);
-        }
-
-        String ErrorCode(const Json& response) {
-            const Json* error = FindJsonMember(response, "error");
-            const auto code = error != nullptr ? GetJsonString(*error, "code") : Optional<String>();
-            return code ? *code : String();
         }
 
         Json FramesOf(int64_t frames) {

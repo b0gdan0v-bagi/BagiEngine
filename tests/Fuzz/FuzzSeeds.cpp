@@ -147,11 +147,6 @@ namespace BECore::Fuzz {
             return ToBytes(writer);
         }
 
-        FuzzBytes TextBytes(StringView text) {
-            const auto* begin = reinterpret_cast<const uint8_t*>(text.data());
-            return FuzzBytes(begin, begin + text.size());
-        }
-
         /// The input of FuzzSceneNode: the scene text, a NUL byte, the node file
         FuzzBytes SceneAndNode(StringView scene, StringView node) {
             FuzzBytes bytes = TextBytes(scene);

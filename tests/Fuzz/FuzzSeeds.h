@@ -9,6 +9,12 @@ namespace BECore::Fuzz {
     /// The environment variable that makes FuzzCorpusTest.WriteSeeds write the generated seeds into the folder it names
     inline constexpr const char* kWriteSeedsVariable = "BAGI_FUZZ_WRITE_SEEDS";
 
+    /// The bytes of @p text, for a seed that is a text
+    inline FuzzBytes TextBytes(StringView text) {
+        const auto* begin = reinterpret_cast<const uint8_t*>(text.data());
+        return FuzzBytes(begin, begin + text.size());
+    }
+
     /// A seed file: its name inside the folder of its target and its bytes
     struct FuzzSeedFile {
         std::filesystem::path folder;  ///< Relative to the corpus root (the corpusFolder of the target)

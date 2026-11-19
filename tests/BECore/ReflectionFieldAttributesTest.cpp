@@ -4,6 +4,7 @@
 #include <BECore/Reflection/PropertyVisitorDispatch.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <Common/NullPropertyVisitor.h>
 #include <Generated/ReflectionFieldAttributesTest.gen.hpp>
 
 namespace BECore::Tests {
@@ -33,54 +34,10 @@ namespace BECore::Tests {
             return serializer.SaveToString();
         }
 
-        /// Every Visit does nothing; a test visitor overrides what it looks at
-        class NullVisitor : public IPropertyVisitor {
-        public:
-            bool Visit(StringView, bool&) override {
-                return false;
-            }
-            bool Visit(StringView, int8_t&) override {
-                return false;
-            }
-            bool Visit(StringView, uint8_t&) override {
-                return false;
-            }
-            bool Visit(StringView, int16_t&) override {
-                return false;
-            }
-            bool Visit(StringView, uint16_t&) override {
-                return false;
-            }
-            bool Visit(StringView, int32_t&) override {
-                return false;
-            }
-            bool Visit(StringView, uint32_t&) override {
-                return false;
-            }
-            bool Visit(StringView, int64_t&) override {
-                return false;
-            }
-            bool Visit(StringView, uint64_t&) override {
-                return false;
-            }
-            bool Visit(StringView, float&) override {
-                return false;
-            }
-            bool Visit(StringView, double&) override {
-                return false;
-            }
-            bool Visit(StringView, PoolString&) override {
-                return false;
-            }
-            bool Visit(StringView, String&) override {
-                return false;
-            }
-        };
-
         /// Overrides no field hook: the defaults of BeginField, EndField and ShowsHidden must be enough to edit a field
-        class IncrementingVisitor final : public NullVisitor {
+        class IncrementingVisitor final : public NullPropertyVisitor {
         public:
-            using NullVisitor::Visit;
+            using NullPropertyVisitor::Visit;
             bool Visit(StringView, int32_t& value) override {
                 ++value;
                 return true;
@@ -95,9 +52,9 @@ namespace BECore::Tests {
             FieldAttributes attributes;
         };
 
-        class RecordingVisitor final : public NullVisitor {
+        class RecordingVisitor final : public NullPropertyVisitor {
         public:
-            using NullVisitor::Visit;
+            using NullPropertyVisitor::Visit;
 
             bool showsHidden = false;
             Vector<Event> events;
@@ -310,7 +267,7 @@ namespace BECore::Tests {
 
     TEST(ReflectionFieldAttributesTest, ChangedIsTrueOnlyWhenAVisitChangedAValue) {
         Annotated state;
-        NullVisitor nothing;
+        NullPropertyVisitor nothing;
         EXPECT_FALSE(state.AcceptPropertyVisitor(nothing));
 
         Outer outer;

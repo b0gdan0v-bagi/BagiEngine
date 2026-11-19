@@ -4,6 +4,7 @@
 #include <BECore/Profiler/Ring/FrameRingBackend.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/SharedMutex.h>
+#include <Common/Wait.h>
 #include <chrono>
 #include <gtest/gtest.h>
 #include <map>
@@ -16,7 +17,6 @@ namespace BECore::Tests {
 
     namespace {
 
-        constexpr auto kPollLimit = std::chrono::seconds(20);
         constexpr auto kHold = std::chrono::milliseconds(200);  // the waiter has this long to reach the lock, also on a loaded machine
         constexpr uint32_t kTestThresholdUs = 1000;
         constexpr const char* kWaitZoneName = "lock wait: Test lock";
@@ -47,17 +47,6 @@ namespace BECore::Tests {
             ProfilerStateGuard& operator=(const ProfilerStateGuard&) = delete;
         };
 
-        bool WaitUntil(const std::atomic<bool>& flag) {
-            const auto deadline = std::chrono::steady_clock::now() + kPollLimit;
-            while (!flag.load()) {
-                if (std::chrono::steady_clock::now() > deadline) {
-                    return false;
-                }
-                std::this_thread::yield();
-            }
-            return true;
-        }
-
         /**
          * A thread takes a lock with @p acquire (it returns the guard that keeps it) and holds it until the waiting thread is about to
          * call @p wait, then for kHold more, so @p wait blocks for about kHold. Returns the profiler id of the waiting thread.
@@ -69,10 +58,10 @@ namespace BECore::Tests {
             std::thread holder([&] {
                 auto guard = acquire();
                 held = true;
-                WaitUntil(waiterReady);
+                WaitUntil([&] { return waiterReady.load(); });
                 std::this_thread::sleep_for(kHold);
             });
-            EXPECT_TRUE(WaitUntil(held));
+            EXPECT_TRUE(WaitUntil([&] { return held.load(); }));
             uint32_t waiterId = 0;
             std::thread waiter([&] {
                 waiterId = Profiler::CurrentThreadId();
@@ -532,7 +521,9 @@ namespace BECore::Tests {
                 Vector<std::thread> threads;
                 for (int i = 0; i < kThreads; ++i) {
                     threads.emplace_back([&] {
-                        WaitUntil(go);
+                        while (!go.load()) {
+                            std::this_thread::yield();
+                        }
                         const std::lock_guard<Mutex> lock(raced);
                     });
                 }

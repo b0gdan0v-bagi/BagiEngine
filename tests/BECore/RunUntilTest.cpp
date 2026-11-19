@@ -4,6 +4,7 @@
 #include <BECore/GameControlTest.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Time/Time.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Games/GameControl.h>
 #include <Games/GameManager.h>
@@ -18,12 +19,6 @@ namespace BECore::Tests {
 
         StringView View(StringView text) {
             return text;
-        }
-
-        String ErrorCode(const Json& response) {
-            const Json* error = FindJsonMember(response, "error");
-            const auto code = error != nullptr ? GetJsonString(*error, "code") : Optional<String>();
-            return code ? *code : String();
         }
 
         Json ConditionPointer(StringView pointer, Json equals) {
@@ -57,16 +52,6 @@ namespace BECore::Tests {
                 params["maxFrames"] = maxFrames;
             }
             return params;
-        }
-
-        String MakeRequest(int64_t id, StringView method, const Json& params = Json()) {
-            Json request = Json::object();
-            request["id"] = id;
-            request["method"] = ToStdString(method);
-            if (!params.is_null()) {
-                request["params"] = params;
-            }
-            return DumpJson(request);
         }
 
         class RunUntilTest : public ::testing::TestWithParam<RunUntilClock> {

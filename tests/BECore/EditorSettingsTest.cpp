@@ -1,6 +1,7 @@
 #include <BECore/Control/Json.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Widgets/EditorLayout/EditorSettings.h>
 #include <Widgets/EditorLayout/UserFileIo.h>
 
@@ -29,8 +30,8 @@ namespace BECore::Tests {
                 std::filesystem::remove_all(_directory, ec);
             }
 
-            void WriteFile(const char* name, const String& text) const {
-                std::ofstream(_directory / name, std::ios::binary) << text;
+            void WriteFile(const char* name, StringView text) const {
+                Tests::WriteFile(_directory / name, text);
             }
 
             [[nodiscard]] String ReadFile(const char* name) const {

@@ -3,6 +3,7 @@
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/SharedMutex.h>
 #include <Common/SharedPtr.h>
+#include <Common/Wait.h>
 #include <chrono>
 #include <gtest/gtest-spi.h>
 #include <gtest/gtest.h>
@@ -15,20 +16,7 @@ namespace BECore::Tests {
 
         constexpr int kContendingThreads = 4;
         constexpr int kIncrementsPerThread = 20000;
-        constexpr auto kPollLimit = std::chrono::seconds(20);
         constexpr auto kShortWait = std::chrono::milliseconds(20);
-
-        template <typename TCondition>
-        bool WaitUntil(TCondition condition) {
-            const auto deadline = std::chrono::steady_clock::now() + kPollLimit;
-            while (!condition()) {
-                if (std::chrono::steady_clock::now() > deadline) {
-                    return false;
-                }
-                std::this_thread::yield();
-            }
-            return true;
-        }
 
     }  // namespace
 
@@ -259,7 +247,7 @@ namespace BECore::Tests {
         });
 
         std::unique_lock<Mutex> lock(mutex);
-        EXPECT_TRUE(changed.wait_for(lock, kPollLimit, [&] { return ready; }));
+        EXPECT_TRUE(changed.wait_for(lock, kWaitLimit, [&] { return ready; }));
         lock.unlock();
         notifier.join();
     }

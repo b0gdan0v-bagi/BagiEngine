@@ -72,7 +72,7 @@ namespace BECore::Fuzz {
         class HubRun {
         public:
             HubRun() : _hub(_registry, MakeSettings(), MakeRandom(), MakeSink()) {
-                const bool registered = _registry.Register(SeatedGameInfo{"demo", DemoCardGame::kSeatCount}, [] { return UniquePtr<ISeatedGame>(MakeUnique<DemoCardGame>()); });
+                const bool registered = RegisterDemoGame(_registry);
                 FUZZ_CHECK(registered);
             }
 

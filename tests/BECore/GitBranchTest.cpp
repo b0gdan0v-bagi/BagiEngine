@@ -1,5 +1,6 @@
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Widgets/EditorLayout/GitBranch.h>
 
 namespace BECore::Tests {
@@ -21,12 +22,6 @@ namespace BECore::Tests {
             void TearDown() override {
                 std::error_code ec;
                 std::filesystem::remove_all(_root, ec);
-            }
-
-            static void WriteFile(const std::filesystem::path& path, const String& text) {
-                std::error_code ec;
-                std::filesystem::create_directories(path.parent_path(), ec);
-                std::ofstream(path, std::ios::binary) << text;
             }
 
             std::filesystem::path _root;

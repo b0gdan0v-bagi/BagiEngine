@@ -6,6 +6,8 @@
 #include <BECore/Profiler/ProfilerControl.h>
 #include <BECore/Time/Time.h>
 #include <BECore/UI/UIControl.h>
+#include <Common/ControlTestSupport.h>
+#include <Common/DestroyTally.h>
 #include <Common/EngineEnvironment.h>
 #include <CoreSDL/SDLScreenshot.h>
 #include <Events/ApplicationEvents.h>
@@ -32,63 +34,6 @@ namespace BECore::Tests {
         StringView View(StringView text) {
             return text;
         }
-
-        String ErrorCode(const Json& response) {
-            const Json* error = FindJsonMember(response, "error");
-            if (error == nullptr) {
-                return {};
-            }
-            const auto code = GetJsonString(*error, "code");
-            return code ? String(code->c_str(), code->size()) : String();
-        }
-
-        String ErrorMessage(const Json& response) {
-            const Json* error = FindJsonMember(response, "error");
-            if (error == nullptr) {
-                return {};
-            }
-            const auto message = GetJsonString(*error, "message");
-            return message ? String(message->c_str(), message->size()) : String();
-        }
-
-        bool IsOk(const Json& response) {
-            return GetJsonBool(response, "ok").value_or(false);
-        }
-
-        int64_t IdOf(const Json& response) {
-            return GetJsonInt(response, "id").value_or(-1);
-        }
-
-        /// A request text built through Json, so that the test data is always valid
-        String MakeRequest(int64_t id, StringView method, const Json& params = Json()) {
-            Json request = Json::object();
-            request["id"] = id;
-            request["method"] = ToStdString(method);
-            if (!params.is_null()) {
-                request["params"] = params;
-            }
-            return DumpJson(request);
-        }
-
-        /// A move-only capture that counts how many times it was destroyed as an owner (a moved-from one does not count)
-        class DestroyCounter {
-        public:
-            explicit DestroyCounter(int& destroyed) : _destroyed(&destroyed) {}
-
-            DestroyCounter(DestroyCounter&& other) noexcept : _destroyed(std::exchange(other._destroyed, nullptr)) {}
-            DestroyCounter& operator=(DestroyCounter&&) = delete;
-            DestroyCounter(const DestroyCounter&) = delete;
-            DestroyCounter& operator=(const DestroyCounter&) = delete;
-
-            ~DestroyCounter() {
-                if (_destroyed != nullptr) {
-                    ++*_destroyed;
-                }
-            }
-
-        private:
-            int* _destroyed;
-        };
 
         /// What a running frame lasts in the loop of a test that has no real clock
         constexpr double kRealFrameSeconds = 1.0 / 64;
@@ -684,7 +629,7 @@ namespace BECore::Tests {
     TEST_F(ControlServiceTest, HandlerWithAMoveOnlyCaptureIsCalledAndDestroyedOnceWhenReplaced) {
         int destroyed = 0;
         int calls = 0;
-        service.RegisterHandler("m", [owner = DestroyCounter(destroyed), &calls](ControlCall& call) {
+        service.RegisterHandler("m", [owner = DestroyTally(destroyed), &calls](ControlCall& call) {
             ++calls;
             call.Reply(Json::object());
         });
@@ -703,7 +648,7 @@ namespace BECore::Tests {
         int destroyed = 0;
         {
             ControlService local;
-            local.RegisterHandler("m", [owner = DestroyCounter(destroyed)](ControlCall& call) { call.Reply(Json::object()); });
+            local.RegisterHandler("m", [owner = DestroyTally(destroyed)](ControlCall& call) { call.Reply(Json::object()); });
             local.Post(MakeRequest(1, "m"), Collect());
             local.Drain();
             EXPECT_EQ(destroyed, 0);
@@ -716,7 +661,7 @@ namespace BECore::Tests {
         int destroyedAfterRegistering = -1;
         constexpr int kWitness = 42;
         int witnessAfterRegistering = 0;
-        service.RegisterHandler("self", [this, owner = DestroyCounter(destroyed), witness = kWitness, &destroyed, &destroyedAfterRegistering, &witnessAfterRegistering](ControlCall& call) {
+        service.RegisterHandler("self", [this, owner = DestroyTally(destroyed), witness = kWitness, &destroyed, &destroyedAfterRegistering, &witnessAfterRegistering](ControlCall& call) {
             service.RegisterHandler("self", [](ControlCall& next) { next.Reply(Json::object()); });
             destroyedAfterRegistering = destroyed;
             witnessAfterRegistering = witness;
@@ -759,7 +704,7 @@ namespace BECore::Tests {
     TEST_F(ControlServiceTest, FrameEndHookThatReplacesItselfKeepsItsCaptureUntilItReturns) {
         int destroyed = 0;
         int destroyedAfterReplacing = -1;
-        service.SetFrameEndHook("a", [this, owner = DestroyCounter(destroyed), &destroyed, &destroyedAfterReplacing] {
+        service.SetFrameEndHook("a", [this, owner = DestroyTally(destroyed), &destroyed, &destroyedAfterReplacing] {
             service.SetFrameEndHook("a", [this] { order.push_back("second"); });
             destroyedAfterReplacing = destroyed;
         });
@@ -849,7 +794,7 @@ namespace BECore::Tests {
     TEST_F(ControlServiceTest, SinkThatReplacesItselfKeepsItsCaptureUntilItReturns) {
         int destroyed = 0;
         int destroyedAfterReplacing = -1;
-        service.SetEventSink([this, owner = DestroyCounter(destroyed), &destroyed, &destroyedAfterReplacing](const String&) {
+        service.SetEventSink([this, owner = DestroyTally(destroyed), &destroyed, &destroyedAfterReplacing](const String&) {
             service.SetEventSink([this](const String&) { order.push_back("second"); });
             destroyedAfterReplacing = destroyed;
         });
@@ -866,7 +811,7 @@ namespace BECore::Tests {
         int destroyed = 0;
         int destroyedAfterClearing = -1;
         int calls = 0;
-        service.SetEventSink([this, owner = DestroyCounter(destroyed), &destroyed, &destroyedAfterClearing, &calls](const String&) {
+        service.SetEventSink([this, owner = DestroyTally(destroyed), &destroyed, &destroyedAfterClearing, &calls](const String&) {
             ++calls;
             service.SetEventSink({});
             destroyedAfterClearing = destroyed;
@@ -925,7 +870,7 @@ namespace BECore::Tests {
         int destroyedAfterRemoving = -1;
         int calls = 0;
         ControlService::PublishObserverId id = ControlService::kNoPublishObserver;
-        id = service.AddPublishObserver([this, &id, owner = DestroyCounter(destroyed), &destroyed, &destroyedAfterRemoving, &calls](StringView, const Json&) {
+        id = service.AddPublishObserver([this, &id, owner = DestroyTally(destroyed), &destroyed, &destroyedAfterRemoving, &calls](StringView, const Json&) {
             ++calls;
             service.RemovePublishObserver(id);
             destroyedAfterRemoving = destroyed;

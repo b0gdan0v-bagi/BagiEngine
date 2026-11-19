@@ -4,6 +4,7 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Games/GameControl.h>
@@ -122,15 +123,6 @@ namespace BECore::Tests {
                 return 0;
             }
         };
-
-        String ErrorCode(const Json& response) {
-            const Json* error = FindJsonMember(response, "error");
-            if (error == nullptr) {
-                return {};
-            }
-            const auto code = GetJsonString(*error, "code");
-            return code ? String(code->c_str(), code->size()) : String();
-        }
 
         class GameControlTest : public ::testing::Test {
         protected:

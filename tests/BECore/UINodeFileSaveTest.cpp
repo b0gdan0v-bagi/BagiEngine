@@ -8,9 +8,8 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
-#include <fstream>
+#include <Common/TestFiles.h>
 #include <gtest/gtest.h>
-#include <sstream>
 
 namespace BECore::Tests {
 
@@ -69,11 +68,6 @@ namespace BECore::Tests {
   </component>
 </components></node>
 )";
-
-        void WriteFile(const std::filesystem::path& path, const String& text) {
-            std::filesystem::create_directories(path.parent_path());
-            std::ofstream(path, std::ios::binary) << text.c_str();  //-NoStd: the test writes its own temporary node files
-        }
 
         String ReadFile(const std::filesystem::path& path) {
             std::ifstream stream(path, std::ios::binary);  //-NoStd: the test reads back its own temporary node files

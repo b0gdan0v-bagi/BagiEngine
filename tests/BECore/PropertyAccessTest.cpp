@@ -8,6 +8,7 @@
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <Common/Printers.h>
+#include <Common/TestText.h>
 #include <Generated/PropertyAccessTest.gen.hpp>
 #include <gtest/gtest.h>
 
@@ -33,10 +34,6 @@ namespace BECore::Tests {
             ref.type->serialize(ref.object, serializer);
             serializer.EndObject();
             return serializer.SaveToString();
-        }
-
-        bool Contains(const String& text, StringView part) {
-            return text.find(part.data(), 0, part.size()) != String::npos;
         }
 
         PropertyValue Read(TypedRef ref, StringView path) {

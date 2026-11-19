@@ -1,4 +1,5 @@
 #include <Common/Printers.h>
+#include <Common/Wait.h>
 #include <Widgets/EditorLayout/Hardware/HardwareMonitor.h>
 #include <Widgets/EditorLayout/Hardware/HardwarePlatform.h>
 
@@ -6,8 +7,6 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// A cap so that a bug fails the test instead of hanging it; a passing test never waits it out
-        constexpr std::chrono::seconds kWaitLimit{30};
         /// The worker reads again at once, so a test that wants many reads does not wait for a period
         constexpr std::chrono::milliseconds kFastPeriod{1};
         constexpr std::chrono::hours kNeverPeriod{1};
@@ -99,14 +98,7 @@ namespace BECore::Tests {
         /// Fetch is allowed to answer false while the worker holds the lock for a moment (the frame tries again next time), so a test that
         /// races a fast worker tries again too
         bool FetchEventually(HardwareMonitor& monitor, HardwareReadings& out) {
-            const auto deadline = std::chrono::steady_clock::now() + kWaitLimit;
-            while (std::chrono::steady_clock::now() < deadline) {
-                if (monitor.Fetch(out)) {
-                    return true;
-                }
-                std::this_thread::yield();
-            }
-            return false;
+            return WaitUntil([&] { return monitor.Fetch(out); });
         }
 
         UniquePtr<HardwareMonitor> MonitorOver(ReaderState& state) {

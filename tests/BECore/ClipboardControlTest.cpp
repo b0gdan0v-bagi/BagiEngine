@@ -5,6 +5,7 @@
 #include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Time/Time.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/Printers.h>
 #include <Events/ClipboardEvents.h>
 #include <gtest/gtest.h>
@@ -13,28 +14,10 @@ namespace BECore::Tests {
 
     namespace {
 
-        String MakeRequest(int64_t id, StringView method, const Json& params = Json()) {
-            Json request = Json::object();
-            request["id"] = id;
-            request["method"] = ToStdString(method);
-            if (!params.is_null()) {
-                request["params"] = params;
-            }
-            return DumpJson(request);
-        }
-
         Json TextParams(StringView text) {
             Json params = Json::object();
             params["text"] = ToStdString(text);
             return params;
-        }
-
-        String StringOf(const Json* object, StringView key) {
-            if (object == nullptr) {
-                return {};
-            }
-            const auto value = GetJsonString(*object, key);
-            return value ? String(value->c_str(), value->size()) : String();
         }
 
         constexpr int kFrameGuard = 1000;  // a loop that does not end would hang the test run

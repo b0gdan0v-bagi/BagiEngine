@@ -1,5 +1,6 @@
 #include <Common/ContentFilesCheck.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 
 namespace BECore::Tests {
 
@@ -7,11 +8,6 @@ namespace BECore::Tests {
 
         std::filesystem::path EngineRoot() {
             return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
-        }
-
-        void WriteFile(const std::filesystem::path& path, const String& text) {
-            std::filesystem::create_directories(path.parent_path());
-            std::ofstream(path).write(text.data(), static_cast<std::streamsize>(text.size()));
         }
 
     }  // namespace

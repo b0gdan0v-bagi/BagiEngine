@@ -1,6 +1,7 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <Common/Printers.h>
+#include <Common/TestText.h>
 #include <Widgets/Console/ConsoleCommandLine.h>
 #include <Widgets/Console/ConsoleSession.h>
 #include <Widgets/EditorLayout/EditorSettings.h>
@@ -16,10 +17,6 @@ namespace BECore::Tests {
                 return Format("error: {}", command.error());
             }
             return Format("{} {}", command->method, DumpJson(command->params));
-        }
-
-        bool Contains(const String& text, StringView part) {
-            return text.find(part.data(), 0, part.size()) != String::npos;
         }
 
         char KindLetter(ConsoleOutputKind kind) {

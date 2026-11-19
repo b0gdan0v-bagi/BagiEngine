@@ -1,5 +1,6 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
@@ -273,11 +274,6 @@ namespace BECore::Tests {
             gKept.clear();
         }
 
-        static String ErrorMessage(const Json& response) {
-            const Json* error = FindJsonMember(response, "error");
-            return error != nullptr ? GetJsonString(*error, "message").value_or(String()) : String();
-        }
-
         Json AcceptAllCall(StringView set) {
             Json params = Json::object();
             params["set"] = ToStdString(set);
@@ -309,11 +305,6 @@ namespace BECore::Tests {
             gAccepted.clear();
             gPlans.clear();
             gMeasures.clear();
-        }
-
-        static String ErrorCode(const Json& response) {
-            const Json* error = FindJsonMember(response, "error");
-            return error != nullptr ? GetJsonString(*error, "code").value_or(String()) : String();
         }
 
         /// The manifest as it is on disk now

@@ -1,22 +1,16 @@
 #include <BECore/Audio/AudioDecode.h>
+#include <Fuzz/FuzzChecks.h>
 #include <Fuzz/FuzzTargets.h>
 #include <cmath>
 
 namespace BECore::Fuzz {
-
-    namespace {
-
-        /// What a refusal of the decoder may be: the loader logs it after the file name
-        constexpr size_t kMaxReasonBytes = 200;
-
-    }  // namespace
 
     void FuzzAudioWav(const uint8_t* data, size_t size) {
         const Span<const uint8_t> bytes(data, size);
         const AudioDecodeResult first = DecodeWav(bytes);
         if (!first) {
             FUZZ_CHECK(!first.error().empty());
-            FUZZ_CHECK(first.error().size() <= kMaxReasonBytes);
+            FUZZ_CHECK(first.error().size() <= kMaxRefusalBytes);
             FUZZ_CHECK(!DecodeWav(bytes).has_value());
             return;
         }

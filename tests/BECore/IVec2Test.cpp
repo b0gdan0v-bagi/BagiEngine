@@ -1,8 +1,6 @@
 #include <BECore/Math/IVec2.h>
-#include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Reflection/XmlSerializer.h>
+#include <Common/MathTestSupport.h>
 #include <gtest/gtest.h>
-#include <type_traits>
 
 namespace BECore::Tests {
 
@@ -13,20 +11,7 @@ namespace BECore::Tests {
     static_assert(-IVec2(1, -2) == IVec2(-1, 2));
     static_assert(IVec2(Vec2(2.9f, -2.9f)) == IVec2(2, -2));
 
-    namespace {
-
-        /// Visits every int of a compound with its name, adds a fixed step and records the names in the order of the visit
-        struct StepVisitor {
-            Vector<String> names;
-
-            bool Visit(const char* name, int32_t& value) {
-                names.push_back(name);
-                value += 1;
-                return true;
-            }
-        };
-
-    }  // namespace
+    namespace {}  // namespace
 
     TEST(IVec2Test, DefaultIsZero) {
         const IVec2 v;
@@ -61,7 +46,7 @@ namespace BECore::Tests {
 
     TEST(IVec2Test, VisitPropertiesVisitsXYInOrder) {
         IVec2 v{1, 2};
-        StepVisitor visitor;
+        StepVisitor<int32_t> visitor;
         EXPECT_TRUE(v.VisitProperties(visitor));
         ASSERT_EQ(visitor.names.size(), 2u);
         EXPECT_EQ(visitor.names[0], "x");
@@ -71,18 +56,9 @@ namespace BECore::Tests {
 
     TEST(IVec2Test, XmlRoundTrip) {
         const IVec2 original{-7, 1000000};
-        XmlSerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("v"));
-        original.Serialize(serializer);
-        serializer.EndObject();
-
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(serializer.SaveToString()));
-        ASSERT_TRUE(deserializer.BeginObject("v"));
-        IVec2 loaded;
-        loaded.Deserialize(deserializer);
-        deserializer.EndObject();
-        EXPECT_EQ(loaded, original);
+        const auto loaded = RoundTripThroughXml(original);
+        ASSERT_TRUE(loaded.has_value());
+        EXPECT_EQ(*loaded, original);
     }
 
 }  // namespace BECore::Tests

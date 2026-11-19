@@ -4,6 +4,7 @@
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Context.h>
 #include <Common/Printers.h>
+#include <Common/TestText.h>
 #include <Generated/ValueTestTypes.gen.hpp>
 #include <gtest/gtest.h>
 
@@ -12,10 +13,6 @@ namespace BECore::Tests {
     using namespace ValueTestData;
 
     namespace {
-
-        bool Contains(const String& text, StringView part) {
-            return text.find(part.data(), 0, part.size()) != String::npos;
-        }
 
         /// A context of the two levels the tests use: `caster` and `cast`
         struct TwoLevels {

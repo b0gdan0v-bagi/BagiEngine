@@ -1,4 +1,5 @@
 #include <Common/Printers.h>
+#include <Common/TestText.h>
 #include <Widgets/EditorLayout/Hardware/HardwareText.h>
 
 namespace BECore::Tests {
@@ -40,10 +41,6 @@ namespace BECore::Tests {
             char buffer[128];
             FormatHardwareLine(text, buffer);
             return buffer;
-        }
-
-        bool Contains(const char* haystack, const char* needle) {
-            return StringView(haystack).find(needle) != StringView::npos;
         }
 
         String MemoryOf(uint32_t usedMb, Optional<uint32_t> totalMb) {

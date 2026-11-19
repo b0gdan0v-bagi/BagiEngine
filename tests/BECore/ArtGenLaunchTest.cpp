@@ -1,9 +1,9 @@
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/Wait.h>
 #include <Widgets/ArtGen/ArtGenLaunch.h>
 #include <chrono>
 #include <cstdio>
-#include <filesystem>
 #include <gtest/gtest.h>
 #include <thread>
 
@@ -45,7 +45,6 @@ namespace BECore::Tests {
     // The real start: in the background, without the standard streams of the editor (one started from the desktop has none), and the script
     // gets its arguments. A stand-in script writes them to the log path it was given.
     TEST(ArtGenLaunchTest, TheBridgeStartsInTheBackgroundAndGetsItsArguments) {
-        constexpr auto kWaitLimit = std::chrono::seconds(20);
         const std::filesystem::path base = TestTempDirectory("artgen_launch_run");
         std::filesystem::create_directories(base);
         const std::filesystem::path script = base / "artgen_bridge.py";
@@ -60,20 +59,16 @@ namespace BECore::Tests {
         if (!LaunchArtGenBridge(script, 8765, log, error)) {
             GTEST_SKIP() << "no " << ArtGenPython().c_str() << " to run: " << error.c_str();
         }
-        const auto deadline = std::chrono::steady_clock::now() + kWaitLimit;
-        while (!std::filesystem::exists(log) && std::chrono::steady_clock::now() < deadline) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        }
-        ASSERT_TRUE(std::filesystem::exists(log)) << "the stand-in bridge did not run in " << kWaitLimit.count() << " s";
+        ASSERT_TRUE(WaitUntil([&] { return std::filesystem::exists(log); })) << "the stand-in bridge did not run in " << kWaitLimit.count() << " s";
         String written;
-        for (int attempt = 0; attempt < 100 && written.find("--exit-with-editor") == String::npos; ++attempt) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        WaitUntil([&] {
             if (std::FILE* read = std::fopen(log.string().c_str(), "rb")) {
                 char buffer[256] = {};
                 written = String(buffer, std::fread(buffer, 1, sizeof(buffer) - 1, read));
                 std::fclose(read);
             }
-        }
+            return written.find("--exit-with-editor") != String::npos;
+        });
         EXPECT_NE(written.find("--port 8765 --exit-with-editor --log"), String::npos) << written.c_str();
         std::filesystem::remove_all(base);
     }

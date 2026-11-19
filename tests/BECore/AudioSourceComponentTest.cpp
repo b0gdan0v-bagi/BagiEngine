@@ -1,5 +1,6 @@
 #include <BECore/Audio/AudioManager.h>
 #include <BECore/Audio/AudioSourceComponent.h>
+#include <BECore/AudioTestSupport.h>
 #include <BECore/FakeAudioBackend.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -10,7 +11,6 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Events/InputEvents.h>
-#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -42,10 +42,6 @@ namespace BECore::Tests {
   </nodes></scene>
 </scenes></SceneManager>)";
 
-        std::filesystem::path FixtureFolder() {
-            return std::filesystem::path(__FILE__).parent_path() / "AudioData";
-        }
-
         IntrusivePtr<SceneNode> FindNodeByName(Scene& scene, const char* name) {
             for (const auto& node : scene.GetRootNode().GetChildren()) {
                 if (node->GetName() == PoolString::Intern(name)) {
@@ -53,12 +49,6 @@ namespace BECore::Tests {
                 }
             }
             return {};
-        }
-
-        AudioPlayRecord LastRecord() {
-            Vector<AudioPlayRecord> records;
-            CoreManager::GetAudio().GetRecentPlays(records);
-            return records.empty() ? AudioPlayRecord{} : records.back();
         }
 
     }  // namespace
@@ -70,7 +60,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            ASSERT_TRUE(CoreManager::GetFileSystem().Mount(PoolString::Intern(kMountPoint), FixtureFolder()));
+            ASSERT_TRUE(CoreManager::GetFileSystem().Mount(PoolString::Intern(kMountPoint), AudioFixtureFolder()));
             backend = New<FakeAudioBackend>();
             CoreManager::GetAudio().SetBackend(backend);
             ASSERT_TRUE(CoreManager::GetAudio().GetBackend());
@@ -129,7 +119,7 @@ namespace BECore::Tests {
         InputEvents::ActionEvent::Emit("Ding"_intern);
         ASSERT_EQ(backend->starts.size(), 1u);
         EXPECT_TRUE(Source("OnAction")->IsPlaying());
-        const AudioPlayRecord record = LastRecord();
+        const AudioPlayRecord record = LastRecord(CoreManager::GetAudio());
         EXPECT_EQ(record.bus, AudioBus::Ui);
         EXPECT_FLOAT_EQ(record.volume, 0.5f);
 
@@ -153,7 +143,7 @@ namespace BECore::Tests {
         source->Play();
         EXPECT_FALSE(source->IsPlaying());
         EXPECT_TRUE(backend->starts.empty());
-        const AudioPlayRecord record = LastRecord();
+        const AudioPlayRecord record = LastRecord(CoreManager::GetAudio());
         EXPECT_EQ(record.clip, "test_audio_source/missing.wav"_intern);
         EXPECT_FALSE(record.played);
     }

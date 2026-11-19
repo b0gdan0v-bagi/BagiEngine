@@ -3,6 +3,8 @@
 #include <BECore/Rooms/ManualClock.h>
 #include <BECore/Rooms/RoomSocketClient.h>
 #include <BECore/Rooms/TestRandom.h>
+#include <Common/LogRecorder.h>
+#include <Common/Wait.h>
 #include <RoomServer/RoomWebSocketServer.h>
 #include <Rooms/RoomErrors.h>
 #include <gtest/gtest.h>
@@ -757,37 +759,22 @@ namespace BECore::Tests {
 
         constexpr std::chrono::milliseconds kStatsInterval{1000};
 
-        /// Collects the stats lines (`Room server: <n> connections, <m> rooms`) that LogEvent::Flush() delivers while it lives
-        class StatsLines : public SubscriptionHolder {
+        /// The stats lines (`Room server: <n> connections, <m> rooms`) that LogEvent::Flush() delivers while it lives
+        class StatsLines {
         public:
-            StatsLines() {
-                LogEvent::Flush();  // what earlier tests left in the ring is not ours
-                Subscribe<LogEvent, &StatsLines::OnLog>(this);
-            }
-
             /// Delivers the pending log entries, then the lines so far
             [[nodiscard]] const Vector<String>& Lines() {
                 LogEvent::Flush();
+                _lines = _log.Messages(LogLevel::Info, {"Room server: ", " connections, ", " rooms"});
                 return _lines;
             }
 
-            /// Waits (real time, up to @p limit) until @p count lines have come
-            bool WaitForCount(size_t count, std::chrono::milliseconds limit = 3s) {
-                const auto deadline = std::chrono::steady_clock::now() + limit;
-                while (Lines().size() < count && std::chrono::steady_clock::now() < deadline) {
-                    std::this_thread::sleep_for(10ms);
-                }
-                return _lines.size() >= count;
+            bool WaitForCount(size_t count) {
+                return WaitUntil([&] { return Lines().size() >= count; });
             }
 
         private:
-            void OnLog(const LogEvent& event) {
-                const String message(event.message.data(), event.message.size());
-                if (message.find("Room server: ") != String::npos && message.find(" connections, ") != String::npos && message.find(" rooms") != String::npos) {
-                    _lines.push_back(message);
-                }
-            }
-
+            LogRecorder _log;
             Vector<String> _lines;
         };
 

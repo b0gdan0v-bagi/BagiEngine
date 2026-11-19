@@ -1,3 +1,4 @@
+#include <Fuzz/FuzzChecks.h>
 #include <Fuzz/FuzzRoomInput.h>
 #include <Fuzz/FuzzTargets.h>
 #include <Rooms/RoomCode.h>
@@ -23,10 +24,7 @@ namespace BECore::Fuzz {
 
         /// A refusal reaches a log and a reply: a message of printable ASCII, not empty, not long
         bool IsTidyRefusal(const ControlError& error, bool (*isKnownCode)(StringView)) {
-            constexpr size_t kMaxRefusalBytes = 200;
-            const StringView message = error.message;
-            return isKnownCode(error.code) && !message.empty() && message.size() <= kMaxRefusalBytes &&
-                   std::all_of(message.begin(), message.end(), [](char letter) { return letter >= ' ' && letter <= '~'; });
+            return isKnownCode(error.code) && IsTidyMessage(error.message);
         }
 
         // ---- Strict UTF-8, from the ranges of the Unicode standard (Table 3-7), not the code under test ------------------------------

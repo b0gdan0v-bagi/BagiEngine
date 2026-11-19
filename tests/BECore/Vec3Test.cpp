@@ -1,7 +1,6 @@
 #include <BECore/Animation/Lerp.h>
 #include <BECore/Math/Vec3.h>
-#include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Reflection/XmlSerializer.h>
+#include <Common/MathTestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -15,17 +14,6 @@ namespace BECore::Tests {
         constexpr Vec3 kAxisX{1.0f, 0.0f, 0.0f};
         constexpr Vec3 kAxisY{0.0f, 1.0f, 0.0f};
         constexpr Vec3 kAxisZ{0.0f, 0.0f, 1.0f};
-
-        /// Visits every float of a compound with its name, adds a fixed step and records the names in the order of the visit
-        struct StepVisitor {
-            Vector<String> names;
-
-            bool Visit(const char* name, float& value) {
-                names.push_back(name);
-                value += 1.0f;
-                return true;
-            }
-        };
 
     }  // namespace
 
@@ -99,7 +87,7 @@ namespace BECore::Tests {
 
     TEST(Vec3Test, VisitPropertiesVisitsXYZInOrder) {
         Vec3 v{1.0f, 2.0f, 3.0f};
-        StepVisitor visitor;
+        StepVisitor<float> visitor;
         EXPECT_TRUE(v.VisitProperties(visitor));
         ASSERT_EQ(visitor.names.size(), 3u);
         EXPECT_EQ(visitor.names[0], "x");
@@ -110,18 +98,9 @@ namespace BECore::Tests {
 
     TEST(Vec3Test, XmlRoundTrip) {
         const Vec3 original{1.5f, -2.25f, 1000.0f};
-        XmlSerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("v"));
-        original.Serialize(serializer);
-        serializer.EndObject();
-
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(serializer.SaveToString()));
-        ASSERT_TRUE(deserializer.BeginObject("v"));
-        Vec3 loaded;
-        loaded.Deserialize(deserializer);
-        deserializer.EndObject();
-        EXPECT_EQ(loaded, original);
+        const auto loaded = RoundTripThroughXml(original);
+        ASSERT_TRUE(loaded.has_value());
+        EXPECT_EQ(*loaded, original);
     }
 
 }  // namespace BECore::Tests

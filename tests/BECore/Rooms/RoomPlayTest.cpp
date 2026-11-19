@@ -1,5 +1,6 @@
 #include <BECore/Rooms/FakeSeatedGame.h>
 #include <BECore/Rooms/TestRandom.h>
+#include <Common/LogRecorder.h>
 #include <Common/Printers.h>
 #include <Common/SharedPtr.h>
 #include <Rooms/Room.h>
@@ -387,29 +388,6 @@ namespace BECore::Tests {
             mutable int proposals = 0;
         };
 
-        /// Collects what LogEvent::Flush() delivers, as copies (the views point into the ring buffer)
-        class LogRecorder : public SubscriptionHolder {
-        public:
-            LogRecorder() {
-                // Lines that earlier tests of this process left in the ring belong to them, not to this recorder
-                LogEvent::Flush();
-                Subscribe<LogEvent, &LogRecorder::OnLog>(this);
-            }
-
-            const Vector<String>& Errors() const {
-                return _errors;
-            }
-
-        private:
-            void OnLog(const LogEvent& event) {
-                if (event.level == LogLevel::Error) {
-                    _errors.emplace_back(event.message.data(), event.message.size());
-                }
-            }
-
-            Vector<String> _errors;
-        };
-
     }  // namespace
 
     TEST(RoomPlayTest, ARefusedComputerMoveIsNotRetriedAndChangesNothing) {
@@ -425,12 +403,13 @@ namespace BECore::Tests {
         ASSERT_TRUE(room.Start(joined->player, kNow, FirstSeatOptions(1)).has_value());
         const uint64_t version = room.GetGameVersion();
         // Seat 1 is a computer and has the turn; its proposal is refused: logged, no move, no loop
-        LogRecorder log;
+        const LogRecorder log;
         EXPECT_FALSE(room.StepComputers(kNow));
         LogEvent::Flush();
-        ASSERT_EQ(log.Errors().size(), 1u);
-        EXPECT_NE(log.Errors()[0].find("seat 1"), String::npos) << log.Errors()[0].c_str();
-        EXPECT_EQ(log.Errors()[0].find("ABCDE"), String::npos) << "the room code is not logged: " << log.Errors()[0].c_str();
+        const Vector<String> errors = log.Messages(LogLevel::Error, {});
+        ASSERT_EQ(errors.size(), 1u);
+        EXPECT_NE(errors[0].find("seat 1"), String::npos) << errors[0].c_str();
+        EXPECT_EQ(errors[0].find("ABCDE"), String::npos) << "the room code is not logged: " << errors[0].c_str();
         EXPECT_EQ((*game)->proposals, 1);
         EXPECT_EQ(room.GetGameVersion(), version);
         EXPECT_EQ(room.GetPhase(), RoomPhase::Playing);

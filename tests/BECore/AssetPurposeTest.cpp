@@ -5,6 +5,7 @@
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/Printers.h>
+#include <Common/TestText.h>
 #include <Generated/AssetPurposeTest.gen.hpp>
 #include <gtest/gtest.h>
 
@@ -88,10 +89,6 @@ namespace BECore::Tests {
         void ResetCounters() {
             PurposeSimDerived::constructed = 0;
             PurposeVisualDerived::constructed = 0;
-        }
-
-        bool Contains(StringView text, StringView part) {
-            return text.find(part) != StringView::npos;
         }
 
         template <typename Deserializer>

@@ -2,6 +2,7 @@
 
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <BECore/Utils/StringUtils.h>
+#include <Common/Wait.h>
 #include <RemoteControl/Socket.h>
 #include <RemoteControl/WebSocketFrame.h>
 #include <gtest/gtest.h>
@@ -14,7 +15,7 @@ namespace BECore::Tests {
 
     inline constexpr WebSocketMask kClientMask = {0x12, 0x34, 0x56, 0x78};
     inline constexpr const char* kClientKey = "dGhlIHNhbXBsZSBub25jZQ==";
-    inline constexpr std::chrono::seconds kClientWaitLimit{30};
+    inline constexpr std::chrono::seconds kClientWaitLimit = kWaitLimit;
     /// Tries of a client that waits for a free connection slot, 10 ms apart: the accept thread may be starved on a loaded machine
     inline constexpr int kSlotRetryAttempts = 3000;
 
@@ -25,17 +26,14 @@ namespace BECore::Tests {
     /// Calls @p pump and @p done every millisecond until @p done is true or @p limit has passed
     template <typename Predicate>
     bool WaitUntil(const WaitPump& pump, Predicate done, std::chrono::milliseconds limit = kClientWaitLimit) {
-        const auto deadline = std::chrono::steady_clock::now() + limit;
-        while (std::chrono::steady_clock::now() < deadline) {
-            if (pump) {
-                pump();
-            }
-            if (done()) {
-                return true;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-        return false;
+        return WaitUntil(
+            [&] {
+                if (pump) {
+                    pump();
+                }
+                return done();
+            },
+            limit);
     }
 
     inline Span<const uint8_t> AsBytes(const String& text) {

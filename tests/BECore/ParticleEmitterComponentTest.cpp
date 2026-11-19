@@ -9,6 +9,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Time/Time.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/NullPropertyVisitor.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Events/InputEvents.h>
@@ -68,47 +69,8 @@ namespace BECore::Tests {
 </scenes></SceneManager>)";
 
         /// Remembers the name of every field and group an inspector would show
-        class NameRecorder : public IPropertyVisitor {
+        class NameRecorder : public NullPropertyVisitor {
         public:
-            bool Visit(StringView name, bool&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, int8_t&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, uint8_t&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, int16_t&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, uint16_t&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, int32_t&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, uint32_t&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, int64_t&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, uint64_t&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, float&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, double&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, PoolString&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, String&) override {
-                return Note(name);
-            }
             bool VisitEnum(StringView name, const StringView*, size_t, size_t&) override {
                 return Note(name);
             }
@@ -119,6 +81,11 @@ namespace BECore::Tests {
 
             [[nodiscard]] bool Has(StringView name) const {
                 return eastl::find(_names.begin(), _names.end(), name) != _names.end();
+            }
+
+        protected:
+            bool VisitValue(StringView name) override {
+                return Note(name);
             }
 
         private:

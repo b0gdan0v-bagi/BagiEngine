@@ -18,6 +18,8 @@ namespace BECore::Tests {
         };
 
         LogRecorder() {
+            // What the ring still holds was logged before this recorder (by an earlier test of the process, too): it is not this recorder's
+            LogEvent::Flush();
             Subscribe<LogEvent, &LogRecorder::OnLog>(this);
         }
 
@@ -38,6 +40,17 @@ namespace BECore::Tests {
                 count += (entry.level == level && ContainsAll(entry.message, parts)) ? 1 : 0;
             }
             return count;
+        }
+
+        /// The recorded messages of @p level that contain every part of @p parts, oldest first
+        Vector<String> Messages(LogLevel level, std::initializer_list<StringView> parts) const {
+            Vector<String> messages;
+            for (const Entry& entry : _entries) {
+                if (entry.level == level && ContainsAll(entry.message, parts)) {
+                    messages.push_back(entry.message);
+                }
+            }
+            return messages;
         }
 
     private:
