@@ -104,7 +104,13 @@ namespace BECore::Tests {
     }
 
     TEST_F(GitBranchTest, ReadGivesEmptyWithoutARepository) {
-        // Assumes the system temp folder has no .git above it
+        // The read walks up past the temp folder, so a .git above it (a checkout holding the temp folder) is found first
+        for (std::filesystem::path above = _root.parent_path(); !above.empty() && above != above.parent_path(); above = above.parent_path()) {
+            std::error_code missing;
+            if (std::filesystem::exists(above / ".git", missing)) {
+                GTEST_SKIP() << "a .git above the temp folder: " << above.string();
+            }
+        }
         std::error_code ec;
         std::filesystem::create_directories(_root / "plain" / "dir", ec);
         EXPECT_EQ(ReadGitBranch(_root / "plain" / "dir"), "");

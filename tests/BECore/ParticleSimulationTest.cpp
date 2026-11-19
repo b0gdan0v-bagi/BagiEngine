@@ -1,7 +1,7 @@
 #include <BECore/Particles/ParticleRandom.h>
 #include <BECore/Particles/ParticleSimulation.h>
-#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/UI/UIColor.h>
+#include <Common/AllocCheck.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
 
@@ -786,32 +786,24 @@ namespace BECore::Tests {
         const size_t poolCapacity = sim.GetCapacity();
         const size_t vertexCapacity = vertices.capacity();
         const size_t indexCapacity = indices.capacity();
-#if BE_PROFILER_ALLOC
-        const uint64_t before = AllocTracker::GetThreadCounters().count;
-#endif
-        for (int frame = 0; frame < 1000; ++frame) {
-            sim.Update(effect, kPointArea, 1.0f / 60.0f);
-            ASSERT_EQ(sim.BuildGeometry(effect, Rect{}, Vec2(64.0f, 64.0f), vertices, indices), 64u);
-        }
-#if BE_PROFILER_ALLOC
-        EXPECT_EQ(AllocTracker::GetThreadCounters().count, before);
-#endif
+        ExpectNoAllocations([&] {
+            for (int frame = 0; frame < 1000; ++frame) {
+                sim.Update(effect, kPointArea, 1.0f / 60.0f);
+                ASSERT_EQ(sim.BuildGeometry(effect, Rect{}, Vec2(64.0f, 64.0f), vertices, indices), 64u);
+            }
+        });
         EXPECT_EQ(sim.GetCapacity(), poolCapacity);
         EXPECT_EQ(vertices.capacity(), vertexCapacity);
         EXPECT_EQ(indices.capacity(), indexCapacity);
         EXPECT_GT(sim.GetDroppedCount(), 0u);
 
         sim.Clear();
-#if BE_PROFILER_ALLOC
-        const uint64_t emptyBefore = AllocTracker::GetThreadCounters().count;
-#endif
-        for (int frame = 0; frame < 100; ++frame) {
-            sim.Update(effect, kPointArea, 1.0f / 60.0f);
-            EXPECT_EQ(sim.BuildGeometry(effect, Rect{}, Vec2{}, vertices, indices), 0u);
-        }
-#if BE_PROFILER_ALLOC
-        EXPECT_EQ(AllocTracker::GetThreadCounters().count, emptyBefore);
-#endif
+        ExpectNoAllocations([&] {
+            for (int frame = 0; frame < 100; ++frame) {
+                sim.Update(effect, kPointArea, 1.0f / 60.0f);
+                EXPECT_EQ(sim.BuildGeometry(effect, Rect{}, Vec2{}, vertices, indices), 0u);
+            }
+        });
         EXPECT_EQ(sim.GetCapacity(), poolCapacity);
     }
 

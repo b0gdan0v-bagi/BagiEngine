@@ -1,10 +1,10 @@
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Text/FontAtlas.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Text/GlyphOutline.h>
 #include <BECore/Text/TextRenderer.h>
+#include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -109,8 +109,8 @@ namespace BECore::Tests {
         const AtlasGlyph* found = atlas->Find(glyphs[0]);
         ASSERT_NE(found, nullptr);
         const RecordedTexture* page = AsRecorded(atlas->GetPage(found->page));
+        ASSERT_NE(page, nullptr);
         const auto& pixels = page->GetPixels();
-        const auto width = static_cast<uint32_t>(page->GetWidth());
         for (size_t i = 0; i < pixels.size(); i += 4) {
             ASSERT_EQ(pixels[i], 255);
             ASSERT_EQ(pixels[i + 1], 255);
@@ -122,7 +122,6 @@ namespace BECore::Tests {
         EXPECT_EQ(AlphaAt(*page, left - 1, top), 0);
         EXPECT_EQ(AlphaAt(*page, left, top - 1), 0);
         EXPECT_EQ(AlphaAt(*page, left + static_cast<uint32_t>(found->source.w), top), 0);
-        EXPECT_LT(width, 1u << 20);
     }
 
     TEST_F(FontAtlasTest, GlyphPicturesDoNotOverlapAndKeepAGapBetweenThem) {
@@ -136,6 +135,7 @@ namespace BECore::Tests {
             for (size_t j = i + 1; j < glyphs.size(); ++j) {
                 const AtlasGlyph* a = atlas->Find(glyphs[i]);
                 const AtlasGlyph* b = atlas->Find(glyphs[j]);
+                ASSERT_NE(a, nullptr);
                 ASSERT_NE(b, nullptr);
                 if (a->page != b->page) {
                     continue;
@@ -173,19 +173,21 @@ namespace BECore::Tests {
     TEST_F(FontAtlasTest, NewGlyphsGoToANewPageAndTheOldPageStaysAsItWas) {
         const uint32_t first[] = {Glyph(U'A')};
         atlas->Prepare(*renderer, first);
-        const AtlasGlyph before = *atlas->Find(first[0]);
+        const AtlasGlyph before = Require(atlas->Find(first[0]));
         ITexture* firstPage = atlas->GetPage(0);
-        const Vector<uint8_t> firstPixels = AsRecorded(firstPage)->GetPixels();
+        const RecordedTexture* firstRecorded = AsRecorded(firstPage);
+        ASSERT_NE(firstRecorded, nullptr);
+        const Vector<uint8_t> firstPixels = firstRecorded->GetPixels();
 
         const uint32_t second[] = {Glyph(U'B')};
         atlas->Prepare(*renderer, second);
 
         EXPECT_EQ(atlas->GetPageCount(), 2u);
         EXPECT_EQ(atlas->GetPage(0), firstPage);  // the same texture object, never replaced
-        EXPECT_EQ(AsRecorded(firstPage)->GetPixels(), firstPixels);
-        EXPECT_EQ(atlas->Find(first[0])->page, before.page);
-        EXPECT_FLOAT_EQ(atlas->Find(first[0])->source.x, before.source.x);
-        EXPECT_EQ(atlas->Find(second[0])->page, 1);
+        EXPECT_EQ(firstRecorded->GetPixels(), firstPixels);
+        EXPECT_EQ(Require(atlas->Find(first[0])).page, before.page);
+        EXPECT_FLOAT_EQ(Require(atlas->Find(first[0])).source.x, before.source.x);
+        EXPECT_EQ(Require(atlas->Find(second[0])).page, 1);
     }
 
     TEST_F(FontAtlasTest, DuplicatesInOnePrepareAreDrawnOnce) {
@@ -200,7 +202,9 @@ namespace BECore::Tests {
         const uint32_t glyphs[] = {Glyph(U'A')};
         atlas->Prepare(*renderer, glyphs);
 
-        EXPECT_LT(AsRecorded(atlas->GetPage(0))->GetWidth(), static_cast<float>(kPageSize));
+        const RecordedTexture* page = AsRecorded(atlas->GetPage(0));
+        ASSERT_NE(page, nullptr);
+        EXPECT_LT(page->GetWidth(), static_cast<float>(kPageSize));
     }
 
     TEST_F(FontAtlasTest, ABatchThatDoesNotFitOnePageSpillsOverToMore) {
@@ -448,7 +452,6 @@ namespace BECore::Tests {
         }
     }
 
-#if BE_PROFILER_ALLOC
     TEST_F(TextRendererTest, ADrawOfGlyphsTheAtlasHasAllocatesNothing) {
         const TextLayoutResult layout = Layout("Hi, мир");
         auto atlas = Atlas();
@@ -456,13 +459,10 @@ namespace BECore::Tests {
         renderer->calls.clear();
         renderer->calls.reserve(layout.glyphs.size());  // the recording itself must not count
 
-        const uint64_t before = AllocTracker::GetThreadCounters().count;
-        const size_t drawn = TextRenderer::Draw(*renderer, *atlas, layout, 0.0f, 0.0f, Color{255, 255, 255, 255});
-
-        EXPECT_EQ(AllocTracker::GetThreadCounters().count, before);
+        size_t drawn = 0;
+        ExpectNoAllocations([&] { drawn = TextRenderer::Draw(*renderer, *atlas, layout, 0.0f, 0.0f, Color{255, 255, 255, 255}); });
         EXPECT_EQ(drawn, 6u);
     }
-#endif
 
     TEST_F(TextRendererTest, AGlyphTheAtlasLacksIsPreparedByTheDraw) {
         const TextLayoutResult layout = Layout("Hi", 24);

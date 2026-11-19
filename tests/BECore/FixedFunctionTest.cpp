@@ -1,5 +1,4 @@
-#include <BECore/Profiler/Alloc/AllocTracker.h>
-#include <BECore/Utils/FixedFunction.h>
+#include <Common/AllocCheck.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -137,16 +136,13 @@ namespace BECore::Tests {
     }
 
     TEST_F(FixedFunctionTest, ItNeverAllocates) {
-        const AllocTracker::ThreadCounters before = AllocTracker::GetThreadCounters();
-        {
+        ExpectNoAllocations([] {
             Fixed function{Tracked{{}, 1}};
             Fixed moved = std::move(function);
             Fixed other = [](int value) { return value; };
             moved = std::move(other);
             EXPECT_EQ(moved(7), 7);
-        }
-        const AllocTracker::ThreadCounters after = AllocTracker::GetThreadCounters();
-        EXPECT_EQ(after.count, before.count);
+        });
     }
 
     TEST_F(FixedFunctionTest, ItIsStoredInAVectorAndDestroyedOnce) {

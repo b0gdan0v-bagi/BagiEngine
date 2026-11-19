@@ -1,4 +1,5 @@
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/Utils/ScopeGuard.h>
 #include <Common/FreshText.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
@@ -204,11 +205,24 @@ namespace BECore::Tests {
 #endif
 
     TEST_F(FileSystemTest, WithoutContentRootsTheProjectRootIsFoundFromTheWorkingDirectory) {
+        // A working directory two levels below a folder with config/, whatever folder the run started in
+        MakeDirectory(_engine / "config");
+        const std::filesystem::path deep = _engine / "a" / "b";
+        MakeDirectory(deep);
+        std::error_code error;
+        const std::filesystem::path started = std::filesystem::current_path(error);
+        ASSERT_FALSE(error) << error.message();
+        std::filesystem::current_path(deep, error);
+        ASSERT_FALSE(error) << error.message();
+        const ScopeGuard restore([&started] {
+            std::error_code ignored;
+            std::filesystem::current_path(started, ignored);
+        });
+
         FileSystem fs;
         fs.Initialize();
 
-        // The test runs inside the repository, which has a config/ folder
-        EXPECT_FALSE(fs.GetRootPath().empty());
+        EXPECT_TRUE(std::filesystem::equivalent(fs.GetRootPath(), _engine, error)) << fs.GetRootPath().string() << " is not " << _engine.string();
         EXPECT_FALSE(fs.GetMountLayers("config"_intern).empty());
     }
 

@@ -1,7 +1,7 @@
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Scene/SceneManager.h>
+#include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Widgets/EditorLayout/EditorPlayModel.h>
@@ -304,16 +304,12 @@ namespace BECore::Tests {
             RunFrame();
         }
 
-        const AllocTracker::ThreadCounters before = AllocTracker::GetThreadCounters();
-        for (int i = 0; i < kSteadyFrames; ++i) {
-            RunFrame();
-        }
-        const AllocTracker::ThreadCounters after = AllocTracker::GetThreadCounters();
-
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                RunFrame();
+            }
+        });
         EXPECT_TRUE(statusBar.GetHardwareText().visible);
-        if constexpr (AllocTracker::kEnabled) {
-            EXPECT_EQ(after.count, before.count);
-        }
     }
 
     TEST_F(EditorBarsTest, ASteadyFrameAllocatesNothing) {
@@ -321,16 +317,11 @@ namespace BECore::Tests {
             RunFrame();
         }
 
-        const AllocTracker::ThreadCounters before = AllocTracker::GetThreadCounters();
-        for (int i = 0; i < kSteadyFrames; ++i) {
-            RunFrame();
-        }
-        const AllocTracker::ThreadCounters after = AllocTracker::GetThreadCounters();
-
-        // The counters stay zero without ENGINE_PROFILER_ALLOC, so the check only bites in the profile build
-        if constexpr (AllocTracker::kEnabled) {
-            EXPECT_EQ(after.count, before.count);
-        }
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                RunFrame();
+            }
+        });
     }
 
 }  // namespace BECore::Tests
