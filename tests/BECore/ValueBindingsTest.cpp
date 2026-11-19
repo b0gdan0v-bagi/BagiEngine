@@ -7,10 +7,9 @@
 #include <BECore/Values/Value.h>
 #include <BECore/Values/ValueTables.h>
 #include <Common/Printers.h>
+#include <Common/Wait.h>
 #include <atomic>
-#include <chrono>
 #include <gtest/gtest.h>
-#include <thread>
 
 namespace BECore::Tests {
 
@@ -21,7 +20,6 @@ namespace BECore::Tests {
         constexpr StringView kCondition = "caster.attack < 10 && caster.alive";
         constexpr StringView kArgument = "caster.attack * 2 + cast.level";
         constexpr int kCompilingThreads = 2;
-        constexpr auto kRendezvousLimit = std::chrono::seconds(10);
 
         template <typename T>
         Value<T> Compiled(const ContextDecl& declaration, StringView text, const CompileOptions& options = {}) {
@@ -124,11 +122,7 @@ namespace BECore::Tests {
         std::atomic<int> arrived{0};
         const auto work = [&](Outcome& outcome) {
             arrived.fetch_add(1);
-            const auto deadline = std::chrono::steady_clock::now() + kRendezvousLimit;
-            while (arrived.load() < kCompilingThreads && std::chrono::steady_clock::now() < deadline) {
-                std::this_thread::yield();
-            }
-            outcome.metOther = arrived.load() == kCompilingThreads;
+            outcome.metOther = WaitUntil([&arrived] { return arrived.load() == kCompilingThreads; });
             for (int round = 0; round < 50; ++round) {
                 const auto argument = CompileValue<int32_t>(kArgument, world.declaration);
                 const auto condition = CompileValue<bool>(kCondition, world.declaration);

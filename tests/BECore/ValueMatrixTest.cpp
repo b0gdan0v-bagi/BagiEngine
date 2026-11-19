@@ -10,11 +10,10 @@
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Value.h>
 #include <BECore/Values/ValueLinkScope.h>
+#include <Common/Wait.h>
 #include <atomic>
-#include <chrono>
 #include <cstring>
 #include <gtest/gtest.h>
-#include <thread>
 
 namespace BECore::Tests {
 
@@ -25,7 +24,6 @@ namespace BECore::Tests {
         constexpr StringView kState = "State";
         constexpr StringView kKey = "v";
         constexpr int kLoadingThreads = 2;
-        constexpr auto kRendezvousLimit = std::chrono::seconds(10);
 
         /// Per value type: the field of `ValueUnitStats` a slot reads, a literal and another one (both unlike the field), and the field of another type
         template <typename T>
@@ -483,11 +481,7 @@ namespace BECore::Tests {
         const auto work = [&arrived](const ContextDecl& declaration, StringView own, StringView other, Outcome& outcome) {
             ValueLinkScope scope(declaration);
             arrived.fetch_add(1);
-            const auto deadline = std::chrono::steady_clock::now() + kRendezvousLimit;
-            while (arrived.load() < kLoadingThreads && std::chrono::steady_clock::now() < deadline) {
-                std::this_thread::yield();
-            }
-            outcome.metOther = arrived.load() == kLoadingThreads;
+            outcome.metOther = WaitUntil([&arrived] { return arrived.load() == kLoadingThreads; });
             for (int round = 0; round < 50; ++round) {
                 ValueHolder<int32_t> ownHolder;
                 ValueHolder<int32_t> otherHolder;

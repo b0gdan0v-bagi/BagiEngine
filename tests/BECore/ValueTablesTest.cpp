@@ -9,12 +9,11 @@
 #include <BECore/Values/ValueLinkScope.h>
 #include <BECore/Values/ValueTables.h>
 #include <Common/Printers.h>
+#include <Common/Wait.h>
 #include <algorithm>
 #include <atomic>
-#include <chrono>
 #include <gtest/gtest.h>
 #include <limits>
-#include <thread>
 
 namespace BECore::Tests {
 
@@ -27,7 +26,6 @@ namespace BECore::Tests {
         constexpr StringView kContext = R"(<context caster="ValueUnitStats" cast="ValueCastInfo"/>)";
         constexpr StringView kTable = "FireballDamage";
         constexpr int kLoadingThreads = 2;
-        constexpr auto kRendezvousLimit = std::chrono::seconds(10);
 
         constexpr int32_t kInt32Min = std::numeric_limits<int32_t>::min();
         constexpr int32_t kInt32Max = std::numeric_limits<int32_t>::max();
@@ -301,11 +299,7 @@ namespace BECore::Tests {
         std::atomic<int> arrived{0};
         const auto work = [&arrived](const ValueTableSet& tables, int32_t scale, Outcome& outcome) {
             arrived.fetch_add(1);
-            const auto deadline = std::chrono::steady_clock::now() + kRendezvousLimit;
-            while (arrived.load() < kLoadingThreads && std::chrono::steady_clock::now() < deadline) {
-                std::this_thread::yield();
-            }
-            outcome.metOther = arrived.load() == kLoadingThreads;
+            outcome.metOther = WaitUntil([&arrived] { return arrived.load() == kLoadingThreads; });
             for (int round = 0; round < 50 && outcome.sawOwn; ++round) {
                 // A scope takes one `<context>`, so each load has its own
                 ValueLinkScope scope("thread.xml");
