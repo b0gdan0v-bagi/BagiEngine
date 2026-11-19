@@ -29,9 +29,12 @@ be_add_game_tests(BagiEngineTests SOURCES ${TESTS_SOURCES} LINK RemoteControlMod
 
 # The FuzzCorpus cases of the shards only replay the corpus; this entry runs them again with the mutations (tests/Fuzz/CLAUDE.md). 50000 per target
 # of cost weight 1 is about 2 s in Debug; the targets run one after the other in this one process.
+# A filter that matches nothing (a renamed instantiation) exits 0, and the vendored gtest has no --gtest_fail_if_no_test_selected: the
+# count line fails it instead. FAIL_, not PASS_REGULAR_EXPRESSION, which would stop ctest from reading the exit code.
 add_test(NAME BagiFuzzMutations COMMAND BagiEngineTests --gtest_filter=FuzzCorpus/* --gtest_brief=1)
 set_tests_properties(BagiFuzzMutations PROPERTIES
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    FAIL_REGULAR_EXPRESSION "\\] 0 tests from 0 test suites ran"
     ENVIRONMENT "BAGI_FUZZ_ITERATIONS=50000"
     LABELS extended)
 
