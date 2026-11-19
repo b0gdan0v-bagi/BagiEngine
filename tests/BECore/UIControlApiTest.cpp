@@ -20,6 +20,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -550,16 +551,6 @@ namespace BECore::Tests {
   </nodes></scene>
   <scene type="Scene" name="Empty"><nodes/></scene>
 </scenes></SceneManager>)";
-
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
 
         /// Counts the actions the buttons emit and the mouse events that reach game code
         class Recorder : public SubscriptionHolder {

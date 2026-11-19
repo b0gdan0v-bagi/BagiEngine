@@ -13,6 +13,7 @@
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <Events/SubscriptionHolder.h>
@@ -73,37 +74,6 @@ namespace BECore::Tests {
 
         constexpr double kStep = 0.125;  // an exact binary fraction; a frame is clamped to 0.25 s anyway
         constexpr uint8_t kAuthoredAlpha = 200;
-
-        class ActionCounter : public SubscriptionHolder {
-        public:
-            ActionCounter() {
-                Subscribe<InputEvents::ActionEvent, &ActionCounter::OnAction>(this);
-            }
-            int count = 0;
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                count += event.action == "OpacityZero"_intern ? 1 : 0;
-            }
-        };
-
-        SDL_MouseMotionEvent Motion(float x, float y) {
-            SDL_MouseMotionEvent event{};
-            event.type = SDL_EVENT_MOUSE_MOTION;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
 
     }  // namespace
 
@@ -218,11 +188,11 @@ namespace BECore::Tests {
         EXPECT_EQ(AlphaOf("Zero"), 0);
         EXPECT_EQ(_hud->GetLayout().HitTest(rect.x + 5.0f, rect.y + 5.0f), &Get("ZeroButton"));
 
-        ActionCounter actions;
+        ActionLog actions;
         CoreManager::GetUIInput().DispatchMouseMotion(Motion(rect.x + 5.0f, rect.y + 5.0f));
         CoreManager::GetUIInput().DispatchMouseButtonDown(Button(rect.x + 5.0f, rect.y + 5.0f, true));
         CoreManager::GetUIInput().DispatchMouseButtonUp(Button(rect.x + 5.0f, rect.y + 5.0f, false));
-        EXPECT_EQ(actions.count, 1);
+        EXPECT_EQ(actions.Count("OpacityZero"), 1u);
     }
 
     TEST_F(UIOpacityTest, TheTooltipPlateIsNotFadedByTheCanvas) {

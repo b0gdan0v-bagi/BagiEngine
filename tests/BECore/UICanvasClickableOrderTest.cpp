@@ -9,6 +9,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -43,39 +44,6 @@ namespace BECore::Tests {
         constexpr float kSquareSize = 50.0f;
         constexpr float kInsideSquare = 20.0f;
         constexpr float kUnderOnly = 250.0f;
-
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        SDL_MouseMotionEvent Motion(float x, float y, SDL_MouseButtonFlags buttonsHeld = 0) {
-            SDL_MouseMotionEvent event{};
-            event.type = SDL_EVENT_MOUSE_MOTION;
-            event.x = x;
-            event.y = y;
-            event.state = buttonsHeld;
-            return event;
-        }
-
-        class Recorder : public SubscriptionHolder {
-        public:
-            Recorder() {
-                Subscribe<InputEvents::ActionEvent, &Recorder::OnAction>(this);
-            }
-
-            Vector<PoolString> actions;
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                actions.push_back(event.action);
-            }
-        };
 
         /// An interactive square that counts what the canvas tells it
         class Probe : public UIElement {
@@ -174,42 +142,42 @@ namespace BECore::Tests {
     };
 
     TEST_F(UICanvasClickableOrderTest, ACanvasDrawnAboveAClickableShieldsIt) {
-        Recorder recorder;
+        ActionLog recorder;
 
         EXPECT_TRUE(Press(kShieldingX + kInsideSquare, kSquareY + kInsideSquare));
 
         EXPECT_EQ(_shielding->presses, 1);
-        EXPECT_TRUE(recorder.actions.empty()) << "the clickable below the canvas element got the press";
+        EXPECT_TRUE(recorder.Total() == 0) << "the clickable below the canvas element got the press";
     }
 
     TEST_F(UICanvasClickableOrderTest, TheClickableBelowTheCanvasTakesWhatTheCanvasLeavesFree) {
-        Recorder recorder;
+        ActionLog recorder;
 
         EXPECT_TRUE(Press(kUnderOnly, kUnderOnly));
 
-        ASSERT_EQ(recorder.actions.size(), 1u);
-        EXPECT_EQ(recorder.actions[0], "ActUnder"_intern);
+        ASSERT_EQ(recorder.Total(), 1u);
+        EXPECT_EQ(recorder.ActionAt(0), "ActUnder"_intern);
         EXPECT_EQ(_shielding->presses, 0);
     }
 
     TEST_F(UICanvasClickableOrderTest, ACanvasDrawnBelowAClickableGetsNoPressWhereTheClickableIs) {
-        Recorder recorder;
+        ActionLog recorder;
 
         EXPECT_TRUE(Press(kCoveredX + kInsideSquare, kSquareY + kInsideSquare));
 
-        ASSERT_EQ(recorder.actions.size(), 1u);
-        EXPECT_EQ(recorder.actions[0], "ActOver"_intern);
+        ASSERT_EQ(recorder.Total(), 1u);
+        EXPECT_EQ(recorder.ActionAt(0), "ActOver"_intern);
         EXPECT_EQ(_covered->presses, 0);
         EXPECT_FALSE(_canvas->HoldsPress());
     }
 
     TEST_F(UICanvasClickableOrderTest, TheCanvasGetsThePressOutsideTheClickableAbove) {
-        Recorder recorder;
+        ActionLog recorder;
 
         EXPECT_TRUE(Press(kFreeX + kInsideSquare, kSquareY + kInsideSquare));
 
         EXPECT_EQ(_free->presses, 1);
-        EXPECT_TRUE(recorder.actions.empty());
+        EXPECT_TRUE(recorder.Total() == 0);
     }
 
     TEST_F(UICanvasClickableOrderTest, TheOrderOfACanvasAndAClickableFollowsTheirLayers) {
@@ -301,7 +269,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UICanvasClickableOrderTest, ABlockingClickableWithNoActionShieldsTheCanvasBelowItAndEmitsNothing) {
-        Recorder recorder;
+        ActionLog recorder;
         ClickableComponent* over = nullptr;
         for (const auto& node : _manager->GetActiveScene()->GetRootNode().GetChildren()) {
             if (node->GetName() == "Over"_intern) {
@@ -320,7 +288,7 @@ namespace BECore::Tests {
 
         EXPECT_FALSE(_covered->hovered);
         EXPECT_EQ(_covered->presses, 0);
-        EXPECT_TRUE(recorder.actions.empty());
+        EXPECT_TRUE(recorder.Total() == 0);
     }
 
 }  // namespace BECore::Tests

@@ -13,6 +13,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <Generated/ClipRectComponentTest.gen.hpp>
@@ -54,20 +55,6 @@ namespace BECore::Tests {
         String SceneXml(const String& nodes, const char* sceneAttributes = "") {
             return Format(R"(<SceneManager><scenes><scene type="Scene" name="S" {}><nodes>{}</nodes></scene></scenes></SceneManager>)", sceneAttributes, nodes);
         }
-
-        class ActionRecorder : public SubscriptionHolder {
-        public:
-            ActionRecorder() {
-                Subscribe<InputEvents::ActionEvent, &ActionRecorder::OnAction>(this);
-            }
-
-            Vector<PoolString> actions;
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                actions.push_back(event.action);
-            }
-        };
 
         bool Press(float x, float y) {
             SDL_MouseMotionEvent motion{};
@@ -271,14 +258,14 @@ namespace BECore::Tests {
         const String inside = Node("Inside", 0, 0, kWide, kWide, 0, R"(<component type="ClickableComponent" actionName="ActInside"/>)");
         ASSERT_NO_FATAL_FAILURE(LoadNodes(below + Node("Clipper", 0, 0, kClipSize, kClipSize, 0, kClip, inside)));
         Draw();
-        ActionRecorder recorder;
+        ActionLog recorder;
 
         EXPECT_TRUE(Press(kInside, kInside));
         EXPECT_TRUE(Press(kBeside, kInside));
 
-        ASSERT_EQ(recorder.actions.size(), 2u);
-        EXPECT_EQ(recorder.actions[0], "ActInside"_intern);
-        EXPECT_EQ(recorder.actions[1], "ActBelow"_intern);
+        ASSERT_EQ(recorder.Total(), 2u);
+        EXPECT_EQ(recorder.ActionAt(0), "ActInside"_intern);
+        EXPECT_EQ(recorder.ActionAt(1), "ActBelow"_intern);
     }
 
     TEST_F(ClipRectComponentTest, APointerTargetUnderTheClipLeavesAPressOutsideToTheOneBelow) {
@@ -304,13 +291,13 @@ namespace BECore::Tests {
         const String inside = Node("Inside", 0, 0, kWide, kWide, 0, R"(<component type="ClickableComponent" actionName="ActInside"/>)");
         ASSERT_NO_FATAL_FAILURE(LoadNodes(Node("Clipper", 0, 0, kClipSize, kClipSize, 0, kClip, inside), kFitView));
         Draw();
-        ActionRecorder recorder;
+        ActionLog recorder;
 
         EXPECT_TRUE(Press(kInside * kFitScale, kFitOffsetY + kInside * kFitScale));
         EXPECT_FALSE(Press(kBeside * kFitScale, kFitOffsetY + kInside * kFitScale));
 
-        ASSERT_EQ(recorder.actions.size(), 1u);
-        EXPECT_EQ(recorder.actions[0], "ActInside"_intern);
+        ASSERT_EQ(recorder.Total(), 1u);
+        EXPECT_EQ(recorder.ActionAt(0), "ActInside"_intern);
     }
 
 }  // namespace BECore::Tests

@@ -15,6 +15,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <Common/UILayoutMatrix.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
@@ -251,16 +252,6 @@ namespace BECore::Tests {
             const size_t at = xml.find(what);
             ASSERT_NE(at, String::npos) << what;
             xml.replace(at, what.size(), with);
-        }
-
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
         }
 
         /// What reaches game code instead of a canvas: the board under the panel

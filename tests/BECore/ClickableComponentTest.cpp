@@ -11,6 +11,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <Generated/ClickableComponentTest.gen.hpp>
@@ -70,37 +71,18 @@ namespace BECore::Tests {
             }
         };
 
-        SDL_MouseButtonEvent MakeButton(float x, float y, bool down, uint8_t button = SDL_BUTTON_LEFT) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = button;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        SDL_MouseMotionEvent MakeMotion(float x, float y, SDL_MouseButtonFlags buttonsHeld = 0) {
-            SDL_MouseMotionEvent event{};
-            event.type = SDL_EVENT_MOUSE_MOTION;
-            event.x = x;
-            event.y = y;
-            event.state = buttonsHeld;
-            return event;
-        }
-
         bool Move(float x, float y, SDL_MouseButtonFlags buttonsHeld = 0) {
-            return CoreManager::GetUIInput().DispatchMouseMotion(MakeMotion(x, y, buttonsHeld));
+            return CoreManager::GetUIInput().DispatchMouseMotion(Motion(x, y, buttonsHeld));
         }
 
         bool Press(float x, float y, uint8_t button = SDL_BUTTON_LEFT, uint32_t which = 0) {
-            SDL_MouseButtonEvent event = MakeButton(x, y, true, button);
+            SDL_MouseButtonEvent event = Button(x, y, true, button);
             event.which = which;
             return CoreManager::GetUIInput().DispatchMouseButtonDown(event);
         }
 
         bool Release(float x, float y, uint8_t button = SDL_BUTTON_LEFT, uint32_t which = 0) {
-            SDL_MouseButtonEvent event = MakeButton(x, y, false, button);
+            SDL_MouseButtonEvent event = Button(x, y, false, button);
             event.which = which;
             return CoreManager::GetUIInput().DispatchMouseButtonUp(event);
         }

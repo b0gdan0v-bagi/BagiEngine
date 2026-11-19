@@ -19,6 +19,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -200,46 +201,9 @@ namespace BECore::Tests {
   </nodes></scene>
 </scenes></SceneManager>)";
 
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
         bool Near(const Rect& a, const Rect& b, float tolerance = 1e-2f) {
             return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
         }
-
-        /// The actions the buttons emit, with the value each carried, in order
-        class ActionLog : public SubscriptionHolder {
-        public:
-            ActionLog() {
-                Subscribe<InputEvents::ActionEvent, &ActionLog::OnAction>(this);
-            }
-
-            size_t Total() const {
-                return _actions.size();
-            }
-            PoolString LastAction() const {
-                return _actions.empty() ? PoolString{} : _actions.back();
-            }
-            PoolString LastValue() const {
-                return _values.empty() ? PoolString{} : _values.back();
-            }
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                _actions.push_back(event.action);
-                _values.push_back(event.value);
-            }
-
-            Vector<PoolString> _actions;
-            Vector<PoolString> _values;
-        };
 
         String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;

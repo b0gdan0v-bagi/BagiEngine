@@ -9,6 +9,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <Events/InputEvents.h>
 #include <Generated/SceneViewTest.gen.hpp>
 #include <gtest/gtest.h>
@@ -54,31 +55,6 @@ namespace BECore::Tests {
     </nodes>
   </scene>
 </scenes></SceneManager>)";
-
-        /// Collects every ActionEvent that is emitted while it is alive.
-        class ActionRecorder : public SubscriptionHolder {
-        public:
-            ActionRecorder() {
-                Subscribe<InputEvents::ActionEvent, &ActionRecorder::OnAction>(this);
-            }
-
-            Vector<PoolString> actions;
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& e) {
-                actions.push_back(e.action);
-            }
-        };
-
-        void EmitLeftClick(float x, float y) {
-            SDL_MouseButtonEvent button{};
-            button.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
-            button.button = SDL_BUTTON_LEFT;
-            button.down = true;
-            button.x = x;
-            button.y = y;
-            CoreManager::GetUIInput().DispatchMouseButtonDown(button);  // the way the window delivers it: a clickable is a target of UIInput
-        }
 
     }  // namespace
 
@@ -196,16 +172,16 @@ namespace BECore::Tests {
 
     TEST_F(SceneViewTest, ClickIsHitTestedInSceneUnits) {
         _manager->DrawAll();
-        ActionRecorder recorder;
+        ActionLog recorder;
 
         // Output (10, 10) is scene (5, -45), above the button even though the raw position is inside (0, 0, 100, 100).
-        EmitLeftClick(10.0f, 10.0f);
-        EXPECT_TRUE(recorder.actions.empty());
+        PressLeftAt(10.0f, 10.0f);
+        EXPECT_TRUE(recorder.Total() == 0);
 
         // Output (100, 150) is scene (50, 25), on the button even though the raw y is past its bottom edge.
-        EmitLeftClick(100.0f, 150.0f);
-        ASSERT_EQ(recorder.actions.size(), 1u);
-        EXPECT_EQ(recorder.actions[0], "Pressed"_intern);
+        PressLeftAt(100.0f, 150.0f);
+        ASSERT_EQ(recorder.Total(), 1u);
+        EXPECT_EQ(recorder.ActionAt(0), "Pressed"_intern);
     }
 
     // The view variants of a scene (the "Responsive" scene: default 1280 x 720, Portrait 720 x 1280, Wide 1600 x 600)

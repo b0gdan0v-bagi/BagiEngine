@@ -27,6 +27,7 @@
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/TextTestSupport.h>
+#include <Common/UIInputEvents.h>
 #include <Common/UITreeCompare.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
@@ -108,53 +109,6 @@ namespace BECore::Tests {
 </scenes></SceneManager>)";
 
         const Color kButtonColor{40, 90, 60, 255};
-
-        SDL_MouseButtonEvent Button(float x, float y, bool down, uint8_t button = SDL_BUTTON_LEFT) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = button;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        SDL_MouseMotionEvent Motion(float x, float y, SDL_MouseButtonFlags buttonsHeld = 0) {
-            SDL_MouseMotionEvent event{};
-            event.type = SDL_EVENT_MOUSE_MOTION;
-            event.x = x;
-            event.y = y;
-            event.state = buttonsHeld;
-            return event;
-        }
-
-        /// Counts the actions the buttons emit, by name
-        class ActionRecorder : public SubscriptionHolder {
-        public:
-            ActionRecorder() {
-                Subscribe<InputEvents::ActionEvent, &ActionRecorder::OnAction>(this);
-            }
-
-            int Count(const char* action) const {
-                return static_cast<int>(std::count(_actions.begin(), _actions.end(), PoolString::Intern(action)));
-            }
-            size_t Total() const {
-                return _actions.size();
-            }
-            /// The value of the last action, empty when there was none
-            PoolString LastValue() const {
-                return _values.empty() ? PoolString{} : _values.back();
-            }
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                _actions.push_back(event.action);
-                _values.push_back(event.value);
-            }
-
-            Vector<PoolString> _actions;
-            Vector<PoolString> _values;
-        };
 
         String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;
@@ -1129,7 +1083,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, AHiddenButtonTakesNoClicks) {
-        ActionRecorder actions;
+        ActionLog actions;
         Draw();
         auto& ok = El("Ok");
         const Rect c = Center(ok);
@@ -1411,7 +1365,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, AClickIsAPressAndItsReleaseOnTheButton) {
-        ActionRecorder actions;
+        ActionLog actions;
         Draw();
         auto& ok = El("Ok");
         const Rect c = Center(ok);
@@ -1423,7 +1377,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, ReleasingElsewhereCancelsTheClick) {
-        ActionRecorder actions;
+        ActionLog actions;
         Draw();
         auto& ok = El("Ok");
 
@@ -1438,7 +1392,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, OnlyTheLeftButtonClicks) {
-        ActionRecorder actions;
+        ActionLog actions;
         Draw();
         const Rect c = Center(El("Ok"));
 
@@ -1449,7 +1403,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, ADisabledButtonTakesTheClickAndDoesNothing) {
-        ActionRecorder actions;
+        ActionLog actions;
         Draw();
         auto& off = El("Off");
         const Rect c = Center(off);
@@ -1507,7 +1461,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, TheClickOfAButtonCarriesItsValue) {
-        ActionRecorder actions;
+        ActionLog actions;
         Draw();
         auto& ok = El("Ok");
         const Rect c = Center(ok);
@@ -1626,7 +1580,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, AGroupDisabledButtonIsGreyAndSwallowsTheClick) {
-        ActionRecorder actions;
+        ActionLog actions;
         auto& ok = El("Ok");
         ok.groupDisabled = true;
         Draw();

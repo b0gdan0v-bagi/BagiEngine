@@ -18,6 +18,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <Common/UIPartShapeChecks.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
@@ -153,25 +154,6 @@ namespace BECore::Tests {
         const Color kOnTrackAuthored{40, 50, 60, 255};
         const Color kThumbAuthored{70, 80, 90, 255};
 
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        SDL_MouseMotionEvent Motion(float x, float y, SDL_MouseButtonFlags held = 0) {
-            SDL_MouseMotionEvent event{};
-            event.type = SDL_EVENT_MOUSE_MOTION;
-            event.x = x;
-            event.y = y;
-            event.state = held;
-            return event;
-        }
-
         struct Point {
             float x = 0.0f;
             float y = 0.0f;
@@ -184,33 +166,6 @@ namespace BECore::Tests {
         bool Inside(const Rect& inner, const Rect& outer, float tolerance = 1e-3f) {
             return inner.x >= outer.x - tolerance && inner.y >= outer.y - tolerance && inner.x + inner.w <= outer.x + outer.w + tolerance && inner.y + inner.h <= outer.y + outer.h + tolerance;
         }
-
-        /// The actions the toggles emit, with the value each carried, in order
-        class ActionLog : public SubscriptionHolder {
-        public:
-            ActionLog() {
-                Subscribe<InputEvents::ActionEvent, &ActionLog::OnAction>(this);
-            }
-
-            size_t Total() const {
-                return _actions.size();
-            }
-            PoolString LastAction() const {
-                return _actions.empty() ? PoolString{} : _actions.back();
-            }
-            PoolString LastValue() const {
-                return _values.empty() ? PoolString{} : _values.back();
-            }
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                _actions.push_back(event.action);
-                _values.push_back(event.value);
-            }
-
-            Vector<PoolString> _actions;
-            Vector<PoolString> _values;
-        };
 
         void SetVar(const char* name, const char* value) {
             CoreManager::GetUIVars().Set(PoolString::Intern(name), value);

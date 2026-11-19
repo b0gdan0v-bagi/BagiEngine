@@ -19,6 +19,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Generated/UIComponentTest.gen.hpp>
 #include <gtest/gtest.h>
@@ -120,25 +121,6 @@ namespace BECore::Tests {
         const Color kFirstMark{1, 0, 0, 255};
         const Color kSecondMark{2, 0, 0, 255};
         const Color kKidColor{30, 30, 30, 255};
-
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        SDL_MouseMotionEvent Motion(float x, float y, SDL_MouseButtonFlags held) {
-            SDL_MouseMotionEvent event{};
-            event.type = SDL_EVENT_MOUSE_MOTION;
-            event.x = x;
-            event.y = y;
-            event.state = held;
-            return event;
-        }
 
         String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;

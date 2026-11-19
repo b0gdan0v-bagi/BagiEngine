@@ -12,6 +12,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -101,49 +102,6 @@ namespace BECore::Tests {
             return (static_cast<uint32_t>(color.r) << 24) | (static_cast<uint32_t>(color.g) << 16) | (static_cast<uint32_t>(color.b) << 8) | color.a;
         }
 
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        SDL_MouseMotionEvent Motion(float x, float y, bool held) {
-            SDL_MouseMotionEvent event{};
-            event.type = SDL_EVENT_MOUSE_MOTION;
-            event.x = x;
-            event.y = y;
-            event.state = held ? SDL_BUTTON_LMASK : 0;
-            return event;
-        }
-
-        struct Emitted {
-            PoolString action;
-            PoolString value;
-        };
-
-        class ActionRecorder : public SubscriptionHolder {
-        public:
-            ActionRecorder() {
-                Subscribe<InputEvents::ActionEvent, &ActionRecorder::OnAction>(this);
-            }
-            [[nodiscard]] const Vector<Emitted>& All() const {
-                return _actions;
-            }
-            [[nodiscard]] size_t Total() const {
-                return _actions.size();
-            }
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                _actions.push_back({event.action, event.value});
-            }
-            Vector<Emitted> _actions;
-        };
-
     }  // namespace
 
     class UIInputClickerTest : public ::testing::Test {
@@ -200,7 +158,7 @@ namespace BECore::Tests {
         }
 
         static bool MoveTo(float x, float y, bool held = false) {
-            return CoreManager::GetUIInput().DispatchMouseMotion(Motion(x, y, held));
+            return CoreManager::GetUIInput().DispatchMouseMotion(Motion(x, y, held ? SDL_BUTTON_LMASK : 0));
         }
         static bool Press(float x, float y) {
             return CoreManager::GetUIInput().DispatchMouseButtonDown(Button(x, y, true));
@@ -295,7 +253,7 @@ namespace BECore::Tests {
     // ---- the click --------------------------------------------------------------------------------------------------------------
 
     TEST_F(UIInputClickerTest, AClickEmitsTheActionWithItsValue) {
-        ActionRecorder actions;
+        ActionLog actions;
         Click(Get("Box"));
 
         ASSERT_EQ(actions.Total(), 1u);
@@ -304,7 +262,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIInputClickerTest, AClickWithNoValueEmitsAnEmptyOne) {
-        ActionRecorder actions;
+        ActionLog actions;
         Click(Get("Pic"));
 
         ASSERT_EQ(actions.Total(), 1u);
@@ -313,7 +271,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIInputClickerTest, APressAloneEmitsNothingTheClickIsTheRelease) {
-        ActionRecorder actions;
+        ActionLog actions;
         const Vec2 at = CenterOf(Get("Box"));
         MoveTo(at.x, at.y);
         EXPECT_TRUE(Press(at.x, at.y));
@@ -323,7 +281,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIInputClickerTest, DraggingOffTheElementCancelsTheClick) {
-        ActionRecorder actions;
+        ActionLog actions;
         const Vec2 at = CenterOf(Get("Box"));
         MoveTo(at.x, at.y);
         Press(at.x, at.y);
@@ -335,7 +293,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIInputClickerTest, AClickAnywhereInTheRectIsAClickOnTheElementAlsoOutsideItsPicture) {
-        ActionRecorder actions;
+        ActionLog actions;
         const UIElement& pic = Get("Pic");
         const float edge = pic.rect.x + 2.0f;  // the picture is 40 wide in the middle of 120: this point is outside it
         ASSERT_LT(edge, pic.rect.x + (pic.rect.w - pic.rect.h) * 0.5f);
@@ -349,7 +307,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIInputClickerTest, AClickerWithNoActionEmitsNothingButStillTakesTheClick) {
-        ActionRecorder actions;
+        ActionLog actions;
         const Vec2 at = CenterOf(Get("NoAction"));
         MoveTo(at.x, at.y);
         EXPECT_TRUE(Press(at.x, at.y));
@@ -359,7 +317,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIInputClickerTest, ADisabledClickerEmitsNothingButTakesThePressAndTheRelease) {
-        ActionRecorder actions;
+        ActionLog actions;
         const UIElement& off = Get("Off");
         EXPECT_TRUE(off.IsDisabled());
         const Vec2 at = CenterOf(off);
@@ -371,7 +329,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIInputClickerTest, AnElementOfADisabledGroupEmitsNothing) {
-        ActionRecorder actions;
+        ActionLog actions;
         UIElement& grouped = Get("Grouped");
         Click(grouped);
         ASSERT_EQ(actions.Total(), 1u);
@@ -388,7 +346,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIInputClickerTest, AnElementThatTheClickerDisablesAtRunTimeStopsEmitting) {
-        ActionRecorder actions;
+        ActionLog actions;
         Get("Box").GetComponent<UIInputClicker>()->disabled = true;
         Click(Get("Box"));
 
@@ -396,7 +354,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIInputClickerTest, AHiddenElementTakesNoClick) {
-        ActionRecorder actions;
+        ActionLog actions;
         Scene& scene = *_manager->GetSceneByName("Main"_intern);
         const Vec2 at = CenterOf(Get("Hide"));
         EXPECT_TRUE(UICanvasComponent::SetElementVisibleByName(scene, "Hide"_intern, false));
@@ -494,7 +452,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(Get("StillOff").IsDisabled());
         EXPECT_TRUE(Get("StillOff").GetVisualState().disabled);
 
-        ActionRecorder actions;
+        ActionLog actions;
         Click(Get("Still"));
         ASSERT_EQ(actions.Total(), 1u);
         EXPECT_EQ(actions.All()[0].action, "StillAction"_intern);

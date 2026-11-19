@@ -23,6 +23,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <Events/SubscriptionHolder.h>
@@ -118,24 +119,6 @@ namespace BECore::Tests::MigrationTwin {
             names.push_back(String((*it)[1].first, (*it)[1].second));
         }
         return names;
-    }
-
-    inline SDL_MouseButtonEvent Button(float x, float y, bool down) {
-        SDL_MouseButtonEvent event{};
-        event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-        event.button = SDL_BUTTON_LEFT;
-        event.down = down;
-        event.x = x;
-        event.y = y;
-        return event;
-    }
-
-    inline SDL_MouseMotionEvent Motion(float x, float y) {
-        SDL_MouseMotionEvent event{};
-        event.type = SDL_EVENT_MOUSE_MOTION;
-        event.x = x;
-        event.y = y;
-        return event;
     }
 
     /// The actions that went out, as "action=value" lines

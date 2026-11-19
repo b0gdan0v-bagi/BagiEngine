@@ -16,6 +16,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <Common/UIPartShapeChecks.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
@@ -133,25 +134,6 @@ namespace BECore::Tests {
 
         constexpr float kEpsilon = 1e-2f;
 
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        SDL_MouseMotionEvent Motion(float x, float y, SDL_MouseButtonFlags held = 0) {
-            SDL_MouseMotionEvent event{};
-            event.type = SDL_EVENT_MOUSE_MOTION;
-            event.x = x;
-            event.y = y;
-            event.state = held;
-            return event;
-        }
-
         bool Near(const Rect& a, const Rect& b, float tolerance = kEpsilon) {
             return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
         }
@@ -159,44 +141,6 @@ namespace BECore::Tests {
         bool Inside(const Rect& inner, const Rect& outer, float tolerance = 1e-3f) {
             return inner.x >= outer.x - tolerance && inner.y >= outer.y - tolerance && inner.x + inner.w <= outer.x + outer.w + tolerance && inner.y + inner.h <= outer.y + outer.h + tolerance;
         }
-
-        /// The actions the sliders emit, with the value each carried, in order
-        class ActionLog : public SubscriptionHolder {
-        public:
-            ActionLog() {
-                Subscribe<InputEvents::ActionEvent, &ActionLog::OnAction>(this);
-            }
-
-            size_t Total() const {
-                return _actions.size();
-            }
-            size_t Count(const char* action) const {
-                return static_cast<size_t>(std::count(_actions.begin(), _actions.end(), PoolString::Intern(action)));
-            }
-            String LastValue() const {
-                return _values.empty() ? String{} : String(_values.back().ToStringView().data(), _values.back().ToStringView().size());
-            }
-            /// The values of one action, joined with spaces
-            String Values(const char* action) const {
-                String joined;
-                for (size_t i = 0; i < _actions.size(); ++i) {
-                    if (_actions[i] == PoolString::Intern(action)) {
-                        joined += joined.empty() ? "" : " ";
-                        joined.append(_values[i].ToStringView().data(), _values[i].ToStringView().size());
-                    }
-                }
-                return joined;
-            }
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                _actions.push_back(event.action);
-                _values.push_back(event.value);
-            }
-
-            Vector<PoolString> _actions;
-            Vector<PoolString> _values;
-        };
 
         String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;
@@ -349,7 +293,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(volume.IsInteractive());
         ActionLog actions;
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.5f));
-        EXPECT_EQ(actions.LastValue(), "0.5");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.5");
         EXPECT_FALSE(volume.IsDisabled());
     }
 
@@ -450,23 +394,23 @@ namespace BECore::Tests {
         const Rect& volume = RectOf("Volume");
 
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.0f));
-        EXPECT_EQ(actions.LastValue(), "0");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0");
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.5f));
-        EXPECT_EQ(actions.LastValue(), "0.5");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.5");
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 1.0f));
-        EXPECT_EQ(actions.LastValue(), "1");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "1");
         EXPECT_EQ(actions.Count("SliderCompVolume"), 3u);
 
         // The edges of the rect and everything within half a thumb of them are the ends
         for (const float x : {volume.x, volume.x + 1.0f, volume.x + 27.0f}) {
             ASSERT_TRUE(Down("Volume", x));
             ASSERT_TRUE(Up(x, MiddleY("Volume")));
-            EXPECT_EQ(actions.LastValue(), "0") << x;
+            EXPECT_EQ(actions.LastValue().ToStringView(), "0") << x;
         }
         for (const float x : {volume.x + volume.w - 27.0f, volume.x + volume.w - 1.0f, volume.x + volume.w - 0.01f}) {
             ASSERT_TRUE(Down("Volume", x));
             ASSERT_TRUE(Up(x, MiddleY("Volume")));
-            EXPECT_EQ(actions.LastValue(), "1") << x;
+            EXPECT_EQ(actions.LastValue().ToStringView(), "1") << x;
         }
     }
 
@@ -476,7 +420,7 @@ namespace BECore::Tests {
         const Rect& rect = RectOf("Volume");
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.3f));
         ASSERT_EQ(actions.Total(), 1u);
-        EXPECT_EQ(actions.LastValue(), "0.3");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.3");
 
         Draw();
         EXPECT_FALSE(CoreManager::GetUIVars().Has("volume"_intern)) << "the slider does not set the variable";
@@ -494,41 +438,41 @@ namespace BECore::Tests {
         ActionLog actions;
         // step 0.1: 0.3 and never 0.30000001
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.3f));
-        EXPECT_EQ(actions.LastValue(), "0.3");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.3");
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.7f));
-        EXPECT_EQ(actions.LastValue(), "0.7");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.7");
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.34f));
-        EXPECT_EQ(actions.LastValue(), "0.3");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.3");
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.36f));
-        EXPECT_EQ(actions.LastValue(), "0.4");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.4");
         // step 1 over 0..10: "7", not "7.0"
         ASSERT_NO_FATAL_FAILURE(Tap("Unit", 0.7f));
-        EXPECT_EQ(actions.LastValue(), "7");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "7");
         ASSERT_NO_FATAL_FAILURE(Tap("Fine", 0.35f));
-        EXPECT_EQ(actions.LastValue(), "35");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "35");
         ASSERT_NO_FATAL_FAILURE(Tap("Fine", 0.372f));
-        EXPECT_EQ(actions.LastValue(), "35");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "35");
         ASSERT_NO_FATAL_FAILURE(Tap("Fine", 0.39f));
-        EXPECT_EQ(actions.LastValue(), "40");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "40");
         ASSERT_NO_FATAL_FAILURE(Tap("Quarter", 0.3f));
-        EXPECT_EQ(actions.LastValue(), "0.25");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.25");
         ASSERT_NO_FATAL_FAILURE(Tap("Quarter", 0.4f));
-        EXPECT_EQ(actions.LastValue(), "0.5");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.5");
         // a continuous slider writes what is under the pointer, short
         ASSERT_NO_FATAL_FAILURE(Tap("Free", 0.5f));
-        EXPECT_EQ(actions.LastValue(), "0.5");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.5");
     }
 
     TEST_F(UISliderComponentTest, ARangeThatIsNotAWholeNumberOfStepsStillReachesItsMaximum) {
         ActionLog actions;
         ASSERT_NO_FATAL_FAILURE(Tap("Odd", 1.0f));
-        EXPECT_EQ(actions.LastValue(), "1");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "1");
         ASSERT_NO_FATAL_FAILURE(Tap("Odd", 0.9f));
-        EXPECT_EQ(actions.LastValue(), "0.9");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.9");
         ASSERT_NO_FATAL_FAILURE(Tap("Odd", 0.3f));
-        EXPECT_EQ(actions.LastValue(), "0.3");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.3");
         ASSERT_NO_FATAL_FAILURE(Tap("Odd", 0.0f));
-        EXPECT_EQ(actions.LastValue(), "0");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0");
     }
 
     TEST_F(UISliderComponentTest, AValueReadBackFromTheVariableLandsOnTheSameThumb) {
@@ -672,7 +616,7 @@ namespace BECore::Tests {
     TEST_F(UISliderComponentTest, AnEmptyOrReversedRangeAsksForTheMinimumOnly) {
         ActionLog actions;
         ASSERT_NO_FATAL_FAILURE(Tap("Reversed", 0.7f));
-        EXPECT_EQ(actions.LastValue(), "1") << "the minimum value of the range as written";
+        EXPECT_EQ(actions.LastValue().ToStringView(), "1") << "the minimum value of the range as written";
         EXPECT_FLOAT_EQ(Slider("Reversed").GetFraction(), 0.0f);
         SetVar("reversed", "0.5");
         EXPECT_FLOAT_EQ(Slider("Reversed").GetFraction(), 0.0f);
@@ -685,7 +629,7 @@ namespace BECore::Tests {
         const Rect& narrow = RectOf("Narrow");
         EXPECT_TRUE(Inside(UISliderComponent::GetParts(narrow, 1.0f).thumb, narrow));
         ASSERT_NO_FATAL_FAILURE(Tap("Narrow", 1.0f));
-        EXPECT_EQ(actions.LastValue(), "0");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0");
         const float x = narrow.x + narrow.w - 1.0f;
         ASSERT_TRUE(Down("Narrow", x));
         ASSERT_TRUE(Up(x, MiddleY("Narrow")));

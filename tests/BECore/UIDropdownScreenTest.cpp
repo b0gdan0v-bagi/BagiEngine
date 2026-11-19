@@ -16,6 +16,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <Common/UILayoutMatrix.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
@@ -191,16 +192,6 @@ namespace BECore::Tests {
                 "<element type=\"UIElement\" name=\"LevelEasyCaption\" flex=\"1\" height=\"100%\"><components><component type=\"UITextComponent\" text=\"{#level.easy}\" align=\"Center\" "
                 "verticalAlign=\"Center\" overflow=\"Ellipsis\" wrap=\"false\"/></components></element></children></element>";
             xml.replace(begin, endTag + String("</element>").size() - begin, icon);
-        }
-
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
         }
 
         size_t Characters(StringView text) {
