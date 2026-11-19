@@ -11,6 +11,7 @@
 #include <Widgets/ImGuiTheme.h>
 #include <cstdio>
 #include <imgui.h>
+#include <system_error>
 
 namespace BECore {
 
@@ -19,8 +20,14 @@ namespace BECore {
         constexpr float kPictureSize = 72.0f;
         constexpr size_t kLabelSize = 64;
         constexpr const char* kSectionLabel = "Reference (optional)";
-        constexpr const char* kWeightTip = "How strongly the picture counts: higher keeps more of it (init) or of its style (style)";
-        constexpr const char* kEmptyNote = "No reference. Use as reference on a variant or an accepted sprite fills it; a preset's own reference applies while it is empty.";
+        constexpr StringView kShapeMode = "structure";
+        constexpr const char* kWeightTip = "How strongly the picture counts: higher keeps more of it (init), applies its style harder (style) or follows its shape more strictly (structure)";
+        constexpr const char* kEmptyNote =
+            "No reference. Type the path of a picture or a sketch above (a sketch's lines are the shape), or use Use as reference or Use as shape on a variant or an accepted sprite; "
+            "a preset's own reference applies while it is empty.";
+        constexpr const char* kFileTip = "A picture or a sketch of any size: a path inside the game folder is kept relative to it, a pasted path may carry quotes";
+        constexpr const char* kUseFileTip = "Put this file into the slot: with the slot's mode, or as the shape (structure) when the slot is empty. It must exist";
+        constexpr const char* kFileMissingNote = "No such file.";
         constexpr const char* kFilledNote = "Sent with the next single Generate; it replaces the preset's own reference.";
         constexpr size_t kPresetPathSize = 512;
         constexpr const char* kPresetNote = "The reference saved with this preset. A Generate or Queue with a filled slot above replaces it for that run.";
@@ -136,9 +143,33 @@ namespace BECore {
         ImGui::EndDisabled();
     }
 
+    void ArtGenReferencePanel::DrawFileField(ArtGenSession& session) {
+        if (ImGui::InputTextWithHint("File##referenceFile", "sketch.png", _typedPath, sizeof(_typedPath))) {
+            _fileMissing = false;
+        }
+        ItemTooltip(kFileTip);
+        if (IconTextButton(ICON_LC_FILE_IMAGE, "Use file", kUseFileTip)) {
+            const Optional<ArtGenReference>& slot = session.GetReferenceSlot();
+            const StringView mode = slot ? StringView(slot->mode) : kShapeMode;
+            const StringView root(session.GetGameRoot());
+            Optional<ArtGenReference> typed = ArtGenReferenceOfTypedPath(root, StringView(_typedPath), mode);
+            std::error_code error;
+            const String file = typed ? ArtGenReferenceFilePath(root, StringView(typed->image)) : String();
+            _fileMissing = !typed || !std::filesystem::is_regular_file(std::filesystem::path(ToStd(StringView(file))), error);  //-NoStd: std::filesystem::path takes a std::string
+            if (!_fileMissing) {
+                session.SetReferenceSlot(std::move(*typed));
+            }
+        }
+        if (_fileMissing) {
+            ImGui::SameLine();
+            ImGui::TextColored(GetImGuiPalette().warning, "%s", kFileMissingNote);
+        }
+    }
+
     void ArtGenReferencePanel::Draw(ArtGenSession& session) {
         const auto& palette = GetImGuiPalette();
         ImGui::SeparatorText(kSectionLabel);
+        DrawFileField(session);
         const Optional<ArtGenReference>& slot = session.GetReferenceSlot();
         if (!slot) {
             DropThumbnail();
