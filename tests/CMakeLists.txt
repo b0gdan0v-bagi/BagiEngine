@@ -69,7 +69,7 @@ if(Python3_FOUND)
     # 4 compiles at once, so no RUN_SERIAL (it would stop the other slots while it waits and runs).
     set(HEADERS_STANDALONE_EXCLUDE)
     if(NOT ENGINE_UI_RMLUI)
-        set(HEADERS_STANDALONE_EXCLUDE --exclude src/Modules/RmlUiHost)
+        set(HEADERS_STANDALONE_EXCLUDE --exclude src/Modules/RmlUiHost --exclude tests/RmlUiHost)
     endif()
     add_test(NAME BagiHeadersStandalone
         COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_headers.py --root ${BAGI_ENGINE_DIR} --build ${CMAKE_BINARY_DIR}

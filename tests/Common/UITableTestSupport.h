@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Config/XmlConfig.h>
+#include <BECore/Config/XmlNode.h>
 #include <BECore/Types/Types.h>
 #include <gtest/gtest.h>
 

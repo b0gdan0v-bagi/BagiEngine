@@ -2,8 +2,8 @@
 
 #include <BECore/Format/Format.h>
 #include <BECore/Types/Types.h>
+#include <Common/TestFiles.h>
 #include <filesystem>
-#include <fstream>
 #include <gtest/gtest.h>
 #include <random>
 
@@ -49,7 +49,7 @@ namespace BECore::Tests {
 
         /// Writes a file and returns its absolute path, which the file system takes as it is
         String Write(const char* name, const String& content) const {
-            std::ofstream(_path / name).write(content.data(), static_cast<std::streamsize>(content.size()));
+            WriteFile(_path / name, content);
             return PathOf(name);
         }
 
