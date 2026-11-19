@@ -815,6 +815,11 @@ if(ENGINE_BUILD_TESTS)
     # BagiEngineTestSupport: main(), the engine environment and the assert bridge shared by every gtest executable
     add_subdirectory(${BAGI_ENGINE_DIR}/tests/Common)
 
+    # The helpers below label their entries: unit (the gtest cases), smoke (the control smoke test), scenario (the scenario
+    # files and their QA replays). The test presets select by label (.claude/rules/build-project.md, "Tests"): the default one
+    # leaves out extended, the label of an entry that only the full run (<preset>-all) needs; a game marks its own entry so in
+    # set_tests_properties.
+
     # be_add_game_tests(<Name> SOURCES <files>... [LINK <targets>...])
     # gtest executable on top of BagiEngineTestSupport, registered with ctest (one process per test, so the
     # global engine state cannot leak between tests). Tests run in the top build folder (inside the repository, so
@@ -868,7 +873,7 @@ if(ENGINE_BUILD_TESTS)
 
         be_deploy_runtime_libs(${NAME})
 
-        gtest_discover_tests(${NAME} DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+        gtest_discover_tests(${NAME} DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" PROPERTIES LABELS unit)
     endfunction()
 
     # be_add_game_control_tests(<ExeTarget> [SCRIPT <file>])
@@ -903,6 +908,7 @@ if(ENGINE_BUILD_TESTS)
             TIMEOUT 120
             RESOURCE_LOCK bagi_control_smoke
             ENVIRONMENT "BAGI_ENGINE_DIR=${BAGI_ENGINE_DIR}"
+            LABELS smoke
         )
     endfunction()
 
@@ -946,6 +952,7 @@ if(ENGINE_BUILD_TESTS)
                 TIMEOUT 120
                 RESOURCE_LOCK bagi_control_smoke
                 ENVIRONMENT "BAGI_ENGINE_DIR=${BAGI_ENGINE_DIR}"
+                LABELS scenario
             )
             if(ARG_INVARIANTS)
                 set(REPLAY_NAME ${EXE_TARGET}QaReplay.${SCENARIO_NAME})
@@ -955,6 +962,7 @@ if(ENGINE_BUILD_TESTS)
                     TIMEOUT 120
                     RESOURCE_LOCK bagi_control_smoke
                     ENVIRONMENT "BAGI_ENGINE_DIR=${BAGI_ENGINE_DIR}"
+                    LABELS scenario
                 )
             endif()
         endforeach()

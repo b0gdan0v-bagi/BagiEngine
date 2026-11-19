@@ -20,7 +20,8 @@ be_add_headless_executable(BagiRoomServer
 # another process, and runs BagiRoomClientProbe (RoomClient) against it. Does not build the executables (a missing server is a skip, exit code
 # 77; a missing probe skips its scenarios). The RESOURCE_LOCK keeps it apart from the other
 # smoke tests of one ctest run; it is not RUN_SERIAL, which would stop every other test while it runs. TIMEOUT 120 is far above the few seconds a
-# run takes; a stuck server is cut off by the script's own limits first
+# run takes; a stuck server is cut off by the script's own limits first. Both entries are labelled extended: seconds of processes and sockets
+# for the room server alone, so the everyday run leaves them to the full one (<preset>-all; the smoke one is also in <preset>-smoke)
 if(ENGINE_BUILD_TESTS AND Python3_FOUND)
     set(ROOM_SMOKE_PROBE_ARGS "")
     if(TARGET BagiRoomClientProbe)
@@ -31,6 +32,7 @@ if(ENGINE_BUILD_TESTS AND Python3_FOUND)
         SKIP_RETURN_CODE 77
         TIMEOUT 120
         RESOURCE_LOCK bagi_room_server_smoke
+        LABELS "smoke;extended"
     )
     # ctest entry BagiRoomServerHostile: tools/rooms/hostile.py attacks the executable with hand-built frames while a good table plays. The same skip
     # rule and lock as the smoke test; a run takes about 15 s, TIMEOUT 180 is the stuck-server bound
@@ -39,5 +41,6 @@ if(ENGINE_BUILD_TESTS AND Python3_FOUND)
         SKIP_RETURN_CODE 77
         TIMEOUT 180
         RESOURCE_LOCK bagi_room_server_smoke
+        LABELS extended
     )
 endif()
