@@ -1772,6 +1772,154 @@ namespace BECore::Tests {
         EXPECT_FALSE(gAccepted[0].image);
     }
 
+    // ---- an atlas group of the set (Sets/CLAUDE.md, "Accept all") ----
+
+    namespace {
+
+        /// A poll whose catalog gives the saved preset `wood` the content @p woodAtlas for its `atlas` key (null: no key)
+        Json PollWithWoodAtlas(const Json& woodAtlas) {
+            Json params = ReadyPoll();
+            Json wood = params["presets"][0];
+            wood["preset"] = Json{{"preset", 1}, {"workflow", "txt2img"}, {"prompt", "{subject}"}};
+            if (!woodAtlas.is_null()) {
+                wood["preset"]["atlas"] = woodAtlas;
+            }
+            Json knock = params["presets"][1];
+            knock["preset"] = Json{{"preset", 1}, {"workflow", "sound"}, {"prompt", "{subject}"}, {"atlas", "pieces"}};
+            params["presets"] = Json::array({wood, knock});
+            return params;
+        }
+
+        Json EnqueueParams(StringView set) {
+            Json params = Json::object();
+            params["preset"] = "wood";
+            params["subjects"] = "a\nb";
+            params["set"] = ToStdString(set);
+            params["seed"] = kSetSeed;
+            return params;
+        }
+
+    }  // namespace
+
+    TEST_F(ArtGenSetSessionTest, EnqueueRecordsTheAtlasGroupInTheSetItsManifestAndTheState) {
+        Json params = EnqueueParams("grouped");
+        params["atlas"] = "pieces";
+        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", params)), "");
+        EXPECT_EQ(session.FindSet("grouped")->atlas, "pieces");
+        EXPECT_EQ(OnDisk("grouped").atlas, "pieces");
+
+        Json setParams = Json::object();
+        setParams["set"] = "grouped";
+        EXPECT_EQ(*FindJsonMember(Result(Call("artgen_set", setParams)), "atlas"), Json("pieces"));
+        const Json state = Result(Call("artgen_state"));
+        EXPECT_EQ(*FindJsonMember((*FindJsonMember(state, "sets"))[0], "atlas"), Json("pieces"));
+
+        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", EnqueueParams("plain"))), "");
+        EXPECT_TRUE(session.FindSet("plain")->atlas.empty());
+        EXPECT_TRUE(FindJsonMember((*FindJsonMember(Result(Call("artgen_state")), "sets"))[1], "atlas")->is_null());
+        ReloadFromDisk();
+        EXPECT_EQ(session.FindSet("grouped")->atlas, "pieces") << "a reload of the sets keeps it";
+    }
+
+    TEST_F(ArtGenSetSessionTest, EnqueueTakesTheGroupOfTheSavedPresetAndAnEmptyStringClearsIt) {
+        Call("artgen_poll", PollWithWoodAtlas("icons"));
+        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", EnqueueParams("by_preset"))), "");
+        EXPECT_EQ(session.FindSet("by_preset")->atlas, "icons");
+
+        Json cleared = EnqueueParams("cleared");
+        cleared["atlas"] = "";
+        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", cleared)), "");
+        EXPECT_TRUE(session.FindSet("cleared")->atlas.empty());
+
+        Json other = EnqueueParams("other");
+        other["atlas"] = "tiles";
+        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", other)), "");
+        EXPECT_EQ(session.FindSet("other")->atlas, "tiles");
+
+        Call("artgen_poll", PollWithWoodAtlas("changed"));
+        EXPECT_EQ(session.FindSet("by_preset")->atlas, "icons") << "editing the preset later does not reach the set";
+        Call("artgen_poll", PollWithWoodAtlas(Json()));
+        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", EnqueueParams("none"))), "");
+        EXPECT_TRUE(session.FindSet("none")->atlas.empty());
+    }
+
+    TEST_F(ArtGenSetSessionTest, ADraftSetTakesItsOwnGroupNeverTheSavedPresets) {
+        Call("artgen_poll", PollWithWoodAtlas("saved"));
+        ArtGenSetRequest request;
+        request.preset = "form";
+        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","atlas":"drafted"})").value();
+        request.subjects = ParseArtGenSubjects("a").value();
+        request.name = "with_group";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        EXPECT_EQ(session.FindSet("with_group")->atlas, "drafted");
+
+        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}"})").value();
+        request.preset = "wood";
+        request.name = "without_group";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        EXPECT_TRUE(session.FindSet("without_group")->atlas.empty());
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASoundSetTakesNoGroup) {
+        Call("artgen_poll", PollWithWoodAtlas(Json()));
+        Json params = Json::object();
+        params["preset"] = "knock";
+        params["subjects"] = "click";
+        params["set"] = "heard";
+        EXPECT_EQ(ErrorCode(Call("artgen_enqueue", params)), "") << "a group the sound preset names is ignored";
+        EXPECT_TRUE(session.FindSet("heard")->atlas.empty());
+
+        params["set"] = "refused";
+        params["atlas"] = "pieces";
+        const Json refused = Call("artgen_enqueue", params);
+        EXPECT_EQ(ErrorCode(refused), "invalid_params");
+        EXPECT_NE(ErrorMessage(refused).find("only an image set can have an atlas"), String::npos) << ErrorMessage(refused).c_str();
+        EXPECT_EQ(session.FindSet("refused"), nullptr);
+    }
+
+    TEST_F(ArtGenSetSessionTest, EnqueueRefusesABadAtlasAndKeepsNothing) {
+        for (const Json& bad : {Json("a b"), Json("../x"), Json(5), Json::array(), Json(true), Json(ToStdString(String(65, 'a')))}) {
+            Json params = EnqueueParams("bad");
+            params["atlas"] = bad;
+            EXPECT_EQ(ErrorCode(Call("artgen_enqueue", params)), "invalid_params") << DumpJson(bad).c_str();
+        }
+        EXPECT_TRUE(session.GetSets().empty());
+
+        ArtGenSetRequest request;
+        request.preset = "wood";
+        request.subjects = ParseArtGenSubjects("a").value();
+        request.atlas = "bad name";
+        EXPECT_FALSE(session.EnqueueSet(request).has_value()) << "the model checks it too";
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASwitchOfALiveRowOfAGroupSetPassesTheGroupAndPacksAtOnce) {
+        ArtGenSetRequest request;
+        request.preset = "wood";
+        request.subjects = ParseArtGenSubjects("a\nb").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "grouped";
+        request.atlas = "pieces";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("grouped")), "");
+        gPlans.clear();
+
+        ASSERT_EQ(session.PickVariant("grouped", "a", kSetSeed), ArtGenSetEdit::Ok);
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_EQ(gPlans[0].atlas, "pieces");
+        EXPECT_FALSE(gPlans[0].deferPack) << "a switch repacks at once";
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASwitchOfALiveRowOfASetWithoutAGroupPassesNone) {
+        ASSERT_NO_FATAL_FAILURE(FinishAndAccept("loose", "a\nb"));
+        ASSERT_EQ(session.PickVariant("loose", "a", kSetSeed), ArtGenSetEdit::Ok);
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_TRUE(gPlans[0].atlas.empty());
+        EXPECT_FALSE(gPlans[0].deferPack);
+    }
+
     // ---- one frame for the whole set (Sets/CLAUDE.md, "Accept all") ----
 
     TEST_F(ArtGenSetSessionTest, TheFirstAcceptAllMeasuresOnceOverEveryVariantAndStoresTheFrame) {

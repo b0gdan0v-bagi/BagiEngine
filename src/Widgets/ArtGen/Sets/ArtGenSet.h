@@ -87,6 +87,7 @@ namespace BECore {
         Vector<ArtGenSetJob> jobs;
         Optional<ArtGenSetProcessing> processing;  // an image set: none until the first Accept all (or for good, see IsLegacyAccepted)
         Optional<ArtGenReference> reference;       // the picture every job's run is given (a style source); none: the preset's own `reference` applies
+        String atlas;                              // an image set: the atlas group its sprites join and are packed into; empty: loose PNGs
     };
 
     /// The set name or job name from a subject: "White Knight!" -> "white_knight". Lowercase letters and digits, one `_` between words,

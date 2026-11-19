@@ -502,6 +502,7 @@ namespace BECore {
             manifest["processing"] = Json(nullptr);
         }
         manifest["reference"] = set.reference ? ArtGenReferenceToJson(*set.reference) : Json(nullptr);
+        manifest["atlas"] = set.atlas.empty() ? Json(nullptr) : MakeJsonString(set.atlas);
         return manifest;
     }
 
@@ -601,6 +602,19 @@ namespace BECore {
                 return std::unexpected(Format("manifest: {}", read.error()));
             }
             set.reference = std::move(*read);
+        }
+
+        // Absent in a manifest from before atlases (the format number stays 1: the key is additive)
+        const Json* atlas = FindJsonMember(manifest, "atlas");
+        if (atlas != nullptr && !atlas->is_null()) {
+            auto group = RequireString(manifest, "atlas", top);
+            if (!group) {
+                return std::unexpected(group.error());
+            }
+            if (!IsValidSpriteName(*group)) {
+                return std::unexpected(Format("manifest: 'atlas' '{}' is not a valid atlas group name", *group));
+            }
+            set.atlas = std::move(*group);
         }
         return set;
     }

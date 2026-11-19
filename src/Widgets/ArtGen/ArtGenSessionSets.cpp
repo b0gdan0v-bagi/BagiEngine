@@ -109,9 +109,12 @@ namespace BECore {
             return variant;
         }
 
-        /// How a row of an image set is written: through the set's frame, or (a legacy set, or settings that change nothing) as the PNG is
-        ArtGenImagePlan PlanOf(const Optional<ArtGenSetProcessing>& processing) {
+        /// How a row of an image set is written: through the set's frame, or (a legacy set, or settings that change nothing) as the PNG is;
+        /// it joins the atlas @p atlas of the set (empty: none), which is packed after the row unless @p deferPack
+        ArtGenImagePlan PlanOf(const Optional<ArtGenSetProcessing>& processing, const String& atlas, bool deferPack) {
             ArtGenImagePlan plan;
+            plan.atlas = atlas;
+            plan.deferPack = deferPack;
             if (processing) {
                 plan.settings = processing->settings;
                 plan.frame = processing->frame;
@@ -346,6 +349,20 @@ namespace BECore {
         // The catalog is empty until the service has polled, so this is a guess; StartJob and the first reported variant settle it
         set.kind = String(kKindImage);
         set.kind = KindOfSet(set);
+        // Like the frame and the reference, the group is taken now: editing the preset later does not move the set's sprites
+        const String group = request.atlas ? *request.atlas : AtlasOf(set.presetData, StringView(set.preset));
+        if (!group.empty()) {
+            if (!IsValidSpriteName(group)) {
+                return std::unexpected(String("'atlas' is an atlas group name of 1 to 64 of A-Z a-z 0-9 _ -, or \"\" for none"));
+            }
+            if (set.kind != kKindImage) {
+                if (request.atlas) {
+                    return std::unexpected(Format("'atlas': the preset '{}' makes {}s, only an image set can have an atlas", request.preset, set.kind));
+                }
+            } else {
+                set.atlas = group;
+            }
+        }
         if (inherited) {
             if (set.kind != kKindImage) {
                 return std::unexpected(Format("'frameOf': the preset '{}' makes {}s, only an image set takes a frame", request.preset, set.kind));
@@ -663,7 +680,8 @@ namespace BECore {
         if (!variant) {
             return fail(Format("the job '{}': {}", job->name, variant.error()));
         }
-        auto answer = sound ? _soundAcceptor(*variant, ArtGenSoundTarget{name, String()}, ArtGenSoundSettings{}, nullptr) : _acceptor(*variant, name, PlanOf(set->processing), nullptr);
+        auto answer =
+            sound ? _soundAcceptor(*variant, ArtGenSoundTarget{name, String()}, ArtGenSoundSettings{}, nullptr) : _acceptor(*variant, name, PlanOf(set->processing, set->atlas, false), nullptr);
         if (!answer) {
             return fail(Format("the job '{}': {}", job->name, answer.error().message));
         }
@@ -702,7 +720,10 @@ namespace BECore {
                                   "comes out the size of the others; refused when the set is unknown, a sound set or has no frame"},
                  ControlParamInfo{"reference", "object", false,
                                   "{mode, image, weight?}: the picture every job's images start from or are drawn in the style of (as artgen_generate's), kept in the set so Retry and more "
-                                  "variants use it; a sound has none, so a sound set's jobs fail"}}});
+                                  "variants use it; a sound has none, so a sound set's jobs fail"},
+                 ControlParamInfo{"atlas", "string", false,
+                                  "an image set: the atlas group its sprites join, packed into assets/atlases/<group>.png (Accept all packs once); \"\" for none; missing takes the preset's "
+                                  "atlas key at this call, and the set keeps it; refused for a sound set"}}});
         service.DescribeMethod("artgen_set", ControlMethodInfo{"One set as its manifest.json, plus state (Active while a job is pending or running, else Complete)",
                                                                {ControlParamInfo{"set", "string", true, "the set's name"}}});
         service.DescribeMethod("artgen_pick",
@@ -785,6 +806,13 @@ namespace BECore {
                 return std::unexpected(InvalidParams(reference.error()));
             }
             request.reference = std::move(*reference);
+        }
+        if (IsGiven(params, "atlas")) {
+            const auto atlas = GetJsonString(params, "atlas");
+            if (!atlas || (!atlas->empty() && !IsValidSpriteName(StringView(*atlas)))) {
+                return std::unexpected(InvalidParams("'atlas' must be an atlas group name (1 to 64 of A-Z a-z 0-9 _ -) or \"\" for none"));
+            }
+            request.atlas = *atlas;
         }
         auto name = EnqueueSet(std::move(request));
         if (!name) {
@@ -1002,7 +1030,7 @@ namespace BECore {
             }
             processing = std::move(*measured);
         }
-        const ArtGenImagePlan imagePlan = PlanOf(processing);
+        const ArtGenImagePlan imagePlan = PlanOf(processing, sound ? String() : set->atlas, false);
 
         // A failure halfway leaves the rows done marked in the manifest; the call can be made again, an accept replaces the same name
         Json accepted = Json::array();
@@ -1211,6 +1239,7 @@ namespace BECore {
             item["live"] = CountLive(set);
             item["kept"] = CountKept(set);
             item["reference"] = set.reference ? ArtGenReferenceToJson(*set.reference) : Json();
+            item["atlas"] = set.atlas.empty() ? Json() : ToJsonString(set.atlas);
             sets.push_back(std::move(item));
         }
         return sets;
