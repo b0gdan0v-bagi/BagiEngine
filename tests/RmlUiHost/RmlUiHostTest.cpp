@@ -107,6 +107,25 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
             return event;
         }
 
+        SDL_MouseWheelEvent Wheel(float x, float y, float mouseX, float mouseY, SDL_MouseWheelDirection direction = SDL_MOUSEWHEEL_NORMAL) {
+            SDL_MouseWheelEvent event{};
+            event.type = SDL_EVENT_MOUSE_WHEEL;
+            event.x = x;
+            event.y = y;
+            event.direction = direction;
+            event.mouse_x = mouseX;
+            event.mouse_y = mouseY;
+            return event;
+        }
+
+        // A box of 200 x 100 dp at (100, 100) whose content is larger in both directions
+        constexpr const char* kScrollMarkup = R"(<div id="box"><div id="content"></div></div>)";
+        constexpr const char* kScrollStyle = "div { display: block; }\n#box { position: absolute; left: 100dp; top: 100dp; width: 200dp; height: 100dp; overflow: scroll; pointer-events: auto; }\n"
+                                             "#content { width: 600dp; height: 600dp; }";
+        constexpr float kInsideTheBoxX = 150.0f;
+        constexpr float kInsideTheBoxY = 150.0f;
+        constexpr int kScrollFrames = 8;  // RmlUi scrolls a wheel step smoothly over the frames that follow
+
         SDL_MouseMotionEvent Motion(float x, float y, SDL_MouseButtonFlags buttonsHeld = 0) {
             SDL_MouseMotionEvent event{};
             event.type = SDL_EVENT_MOUSE_MOTION;
@@ -272,6 +291,14 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         void DrawFile() {
             _renderer->ClearCalls();
             _fileManager->DrawAll();
+        }
+
+        /// Lets the frames of the smooth scroll of a wheel step pass (the game clock moves, the document updates)
+        void SettleScroll(const char* sceneName) {
+            for (int frame = 0; frame < kScrollFrames; ++frame) {
+                CoreManager::GetTime().Advance(Time::kMaxFrameTime);
+                Draw(sceneName);
+            }
         }
 
         IntrusivePtr<RecordingRenderer> _renderer;
@@ -583,6 +610,60 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         ASSERT_EQ(recorder.actions.size(), 1u);
         EXPECT_EQ(recorder.actions[0], "GamePlay"_intern);
         EXPECT_EQ(recorder.gameDowns, 0) << "the click did not reach the game";
+    }
+
+    TEST_F(RmlUiHostTest, TheWheelScrollsTheContentTheWayRmlUiReadsIt) {
+        auto doc = Doc("Main");
+        ASSERT_TRUE(doc->SetMarkup(Document(kScrollMarkup, kScrollStyle)));
+        Draw("Main");
+        Rml::Element* box = doc->GetDocument()->GetElementById("box");
+        ASSERT_NE(box, nullptr);
+        ASSERT_GT(box->GetScrollWidth(), box->GetClientWidth());
+        ASSERT_GT(box->GetScrollHeight(), box->GetClientHeight());
+        UIInput& input = CoreManager::GetUIInput();
+
+        // SDL: positive x is to the right, negative y is toward the user (down); RmlUi: positive is right and down
+        EXPECT_TRUE(input.DispatchMouseWheel(Wheel(1.0f, 0.0f, kInsideTheBoxX, kInsideTheBoxY)));
+        SettleScroll("Main");
+        EXPECT_GT(box->GetScrollLeft(), 0.0f) << "a wheel to the right moves the view to the right";
+        EXPECT_EQ(box->GetScrollTop(), 0.0f);
+
+        EXPECT_TRUE(input.DispatchMouseWheel(Wheel(0.0f, -1.0f, kInsideTheBoxX, kInsideTheBoxY)));
+        SettleScroll("Main");
+        const float scrolledDown = box->GetScrollTop();
+        EXPECT_GT(scrolledDown, 0.0f) << "a wheel toward the user scrolls down";
+
+        EXPECT_TRUE(input.DispatchMouseWheel(Wheel(0.0f, 1.0f, kInsideTheBoxX, kInsideTheBoxY)));
+        SettleScroll("Main");
+        EXPECT_LT(box->GetScrollTop(), scrolledDown) << "a wheel away from the user scrolls up";
+    }
+
+    TEST_F(RmlUiHostTest, AFlippedWheelEventScrollsTheOtherWay) {
+        auto doc = Doc("Main");
+        ASSERT_TRUE(doc->SetMarkup(Document(kScrollMarkup, kScrollStyle)));
+        Draw("Main");
+        Rml::Element* box = doc->GetDocument()->GetElementById("box");
+        ASSERT_NE(box, nullptr);
+
+        // SDL reports the values opposite when `direction` is FLIPPED: this is a step to the right and down
+        EXPECT_TRUE(CoreManager::GetUIInput().DispatchMouseWheel(Wheel(-1.0f, 1.0f, kInsideTheBoxX, kInsideTheBoxY, SDL_MOUSEWHEEL_FLIPPED)));
+        SettleScroll("Main");
+
+        EXPECT_GT(box->GetScrollLeft(), 0.0f);
+        EXPECT_GT(box->GetScrollTop(), 0.0f);
+    }
+
+    TEST_F(RmlUiHostTest, AWheelAwayFromTheDocumentGoesToTheGame) {
+        auto doc = Doc("Main");
+        ASSERT_TRUE(doc->SetMarkup(Document(kScrollMarkup, kScrollStyle)));
+        Draw("Main");
+        Rml::Element* box = doc->GetDocument()->GetElementById("box");
+        ASSERT_NE(box, nullptr);
+
+        EXPECT_FALSE(CoreManager::GetUIInput().DispatchMouseWheel(Wheel(0.0f, -1.0f, 600.0f, 500.0f)));
+        SettleScroll("Main");
+
+        EXPECT_EQ(box->GetScrollTop(), 0.0f);
     }
 
     TEST_F(RmlUiHostTest, AReleaseElsewhereCancelsTheClick) {

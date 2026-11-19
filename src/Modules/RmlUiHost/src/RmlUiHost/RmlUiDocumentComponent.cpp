@@ -394,7 +394,9 @@ namespace BECore {
         }
         const bool over = MovePointer(event.mouse_x, event.mouse_y);
         if (over) {
-            _context->ProcessMouseWheel(Rml::Vector2f(-event.x, -event.y), 0);
+            // SDL: x positive to the right, y positive away from the user (up), both reversed when `direction` is FLIPPED. RmlUi: positive is right and down
+            const float flip = event.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.0f : 1.0f;
+            _context->ProcessMouseWheel(Rml::Vector2f(event.x * flip, -event.y * flip), 0);
         }
         return _modal || over;
     }
