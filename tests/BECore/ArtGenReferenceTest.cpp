@@ -132,15 +132,42 @@ namespace BECore::Tests {
         EXPECT_EQ(ArtGenReferenceFileName("x.png"), "x.png");
     }
 
-    TEST(ArtGenReferenceTest, TheDefaultWeightIsInsideTheSlidersRange) {
-        const double weight = ArtGenReferenceDefaultWeight("init");
-        EXPECT_GT(weight, kArtGenReferenceWeightMin);
-        EXPECT_LT(weight, kArtGenReferenceWeightMax);
+    TEST(ArtGenReferenceTest, EveryModeIsLookedUpByItsKey) {
+        EXPECT_EQ(ArtGenReferenceModeOf("init").mode, "init");
+        EXPECT_EQ(ArtGenReferenceModeOf("style").mode, "style");
+        EXPECT_DOUBLE_EQ(ArtGenReferenceDefaultWeight("init"), 0.4);
+        EXPECT_DOUBLE_EQ(ArtGenReferenceDefaultWeight("style"), 0.8);
     }
 
-    TEST(ArtGenReferenceTest, InitIsAMode) {
-        EXPECT_EQ(kArtGenReferenceModes.size(), 1u);
-        EXPECT_EQ(kArtGenReferenceModes[0], "init");
+    TEST(ArtGenReferenceTest, AnUnknownModeGetsTheFirstRow) {
+        EXPECT_EQ(&ArtGenReferenceModeOf("structure"), &kArtGenReferenceModes[0]);
+        EXPECT_EQ(&ArtGenReferenceModeOf(""), &kArtGenReferenceModes[0]);
+        EXPECT_DOUBLE_EQ(ArtGenReferenceDefaultWeight("structure"), kArtGenReferenceModes[0].defaultWeight);
+    }
+
+    TEST(ArtGenReferenceTest, InitIsTheFirstModeAndStyleFollows) {
+        ASSERT_EQ(kArtGenReferenceModes.size(), 2u);
+        EXPECT_EQ(kArtGenReferenceModes[0].mode, "init");
+        EXPECT_EQ(kArtGenReferenceModes[1].mode, "style");
+    }
+
+    TEST(ArtGenReferenceTest, TheDefaultWeightOfEveryModeIsInsideItsSlidersRange) {
+        for (const ArtGenReferenceModeRow& row : kArtGenReferenceModes) {
+            EXPECT_LT(row.minWeight, row.maxWeight) << row.mode.data();
+            EXPECT_GT(row.defaultWeight, row.minWeight) << row.mode.data();
+            EXPECT_LT(row.defaultWeight, row.maxWeight) << row.mode.data();
+            EXPECT_GT(row.minWeight, 0.0f) << row.mode.data() << ": the service's interval is open at 0";
+        }
+    }
+
+    TEST(ArtGenReferenceTest, EveryModeHasATooltipAndAUniqueKey) {
+        for (size_t i = 0; i < kArtGenReferenceModes.size(); ++i) {
+            ASSERT_NE(kArtGenReferenceModes[i].tip, nullptr);
+            EXPECT_NE(StringView(kArtGenReferenceModes[i].tip), "") << kArtGenReferenceModes[i].mode.data();
+            for (size_t j = i + 1; j < kArtGenReferenceModes.size(); ++j) {
+                EXPECT_NE(kArtGenReferenceModes[i].mode, kArtGenReferenceModes[j].mode);
+            }
+        }
     }
 
 }  // namespace BECore::Tests

@@ -3,6 +3,7 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Types/Types.h>
 #include <Widgets/ArtGen/ArtGenImage.h>
+#include <Widgets/ArtGen/Reference/ArtGenReference.h>
 #include <cstdint>
 #include <expected>
 
@@ -58,7 +59,8 @@ namespace BECore {
      * defaults, and the file it came from, so the panel knows what is unsaved and can revert.
      *
      * The text fields are fixed buffers the panel edits in place; after an edit the panel calls Touch(). Keys of the file the form does not
-     * show are kept and written back, so loading and saving an unchanged file changes nothing.
+     * show are kept and written back, so loading and saving an unchanged file changes nothing (also `accept` and `reference`, which the form
+     * edits but writes as the file had them while they are as loaded).
      */
     class ArtGenPresetForm {
     public:
@@ -128,6 +130,18 @@ namespace BECore {
             return _acceptInFile || _accept != ArtGenImageSettings{};
         }
 
+        /// The preset's own `reference`; none when the file has none or its `reference` is not readable
+        [[nodiscard]] const Optional<ArtGenReference>& GetReference() const {
+            return _reference;
+        }
+        void SetReference(const ArtGenReference& reference);
+        /// Drops the key, an unreadable one too
+        void ClearReference();
+        /// The file has a `reference` that does not read as one: kept as it is until it is replaced or removed
+        [[nodiscard]] bool HasUnreadableReference() const {
+            return _extra.contains("reference");
+        }
+
         /// Call after an edit of a field: the dirty check is made again only then
         void Touch() {
             ++_revision;
@@ -144,15 +158,20 @@ namespace BECore {
         void FromJson(const Json& data);
         /// Takes a valid `accept` object; false (nothing changed) for one that is not, which the caller keeps among the extra keys
         bool ReadAccept(const Json& value);
+        /// The same for `reference`
+        bool ReadReference(const Json& value);
 
         String _workflow;
         Vector<Param> _params;
-        Json _extra = Json::object();  // keys of the file the form does not show, a malformed `accept` among them
+        Json _extra = Json::object();  // keys of the file the form does not show, a malformed `accept` or `reference` among them
         ArtGenImageSettings _accept;
         bool _acceptInFile = false;         // the loaded file had a valid `accept`, or the person set one
         Json _acceptAsLoaded;               // its text, written back while the settings are as loaded, so an untouched file stays as it was
         ArtGenImageSettings _acceptLoaded;  // the settings _acceptAsLoaded reads as
-        Json _base;                         // the saved content; null for a new one
+        Optional<ArtGenReference> _reference;
+        Json _referenceAsLoaded;                     // the file's own text of `reference` (a null weight, other keys), written back while _reference is as loaded
+        Optional<ArtGenReference> _referenceLoaded;  // what _referenceAsLoaded reads as
+        Json _base;                                  // the saved content; null for a new one
         String _baseName;
         String _baseSource;
         uint64_t _revision = 0;

@@ -342,6 +342,7 @@ namespace BECore {
         set.presetData = std::move(request.presetData);
         set.count = request.count;
         set.seed = request.seed ? *request.seed : DrawSeed();
+        set.reference = std::move(request.reference);
         // The catalog is empty until the service has polled, so this is a guess; StartJob and the first reported variant settle it
         set.kind = String(kKindImage);
         set.kind = KindOfSet(set);
@@ -410,6 +411,7 @@ namespace BECore {
         _run.name = job.name;
         _run.setName = set.name;
         _run.jobName = job.name;
+        _run.reference = set.reference;
         SaveSet(set);
         ++_version;
     }
@@ -697,7 +699,10 @@ namespace BECore {
                  ControlParamInfo{"set", "string", false, "the set's name and folder under artgen/out, 1 to 64 of A-Z a-z 0-9 _ - (default <preset>-<date>-<time>)"},
                  ControlParamInfo{"frameOf", "string", false,
                                   "an image set that already has a frame (it is fixed at its first Accept all): this set is cut and scaled by the same frame, so a replacement of one row "
-                                  "comes out the size of the others; refused when the set is unknown, a sound set or has no frame"}}});
+                                  "comes out the size of the others; refused when the set is unknown, a sound set or has no frame"},
+                 ControlParamInfo{"reference", "object", false,
+                                  "{mode, image, weight?}: the picture every job's images start from or are drawn in the style of (as artgen_generate's), kept in the set so Retry and more "
+                                  "variants use it; a sound has none, so a sound set's jobs fail"}}});
         service.DescribeMethod("artgen_set", ControlMethodInfo{"One set as its manifest.json, plus state (Active while a job is pending or running, else Complete)",
                                                                {ControlParamInfo{"set", "string", true, "the set's name"}}});
         service.DescribeMethod("artgen_pick",
@@ -773,6 +778,13 @@ namespace BECore {
                 return std::unexpected(InvalidParams("'frameOf' must be the name of a set"));
             }
             request.frameOf = *frameOf;
+        }
+        if (IsGiven(params, "reference")) {
+            auto reference = ReadArtGenReference(*FindJsonMember(params, "reference"));
+            if (!reference) {
+                return std::unexpected(InvalidParams(reference.error()));
+            }
+            request.reference = std::move(*reference);
         }
         auto name = EnqueueSet(std::move(request));
         if (!name) {
@@ -1198,6 +1210,7 @@ namespace BECore {
             item["accepted"] = AcceptedCount(set);
             item["live"] = CountLive(set);
             item["kept"] = CountKept(set);
+            item["reference"] = set.reference ? ArtGenReferenceToJson(*set.reference) : Json();
             sets.push_back(std::move(item));
         }
         return sets;

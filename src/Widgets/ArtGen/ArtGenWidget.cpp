@@ -182,7 +182,7 @@ namespace BECore {
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem(ICON_LC_LIST_CHECKS " Set")) {
-                const ArtGenSetPanelForm form{_form};
+                const ArtGenSetPanelForm form{_form, PresetMakesImages(session)};
                 const auto play = [this](const AudioClip& clip) { PlaySound(clip, kSetTabRow); };
                 const auto stop = [this] { StopSound(); };
                 _setPanel.DrawSetTab(session, form, ArtGenSetPanelSound{play, stop, _playingRow == kSetTabRow});
@@ -625,6 +625,10 @@ namespace BECore {
             }
             if (workflow->kind != kKindAudio && ImGui::TreeNodeEx("Accept (image)")) {
                 DrawImageAcceptFields("##presetAccept");
+                ImGui::TreePop();
+            }
+            if (workflow->kind != kKindAudio && ImGui::TreeNodeEx("Reference")) {
+                ArtGenReferencePanel::DrawPresetReference(session, _form);
                 ImGui::TreePop();
             }
             ImGui::TreePop();

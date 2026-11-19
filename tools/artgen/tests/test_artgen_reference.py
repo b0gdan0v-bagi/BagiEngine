@@ -4,6 +4,7 @@ a preset."""
 import copy
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -65,7 +66,7 @@ def test_a_reference_gets_the_default_weight():
 @pytest.mark.parametrize("data, message", [
     ("a.png", "must be an object"),
     ({"image": "a.png"}, "reference.mode"),
-    ({"mode": "style", "image": "a.png"}, "reference.mode.*init"),
+    ({"mode": "structure", "image": "a.png"}, "reference.mode.*init, style"),
     ({"mode": 3, "image": "a.png"}, "reference.mode"),
     ({"mode": "init"}, "reference.image"),
     ({"mode": "init", "image": ""}, "reference.image"),
@@ -83,9 +84,55 @@ def test_a_malformed_reference_is_refused_by_its_key(data, message):
     assert str(error.value).startswith("the request:")
 
 
+def test_style_takes_its_default_weight_and_a_weight_in_its_open_range():
+    assert artgen_reference.parse_reference({"mode": "style", "image": "a.png"}, "x") == {"mode": "style", "image": "a.png", "weight": 0.8}
+    assert artgen_reference.parse_reference({"mode": "style", "image": "a.png", "weight": 1.5}, "x")["weight"] == 1.5
+    for weight in (0, 2, 2.5, -0.5):
+        with pytest.raises(artgen_preset.PresetError, match="reference.weight\" of the mode 'style' must be a number above 0.0 and below 2.0"):
+            artgen_reference.parse_reference({"mode": "style", "image": "a.png", "weight": weight}, "x")
+
+
+def test_the_weight_of_style_goes_to_the_adapter_as_it_is():
+    assert artgen_reference.weight_value("style", 1.3) == 1.3
+
+
+def test_only_a_mode_beyond_the_image_models_names_a_kind():
+    assert artgen_reference.MODES["init"].kind is None
+    assert artgen_reference.MODES["style"].kind == "style"
+
+
 def test_the_weight_of_init_is_the_part_that_stays():
     assert artgen_reference.weight_value("init", 0.4) == 0.6
     assert artgen_reference.weight_value("init", 0.25) == 0.75
+
+
+# --- the editor's table of modes
+
+PANEL_MODES_HEADER = ARTGEN_DIR.parents[1] / "src" / "Widgets" / "ArtGen" / "Reference" / "ArtGenReference.h"
+PANEL_ROW = re.compile(r'\{"(?P<mode>\w+)",\s*(?P<default>[\d.]+),\s*(?P<min>[\d.]+)f,\s*(?P<max>[\d.]+)f,')
+
+
+def panel_modes():
+    """The rows of kArtGenReferenceModes in the editor's header, as {mode: (default, min, max)}: the one place the two sides meet."""
+    text = PANEL_MODES_HEADER.read_text(encoding="utf-8")
+    block = text[text.index("kArtGenReferenceModes"):]
+    block = block[:block.index("}};")]
+    return {row["mode"]: (float(row["default"]), float(row["min"]), float(row["max"])) for row in PANEL_ROW.finditer(block)}
+
+
+def test_the_panels_modes_are_the_modes_of_the_service_in_the_same_order():
+    assert list(panel_modes()) == list(artgen_reference.MODES)
+
+
+def test_the_panels_default_weights_are_the_services():
+    for mode, (default, _, _) in panel_modes().items():
+        assert default == artgen_reference.MODES[mode].default_weight, mode
+
+
+def test_the_panels_slider_lies_inside_the_open_range_of_the_service_and_holds_its_default():
+    for mode, (default, low, high) in panel_modes().items():
+        service_low, service_high = artgen_reference.MODES[mode].weight_range
+        assert service_low < low < default < high < service_high, mode
 
 
 # --- the preset's and the request's reference
@@ -102,7 +149,7 @@ def test_a_preset_with_a_reference_key_loads_and_keeps_it(game):
 @pytest.mark.parametrize("reference, message", [
     ("x.png", "must be an object"),
     ({"mode": "init", "image": "a.png", "weight": 2}, "reference.weight"),
-    ({"mode": "style", "image": "a.png"}, "reference.mode"),
+    ({"mode": "structure", "image": "a.png"}, "reference.mode"),
 ])
 def test_a_malformed_reference_of_a_preset_is_refused_with_the_file_named(game, reference, message):
     path = write_preset(game, "bad", {**PRESET, "reference": reference})
@@ -135,9 +182,12 @@ def test_the_requests_reference_replaces_the_presets_whole(game):
 
 def test_the_map_names_the_workflow_that_runs_a_mode(game):
     base = artgen_preset.load_workflow("sdxl_cutout", game)
-    assert base.reference == {"init": "sdxl_img2img_cutout"}
+    assert base.reference == {"init": "sdxl_img2img_cutout", "style": "sdxl_ipadapter_cutout"}
     assert artgen_reference.effective_workflow(base, "init", game).name == "sdxl_img2img_cutout"
-    assert artgen_reference.effective_workflow(artgen_preset.load_workflow("sdxl_basic"), "init").name == "sdxl_img2img"
+    assert artgen_reference.effective_workflow(base, "style", game).name == "sdxl_ipadapter_cutout"
+    plain = artgen_preset.load_workflow("sdxl_basic")
+    assert artgen_reference.effective_workflow(plain, "init").name == "sdxl_img2img"
+    assert artgen_reference.effective_workflow(plain, "style").name == "sdxl_ipadapter"
 
 
 def test_a_workflow_that_takes_the_picture_serves_its_own_mode(game):
@@ -148,7 +198,7 @@ def test_a_workflow_that_takes_the_picture_serves_its_own_mode(game):
 def test_a_mode_the_workflow_cannot_run_is_refused_naming_the_modes_it_has(game):
     with pytest.raises(artgen_preset.PresetError, match=r"'sao_sfx' cannot run the reference mode 'init' \(its modes: none\)"):
         artgen_reference.effective_workflow(artgen_preset.load_workflow("sao_sfx"), "init")
-    with pytest.raises(artgen_preset.PresetError, match=r"'sdxl_basic' cannot run the reference mode 'structure' \(its modes: init\)"):
+    with pytest.raises(artgen_preset.PresetError, match=r"'sdxl_basic' cannot run the reference mode 'structure' \(its modes: init, style\)"):
         artgen_reference.effective_workflow(artgen_preset.load_workflow("sdxl_basic"), "structure")
 
 
@@ -191,6 +241,36 @@ def test_the_img2img_graphs_lay_the_picture_under_the_alpha_and_end_like_their_b
     assert artgen_preset.load_workflow("sdxl_img2img").graph["3"]["inputs"]["denoise"] == 0.6
 
 
+def test_the_style_graphs_start_from_noise_and_hand_the_adapter_the_picture_over_grey():
+    for base_name, variant_name in (("sdxl_basic", "sdxl_ipadapter"), ("sdxl_cutout", "sdxl_ipadapter_cutout")):
+        base, variant = artgen_preset.load_workflow(base_name), artgen_preset.load_workflow(variant_name)
+        graph = variant.graph
+        adapter = next(node for node, n in graph.items() if n["class_type"] == "IPAdapterAdvanced")
+        assert graph["3"]["inputs"]["model"] == [adapter, 0], "the sampler runs the model the adapter patched"
+        assert graph[adapter]["inputs"]["model"] == ["4", 0]
+        assert graph[graph[adapter]["inputs"]["ipadapter"][0]]["class_type"] == "IPAdapterModelLoader"
+        assert graph[graph[adapter]["inputs"]["clip_vision"][0]]["class_type"] == "CLIPVisionLoader"
+        assert graph[graph[adapter]["inputs"]["image"][0]]["class_type"] == "ImageCompositeMasked", "the picture goes in over flat grey"
+        assert graph["3"]["inputs"]["latent_image"] == ["5", 0] and graph["3"]["inputs"]["denoise"] == 1.0
+        assert graph["5"]["class_type"] == "EmptyLatentImage"
+        assert "denoise" not in variant.inputs, "the weight of the mode is the adapter's, not a denoise"
+        assert graph[adapter]["inputs"]["weight_type"] == "style transfer"
+        assert variant.inputs["weight_type"] == [adapter, "weight_type"] and variant.inputs["adapter_weight"] == [adapter, "weight"]
+        assert variant.graph[variant.inputs["output"]]["class_type"] == base.graph[base.inputs["output"]]["class_type"]
+        for node, value in base.graph.items():
+            if node in ("8", "9", "11", "12", "13", "14"):
+                assert {k: v for k, v in graph[node].items() if k != "inputs"} == {k: v for k, v in value.items() if k != "inputs"}
+
+
+@pytest.mark.parametrize("name", sorted(p.name[:-len(".json")] for p in artgen_preset.ENGINE_WORKFLOWS.glob("*.json") if not p.name.endswith(".inputs.json")))
+def test_every_link_of_an_engine_graph_points_to_a_node_of_it(name):
+    graph, _ = engine_workflow(name)
+    for node_id, node in graph.items():
+        for field, value in node["inputs"].items():
+            if isinstance(value, list):
+                assert value[0] in graph, f"{name}: node {node_id} input {field} links to the missing node {value[0]}"
+
+
 @pytest.mark.parametrize("change, message", [
     (lambda inputs, graph: inputs.pop("steps"), "does not name the input 'steps' of 'base'"),
     (lambda inputs, graph: inputs.pop("denoise"), "does not name the input 'denoise'"),
@@ -210,7 +290,7 @@ def test_a_mapped_workflow_that_lacks_what_its_base_has_is_refused(game, change,
     assert "base.inputs.json" in str(error.value)
 
 
-@pytest.mark.parametrize("reference", [["init"], {"style": "sdxl_img2img"}, {"init": ""}, {"init": 3}, {"init": "nope"}])
+@pytest.mark.parametrize("reference", [["init"], {"structure": "sdxl_img2img"}, {"init": ""}, {"init": 3}, {"init": "nope"}])
 def test_a_malformed_map_is_refused(game, reference):
     graph, inputs = engine_workflow("sdxl_basic")
     inputs["reference"] = reference
@@ -253,6 +333,18 @@ def test_a_graph_with_a_reference_sets_the_picture_and_the_denoise_and_leaves_th
     assert graph["9"]["inputs"]["filename_prefix"] == "artgen_x"
     assert json.dumps([preset.workflow.graph, reference.workflow.graph], sort_keys=True) == templates
     assert "20" not in artgen_preset.build_graph(preset, "knight", 7)
+
+
+def test_a_style_graph_sets_the_picture_and_the_adapter_weight_and_has_no_denoise_to_touch(game):
+    preset = preset_with(game, workflow="sdxl_cutout")
+    reference = use_of(preset, mode="style", weight=1.3)
+    graph = artgen_preset.build_graph(preset, "knight", 7, reference=reference)
+    assert graph["20"]["inputs"]["image"] == "artgen_ref_x.png"
+    assert graph["32"]["inputs"]["weight"] == 1.3 and graph["32"]["inputs"]["weight_type"] == "style transfer"
+    assert graph["3"]["inputs"]["denoise"] == 1.0, "the mode has no denoise: the sampler starts from noise"
+    assert (graph["5"]["inputs"]["width"], graph["5"]["inputs"]["height"]) == (512, 768)
+    assert graph["12"]["class_type"] == "RemoveBackground"
+    assert artgen_preset.models_of(graph)["ipadapter_file"] == ["ip-adapter-plus_sdxl_vit-h.safetensors"]
 
 
 def test_a_graph_without_a_reference_is_what_it_was(game):

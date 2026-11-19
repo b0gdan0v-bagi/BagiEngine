@@ -501,6 +501,7 @@ namespace BECore {
         } else {
             manifest["processing"] = Json(nullptr);
         }
+        manifest["reference"] = set.reference ? ArtGenReferenceToJson(*set.reference) : Json(nullptr);
         return manifest;
     }
 
@@ -591,6 +592,15 @@ namespace BECore {
                 return std::unexpected(read.error());
             }
             set.processing = *read;
+        }
+
+        const Json* reference = FindJsonMember(manifest, "reference");
+        if (reference != nullptr && !reference->is_null()) {
+            auto read = ReadArtGenReference(*reference);
+            if (!read) {
+                return std::unexpected(Format("manifest: {}", read.error()));
+            }
+            set.reference = std::move(*read);
         }
         return set;
     }

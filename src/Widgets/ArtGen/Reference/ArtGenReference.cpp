@@ -11,7 +11,6 @@ namespace BECore {
         constexpr StringView kWeightKey = "weight";
         constexpr StringView kInitMode = "init";
         constexpr StringView kImageKind = "image";
-        constexpr double kInitDefaultWeight = 0.4;  // `default_weight` of "init" in MODES
 
         String Slashed(StringView path) {
             String result(path);
@@ -115,8 +114,17 @@ namespace BECore {
         return reference;
     }
 
-    double ArtGenReferenceDefaultWeight(StringView /*mode*/) {
-        return kInitDefaultWeight;
+    const ArtGenReferenceModeRow& ArtGenReferenceModeOf(StringView mode) {
+        for (const ArtGenReferenceModeRow& row : kArtGenReferenceModes) {
+            if (row.mode == mode) {
+                return row;
+            }
+        }
+        return kArtGenReferenceModes[0];
+    }
+
+    double ArtGenReferenceDefaultWeight(StringView mode) {
+        return ArtGenReferenceModeOf(mode).defaultWeight;
     }
 
     String ArtGenReferenceFilePath(StringView gameRoot, StringView image) {

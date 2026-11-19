@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sets up, starts and stops a local ComfyUI on any supported machine (tools/artgen/CLAUDE.md, "Setup").
+"""Sets up, starts and stops a local ComfyUI on any supported machine (tools/artgen/comfyui/CLAUDE.md, "Setup").
 
 One pipeline for every platform: it detects the platform and the GPU, picks that platform's variant of
 `comfyui/manifest.json` (a pinned portable release on Windows, a pinned git commit and a venv on macOS and Linux), says what
@@ -7,7 +7,7 @@ it would download and where (size, licence), asks, then installs with progress a
 matches the manifest is left alone, so a second run only checks. It never overwrites or deletes what it did not create.
 
     python tools/artgen/artgen_setup.py detect            the platform key and the GPUs seen
-    python tools/artgen/artgen_setup.py install [--root DIR] [--yes] [--dry-run] [--json] [--skip-models]
+    python tools/artgen/artgen_setup.py install [--root DIR] [--yes] [--dry-run] [--json] [--skip-models] [--audio] [--style]
     python tools/artgen/artgen_setup.py start [--wait S] [-- ARGS]  ComfyUI in the background on the address of local.json
     python tools/artgen/artgen_setup.py stop              only the ComfyUI this tool started
     python tools/artgen/artgen_setup.py status            ready / not_running / not_installed and why
@@ -174,12 +174,35 @@ def model_path(root, model):
 
 KIND_IMAGE = "image"
 KIND_AUDIO = "audio"
+KIND_STYLE = "style"
+# The kinds an install adds to the image ones, each by the flag of its own name (`--audio`, `--style`; both may be given).
+OPTIONAL_KINDS = {
+    KIND_AUDIO: "also the sound effects model (Stable Audio Open: gated, needs HF_TOKEN)",
+    KIND_STYLE: "also the style reference: the IP-Adapter models and its custom node (about 3.4 GB, git at a pinned commit)",
+}
 HF_API = "https://huggingface.co/api/models"
+CUSTOM_NODES_DIR = "custom_nodes"
+RESTART_NOTE = "restart ComfyUI after the install: it loads a custom node only when it starts"
 
 
 def model_kind(model):
-    """What a model of the manifest is for: `image` (the default) or `audio`."""
+    """What a model or a custom node of the manifest is for: `image` (the default), `audio` or `style`."""
     return model.get("kind", KIND_IMAGE)
+
+
+def custom_node_path(root, node):
+    return Path(root) / "ComfyUI" / CUSTOM_NODES_DIR / node["name"]
+
+
+def read_git_head(folder):
+    """The commit of the git checkout in `folder`, or None when `folder` is no checkout of its own (a folder inside another work tree
+    would answer with that tree's HEAD, so its own `.git` is required)."""
+    if not (Path(folder) / ".git").exists():
+        return None
+    result = subprocess.run(["git", "-C", str(folder), "rev-parse", "HEAD"], capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
 
 
 def hf_token(env=None, settings_path=None):
@@ -219,9 +242,10 @@ def gated_sha256(model, token, opener=None):
     return oid
 
 
-def make_plan(manifest, key, root, skip_models=False, kinds=(KIND_IMAGE,)):
+def make_plan(manifest, key, root, skip_models=False, kinds=(KIND_IMAGE,), git_head=read_git_head):
     """The steps of an install of platform `key` into `root`, or SetupError when something there is not this tool's. `kinds` picks the
-    models: the image ones by default, `audio` adds the sound effects model (gated: it needs a token, `hf_token`)."""
+    models and the custom nodes: the image ones by default, `audio` adds the sound effects model (gated: it needs a token, `hf_token`),
+    `style` the IP-Adapter models and its custom node. A custom node is `present` when its folder is a checkout of the pinned commit."""
     root = Path(root)
     comfy = manifest["comfyui"]
     var = variant(manifest, key)
@@ -240,6 +264,9 @@ def make_plan(manifest, key, root, skip_models=False, kinds=(KIND_IMAGE,)):
         done = version is not None and marker is not None and marker.get("platform") == key and marker.get("version") == comfy["version"]
         steps.append(Step("comfyui", f"{what}: git {comfy['commit'][:12]}, a venv, PyTorch and the requirements from PyPI", str(root),
                           "present" if done else "install", 0, comfy["licence"], comfy["repo"]))
+    for node in manifest.get("customNodes", []):
+        if model_kind(node) in kinds:
+            steps.append(_custom_node_step(node, custom_node_path(root, node), git_head))
     if not skip_models:
         for model in manifest["models"]:
             if model_kind(model) not in kinds:
@@ -250,6 +277,20 @@ def make_plan(manifest, key, root, skip_models=False, kinds=(KIND_IMAGE,)):
             else:
                 steps.append(Step("model", f"{model['folder']}/{model['name']}", str(dest), "download", model["size"], model["licence"], model["url"]))
     return steps
+
+
+def _custom_node_step(node, dest, git_head):
+    state = "install"
+    if dest.exists():
+        head = git_head(dest) if dest.is_dir() else None
+        if head is None:
+            raise SetupError(f"{dest} exists and is not a git checkout: it is not this tool's custom node {node['name']}; "
+                             "move that folder away and run again")
+        if head != node["commit"]:
+            raise SetupError(f"{dest} is at commit {head}, the manifest pins {node['commit']}: this tool never overwrites it; "
+                             "move that folder away (or check out the pinned commit) and run again")
+        state = "present"
+    return Step("customnode", node["name"], str(dest), state, 0, node["licence"], node["repo"])
 
 
 def describe(steps):
@@ -267,6 +308,8 @@ def describe(steps):
         lines.append("everything is installed")
     else:
         lines.append(f"to download: {total / 1e9:.2f} GB" + ("; plus PyTorch and the requirements from PyPI (a few GB)" if any(s.state == "install" for s in steps) else ""))
+        if any(s.kind == "customnode" and s.state == "install" for s in steps):
+            lines.append(RESTART_NOTE)
     return "\n".join(lines)
 
 
@@ -389,6 +432,10 @@ class Installer:
         self.hash_of_gated = hash_of_gated
 
     def install(self, steps, keep_downloads=False):
+        nodes = [s for s in steps if s.kind == "customnode" and s.state == "install"]
+        if nodes and not shutil.which("git") and self.run is run_checked:
+            raise SetupError(f"git is not installed: the custom node {nodes[0].what} is fetched with it, at one commit (the portable "
+                             "ComfyUI has no git; install Git, https://git-scm.com/downloads)")
         for index, step in enumerate(steps):
             _check_cancel(self.cancel)
             self.emit({"event": "step", "index": index, "what": step.what, "state": step.state})
@@ -397,6 +444,9 @@ class Installer:
                     self._portable(index, keep_downloads)
                 elif step.state == "install":
                     self._source()
+            elif step.kind == "customnode":
+                if step.state == "install":
+                    self._custom_node(step)
             elif step.state == "verify":
                 self._verify_model(index, step)
             elif step.state == "download":
@@ -408,6 +458,8 @@ class Installer:
         if var["kind"] == "portable" and START_BAT.is_file() and installed_version(self.root):
             shutil.copyfile(START_BAT, self.root / START_BAT.name)
         remember_root(self.root)
+        if nodes:
+            self.emit({"event": "log", "text": RESTART_NOTE})
 
     def _progress(self, index):
         """At most one progress event per PROGRESS_EVERY_S, and the last one: a hash check reads a megabyte at a time."""
@@ -512,6 +564,31 @@ class Installer:
         self.run([str(python), "-m", "pip", "install", "torch", "torchvision", "torchaudio", *var.get("torch", [])])
         self.run([str(python), "-m", "pip", "install", "-r", str(repo / "requirements.txt")])
         self._write_marker()
+
+    def _custom_node(self, step):
+        """A custom node at exactly the manifest's commit: fetched into the staging folder, its `HEAD` checked, then moved into place. A git
+        checkout and not an archive, so the commit hash is the integrity check (as for ComfyUI's own source install)."""
+        node = next(n for n in self.manifest["customNodes"] if str(custom_node_path(self.root, n)) == step.dest)
+        dest = Path(step.dest)
+        if dest.exists():
+            raise SetupError(f"{dest} appeared since the plan: it is not this tool's; move it away and run again")
+        staging = Path(str(self.root) + ".unpack")
+        if staging.exists():
+            shutil.rmtree(staging)  # this tool's own staging folder, left by an interrupted install
+        checkout = staging / node["name"]
+        checkout.mkdir(parents=True)
+        self.emit({"event": "log", "text": f"fetching {node['name']} at commit {node['commit'][:12]}"})
+        for command in (["git", "init", "--quiet", str(checkout)],
+                        ["git", "-C", str(checkout), "remote", "add", "origin", node["repo"]],
+                        ["git", "-C", str(checkout), "fetch", "--quiet", "--depth", "1", "origin", node["commit"]],
+                        ["git", "-C", str(checkout), "checkout", "--quiet", "--detach", "FETCH_HEAD"]):
+            self.run(command)
+        head = self.git_head(checkout)
+        if head != node["commit"]:
+            raise SetupError(f"{node['repo']} gave commit {head}, the manifest pins {node['commit']}: the commit moved; ask the owner")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(checkout), str(dest))
+        shutil.rmtree(staging)
 
     def _write_marker(self):
         marker = {"platform": self.key, "version": self.manifest["comfyui"]["version"], "kind": variant(self.manifest, self.key)["kind"]}
@@ -729,7 +806,8 @@ def main(argv=None, probe=probe_machine, ask=input):
     install.add_argument("--yes", action="store_true", help="do not ask (the editor asked)")
     install.add_argument("--dry-run", action="store_true", help="only print the plan")
     install.add_argument("--skip-models", action="store_true")
-    install.add_argument("--audio", action="store_true", help="also the sound effects model (Stable Audio Open: gated, needs HF_TOKEN)")
+    for kind, text in OPTIONAL_KINDS.items():
+        install.add_argument(f"--{kind}", action="store_true", help=text)
     install.add_argument("--keep-downloads", action="store_true")
     install.add_argument("--json", action="store_true", help="one JSON event per line")
     for name in ("start", "stop", "status"):
@@ -755,7 +833,7 @@ def main(argv=None, probe=probe_machine, ask=input):
         root = args.root or default_root()
         if args.command == "install":
             key = args.platform or detect(probe())
-            kinds = (KIND_IMAGE, KIND_AUDIO) if args.audio else (KIND_IMAGE,)
+            kinds = (KIND_IMAGE, *(kind for kind in OPTIONAL_KINDS if getattr(args, kind)))
             steps = make_plan(manifest, key, root, args.skip_models, kinds)
             if args.json:
                 emit({"event": "plan", "platform": key, "root": str(root), "steps": [s.to_json() for s in steps],

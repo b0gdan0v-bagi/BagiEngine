@@ -1,16 +1,12 @@
 #include "ArtGenPresetForm.h"
 
-#include <Widgets/ArtGen/Reference/ArtGenReference.h>
-#include <algorithm>
-#include <cstring>
-
 namespace BECore {
 
     namespace {
 
         constexpr StringView kReferenceImageInput = "reference_image";
         constexpr StringView kServiceInputs[] = {"prompt", "negative", "seed", "width", "height", "output", kReferenceImageInput};
-        // The keys of a written file in order, `reference` last: the form keeps it as the file has it and does not edit it; any other key follows them
+        // The keys of a written file in order, `reference` last of the form's own; any other key follows them
         constexpr StringView kFileOrder[] = {"preset", "title", "workflow", "prompt", "negative", "size", "params", "accept", "reference"};
         constexpr StringView kCopySuffix = "_copy";
 
@@ -127,6 +123,16 @@ namespace BECore {
         return true;
     }
 
+    bool ArtGenPresetForm::ReadReference(const Json& value) {
+        auto reference = ReadArtGenReference(value);
+        if (!reference) {
+            return false;
+        }
+        _reference = _referenceLoaded = std::move(*reference);
+        _referenceAsLoaded = value;
+        return true;
+    }
+
     void ArtGenPresetForm::FromJson(const Json& data) {
         name[0] = title[0] = prompt[0] = negative[0] = '\0';
         width = height = 0;
@@ -137,6 +143,9 @@ namespace BECore {
         _acceptInFile = false;
         _acceptAsLoaded = Json();
         _acceptLoaded = {};
+        _reference.reset();
+        _referenceAsLoaded = Json();
+        _referenceLoaded.reset();
         if (!data.is_object()) {
             return;
         }
@@ -158,6 +167,8 @@ namespace BECore {
                     SetParam(StringView(param.data(), param.size()), paramValue);
                 }
             } else if (field == "accept" && value.is_object() && ReadAccept(value)) {
+                continue;
+            } else if (field == "reference" && ReadReference(value)) {
                 continue;
             } else if (field != "preset") {
                 _extra[key] = value;
@@ -188,6 +199,9 @@ namespace BECore {
         }
         if (HasImageAccept()) {
             data["accept"] = (_acceptInFile && _accept == _acceptLoaded) ? _acceptAsLoaded : ArtGenImageSettingsToJson(_accept);
+        }
+        if (_reference) {
+            data["reference"] = (_referenceLoaded && *_reference == *_referenceLoaded) ? _referenceAsLoaded : ArtGenReferenceToJson(*_reference);
         }
         return data;
     }
@@ -238,6 +252,10 @@ namespace BECore {
         if (const Json* accept = FindJsonMember(_base, "accept"); accept != nullptr) {
             ReadAccept(*accept);
         }
+        _referenceLoaded.reset();
+        if (const Json* reference = FindJsonMember(_base, "reference"); reference != nullptr) {
+            ReadReference(*reference);
+        }
         _baseName = String(name);
         _baseSource = "game";
         Touch();
@@ -275,6 +293,22 @@ namespace BECore {
             _accept = {};
             _acceptInFile = false;
             _acceptAsLoaded = Json();
+            Touch();
+        }
+    }
+
+    void ArtGenPresetForm::SetReference(const ArtGenReference& reference) {
+        if (_reference != reference || HasUnreadableReference()) {
+            _reference = reference;
+            _extra.erase("reference");
+            Touch();
+        }
+    }
+
+    void ArtGenPresetForm::ClearReference() {
+        if (_reference || HasUnreadableReference()) {
+            _reference.reset();
+            _extra.erase("reference");
             Touch();
         }
     }

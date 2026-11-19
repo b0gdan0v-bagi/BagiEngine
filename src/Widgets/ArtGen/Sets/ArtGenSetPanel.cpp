@@ -213,6 +213,28 @@ namespace BECore {
         return ArtGenRowWidths{std::max(subject * shrink, kMinFieldWidth), std::max(name * shrink, kMinFieldWidth)};
     }
 
+    Optional<ArtGenReference> ArtGenQueueReference(const Optional<ArtGenReference>& slot, bool makesImages) {
+        return makesImages ? slot : Optional<ArtGenReference>();
+    }
+
+    void FormatArtGenReferenceSummary(const ArtGenReference& reference, char* out, size_t size) {
+        const StringView file = ArtGenReferenceFileName(StringView(reference.image.data(), reference.image.size()));
+        const double weight = reference.weight ? *reference.weight : ArtGenReferenceDefaultWeight(StringView(reference.mode.data(), reference.mode.size()));
+        std::snprintf(out, size, "%.*s (%s, weight %.2f)", static_cast<int>(file.size()), file.data(), reference.mode.c_str(), weight);
+    }
+
+    void FormatArtGenQueueReference(const Optional<ArtGenReference>& slot, bool makesImages, char* out, size_t size) {
+        if (!makesImages) {
+            std::snprintf(out, size, "No reference: a sound takes none.");
+        } else if (!slot) {
+            std::snprintf(out, size, "No reference: the preset's own reference applies, if it has one. Use as reference fills the slot.");
+        } else {
+            char summary[kLabelSize];
+            FormatArtGenReferenceSummary(*slot, summary, sizeof(summary));
+            std::snprintf(out, size, "Reference of every job: %s", summary);
+        }
+    }
+
     void ArtGenSetPanel::DrawSubjectRows() {
         if (_subjectRows.empty()) {
             _subjectRows.emplace_back();
@@ -260,6 +282,11 @@ namespace BECore {
     void ArtGenSetPanel::DrawQueueForm(ArtGenSession& session, const ArtGenSetPanelForm& form) {
         const auto& palette = GetImGuiPalette();
         DrawSubjectRows();
+        char referenceLine[kLabelSize];
+        FormatArtGenQueueReference(session.GetReferenceSlot(), form.makesImages, referenceLine, sizeof(referenceLine));
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", referenceLine);
+        ImGui::PopTextWrapPos();
         ImGui::SetNextItemWidth(LabelledFieldWidth(kSetNameWidthInEm, "Set name"));
         ImGui::InputTextWithHint("Set name", "<preset>-<date> when empty", _setName, sizeof(_setName));
         ItemTooltip("The folder under artgen/out/ that keeps the set; 1 to 64 of A-Z a-z 0-9 _ -");
@@ -297,6 +324,7 @@ namespace BECore {
                 request.count = _count;
                 request.seed = _randomSeed ? Optional<int64_t>() : Optional<int64_t>(_seed);
                 request.name = String(_setName);
+                request.reference = ArtGenQueueReference(session.GetReferenceSlot(), form.makesImages);
                 // A saved preset goes by name, so its provenance names the file; anything else goes inline as a draft
                 if (form.preset.IsDirty()) {
                     request.preset = String(form.preset.name);
@@ -390,6 +418,14 @@ namespace BECore {
         ImGui::Text("%s %s", set.kind == kKindAudio ? ICON_LC_AUDIO_LINES : ICON_LC_IMAGE, set.name.c_str());
         ImGui::SameLine();
         ImGui::TextDisabled("%s", set.preset.c_str());
+        if (set.reference) {
+            // The file name is the label, the mode and weight the tooltip: a set is judged by what it was made from
+            char summary[kLabelSize];
+            FormatArtGenReferenceSummary(*set.reference, summary, sizeof(summary));
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s %s", ICON_LC_IMAGE_PLUS, summary);
+            ItemTooltip(set.reference->image.c_str());
+        }
 
         const ArtGenRun& run = session.GetRun();
         if (StringView(run.setName) == StringView(set.name) && (run.state == ArtGenRunState::Queued || run.state == ArtGenRunState::Running)) {

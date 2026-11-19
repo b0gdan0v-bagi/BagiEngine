@@ -101,7 +101,40 @@
       "sha256": "a90903540cc02cbeb7ff9f823f1a80eb778c7e22426a0e620b01c77a5ec8f5b4",
       "licence": "Apache 2.0",
       "source": "https://huggingface.co/google-t5/t5-base"
+    },
+    {
+      "name": "ip-adapter-plus_sdxl_vit-h.safetensors",
+      "folder": "ipadapter",
+      "kind": "style",
+      "url": "https://huggingface.co/h94/IP-Adapter/resolve/018e402774aeeddd60609b4ecdb7e298259dc729/sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors",
+      "size": 847517512,
+      "sha256": "3f5062b8400c94b7159665b21ba5c62acdcd7682262743d7f2aefedef00e6581",
+      "licence": "Apache 2.0 (IP-Adapter, Tencent AI Lab)",
+      "source": "https://huggingface.co/h94/IP-Adapter"
+    },
+    {
+      "name": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors",
+      "folder": "clip_vision",
+      "kind": "style",
+      "url": "https://huggingface.co/h94/IP-Adapter/resolve/018e402774aeeddd60609b4ecdb7e298259dc729/models/image_encoder/model.safetensors",
+      "size": 2528373448,
+      "sha256": "6ca9667da1ca9e0b0f75e46bb030f7e011f44f86cbfb8d5a36590fcd7507b030",
+      "licence": "MIT (OpenCLIP ViT-H-14 laion2B-s32B-b79K, LAION; the copy of the IP-Adapter repository, Apache 2.0)",
+      "source": "https://huggingface.co/h94/IP-Adapter"
     }
   ],
-  "customNodes": []
+  "customNodes": [
+    {
+      "name": "ComfyUI_IPAdapter_plus",
+      "kind": "style",
+      "repo": "https://github.com/cubiq/ComfyUI_IPAdapter_plus.git",
+      "commit": "a0f451a5113cf9becb0847b92884cb10cbdec0ef",
+      "licence": "GPL-3.0 (loaded by ComfyUI, itself GPL-3.0: never linked or shipped by us; maintenance-only since 2025-04-14)",
+      "source": "https://github.com/cubiq/ComfyUI_IPAdapter_plus",
+      "nodes": [
+        "IPAdapterModelLoader",
+        "IPAdapterAdvanced"
+      ]
+    }
+  ]
 }
