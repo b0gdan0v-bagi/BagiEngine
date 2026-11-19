@@ -336,7 +336,27 @@ class TestGate:
 
     def test_green_passes(self, tmp_path):
         state = self.write(tmp_path / "r.json", "a" * 40, "green")
-        assert alltests_results.check(tmp_path, state, head=lambda _: "a" * 40).green
+        assert alltests_results.check(tmp_path, state, head=lambda _: "a" * 40, changes=lambda *_: []).green
+
+    def test_a_tree_with_uncommitted_changes_refuses_on_the_green_of_its_head(self, tmp_path):
+        state = self.write(tmp_path / "r.json", "a" * 40, "green")
+        verdict = alltests_results.check(tmp_path, state, head=lambda _: "a" * 40, changes=lambda *_: [" M a.txt"])
+        assert not verdict.green and "uncommitted changes ( M a.txt)" in verdict.message
+
+    def test_the_tree_is_read_from_git_status_less_the_untracked_files_of_the_ignored_folders(self, rig):
+        assert alltests_results.uncommitted(rig.repo) == []
+        (rig.repo / "first.txt").write_text("changed", encoding="utf-8")
+        (rig.repo / "dist").mkdir()
+        (rig.repo / "dist" / "index.html").write_text("built", encoding="utf-8")
+        (rig.repo / "new.txt").write_text("new", encoding="utf-8")
+        assert alltests_results.uncommitted(rig.repo, [rig.repo / "dist"]) == [" M first.txt", "?? new.txt"]
+        assert "?? dist/index.html" in alltests_results.uncommitted(rig.repo)
+
+    def test_a_tracked_change_inside_an_ignored_folder_still_counts(self, rig):
+        (rig.repo / "dist").mkdir()
+        commit(rig.repo, "dist/kept")
+        (rig.repo / "dist" / "kept.txt").write_text("changed", encoding="utf-8")
+        assert alltests_results.uncommitted(rig.repo, [rig.repo / "dist"]) == [" M dist/kept.txt"]
 
     def test_no_result_refuses_and_says_how_to_get_one(self, tmp_path):
         state = self.write(tmp_path / "r.json", "a" * 40, "green")

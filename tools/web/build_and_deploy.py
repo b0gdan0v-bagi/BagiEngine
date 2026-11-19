@@ -11,9 +11,9 @@ The steps, in order:
   2. cmake --build --preset <preset> --target <game>
   3. package.py build/<preset>/bin <dist> --game <game> (with --single-thread when the page is the single-thread one, and with
      --app <source>/web/app.json when the game has that file: its web app manifest and icons; --app FILE names another)
-  4. with --deploy: the deploy gate first (a green full test run of HEAD of the source, tools/alltests; --skip-alltests passes it,
-     --dry-run only reports it), then stage Dockerfile, serve.py and dist/ in one folder and run
-     `railway up <folder> --path-as-root --service <name> --detach` in it (the Railway CLI, logged in and the project linked with
+  4. with --deploy: the deploy gate first (a green full test run of HEAD of the source and no uncommitted change besides dist/ and
+     the staging, tools/alltests; --skip-alltests passes it, --dry-run only reports it), then stage Dockerfile, serve.py and
+     dist/ in one folder and run `railway up <folder> --path-as-root --service <name> --detach` in it (the Railway CLI, logged in and the project linked with
      `railway link`, or RAILWAY_TOKEN of the project; the service must exist and its settings (builder Dockerfile, health check
      /healthz) come from the game's Railway IaC file, not from the upload: tools/web/CLAUDE.md).
 Standard library only. Nothing here reads or writes a secret.
@@ -151,7 +151,7 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
     parser.add_argument("--deploy", action="store_true", help="after packaging, run `railway up`")
     parser.add_argument("--service", default=DEFAULT_SERVICE, help=f"the Railway service for --deploy (default: {DEFAULT_SERVICE})")
     parser.add_argument("--dry-run", action="store_true", help="print the commands and run nothing")
-    parser.add_argument("--skip-alltests", action="store_true", help="deploy even when HEAD of the source has no green full test run (tools/alltests)")
+    parser.add_argument("--skip-alltests", action="store_true", help="deploy even when HEAD of the source has no green full test run or the tree has uncommitted changes (tools/alltests)")
     parser.add_argument("--alltests-results", type=Path, help="the results file of tools/alltests (default: the one of the source's repository)")
     args = parser.parse_args(argv)
     source_dir = (args.source_dir or Path.cwd()).resolve()
@@ -161,11 +161,11 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
     except DeployError as error:
         print(f"build_and_deploy.py: {error}", file=sys.stderr)
         return 2
-    if args.deploy and not alltests_results.allows_deploy(gate(source_dir, args.alltests_results), args.skip_alltests, args.dry_run):
-        return 2
-
     dist = args.dist or source_dir / DIST_FOLDER
     stage_dir = args.stage_dir or source_dir / STAGE_FOLDER
+    if args.deploy and not alltests_results.allows_deploy(gate(source_dir, args.alltests_results, (dist, stage_dir)), args.skip_alltests, args.dry_run):
+        return 2
+
     for step in plan_commands(args, source_dir, dist, stage_dir):
         program = step.command[0]
         if step.is_deploy:

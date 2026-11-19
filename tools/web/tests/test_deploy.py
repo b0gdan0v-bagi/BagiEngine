@@ -21,7 +21,7 @@ alltests_results = build_and_deploy.alltests_results
 GREEN_COMMIT, OTHER_COMMIT = "a" * 40, "b" * 40
 
 
-def green_gate(source_dir: Path, results_file: Path | None) -> "alltests_results.Verdict":
+def green_gate(source_dir: Path, results_file: Path | None, ignored=()) -> "alltests_results.Verdict":
     """The deploy gate of a commit with a green full test run, so the tests of the other steps need no repository."""
     return alltests_results.Verdict(True, GREEN_COMMIT, "green")
 
@@ -347,8 +347,8 @@ class AlltestsGateTest(DeployTestCase):
         alltests_results.save(self.results, data)
         (self.source / "dist").mkdir()
 
-    def deploy(self, commit: str, *argv: str):
-        gate = functools.partial(alltests_results.check, head=lambda _: commit)
+    def deploy(self, commit: str, *argv: str, changes=None):
+        gate = functools.partial(alltests_results.check, head=lambda _: commit, changes=changes or (lambda *_: []))
         return self.run_script("--deploy", "--alltests-results", str(self.results), *argv, which=have_railway, gate=gate)
 
     def test_a_commit_without_a_result_is_not_deployed_and_the_message_says_how_to_run_the_tests(self):
@@ -382,6 +382,24 @@ class AlltestsGateTest(DeployTestCase):
         self.assertEqual(code, 0, err)
         self.assertIn("--deploy would stop here", out)
         self.assertIn("railway up", out)
+
+    def test_an_uncommitted_change_is_not_deployed_on_the_green_of_head(self):
+        code, _, err, runner = self.deploy(GREEN_COMMIT, changes=lambda *_: [" M src/Game.cpp"])
+        self.assertEqual(code, 2)
+        self.assertEqual(runner.calls, [])
+        self.assertIn("uncommitted changes ( M src/Game.cpp)", err)
+        self.assertIn("--skip-alltests", err)
+
+    def test_skip_alltests_deploys_an_uncommitted_tree_anyway(self):
+        code, out, err, runner = self.deploy(GREEN_COMMIT, "--skip-alltests", changes=lambda *_: [" M src/Game.cpp"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("skipped (--skip-alltests)", out)
+        self.assertEqual(runner.calls[-1][0][:2], [RAILWAY_PATH, "up"])
+
+    def test_the_gate_leaves_out_what_the_script_writes_itself_dist_and_the_stage(self):
+        asked = []
+        self.deploy(GREEN_COMMIT, changes=lambda _, ignored: asked.extend(ignored) or [])
+        self.assertEqual([path.resolve() for path in asked], [(self.source / folder).resolve() for folder in ("dist", build_and_deploy.STAGE_FOLDER)])
 
     def test_without_deploy_the_gate_is_not_asked(self):
         def no_gate(*_):

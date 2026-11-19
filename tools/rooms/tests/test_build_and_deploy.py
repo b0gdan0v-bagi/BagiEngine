@@ -27,7 +27,7 @@ alltests_results = build_and_deploy.alltests_results
 GREEN_COMMIT = "a" * 40
 
 
-def green_gate(source_dir: Path, results_file: Path | None) -> "alltests_results.Verdict":
+def green_gate(source_dir: Path, results_file: Path | None, ignored=()) -> "alltests_results.Verdict":
     """The deploy gate of a commit with a green full test run, so the tests of the other steps need no repository."""
     return alltests_results.Verdict(True, GREEN_COMMIT, "green")
 
@@ -287,8 +287,8 @@ class AlltestsGateTest(DeployTestCase):
         data["results"][GREEN_COMMIT] = {"status": "green", "preset": "macos-debug-all", "finished": "2026-11-19T10:00:00Z", "failed": []}
         alltests_results.save(self.results, data)
 
-    def deploy(self, commit: str, *argv: str):
-        gate = functools.partial(alltests_results.check, head=lambda _: commit)
+    def deploy(self, commit: str, *argv: str, changes=None):
+        gate = functools.partial(alltests_results.check, head=lambda _: commit, changes=changes or (lambda *_: []))
         return self.run_script("--deploy", "--alltests-results", str(self.results), *argv, gate=gate)
 
     def test_a_commit_without_a_green_result_is_refused_before_the_docker_build(self):
@@ -308,6 +308,23 @@ class AlltestsGateTest(DeployTestCase):
         self.assertEqual(code, 0, err)
         self.assertIn("skipped (--skip-alltests)", out)
         self.assertEqual(runner.calls[-1][0][:2], [RAILWAY_PATH, "up"])
+
+    def test_an_uncommitted_change_is_refused_before_the_docker_build(self):
+        code, _, err, runner = self.deploy(GREEN_COMMIT, changes=lambda *_: [" M src/Server.cpp"])
+        self.assertEqual(code, 2)
+        self.assertEqual(runner.calls, [])
+        self.assertIn("uncommitted changes ( M src/Server.cpp)", err)
+
+    def test_skip_alltests_deploys_an_uncommitted_tree_anyway(self):
+        code, out, err, runner = self.deploy(GREEN_COMMIT, "--skip-alltests", changes=lambda *_: [" M src/Server.cpp"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("skipped (--skip-alltests)", out)
+        self.assertEqual(runner.calls[-1][0][:2], [RAILWAY_PATH, "up"])
+
+    def test_the_gate_leaves_out_the_stage_the_script_writes_itself(self):
+        asked = []
+        self.deploy(GREEN_COMMIT, changes=lambda _, ignored: asked.extend(ignored) or [])
+        self.assertEqual(asked, [self.stage.resolve()])
 
     def test_a_dry_run_only_reports_the_gate(self):
         code, out, err, runner = self.deploy("c" * 40, "--dry-run")
