@@ -1081,7 +1081,7 @@ namespace BECore {
                 }
             }
             item["seed"] = plan.seed;
-            item["alternatives"] = AlternativesOf(job);
+            item["alternatives"] = AlternativesBesides(job, plan.seed);
             accepted.push_back(std::move(item));
         }
         Optional<String> saveFailure;

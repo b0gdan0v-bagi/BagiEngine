@@ -43,7 +43,7 @@ namespace BECore::Tests {
                 CoreManager::GetResourceManager().RegisterLoader(New<EvictProbeLoader>());
                 return true;
             }();
-            (void)registered;
+            static_cast<void>(registered);
             SetSource(source);
         }
 

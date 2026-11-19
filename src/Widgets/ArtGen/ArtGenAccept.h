@@ -122,6 +122,11 @@ namespace BECore {
             return true;
         }
 
+        /// A row rewrote an atlas file on disk; a failed Commit then says the old member rects no longer match it (Pack in the Sprite Library repairs that)
+        void NoteRepacked() {
+            _repacked = true;
+        }
+
         /// @return false and nothing saved when no accept changed the library; true after one successful @p save; else the reason, with the library as it was at construction
         std::expected<bool, String> Commit(FunctionRef<bool()> save);
 
@@ -129,6 +134,7 @@ namespace BECore {
         TextureLibrary& _library;
         Vector<SpriteEntry> _snapshot;
         bool _owed = false;
+        bool _repacked = false;
     };
 
     /// What `artgen_accept` answers as `atlas`: `null` when no atlas was written, else `{name, texturePath, width, height, members}`

@@ -166,6 +166,8 @@ namespace BECore {
     [[nodiscard]] ArtGenRowStatus StatusOf(const ArtGenSetJob& job, bool replacedByNewer);
     /// The variants of @p job other than its pick (all of them when it has none)
     [[nodiscard]] int32_t AlternativesOf(const ArtGenSetJob& job);
+    /// The variants of @p job other than @p seed: the answer of a pick that is not written to the row yet (a batched Accept all marks the rows last)
+    [[nodiscard]] int32_t AlternativesBesides(const ArtGenSetJob& job, int64_t seed);
 
     /// Why "more variants" is off for @p set at @p count, or null: the set is active, or no row passes `ArtGenMoreSkipReason`
     [[nodiscard]] const char* ArtGenMoreBlocker(const ArtGenSet& set, int32_t count);

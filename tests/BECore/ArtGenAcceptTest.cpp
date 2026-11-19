@@ -746,6 +746,25 @@ namespace BECore::Tests {
         EXPECT_EQ(library.GetAll()[0].name.ToStringView(), "queen");
     }
 
+    TEST(ArtGenLibraryBatchTest, AFailedCommitAfterARepackTellsThePersonToPack) {
+        TextureLibrary library;
+        FillPlain(library);
+        ArtGenLibraryBatch plain(library);
+        library.AddOrUpdate(LibraryEntry("queen", "assets/artgen/queen.png", Rect(0, 0, 128, 64)));
+        ASSERT_TRUE(plain.Defer());
+        const auto plainFailure = plain.Commit([] { return false; });
+        ASSERT_FALSE(plainFailure.has_value());
+        EXPECT_EQ(plainFailure.error().find("Pack"), String::npos) << "no atlas was touched";
+
+        ArtGenLibraryBatch repacked(library);
+        library.AddOrUpdate(LibraryEntry("queen", "assets/artgen/queen.png", Rect(0, 0, 128, 64)));
+        ASSERT_TRUE(repacked.Defer());
+        repacked.NoteRepacked();
+        const auto repackedFailure = repacked.Commit([] { return false; });
+        ASSERT_FALSE(repackedFailure.has_value());
+        EXPECT_NE(repackedFailure.error().find("press Pack in the Sprite Library"), String::npos) << repackedFailure.error().c_str();
+    }
+
     TEST(ArtGenLibraryBatchTest, APackedRowIsSavedOnceAndItsMembersComeBackWhenTheSaveFails) {
         const AcceptGame game;
         TextureLibrary library;

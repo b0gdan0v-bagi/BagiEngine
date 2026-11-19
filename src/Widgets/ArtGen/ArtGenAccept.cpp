@@ -541,6 +541,9 @@ namespace BECore {
                 _library.AddOrUpdate(old);
             }
         }
+        if (_repacked) {
+            return std::unexpected(String("TextureLibrary.xml could not be saved (does the game have one?); an atlas file was already rewritten, so press Pack in the Sprite Library"));
+        }
         return std::unexpected(String("TextureLibrary.xml could not be saved (does the game have one?)"));
     }
 
@@ -648,6 +651,10 @@ namespace BECore {
         auto stored = AcceptIntoLibrary(library, *copied, sprite, io, [&library] { return gOpenBatch.has_value() ? gOpenBatch->Defer() : library.Save(); });
         if (!stored) {
             return std::unexpected(stored.error());
+        }
+
+        if (gOpenBatch.has_value() && stored->repacked) {
+            gOpenBatch->NoteRepacked();
         }
 
         const PoolString name = PoolString::Intern(sprite);

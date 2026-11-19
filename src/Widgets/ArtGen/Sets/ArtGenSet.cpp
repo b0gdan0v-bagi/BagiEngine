@@ -681,8 +681,12 @@ namespace BECore {
         return job.accepted->kept ? ArtGenRowStatus::Kept : ArtGenRowStatus::Live;
     }
 
+    int32_t AlternativesBesides(const ArtGenSetJob& job, int64_t seed) {
+        return static_cast<int32_t>(std::count_if(job.variants.begin(), job.variants.end(), [seed](const ArtGenSetVariant& variant) { return variant.seed != seed; }));
+    }
+
     int32_t AlternativesOf(const ArtGenSetJob& job) {
-        return static_cast<int32_t>(std::count_if(job.variants.begin(), job.variants.end(), [&job](const ArtGenSetVariant& variant) { return !job.pick || variant.seed != *job.pick; }));
+        return job.pick ? AlternativesBesides(job, *job.pick) : static_cast<int32_t>(job.variants.size());
     }
 
     const char* ArtGenMoreBlocker(const ArtGenSet& set, int32_t count) {

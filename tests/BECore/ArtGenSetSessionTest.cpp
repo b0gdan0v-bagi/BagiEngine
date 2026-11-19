@@ -1206,6 +1206,23 @@ namespace BECore::Tests {
         EXPECT_TRUE(disk.processing.has_value());
     }
 
+    TEST_F(ArtGenSetSessionTest, ABatchedAcceptAllCountsTheAlternativesOfARowThatHasNoPickYet) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(Enqueue("nopick", "a\nb").has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAll());
+        ASSERT_EQ(session.PickVariant("nopick", "b", kSetSeed + 1), ArtGenSetEdit::Ok);
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("nopick"));
+
+        const Json answer = Result(AcceptAllCall("nopick"));
+
+        ASSERT_NE(FindJsonMember(answer, "accepted"), nullptr);
+        const Json& rows = *FindJsonMember(answer, "accepted");
+        ASSERT_EQ(rows.size(), 2u);
+        EXPECT_EQ(GetJsonInt(rows[0], "seed"), Optional<int64_t>(kSetSeed)) << "the first variant is the candidate of a row without a pick";
+        EXPECT_EQ(GetJsonInt(rows[0], "alternatives"), Optional<int64_t>(1));
+        EXPECT_EQ(GetJsonInt(rows[1], "alternatives"), Optional<int64_t>(1));
+    }
+
     TEST_F(ArtGenSetSessionTest, AFailureHalfwayInABatchEndsItMarksTheRowsDoneAndTheNextCallFinishes) {
         session.SetAcceptBatch(&FakeBegin, &FakeEnd);
         ASSERT_TRUE(Enqueue("five", "a\nb\nc\nd\ne").has_value());
