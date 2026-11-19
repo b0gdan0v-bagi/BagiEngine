@@ -13,6 +13,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/SceneTestSupport.h>
 #include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
@@ -86,18 +87,6 @@ namespace BECore::Tests {
             EXPECT_FLOAT_EQ(call.clip->h, expected.h);
         }
 
-        SceneNode* Find(SceneNode& node, const char* name) {
-            if (node.GetName() == PoolString::Intern(name)) {
-                return &node;
-            }
-            for (const auto& child : node.GetChildren()) {
-                if (SceneNode* found = Find(*child, name)) {
-                    return found;
-                }
-            }
-            return nullptr;
-        }
-
     }  // namespace
 
     class ClipRectComponentTest : public ::testing::Test {
@@ -128,7 +117,7 @@ namespace BECore::Tests {
         }
 
         SceneNode& At(const char* name) {
-            SceneNode* node = Find(_manager->GetActiveScene()->GetRootNode(), name);
+            SceneNode* node = FindNodeBelow(_manager->GetActiveScene()->GetRootNode(), name);
             EXPECT_NE(node, nullptr) << name;
             return node != nullptr ? *node : _manager->GetActiveScene()->GetRootNode();
         }

@@ -3,6 +3,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/SceneTestSupport.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <gtest/gtest.h>
@@ -39,19 +40,6 @@ namespace BECore::Tests {
         constexpr float kJustBelowTheMiddle = 0.74f;
         constexpr float kBottomOfRow = 1.0f;
 
-        SceneNode* Find(SceneNode& from, const char* name) {
-            const PoolString wanted = PoolString::Intern(name);
-            for (const auto& child : from.GetChildren()) {
-                if (child->GetName() == wanted) {
-                    return child.Get();
-                }
-                if (SceneNode* found = Find(*child, name)) {
-                    return found;
-                }
-            }
-            return nullptr;
-        }
-
     }  // namespace
 
     /// The pure decisions of the hierarchy panel, on a scene loaded from a string
@@ -77,7 +65,7 @@ namespace BECore::Tests {
         }
 
         SceneNode& Node(const char* name) {
-            SceneNode* node = Find(_scene->GetRootNode(), name);
+            SceneNode* node = FindNodeBelow(_scene->GetRootNode(), name);
             EXPECT_NE(node, nullptr) << name;
             return *node;
         }
@@ -292,7 +280,7 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(result.changed);
         EXPECT_EQ(result.reveal, &branch);
-        EXPECT_EQ(Find(Root(), "Leaf"), nullptr);
+        EXPECT_EQ(FindNodeBelow(Root(), "Leaf"), nullptr);
         EXPECT_EQ(branch.GetChildren().size(), 1u);
     }
 
@@ -323,7 +311,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(ApplyOperation(*_scene, {OperationKind::None, &Node("A"), nullptr, 0}).changed);
         EXPECT_FALSE(ApplyOperation(*_scene, {OperationKind::Delete, nullptr, nullptr, 0}).changed);
         EXPECT_EQ(Root().GetChildren().size(), 3u);
-        EXPECT_NE(Find(Root(), "Leaf"), nullptr);
+        EXPECT_NE(FindNodeBelow(Root(), "Leaf"), nullptr);
     }
 
     TEST_F(HierarchyModelTest, ALockedNodeIsNotDeletedOrMovedButMayBeDuplicated) {
@@ -366,8 +354,8 @@ namespace BECore::Tests {
         Scene* otherScene = other->GetSceneByName("Main"_intern);
         ASSERT_NE(otherScene, nullptr);
 
-        EXPECT_FALSE(ApplyOperation(*_scene, {OperationKind::Delete, Find(otherScene->GetRootNode(), "A"), nullptr, 0}).changed);
-        EXPECT_NE(Find(otherScene->GetRootNode(), "A"), nullptr);
+        EXPECT_FALSE(ApplyOperation(*_scene, {OperationKind::Delete, FindNodeBelow(otherScene->GetRootNode(), "A"), nullptr, 0}).changed);
+        EXPECT_NE(FindNodeBelow(otherScene->GetRootNode(), "A"), nullptr);
     }
 
     TEST_F(HierarchyModelTest, AncestorsOfListsTheRowsToOpenFromTheRootDown) {
@@ -449,8 +437,8 @@ namespace BECore::Tests {
         state.selected = &Node("A");
 
         // The node of another scene, asked for with its own scene or with ours
-        EXPECT_FALSE(HierarchyPanel::Reveal(*_scene, state, otherScene, Find(otherScene->GetRootNode(), "A")));
-        EXPECT_FALSE(HierarchyPanel::Reveal(*_scene, state, _scene, Find(otherScene->GetRootNode(), "A")));
+        EXPECT_FALSE(HierarchyPanel::Reveal(*_scene, state, otherScene, FindNodeBelow(otherScene->GetRootNode(), "A")));
+        EXPECT_FALSE(HierarchyPanel::Reveal(*_scene, state, _scene, FindNodeBelow(otherScene->GetRootNode(), "A")));
         EXPECT_FALSE(HierarchyPanel::Reveal(*_scene, state, _scene, nullptr));
         Node("Branch").RemoveChild(removed);
         EXPECT_FALSE(HierarchyPanel::Reveal(*_scene, state, _scene, removed));

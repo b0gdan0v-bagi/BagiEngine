@@ -10,6 +10,7 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <gtest/gtest.h>
@@ -60,23 +61,6 @@ namespace BECore::Tests {
   </component>
 </components></node>)";
 
-        String Printed(pugi::xml_node node) {
-            std::ostringstream out;
-            node.print(out, "", pugi::format_raw);
-            return String(out.str().c_str());
-        }
-
-        /// The components of @p node as text: type and serialized fields, in order
-        Vector<String> ComponentTexts(const SceneNode& node) {
-            Vector<String> texts;
-            for (const auto& component : node.GetComponents()) {
-                XmlSerializer serializer;
-                component->Serialize(serializer);
-                texts.push_back(String(component->GetTypeMeta().typeName.data()) + ":" + Printed(serializer.GetRootNode()).c_str());
-            }
-            return texts;
-        }
-
     }  // namespace
 
     /// BuildNodeReference on instances of node files in a temp folder, with the engine services
@@ -102,7 +86,7 @@ namespace BECore::Tests {
 
         /// Loads a scene Main whose only node is @p nodeXml (a `<node ref>` or an inline node) and returns that node
         SceneNode& LoadNode(const String& nodeXml) {
-            const String text = "<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes>" + nodeXml + "</nodes></scene></scenes></SceneManager>";
+            const String text = SceneConfigText(nodeXml);
             const pugi::xml_parse_result parsed = _doc.load_string(text.c_str());
             EXPECT_TRUE(parsed) << parsed.description();
             _manager = LoadSceneManager(XmlNode{_doc.document_element()}, _loader);
@@ -120,7 +104,7 @@ namespace BECore::Tests {
             if (!built) {
                 EXPECT_FALSE(nodesEl.first_child()) << "a refusal appended something";
             }
-            result = Printed(nodesEl).c_str();
+            result = XmlText(nodesEl).c_str();
             return built;
         }
 
@@ -360,7 +344,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(BuildNodeReference(node, _loader, nodesEl, reason)) << reason.c_str();
 
-        EXPECT_EQ(Printed(nodesEl), String(R"(<nodes><node name="First"/><node ref="nodes/Box"/></nodes>)"));
+        EXPECT_EQ(XmlText(nodesEl), String(R"(<nodes><node name="First"/><node ref="nodes/Box"/></nodes>)"));
     }
 
 }  // namespace BECore::Tests

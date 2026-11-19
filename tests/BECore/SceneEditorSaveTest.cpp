@@ -15,6 +15,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Widgets/SceneEditor/SceneConfigWriter.h>
@@ -93,13 +94,6 @@ namespace BECore::Tests {
             return count;
         }
 
-        String Print(pugi::xml_node node) {
-            std::ostringstream stream;
-            node.print(stream, "  ");
-            const String text = FromStdString(stream.str());
-            return String{text.c_str(), text.size()};
-        }
-
         /// True when @p node or something below it has an attribute called @p name
         bool HasAttributeBelow(pugi::xml_node node, const char* name) {
             if (node.attribute(name)) {
@@ -152,28 +146,6 @@ namespace BECore::Tests {
         constexpr float kEditedX = 77.0f;
         constexpr int32_t kEditedLayer = 5;
 
-        /// The element in the compact form, for comparing a node with the text it should have
-        String Raw(pugi::xml_node node) {
-            std::ostringstream stream;
-            node.print(stream, "", pugi::format_raw);
-            const String text = FromStdString(stream.str());
-            return String{text.c_str(), text.size()};
-        }
-
-        /// The components of @p node as text: type and serialized fields, in order
-        Vector<String> ComponentTexts(const SceneNode& node) {
-            Vector<String> texts;
-            for (const auto& component : node.GetComponents()) {
-                XmlSerializer serializer;
-                component->Serialize(serializer);
-                String text = component->GetTypeMeta().typeName.data();
-                text.append(":");
-                text.append(Raw(serializer.GetRootNode()));
-                texts.push_back(text);
-            }
-            return texts;
-        }
-
         /// The i-th `<node>` of the `<nodes>` of the `<scene>` called @p sceneName
         pugi::xml_node SavedNode(pugi::xml_node configRoot, const char* sceneName, size_t index) {
             pugi::xml_node node = FindSceneElement(configRoot, sceneName).child("nodes").first_child();
@@ -197,36 +169,6 @@ namespace BECore::Tests {
     <node name="Right"/>
   </nodes></scene>
 </scenes></SceneManager>)";
-
-        /// The names of the tree below @p node, depth first, each followed by one dot per level ("Left Inner. Deep.. Last. Right")
-        void AppendTree(const SceneNode& node, size_t depth, String& out) {
-            for (const auto& child : node.GetChildren()) {
-                if (!out.empty()) {
-                    out.append(" ");
-                }
-                out.append(child->GetName().CStr());
-                out.append(depth, '.');
-                AppendTree(*child, depth + 1, out);
-            }
-        }
-
-        String TreeOf(const SceneNode& root) {
-            String out;
-            AppendTree(root, 0, out);
-            return out;
-        }
-
-        const SceneNode* FindNodeByName(const SceneNode& from, PoolString name) {
-            for (const auto& child : from.GetChildren()) {
-                if (child->GetName() == name) {
-                    return child.Get();
-                }
-                if (const SceneNode* found = FindNodeByName(*child, name)) {
-                    return found;
-                }
-            }
-            return nullptr;
-        }
 
         SceneNode* FindTopLevelNode(Scene& scene, PoolString name) {
             for (const auto& node : scene.GetRootNode().GetChildren()) {
@@ -445,8 +387,8 @@ namespace BECore::Tests {
 
     TEST_F(SceneEditorSaveTest, TheOtherScenesAreKeptVerbatim) {
         ASSERT_NO_FATAL_FAILURE(LoadScenes());
-        const String menuBefore = Print(FindSceneElement(ConfigRoot(), "Menu"));
-        const String creditsBefore = Print(FindSceneElement(ConfigRoot(), "Credits"));
+        const String menuBefore = XmlTextIndented(FindSceneElement(ConfigRoot(), "Menu"));
+        const String creditsBefore = XmlTextIndented(FindSceneElement(ConfigRoot(), "Credits"));
         ASSERT_FALSE(menuBefore.empty());
         ASSERT_FALSE(creditsBefore.empty());
 
@@ -454,9 +396,9 @@ namespace BECore::Tests {
         FindTopLevelNode(*_manager->GetActiveScene(), "Piece"_intern)->SetName("Pawn"_intern);
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), *_manager->GetActiveScene()));
 
-        EXPECT_EQ(Print(FindSceneElement(ConfigRoot(), "Menu")), menuBefore);
+        EXPECT_EQ(XmlTextIndented(FindSceneElement(ConfigRoot(), "Menu")), menuBefore);
         const pugi::xml_node credits = FindSceneElement(ConfigRoot(), "Credits");
-        EXPECT_EQ(Print(credits), creditsBefore);
+        EXPECT_EQ(XmlTextIndented(credits), creditsBefore);
 
         // The comments sit where they were: before Game and before Credits
         const pugi::xml_node creditsComment = credits.previous_sibling();
@@ -493,14 +435,14 @@ namespace BECore::Tests {
         pugi::xml_node scenes = ConfigRoot().child("scenes");
         ASSERT_TRUE(scenes.remove_child(FindSceneElement(ConfigRoot(), "Game")));
         ASSERT_EQ(SceneOrder(ConfigRoot()), "Menu,Credits");
-        const String menuBefore = Print(FindSceneElement(ConfigRoot(), "Menu"));
-        const String creditsBefore = Print(FindSceneElement(ConfigRoot(), "Credits"));
+        const String menuBefore = XmlTextIndented(FindSceneElement(ConfigRoot(), "Menu"));
+        const String creditsBefore = XmlTextIndented(FindSceneElement(ConfigRoot(), "Credits"));
 
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), *_manager->GetActiveScene()));
 
         EXPECT_EQ(SceneOrder(ConfigRoot()), "Menu,Credits,Game");
-        EXPECT_EQ(Print(FindSceneElement(ConfigRoot(), "Menu")), menuBefore);
-        EXPECT_EQ(Print(FindSceneElement(ConfigRoot(), "Credits")), creditsBefore);
+        EXPECT_EQ(XmlTextIndented(FindSceneElement(ConfigRoot(), "Menu")), menuBefore);
+        EXPECT_EQ(XmlTextIndented(FindSceneElement(ConfigRoot(), "Credits")), creditsBefore);
         EXPECT_EQ(StringView{scenes.last_child().attribute("name").as_string()}, "Game");
 
         ASSERT_NO_FATAL_FAILURE(SaveAndReload());
@@ -598,9 +540,9 @@ namespace BECore::Tests {
         EXPECT_FALSE(FindSceneElement(ConfigRoot(), "Plain").child("viewVariants"));
 
         // Saving again gives the same document, and the file loads back with the same views
-        const String once = Print(ConfigRoot());
+        const String once = XmlTextIndented(ConfigRoot());
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), GetScene("Responsive")));
-        EXPECT_EQ(Print(ConfigRoot()), once);
+        EXPECT_EQ(XmlTextIndented(ConfigRoot()), once);
 
         ASSERT_NO_FATAL_FAILURE(SaveAndReload());
         Scene& reloaded = Reloaded("Responsive");
@@ -648,10 +590,10 @@ namespace BECore::Tests {
         Scene& game = *_manager->GetActiveScene();
 
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), game));
-        const String once = Print(ConfigRoot());
+        const String once = XmlTextIndented(ConfigRoot());
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), game));
 
-        EXPECT_EQ(Print(ConfigRoot()), once);
+        EXPECT_EQ(XmlTextIndented(ConfigRoot()), once);
         EXPECT_EQ(CountScenes(ConfigRoot()), 3u);
     }
 
@@ -723,19 +665,19 @@ namespace BECore::Tests {
         constexpr size_t kReferenceIndices[] = {0, 2, 3};
         Vector<String> before;
         for (const size_t index : kReferenceIndices) {
-            before.push_back(Raw(SavedNode(ConfigRoot(), "Main", index)));
+            before.push_back(XmlText(SavedNode(ConfigRoot(), "Main", index)));
         }
 
         ASSERT_TRUE(Save(GetScene("Main")));
 
         // Every reference has the text it had, a bare one stays bare, and the file does not learn the node file of a node
         for (size_t i = 0; i < before.size(); ++i) {
-            EXPECT_EQ(Raw(SavedNode(ConfigRoot(), "Main", kReferenceIndices[i])), before[i]);
+            EXPECT_EQ(XmlText(SavedNode(ConfigRoot(), "Main", kReferenceIndices[i])), before[i]);
         }
         EXPECT_FALSE(HasAttributeBelow(ConfigRoot(), "sourceRef"));
         EXPECT_TRUE(_notes.empty());
-        EXPECT_EQ(Raw(SavedNode(ConfigRoot(), "Main", 0)), "<node ref=\"nodes/Box\"/>");
-        EXPECT_EQ(Raw(SavedNode(ConfigRoot(), "Main", 2)), kBoxOverrideRef);
+        EXPECT_EQ(XmlText(SavedNode(ConfigRoot(), "Main", 0)), "<node ref=\"nodes/Box\"/>");
+        EXPECT_EQ(XmlText(SavedNode(ConfigRoot(), "Main", 2)), kBoxOverrideRef);
 
         ASSERT_NO_FATAL_FAILURE(SaveAndReloadSplit());
         ASSERT_NO_FATAL_FAILURE(ExpectReloadedEqualsLive("Main"));
@@ -754,7 +696,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(Save(GetScene("Main")));
         EXPECT_TRUE(_notes.empty());
 
-        EXPECT_EQ(Raw(SavedNode(ConfigRoot(), "Main", 0)), "<node ref=\"nodes/Box\"><components><component type=\"TransformComponent\" x=\"77\"/></components></node>");
+        EXPECT_EQ(XmlText(SavedNode(ConfigRoot(), "Main", 0)), "<node ref=\"nodes/Box\"><components><component type=\"TransformComponent\" x=\"77\"/></components></node>");
         const pugi::xml_node third = SavedNode(ConfigRoot(), "Main", 2);
         EXPECT_STREQ(third.attribute("ref").as_string(), "nodes/Box");
         EXPECT_STREQ(third.attribute("name").as_string(), "Crate");
@@ -805,7 +747,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(_notes.empty());
 
         const pugi::xml_node nodes = FindSceneElement(ConfigRoot(), "Main").child("nodes");
-        EXPECT_EQ(Raw(nodes.first_child()), "<node ref=\"nodes/Box\" name=\"Added\"/>");
+        EXPECT_EQ(XmlText(nodes.first_child()), "<node ref=\"nodes/Box\" name=\"Added\"/>");
         size_t count = 0;
         for (pugi::xml_node node = nodes.first_child(); node; node = node.next_sibling()) {
             ++count;
@@ -875,13 +817,13 @@ namespace BECore::Tests {
 
     TEST_F(SceneEditorSaveReferencesTest, TheOtherScenesKeepTheirReferencesVerbatim) {
         ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
-        const String otherBefore = Print(FindSceneElement(ConfigRoot(), "Other"));
+        const String otherBefore = XmlTextIndented(FindSceneElement(ConfigRoot(), "Other"));
         const pugi::xml_node otherEl = FindSceneElement(ConfigRoot(), "Other");
         otherEl.parent().insert_child_before(pugi::node_comment, otherEl).set_value(kCreditsComment);
 
         ASSERT_TRUE(Save(GetScene("Main")));
 
-        EXPECT_EQ(Print(FindSceneElement(ConfigRoot(), "Other")), otherBefore);
+        EXPECT_EQ(XmlTextIndented(FindSceneElement(ConfigRoot(), "Other")), otherBefore);
         EXPECT_EQ(SceneOrder(ConfigRoot()), "Main,Other");
         EXPECT_EQ(FindSceneElement(ConfigRoot(), "Other").previous_sibling().type(), pugi::node_comment);
     }
@@ -947,7 +889,7 @@ namespace BECore::Tests {
         EXPECT_NE(fileText.find("width=\"184\" height=\"30\" fontSize=\"24\""), String::npos);
 
         // The scene file no longer carries an override
-        EXPECT_EQ(Raw(SavedNode(ConfigRoot(), "Main", 3)), "<node ref=\"nodes/Panel\"/>");
+        EXPECT_EQ(XmlText(SavedNode(ConfigRoot(), "Main", 3)), "<node ref=\"nodes/Panel\"/>");
         EXPECT_TRUE(_notes.empty());
 
         // A reload through the saved file lays the element out as the edited one did
@@ -1035,10 +977,10 @@ namespace BECore::Tests {
         Child("Main", 0).GetComponent<TransformComponent>()->_x = kEditedX;
 
         ASSERT_TRUE(Save(GetScene("Main")));
-        const String once = Print(ConfigRoot());
+        const String once = XmlTextIndented(ConfigRoot());
         ASSERT_TRUE(Save(GetScene("Main")));
 
-        EXPECT_EQ(Print(ConfigRoot()), once);
+        EXPECT_EQ(XmlTextIndented(ConfigRoot()), once);
         EXPECT_EQ(CountScenes(ConfigRoot()), 2u);
     }
 
@@ -1095,21 +1037,21 @@ namespace BECore::Tests {
 
         EXPECT_EQ(TreeOf(Reloaded("Main").GetRootNode()), TreeOf(main.GetRootNode()));
         EXPECT_EQ(TreeOf(main.GetRootNode()), "Left Inner. Deep.. Last. Right");
-        const SceneNode* inner = FindNodeByName(Reloaded("Main").GetRootNode(), "Inner"_intern);
+        const SceneNode* inner = FindNodeBelow(Reloaded("Main").GetRootNode(), "Inner");
         ASSERT_NE(inner, nullptr);
         EXPECT_EQ(inner->GetLayer(), kPieceLayer);
         ASSERT_TRUE(inner->GetComponent<TransformComponent>());
         EXPECT_FLOAT_EQ(inner->GetComponent<TransformComponent>()->_x, kMovedX);
-        const String once = Print(ConfigRoot());
+        const String once = XmlTextIndented(ConfigRoot());
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
-        EXPECT_EQ(Print(ConfigRoot()), once);
+        EXPECT_EQ(XmlTextIndented(ConfigRoot()), once);
     }
 
     TEST_F(SceneEditorSaveTest, TheEditorFlagsAreNotSaved) {
         ASSERT_NO_FATAL_FAILURE(LoadOwnScenes(kNestedScenesXml));
         Scene& main = GetScene("Main");
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
-        const String plain = Print(ConfigRoot());
+        const String plain = XmlTextIndented(ConfigRoot());
 
         // Tree: Left (Inner (Deep), Last), Right
         ASSERT_FALSE(main.GetRootNode().GetChildren().empty());
@@ -1120,7 +1062,7 @@ namespace BECore::Tests {
         inner->SetEditorFlags(EditorFlags::Hidden | EditorFlags::Locked);
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
 
-        EXPECT_EQ(Print(ConfigRoot()), plain);
+        EXPECT_EQ(XmlTextIndented(ConfigRoot()), plain);
     }
 
     TEST_F(SceneEditorSaveReferencesTest, AnInstanceWithChildrenIsWrittenInlineWithANote) {

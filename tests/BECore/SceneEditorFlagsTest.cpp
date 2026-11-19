@@ -3,19 +3,10 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNodeInstance.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/SceneTestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
-
-    namespace {
-
-        String Print(const pugi::xml_node& node) {
-            std::ostringstream out;
-            node.print(out);
-            return String(out.str().c_str());
-        }
-
-    }  // namespace
 
     /// The editor flags of a node (hidden, locked): editor state that no file, serializer or copy sees
     class SceneEditorFlagsTest : public ::testing::Test {
@@ -61,12 +52,12 @@ namespace BECore::Tests {
         const String plainElement = [&] {
             pugi::xml_document document;
             AppendNodeElement(document, *_parent);
-            return Print(document);
+            return XmlTextIndented(document);
         }();
         const String plainSerialized = [&] {
             XmlSerializer serializer;
             _parent->Serialize(serializer);
-            return Print(serializer.GetRootNode());
+            return XmlTextIndented(serializer.GetRootNode());
         }();
 
         _parent->SetEditorFlags(EditorFlags::Hidden | EditorFlags::Locked);
@@ -76,8 +67,8 @@ namespace BECore::Tests {
         AppendNodeElement(document, *_parent);
         XmlSerializer serializer;
         _parent->Serialize(serializer);
-        EXPECT_EQ(Print(document), plainElement);
-        EXPECT_EQ(Print(serializer.GetRootNode()), plainSerialized);
+        EXPECT_EQ(XmlTextIndented(document), plainElement);
+        EXPECT_EQ(XmlTextIndented(serializer.GetRootNode()), plainSerialized);
     }
 
     TEST_F(SceneEditorFlagsTest, ADuplicateStartsVisibleAndUnlocked) {

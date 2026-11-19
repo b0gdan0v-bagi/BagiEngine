@@ -4,6 +4,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/SceneEventsTest.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/SceneTestSupport.h>
 #include <Events/SceneEvents.h>
 #include <entt/entt.hpp>
 #include <gtest/gtest.h>
@@ -32,36 +33,6 @@ namespace BECore::Tests {
 </scenes></SceneManager>)";
 
         constexpr int32_t kInnerLayer = 3;
-
-        /// The names of the tree below @p node, depth first, each with the number of its ancestors below @p node ("Left Inner. Deep.. Last.")
-        void AppendTree(const SceneNode& node, size_t depth, String& out) {
-            for (const auto& child : node.GetChildren()) {
-                if (!out.empty()) {
-                    out.append(" ");
-                }
-                out.append(child->GetName().CStr());
-                out.append(depth, '.');
-                AppendTree(*child, depth + 1, out);
-            }
-        }
-
-        String TreeOf(const SceneNode& root) {
-            String out;
-            AppendTree(root, 0, out);
-            return out;
-        }
-
-        SceneNode* FindByName(SceneNode& from, PoolString name) {
-            for (const auto& child : from.GetChildren()) {
-                if (child->GetName() == name) {
-                    return child.Get();
-                }
-                if (SceneNode* found = FindByName(*child, name)) {
-                    return found;
-                }
-            }
-            return nullptr;
-        }
 
     }  // namespace
 
@@ -93,19 +64,19 @@ namespace BECore::Tests {
         Scene& scene = Load();
 
         EXPECT_EQ(TreeOf(scene.GetRootNode()), "Left Inner. Deep.. Last. Right");
-        SceneNode* inner = FindByName(scene.GetRootNode(), "Inner"_intern);
+        SceneNode* inner = FindNodeBelow(scene.GetRootNode(), "Inner");
         ASSERT_NE(inner, nullptr);
         EXPECT_EQ(inner->GetLayer(), kInnerLayer);
         EXPECT_EQ(inner->GetParent()->GetName(), "Left"_intern);
-        EXPECT_EQ(FindByName(scene.GetRootNode(), "Deep"_intern)->GetParent(), inner);
-        EXPECT_EQ(FindByName(scene.GetRootNode(), "Left"_intern)->GetParent(), &scene.GetRootNode());
+        EXPECT_EQ(FindNodeBelow(scene.GetRootNode(), "Deep")->GetParent(), inner);
+        EXPECT_EQ(FindNodeBelow(scene.GetRootNode(), "Left")->GetParent(), &scene.GetRootNode());
     }
 
     TEST_F(SceneNestedNodesTest, EveryNestedNodeIsWiredLikeATopLevelOne) {
         Scene& scene = Load();
 
-        SceneNode* inner = FindByName(scene.GetRootNode(), "Inner"_intern);
-        SceneNode* deep = FindByName(scene.GetRootNode(), "Deep"_intern);
+        SceneNode* inner = FindNodeBelow(scene.GetRootNode(), "Inner");
+        SceneNode* deep = FindNodeBelow(scene.GetRootNode(), "Deep");
         ASSERT_NE(inner, nullptr);
         ASSERT_NE(deep, nullptr);
         EXPECT_TRUE(scene.GetRegistry().valid(inner->GetEntity()));
@@ -119,8 +90,8 @@ namespace BECore::Tests {
 
     TEST_F(SceneNestedNodesTest, OnAttachedRunsOnceForANestedComponent) {
         Scene& scene = Load();
-        const auto top = FindByName(scene.GetRootNode(), "Left"_intern)->GetComponent<SceneEventCounter>();
-        const auto nested = FindByName(scene.GetRootNode(), "Inner"_intern)->GetComponent<SceneEventCounter>();
+        const auto top = FindNodeBelow(scene.GetRootNode(), "Left")->GetComponent<SceneEventCounter>();
+        const auto nested = FindNodeBelow(scene.GetRootNode(), "Inner")->GetComponent<SceneEventCounter>();
         ASSERT_TRUE(top);
         ASSERT_TRUE(nested);
 
@@ -133,10 +104,10 @@ namespace BECore::Tests {
 
     TEST_F(SceneNestedNodesTest, TheDrawOrderFollowsTheTree) {
         Scene& scene = Load();
-        const SceneNode& left = *FindByName(scene.GetRootNode(), "Left"_intern);
-        const SceneNode& last = *FindByName(scene.GetRootNode(), "Last"_intern);
-        const SceneNode& right = *FindByName(scene.GetRootNode(), "Right"_intern);
-        const SceneNode& inner = *FindByName(scene.GetRootNode(), "Inner"_intern);
+        const SceneNode& left = *FindNodeBelow(scene.GetRootNode(), "Left");
+        const SceneNode& last = *FindNodeBelow(scene.GetRootNode(), "Last");
+        const SceneNode& right = *FindNodeBelow(scene.GetRootNode(), "Right");
+        const SceneNode& inner = *FindNodeBelow(scene.GetRootNode(), "Inner");
 
         // Layer 0 in tree order, the node on layer 3 after all of them
         EXPECT_LT(scene.GetDrawRank(left), scene.GetDrawRank(last));

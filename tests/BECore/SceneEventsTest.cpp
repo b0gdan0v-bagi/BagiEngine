@@ -8,6 +8,7 @@
 #include <BECore/UI/UIColor.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/SceneTestSupport.h>
 #include <Common/UIInputEvents.h>
 #include <Events/InputEvents.h>
 #include <Events/SceneEvents.h>
@@ -140,18 +141,6 @@ namespace BECore::Tests {
             }
         };
 
-        SceneNode* FindNode(SceneNode& node, PoolString name) {
-            if (node.GetName() == name) {
-                return &node;
-            }
-            for (const auto& child : node.GetChildren()) {
-                if (auto* found = FindNode(*child, name)) {
-                    return found;
-                }
-            }
-            return nullptr;
-        }
-
         constexpr Color kInitialColor{1, 2, 3, 255};
 
     }  // namespace
@@ -191,7 +180,7 @@ namespace BECore::Tests {
 
         /// The SceneEventCounter on the node @p nodeName of scene @p sceneName, found at any depth. Empty if there is none.
         IntrusivePtr<SceneEventCounter> GetCounter(PoolString sceneName, PoolString nodeName) const {
-            SceneNode* node = FindNode(GetScene(sceneName).GetRootNode(), nodeName);
+            SceneNode* node = FindNodeBelow(GetScene(sceneName).GetRootNode(), nodeName.ToStringView());
             return node ? node->GetComponent<SceneEventCounter>() : IntrusivePtr<SceneEventCounter>{};
         }
 
@@ -360,7 +349,7 @@ namespace BECore::Tests {
     TEST_F(SceneEventsTest, DrawsAParentThenItsChildrenThenTheNextSibling) {
         ASSERT_NO_FATAL_FAILURE(LoadScenes(kDrawOrderScenesXml));
         _manager->SetActiveScene("Nested"_intern);
-        SceneNode* parent = FindNode(GetScene("Nested"_intern).GetRootNode(), "Parent"_intern);
+        SceneNode* parent = FindNodeBelow(GetScene("Nested"_intern).GetRootNode(), "Parent");
         ASSERT_NE(parent, nullptr);
         auto child = parent->AddChild("Child"_intern);
         auto childCounter = BECore::New<SceneEventCounter>();
@@ -380,7 +369,7 @@ namespace BECore::Tests {
     TEST_F(SceneEventsTest, AChildDoesNotInheritTheLayerOfItsParent) {
         ASSERT_NO_FATAL_FAILURE(LoadScenes(kDrawOrderScenesXml));
         _manager->SetActiveScene("NestedLayer"_intern);
-        SceneNode* parent = FindNode(GetScene("NestedLayer"_intern).GetRootNode(), "Parent"_intern);
+        SceneNode* parent = FindNodeBelow(GetScene("NestedLayer"_intern).GetRootNode(), "Parent");
         ASSERT_NE(parent, nullptr);
         auto child = parent->AddChild("Child"_intern);
         auto childCounter = BECore::New<SceneEventCounter>();

@@ -3,6 +3,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/SceneTestSupport.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
 #include <Widgets/SceneEditor/SceneSelection.h>
 #include <gtest/gtest.h>
@@ -23,19 +24,6 @@ namespace BECore::Tests {
     <node name="Elsewhere"/>
   </nodes></scene>
 </scenes></SceneManager>)";
-
-        SceneNode* Find(SceneNode& from, const char* name) {
-            const PoolString wanted = PoolString::Intern(name);
-            for (const auto& child : from.GetChildren()) {
-                if (child->GetName() == wanted) {
-                    return child.Get();
-                }
-                if (SceneNode* found = Find(*child, name)) {
-                    return found;
-                }
-            }
-            return nullptr;
-        }
 
     }  // namespace
 
@@ -62,7 +50,7 @@ namespace BECore::Tests {
         }
 
         SceneNode* Node(const char* name) {
-            SceneNode* node = Find(_scene->GetRootNode(), name);
+            SceneNode* node = FindNodeBelow(_scene->GetRootNode(), name);
             EXPECT_NE(node, nullptr) << name;
             return node;
         }
@@ -223,7 +211,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneSelectionTest, PruneDropsANodeOfAnotherSceneAndTheRoot) {
-        SceneNode* elsewhere = Find(_manager->GetSceneByName("Other"_intern)->GetRootNode(), "Elsewhere");
+        SceneNode* elsewhere = FindNodeBelow(_manager->GetSceneByName("Other"_intern)->GetRootNode(), "Elsewhere");
         ASSERT_NE(elsewhere, nullptr);
         _selection.Add(elsewhere);
         _selection.Add(Node("A"));

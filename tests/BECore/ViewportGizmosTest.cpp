@@ -7,6 +7,7 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/SceneTestSupport.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <gtest/gtest.h>
 
@@ -54,16 +55,6 @@ namespace BECore::Tests {
     </components></node>
   </nodes></scene>
 </scenes></SceneManager>)";
-
-        SceneNode* Find(SceneNode& from, const char* name) {
-            const PoolString wanted = PoolString::Intern(name);
-            for (const auto& child : from.GetChildren()) {
-                if (child->GetName() == wanted) {
-                    return child.Get();
-                }
-            }
-            return nullptr;
-        }
 
         Gizmo::Item Moved(Gizmo::Item item, float dx) {
             item.x += dx;
@@ -126,7 +117,7 @@ namespace BECore::Tests {
         }
 
         SceneNode& Node(const char* sceneName, const char* name) const {
-            SceneNode* node = Find(GetScene(sceneName).GetRootNode(), name);
+            SceneNode* node = FindNodeBelow(GetScene(sceneName).GetRootNode(), name);
             EXPECT_NE(node, nullptr) << name;
             return *node;
         }

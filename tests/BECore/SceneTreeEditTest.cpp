@@ -5,6 +5,7 @@
 #include <BECore/SceneEventsTest.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/SceneTestSupport.h>
 #include <Events/SceneEvents.h>
 #include <entt/entt.hpp>
 #include <gtest/gtest.h>
@@ -33,37 +34,6 @@ namespace BECore::Tests {
         constexpr float kEditedX = 99.0f;
         constexpr float kOriginalX = 1.0f;
 
-        /// The names of the tree below @p node, depth first, each followed by one dot per level ("A B B1. B1a.. B2. C")
-        void AppendTree(const SceneNode& node, size_t depth, String& out) {
-            for (const auto& child : node.GetChildren()) {
-                if (!out.empty()) {
-                    out.append(" ");
-                }
-                out.append(child->GetName().CStr());
-                out.append(depth, '.');
-                AppendTree(*child, depth + 1, out);
-            }
-        }
-
-        String TreeOf(const SceneNode& root) {
-            String out;
-            AppendTree(root, 0, out);
-            return out;
-        }
-
-        SceneNode* Find(SceneNode& from, const char* name) {
-            const PoolString wanted = PoolString::Intern(name);
-            for (const auto& child : from.GetChildren()) {
-                if (child->GetName() == wanted) {
-                    return child.Get();
-                }
-                if (SceneNode* found = Find(*child, name)) {
-                    return found;
-                }
-            }
-            return nullptr;
-        }
-
     }  // namespace
 
     /// Scene::MoveNode, DuplicateNode and MakeUniqueSiblingName on a scene loaded from a string
@@ -89,7 +59,7 @@ namespace BECore::Tests {
         }
 
         SceneNode& Node(const char* name) {
-            SceneNode* node = Find(_scene->GetRootNode(), name);
+            SceneNode* node = FindNodeBelow(_scene->GetRootNode(), name);
             EXPECT_NE(node, nullptr) << name;
             return *node;
         }
@@ -176,7 +146,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneTreeEditTest, TheRootAndNodesOfAnotherSceneAreRefused) {
         Scene& other = *_manager->GetSceneByName("Other"_intern);
-        SceneNode& foreign = *Find(other.GetRootNode(), "Foreign");
+        SceneNode& foreign = *FindNodeBelow(other.GetRootNode(), "Foreign");
         const String before = Tree();
         const String otherBefore = TreeOf(other.GetRootNode());
 
@@ -262,7 +232,7 @@ namespace BECore::Tests {
         const String before = Tree();
 
         EXPECT_FALSE(_scene->DuplicateNode(_scene->GetRootNode()));
-        EXPECT_FALSE(_scene->DuplicateNode(*Find(other.GetRootNode(), "Foreign")));
+        EXPECT_FALSE(_scene->DuplicateNode(*FindNodeBelow(other.GetRootNode(), "Foreign")));
 
         EXPECT_EQ(Tree(), before);
     }
