@@ -189,7 +189,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(RoomProtocolTest, TheSizeAndNulRulesApplyToTheNewTypes) {
+    TEST(RoomProtocolTest, TheSizeAndNulRulesApplyToListAndCreateRoom) {
         const String list = Message("list_rooms", R"("game":"g")");
         EXPECT_EQ(ErrorCodeOfText(list, list.size()), "<ok>");
         EXPECT_EQ(ErrorCodeOfText(list, list.size() - 1), RoomErrors::kMessageTooLarge);
@@ -624,7 +624,7 @@ namespace BECore::Tests {
             return parsed ? String("<ok>") : parsed.error().code;
         }
 
-        /// A `lobby` message with @p seats as the JSON text of the array
+        /// A `lobby` message with @p members as the JSON text of its members (no braces)
         String LobbyWith(StringView members) {
             return Message("lobby", members);
         }
@@ -957,7 +957,7 @@ namespace BECore::Tests {
             return listing;
         }
 
-        /// A `rooms` entry as JSON text with the members of @p members
+        /// A `rooms` message of the game `g` with @p entries as the JSON text of its list and @p more as its `more` flag
         String RoomsWith(StringView entries, StringView more = "false") {
             return Message("rooms", Format(R"("game":"g","rooms":[{}],"more":{})", entries, more));
         }

@@ -4,8 +4,8 @@
 
 namespace BECore::Tests {
 
-    /// The hub in memory against a client that does what no honest client does (the sockets: RoomServerHostileTest). The harness judges every text
-    /// against the live game as it is sent (a leak fails the test); the wire judge here reads the same texts again from the client's side.
+    // The hub in memory against a client that does what no honest client does (the sockets: RoomServerHostileTest). The harness judges every text
+    // against the live game as it is sent (a leak fails the test); the wire judge here reads the same texts again from the client's side.
 
     namespace {
 

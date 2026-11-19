@@ -62,13 +62,13 @@ namespace BECore::Tests {
         [[nodiscard]] std::expected<ClientMessage, ControlError> ParseSent(size_t index) const {
             return ParseClientMessage(sent.at(index));
         }
-
-        template <typename T>
-        [[nodiscard]] const T* SentAs(size_t index, std::expected<ClientMessage, ControlError>& holder) const {
-            holder = ParseSent(index);
-            return holder ? std::get_if<T>(&*holder) : nullptr;
-        }
     };
+
+    /// The message of type @p T in @p parsed, or null when the parse failed or the message is of another type
+    template <typename T>
+    [[nodiscard]] const T* SentAs(const std::expected<ClientMessage, ControlError>& parsed) {
+        return parsed ? std::get_if<T>(&*parsed) : nullptr;
+    }
 
     class FakeRoomTransport final : public IRoomTransport {
     public:

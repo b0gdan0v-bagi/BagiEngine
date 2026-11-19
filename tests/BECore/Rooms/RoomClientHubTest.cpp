@@ -14,7 +14,7 @@ namespace BECore::Tests {
         constexpr StringView kUrl = "ws://hub.test";
         constexpr milliseconds kStep{10};
         constexpr int kMaxSteps = 20000;
-        constexpr int kCardsInAHand = DemoCardGame::kTotalPlays;
+        constexpr int kCardsPlayedInAHand = DemoCardGame::kTotalPlays;
 
         /// A RoomClientPlayer over the hub; @p judged off leaves the wire judge out
         struct Player : RoomClientPlayer {
@@ -99,7 +99,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(_players[0]->client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));
         for (const auto& player : _players) {
-            EXPECT_EQ(player->TableSize(), kCardsInAHand);
+            EXPECT_EQ(player->TableSize(), kCardsPlayedInAHand);
             EXPECT_GT(player->judge->texts, 3u);
             EXPECT_TRUE(player->judge->leaks.empty());
             EXPECT_EQ(player->Count(Kind::Error), 0u);
@@ -114,7 +114,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(_players[0]->client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));
         for (const auto& player : _players) {
-            EXPECT_EQ(player->TableSize(), kCardsInAHand);
+            EXPECT_EQ(player->TableSize(), kCardsPlayedInAHand);
             EXPECT_TRUE(player->judge->leaks.empty());
             EXPECT_EQ(player->Count(Kind::Error), 0u);
         }
@@ -153,7 +153,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));
         for (const auto& player : _players) {
-            EXPECT_EQ(player->TableSize(), kCardsInAHand);
+            EXPECT_EQ(player->TableSize(), kCardsPlayedInAHand);
             EXPECT_TRUE(player->judge->leaks.empty());
         }
     }
@@ -184,7 +184,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(host.client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));
         for (const auto& player : _players) {
-            EXPECT_EQ(player->TableSize(), kCardsInAHand);
+            EXPECT_EQ(player->TableSize(), kCardsPlayedInAHand);
             EXPECT_TRUE(player->judge->leaks.empty());
             EXPECT_EQ(player->Count(Kind::Error), 0u);
         }
@@ -255,7 +255,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));
         for (const auto& player : _players) {
-            EXPECT_EQ(player->TableSize(), kCardsInAHand);
+            EXPECT_EQ(player->TableSize(), kCardsPlayedInAHand);
             EXPECT_TRUE(player->judge->leaks.empty());
         }
     }
@@ -302,7 +302,7 @@ namespace BECore::Tests {
 
         // The second plays the seat for the rest of the hand (the first has stopped acting)
         ASSERT_TRUE(StepUntil([&] { return _players[0]->client->IsFinished() && second.client->IsFinished(); }));
-        EXPECT_EQ(second.TableSize(), kCardsInAHand);
+        EXPECT_EQ(second.TableSize(), kCardsPlayedInAHand);
         EXPECT_TRUE(second.judge->leaks.empty());
     }
 

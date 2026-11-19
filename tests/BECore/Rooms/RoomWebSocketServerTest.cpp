@@ -2,6 +2,7 @@
 #include <BECore/Rooms/FakeSeatedGame.h>
 #include <BECore/Rooms/ManualClock.h>
 #include <BECore/Rooms/RoomTableDriver.h>
+#include <BECore/Rooms/RoomTestTimings.h>
 #include <BECore/Rooms/TestRandom.h>
 #include <Common/LogRecorder.h>
 #include <Common/Wait.h>
@@ -21,7 +22,7 @@ namespace BECore::Tests {
         RoomServerSettings MakeSettings() {
             RoomServerSettings settings;
             settings.tickInterval = 10ms;
-            settings.hub.timings = RoomTimings{30s, 10min, 0ms};
+            settings.hub.timings = NoComputerDelayTimings();
             settings.pingInterval = 0ms;  // on the real clock a loaded machine would see pings; the liveness cases set their own
             settings.random = MakeSequence(7);
             return settings;
@@ -386,7 +387,8 @@ namespace BECore::Tests {
         /// Asks the server for so many answers without ever reading one: its send buffer and the client's receive buffer fill, the writer of the
         /// connection blocks in the socket and the rest of the answers wait in the outbox (`maxOutboxBytes` of the settings has to be above them)
         void FloodWithoutReading(RoomSocketClient& client) {
-            // About 80 bytes of answer for 50 sent, 13 MB in all: above the 4 MB the system lets a send buffer and a receive buffer grow to, together
+            // `join` is no message type: each is answered with a `bad_message` error, which is larger than it and spends no failed-join
+            // budget. 13 MB of answers in all, far above what the send and receive buffers of a local socket hold together
             constexpr int kChunks = 80;
             const Vector<uint8_t> chunk = RepeatText("{\"v\":1,\"type\":\"join\",\"room\":\"ZZZZ\",\"name\":\"x\"}", 2000);
             for (int i = 0; i < kChunks; ++i) {
@@ -394,13 +396,12 @@ namespace BECore::Tests {
             }
         }
 
-        /// Settings for FloodWithoutReading(): no rate limit, no end after failed joins, an outbox that holds every answer
+        /// Settings for FloodWithoutReading(): no rate limit, an outbox that holds every answer
         RoomServerSettings MakeStuckClientSettings(std::chrono::milliseconds grace) {
             RoomServerSettings settings = MakeShutdownSettings(grace);
             settings.maxOutboxBytes = 512 * 1024 * 1024;
             settings.hub.rateBurst = 100'000'000;
             settings.hub.ratePerSecond = 100'000'000.0;
-            settings.hub.maxFailedJoinsInRow = std::numeric_limits<int>::max();
             return settings;
         }
 

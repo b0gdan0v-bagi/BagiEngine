@@ -52,7 +52,7 @@ namespace BECore::Tests {
             return browser;
         }
 
-        /// Whether any text any client received that is not in @p members contains @p code
+        /// How many texts received by the clients that are not in @p members contain @p code
         size_t CountTextsWithCode(HubHarness& harness, const String& code, const Vector<ConnectionId>& members) {
             size_t count = 0;
             for (const auto& [id, client] : harness.Clients()) {
@@ -74,7 +74,7 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(RoomHubTest, APrivateRoomIsNeverListedAndItsCodeGoesToItsMembersOnly) {
+    TEST(RoomListTest, APrivateRoomIsNeverListedAndItsCodeGoesToItsMembersOnly) {
         HubHarness harness;
         const ConnectionId host = harness.Connect();
         harness.Create(host, "Ann");
@@ -101,7 +101,7 @@ namespace BECore::Tests {
         EXPECT_EQ(harness.GetLeakCount(), 0u);
     }
 
-    TEST(RoomHubTest, ACreateWithPublicFalseIsPrivateAndTheLobbyDoesNotSayWhetherARoomIsListed) {
+    TEST(RoomListTest, ACreateWithPublicFalseIsPrivateAndTheLobbyDoesNotSayWhetherARoomIsListed) {
         HubHarness harness;
         const ConnectionId host = harness.Connect();
         harness.Send(host, CreateRoomMessage{"fake", "Ann", Json::object(), false});
@@ -111,7 +111,7 @@ namespace BECore::Tests {
         EXPECT_EQ(FindJsonMember(Require(harness.Client(publicHost).Last(RoomMessageTypes::kJoined)).json, "public"), nullptr);
     }
 
-    TEST(RoomHubTest, APublicRoomIsListedWithTheHostTheSeatsAndTheOptions) {
+    TEST(RoomListTest, APublicRoomIsListedWithTheHostTheSeatsAndTheOptions) {
         HubHarness harness;
         Json options = Json::object();
         options["open"] = true;
@@ -151,7 +151,7 @@ namespace BECore::Tests {
         EXPECT_EQ(harness.Client(plainHost).roomCode, GetJsonString((*RoomsOf(client))[0], "room").value_or(String()));
     }
 
-    TEST(RoomHubTest, ARoomDropsOutOfTheListWhenFullAndComesBackWhenASeatIsFree) {
+    TEST(RoomListTest, ARoomDropsOutOfTheListWhenFullAndComesBackWhenASeatIsFree) {
         HubHarness harness;
         const ConnectionId host = MakePublicRoom(harness, "Ann");
         const String code = harness.Client(host).roomCode;
@@ -171,7 +171,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(IsListed(harness.Client(Browse(harness)), code));
     }
 
-    TEST(RoomHubTest, AStartedRoomIsNotListedUnlessTheGameSaysSoAndAFinishedOneNever) {
+    TEST(RoomListTest, AStartedRoomIsNotListedUnlessTheGameSaysSoAndAFinishedOneNever) {
         HubHarness harness;
         const ConnectionId plain = MakePublicRoom(harness, "Ann", "fake");
         const ConnectionId listing = MakePublicRoom(harness, "Bob", "fake-started");
@@ -204,7 +204,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(IsListed(harness.Client(Browse(harness, "fake-started")), listingCode));
     }
 
-    TEST(RoomHubTest, AClosedRoomIsNotListedAndWhenTheHostLeavesTheNewHostIsShown) {
+    TEST(RoomListTest, AClosedRoomIsNotListedAndWhenTheHostLeavesTheNewHostIsShown) {
         HubHarness harness;
         const ConnectionId host = MakePublicRoom(harness, "Ann");
         const String code = harness.Client(host).roomCode;
@@ -226,7 +226,7 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonBool(Require(harness.Client(third).Last(RoomMessageTypes::kRooms)).json, "more"), false);
     }
 
-    TEST(RoomHubTest, ListingAsksForOneGameOnly) {
+    TEST(RoomListTest, ListingAsksForOneGameOnly) {
         HubHarness harness;
         const ConnectionId one = MakePublicRoom(harness, "Ann", "fake");
         const ConnectionId two = MakePublicRoom(harness, "Bob", "fake-public");
@@ -238,7 +238,7 @@ namespace BECore::Tests {
         EXPECT_EQ(CodeAt(harness.Client(publicBrowser), 0), harness.Client(two).roomCode);
     }
 
-    TEST(RoomHubTest, ListingAnUnknownGameOrFromInsideARoomIsAnError) {
+    TEST(RoomListTest, ListingAnUnknownGameOrFromInsideARoomIsAnError) {
         HubHarness harness;
         const ConnectionId host = MakePublicRoom(harness, "Ann");
         const ConnectionId browser = harness.Connect();
@@ -256,7 +256,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(harness.Client(host).closed);
     }
 
-    TEST(RoomHubTest, TheAnswerIsCutAtTheCapOldestFirst) {
+    TEST(RoomListTest, TheAnswerIsCutAtTheCapOldestFirst) {
         HubHarness harness(SettingsWith(2));
         Vector<String> codes;
         for (int i = 0; i < 3; ++i) {
@@ -279,7 +279,7 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonBool(Require(exact.Client(other).Last(RoomMessageTypes::kRooms)).json, "more"), false);
     }
 
-    TEST(RoomHubTest, TheCapOfTheSettingsNeverGoesAboveTheLimitOfTheProtocol) {
+    TEST(RoomListTest, TheCapOfTheSettingsNeverGoesAboveTheLimitOfTheProtocol) {
         HubHarness harness(SettingsWith(1000));
         for (size_t i = 0; i < RoomLimits::kMaxListedRooms + 1; ++i) {
             MakePublicRoom(harness, "H");
@@ -291,7 +291,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(ParseServerMessage(Require(harness.Client(browser).Last(RoomMessageTypes::kRooms)).text).has_value());
     }
 
-    TEST(RoomHubTest, TheOrderIsTheOrderOfCreationWhateverTheCodes) {
+    TEST(RoomListTest, TheOrderIsTheOrderOfCreationWhateverTheCodes) {
         HubHarness harness;
         Vector<String> codes;
         for (int i = 0; i < 12; ++i) {
@@ -308,7 +308,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Require(harness.Client(browser).Last(RoomMessageTypes::kRooms)).text, first);
     }
 
-    TEST(RoomHubTest, TheListBucketAnswersRateLimitedKeepsTheConnectionAndRefills) {
+    TEST(RoomListTest, TheListBucketAnswersRateLimitedKeepsTheConnectionAndRefills) {
         HubHarness harness;
         MakePublicRoom(harness, "Ann");
         const ConnectionId browser = harness.Connect();
@@ -341,7 +341,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Require(harness.Client(browser).Last(RoomMessageTypes::kJoined)).GetString("room"), code);
     }
 
-    TEST(RoomHubTest, TheListBucketBelongsToTheConnection) {
+    TEST(RoomListTest, TheListBucketBelongsToTheConnection) {
         HubHarness harness;
         const ConnectionId first = harness.Connect();
         const ConnectionId second = harness.Connect();
@@ -353,7 +353,7 @@ namespace BECore::Tests {
         EXPECT_EQ(harness.Client(second).Count(RoomMessageTypes::kError), 0u);
     }
 
-    TEST(RoomHubTest, ARefusedListDoesNotCountAsAFailedJoin) {
+    TEST(RoomListTest, ARefusedListDoesNotCountAsAFailedJoin) {
         HubHarness harness;
         const ConnectionId client = harness.Connect();
         for (int i = 0; i < RoomLimits::kMaxFailedJoinsInRow - 1; ++i) {
@@ -372,7 +372,7 @@ namespace BECore::Tests {
         EXPECT_EQ(harness.Client(client).closeReason, "too_many_failed_joins");
     }
 
-    TEST(RoomHubTest, AFloodOfListsEndsAtTheGeneralLimitWithAClose) {
+    TEST(RoomListTest, AFloodOfListsEndsAtTheGeneralLimitWithAClose) {
         HubHarness harness;
         const ConnectionId client = harness.Connect();
         for (int i = 0; i < 100 && !harness.Client(client).closed; ++i) {
@@ -385,7 +385,7 @@ namespace BECore::Tests {
         EXPECT_EQ(harness.Hub().GetConnectionCount(), 0u);
     }
 
-    TEST(RoomHubTest, ListsNeverSpendTheFailedJoinBudgets) {
+    TEST(RoomListTest, ListsNeverSpendTheFailedJoinBudgets) {
         RoomHubSettings settings = HubHarness::MakeSettings();
         settings.addressJoinBurst = 2;
         settings.serverJoinBurst = 2;
@@ -420,7 +420,7 @@ namespace BECore::Tests {
         EXPECT_EQ(harness.Client(late).LastErrorCode(), RoomErrors::kRateLimited);
     }
 
-    TEST(RoomHubTest, AListCountsAsActivityForTheIdleTimeoutAndAPingDoesNot) {
+    TEST(RoomListTest, AListCountsAsActivityForTheIdleTimeoutAndAPingDoesNot) {
         HubHarness harness;
         const ConnectionId lister = harness.Connect();
         const ConnectionId pinger = harness.Connect();
@@ -453,7 +453,7 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(RoomHubTest, JoiningFromTheListGivesTheSameAnswersAsJoiningByCode) {
+    TEST(RoomListTest, JoiningFromTheListGivesTheSameAnswersAsJoiningByCode) {
         // Each case: a room is listed, something happens to it, then one connection joins with the code it read from the list and another with the
         // code the host told it; the two get the same text. (A code from the list is the code: the client sends the same `join_room`.)
         enum class Case { Open, Full, Started, BadName, Closed };
@@ -507,7 +507,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(RoomHubTest, ACodeFromAStaleListIsAFailedJoinLikeAnyUnknownCode) {
+    TEST(RoomListTest, ACodeFromAStaleListIsAFailedJoinLikeAnyUnknownCode) {
         HubHarness harness;
         const ConnectionId host = MakePublicRoom(harness, "Ann");
         const ConnectionId browser = Browse(harness);
@@ -525,7 +525,7 @@ namespace BECore::Tests {
 
     // ---- The room's part ----------------------------------------------------------------------------------------------------------
 
-    TEST(RoomLobbyTest, ARoomIsPrivateUntilItIsMadePublicAndTheFlagIsNoLobbyChange) {
+    TEST(RoomListTest, ARoomIsPrivateUntilItIsMadePublicAndTheFlagIsNoLobbyChange) {
         Room room("ABCDE", SeatedGameInfo{"fake", 4}, MakeSequence(7));
         EXPECT_FALSE(room.IsPublic());
         const uint64_t revision = room.GetLobbyRevision();
@@ -536,7 +536,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(room.IsPublic());
     }
 
-    TEST(RoomLobbyTest, TheListingNamesTheHostCountsTheHumansAndKeepsTheLobbyOptions) {
+    TEST(RoomListTest, TheListingNamesTheHostCountsTheHumansAndKeepsTheLobbyOptions) {
         Room room("ABCDE", SeatedGameInfo{"fake", 4, {"hints"}}, MakeSequence(7));
         Json options = Json::object();
         options["hints"] = true;

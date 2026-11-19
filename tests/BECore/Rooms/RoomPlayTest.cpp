@@ -1,4 +1,5 @@
 #include <BECore/Rooms/FakeSeatedGame.h>
+#include <BECore/Rooms/RoomTestTimings.h>
 #include <BECore/Rooms/TestRandom.h>
 #include <Common/LogRecorder.h>
 #include <Common/Printers.h>
@@ -390,7 +391,7 @@ namespace BECore::Tests {
             *game = made.get();
             return made;
         };
-        Room room("ABCDE", SeatedGameInfo{"fake", 4}, MakeSequence(5), std::move(factory), RoomTimings{std::chrono::seconds(30), std::chrono::minutes(10), std::chrono::milliseconds(0)});
+        Room room("ABCDE", SeatedGameInfo{"fake", 4}, MakeSequence(5), std::move(factory), NoComputerDelayTimings());
         const auto joined = room.AddMember("Ann", kNow);
         ASSERT_TRUE(joined.has_value());
         ASSERT_TRUE(room.Start(joined->player, kNow, FirstSeatOptions(1)).has_value());

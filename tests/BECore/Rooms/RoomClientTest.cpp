@@ -70,13 +70,6 @@ namespace BECore::Tests {
                 Pump();
             }
 
-            /// The kinds of the events since the last Forget(), then forgets them
-            [[nodiscard]] Vector<RoomClientEventKind> TakeKinds() {
-                auto kinds = Kinds();
-                _events.clear();
-                return kinds;
-            }
-
             void Receive(FakeLink& link, StringView text) {
                 link.PushText(text);
                 Pump();
@@ -101,15 +94,6 @@ namespace BECore::Tests {
                     kinds.push_back(event.kind);
                 }
                 return kinds;
-            }
-
-            [[nodiscard]] std::expected<ClientMessage, ControlError> SentParsed(const FakeLink& link, size_t index) const {
-                return link.ParseSent(index);
-            }
-
-            template <typename T>
-            [[nodiscard]] const T* AsSent(const std::expected<ClientMessage, ControlError>& parsed) const {
-                return parsed ? std::get_if<T>(&*parsed) : nullptr;
             }
 
             ManualClock _clock;
@@ -140,8 +124,8 @@ namespace BECore::Tests {
         Pump();
         EXPECT_EQ(_client->GetState(), RoomClientState::Connected);
         ASSERT_EQ(link.sent.size(), 1u);
-        const auto parsed = SentParsed(link, 0);
-        const auto* create = AsSent<CreateRoomMessage>(parsed);
+        const auto parsed = link.ParseSent(0);
+        const auto* create = SentAs<CreateRoomMessage>(parsed);
         ASSERT_NE(create, nullptr);
         EXPECT_EQ(create->game, "cards");
         EXPECT_EQ(create->name, "Ann");
@@ -156,8 +140,8 @@ namespace BECore::Tests {
         link.PushOpened();
         Pump();
         ASSERT_EQ(link.sent.size(), 1u);
-        const auto parsed = SentParsed(link, 0);
-        const auto* join = AsSent<JoinRoomMessage>(parsed);
+        const auto parsed = link.ParseSent(0);
+        const auto* join = SentAs<JoinRoomMessage>(parsed);
         ASSERT_NE(join, nullptr);
         EXPECT_EQ(join->code, kRoom);
         EXPECT_EQ(join->name, "Bob");
@@ -244,14 +228,14 @@ namespace BECore::Tests {
         ASSERT_TRUE(_client->Start().has_value());
         ASSERT_TRUE(_client->Leave().has_value());
         ASSERT_EQ(link.sent.size(), 4u);
-        const auto seat = SentParsed(link, 1);
-        const auto* chooseSeat = AsSent<ChooseSeatMessage>(seat);
+        const auto seat = link.ParseSent(1);
+        const auto* chooseSeat = SentAs<ChooseSeatMessage>(seat);
         ASSERT_NE(chooseSeat, nullptr);
         EXPECT_EQ(chooseSeat->seat, 2);
-        const auto start = SentParsed(link, 2);
-        EXPECT_NE(AsSent<StartMessage>(start), nullptr);
-        const auto leave = SentParsed(link, 3);
-        EXPECT_NE(AsSent<LeaveMessage>(leave), nullptr);
+        const auto start = link.ParseSent(2);
+        EXPECT_NE(SentAs<StartMessage>(start), nullptr);
+        const auto leave = link.ParseSent(3);
+        EXPECT_NE(SentAs<LeaveMessage>(leave), nullptr);
     }
 
     TEST_F(RoomClientTest, ChooseSeatTakesTheSeatAtOnceAndGoesBackOnAnError) {
@@ -300,8 +284,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(_client->Join(kUrl, "FGHJK", "Ann").has_value());
         EXPECT_EQ(_transports.Count(), 1u);
         ASSERT_EQ(link.sent.size(), sentBefore + 1);
-        const auto parsed = SentParsed(link, sentBefore);
-        const auto* join = AsSent<JoinRoomMessage>(parsed);
+        const auto parsed = link.ParseSent(sentBefore);
+        const auto* join = SentAs<JoinRoomMessage>(parsed);
         ASSERT_NE(join, nullptr);
         EXPECT_EQ(join->code, "FGHJK");
     }
@@ -319,13 +303,13 @@ namespace BECore::Tests {
         ASSERT_TRUE(_client->SendAction(OneAction()).has_value());
 
         ASSERT_EQ(link.sent.size(), 3u);
-        const auto first = SentParsed(link, 1);
-        const auto* firstAction = AsSent<ActionMessage>(first);
+        const auto first = link.ParseSent(1);
+        const auto* firstAction = SentAs<ActionMessage>(first);
         ASSERT_NE(firstAction, nullptr);
         EXPECT_EQ(firstAction->version, 7u);
         EXPECT_EQ(firstAction->action, OneAction());
-        const auto second = SentParsed(link, 2);
-        const auto* secondAction = AsSent<ActionMessage>(second);
+        const auto second = link.ParseSent(2);
+        const auto* secondAction = SentAs<ActionMessage>(second);
         ASSERT_NE(secondAction, nullptr);
         EXPECT_EQ(secondAction->version, 8u);
     }
@@ -457,11 +441,6 @@ namespace BECore::Tests {
         ASSERT_FALSE(hosted.has_value());
         EXPECT_EQ(hosted.error().code, RoomClientErrors::kTransportUnavailable);
         EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
-
-        // No factory at all: the default one, which this test build may not have
-        RoomClient withDefault;
-        const auto joined = withDefault.Join(kUrl, "ABCDE", "Bob");
-        EXPECT_TRUE(joined.has_value() || joined.error().code == RoomClientErrors::kTransportUnavailable || joined.error().code == RoomClientErrors::kConnectFailed);
     }
 
     TEST_F(RoomClientTest, AConnectThatIsRefusedGivesAClosedEvent) {
@@ -662,8 +641,8 @@ namespace BECore::Tests {
         EXPECT_EQ(link.sent.size(), sent);
         Advance(milliseconds(1));
         ASSERT_EQ(link.sent.size(), sent + 1);
-        const auto parsed = SentParsed(link, sent);
-        EXPECT_NE(AsSent<PingMessage>(parsed), nullptr);
+        const auto parsed = link.ParseSent(sent);
+        EXPECT_NE(SentAs<PingMessage>(parsed), nullptr);
     }
 
     TEST_F(RoomClientTest, OnlyOnePingIsOutstandingUntilSomethingArrives) {
@@ -777,8 +756,8 @@ namespace BECore::Tests {
         second.PushOpened();
         Pump();
         ASSERT_EQ(second.sent.size(), 1u);
-        const auto parsed = SentParsed(second, 0);
-        const auto* join = AsSent<JoinRoomMessage>(parsed);
+        const auto parsed = second.ParseSent(0);
+        const auto* join = SentAs<JoinRoomMessage>(parsed);
         ASSERT_NE(join, nullptr);
         EXPECT_TRUE(join->IsReconnect());
         EXPECT_EQ(join->token, kToken);
@@ -1082,8 +1061,8 @@ namespace BECore::Tests {
         link.PushOpened();
         Pump();
         ASSERT_EQ(link.sent.size(), 1u);
-        const auto parsed = SentParsed(link, 0);
-        const auto* join = AsSent<JoinRoomMessage>(parsed);
+        const auto parsed = link.ParseSent(0);
+        const auto* join = SentAs<JoinRoomMessage>(parsed);
         ASSERT_NE(join, nullptr);
         EXPECT_EQ(join->code, kRoom);
         EXPECT_EQ(join->token, kToken);
@@ -1183,8 +1162,8 @@ namespace BECore::Tests {
         Pump();
         EXPECT_EQ(_client->GetState(), RoomClientState::Connected);
         ASSERT_EQ(link.sent.size(), 1u);
-        const auto parsed = SentParsed(link, 0);
-        const auto* list = AsSent<ListRoomsMessage>(parsed);
+        const auto parsed = link.ParseSent(0);
+        const auto* list = SentAs<ListRoomsMessage>(parsed);
         ASSERT_NE(list, nullptr);
         EXPECT_EQ(list->game, "cards");
         EXPECT_TRUE(_client->GetRoomList().rooms.empty());
@@ -1250,8 +1229,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(_client->Join(kUrl, kRoom, "Cy").has_value());
         EXPECT_EQ(_transports.Count(), 1u);
         ASSERT_EQ(link.sent.size(), 3u);
-        const auto parsed = SentParsed(link, 2);
-        const auto* join = AsSent<JoinRoomMessage>(parsed);
+        const auto parsed = link.ParseSent(2);
+        const auto* join = SentAs<JoinRoomMessage>(parsed);
         ASSERT_NE(join, nullptr);
         EXPECT_EQ(join->code, kRoom);
         EXPECT_EQ(join->name, "Cy");
@@ -1333,8 +1312,8 @@ namespace BECore::Tests {
         Pump();
         ASSERT_EQ(link.sent.size(), 1u);
         EXPECT_NE(link.sent[0].find("\"public\":true"), String::npos);
-        const auto parsed = SentParsed(link, 0);
-        const auto* create = AsSent<CreateRoomMessage>(parsed);
+        const auto parsed = link.ParseSent(0);
+        const auto* create = SentAs<CreateRoomMessage>(parsed);
         ASSERT_NE(create, nullptr);
         EXPECT_TRUE(create->isPublic);
     }

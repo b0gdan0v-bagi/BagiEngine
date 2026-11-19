@@ -2,6 +2,7 @@
 
 #include <BECore/Format/Format.h>
 #include <BECore/Rooms/FakeSeatedGame.h>
+#include <BECore/Rooms/RoomTestTimings.h>
 #include <BECore/Rooms/TestRandom.h>
 #include <BECore/Rooms/WireJudge.h>
 #include <BECore/Types/Types.h>
@@ -122,10 +123,9 @@ namespace BECore::Tests {
             EXPECT_TRUE(_registry.Register(SeatedGameInfo{"fake-started", FakeSeatedGame::kSeatCount, {}, true}, factory));
         }
 
-        /// Small times for tests: no computer delay, the usual grace and timeouts
         static RoomHubSettings MakeSettings() {
             RoomHubSettings settings;
-            settings.timings = RoomTimings{std::chrono::seconds(30), std::chrono::minutes(10), std::chrono::milliseconds(0)};
+            settings.timings = NoComputerDelayTimings();
             return settings;
         }
 
@@ -215,7 +215,7 @@ namespace BECore::Tests {
             Send(id, PingMessage{});
         }
 
-        /// Creates a room with a host and @p guests more humans; returns the connections (host first). The room is in the lobby.
+        /// Creates a room of @p humans humans, the host and the guests who joined it by its code; returns the connections (host first). The room is in the lobby.
         Vector<ConnectionId> MakeLobby(int humans) {
             Vector<ConnectionId> ids;
             const ConnectionId host = Connect();
