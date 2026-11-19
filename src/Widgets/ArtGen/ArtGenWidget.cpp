@@ -141,6 +141,7 @@ namespace BECore {
         session.SetSoundAcceptor(&AcceptSoundForControl);
         session.SetKeeper(&KeepForControl);
         session.SetFrameMeasurer(&MeasureFrameForControl);
+        session.SetAcceptBatch(&BeginAcceptBatch, &EndAcceptBatch);
         session.RegisterControl(CoreManager::GetControlService());
         return true;
     }

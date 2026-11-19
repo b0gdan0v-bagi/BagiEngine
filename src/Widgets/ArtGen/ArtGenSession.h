@@ -148,6 +148,10 @@ namespace BECore {
         using FrameMeasurer = std::expected<ArtGenImageFrame, String> (*)(const Vector<String>& pngFiles, const ArtGenImageSettings& settings);
         /// Writes into the game's provenance file of @p name (a sprite or a clip, by @p kind) that the choice with @p seed was kept on @p date
         using Keeper = std::expected<void, ControlError> (*)(StringView kind, StringView name, int64_t seed, StringView date);
+        /// Opens and closes the batch of one Accept all of images: the acceptors called between them write their files and change the library
+        /// in memory only, and the end saves it once. The end's failure says the library was not saved
+        using BatchBegin = void (*)();
+        using BatchEnd = std::expected<void, ControlError> (*)();
 
         /// @param clock monotonic seconds; the default is the steady clock (a test passes its own). The editor's one session is GetInstance()
         explicit ArtGenSession(Clock clock = {});
@@ -226,6 +230,12 @@ namespace BECore {
         void SetFrameMeasurer(FrameMeasurer measurer) {
             _frameMeasurer = measurer;
         }
+        /// The batch an Accept all of images runs its acceptors inside (ArtGenAccept.h in the editor; fakes in the tests). Both hooks must be
+        /// given for a batch; a null one leaves every accept saving the library itself and every row marked as soon as it is written
+        void SetAcceptBatch(BatchBegin begin, BatchEnd end) {
+            _batchBegin = begin;
+            _batchEnd = end;
+        }
         /// The node "Use on selected" puts the sprite on (the scene editor's primary selection); null for none. Held, so it is checked alive
         /// in the active scene before use
         void SetSelectedNode(IntrusivePtr<SceneNode> node);
@@ -289,7 +299,9 @@ namespace BECore {
         ArtGenSetEdit PickVariant(StringView set, StringView job, int64_t seed, ArtGenSwitch* write = nullptr);
         /// Accepts the candidate of every job of a finished set as its job's name, through the acceptors Accept uses, marking each row in the
         /// manifest (Sets/CLAUDE.md, "Accept all"): the pick, else for images the first variant. A kept row and a row another set replaced are skipped. The checks come first and a
-        /// refusal by them changes nothing; a failure halfway leaves the rows before it accepted
+        /// refusal by them changes nothing. With the batch hooks an image set's files are written first and the library is saved once; the
+        /// rows are marked only after that save went through, so the manifest never names a row whose library entry was rolled back. A
+        /// failure halfway leaves the rows before it accepted (and marked); a failed save marks none and says which files were written
         std::expected<Json, ControlError> AcceptSet(StringView name);
         /// Fixes the choice of every live row of a set, or of @p job only: the Keeper writes the kept seed into the game first, then the row is
         /// kept (its other variants leave the manifest) and the manifest written. Final; nothing live to keep is `invalid_params`, and so is a named
@@ -363,6 +375,8 @@ namespace BECore {
         SoundAcceptor _soundAcceptor = nullptr;
         Keeper _keeper = nullptr;
         FrameMeasurer _frameMeasurer = nullptr;
+        BatchBegin _batchBegin = nullptr;
+        BatchEnd _batchEnd = nullptr;
         IntrusivePtr<SceneNode> _selectedNode;
         String _gameRoot;
         Vector<ArtGenSet> _sets;

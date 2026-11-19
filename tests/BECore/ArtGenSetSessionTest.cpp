@@ -54,11 +54,32 @@ namespace BECore::Tests {
         Vector<AcceptedRow> gAccepted;
         String gFailOn;  // a row of this name is refused by the fake acceptors
 
+        /// The calls of the batch hooks and the acceptors in the order they came: "begin", "accept <name>", "end"
+        Vector<String> gEvents;
+        bool gEndFails = false;               // the fake end of the batch answers that the library was not saved
+        MoveOnlyFunction<void()> gDuringEnd;  // what a test looks at while the fake end runs: the library is saved there, the rows are not marked yet
+
+        void FakeBegin() {
+            gEvents.push_back("begin");
+        }
+
+        std::expected<void, ControlError> FakeEnd() {
+            gEvents.push_back("end");
+            if (gDuringEnd) {
+                gDuringEnd();
+            }
+            if (gEndFails) {
+                return std::unexpected(ControlError{String("artgen_accept_failed"), String("TextureLibrary.xml could not be saved")});
+            }
+            return {};
+        }
+
         std::expected<Json, ControlError> Answer(const ArtGenVariant& variant, StringView name, bool image, bool withNode, bool defaultSettings) {
             if (name == gFailOn) {
                 return std::unexpected(ControlError{String("artgen_accept_failed"), String("the disk is full")});
             }
             gAccepted.push_back(AcceptedRow{variant.seed, variant.path, variant.provenancePath, String(name), image, withNode, defaultSettings});
+            gEvents.push_back(Format("accept {}", name));
             Json reply = Json::object();
             reply[image ? "sprite" : "clip"] = ToStdString(name);
             return reply;
@@ -133,6 +154,9 @@ namespace BECore::Tests {
             gMeasures.clear();
             gMeasureFail.clear();
             gFailOn.clear();
+            gEvents.clear();
+            gEndFails = false;
+            gDuringEnd = nullptr;
             gKept.clear();
             gKeepFailOn.clear();
         }
@@ -1147,6 +1171,142 @@ namespace BECore::Tests {
         for (const ArtGenSetJob& job : OnDisk("five").jobs) {
             EXPECT_TRUE(job.accepted.has_value());
         }
+    }
+
+    TEST_F(ArtGenSetSessionTest, AcceptAllOfImagesRunsItsAcceptorsInsideOneBatchAndMarksTheRowsAfterIt) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(Enqueue("batch", "a\nb\nc").has_value());
+        RunAndPickAll("batch");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("batch"));
+        size_t markedWhileEnding = 99;
+        gDuringEnd = [this, &markedWhileEnding] {
+            markedWhileEnding = 0;
+            for (const ArtGenSetJob& job : OnDisk("batch").jobs) {
+                markedWhileEnding += job.accepted.has_value() ? 1 : 0;
+            }
+        };
+
+        const Json answer = Result(AcceptAllCall("batch"));
+
+        const Vector<String> expected{"begin", "accept a", "accept b", "accept c", "end"};
+        EXPECT_EQ(gEvents, expected);
+        EXPECT_EQ(markedWhileEnding, 0u) << "the library is saved before any row is marked";
+        ASSERT_NE(FindJsonMember(answer, "accepted"), nullptr);
+        const Json& rows = *FindJsonMember(answer, "accepted");
+        ASSERT_EQ(rows.size(), 3u);
+        EXPECT_EQ(GetJsonString(rows[2], "as"), Optional<String>("c"));
+        EXPECT_EQ(GetJsonString(rows[2], "sprite"), Optional<String>("c"));
+        EXPECT_EQ(GetJsonInt(rows[2], "seed"), Optional<int64_t>(kSetSeed + 1));
+        const ArtGenSet disk = OnDisk("batch");
+        for (const ArtGenSetJob& job : disk.jobs) {
+            ASSERT_TRUE(job.accepted.has_value());
+            EXPECT_EQ(job.pick, Optional<int64_t>(kSetSeed + 1));
+            EXPECT_FALSE(job.accepted->kept);
+        }
+        EXPECT_TRUE(disk.processing.has_value());
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailureHalfwayInABatchEndsItMarksTheRowsDoneAndTheNextCallFinishes) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(Enqueue("five", "a\nb\nc\nd\ne").has_value());
+        RunAndPickAll("five");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("five"));
+
+        gFailOn = "c";
+        const Json refused = AcceptAllCall("five");
+
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        const String message = ErrorMessage(refused);
+        EXPECT_NE(message.find("row 3 of 5"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("accepted before it: a, b"), String::npos) << message.c_str();
+        const Vector<String> expected{"begin", "accept a", "accept b", "end"};
+        EXPECT_EQ(gEvents, expected) << "the batch ends once, on the failure path too";
+        const ArtGenSet disk = OnDisk("five");
+        EXPECT_TRUE(disk.jobs[0].accepted.has_value());
+        EXPECT_TRUE(disk.jobs[1].accepted.has_value());
+        EXPECT_FALSE(disk.jobs[2].accepted.has_value());
+
+        gFailOn.clear();
+        gEvents.clear();
+        EXPECT_EQ(ErrorCode(AcceptAllCall("five")), "");
+        EXPECT_EQ(gEvents.size(), 7u) << "begin, five accepts, end";
+        for (const ArtGenSetJob& job : OnDisk("five").jobs) {
+            EXPECT_TRUE(job.accepted.has_value());
+        }
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailedLibrarySaveMarksNoRowAndNamesTheFilesWritten) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(Enqueue("lost", "a\nb\nc").has_value());
+        RunAndPickAll("lost");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("lost"));
+        const uint64_t versionBefore = session.Version();
+
+        gEndFails = true;
+        const Json refused = AcceptAllCall("lost");
+
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        const String message = ErrorMessage(refused);
+        EXPECT_NE(message.find("files written: a, b, c"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("library was not saved"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("call again"), String::npos) << message.c_str();
+        for (const ArtGenSetJob& job : OnDisk("lost").jobs) {
+            EXPECT_FALSE(job.accepted.has_value());
+        }
+        EXPECT_FALSE(OnDisk("lost").processing.has_value());
+        EXPECT_EQ(session.Version(), versionBefore) << "nothing of the set changed";
+
+        gEndFails = false;
+        EXPECT_EQ(ErrorCode(AcceptAllCall("lost")), "");
+        for (const ArtGenSetJob& job : OnDisk("lost").jobs) {
+            EXPECT_TRUE(job.accepted.has_value());
+        }
+    }
+
+    TEST_F(ArtGenSetSessionTest, ARowFailureAndAFailedLibrarySaveAreBothInTheError) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(Enqueue("both", "a\nb\nc").has_value());
+        RunAndPickAll("both");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("both"));
+
+        gFailOn = "b";
+        gEndFails = true;
+        const String message = ErrorMessage(AcceptAllCall("both"));
+
+        EXPECT_NE(message.find("'b'"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("the disk is full"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("library was not saved"), String::npos) << message.c_str();
+        EXPECT_FALSE(OnDisk("both").jobs[0].accepted.has_value()) << "the row before the failure is not marked either";
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASetWithNothingToWriteAndASoundSetCallNoBatchHook) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(Enqueue("done", "a").has_value());
+        RunAndPickAll("done");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("done"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("done")), "");
+        ASSERT_NO_FATAL_FAILURE(KeepOnDisk("done", "a"));
+        gEvents.clear();
+        EXPECT_EQ(ErrorCode(AcceptAllCall("done")), "");
+        EXPECT_TRUE(gEvents.empty()) << "every row is kept: nothing is written, no batch is opened";
+
+        Poll();
+        ArtGenSetRequest request;
+        request.preset = "knock";
+        request.subjects = ParseArtGenSubjects("knock: a wooden knock\ntap: a soft tap").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "heard";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAll("audio"));
+        ASSERT_EQ(session.PickVariant("heard", "knock", kSetSeed), ArtGenSetEdit::Ok);
+        ASSERT_EQ(session.PickVariant("heard", "tap", kSetSeed), ArtGenSetEdit::Ok);
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("heard"));
+        gEvents.clear();
+        EXPECT_EQ(ErrorCode(AcceptAllCall("heard")), "");
+        const Vector<String> expected{"accept knock", "accept tap"};
+        EXPECT_EQ(gEvents, expected) << "a sound touches no library";
+        EXPECT_TRUE(OnDisk("heard").jobs[1].accepted.has_value());
     }
 
     TEST_F(ArtGenSetSessionTest, AcceptAllOfRowsWithNoPickTakesTheFirstVariantAndRecordsItAsThePick) {
