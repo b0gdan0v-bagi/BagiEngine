@@ -107,7 +107,7 @@ Managed by `TestManager`, which fills a `Tests::TestList` from `TestsConfig` wit
 - `StackTraceHandler` — prints a stack trace
 
 ## Checklist for New gtest Test
-- [ ] `tests/<Module>/<Name>Test.cpp` (engine) or `tests/<Name>Test.cpp` of a game's repository (game) with `TEST(<Name>Test, ...)` in `namespace BECore::Tests`
+- [ ] `tests/BECore/<Name>Test.cpp` (engine, any module) or `tests/<Name>Test.cpp` of a game's repository (game) with `TEST(<Name>Test, ...)` in `namespace BECore::Tests`
 - [ ] gtest macros, not engine `ASSERT` / `EXPECT`
 - [ ] `static_assert` checks at file scope + `CompileTimeChecks` case
 - [ ] Re-ran `cmake --preset ...` and `ctest --preset ...` is green
