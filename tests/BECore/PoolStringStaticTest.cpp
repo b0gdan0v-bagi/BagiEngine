@@ -4,7 +4,7 @@
 #include <BECore/PoolString/StaticPoolString.h>
 #include <BECore/PoolStringTestSupport.h>
 #include <Common/Printers.h>
-#include <chrono>
+#include <Common/Wait.h>
 #include <cstring>
 
 // The pool is the process's and cannot un-intern, so each test uses literals no other test names. Counters are deltas
@@ -13,8 +13,6 @@
 namespace BECore::Tests {
 
     namespace {
-
-        constexpr std::chrono::milliseconds kThreadLimit{10000};
 
         bool IsEntry(const PoolString& value, const Details::PoolStringEntry& entry) {
             return value.CStr() == entry.data;
@@ -121,7 +119,7 @@ namespace BECore::Tests {
         const PoolStringStats before = PoolString::GetStats();
         PoolString results[kThreads];
 
-        EXPECT_TRUE(RunThreadsTogether(kThreads, kThreadLimit, [&](int t) { results[t] = Literal::ToPoolString(); }));
+        EXPECT_TRUE(RunThreadsTogether(kThreads, kWaitLimit, [&](int t) { results[t] = Literal::ToPoolString(); }));
 
         for (const PoolString& result : results) {
             EXPECT_EQ(result, results[0]);
