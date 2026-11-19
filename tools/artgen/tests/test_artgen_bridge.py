@@ -247,6 +247,36 @@ def test_a_style_run_on_a_generator_without_the_style_kind_fails_with_the_instal
     assert generator.graphs == [] and generator.uploads == [] and not (game / "artgen" / "out").exists()
 
 
+def test_a_structure_run_on_a_generator_without_the_structure_kind_fails_with_the_install_command(game):
+    (game / "assets").mkdir()
+    (game / "assets" / "rook.png").write_bytes(tiny_png(4, 4, (9, 9, 200)))
+    editor = FakeEditor(game)
+    generator = FakeGenerator()
+    generator.kinds = ["audio", "image", "style"]
+    bridge = artgen_bridge.Bridge(editor, generator, log=lambda *a: None)
+    bridge.tick()
+    editor.request("wood", "rook", count=1, reference={"mode": "structure", "image": "assets/rook.png"})
+    run_until(bridge, editor, lambda: editor.run["state"] == "Failed")
+    assert "install --structure" in editor.run["error"]
+    assert generator.graphs == [] and generator.uploads == [] and not (game / "artgen" / "out").exists()
+
+
+def test_a_structure_reference_of_a_set_job_reaches_the_generator_unchanged(game):
+    (game / "assets").mkdir()
+    (game / "assets" / "rook.png").write_bytes(tiny_png(4, 4, (9, 9, 200)))
+    editor = FakeEditor(game)
+    generator = FakeGenerator()
+    bridge = artgen_bridge.Bridge(editor, generator, log=lambda *a: None)
+    bridge.tick()
+    reference = {"mode": "structure", "image": "assets/rook.png", "weight": 1.2}
+    editor.request("wood", "white rook", count=1, seed=3, outDir="set_1/white-rook", name="white-rook", reference=reference)
+    run_until(bridge, editor, lambda: editor.run["state"] not in ("Queued", "Running"))
+    assert editor.run["state"] == "Done", editor.run["error"]
+    assert generator.graphs[0]["42"]["inputs"]["strength"] == 1.2
+    provenance = json.loads(Path(editor.run["variants"][0]["provenance"]).read_text(encoding="utf-8"))
+    assert provenance["reference"]["mode"] == "structure" and provenance["reference"]["weight"] == 1.2 and provenance["workflow"] == "sdxl_controlnet"
+
+
 def test_a_request_with_min_pass_and_extra_regenerates_and_the_editor_sees_the_extra_images(game):
     editor = FakeEditor(game)
     generator = CutOutGenerator()
