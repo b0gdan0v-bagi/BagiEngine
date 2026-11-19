@@ -1030,7 +1030,9 @@ namespace BECore {
             }
             processing = std::move(*measured);
         }
-        const ArtGenImagePlan imagePlan = PlanOf(processing, sound ? String() : set->atlas, false);
+        // The rows join the group loose and the group is packed once after the last one; with no packer each row packs by itself
+        const bool deferPack = !sound && !set->atlas.empty() && _atlasPacker != nullptr;
+        const ArtGenImagePlan imagePlan = PlanOf(processing, sound ? String() : set->atlas, deferPack);
 
         // A failure halfway leaves the rows done marked in the manifest; the call can be made again, an accept replaces the same name
         Json accepted = Json::array();
@@ -1054,8 +1056,12 @@ namespace BECore {
             if (!answer) {
                 String doneNames;
                 AppendNames(doneNames, "accepted before it", done);
-                return std::unexpected(MakeError(kAcceptFailedCode, Format("the job '{}' (row {} of {}): {}; {}", job.name, row + 1, set->jobs.size(), answer.error().message,
-                                                                           done.empty() ? String("accepted before it: none") : doneNames)));
+                String message =
+                    Format("the job '{}' (row {} of {}): {}; {}", job.name, row + 1, set->jobs.size(), answer.error().message, done.empty() ? String("accepted before it: none") : doneNames);
+                if (deferPack && !done.empty()) {
+                    message += Format("; the atlas '{}' is not packed, call artgen_accept_set again to finish it", set->atlas);
+                }
+                return std::unexpected(MakeError(kAcceptFailedCode, message));
             }
             job.pick = plan.seed;
             job.accepted = ArtGenSetAccepted{job.name, ArtGenTimestamp(std::chrono::system_clock::now()), false};
@@ -1079,6 +1085,19 @@ namespace BECore {
         Json reply = Json::object();
         reply["set"] = ToJsonString(set->name);
         reply["accepted"] = std::move(accepted);
+        reply["atlas"] = Json();
+        // With BeginAcceptBatch / EndAcceptBatch (branch todo/artgen-review-leftovers) this call goes after the rows and before EndAcceptBatch
+        if (deferPack && !done.empty()) {
+            auto packed = _atlasPacker(set->atlas);
+            if (!packed) {
+                return std::unexpected(MakeError(
+                    kAcceptFailedCode,
+                    Format(
+                        "the set '{}': its {} rows are accepted and in the game, but the atlas '{}' is not packed: {}; call artgen_accept_set again or press Pack in the Sprite Library to finish it",
+                        setName, done.size(), set->atlas, packed.error().message)));
+            }
+            reply["atlas"] = std::move(*packed);
+        }
         return reply;
     }
 

@@ -149,6 +149,9 @@ namespace BECore {
         using FrameMeasurer = std::expected<ArtGenImageFrame, String> (*)(const Vector<String>& pngFiles, const ArtGenImageSettings& settings);
         /// Writes into the game's provenance file of @p name (a sprite or a clip, by @p kind) that the choice with @p seed was kept on @p date
         using Keeper = std::expected<void, ControlError> (*)(StringView kind, StringView name, int64_t seed, StringView date);
+        /// Packs the atlas group @p group once, after the rows of an Accept all that were written without packing; the answer is the
+        /// `atlas` of `artgen_accept_set` (`PackAtlasForControl` in the editor, a fake in the tests)
+        using AtlasPacker = std::expected<Json, ControlError> (*)(StringView group);
 
         /// @param clock monotonic seconds; the default is the steady clock (a test passes its own). The editor's one session is GetInstance()
         explicit ArtGenSession(Clock clock = {});
@@ -223,6 +226,11 @@ namespace BECore {
         void SetKeeper(Keeper keeper) {
             _keeper = keeper;
         }
+        /// What an Accept all of a set with an atlas group packs it with, once after the rows. With none installed each row packs through its
+        /// own acceptor and the answer's `atlas` stays null
+        void SetAtlasPacker(AtlasPacker packer) {
+            _atlasPacker = packer;
+        }
         /// What the first Accept all of an image set measures its frame with (ArtGenAccept.h in the editor; a fake in the tests)
         void SetFrameMeasurer(FrameMeasurer measurer) {
             _frameMeasurer = measurer;
@@ -293,7 +301,10 @@ namespace BECore {
         ArtGenSetEdit PickVariant(StringView set, StringView job, int64_t seed, ArtGenSwitch* write = nullptr);
         /// Accepts the candidate of every job of a finished set as its job's name, through the acceptors Accept uses, marking each row in the
         /// manifest (Sets/CLAUDE.md, "Accept all"): the pick, else for images the first variant. A kept row and a row another set replaced are skipped. The checks come first and a
-        /// refusal by them changes nothing; a failure halfway leaves the rows before it accepted
+        /// refusal by them changes nothing; a failure halfway leaves the rows before it accepted.
+        /// A set with an atlas group and an installed AtlasPacker writes its rows into the group without packing it and packs it once after the
+        /// last row (the answer's `atlas`; a set of only kept or replaced rows packs nothing). A failed row or a failed pack leaves the rows
+        /// done marked and in the game, says the group is not packed, and calling again finishes it
         std::expected<Json, ControlError> AcceptSet(StringView name);
         /// Fixes the choice of every live row of a set, or of @p job only: the Keeper writes the kept seed into the game first, then the row is
         /// kept (its other variants leave the manifest) and the manifest written. Final; nothing live to keep is `invalid_params`, and so is a named
@@ -369,6 +380,7 @@ namespace BECore {
         SoundAcceptor _soundAcceptor = nullptr;
         Keeper _keeper = nullptr;
         FrameMeasurer _frameMeasurer = nullptr;
+        AtlasPacker _atlasPacker = nullptr;
         IntrusivePtr<SceneNode> _selectedNode;
         String _gameRoot;
         Vector<ArtGenSet> _sets;

@@ -11,6 +11,7 @@
 #include <Events/ApplicationEvents.h>
 #include <Generated/ArtGenWidget.gen.hpp>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/ArtGen/ArtGenAtlasAccept.h>
 #include <Widgets/ArtGen/ArtGenLaunch.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/ArtGenVerdict.h>
@@ -140,6 +141,7 @@ namespace BECore {
         session.SetAcceptor(&AcceptForControl);
         session.SetSoundAcceptor(&AcceptSoundForControl);
         session.SetKeeper(&KeepForControl);
+        session.SetAtlasPacker(&PackAtlasForControl);
         session.SetFrameMeasurer(&MeasureFrameForControl);
         session.RegisterControl(CoreManager::GetControlService());
         return true;

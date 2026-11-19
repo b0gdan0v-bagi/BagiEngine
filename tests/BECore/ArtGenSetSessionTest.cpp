@@ -92,6 +92,22 @@ namespace BECore::Tests {
             return answer;
         }
 
+        /// The group of each call of the fake packer, and how many rows the fake acceptor had written when it was called
+        struct PackCall {
+            String group;
+            size_t acceptedBefore = 0;
+        };
+        Vector<PackCall> gPacks;
+        String gPackFail;  // the fake packer fails with this text when it is not empty
+
+        std::expected<Json, ControlError> FakePacker(StringView group) {
+            gPacks.push_back(PackCall{String(group), gAccepted.size()});
+            if (!gPackFail.empty()) {
+                return std::unexpected(ControlError{String("artgen_accept_failed"), gPackFail});
+            }
+            return Json{{"name", ToStdString(group)}, {"members", static_cast<int64_t>(gAccepted.size())}};
+        }
+
         struct MeasureCall {
             Vector<String> files;
             ArtGenImageSettings settings;
@@ -128,6 +144,9 @@ namespace BECore::Tests {
             session.SetSoundAcceptor(&FakeSoundAcceptor);
             session.SetKeeper(&FakeKeeper);
             session.SetFrameMeasurer(&FakeMeasurer);
+            session.SetAtlasPacker(&FakePacker);
+            gPacks.clear();
+            gPackFail.clear();
             gAccepted.clear();
             gPlans.clear();
             gMeasures.clear();
@@ -1918,6 +1937,171 @@ namespace BECore::Tests {
         ASSERT_EQ(gPlans.size(), 1u);
         EXPECT_TRUE(gPlans[0].atlas.empty());
         EXPECT_FALSE(gPlans[0].deferPack);
+    }
+
+    // ---- Accept all packs the group once (Sets/CLAUDE.md, "Accept all") ----
+
+    namespace {
+
+        std::expected<String, String> EnqueueInGroup(ArtGenSession& session, StringView name, StringView lines, StringView group) {
+            ArtGenSetRequest request;
+            request.preset = "wood";
+            request.subjects = ParseArtGenSubjects(lines).value();
+            request.count = 2;
+            request.seed = kSetSeed;
+            request.name = String(name);
+            request.atlas = String(group);
+            return session.EnqueueSet(std::move(request));
+        }
+
+    }  // namespace
+
+    TEST_F(ArtGenSetSessionTest, AcceptAllOfAGroupSetDefersEveryRowAndPacksOnceAfterTheLastOne) {
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb\nc", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+
+        const Json answer = Result(AcceptAllCall("grouped"));
+        ASSERT_EQ(gPlans.size(), 3u);
+        for (const ArtGenImagePlan& plan : gPlans) {
+            EXPECT_EQ(plan.atlas, "pieces");
+            EXPECT_TRUE(plan.deferPack);
+        }
+        ASSERT_EQ(gPacks.size(), 1u);
+        EXPECT_EQ(gPacks[0].group, "pieces");
+        EXPECT_EQ(gPacks[0].acceptedBefore, 3u) << "after the last row";
+        const Json* atlas = FindJsonMember(answer, "atlas");
+        ASSERT_NE(atlas, nullptr);
+        EXPECT_EQ(GetJsonString(*atlas, "name"), Optional<String>("pieces"));
+        EXPECT_EQ(FindJsonMember(answer, "accepted")->size(), 3u);
+        for (const ArtGenSetJob& job : OnDisk("grouped").jobs) {
+            EXPECT_TRUE(job.accepted.has_value());
+        }
+    }
+
+    TEST_F(ArtGenSetSessionTest, AcceptAllOfASetWithoutAGroupNeverCallsThePacker) {
+        ASSERT_NO_FATAL_FAILURE(FinishAndAccept("loose", "a\nb"));
+        const Json answer = Result(AcceptAllCall("loose"));
+        EXPECT_TRUE(gPacks.empty());
+        ASSERT_EQ(gPlans.size(), 2u);
+        for (const ArtGenImagePlan& plan : gPlans) {
+            EXPECT_TRUE(plan.atlas.empty());
+            EXPECT_FALSE(plan.deferPack);
+        }
+        const Json* atlas = FindJsonMember(answer, "atlas");
+        ASSERT_NE(atlas, nullptr);
+        EXPECT_TRUE(atlas->is_null());
+    }
+
+    TEST_F(ArtGenSetSessionTest, AcceptAllOfAGroupSetWithNoPackerLetsEveryRowPackByItself) {
+        session.SetAtlasPacker(nullptr);
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+        const Json answer = Result(AcceptAllCall("grouped"));
+        ASSERT_EQ(gPlans.size(), 2u);
+        for (const ArtGenImagePlan& plan : gPlans) {
+            EXPECT_EQ(plan.atlas, "pieces");
+            EXPECT_FALSE(plan.deferPack);
+        }
+        EXPECT_TRUE(gPacks.empty());
+        EXPECT_TRUE(FindJsonMember(answer, "atlas")->is_null());
+    }
+
+    TEST_F(ArtGenSetSessionTest, AcceptAllOfAGroupSetPacksNothingWhenEveryRowIsKeptOrReplaced) {
+        ASSERT_TRUE(EnqueueInGroup(session, "first", "a\nb", "pieces").has_value());
+        ASSERT_TRUE(EnqueueInGroup(session, "second", "a", "pieces").has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAndPickAll("first"));
+        ASSERT_EQ(session.PickVariant("second", "a", kSetSeed + 1), ArtGenSetEdit::Ok);
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("first"));
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("second"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("first")), "");
+        ASSERT_EQ(ErrorCode(AcceptAllCall("second")), "");
+        ASSERT_NO_FATAL_FAILURE(KeepOnDisk("first", "b"));
+        gAccepted.clear();
+        gPacks.clear();
+
+        // Row a of the first set is held by the second, row b is kept: nothing is written, so nothing is packed
+        const Json answer = Result(AcceptAllCall("first"));
+        EXPECT_TRUE(gAccepted.empty());
+        EXPECT_TRUE(gPacks.empty());
+        EXPECT_TRUE(FindJsonMember(answer, "atlas")->is_null());
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailedRowOfAGroupSetPacksNothingAndTheNextCallFinishesAndPacksOnce) {
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb\nc", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+
+        gFailOn = "c";
+        const Json refused = AcceptAllCall("grouped");
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        const String message = ErrorMessage(refused);
+        EXPECT_NE(message.find("accepted before it: a, b"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("atlas 'pieces' is not packed"), String::npos) << message.c_str();
+        EXPECT_TRUE(gPacks.empty());
+        const ArtGenSet disk = OnDisk("grouped");
+        EXPECT_TRUE(disk.jobs[0].accepted.has_value());
+        EXPECT_TRUE(disk.jobs[1].accepted.has_value());
+        EXPECT_FALSE(disk.jobs[2].accepted.has_value());
+
+        gFailOn.clear();
+        const Json again = Result(AcceptAllCall("grouped"));
+        ASSERT_EQ(gPacks.size(), 1u);
+        EXPECT_EQ(gPacks[0].acceptedBefore, 5u) << "the first two rows replace themselves";
+        EXPECT_FALSE(FindJsonMember(again, "atlas")->is_null());
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailedFirstRowOfAGroupSetSaysNothingAboutTheAtlas) {
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+        gFailOn = "a";
+        const Json refused = AcceptAllCall("grouped");
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        EXPECT_EQ(ErrorMessage(refused).find("atlas"), String::npos) << ErrorMessage(refused).c_str();
+        EXPECT_TRUE(gPacks.empty());
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailedPackKeepsTheRowsAcceptedAndNamesTheRepair) {
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+
+        gPackFail = "the atlas file is locked";
+        const Json refused = AcceptAllCall("grouped");
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        const String message = ErrorMessage(refused);
+        EXPECT_NE(message.find("the atlas file is locked"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("'pieces' is not packed"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("call artgen_accept_set again"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("Pack in the Sprite Library"), String::npos) << message.c_str();
+        ASSERT_EQ(gPacks.size(), 1u);
+        EXPECT_EQ(gAccepted.size(), 2u) << "the rows are in the game";
+        for (const ArtGenSetJob& job : OnDisk("grouped").jobs) {
+            EXPECT_TRUE(job.accepted.has_value()) << "the manifest on disk has them accepted";
+        }
+
+        gPackFail.clear();
+        const Json again = Result(AcceptAllCall("grouped"));
+        EXPECT_EQ(gPacks.size(), 2u);
+        EXPECT_FALSE(FindJsonMember(again, "atlas")->is_null());
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASoundSetNeverCallsThePacker) {
+        Poll();  // the catalog tells the kind of the preset
+        ArtGenSetRequest request;
+        request.preset = "knock";
+        request.subjects = ParseArtGenSubjects("a\nb").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "heard";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        RunAndPickAll("heard", "audio");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("heard"));
+        const Json answer = Result(AcceptAllCall("heard"));
+        EXPECT_TRUE(gPacks.empty());
+        EXPECT_TRUE(FindJsonMember(answer, "atlas")->is_null());
     }
 
     // ---- one frame for the whole set (Sets/CLAUDE.md, "Accept all") ----
