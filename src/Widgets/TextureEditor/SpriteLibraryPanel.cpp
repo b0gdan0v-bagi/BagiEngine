@@ -7,6 +7,7 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
+#include <imgui_internal.h>
 
 namespace BECore {
 
@@ -16,6 +17,11 @@ namespace BECore {
         constexpr float kRowPadding = 4.0f;
         constexpr float kThumbnailCheckerCell = 8.0f;
         constexpr float kHalf = 0.5f;
+        constexpr float kDropOutlineThickness = 2.0f;
+        constexpr float kDropTintAlpha = 0.18f;
+
+        const char* const kNewSpriteHint = "Drop for a new sprite";
+        const char* const kSoundNotSpriteHint = "A sound is not a sprite";
 
         const char* const kAllLabel = ICON_LC_LIBRARY " All sprites";
         const char* const kNoAtlasLabel = ICON_LC_IMAGE " No atlas";
@@ -87,6 +93,35 @@ namespace BECore {
             ImGui::EndTooltip();
         }
 
+        /// The variant dragged now, or null when the drag is something else; a peek, nothing is accepted
+        const ArtGenDragPayload* PeekVariant() {
+            const ImGuiPayload* payload = ImGui::GetDragDropPayload();
+            if (payload == nullptr || !payload->IsDataType(kArtGenVariantPayload) || payload->DataSize != static_cast<int>(sizeof(ArtGenDragPayload))) {
+                return nullptr;
+            }
+            return static_cast<const ArtGenDragPayload*>(payload->Data);
+        }
+
+        /// Inside `BeginDragDropTarget` / `...Custom`: @p hot says an image variant is over the target; the return is true when it was
+        /// released here (its copy in @p dropped)
+        bool TakeVariant(ArtGenDragPayload& dropped, bool& hot) {
+            const ArtGenDragPayload* dragged = PeekVariant();
+            if (dragged == nullptr) {
+                return false;
+            }
+            if (dragged->kind == ArtGenDragKind::Audio) {
+                ImGui::SetTooltip("%s", kSoundNotSpriteHint);
+                return false;
+            }
+            hot = true;
+            const ImGuiPayload* delivered = ImGui::AcceptDragDropPayload(kArtGenVariantPayload, ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
+            if (delivered == nullptr || delivered->DataSize != static_cast<int>(sizeof(ArtGenDragPayload))) {
+                return false;
+            }
+            dropped = *static_cast<const ArtGenDragPayload*>(delivered->Data);
+            return true;
+        }
+
     }  // namespace
 
     void DrawCheckerRect(ImDrawList* drawList, ImVec2 min, ImVec2 max, ImU32 light, ImU32 dark, float cell) {
@@ -104,6 +139,39 @@ namespace BECore {
                 drawList->AddRectFilled(ImVec2(left, top), ImVec2(std::min(left + cell, max.x), bottom), dark);
             }
         }
+    }
+
+    Optional<SpriteLibraryDrop> SpriteLibraryPanel::TakeDrop() {
+        Optional<SpriteLibraryDrop> drop = _drop;
+        _drop.reset();
+        return drop;
+    }
+
+    void SpriteLibraryPanel::SubmitDropArea() {
+        ImGuiWindow* window = ImGui::GetCurrentWindow();
+        _areaMin = ImVec2(window->InnerRect.Min.x, ImGui::GetCursorScreenPos().y);
+        _areaMax = window->InnerRect.Max;
+        if (!ImGui::BeginDragDropTargetCustom(ImRect(_areaMin, _areaMax), window->GetID("##sprite_drop_area"))) {
+            return;
+        }
+        ArtGenDragPayload dropped;
+        if (TakeVariant(dropped, _areaHot)) {
+            _drop = SpriteLibraryDrop{-1, dropped};
+        }
+        ImGui::EndDragDropTarget();
+    }
+
+    void SpriteLibraryPanel::DrawDropHint() const {
+        if (!_areaHot || _rowHot) {
+            return;
+        }
+        const ImGuiPalette& palette = GetImGuiPalette();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddRectFilled(_areaMin, _areaMax, ImGui::GetColorU32(ImGui::GetColorU32(palette.accent), kDropTintAlpha));
+        drawList->AddRect(_areaMin, _areaMax, ImGui::GetColorU32(palette.accent), 0.0f, 0, kDropOutlineThickness);
+        const ImVec2 textSize = ImGui::CalcTextSize(kNewSpriteHint);
+        const ImVec2 at(_areaMin.x + (_areaMax.x - _areaMin.x - textSize.x) * kHalf, _areaMin.y + (_areaMax.y - _areaMin.y - textSize.y) * kHalf);
+        drawList->AddText(at, ImGui::GetColorU32(palette.text), kNewSpriteHint);
     }
 
     void SpriteLibraryPanel::ResetFilter() {
@@ -171,6 +239,16 @@ namespace BECore {
         const ImVec2 origin = ImGui::GetCursorScreenPos();
         const float width = ImGui::GetContentRegionAvail().x;
         const bool clicked = ImGui::Selectable("##row", selected, 0, ImVec2(0.0f, rowHeight));
+        if (ImGui::BeginDragDropTarget()) {
+            ArtGenDragPayload dropped;
+            if (TakeVariant(dropped, _rowHot)) {
+                _drop = SpriteLibraryDrop{index, dropped};
+            }
+            if (_rowHot) {
+                ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImGui::GetColorU32(palette.accent), 0.0f, 0, kDropOutlineThickness);
+            }
+            ImGui::EndDragDropTarget();
+        }
         DrawTooltip(entry, state);
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -208,9 +286,14 @@ namespace BECore {
         DrawFilterCombo();
         EnsureBuilt(library);
 
+        _areaHot = false;
+        _rowHot = false;
+        SubmitDropArea();
+
         const Vector<SpriteEntry>& entries = library.GetAll();
         if (_rows.empty()) {
             EmptyState(ICON_LC_IMAGE_OFF, entries.empty() ? "No sprites yet" : "No sprite matches the filter");
+            DrawDropHint();
             return -1;
         }
 
@@ -225,6 +308,7 @@ namespace BECore {
                 }
             }
         }
+        DrawDropHint();
         return clickedIndex;
     }
 

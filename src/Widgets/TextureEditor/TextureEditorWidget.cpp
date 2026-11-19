@@ -22,6 +22,7 @@ namespace BECore {
     namespace {
 
         constexpr float kLibraryListWidth = 300.0f;
+        const char* const kAddSpritePopup = "Add sprite";
 
     }  // namespace
 
@@ -65,6 +66,13 @@ namespace BECore {
         if (_isDirty) {
             ImGui::SameLine();
             ImGui::TextColored(GetImGuiPalette().warning, "(unsaved changes)");
+        }
+
+        if (!_dropMessage.empty()) {
+            const ImGuiPalette& palette = GetImGuiPalette();
+            ImGui::PushStyleColor(ImGuiCol_Text, _dropFailed ? palette.error : palette.success);
+            ImGui::TextWrapped("%s", _dropMessage.c_str());
+            ImGui::PopStyleColor();
         }
 
         ImGui::Separator();
@@ -116,6 +124,10 @@ namespace BECore {
         if (clicked >= 0) {
             Select(clicked);
         }
+        if (const Optional<SpriteLibraryDrop> drop = _libraryPanel.TakeDrop()) {
+            OnLibraryDrop(*drop);
+        }
+        DrawDropPopup();
 
         ImGui::Separator();
         if (IconTextButton(ICON_LC_CIRCLE_PLUS, "Add", "Add a sprite entry to the library", -1.0f)) {
@@ -127,6 +139,82 @@ namespace BECore {
             SelectByName(addedName);
             _isDirty = true;
         }
+    }
+
+    void TextureEditorWidget::OnLibraryDrop(const SpriteLibraryDrop& drop) {
+        const auto& library = CoreManager::GetTextureLibrary();
+        const auto& entries = library.GetAll();
+        if (drop.row < 0) {
+            _pendingDrop = drop.payload;
+            memcpy(_popupName, drop.payload.suggestedName, sizeof(_popupName));
+            PlanPopupName();
+            _openDropPopup = true;
+            return;
+        }
+        if (drop.row >= static_cast<int>(entries.size())) {
+            return;
+        }
+        const ArtGenDropPlan plan = PlanArtGenDrop(drop.payload, entries[static_cast<size_t>(drop.row)].name.ToStringView(), library);
+        if (plan.mode == ArtGenDropMode::Refused) {
+            _dropMessage = plan.reason;
+            _dropFailed = true;
+            return;
+        }
+        AcceptDrop(drop.payload, plan.sprite);
+    }
+
+    void TextureEditorWidget::AcceptDrop(const ArtGenDragPayload& payload, StringView sprite) {
+        ArtGenDropResult result;
+        ArtGenVariantDropEvent::Emit(payload, sprite, &result);
+        _dropFailed = !result.ok;
+        _dropMessage = eastl::move(result.message);
+        if (result.ok) {
+            _libraryPanel.ResetFilter();
+            SelectByName(PoolString::Intern(sprite));
+        }
+    }
+
+    void TextureEditorWidget::PlanPopupName() {
+        const ArtGenDragPayload named = MakeArtGenDragPayload(_pendingDrop.kind, _pendingDrop.seed, _pendingDrop.set, _pendingDrop.job, _popupName);
+        _popupPlan = PlanArtGenDrop(named, StringView{}, CoreManager::GetTextureLibrary());
+    }
+
+    void TextureEditorWidget::DrawDropPopup() {
+        if (_openDropPopup) {
+            ImGui::OpenPopup(kAddSpritePopup);
+            _openDropPopup = false;
+        }
+        if (!ImGui::BeginPopupModal(kAddSpritePopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            return;
+        }
+        const ImGuiPalette& palette = GetImGuiPalette();
+        ImGui::TextUnformatted("Name of the new sprite");
+        if (ImGui::IsWindowAppearing()) {
+            ImGui::SetKeyboardFocusHere();
+        }
+        if (ImGui::InputText("##drop_name", _popupName, sizeof(_popupName))) {
+            PlanPopupName();
+        }
+        const bool refused = _popupPlan.mode == ArtGenDropMode::Refused;
+        if (refused) {
+            ImGui::PushStyleColor(ImGuiCol_Text, palette.error);
+            ImGui::TextWrapped("%s", _popupPlan.reason.c_str());
+            ImGui::PopStyleColor();
+        } else if (_popupPlan.sprite != _popupName) {
+            ImGui::TextColored(palette.textDisabled, "Taken: it will be added as '%s'", _popupPlan.sprite.c_str());
+        }
+
+        ImGui::BeginDisabled(refused);
+        if (IconTextButton(ICON_LC_CHECK, "Accept", "Accept the variant as this sprite")) {
+            AcceptDrop(_pendingDrop, _popupPlan.sprite);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (IconTextButton(ICON_LC_X, "Cancel", "Drop nothing")) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 
     void TextureEditorWidget::RenderRightPanel() {
