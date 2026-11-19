@@ -92,6 +92,35 @@ namespace BECore {
      */
     std::expected<AcceptStored, String> AcceptIntoLibrary(TextureLibrary& library, const ArtGenCopied& copied, StringView sprite, const AtlasIo& io, FunctionRef<bool()> save);
 
+    /**
+     * @brief Several accepts that owe the library one save, not one each (Accept all of a set of images).
+     *
+     * The constructor copies the library's entries. `Defer` is the `save` of AcceptIntoLibrary and StoreSpriteEntry: it notes that a save is
+     * owed and says it went through, so the library is only changed in memory. `Commit` then saves once. When that save fails the library
+     * goes back to the copy (entries the batch added are removed, entries it replaced or repacked come back): a snapshot, because a repack
+     * changes several members and per-row undo would have to know all of them. No services: the caller gives the save.
+     *
+     * The library must outlive the batch and not be changed by anything but the accepts between the constructor and Commit.
+     */
+    class ArtGenLibraryBatch {
+    public:
+        explicit ArtGenLibraryBatch(TextureLibrary& library);
+
+        /// @return true: the save is only owed
+        bool Defer() {
+            _owed = true;
+            return true;
+        }
+
+        /// @return false and nothing saved when no accept changed the library; true after one successful @p save; else the reason, with the library as it was at construction
+        std::expected<bool, String> Commit(FunctionRef<bool()> save);
+
+    private:
+        TextureLibrary& _library;
+        Vector<SpriteEntry> _snapshot;
+        bool _owed = false;
+    };
+
     /// What `artgen_accept` answers as `atlas`: `null` when no atlas was written, else `{name, texturePath, width, height, members}`
     [[nodiscard]] Json AtlasReplyToJson(const Optional<AtlasWritten>& repacked);
 
@@ -108,9 +137,27 @@ namespace BECore {
      * Copies it into the game's assets (CopyVariantIntoAssets with @p plan), adds or replaces the TextureLibrary entry (the whole written image; a
      * sprite of an atlas group keeps its link, and a packed one has its atlas repacked, see AcceptIntoLibrary) and saves the library, drops the old
      * textures of the paths from the resource cache and reloads every sprite of the active scene that uses them, so the new picture shows at once. Fails without changing the library when the game has
-     * no assets folder or no TextureLibrary.xml.
+     * no assets folder or no TextureLibrary.xml. While an accept batch is open (BeginAcceptBatch) the library is changed in memory only and
+     * EndAcceptBatch saves it.
      */
     std::expected<ArtGenAccepted, String> AcceptVariant(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan);
+
+    /**
+     * @brief Opens the editor's accept batch: the AcceptVariant calls until EndAcceptBatch save the game's TextureLibrary.xml once, at the end.
+     * A Begin while one is open is a bug (it asserts and changes nothing).
+     *
+     * The batch is one file-local object, not a parameter, because the session's acceptors are plain function pointers that carry no state;
+     * the editor is single-threaded, so there is never more than one.
+     */
+    void BeginAcceptBatch();
+
+    /**
+     * @brief Closes the batch BeginAcceptBatch opened, saving the game's library once when an accept changed it; ok when none is open.
+     *
+     * A failed save puts the library back to what it was at Begin and is `artgen_accept_failed`: the PNGs of the batch are already in the
+     * game's assets, the library keeps its old entries.
+     */
+    std::expected<void, ControlError> EndAcceptBatch();
 
     /// Puts the sprite on @p node's SpriteRendererComponent and reloads it; fails when the node has none
     std::expected<void, String> UseSpriteOn(SceneNode& node, PoolString sprite);

@@ -504,6 +504,34 @@ namespace BECore {
         return std::unexpected(String("TextureLibrary.xml could not be saved (does the game have one?)"));
     }
 
+    ArtGenLibraryBatch::ArtGenLibraryBatch(TextureLibrary& library) : _library(library), _snapshot(library.GetAll()) {}
+
+    std::expected<bool, String> ArtGenLibraryBatch::Commit(FunctionRef<bool()> save) {
+        if (!_owed) {
+            return false;
+        }
+        if (save()) {
+            return true;
+        }
+        Vector<PoolString> added;
+        for (const SpriteEntry& entry : _library.GetAll()) {
+            const bool known = std::any_of(_snapshot.begin(), _snapshot.end(), [&entry](const SpriteEntry& old) { return old.name == entry.name; });
+            if (!known) {
+                added.push_back(entry.name);
+            }
+        }
+        for (const PoolString name : added) {
+            _library.Remove(name);
+        }
+        for (const SpriteEntry& old : _snapshot) {
+            const SpriteEntry* now = _library.GetSprite(old.name);
+            if (now == nullptr || !IsSameSpriteEntry(old, *now)) {
+                _library.AddOrUpdate(old);
+            }
+        }
+        return std::unexpected(String("TextureLibrary.xml could not be saved (does the game have one?)"));
+    }
+
     Json AtlasReplyToJson(const Optional<AtlasWritten>& repacked) {
         if (!repacked) {
             return Json();
@@ -560,6 +588,35 @@ namespace BECore {
         return result;
     }
 
+    namespace {
+
+        // Global because the session's acceptors are plain function pointers; the editor is single-threaded, so there is one batch at most
+        Optional<ArtGenLibraryBatch> gOpenBatch;
+
+    }  // namespace
+
+    void BeginAcceptBatch() {
+        ASSERT(!gOpenBatch.has_value(), "BeginAcceptBatch while an accept batch is open");
+        if (gOpenBatch.has_value()) {
+            return;
+        }
+        gOpenBatch.emplace(CoreManager::GetTextureLibrary());
+    }
+
+    std::expected<void, ControlError> EndAcceptBatch() {
+        if (!gOpenBatch.has_value()) {
+            return {};
+        }
+        auto& library = CoreManager::GetTextureLibrary();
+        auto committed = gOpenBatch->Commit([&library] { return library.Save(); });
+        gOpenBatch.reset();
+        if (!committed) {
+            return std::unexpected(
+                ControlError{String("artgen_accept_failed"), Format("{}; the PNGs of the accepted rows are in the game's assets, the library keeps its old entries", committed.error())});
+        }
+        return {};
+    }
+
     std::expected<ArtGenAccepted, String> AcceptVariant(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan) {
         const std::filesystem::path assetsDir = CoreManager::GetFileSystem().GetMountedPath(MountPoints::assets);
         if (assetsDir.empty()) {
@@ -574,7 +631,7 @@ namespace BECore {
         auto& files = CoreManager::GetFileSystem();
         auto resolve = [&files](StringView path) { return files.ResolvePath(path); };
         const AtlasIo io{assetsDir, resolve};
-        auto stored = AcceptIntoLibrary(library, *copied, sprite, io, [&library] { return library.Save(); });
+        auto stored = AcceptIntoLibrary(library, *copied, sprite, io, [&library] { return gOpenBatch.has_value() ? gOpenBatch->Defer() : library.Save(); });
         if (!stored) {
             return std::unexpected(stored.error());
         }

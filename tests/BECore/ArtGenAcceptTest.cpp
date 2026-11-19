@@ -658,6 +658,128 @@ namespace BECore::Tests {
         EXPECT_EQ(stored->repacked->changed.size(), 2u);
     }
 
+    namespace {
+
+        /// What CopyVariantIntoAssets would have returned for a sprite of the unpacked kind (no file is read for it)
+        ArtGenCopied CopiedOf(StringView sprite, uint32_t width, uint32_t height) {
+            ArtGenCopied copied;
+            copied.texturePath = Format("assets/artgen/{}.png", sprite);
+            copied.width = width;
+            copied.height = height;
+            return copied;
+        }
+
+        /// The library as the batch tests start it: a queen and a rook, no atlas
+        void FillPlain(TextureLibrary& library) {
+            library.AddOrUpdate(LibraryEntry("queen", "assets/artgen/queen.png", Rect(0, 0, 64, 64)));
+            library.AddOrUpdate(LibraryEntry("rook", "assets/artgen/rook.png", Rect(0, 0, 32, 32)));
+        }
+
+    }  // namespace
+
+    TEST(ArtGenLibraryBatchTest, NewRowsAreOnlyOwedUntilTheCommitSavesOnce) {
+        const AcceptGame game;
+        TextureLibrary library;
+        ArtGenLibraryBatch batch(library);
+        int saves = 0;
+        auto save = [&saves] {
+            ++saves;
+            return true;
+        };
+
+        for (const char* name : {"knight", "bishop", "pawn"}) {
+            const auto stored = AcceptIntoLibrary(library, CopiedOf(name, 16, 16), name, game.Io(), [&batch] { return batch.Defer(); });
+            ASSERT_TRUE(stored.has_value());
+            EXPECT_TRUE(stored->saved);
+        }
+        EXPECT_EQ(saves, 0);
+        EXPECT_EQ(library.GetAll().size(), 3u);
+
+        const auto committed = batch.Commit(save);
+
+        ASSERT_TRUE(committed.has_value());
+        EXPECT_TRUE(*committed);
+        EXPECT_EQ(saves, 1);
+        EXPECT_EQ(library.GetAll().size(), 3u);
+    }
+
+    TEST(ArtGenLibraryBatchTest, RowsThatChangeNothingOweNoSave) {
+        const AcceptGame game;
+        TextureLibrary library;
+        FillPlain(library);
+        ArtGenLibraryBatch batch(library);
+        ASSERT_TRUE(AcceptIntoLibrary(library, CopiedOf("queen", 64, 64), "queen", game.Io(), [&batch] { return batch.Defer(); }).has_value());
+        int saves = 0;
+
+        const auto committed = batch.Commit([&saves] {
+            ++saves;
+            return true;
+        });
+
+        ASSERT_TRUE(committed.has_value());
+        EXPECT_FALSE(*committed);
+        EXPECT_EQ(saves, 0);
+    }
+
+    TEST(ArtGenLibraryBatchTest, AFailedCommitGivesTheLibraryBack) {
+        const AcceptGame game;
+        TextureLibrary library;
+        FillPlain(library);
+        ArtGenLibraryBatch batch(library);
+        auto defer = [&batch] { return batch.Defer(); };
+        ASSERT_TRUE(AcceptIntoLibrary(library, CopiedOf("queen", 128, 64), "queen", game.Io(), defer).has_value());
+        ASSERT_TRUE(AcceptIntoLibrary(library, CopiedOf("king", 8, 8), "king", game.Io(), defer).has_value());
+        ASSERT_EQ(library.GetSprite("queen"_intern)->srcRect.w, 128.0f);
+        ASSERT_NE(library.GetSprite("king"_intern), nullptr);
+
+        const auto committed = batch.Commit([] { return false; });
+
+        ASSERT_FALSE(committed.has_value());
+        EXPECT_NE(committed.error().find("TextureLibrary.xml could not be saved"), String::npos);
+        EXPECT_EQ(library.GetAll().size(), 2u);
+        EXPECT_EQ(library.GetSprite("king"_intern), nullptr);
+        EXPECT_EQ(library.GetSprite("queen"_intern)->srcRect.w, 64.0f);
+        EXPECT_EQ(library.GetSprite("rook"_intern)->srcRect.w, 32.0f);
+        EXPECT_EQ(library.GetAll()[0].name.ToStringView(), "queen");
+    }
+
+    TEST(ArtGenLibraryBatchTest, APackedRowIsSavedOnceAndItsMembersComeBackWhenTheSaveFails) {
+        const AcceptGame game;
+        TextureLibrary library;
+        FillGroup(library, game, true);
+        ArtGenLibraryBatch batch(library);
+        const ArtGenCopied copied = game.Copied(MakeSolid(6, 2, 0, kHigh, 0));
+
+        const auto stored = AcceptIntoLibrary(library, copied, "queen", game.Io(), [&batch] { return batch.Defer(); });
+        ASSERT_TRUE(stored.has_value());
+        ASSERT_TRUE(stored->repacked.has_value());
+        ASSERT_EQ(Queen(library).atlas->source->rect.w, 6.0f);
+
+        int saves = 0;
+        const auto committed = batch.Commit([&saves] {
+            ++saves;
+            return true;
+        });
+        ASSERT_TRUE(committed.has_value());
+        EXPECT_TRUE(*committed);
+        EXPECT_EQ(saves, 1);
+
+        ArtGenLibraryBatch failing(library);
+        const ArtGenCopied again = game.Copied(MakeSolid(3, 3, kLow, kLow, kLow));
+        const SpriteEntry queenSaved = Queen(library);
+        const SpriteEntry rookSaved = Rook(library);
+        ASSERT_TRUE(AcceptIntoLibrary(library, again, "queen", game.Io(), [&failing] { return failing.Defer(); }).has_value());
+        ASSERT_NE(Queen(library).atlas->source->rect.w, queenSaved.atlas->source->rect.w);
+
+        EXPECT_FALSE(failing.Commit([] { return false; }).has_value());
+
+        EXPECT_EQ(Queen(library).atlas->source->rect.w, queenSaved.atlas->source->rect.w);
+        EXPECT_EQ(Queen(library).srcRect.x, queenSaved.srcRect.x);
+        EXPECT_EQ(Queen(library).srcRect.w, queenSaved.srcRect.w);
+        EXPECT_EQ(Rook(library).srcRect.x, rookSaved.srcRect.x);
+        EXPECT_EQ(Rook(library).srcRect.y, rookSaved.srcRect.y);
+    }
+
     TEST(ArtGenSpriteNameTest, OnlyPlainNamesAreSpriteNames) {
         EXPECT_TRUE(IsValidSpriteName("white_knight"));
         EXPECT_TRUE(IsValidSpriteName("Gem-Red-2"));
