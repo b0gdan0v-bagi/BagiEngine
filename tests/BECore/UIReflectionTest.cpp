@@ -319,7 +319,7 @@ namespace BECore::Tests {
 
     TEST(UIReflectionTest, AMalformedEdgeAnchorIsReportedAndLeavesTheOtherFieldsAlone) {
         for (const char* attribute : {"anchorMin=\"1\"", "anchorMax=\"a,b\"", "pivot=\"nan,0\"", "anchorMin=\"1,2,3\""}) {
-            const String xml = String("<root><component><elements><element type=\"UIElement\" name=\"A\" x=\"5\" ") + attribute + "/></elements></component></root>";
+            const String xml = Format("<root><component><elements><element type=\"UIElement\" name=\"A\" x=\"5\" {}/></elements></component></root>", attribute);
             XmlDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
             auto canvas = New<UICanvasComponent>();

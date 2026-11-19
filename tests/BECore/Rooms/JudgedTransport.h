@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Format/Format.h>
 #include <BECore/Rooms/WireJudge.h>
 #include <Common/SharedPtr.h>
 #include <RoomClient/RoomTransport.h>
@@ -58,7 +59,7 @@ namespace BECore::Tests {
                 _log->seat = static_cast<int>(GetJsonInt(*parsed, "seat").value_or(-1));
             }
             for (const String& id : FindLeakedCardIds(text, _log->seat)) {
-                _log->leaks.push_back(id + " in " + text);
+                _log->leaks.push_back(Format("{} in {}", id, text));
             }
             if (parsed && type == RoomMessageTypes::kLeft) {
                 _log->seat = -1;

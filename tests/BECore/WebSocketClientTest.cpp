@@ -95,12 +95,12 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] String Url(const String& path = "/") const {
-                return "ws://127.0.0.1:" + ToString(GetPort()) + path;
+                return Format("ws://127.0.0.1:{}{}", GetPort(), path);
             }
 
             /// A `wss://` address of this server; @p host is the name in it (localhost reaches the same loopback)
             [[nodiscard]] String TlsUrl(const String& host = "127.0.0.1", const String& path = "/") const {
-                return "wss://" + host + ":" + ToString(GetPort()) + path;
+                return Format("wss://{}:{}{}", host, GetPort(), path);
             }
 
             /// Takes the connection of the client (no byte is read)
@@ -155,7 +155,7 @@ namespace BECore::Tests {
 
             /// The value of the request header @p name ("" when there is none)
             [[nodiscard]] String RequestHeader(const String& name) const {
-                const String needle = "\r\n" + name + ": ";
+                const String needle = Format("\r\n{}: ", name);
                 const size_t at = _request.find(needle);
                 if (at == String::npos) {
                     return {};
@@ -165,7 +165,7 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] String AcceptResponse(const String& acceptValue) const {
-                return "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + acceptValue + "\r\n\r\n";
+                return Format("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n", acceptValue);
             }
 
             /// The right answer to the request that was read; @p extraBytes follow it in the same send
@@ -271,7 +271,7 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] String Url() const {
-                return "ws://127.0.0.1:" + ToString(_port) + "/rooms";
+                return Format("ws://127.0.0.1:{}/rooms", _port);
             }
 
             [[nodiscard]] uint16_t GetPort() const {
@@ -336,7 +336,7 @@ namespace BECore::Tests {
 
         constexpr int kCount = 100;
         for (int i = 0; i < kCount; ++i) {
-            const String text = "message " + ToString(i);
+            const String text = Format("message {}", i);
             ASSERT_TRUE(session.client.SendText(text));
         }
         ASSERT_TRUE(session.WaitForCount(WebSocketClientEventKind::Text, kCount));
@@ -344,7 +344,7 @@ namespace BECore::Tests {
         const Vector<String> texts = session.Texts();
         ASSERT_EQ(texts.size(), static_cast<size_t>(kCount));
         for (int i = 0; i < kCount; ++i) {
-            EXPECT_EQ(texts[static_cast<size_t>(i)], "message " + ToString(i));
+            EXPECT_EQ(texts[static_cast<size_t>(i)], Format("message {}", i));
         }
         EXPECT_GT(session.client.GetBytesReceived(), 0u);
     }
@@ -356,7 +356,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(server.AcceptAndReadRequest());
 
         EXPECT_TRUE(StringView(server.Request()).starts_with("GET /rooms?lang=en HTTP/1.1\r\n"));
-        EXPECT_EQ(server.RequestHeader("Host"), "127.0.0.1:" + ToString(server.GetPort()));
+        EXPECT_EQ(server.RequestHeader("Host"), Format("127.0.0.1:{}", server.GetPort()));
         EXPECT_EQ(server.RequestHeader("Sec-WebSocket-Version"), "13");
         EXPECT_EQ(server.RequestHeader("Origin"), "");
         EXPECT_EQ(server.Request().find("Origin"), String::npos);
@@ -530,7 +530,7 @@ namespace BECore::Tests {
             port = listener->GetLocalPort();
         }  // the port is free again, nobody listens
         Session session;
-        const String url = "ws://127.0.0.1:" + ToString(port);
+        const String url = Format("ws://127.0.0.1:{}", port);
         ASSERT_TRUE(session.client.Open(url.c_str()).has_value());
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
@@ -569,7 +569,7 @@ namespace BECore::Tests {
         Session session;
         ASSERT_TRUE(session.client.Open(server.Url().c_str()).has_value());
         ASSERT_TRUE(server.AcceptAndReadRequest());
-        server.SendRaw("HTTP/1.1 101 Switching Protocols\r\nX-Padding: " + String(kMaxHandshakeBytes + 100, 'a'));
+        server.SendRaw(Format("HTTP/1.1 101 Switching Protocols\r\nX-Padding: {}", String(kMaxHandshakeBytes + 100, 'a')));
         session.ExpectSingleClosed();
         EXPECT_NE(session.Closed().reason.find("too long"), String::npos);
     }
@@ -669,7 +669,7 @@ namespace BECore::Tests {
         const auto connection = server.Connection(0);
         ASSERT_TRUE(connection != nullptr);
         for (int i = 0; i < kMessages; ++i) {
-            const String text = ToString(i) + ":" + String(kMessageBytes, 'x');
+            const String text = Format("{}:{}", i, String(kMessageBytes, 'x'));
             ASSERT_TRUE(connection->QueueText(text));
         }
 
@@ -956,7 +956,7 @@ namespace BECore::Tests {
         Session session;
         ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), FakeTlsSettings()).has_value());
         ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
-        EXPECT_EQ(server.RequestHeader("Host"), "127.0.0.1:" + ToString(server.GetPort()));
+        EXPECT_EQ(server.RequestHeader("Host"), Format("127.0.0.1:{}", server.GetPort()));
         server.Accept();
         ASSERT_TRUE(session.WaitForOpened());
         EXPECT_TRUE(session.client.IsOpen());
@@ -1035,10 +1035,10 @@ namespace BECore::Tests {
             closedPort = server.GetPort();
         }
         Session session;
-        ASSERT_TRUE(session.client.Open(("wss://127.0.0.1:" + ToString(closedPort) + "/").c_str(), FakeTlsSettings()).has_value());
+        ASSERT_TRUE(session.client.Open(Format("wss://127.0.0.1:{}/", closedPort).c_str(), FakeTlsSettings()).has_value());
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
-        EXPECT_NE(session.Closed().reason.find("127.0.0.1:" + ToString(closedPort)), String::npos) << session.Closed().reason;
+        EXPECT_NE(session.Closed().reason.find(Format("127.0.0.1:{}", closedPort)), String::npos) << session.Closed().reason;
     }
 
     TEST(WebSocketClientTest, TheStreamGetsTheHostOfTheUrlAsItsServerName) {

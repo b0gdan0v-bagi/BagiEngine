@@ -100,7 +100,7 @@ namespace BECore::Tests {
         void BuildLayout(UICanvasLayout& layout, FunctionRef<void(String&)> edit = NoTextEdit) {
             String body = kScreenBody;
             edit(body);
-            const String xml = "<root>" + body + "</root>";
+            const String xml = Format("<root>{}</root>", body);
             XmlDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromString(xml));
             UIScreenContent content;

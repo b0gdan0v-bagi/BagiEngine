@@ -119,7 +119,7 @@ namespace BECore::Tests {
 
         UniquePtr<Compiled> Compile(const String& html, const String& css = {}) {
             auto compiled = MakeUnique<Compiled>();
-            const String source = css.empty() ? html : "<style>" + css + "</style>" + html;
+            const String source = css.empty() ? html : Format("<style>{}</style>{}", css, html);
             compiled->xml = UIWebCompiler::Compile(source, {}, compiled->report);
             EXPECT_TRUE(compiled->document.load_string(compiled->xml.c_str())) << compiled->xml.c_str();
             XmlDeserializer deserializer;
@@ -1632,7 +1632,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         }
 
         UIBoxStyle BoxFromXml(const char* attributes) {
-            const String xml = String("<ui><elements><element type=\"UIElement\" name=\"x\" ") + attributes + "/></elements></ui>";
+            const String xml = Format("<ui><elements><element type=\"UIElement\" name=\"x\" {}/></elements></ui>", attributes);
             const UIScreenContent content = ReadXml(xml);
             EXPECT_EQ(content.elements.size(), 1u);
             return content.elements.empty() ? UIBoxStyle{} : content.elements[0]->box;
@@ -2317,7 +2317,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     TEST_F(UIWebTest, ADocumentInHtmlLoadsThroughTheResourceManagerAndBuildsTheSameElements) {
         TempDirectory temp;
         temp.Write("hud.css", kHudCss);
-        const String path = temp.Write("hud.ui.html", String("<link rel=\"stylesheet\" href=\"hud.css\">") + kHudHtml);
+        const String path = temp.Write("hud.ui.html", Format("<link rel=\"stylesheet\" href=\"hud.css\">{}", kHudHtml));
 
         auto handle = CoreManager::GetResourceManager().Load<UIDocument>(path);
         ASSERT_TRUE(handle);
@@ -2597,7 +2597,7 @@ button:checked { background: var(--panel); }
 
         CompiledWithSheet CompileWithSheet(const String& html, const String& css) {
             CompiledWithSheet result;
-            const String source = "<link rel=\"stylesheet\" href=\"a.css\">" + html;
+            const String source = Format("<link rel=\"stylesheet\" href=\"a.css\">{}", html);
             const UIWebCompiler::StylesheetLoader loader = [&css](StringView) { return Optional<String>(String(css.data(), css.size())); };
             result.xml = UIWebCompiler::Compile(source, loader, result.report);
             return result;
@@ -2627,7 +2627,7 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, ANestingAtTheLimitIsKeptWhole) {
-        const String html = Repeat("<div>", UIHtmlParser::kMaxDepth) + Repeat("</div>", UIHtmlParser::kMaxDepth);
+        const String html = Format("{}{}", Repeat("<div>", UIHtmlParser::kMaxDepth), Repeat("</div>", UIHtmlParser::kMaxDepth));
         const auto compiled = Compile(html);
         EXPECT_FALSE(Mentions(compiled->report, "nested deeper"));
         EXPECT_EQ(compiled->report.elements, UIHtmlParser::kMaxDepth);
@@ -2641,7 +2641,7 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, ADocumentOverTheSizeLimitIsCutWithAnEntry) {
-        const String html = "<span id=\"s\">" + String(2 * UIHtmlParser::kMaxDocumentBytes, 'a') + "</span>";
+        const String html = Format("<span id=\"s\">{}</span>", String(2 * UIHtmlParser::kMaxDocumentBytes, 'a'));
         const auto compiled = Compile(html);
         EXPECT_TRUE(Mentions(compiled->report, "document is longer than 1048576 bytes"));
     }
@@ -2655,7 +2655,7 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, ASelectorOfOneMegabyteIsLeftOutAndTheRuleAfterItStays) {
-        const String css = "." + String(1024 * 1024 - 100, 'a') + " { width: 5px; }\n#b { width: 7px; }";
+        const String css = Format(".{} {{ width: 5px; }}\n#b {{ width: 7px; }}", String(1024 * 1024 - 100, 'a'));
         const CompiledWithSheet compiled = CompileWithSheet("<div id=\"b\"></div>", css);
         EXPECT_TRUE(Mentions(compiled.report, "selector longer than 1024 bytes"));
         EXPECT_EQ(compiled.report.rules, 1u);
@@ -2680,7 +2680,7 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, DeclarationsRulesAndMediaBlocksPastTheirLimitsAreLeftOut) {
-        const auto declarations = Compile("<div id=\"a\"></div>", "#a { " + Repeat("width: 1px; ", 300) + "}");
+        const auto declarations = Compile("<div id=\"a\"></div>", Format("#a {{ {}}}", Repeat("width: 1px; ", 300)));
         EXPECT_TRUE(Mentions(declarations->report, "more than 256 declarations"));
         EXPECT_EQ(declarations->report.declarations, UICssParser::kMaxDeclarationsPerRule);
 
@@ -2688,24 +2688,24 @@ button:checked { background: var(--panel); }
         EXPECT_EQ(rules->report.rules, UICssParser::kMaxRules);
         EXPECT_TRUE(Mentions(rules->report, "more than 1024 rules"));
 
-        const auto totalDeclarations = Compile("<div id=\"a\"></div>", Repeat(".x { " + Repeat("width: 1px; ", 200) + "}\n", 100));
+        const auto totalDeclarations = Compile("<div id=\"a\"></div>", Repeat(Format(".x {{ {}}}\n", Repeat("width: 1px; ", 200)), 100));
         EXPECT_TRUE(Mentions(totalDeclarations->report, "more than 16384 declarations"));
 
         const auto medias = Compile("<div id=\"a\"></div>", Repeat("@media (min-width: 100px) { #a { width: 1px; } }\n", 20));
         EXPECT_EQ(medias->report.mediaBlocks, UICssParser::kMaxMediaBlocks);
         EXPECT_TRUE(Mentions(medias->report, "more than 16 @media blocks"));
 
-        const auto queries = Compile("<div id=\"a\"></div>", "@media " + Repeat("(min-width: 100px), ", 12) + "(max-width: 90px) { #a { width: 1px; } }");
+        const auto queries = Compile("<div id=\"a\"></div>", Format("@media {}(max-width: 90px) {{ #a {{ width: 1px; }} }}", Repeat("(min-width: 100px), ", 12)));
         EXPECT_TRUE(Mentions(queries->report, "more than 8 queries"));
         EXPECT_LE(queries->report.variants, UICssParser::kMaxMediaAlternatives);
     }
 
     TEST_F(UIWebTest, AnElementWithTooManyOrTooLongAttributesLosesThem) {
-        const auto many = Compile("<div id=\"a\" " + Repeat("data-x=\"1\" ", 100) + "></div>");
+        const auto many = Compile(Format("<div id=\"a\" {}></div>", Repeat("data-x=\"1\" ", 100)));
         EXPECT_TRUE(Mentions(many->report, "more than 64 attributes"));
         EXPECT_TRUE(static_cast<bool>(many->Find("a"))) << "the element itself stays";
 
-        const auto longValue = Compile("<div id=\"a\" title=\"" + String(UIHtmlParser::kMaxAttributeBytes + 1, 'x') + "\"></div>");
+        const auto longValue = Compile(Format("<div id=\"a\" title=\"{}\"></div>", String(UIHtmlParser::kMaxAttributeBytes + 1, 'x')));
         EXPECT_TRUE(Mentions(longValue->report, "longer than 16384 bytes"));
         EXPECT_EQ(longValue->report.elements, 1u);
     }
@@ -2722,7 +2722,7 @@ button:checked { background: var(--panel); }
     TEST_F(UIWebTest, MoreIssuesThanTheReportKeepsAreCountedAndSaidOnce) {
         String css = "#a {";
         for (size_t i = 0; i < 500; ++i) {
-            css += " unknown-" + ToString(i) + ": 1;";
+            AppendFormat(css, " unknown-{}: 1;", i);
         }
         css += " }";
         const auto compiled = Compile("<div id=\"a\"></div>", css);
@@ -2733,15 +2733,15 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, AMessageThatRepeatsTheFileHasNoLineBreakAndIsCut) {
-        const String name = "bad\nname" + String(1000, 'z');
-        const auto compiled = Compile("<div id=\"a\"></div>", "#a { " + name + ": 1; }");
+        const String name = Format("bad\nname{}", String(1000, 'z'));
+        const auto compiled = Compile("<div id=\"a\"></div>", Format("#a {{ {}: 1; }}", name));
         ASSERT_TRUE(compiled->report.HasIssues());
         for (const UIWebIssue& issue : compiled->report.issues) {
             EXPECT_LE(issue.message.size(), UIWebReport::kMaxMessageBytes);
             EXPECT_EQ(issue.message.find('\n'), String::npos);
         }
         // A cut never leaves half of a UTF-8 character: the text is Cyrillic, two bytes a letter, and the cut falls between the two bytes of one
-        const auto cyrillic = Compile("<div id=\"a\"></div>", "#a { " + Repeat("\xD0\xB1", 400) + ": 1; }");
+        const auto cyrillic = Compile("<div id=\"a\"></div>", Format("#a {{ {}: 1; }}", Repeat("\xD0\xB1", 400)));
         ASSERT_TRUE(cyrillic->report.HasIssues());
         const String message = cyrillic->report.issues[0].message.c_str();
         const size_t dots = message.find("...");
@@ -2779,8 +2779,8 @@ button:checked { background: var(--panel); }
     TEST_F(UIWebTest, ADescendantSelectorOverADeepChainCostsTheChainNotTheNumberOfWaysThroughIt) {
         // `span` is never an ancestor, so every way down the chain of 60 divs fails at the end: without memory that is the number of ways to choose 14 of 60,
         // and the case never ends (the ctest timeout fails it); what it costs with the memory is the benchmark `ui-web-limits`
-        const String selector = "span " + Repeat("div ", 14) + "div";
-        const auto compiled = Compile(Repeat("<div>", 60) + Repeat("</div>", 60), selector + " { width: 1px; }");
+        const String selector = Format("span {}div", Repeat("div ", 14));
+        const auto compiled = Compile(Format("{}{}", Repeat("<div>", 60), Repeat("</div>", 60)), Format("{} {{ width: 1px; }}", selector));
         EXPECT_FALSE(compiled->report.HasIssues());
     }
 
@@ -2813,12 +2813,12 @@ button:checked { background: var(--panel); }
         (void)Compile(Repeat("<div></div>", 20000));
         (void)CompileWithSheet("<div id=\"a\" class=\"a\"></div>", Repeat(".a { width: 1px; }\n", 10 * 1024 * 1024 / 19));
         (void)Compile(Repeat("<div class=\"x\"></div>", 4000), Repeat(".x { width: 1px; }\n", 1000));
-        (void)Compile(Repeat("<div>", 60) + Repeat("</div>", 60), "span " + Repeat("div ", 14) + "div { width: 1px; }");
+        (void)Compile(Format("{}{}", Repeat("<div>", 60), Repeat("</div>", 60)), Format("span {}div {{ width: 1px; }}", Repeat("div ", 14)));
         std::printf("UIWebLimits total_ms=%.1f\n", watch.Seconds() * 1000.0);
     }
 
     TEST_F(UIWebTest, ThousandsOfVariantElementsWithoutAnIdGetNamesOfTheirOwn) {
-        const auto compiled = Compile("<div id=\"div-2\"></div>" + Repeat("<div class=\"x\"></div>", 2000), "@media (min-width: 1px) { .x { width: 5px; } }");
+        const auto compiled = Compile(Format("<div id=\"div-2\"></div>{}", Repeat("<div class=\"x\"></div>", 2000)), "@media (min-width: 1px) { .x { width: 5px; } }");
         Set<String> names;
         for (const pugi::xpath_node node : compiled->document.select_nodes("//element")) {
             names.insert(node.node().attribute("name").as_string());
@@ -2934,7 +2934,7 @@ button:checked { background: var(--panel); }
         const Pair<const char*, EaseType> cases[] = {{"linear", EaseType::Linear},    {"ease", EaseType::QuadInOut},        {"ease-in", EaseType::QuadIn},
                                                      {"ease-out", EaseType::QuadOut}, {"ease-in-out", EaseType::QuadInOut}, {"", EaseType::QuadInOut}};
         for (const auto& [word, ease] : cases) {
-            const auto compiled = Compile(R"(<div id="p"></div>)", String("#p { transition: opacity .1s ") + word + " }");
+            const auto compiled = Compile(R"(<div id="p"></div>)", Format("#p {{ transition: opacity .1s {} }}", word));
             const auto* transition = compiled->Element("p")->GetComponent<UITransitionComponent>();
             ASSERT_NE(transition, nullptr) << word;
             EXPECT_EQ(transition->ease, ease) << "'" << word << "' (no word is CSS's `ease`)";

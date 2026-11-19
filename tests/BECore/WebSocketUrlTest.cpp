@@ -108,7 +108,7 @@ namespace BECore::Tests {
     }
 
     TEST(WebSocketUrlTest, RefusesAUrlOverTheLimit) {
-        const String longPath = "ws://a.com/" + String(kMaxWebSocketUrlBytes, 'a');
+        const String longPath = Format("ws://a.com/{}", String(kMaxWebSocketUrlBytes, 'a'));
         ExpectRefused(longPath);
         String atLimit = "ws://a.com/";
         atLimit.append(kMaxWebSocketUrlBytes - atLimit.size(), 'a');
@@ -116,9 +116,9 @@ namespace BECore::Tests {
     }
 
     TEST(WebSocketUrlTest, RefusesAHostLongerThanADnsName) {
-        const String atLimit = "ws://" + String(kMaxWebSocketHostBytes, 'a') + "/x";
+        const String atLimit = Format("ws://{}/x", String(kMaxWebSocketHostBytes, 'a'));
         EXPECT_EQ(MustParse(atLimit).host.size(), kMaxWebSocketHostBytes);
-        const String overLimit = "ws://" + String(kMaxWebSocketHostBytes + 1, 'a') + ":9/x";
+        const String overLimit = Format("ws://{}:9/x", String(kMaxWebSocketHostBytes + 1, 'a'));
         ExpectRefused(overLimit, "host is longer");
     }
 

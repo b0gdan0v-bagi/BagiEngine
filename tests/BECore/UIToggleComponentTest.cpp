@@ -522,7 +522,7 @@ namespace BECore::Tests {
             for (const float width : {0.0f, 5.0f, 30.0f, 60.0f, 100.0f, 900.0f}) {
                 const Rect area{7.0f, 9.0f, width, height};
                 const auto parts = UISwitchComponent::GetParts(area);
-                const String where = ToString(width) + " x " + ToString(height);
+                const String where = Format("{} x {}", width, height);
                 EXPECT_TRUE(RectInside(parts.track, area)) << where;
                 EXPECT_TRUE(RectInside(parts.thumbOn, parts.track) || parts.thumbOn.IsEmpty()) << where;
                 EXPECT_TRUE(RectInside(parts.thumbOff, parts.track) || parts.thumbOff.IsEmpty()) << where;

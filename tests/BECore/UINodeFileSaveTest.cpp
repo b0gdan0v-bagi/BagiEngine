@@ -143,7 +143,7 @@ namespace BECore::Tests {
 
         /// Loads the scene Main with @p nodesXml as its nodes; the scene is kept in `_scene`
         void LoadScene(const String& nodesXml) {
-            const String text = "<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes>" + nodesXml + "</nodes></scene></scenes></SceneManager>";
+            const String text = Format("<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes>{}</nodes></scene></scenes></SceneManager>", nodesXml);
             const pugi::xml_parse_result parsed = _doc.load_string(text.c_str());
             ASSERT_TRUE(parsed) << parsed.description();
             _manager = LoadSceneManager(XmlNode{_doc.document_element()}, _loader);

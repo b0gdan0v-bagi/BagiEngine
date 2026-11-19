@@ -197,7 +197,7 @@ namespace BECore::Tests {
         params.connectTimeout = 5s;
         const auto connected = stream.Connect(params);
         ASSERT_FALSE(connected.has_value());
-        EXPECT_NE(connected.error().find("127.0.0.1:" + ToString(closedPort)), String::npos) << connected.error().c_str();
+        EXPECT_NE(connected.error().find(Format("127.0.0.1:{}", closedPort)), String::npos) << connected.error().c_str();
     }
 
     TEST(TlsStreamTest, AServerThatNeverAnswersTheHelloEndsAtTheDeadline) {

@@ -8,7 +8,7 @@ namespace BECore::Tests {
         constexpr const char* kDash = "\xE2\x80\x94";  // U+2014 in UTF-8
 
         String Expect(const char* game) {
-            return String(game) + " " + kDash + " BagiEngine Editor";
+            return Format("{} {} BagiEngine Editor", game, kDash);
         }
 
     }  // namespace

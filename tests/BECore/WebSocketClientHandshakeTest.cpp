@@ -14,7 +14,7 @@ namespace BECore::Tests {
         class Response {
         public:
             String statusLine = "HTTP/1.1 101 Switching Protocols";
-            Vector<String> headers = {"Upgrade: websocket", "Connection: Upgrade", String("Sec-WebSocket-Accept: ") + kRfcAccept};
+            Vector<String> headers = {"Upgrade: websocket", "Connection: Upgrade", Format("Sec-WebSocket-Accept: {}", kRfcAccept)};
 
             Response& Add(StringView line) {
                 headers.emplace_back(line);
@@ -114,13 +114,13 @@ namespace BECore::Tests {
 
     TEST(WebSocketClientHandshakeTest, HeaderNamesAndTheConnectionTokenListAreRead) {
         Response response;
-        response.headers = {"UPGRADE: WebSocket", "connection: keep-alive, Upgrade", String("sec-websocket-accept:  ") + kRfcAccept + "  "};
+        response.headers = {"UPGRADE: WebSocket", "connection: keep-alive, Upgrade", Format("sec-websocket-accept:  {}  ", kRfcAccept)};
         const auto result = response.Check();
         EXPECT_TRUE(result.has_value()) << result.error().c_str();
     }
 
     TEST(WebSocketClientHandshakeTest, AnswerWithoutTheTrailingEmptyLineIsRead) {
-        const String text = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + String(kRfcAccept);
+        const String text = Format("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}", kRfcAccept);
         EXPECT_TRUE(CheckServerHandshakeResponse(text, kRfcKey).has_value());
     }
 
@@ -187,7 +187,7 @@ namespace BECore::Tests {
         }
         {
             Response response;
-            response.Add(String("Sec-WebSocket-Accept: ") + kRfcAccept);
+            response.Add(Format("Sec-WebSocket-Accept: {}", kRfcAccept));
             ExpectRefused(response, "repeats");
         }
     }
@@ -215,13 +215,13 @@ namespace BECore::Tests {
 
     TEST(WebSocketClientHandshakeTest, AHeadOverTheLimitIsRefused) {
         Response response;
-        response.Add("X-Padding: " + String(kMaxHandshakeBytes, 'a'));
+        response.Add(Format("X-Padding: {}", String(kMaxHandshakeBytes, 'a')));
         ExpectRefused(response, "too long");
     }
 
     TEST(WebSocketClientHandshakeTest, ARefusalRepeatsTheStatusLineCutAndAsPrintableText) {
         Response response;
-        response.statusLine = "HTTP/1.1 503 " + String(500, 'x') + "\x1B[2J\x01";
+        response.statusLine = Format("HTTP/1.1 503 {}\x1B[2J\x01", String(500, 'x'));
         const auto result = response.Check();
         ASSERT_FALSE(result.has_value());
         EXPECT_NE(result.error().find("HTTP/1.1 503"), String::npos);

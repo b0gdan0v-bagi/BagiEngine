@@ -76,18 +76,18 @@ namespace BECore::Tests {
                 WebSocketHandler handler;
                 handler.onOpen = [this](const WebSocketHandler::ConnectionPtr& connection) {
                     recorder.AddConnection(connection);
-                    recorder.Add("open:" + ToString(connection->GetId()));
+                    recorder.Add(Format("open:{}", connection->GetId()));
                 };
                 handler.onMessage = [this](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessage message) {
                     const String text(message.GetText().data(), message.GetText().size());
-                    recorder.Add("text:" + ToString(connection->GetId()) + ":" + text);
+                    recorder.Add(Format("text:{}:{}", connection->GetId(), text));
                     if (text == "quit") {
                         return false;
                     }
                     connection->QueueText(message.GetText());
                     return true;
                 };
-                handler.onClosed = [this](const WebSocketHandler::ConnectionPtr& connection) { recorder.Add("closed:" + ToString(connection->GetId())); };
+                handler.onClosed = [this](const WebSocketHandler::ConnectionPtr& connection) { recorder.Add(Format("closed:{}", connection->GetId())); };
 
                 listener = MakeUnique<WebSocketListener>(std::move(settings), std::move(handler));
                 const auto port = listener->Start(0);

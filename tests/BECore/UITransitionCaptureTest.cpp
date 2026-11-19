@@ -80,7 +80,7 @@ namespace BECore::Tests {
         }
 
         String Describe(const Pixel& pixel) {
-            return "(" + ToString(pixel[0]) + ", " + ToString(pixel[1]) + ", " + ToString(pixel[2]) + ")";
+            return Format("({}, {}, {})", pixel[0], pixel[1], pixel[2]);
         }
 
     }  // namespace

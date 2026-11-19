@@ -1174,14 +1174,14 @@ namespace BECore::Tests {
     /// that limit allows (a chain of operators, calls over a chain, unary operators over a chain, the deepest parentheses) must fit the stack of a secondary thread
     TEST(ProgramCheckerTest, TheHighestTreesTheLimitAllowsFitTheStackOfAThread) {
         constexpr size_t kLevels = ExprLimits::kMaxTreeHeight;
-        const auto chain = [](size_t operators) { return "caster.attack" + Repeated(" + caster.attack", operators); };
+        const auto chain = [](size_t operators) { return Format("caster.attack{}", Repeated(" + caster.attack", operators)); };
         const String texts[] = {
             chain(kLevels),
-            Repeated("abs(", kLevels / 2) + chain(kLevels / 2 - 1) + Repeated(")", kLevels / 2),
-            "-(" + chain(kLevels - 1) + ")",
-            Repeated("-", kLevels / 2) + chain(kLevels / 2),
-            Repeated("(", ExprLimits::kMaxNesting) + "caster.attack" + Repeated(")", ExprLimits::kMaxNesting),
-            Repeated("-", kLevels) + "caster.attack",
+            Format("{}{}{}", Repeated("abs(", kLevels / 2), chain(kLevels / 2 - 1), Repeated(")", kLevels / 2)),
+            Format("-({})", chain(kLevels - 1)),
+            Format("{}{}", Repeated("-", kLevels / 2), chain(kLevels / 2)),
+            Format("{}caster.attack{}", Repeated("(", ExprLimits::kMaxNesting), Repeated(")", ExprLimits::kMaxNesting)),
+            Format("{}caster.attack", Repeated("-", kLevels)),
         };
         const CheckerContext context;
         for (const String& text : texts) {

@@ -229,7 +229,7 @@ namespace BECore::Tests {
 
         ExpectReadError(ref, kNeverInterned, PropertyErrorCode::not_found);
         ExpectRefused(ref, kNeverInterned, Int(1), PropertyErrorCode::not_found);
-        const String keyed = String("table[\"") + String(kNeverInterned.data(), kNeverInterned.size()) + "\"]";
+        const String keyed = Format("table[\"{}\"]", kNeverInterned);
         static_cast<void>(GetProperty(ref, StringView(keyed.data(), keyed.size())));
         EXPECT_FALSE(PoolString::Find(kNeverInterned).has_value());
     }

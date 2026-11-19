@@ -96,7 +96,7 @@ namespace BECore::Tests {
         String SplitScene(std::initializer_list<int> order) {
             String nodes;
             for (int index : order) {
-                nodes += String("<node ref=\"nodes/") + kNodeNames[index] + "\"/>";
+                nodes += Format("<node ref=\"nodes/{}\"/>", kNodeNames[index]);
             }
             return SceneConfigText(nodes, kMainSceneView800x600);
         }
@@ -104,25 +104,20 @@ namespace BECore::Tests {
         // A node with a transform and a screen canvas, written inline for the overrides: the name, the layer, the origin and the elements are the parts an instance changes. The
         // button of 20 units is under the touch size, so the validator has something to find on every instance.
         String PanelElements(const String& title) {
-            return "<elements>"
-                   "<element type=\"UIElement\" name=\"Title\" x=\"8\" y=\"8\" width=\"184\" height=\"30\" fontSize=\"24\"><components>"
-                   "<component type=\"UITextComponent\" text=\"" +
-                   title +
-                   "\"/></components></element>"
-                   "<element type=\"UIElement\" name=\"Tiny\" x=\"400\" y=\"10\" width=\"20\" height=\"20\" color=\"40,90,60,255\"><components>"
-                   "<component type=\"UITextComponent\" text=\"T\" align=\"Center\" verticalAlign=\"Center\" wrap=\"false\"/>"
-                   "<component type=\"UIInputClicker\" action=\"SceneSplitTiny\"/></components></element>"
-                   "</elements>";
+            return Format("<elements>"
+                          "<element type=\"UIElement\" name=\"Title\" x=\"8\" y=\"8\" width=\"184\" height=\"30\" fontSize=\"24\"><components>"
+                          "<component type=\"UITextComponent\" text=\"{}\"/></components></element>"
+                          "<element type=\"UIElement\" name=\"Tiny\" x=\"400\" y=\"10\" width=\"20\" height=\"20\" color=\"40,90,60,255\"><components>"
+                          "<component type=\"UITextComponent\" text=\"T\" align=\"Center\" verticalAlign=\"Center\" wrap=\"false\"/>"
+                          "<component type=\"UIInputClicker\" action=\"SceneSplitTiny\"/></components></element>"
+                          "</elements>",
+                          title);
         }
 
         String PanelNode(const String& name, int layer, int x, int y, const String& elements) {
-            return "<node name=\"" + name + "\" layer=\"" + ToString(layer) +
-                   "\"><components>"
-                   "<component type=\"TransformComponent\" x=\"" +
-                   ToString(x) + "\" y=\"" + ToString(y) +
-                   "\" width=\"200\" height=\"100\"/>"
-                   "<component type=\"UICanvasComponent\" space=\"Screen\" scaleMode=\"ConstantPixelSize\">" +
-                   elements + "</component></components></node>";
+            return Format("<node name=\"{}\" layer=\"{}\"><components><component type=\"TransformComponent\" x=\"{}\" y=\"{}\" width=\"200\" height=\"100\"/>"
+                          "<component type=\"UICanvasComponent\" space=\"Screen\" scaleMode=\"ConstantPixelSize\">{}</component></components></node>",
+                          name, layer, x, y, elements);
         }
 
         /// The node file of every instance: Panel, layer 2, at (10, 20), the title "Base"
@@ -131,12 +126,12 @@ namespace BECore::Tests {
         }
 
         // Three instances of the one node file, each overriding some of the values; PanelInline() below is the same three nodes written out
-        const String kPanelRefA = "<node ref=\"nodes/Panel\" name=\"PanelA\" layer=\"7\"><components>"
-                                  "<component type=\"TransformComponent\" x=\"100\"/>"
-                                  "<component type=\"UICanvasComponent\">" +
-                                  PanelElements("A") + "</component></components></node>";
+        const String kPanelRefA = Format("<node ref=\"nodes/Panel\" name=\"PanelA\" layer=\"7\"><components><component type=\"TransformComponent\" x=\"100\"/>"
+                                         "<component type=\"UICanvasComponent\">{}</component></components></node>",
+                                         PanelElements("A"));
         const String kPanelRefB = "<node ref=\"nodes/Panel\" name=\"PanelB\"><components><component type=\"TransformComponent\" y=\"55\"/></components></node>";
-        const String kPanelRefC = "<node ref=\"nodes/Panel\" name=\"PanelC\" layer=\"1\"><components><component type=\"UICanvasComponent\">" + PanelElements("C") + "</component></components></node>";
+        const String kPanelRefC =
+            Format("<node ref=\"nodes/Panel\" name=\"PanelC\" layer=\"1\"><components><component type=\"UICanvasComponent\">{}</component></components></node>", PanelElements("C"));
 
         String PanelInlineA() {
             return PanelNode("PanelA", 7, 100, 20, PanelElements("A"));
@@ -272,7 +267,7 @@ namespace BECore::Tests {
             options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
             for (const auto& node : Main(manager).GetRootNode().GetChildren()) {
                 if (const auto canvas = node->GetComponent<UICanvasComponent>()) {
-                    all += String(node->GetName().CStr()) + ":" + DescribeMatrixFailures(ValidateOnMatrix(canvas->GetLayout(), options), 100) + "\n";
+                    all += Format("{}:{}\n", node->GetName().CStr(), DescribeMatrixFailures(ValidateOnMatrix(canvas->GetLayout(), options), 100));
                 }
             }
             return all;
@@ -357,8 +352,8 @@ namespace BECore::Tests {
     TEST_F(SceneSplitTest, ReferencesMixedWithInlineNodesKeepTheirPlace) {
         pugi::xml_document inlineDoc;
         pugi::xml_document splitDoc;
-        const auto inlined = Load(SceneConfigText(String(kBoardNode) + kHudNode + "<node name=\"Tail\"/>", kMainSceneView800x600), inlineDoc);
-        const auto split = Load(SceneConfigText("<node ref=\"nodes/Board\"/>" + String(kHudNode) + "<node name=\"Tail\"/>", kMainSceneView800x600), splitDoc);
+        const auto inlined = Load(SceneConfigText(Format("{}{}<node name=\"Tail\"/>", kBoardNode, kHudNode), kMainSceneView800x600), inlineDoc);
+        const auto split = Load(SceneConfigText(Format("<node ref=\"nodes/Board\"/>{}<node name=\"Tail\"/>", kHudNode), kMainSceneView800x600), splitDoc);
 
         EXPECT_EQ(NodeNamesOf(Main(split)), (Vector<String>{"Board", "Hud", "Tail"}));
         ExpectSameScene(Main(inlined), Main(split));
@@ -454,7 +449,7 @@ namespace BECore::Tests {
     /// A node with overrides, also under another name, keeps the reference of its file
     TEST_F(SceneSplitOverrideTest, AnInstanceWithOverridesKeepsTheReferenceOfItsFile) {
         pugi::xml_document doc;
-        const auto split = Load(SceneConfigText(kPanelRefA + kPanelRefB + "<node name=\"Own\"/>" + kPanelRefC, kMainSceneView800x600), doc);
+        const auto split = Load(SceneConfigText(Format("{}{}<node name=\"Own\"/>{}", kPanelRefA, kPanelRefB, kPanelRefC), kMainSceneView800x600), doc);
 
         const auto& nodes = Main(split).GetRootNode().GetChildren();
         ASSERT_EQ(nodes.size(), 4u);

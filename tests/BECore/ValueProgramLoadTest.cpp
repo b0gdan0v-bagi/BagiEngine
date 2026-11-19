@@ -753,7 +753,7 @@ namespace BECore::Tests {
 
     TEST(ValueProgramLoadTest, HostileTextsAreErrorsAndNotCrashes) {
         const String tooLong = String(5000, '1');
-        const String tooDeep = String(200, '(') + "1" + String(200, ')');
+        const String tooDeep = Format("{}1{}", String(200, '('), String(200, ')'));
         const String manyNodes = [] {
             String text = "1";
             for (size_t i = 0; i < 600; ++i) {

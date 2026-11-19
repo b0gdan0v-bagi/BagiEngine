@@ -237,7 +237,7 @@ namespace BECore::Tests {
                     isRect = isRect || name == attribute.name();
                 }
                 if (!isRect) {
-                    others.push_back(String(attribute.name()) + "=" + attribute.value());
+                    others.push_back(Format("{}={}", attribute.name(), attribute.value()));
                 }
             }
             return others;

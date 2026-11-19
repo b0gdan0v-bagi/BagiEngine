@@ -37,9 +37,10 @@ namespace BECore::Tests {
   </variants>)";
 
         String ScenesXml(const String& componentAttributes, const String& componentBody) {
-            return "<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes><node name=\"Hud\"><components>"
-                   "<component type=\"UICanvasComponent\" space=\"Screen\" scaleMode=\"ScaleWithScreen\" referenceWidth=\"1280\" referenceHeight=\"720\" match=\"0.5\" " +
-                   componentAttributes + ">" + componentBody + "</component></components></node></nodes></scene></scenes></SceneManager>";
+            return Format("<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes><node name=\"Hud\"><components>"
+                          "<component type=\"UICanvasComponent\" space=\"Screen\" scaleMode=\"ScaleWithScreen\" referenceWidth=\"1280\" referenceHeight=\"720\" match=\"0.5\" {}>{}"
+                          "</component></components></node></nodes></scene></scenes></SceneManager>",
+                          componentAttributes, componentBody);
         }
 
         /// A directory of our own under the system's temporary one, removed with the object
@@ -120,11 +121,11 @@ namespace BECore::Tests {
         }
 
         static String SourceAttribute(const String& path) {
-            return "source=\"" + path + "\"";
+            return Format("source=\"{}\"", path);
         }
 
         static String DocumentXml(const String& body) {
-            return "<ui>" + body + "</ui>";
+            return Format("<ui>{}</ui>", body);
         }
 
         TempDirectory _temp;

@@ -394,7 +394,7 @@ namespace BECore::Tests {
 
     TEST_F(EditorSettingsTest, AnUnknownViewportInputModeGivesPlayAndTheOtherFieldsStay) {
         for (const char* text : {R"("fly")", R"("")", "3", "true", R"("Edit")"}) {
-            WriteFile("preferences.json", String(R"({"version":1,"fontScale":1.5,"viewportInputMode":)") + text + "}");
+            WriteFile("preferences.json", Format(R"({{"version":1,"fontScale":1.5,"viewportInputMode":{}}})", text));
             EditorSettings settings(_directory);
             settings.Load();
             EXPECT_EQ(settings.GetPreferences().viewportInputMode, ViewportInputMode::Play) << text;
@@ -468,7 +468,7 @@ namespace BECore::Tests {
 
     TEST_F(EditorSettingsTest, AnExternalEditorOverTheLimitIsCutAtACharacter) {
         const String longText(kMaxExternalEditorLength + 40, 'x');
-        WriteFile("preferences.json", String(R"({"externalEditor":")") + longText + R"("})");
+        WriteFile("preferences.json", Format(R"({{"externalEditor":"{}"}})", longText));
         EditorSettings settings(_directory);
         settings.Load();
         EXPECT_EQ(settings.GetPreferences().externalEditor.size(), kMaxExternalEditorLength);

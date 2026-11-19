@@ -74,7 +74,7 @@ namespace BECore::Tests {
             SDL_Surface* surface = SDL_CreateSurfaceFrom(static_cast<int>(image.width), static_cast<int>(image.height), SDL_PIXELFORMAT_RGBA32, const_cast<uint8_t*>(image.rgba.data()),
                                                          static_cast<int>(image.width * 4));
             if (surface != nullptr) {
-                const String path = String(directory) + "/" + name + ".png";
+                const String path = Format("{}/{}.png", directory, name);
                 IMG_SavePNG(surface, path.c_str());
                 SDL_DestroySurface(surface);
             }

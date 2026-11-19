@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Format/Format.h>
 #include <BECore/Utils/FunctionRef.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <BECore/Utils/StringUtils.h>
@@ -45,9 +46,9 @@ namespace BECore::Tests {
 
     /// The opening handshake of the RFC for a server on @p port; @p host replaces the `Host` header value when it is not empty
     inline String HandshakeRequest(uint16_t port, const String& extraHeaders = "", const String& host = "") {
-        const String hostValue = host.empty() ? "127.0.0.1:" + ToString(port) : host;
-        return "GET /control HTTP/1.1\r\nHost: " + hostValue + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " + String(kClientKey) + "\r\nSec-WebSocket-Version: 13\r\n" +
-               extraHeaders + "\r\n";
+        const String hostValue = host.empty() ? Format("127.0.0.1:{}", port) : host;
+        return Format("GET /control HTTP/1.1\r\nHost: {}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {}\r\nSec-WebSocket-Version: 13\r\n{}\r\n", hostValue, kClientKey,
+                      extraHeaders);
     }
 
     /// A frame as it came off the wire, the payload unmasked. A server's frame must not be masked (RFC 6455, 5.1), a client's must

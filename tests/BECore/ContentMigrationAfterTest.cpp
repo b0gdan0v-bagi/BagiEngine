@@ -156,7 +156,7 @@ namespace BECore::Tests {
         };
 
         String Key(const char* folder, const char* name) {
-            return String(folder) + "/" + name;
+            return Format("{}/{}", folder, name);
         }
 
         String Number(double value) {
@@ -167,10 +167,10 @@ namespace BECore::Tests {
 
         /// What the test checks of one entry of `ui_tree`, as one line; @p checked is the state of a toggle
         String TreeLine(const char* type, const Control& control, bool checked) {
-            String line = String("type=") + type + "; text=" + control.text + "; icon=" + control.icon + "; action=" + control.action + "; value=" + control.value + "; tooltip=" + control.tooltip +
-                          "; bind=" + control.bind + "; range=" + control.range + "; disabled=" + (control.disabled ? "true" : "false");
+            String line = Format("type={}; text={}; icon={}; action={}; value={}; tooltip={}; bind={}; range={}; disabled={}", type, control.text, control.icon, control.action, control.value,
+                                 control.tooltip, control.bind, control.range, control.disabled);
             if (control.kind == Kind::Toggle) {
-                line += String("; checked=") + (checked ? "true" : "false");
+                AppendFormat(line, "; checked={}", checked);
             }
             return line;
         }
@@ -178,14 +178,14 @@ namespace BECore::Tests {
         String TreeLineOf(const Json& element) {
             String range;
             if (const auto min = GetJsonNumber(element, "minValue")) {
-                range = Number(*min) + ".." + Number(GetJsonNumber(element, "maxValue").value_or(0.0)) + " step " + Number(GetJsonNumber(element, "step").value_or(0.0));
+                range = Format("{}..{} step {}", Number(*min), Number(GetJsonNumber(element, "maxValue").value_or(0.0)), Number(GetJsonNumber(element, "step").value_or(0.0)));
             }
             // A slider answers `value` as a number: the clicker's value is the string; only a string is read here
-            String line = "type=" + JsonText(element, "type") + "; text=" + JsonText(element, "text") + "; icon=" + JsonText(element, "icon") + "; action=" + JsonText(element, "action") +
-                          "; value=" + (range.empty() ? JsonText(element, "value") : String()) + "; tooltip=" + JsonText(element, "tooltip") + "; bind=" + JsonText(element, "bind") +
-                          "; range=" + range + "; disabled=" + JsonFlag(element, "disabled");
+            String line = Format("type={}; text={}; icon={}; action={}; value={}; tooltip={}; bind={}; range={}; disabled={}", JsonText(element, "type"), JsonText(element, "text"),
+                                 JsonText(element, "icon"), JsonText(element, "action"), range.empty() ? JsonText(element, "value") : String(), JsonText(element, "tooltip"), JsonText(element, "bind"),
+                                 range, JsonFlag(element, "disabled"));
             if (FindJsonMember(element, "checked") != nullptr) {
-                line += "; checked=" + JsonFlag(element, "checked");
+                AppendFormat(line, "; checked={}", JsonFlag(element, "checked"));
             }
             return line;
         }
@@ -236,7 +236,7 @@ namespace BECore::Tests {
             for (const CanvasRef& ref : _canvases) {
                 for (const UIMatrixFailure& failure : ValidateOnMatrix(ref.canvas->GetLayout(), options, context)) {
                     for (const UILayoutIssue& issue : failure.issues) {
-                        findings.insert(String(EnumUtils<UILayoutIssueKind>::ToString(issue.kind).data()) + " | " + issue.element.CStr() + " | " + issue.other.CStr());
+                        findings.insert(Format("{} | {} | {}", EnumUtils<UILayoutIssueKind>::ToString(issue.kind), issue.element.CStr(), issue.other.CStr()));
                     }
                 }
             }
@@ -286,7 +286,7 @@ namespace BECore::Tests {
             Vector<const UIElement*> targets{element};
             if (control.kind == Kind::Toggle) {
                 for (const char* suffix : {"Caption", "Switch"}) {
-                    if (const UIElement* part = Find(String(control.name) + suffix); part != nullptr && !part->rect.IsEmpty()) {
+                    if (const UIElement* part = Find(Format("{}{}", control.name, suffix)); part != nullptr && !part->rect.IsEmpty()) {
                         targets.push_back(part);
                     }
                 }
@@ -306,7 +306,7 @@ namespace BECore::Tests {
                 const auto onLine = on.find(control.name);
                 ASSERT_NE(onLine, on.end());
                 EXPECT_EQ(onLine->second, TreeLine("UIElement", control, true)) << label << " " << control.name << " in ui_tree with the variable on";
-                const String flipped = control.disabled || action.empty() ? "" : action + "=" + control.off;
+                const String flipped = control.disabled || action.empty() ? String() : Format("{}={}", action, control.off);
                 EXPECT_EQ(emitted(ClickOn(*canvas, *element)), flipped) << label << " a click on " << control.name << " with the variable on";
                 CoreManager::GetUIVars().Clear();
                 Draw(kLargeWidth, kLargeHeight);
@@ -396,7 +396,7 @@ namespace BECore::Tests {
         ASSERT_NE(_scene, nullptr);
 
         for (const String& finding : ValidatorFindings()) {
-            EXPECT_TRUE(kExpectedIssues.contains(label + " | " + finding)) << label << ": the validator finds on the size matrix: " << finding;
+            EXPECT_TRUE(kExpectedIssues.contains(Format("{} | {}", label, finding))) << label << ": the validator finds on the size matrix: " << finding;
         }
 
         // The controls have a rect at the second output size too

@@ -190,7 +190,7 @@ namespace BECore::Tests {
             _canvas.Reset();
             _manager.Reset();
             UIWebReport report;
-            const String source = String("<style>") + css + "</style>" + kNoteHtml;
+            const String source = Format("<style>{}</style>{}", css, kNoteHtml);
             const String compiled = UIWebCompiler::Compile(source, {}, report);
             ASSERT_FALSE(report.HasIssues()) << report.issues[0].message.c_str() << " / " << compiled.c_str();
             const String note = CompiledElements(compiled);

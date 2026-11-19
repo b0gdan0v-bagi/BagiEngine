@@ -259,7 +259,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(XmlTextPatch::Parse(text, doc, error));
         const Vector<ElementEdit> edits{{doc.child("root").child("a"), {Set("x", "2")}}};
         String out;
-        EXPECT_FALSE(XmlTextPatch::Apply("<!--shifted-->" + text, edits, out, error));
+        EXPECT_FALSE(XmlTextPatch::Apply(Format("<!--shifted-->{}", text), edits, out, error));
         EXPECT_FALSE(XmlTextPatch::Apply("<root><a z=\"1\"/></root>", edits, out, error));
         EXPECT_FALSE(XmlTextPatch::Apply("<root><a x=\"1\" y=\"2\"/></root>", edits, out, error));
         EXPECT_TRUE(XmlTextPatch::Apply(text, edits, out, error)) << error.c_str();

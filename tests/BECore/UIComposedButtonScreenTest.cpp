@@ -156,33 +156,35 @@ namespace BECore::Tests {
         // Two buttons written in HTML + CSS: an icon-only one and an icon-left one
         String HtmlBarXml(float side) {
             const String sideUnits = ToString(static_cast<int>(side));
-            const String sidePx = sideUnits + "px";
-            const String source = "<style>#Icon { left: 10px; top: 10px; width: " + sidePx + "; height: " + sidePx +
-                                  "; background: #283c5a } #Left { left: 70px; top: 10px; width: 200px; height: " + sidePx + "; background: #283c5a }</style>" +
-                                  R"(<button id="Icon" data-icon="BarIcon" data-action="IconBar"></button><button id="Left" data-icon="BarIcon" data-action="LeftBar">Go</button>)";
+            const String sidePx = Format("{}px", sideUnits);
+            const String source = Format("<style>#Icon {{ left: 10px; top: 10px; width: {0}; height: {0}; background: #283c5a }} #Left {{ left: 70px; top: 10px; width: 200px; height: {0}; "
+                                         "background: #283c5a }}</style>"
+                                         R"(<button id="Icon" data-icon="BarIcon" data-action="IconBar"></button><button id="Left" data-icon="BarIcon" data-action="LeftBar">Go</button>)",
+                                         sidePx);
             UIWebReport report;
             const String compiled = UIWebCompiler::Compile(source, {}, report);
             EXPECT_TRUE(report.issues.empty());
             const String xml(compiled.c_str());
             const size_t begin = xml.find("<elements>") + String("<elements>").size();
             const size_t end = xml.find("</elements>");
-            return kSceneHead + xml.substr(begin, end - begin) + kSceneTail;
+            return Format("{}{}{}", kSceneHead, xml.substr(begin, end - begin), kSceneTail);
         }
 
         // A segmented group written in HTML + CSS: an icon-only segment, an icon-left one and a plain one, in a row (the segments are composed like any button)
         String HtmlGroupXml(float side) {
-            const String sidePx = ToString(static_cast<int>(side)) + "px";
-            const String source =
-                "<style>#Seg { display: flex; gap: 4px; left: 10px; top: 10px; width: 400px; height: " + sidePx + "; background: #1e1e1e } #Seg button { flex: 1; height: " + sidePx +
-                "; background: #283c5a }</style>" +
-                R"(<div id="Seg" data-widget="segmented" data-bind="seg"><button id="SegA" data-value="a" data-icon="BarIcon"></button><button id="SegB" data-value="b" data-icon="BarIcon">Go</button><button id="SegC" data-value="c">Plain</button></div>)";
+            const String sidePx = Format("{}px", static_cast<int>(side));
+            const String source = Format(
+                "<style>#Seg {{ display: flex; gap: 4px; left: 10px; top: 10px; width: 400px; height: {0}; background: #1e1e1e }} #Seg button {{ flex: 1; height: {0}; "
+                "background: #283c5a }}</style>"
+                R"(<div id="Seg" data-widget="segmented" data-bind="seg"><button id="SegA" data-value="a" data-icon="BarIcon"></button><button id="SegB" data-value="b" data-icon="BarIcon">Go</button><button id="SegC" data-value="c">Plain</button></div>)",
+                sidePx);
             UIWebReport report;
             const String compiled = UIWebCompiler::Compile(source, {}, report);
             EXPECT_TRUE(report.issues.empty());
             const String xml(compiled.c_str());
             const size_t begin = xml.find("<elements>") + String("<elements>").size();
             const size_t end = xml.find("</elements>");
-            return kSceneHead + xml.substr(begin, end - begin) + kSceneTail;
+            return Format("{}{}{}", kSceneHead, xml.substr(begin, end - begin), kSceneTail);
         }
 
         String BarXml(float side, bool narrow) {

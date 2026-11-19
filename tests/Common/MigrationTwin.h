@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/Format/Format.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/UIInput.h>
 #include <BECore/Math/Rect.h>
@@ -106,8 +107,8 @@ namespace BECore::Tests::MigrationTwin {
         }
         std::cmatch match;
         if (std::regex_search(stripped.c_str(), match, root) && match[1] == "node") {
-            return "<SceneManager><scenes><scene type=\"Scene\" name=\"" + String(kNodeSceneName) + "\" viewWidth=\"" + ToString(static_cast<int>(kDefaultViewWidth)) + "\" viewHeight=\"" +
-                   ToString(static_cast<int>(kDefaultViewHeight)) + "\"><nodes>" + text + "</nodes></scene></scenes></SceneManager>";
+            return Format("<SceneManager><scenes><scene type=\"Scene\" name=\"{}\" viewWidth=\"{}\" viewHeight=\"{}\"><nodes>{}</nodes></scene></scenes></SceneManager>", kNodeSceneName,
+                          static_cast<int>(kDefaultViewWidth), static_cast<int>(kDefaultViewHeight), text);
         }
         return text;
     }
@@ -131,7 +132,7 @@ namespace BECore::Tests::MigrationTwin {
 
     private:
         void OnAction(const InputEvents::ActionEvent& event) {
-            emitted.push_back(String(event.action.CStr()) + "=" + String(event.value.CStr()));
+            emitted.push_back(Format("{}={}", event.action.CStr(), event.value.CStr()));
         }
     };
 
@@ -158,7 +159,7 @@ namespace BECore::Tests::MigrationTwin {
         }
         for (const Json& element : *list) {
             const String name = JsonText(element, "name");
-            const String key = canvasKey + "|" + name;
+            const String key = Format("{}|{}", canvasKey, name);
             if (!name.empty() && seen.insert(key).second) {
                 out[key] = fieldsOf(element);
             }

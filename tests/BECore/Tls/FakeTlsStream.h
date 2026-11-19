@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Format/Format.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/StringUtils.h>
 #include <Common/Printers.h>
@@ -72,25 +73,25 @@ namespace BECore::Tests {
         }
 
         std::expected<void, String> Connect(const TlsConnectParams& params) override {
-            const String target = String(params.host.data(), params.host.size()) + ":" + ToString(params.port);
+            const String target = Format("{}:{}", params.host, params.port);
             auto connected = Socket::Connect(params.host, params.port, params.connectTimeout, params.cancel);
             if (!connected) {
                 return std::unexpected(SetError(connected.error()));
             }
             Socket socket = std::move(*connected);
-            const String hello = "FAKE-HELLO " + String(params.host.data(), params.host.size()) + " " + ToString(params.additionalTrustAnchorsDer.size()) + "\n";
+            const String hello = Format("FAKE-HELLO {} {}\n", params.host, params.additionalTrustAnchorsDer.size());
             if (!socket.SendAll(BECore::AsBytes(hello))) {
-                return std::unexpected(SetError(String(("TLS: sending the hello to " + target + " failed").c_str())));
+                return std::unexpected(SetError(Format("TLS: sending the hello to {} failed", target)));
             }
             String answer;
             String whyNot;
             if (!FakeTlsDetail::ReadLine(socket, answer, params.handshakeDeadline, params.cancel, whyNot)) {
-                return std::unexpected(SetError(String(("TLS: no handshake answer from " + target + ": " + whyNot).c_str())));
+                return std::unexpected(SetError(Format("TLS: no handshake answer from {}: {}", target, whyNot)));
             }
             if (answer != "FAKE-OK") {
                 constexpr StringView kReject = "FAKE-REJECT ";
-                const String reason = StringView(answer).starts_with(kReject) ? answer.substr(kReject.size()) : "bad handshake answer: " + answer;
-                return std::unexpected(SetError(String(("TLS: " + reason).c_str())));
+                const String reason = StringView(answer).starts_with(kReject) ? answer.substr(kReject.size()) : Format("bad handshake answer: {}", answer);
+                return std::unexpected(SetError(Format("TLS: {}", reason)));
             }
             socket.SetReceiveTimeout(std::chrono::milliseconds::zero());
             std::lock_guard<std::mutex> lock(_mutex);
@@ -196,7 +197,7 @@ namespace BECore::Tests {
             anchorCount = space == String::npos ? 0 : StringUtils::ParseNumber<size_t>(StringView(rest).substr(space + 1)).value_or(0);
             hello = true;
 
-            const String answer = rejectReason.empty() ? "FAKE-OK\n" : "FAKE-REJECT " + rejectReason + "\n";
+            const String answer = rejectReason.empty() ? String("FAKE-OK\n") : Format("FAKE-REJECT {}\n", rejectReason);
             EXPECT_TRUE(peer.SendAll(BECore::AsBytes(answer)));
             return rejectReason.empty();
         }

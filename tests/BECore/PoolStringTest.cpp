@@ -345,7 +345,7 @@ namespace BECore::Tests {
             static std::atomic<uint32_t> s_serial{0};
             Vector<String> names;
             for (int i = 0; i < kLockCostNames; ++i) {
-                names.push_back("pool_lock_cost_" + ToString(i));
+                names.push_back(Format("pool_lock_cost_{}", i));
                 static_cast<void>(PoolString::Intern(View(names.back())));
             }
             double best = 1e30;
@@ -354,7 +354,7 @@ namespace BECore::Tests {
                 for (auto& list : fresh) {
                     const size_t count = newEvery > 0 ? static_cast<size_t>(kLockCostRounds) * kLockCostNames / newEvery : 0;
                     for (size_t i = 0; i < count; ++i) {
-                        list.push_back("pool_lock_cost_new_" + ToString(s_serial.fetch_add(1)));
+                        list.push_back(Format("pool_lock_cost_new_{}", s_serial.fetch_add(1)));
                     }
                 }
                 Vector<double> results(static_cast<size_t>(threads), 0.0);

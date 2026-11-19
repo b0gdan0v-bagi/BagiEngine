@@ -24,7 +24,7 @@ namespace BECore::Tests {
         constexpr WebSocketMask kMask = kClientMask;
 
         String Request(int64_t id, StringView method, StringView paramsJson = "{}") {
-            return "{\"id\":" + ToString(id) + ",\"method\":\"" + String(method) + "\",\"params\":" + String(paramsJson) + "}";
+            return Format("{{\"id\":{},\"method\":\"{}\",\"params\":{}}}", id, method, paramsJson);
         }
 
         /// The members of a response, read through the checked helpers
@@ -211,7 +211,7 @@ namespace BECore::Tests {
         constexpr int kRequests = 50;
         Vector<uint8_t> batch;
         for (int id = 1; id <= kRequests; ++id) {
-            const String text = Request(id, "echo", "{\"n\":" + ToString(id) + "}");
+            const String text = Request(id, "echo", Format("{{\"n\":{}}}", id));
             const auto frame = EncodeTextFrame(text, kMask);
             batch.insert(batch.end(), frame.begin(), frame.end());
         }
@@ -338,7 +338,7 @@ namespace BECore::Tests {
         // A request that is exactly at the limit is passed on; the answer to it is not a transport matter
         const String prefix = "{\"id\":1,\"method\":\"echo\",\"params\":{\"pad\":\"";
         const String suffix = "\"}}";
-        const String request = prefix + String(ControlService::kMaxRequestBytes - prefix.size() - suffix.size(), 'x') + suffix;
+        const String request = Format("{}{}{}", prefix, String(ControlService::kMaxRequestBytes - prefix.size() - suffix.size(), 'x'), suffix);
         ASSERT_EQ(request.size(), ControlService::kMaxRequestBytes);
 
         const Response response = Call(*client, request);
@@ -375,7 +375,7 @@ namespace BECore::Tests {
         auto client = OpenClient(port);
         ASSERT_TRUE(client.has_value());
 
-        client->Send(HandshakeRequest(port, "", "rebound.example.com:" + ToString(port)));
+        client->Send(HandshakeRequest(port, "", Format("rebound.example.com:{}", port)));
         EXPECT_TRUE(StringView(client->ReadHttpResponse()).starts_with("HTTP/1.1 403 Forbidden\r\n"));
     }
 

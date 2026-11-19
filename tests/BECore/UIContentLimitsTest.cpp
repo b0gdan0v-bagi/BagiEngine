@@ -36,24 +36,18 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST(UIContentLimitsTest, TheProblemsOfAStringTableAreShortLinesWhateverTheFileSays) {
-        const String longKey = String(5000, 'k') + "}";
-        const String xml = "<UIStrings default=\"" + String(2000, 'd') +
-                           "\">"
-                           "<language id=\"en\"><string key=\"" +
-                           longKey + "\" text=\"x\"/><string key=\"a&#10;b\"/><other-" + String(3000, 'o') +
-                           "/></language>"
-                           "<language id=\"" +
-                           String(1000, 'l') + "\"/><weird/></UIStrings>";
+        const String longKey = Format("{}}}", String(5000, 'k'));
+        const String xml = Format("<UIStrings default=\"{}\"><language id=\"en\"><string key=\"{}\" text=\"x\"/><string key=\"a&#10;b\"/><other-{}/></language>"
+                                  "<language id=\"{}\"/><weird/></UIStrings>",
+                                  String(2000, 'd'), longKey, String(3000, 'o'), String(1000, 'l'));
         UIStrings strings;
         ExpectOneShortLine(Load(strings, xml));
     }
 
     TEST(UIContentLimitsTest, TheProblemsOfAThemeTableAreShortLinesWhateverTheFileSays) {
-        const String xml = "<UIThemes default=\"" + String(2000, 'd') +
-                           "\">"
-                           "<theme id=\"t\"><color name=\"" +
-                           String(5000, 'n') + "\" value=\"#fff\"/><color name=\"a\" value=\"" + String(4000, 'v') + "&#10;\"/><color name=\"b&#9;c\" value=\"#fff\"/><x-" + String(3000, 'x') +
-                           "/></theme><theme id=\"" + String(1000, 't') + "\"/></UIThemes>";
+        const String xml = Format("<UIThemes default=\"{}\"><theme id=\"t\"><color name=\"{}\" value=\"#fff\"/><color name=\"a\" value=\"{}&#10;\"/>"
+                                  "<color name=\"b&#9;c\" value=\"#fff\"/><x-{}/></theme><theme id=\"{}\"/></UIThemes>",
+                                  String(2000, 'd'), String(5000, 'n'), String(4000, 'v'), String(3000, 'x'), String(1000, 't'));
         UIThemes themes;
         ExpectOneShortLine(Load(themes, xml));
     }

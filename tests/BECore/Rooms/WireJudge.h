@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/Json.h>
+#include <BECore/Format/Format.h>
 #include <vector>
 
 namespace BECore::Tests {
@@ -56,7 +57,7 @@ namespace BECore::Tests {
                 allowedTable = FindCardIds(FromStd(table->dump()));
             }
         }
-        const String ownPrefix = seat >= 0 ? "c" + ToString(seat) + "_" : String();
+        const String ownPrefix = seat >= 0 ? Format("c{}_", seat) : String();
         Vector<String> leaked;
         for (const String& id : FindCardIds(text)) {
             const bool own = !ownPrefix.empty() && StringView(id).starts_with(ownPrefix);

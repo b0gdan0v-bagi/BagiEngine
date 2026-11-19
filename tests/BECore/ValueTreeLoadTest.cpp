@@ -131,9 +131,9 @@ namespace BECore::Tests {
             String close;
             for (size_t i = 0; i < levels; ++i) {
                 AppendFormat(open, "<{} type=\"CalcUnary\" op=\"Neg\">", i == 0 ? key : StringView("operand"));
-                close = (i == 0 ? Format("</{}>", key) : String("</operand>")) + close;
+                close = Format("{}{}", i == 0 ? Format("</{}>", key) : String("</operand>"), close);
             }
-            return open + R"(<operand type="CalcNumber" text="1"/>)" + close;
+            return Format(R"({}<operand type="CalcNumber" text="1"/>{})", open, close);
         }
 
         void ExpectAttackTimesTwo(const Value<int32_t>& value) {

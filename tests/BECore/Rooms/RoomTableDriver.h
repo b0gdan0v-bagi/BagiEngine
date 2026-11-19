@@ -131,7 +131,7 @@ namespace BECore::Tests {
 
     inline void ExpectCleanWire(const Clients& clients) {
         for (size_t i = 0; i < clients.size(); ++i) {
-            ExpectCleanWire(*clients[i], ("client " + ToString(i)).c_str());
+            ExpectCleanWire(*clients[i], Format("client {}", i).c_str());
         }
     }
 

@@ -62,7 +62,7 @@ namespace BECore::Tests {
 
     TEST(LogSiteTest, ATruncatedMessageKeepsItsSite) {
         LogRecorder recorder;
-        const String text = "LogSiteTest long " + String(600, 'x');
+        const String text = Format("LogSiteTest long {}", String(600, 'x'));
         constexpr uint32_t kLine = __LINE__ + 1;
         LOG_ERROR(StringView(text.data(), text.size()));
         LogEvent::Flush();

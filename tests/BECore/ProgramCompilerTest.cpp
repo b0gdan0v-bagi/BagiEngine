@@ -351,7 +351,7 @@ namespace BECore::Tests {
     }
 
     TEST(ProgramCompilerTest, ALongTextShowsAWindowAroundTheColumn) {
-        const String text = String(100, 'a') + "b" + String(100, 'c');
+        const String text = Format("{}b{}", String(100, 'a'), String(100, 'c'));
         const String line = FormatProgramError(text, ProgramError{"bad", 101});
         const String expected = Format("bad (column 101)\n  ...{}b{}...\n  {}^", String(32, 'a'), String(27, 'c'), String(3 + 32, ' '));
         EXPECT_EQ(line, expected);

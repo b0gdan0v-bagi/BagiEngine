@@ -126,7 +126,7 @@ namespace BECore::Tests {
             String result;
             String reason;
             ASSERT_TRUE(Build(node, result, reason)) << reason.c_str();
-            EXPECT_EQ(result, "<nodes>" + expected + "</nodes>");
+            EXPECT_EQ(result, Format("<nodes>{}</nodes>", expected));
             ExpectRoundTrip(node);
         }
 

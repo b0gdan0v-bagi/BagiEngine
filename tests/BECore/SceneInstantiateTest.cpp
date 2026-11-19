@@ -101,7 +101,7 @@ namespace BECore::Tests {
 
         /// The scene Main with A and C, and the instance of @p reference between them, loaded from a file the plain way (the expected one)
         Scene& LoadExpected(const String& reference) {
-            return Load(SceneConfigText(String("<node name=\"A\"/>") + reference + "<node name=\"C\"/>", kMainSceneView800x600));
+            return Load(SceneConfigText(Format("<node name=\"A\"/>{}<node name=\"C\"/>", reference), kMainSceneView800x600));
         }
 
         std::filesystem::path _dir;

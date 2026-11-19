@@ -41,7 +41,7 @@ namespace BECore::Tests {
 
         /// A node file at the current content version, as the file-system loader wants it
         String CurrentNode(const char* name) {
-            return String("<node name=\"") + name + "\" contentVersion=\"" + ToString(kContentVersion) + "\"/>";
+            return Format("<node name=\"{}\" contentVersion=\"{}\"/>", name, kContentVersion);
         }
 
         /// The text of a file, to see that a node file is not changed by the instances made of it
@@ -405,8 +405,8 @@ namespace BECore::Tests {
     TEST_F(SceneNodeFilesTest, FileSystemLoaderRefusesAnOlderAndANewerNodeFile) {
         ASSERT_GT(kContentVersion, 0u);
         const auto root = _dir / "root";
-        WriteFile(root / "config" / "nodes" / "Old.xml", "<node name=\"Old\" contentVersion=\"" + ToString(kContentVersion - 1) + "\"/>");
-        WriteFile(root / "config" / "nodes" / "New.xml", "<node name=\"New\" contentVersion=\"" + ToString(kContentVersion + 1) + "\"/>");
+        WriteFile(root / "config" / "nodes" / "Old.xml", Format("<node name=\"Old\" contentVersion=\"{}\"/>", kContentVersion - 1));
+        WriteFile(root / "config" / "nodes" / "New.xml", Format("<node name=\"New\" contentVersion=\"{}\"/>", kContentVersion + 1));
         WriteFile(root / "config" / "nodes" / "Bad.xml", R"(<node name="Bad" contentVersion="two"/>)");
         WriteFile(root / "config" / "nodes" / "Now.xml", CurrentNode("Now"));
         FileSystem fs;
@@ -432,7 +432,7 @@ namespace BECore::Tests {
     TEST_F(SceneNodeFilesTest, AnOlderNodeFileIsADroppedReferenceInTheExpansion) {
         ASSERT_GT(kContentVersion, 0u);
         const auto root = _dir / "root";
-        WriteFile(root / "config" / "nodes" / "Old.xml", "<node name=\"Old\" contentVersion=\"" + ToString(kContentVersion - 1) + "\"/>");
+        WriteFile(root / "config" / "nodes" / "Old.xml", Format("<node name=\"Old\" contentVersion=\"{}\"/>", kContentVersion - 1));
         WriteFile(root / "config" / "nodes" / "Now.xml", CurrentNode("Now"));
         FileSystem fs;
         fs.AddContentRoot(root);
@@ -461,7 +461,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneNodeFilesTest, TheExpandedCopyHasNoContentVersion) {
-        WriteFile(_dir / "nodes" / "Stamped.xml", "<node name=\"Stamped\" layer=\"3\" contentVersion=\"" + ToString(kContentVersion) + "\"/>");
+        WriteFile(_dir / "nodes" / "Stamped.xml", Format("<node name=\"Stamped\" layer=\"3\" contentVersion=\"{}\"/>", kContentVersion));
         pugi::xml_document doc;
         const auto result = Expand(SceneConfigText(R"(<node ref="nodes/Stamped"/>)"), doc);
 
@@ -657,7 +657,7 @@ namespace BECore::Tests {
         for (const char* reference : kInvalidReferences) {
             SCOPED_TRACE(reference);
             pugi::xml_document doc;
-            const auto result = Expand(SceneConfigText(String(R"(<node name="A"/>)") + reference + R"(<node name="C"/>)"), doc);
+            const auto result = Expand(SceneConfigText(Format(R"(<node name="A"/>{}<node name="C"/>)", reference)), doc);
 
             ExpectOneError(result, "nodes/Hud");
             EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<String>{"A", "C"}));
@@ -799,7 +799,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeFilesTest, MarkSourceSetsOnlyTheSourceRefOnTheCopy) {
         WriteFile(_dir / "nodes" / "Stamped.xml",
-                  "<node name=\"Stamped\" layer=\"3\" contentVersion=\"" + ToString(kContentVersion) + "\"><components><component type=\"TransformComponent\" x=\"1\"/></components></node>");
+                  Format("<node name=\"Stamped\" layer=\"3\" contentVersion=\"{}\"><components><component type=\"TransformComponent\" x=\"1\"/></components></node>", kContentVersion));
         pugi::xml_document reference = Parse(R"(<node ref="nodes/Stamped" name="Own"><components><component type="TransformComponent" x="9"/></components></node>)");
         pugi::xml_document plain;
         pugi::xml_document marked;

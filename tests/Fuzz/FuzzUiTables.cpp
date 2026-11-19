@@ -146,7 +146,7 @@ namespace BECore::Fuzz {
                     FUZZ_CHECK(table.SetTheme(theme));
                     const auto color = table.Find(token.ToStringView());
                     FUZZ_CHECK(color.has_value());
-                    digest += ToString(color->r) + "," + ToString(color->g) + "," + ToString(color->b) + "," + ToString(color->a) + ";";
+                    AppendFormat(digest, "{},{},{},{};", color->r, color->g, color->b, color->a);
                 }
             }
             return digest;

@@ -82,7 +82,7 @@ namespace BECore::Tests {
             if (!ReadWholeFile(CoreManager::GetFileSystem().ResolvePath(kIconHeaderPath), text)) {
                 return codepoints;
             }
-            const String definePrefix = String("#define ") + kIconTokenPrefix;
+            const String definePrefix = Format("#define {}", kIconTokenPrefix);
             std::istringstream lines(ToStdString(text));
             std::string stdLine;  //-NoStd: std::getline fills a std::string
             while (std::getline(lines, stdLine)) {

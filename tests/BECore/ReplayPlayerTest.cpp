@@ -28,7 +28,7 @@ namespace BECore::Tests {
             }
 
             void SetUp() override {
-                _path = TestTempPath("replay_player_" + String(::testing::UnitTest::GetInstance()->current_test_info()->name()));
+                _path = TestTempPath(Format("replay_player_{}", ::testing::UnitTest::GetInstance()->current_test_info()->name()));
                 CoreManager::GetTime().Reset();
                 ReplayTestGame::RestartSeedCounter();
                 GameManager::GetInstance().Initialize();

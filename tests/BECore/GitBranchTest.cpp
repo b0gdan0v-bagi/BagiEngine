@@ -83,7 +83,7 @@ namespace BECore::Tests {
 
     TEST_F(GitBranchTest, ReadFollowsAnAbsoluteGitdirFile) {
         WriteFile(_root / "elsewhere" / "HEAD", "ref: refs/heads/games/mahjong\n");
-        WriteFile(_root / "project" / ".git", "gitdir: " + FromStdString((_root / "elsewhere").string()) + "\n");
+        WriteFile(_root / "project" / ".git", Format("gitdir: {}\n", FromStdString((_root / "elsewhere").string())));
         EXPECT_EQ(ReadGitBranch(_root / "project"), "games/mahjong");
     }
 

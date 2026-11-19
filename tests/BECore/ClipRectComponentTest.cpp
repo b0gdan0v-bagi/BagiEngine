@@ -189,7 +189,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ClipRectComponentTest, ANodeWithTheComponentAndNoTransformClipsNothing) {
-        const String bare = R"(<node name="Bare"><components><component type="ClipRectComponent"/></components><children>)" + Node("Child", 0, 0, kWide, kWide, 0, kQuad) + "</children></node>";
+        const String bare = Format(R"(<node name="Bare"><components><component type="ClipRectComponent"/></components><children>{}</children></node>)", Node("Child", 0, 0, kWide, kWide, 0, kQuad));
         ASSERT_NO_FATAL_FAILURE(LoadNodes(bare));
 
         const Vector<DrawCall>& calls = Draw();

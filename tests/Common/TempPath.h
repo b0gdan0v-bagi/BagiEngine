@@ -16,7 +16,7 @@ namespace BECore::Tests {
      */
     inline std::filesystem::path TestTempPath(const String& stem) {
         static const String tag = Format("{:08x}", std::random_device{}());
-        const String name = stem + "_" + tag;
+        const String name = Format("{}_{}", stem, tag);
         return std::filesystem::temp_directory_path() / ToStd(name);
     }
 

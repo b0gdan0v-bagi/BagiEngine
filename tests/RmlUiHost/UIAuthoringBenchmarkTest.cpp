@@ -100,11 +100,11 @@ button { width: 56dp; height: 24dp; font-size: 14dp; background-color: rgb(40, 9
 )";
 
         String WebScreen() {
-            return String("<style>") + kWebCss + "</style>\n" + HtmlBody("px");
+            return Format("<style>{}</style>\n{}", kWebCss, HtmlBody("px"));
         }
 
         String RmlScreen() {
-            return String("<rml><head><style>") + kRmlCss + "</style></head><body>\n" + HtmlBody("dp") + "</body></rml>";
+            return Format("<rml><head><style>{}</style></head><body>\n{}</body></rml>", kRmlCss, HtmlBody("dp"));
         }
 
         using Clock = std::chrono::steady_clock;

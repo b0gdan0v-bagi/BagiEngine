@@ -28,7 +28,7 @@ namespace BECore::Tests {
             }
 
             void SetUp() override {
-                _path = TestTempPath("replay_control_" + String(::testing::UnitTest::GetInstance()->current_test_info()->name()));
+                _path = TestTempPath(Format("replay_control_{}", ::testing::UnitTest::GetInstance()->current_test_info()->name()));
                 const Span<const String> arguments = CoreManager::GetCommandLine().GetArguments();
                 _arguments.assign(arguments.begin(), arguments.end());
                 CoreManager::GetTime().Reset();
@@ -204,7 +204,7 @@ namespace BECore::Tests {
         StartRecordingFromCommandLine();
         EXPECT_FALSE(SessionRecorder::GetInstance().IsRecording());
 
-        const String flag = "--record=" + PathText();
+        const String flag = Format("--record={}", PathText());
         CoreManager::GetCommandLine().Set(Vector<String>{flag});
         StartRecordingFromCommandLine();
         ASSERT_TRUE(SessionRecorder::GetInstance().IsRecording());
@@ -216,7 +216,7 @@ namespace BECore::Tests {
 
     TEST_F(ReplayControlTest, TheRecordFlagOnAGameThatCannotRecordLeavesNoRecording) {
         GameManager::GetInstance().SwitchTo("FakeControllable"_intern);
-        const String flag = "--record=" + PathText();
+        const String flag = Format("--record={}", PathText());
         CoreManager::GetCommandLine().Set(Vector<String>{flag});
 
         StartRecordingFromCommandLine();
@@ -228,7 +228,7 @@ namespace BECore::Tests {
     // The default game of the test binary is the first registered one, which this test does not choose: it holds the flag to what that game can do
     TEST_F(ReplayControlTest, InitializeReadsTheRecordFlagForTheDefaultGame) {
         GameManager::GetInstance().Shutdown();
-        const String flag = "--record=" + PathText();
+        const String flag = Format("--record={}", PathText());
         CoreManager::GetCommandLine().Set(Vector<String>{flag});
 
         GameManager::GetInstance().Initialize();

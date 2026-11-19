@@ -232,7 +232,7 @@ namespace BECore::Tests {
 
     TEST(ReaderLimitsTest, XmlStrictErrorQuotesAShortPieceOfTheValue) {
         const String junk(1000, 'z');
-        const String xml = "<root a=\"" + junk + "\"/>";
+        const String xml = Format("<root a=\"{}\"/>", junk);
         XmlDeserializer reader;
         reader.SetStrictValues(true);
         ASSERT_TRUE(reader.LoadFromString(xml));
