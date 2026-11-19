@@ -96,7 +96,7 @@ namespace BECore {
      * group with the settings the group was packed with (`PackSettingsOf`) and saves again when the repack moved a member. No services.
      *
      * A sprite with no atlas link is only stored, as StoreSpriteEntry does. A repack that fails leaves the new `atlas.source` in the saved
-     * library and the old atlas file as it was (the error says the PNG is in place and Pack in the Sprite Library finishes it). When the
+     * library and the old atlas file as it was (the error says the PNG was already written over the game's file and Pack in the Sprite Library finishes it). When the
      * second save fails the members go back to what the library held before the repack; the atlas file is already replaced then, and the
      * error says so.
      */

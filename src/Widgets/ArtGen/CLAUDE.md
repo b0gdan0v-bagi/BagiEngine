@@ -47,7 +47,7 @@ The service **pulls**: a request made before the service connects is not lost, a
 - **Cancel.** A queued run is cancelled at once; a running one when the service, after it saw `cancel` in a poll, answers `artgen_done` `cancelled`. Images already made stay.
 - **Setup actions** (`ArtGenSetup`) travel the same way and never beside a run (`RequestSetup` and `Request` refuse each other's time). The service downloads without asking: Install is offered only under the plan.
 - The panel and `artgen_generate` go through the same `ArtGenSession::Request` (by name) or `RequestDraft` (inline). A preset the service reported broken is refused by name; a draft is checked here only for its shape, the rest by the service, which fails the run with the reason.
-- **Save** (`SavePreset`, `artgen_save_preset`): the C++ side checks only the name and the shape; the file is written atomically with the keys in the order of the docs, shown at once as the game's, and the next poll asks the service for `refresh`, whose verdict comes back as the preset's `error`. `keepVariants` starts the new run with the variants of the last one.
+- **Save** (`SavePreset`, `artgen_save_preset`): the C++ side checks only the name and the shape; the file is written atomically with the keys in the order of the docs, shown at once as the game's, and the next poll asks the service for `refresh`, whose verdict comes back as the preset's `error`. `keepVariants` starts the new run with the variants of the last one (not of a set's job: they are its row's).
 
 ## Lifetime and threads
 

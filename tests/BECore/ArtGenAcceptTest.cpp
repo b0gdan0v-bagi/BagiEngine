@@ -599,7 +599,7 @@ namespace BECore::Tests {
         const auto stored = AcceptIntoLibrary(library, copied, "queen", game.Io(), save);
 
         ASSERT_FALSE(stored.has_value());
-        EXPECT_NE(stored.error().find("the PNG is in"), String::npos);
+        EXPECT_NE(stored.error().find("already written over the game's file"), String::npos);
         EXPECT_EQ(library.GetSprite("queen"_intern), nullptr);
     }
 

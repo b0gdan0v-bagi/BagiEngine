@@ -169,11 +169,11 @@ namespace BECore {
         }
 
         /// Queues a request; the error says why not (a run in work, a bad count or preset). @p keepVariants starts the new run with the
-        /// variants of the last one, so a few more can be made without losing the ones on screen
+        /// variants of the last one, so a few more can be made without losing the ones on screen (not those of a set's job: they are its row's)
         /// @p reference is the picture the images start from (it replaces the preset's own `reference` whole); the service checks it and fails the run with the reason
         std::expected<uint32_t, String> Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants = false, Optional<ArtGenReference> reference = {});
         /// The same with the preset's content inline (the panel's form, saved or not): the service checks it as it checks a file, and the
-        /// provenance names it `draft`. @p name is the form's, for the messages
+        /// provenance names it `draft`. @p name is the form's, for the messages; @p keepVariants is as for Request
         std::expected<uint32_t, String> RequestDraft(StringView name, const Json& preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants = false,
                                                      Optional<ArtGenReference> reference = {});
 
@@ -309,7 +309,8 @@ namespace BECore {
         /// names the rows kept; a failure halfway names the row and the rows done
         std::expected<Json, ControlError> KeepSet(StringView name, StringView job = {});
         /// The other set that accepted a row under the same name and kind of @p job later, so the game's file is its variant now (null when
-        /// @p job owns it, or was never accepted). The dates have a resolution of a second: on a tie the set later in the list is the newer
+        /// @p job owns it, or was never accepted). A new accept's date is strictly later than the others' (`NewAcceptDate`), so a tie
+        /// (the set later in the list is the newer) is left only for manifests written before that rule
         [[nodiscard]] const ArtGenSet* FindNewerOwner(const ArtGenSet& set, const ArtGenSetJob& job) const;
         [[nodiscard]] const ArtGenSet* FindSet(StringView name) const;
         [[nodiscard]] const Vector<ArtGenSet>& GetSets() const {
@@ -351,6 +352,9 @@ namespace BECore {
         [[nodiscard]] ArtGenSet* MutableSet(StringView name);
         /// The job of `_run` while it is Running (the run is the work of a set), else null
         [[nodiscard]] ArtGenSetJob* RunningJobOfRun(ArtGenSet*& set);
+        /// The `accepted.date` of an accept of @p name by @p set now: strictly later than the date of every row of the other sets of its kind
+        /// that holds the name (live or kept), so `FindNewerOwner` never meets a tie of two accepts within one second
+        [[nodiscard]] String NewAcceptDate(const ArtGenSet& set, StringView name) const;
         void SaveSet(const ArtGenSet& set);
         /// The image settings a preset (a draft's @p presetData, else the saved one by @p preset) asks for; a malformed `accept` is the defaults
         [[nodiscard]] ArtGenImageSettings ImageSettingsOf(const Json& presetData, StringView preset) const;

@@ -133,6 +133,14 @@ namespace BECore {
     /// `2026-11-17T12:34:56Z`
     [[nodiscard]] String ArtGenTimestamp(std::chrono::system_clock::time_point time);
 
+    /// The time of a text `ArtGenTimestamp` wrote (that one format, UTC, a real calendar date); anything else is empty
+    [[nodiscard]] Optional<std::chrono::system_clock::time_point> ParseArtGenTimestamp(StringView text);
+
+    /// The `accepted.date` of an accept at @p now, which must sort after @p latestOther, the greatest date another set holds under the same
+    /// name: the stamp of @p now, or the second after @p latestOther when that is not earlier (the stamps have a resolution of a second, so
+    /// two accepts of one name within it would tie). An empty or unparsable @p latestOther changes nothing
+    [[nodiscard]] String ArtGenAcceptDate(std::chrono::system_clock::time_point now, StringView latestOther);
+
     /// The manifest of @p set (Sets/CLAUDE.md, "The manifest")
     [[nodiscard]] Json ArtGenSetToJson(const ArtGenSet& set);
 

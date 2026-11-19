@@ -1456,6 +1456,7 @@ namespace BECore::Tests {
         ArtGenSwitch write;
         EXPECT_EQ(session.PickVariant("fail", "a", kSetSeed, &write), ArtGenSetEdit::WriteFailed);
         EXPECT_NE(write.error.find("the disk is full"), String::npos) << write.error.c_str();
+        EXPECT_NE(write.error.find(Format("the row still names seed {}", kSetSeed + 1)), String::npos) << write.error.c_str();
         const Json refused = Call("artgen_pick", pick);
         EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
         EXPECT_EQ(ArtGenSetToJson(OnDisk("fail")), ArtGenSetToJson(before));
@@ -1719,6 +1720,63 @@ namespace BECore::Tests {
         EXPECT_TRUE(gAccepted.empty());
         EXPECT_EQ(session.PickVariant("first", "a", kSetSeed), ArtGenSetEdit::Ok);
         ASSERT_EQ(gAccepted.size(), 1u);
+    }
+
+    TEST_F(ArtGenSetSessionTest, AnAcceptOfANameAnotherSetHoldsWithALaterDateTakesTheNextSecondAndOwnsTheName) {
+        ASSERT_TRUE(Enqueue("first", "a\nb").has_value());
+        ASSERT_TRUE(Enqueue("second", "a").has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAndPickAll("first"));
+        ASSERT_EQ(session.PickVariant("second", "a", kSetSeed + 1), ArtGenSetEdit::Ok);
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("first"));
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("second"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("second")), "");
+        ArtGenSet disk = OnDisk("second");
+        disk.jobs[0].accepted->date = "2999-01-01T00:00:00Z";
+        ASSERT_TRUE(WriteManifest(_root, disk).has_value());
+        ReloadFromDisk();
+
+        ASSERT_EQ(ErrorCode(AcceptAllCall("first")), "");
+
+        const ArtGenSet& first = *session.FindSet("first");
+        const ArtGenSet& second = *session.FindSet("second");
+        EXPECT_EQ(first.jobs[0].accepted->date, "2999-01-01T00:00:01Z");
+        EXPECT_EQ(OnDisk("first").jobs[0].accepted->date, "2999-01-01T00:00:01Z");
+        EXPECT_EQ(session.FindNewerOwner(second, second.jobs[0]), &first);
+        EXPECT_EQ(session.FindNewerOwner(first, first.jobs[0]), nullptr);
+        EXPECT_LT(first.jobs[1].accepted->date, String("2999")) << "a name no other set holds keeps the stamp of now";
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASwitchOfTheOwnerTakesADateAfterTheOtherSetsDateAndKeepsTheName) {
+        ASSERT_NO_FATAL_FAILURE(AcceptTwoSetsOfOneName());
+        for (const char* name : {"first", "second"}) {
+            ArtGenSet disk = OnDisk(name);
+            disk.jobs[0].accepted->date = "2999-01-01T00:00:00Z";
+            ASSERT_TRUE(WriteManifest(_root, disk).has_value());
+        }
+        ReloadFromDisk();
+        const ArtGenSet& first = *session.FindSet("first");
+        const ArtGenSet& second = *session.FindSet("second");
+        ASSERT_EQ(session.FindNewerOwner(first, first.jobs[0]), &second) << "manifests that hold equal dates: the later set in the list owns the name";
+        ASSERT_EQ(session.FindNewerOwner(second, second.jobs[0]), nullptr);
+        EXPECT_EQ(session.PickVariant("first", "a", kSetSeed), ArtGenSetEdit::WriteFailed);
+
+        ASSERT_EQ(session.PickVariant("second", "a", kSetSeed), ArtGenSetEdit::Ok);
+
+        EXPECT_EQ(second.jobs[0].accepted->date, "2999-01-01T00:00:01Z");
+        EXPECT_EQ(session.FindNewerOwner(first, first.jobs[0]), &second);
+        EXPECT_EQ(session.FindNewerOwner(second, second.jobs[0]), nullptr);
+    }
+
+    TEST_F(ArtGenSetSessionTest, TheNextSingleRunDoesNotCarryTheDraftsOfASetsJob) {
+        ASSERT_TRUE(Enqueue("drafts", "a").has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAll());
+        ASSERT_FALSE(session.GetRun().variants.empty()) << "the job's drafts are the run's variants when it ends";
+
+        ASSERT_TRUE(session.Request("wood", "b", 1, 5, true).has_value());
+
+        EXPECT_TRUE(session.GetRun().variants.empty());
+        EXPECT_EQ(session.GetRun().keptVariants, 0);
+        EXPECT_EQ(session.FindSet("drafts")->jobs[0].variants.size(), 2u) << "the row keeps its own";
     }
 
     TEST_F(ArtGenSetSessionTest, ASoundAndAnImageOfTheSameNameDoNotReplaceEachOther) {

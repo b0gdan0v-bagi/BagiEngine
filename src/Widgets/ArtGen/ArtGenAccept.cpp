@@ -567,7 +567,7 @@ namespace BECore {
         const SpriteEntry entry = AcceptedSpriteEntry(library, name, texturePath, copied.width, copied.height);
         auto stored = StoreSpriteEntry(library, entry, save);
         if (!stored) {
-            return std::unexpected(Format("the PNG is in '{}', but {}", copied.pngFile.generic_string(), stored.error()));
+            return std::unexpected(Format("the PNG was already written over the game's file '{}', so the library entry was not updated: {}", copied.pngFile.generic_string(), stored.error()));
         }
         AcceptStored result;
         result.saved = *stored;
@@ -582,8 +582,9 @@ namespace BECore {
         }
         auto written = WriteAtlas(library, group.ToStringView(), PackSettingsOf(library, group.ToStringView()), io);
         if (!written) {
-            return std::unexpected(Format("the PNG is in '{}', the library points to it, but atlas '{}' could not be repacked: {}; press Pack in the Sprite Library", copied.pngFile.generic_string(),
-                                          group.ToStringView(), written.error()));
+            return std::unexpected(
+                Format("the PNG was already written over the game's file '{}' and the library points to it, but atlas '{}' could not be repacked: {}; press Pack in the Sprite Library",
+                       copied.pngFile.generic_string(), group.ToStringView(), written.error()));
         }
         const bool entriesChanged = std::any_of(before.begin(), before.end(), [&library](const SpriteEntry& old) { return !IsSameSpriteEntry(old, *library.GetSprite(old.name)); });
         if (entriesChanged) {
@@ -591,7 +592,8 @@ namespace BECore {
                 for (const SpriteEntry& old : before) {
                     library.AddOrUpdate(old);
                 }
-                return std::unexpected(Format("the PNG is in '{}' and atlas '{}' was rewritten, but TextureLibrary.xml could not be saved; press Pack in the Sprite Library",
+                return std::unexpected(Format("the PNG was already written over the game's file '{}' and atlas '{}' was rewritten, but TextureLibrary.xml could not be saved, so the library entries "
+                                              "were not updated; press Pack in the Sprite Library",
                                               copied.pngFile.generic_string(), group.ToStringView()));
             }
             result.saved = true;
