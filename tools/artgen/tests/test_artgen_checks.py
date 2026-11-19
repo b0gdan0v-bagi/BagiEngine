@@ -306,7 +306,8 @@ def test_checks_each_threshold_can_be_replaced():
     assert failed_of(draw(SIDE, disc(100, 100, 60, alpha=200)), {"cut": 201}) == ["empty"]
     two = draw(SIDE, disc(60, 100, 30), disc(140, 100, 30))
     assert failed_of(two, {"maxPieces": 2}) == ["bodies"], "a gap is a valley too once two pieces are allowed"
-    assert failed_of(two, {"maxPieces": 2, "maxValley": 1}) == []
+    assert failed_of(two, {"maxPieces": 2, "maxValley": 1}) == ["bodies"], "and a gap has no floor"
+    assert failed_of(two, {"maxPieces": 2, "maxValley": 1, "minFloor": 0}) == []
     speck = draw(SIDE, disc(100, 100, 60), disc(10, 10, 3))
     assert failed_of(speck, {"minPieceArea": 0.0001}) == ["pieces"]
     assert failed_of(draw(SIDE, disc(100, 50, 60)), {"maxEdgeRun": 0.5}) == []
@@ -377,16 +378,107 @@ def test_checks_a_picture_larger_than_the_reduced_side_has_the_same_valley():
 
 def test_checks_both_valley_thresholds_can_be_replaced():
     joined = two_columns_on_a_base(1, 155)
-    assert failed_of(joined, {"maxValley": 0.9}) == []
+    assert failed_of(joined, {"maxValley": 0.9}) == ["bodies"], "the thin base fails minFloor too"
+    assert failed_of(joined, {"maxValley": 0.9, "minFloor": 0}) == []
     assert failed_of(joined, {"maxValley": 0.0}) == ["bodies"]
     assert failed_of(joined, {"minBodyWidth": 0.6}) == []
     verdict = check_alpha(joined, {"maxValley": 0.9, "minBodyWidth": 0.1})
     assert verdict["thresholds"]["maxValley"] == 0.9 and verdict["thresholds"]["minBodyWidth"] == 0.1
 
 
+# Silhouettes of the Chess game's art, reduced to a 0/255 alpha (no colour): `accept/` holds pictures that are one piece (the
+# game's accepted set, a horn or a glass on a stand), `reject/` pictures of several objects that stand together on a thin base.
+SILHOUETTES = Path(__file__).resolve().parent / "fixtures" / "silhouettes"
+
+
+def silhouettes(kind):
+    return sorted((SILHOUETTES / kind).glob("*.png"))
+
+
+@pytest.mark.parametrize("path", silhouettes("accept"), ids=lambda path: path.stem)
+def test_checks_the_accepted_silhouettes_pass(path):
+    verdict = check_png(path.read_bytes())
+    assert verdict["failed"] == [], verdict["metrics"]
+
+
+def on_a_plate(scale, plate_top):
+    """A tall body and a small one side by side on a plate, 145 high in all: the plate's thickness is the valley's floor."""
+    side = SIDE * scale
+    return draw(side,
+                square(20 * scale, plate_top * scale, 170 * scale, 175 * scale),
+                square(100 * scale, 30 * scale, 160 * scale, plate_top * scale),
+                square(30 * scale, 130 * scale, 55 * scale, plate_top * scale))
+
+
+def test_checks_a_small_body_beside_a_tall_one_on_a_thin_plate_fails_bodies():
+    verdict = check_alpha(on_a_plate(1, 160))
+    assert verdict["failed"] == ["bodies"]
+    assert verdict["metrics"]["valley"] < DEFAULTS["maxValley"], "the small neighbour makes the valley shallow"
+    assert verdict["metrics"]["floor"] == pytest.approx(15 / 145, abs=0.02)
+
+
+def test_checks_the_same_bodies_on_a_thick_plate_are_one_object():
+    verdict = check_alpha(on_a_plate(1, 130))
+    assert verdict["failed"] == []
+    assert verdict["metrics"]["floor"] == 1.0, "a valley that shallow is no valley between two bodies"
+
+
+def test_checks_two_tall_bodies_on_a_thick_stand_keep_their_floor():
+    stand = check_alpha(two_columns_on_a_base(1, 120))
+    assert stand["failed"] == []
+    assert stand["metrics"]["valley"] > 0.4 and stand["metrics"]["floor"] == pytest.approx(55 / 115, abs=0.02)
+
+
+def test_checks_a_glass_on_a_stand_a_crown_and_an_antenna_have_no_floor_to_check():
+    glass = draw(SIDE, disc(100, 70, 45), square(92, 100, 108, 160), square(60, 160, 140, 175))
+    assert check_alpha(glass)["metrics"]["floor"] == 1.0 and failed_of(glass) == []
+    teeth = [square(x, 70, x + 3, 130) for x in (40, 70, 100, 130, 157)]
+    assert check_alpha(draw(SIDE, square(40, 130, 160, 150), *teeth))["metrics"]["floor"] == 1.0
+    antenna = draw(SIDE, disc(80, 120, 50), square(95, 166, 153, 171), square(150, 40, 153, 166))
+    assert check_alpha(antenna)["metrics"]["floor"] == 1.0
+
+
+def test_checks_a_lone_object_has_floor_one():
+    assert check_alpha(draw(SIDE, disc(100, 100, 60)))["metrics"]["floor"] == 1.0
+
+
+def test_checks_a_picture_larger_than_the_reduced_side_has_the_same_floor():
+    small = check_alpha(on_a_plate(1, 160))
+    big = check_alpha(on_a_plate(3, 160))
+    assert big["failed"] == ["bodies"]
+    assert big["metrics"]["floor"] == pytest.approx(small["metrics"]["floor"], abs=0.03)
+    assert failed_of(on_a_plate(3, 130)) == []
+
+
+def test_checks_the_floor_threshold_can_be_replaced():
+    thin = on_a_plate(1, 160)
+    assert failed_of(thin, {"minFloor": 0}) == []
+    assert failed_of(thin, {"minFloor": 0.05}) == []
+    assert failed_of(thin, {"minFloor": 0.2}) == ["bodies"]
+    assert failed_of(two_columns_on_a_base(1, 120), {"minFloor": 0.6}) == ["bodies"]
+    verdict = check_alpha(thin, {"minFloor": 0.05})
+    assert verdict["thresholds"]["minFloor"] == 0.05
+    with pytest.raises(ValueError, match="'minFloor' must be a number from 0 to 1"):
+        artgen_checks.merge_thresholds({"minFloor": 1.5})
+
+
+@pytest.mark.parametrize("path", silhouettes("reject"), ids=lambda path: path.stem)
+def test_checks_the_rejected_silhouettes_fail_bodies(path):
+    verdict = check_png(path.read_bytes())
+    assert verdict["failed"] == ["bodies"], verdict["metrics"]
+
+
+def test_checks_the_silhouettes_are_told_apart_with_a_margin_on_both_sides():
+    floors = {kind: [check_png(path.read_bytes())["metrics"]["floor"] for path in silhouettes(kind)]
+              for kind in ("accept", "reject")}
+    minimum = DEFAULTS["minFloor"]
+    assert max(floors["reject"]) <= minimum * 0.85
+    assert min(floors["accept"]) >= minimum * 1.15
+
+
 def test_checks_the_names_of_the_thresholds_and_of_the_checks():
-    assert set(DEFAULTS) == {"cut", "maxEdgeRun", "maxPieces", "minPieceArea", "maxValley", "minBodyWidth", "maxHalo", "maxFill",
-                             "minCover", "maxOffset"}
+    assert set(DEFAULTS) == {"cut", "maxEdgeRun", "maxPieces", "minPieceArea", "maxValley", "minBodyWidth", "minFloor", "maxHalo",
+                             "maxFill", "minCover", "maxOffset"}
     assert set(artgen_checks.CHECK_NAMES) == {"empty", "edge", "pieces", "bodies", "halo", "background", "small", "offCentre"}
 
 
