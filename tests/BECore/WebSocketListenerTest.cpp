@@ -236,14 +236,11 @@ namespace BECore::Tests {
         // One byte now and then, each well inside the timeout, and never the blank line that ends the head: the timeout counts from
         // the connect, not from the last byte, so the server has to hang up although the client never goes quiet for long
         constexpr std::chrono::milliseconds kDripInterval{50};
-        const auto start = std::chrono::steady_clock::now();
-        const auto giveUp = start + 5 * settings.handshakeTimeout;
         dripper->Send(String("GET / HTTP/1.1\r\nX-Slow: "));
-        bool hungUp = false;
-        while (!hungUp && std::chrono::steady_clock::now() < giveUp) {
+        const bool hungUp = WaitUntil([&] {
             std::this_thread::sleep_for(kDripInterval);
-            hungUp = !dripper->TrySend(AsBytes(String("a")));
-        }
+            return !dripper->TrySend(AsBytes(String("a")));
+        });
         EXPECT_TRUE(hungUp) << "a client that sends a byte every " << kDripInterval.count() << " ms held its slot past the handshake timeout";
         EXPECT_TRUE(dripper->WaitForEndOfStream());
         EXPECT_TRUE(recorder.Events().empty()) << "the handler must never hear of it";
