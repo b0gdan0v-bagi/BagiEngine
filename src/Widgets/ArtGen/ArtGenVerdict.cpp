@@ -13,8 +13,9 @@ namespace BECore {
         };
 
         // Sorted by name; the names are `artgen_checks.CHECK_NAMES`. A name that is not here is shown as it is
-        constexpr Array<CheckMeaning, 7> kCheckMeanings{{
+        constexpr Array<CheckMeaning, 8> kCheckMeanings{{
             {"background", "the background was not removed"},
+            {"bodies", "several objects side by side"},
             {"edge", "the object touches the edge of the frame"},
             {"empty", "nothing is drawn"},
             {"halo", "a halo of half-transparent pixels"},

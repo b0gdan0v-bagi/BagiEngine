@@ -305,7 +305,8 @@ def test_checks_each_threshold_can_be_replaced():
     assert failed_of(clean, {"minCover": 0.5}) == ["small"]
     assert failed_of(draw(SIDE, disc(100, 100, 60, alpha=200)), {"cut": 201}) == ["empty"]
     two = draw(SIDE, disc(60, 100, 30), disc(140, 100, 30))
-    assert failed_of(two, {"maxPieces": 2}) == []
+    assert failed_of(two, {"maxPieces": 2}) == ["bodies"], "a gap is a valley too once two pieces are allowed"
+    assert failed_of(two, {"maxPieces": 2, "maxValley": 1}) == []
     speck = draw(SIDE, disc(100, 100, 60), disc(10, 10, 3))
     assert failed_of(speck, {"minPieceArea": 0.0001}) == ["pieces"]
     assert failed_of(draw(SIDE, disc(100, 50, 60)), {"maxEdgeRun": 0.5}) == []
@@ -315,9 +316,78 @@ def test_checks_each_threshold_can_be_replaced():
     assert verdict["thresholds"]["maxFill"] == 0.5 and verdict["thresholds"]["cut"] == DEFAULTS["cut"]
 
 
+def two_columns_on_a_base(scale, base_top):
+    """Two columns standing on a wide base: the base is one body's floor, the columns are two bodies when it is thin."""
+    side = SIDE * scale
+    return draw(side,
+                square(30 * scale, base_top * scale, 170 * scale, 175 * scale),
+                square(40 * scale, 60 * scale, 80 * scale, base_top * scale),
+                square(120 * scale, 60 * scale, 160 * scale, base_top * scale))
+
+
+def test_checks_a_single_body_has_no_valley():
+    verdict = check_alpha(draw(SIDE, disc(100, 100, 60)))
+    assert verdict["metrics"]["valley"] == 0.0
+    handled = check_alpha(draw(SIDE, disc(90, 100, 50), ring(150, 100, 15, 22, 255)))
+    assert handled["failed"] == [] and handled["metrics"]["valley"] < 0.1
+
+
+def test_checks_two_bodies_joined_by_a_thin_base_fail_bodies_and_not_pieces():
+    verdict = check_alpha(two_columns_on_a_base(1, 155))
+    assert verdict["failed"] == ["bodies"]
+    assert verdict["metrics"]["pieces"] == 1
+    assert verdict["metrics"]["valley"] == pytest.approx(0.83, abs=0.02)
+
+
+def test_checks_a_thick_bridge_is_one_object():
+    thick = draw(SIDE, square(30, 105, 170, 175), square(40, 60, 80, 105), square(120, 60, 160, 105))
+    verdict = check_alpha(thick)
+    assert verdict["failed"] == []
+    assert verdict["metrics"]["valley"] == pytest.approx(0.39, abs=0.02)
+
+
+def test_checks_two_discs_apart_fail_pieces_only():
+    verdict = check_alpha(draw(SIDE, disc(60, 100, 30), disc(140, 100, 30)))
+    assert verdict["failed"] == ["pieces"]
+    assert verdict["metrics"]["valley"] == 1.0
+
+
+def test_checks_narrow_teeth_of_a_crown_are_not_bodies():
+    teeth = [square(x, 70, x + 3, 130) for x in (40, 70, 100, 130, 157)]
+    crown = draw(SIDE, square(40, 130, 160, 150), *teeth)
+    assert failed_of(crown) == []
+    assert failed_of(crown, {"minBodyWidth": 0.001}) == ["bodies"], "without the opening each tooth is a body"
+
+
+def test_checks_a_thin_tall_antenna_is_not_a_body():
+    antenna = draw(SIDE, disc(80, 120, 50), square(95, 166, 153, 171), square(150, 40, 153, 166))
+    verdict = check_alpha(antenna)
+    assert verdict["failed"] == []
+    assert verdict["metrics"]["pieces"] == 1 and verdict["metrics"]["valley"] == 0.0
+    assert failed_of(antenna, {"minBodyWidth": 0.001}) == ["bodies"]
+
+
+def test_checks_a_picture_larger_than_the_reduced_side_has_the_same_valley():
+    small = check_alpha(two_columns_on_a_base(1, 155))
+    big = check_alpha(two_columns_on_a_base(3, 155))
+    assert big["failed"] == ["bodies"]
+    assert big["metrics"]["valley"] == pytest.approx(small["metrics"]["valley"], abs=0.03)
+    assert failed_of(draw(600, square(90, 105 * 3, 510, 175 * 3), square(120, 180, 240, 315), square(360, 180, 480, 315))) == []
+
+
+def test_checks_both_valley_thresholds_can_be_replaced():
+    joined = two_columns_on_a_base(1, 155)
+    assert failed_of(joined, {"maxValley": 0.9}) == []
+    assert failed_of(joined, {"maxValley": 0.0}) == ["bodies"]
+    assert failed_of(joined, {"minBodyWidth": 0.6}) == []
+    verdict = check_alpha(joined, {"maxValley": 0.9, "minBodyWidth": 0.1})
+    assert verdict["thresholds"]["maxValley"] == 0.9 and verdict["thresholds"]["minBodyWidth"] == 0.1
+
+
 def test_checks_the_names_of_the_thresholds_and_of_the_checks():
-    assert set(DEFAULTS) == {"cut", "maxEdgeRun", "maxPieces", "minPieceArea", "maxHalo", "maxFill", "minCover", "maxOffset"}
-    assert set(artgen_checks.CHECK_NAMES) == {"empty", "edge", "pieces", "halo", "background", "small", "offCentre"}
+    assert set(DEFAULTS) == {"cut", "maxEdgeRun", "maxPieces", "minPieceArea", "maxValley", "minBodyWidth", "maxHalo", "maxFill",
+                             "minCover", "maxOffset"}
+    assert set(artgen_checks.CHECK_NAMES) == {"empty", "edge", "pieces", "bodies", "halo", "background", "small", "offCentre"}
 
 
 def png_of(alpha):

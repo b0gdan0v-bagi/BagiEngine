@@ -906,6 +906,8 @@ def test_a_preset_has_the_default_checks_none_or_the_thresholds_it_names(game):
     assert own.data["checks"] == {"maxFill": 0.5, "cut": 100}, "the provenance names what the file says"
     write_preset(game, "empty", {**PRESET, "checks": {}})
     assert preset_of(game, "empty").checks == artgen_checks.DEFAULTS
+    write_preset(game, "bodies", {**PRESET, "checks": {"maxValley": 0.99, "minBodyWidth": 0.1}})
+    assert preset_of(game, "bodies").checks == {**artgen_checks.DEFAULTS, "maxValley": 0.99, "minBodyWidth": 0.1}
 
 
 @pytest.mark.parametrize("checks, message", [
@@ -917,6 +919,8 @@ def test_a_preset_has_the_default_checks_none_or_the_thresholds_it_names(game):
     ({"maxFill": True}, "'maxFill' must be a number from 0 to 1"),
     ({"maxFill": 1.5}, "'maxFill' must be a number from 0 to 1"),
     ({"maxOffset": -0.1}, "'maxOffset' must be a number from 0 to 1"),
+    ({"maxValley": 2}, "'maxValley' must be a number from 0 to 1"),
+    ({"minBodyWidth": -1}, "'minBodyWidth' must be a number from 0 to 1"),
     ({"cut": 0}, "'cut' must be an integer from 1 to 255"),
     ({"cut": 128.5}, "'cut' must be an integer from 1 to 255"),
     ({"maxPieces": 0}, "'maxPieces' must be an integer 1 or more"),
