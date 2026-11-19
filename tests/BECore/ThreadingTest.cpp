@@ -472,6 +472,12 @@ namespace BECore::Tests {
 #endif
         }
 
+        /// The profiler names the first Profiler::kMaxThreads threads of a process only, and an id is never given twice: a process that ran
+        /// many cases before (`--gtest_repeat`, a whole run in one process) has none left for a new thread, so a case about the name has nothing to check
+        bool HasNoNamedIdLeft(uint32_t threadId) {
+            return threadId >= Profiler::kMaxThreads;
+        }
+
     }  // namespace
 
     TEST(ThreadingTest, ThreadRunsTheBodyOnAnotherThreadAndJoins) {
@@ -488,13 +494,18 @@ namespace BECore::Tests {
     TEST(ThreadingTest, ThreadIsNamedBeforeItsBodyRuns) {
         String seen;
         uint32_t seenSortIndex = 0;
+        uint32_t threadId = 0;
         Thread thread("Test named", [&] {
+            threadId = Profiler::CurrentThreadId();
             seen = CurrentThreadNameInProfiler();
 #if BE_PROFILER
             seenSortIndex = Profiler::GetThreadSortIndex(Profiler::CurrentThreadId());
 #endif
         });
         thread.join();
+        if (HasNoNamedIdLeft(threadId)) {
+            GTEST_SKIP() << "the profiler has no named thread id left in this process";
+        }
 #if BE_PROFILER
         EXPECT_EQ(seen, "Test named");
         EXPECT_EQ(seenSortIndex, Profiler::kNoSortIndex);
@@ -507,13 +518,18 @@ namespace BECore::Tests {
     TEST(ThreadingTest, ThreadKeepsItsSortIndex) {
         String seen;
         uint32_t seenSortIndex = 0;
+        uint32_t threadId = 0;
         Thread thread("Test sorted", kTestSortIndex, [&] {
+            threadId = Profiler::CurrentThreadId();
             seen = CurrentThreadNameInProfiler();
 #if BE_PROFILER
             seenSortIndex = Profiler::GetThreadSortIndex(Profiler::CurrentThreadId());
 #endif
         });
         thread.join();
+        if (HasNoNamedIdLeft(threadId)) {
+            GTEST_SKIP() << "the profiler has no named thread id left in this process";
+        }
 #if BE_PROFILER
         EXPECT_EQ(seen, "Test sorted");
         EXPECT_EQ(seenSortIndex, kTestSortIndex);
@@ -526,17 +542,22 @@ namespace BECore::Tests {
     TEST(ThreadingTest, ThreadCopiesARunTimeName) {
         std::atomic<bool> nameGone{false};
         String seen;
+        uint32_t threadId = 0;
         auto name = MakeUnique<String>("Test run-time name 7");
         Thread thread(name->c_str(), [&] {
             while (!nameGone.load()) {
                 std::this_thread::yield();
             }
+            threadId = Profiler::CurrentThreadId();
             seen = CurrentThreadNameInProfiler();
         });
         // The thread may not have started yet; the name must not be needed after the constructor returned
         name.reset();
         nameGone.store(true);
         thread.join();
+        if (HasNoNamedIdLeft(threadId)) {
+            GTEST_SKIP() << "the profiler has no named thread id left in this process";
+        }
 #if BE_PROFILER
         EXPECT_EQ(seen, "Test run-time name 7");
 #else

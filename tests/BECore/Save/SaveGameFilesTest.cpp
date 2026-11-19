@@ -1,5 +1,5 @@
-#include <BECore/PoolString/PoolString.h>
 #include <BECore/Save/SaveGame.h>
+#include <Common/FreshText.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 
@@ -167,16 +167,17 @@ namespace BECore::Tests {
         SaveGameService service(_fileSystem);
         ASSERT_TRUE(service.Initialize(_saves));
 
-        // Names no other test of this process interns: the pool is shared and cannot forget them
+        // Names no other case of this process interned: the pool is shared and cannot forget them
         constexpr size_t kSlots = 25;
+        const String stem = FreshText("listbatch");
         Vector<String> expected;
         for (size_t i = 0; i < kSlots; ++i) {
-            expected.push_back(Format("listbatch_{:02}", i));
+            expected.push_back(Format("{}_{:02}", stem, i));
         }
         for (size_t i = kSlots; i-- > 0;) {
             ASSERT_TRUE(service.WriteSlot(expected[i], Bytes({1})).has_value());
         }
-        std::filesystem::copy_file(_saves / "listbatch_00.save", _saves / "listbatch bad.save");
+        std::filesystem::copy_file(_saves / ToStd(Format("{}.save", expected[0])), _saves / "listbatch bad.save");
         const PoolString mountPoint = PoolString::Intern(kSaveMountPoint);
         ASSERT_FALSE(mountPoint.Empty());
 

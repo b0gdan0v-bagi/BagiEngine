@@ -1,4 +1,5 @@
 #include <BECore/FileSystem/FileSystem.h>
+#include <Common/FreshText.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
@@ -151,18 +152,19 @@ namespace BECore::Tests {
     }
 
     TEST_F(FileSystemTest, EnumerateFilesInternsTheWholeListWithOneBatch) {
-        // Names no other test of this process interns: the pool is shared and cannot forget them
+        // Names no other case of this process interned: the pool is shared and cannot forget them
         constexpr size_t kFiles = 40;
+        const String stem = FreshText("enumbatch");
         Vector<String> expected;
         for (size_t i = 0; i < kFiles; ++i) {
-            const String name = Format("enumbatch_{:03}.png", kFiles - 1 - i);
+            const String name = Format("{}_{:03}.png", stem, kFiles - 1 - i);
             Touch(_engine / "assets" / "enumbatch" / ToStd(name));
             if (i % 2 == 0) {
                 Touch(_game / "assets" / "enumbatch" / ToStd(name));
             }
         }
         for (size_t i = 0; i < kFiles; ++i) {
-            expected.push_back(Format("assets/enumbatch/enumbatch_{:03}.png", i));
+            expected.push_back(Format("assets/enumbatch/{}_{:03}.png", stem, i));
         }
 
         FileSystem fs;

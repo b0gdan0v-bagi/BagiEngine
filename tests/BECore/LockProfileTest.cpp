@@ -185,11 +185,14 @@ namespace BECore::Tests {
             return nullptr;
         }
 
+        /// Any thread, for CountRingZones on the process's ring
+        constexpr uint32_t kAnyThread = 0;
+
         size_t CountRingZones(const FrameRingBackend& ring, const char* name, uint32_t threadId, uint32_t* depth = nullptr, uint64_t* ticks = nullptr) {
             size_t count = 0;
             for (const RingThread& thread : ring.Snapshot().threads) {
                 for (const ZoneRecord& zone : thread.zones) {
-                    if (thread.threadId == threadId && String(zone.site->name) == name) {
+                    if ((threadId == kAnyThread || thread.threadId == threadId) && String(zone.site->name) == name) {
                         ++count;
                         if (depth != nullptr) {
                             *depth = zone.depth;
@@ -442,7 +445,9 @@ namespace BECore::Tests {
         const uint32_t waiterId = RunContended([&] { return std::unique_lock<Mutex>(mutex); }, [&] { std::lock_guard<Mutex> lock(mutex); });
 
         EXPECT_NE(FindOnThread(FindZones(recorder.WriteJson(), kWaitZoneName), waiterId), nullptr);
-        EXPECT_EQ(CountRingZones(Profiler::GetFrameRing(), kWaitZoneName, waiterId), 1u);
+        // The process's ring outlives the case: a waiter whose std::thread::id an earlier thread had writes into that thread's buffer, under its id.
+        // The ring holds only what came after SetRingEnabled(true), so the one wait zone of this case is the one on any thread
+        EXPECT_EQ(CountRingZones(Profiler::GetFrameRing(), kWaitZoneName, kAnyThread), 1u);
     }
 
     TEST(LockProfileTest, TheTraceStaysBalancedWithFourThreadsFightingOverALock) {

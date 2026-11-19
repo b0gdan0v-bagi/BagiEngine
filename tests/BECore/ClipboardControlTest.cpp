@@ -33,6 +33,12 @@ namespace BECore::Tests {
         }
 
         void TearDown() override {
+            // A request the case gave up on (a timeout) still waits in the process's clipboard, with a callback into this fixture: the read
+            // ends here, while the fixture lives, or the next case's Update would ask its backend and call into a dead service
+            for (int frame = 0; CoreManager::GetClipboard().HasPending() && frame < kFrameGuard; ++frame) {
+                CoreManager::GetClipboard().Update();
+            }
+            EXPECT_FALSE(CoreManager::GetClipboard().HasPending());
             _scope.reset();
             CoreManager::GetTime().Reset();
         }

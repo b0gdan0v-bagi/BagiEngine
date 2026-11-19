@@ -7,6 +7,7 @@
 #include <BECore/Reflection/TypedRef.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/Components/TransformComponent.h>
+#include <Common/FreshText.h>
 #include <Common/Printers.h>
 #include <Common/TestText.h>
 #include <Generated/PropertyAccessTest.gen.hpp>
@@ -211,7 +212,7 @@ namespace BECore::Tests {
     TEST(PropertyAccessTest, APoolStringIsWrittenOnlyWhenInterningIsAllowed) {
         PaScalars scalars;
         const TypedRef ref = Ref(scalars);
-        const String text = "pa-interned-only-on-request";
+        const String text = FreshText("pa-interned-only-on-request");
 
         ExpectRefused(ref, "name", Text(text.c_str()), PropertyErrorCode::interning);
         EXPECT_FALSE(PoolString::Find(StringView(text.data(), text.size())).has_value());

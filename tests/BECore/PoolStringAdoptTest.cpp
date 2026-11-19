@@ -1,10 +1,8 @@
 #include <BECore/PoolString/PoolBlock.h>
-#include <BECore/PoolString/PoolString.h>
 #include <BECore/PoolString/PoolStringStorage.h>
 #include <BECore/PoolStringTestSupport.h>
-#include <BECore/Utils/EnumUtils.h>
+#include <Common/FreshText.h>
 #include <Common/Printers.h>
-#include <cstring>
 
 namespace BECore::Tests {
 
@@ -503,7 +501,7 @@ namespace BECore::Tests {
     }
 
     TEST(PoolStringAdoptTest, ACookedBlockAdoptedIntoTheProcessPoolAnswersIntern) {
-        const Vector<String> texts = Names("adopt_process_pool_name_", 50);
+        const Vector<String> texts = Names(Format("{}_", FreshText("adopt_process_pool_name")), 50);
         const PoolStringStats before = PoolString::GetStats();
 
         PoolBlock block = PoolString::AllocateBlock(BytesOf(texts));

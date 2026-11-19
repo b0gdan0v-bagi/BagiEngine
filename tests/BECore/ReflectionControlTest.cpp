@@ -12,6 +12,7 @@
 #include <BECore/Reflection/TypedRef.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <Common/ControlTestSupport.h>
+#include <Common/FreshText.h>
 #include <Common/Printers.h>
 #include <Games/GameControl.h>
 #include <Generated/ReflectionControlTest.gen.hpp>
@@ -167,7 +168,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(IsOk(Get("box", "secret")));
         const Json locked = Get("box", "locked");
         ASSERT_TRUE(IsOk(locked));
-        EXPECT_EQ(GetJsonInt(*FindJsonMember(locked, "result"), "value").value_or(0), 7);
+        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(locked, "result")), "value").value_or(0), 7);
     }
 
     TEST_F(ReflectionControlTest, SetPropertyWritesEveryKindAndAnswersWithTheValueReadBack) {
@@ -449,20 +450,22 @@ namespace BECore::Tests {
     }
 
     TEST_F(ReflectionControlTest, AMethodWithTextForThePoolNeedsARootThatAllowsInterning) {
+        // The open root interns the text at the end, so it is a text of its own: kClientTag stays out of the pool for the other cases
+        const String clientTag = FreshText("rc_method_tag");
         Json name = Json::object();
-        name["name"] = MakeJsonString(kClientTag);
+        name["name"] = MakeJsonString(clientTag);
         ExpectCallRefused("tool", "Name", name, "interning");
-        EXPECT_FALSE(PoolString::Find(kClientTag).has_value());
+        EXPECT_FALSE(PoolString::Find(StringView(clientTag)).has_value());
 
         Json tagged = Json::object();
-        tagged["tagged"] = Json{{"id", 1}, {"tag", MakeJsonString(kClientTag)}};
+        tagged["tagged"] = Json{{"id", 1}, {"tag", MakeJsonString(clientTag)}};
         ExpectCallRefused("tool", "Tag", tagged, "interning");
         ExpectCallRefused("tool", "Tag", Json::object(), "interning");  // refused before the arguments are read
-        EXPECT_FALSE(PoolString::Find(kClientTag).has_value());
+        EXPECT_FALSE(PoolString::Find(StringView(clientTag)).has_value());
 
         EXPECT_TRUE(IsOk(Call("tool_open", "Name", name)));
         EXPECT_TRUE(IsOk(Call("tool_open", "Tag", tagged)));
-        EXPECT_TRUE(PoolString::Find(kClientTag).has_value());
+        EXPECT_TRUE(PoolString::Find(StringView(clientTag)).has_value());
         EXPECT_EQ(tool.calls, 2);
     }
 
@@ -505,7 +508,7 @@ namespace BECore::Tests {
         arguments["text"] = MakeJsonString(longText);
         const Json response = Call("tool", "Echo", arguments);
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response).c_str();
-        EXPECT_EQ(GetJsonString(*FindJsonMember(response, "result"), "result").value_or(String()).size(), longText.size());
+        EXPECT_EQ(GetJsonString(Require(FindJsonMember(response, "result")), "result").value_or(String()).size(), longText.size());
     }
 
     TEST_F(ReflectionControlTest, ALongTextInTheWrongPlaceIsCutInTheMessage) {

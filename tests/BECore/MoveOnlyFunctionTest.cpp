@@ -1,5 +1,4 @@
 #include <BECore/Profiler/Alloc/AllocTracker.h>
-#include <BECore/Utils/MoveOnlyFunction.h>
 #include <EASTL/deque.h>
 #include <gtest/gtest.h>
 
@@ -486,7 +485,8 @@ namespace BECore::Tests {
         fromStd();
         EXPECT_EQ(calls, 1);
 
-        static int pointerCalls = 0;
+        static int pointerCalls;
+        pointerCalls = 0;  // a function pointer captures nothing, so the count is a static, and a repeated run starts it again
         MoveOnlyFunction<void()> fromPointer = +[]() { ++pointerCalls; };
         fromPointer();
         EXPECT_EQ(pointerCalls, 1);
