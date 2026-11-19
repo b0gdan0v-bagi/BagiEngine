@@ -109,15 +109,13 @@ namespace BECore::Tests {
         void SetUp() override {
             // One folder per test and per process (ctest runs the tests in parallel processes)
             _dir = TestTempDirectory("BagiSceneNodeFilesTest");
-            std::filesystem::remove_all(_dir);
-            std::filesystem::create_directories(_dir);
+            MakeEmptyDirectory(_dir);
             WriteFile(_dir / "nodes" / "Hud.xml", kHudNode);
             WriteFile(_dir / "nodes" / "B.xml", kPlainNode);
         }
 
         void TearDown() override {
-            std::error_code ignored;
-            std::filesystem::remove_all(_dir, ignored);
+            RemoveDirectory(_dir);
         }
 
         /// Expands @p sceneXml (a SceneConfig text) against the folder
