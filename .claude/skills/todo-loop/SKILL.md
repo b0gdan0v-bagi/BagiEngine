@@ -241,7 +241,7 @@ The owner's own steps (a variable in Railway, a Google client, a check on produc
 
 ## Stopping a task (status stays `in progress`)
 
-Commit what exists (the developer's last green state), `todo stop <id> --reason "<reason>"`, go to the base, take the next entry. Reasons: `BLOCKED` from the architect; the same failure after 3 attempts; 2 review rounds without `APPROVE`; a WP not closed after 2 restarts of the developer; the work grew beyond the entry; the cost cap ("Through"); the base conflicts or the tree differs from HEAD ("Fresh base"). A stop pauses the queue and never removes an entry from it. In a worker `w<k>` every stop also pauses its queue, so nothing is started past a task the owner has to look at: `python3 <engine>/tools/todo/worker.py queue <k> --pause --reason "<id> stopped: <reason>"` (the owner lifts it with `--resume`).
+Commit what exists (the developer's last green state), `todo stop <id> --reason "<reason>"`, `python3 <engine>/tools/tokstats/tokstats.py record <branch-id> --entry <id>` from the root the loop runs in (what the stopped work cost; a failure is a note), go to the base, take the next entry. Reasons: `BLOCKED` from the architect; the same failure after 3 attempts; 2 review rounds without `APPROVE`; a WP not closed after 2 restarts of the developer; the work grew beyond the entry; the cost cap ("Through"); the base conflicts or the tree differs from HEAD ("Fresh base"). A stop pauses the queue and never removes an entry from it. In a worker `w<k>` every stop also pauses its queue, so nothing is started past a task the owner has to look at: `python3 <engine>/tools/todo/worker.py queue <k> --pause --reason "<id> stopped: <reason>"` (the owner lifts it with `--resume`).
 
 ## Stopping the whole loop
 
