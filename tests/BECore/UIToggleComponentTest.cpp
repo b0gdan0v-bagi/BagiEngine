@@ -18,6 +18,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UICanvasRoundTrip.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UIPartShapeChecks.h>
 #include <Common/UITestSupport.h>
@@ -162,14 +163,6 @@ namespace BECore::Tests {
 
         void SetVar(const char* name, const char* value) {
             CoreManager::GetUIVars().Set(PoolString::Intern(name), value);
-        }
-
-        String ElementToXml(const UIElement& element) {
-            XmlSerializer serializer;
-            EXPECT_TRUE(serializer.BeginObject("element"));
-            element.Serialize(serializer);
-            serializer.EndObject();
-            return serializer.SaveToString();
         }
 
     }  // namespace
@@ -743,20 +736,9 @@ namespace BECore::Tests {
     // ---- reflection --------------------------------------------------------------------------------------------------------
 
     TEST_F(UIToggleComponentTest, TheFieldsSurviveAnXmlRoundTrip) {
-        XmlSerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        _canvas->Serialize(serializer);
-        serializer.EndObject();
-        const String xml = serializer.SaveToString();
-
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        ASSERT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
+        String xml;
+        const auto loaded = XmlRoundTrip(*_canvas, &xml);
+        ASSERT_TRUE(loaded);
 
         const auto* custom = loaded->GetRoot().FindByName("Custom"_intern)->GetComponent<UIToggleComponent>();
         ASSERT_NE(custom, nullptr);
@@ -775,37 +757,20 @@ namespace BECore::Tests {
         ASSERT_NE(sound, nullptr);
         EXPECT_EQ(sound->onValue, "true"_intern) << "the defaults come back as the defaults";
         EXPECT_EQ(sound->offValue, "false"_intern);
-        ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
-        for (size_t i = 0; i < loaded->_elements.size(); ++i) {
-            EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
-        }
+        ExpectSameElementXml(*_canvas, *loaded);
     }
 
     TEST_F(UIToggleComponentTest, TheFieldsSurviveABinaryRoundTrip) {
         Toggle("Sound").offValue = "off"_intern;
-        BinarySerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        _canvas->Serialize(serializer);
-        serializer.EndObject();
-
-        BinaryDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromBuffer(serializer.GetData().data(), serializer.GetData().size()));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        ASSERT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
+        const auto loaded = BinaryRoundTrip(*_canvas);
+        ASSERT_TRUE(loaded);
 
         const auto* custom = loaded->GetRoot().FindByName("Custom"_intern)->GetComponent<UIToggleComponent>();
         ASSERT_NE(custom, nullptr);
         EXPECT_EQ(custom->onValue, "1"_intern);
         EXPECT_EQ(loaded->GetRoot().FindByName("CustomSwitch"_intern)->GetComponent<UISwitchComponent>()->thumbColor.b, kThumbAuthored.b);
         EXPECT_EQ(loaded->GetRoot().FindByName("Sound"_intern)->GetComponent<UIToggleComponent>()->offValue, "off"_intern);
-        ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
-        for (size_t i = 0; i < loaded->_elements.size(); ++i) {
-            EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
-        }
+        ExpectSameElementXml(*_canvas, *loaded);
     }
 
     TEST_F(UIToggleComponentTest, ThePartShapeIsSkippedAsADefaultWhenAsked) {

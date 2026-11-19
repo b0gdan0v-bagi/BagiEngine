@@ -15,6 +15,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UICanvasRoundTrip.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UIPartShapeChecks.h>
 #include <Common/UITestSupport.h>
@@ -52,14 +53,6 @@ namespace BECore::Tests {
     </components></node>
   </nodes></scene>
 </scenes></SceneManager>)";
-
-        String ElementToXml(const UIElement& element) {
-            XmlSerializer serializer;
-            EXPECT_TRUE(serializer.BeginObject("element"));
-            element.Serialize(serializer);
-            serializer.EndObject();
-            return serializer.SaveToString();
-        }
 
         void SetVar(const char* name, const char* value) {
             CoreManager::GetUIVars().Set(PoolString::Intern(name), value);
@@ -386,20 +379,9 @@ namespace BECore::Tests {
     // ---- reflection --------------------------------------------------------------------------------------------------------
 
     TEST_F(UIProgressBarTest, TheFieldsSurviveAnXmlRoundTrip) {
-        XmlSerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        _canvas->Serialize(serializer);
-        serializer.EndObject();
-        const String xml = serializer.SaveToString();
-
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        ASSERT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
+        String xml;
+        const auto loaded = XmlRoundTrip(*_canvas, &xml);
+        ASSERT_TRUE(loaded);
 
         const auto* signedBar = loaded->GetRoot().FindByName("Signed"_intern)->Cast<UIProgressBar>();
         ASSERT_NE(signedBar, nullptr);
@@ -413,36 +395,19 @@ namespace BECore::Tests {
         const auto* unit = loaded->GetRoot().FindByName("Unit"_intern)->Cast<UIProgressBar>();
         ASSERT_NE(unit, nullptr);
         EXPECT_FLOAT_EQ(unit->maxValue, 1.0f) << "the defaults come back as the defaults";
-        ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
-        for (size_t i = 0; i < loaded->_elements.size(); ++i) {
-            EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
-        }
+        ExpectSameElementXml(*_canvas, *loaded);
     }
 
     TEST_F(UIProgressBarTest, TheFieldsSurviveABinaryRoundTrip) {
         Bar("Unit").maxValue = 7.5f;
-        BinarySerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        _canvas->Serialize(serializer);
-        serializer.EndObject();
-
-        BinaryDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromBuffer(serializer.GetData().data(), serializer.GetData().size()));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        ASSERT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
+        const auto loaded = BinaryRoundTrip(*_canvas);
+        ASSERT_TRUE(loaded);
 
         const auto* custom = loaded->GetRoot().FindByName("Custom"_intern)->Cast<UIProgressBar>();
         ASSERT_NE(custom, nullptr);
         EXPECT_EQ(custom->fillColor.b, 60);
         EXPECT_EQ(loaded->GetRoot().FindByName("Unit"_intern)->Cast<UIProgressBar>()->maxValue, 7.5f);
-        ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
-        for (size_t i = 0; i < loaded->_elements.size(); ++i) {
-            EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
-        }
+        ExpectSameElementXml(*_canvas, *loaded);
     }
 
     // ---- the shape of the parts ----------------------------------------------------------------------------------------------
@@ -499,19 +464,9 @@ namespace BECore::Tests {
         Bar("Unit").partShape = UIPartShape::Round;
         EXPECT_NE(element(Bar("Unit")).find("partShape=\"Round\""), String::npos);
 
-        XmlSerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        _canvas->Serialize(serializer);
-        serializer.EndObject();
-        const String xml = serializer.SaveToString();
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        ASSERT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
+        String xml;
+        const auto loaded = XmlRoundTrip(*_canvas, &xml);
+        ASSERT_TRUE(loaded);
         EXPECT_EQ(loaded->GetRoot().FindByName("Unit"_intern)->Cast<UIProgressBar>()->partShape, UIPartShape::Round);
         EXPECT_EQ(loaded->GetRoot().FindByName("Percent"_intern)->Cast<UIProgressBar>()->partShape, UIPartShape::Square);
     }

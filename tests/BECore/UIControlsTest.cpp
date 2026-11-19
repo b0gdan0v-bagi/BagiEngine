@@ -27,6 +27,7 @@
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/TextTestSupport.h>
+#include <Common/UICanvasRoundTrip.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UITestSupport.h>
 #include <Common/UITreeCompare.h>
@@ -110,14 +111,6 @@ namespace BECore::Tests {
 </scenes></SceneManager>)";
 
         const Color kButtonColor{40, 90, 60, 255};
-
-        String ElementToXml(const UIElement& element) {
-            XmlSerializer serializer;
-            EXPECT_TRUE(serializer.BeginObject("element"));
-            element.Serialize(serializer);
-            serializer.EndObject();
-            return serializer.SaveToString();
-        }
 
         Vector<uint8_t> GreyPixels(uint32_t width, uint32_t height) {
             return Vector<uint8_t>(static_cast<size_t>(width) * height * 4, 128);
@@ -314,20 +307,9 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, TheControlsSaveAndLoadBack) {
-        XmlSerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        _canvas->Serialize(serializer);
-        serializer.EndObject();
-        const String xml = serializer.SaveToString();
-
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        EXPECT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
+        String xml;
+        const auto loaded = XmlRoundTrip(*_canvas, &xml);
+        ASSERT_TRUE(loaded);
 
         ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
         for (size_t i = 0; i < loaded->_elements.size(); ++i) {
@@ -499,20 +481,11 @@ namespace BECore::Tests {
 
                 auto canvas = New<UICanvasComponent>();
                 canvas->_elements.push_back(original);
-                XmlSerializer serializer;
-                ASSERT_TRUE(serializer.BeginObject("component"));
-                canvas->Serialize(serializer);
-                serializer.EndObject();
-                const String xml = serializer.SaveToString();
+                String xml;
+                const auto loaded = XmlRoundTrip(*canvas, &xml);
+                ASSERT_TRUE(loaded) << type;
                 EXPECT_EQ(xml.find("@tok") != String::npos, tokens) << type << ": " << xml.c_str();
 
-                XmlDeserializer deserializer;
-                ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
-                auto loaded = New<UICanvasComponent>();
-                ASSERT_TRUE(deserializer.BeginObject("component"));
-                loaded->Deserialize(deserializer);
-                deserializer.EndObject();
-                ASSERT_FALSE(deserializer.HasErrors()) << type;
                 ASSERT_EQ(loaded->_elements.size(), 1u) << type;
 
                 EXPECT_TRUE(original->style == loaded->_elements[0]->style) << type << ": the style changed on the way";

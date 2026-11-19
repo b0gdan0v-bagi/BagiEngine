@@ -20,6 +20,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UICanvasRoundTrip.h>
 #include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Generated/UIComponentTest.gen.hpp>
@@ -122,14 +123,6 @@ namespace BECore::Tests {
         const Color kFirstMark{1, 0, 0, 255};
         const Color kSecondMark{2, 0, 0, 255};
         const Color kKidColor{30, 30, 30, 255};
-
-        String ElementToXml(const UIElement& element) {
-            XmlSerializer serializer;
-            EXPECT_TRUE(serializer.BeginObject("element"));
-            element.Serialize(serializer);
-            serializer.EndObject();
-            return serializer.SaveToString();
-        }
 
         Vector<String> TypeNames(const UIElement& element) {
             Vector<String> names;

@@ -8,6 +8,7 @@
 #include <BECore/UI/UIThemes.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/UICanvasRoundTrip.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -16,14 +17,6 @@ namespace BECore::Tests {
 
         constexpr Color Green{51, 170, 102, 255};
         constexpr Color DarkGreen{0, 90, 40, 255};
-
-        String ElementToXml(const UIElement& element) {
-            XmlSerializer serializer;
-            EXPECT_TRUE(serializer.BeginObject("element"));
-            element.Serialize(serializer);
-            serializer.EndObject();
-            return serializer.SaveToString();
-        }
 
         /// The element of @p type that the attributes (and the @p body between its tags) make, and whether the deserializer reported an error
         IntrusivePtr<UIElement> Load(const char* type, const char* attributes, bool& hadErrors, const char* body = "") {

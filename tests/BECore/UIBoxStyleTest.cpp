@@ -6,6 +6,7 @@
 #include <BECore/UI/UIPanel.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UICanvasRoundTrip.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -51,14 +52,6 @@ namespace BECore::Tests {
             loaded.errors = deserializer.GetErrors();
             EXPECT_EQ(loaded.canvas->_elements.size(), 1u);
             return loaded;
-        }
-
-        String ElementToXml(const UIElement& element) {
-            XmlSerializer serializer;
-            EXPECT_TRUE(serializer.BeginObject("element"));
-            element.Serialize(serializer);
-            serializer.EndObject();
-            return serializer.SaveToString();
         }
 
         UIBoxStyle EveryField() {
@@ -359,22 +352,13 @@ namespace BECore::Tests {
 
         auto canvas = New<UICanvasComponent>();
         canvas->_elements.push_back(original);
-        XmlSerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        canvas->Serialize(serializer);
-        serializer.EndObject();
-        const String xml = serializer.SaveToString();
+        String xml;
+        const auto loaded = XmlRoundTrip(*canvas, &xml);
+        ASSERT_TRUE(loaded);
         for (const char* name : {"cornerRadius=\"4,8,12,0\"", "borderWidth=", "borderColor=", "gradientColor=", "gradientDirection=\"Horizontal\"", "shadow=", "glow=", "highlight="}) {
             EXPECT_NE(xml.find(name), String::npos) << name << " in " << xml.c_str();
         }
 
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        EXPECT_FALSE(deserializer.HasErrors());
         ASSERT_EQ(loaded->_elements.size(), 1u);
         EXPECT_TRUE(loaded->_elements[0]->box == every);
         EXPECT_STREQ(ElementToXml(*original).c_str(), ElementToXml(*loaded->_elements[0]).c_str());

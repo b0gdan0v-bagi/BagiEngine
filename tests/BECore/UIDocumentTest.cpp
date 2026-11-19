@@ -10,6 +10,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/UICanvasRoundTrip.h>
 #include <Common/UITreeCompare.h>
 #include <gtest/gtest.h>
 
@@ -277,19 +278,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(canvas->GetLayout().variants[0].overrides[0].region.has_value());
         EXPECT_EQ(*canvas->GetLayout().variants[0].overrides[0].region, "table.plate.2"_intern);
 
-        XmlSerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        canvas->Serialize(serializer);
-        serializer.EndObject();
-        const String xml = serializer.SaveToString();
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        EXPECT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
+        String xml;
+        const auto loaded = XmlRoundTrip(*canvas, &xml);
+        ASSERT_TRUE(loaded);
 
         ExpectSameElements(canvas->GetRoot().children, loaded->GetRoot().children);
         EXPECT_TRUE(canvas->GetLayout().variants == loaded->GetLayout().variants);

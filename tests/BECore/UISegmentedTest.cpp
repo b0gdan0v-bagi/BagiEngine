@@ -19,6 +19,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UICanvasRoundTrip.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
@@ -201,14 +202,6 @@ namespace BECore::Tests {
     </components></node>
   </nodes></scene>
 </scenes></SceneManager>)";
-
-        String ElementToXml(const UIElement& element) {
-            XmlSerializer serializer;
-            EXPECT_TRUE(serializer.BeginObject("element"));
-            element.Serialize(serializer);
-            serializer.EndObject();
-            return serializer.SaveToString();
-        }
 
         void SetVar(const char* name, const char* value) {
             CoreManager::GetUIVars().Set(PoolString::Intern(name), value);
@@ -572,20 +565,9 @@ namespace BECore::Tests {
         auto& level = Get<UISegmented>("Level");
         level.disabled = true;
 
-        XmlSerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        _canvas->Serialize(serializer);
-        serializer.EndObject();
-        const String xml = serializer.SaveToString();
-
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        ASSERT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
+        String xml;
+        const auto loaded = XmlRoundTrip(*_canvas, &xml);
+        ASSERT_TRUE(loaded);
 
         const auto* again = loaded->GetRoot().FindByName("Level"_intern);
         ASSERT_NE(again, nullptr);
@@ -595,28 +577,14 @@ namespace BECore::Tests {
         EXPECT_TRUE(typed->disabled);
         EXPECT_EQ(typed->children.size(), 4u);
         EXPECT_EQ(typed->layout, UILayoutKind::Stack);
-        ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
-        for (size_t i = 0; i < loaded->_elements.size(); ++i) {
-            EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
-        }
+        ExpectSameElementXml(*_canvas, *loaded);
     }
 
     TEST_F(UISegmentedTest, TheBindAndTheDisabledFlagSurviveABinaryRoundTrip) {
         Get<UISegmented>("Mode").disabled = true;
 
-        BinarySerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        _canvas->Serialize(serializer);
-        serializer.EndObject();
-
-        BinaryDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromBuffer(serializer.GetData().data(), serializer.GetData().size()));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        ASSERT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
+        const auto loaded = BinaryRoundTrip(*_canvas);
+        ASSERT_TRUE(loaded);
 
         const auto* typed = loaded->GetRoot().FindByName("Mode"_intern)->Cast<UISegmented>();
         ASSERT_NE(typed, nullptr);
@@ -624,10 +592,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(typed->disabled);
         ASSERT_EQ(typed->children.size(), 2u);
         EXPECT_EQ(typed->children[1]->GetComponent<UIInputClicker>()->value, "computer"_intern);
-        ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
-        for (size_t i = 0; i < loaded->_elements.size(); ++i) {
-            EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
-        }
+        ExpectSameElementXml(*_canvas, *loaded);
     }
 
     // ---- composed segments: an element with a clicker is a segment ----------------------------------------

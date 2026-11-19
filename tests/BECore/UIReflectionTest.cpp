@@ -9,6 +9,7 @@
 #include <BECore/UI/UIValueText.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/UICanvasRoundTrip.h>
 #include <Common/UITreeCompare.h>
 #include <gtest/gtest.h>
 
@@ -260,19 +261,8 @@ namespace BECore::Tests {
     TEST(UIReflectionTest, ABinaryStreamCarriesTheSameTree) {
         const auto canvas = MakeCanvas();
 
-        BinarySerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        canvas->Serialize(serializer);
-        serializer.EndObject();
-
-        BinaryDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromBuffer(serializer.GetData().data(), serializer.GetData().size()));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        EXPECT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
+        const auto loaded = BinaryRoundTrip(*canvas);
+        ASSERT_TRUE(loaded);
 
         ExpectSameCanvas(*canvas, *loaded);
     }
