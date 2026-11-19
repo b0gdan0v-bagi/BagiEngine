@@ -4,6 +4,7 @@
 #include <BECore/Profiler/ProfilerSettings.h>
 #include <BECore/Profiler/ScopedTrace.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <chrono>
@@ -27,17 +28,6 @@ namespace BECore::Tests {
         String Member(const Json& event, const char* key) {
             const auto value = GetJsonString(event, key);
             return value ? *value : String();
-        }
-
-        /// The object @p key of @p event; a failure of the case and an empty object when it has none
-        const Json& Object(const Json& event, const char* key) {
-            static const Json kNone = Json::object();
-            const Json* found = FindJsonMember(event, key);
-            if (found == nullptr) {
-                ADD_FAILURE() << "the event has no " << key;
-                return kNone;
-            }
-            return *found;
         }
 
         /// The events of a trace, parsed back (fails the test when the JSON is not valid)
@@ -180,9 +170,9 @@ namespace BECore::Tests {
                 begun.push_back(Member(event, "name"));
             } else if (phase == "C") {
                 EXPECT_EQ(Member(event, "name"), "Score");
-                EXPECT_EQ(GetJsonNumber(Object(event, "args"), "value"), 2.5);
+                EXPECT_EQ(GetJsonNumber(Require(FindJsonMember(event, "args")), "value"), 2.5);
             } else if (phase == "M") {
-                EXPECT_EQ(Member(Object(event, "args"), "name"), "Test main");
+                EXPECT_EQ(Member(Require(FindJsonMember(event, "args")), "name"), "Test main");
             }
         }
         EXPECT_EQ(begun, (Vector<String>{"Outer", "Inner \"quoted\"\\"}));
