@@ -1,3 +1,4 @@
+#include <BECore/RuleTestSupport.h>
 #include <BECore/Rules/RuleAxis.h>
 #include <gtest/gtest.h>
 
@@ -5,19 +6,10 @@ namespace BECore::Tests {
 
     namespace {
 
-        TagTree MakeTags(std::initializer_list<StringView> paths) {
-            TagTree tree;
-            for (StringView path : paths) {
-                EXPECT_TRUE(tree.Add(path).has_value()) << ToStd(path);
-            }
-            tree.Bake();
-            return tree;
-        }
-
         /// The element kinds of the tests: `plain` has no tag, `bomb` and `rocket` are special, `wild` is only `special` itself,
         /// `specialist` carries a tag whose name begins with "special" without being under it.
         RuleAxis MakeKindAxis() {
-            const TagTree tags = MakeTags({"special.bomb", "special.rocket", "special", "specialist", "blocker"});
+            const TagTree tags = BakedTags({"special.bomb", "special.rocket", "special", "specialist", "blocker"});
             const StringView names[] = {"plain", "bomb", "rocket", "wild", "specialist", "stone", "both"};
             auto axis = RuleAxis::Named("kind", Span<const StringView>(names), tags);
             EXPECT_TRUE(axis.has_value());
@@ -80,7 +72,7 @@ namespace BECore::Tests {
     }
 
     TEST(RuleAxisTest, AnAxisOfTagsExpandsDescendants) {
-        const TagTree tags = MakeTags({"match.3", "match.4", "match.5.line", "other"});
+        const TagTree tags = BakedTags({"match.3", "match.4", "match.5.line", "other"});
         const RuleAxis axis = RuleAxis::OfTags("how", tags);
         ASSERT_EQ(axis.Count(), 6u);
         EXPECT_EQ(axis.ValueName(0), "match");
@@ -98,7 +90,7 @@ namespace BECore::Tests {
     }
 
     TEST(RuleAxisTest, SpecificityNumbers) {
-        const TagTree tags = MakeTags({"match.3", "match.4", "other"});
+        const TagTree tags = BakedTags({"match.3", "match.4", "other"});
         const RuleAxis axis = RuleAxis::OfTags("how", tags);
         EXPECT_EQ(SpecificityOf(axis, "*"), 0u);
         EXPECT_EQ(SpecificityOf(axis, "tag:match"), 2u);
@@ -147,7 +139,7 @@ namespace BECore::Tests {
     }
 
     TEST(RuleAxisTest, SetTagsKeepsASortedSetWithoutRepeats) {
-        const TagTree tags = MakeTags({"a", "b", "c"});
+        const TagTree tags = BakedTags({"a", "b", "c"});
         auto axis = RuleAxis::Named("kind", {"x"}, tags);
         ASSERT_TRUE(axis.has_value());
         ASSERT_TRUE(axis->SetTags(0u, {"c", "a", "c", "a"}).has_value());
@@ -161,7 +153,7 @@ namespace BECore::Tests {
 
     TEST(RuleAxisTest, AnAxisIsAValueThatKeepsItsOwnTree) {
         RuleAxis copy = [&] {
-            const TagTree tags = MakeTags({"a.b"});
+            const TagTree tags = BakedTags({"a.b"});
             auto axis = RuleAxis::Named("kind", {"x"}, tags);
             EXPECT_TRUE(axis->SetTags("x", {"a.b"}).has_value());
             return std::move(*axis);
@@ -185,7 +177,7 @@ namespace BECore::Tests {
     }
 
     TEST(RuleAxisTest, ATagNoValueCarriesIsAnEmptyExpansion) {
-        const TagTree tags = MakeTags({"used", "unused"});
+        const TagTree tags = BakedTags({"used", "unused"});
         auto axis = RuleAxis::Named("kind", {"x"}, tags);
         ASSERT_TRUE(axis->SetTags("x", {"used"}).has_value());
         ExpectErrorNames(axis->ParseSelector("tag:unused"), "tag:unused", "kind");
@@ -206,7 +198,7 @@ namespace BECore::Tests {
     }
 
     TEST(RuleAxisTest, SetTagsErrorsNameTheAxisAndWhatIsUnknown) {
-        const TagTree tags = MakeTags({"a"});
+        const TagTree tags = BakedTags({"a"});
         auto axis = RuleAxis::Named("kind", {"x"}, tags);
         ASSERT_TRUE(axis.has_value());
 

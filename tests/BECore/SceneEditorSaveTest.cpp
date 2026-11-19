@@ -156,6 +156,9 @@ namespace BECore::Tests {
             return node;
         }
 
+        // The layer and x that kNestedScenesXml gives `Inner`
+        constexpr int32_t kInnerLayer = 2;
+        constexpr float kInnerX = 123.5f;
         constexpr const char* kNestedScenesXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main"><nodes>
@@ -1040,9 +1043,8 @@ namespace BECore::Tests {
         EXPECT_EQ(TreeOf(main.GetRootNode()), "Left Inner. Deep.. Last. Right");
         const SceneNode* inner = FindNodeBelow(Reloaded("Main").GetRootNode(), "Inner");
         ASSERT_NE(inner, nullptr);
-        EXPECT_EQ(inner->GetLayer(), kPieceLayer);
-        ASSERT_TRUE(inner->GetComponent<TransformComponent>());
-        EXPECT_FLOAT_EQ(Require(inner->GetComponent<TransformComponent>())._x, kMovedX);
+        EXPECT_EQ(inner->GetLayer(), kInnerLayer);
+        EXPECT_FLOAT_EQ(Require(inner->GetComponent<TransformComponent>())._x, kInnerX);
         const String once = XmlTextIndented(ConfigRoot());
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
         EXPECT_EQ(XmlTextIndented(ConfigRoot()), once);

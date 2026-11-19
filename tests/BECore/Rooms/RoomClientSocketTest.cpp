@@ -1,6 +1,7 @@
 #include <BECore/Rooms/ManualClock.h>
 #include <BECore/Rooms/RoomClientPlayer.h>
 #include <BECore/Rooms/RoomTableDriver.h>
+#include <BECore/Rooms/RoomTestTimings.h>
 #include <BECore/Rooms/TestRandom.h>
 #include <BECore/WebSocketTestClient.h>
 #include <Common/Printers.h>
@@ -23,7 +24,7 @@ namespace BECore::Tests {
         using Kind = RoomClientEventKind;
 
         constexpr std::chrono::milliseconds kShortLimit{30'000};
-        constexpr int kCardsInAHand = DemoCardGame::kTotalPlays;
+        constexpr int kCardsPlayedInAHand = DemoCardGame::kTotalPlays;
 
         /// What the test wants to know of the transports a client made, and a hand on the connection to cut it
         struct Tap {
@@ -152,7 +153,7 @@ namespace BECore::Tests {
             RoomServerSettings settings;
             settings.tickInterval = 10ms;
             // The computers move at once (a test that needs a slower hand says so); no liveness pings, which a moved clock would turn into drops
-            settings.hub.timings = RoomTimings{30s, 10min, 0ms};
+            settings.hub.timings = NoComputerDelayTimings();
             settings.pingInterval = 0ms;
             settings.random = MakeSequence(5);
             return settings;
@@ -220,7 +221,7 @@ namespace BECore::Tests {
             void ExpectACleanFinishedHand() {
                 for (size_t i = 0; i < players.size(); ++i) {
                     const Player& player = *players[i];
-                    EXPECT_EQ(player.TableSize(), kCardsInAHand) << "player " << i;
+                    EXPECT_EQ(player.TableSize(), kCardsPlayedInAHand) << "player " << i;
                     EXPECT_GT(player.judge->texts, 3u) << "player " << i;
                     EXPECT_TRUE(player.judge->leaks.empty()) << "player " << i << " was sent " << (player.judge->leaks.empty() ? "" : player.judge->leaks.front());
                 }
@@ -418,7 +419,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientSocketTest, AWrongPortGivesAClosedEventAndNoHang) {
-        // A port that was in use a moment ago and now has nobody on it
+        // A port that was in use a moment ago and now has nobody on it: another test that binds the freed port before the connect would make this pass for the wrong reason; that clash is rare enough
+        // to accept
         ASSERT_NO_FATAL_FAILURE(StartServer());
         const String deadUrl = url;
         server->Stop();

@@ -307,8 +307,6 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(GetProbe("Fit"_intern)->seen.scale, 0.75f);
     }
 
-    // The override a tool (the editor viewport) sets around one pass
-
     TEST_F(SceneViewVariantsTest, TheVariantsAreListedInTheOrderOfTheFile) {
         const Span<const SceneViewVariant> variants = _scene->GetViewVariants();
         ASSERT_EQ(variants.size(), 2u);
@@ -316,6 +314,8 @@ namespace BECore::Tests {
         EXPECT_EQ(variants[1].name, "Wide"_intern);
         EXPECT_TRUE(GetScene("Fit"_intern).GetViewVariants().empty());
     }
+
+    // The override a tool (the editor viewport) sets around one pass
 
     TEST_F(SceneViewVariantsTest, AnOverrideForcesAVariantWhereTheOutputWouldPickTheDefault) {
         _scene->SetViewOverride(0);

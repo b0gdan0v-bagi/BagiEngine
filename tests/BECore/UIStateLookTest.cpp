@@ -1,4 +1,5 @@
 #include <BECore/UI/UIElement.h>
+#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UIStateLook.h>
 #include <gtest/gtest.h>
 
@@ -248,6 +249,14 @@ namespace BECore::Tests {
         element.hovered = true;
         EXPECT_TRUE(element.GetVisualState().pressed);
         EXPECT_TRUE(element.GetVisualState().hovered);
+    }
+
+    TEST(UIStateLookTest, ADisabledClickerDisablesItsElement) {
+        UIElement element;
+        auto& clicker = element.AddComponent<UIInputClicker>();
+        EXPECT_FALSE(element.IsDisabled());
+        clicker.disabled = true;
+        EXPECT_TRUE(element.IsDisabled());
     }
 
     TEST(UIStateLookTest, TheGroupDisablesAnElementAndSelectedIsCarried) {

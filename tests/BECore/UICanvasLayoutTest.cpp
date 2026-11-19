@@ -1,5 +1,6 @@
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UITextComponent.h>
+#include <BECore/UILayoutHud.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/UILayoutMatrix.h>
@@ -17,29 +18,6 @@ namespace BECore::Tests {
             context.outputWidth = width;
             context.outputHeight = height;
             return context;
-        }
-
-        IntrusivePtr<UIElement> AddBox(UIElement& parent, const char* name, float x, float y, float width, float height) {
-            auto box = parent.AddChild(PoolString::Intern(name));
-            box->style.rect.x = UILength::Px(x);
-            box->style.rect.y = UILength::Px(y);
-            box->style.rect.width = UILength::Px(width);
-            box->style.rect.height = UILength::Px(height);
-            return box;
-        }
-
-        /// The HUD of the plan: a panel top left with a score and a Reset button. The button is 48 units high and the canvas never scales below 0.7, so on
-        /// a near-square window (where ScaleWithScreen goes down to 0.5) it is still the 32 window units that the validator asks for.
-        void BuildHud(UICanvasLayout& canvas) {
-            canvas.params.useSafeArea = true;
-            canvas.params.minScale = 0.7f;
-            auto hud = AddBox(*canvas.root, "Hud", 16.0f, 16.0f, 220.0f, 96.0f);
-            hud->blocksInput = true;
-            hud->color = Color{0, 0, 0, 160};
-            AddBox(*hud, "Score", 12.0f, 10.0f, 120.0f, 28.0f);
-            auto reset = AddBox(*hud, "Reset", -12.0f, -10.0f, 96.0f, 48.0f);
-            reset->style.rect.anchor = UIAnchor::BottomRight;
-            reset->interactive = true;
         }
 
         /// A popup whose list is one row under the header, as wide as it, 40 units high
@@ -306,7 +284,7 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(UICanvasLayoutTest, AnchorsOfAnExtendedCanvasRefToTheWholeOutput) {
+    TEST(UICanvasLayoutTest, AnchorsOfAnExtendedCanvasReferToTheWholeOutput) {
         UICanvasLayout canvas = ExtendedCanvas();
         auto top = AddBox(*canvas.root, "Top", 0.0f, 10.0f, 100.0f, 40.0f);
         top->style.rect.anchor = UIAnchor::Top;
@@ -361,7 +339,7 @@ namespace BECore::Tests {
 
     // ---- hit testing ------------------------------------------------------------------------------------------------------
 
-    TEST(UICanvasLayoutTest, ABeforeTheFirstUpdateNothingIsHit) {
+    TEST(UICanvasLayoutTest, BeforeTheFirstUpdateNothingIsHit) {
         UICanvasLayout canvas;
         BuildHud(canvas);
 
@@ -532,123 +510,6 @@ namespace BECore::Tests {
         BuildHud(canvas);
 
         EXPECT_EQ(canvas.PickElement(20.0f, 20.0f), nullptr);
-    }
-
-    // ---- the size matrix --------------------------------------------------------------------------------------------------
-
-    TEST(UILayoutMatrixTest, TheMatrixCoversEveryAspectSizeAndSafeAreaOfThePlan) {
-        const auto& cases = UILayoutMatrix();
-
-        for (const char* aspect : {"16:9 ", "16:10 ", "3:2 ", "4:3 ", "1:1 ", "21:9 ", "32:9 ", "9:16 ", "9:19.5 ", "3:4 "}) {
-            for (const char* safe : {"no insets", "notch", "side insets"}) {
-                const bool found = std::any_of(cases.begin(), cases.end(), [&](const UIMatrixCase& c) { return c.label.find(aspect) == 0 && c.label.find(safe) != String::npos; });
-                EXPECT_TRUE(found) << aspect << " " << safe;
-            }
-        }
-
-        float smallestShortSide = 1e9f;
-        float largestLongSide = 0.0f;
-        bool hasFourK = false;
-        for (const UIMatrixCase& c : cases) {
-            smallestShortSide = std::min({smallestShortSide, c.context.outputWidth, c.context.outputHeight});
-            largestLongSide = std::max({largestLongSide, c.context.outputWidth, c.context.outputHeight});
-            hasFourK |= c.context.outputWidth == 3840.0f && c.context.outputHeight == 2160.0f;
-            EXPECT_GT(c.context.safeArea.w, 0.0f) << c.label.c_str();
-        }
-        EXPECT_FLOAT_EQ(smallestShortSide, 480.0f);
-        EXPECT_FLOAT_EQ(largestLongSide, 3840.0f);
-        EXPECT_TRUE(hasFourK);
-    }
-
-    TEST(UILayoutMatrixTest, EveryLabelIsUnique) {
-        const auto& cases = UILayoutMatrix();
-        for (size_t i = 0; i < cases.size(); ++i) {
-            for (size_t j = i + 1; j < cases.size(); ++j) {
-                ASSERT_NE(cases[i].label, cases[j].label);
-            }
-        }
-    }
-
-    TEST(UILayoutMatrixTest, ASafeAreaStaysInsideTheOutput) {
-        for (const UIMatrixCase& c : UILayoutMatrix()) {
-            const Rect& safe = c.context.safeArea;
-            EXPECT_GE(safe.x, 0.0f) << c.label.c_str();
-            EXPECT_GE(safe.y, 0.0f) << c.label.c_str();
-            EXPECT_LE(safe.x + safe.w, c.context.outputWidth + kTolerance) << c.label.c_str();
-            EXPECT_LE(safe.y + safe.h, c.context.outputHeight + kTolerance) << c.label.c_str();
-        }
-    }
-
-    TEST(UILayoutMatrixTest, TheShippedStyleOfHudPassesEveryCase) {
-        UICanvasLayout canvas;
-        BuildHud(canvas);
-
-        const auto failures = ValidateOnMatrix(canvas);
-
-        EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
-    }
-
-    TEST(UILayoutMatrixTest, AScreenThatDoesNotAdaptIsCaughtOnTheSmallAndTallCases) {
-        UICanvasLayout canvas;
-        auto banner = AddBox(*canvas.root, "Banner", 0.0f, 0.0f, 1000.0f, 80.0f);  // a fixed 1000 units wide: too wide for any phone-like canvas at scale 1
-        banner->blocksInput = true;
-        auto tiny = AddBox(*canvas.root, "Tiny", 20.0f, 100.0f, 20.0f, 20.0f);
-        tiny->interactive = true;
-        canvas.params.scaleMode = CanvasScaleMode::ConstantPixelSize;
-
-        const auto failures = ValidateOnMatrix(canvas);
-
-        ASSERT_FALSE(failures.empty());
-        bool bannerCaught = false;
-        bool tinyCaught = false;
-        for (const UIMatrixFailure& failure : failures) {
-            for (const UILayoutIssue& issue : failure.issues) {
-                bannerCaught |= issue.kind == UILayoutIssueKind::OutsideCanvas && issue.element == "Banner"_intern;
-                tinyCaught |= issue.kind == UILayoutIssueKind::TouchTargetTooSmall && issue.element == "Tiny"_intern;
-            }
-        }
-        EXPECT_TRUE(bannerCaught);
-        EXPECT_TRUE(tinyCaught);
-        EXPECT_EQ(canvas.params.scaleMode, CanvasScaleMode::ConstantPixelSize);  // the helper gives the params back
-    }
-
-    TEST(UILayoutMatrixTest, AVariantThatNarrowsThePanelMakesTheScreenPass) {
-        auto build = [](bool withVariant) {
-            auto canvas = MakeUnique<UICanvasLayout>();
-            auto panel = AddBox(*canvas->root, "Panel", 10.0f, 10.0f, 700.0f, 100.0f);
-            panel->blocksInput = true;
-            if (withVariant) {
-                UIVariant narrow;
-                narrow.when.maxWidth = 800.0f;
-                UIElementOverride shrink;
-                shrink.element = "Panel"_intern;
-                shrink.width = UILength::Percent(90.0f);
-                narrow.overrides.push_back(shrink);
-                canvas->variants.push_back(narrow);
-            }
-            return canvas;
-        };
-
-        auto without = build(false);
-        auto with = build(true);
-
-        EXPECT_FALSE(ValidateOnMatrix(*without).empty());
-        const auto failures = ValidateOnMatrix(*with);
-        EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
-    }
-
-    TEST(UILayoutMatrixTest, ASceneViewCanvasRunsOncePerCaseBecauseTheModeAndUserScaleDoNotApply) {
-        UICanvasLayout canvas;
-        canvas.params.space = CanvasSpace::SceneView;
-        UILayoutContext base;
-        base.sceneViewWidth = 840.0f;
-        base.sceneViewHeight = 760.0f;
-        AddBox(*canvas.root, "Label", 100.0f, 100.0f, 200.0f, 40.0f);
-
-        const auto failures = ValidateOnMatrix(canvas, {}, base);
-
-        EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
-        EXPECT_EQ(canvas.GetLayoutRuns(), static_cast<uint32_t>(UILayoutMatrix().size()));
     }
 
 }  // namespace BECore::Tests

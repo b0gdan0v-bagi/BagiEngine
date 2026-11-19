@@ -10,20 +10,6 @@ namespace BECore::Tests {
 
         constexpr uint32_t kKinds = 4;
 
-        /// The `DESIGN.md` combo table: a kind against a kind, `bomb`, `color_bomb` and `rocket` are `special`, `gem` is not.
-        Vector<RuleAxis> ComboAxes() {
-            const TagTree tags = BakedTags({"special"});
-            Vector<RuleAxis> axes;
-            for (const StringView name : {"first", "second"}) {
-                RuleAxis axis = MakeNamedAxis(name, {"bomb", "color_bomb", "rocket", "gem"}, tags);
-                for (const StringView special : {"bomb", "color_bomb", "rocket"}) {
-                    EXPECT_TRUE(axis.SetTags(special, {"special"}).has_value());
-                }
-                axes.push_back(std::move(axis));
-            }
-            return axes;
-        }
-
         /// A value without a default constructor.
         struct Effect {
             explicit Effect(int power, bool pierce = false) : power(power), pierce(pierce) {}
@@ -31,14 +17,6 @@ namespace BECore::Tests {
             int power;
             bool pierce;
         };
-
-        RuleTable<String> MakeComboTable() {
-            RuleTable<String> table(ComboAxes());
-            EXPECT_TRUE(table.AddSymmetric("tag:special", "color_bomb", "clear_all", "combo:1").has_value());
-            EXPECT_TRUE(table.AddSymmetric("bomb", "color_bomb", "super", "combo:2").has_value());
-            EXPECT_TRUE(table.AddSymmetric("tag:special", "tag:special", "merge", "combo:3").has_value());
-            return table;
-        }
 
     }  // namespace
 

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <BECore/Format/Format.h>
+#include <BECore/Threading/LockGuards.h>
+#include <BECore/Threading/Mutex.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/StringUtils.h>
 #include <Common/Printers.h>
@@ -12,7 +14,6 @@
 #include <cstdint>
 #include <expected>
 #include <gtest/gtest.h>
-#include <mutex>
 #include <utility>
 
 namespace BECore::Tests {
@@ -94,7 +95,7 @@ namespace BECore::Tests {
                 return std::unexpected(SetError(Format("TLS: {}", reason)));
             }
             socket.SetReceiveTimeout(std::chrono::milliseconds::zero());
-            std::lock_guard<std::mutex> lock(_mutex);
+            const LockGuard lock(_mutex);
             _socket = std::move(socket);
             _valid = true;
             return {};
@@ -148,21 +149,21 @@ namespace BECore::Tests {
         }
 
         String GetLastError() const override {
-            std::lock_guard<std::mutex> lock(_mutex);
+            const LockGuard lock(_mutex);
             return _lastError;
         }
 
     private:
         /// Remembers @p text for GetLastError() and gives it back
         String SetError(String text) {
-            std::lock_guard<std::mutex> lock(_mutex);
+            const LockGuard lock(_mutex);
             _lastError = text;
             return text;
         }
 
         Socket _socket;  // published by Connect() before any other thread has the stream
         std::atomic<bool> _valid{false};
-        mutable std::mutex _mutex;  // guards _lastError (Receive and SendAll fail on different threads)
+        mutable Mutex _mutex{BE_LOCK_SITE("Fake TLS stream error")};  // guards _lastError (Receive and SendAll fail on different threads)
         String _lastError;
     };
 

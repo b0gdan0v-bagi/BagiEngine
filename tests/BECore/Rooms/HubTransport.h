@@ -11,7 +11,6 @@
 #include <Rooms/RoomLimits.h>
 #include <deque>
 #include <memory>
-#include <vector>
 
 namespace BECore::Tests {
 
@@ -67,10 +66,10 @@ namespace BECore::Tests {
     public:
         explicit HubWorld(RoomHubSettings settings, RandomFn random = MakeSequence(11)) : _hub(MakeRegistry(), std::move(settings), std::move(random), MakeSink()) {}
 
-        /// A zero computer delay and the usual grace and timeouts
+        /// The usual grace and abandon timeout with @p computerDelay between the moves of computers
         static RoomHubSettings MakeSettings(std::chrono::milliseconds computerDelay = std::chrono::milliseconds(0)) {
             RoomHubSettings settings;
-            settings.timings = RoomTimings{RoomLimits::kReconnectGrace, RoomLimits::kAbandonedTimeout, computerDelay};
+            settings.timings.computerDelay = computerDelay;
             return settings;
         }
 

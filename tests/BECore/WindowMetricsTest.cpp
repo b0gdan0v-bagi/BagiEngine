@@ -253,8 +253,15 @@ namespace BECore::Tests {
         EXPECT_EQ(window->GetHeight(), 0);
     }
 
-    TEST(WindowMetricsTest, TheShippedWindowConfigAsksForTheHighDensityMode) {
-        EngineEnvironment::EnsureCoreServices();
+    /// The engine's own window config, read through the core services
+    class WindowMetricsShippedTest : public ::testing::Test {
+    protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
+    };
+
+    TEST_F(WindowMetricsShippedTest, TheShippedWindowConfigAsksForTheHighDensityMode) {
         auto config = XmlConfig::Create();
         ASSERT_TRUE(config.LoadFromFile(CoreManager::GetFileSystem().ResolvePath(kWindowConfig)));
         const auto flagsText = config.GetRoot().GetChild("window").GetAttribute("windowFlags");

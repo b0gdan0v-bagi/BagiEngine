@@ -113,6 +113,24 @@ namespace BECore::Tests {
             }
         };
 
+        /// Registers a handler in the global UIInput for its own lifetime, so a case that returns early leaves no dangling handler behind
+        class ScopedUIInputHandler {
+        public:
+            explicit ScopedUIInputHandler(IUIInputHandler& handler) : _handler(handler) {
+                CoreManager::GetUIInput().Register(_handler, 0);
+            }
+
+            ~ScopedUIInputHandler() {
+                CoreManager::GetUIInput().Unregister(_handler);
+            }
+
+            ScopedUIInputHandler(const ScopedUIInputHandler&) = delete;
+            ScopedUIInputHandler& operator=(const ScopedUIInputHandler&) = delete;
+
+        private:
+            IUIInputHandler& _handler;
+        };
+
         /// Consumes every mouse event it is offered
         class ConsumingHandler : public IUIInputHandler {
         public:
@@ -225,16 +243,6 @@ namespace BECore::Tests {
             event.type = SDL_EVENT_TEXT_INPUT;
             event.text.text = text;
             ASSERT_NO_FATAL_FAILURE(PushEvent(event));
-        }
-
-        void PushLeftClick(float x, float y) {
-            SDL_Event event{};
-            event.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
-            event.button.button = SDL_BUTTON_LEFT;
-            event.button.down = true;
-            event.button.x = x;
-            event.button.y = y;
-            ASSERT_TRUE(SDL_PushEvent(&event));
         }
 
         constexpr SDL_TouchID kScreenTouch = 77;  // a touch screen: neither the trackpad nor the pen id
@@ -359,7 +367,7 @@ namespace BECore::Tests {
         ASSERT_EQ(ImGui::GetCurrentContext(), nullptr);
 
         MouseRecorder recorder;
-        ASSERT_NO_FATAL_FAILURE(PushLeftClick(123.0f, 45.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 123.0f, 45.0f));
         _provider.ProcessEvents();
 
         ASSERT_EQ(recorder.clicks.size(), 1u);
@@ -373,7 +381,7 @@ namespace BECore::Tests {
         ImGui::GetIO().WantCaptureMouse = true;
 
         MouseRecorder recorder;
-        ASSERT_NO_FATAL_FAILURE(PushLeftClick(10.0f, 10.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 10.0f, 10.0f));
         _provider.ProcessEvents();
 
         EXPECT_TRUE(recorder.clicks.empty());
@@ -384,7 +392,7 @@ namespace BECore::Tests {
         ImGui::GetIO().WantCaptureMouse = false;
 
         MouseRecorder recorder;
-        ASSERT_NO_FATAL_FAILURE(PushLeftClick(10.0f, 20.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 10.0f, 20.0f));
         _provider.ProcessEvents();
 
         ASSERT_EQ(recorder.clicks.size(), 1u);
@@ -394,15 +402,16 @@ namespace BECore::Tests {
 
     TEST_F(SDLEventsProviderTest, AUIHandlerConsumesTheClickBeforeGameCode) {
         ConsumingHandler ui;
-        CoreManager::GetUIInput().Register(ui, 0);
         MouseRecorder recorder;
 
         const auto pushAndProcess = [this]() {
-            ASSERT_NO_FATAL_FAILURE(PushLeftClick(30.0f, 40.0f));
+            ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 30.0f, 40.0f));
             _provider.ProcessEvents();
         };
-        pushAndProcess();
-        CoreManager::GetUIInput().Unregister(ui);
+        {
+            const ScopedUIInputHandler uiRegistered(ui);
+            pushAndProcess();
+        }
 
         EXPECT_EQ(ui.downs, 1);
         EXPECT_TRUE(recorder.clicks.empty());
@@ -473,12 +482,11 @@ namespace BECore::Tests {
 
     TEST_F(SDLEventsProviderTest, AUIHandlerConsumesMotionAndTheGameSeesNone) {
         ConsumingHandler ui;
-        CoreManager::GetUIInput().Register(ui, 0);
+        const ScopedUIInputHandler uiRegistered(ui);
         InputRecorder recorder;
 
         ASSERT_NO_FATAL_FAILURE(PushMouseMotion(1.0f, 1.0f));
         _provider.ProcessEvents();
-        CoreManager::GetUIInput().Unregister(ui);
 
         EXPECT_EQ(ui.motions, 1);
         EXPECT_TRUE(recorder.motions.empty());
@@ -489,7 +497,7 @@ namespace BECore::Tests {
         MouseRecorder clicks;
         InputRecorder recorder;
 
-        ASSERT_NO_FATAL_FAILURE(PushLeftClick(10.0f, 20.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 10.0f, 20.0f));
         ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_UP, 3.0f, 4.0f));
         SDL_Event motion{};
         motion.type = SDL_EVENT_MOUSE_MOTION;
@@ -538,11 +546,10 @@ namespace BECore::Tests {
             float x = 0.0f;
             float y = 0.0f;
         } ui;
-        CoreManager::GetUIInput().Register(ui, 0);
+        const ScopedUIInputHandler uiRegistered(ui);
 
-        ASSERT_NO_FATAL_FAILURE(PushLeftClick(10.0f, 20.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 10.0f, 20.0f));
         _provider.ProcessEvents();
-        CoreManager::GetUIInput().Unregister(ui);
 
         EXPECT_EQ(ui.downs, 1);
         EXPECT_FLOAT_EQ(ui.x, 20.0f);
@@ -553,10 +560,10 @@ namespace BECore::Tests {
         InstallWindow(2.0f);
         MouseRecorder recorder;
 
-        ASSERT_NO_FATAL_FAILURE(PushLeftClick(10.0f, 10.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 10.0f, 10.0f));
         _provider.ProcessEvents();
         _window->SetDensity(1.5f);  // the window moved to another display
-        ASSERT_NO_FATAL_FAILURE(PushLeftClick(10.0f, 10.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 10.0f, 10.0f));
         _provider.ProcessEvents();
 
         ASSERT_EQ(recorder.clicks.size(), 2u);
@@ -568,7 +575,7 @@ namespace BECore::Tests {
         InstallWindow(1.0f);
         MouseRecorder recorder;
 
-        ASSERT_NO_FATAL_FAILURE(PushLeftClick(10.0f, 20.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 10.0f, 20.0f));
         _provider.ProcessEvents();
 
         ASSERT_EQ(recorder.clicks.size(), 1u);
@@ -652,7 +659,7 @@ namespace BECore::Tests {
         InputRecorder recorder;
         MouseRecorder clicks;
 
-        ASSERT_NO_FATAL_FAILURE(PushLeftClick(1.0f, 2.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 1.0f, 2.0f));
         ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_UP, 1.0f, 2.0f));
         ASSERT_NO_FATAL_FAILURE(PushMouseMotion(3.0f, 4.0f));
         ASSERT_NO_FATAL_FAILURE(PushMouseWheel(1.0f));
@@ -675,7 +682,7 @@ namespace BECore::Tests {
         RawRecorder raw;
         InputRecorder recorder;
 
-        ASSERT_NO_FATAL_FAILURE(PushLeftClick(1.0f, 2.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 1.0f, 2.0f));
         ASSERT_NO_FATAL_FAILURE(PushKey(SDL_EVENT_KEY_DOWN, SDLK_A));
         SDL_Event resized{};
         resized.type = SDL_EVENT_WINDOW_RESIZED;
@@ -694,7 +701,7 @@ namespace BECore::Tests {
         MouseRecorder clicks;
 
         // A click made in the pause: the press is dropped, and the release after the resume is only a release, no click
-        ASSERT_NO_FATAL_FAILURE(PushLeftClick(1.0f, 2.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 1.0f, 2.0f));
         ASSERT_NO_FATAL_FAILURE(PushKey(SDL_EVENT_KEY_DOWN, SDLK_A));
         _provider.ProcessEvents();
         CoreManager::GetPause().SetPaused(false);
@@ -705,7 +712,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(recorder.keyDowns.empty());
         EXPECT_EQ(recorder.ups.size(), 1u);
 
-        ASSERT_NO_FATAL_FAILURE(PushLeftClick(5.0f, 6.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 5.0f, 6.0f));
         ASSERT_NO_FATAL_FAILURE(PushKey(SDL_EVENT_KEY_DOWN, SDLK_B));
         ASSERT_NO_FATAL_FAILURE(PushText("b"));
         _provider.ProcessEvents();
@@ -720,9 +727,9 @@ namespace BECore::Tests {
     TEST_F(SDLEventsProviderTest, APausedGameDoesNotReachAUIHandlerEither) {
         CoreManager::GetPause().SetPaused(true);
         ConsumingHandler ui;
-        CoreManager::GetUIInput().Register(ui, 0);
+        const ScopedUIInputHandler uiRegistered(ui);
 
-        ASSERT_NO_FATAL_FAILURE(PushLeftClick(30.0f, 40.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 30.0f, 40.0f));
         ASSERT_NO_FATAL_FAILURE(PushMouseMotion(1.0f, 1.0f));
         _provider.ProcessEvents();
 
@@ -731,7 +738,6 @@ namespace BECore::Tests {
         injected.button = SDL_BUTTON_LEFT;
         injected.down = true;
         CoreManager::GetUIInput().DispatchMouseButtonDown(injected);
-        CoreManager::GetUIInput().Unregister(ui);
 
         EXPECT_EQ(ui.motions, 0);
         EXPECT_EQ(ui.downs, 1);
@@ -894,8 +900,8 @@ namespace BECore::Tests {
             CountingHandler& _target;
             bool _leftHalf;
         } leftHalf(left, true), rightHalf(right, false);
-        CoreManager::GetUIInput().Register(leftHalf, 0);
-        CoreManager::GetUIInput().Register(rightHalf, 0);
+        const ScopedUIInputHandler leftHalfRegistered(leftHalf);
+        const ScopedUIInputHandler rightHalfRegistered(rightHalf);
 
         ASSERT_NO_FATAL_FAILURE(PushFinger(SDL_EVENT_FINGER_DOWN, 1, 0.25f, 0.5f));
         ASSERT_NO_FATAL_FAILURE(PushFinger(SDL_EVENT_FINGER_DOWN, 2, 0.75f, 0.5f));
@@ -921,8 +927,6 @@ namespace BECore::Tests {
 
         ASSERT_NO_FATAL_FAILURE(PushFinger(SDL_EVENT_FINGER_UP, 1, 0.9f, 0.5f));
         _provider.ProcessEvents();
-        CoreManager::GetUIInput().Unregister(leftHalf);
-        CoreManager::GetUIInput().Unregister(rightHalf);
 
         ASSERT_EQ(left.ups.size(), 1u);
         EXPECT_EQ(left.ups[0], left.downs[0]);
@@ -931,12 +935,11 @@ namespace BECore::Tests {
     TEST_F(SDLEventsProviderTest, ALiftedFingerTellsItsHoverToLeave) {
         InstallWindow(1.0f);
         CountingHandler handler;
-        CoreManager::GetUIInput().Register(handler, 0);
+        const ScopedUIInputHandler handlerRegistered(handler);
 
         ASSERT_NO_FATAL_FAILURE(PushFinger(SDL_EVENT_FINGER_DOWN, 1, 0.5f, 0.5f));
         ASSERT_NO_FATAL_FAILURE(PushFinger(SDL_EVENT_FINGER_UP, 1, 0.5f, 0.5f));
         _provider.ProcessEvents();
-        CoreManager::GetUIInput().Unregister(handler);
 
         ASSERT_EQ(handler.leaves.size(), 1u);
         EXPECT_EQ(handler.leaves[0], handler.downs[0]);
@@ -945,7 +948,7 @@ namespace BECore::Tests {
     TEST_F(SDLEventsProviderTest, ACancelledFingerReleasesItsPress) {
         InstallWindow(1.0f);
         CountingHandler handler;
-        CoreManager::GetUIInput().Register(handler, 0);
+        const ScopedUIInputHandler handlerRegistered(handler);
 
         ASSERT_NO_FATAL_FAILURE(PushFinger(SDL_EVENT_FINGER_DOWN, 1, 0.5f, 0.5f));
         _provider.ProcessEvents();
@@ -955,7 +958,6 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(PushFinger(SDL_EVENT_FINGER_CANCELED, 1, 0.5f, 0.5f));
         _provider.ProcessEvents();
         const bool held = CoreManager::GetUIInput().HoldsPress(handler, handler.downs[0]);
-        CoreManager::GetUIInput().Unregister(handler);
 
         EXPECT_FALSE(held);
         ASSERT_EQ(handler.ups.size(), 1u);
@@ -965,7 +967,7 @@ namespace BECore::Tests {
     TEST_F(SDLEventsProviderTest, ANinthFingerGetsNoPointer) {
         InstallWindow(1.0f);
         CountingHandler handler;
-        CoreManager::GetUIInput().Register(handler, 0);
+        const ScopedUIInputHandler handlerRegistered(handler);
 
         for (SDL_FingerID finger = 1; finger <= kMaxFingerPointers + 1; ++finger) {
             ASSERT_NO_FATAL_FAILURE(PushFinger(SDL_EVENT_FINGER_DOWN, finger, 0.5f, 0.5f));
@@ -973,7 +975,6 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(PushFinger(SDL_EVENT_FINGER_MOTION, kMaxFingerPointers + 1, 0.6f, 0.5f, 0.1f, 0.0f));
         ASSERT_NO_FATAL_FAILURE(PushFinger(SDL_EVENT_FINGER_UP, kMaxFingerPointers + 1, 0.6f, 0.5f));
         _provider.ProcessEvents();
-        CoreManager::GetUIInput().Unregister(handler);
 
         EXPECT_EQ(handler.downs.size(), kMaxFingerPointers);
         EXPECT_EQ(handler.motions.size(), kMaxFingerPointers) << "the arrivals only";
@@ -1023,7 +1024,7 @@ namespace BECore::Tests {
         InstallWindow(1.0f);
         MouseRecorder downs;
 
-        ASSERT_NO_FATAL_FAILURE(PushLeftClick(1.0f, 2.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_DOWN, 1.0f, 2.0f));
         _provider.ProcessEvents();
 
         EXPECT_EQ(downs.clicks.size(), 1u);

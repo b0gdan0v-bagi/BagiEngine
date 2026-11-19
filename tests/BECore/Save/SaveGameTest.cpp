@@ -4,8 +4,8 @@
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/ReaderLimits.h>
 #include <BECore/Save/SaveGame.h>
+#include <BECore/Save/SaveTestSupport.h>
 #include <Common/Printers.h>
-#include <Common/TempPath.h>
 #include <Generated/SaveGameTest.gen.hpp>
 
 namespace BECore::Tests {
@@ -120,31 +120,24 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    /// A local FileSystem and a temp folder per test: no global services, so the tests run beside each other
-    class SaveGameTest : public ::testing::Test {
+    /// A service initialised on the saves folder of the test
+    class SaveGameTest : public SaveFolderTest {
     protected:
         void SetUp() override {
-            _base = TestTempDirectory("BagiSaveGameEnvelopeTest");
-            std::filesystem::remove_all(_base);
-            std::filesystem::create_directories(_base);
-            _saves = _base / "saves";
+            ASSERT_NO_FATAL_FAILURE(SaveFolderTest::SetUp());
             _service.emplace(_fileSystem);
             ASSERT_TRUE(_service->Initialize(_saves));
         }
 
         void TearDown() override {
             _service.reset();
-            std::error_code ec;
-            std::filesystem::remove_all(_base, ec);
+            SaveFolderTest::TearDown();
         }
 
         SaveGameService& Service() {
             return *_service;
         }
 
-        std::filesystem::path _base;
-        std::filesystem::path _saves;
-        FileSystem _fileSystem;
         Optional<SaveGameService> _service;
     };
 

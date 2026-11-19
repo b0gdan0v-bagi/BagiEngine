@@ -5,15 +5,14 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
+#include <Common/TextTestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
 
     namespace {
 
-        constexpr const char* kDefaultFontPath = "assets/fonts/PT_Sans-Web-Regular.ttf";
         constexpr float kSize = 20.0f;
-        constexpr float kEllipsisCodePoint = 0x2026;
 
         char32_t LastCodePoint(const TextLayoutResult& result) {
             return result.glyphs.empty() ? 0 : result.glyphs.back().codePoint;
@@ -46,7 +45,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            auto handle = CoreManager::GetResourceManager().Load<Font>(kDefaultFontPath);
+            auto handle = CoreManager::GetResourceManager().Load<Font>(kTestRegularPath);
             font = IntrusivePtr<Font>(handle ? &*handle : nullptr);
             ASSERT_TRUE(font);
             ASSERT_EQ(font->GetState(), ResourceState::Loaded);
@@ -300,7 +299,7 @@ namespace BECore::Tests {
 
         ASSERT_EQ(result.lines.size(), 1u);
         EXPECT_TRUE(result.truncated);
-        EXPECT_EQ(LastCodePoint(result), static_cast<char32_t>(kEllipsisCodePoint));
+        EXPECT_EQ(LastCodePoint(result), kEllipsis);
         EXPECT_LE(result.width, options.maxWidth + 0.01f);
         EXPECT_FALSE(result.overflowed);
     }
@@ -335,7 +334,7 @@ namespace BECore::Tests {
 
         ASSERT_EQ(result.lines.size(), 2u);
         EXPECT_TRUE(result.truncated);
-        EXPECT_EQ(LastCodePoint(result), static_cast<char32_t>(kEllipsisCodePoint));
+        EXPECT_EQ(LastCodePoint(result), kEllipsis);
         EXPECT_LE(result.height, options.maxHeight + 0.01f);
         EXPECT_LE(At(result.lines, 1).width, options.maxWidth + 0.01f);
     }
@@ -419,7 +418,7 @@ namespace BECore::Tests {
 
         EXPECT_FLOAT_EQ(result.fontSize, 20.0f);
         EXPECT_TRUE(result.truncated);
-        EXPECT_EQ(LastCodePoint(result), static_cast<char32_t>(kEllipsisCodePoint));
+        EXPECT_EQ(LastCodePoint(result), kEllipsis);
     }
 
     TEST_F(TextLayoutTest, AutoFitWithoutABoxChangesNothing) {

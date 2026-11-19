@@ -153,6 +153,23 @@ namespace BECore::Tests {
   </nodes></scene>
 </scenes></SceneManager>)";
 
+        /// The scene of these tests with the elements that @p source (HTML + CSS) compiles to; a failure of the case and an empty scene when the
+        /// compiled text has no element list
+        String CompiledSceneXml(const String& source) {
+            UIWebReport report;
+            const String compiled = UIWebCompiler::Compile(source, {}, report);
+            EXPECT_TRUE(report.issues.empty());
+            constexpr StringView kOpen = "<elements>";
+            const size_t open = compiled.find(kOpen.data(), 0, kOpen.size());
+            const size_t end = compiled.find("</elements>");
+            if (open == String::npos || end == String::npos || end < open) {
+                ADD_FAILURE() << "no element list in the compiled screen: " << compiled.c_str();
+                return Format("{}{}", kSceneHead, kSceneTail);
+            }
+            const size_t begin = open + kOpen.size();
+            return Format("{}{}{}", kSceneHead, compiled.substr(begin, end - begin), kSceneTail);
+        }
+
         // Two buttons written in HTML + CSS: an icon-only one and an icon-left one
         String HtmlBarXml(float side) {
             const String sideUnits = ToString(static_cast<int>(side));
@@ -161,13 +178,7 @@ namespace BECore::Tests {
                                          "background: #283c5a }}</style>"
                                          R"(<button id="Icon" data-icon="BarIcon" data-action="IconBar"></button><button id="Left" data-icon="BarIcon" data-action="LeftBar">Go</button>)",
                                          sidePx);
-            UIWebReport report;
-            const String compiled = UIWebCompiler::Compile(source, {}, report);
-            EXPECT_TRUE(report.issues.empty());
-            const String xml(compiled.c_str());
-            const size_t begin = xml.find("<elements>") + String("<elements>").size();
-            const size_t end = xml.find("</elements>");
-            return Format("{}{}{}", kSceneHead, xml.substr(begin, end - begin), kSceneTail);
+            return CompiledSceneXml(source);
         }
 
         // A segmented group written in HTML + CSS: an icon-only segment, an icon-left one and a plain one, in a row (the segments are composed like any button)
@@ -178,13 +189,7 @@ namespace BECore::Tests {
                 "background: #283c5a }}</style>"
                 R"(<div id="Seg" data-widget="segmented" data-bind="seg"><button id="SegA" data-value="a" data-icon="BarIcon"></button><button id="SegB" data-value="b" data-icon="BarIcon">Go</button><button id="SegC" data-value="c">Plain</button></div>)",
                 sidePx);
-            UIWebReport report;
-            const String compiled = UIWebCompiler::Compile(source, {}, report);
-            EXPECT_TRUE(report.issues.empty());
-            const String xml(compiled.c_str());
-            const size_t begin = xml.find("<elements>") + String("<elements>").size();
-            const size_t end = xml.find("</elements>");
-            return Format("{}{}{}", kSceneHead, xml.substr(begin, end - begin), kSceneTail);
+            return CompiledSceneXml(source);
         }
 
         String BarXml(float side, bool narrow) {

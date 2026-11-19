@@ -1,7 +1,6 @@
 #include <BECore/UI/UIChoice.h>
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UITextComponent.h>
-#include <Common/EngineEnvironment.h>
 #include <Common/Require.h>
 #include <gtest/gtest.h>
 
@@ -27,14 +26,7 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class UIChoiceTest : public ::testing::Test {
-    protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-    };
-
-    TEST_F(UIChoiceTest, AnElementWithAClickerIsAnOptionWithTheValueOfTheClicker) {
+    TEST(UIChoiceTest, AnElementWithAClickerIsAnOptionWithTheValueOfTheClicker) {
         const auto element = MakeClickerElement("hard", "Hard");
 
         EXPECT_TRUE(UIChoice::IsOption(*element));
@@ -43,7 +35,7 @@ namespace BECore::Tests {
         EXPECT_EQ(&UIChoice::GetText(*element), &Require(element->GetComponent<UITextComponent>()).text) << "a view of the string, not a copy";
     }
 
-    TEST_F(UIChoiceTest, APlainElementIsNoOption) {
+    TEST(UIChoiceTest, APlainElementIsNoOption) {
         auto plain = New<UIElement>();
         plain->AddComponent<UITextComponent>().text = "Caption";
 
@@ -51,7 +43,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(UIChoice::GetValue(*plain).Empty());
     }
 
-    TEST_F(UIChoiceTest, TheCaptionIsTheTextOfTheFirstDescendantThatHasOne) {
+    TEST(UIChoiceTest, TheCaptionIsTheTextOfTheFirstDescendantThatHasOne) {
         const auto element = MakeClickerElement("a");
         auto icon = New<UIElement>();
         auto wrap = New<UIElement>();
@@ -63,14 +55,14 @@ namespace BECore::Tests {
         EXPECT_EQ(UIChoice::GetText(*element), "Deep") << "depth first, in order";
     }
 
-    TEST_F(UIChoiceTest, TheTextOfTheElementItselfWinsOverItsChildren) {
+    TEST(UIChoiceTest, TheTextOfTheElementItselfWinsOverItsChildren) {
         const auto element = MakeClickerElement("a", "Own");
         element->children.push_back(MakeCaptionChild("Child"));
 
         EXPECT_EQ(UIChoice::GetText(*element), "Own");
     }
 
-    TEST_F(UIChoiceTest, ANestedClickerIsAnotherButtonAndItsTextIsNotTaken) {
+    TEST(UIChoiceTest, ANestedClickerIsAnotherButtonAndItsTextIsNotTaken) {
         const auto outer = MakeClickerElement("outer");
         auto inner = MakeClickerElement("inner", "Inner");
         inner->children.push_back(MakeCaptionChild("InnerChild"));
@@ -82,18 +74,11 @@ namespace BECore::Tests {
         EXPECT_EQ(UIChoice::GetText(*outer), "Mine") << "the sibling after the nested button is still the caption";
     }
 
-    TEST_F(UIChoiceTest, AnOptionWithoutAnyTextHasAnEmptyCaption) {
+    TEST(UIChoiceTest, AnOptionWithoutAnyTextHasAnEmptyCaption) {
         const auto element = MakeClickerElement("a");
         element->children.push_back(New<UIElement>());
 
         EXPECT_TRUE(UIChoice::GetText(*element).empty());
-    }
-
-    TEST_F(UIChoiceTest, DisabledIsTheAnswerOfTheElement) {
-        const auto element = MakeClickerElement("a");
-        EXPECT_FALSE(element->IsDisabled());
-        Require(element->GetComponent<UIInputClicker>()).disabled = true;
-        EXPECT_TRUE(element->IsDisabled());
     }
 
 }  // namespace BECore::Tests

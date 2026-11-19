@@ -17,8 +17,8 @@
 
 namespace BECore::Tests {
 
-    /// What the socket tests of a room server share: humans at a table of the demo card game, played over real sockets
-    /// (RoomServerScenarioTest, RoomServerHostileTest). The judge of the wire is WireJudge.h.
+    // What the socket tests of a room server share: humans at a table of the demo card game, played over real sockets
+    // (RoomServerScenarioTest, RoomServerHostileTest). The judge of the wire is WireJudge.h.
 
     inline constexpr std::chrono::milliseconds kPlayLimit{30'000};
     inline constexpr int kHumansAtFullTable = 4;
@@ -135,8 +135,8 @@ namespace BECore::Tests {
         }
     }
 
-    /// The end of a hand: the last view of the client is `finished` and shows every one of the twelve played cards once
-    inline void ExpectAllTwelveCardsPlayed(const RoomSocketClient& client) {
+    /// The end of a hand: the last view of the client is `finished` and shows every card played in the hand once
+    inline void ExpectEveryCardPlayed(const RoomSocketClient& client) {
         ASSERT_TRUE(SeesTheEnd(client));
         const Json* table = LastTable(client);
         ASSERT_NE(table, nullptr);

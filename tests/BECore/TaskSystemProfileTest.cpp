@@ -81,7 +81,8 @@ namespace BECore::Tests {
             return *backend;
         }
 
-        /// Installs a backend for a scope. The pool of a test is shut down before the scope ends, so no zone is still open on it
+        /// Installs a backend for a scope. A worker may still be in a zone of it after the scope ends, which is safe because the
+        /// backend outlives every worker (FreshBackend())
         class ScopedBackend {
         public:
             explicit ScopedBackend(IProfilerBackend& backend) {
@@ -294,8 +295,11 @@ namespace BECore::Tests {
 
     TEST_F(TaskManagerProfileTest, NothingIsSampledWithoutABackend) {
         Profiler::SetBackend(nullptr);
-        TaskManager::GetInstance().SampleProfilerCounters();  // must not crash and has nobody to tell
-        SUCCEED();
+        TaskManager::GetInstance().SampleProfilerCounters();  // has nobody to tell
+
+        RecordingBackend& backend = FreshBackend();
+        ScopedBackend installed(backend);
+        EXPECT_FALSE(backend.HasCounter("Main thread queue: pending")) << "a sample without a backend is not kept for the next one";
     }
 
 #else

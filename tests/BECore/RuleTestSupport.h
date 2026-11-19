@@ -7,6 +7,7 @@
 #include <BECore/Random/Rng.h>
 #include <BECore/Rules/RuleAxis.h>
 #include <BECore/Rules/RuleBaker.h>
+#include <BECore/Rules/RuleTable.h>
 #include <BECore/Types/Types.h>
 #include <gtest/gtest.h>
 #include <initializer_list>
@@ -26,6 +27,29 @@ namespace BECore::Tests {
         auto axis = RuleAxis::Named(name, valueNames, tags);
         EXPECT_TRUE(axis.has_value()) << (axis ? "" : axis.error().c_str());
         return std::move(*axis);
+    }
+
+    /// The axes of the combo table: a kind against a kind, `bomb`, `color_bomb` and `rocket` are `special`, `gem` is not.
+    inline Vector<RuleAxis> ComboAxes() {
+        const TagTree tags = BakedTags({"special"});
+        Vector<RuleAxis> axes;
+        for (const StringView name : {"first", "second"}) {
+            RuleAxis axis = MakeNamedAxis(name, {"bomb", "color_bomb", "rocket", "gem"}, tags);
+            for (const StringView special : {"bomb", "color_bomb", "rocket"}) {
+                EXPECT_TRUE(axis.SetTags(special, {"special"}).has_value());
+            }
+            axes.push_back(std::move(axis));
+        }
+        return axes;
+    }
+
+    /// The combo table: three symmetric rules, so rules #0 and #1, #2 and #3 are mirror pairs and #4 is its own mirror.
+    inline RuleTable<String> MakeComboTable() {
+        RuleTable<String> table(ComboAxes());
+        EXPECT_TRUE(table.AddSymmetric("tag:special", "color_bomb", "clear_all", "combo:1").has_value());
+        EXPECT_TRUE(table.AddSymmetric("bomb", "color_bomb", "super", "combo:2").has_value());
+        EXPECT_TRUE(table.AddSymmetric("tag:special", "tag:special", "merge", "combo:3").has_value());
+        return table;
     }
 
     /// A rule with one selector text per axis; a selector that does not parse fails the test.

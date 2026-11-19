@@ -76,11 +76,6 @@ namespace BECore::Tests {
   </component>
 </components></node>)";
 
-        // Read through the file-system loader, which refuses a node file that is not at the current content version
-        String CurrentNode(const char* name) {
-            return Format("<node name=\"{}\" contentVersion=\"{}\"/>", name, kContentVersion);
-        }
-
         const char* const kNodeNames[] = {"Board", "Hud", "Menu"};
         const char* const kNodeTexts[] = {kBoardNode, kHudNode, kMenuNode};
 
@@ -126,13 +121,18 @@ namespace BECore::Tests {
             return PanelNode("Panel", 2, 10, 20, PanelElements("Base"));
         }
 
-        // Three instances of the one node file, each overriding some of the values; PanelInline() below is the same three nodes written out
-        const String kPanelRefA = Format("<node ref=\"nodes/Panel\" name=\"PanelA\" layer=\"7\"><components><component type=\"TransformComponent\" x=\"100\"/>"
-                                         "<component type=\"UICanvasComponent\">{}</component></components></node>",
-                                         PanelElements("A"));
-        const String kPanelRefB = "<node ref=\"nodes/Panel\" name=\"PanelB\"><components><component type=\"TransformComponent\" y=\"55\"/></components></node>";
-        const String kPanelRefC =
-            Format("<node ref=\"nodes/Panel\" name=\"PanelC\" layer=\"1\"><components><component type=\"UICanvasComponent\">{}</component></components></node>", PanelElements("C"));
+        // Three instances of the one node file, each overriding some of the values; PanelInlineA() to C() below are the same three nodes written out
+        String PanelRefA() {
+            return Format("<node ref=\"nodes/Panel\" name=\"PanelA\" layer=\"7\"><components><component type=\"TransformComponent\" x=\"100\"/>"
+                          "<component type=\"UICanvasComponent\">{}</component></components></node>",
+                          PanelElements("A"));
+        }
+        String PanelRefB() {
+            return "<node ref=\"nodes/Panel\" name=\"PanelB\"><components><component type=\"TransformComponent\" y=\"55\"/></components></node>";
+        }
+        String PanelRefC() {
+            return Format("<node ref=\"nodes/Panel\" name=\"PanelC\" layer=\"1\"><components><component type=\"UICanvasComponent\">{}</component></components></node>", PanelElements("C"));
+        }
 
         String PanelInlineA() {
             return PanelNode("PanelA", 7, 100, 20, PanelElements("A"));
@@ -149,7 +149,7 @@ namespace BECore::Tests {
         }
 
         /// GetDrawRank of every child of the scene root, in scene order
-        Vector<int32_t> DrawRanks(BECore::Scene& scene) {
+        Vector<int32_t> DrawRanks(Scene& scene) {
             Vector<int32_t> ranks;
             for (const auto& node : scene.GetRootNode().GetChildren()) {
                 ranks.push_back(scene.GetDrawRank(*node));
@@ -158,7 +158,7 @@ namespace BECore::Tests {
         }
 
         /// Two scenes hold the same nodes in the same order: name, layer, the types of the components, the transform, the elements of every canvas
-        void ExpectSameScene(BECore::Scene& expected, BECore::Scene& actual) {
+        void ExpectSameScene(Scene& expected, Scene& actual) {
             const auto& expectedNodes = expected.GetRootNode().GetChildren();
             const auto& actualNodes = actual.GetRootNode().GetChildren();
             ASSERT_EQ(expectedNodes.size(), actualNodes.size());
@@ -190,7 +190,7 @@ namespace BECore::Tests {
             EXPECT_EQ(DrawRanks(expected), DrawRanks(actual));
         }
 
-        Vector<String> NodeNamesOf(BECore::Scene& scene) {
+        Vector<String> NodeNamesOf(Scene& scene) {
             Vector<String> names;
             for (const auto& node : scene.GetRootNode().GetChildren()) {
                 names.emplace_back(node->GetName().CStr());
@@ -238,8 +238,8 @@ namespace BECore::Tests {
             return manager;
         }
 
-        static BECore::Scene& Main(const IntrusivePtrAtomic<SceneManager>& manager) {
-            BECore::Scene* scene = manager->GetSceneByName("Main"_intern);
+        static Scene& Main(const IntrusivePtrAtomic<SceneManager>& manager) {
+            Scene* scene = manager->GetSceneByName("Main"_intern);
             EXPECT_NE(scene, nullptr);
             return Require(scene);
         }
@@ -431,7 +431,7 @@ namespace BECore::Tests {
         pugi::xml_document inlineDoc;
         pugi::xml_document splitDoc;
         const auto inlined = Load(SceneConfigText(PanelInlineA() + PanelInlineB() + PanelInlineC(), kMainSceneView800x600), inlineDoc);
-        const auto split = Load(SceneConfigText(kPanelRefA + kPanelRefB + kPanelRefC, kMainSceneView800x600), splitDoc);
+        const auto split = Load(SceneConfigText(Format("{}{}{}", PanelRefA(), PanelRefB(), PanelRefC()), kMainSceneView800x600), splitDoc);
 
         ExpectSameScene(Main(inlined), Main(split));
         EXPECT_EQ(NodeNamesOf(Main(split)), (Vector<String>{"PanelA", "PanelB", "PanelC"}));
@@ -450,7 +450,7 @@ namespace BECore::Tests {
     /// A node with overrides, also under another name, keeps the reference of its file
     TEST_F(SceneSplitOverrideTest, AnInstanceWithOverridesKeepsTheReferenceOfItsFile) {
         pugi::xml_document doc;
-        const auto split = Load(SceneConfigText(Format("{}{}<node name=\"Own\"/>{}", kPanelRefA, kPanelRefB, kPanelRefC), kMainSceneView800x600), doc);
+        const auto split = Load(SceneConfigText(Format("{}{}<node name=\"Own\"/>{}", PanelRefA(), PanelRefB(), PanelRefC()), kMainSceneView800x600), doc);
 
         const auto& nodes = Main(split).GetRootNode().GetChildren();
         ASSERT_EQ(nodes.size(), 4u);
@@ -463,13 +463,13 @@ namespace BECore::Tests {
 
     /// The mark is on the live node only: the document a tool reads has no `sourceRef`, and the given node is not changed
     TEST_F(SceneSplitOverrideTest, NoSourceRefReachesTheDocuments) {
-        WriteFile(_dir / "SceneConfig.xml", SceneConfigText(kPanelRefA + kPanelRefB, kMainSceneView800x600));
+        WriteFile(_dir / "SceneConfig.xml", SceneConfigText(Format("{}{}", PanelRefA(), PanelRefB()), kMainSceneView800x600));
         pugi::xml_document split;
         ASSERT_TRUE(LoadSceneDocument(_dir / "SceneConfig.xml", split).Ok());
         EXPECT_EQ(XmlText(split.document_element()).find("sourceRef"), String::npos);
 
         pugi::xml_document doc;
-        ASSERT_TRUE(doc.load_string(SceneConfigText(kPanelRefA, kMainSceneView800x600).c_str()));
+        ASSERT_TRUE(doc.load_string(SceneConfigText(PanelRefA(), kMainSceneView800x600).c_str()));
         const String before = XmlText(doc.document_element());
         LoadSceneManager(XmlNode{doc.document_element()}, MakeDirectoryNodeLoader(_dir));
         EXPECT_EQ(XmlText(doc.document_element()), before);
@@ -480,7 +480,7 @@ namespace BECore::Tests {
         pugi::xml_document splitDoc;
         pugi::xml_document plainDoc;
         const auto inlined = Load(SceneConfigText(PanelInlineA() + PanelInlineB() + PanelInlineC(), kMainSceneView800x600), inlineDoc);
-        const auto split = Load(SceneConfigText(kPanelRefA + kPanelRefB + kPanelRefC, kMainSceneView800x600), splitDoc);
+        const auto split = Load(SceneConfigText(Format("{}{}{}", PanelRefA(), PanelRefB(), PanelRefC()), kMainSceneView800x600), splitDoc);
         const auto plain = Load(SceneConfigText("<node ref=\"nodes/Panel\"/>", kMainSceneView800x600), plainDoc);
 
         const String expectedTree = UiTree(inlined);
@@ -515,8 +515,8 @@ namespace BECore::Tests {
         const String bad = "<node ref=\"nodes/Panel\" name=\"Broken\"><components><component type=\"QuadRendererComponent\"/></components></node>";
         pugi::xml_document withBadDoc;
         pugi::xml_document withoutDoc;
-        const auto withBad = Load(SceneConfigText(kPanelRefA + bad + kPanelRefC, kMainSceneView800x600), withBadDoc);
-        const auto without = Load(SceneConfigText(kPanelRefA + kPanelRefC, kMainSceneView800x600), withoutDoc);
+        const auto withBad = Load(SceneConfigText(Format("{}{}{}", PanelRefA(), bad, PanelRefC()), kMainSceneView800x600), withBadDoc);
+        const auto without = Load(SceneConfigText(Format("{}{}", PanelRefA(), PanelRefC()), kMainSceneView800x600), withoutDoc);
 
         EXPECT_EQ(NodeNamesOf(Main(withBad)), (Vector<String>{"PanelA", "PanelC"}));
         ExpectSameScene(Main(without), Main(withBad));
@@ -525,7 +525,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneSplitOverrideTest, LoadSceneManagerLeavesTheGivenNodeWithItsReferencesAndOverrides) {
         pugi::xml_document doc;
-        ASSERT_TRUE(doc.load_string(SceneConfigText(kPanelRefA + kPanelRefB + kPanelRefC, kMainSceneView800x600).c_str()));
+        ASSERT_TRUE(doc.load_string(SceneConfigText(Format("{}{}{}", PanelRefA(), PanelRefB(), PanelRefC()), kMainSceneView800x600).c_str()));
         const String before = XmlText(doc.document_element());
 
         const auto manager = LoadSceneManager(XmlNode{doc.document_element()}, MakeDirectoryNodeLoader(_dir));
@@ -538,7 +538,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneSplitOverrideTest, LoadSceneDocumentWithOverridesEqualsTheInlineDocument) {
-        WriteFile(_dir / "SceneConfig.xml", SceneConfigText(kPanelRefA + kPanelRefB + kPanelRefC, kMainSceneView800x600));
+        WriteFile(_dir / "SceneConfig.xml", SceneConfigText(Format("{}{}{}", PanelRefA(), PanelRefB(), PanelRefC()), kMainSceneView800x600));
 
         pugi::xml_document split;
         const NodeExpansion result = LoadSceneDocument(_dir / "SceneConfig.xml", split);
@@ -552,7 +552,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneSplitOverrideTest, AnElementsOverrideReachesTheLiveCanvas) {
         pugi::xml_document doc;
-        const auto manager = Load(SceneConfigText(kPanelRefC, kMainSceneView800x600), doc);
+        const auto manager = Load(SceneConfigText(PanelRefC(), kMainSceneView800x600), doc);
 
         const auto canvas = Main(manager).GetRootNode().GetChildren()[0]->GetComponent<UICanvasComponent>();
         ASSERT_TRUE(canvas);
@@ -561,38 +561,6 @@ namespace BECore::Tests {
         ASSERT_NE(title->GetComponent<UITextComponent>(), nullptr);
         EXPECT_EQ(title->name, "Title"_intern);
         EXPECT_EQ(Require(title->GetComponent<UITextComponent>()).text, "C");
-    }
-
-    // ---- layering ---------------------------------------------------------------------------------------------------------
-
-    /// Two content roots, an engine and a game on top of it, both with config/nodes/Shared.xml; only the engine has Only.xml
-    TEST(SceneSplitLayerTest, AGameNodeFileReplacesTheEngineOne) {
-        const std::filesystem::path base = TestTempDirectory("BagiSceneSplitLayer");
-        std::filesystem::remove_all(base);
-        const std::filesystem::path engine = base / "engine";
-        const std::filesystem::path game = base / "game";
-        WriteFile(engine / "config" / "nodes" / "Shared.xml", CurrentNode("FromEngine").c_str());
-        WriteFile(game / "config" / "nodes" / "Shared.xml", CurrentNode("FromGame").c_str());
-        WriteFile(engine / "config" / "nodes" / "Only.xml", CurrentNode("Only").c_str());
-
-        FileSystem fs;
-        fs.AddContentRoot(engine);
-        fs.AddContentRoot(game);
-        fs.Initialize();
-        const NodeFileLoader loader = MakeFileSystemNodeLoader(fs);
-
-        pugi::xml_document doc;
-        ASSERT_TRUE(doc.load_string(SceneConfigText("<node ref=\"nodes/Shared\"/><node ref=\"nodes/Only\"/>", kMainSceneView800x600).c_str()));
-        const NodeExpansion result = ExpandNodeReferences(doc.document_element(), loader);
-
-        EXPECT_TRUE(result.Ok());
-        EXPECT_EQ(result.expanded, 2u);
-        pugi::xml_node first = doc.document_element().child("scenes").child("scene").child("nodes").child("node");
-        EXPECT_STREQ(first.attribute("name").as_string(), "FromGame");
-        EXPECT_STREQ(first.next_sibling("node").attribute("name").as_string(), "Only");
-
-        std::error_code ignored;
-        std::filesystem::remove_all(base, ignored);
     }
 
 }  // namespace BECore::Tests

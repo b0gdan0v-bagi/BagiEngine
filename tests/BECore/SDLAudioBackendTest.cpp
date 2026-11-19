@@ -9,14 +9,17 @@ namespace BECore::Tests {
 
     namespace {
 
-        constexpr uint32_t kRate = 48000;
         constexpr uint32_t kVoices = 4;
+        // The dummy device takes samples in real time: the silence lasts so long that no stall of a loaded machine lets it play out
+        // before the test looks, and its low rate keeps those minutes small in memory
+        constexpr uint32_t kSilenceRate = 4000;
+        constexpr uint32_t kSilenceSeconds = 300;
+        constexpr AudioFormat kSilenceFormat{kSilenceRate, 1};
 
-        /// Long enough that the dummy device, which takes samples in real time, cannot have played it before the test looks
-        IntrusivePtr<AudioClip> TenSecondsOfSilence() {
+        IntrusivePtr<AudioClip> LongSilence() {
             DecodedAudio audio;
-            audio.format = AudioFormat{kRate, 2};
-            audio.samples.assign(static_cast<size_t>(kRate) * 2 * 10, 0.0f);
+            audio.format = kSilenceFormat;
+            audio.samples.assign(static_cast<size_t>(kSilenceRate) * kSilenceSeconds, 0.0f);
             return AudioClip::Create("test/silence.wav"_intern, std::move(audio));
         }
 
@@ -40,7 +43,7 @@ namespace BECore::Tests {
         }
 
         IntrusivePtr<SDLAudioBackend> backend;
-        IntrusivePtr<AudioClip> clip = TenSecondsOfSilence();
+        IntrusivePtr<AudioClip> clip = LongSilence();
     };
 
     TEST_F(SDLAudioBackendTest, OpenMakesTheVoices) {
@@ -97,10 +100,9 @@ namespace BECore::Tests {
     }
 
     TEST_F(SDLAudioBackendTest, AStreamTakesSamplesPartByPartAndPlaysOutAfterItsEnd) {
-        const AudioFormat format{22050, 2};
-        ASSERT_TRUE(backend->StartStream(2, format, 0.5f));
+        ASSERT_TRUE(backend->StartStream(2, kSilenceFormat, 0.5f));
         EXPECT_EQ(backend->GetQueuedFrames(2), 0u);
-        const Vector<float> part(22050 * 2 * 4, 0.0f);  // four seconds: the dummy device takes them in real time, far slower than the test
+        const Vector<float> part(static_cast<size_t>(kSilenceRate) * kSilenceSeconds, 0.0f);
         ASSERT_TRUE(backend->QueueStream(2, part));
         EXPECT_GT(backend->GetQueuedFrames(2), 0u);
         EXPECT_TRUE(backend->IsPlaying(2));

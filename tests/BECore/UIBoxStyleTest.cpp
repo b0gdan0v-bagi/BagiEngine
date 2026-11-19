@@ -35,8 +35,9 @@ namespace BECore::Tests {
             bool hadErrors = false;
             Vector<DeserializeError> errors;
 
+            /// The element, or a failure of the case and a blank element when the load made none
             [[nodiscard]] UIElement& Get() const {
-                return *canvas->_elements[0];
+                return Require(At(canvas->_elements, 0));
             }
         };
 
@@ -255,7 +256,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(Draw(*element, renderer).empty());
     }
 
-    TEST(UIBoxStyleTest, TheScratchVectorsAreReusedAndTheCallsDoNotGrow) {
+    TEST(UIBoxStyleTest, ASecondDrawStartsFromEmptyLists) {
         auto element = MakeElement();
         element->box = EveryField();
         element->box.shadow.color.a = 200;

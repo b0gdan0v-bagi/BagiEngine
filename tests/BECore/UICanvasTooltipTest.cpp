@@ -201,10 +201,6 @@ namespace BECore::Tests {
         }
 
         UIElement& Get(const char* name) const {
-            return GetElement(name);
-        }
-
-        UIElement& GetElement(const char* name) const {
             UIElement* element = _hud->GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
             return Require(element);
@@ -239,7 +235,7 @@ namespace BECore::Tests {
 
         /// The pointer comes to a button and rests there until its tooltip is due; the last frame is the first one that shows it
         void HoverUntilShown(const char* name) {
-            const Rect at = CenterOf(GetElement(name).rect);
+            const Rect at = CenterOf(Get(name).rect);
             Motion(at.x, at.y);
             Wait(UITooltip::kHoverDelay);
         }
@@ -593,7 +589,7 @@ namespace BECore::Tests {
     // ---- a composed element: the text of its UITooltipComponent --------------------------------------------------------------------
 
     TEST_F(UICanvasTooltipTest, AComposedElementShowsTheTooltipOfItsComponentAfterTheDelay) {
-        const Rect comp = GetElement("Comp").rect;
+        const Rect comp = Get("Comp").rect;
         const Rect at = CenterOf(comp);
         Motion(at.x, at.y);
         Wait(UITooltip::kHoverDelay - kStep);
@@ -639,7 +635,7 @@ namespace BECore::Tests {
 
     TEST_F(UICanvasTooltipTest, AFingerHeldOnAComposedElementShowsItsTooltipAndTheReleaseIsNoClick) {
         ActionLog actions;
-        const Rect at = CenterOf(GetElement("Comp").rect);
+        const Rect at = CenterOf(Get("Comp").rect);
         Motion(at.x, at.y, true);
         Press(at.x, at.y, true);
         Wait(UITooltip::kLongPress);
@@ -656,7 +652,7 @@ namespace BECore::Tests {
         HoverUntilShown("Comp");
         ASSERT_TRUE(Plate().has_value());
 
-        Require(GetElement("Comp").GetComponent<UITooltipComponent>()).text.clear();
+        Require(Get("Comp").GetComponent<UITooltipComponent>()).text.clear();
         Draw();
         EXPECT_FALSE(Plate());
     }

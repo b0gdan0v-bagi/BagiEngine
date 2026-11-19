@@ -2,7 +2,7 @@
 
 #include <BECore/Control/Json.h>
 #include <BECore/Format/Format.h>
-#include <vector>
+#include <algorithm>
 
 namespace BECore::Tests {
 
