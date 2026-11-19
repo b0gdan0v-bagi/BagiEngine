@@ -2777,7 +2777,8 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, ADescendantSelectorOverADeepChainCostsTheChainNotTheNumberOfWaysThroughIt) {
-        // `span` is never an ancestor, so every way down the chain of 60 divs fails at the end: without memory that is the number of ways to choose 14 of 60
+        // `span` is never an ancestor, so every way down the chain of 60 divs fails at the end: without memory that is the number of ways to choose 14 of 60,
+        // and the case never ends (the ctest timeout fails it); what it costs with the memory is the benchmark `ui-web-limits`
         const String selector = "span " + Repeat("div ", 14) + "div";
         const auto compiled = Compile(Repeat("<div>", 60) + Repeat("</div>", 60), selector + " { width: 1px; }");
         EXPECT_FALSE(compiled->report.HasIssues());
@@ -2816,7 +2817,7 @@ button:checked { background: var(--panel); }
         std::printf("UIWebLimits total_ms=%.1f\n", watch.Seconds() * 1000.0);
     }
 
-    TEST_F(UIWebTest, ThousandsOfVariantElementsWithoutAnIdGetNamesInLinearTime) {
+    TEST_F(UIWebTest, ThousandsOfVariantElementsWithoutAnIdGetNamesOfTheirOwn) {
         const auto compiled = Compile("<div id=\"div-2\"></div>" + Repeat("<div class=\"x\"></div>", 2000), "@media (min-width: 1px) { .x { width: 5px; } }");
         Set<String> names;
         for (const pugi::xpath_node node : compiled->document.select_nodes("//element")) {
