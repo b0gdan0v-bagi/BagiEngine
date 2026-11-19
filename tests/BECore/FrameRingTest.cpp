@@ -2,6 +2,7 @@
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/Ring/FrameRingBackend.h>
 #include <BECore/Profiler/ScopedTrace.h>
+#include <Common/ProfilerTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <chrono>
@@ -427,28 +428,9 @@ namespace BECore::Tests {
         constexpr ProfileSite kSwitchedSite{"Spans the switch", "Test", "FrameRingTest.cpp", 12, 0};
         constexpr ProfileSite kPrimaryOnlySite{"Primary only", "Test", "FrameRingTest.cpp", 13, 0};
 
-        /// Leaves the process with no backend and the ring off, whatever the test did. It stops the
-        /// primary backend, so declare it after every backend the test installs (locals die in reverse)
-        class ProfilerStateGuard {
-        public:
-            ProfilerStateGuard() = default;
-            ~ProfilerStateGuard() {
-                Profiler::SetRingEnabled(false);
-                Profiler::SetBackend(nullptr);
-            }
-            ProfilerStateGuard(const ProfilerStateGuard&) = delete;
-            ProfilerStateGuard& operator=(const ProfilerStateGuard&) = delete;
-        };
-
         /// The zones of @p site in the process's ring (all threads)
         size_t CountInRing(const ProfileSite& site) {
-            size_t count = 0;
-            for (const RingThread& thread : Profiler::GetFrameRing().Snapshot().threads) {
-                for (const ZoneRecord& zone : thread.zones) {
-                    count += zone.site == &site ? 1 : 0;
-                }
-            }
-            return count;
+            return CountRingZones(Profiler::GetFrameRing(), [&site](const RingThread&, const ZoneRecord& zone) { return zone.site == &site; });
         }
 
         size_t CountText(const String& text, const char* needle) {

@@ -2,9 +2,20 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/Resource/ResourceManager.h>
+#include <BECore/Text/Font.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 
 namespace BECore::Tests {
+
+    /// The regular face that ships with the engine
+    inline constexpr const char* kDefaultFontPath = "assets/fonts/PT_Sans-Web-Regular.ttf";
+
+    /// The font at @p path loaded through the resource manager, as a game loads it; null when it does not load
+    inline IntrusivePtr<Font> LoadTestFont(const char* path = kDefaultFontPath) {
+        auto handle = CoreManager::GetResourceManager().Load<Font>(path);
+        return IntrusivePtr<Font>(handle ? &*handle : nullptr);
+    }
 
     /// A font table for the tests of the face choice: the family "Test" has a regular and a bold face. Both are the PT Sans Regular that ships with the
     /// engine, under two spellings of its path (the bold file is another asset), so a test tells which face was asked for by the path it got

@@ -2,15 +2,12 @@
 // every platform. The everyday run only replays; the mutations need BAGI_FUZZ_ITERATIONS, which the ctest entry BagiFuzzMutations (label
 // extended) sets. The long runs are libFuzzer (tests/Fuzz/CLAUDE.md).
 
+#include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Fuzz/FuzzChecks.h>
 #include <Fuzz/FuzzMutator.h>
 #include <Fuzz/FuzzSeeds.h>
 #include <Fuzz/FuzzTargets.h>
-
-// Defined by the generated source of BagiEngineTestSupport (be_link_content_roots): no ordinary source names the checkout path
-namespace BagiContentRoots {
-    extern const char* const kEngine;
-}  // namespace BagiContentRoots
 
 namespace BECore::Tests {
 
@@ -22,9 +19,6 @@ namespace BECore::Tests {
 
         /// The seed of the generator; mixed with the name of the target so the targets do not mutate the same way
         constexpr uint64_t kReplaySeed = 0x42414749465A5A31ull;
-
-        constexpr uint64_t kFnvOffset = 0xCBF29CE484222325ull;
-        constexpr uint64_t kFnvPrime = 0x100000001B3ull;
 
         /// Most mutations stacked on one seed
         constexpr uint32_t kMaxStackedMutations = 3;
@@ -56,11 +50,9 @@ namespace BECore::Tests {
         }
 
         uint64_t HashName(StringView name) {
-            uint64_t value = kFnvOffset;
-            for (const char symbol : name) {
-                value = (value ^ static_cast<uint8_t>(symbol)) * kFnvPrime;
-            }
-            return value;
+            Fuzz::FuzzDigest digest;
+            digest.AddBytes(name.data(), name.size());
+            return digest.Value();
         }
 
         /// The files of a corpus folder in the order of their names (the order of a directory listing is not defined)

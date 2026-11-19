@@ -1,4 +1,5 @@
 #include <Common/Printers.h>
+#include <Fuzz/FuzzChecks.h>
 #include <Fuzz/FuzzMutator.h>
 
 namespace BECore::Tests {
@@ -18,9 +19,6 @@ namespace BECore::Tests {
         /// A byte that none of the "interesting" values equals, so a SetByte / SetWord always changes the input
         constexpr uint8_t kPlainByte = 0x55;
 
-        constexpr uint64_t kFnvOffset = 0xCBF29CE484222325ull;
-        constexpr uint64_t kFnvPrime = 0x100000001B3ull;
-
         FuzzBytes PlainInput(size_t size = kInputSize) {
             return FuzzBytes(size, kPlainByte);
         }
@@ -31,13 +29,6 @@ namespace BECore::Tests {
                 seed.push_back(value);
             }
             return seed;
-        }
-
-        uint64_t Hash(const FuzzBytes& bytes, uint64_t state = kFnvOffset) {
-            for (const uint8_t byte : bytes) {
-                state = (state ^ byte) * kFnvPrime;
-            }
-            return state;
         }
 
         FuzzMutation KindAt(size_t index) {
@@ -81,12 +72,12 @@ namespace BECore::Tests {
         const auto run = [&] {
             FuzzRandom random(2024);
             FuzzBytes bytes = PlainInput();
-            uint64_t hash = kFnvOffset;
+            Fuzz::FuzzDigest digest;
             for (int i = 0; i < 200; ++i) {
                 Mutate(bytes, random, others);
-                hash = Hash(bytes, hash);
+                digest.AddBytes(bytes.data(), bytes.size());
             }
-            return hash;
+            return digest.Value();
         };
 
         EXPECT_EQ(run(), run());

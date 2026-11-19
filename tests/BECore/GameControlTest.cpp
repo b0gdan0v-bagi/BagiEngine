@@ -141,23 +141,7 @@ namespace BECore::Tests {
 
             /// Posts one request, runs the queue and returns the response ({} when nothing was answered)
             Json Call(StringView method, const Json& params = Json()) {
-                ControlService& service = CoreManager::GetControlService();
-                Json request = Json::object();
-                request["id"] = ++_lastId;
-                request["method"] = ToStdString(method);
-                if (!params.is_null()) {
-                    request["params"] = params;
-                }
-
-                Json response;
-                service.Post(DumpJson(request), [&response](String text) {
-                    auto parsed = ParseJson(text);
-                    if (parsed) {
-                        response = std::move(*parsed);
-                    }
-                });
-                service.Drain();
-                return response;
+                return CallControl(CoreManager::GetControlService(), ++_lastId, method, params);
             }
 
             static const Json* Result(const Json& response) {
@@ -168,18 +152,11 @@ namespace BECore::Tests {
                 return GetJsonBool(response, "ok").value_or(false);
             }
 
-            static FakeControllableGame* Controllable() {
+            /// The registered game of type @p T; nullptr when there is none
+            template <typename T>
+            static T* Find() {
                 for (const IntrusivePtr<IGame>& game : GameManager::GetInstance().GetAll()) {
-                    if (auto* fake = game->Cast<FakeControllableGame>()) {
-                        return fake;
-                    }
-                }
-                return nullptr;
-            }
-
-            static FakePlainGame* Plain() {
-                for (const IntrusivePtr<IGame>& game : GameManager::GetInstance().GetAll()) {
-                    if (auto* fake = game->Cast<FakePlainGame>()) {
+                    if (auto* fake = game->Cast<T>()) {
                         return fake;
                     }
                 }
@@ -202,9 +179,9 @@ namespace BECore::Tests {
 
         const TypedRef ref = roots.Resolve(kGameRootName);
         ASSERT_TRUE(ref);
-        ASSERT_NE(Controllable(), nullptr);
+        ASSERT_NE(Find<FakeControllableGame>(), nullptr);
         EXPECT_EQ(ref.type->Name(), "FakeControllableGame");
-        EXPECT_EQ(ref.Address(), static_cast<void*>(Controllable()));
+        EXPECT_EQ(ref.Address(), static_cast<void*>(Find<FakeControllableGame>()));
     }
 
     TEST_F(GameControlTest, TheGameRootFollowsTheActiveGame) {
@@ -316,8 +293,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(GameControlTest, GetStateWrapsTheStateOfTheGame) {
-        Controllable()->counter = 5;
-        Controllable()->version = 9;
+        Find<FakeControllableGame>()->counter = 5;
+        Find<FakeControllableGame>()->version = 9;
 
         const Json response = Call("get_state");
 
@@ -352,7 +329,7 @@ namespace BECore::Tests {
         const Json response = Call("perform_action", action);
 
         ASSERT_TRUE(Succeeded(response));
-        EXPECT_EQ(Controllable()->counter, 1);
+        EXPECT_EQ(Find<FakeControllableGame>()->counter, 1);
         const Json* result = Result(response);
         ASSERT_NE(result, nullptr);
         EXPECT_EQ(GetJsonInt(*result, "version"), versionBefore + 1);
@@ -371,7 +348,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(Succeeded(illegalResponse));
         EXPECT_EQ(ErrorCode(illegalResponse), "illegal_action");
         EXPECT_EQ(ErrorCode(emptyResponse), "invalid_params");
-        EXPECT_EQ(Controllable()->counter, 0);
+        EXPECT_EQ(Find<FakeControllableGame>()->counter, 0);
     }
 
     TEST_F(GameControlTest, PipelinedActionsRunInOrderBeforeTheStateIsRead) {
@@ -406,27 +383,27 @@ namespace BECore::Tests {
     }
 
     TEST_F(GameControlTest, ResetPassesTheOptionsToTheGame) {
-        Controllable()->counter = 8;
+        Find<FakeControllableGame>()->counter = 8;
         Json options = Json::object();
         options["start"] = 4;
 
         const Json response = Call("reset", options);
 
         ASSERT_TRUE(Succeeded(response));
-        EXPECT_EQ(Controllable()->counter, 4);
-        EXPECT_EQ(Controllable()->plainResetCalls, 0);  // the controllable path, not IGame::Reset()
+        EXPECT_EQ(Find<FakeControllableGame>()->counter, 4);
+        EXPECT_EQ(Find<FakeControllableGame>()->plainResetCalls, 0);  // the controllable path, not IGame::Reset()
         EXPECT_TRUE(FindJsonMember(Require(Result(response)), "version") != nullptr);
     }
 
     TEST_F(GameControlTest, ResetRefusesBadOptionsAndChangesNothing) {
-        Controllable()->counter = 8;
+        Find<FakeControllableGame>()->counter = 8;
         Json options = Json::object();
         options["start"] = "four";
 
         const Json response = Call("reset", options);
 
         EXPECT_EQ(ErrorCode(response), "invalid_params");
-        EXPECT_EQ(Controllable()->counter, 8);
+        EXPECT_EQ(Find<FakeControllableGame>()->counter, 8);
     }
 
     TEST_F(GameControlTest, ResetOfAGameThatCannotBeControlledCallsIGameReset) {
@@ -435,7 +412,7 @@ namespace BECore::Tests {
         const Json response = Call("reset");
 
         ASSERT_TRUE(Succeeded(response));
-        EXPECT_EQ(Plain()->resetCalls, 1);
+        EXPECT_EQ(Find<FakePlainGame>()->resetCalls, 1);
         EXPECT_EQ(GetJsonString(Require(Result(response)), "game").value_or("").c_str(), String("FakePlain"));
         EXPECT_EQ(FindJsonMember(Require(Result(response)), "version"), nullptr);  // it has no version to report
     }
@@ -447,9 +424,9 @@ namespace BECore::Tests {
         const Json response = Call("set_state", state);
 
         ASSERT_TRUE(Succeeded(response));
-        EXPECT_EQ(Controllable()->counter, 41);
+        EXPECT_EQ(Find<FakeControllableGame>()->counter, 41);
         EXPECT_EQ(ErrorCode(Call("set_state")), "invalid_params");
-        EXPECT_EQ(Controllable()->counter, 41);
+        EXPECT_EQ(Find<FakeControllableGame>()->counter, 41);
     }
 
     TEST_F(GameControlTest, GameMethodsOfAGameThatCannotBeControlledSayNotControllable) {
@@ -541,7 +518,7 @@ namespace BECore::Tests {
 
     TEST_F(GameControlTest, TheFirstLookOnlyRecordsTheVersion) {
         ControlService& service = CoreManager::GetControlService();
-        Controllable()->version = 7;  // moved before anybody looked
+        Find<FakeControllableGame>()->version = 7;  // moved before anybody looked
         EventCollector collector;
 
         service.EndFrame();
@@ -554,7 +531,7 @@ namespace BECore::Tests {
         EventCollector collector;
         service.EndFrame();
 
-        Controllable()->version += 5;  // a change of any size is one event
+        Find<FakeControllableGame>()->version += 5;  // a change of any size is one event
         service.EndFrame();
         service.EndFrame();
 
@@ -568,8 +545,8 @@ namespace BECore::Tests {
         EventCollector collector;
         service.EndFrame();
 
-        Controllable()->counter = 41;
-        ++Controllable()->version;
+        Find<FakeControllableGame>()->counter = 41;
+        ++Find<FakeControllableGame>()->version;
         service.EndFrame();
 
         ASSERT_EQ(collector.events.size(), 1u);
@@ -617,7 +594,7 @@ namespace BECore::Tests {
         EventCollector collector;
         service.EndFrame();
 
-        ++Controllable()->version;
+        ++Find<FakeControllableGame>()->version;
         service.EndFrame();
 
         EXPECT_EQ(collector.events.size(), 1u);

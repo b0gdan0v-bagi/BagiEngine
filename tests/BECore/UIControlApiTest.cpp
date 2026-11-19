@@ -670,19 +670,7 @@ namespace BECore::Tests {
 
         /// Sends a request, runs the frame stage that answers it and returns the whole response
         Json Call(StringView method, const Json& params = Json()) {
-            Json request = Json::object();
-            request["id"] = ++_nextId;
-            request["method"] = ToStdString(method);
-            if (!params.is_null()) {
-                request["params"] = params;
-            }
-            Json response;
-            _service.Post(DumpJson(request), [&response](String text) {
-                auto parsed = ParseJson(text);
-                response = parsed ? std::move(*parsed) : Json();
-            });
-            _service.Drain();
-            return response;
+            return CallControl(_service, ++_nextId, method, params);
         }
 
         static Json Click(const char* name) {

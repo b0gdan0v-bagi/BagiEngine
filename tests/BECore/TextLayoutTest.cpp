@@ -5,13 +5,13 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
+#include <Common/TextTestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
 
     namespace {
 
-        constexpr const char* kDefaultFontPath = "assets/fonts/PT_Sans-Web-Regular.ttf";
         constexpr float kSize = 20.0f;
         constexpr float kEllipsisCodePoint = 0x2026;
 
@@ -46,8 +46,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            auto handle = CoreManager::GetResourceManager().Load<Font>(kDefaultFontPath);
-            font = IntrusivePtr<Font>(handle ? &*handle : nullptr);
+            font = LoadTestFont();
             ASSERT_TRUE(font);
             ASSERT_EQ(font->GetState(), ResourceState::Loaded);
             options.fontSize = kSize;
