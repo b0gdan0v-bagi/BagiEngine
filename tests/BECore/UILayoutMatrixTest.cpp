@@ -2,6 +2,7 @@
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UILayoutHud.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/UILayoutMatrix.h>
 #include <gtest/gtest.h>
 
@@ -216,7 +217,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
         EXPECT_EQ(canvas.regions.Size(), 1u);  // the canvas gets its own set back
         ASSERT_NE(canvas.regions.Find("kept"_intern), nullptr);
-        EXPECT_FLOAT_EQ(canvas.regions.Find("kept"_intern)->h, 4.0f);
+        EXPECT_FLOAT_EQ(Require(canvas.regions.Find("kept"_intern)).h, 4.0f);
     }
 
     TEST(UILayoutMatrixTest, ARegionNameThePublisherDoesNotSetFailsEveryCaseWithMissingRegion) {

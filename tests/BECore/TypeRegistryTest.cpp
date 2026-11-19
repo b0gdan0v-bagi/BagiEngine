@@ -13,6 +13,7 @@
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Generated/TypeRegistryTest.gen.hpp>
 #include <gtest/gtest.h>
 
@@ -125,7 +126,7 @@ namespace BECore::Tests {
         const size_t before = registry.All().size();
         EXPECT_FALSE(registry.Register(clash));
         EXPECT_EQ(registry.All().size(), before);
-        EXPECT_EQ(registry.Find("RegInner")->Name(), "RegInner");
+        EXPECT_EQ(Require(registry.Find("RegInner")).Name(), "RegInner");
         EXPECT_EQ(registry.Find("OtherName"), nullptr);
         EXPECT_EQ(registry.RefusedCount(), 1U);
     }
@@ -571,7 +572,7 @@ namespace BECore::Tests {
         const TypeRegistry& registry = TypeRegistry::GetInstance();
         EXPECT_FALSE(registry.Create("IComponent"));
         EXPECT_FALSE(registry.Create("NoSuchType"));
-        EXPECT_FALSE(registry.Create(*registry.Find("RegInner")));
+        EXPECT_FALSE(registry.Create(Require(registry.Find("RegInner"))));
         EXPECT_FALSE(PoolString::Find(StringView{"NoSuchType"}).has_value());
     }
 

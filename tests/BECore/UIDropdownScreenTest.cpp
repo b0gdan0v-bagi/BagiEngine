@@ -9,6 +9,7 @@
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIVars.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TestText.h>
 #include <Common/UIScreenTestSupport.h>
 #include <Events/InputEvents.h>
@@ -304,15 +305,15 @@ namespace BECore::Tests {
         ForEachLanguage([&](PoolString language) {
             size_t longest = 0;
             for (const char* key : kOptionKeys) {
-                longest = std::max(longest, Characters(*strings.Find(key)));
+                longest = std::max(longest, Characters(Require(strings.Find(key))));
             }
-            EXPECT_EQ(longest, Characters(*strings.Find("level.master"))) << language.ToStringView().data();
+            EXPECT_EQ(longest, Characters(Require(strings.Find("level.master")))) << language.ToStringView().data();
         });
         for (const char* key : kOptionKeys) {
             ASSERT_TRUE(strings.SetLanguage("en"_intern));
-            english += Characters(*strings.Find(key));
+            english += Characters(Require(strings.Find(key)));
             ASSERT_TRUE(strings.SetLanguage("de"_intern));
-            german += Characters(*strings.Find(key));
+            german += Characters(Require(strings.Find(key)));
         }
         strings.SetLanguage("en"_intern);
         EXPECT_GE(static_cast<float>(german), 1.4f * static_cast<float>(english));
@@ -486,7 +487,8 @@ namespace BECore::Tests {
         Draw();
         EXPECT_TRUE(El("LevelEasy").rect.IsEmpty()) << "closed again";
         EXPECT_TRUE(El("LevelEasyCaption").rect.IsEmpty());
-        ForEachLanguage([&](PoolString language) { EXPECT_EQ(ShownText(Get<UIDropdown>("Level")), String(*CoreManager::GetUIStrings().Find("level.easy"))) << language.ToStringView().data(); });
+        ForEachLanguage(
+            [&](PoolString language) { EXPECT_EQ(ShownText(Get<UIDropdown>("Level")), String(Require(CoreManager::GetUIStrings().Find("level.easy")))) << language.ToStringView().data(); });
     }
 
     TEST_F(UIDropdownScreenTest, APressOutsideAListWithAnIconOptionClosesItAndNothingElseHappens) {

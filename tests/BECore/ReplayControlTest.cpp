@@ -7,6 +7,7 @@
 #include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Events/ApplicationEvents.h>
@@ -128,7 +129,7 @@ namespace BECore::Tests {
         const Json stopped = Call("record_stop", Json::object());
         ASSERT_TRUE(IsOk(stopped));
         ASSERT_NE(FindResult(stopped), nullptr);
-        EXPECT_EQ(GetJsonInt(*FindResult(stopped), "entries").value_or(-1), 4);
+        EXPECT_EQ(GetJsonInt(Require(FindResult(stopped)), "entries").value_or(-1), 4);
 
         const ParsedReplay replay = ParseRecording();
         ASSERT_EQ(replay.entries.size(), 4u);

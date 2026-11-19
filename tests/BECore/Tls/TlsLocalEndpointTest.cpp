@@ -1,4 +1,5 @@
 #include <BECore/WebSocketTestClient.h>
+#include <Common/Require.h>
 #include <Common/TestText.h>
 #include <RemoteControl/Tls/TlsStream.h>
 #include <RemoteControl/WebSocketClient.h>
@@ -112,7 +113,7 @@ namespace BECore::Tests {
 
         client.Close(1000, "done");
         ASSERT_TRUE(WaitFor(WebSocketClientEventKind::Closed));
-        EXPECT_EQ(Find(WebSocketClientEventKind::Closed)->closeCode, 1000u);
+        EXPECT_EQ(Require(Find(WebSocketClientEventKind::Closed)).closeCode, 1000u);
     }
 
     TEST_F(TlsLocalEndpointTest, ACertificateOfAnUnknownCaIsRefusedWithoutTheAnchor) {

@@ -13,6 +13,7 @@
 #include <BECore/UI/UIVars.h>
 #include <BECore/UIScreenFixtures.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TestText.h>
 #include <Common/UIScreenTestSupport.h>
 #include <Events/InputEvents.h>
@@ -246,9 +247,9 @@ namespace BECore::Tests {
         size_t german = 0;
         for (const char* key : kLanguageKeys) {
             ASSERT_TRUE(strings.SetLanguage("en"_intern));
-            english += Characters(*strings.Find(key));
+            english += Characters(Require(strings.Find(key)));
             ASSERT_TRUE(strings.SetLanguage("de"_intern));
-            german += Characters(*strings.Find(key));
+            german += Characters(Require(strings.Find(key)));
         }
         strings.SetLanguage("en"_intern);
         EXPECT_GE(static_cast<float>(german), kLongerShare * static_cast<float>(english)) << german << " characters against " << english;
@@ -503,7 +504,7 @@ namespace BECore::Tests {
             Draw();
             EXPECT_EQ(CoreManager::GetUIStrings().GetLanguage(), PoolString::Intern(language.id));
             EXPECT_EQ(ShownText(El("Title")), language.title) << "the title follows the language at the next draw";
-            EXPECT_EQ(ShownText(*_hud->GetRoot().FindByName("Open"_intern)), *CoreManager::GetUIStrings().Find("settings.open")) << "the button of the other canvas follows too";
+            EXPECT_EQ(ShownText(Require(_hud->GetRoot().FindByName("Open"_intern))), Require(CoreManager::GetUIStrings().Find("settings.open"))) << "the button of the other canvas follows too";
             EXPECT_TRUE(El(language.segment).selected);
             EXPECT_EQ(Get<UISegmented>("Language").GetSelectedValue(), language.id);
             EXPECT_EQ(ShownText(El("LanguageDe")), "Deutsch");

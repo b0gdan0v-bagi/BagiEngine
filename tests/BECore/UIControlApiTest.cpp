@@ -2197,8 +2197,8 @@ namespace BECore::Tests {
         EXPECT_FALSE(BoolMember(*mix, "disabled"));
         EXPECT_EQ(StringMember(Require(FindElement(*mix, "MixCaption")), "text"), "Mix Ann");
         EXPECT_EQ(StringMember(Require(FindElement(*mix, "MixIcon")), "icon"), "MixSprite");
-        EXPECT_FALSE(FindElement(*mix, "MixCaption")->contains("icon"));
-        EXPECT_FALSE(FindElement(*mix, "MixIcon")->contains("text"));
+        EXPECT_FALSE(Require(FindElement(*mix, "MixCaption")).contains("icon"));
+        EXPECT_FALSE(Require(FindElement(*mix, "MixIcon")).contains("text"));
     }
 
     TEST_F(UIControlApiTest, AClickerWithNothingBelowItAnswersNeitherTextNorIcon) {

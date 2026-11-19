@@ -3,6 +3,7 @@
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/UITableTestSupport.h>
 #include <gtest/gtest.h>
 
@@ -32,7 +33,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(strings.Set("en"_intern, "menu.start", "Start"));
 
         ASSERT_TRUE(strings.Find("menu.start").has_value());
-        EXPECT_EQ(*strings.Find("menu.start"), "Start");
+        EXPECT_EQ(Require(strings.Find("menu.start")), "Start");
         EXPECT_FALSE(strings.Find("menu.quit").has_value());
     }
 
@@ -52,7 +53,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(strings.SetLanguage("ru"_intern));
 
         EXPECT_EQ(strings.GetLanguage(), "ru"_intern);
-        EXPECT_EQ(*strings.Find("menu.start"), "Начать");
+        EXPECT_EQ(Require(strings.Find("menu.start")), "Начать");
     }
 
     TEST(UIStringsTest, AKeyMissingInTheCurrentLanguageFallsBackToTheDefaultOne) {
@@ -60,7 +61,7 @@ namespace BECore::Tests {
         strings.SetLanguage("ru"_intern);
 
         ASSERT_TRUE(strings.Find("menu.quit").has_value());
-        EXPECT_EQ(*strings.Find("menu.quit"), "Quit");
+        EXPECT_EQ(Require(strings.Find("menu.quit")), "Quit");
     }
 
     TEST(UIStringsTest, AKeyMissingEverywhereShowsTheKeyAndIsRecordedOnce) {
@@ -191,7 +192,7 @@ namespace BECore::Tests {
 
         strings.SetDefaultLanguage("ru"_intern);
         EXPECT_EQ(strings.GetLanguage(), "ru"_intern);
-        EXPECT_EQ(*strings.Find("menu.start"), "Начать");
+        EXPECT_EQ(Require(strings.Find("menu.start")), "Начать");
 
         strings.SetLanguage("en"_intern);
         strings.SetDefaultLanguage("ru"_intern);
@@ -306,10 +307,10 @@ namespace BECore::Tests {
         EXPECT_EQ(strings.GetDefaultLanguage(), "ru"_intern);
         EXPECT_EQ(strings.GetLanguage(), "ru"_intern);
         ASSERT_EQ(strings.GetLanguages().size(), 2u);
-        EXPECT_EQ(*strings.Find("menu.start"), "Начать");
+        EXPECT_EQ(Require(strings.Find("menu.start")), "Начать");
         EXPECT_FALSE(strings.Find("menu.quit").has_value());  // only "en" has it, and "en" is neither the current nor the default language
         EXPECT_TRUE(strings.SetLanguage("en"_intern));
-        EXPECT_EQ(*strings.Find("menu.start"), "Start");
+        EXPECT_EQ(Require(strings.Find("menu.start")), "Start");
     }
 
     TEST(UIStringsTest, LoadFromXmlWithoutADefaultTakesTheFirstLanguage) {
@@ -319,7 +320,7 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(problems.empty());
         EXPECT_EQ(strings.GetDefaultLanguage(), "de"_intern);
-        EXPECT_EQ(*strings.Find("k"), "Ja");
+        EXPECT_EQ(Require(strings.Find("k")), "Ja");
     }
 
     TEST(UIStringsTest, LoadFromXmlReportsEveryKindOfProblemAndKeepsTheRest) {
@@ -353,8 +354,8 @@ namespace BECore::Tests {
         EXPECT_TRUE(Mentions(problems, "unknown element: region"));
         EXPECT_TRUE(Mentions(problems, "default language 'fr'"));
 
-        EXPECT_EQ(*strings.Find("ok"), "fine");
-        EXPECT_EQ(*strings.Find("dup"), "first");
+        EXPECT_EQ(Require(strings.Find("ok")), "fine");
+        EXPECT_EQ(Require(strings.Find("dup")), "first");
         EXPECT_FALSE(strings.Find("orphan").has_value());
         EXPECT_FALSE(strings.Find("k").has_value());
         EXPECT_EQ(strings.GetLanguages().size(), 1u);
@@ -376,15 +377,15 @@ namespace BECore::Tests {
         const auto problems = LoadTableXml(strings, R"(<UIStrings><language id="en"><string key="menu.start" text="Go"/><string key="extra" text="More"/></language></UIStrings>)");
 
         EXPECT_EQ(problems.size(), 1u);  // "menu.start" is set twice: the table's value stays
-        EXPECT_EQ(*strings.Find("menu.start"), "Start");
-        EXPECT_EQ(*strings.Find("extra"), "More");
+        EXPECT_EQ(Require(strings.Find("menu.start")), "Start");
+        EXPECT_EQ(Require(strings.Find("extra")), "More");
     }
 
     TEST(UIStringsTest, TheXmlTextMayHoldVariablesEscapesAndLineBreaks) {
         UIStrings strings;
         LoadTableXml(strings, R"(<UIStrings><language id="en"><string key="k" text="{score} &amp; {{x}}&#10;next"/></language></UIStrings>)");
 
-        EXPECT_EQ(*strings.Find("k"), "{score} & {{x}}\nnext");
+        EXPECT_EQ(Require(strings.Find("k")), "{score} & {{x}}\nnext");
     }
 
     // ---- the table of the core services ----------------------------------------------------------------------------------
@@ -413,7 +414,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(loaded.GetLanguages().empty());
 
         strings.Set("en"_intern, "k", "v");
-        EXPECT_EQ(*CoreManager::GetUIStrings().Find("k"), "v");
+        EXPECT_EQ(Require(CoreManager::GetUIStrings().Find("k")), "v");
     }
 
 }  // namespace BECore::Tests

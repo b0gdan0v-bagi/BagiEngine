@@ -257,7 +257,7 @@ namespace BECore::Tests {
         ASSERT_NE(derived, nullptr);
 
         EXPECT_TRUE(registry.IsDerivedFrom(*derived, *base));
-        EXPECT_TRUE(registry.IsDerivedFrom(*base, *registry.Find("IComponent")));
+        EXPECT_TRUE(registry.IsDerivedFrom(*base, Require(registry.Find("IComponent"))));
     }
 
     TEST_F(PointerTargetComponentTest, APressCarriesTheSceneAndOutputPositionTheButtonTheClicksAndThePointer) {

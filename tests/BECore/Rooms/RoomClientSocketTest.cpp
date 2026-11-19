@@ -5,6 +5,7 @@
 #include <BECore/Rooms/TestRandom.h>
 #include <BECore/WebSocketTestClient.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/SharedPtr.h>
 #include <RemoteControl/Tls/TlsStream.h>
 #include <RemoteControl/WebSocketClient.h>
@@ -292,7 +293,7 @@ namespace BECore::Tests {
         cut.tap.Sever();
         ASSERT_TRUE(WaitFor([&] { return cut.Count(Kind::Resumed) == 1; }, kShortLimit)) << "the client did not come back";
         EXPECT_EQ(cut.Count(Kind::ConnectionLost), 1u);
-        EXPECT_TRUE(cut.Find(Kind::ConnectionLost)->willRetry);
+        EXPECT_TRUE(Require(cut.Find(Kind::ConnectionLost)).willRetry);
         EXPECT_EQ(cut.client->GetSeat(), seat);
         EXPECT_EQ(cut.client->GetSession().token, token);
         EXPECT_EQ(cut.tap.connections, 2u);
@@ -380,10 +381,10 @@ namespace BECore::Tests {
         server->Stop();
         ASSERT_TRUE(WaitFor([&] { return host.client->GetState() == RoomClientState::Disconnected; }, kShortLimit)) << "the client never gave up";
         EXPECT_EQ(host.Count(Kind::ConnectionLost), 1u);
-        EXPECT_TRUE(host.Find(Kind::ConnectionLost)->willRetry);
+        EXPECT_TRUE(Require(host.Find(Kind::ConnectionLost)).willRetry);
         EXPECT_EQ(host.Count(Kind::Resumed), 0u);
         ASSERT_EQ(host.Count(Kind::Closed), 1u);
-        EXPECT_EQ(host.Find(Kind::Closed)->code, RoomClientCloseReasons::kGaveUp);
+        EXPECT_EQ(Require(host.Find(Kind::Closed)).code, RoomClientCloseReasons::kGaveUp);
         EXPECT_GE(host.tap.connections, 3u) << "it should have tried again, not only once";
         EXPECT_FALSE(host.client->GetSession().IsValid());
     }
@@ -414,8 +415,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(player.client->Host(Format("wss://127.0.0.1:{}", port), "cards", "P0").has_value());
         ASSERT_TRUE(WaitFor([&] { return player.client->GetState() == RoomClientState::Disconnected; }, kShortLimit)) << "the TLS handshake never ended";
         ASSERT_EQ(player.Count(Kind::Closed), 1u);
-        EXPECT_EQ(player.Find(Kind::Closed)->closeCode, kRoomTransportAbnormalClosure);
-        EXPECT_NE(player.Find(Kind::Closed)->message.find("TLS"), String::npos) << player.Find(Kind::Closed)->message.c_str();
+        EXPECT_EQ(Require(player.Find(Kind::Closed)).closeCode, kRoomTransportAbnormalClosure);
+        EXPECT_NE(Require(player.Find(Kind::Closed)).message.find("TLS"), String::npos) << Require(player.Find(Kind::Closed)).message.c_str();
     }
 
     TEST_F(RoomClientSocketTest, AWrongPortGivesAClosedEventAndNoHang) {
@@ -430,8 +431,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(player.client->Join(deadUrl, "ABCDE", "P0").has_value());
         ASSERT_TRUE(WaitFor([&] { return player.client->GetState() == RoomClientState::Disconnected; }, kShortLimit)) << "the connect never ended";
         ASSERT_EQ(player.Count(Kind::Closed), 1u);
-        EXPECT_EQ(player.Find(Kind::Closed)->closeCode, kRoomTransportAbnormalClosure);
-        EXPECT_FALSE(player.Find(Kind::Closed)->message.empty());
+        EXPECT_EQ(Require(player.Find(Kind::Closed)).closeCode, kRoomTransportAbnormalClosure);
+        EXPECT_FALSE(Require(player.Find(Kind::Closed)).message.empty());
         // Without a room there is nothing to bring back
         std::this_thread::sleep_for(200ms);
         player.Pump();

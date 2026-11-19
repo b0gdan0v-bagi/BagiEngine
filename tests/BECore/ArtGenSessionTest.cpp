@@ -2,6 +2,7 @@
 #include <BECore/Control/Json.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
@@ -213,7 +214,7 @@ namespace BECore::Tests {
         const Json* run = FindJsonMember(state, "run");
         ASSERT_NE(run, nullptr);
         EXPECT_EQ(GetJsonString(*run, "state"), Optional<String>("Done"));
-        EXPECT_EQ(FindJsonMember(*run, "variants")->size(), 2u);
+        EXPECT_EQ(Require(FindJsonMember(*run, "variants")).size(), 2u);
     }
 
     TEST_F(ArtGenSessionTest, AFailureKeepsItsReason) {
@@ -517,8 +518,8 @@ namespace BECore::Tests {
         ASSERT_NE(sampler, nullptr);
         EXPECT_EQ(sampler->defaultValue, Json("euler"));
         EXPECT_EQ(sampler->choices, Json::array({"euler", "ddim"}));
-        EXPECT_EQ(basic->FindInput("steps")->defaultValue, Json(25));
-        EXPECT_EQ(session.FindWorkflow("broken")->error, "no inputs");
+        EXPECT_EQ(Require(basic->FindInput("steps")).defaultValue, Json(25));
+        EXPECT_EQ(Require(session.FindWorkflow("broken")).error, "no inputs");
 
         // The same lists again change nothing the panel draws
         const uint64_t version = session.Version();
@@ -606,9 +607,9 @@ namespace BECore::Tests {
         params["presets"][0]["kind"] = "audio";
         params["workflows"][0]["kind"] = "audio";
         Call("artgen_poll", params);
-        EXPECT_EQ(session.FindPreset("wood")->kind, "audio");
-        EXPECT_EQ(session.FindPreset("sprite")->kind, "image") << "image when the service says nothing";
-        EXPECT_EQ(session.FindWorkflow("sdxl_basic")->kind, "audio");
+        EXPECT_EQ(Require(session.FindPreset("wood")).kind, "audio");
+        EXPECT_EQ(Require(session.FindPreset("sprite")).kind, "image") << "image when the service says nothing";
+        EXPECT_EQ(Require(session.FindWorkflow("sdxl_basic")).kind, "audio");
 
         const uint32_t id = Require(session.Request("wood", "knock", 2, Optional<int64_t>(1)));
         Call("artgen_poll", params);
@@ -625,7 +626,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(session.GetRun().variants[0].IsAudio());
         EXPECT_FALSE(session.GetRun().variants[1].IsAudio());
         const Json state = Call("artgen_state");
-        EXPECT_EQ(GetJsonString((Require(FindJsonMember(*FindJsonMember(Result(state), "run"), "variants")))[0], "kind"), Optional<String>("audio"));
+        EXPECT_EQ(GetJsonString(Require(FindJsonMember(Require(FindJsonMember(Result(state), "run")), "variants"))[0], "kind"), Optional<String>("audio"));
 
         session.SetAcceptor(&FakeAcceptor);
         auto accepted = session.Accept(1, "knock", false);

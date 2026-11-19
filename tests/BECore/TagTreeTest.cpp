@@ -1,4 +1,5 @@
 #include <BECore/Rules/TagTree.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -123,11 +124,11 @@ namespace BECore::Tests {
 
     TEST(TagTreeTest, DepthAndName) {
         const TagTree tree = MakeBaked({"match.3.line", "special"});
-        EXPECT_EQ(tree.Depth(*tree.Find("match")), 1u);
-        EXPECT_EQ(tree.Depth(*tree.Find("match.3")), 2u);
-        EXPECT_EQ(tree.Depth(*tree.Find("match.3.line")), 3u);
-        EXPECT_EQ(tree.Name(*tree.Find("match.3")), "match.3");
-        EXPECT_EQ(tree.Name(*tree.Find("special")), "special");
+        EXPECT_EQ(tree.Depth(Require(tree.Find("match"))), 1u);
+        EXPECT_EQ(tree.Depth(Require(tree.Find("match.3"))), 2u);
+        EXPECT_EQ(tree.Depth(Require(tree.Find("match.3.line"))), 3u);
+        EXPECT_EQ(tree.Name(Require(tree.Find("match.3"))), "match.3");
+        EXPECT_EQ(tree.Name(Require(tree.Find("special"))), "special");
     }
 
     TEST(TagTreeTest, FindOfAnUnknownPathIsEmpty) {
@@ -239,15 +240,15 @@ namespace BECore::Tests {
 
     TEST(TagTreeTest, ParentOfARootIsNoTag) {
         const TagTree tree = MakeBaked({"a.x", "b", "a.y"});
-        EXPECT_EQ(tree.Parent(*tree.Find("a")), kNoTag);
-        EXPECT_EQ(tree.Parent(*tree.Find("b")), kNoTag);
-        EXPECT_EQ(tree.Parent(*tree.Find("a.x")), *tree.Find("a"));
-        EXPECT_EQ(tree.Parent(*tree.Find("a.y")), *tree.Find("a"));
+        EXPECT_EQ(tree.Parent(Require(tree.Find("a"))), kNoTag);
+        EXPECT_EQ(tree.Parent(Require(tree.Find("b"))), kNoTag);
+        EXPECT_EQ(tree.Parent(Require(tree.Find("a.x"))), Require(tree.Find("a")));
+        EXPECT_EQ(tree.Parent(Require(tree.Find("a.y"))), Require(tree.Find("a")));
     }
 
     TEST(TagTreeTest, TheParentChainOfADeepTagEndsAtNoTag) {
         const TagTree tree = MakeBaked({"a.b.c.d"});
-        TagId tag = *tree.Find("a.b.c.d");
+        TagId tag = Require(tree.Find("a.b.c.d"));
         size_t steps = 0;
         while (tree.Parent(tag) != kNoTag) {
             tag = tree.Parent(tag);
@@ -278,7 +279,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(tree.Add(TagOfDepth(kMaxTagDepth)).has_value());
         EXPECT_TRUE(tree.Add(String(kMaxTagNameLength, 'n')).has_value());
         tree.Bake();
-        EXPECT_EQ(tree.Depth(*tree.Find(TagOfDepth(kMaxTagDepth))), kMaxTagDepth);
+        EXPECT_EQ(tree.Depth(Require(tree.Find(TagOfDepth(kMaxTagDepth)))), kMaxTagDepth);
         EXPECT_TRUE(tree.Find(String(kMaxTagNameLength, 'n')).has_value());
     }
 
@@ -379,16 +380,16 @@ namespace BECore::Tests {
         const TagTree tree = MakeBaked({"a.x", "a.y", "b", "a.x.deep"});
         const auto a = tree.Resolve("a.*");
         ASSERT_TRUE(a.has_value());
-        EXPECT_EQ(*a, tree.Range(*tree.Find("a")));
-        EXPECT_TRUE(a->Contains(*tree.Find("a")));
-        EXPECT_TRUE(a->Contains(*tree.Find("a.x.deep")));
-        EXPECT_FALSE(a->Contains(*tree.Find("b")));
-        EXPECT_EQ(tree.Resolve("a.x.*"), (TagRange{*tree.Find("a.x"), *tree.Find("a.x.deep")}));
+        EXPECT_EQ(*a, tree.Range(Require(tree.Find("a"))));
+        EXPECT_TRUE(a->Contains(Require(tree.Find("a"))));
+        EXPECT_TRUE(a->Contains(Require(tree.Find("a.x.deep"))));
+        EXPECT_FALSE(a->Contains(Require(tree.Find("b"))));
+        EXPECT_EQ(tree.Resolve("a.x.*"), (TagRange{Require(tree.Find("a.x")), Require(tree.Find("a.x.deep"))}));
     }
 
     TEST(TagTreeTest, ALeafWildcardIsTheLeafAlone) {
         const TagTree tree = MakeBaked({"a.x", "b"});
-        const TagId leaf = *tree.Find("a.x");
+        const TagId leaf = Require(tree.Find("a.x"));
         EXPECT_EQ(tree.Resolve("a.x.*"), (TagRange{leaf, leaf}));
         EXPECT_EQ(tree.Resolve("b.*"), (TagRange{2, 2}));
     }
@@ -406,7 +407,7 @@ namespace BECore::Tests {
 
     TEST(TagTreeTest, ResolveTreatsASubtreeAsIncludingTheTagUnlikeDescendantRange) {
         const TagTree tree = MakeBaked({"match.3", "match.4", "special"});
-        const TagId match = *tree.Find("match");
+        const TagId match = Require(tree.Find("match"));
         EXPECT_EQ(tree.Resolve("match.*"), tree.Range(match));
         EXPECT_NE(tree.Resolve("match.*"), tree.DescendantRange(match));
     }
@@ -426,7 +427,7 @@ namespace BECore::Tests {
         const TagTree tree = MakeBaked({"a.x", "b"});
         const auto ax = tree.ResolveTag("a.x");
         ASSERT_TRUE(ax.has_value());
-        EXPECT_EQ(*ax, *tree.Find("a.x"));
+        EXPECT_EQ(*ax, Require(tree.Find("a.x")));
         const auto b = tree.ResolveTag("b");
         ASSERT_TRUE(b.has_value());
         EXPECT_EQ(*b, TagId{2});

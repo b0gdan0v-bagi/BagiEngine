@@ -4,6 +4,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/SceneEventsTest.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
 #include <Events/SceneEvents.h>
 #include <entt/entt.hpp>
@@ -68,8 +69,8 @@ namespace BECore::Tests {
         ASSERT_NE(inner, nullptr);
         EXPECT_EQ(inner->GetLayer(), kInnerLayer);
         EXPECT_EQ(inner->GetParent()->GetName(), "Left"_intern);
-        EXPECT_EQ(FindNodeBelow(scene.GetRootNode(), "Deep")->GetParent(), inner);
-        EXPECT_EQ(FindNodeBelow(scene.GetRootNode(), "Left")->GetParent(), &scene.GetRootNode());
+        EXPECT_EQ(Require(FindNodeBelow(scene.GetRootNode(), "Deep")).GetParent(), inner);
+        EXPECT_EQ(Require(FindNodeBelow(scene.GetRootNode(), "Left")).GetParent(), &scene.GetRootNode());
     }
 
     TEST_F(SceneNestedNodesTest, EveryNestedNodeIsWiredLikeATopLevelOne) {
@@ -90,8 +91,8 @@ namespace BECore::Tests {
 
     TEST_F(SceneNestedNodesTest, OnAttachedRunsOnceForANestedComponent) {
         Scene& scene = Load();
-        const auto top = FindNodeBelow(scene.GetRootNode(), "Left")->GetComponent<SceneEventCounter>();
-        const auto nested = FindNodeBelow(scene.GetRootNode(), "Inner")->GetComponent<SceneEventCounter>();
+        const auto top = Require(FindNodeBelow(scene.GetRootNode(), "Left")).GetComponent<SceneEventCounter>();
+        const auto nested = Require(FindNodeBelow(scene.GetRootNode(), "Inner")).GetComponent<SceneEventCounter>();
         ASSERT_TRUE(top);
         ASSERT_TRUE(nested);
 
@@ -104,10 +105,10 @@ namespace BECore::Tests {
 
     TEST_F(SceneNestedNodesTest, TheDrawOrderFollowsTheTree) {
         Scene& scene = Load();
-        const SceneNode& left = *FindNodeBelow(scene.GetRootNode(), "Left");
-        const SceneNode& last = *FindNodeBelow(scene.GetRootNode(), "Last");
-        const SceneNode& right = *FindNodeBelow(scene.GetRootNode(), "Right");
-        const SceneNode& inner = *FindNodeBelow(scene.GetRootNode(), "Inner");
+        const SceneNode& left = Require(FindNodeBelow(scene.GetRootNode(), "Left"));
+        const SceneNode& last = Require(FindNodeBelow(scene.GetRootNode(), "Last"));
+        const SceneNode& right = Require(FindNodeBelow(scene.GetRootNode(), "Right"));
+        const SceneNode& inner = Require(FindNodeBelow(scene.GetRootNode(), "Inner"));
 
         // Layer 0 in tree order, the node on layer 3 after all of them
         EXPECT_LT(scene.GetDrawRank(left), scene.GetDrawRank(last));

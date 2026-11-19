@@ -355,7 +355,7 @@ namespace BECore::Tests {
         const Rect text = UIDropdown::GetHeaderParts(level.rect).text;
         EXPECT_TRUE(SameRect(level.GetComponentArea(), text)) << "the component draws left of the arrow, not in the whole rect";
         ASSERT_NE(level.GetTextOverride(), nullptr);
-        EXPECT_EQ(*level.GetTextOverride(), UIChoice::GetText(*level.FindChosenOption())) << "the caption of the chosen option, not expanded";
+        EXPECT_EQ(*level.GetTextOverride(), UIChoice::GetText(Require(level.FindChosenOption()))) << "the caption of the chosen option, not expanded";
         const size_t glyphs = GlyphQuadsIn(text);
         EXPECT_EQ(glyphs, 6u) << "Medium: six glyphs, all inside the text area";
 

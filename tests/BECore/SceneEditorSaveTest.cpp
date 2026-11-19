@@ -397,7 +397,7 @@ namespace BECore::Tests {
         ASSERT_FALSE(creditsBefore.empty());
 
         _manager->SetActiveScene("Game"_intern);
-        FindTopLevelNode(*_manager->GetActiveScene(), "Piece"_intern)->SetName("Pawn"_intern);
+        Require(FindTopLevelNode(*_manager->GetActiveScene(), "Piece"_intern)).SetName("Pawn"_intern);
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), *_manager->GetActiveScene()));
 
         EXPECT_EQ(XmlTextIndented(FindSceneElement(ConfigRoot(), "Menu")), menuBefore);

@@ -6,6 +6,7 @@
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Widgets/IWidget.h>
+#include <Common/Require.h>
 #include <Generated/SchemaExportTest.gen.hpp>
 #include <gtest/gtest.h>
 
@@ -426,7 +427,7 @@ namespace BECore::Tests {
 
         EXPECT_EQ(DumpJson(BuildSchemaJson(forward, roots)), DumpJson(BuildSchemaJson(backward, roots)));
         EXPECT_EQ(DumpJson(ListTypesJson(forward, {})), DumpJson(ListTypesJson(backward, {})));
-        EXPECT_EQ(DumpJson(DescribeTypeJson(*forward.Find("SchemaShape"), forward)), DumpJson(DescribeTypeJson(*backward.Find("SchemaShape"), backward)));
+        EXPECT_EQ(DumpJson(DescribeTypeJson(Require(forward.Find("SchemaShape")), forward)), DumpJson(DescribeTypeJson(Require(backward.Find("SchemaShape")), backward)));
     }
 
     TEST(SchemaExportEmptyTest, AnEmptyRegistryGivesAnEmptyDocument) {

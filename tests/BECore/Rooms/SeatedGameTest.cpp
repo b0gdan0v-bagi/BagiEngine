@@ -1,5 +1,6 @@
 #include <BECore/Rooms/FakeSeatedGame.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 #include <Games/SeatedGameRegistry.h>
@@ -250,7 +251,7 @@ namespace BECore::Tests {
         eastl::sort(keys.begin(), keys.end());
         const Vector<String> expected = {"cardCounts", "finished", "hand", "seat", "table", "turn"};
         EXPECT_EQ(keys, expected);
-        EXPECT_EQ(FindJsonMember(*view, "hand")->size(), 3u);
+        EXPECT_EQ(Require(FindJsonMember(*view, "hand")).size(), 3u);
         const Json* counts = FindJsonMember(*view, "cardCounts");
         ASSERT_NE(counts, nullptr);
         EXPECT_EQ(*counts, Json::array({2, 3, 3, 3}));
@@ -325,7 +326,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(registry.Register({"G", 4}, [] { return MakeUnique<FakeSeatedGame>(); }));
         ASSERT_TRUE(registry.Register({"G", 3}, [] { return MakeUnique<LeakyFakeSeatedGame>(); }));
         EXPECT_EQ(registry.GetCount(), 1u);
-        EXPECT_EQ(registry.Find("G")->seatCount, 3);
+        EXPECT_EQ(Require(registry.Find("G")).seatCount, 3);
         const auto game = registry.Create("G");
         ASSERT_TRUE(game != nullptr);
         EXPECT_NE(dynamic_cast<LeakyFakeSeatedGame*>(game.get()), nullptr);
@@ -341,7 +342,7 @@ namespace BECore::Tests {
         EXPECT_EQ(registry.GetCount(), 0u);
         ASSERT_TRUE(registry.Register({"G", 4}, makeFactory()));
         EXPECT_FALSE(registry.Register({"G", 0}, makeFactory())) << "a refused registration keeps the old one";
-        EXPECT_EQ(registry.Find("G")->seatCount, 4);
+        EXPECT_EQ(Require(registry.Find("G")).seatCount, 4);
     }
 
     TEST(SeatedGameRegistryTest, AFactoryThatOwnsAMoveOnlyCaptureMakesGamesAndIsDestroyedOnceWithTheRegistry) {

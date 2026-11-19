@@ -356,7 +356,7 @@ namespace BECore::Tests {
         params["level"] = "error";
         const Json errorsOnly = ResultOf(Call("log_since", params));
 
-        EXPECT_EQ(FindJsonMember(all, "lines")->size(), 3U);
+        EXPECT_EQ(Require(FindJsonMember(all, "lines")).size(), 3U);
         const Json* lines = FindJsonMember(errorsOnly, "lines");
         ASSERT_NE(lines, nullptr);
         ASSERT_EQ(lines->size(), 2U);

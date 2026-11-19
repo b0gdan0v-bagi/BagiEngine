@@ -1,6 +1,7 @@
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/PoolString/PoolString.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -47,7 +48,7 @@ namespace BECore::Tests {
         EXPECT_EQ(roots.Names().size(), 1U);
         EXPECT_EQ(roots.Resolve("player").Address(), &second);
         ASSERT_NE(roots.Find("player"), nullptr);
-        EXPECT_TRUE(roots.Find("player")->allowInterning);
+        EXPECT_TRUE(Require(roots.Find("player")).allowInterning);
     }
 
     TEST(ControlRootsTest, TheProviderRunsOnEveryResolve) {

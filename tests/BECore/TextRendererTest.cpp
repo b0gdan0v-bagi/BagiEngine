@@ -83,7 +83,7 @@ namespace BECore::Tests {
         TextRenderer::Draw(*renderer, *atlas, layout, 0.0f, 0.0f, Color{255, 255, 255, 255});
 
         ASSERT_EQ(renderer->calls.size(), 1u);
-        const AtlasGlyph& glyph = *atlas->Find(layout.glyphs[0].glyph);
+        const AtlasGlyph& glyph = Require(atlas->Find(layout.glyphs[0].glyph));
         const DrawCall& call = At(renderer->calls, 0);
         ASSERT_TRUE(call.source.has_value());
         EXPECT_FLOAT_EQ(call.source->x, glyph.source.x);
@@ -127,7 +127,7 @@ namespace BECore::Tests {
         TextRenderer::Draw(*renderer, *atlas, layout, 10.0f, 0.0f, Color{255, 255, 255, 255});
 
         ASSERT_EQ(renderer->calls.size(), 1u);
-        const AtlasGlyph& glyph = *atlas->Find(layout.glyphs[0].glyph);
+        const AtlasGlyph& glyph = Require(atlas->Find(layout.glyphs[0].glyph));
         EXPECT_FLOAT_EQ(At(renderer->calls, 0).rect.w, glyph.source.w);
         // The origin (10, 0) is at output x = 10 * 2 + 40 = 60
         EXPECT_FLOAT_EQ(At(renderer->calls, 0).rect.x, std::round(60.0f + layout.glyphs[0].x + glyph.offsetX));
@@ -309,7 +309,7 @@ namespace BECore::Tests {
         TextRenderer::Draw(*renderer, *fill, nullptr, layout, 0.0f, 0.0f, kFill, effects);
 
         ASSERT_EQ(renderer->calls.size(), 2u);
-        EXPECT_FLOAT_EQ(At(renderer->calls, 0).rect.x, std::round(layout.glyphs[0].x + fill->Find(layout.glyphs[0].glyph)->offsetX + 2.6f));
+        EXPECT_FLOAT_EQ(At(renderer->calls, 0).rect.x, std::round(layout.glyphs[0].x + Require(fill->Find(layout.glyphs[0].glyph)).offsetX + 2.6f));
         EXPECT_FLOAT_EQ(At(renderer->calls, 0).rect.x, std::round(At(renderer->calls, 0).rect.x));
     }
 

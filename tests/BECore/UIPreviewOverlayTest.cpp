@@ -1,5 +1,6 @@
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIPreviewOverlay.h>
+#include <Common/Require.h>
 #include <Common/UILayoutMatrix.h>
 #include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
@@ -185,9 +186,9 @@ namespace BECore::Tests {
         ASSERT_EQ(marks.size(), 2u);
         ASSERT_NE(Find(marks, "Small"_intern), nullptr);
         ASSERT_NE(Find(marks, "Big"_intern), nullptr);
-        EXPECT_TRUE(Find(marks, "Small"_intern)->tooSmall);
-        EXPECT_FALSE(Find(marks, "Big"_intern)->tooSmall);
-        ExpectRect(Find(marks, "Small"_intern)->rect, {10.0f, 10.0f, 100.0f, 20.0f});
+        EXPECT_TRUE(Require(Find(marks, "Small"_intern)).tooSmall);
+        EXPECT_FALSE(Require(Find(marks, "Big"_intern)).tooSmall);
+        ExpectRect(Require(Find(marks, "Small"_intern)).rect, {10.0f, 10.0f, 100.0f, 20.0f});
     }
 
     TEST(UIPreviewOverlayTest, TheDensityTurnsTheSizeIntoWindowUnits) {

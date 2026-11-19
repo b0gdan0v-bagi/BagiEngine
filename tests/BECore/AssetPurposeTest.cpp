@@ -5,6 +5,7 @@
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TestText.h>
 #include <Generated/AssetPurposeTest.gen.hpp>
 #include <gtest/gtest.h>
@@ -243,7 +244,7 @@ namespace BECore::Tests {
 
         const auto& factory = AbstractFactory<PurposeAssetBase>::GetInstance();
         ASSERT_NE(factory.FindMeta("PurposeVisualDerived"), nullptr);
-        EXPECT_EQ(factory.FindMeta("PurposeVisualDerived")->purpose, AssetPurpose::Visual);
+        EXPECT_EQ(Require(factory.FindMeta("PurposeVisualDerived")).purpose, AssetPurpose::Visual);
         EXPECT_EQ(factory.FindMeta("NoSuchType"), nullptr);
     }
 

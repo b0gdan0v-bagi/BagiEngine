@@ -112,12 +112,12 @@ namespace BECore::Tests {
         const auto byName = ArtGenSetFromJson(ArtGenSetToJson(MakeSet()));
         ASSERT_TRUE(byName.has_value());
         EXPECT_TRUE(byName->presetData.is_null());
-        EXPECT_TRUE(FindJsonMember(ArtGenSetToJson(MakeSet()), "presetData")->is_null());
+        EXPECT_TRUE(Require(FindJsonMember(ArtGenSetToJson(MakeSet()), "presetData")).is_null());
     }
 
     TEST(ArtGenSetTest, ProcessingRoundTripsAndAManifestWithoutItReadsAsNone) {
         ArtGenSet set = MakeSet();
-        EXPECT_TRUE(FindJsonMember(ArtGenSetToJson(set), "processing")->is_null());
+        EXPECT_TRUE(Require(FindJsonMember(ArtGenSetToJson(set), "processing")).is_null());
         const auto without = ArtGenSetFromJson(ArtGenSetToJson(set));
         ASSERT_TRUE(without.has_value()) << without.error();
         EXPECT_FALSE(without->processing.has_value());
@@ -129,7 +129,7 @@ namespace BECore::Tests {
         set.processing = ArtGenSetProcessing{ArtGenImageSettings{true, 5, 128}, ArtGenImageFrame{10, 20, 300, 400, 96, 128}};
         EXPECT_FALSE(IsLegacyAccepted(set));
         const Json json = ArtGenSetToJson(set);
-        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(*FindJsonMember(json, "processing"), "frame")), "outHeight"), Optional<int64_t>(128));
+        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(Require(FindJsonMember(json, "processing")), "frame")), "outHeight"), Optional<int64_t>(128));
         const auto back = ArtGenSetFromJson(json);
         ASSERT_TRUE(back.has_value()) << back.error();
         EXPECT_EQ(back->processing, set.processing);
@@ -486,7 +486,7 @@ namespace BECore::Tests {
         EXPECT_EQ(job.pick, Optional<int64_t>(4242));
         EXPECT_FALSE(PickVariant(job, 1));
         EXPECT_EQ(job.pick, Optional<int64_t>(4242));
-        EXPECT_EQ(FindVariant(job, 4243)->seed, 4243);
+        EXPECT_EQ(Require(FindVariant(job, 4243)).seed, 4243);
         EXPECT_EQ(FindVariant(job, 5), nullptr);
     }
 
@@ -524,7 +524,7 @@ namespace BECore::Tests {
     TEST(ArtGenSetTest, FindJobByName) {
         ArtGenSet set = MakeSet();
         ASSERT_NE(FindJob(set, "black_knight"), nullptr);
-        EXPECT_EQ(FindJob(set, "black_knight")->subject, "a black knight");
+        EXPECT_EQ(Require(FindJob(set, "black_knight")).subject, "a black knight");
         EXPECT_EQ(FindJob(set, "queen"), nullptr);
         const ArtGenSet& view = set;
         EXPECT_EQ(FindJob(view, "white_knight"), &set.jobs[0]);

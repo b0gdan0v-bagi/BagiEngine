@@ -277,7 +277,7 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(themes.GetThemes().empty());
         EXPECT_TRUE(themes.Set("light"_intern, "primary", LightPrimary));
-        EXPECT_TRUE(ColorsEqual(*CoreManager::GetUIThemes().Find("primary"), LightPrimary));
+        EXPECT_TRUE(ColorsEqual(Require(CoreManager::GetUIThemes().Find("primary")), LightPrimary));
     }
 
 }  // namespace BECore::Tests

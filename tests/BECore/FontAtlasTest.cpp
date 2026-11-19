@@ -228,7 +228,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(tiny->Prepare(*renderer, glyphs));
 
         ASSERT_NE(tiny->Find(glyphs[0]), nullptr);
-        EXPECT_EQ(tiny->Find(glyphs[0])->page, -1);
+        EXPECT_EQ(Require(tiny->Find(glyphs[0])).page, -1);
         EXPECT_TRUE(tiny->Prepare(*renderer, glyphs));  // remembered: no second attempt
     }
 
@@ -254,7 +254,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(atlas->Prepare(*failing, glyphs));
 
         ASSERT_NE(atlas->Find(glyphs[0]), nullptr);
-        EXPECT_EQ(atlas->Find(glyphs[0])->page, -1);
+        EXPECT_EQ(Require(atlas->Find(glyphs[0])).page, -1);
         EXPECT_EQ(atlas->GetPageCount(), 0u);
     }
 

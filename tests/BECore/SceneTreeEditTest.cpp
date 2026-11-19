@@ -147,7 +147,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneTreeEditTest, TheRootAndNodesOfAnotherSceneAreRefused) {
         Scene& other = *_manager->GetSceneByName("Other"_intern);
-        SceneNode& foreign = *FindNodeBelow(other.GetRootNode(), "Foreign");
+        SceneNode& foreign = Require(FindNodeBelow(other.GetRootNode(), "Foreign"));
         const String before = Tree();
         const String otherBefore = TreeOf(other.GetRootNode());
 
@@ -233,7 +233,7 @@ namespace BECore::Tests {
         const String before = Tree();
 
         EXPECT_FALSE(_scene->DuplicateNode(_scene->GetRootNode()));
-        EXPECT_FALSE(_scene->DuplicateNode(*FindNodeBelow(other.GetRootNode(), "Foreign")));
+        EXPECT_FALSE(_scene->DuplicateNode(Require(FindNodeBelow(other.GetRootNode(), "Foreign"))));
 
         EXPECT_EQ(Tree(), before);
     }

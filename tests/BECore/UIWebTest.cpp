@@ -611,8 +611,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         ASSERT_GE(doc.nodes.size(), 4u);
         const UIHtmlNode& div = doc.nodes[doc.nodes[0].children.at(0)];
         EXPECT_EQ(div.tag, "div");
-        EXPECT_EQ(*div.FindAttribute("id"), "a");
-        EXPECT_EQ(*div.FindAttribute("data-n"), "5");
+        EXPECT_EQ(Require(div.FindAttribute("id")), "a");
+        EXPECT_EQ(Require(div.FindAttribute("data-n")), "5");
         EXPECT_TRUE(div.HasAttribute("hidden"));
         EXPECT_TRUE(div.HasClass("x"));
         EXPECT_TRUE(div.HasClass("y"));
@@ -626,7 +626,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         UIWebReport report;
         const auto doc = UIHtmlParser::Parse(R"(<p title="a &amp; b">1 &lt; 2 &#65;&#x42; &unknown; &copy</p>)", report);
         const UIHtmlNode& p = doc.nodes[doc.nodes[0].children.at(0)];
-        EXPECT_EQ(*p.FindAttribute("title"), "a & b");
+        EXPECT_EQ(Require(p.FindAttribute("title")), "a & b");
         EXPECT_EQ(doc.nodes[p.children.at(0)].text, "1 < 2 AB &unknown; &copy");
     }
 
@@ -921,7 +921,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             LaidOut web(compiled->content);
             web.InSceneView(shape.viewWidth, shape.viewHeight);
             web.At(1280.0f, 720.0f);
-            EXPECT_FLOAT_EQ(web.Find("LevelRow")->rect.h, shape.rowHeight) << shape.viewWidth;
+            EXPECT_FLOAT_EQ(Require(web.Find("LevelRow")).rect.h, shape.rowHeight) << shape.viewWidth;
         }
     }
 
@@ -1089,11 +1089,11 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             LaidOut web(compiled->content);
             web.InSceneView(shape.viewWidth, shape.viewHeight);
             web.At(1280.0f, 720.0f);
-            EXPECT_FLOAT_EQ(web.Find("Plate")->rect.h, shape.plateHeight) << shape.viewWidth;
-            EXPECT_FLOAT_EQ(web.Find("Volume")->rect.h, 56.0f);
-            EXPECT_GT(web.Find("Volume")->rect.w, 100.0f);
-            EXPECT_FLOAT_EQ(web.Find("Progress")->rect.h, 24.0f);
-            EXPECT_FLOAT_EQ(web.Find("Sound")->rect.h, 56.0f);
+            EXPECT_FLOAT_EQ(Require(web.Find("Plate")).rect.h, shape.plateHeight) << shape.viewWidth;
+            EXPECT_FLOAT_EQ(Require(web.Find("Volume")).rect.h, 56.0f);
+            EXPECT_GT(Require(web.Find("Volume")).rect.w, 100.0f);
+            EXPECT_FLOAT_EQ(Require(web.Find("Progress")).rect.h, 24.0f);
+            EXPECT_FLOAT_EQ(Require(web.Find("Sound")).rect.h, 56.0f);
         }
     }
 
@@ -1707,7 +1707,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
         LaidOut web(compiled->content);
         web.At(1280.0f, 720.0f);
-        EXPECT_NEAR(web.Find("card")->rect.w, 120.0f, kTolerance) << "the box paint is not layout";
+        EXPECT_NEAR(Require(web.Find("card")).rect.w, 120.0f, kTolerance) << "the box paint is not layout";
     }
 
     TEST_F(UIWebTest, APillIsARadiusOfAThousandPixels) {
@@ -2203,9 +2203,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         // The base screen has it hidden; wide enough (in canvas units: the scale is kept at 0.7 or more, so 480 px are 685 units), the variant shows it
         LaidOut web(compiled->content);
         web.At(480.0f, 270.0f);
-        EXPECT_TRUE(web.Find("a")->rect.IsEmpty());
+        EXPECT_TRUE(Require(web.Find("a")).rect.IsEmpty());
         web.At(1920.0f, 1080.0f);
-        EXPECT_FALSE(web.Find("a")->rect.IsEmpty());
+        EXPECT_FALSE(Require(web.Find("a")).rect.IsEmpty());
     }
 
     TEST_F(UIWebTest, AQueryListMakesOneVariantForEachAlternative) {

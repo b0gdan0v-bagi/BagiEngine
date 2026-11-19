@@ -1,4 +1,5 @@
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/HotkeyMap.h>
 
@@ -38,8 +39,8 @@ namespace BECore::Tests {
             EXPECT_EQ(map.Find(*command->defaultChord), id);
         }
         // Only the step repeats while held
-        EXPECT_FALSE(FindEditorCommand(kGamePause)->repeats);
-        EXPECT_TRUE(FindEditorCommand(kGameStep)->repeats);
+        EXPECT_FALSE(Require(FindEditorCommand(kGamePause)).repeats);
+        EXPECT_TRUE(Require(FindEditorCommand(kGameStep)).repeats);
     }
 
     TEST(HotkeyMapTest, TheViewportInputModeCommandIsRebindableOnF8) {

@@ -7,6 +7,7 @@
 #include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Games/GameControl.h>
 #include <Games/GameManager.h>
 #include <Generated/GameControlTest.gen.hpp>
@@ -175,7 +176,7 @@ namespace BECore::Tests {
     TEST_F(GameControlTest, TheGameRootResolvesTheActiveGameToItsMostDerivedType) {
         const ControlRoots& roots = CoreManager::GetControlService().Roots();
         ASSERT_NE(roots.Find(kGameRootName), nullptr);
-        EXPECT_FALSE(roots.Find(kGameRootName)->allowInterning);
+        EXPECT_FALSE(Require(roots.Find(kGameRootName)).allowInterning);
 
         const TypedRef ref = roots.Resolve(kGameRootName);
         ASSERT_TRUE(ref);

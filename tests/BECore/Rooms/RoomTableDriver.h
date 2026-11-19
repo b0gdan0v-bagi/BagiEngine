@@ -4,6 +4,7 @@
 #include <BECore/Rooms/RoomSocketClient.h>
 #include <BECore/Rooms/WireJudge.h>
 #include <BECore/Types/Types.h>
+#include <Common/Require.h>
 #include <RoomServer/DemoCardGame.h>
 #include <algorithm>
 #include <chrono>
@@ -86,7 +87,7 @@ namespace BECore::Tests {
             }
             ActionMessage action;
             action.version = version;
-            action.action = (*FindJsonMember(view->json, "actions"))[0];
+            action.action = Require(FindJsonMember(view->json, "actions"))[0];
             _client.Send(action);
             _acted = true;
             _actedVersion = version;

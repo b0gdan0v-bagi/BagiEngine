@@ -9,6 +9,7 @@
 #include <BECore/Values/ValueLinkScope.h>
 #include <BECore/Values/ValueTables.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/Wait.h>
 #include <algorithm>
 #include <atomic>
@@ -335,7 +336,7 @@ namespace BECore::Tests {
         EXPECT_EQ(names[0], "Fire");
         EXPECT_EQ(names[1], "Water");
         ASSERT_TRUE(tables.Find("Water").has_value());
-        EXPECT_EQ(tables.Find("Water")->size(), 3U);
+        EXPECT_EQ(Require(tables.Find("Water")).size(), 3U);
         EXPECT_FALSE(tables.Find("Earth").has_value());
     }
 
