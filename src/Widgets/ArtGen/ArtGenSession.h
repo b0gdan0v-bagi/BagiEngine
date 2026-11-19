@@ -149,8 +149,8 @@ namespace BECore {
         using FrameMeasurer = std::expected<ArtGenImageFrame, String> (*)(const Vector<String>& pngFiles, const ArtGenImageSettings& settings);
         /// Writes into the game's provenance file of @p name (a sprite or a clip, by @p kind) that the choice with @p seed was kept on @p date
         using Keeper = std::expected<void, ControlError> (*)(StringView kind, StringView name, int64_t seed, StringView date);
-        /// Packs the atlas group @p group once, after the rows of an Accept all that were written without packing it; the answer is the
-        /// `atlas` of `artgen_accept_set` (`PackAtlasForControl` in the editor, a fake in the tests)
+        /// Packs the atlas group @p group once, after the rows of an Accept all that were written without packing and before the batch
+        /// ends; the answer is the `atlas` of `artgen_accept_set` (`PackAtlasForControl` in the editor, a fake in the tests)
         using AtlasPacker = std::expected<Json, ControlError> (*)(StringView group);
         /// Opens and closes the batch of one Accept all of images: the acceptors called between them write their files and change the library
         /// in memory only, and the end saves it once. The end's failure says the library was not saved
@@ -314,9 +314,10 @@ namespace BECore {
         /// refusal by them changes nothing. With the batch hooks an image set's files are written first and the library is saved once; the
         /// rows are marked only after that save went through, so the manifest never names a row whose library entry was rolled back. A
         /// failure halfway leaves the rows before it accepted (and marked); a failed save marks none and says which files were written.
-        /// A set with an atlas group and an installed AtlasPacker writes its rows into the group without packing it and packs it once after the
-        /// last row (the answer's `atlas`; a set of only kept or replaced rows packs nothing). A failed row or a failed pack leaves the rows
-        /// done marked and in the game, says the group is not packed, and calling again finishes it
+        /// A set with an atlas group and an installed AtlasPacker writes its rows into the group without packing it and packs it once after
+        /// the last row, inside the batch, so nothing reaches TextureLibrary.xml before the batch's one save (the answer's `atlas`; a set of
+        /// only kept or replaced rows packs nothing). A failed row or a failed pack leaves the rows done marked and in the game, says the
+        /// group is not packed, and calling again finishes it
         std::expected<Json, ControlError> AcceptSet(StringView name);
         /// Fixes the choice of every live row of a set, or of @p job only: the Keeper writes the kept seed into the game first, then the row is
         /// kept (its other variants leave the manifest) and the manifest written. Final; nothing live to keep is `invalid_params`, and so is a named

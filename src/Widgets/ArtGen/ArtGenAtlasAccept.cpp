@@ -11,30 +11,6 @@ namespace BECore {
 
     namespace {
 
-        bool IsSameRect(const Rect& a, const Rect& b) {
-            return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
-        }
-
-        bool IsSameLink(const Optional<SpriteAtlasLink>& a, const Optional<SpriteAtlasLink>& b) {
-            if (a.has_value() != b.has_value()) {
-                return false;
-            }
-            if (!a.has_value()) {
-                return true;
-            }
-            if (a->name != b->name || a->source.has_value() != b->source.has_value() || a->pack.has_value() != b->pack.has_value()) {
-                return false;
-            }
-            if (a->source && (a->source->texturePath != b->source->texturePath || !IsSameRect(a->source->rect, b->source->rect))) {
-                return false;
-            }
-            return !a->pack || (a->pack->padding == b->pack->padding && a->pack->sizeMode == b->pack->sizeMode && a->pack->maxSide == b->pack->maxSide);
-        }
-
-        bool IsSameEntry(const SpriteEntry& a, const SpriteEntry& b) {
-            return a.name == b.name && a.texturePath == b.texturePath && IsSameRect(a.srcRect, b.srcRect) && IsSameLink(a.atlas, b.atlas);
-        }
-
         /// What the accept wrote, for an error text: the PNG, or the sprites in general when no PNG is named
         String WrittenText(StringView pngForMessage) {
             return pngForMessage.empty() ? String("the sprites are in the game") : Format("the PNG is in '{}'", pngForMessage);
@@ -66,32 +42,18 @@ namespace BECore {
     }
 
     std::expected<AcceptStored, String> PackGroupAfterAccept(TextureLibrary& library, StringView group, const AtlasIo& io, FunctionRef<bool()> save, StringView pngForMessage) {
-        // The members as the saved library has them: what a failed save of the pack goes back to
-        Vector<SpriteEntry> before;
-        for (const PoolString member : AtlasMembers(library, group)) {
-            before.push_back(*library.GetSprite(member));
-        }
-        if (before.empty()) {
+        if (AtlasMembers(library, group).empty()) {
             return std::unexpected(Format("{}, but atlas '{}' has no sprite to pack", WrittenText(pngForMessage), group));
         }
-        auto written = WriteAtlas(library, group, PackSettingsOf(library, group), io);
-        if (!written) {
-            return std::unexpected(
-                Format("{}, the library points to it, but atlas '{}' could not be packed: {}; press Pack in the Sprite Library", WrittenText(pngForMessage), group, written.error()));
-        }
-        AcceptStored result;
-        const bool entriesChanged = std::any_of(before.begin(), before.end(), [&library](const SpriteEntry& old) { return !IsSameEntry(old, *library.GetSprite(old.name)); });
-        if (entriesChanged) {
-            if (!save()) {
-                for (const SpriteEntry& old : before) {
-                    library.AddOrUpdate(old);
-                }
-                return std::unexpected(Format("{} and atlas '{}' was rewritten, but TextureLibrary.xml could not be saved; press Pack in the Sprite Library", WrittenText(pngForMessage), group));
+        auto repacked = RepackGroupAndSave(library, group, io, save);
+        if (!repacked) {
+            if (!repacked.error().atlasWritten) {
+                return std::unexpected(
+                    Format("{}, the library points to it, but atlas '{}' could not be packed: {}; press Pack in the Sprite Library", WrittenText(pngForMessage), group, repacked.error().reason));
             }
-            result.saved = true;
+            return std::unexpected(Format("{} and atlas '{}' was rewritten, but TextureLibrary.xml could not be saved; press Pack in the Sprite Library", WrittenText(pngForMessage), group));
         }
-        result.repacked = std::move(*written);
-        return result;
+        return std::move(*repacked);
     }
 
     std::expected<AcceptStored, String> AcceptIntoGroup(TextureLibrary& library, const ArtGenCopied& copied, StringView sprite, StringView group, bool deferPack, const AtlasIo& io,
@@ -136,10 +98,11 @@ namespace BECore {
         auto& library = CoreManager::GetTextureLibrary();
         auto resolve = [&files](StringView path) { return files.ResolvePath(path); };
         const AtlasIo io{assetsDir, resolve};
-        auto packed = PackGroupAfterAccept(library, group, io, [&library] { return library.Save(); }, StringView());
+        auto packed = PackGroupAfterAccept(library, group, io, [] { return SaveGameLibraryForAccept(); }, StringView());
         if (!packed) {
             return fail(packed.error());
         }
+        NoteAtlasRewrittenForAccept();
         // The old pictures of the atlas path may be cached: drop them so the reload reads the new file
         CoreManager::GetResourceManager().Evict(packed->repacked->texturePath.ToStringView());
         if (Scene* scene = CoreManager::GetSceneManager().GetActiveScene()) {

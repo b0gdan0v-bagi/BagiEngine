@@ -292,6 +292,44 @@ namespace BECore::Tests {
         EXPECT_TRUE(RectIsSolid(atlas, Rook(library).srcRect, kHigh, 0, 0));
     }
 
+    TEST(ArtGenAtlasAcceptTest, ARowsAndThePackInsideABatchOweOneSaveAndAFailedCommitGivesTheLibraryBack) {
+        const AtlasGame game;
+        TextureLibrary library;
+        ASSERT_NO_FATAL_FAILURE(FillPackedPieces(library, game));
+        const Vector<uint8_t> atlasBefore = ReadAllBytes(game.Resolve(kPiecesAtlas));
+        const SpriteEntry queenBefore = Queen(library);
+        const SpriteEntry rookBefore = Rook(library);
+        const size_t entriesBefore = library.GetAll().size();
+        ArtGenLibraryBatch batch(library);
+        int saves = 0;
+        const auto defer = [&batch, &saves] {
+            ++saves;
+            return batch.Defer();
+        };
+
+        ASSERT_TRUE(AcceptIntoGroup(library, game.Copied(kQueenPng, MakeSolid(6, 2, 0, kHigh, 0)), "queen", "pieces", true, game.Io(), defer).has_value());
+        ASSERT_TRUE(AcceptIntoGroup(library, game.Copied("assets/artgen/bishop.png", MakeSolid(3, 5, kHigh, kHigh, 0)), "bishop", "pieces", true, game.Io(), defer).has_value());
+        const auto packed = PackGroupAfterAccept(library, "pieces", game.Io(), defer, "");
+        ASSERT_TRUE(packed.has_value());
+        ASSERT_TRUE(packed->repacked.has_value());
+        batch.NoteRepacked();
+        EXPECT_NE(ReadAllBytes(game.Resolve(kPiecesAtlas)), atlasBefore) << "the pack rewrote the atlas file";
+
+        int committedSaves = 0;
+        const auto committed = batch.Commit([&committedSaves] {
+            ++committedSaves;
+            return false;
+        });
+
+        ASSERT_FALSE(committed.has_value());
+        EXPECT_NE(committed.error().find("press Pack in the Sprite Library"), String::npos) << committed.error().c_str();
+        EXPECT_EQ(committedSaves, 1) << "the batch's save is the only one that would reach the file";
+        EXPECT_EQ(library.GetAll().size(), entriesBefore);
+        EXPECT_EQ(library.GetSprite("bishop"_intern), nullptr);
+        EXPECT_TRUE(IsSameSpriteEntry(Queen(library), queenBefore));
+        EXPECT_TRUE(IsSameSpriteEntry(Rook(library), rookBefore));
+    }
+
     TEST(ArtGenAtlasAcceptTest, ANewPictureOfAPackedMemberPacksTheGroupAgain) {
         const AtlasGame game;
         TextureLibrary library;

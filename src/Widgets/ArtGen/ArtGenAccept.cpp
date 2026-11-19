@@ -135,10 +135,6 @@ namespace BECore {
             return !a->source.has_value() || (a->source->texturePath == b->source->texturePath && IsSameRect(a->source->rect, b->source->rect));
         }
 
-        bool IsSameSpriteEntry(const SpriteEntry& a, const SpriteEntry& b) {
-            return a.name == b.name && a.texturePath == b.texturePath && IsSameRect(a.srcRect, b.srcRect) && IsSameAtlasLink(a.atlas, b.atlas);
-        }
-
         void ReloadUnder(SceneNode& node, PoolString sprite, PoolString texturePath, uint32_t& count) {
             if (auto renderer = node.GetComponent<SpriteRendererComponent>()) {
                 if ((!sprite.Empty() && renderer->_spriteId == sprite) || (!texturePath.Empty() && renderer->_texturePath == texturePath)) {
@@ -152,6 +148,10 @@ namespace BECore {
         }
 
     }  // namespace
+
+    bool IsSameSpriteEntry(const SpriteEntry& a, const SpriteEntry& b) {
+        return a.name == b.name && a.texturePath == b.texturePath && IsSameRect(a.srcRect, b.srcRect) && IsSameAtlasLink(a.atlas, b.atlas);
+    }
 
     String ArtGenGameFile(StringView name, StringView kind) {
         return Format("assets/{}/{}{}", kArtGenAssetsFolder, name, kind == kKindAudio ? kWavExtension : kPngExtension);
@@ -561,6 +561,31 @@ namespace BECore {
         return json;
     }
 
+    std::expected<AcceptStored, RepackError> RepackGroupAndSave(TextureLibrary& library, StringView group, const AtlasIo& io, FunctionRef<bool()> save) {
+        // The members as the saved library has them: what a failed save of the repack goes back to
+        Vector<SpriteEntry> before;
+        for (const PoolString member : AtlasMembers(library, group)) {
+            before.push_back(*library.GetSprite(member));
+        }
+        auto written = WriteAtlas(library, group, PackSettingsOf(library, group), io);
+        if (!written) {
+            return std::unexpected(RepackError{false, std::move(written.error())});
+        }
+        AcceptStored result;
+        const bool entriesChanged = std::any_of(before.begin(), before.end(), [&library](const SpriteEntry& old) { return !IsSameSpriteEntry(old, *library.GetSprite(old.name)); });
+        if (entriesChanged) {
+            if (!save()) {
+                for (const SpriteEntry& old : before) {
+                    library.AddOrUpdate(old);
+                }
+                return std::unexpected(RepackError{true, String()});
+            }
+            result.saved = true;
+        }
+        result.repacked = std::move(*written);
+        return result;
+    }
+
     std::expected<AcceptStored, String> AcceptIntoLibrary(TextureLibrary& library, const ArtGenCopied& copied, StringView sprite, const AtlasIo& io, FunctionRef<bool()> save) {
         const PoolString name = PoolString::Intern(sprite);
         const PoolString texturePath = PoolString::Intern(copied.texturePath);
@@ -579,31 +604,19 @@ namespace BECore {
             return result;
         }
 
-        // The members as the saved library has them: what a failed save of the repack goes back to
-        Vector<SpriteEntry> before;
-        for (const PoolString member : AtlasMembers(library, group.ToStringView())) {
-            before.push_back(*library.GetSprite(member));
-        }
-        auto written = WriteAtlas(library, group.ToStringView(), PackSettingsOf(library, group.ToStringView()), io);
-        if (!written) {
-            return std::unexpected(
-                Format("the PNG was already written over the game's file '{}' and the library points to it, but atlas '{}' could not be repacked: {}; press Pack in the Sprite Library",
-                       copied.pngFile.generic_string(), group.ToStringView(), written.error()));
-        }
-        const bool entriesChanged = std::any_of(before.begin(), before.end(), [&library](const SpriteEntry& old) { return !IsSameSpriteEntry(old, *library.GetSprite(old.name)); });
-        if (entriesChanged) {
-            if (!save()) {
-                for (const SpriteEntry& old : before) {
-                    library.AddOrUpdate(old);
-                }
-                return std::unexpected(Format("the PNG was already written over the game's file '{}' and atlas '{}' was rewritten, but TextureLibrary.xml could not be saved, so the library entries "
-                                              "were not updated; press Pack in the Sprite Library",
-                                              copied.pngFile.generic_string(), group.ToStringView()));
+        auto repacked = RepackGroupAndSave(library, group.ToStringView(), io, save);
+        if (!repacked) {
+            if (!repacked.error().atlasWritten) {
+                return std::unexpected(
+                    Format("the PNG was already written over the game's file '{}' and the library points to it, but atlas '{}' could not be repacked: {}; press Pack in the Sprite Library",
+                           copied.pngFile.generic_string(), group.ToStringView(), repacked.error().reason));
             }
-            result.saved = true;
+            return std::unexpected(Format("the PNG was already written over the game's file '{}' and atlas '{}' was rewritten, but TextureLibrary.xml could not be saved, so the library entries "
+                                          "were not updated; press Pack in the Sprite Library",
+                                          copied.pngFile.generic_string(), group.ToStringView()));
         }
-        result.repacked = std::move(*written);
-        return result;
+        repacked->saved = repacked->saved || result.saved;
+        return std::move(*repacked);
     }
 
     namespace {
@@ -619,6 +632,16 @@ namespace BECore {
             return;
         }
         gOpenBatch.emplace(CoreManager::GetTextureLibrary());
+    }
+
+    bool SaveGameLibraryForAccept() {
+        return gOpenBatch.has_value() ? gOpenBatch->Defer() : CoreManager::GetTextureLibrary().Save();
+    }
+
+    void NoteAtlasRewrittenForAccept() {
+        if (gOpenBatch.has_value()) {
+            gOpenBatch->NoteRepacked();
+        }
     }
 
     std::expected<void, ControlError> EndAcceptBatch() {
@@ -656,14 +679,14 @@ namespace BECore {
         auto& files = CoreManager::GetFileSystem();
         auto resolve = [&files](StringView path) { return files.ResolvePath(path); };
         const AtlasIo io{assetsDir, resolve};
-        auto save = [&library] { return gOpenBatch.has_value() ? gOpenBatch->Defer() : library.Save(); };
+        const auto save = [] { return SaveGameLibraryForAccept(); };
         auto stored = plan.atlas.empty() ? AcceptIntoLibrary(library, *copied, sprite, io, save) : AcceptIntoGroup(library, *copied, sprite, StringView(plan.atlas), plan.deferPack, io, save);
         if (!stored) {
             return std::unexpected(stored.error());
         }
 
-        if (gOpenBatch.has_value() && stored->repacked) {
-            gOpenBatch->NoteRepacked();
+        if (stored->repacked) {
+            NoteAtlasRewrittenForAccept();
         }
 
         const PoolString name = PoolString::Intern(sprite);

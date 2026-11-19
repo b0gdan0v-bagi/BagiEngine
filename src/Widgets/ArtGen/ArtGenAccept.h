@@ -91,6 +91,23 @@ namespace BECore {
         Optional<AtlasWritten> repacked;  // engaged when the sprite was packed and its group was repacked
     };
 
+    /// Whether two entries are the same sprite in the same place (name, picture, rect and atlas link with its source and pack record)
+    [[nodiscard]] bool IsSameSpriteEntry(const SpriteEntry& a, const SpriteEntry& b);
+
+    /// Why RepackGroupAndSave failed: the atlas could not be written (@p reason says why; the library and the old atlas file are as they were),
+    /// or it was written and the save failed (no reason; the members are back to what the library held, the atlas file is replaced)
+    struct RepackError {
+        bool atlasWritten = false;
+        String reason;
+    };
+
+    /**
+     * @brief The repack both ways into an atlas share: `WriteAtlas` of @p group with the settings it was last packed with (`PackSettingsOf`),
+     * then @p save once when the repack moved a member. On a failed save the members go back to what the library held before the call.
+     * The returned `AcceptStored` has `saved` set when this call saved and `repacked` set to the atlas written. The callers word the errors.
+     */
+    std::expected<AcceptStored, RepackError> RepackGroupAndSave(TextureLibrary& library, StringView group, const AtlasIo& io, FunctionRef<bool()> save);
+
     /**
      * @brief The library side of Accept of the PNG @p copied as @p sprite: stores `AcceptedSpriteEntry` and, for a packed sprite, repacks its
      * group with the settings the group was packed with (`PackSettingsOf`) and saves again when the repack moved a member. No services.
@@ -158,7 +175,7 @@ namespace BECore {
      * EndAcceptBatch saves it.
      *
      * With `plan.atlas` the sprite joins that group and the group is packed (`AcceptIntoGroup`; not packed with `plan.deferPack`, the caller
-     * packs once later). A packed member of another group is refused before anything is written.
+     * packs once later, inside the same batch). A packed member of another group is refused before anything is written.
      */
     std::expected<ArtGenAccepted, String> AcceptVariant(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan);
 
@@ -178,6 +195,15 @@ namespace BECore {
      * game's assets, the library keeps its old entries.
      */
     std::expected<void, ControlError> EndAcceptBatch();
+
+    /// The save of the game's library that every step of an accept calls (`AcceptIntoLibrary`, `AcceptIntoGroup`, `PackAtlasForControl`): with
+    /// an accept batch open it only owes the save to the batch (true), else it writes TextureLibrary.xml now. So nothing writes the file
+    /// before EndAcceptBatch
+    bool SaveGameLibraryForAccept();
+
+    /// A step wrote an atlas file: with a batch open, a failed EndAcceptBatch then says the old member rects no longer match it. Nothing
+    /// without a batch
+    void NoteAtlasRewrittenForAccept();
 
     /// Puts the sprite on @p node's SpriteRendererComponent and reloads it; fails when the node has none
     std::expected<void, String> UseSpriteOn(SceneNode& node, PoolString sprite);

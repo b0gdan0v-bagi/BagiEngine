@@ -1117,6 +1117,18 @@ namespace BECore {
             item["alternatives"] = AlternativesBesides(job, plan.seed);
             accepted.push_back(std::move(item));
         }
+        // The group is packed once, after the last row and inside the batch: the pack goes through the batch's save too, so the one write
+        // of TextureLibrary.xml is EndAcceptBatch's. A failed row packs nothing (the rows done are in the group, loose)
+        Json atlasReply;
+        Optional<String> packFailure;
+        if (!rowFailure && deferPack && !done.empty()) {
+            auto packed = _atlasPacker(set->atlas);
+            if (packed) {
+                atlasReply = std::move(*packed);
+            } else {
+                packFailure = packed.error().message;
+            }
+        }
         Optional<String> saveFailure;
         if (batched) {
             auto ended = _batchEnd();
@@ -1135,7 +1147,10 @@ namespace BECore {
         if (saveFailure) {
             String doneNames;
             AppendNames(doneNames, "files written", done);
-            const String notMarked = Format("the library was not saved ({}), so no row of the set is marked; call again to finish: an accept replaces the same name", *saveFailure);
+            String notMarked = Format("the library was not saved ({}), so no row of the set is marked; call again to finish: an accept replaces the same name", *saveFailure);
+            if (packFailure) {
+                notMarked += Format("; the atlas '{}' could not be packed either: {}", set->atlas, *packFailure);
+            }
             if (rowFailure) {
                 return std::unexpected(MakeError(kAcceptFailedCode, Format("{}; {}", *rowFailure, notMarked)));
             }
@@ -1144,22 +1159,16 @@ namespace BECore {
         if (rowFailure) {
             return std::unexpected(MakeError(kAcceptFailedCode, *rowFailure));
         }
+        if (packFailure) {
+            return std::unexpected(MakeError(
+                kAcceptFailedCode,
+                Format("the set '{}': its {} rows are accepted and in the game, but the atlas '{}' is not packed: {}; call artgen_accept_set again or press Pack in the Sprite Library to finish it",
+                       setName, done.size(), set->atlas, *packFailure)));
+        }
         Json reply = Json::object();
         reply["set"] = ToJsonString(set->name);
         reply["accepted"] = std::move(accepted);
-        reply["atlas"] = Json();
-        // With BeginAcceptBatch / EndAcceptBatch (branch todo/artgen-review-leftovers) this call goes after the rows and before EndAcceptBatch
-        if (deferPack && !done.empty()) {
-            auto packed = _atlasPacker(set->atlas);
-            if (!packed) {
-                return std::unexpected(MakeError(
-                    kAcceptFailedCode,
-                    Format(
-                        "the set '{}': its {} rows are accepted and in the game, but the atlas '{}' is not packed: {}; call artgen_accept_set again or press Pack in the Sprite Library to finish it",
-                        setName, done.size(), set->atlas, packed.error().message)));
-            }
-            reply["atlas"] = std::move(*packed);
-        }
+        reply["atlas"] = std::move(atlasReply);
         return reply;
     }
 

@@ -54,7 +54,7 @@ namespace BECore::Tests {
         Vector<AcceptedRow> gAccepted;
         String gFailOn;  // a row of this name is refused by the fake acceptors
 
-        /// The calls of the batch hooks and the acceptors in the order they came: "begin", "accept <name>", "end"
+        /// The calls of the batch hooks, the acceptors and the packer in the order they came: "begin", "accept <name>", "pack <group>", "end"
         Vector<String> gEvents;
         bool gEndFails = false;               // the fake end of the batch answers that the library was not saved
         MoveOnlyFunction<void()> gDuringEnd;  // what a test looks at while the fake end runs: the library is saved there, the rows are not marked yet
@@ -123,6 +123,7 @@ namespace BECore::Tests {
 
         std::expected<Json, ControlError> FakePacker(StringView group) {
             gPacks.push_back(PackCall{String(group), gAccepted.size()});
+            gEvents.push_back(Format("pack {}", group));
             if (!gPackFail.empty()) {
                 return std::unexpected(ControlError{String("artgen_accept_failed"), gPackFail});
             }
@@ -2321,6 +2322,85 @@ namespace BECore::Tests {
         const Json again = Result(AcceptAllCall("grouped"));
         EXPECT_EQ(gPacks.size(), 2u);
         EXPECT_FALSE(FindJsonMember(again, "atlas")->is_null());
+    }
+
+    TEST_F(ArtGenSetSessionTest, AcceptAllOfAGroupSetPacksInsideTheBatchAndMarksTheRowsAfterItsSave) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb\nc", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+        size_t markedWhileEnding = 99;
+        gDuringEnd = [this, &markedWhileEnding] {
+            markedWhileEnding = 0;
+            for (const ArtGenSetJob& job : OnDisk("grouped").jobs) {
+                markedWhileEnding += job.accepted.has_value() ? 1 : 0;
+            }
+        };
+
+        const Json answer = Result(AcceptAllCall("grouped"));
+
+        const Vector<String> expected{"begin", "accept a", "accept b", "accept c", "pack pieces", "end"};
+        EXPECT_EQ(gEvents, expected) << "the pack is a step of the batch, so the library is written once, by its end";
+        EXPECT_EQ(markedWhileEnding, 0u);
+        EXPECT_FALSE(FindJsonMember(answer, "atlas")->is_null());
+        for (const ArtGenSetJob& job : OnDisk("grouped").jobs) {
+            EXPECT_TRUE(job.accepted.has_value());
+        }
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailedSaveAfterThePackMarksNoRowOfAGroupSet) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+        gEndFails = true;
+
+        const Json refused = AcceptAllCall("grouped");
+
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        const String message = ErrorMessage(refused);
+        EXPECT_NE(message.find("the library was not saved"), String::npos) << message.c_str();
+        const Vector<String> expected{"begin", "accept a", "accept b", "pack pieces", "end"};
+        EXPECT_EQ(gEvents, expected);
+        for (const ArtGenSetJob& job : OnDisk("grouped").jobs) {
+            EXPECT_FALSE(job.accepted.has_value()) << "a row is marked only after the save went through";
+        }
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailedPackInsideTheBatchStillSavesAndMarksTheRowsDone) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+        gPackFail = "the atlas file is locked";
+
+        const Json refused = AcceptAllCall("grouped");
+
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        EXPECT_NE(ErrorMessage(refused).find("'pieces' is not packed"), String::npos) << ErrorMessage(refused).c_str();
+        const Vector<String> expected{"begin", "accept a", "accept b", "pack pieces", "end"};
+        EXPECT_EQ(gEvents, expected) << "the loose members are saved by the batch's end";
+        for (const ArtGenSetJob& job : OnDisk("grouped").jobs) {
+            EXPECT_TRUE(job.accepted.has_value());
+        }
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailedRowOfAGroupSetInsideTheBatchPacksNothingAndEndsTheBatch) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb\nc", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+        gFailOn = "c";
+
+        const Json refused = AcceptAllCall("grouped");
+
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        const Vector<String> expected{"begin", "accept a", "accept b", "end"};
+        EXPECT_EQ(gEvents, expected);
+        const ArtGenSet disk = OnDisk("grouped");
+        EXPECT_TRUE(disk.jobs[0].accepted.has_value());
+        EXPECT_TRUE(disk.jobs[1].accepted.has_value());
+        EXPECT_FALSE(disk.jobs[2].accepted.has_value());
     }
 
     TEST_F(ArtGenSetSessionTest, ASoundSetNeverCallsThePacker) {

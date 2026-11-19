@@ -17,7 +17,8 @@
 /// a switch of a live row of a set, packs the group again. `AcceptIntoLibrary` is the same for a sprite that is already packed; here the
 /// group is named by the caller, so a sprite with no entry or no link joins it.
 ///
-/// A set packs once, not per row: every row is stored with `deferPack` and `PackGroupAfterAccept` runs after the last one.
+/// A set packs once, not per row: every row is stored with `deferPack` and `PackGroupAfterAccept` runs after the last one, inside the
+/// accept batch (`ArtGenAccept.h`), so the one write of the library is the batch's.
 namespace BECore {
 
     /**
@@ -67,7 +68,8 @@ namespace BECore {
     /**
      * @brief Packs group @p group of the game's library (`PackGroupAfterAccept`, which has the order and what a failure leaves), drops the
      * atlas file from the resource cache and reloads every `SpriteRendererComponent` of the active scene that names a member the pack moved.
-     * The editor's way to pack once after the rows of a set.
+     * The editor's way to pack once after the rows of a set. It saves through `SaveGameLibraryForAccept` and tells an open batch that an
+     * atlas file was rewritten (`NoteAtlasRewrittenForAccept`), so with a batch open it never writes `TextureLibrary.xml` itself.
      *
      * Answers `AtlasReplyToJson`'s object; a failure is `artgen_accept_failed` with the reason.
      */
