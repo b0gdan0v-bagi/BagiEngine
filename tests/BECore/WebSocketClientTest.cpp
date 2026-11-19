@@ -79,14 +79,6 @@ namespace BECore::Tests {
             }
         };
 
-        /// A frame the client sent, as the bytes said (masked, with its key)
-        struct ClientFrame {
-            uint8_t opcode = 0;
-            String payload;  // unmasked
-            bool masked = false;
-            WebSocketMask key{};
-        };
-
         /// A hand-written server: a listening socket that accepts one connection and speaks the bytes the test tells it to
         class ScriptedServer {
         public:
@@ -144,15 +136,16 @@ namespace BECore::Tests {
             bool ReadRequest() {
                 const bool read = WaitUntil({}, [&] {
                     Fill();
-                    return _buffer.find("\r\n\r\n") != String::npos;
+                    return _reader.Buffered().find("\r\n\r\n") != String::npos;
                 });
                 if (!read) {
                     ADD_FAILURE() << "no request head";
                     return false;
                 }
-                const size_t end = _buffer.find("\r\n\r\n") + 4;
-                _request = _buffer.substr(0, end);
-                _buffer.erase(0, end);
+                String& buffered = _reader.Buffered();
+                const size_t end = buffered.find("\r\n\r\n") + 4;
+                _request = buffered.substr(0, end);
+                buffered.erase(0, end);
                 return true;
             }
 
@@ -199,13 +192,13 @@ namespace BECore::Tests {
             }
 
             /// The next frame of the client (masked frames are expected; the key is kept), nullopt when none came in @p limit
-            Optional<ClientFrame> ReadFrame(std::chrono::milliseconds limit = kClientWaitLimit) {
-                Optional<ClientFrame> frame;
+            Optional<RawFrame> ReadFrame(std::chrono::milliseconds limit = kClientWaitLimit) {
+                Optional<RawFrame> frame;
                 WaitUntil(
                     {},
                     [&] {
                         Fill();
-                        frame = ParseBuffered();
+                        frame = _reader.Parse();
                         return frame.has_value();
                     },
                     limit);
@@ -216,7 +209,7 @@ namespace BECore::Tests {
             bool WaitForEndOfStream() {
                 return WaitUntil({}, [&] {
                     Fill();
-                    return _ended;
+                    return _reader.HasEnded();
                 });
             }
 
@@ -234,77 +227,20 @@ namespace BECore::Tests {
             }
 
             void Fill() {
-                Array<uint8_t, 4096> chunk;
-                for (int i = 0; i < 1024; ++i) {
-                    const auto received = _peer.Receive(Span<uint8_t>(chunk.data(), chunk.size()));
-                    if (!received) {
-                        if (received.error() != SocketError::TimedOut) {
-                            _ended = true;
-                        }
-                        return;
-                    }
+                _reader.Fill(_peer, [this](uint8_t* data, size_t size) {
                     if (_fakeTls) {
-                        FakeTlsMask(chunk.data(), *received);
+                        FakeTlsMask(data, size);
                     }
-                    _buffer.append(reinterpret_cast<const char*>(chunk.data()), *received);
-                }
-            }
-
-            Optional<ClientFrame> ParseBuffered() {
-                if (_buffer.size() < 2) {
-                    return std::nullopt;
-                }
-                const auto byteAt = [this](size_t index) { return static_cast<uint8_t>(_buffer[index]); };
-                ClientFrame frame;
-                frame.opcode = byteAt(0) & 0x0F;
-                frame.masked = (byteAt(1) & 0x80) != 0;
-                size_t length = byteAt(1) & 0x7F;
-                size_t offset = 2;
-                if (length == 126 || length == 127) {
-                    const size_t lengthBytes = length == 126 ? 2 : 8;
-                    if (_buffer.size() < 2 + lengthBytes) {
-                        return std::nullopt;
-                    }
-                    length = 0;
-                    for (size_t i = 0; i < lengthBytes; ++i) {
-                        length = (length << 8) | byteAt(2 + i);
-                    }
-                    offset += lengthBytes;
-                }
-                if (frame.masked) {
-                    if (_buffer.size() < offset + frame.key.size()) {
-                        return std::nullopt;
-                    }
-                    for (size_t i = 0; i < frame.key.size(); ++i) {
-                        frame.key[i] = byteAt(offset + i);
-                    }
-                    offset += frame.key.size();
-                }
-                if (_buffer.size() < offset + length) {
-                    return std::nullopt;
-                }
-                frame.payload = _buffer.substr(offset, length);
-                if (frame.masked) {
-                    for (size_t i = 0; i < frame.payload.size(); ++i) {
-                        frame.payload[i] = static_cast<char>(static_cast<uint8_t>(frame.payload[i]) ^ frame.key[i % frame.key.size()]);
-                    }
-                }
-                _buffer.erase(0, offset + length);
-                return frame;
+                });
             }
 
             Socket _listener;
             Socket _peer;
-            String _buffer;
+            RawFrameReader _reader;
             String _request;
-            bool _ended = false;
             bool _fakeTls = false;  // the fake handshake was accepted: the bytes are masked both ways
             FakeTlsServerSide _tlsHello;
         };
-
-        [[nodiscard]] uint16_t CloseCodeOfFrame(const ClientFrame& frame) {
-            return static_cast<uint16_t>((static_cast<uint8_t>(frame.payload[0]) << 8) | static_cast<uint8_t>(frame.payload[1]));
-        }
 
         /// A real WebSocketListener that echoes every text and counts what happened
         class EchoServer {
@@ -493,7 +429,7 @@ namespace BECore::Tests {
         const auto echo = server.ReadFrame();
         ASSERT_TRUE(echo.has_value());
         EXPECT_EQ(echo->opcode, WebSocketOpcode::kClose);
-        EXPECT_EQ(CloseCodeOfFrame(*echo), WebSocketCloseCode::kGoingAway);
+        EXPECT_EQ(CloseCodeOf(*echo), WebSocketCloseCode::kGoingAway);
 
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kGoingAway);
@@ -533,7 +469,7 @@ namespace BECore::Tests {
         const auto frame = server.ReadFrame();
         ASSERT_TRUE(frame.has_value());
         EXPECT_EQ(frame->opcode, WebSocketOpcode::kClose);
-        EXPECT_EQ(CloseCodeOfFrame(*frame), 4000);
+        EXPECT_EQ(CloseCodeOf(*frame), 4000);
         EXPECT_EQ(frame->payload.substr(2), "bye");
 
         // The server stays silent: the connection is aborted after closeTimeout
@@ -662,7 +598,7 @@ namespace BECore::Tests {
         const auto close = server.ReadFrame();
         ASSERT_TRUE(close.has_value());
         EXPECT_EQ(close->opcode, WebSocketOpcode::kClose);
-        EXPECT_EQ(CloseCodeOfFrame(*close), WebSocketCloseCode::kProtocolError);
+        EXPECT_EQ(CloseCodeOf(*close), WebSocketCloseCode::kProtocolError);
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kProtocolError);
         EXPECT_EQ(session.Count(WebSocketClientEventKind::Text), 0u);
@@ -681,7 +617,7 @@ namespace BECore::Tests {
         server.SendText(String(101, 'x'));
         const auto close = server.ReadFrame();
         ASSERT_TRUE(close.has_value());
-        EXPECT_EQ(CloseCodeOfFrame(*close), WebSocketCloseCode::kMessageTooBig);
+        EXPECT_EQ(CloseCodeOf(*close), WebSocketCloseCode::kMessageTooBig);
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kMessageTooBig);
         EXPECT_EQ(session.Count(WebSocketClientEventKind::Text), 0u);
@@ -712,7 +648,7 @@ namespace BECore::Tests {
         server.SendFrame(WebSocketOpcode::kBinary, "\x01\x02");
         const auto close = server.ReadFrame();
         ASSERT_TRUE(close.has_value());
-        EXPECT_EQ(CloseCodeOfFrame(*close), WebSocketCloseCode::kUnsupportedData);
+        EXPECT_EQ(CloseCodeOf(*close), WebSocketCloseCode::kUnsupportedData);
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kUnsupportedData);
     }
@@ -1056,7 +992,7 @@ namespace BECore::Tests {
         const auto close = server.ReadFrame();
         ASSERT_TRUE(close.has_value());
         EXPECT_EQ(close->opcode, WebSocketOpcode::kClose);
-        EXPECT_EQ(CloseCodeOfFrame(*close), WebSocketCloseCode::kNormal);
+        EXPECT_EQ(CloseCodeOf(*close), WebSocketCloseCode::kNormal);
         server.SendClose(WebSocketCloseCode::kNormal, "");
         session.ExpectSingleClosed();
         EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kNormal);

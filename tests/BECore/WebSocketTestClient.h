@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Utils/FunctionRef.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <BECore/Utils/StringUtils.h>
 #include <Common/Wait.h>
@@ -51,22 +52,115 @@ namespace BECore::Tests {
                extraHeaders + "\r\n";
     }
 
-    /// A frame of the server (not masked)
-    struct ServerFrame {
+    /// A frame as it came off the wire, the payload unmasked. A server's frame must not be masked (RFC 6455, 5.1), a client's must
+    struct RawFrame {
         uint8_t opcode = 0;
         String payload;
-        /// The mask bit of the header: a server must never set it (RFC 6455, 5.1)
+        /// The mask bit of the header
         bool masked = false;
+        /// The masking key when masked
+        WebSocketMask key{};
     };
 
-    inline uint16_t CloseCodeOf(const ServerFrame& frame) {
+    inline uint16_t CloseCodeOf(const RawFrame& frame) {
         return static_cast<uint16_t>((static_cast<uint8_t>(frame.payload[0]) << 8) | static_cast<uint8_t>(frame.payload[1]));
     }
 
     /// The reason of a close frame (after the two bytes of the code)
-    inline String CloseReasonOf(const ServerFrame& frame) {
+    inline String CloseReasonOf(const RawFrame& frame) {
         return frame.payload.size() > 2 ? frame.payload.substr(2) : String();
     }
+
+    /**
+     * @brief The receiving half of a hand-written WebSocket peer: what a socket delivered, and the frames parsed from it.
+     *
+     * The raw client below reads a server's frames with it, a scripted server (WebSocketClientTest) a client's; both also read an
+     * HTTP head from Buffered() before the first frame.
+     */
+    class RawFrameReader {
+    public:
+        /// Changes the bytes as they arrive (a fake TLS layer); may be empty
+        using Filter = FunctionRef<void(uint8_t* data, size_t size)>;
+
+        /// Reads everything that has arrived (up to kMaxChunksPerFill chunks); a loop, because WaitUntil sleeps 1 ms between its
+        /// calls, which is 15 ms on Windows, and a megabyte in chunks of 4 KiB would take seconds
+        void Fill(Socket& socket, Optional<Filter> filter = std::nullopt) {
+            Array<uint8_t, 4096> chunk;
+            for (int i = 0; i < kMaxChunksPerFill; ++i) {
+                const auto received = socket.Receive(Span<uint8_t>(chunk.data(), chunk.size()));
+                if (!received) {
+                    if (received.error() != SocketError::TimedOut) {
+                        _ended = true;
+                    }
+                    return;
+                }
+                if (filter) {
+                    (*filter)(chunk.data(), *received);
+                }
+                _buffer.append(reinterpret_cast<const char*>(chunk.data()), *received);
+            }
+        }
+
+        /// The next complete frame of the buffer (unmasked when the mask bit is set), nullopt when it is not all there yet
+        Optional<RawFrame> Parse() {
+            if (_buffer.size() < 2) {
+                return std::nullopt;
+            }
+            const auto byteAt = [this](size_t index) { return static_cast<uint8_t>(_buffer[index]); };
+            RawFrame frame;
+            frame.opcode = byteAt(0) & 0x0F;
+            frame.masked = (byteAt(1) & 0x80) != 0;
+            size_t length = byteAt(1) & 0x7F;
+            size_t offset = 2;
+            if (length == 126 || length == 127) {
+                const size_t lengthBytes = length == 126 ? 2 : 8;
+                if (_buffer.size() < offset + lengthBytes) {
+                    return std::nullopt;
+                }
+                length = 0;
+                for (size_t i = 0; i < lengthBytes; ++i) {
+                    length = (length << 8) | byteAt(offset + i);
+                }
+                offset += lengthBytes;
+            }
+            if (frame.masked) {
+                if (_buffer.size() < offset + frame.key.size()) {
+                    return std::nullopt;
+                }
+                for (size_t i = 0; i < frame.key.size(); ++i) {
+                    frame.key[i] = byteAt(offset + i);
+                }
+                offset += frame.key.size();
+            }
+            if (_buffer.size() < offset + length) {
+                return std::nullopt;
+            }
+            frame.payload = _buffer.substr(offset, length);
+            if (frame.masked) {
+                for (size_t i = 0; i < frame.payload.size(); ++i) {
+                    frame.payload[i] = static_cast<char>(static_cast<uint8_t>(frame.payload[i]) ^ frame.key[i % frame.key.size()]);
+                }
+            }
+            _buffer.erase(0, offset + length);
+            return frame;
+        }
+
+        /// What arrived and was not parsed yet
+        [[nodiscard]] String& Buffered() {
+            return _buffer;
+        }
+
+        /// The peer ended the connection
+        [[nodiscard]] bool HasEnded() const {
+            return _ended;
+        }
+
+    private:
+        static constexpr int kMaxChunksPerFill = 1024;
+
+        String _buffer;
+        bool _ended = false;
+    };
 
     class WebSocketTestClient {
     public:
@@ -107,8 +201,8 @@ namespace BECore::Tests {
             String response;
             size_t bodyExpected = 0;
             const bool complete = WaitUntil(_pump, [&] {
-                FillBuffer();
-                const String text(reinterpret_cast<const char*>(_buffer.data()), _buffer.size());
+                _reader.Fill(_socket);
+                String& text = _reader.Buffered();
                 const size_t headEnd = text.find(kHeadEnd.data(), 0, kHeadEnd.size());
                 if (headEnd == String::npos) {
                     return false;
@@ -124,7 +218,7 @@ namespace BECore::Tests {
                     return false;
                 }
                 response = text.substr(0, headEnd + kHeadEnd.size() + bodyExpected);
-                _buffer.erase(_buffer.begin(), _buffer.begin() + static_cast<ptrdiff_t>(response.size()));
+                text.erase(0, response.size());
                 return true;
             });
             return complete ? response : String();
@@ -137,17 +231,17 @@ namespace BECore::Tests {
         }
 
         /// The next complete frame of the server, nullopt when none came yet
-        Optional<ServerFrame> TryReadFrame() {
-            if (const auto frame = ParseBuffered()) {
+        Optional<RawFrame> TryReadFrame() {
+            if (auto frame = _reader.Parse()) {
                 return frame;
             }
-            FillBuffer();
-            return ParseBuffered();
+            _reader.Fill(_socket);
+            return _reader.Parse();
         }
 
         /// Waits up to @p limit for the next frame
-        Optional<ServerFrame> WaitForFrame(std::chrono::milliseconds limit = kClientWaitLimit) {
-            Optional<ServerFrame> frame;
+        Optional<RawFrame> WaitForFrame(std::chrono::milliseconds limit = kClientWaitLimit) {
+            Optional<RawFrame> frame;
             WaitUntil(
                 _pump,
                 [&] {
@@ -161,8 +255,8 @@ namespace BECore::Tests {
         /// True when the server ended the connection (and every frame it sent before has been read)
         bool WaitForEndOfStream() {
             return WaitUntil(_pump, [&] {
-                FillBuffer();
-                return _ended;
+                _reader.Fill(_socket);
+                return _reader.HasEnded();
             });
         }
 
@@ -173,60 +267,11 @@ namespace BECore::Tests {
         }
 
     private:
-        static constexpr int kMaxChunksPerFill = 1024;
-
         WebSocketTestClient() = default;
-
-        /// Reads everything that has arrived (up to kMaxChunksPerFill chunks); a loop, because WaitUntil sleeps 1 ms
-        /// between its calls, which is 15 ms on Windows, and a megabyte in chunks of 4 KiB would take seconds
-        void FillBuffer() {
-            Array<uint8_t, 4096> chunk;
-            for (int i = 0; i < kMaxChunksPerFill; ++i) {
-                const auto received = _socket.Receive(Span<uint8_t>(chunk.data(), chunk.size()));
-                if (!received) {
-                    if (received.error() != SocketError::TimedOut) {
-                        _ended = true;
-                    }
-                    return;
-                }
-                // Pointers, not std::array iterators: EASTL's insert does not take MSVC's class iterator
-                _buffer.insert(_buffer.end(), chunk.data(), chunk.data() + *received);
-            }
-        }
-
-        /// The frames of a server are not masked
-        Optional<ServerFrame> ParseBuffered() {
-            if (_buffer.size() < 2) {
-                return std::nullopt;
-            }
-            size_t length = _buffer[1] & 0x7F;
-            size_t headerSize = 2;
-            if (length == 126 || length == 127) {
-                const size_t lengthBytes = (length == 126) ? 2 : 8;
-                if (_buffer.size() < 2 + lengthBytes) {
-                    return std::nullopt;
-                }
-                length = 0;
-                for (size_t i = 0; i < lengthBytes; ++i) {
-                    length = (length << 8) | _buffer[2 + i];
-                }
-                headerSize += lengthBytes;
-            }
-            if (_buffer.size() < headerSize + length) {
-                return std::nullopt;
-            }
-            ServerFrame frame;
-            frame.opcode = _buffer[0] & 0x0F;
-            frame.masked = (_buffer[1] & 0x80) != 0;
-            frame.payload.assign(reinterpret_cast<const char*>(_buffer.data()) + headerSize, length);
-            _buffer.erase(_buffer.begin(), _buffer.begin() + static_cast<ptrdiff_t>(headerSize + length));
-            return frame;
-        }
 
         Socket _socket;
         WaitPump _pump;
-        Vector<uint8_t> _buffer;
-        bool _ended = false;
+        RawFrameReader _reader;
     };
 
 }  // namespace BECore::Tests

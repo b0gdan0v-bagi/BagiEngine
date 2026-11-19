@@ -172,7 +172,7 @@ namespace BECore::Tests {
     }
 
     /// Reads frames until the server's close frame; nullopt when none comes
-    inline Optional<ServerFrame> ReadUntilClose(WebSocketTestClient& client) {
+    inline Optional<RawFrame> ReadUntilClose(WebSocketTestClient& client) {
         for (;;) {
             const auto frame = client.WaitForFrame();
             if (!frame) {

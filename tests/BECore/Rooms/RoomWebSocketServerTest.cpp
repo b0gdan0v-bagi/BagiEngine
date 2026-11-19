@@ -483,7 +483,7 @@ namespace BECore::Tests {
         std::this_thread::sleep_for(150ms);
 
         auto late = RoomSocketClient::Connect(port);
-        Optional<ServerFrame> close;
+        Optional<RawFrame> close;
         if (late) {
             close = late->WaitForClose();
         }

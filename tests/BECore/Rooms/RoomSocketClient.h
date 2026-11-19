@@ -121,7 +121,7 @@ namespace BECore::Tests {
         }
 
         /// Reads forward until the server's close frame arrives (the messages before it are kept); nullopt when none does
-        Optional<ServerFrame> WaitForClose(std::chrono::milliseconds limit = kClientWaitLimit) {
+        Optional<RawFrame> WaitForClose(std::chrono::milliseconds limit = kClientWaitLimit) {
             const auto deadline = std::chrono::steady_clock::now() + limit;
             while (!_closeFrame && std::chrono::steady_clock::now() < deadline) {
                 if (!Next(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now())) && !_closeFrame) {
@@ -137,7 +137,7 @@ namespace BECore::Tests {
         }
 
         /// The close frame the server sent, once Next() met it
-        [[nodiscard]] const Optional<ServerFrame>& GetCloseFrame() const {
+        [[nodiscard]] const Optional<RawFrame>& GetCloseFrame() const {
             return _closeFrame;
         }
 
@@ -166,7 +166,7 @@ namespace BECore::Tests {
         WebSocketTestClient _raw;
         Vector<ReceivedMessage> _received;
         size_t _cursor = 0;
-        Optional<ServerFrame> _closeFrame;
+        Optional<RawFrame> _closeFrame;
         size_t _maskedFrames = 0;
         size_t _binaryFrames = 0;
     };
