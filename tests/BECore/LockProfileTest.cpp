@@ -11,13 +11,19 @@
 #include <thread>
 #include <vector>
 
+#if defined(__APPLE__)
+#include <mach/mach.h>
+#include <pthread.h>
+#endif
+
 namespace BECore::Tests {
 
 #if BE_PROFILER
 
     namespace {
 
-        constexpr auto kHold = std::chrono::milliseconds(200);  // the waiter has this long to reach the lock, also on a loaded machine
+        /// How long the holder keeps the lock once the waiter is blocked on it: above kTestThresholdUs, so the wait is long enough to record
+        constexpr auto kHoldWhileBlocked = std::chrono::milliseconds(20);
         constexpr uint32_t kTestThresholdUs = 1000;
         constexpr const char* kWaitZoneName = "lock wait: Test lock";
 
@@ -48,26 +54,73 @@ namespace BECore::Tests {
         };
 
         /**
-         * A thread takes a lock with @p acquire (it returns the guard that keeps it) and holds it until the waiting thread is about to
-         * call @p wait, then for kHold more, so @p wait blocks for about kHold. Returns the profiler id of the waiting thread.
+         * Tells whether a thread is blocked in the system, so that a test can release a lock only once the waiter sits in it. The waiter
+         * calls Register() on itself first. Without a probe of the platform (only macOS has one) IsBlocked() is true kFallbackPause after
+         * Register(): there a waiter descheduled for longer than that before its lock() is not contended, and the test fails.
+         */
+        class BlockedThreadProbe {
+        public:
+            void Register() {
+#if defined(__APPLE__)
+                _thread = pthread_mach_thread_np(pthread_self());
+#endif
+                _registeredAt = std::chrono::steady_clock::now();
+                _registered = true;
+            }
+
+            [[nodiscard]] bool IsBlocked() const {
+                if (!_registered) {
+                    return false;
+                }
+#if defined(__APPLE__)
+                thread_basic_info_data_t info{};
+                mach_msg_type_number_t count = THREAD_BASIC_INFO_COUNT;
+                if (thread_info(_thread, THREAD_BASIC_INFO, reinterpret_cast<thread_info_t>(&info), &count) != KERN_SUCCESS) {
+                    return false;
+                }
+                return info.run_state == TH_STATE_WAITING;
+#else
+                return std::chrono::steady_clock::now() - _registeredAt >= kFallbackPause;
+#endif
+            }
+
+        private:
+            static constexpr auto kFallbackPause = std::chrono::milliseconds(200);
+
+            std::atomic<bool> _registered{false};
+            std::chrono::steady_clock::time_point _registeredAt;
+#if defined(__APPLE__)
+            mach_port_t _thread = MACH_PORT_NULL;
+#endif
+        };
+
+        /**
+         * A thread takes a lock with @p acquire (it returns the guard that keeps it) and holds it until the waiting thread is blocked in
+         * @p wait, then kHoldWhileBlocked more, so a wait of the waiter is at least that long whatever the load of the machine. A @p wait
+         * that does not block (a second reader) ends on its own and the holder lets go after it. Returns the profiler id of the waiter.
          */
         template <typename TAcquire, typename TWait>
         uint32_t RunContended(TAcquire acquire, TWait wait) {
             std::atomic<bool> held{false};
-            std::atomic<bool> waiterReady{false};
+            std::atomic<bool> release{false};
             std::thread holder([&] {
                 auto guard = acquire();
                 held = true;
-                WaitUntil([&] { return waiterReady.load(); });
-                std::this_thread::sleep_for(kHold);
+                WaitUntil([&] { return release.load(); });
+                std::this_thread::sleep_for(kHoldWhileBlocked);
             });
             EXPECT_TRUE(WaitUntil([&] { return held.load(); }));
             uint32_t waiterId = 0;
+            BlockedThreadProbe probe;
+            std::atomic<bool> waited{false};
             std::thread waiter([&] {
                 waiterId = Profiler::CurrentThreadId();
-                waiterReady = true;
+                probe.Register();
                 wait();
+                waited = true;
             });
+            EXPECT_TRUE(WaitUntil([&] { return waited.load() || probe.IsBlocked(); })) << "the waiter neither blocked nor finished";
+            release = true;
             waiter.join();
             holder.join();
             return waiterId;
