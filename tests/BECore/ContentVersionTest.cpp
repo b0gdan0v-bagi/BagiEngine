@@ -18,7 +18,7 @@ namespace BECore::Tests {
 
         /// A `<node ... contentVersion=V/>` root, the attribute left out when @p version is empty
         pugi::xml_document NodeWith(const String& version) {
-            return Parse(version.empty() ? "<node name=\"A\"/>" : "<node name=\"A\" contentVersion=\"" + version + "\"/>");
+            return Parse(version.empty() ? String("<node name=\"A\"/>") : Format("<node name=\"A\" contentVersion=\"{}\"/>", version));
         }
 
         String Message(const pugi::xml_document& doc) {
@@ -27,7 +27,7 @@ namespace BECore::Tests {
         }
 
         String SceneConfigText(const String& attribute) {
-            return "<SceneManager" + attribute + "><scenes><scene type=\"Scene\" name=\"Main\"><nodes/></scene></scenes></SceneManager>";
+            return Format("<SceneManager{}><scenes><scene type=\"Scene\" name=\"Main\"><nodes/></scene></scenes></SceneManager>", attribute);
         }
 
         NodeFileLoader NoNodeFiles() {
@@ -61,7 +61,7 @@ namespace BECore::Tests {
 
     TEST(ContentVersionTest, MalformedValueIsAnErrorOfTheFile) {
         for (const char* value : {"", "x", "2x", "-1", "1.5", " 2", "99999999999"}) {
-            const pugi::xml_document doc = Parse(String("<node name=\"A\" contentVersion=\"") + value + "\"/>");
+            const pugi::xml_document doc = Parse(Format("<node name=\"A\" contentVersion=\"{}\"/>", value));
             EXPECT_FALSE(GetContentVersion(doc.document_element())) << "'" << value << "'";
             const String message = Message(doc);
             EXPECT_TRUE(StringView(message).starts_with("config/nodes/A.xml: contentVersion '")) << message;
@@ -113,7 +113,7 @@ namespace BECore::Tests {
     };
 
     TEST_F(ContentVersionSceneTest, AStampedSceneConfigLoadsLikeAnUnstampedOne) {
-        const String stamp = " contentVersion=\"" + ToString(kContentVersion) + "\"";
+        const String stamp = Format(" contentVersion=\"{}\"", kContentVersion);
         EXPECT_TRUE(HasMain(SceneConfigText(stamp), false));
         EXPECT_TRUE(HasMain(SceneConfigText(stamp), true));
         EXPECT_TRUE(HasMain(SceneConfigText(""), false));
@@ -121,8 +121,8 @@ namespace BECore::Tests {
 
     TEST_F(ContentVersionSceneTest, TheCheckedLoaderRefusesAnOlderAndANewerSceneConfig) {
         ASSERT_GT(kContentVersion, 0u);
-        EXPECT_FALSE(HasMain(SceneConfigText(" contentVersion=\"" + ToString(kContentVersion - 1) + "\""), true));
-        EXPECT_FALSE(HasMain(SceneConfigText(" contentVersion=\"" + ToString(kContentVersion + 1) + "\""), true));
+        EXPECT_FALSE(HasMain(SceneConfigText(Format(" contentVersion=\"{}\"", kContentVersion - 1)), true));
+        EXPECT_FALSE(HasMain(SceneConfigText(Format(" contentVersion=\"{}\"", kContentVersion + 1)), true));
         EXPECT_FALSE(HasMain(SceneConfigText(" contentVersion=\"x\""), true));
     }
 

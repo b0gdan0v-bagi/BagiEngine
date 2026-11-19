@@ -11,6 +11,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <Generated/ClickableComponentTest.gen.hpp>
@@ -70,37 +71,18 @@ namespace BECore::Tests {
             }
         };
 
-        SDL_MouseButtonEvent MakeButton(float x, float y, bool down, uint8_t button = SDL_BUTTON_LEFT) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = button;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        SDL_MouseMotionEvent MakeMotion(float x, float y, SDL_MouseButtonFlags buttonsHeld = 0) {
-            SDL_MouseMotionEvent event{};
-            event.type = SDL_EVENT_MOUSE_MOTION;
-            event.x = x;
-            event.y = y;
-            event.state = buttonsHeld;
-            return event;
-        }
-
         bool Move(float x, float y, SDL_MouseButtonFlags buttonsHeld = 0) {
-            return CoreManager::GetUIInput().DispatchMouseMotion(MakeMotion(x, y, buttonsHeld));
+            return CoreManager::GetUIInput().DispatchMouseMotion(Motion(x, y, buttonsHeld));
         }
 
         bool Press(float x, float y, uint8_t button = SDL_BUTTON_LEFT, uint32_t which = 0) {
-            SDL_MouseButtonEvent event = MakeButton(x, y, true, button);
+            SDL_MouseButtonEvent event = Button(x, y, true, button);
             event.which = which;
             return CoreManager::GetUIInput().DispatchMouseButtonDown(event);
         }
 
         bool Release(float x, float y, uint8_t button = SDL_BUTTON_LEFT, uint32_t which = 0) {
-            SDL_MouseButtonEvent event = MakeButton(x, y, false, button);
+            SDL_MouseButtonEvent event = Button(x, y, false, button);
             event.which = which;
             return CoreManager::GetUIInput().DispatchMouseButtonUp(event);
         }
@@ -252,7 +234,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ClickableComponentTest, TheLaterSiblingWinsAndTheLowerOneGetsNothing) {
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Low", "ActLow", 0.0f) + ClickableNode("High", "ActHigh", 0.0f)));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("Low", "ActLow", 0.0f), ClickableNode("High", "ActHigh", 0.0f))));
         Draw();
         InputRecorder recorder;
 
@@ -263,7 +245,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ClickableComponentTest, AHigherLayerWinsOverALaterSibling) {
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Front", "ActFront", 0.0f, 1) + ClickableNode("Later", "ActLater", 0.0f)));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("Front", "ActFront", 0.0f, 1), ClickableNode("Later", "ActLater", 0.0f))));
         Draw();
         InputRecorder recorder;
 
@@ -274,7 +256,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ClickableComponentTest, TheLowerOneTakesAPressOutsideTheOneAboveIt) {
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Low", "ActLow", 0.0f) + ClickableNode("High", "ActHigh", kBoxSize / 2)));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("Low", "ActLow", 0.0f), ClickableNode("High", "ActHigh", kBoxSize / 2))));
         Draw();
         InputRecorder recorder;
 
@@ -285,7 +267,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ClickableComponentTest, APressHeldOnOneAndReleasedOverTheOtherEmitsOnlyTheFirst) {
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("A", "ActA", 0.0f) + ClickableNode("B", "ActB", 200.0f)));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("A", "ActA", 0.0f), ClickableNode("B", "ActB", 200.0f))));
         Draw();
         InputRecorder recorder;
 
@@ -305,7 +287,7 @@ namespace BECore::Tests {
   <component type="ClipPopTestComponent"/>
 </components></node>)",
                                       kBoxSize / 2, kBoxSize, kBoxSize, kBoxSize);
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Under", "ActUnder", 0.0f) + clipped));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("Under", "ActUnder", 0.0f), clipped)));
         Draw();
         InputRecorder recorder;
 
@@ -323,7 +305,7 @@ namespace BECore::Tests {
   <component type="TransformComponent" x="0" y="0" width="100" height="100"/>
   <component type="ClickableComponent"/>
 </components></node>)";
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Under", "ActUnder", 0.0f) + silent));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("Under", "ActUnder", 0.0f), silent)));
         Draw();
         InputRecorder recorder;
 
@@ -337,7 +319,7 @@ namespace BECore::Tests {
         const String bare = R"(<node name="Bare"><components>
   <component type="ClickableComponent" actionName="ActBare"/>
 </components></node>)";
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Under", "ActUnder", 0.0f) + bare));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("Under", "ActUnder", 0.0f), bare)));
         Draw();
         InputRecorder recorder;
 
@@ -481,7 +463,7 @@ namespace BECore::Tests {
   <component type="TransformComponent" x="0" y="0" width="100" height="100"/>
   <component type="ClickableComponent" actionName="ActRound" shape="Ellipse"/>
 </components></node>)";
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Under", "ActUnder", 0.0f) + ellipse));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("Under", "ActUnder", 0.0f), ellipse)));
         Draw();
         InputRecorder recorder;
 
@@ -512,7 +494,7 @@ namespace BECore::Tests {
   <component type="TransformComponent" x="0" y="0" width="100" height="100"/>
   <component type="ClickableComponent" blocksInput="true"/>
 </components></node>)";
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(ClickableNode("Under", "ActUnder", 0.0f) + shield));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", ClickableNode("Under", "ActUnder", 0.0f), shield)));
         Draw();
         InputRecorder recorder;
 

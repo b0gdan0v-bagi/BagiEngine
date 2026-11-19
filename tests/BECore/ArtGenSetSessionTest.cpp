@@ -1,6 +1,8 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
@@ -173,7 +175,7 @@ namespace BECore::Tests {
         std::expected<String, String> Enqueue(StringView name, StringView lines, int32_t count = 2, Optional<int64_t> seed = kSetSeed) {
             ArtGenSetRequest request;
             request.preset = "wood";
-            request.subjects = ParseArtGenSubjects(lines).value();
+            request.subjects = Require(ParseArtGenSubjects(lines));
             request.count = count;
             request.seed = seed;
             request.name = String(name);
@@ -187,13 +189,13 @@ namespace BECore::Tests {
 
         /// What the service does for the request it got: an image per seed, then the end
         void Finish(const Json& request, StringView status, StringView error = {}, StringView kind = "image") {
-            const uint32_t id = static_cast<uint32_t>(GetJsonInt(request, "id").value());
-            const int64_t seed = GetJsonInt(request, "seed").value();
-            const String outDir = GetJsonString(request, "outDir").value();
-            const String name = GetJsonString(request, "name").value();
+            const uint32_t id = static_cast<uint32_t>(Require(GetJsonInt(request, "id")));
+            const int64_t seed = Require(GetJsonInt(request, "seed"));
+            const String outDir = Require(GetJsonString(request, "outDir"));
+            const String name = Require(GetJsonString(request, "name"));
             const StringView extension = kind == "audio" ? "flac" : "png";
             if (status == "ok") {
-                const int64_t count = GetJsonInt(request, "count").value();
+                const int64_t count = Require(GetJsonInt(request, "count"));
                 for (int64_t i = 0; i < count; ++i) {
                     Json image = Report(id);
                     image["seed"] = seed + i;
@@ -216,14 +218,14 @@ namespace BECore::Tests {
             while (const Json* request = RequestOf(pollReply = Poll())) {
                 Finish(*request, "ok", {}, kind);
             }
-            for (const ArtGenSetJob& job : session.FindSet(set)->jobs) {
+            for (const ArtGenSetJob& job : Require(session.FindSet(set)).jobs) {
                 ASSERT_EQ(session.PickVariant(set, job.name, kSetSeed + 1), ArtGenSetEdit::Ok);
             }
         }
 
         /// Makes the files the manifest names, as the service would have written them (the reports alone leave none)
         void MakeFiles(StringView set) {
-            for (const ArtGenSetJob& job : session.FindSet(set)->jobs) {
+            for (const ArtGenSetJob& job : Require(session.FindSet(set)).jobs) {
                 for (const ArtGenSetVariant& variant : job.variants) {
                     for (const String& file : {variant.file, variant.provenance}) {
                         const std::filesystem::path path = AbsoluteInSet(_root, set, file);
@@ -273,11 +275,6 @@ namespace BECore::Tests {
             gKept.clear();
         }
 
-        static String ErrorMessage(const Json& response) {
-            const Json* error = FindJsonMember(response, "error");
-            return error != nullptr ? GetJsonString(*error, "message").value_or(String()) : String();
-        }
-
         Json AcceptAllCall(StringView set) {
             Json params = Json::object();
             params["set"] = ToStdString(set);
@@ -311,15 +308,10 @@ namespace BECore::Tests {
             gMeasures.clear();
         }
 
-        static String ErrorCode(const Json& response) {
-            const Json* error = FindJsonMember(response, "error");
-            return error != nullptr ? GetJsonString(*error, "code").value_or(String()) : String();
-        }
-
         /// The manifest as it is on disk now
         ArtGenSet OnDisk(StringView set) const {
             const auto text = ReadTextFile(ManifestPath(_root, set));
-            return ArtGenSetFromJson(ParseJson(text.value()).value()).value();
+            return Require(ArtGenSetFromJson(Require(ParseJson(Require(text)))));
         }
 
         static ArtGenSetJobState StateOf(const ArtGenSet& set, size_t job) {
@@ -379,13 +371,13 @@ namespace BECore::Tests {
         Finish(*request, "ok");
 
         EXPECT_FALSE(session.IsBusy());
-        EXPECT_EQ(CountJobs(*session.FindSet("pieces"), ArtGenSetJobState::Done), 3);
+        EXPECT_EQ(CountJobs(Require(session.FindSet("pieces")), ArtGenSetJobState::Done), 3);
         EXPECT_EQ(RequestOf(Poll()), nullptr);
     }
 
     TEST_F(ArtGenSetSessionTest, TheSetDrawsASharedSeedWhenNoneIsGiven) {
         ASSERT_TRUE(Enqueue("drawn", "a\nb", 1, Optional<int64_t>()).has_value());
-        const ArtGenSet& set = *session.FindSet("drawn");
+        const ArtGenSet& set = Require(session.FindSet("drawn"));
         EXPECT_GE(set.seed, 0);
         EXPECT_EQ(OnDisk("drawn").seed, set.seed);
         const Json first = Poll();
@@ -463,7 +455,7 @@ namespace BECore::Tests {
         }
         Poll();
         Finish(*RequestOf(first), "cancelled");
-        EXPECT_FALSE(IsActive(*session.FindSet("all")));
+        EXPECT_FALSE(IsActive(Require(session.FindSet("all"))));
         // The next set in line starts
         const Json next = Poll();
         ASSERT_NE(RequestOf(next), nullptr);
@@ -489,7 +481,7 @@ namespace BECore::Tests {
         Finish(*RequestOf(Poll()), "ok");
         Finish(*RequestOf(Poll()), "failed", "boom");
         session.CancelJob("retry", "c");
-        EXPECT_FALSE(IsActive(*session.FindSet("retry")));
+        EXPECT_FALSE(IsActive(Require(session.FindSet("retry"))));
         ASSERT_TRUE(session.PickVariant("retry", "a", kSetSeed) == ArtGenSetEdit::Ok);
 
         EXPECT_EQ(session.RetryJobs("retry", "b"), ArtGenSetEdit::Ok);
@@ -544,14 +536,14 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("wait", "a\nb").has_value());
         session.PumpSets();
         EXPECT_EQ(session.GetRun().state, ArtGenRunState::Idle);
-        EXPECT_EQ(StateOf(*session.FindSet("wait"), 0), ArtGenSetJobState::Pending);
+        EXPECT_EQ(StateOf(Require(session.FindSet("wait")), 0), ArtGenSetJobState::Pending);
 
         const Json first = Poll();
         ASSERT_NE(RequestOf(first), nullptr);
         // The service is silent past the timeout when the job ends: the next one waits for a poll
         now += ArtGenSession::kServiceTimeoutSeconds + 1.0;
         Finish(*RequestOf(first), "ok");
-        EXPECT_EQ(StateOf(*session.FindSet("wait"), 1), ArtGenSetJobState::Pending);
+        EXPECT_EQ(StateOf(Require(session.FindSet("wait")), 1), ArtGenSetJobState::Pending);
         EXPECT_EQ(GetJsonString(*RequestOf(Poll()), "name"), Optional<String>("b"));
     }
 
@@ -570,7 +562,7 @@ namespace BECore::Tests {
         }
         // No pump while the service is gone; a service that polls again takes the next job
         session.PumpSets();
-        EXPECT_EQ(StateOf(*session.FindSet("bye"), 1), ArtGenSetJobState::Pending);
+        EXPECT_EQ(StateOf(Require(session.FindSet("bye")), 1), ArtGenSetJobState::Pending);
         const Json again = Poll();
         ASSERT_NE(RequestOf(again), nullptr);
         EXPECT_EQ(GetJsonString(*RequestOf(again), "name"), Optional<String>("b"));
@@ -601,13 +593,13 @@ namespace BECore::Tests {
         ASSERT_NE(RequestOf(Poll()), nullptr);
         // The panel calls this at every switch of the run mode; a reload would turn the running job into Cancelled
         session.SetGameRoot(PathText(_root));
-        EXPECT_EQ(StateOf(*session.FindSet("keep"), 0), ArtGenSetJobState::Running);
+        EXPECT_EQ(StateOf(Require(session.FindSet("keep")), 0), ArtGenSetJobState::Running);
     }
 
     TEST_F(ArtGenSetSessionTest, AReportOfAnOlderRunIsStale) {
         ASSERT_TRUE(Enqueue("stale", "a\nb").has_value());
         const Json first = Poll();
-        const uint32_t firstId = static_cast<uint32_t>(GetJsonInt(*RequestOf(first), "id").value());
+        const uint32_t firstId = static_cast<uint32_t>(Require(GetJsonInt(*RequestOf(first), "id")));
         Finish(*RequestOf(first), "ok");
         const Json second = Poll();
         ASSERT_NE(RequestOf(second), nullptr);
@@ -653,13 +645,13 @@ namespace BECore::Tests {
         empty.preset = "wood";
         EXPECT_FALSE(session.EnqueueSet(empty).has_value());
         ArtGenSetRequest noPreset;
-        noPreset.subjects = ParseArtGenSubjects("a").value();
+        noPreset.subjects = Require(ParseArtGenSubjects("a"));
         EXPECT_FALSE(session.EnqueueSet(noPreset).has_value());
 
         ArtGenSession noRoot;
         ArtGenSetRequest request;
         request.preset = "wood";
-        request.subjects = ParseArtGenSubjects("a").value();
+        request.subjects = Require(ParseArtGenSubjects("a"));
         EXPECT_FALSE(noRoot.EnqueueSet(request).has_value());
     }
 
@@ -672,7 +664,7 @@ namespace BECore::Tests {
         Call("artgen_poll", params);
         ArtGenSetRequest request;
         request.preset = "broken";
-        request.subjects = ParseArtGenSubjects("a").value();
+        request.subjects = Require(ParseArtGenSubjects("a"));
         const auto refused = session.EnqueueSet(request);
         ASSERT_FALSE(refused.has_value());
         EXPECT_NE(refused.error().find("broken"), String::npos);
@@ -687,15 +679,15 @@ namespace BECore::Tests {
     TEST_F(ArtGenSetSessionTest, ADraftTravelsInlineWithEveryJob) {
         ArtGenSetRequest request;
         request.preset = "form";
-        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}"})").value();
-        request.subjects = ParseArtGenSubjects("a").value();
+        request.presetData = Require(ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}"})"));
+        request.subjects = Require(ParseArtGenSubjects("a"));
         request.name = "drafted";
         request.seed = 3;
         ASSERT_TRUE(session.EnqueueSet(request).has_value());
         const Json first = Poll();
         const Json* sent = RequestOf(first);
         ASSERT_NE(sent, nullptr);
-        EXPECT_EQ(FindJsonMember(*sent, "preset")->type(), Json::value_t::object);
+        EXPECT_EQ(Require(FindJsonMember(*sent, "preset")).type(), Json::value_t::object);
         EXPECT_EQ(GetJsonString(*sent, "presetName"), Optional<String>("form"));
         EXPECT_EQ(OnDisk("drafted").presetData, request.presetData);
     }
@@ -711,7 +703,7 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString(first, "set"), Optional<String>("from_lines"));
         EXPECT_EQ(GetJsonInt(first, "seed"), Optional<int64_t>(5));
         ASSERT_NE(FindJsonMember(first, "jobs"), nullptr);
-        EXPECT_EQ(*FindJsonMember(first, "jobs"), (Json::array({"rook", "white_knight"})));
+        EXPECT_EQ(Require(FindJsonMember(first, "jobs")), (Json::array({"rook", "white_knight"})));
         EXPECT_EQ(GetJsonBool(first, "serviceConnected"), Optional<bool>(false));
         EXPECT_EQ(OnDisk("from_lines").count, 3);
 
@@ -721,7 +713,7 @@ namespace BECore::Tests {
         list["set"] = "from_list";
         const Json second = Result(Call("artgen_enqueue", list));
         ASSERT_NE(FindJsonMember(second, "jobs"), nullptr);
-        EXPECT_EQ(*FindJsonMember(second, "jobs"), (Json::array({"bishop", "a_queen"})));
+        EXPECT_EQ(Require(FindJsonMember(second, "jobs")), (Json::array({"bishop", "a_queen"})));
         EXPECT_EQ(OnDisk("from_list").count, kArtGenSetDefaultCount);
 
         Json objects = Json::object();
@@ -731,13 +723,13 @@ namespace BECore::Tests {
         objects["seed"] = nullptr;
         const Json third = Result(Call("artgen_enqueue", objects));
         ASSERT_NE(FindJsonMember(third, "jobs"), nullptr);
-        EXPECT_EQ(*FindJsonMember(third, "jobs"), (Json::array({"pawn", "a_tall_king"})));
+        EXPECT_EQ(Require(FindJsonMember(third, "jobs")), (Json::array({"pawn", "a_tall_king"})));
         const ArtGenSet disk = OnDisk("from_objects");
         EXPECT_EQ(disk.jobs[0].subject, "a small pawn");
         EXPECT_EQ(GetJsonInt(third, "seed"), Optional<int64_t>(disk.seed)) << "no seed: one is drawn and told";
 
         Json draft = Json::object();
-        draft["preset"] = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}"})").value();
+        draft["preset"] = Require(ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}"})"));
         draft["presetName"] = "form";
         draft["subjects"] = "a";
         draft["set"] = "from_draft";
@@ -1031,7 +1023,7 @@ namespace BECore::Tests {
             EXPECT_FALSE(disk.jobs[row].accepted->kept) << "a written row is live";
         }
         const Json state = Result(Call("artgen_state"));
-        EXPECT_EQ(GetJsonInt((*FindJsonMember(state, "sets"))[0], "accepted"), Optional<int64_t>(3));
+        EXPECT_EQ(GetJsonInt((Require(FindJsonMember(state, "sets")))[0], "accepted"), Optional<int64_t>(3));
     }
 
     TEST_F(ArtGenSetSessionTest, AcceptAllRefusesASetThatIsNotReadyAndChangesNothing) {
@@ -1049,7 +1041,7 @@ namespace BECore::Tests {
 
         const Json refused = Call("artgen_accept_set", params);
         EXPECT_EQ(ErrorCode(refused), "artgen_set_incomplete");
-        const String message = GetJsonString(*FindJsonMember(refused, "error"), "message").value_or(String());
+        const String message = GetJsonString(Require(FindJsonMember(refused, "error")), "message").value_or(String());
         EXPECT_EQ(message.find("not picked"), String::npos) << "an image row with no pick takes its first variant: " << message.c_str();
         EXPECT_NE(message.find("failed: c"), String::npos) << message.c_str();
         EXPECT_NE(message.find("cancelled: d"), String::npos) << message.c_str();
@@ -1073,7 +1065,7 @@ namespace BECore::Tests {
         std::filesystem::remove(AbsoluteInSet(_root, "files", "c/c_41.png"));
         Json refused = Call("artgen_accept_set", params);
         EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
-        const String message = GetJsonString(*FindJsonMember(refused, "error"), "message").value_or(String());
+        const String message = GetJsonString(Require(FindJsonMember(refused, "error")), "message").value_or(String());
         EXPECT_NE(message.find("'c'"), String::npos) << message.c_str();
         EXPECT_TRUE(gAccepted.empty());
         EXPECT_FALSE(OnDisk("files").jobs[0].accepted.has_value());
@@ -1105,7 +1097,7 @@ namespace BECore::Tests {
         gFailOn = "c";
         const Json refused = Call("artgen_accept_set", params);
         EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
-        const String message = GetJsonString(*FindJsonMember(refused, "error"), "message").value_or(String());
+        const String message = GetJsonString(Require(FindJsonMember(refused, "error")), "message").value_or(String());
         EXPECT_NE(message.find("'c'"), String::npos) << message.c_str();
         EXPECT_NE(message.find("row 3 of 5"), String::npos) << message.c_str();
         EXPECT_NE(message.find("the disk is full"), String::npos) << message.c_str();
@@ -1122,7 +1114,7 @@ namespace BECore::Tests {
         gFailOn.clear();
         const Json again = Result(Call("artgen_accept_set", params));
         ASSERT_NE(FindJsonMember(again, "accepted"), nullptr);
-        EXPECT_EQ(FindJsonMember(again, "accepted")->size(), 5u);
+        EXPECT_EQ(Require(FindJsonMember(again, "accepted")).size(), 5u);
         ASSERT_EQ(gAccepted.size(), 7u) << "the first two replace themselves";
         EXPECT_EQ(gAccepted[2].name, "a");
         EXPECT_EQ(gAccepted[6].name, "e");
@@ -1146,14 +1138,14 @@ namespace BECore::Tests {
         EXPECT_EQ(disk.jobs[0].pick, Optional<int64_t>(kSetSeed));
         EXPECT_EQ(disk.jobs[1].pick, Optional<int64_t>(kSetSeed + 1));
         EXPECT_TRUE(IsLive(disk.jobs[0]));
-        EXPECT_EQ(GetJsonInt((*FindJsonMember(answer, "accepted"))[0], "seed"), Optional<int64_t>(kSetSeed));
+        EXPECT_EQ(GetJsonInt((Require(FindJsonMember(answer, "accepted")))[0], "seed"), Optional<int64_t>(kSetSeed));
     }
 
     TEST_F(ArtGenSetSessionTest, AcceptAllOfASoundSetStillNeedsAPickOnEveryRow) {
         Poll();
         ArtGenSetRequest request;
         request.preset = "knock";
-        request.subjects = ParseArtGenSubjects("knock: a wooden knock\ntap: a soft tap").value();
+        request.subjects = Require(ParseArtGenSubjects("knock: a wooden knock\ntap: a soft tap"));
         request.count = 2;
         request.seed = kSetSeed;
         request.name = "heard";
@@ -1164,7 +1156,7 @@ namespace BECore::Tests {
 
         const Json refused = AcceptAllCall("heard");
         EXPECT_EQ(ErrorCode(refused), "artgen_set_incomplete");
-        const String message = GetJsonString(*FindJsonMember(refused, "error"), "message").value_or(String());
+        const String message = GetJsonString(Require(FindJsonMember(refused, "error")), "message").value_or(String());
         EXPECT_NE(message.find("not picked: tap"), String::npos) << message.c_str();
         EXPECT_TRUE(gAccepted.empty());
         EXPECT_FALSE(OnDisk("heard").jobs[1].pick.has_value()) << "nothing was picked for the person";
@@ -1184,7 +1176,7 @@ namespace BECore::Tests {
         ASSERT_EQ(gAccepted.size(), 2u);
         EXPECT_EQ(gAccepted[0].name, "a");
         EXPECT_EQ(gAccepted[1].name, "c");
-        const Json& rows = *FindJsonMember(answer, "accepted");
+        const Json& rows = Require(FindJsonMember(answer, "accepted"));
         ASSERT_EQ(rows.size(), 3u);
         EXPECT_EQ(GetJsonString(rows[1], "job"), Optional<String>("b"));
         EXPECT_EQ(GetJsonBool(rows[1], "kept"), Optional<bool>(true));
@@ -1218,7 +1210,7 @@ namespace BECore::Tests {
         const Json reply = Result(Call("artgen_pick", pick));
         EXPECT_EQ(GetJsonInt(reply, "pick"), Optional<int64_t>(kSetSeed));
         ASSERT_NE(FindJsonMember(reply, "switched"), nullptr) << DumpJson(reply).c_str();
-        EXPECT_EQ(GetJsonString(*FindJsonMember(reply, "switched"), "sprite"), Optional<String>("a"));
+        EXPECT_EQ(GetJsonString(Require(FindJsonMember(reply, "switched")), "sprite"), Optional<String>("a"));
 
         ASSERT_EQ(gAccepted.size(), 1u);
         EXPECT_EQ(gAccepted[0].name, "a") << "the same name: the file is replaced";
@@ -1281,7 +1273,7 @@ namespace BECore::Tests {
         const Json refused = Call("artgen_pick", pick);
         EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
         EXPECT_EQ(ArtGenSetToJson(OnDisk("fail")), ArtGenSetToJson(before));
-        EXPECT_EQ(session.FindSet("fail")->jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
+        EXPECT_EQ(Require(session.FindSet("fail")).jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
 
         gFailOn.clear();
         std::filesystem::remove(AbsoluteInSet(_root, "fail", "a/a_40.png"));
@@ -1291,7 +1283,7 @@ namespace BECore::Tests {
 
         session.SetAcceptor(nullptr);
         EXPECT_EQ(ErrorCode(Call("artgen_pick", pick)), "artgen_accept_failed");
-        EXPECT_EQ(session.FindSet("fail")->jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
+        EXPECT_EQ(Require(session.FindSet("fail")).jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
     }
 
     TEST_F(ArtGenSetSessionTest, ALiveRowStillSwitchesAfterARestart) {
@@ -1312,7 +1304,7 @@ namespace BECore::Tests {
         Poll();
         ArtGenSetRequest request;
         request.preset = "knock";
-        request.subjects = ParseArtGenSubjects("knock: a wooden knock").value();
+        request.subjects = Require(ParseArtGenSubjects("knock: a wooden knock"));
         request.count = 2;
         request.seed = kSetSeed;
         request.name = "clips";
@@ -1394,7 +1386,7 @@ namespace BECore::Tests {
         params["set"] = "all";
         const Json answer = Result(Call("artgen_keep", params));
         ASSERT_NE(FindJsonMember(answer, "kept"), nullptr);
-        EXPECT_EQ(FindJsonMember(answer, "kept")->size(), 3u);
+        EXPECT_EQ(Require(FindJsonMember(answer, "kept")).size(), 3u);
         EXPECT_EQ(gKept.size(), 3u);
         const ArtGenSet disk = OnDisk("all");
         EXPECT_EQ(CountKept(disk), 3);
@@ -1434,7 +1426,7 @@ namespace BECore::Tests {
         gKeepFailOn = "b";
         const Json refused = Call("artgen_keep", params);
         EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
-        const String message = GetJsonString(*FindJsonMember(refused, "error"), "message").value_or(String());
+        const String message = GetJsonString(Require(FindJsonMember(refused, "error")), "message").value_or(String());
         EXPECT_NE(message.find("'b'"), String::npos) << message.c_str();
         EXPECT_NE(message.find("read-only"), String::npos) << message.c_str();
         EXPECT_NE(message.find("kept before it: a"), String::npos) << message.c_str();
@@ -1447,7 +1439,7 @@ namespace BECore::Tests {
 
         gKeepFailOn.clear();
         const Json again = Result(Call("artgen_keep", params));
-        EXPECT_EQ(FindJsonMember(again, "kept")->size(), 2u);
+        EXPECT_EQ(Require(FindJsonMember(again, "kept")).size(), 2u);
         EXPECT_EQ(CountKept(OnDisk("kfail")), 3);
     }
 
@@ -1455,7 +1447,7 @@ namespace BECore::Tests {
         Poll();
         ArtGenSetRequest request;
         request.preset = "knock";
-        request.subjects = ParseArtGenSubjects("knock: a wooden knock").value();
+        request.subjects = Require(ParseArtGenSubjects("knock: a wooden knock"));
         request.count = 2;
         request.seed = kSetSeed;
         request.name = "kclips";
@@ -1473,7 +1465,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("counts", "a\nb\nc").has_value());
         RunAndPickAll("counts");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("counts"));
-        const auto setState = [this] { return (*FindJsonMember(Result(Call("artgen_state")), "sets"))[0]; };
+        const auto setState = [this] { return (Require(FindJsonMember(Result(Call("artgen_state")), "sets")))[0]; };
         EXPECT_EQ(GetJsonInt(setState(), "live"), Optional<int64_t>(0));
         EXPECT_EQ(GetJsonInt(setState(), "kept"), Optional<int64_t>(0));
 
@@ -1494,14 +1486,14 @@ namespace BECore::Tests {
         notRunning["reason"] = "ComfyUI is not started";
         const Json first = Result(Call("artgen_poll", notRunning));
         EXPECT_EQ(RequestOf(first), nullptr);
-        EXPECT_EQ(CountJobs(*session.FindSet("down"), ArtGenSetJobState::Pending), 2);
-        EXPECT_EQ(CountJobs(*session.FindSet("down"), ArtGenSetJobState::Running), 0);
+        EXPECT_EQ(CountJobs(Require(session.FindSet("down")), ArtGenSetJobState::Pending), 2);
+        EXPECT_EQ(CountJobs(Require(session.FindSet("down")), ArtGenSetJobState::Running), 0);
         EXPECT_FALSE(session.IsGeneratorReady());
         EXPECT_TRUE(session.IsServiceConnected());
 
         const Json ready = Poll();
         ASSERT_NE(RequestOf(ready), nullptr) << "the first poll with a ready generator starts a job";
-        EXPECT_EQ(CountJobs(*session.FindSet("down"), ArtGenSetJobState::Running), 1);
+        EXPECT_EQ(CountJobs(Require(session.FindSet("down")), ArtGenSetJobState::Running), 1);
         EXPECT_TRUE(session.IsGeneratorReady());
     }
 
@@ -1549,7 +1541,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(RunAll("image"));
         ArtGenSetRequest request;
         request.preset = "knock";
-        request.subjects = ParseArtGenSubjects("knock").value();
+        request.subjects = Require(ParseArtGenSubjects("knock"));
         request.count = 2;
         request.seed = kSetSeed;
         request.name = "clips";
@@ -1583,8 +1575,8 @@ namespace BECore::Tests {
         params.erase("job");
         const Json answer = Result(Call("artgen_keep", params));
         ASSERT_NE(FindJsonMember(answer, "kept"), nullptr) << DumpJson(answer).c_str();
-        ASSERT_EQ(FindJsonMember(answer, "kept")->size(), 1u);
-        EXPECT_EQ((*FindJsonMember(answer, "kept"))[0], "b");
+        ASSERT_EQ(Require(FindJsonMember(answer, "kept")).size(), 1u);
+        EXPECT_EQ((Require(FindJsonMember(answer, "kept")))[0], "b");
         const Json* replaced = FindJsonMember(answer, "replaced");
         ASSERT_NE(replaced, nullptr);
         ASSERT_EQ(replaced->size(), 1u);
@@ -1611,7 +1603,7 @@ namespace BECore::Tests {
         const Json answer = Result(AcceptAllCall("first"));
         ASSERT_EQ(gAccepted.size(), 1u) << "b is written again, a is not";
         EXPECT_EQ(gAccepted[0].name, "b");
-        const Json& rows = *FindJsonMember(answer, "accepted");
+        const Json& rows = Require(FindJsonMember(answer, "accepted"));
         ASSERT_EQ(rows.size(), 2u);
         EXPECT_EQ(GetJsonString(rows[0], "job"), Optional<String>("a"));
         EXPECT_EQ(GetJsonString(rows[0], "replacedBy"), Optional<String>("second"));
@@ -1635,7 +1627,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(MakeFiles("old"));
         ASSERT_EQ(ErrorCode(AcceptAllCall("old")), "");
         ASSERT_NO_FATAL_FAILURE(KeepOnDisk("old", "a"));
-        ASSERT_EQ(session.FindSet("old")->jobs[0].variants.size(), 2u);
+        ASSERT_EQ(Require(session.FindSet("old")).jobs[0].variants.size(), 2u);
         gAccepted.clear();
 
         Json pick = Json::object();
@@ -1645,7 +1637,7 @@ namespace BECore::Tests {
         const Json refused = Call("artgen_pick", pick);
         EXPECT_EQ(ErrorCode(refused), "artgen_no_variant");
         EXPECT_NE(ErrorMessage(refused).find("kept"), String::npos) << ErrorMessage(refused).c_str();
-        EXPECT_EQ(session.FindSet("old")->jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
+        EXPECT_EQ(Require(session.FindSet("old")).jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
         EXPECT_EQ(session.PickVariant("old", "a", kSetSeed + 1), ArtGenSetEdit::Ok) << "the pick it holds is no change";
         EXPECT_TRUE(gAccepted.empty());
     }
@@ -1655,7 +1647,7 @@ namespace BECore::Tests {
         for (int32_t index = 0; index < 3; ++index) {
             ArtGenSetRequest request;
             request.preset = "wood";
-            request.subjects = ParseArtGenSubjects("a").value();
+            request.subjects = Require(ParseArtGenSubjects("a"));
             request.seed = kSetSeed;
             const auto name = session.EnqueueSet(request);
             ASSERT_TRUE(name.has_value()) << name.error().c_str();
@@ -1667,7 +1659,7 @@ namespace BECore::Tests {
 
         ArtGenSetRequest longPreset;
         longPreset.preset = String(70, 'p');
-        longPreset.subjects = ParseArtGenSubjects("a").value();
+        longPreset.subjects = Require(ParseArtGenSubjects("a"));
         for (int32_t index = 0; index < 12; ++index) {
             const auto name = session.EnqueueSet(longPreset);
             ASSERT_TRUE(name.has_value()) << name.error().c_str();
@@ -1677,7 +1669,7 @@ namespace BECore::Tests {
 
         ArtGenSetRequest named;
         named.preset = "wood";
-        named.subjects = ParseArtGenSubjects("a").value();
+        named.subjects = Require(ParseArtGenSubjects("a"));
         named.name = "mine";
         ASSERT_TRUE(session.EnqueueSet(named).has_value());
         EXPECT_FALSE(session.EnqueueSet(named).has_value()) << "a name that was given and is taken stays a refusal";
@@ -1687,12 +1679,12 @@ namespace BECore::Tests {
         Poll();  // the catalog tells the kind of the preset
         ArtGenSetRequest request;
         request.preset = "knock";
-        request.subjects = ParseArtGenSubjects("knock: a wooden knock\ntap: a soft tap").value();
+        request.subjects = Require(ParseArtGenSubjects("knock: a wooden knock\ntap: a soft tap"));
         request.count = 2;
         request.seed = kSetSeed;
         request.name = "sounds";
         ASSERT_TRUE(session.EnqueueSet(request).has_value());
-        EXPECT_EQ(session.FindSet("sounds")->kind, "audio");
+        EXPECT_EQ(Require(session.FindSet("sounds")).kind, "audio");
         RunAndPickAll("sounds", "audio");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("sounds"));
 
@@ -1700,7 +1692,7 @@ namespace BECore::Tests {
         params["set"] = "sounds";
         const Json answer = Result(Call("artgen_accept_set", params));
         ASSERT_NE(FindJsonMember(answer, "accepted"), nullptr);
-        EXPECT_EQ(GetJsonString((*FindJsonMember(answer, "accepted"))[0], "clip"), Optional<String>("knock"));
+        EXPECT_EQ(GetJsonString((Require(FindJsonMember(answer, "accepted")))[0], "clip"), Optional<String>("knock"));
         ASSERT_EQ(gAccepted.size(), 2u);
         for (const AcceptedRow& row : gAccepted) {
             EXPECT_FALSE(row.image);
@@ -1714,15 +1706,15 @@ namespace BECore::Tests {
     TEST_F(ArtGenSetSessionTest, ASoundSetQueuedBeforeTheFirstPollIsAcceptedAsClips) {
         ArtGenSetRequest request;
         request.preset = "knock";
-        request.subjects = ParseArtGenSubjects("knock: a wooden knock\ntap: a soft tap").value();
+        request.subjects = Require(ParseArtGenSubjects("knock: a wooden knock\ntap: a soft tap"));
         request.count = 2;
         request.seed = kSetSeed;
         request.name = "early";
         ASSERT_TRUE(session.EnqueueSet(request).has_value());
-        EXPECT_EQ(session.FindSet("early")->kind, "image") << "the catalog is empty: only a guess";
+        EXPECT_EQ(Require(session.FindSet("early")).kind, "image") << "the catalog is empty: only a guess";
 
         RunAndPickAll("early", "audio");
-        EXPECT_EQ(session.FindSet("early")->kind, "audio") << "the first poll brought the catalog, and the job went out with its kind";
+        EXPECT_EQ(Require(session.FindSet("early")).kind, "audio") << "the first poll brought the catalog, and the job went out with its kind";
         EXPECT_EQ(OnDisk("early").kind, "audio");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("early"));
 
@@ -1736,14 +1728,14 @@ namespace BECore::Tests {
     TEST_F(ArtGenSetSessionTest, TheKindOfASetTheCatalogDoesNotKnowComesFromItsVariants) {
         ArtGenSetRequest request;
         request.preset = "not_in_the_catalog";
-        request.subjects = ParseArtGenSubjects("knock: a wooden knock").value();
+        request.subjects = Require(ParseArtGenSubjects("knock: a wooden knock"));
         request.count = 2;
         request.seed = kSetSeed;
         request.name = "unlisted";
         ASSERT_TRUE(session.EnqueueSet(request).has_value());
 
         RunAndPickAll("unlisted", "audio");
-        EXPECT_EQ(session.FindSet("unlisted")->kind, "audio");
+        EXPECT_EQ(Require(session.FindSet("unlisted")).kind, "audio");
         EXPECT_EQ(OnDisk("unlisted").kind, "audio");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("unlisted"));
 
@@ -1760,7 +1752,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("framed", "a\nb").has_value());
         RunAndPickAll("framed");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
-        EXPECT_FALSE(session.FindSet("framed")->processing.has_value());
+        EXPECT_FALSE(Require(session.FindSet("framed")).processing.has_value());
 
         ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
 
@@ -1780,7 +1772,7 @@ namespace BECore::Tests {
             EXPECT_EQ(plan.frame, Optional<ArtGenImageFrame>(kFakeFrame));
         }
         const Optional<ArtGenSetProcessing> expected = ArtGenSetProcessing{ArtGenImageSettings{}, kFakeFrame};
-        EXPECT_EQ(session.FindSet("framed")->processing, expected);
+        EXPECT_EQ(Require(session.FindSet("framed")).processing, expected);
         EXPECT_EQ(OnDisk("framed").processing, expected);
 
         Json params = Json::object();
@@ -1788,14 +1780,14 @@ namespace BECore::Tests {
         const Json shown = Result(Call("artgen_set", params));
         const Json* processing = FindJsonMember(shown, "processing");
         ASSERT_NE(processing, nullptr);
-        EXPECT_EQ(GetJsonInt(*FindJsonMember(*processing, "frame"), "outWidth"), Optional<int64_t>(150));
+        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(*processing, "frame")), "outWidth"), Optional<int64_t>(150));
     }
 
     TEST_F(ArtGenSetSessionTest, TheFrameOfAnAcceptAllUsesTheSettingsOfTheSetsDraft) {
         ArtGenSetRequest request;
         request.preset = "form";
-        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","accept":{"trim":true,"padding":7,"maxSize":128}})").value();
-        request.subjects = ParseArtGenSubjects("a").value();
+        request.presetData = Require(ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","accept":{"trim":true,"padding":7,"maxSize":128}})"));
+        request.subjects = Require(ParseArtGenSubjects("a"));
         request.count = 2;
         request.seed = kSetSeed;
         request.name = "drafted";
@@ -1806,7 +1798,7 @@ namespace BECore::Tests {
 
         ASSERT_EQ(gMeasures.size(), 1u);
         EXPECT_EQ(gMeasures[0].settings, (ArtGenImageSettings{true, 7, 128}));
-        EXPECT_EQ(session.FindSet("drafted")->processing->settings, (ArtGenImageSettings{true, 7, 128}));
+        EXPECT_EQ(Require(session.FindSet("drafted")).processing->settings, (ArtGenImageSettings{true, 7, 128}));
     }
 
     TEST_F(ArtGenSetSessionTest, ASecondAcceptAllAndASwitchKeepTheFrameAndMeasureNothing) {
@@ -1814,7 +1806,7 @@ namespace BECore::Tests {
         RunAndPickAll("framed");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
         ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
-        const Optional<ArtGenSetProcessing> stored = session.FindSet("framed")->processing;
+        const Optional<ArtGenSetProcessing> stored = Require(session.FindSet("framed")).processing;
         ASSERT_TRUE(stored.has_value());
         gMeasures.clear();
         gAccepted.clear();
@@ -1836,7 +1828,7 @@ namespace BECore::Tests {
         EXPECT_EQ(gPlans[0].settings, stored->settings);
         EXPECT_EQ(gPlans[0].frame, Optional<ArtGenImageFrame>(stored->frame));
         EXPECT_TRUE(gMeasures.empty());
-        EXPECT_EQ(session.FindSet("framed")->processing, stored) << "the frame never moves";
+        EXPECT_EQ(Require(session.FindSet("framed")).processing, stored) << "the frame never moves";
     }
 
     TEST_F(ArtGenSetSessionTest, AnEditOfThePresetAfterTheFirstAcceptAllDoesNotReachTheSet) {
@@ -1848,7 +1840,7 @@ namespace BECore::Tests {
         Json preset = Json::object();
         preset["name"] = "wood";
         preset["title"] = "wood";
-        preset["preset"] = ParseJson(R"({"accept":{"trim":false,"maxSize":0}})").value();
+        preset["preset"] = Require(ParseJson(R"({"accept":{"trim":false,"maxSize":0}})"));
         Json poll = ReadyPoll();
         poll["presets"] = Json::array({preset});
         Call("artgen_poll", poll);
@@ -1871,12 +1863,12 @@ namespace BECore::Tests {
         params["job"] = "a";
         ASSERT_EQ(ErrorCode(Call("artgen_keep", params)), "");
         const Optional<ArtGenSetProcessing> expected = ArtGenSetProcessing{ArtGenImageSettings{}, kFakeFrame};
-        EXPECT_EQ(session.FindSet("framed")->processing, expected) << "Keep cuts a row's variants, the frame is the set's";
+        EXPECT_EQ(Require(session.FindSet("framed")).processing, expected) << "Keep cuts a row's variants, the frame is the set's";
         EXPECT_EQ(OnDisk("framed").processing, expected);
 
         ReloadFromDisk();
         ASSERT_NE(session.FindSet("framed"), nullptr);
-        EXPECT_EQ(session.FindSet("framed")->processing, expected);
+        EXPECT_EQ(Require(session.FindSet("framed")).processing, expected);
 
         // Row b is still live: its switch after the reload goes through the same frame, and nothing is measured again
         gPlans.clear();
@@ -1896,7 +1888,7 @@ namespace BECore::Tests {
         disk.jobs[0].accepted = ArtGenSetAccepted{"a", "2026-11-17T00:00:00Z", false};
         ASSERT_TRUE(WriteManifest(_root, disk).has_value());
         ReloadFromDisk();
-        ASSERT_TRUE(IsLegacyAccepted(*session.FindSet("old")));
+        ASSERT_TRUE(IsLegacyAccepted(Require(session.FindSet("old"))));
 
         ASSERT_EQ(ErrorCode(AcceptAllCall("old")), "");
         EXPECT_TRUE(gMeasures.empty());
@@ -1905,7 +1897,7 @@ namespace BECore::Tests {
             EXPECT_TRUE(plan.settings.IsIdentity());
             EXPECT_FALSE(plan.frame.has_value());
         }
-        EXPECT_FALSE(session.FindSet("old")->processing.has_value());
+        EXPECT_FALSE(Require(session.FindSet("old")).processing.has_value());
 
         gPlans.clear();
         ASSERT_EQ(session.PickVariant("old", "a", kSetSeed), ArtGenSetEdit::Ok);
@@ -1917,8 +1909,8 @@ namespace BECore::Tests {
     TEST_F(ArtGenSetSessionTest, SettingsThatChangeNothingNeedNoFrame) {
         ArtGenSetRequest request;
         request.preset = "form";
-        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","accept":{"trim":false,"maxSize":0}})").value();
-        request.subjects = ParseArtGenSubjects("a").value();
+        request.presetData = Require(ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","accept":{"trim":false,"maxSize":0}})"));
+        request.subjects = Require(ParseArtGenSubjects("a"));
         request.count = 2;
         request.seed = kSetSeed;
         request.name = "plain";
@@ -1930,7 +1922,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(gMeasures.empty());
         ASSERT_EQ(gPlans.size(), 1u);
         EXPECT_TRUE(gPlans[0].settings.IsIdentity());
-        EXPECT_FALSE(session.FindSet("plain")->processing.has_value());
+        EXPECT_FALSE(Require(session.FindSet("plain")).processing.has_value());
     }
 
     TEST_F(ArtGenSetSessionTest, AFrameThatCannotBeMeasuredIsARefusalThatChangesNothing) {
@@ -1949,7 +1941,7 @@ namespace BECore::Tests {
 
         gMeasureFail.clear();
         EXPECT_EQ(ErrorCode(AcceptAllCall("framed")), "") << "the next call measures again";
-        EXPECT_TRUE(session.FindSet("framed")->processing.has_value());
+        EXPECT_TRUE(Require(session.FindSet("framed")).processing.has_value());
     }
 
     TEST_F(ArtGenSetSessionTest, AFailedFirstRowStoresNoFrame) {
@@ -1959,13 +1951,13 @@ namespace BECore::Tests {
         gFailOn = "a";
 
         EXPECT_EQ(ErrorCode(AcceptAllCall("framed")), "artgen_accept_failed");
-        EXPECT_FALSE(session.FindSet("framed")->processing.has_value());
+        EXPECT_FALSE(Require(session.FindSet("framed")).processing.has_value());
         EXPECT_FALSE(OnDisk("framed").processing.has_value());
-        EXPECT_FALSE(IsLegacyAccepted(*session.FindSet("framed"))) << "nothing was written, so the set is not legacy";
+        EXPECT_FALSE(IsLegacyAccepted(Require(session.FindSet("framed")))) << "nothing was written, so the set is not legacy";
 
         gFailOn.clear();
         ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
-        EXPECT_TRUE(session.FindSet("framed")->processing.has_value());
+        EXPECT_TRUE(Require(session.FindSet("framed")).processing.has_value());
         EXPECT_EQ(gMeasures.size(), 2u);
     }
 
@@ -1984,7 +1976,7 @@ namespace BECore::Tests {
 
         ArtGenSetRequest request;
         request.preset = "wood";
-        request.subjects = ParseArtGenSubjects("a: a bigger knight").value();
+        request.subjects = Require(ParseArtGenSubjects("a: a bigger knight"));
         request.count = 2;
         request.seed = kSetSeed;
         request.name = "fix";
@@ -1999,7 +1991,7 @@ namespace BECore::Tests {
         ASSERT_EQ(gPlans.size(), 1u);
         EXPECT_EQ(gPlans[0].frame, Optional<ArtGenImageFrame>(kOldProcessing.frame));
         EXPECT_EQ(gPlans[0].settings, kOldProcessing.settings);
-        EXPECT_EQ(session.FindSet("fix")->processing, Optional<ArtGenSetProcessing>(kOldProcessing));
+        EXPECT_EQ(Require(session.FindSet("fix")).processing, Optional<ArtGenSetProcessing>(kOldProcessing));
     }
 
     TEST_F(ArtGenSetSessionTest, FrameOfNeedsAnImageSetThatHasAFrame) {
@@ -2007,14 +1999,14 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("noframe", "a").has_value());
         ArtGenSetRequest sound;
         sound.preset = "knock";
-        sound.subjects = ParseArtGenSubjects("click").value();
+        sound.subjects = Require(ParseArtGenSubjects("click"));
         sound.name = "sounds";
         ASSERT_TRUE(session.EnqueueSet(sound).has_value());
-        ASSERT_TRUE(session.FindSet("sounds")->kind == kKindAudio);
+        ASSERT_TRUE(Require(session.FindSet("sounds")).kind == kKindAudio);
 
         ArtGenSetRequest good;
         good.preset = "wood";
-        good.subjects = ParseArtGenSubjects("a").value();
+        good.subjects = Require(ParseArtGenSubjects("a"));
         good.name = "fix";
         const size_t setsBefore = session.GetSets().size();
         const auto refused = [&](StringView frameOf, StringView preset = "wood") {
@@ -2060,14 +2052,14 @@ namespace BECore::Tests {
         params["frameOf"] = "old";
         EXPECT_EQ(ErrorCode(Call("artgen_enqueue", params)), "");
         ASSERT_NE(session.FindSet("fix"), nullptr);
-        EXPECT_EQ(session.FindSet("fix")->processing, Optional<ArtGenSetProcessing>(kOldProcessing));
+        EXPECT_EQ(Require(session.FindSet("fix")).processing, Optional<ArtGenSetProcessing>(kOldProcessing));
     }
 
     TEST_F(ArtGenSetSessionTest, ASoundSetNeedsNoFrame) {
         session.SetFrameMeasurer(nullptr);
         ArtGenSetRequest request;
         request.preset = "knock";
-        request.subjects = ParseArtGenSubjects("click").value();
+        request.subjects = Require(ParseArtGenSubjects("click"));
         request.count = 2;
         request.seed = kSetSeed;
         request.name = "sounds";
@@ -2076,7 +2068,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(MakeFiles("sounds"));
         EXPECT_EQ(ErrorCode(AcceptAllCall("sounds")), "");
         EXPECT_TRUE(gMeasures.empty());
-        EXPECT_FALSE(session.FindSet("sounds")->processing.has_value());
+        EXPECT_FALSE(Require(session.FindSet("sounds")).processing.has_value());
     }
 
     TEST_F(ArtGenSetSessionTest, MoreQueuesEveryDoneRowOnTheGivenSeedAndTheRunAppendsToTheVariants) {
@@ -2095,10 +2087,10 @@ namespace BECore::Tests {
         EXPECT_EQ((*names)[0], "a");
         EXPECT_EQ((*names)[1], "b");
         ASSERT_NE(FindJsonMember(answer, "skipped"), nullptr);
-        EXPECT_TRUE(FindJsonMember(answer, "skipped")->empty());
+        EXPECT_TRUE(Require(FindJsonMember(answer, "skipped")).empty());
 
         EXPECT_TRUE(session.IsBusy());
-        for (const ArtGenSetJob& job : session.FindSet("m")->jobs) {
+        for (const ArtGenSetJob& job : Require(session.FindSet("m")).jobs) {
             EXPECT_EQ(job.state, ArtGenSetJobState::Pending);
             ASSERT_TRUE(job.more.has_value());
             EXPECT_EQ(job.more->seed, kMoreSeed);
@@ -2106,11 +2098,11 @@ namespace BECore::Tests {
             EXPECT_EQ(job.variants.size(), 2u) << "nothing is dropped while the row waits";
         }
         const Json state = Result(Call("artgen_state"));
-        EXPECT_EQ(GetJsonString((*FindJsonMember(state, "sets"))[0], "state"), Optional<String>("Active"));
+        EXPECT_EQ(GetJsonString((Require(FindJsonMember(state, "sets")))[0], "state"), Optional<String>("Active"));
         Json setParams = Json::object();
         setParams["set"] = "m";
         const Json shown = Result(Call("artgen_set", setParams));
-        const Json& shownMore = (*FindJsonMember(shown, "jobs"))[0]["more"];
+        const Json& shownMore = (Require(FindJsonMember(shown, "jobs")))[0]["more"];
         EXPECT_EQ(GetJsonInt(shownMore, "seed"), Optional<int64_t>(kMoreSeed));
         EXPECT_EQ(GetJsonInt(shownMore, "count"), Optional<int64_t>(2));
 
@@ -2122,8 +2114,8 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString(*request, "outDir"), Optional<String>("m/a"));
         EXPECT_EQ(GetJsonString(*request, "name"), Optional<String>("a"));
         Finish(*request, "ok");
-        EXPECT_EQ(session.FindSet("m")->jobs[0].state, ArtGenSetJobState::Done);
-        EXPECT_FALSE(session.FindSet("m")->jobs[0].more.has_value());
+        EXPECT_EQ(Require(session.FindSet("m")).jobs[0].state, ArtGenSetJobState::Done);
+        EXPECT_FALSE(Require(session.FindSet("m")).jobs[0].more.has_value());
         ASSERT_NO_FATAL_FAILURE(RunAll());
 
         EXPECT_FALSE(session.IsBusy());
@@ -2142,22 +2134,22 @@ namespace BECore::Tests {
             EXPECT_FALSE(job.accepted->kept);
         }
         EXPECT_TRUE(gAccepted.empty()) << "more variants write nothing into the game";
-        EXPECT_EQ(GetJsonString((*FindJsonMember(Result(Call("artgen_state")), "sets"))[0], "state"), Optional<String>("Complete"));
+        EXPECT_EQ(GetJsonString((Require(FindJsonMember(Result(Call("artgen_state")), "sets")))[0], "state"), Optional<String>("Complete"));
     }
 
     TEST_F(ArtGenSetSessionTest, MoreDrawsOneFreshSeedForTheRowsOfTheCall) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a\nb\nc"));
         const Json answer = Result(MoreCall("m"));
         EXPECT_EQ(GetJsonInt(answer, "count"), Optional<int64_t>(1)) << "the default is one variant per row";
-        const int64_t seed = GetJsonInt(answer, "seed").value();
-        for (const ArtGenSetJob& job : session.FindSet("m")->jobs) {
+        const int64_t seed = Require(GetJsonInt(answer, "seed"));
+        for (const ArtGenSetJob& job : Require(session.FindSet("m")).jobs) {
             ASSERT_TRUE(job.more.has_value());
             EXPECT_EQ(job.more->seed, seed) << "one seed keeps the look of the rows together";
             EXPECT_EQ(job.more->count, 1);
             EXPECT_TRUE(ArtGenSeedRangeFree(job, seed, 1));
         }
         ASSERT_NO_FATAL_FAILURE(RunAll());
-        for (const ArtGenSetJob& job : session.FindSet("m")->jobs) {
+        for (const ArtGenSetJob& job : Require(session.FindSet("m")).jobs) {
             ASSERT_EQ(job.variants.size(), 3u);
             EXPECT_EQ(job.variants[2].seed, seed);
         }
@@ -2199,13 +2191,13 @@ namespace BECore::Tests {
         ASSERT_EQ(skipped->size(), 1u);
         EXPECT_EQ(GetJsonString((*skipped)[0], "job"), Optional<String>("a"));
         EXPECT_EQ(GetJsonString((*skipped)[0], "reason"), Optional<String>("kept"));
-        const ArtGenSetJob* kept = FindJob(*session.FindSet("m"), "a");
+        const ArtGenSetJob* kept = FindJob(Require(session.FindSet("m")), "a");
         EXPECT_EQ(kept->state, ArtGenSetJobState::Done);
         EXPECT_FALSE(kept->more.has_value());
         EXPECT_EQ(kept->variants.size(), 1u) << "Keep trimmed it and More leaves it alone";
         ASSERT_NO_FATAL_FAILURE(RunAll());
-        EXPECT_EQ(FindJob(*session.FindSet("m"), "a")->variants.size(), 1u);
-        EXPECT_EQ(FindJob(*session.FindSet("m"), "b")->variants.size(), 3u);
+        EXPECT_EQ(Require(FindJob(Require(session.FindSet("m")), "a")).variants.size(), 1u);
+        EXPECT_EQ(Require(FindJob(Require(session.FindSet("m")), "b")).variants.size(), 3u);
 
         ASSERT_EQ(ErrorCode(KeepCall("m")), "");
         const Json refused = MoreCall("m");
@@ -2228,12 +2220,12 @@ namespace BECore::Tests {
         }
 
         ASSERT_NO_FATAL_FAILURE(RunAll());
-        for (const ArtGenSetJob& job : session.FindSet("m")->jobs) {
+        for (const ArtGenSetJob& job : Require(session.FindSet("m")).jobs) {
             EXPECT_EQ(job.variants.size(), 3u);
             EXPECT_FALSE(job.accepted->kept);
         }
         ASSERT_EQ(ErrorCode(KeepCall("m")), "");
-        for (const ArtGenSetJob& job : session.FindSet("m")->jobs) {
+        for (const ArtGenSetJob& job : Require(session.FindSet("m")).jobs) {
             EXPECT_EQ(job.variants.size(), 1u);
         }
     }
@@ -2244,13 +2236,13 @@ namespace BECore::Tests {
         Finish(*RequestOf(Poll()), "failed", "boom");
         session.CancelJob("m", "c");
         const Json answer = Result(MoreCall("m"));
-        ASSERT_EQ(FindJsonMember(answer, "jobs")->size(), 1u);
-        const Json& skipped = *FindJsonMember(answer, "skipped");
+        ASSERT_EQ(Require(FindJsonMember(answer, "jobs")).size(), 1u);
+        const Json& skipped = Require(FindJsonMember(answer, "skipped"));
         ASSERT_EQ(skipped.size(), 2u);
         EXPECT_EQ(GetJsonString(skipped[0], "reason"), Optional<String>("failed"));
         EXPECT_EQ(GetJsonString(skipped[1], "reason"), Optional<String>("cancelled"));
-        EXPECT_EQ(FindJob(*session.FindSet("m"), "b")->state, ArtGenSetJobState::Failed);
-        EXPECT_EQ(FindJob(*session.FindSet("m"), "b")->error, "boom");
+        EXPECT_EQ(Require(FindJob(Require(session.FindSet("m")), "b")).state, ArtGenSetJobState::Failed);
+        EXPECT_EQ(Require(FindJob(Require(session.FindSet("m")), "b")).error, "boom");
     }
 
     TEST_F(ArtGenSetSessionTest, MoreNarrowsToTheNamedRowsAndNamesTheUnknownOne) {
@@ -2259,10 +2251,10 @@ namespace BECore::Tests {
         extra["jobs"] = Json::array({"c"});
         extra["seed"] = 7000;
         const Json answer = Result(MoreCall("m", extra));
-        ASSERT_EQ(FindJsonMember(answer, "jobs")->size(), 1u);
-        EXPECT_EQ((*FindJsonMember(answer, "jobs"))[0], "c");
-        EXPECT_TRUE(FindJsonMember(answer, "skipped")->empty()) << "a row that was not named is not a skipped one";
-        EXPECT_EQ(FindJob(*session.FindSet("m"), "a")->state, ArtGenSetJobState::Done);
+        ASSERT_EQ(Require(FindJsonMember(answer, "jobs")).size(), 1u);
+        EXPECT_EQ((Require(FindJsonMember(answer, "jobs")))[0], "c");
+        EXPECT_TRUE(Require(FindJsonMember(answer, "skipped")).empty()) << "a row that was not named is not a skipped one";
+        EXPECT_EQ(Require(FindJob(Require(session.FindSet("m")), "a")).state, ArtGenSetJobState::Done);
         ASSERT_NO_FATAL_FAILURE(RunAll());
 
         extra["jobs"] = Json::array({"c", "nope"});
@@ -2302,7 +2294,7 @@ namespace BECore::Tests {
         Json two = Json::object();
         two["count"] = 2;
         EXPECT_EQ(ErrorCode(MoreCall("m", two)), "artgen_busy");
-        for (const ArtGenSetJob& job : session.FindSet("m")->jobs) {
+        for (const ArtGenSetJob& job : Require(session.FindSet("m")).jobs) {
             EXPECT_EQ(job.more->count, 1) << "a refusal changes nothing";
         }
     }
@@ -2311,7 +2303,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a"));
         ASSERT_TRUE(session.Request("wood", "a lone sprite", 1, 9, false).has_value());
         EXPECT_EQ(ErrorCode(MoreCall("m")), "");
-        EXPECT_EQ(session.FindSet("m")->jobs[0].state, ArtGenSetJobState::Pending);
+        EXPECT_EQ(Require(session.FindSet("m")).jobs[0].state, ArtGenSetJobState::Pending);
     }
 
     TEST_F(ArtGenSetSessionTest, ACancelledMoreRunLeavesTheRowDoneWithItsVariantsAndPick) {
@@ -2321,9 +2313,9 @@ namespace BECore::Tests {
         ASSERT_NE(RequestOf(first), nullptr);
         EXPECT_EQ(session.CancelSet("m"), ArtGenSetEdit::Ok);
         // The pending rows end at once; the running one when the service says so
-        EXPECT_EQ(FindJob(*session.FindSet("m"), "b")->state, ArtGenSetJobState::Done);
-        EXPECT_EQ(FindJob(*session.FindSet("m"), "b")->error, "cancelled");
-        EXPECT_EQ(FindJob(*session.FindSet("m"), "a")->state, ArtGenSetJobState::Running);
+        EXPECT_EQ(Require(FindJob(Require(session.FindSet("m")), "b")).state, ArtGenSetJobState::Done);
+        EXPECT_EQ(Require(FindJob(Require(session.FindSet("m")), "b")).error, "cancelled");
+        EXPECT_EQ(Require(FindJob(Require(session.FindSet("m")), "a")).state, ArtGenSetJobState::Running);
         EXPECT_EQ(GetJsonInt(Poll(), "cancel"), GetJsonInt(*RequestOf(first), "id"));
         Finish(*RequestOf(first), "cancelled");
 
@@ -2341,7 +2333,7 @@ namespace BECore::Tests {
         retry["set"] = "m";
         EXPECT_EQ(GetJsonInt(Result(Call("artgen_retry", retry)), "retried"), Optional<int64_t>(0));
         EXPECT_FALSE(session.IsBusy());
-        EXPECT_EQ(session.FindSet("m")->jobs[0].variants.size(), 2u);
+        EXPECT_EQ(Require(session.FindSet("m")).jobs[0].variants.size(), 2u);
     }
 
     TEST_F(ArtGenSetSessionTest, ACancelOfOneRunningMoreJobLeavesTheOthersToRun) {
@@ -2352,7 +2344,7 @@ namespace BECore::Tests {
         EXPECT_EQ(session.CancelJob("m", "a"), ArtGenSetEdit::Ok);
         Poll();
         Finish(*RequestOf(first), "cancelled");
-        const ArtGenSetJob* a = FindJob(*session.FindSet("m"), "a");
+        const ArtGenSetJob* a = FindJob(Require(session.FindSet("m")), "a");
         EXPECT_EQ(a->state, ArtGenSetJobState::Done);
         EXPECT_EQ(a->variants.size(), 2u);
         EXPECT_EQ(a->pick, Optional<int64_t>(kSetSeed + 1));
@@ -2369,7 +2361,7 @@ namespace BECore::Tests {
         ASSERT_EQ(ErrorCode(MoreCall("m", extra)), "");
         const Json* request = RequestOf(pollReply = Poll());
         ASSERT_NE(request, nullptr);
-        const uint32_t id = static_cast<uint32_t>(GetJsonInt(*request, "id").value());
+        const uint32_t id = static_cast<uint32_t>(Require(GetJsonInt(*request, "id")));
         Json image = Report(id);
         image["seed"] = 6000;
         image["path"] = ToStdString(Format("{}/artgen/out/m/a/a_6000.png", PathText(_root)));
@@ -2379,7 +2371,7 @@ namespace BECore::Tests {
         done["error"] = "out of memory";
         Call("artgen_done", done);
 
-        const ArtGenSetJob& job = session.FindSet("m")->jobs[0];
+        const ArtGenSetJob& job = Require(session.FindSet("m")).jobs[0];
         EXPECT_EQ(job.state, ArtGenSetJobState::Done) << "a Failed row would be Retry's to wipe";
         EXPECT_EQ(job.error, "out of memory");
         EXPECT_FALSE(job.more.has_value());
@@ -2388,7 +2380,7 @@ namespace BECore::Tests {
         EXPECT_EQ(job.pick, Optional<int64_t>(kSetSeed + 1));
         EXPECT_TRUE(job.accepted.has_value());
         EXPECT_EQ(session.RetryJobs("m"), ArtGenSetEdit::Ok);
-        EXPECT_EQ(session.FindSet("m")->jobs[0].variants.size(), 3u);
+        EXPECT_EQ(Require(session.FindSet("m")).jobs[0].variants.size(), 3u);
         EXPECT_FALSE(session.IsBusy());
     }
 
@@ -2467,12 +2459,12 @@ namespace BECore::Tests {
             ASSERT_EQ(ErrorCode(MoreCall("m", grow)), "") << round;
             ASSERT_NO_FATAL_FAILURE(RunAll());
         }
-        EXPECT_EQ(static_cast<int32_t>(FindJob(*session.FindSet("m"), "a")->variants.size()), kArtGenJobMaxVariants);
+        EXPECT_EQ(static_cast<int32_t>(Require(FindJob(Require(session.FindSet("m")), "a")).variants.size()), kArtGenJobMaxVariants);
 
         const Json answer = Result(MoreCall("m"));
-        ASSERT_EQ(FindJsonMember(answer, "jobs")->size(), 1u);
-        EXPECT_EQ((*FindJsonMember(answer, "jobs"))[0], "b");
-        const Json& skipped = *FindJsonMember(answer, "skipped");
+        ASSERT_EQ(Require(FindJsonMember(answer, "jobs")).size(), 1u);
+        EXPECT_EQ((Require(FindJsonMember(answer, "jobs")))[0], "b");
+        const Json& skipped = Require(FindJsonMember(answer, "skipped"));
         ASSERT_EQ(skipped.size(), 1u);
         EXPECT_EQ(GetJsonString(skipped[0], "job"), Optional<String>("a"));
         EXPECT_EQ(GetJsonString(skipped[0], "reason"), Optional<String>("full"));
@@ -2482,7 +2474,7 @@ namespace BECore::Tests {
         Poll();  // the catalog tells the kind of the preset
         ArtGenSetRequest request;
         request.preset = "knock";
-        request.subjects = ParseArtGenSubjects("knock: a wooden knock").value();
+        request.subjects = Require(ParseArtGenSubjects("knock: a wooden knock"));
         request.count = 2;
         request.seed = kSetSeed;
         request.name = "sounds";
@@ -2490,7 +2482,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(RunAndPickAll("sounds", "audio"));
         ASSERT_EQ(ErrorCode(MoreCall("sounds")), "");
         ASSERT_NO_FATAL_FAILURE(RunAll("audio"));
-        const ArtGenSetJob& job = session.FindSet("sounds")->jobs[0];
+        const ArtGenSetJob& job = Require(session.FindSet("sounds")).jobs[0];
         ASSERT_EQ(job.variants.size(), 3u);
         EXPECT_EQ(job.variants[2].kind, "audio");
         EXPECT_NE(job.variants[2].file.find(".flac"), String::npos);

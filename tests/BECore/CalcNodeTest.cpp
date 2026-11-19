@@ -7,6 +7,7 @@
 #include <BECore/Values/Programs/ExprParser.h>
 #include <BECore/Values/Programs/Program.h>
 #include <Common/Printers.h>
+#include <Common/TestText.h>
 #include <gtest/gtest.h>
 #include <initializer_list>
 
@@ -76,10 +77,6 @@ namespace BECore::Tests {
             node->table = String(table);
             node->index = std::move(index);
             return node;
-        }
-
-        bool Contains(const String& text, StringView part) {
-            return text.find(part.data(), 0, part.size()) != String::npos;
         }
 
         /// The tree without its columns: a tree and the text it prints have the same nodes, whatever bytes the text puts them at

@@ -1,5 +1,6 @@
 #include <BECore/Control/Json.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -48,7 +49,7 @@ namespace BECore::Tests {
         EXPECT_EQ(form.GetWorkflow(), "sdxl_basic");
         EXPECT_EQ(form.width, 512);
         EXPECT_EQ(form.height, 768);
-        EXPECT_EQ(*form.FindParam("cfg"), Json(6.5));
+        EXPECT_EQ(Require(form.FindParam("cfg")), Json(6.5));
         EXPECT_EQ(form.ToJson(), WoodPreset().data) << "a key the form does not show is kept";
         EXPECT_FALSE(form.IsDirty());
         EXPECT_EQ(form.GetBaseSource(), "game");

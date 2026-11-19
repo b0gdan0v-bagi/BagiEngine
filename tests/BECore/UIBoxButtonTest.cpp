@@ -7,6 +7,7 @@
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -24,7 +25,7 @@ namespace BECore::Tests {
         constexpr Color kBorder{200, 150, 100, 255};
         constexpr Color kText{250, 240, 230, 255};
 
-        enum class State : uint8_t { Normal, Hover, Pressed, Selected, Disabled };
+        CORE_ENUM(State, uint8_t, Normal, Hover, Pressed, Selected, Disabled)
 
         /// An element with a clicker and a text of the colour `kText` (the colour of the selection), in @p state; its box has every field set when @p styled
         IntrusivePtr<UIElement> MakeElement(State state, bool styled = true) {
@@ -132,14 +133,14 @@ namespace BECore::Tests {
         const auto glowOff = Draw(*glowing);
         ASSERT_EQ(glowOff.size(), 1u);
         EXPECT_FALSE(outside(glowOff[0])) << "a glow is dropped too";
-        glowing->GetComponent<UIInputClicker>()->disabled = false;
+        Require(glowing->GetComponent<UIInputClicker>()).disabled = false;
         const auto glowOn = Draw(*glowing);
         ASSERT_EQ(glowOn.size(), 1u);
         EXPECT_TRUE(outside(glowOn[0]));
     }
 
-    TEST(UIBoxButtonTest, ADefaultStyleElementDrawsTheCallsItDidBefore) {
-        const Color expected[] = {kFill, ShiftColor(kFill, kHoverBrighten), ShiftColor(kFill, -kPressDarken), ShiftColor(kFill, 56), WithAlpha(kFill, kDisabledAlpha)};
+    TEST(UIBoxButtonTest, ADefaultStyleElementDrawsItsStateFillAndTheSelectedBar) {
+        const Color expected[] = {kFill, ShiftColor(kFill, kHoverBrighten), ShiftColor(kFill, -kPressDarken), ShiftColor(kFill, UIStateLook::kSelectedBrighten), WithAlpha(kFill, kDisabledAlpha)};
         for (size_t i = 0; i < std::size(kAllStates); ++i) {
             const auto button = MakeElement(kAllStates[i], false);
             button->selectedColor = Color{};
@@ -229,7 +230,7 @@ namespace BECore::Tests {
         Vector<IntrusivePtr<UIElement>> segments;
         for (const char* value : {"one", "two", "three"}) {
             auto segment = MakeElement(State::Normal);
-            segment->GetComponent<UIInputClicker>()->value = PoolString::Intern(value);
+            Require(segment->GetComponent<UIInputClicker>()).value = PoolString::Intern(value);
             group->children.push_back(segment);
             segments.push_back(segment);
         }

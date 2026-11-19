@@ -229,9 +229,9 @@ namespace BECore::Tests {
         for (int i = 0; i < 100000; ++i) {
             deep += "/a";
         }
-        const String longKey = "/" + String(1 << 20, 'k');
-        const String longDigits = "/list/" + String(1 << 16, '9');
-        const String longBad = "/list/" + String(1 << 16, '9') + "x";
+        const String longKey = Format("/{}", String(1 << 20, 'k'));
+        const String longDigits = Format("/list/{}", String(1 << 16, '9'));
+        const String longBad = Format("/list/{}x", String(1 << 16, '9'));
 
         EXPECT_EQ(PointerResult(document, View(deep)), "absent");
         EXPECT_EQ(PointerResult(document, View(longKey)), "absent");

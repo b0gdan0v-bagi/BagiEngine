@@ -1,13 +1,17 @@
 #pragma once
 
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasScaler.h>
 #include <BECore/UI/UIScreenContent.h>
+#include <RmlUi/Core.h>
+#include <RmlUiHost/RmlUiDocumentComponent.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests::RmlUiScreens {
 
-    // Three game screens (a menu and two HUDs; the engine ships none of them) in the engine's XML (the SceneConfig.xml of a game) and in RmlUi's HTML + CSS dialect.
+    // Two game screens (a menu and a HUD; the engine ships neither) in the engine's XML (the SceneConfig.xml of a game) and in RmlUi's HTML + CSS dialect.
     // The XML is the reference: every element of the RML screen must land on the same rect, in every shape of the size matrix.
     // The XML is written composed, as the shipped files and the HTML compiler write it (a text is a `UIElement` with a `UITextComponent`, a button one with a text and a clicker).
 
@@ -135,6 +139,33 @@ button { width: 124dp; height: 48dp; font-size: 24dp; line-height: 48dp; text-al
   <component type="RmlUiDocumentComponent" space="{}" scaleMode="ScaleWithScreen" referenceWidth="1280" referenceHeight="720" match="0.5" minScale="{}" useSafeArea="true"/>
 </components></node></nodes></scene></scenes></SceneManager>)",
                       view ? screen.viewWidth : 0.0f, view ? screen.viewHeight : 0.0f, EnumUtils<CanvasSpace>::ToString(screen.space), screen.minScale);
+    }
+
+    /// The scenes of @p screen put into @p manager, the scene "S" active; the document component of its one node with the RML of the screen in it
+    inline IntrusivePtr<RmlUiDocumentComponent> LoadScreen(IntrusivePtrAtomic<SceneManager>& manager, const Screen& screen) {
+        XmlDeserializer deserializer;
+        EXPECT_TRUE(deserializer.LoadFromString(SceneXml(screen)));
+        manager = New<SceneManager>();
+        manager->Deserialize(deserializer);
+        EXPECT_FALSE(deserializer.HasErrors());
+        manager->Initialize();
+        manager->SetActiveScene("S"_intern);
+        auto doc = manager->GetSceneByName("S"_intern)->GetRootNode().GetChildren()[0]->GetComponent<RmlUiDocumentComponent>();
+        EXPECT_TRUE(doc);
+        EXPECT_TRUE(doc && doc->SetMarkup(String(screen.rml)));
+        return doc;
+    }
+
+    /// The border box of the element @p id of the document, in output pixels; a missing one fails the case and is empty
+    inline Rect BoxOf(const RmlUiDocumentComponent& doc, const char* id) {
+        Rml::Element* element = doc.GetDocument() ? doc.GetDocument()->GetElementById(id) : nullptr;
+        if (!element) {
+            ADD_FAILURE() << "no element '" << id << "'";
+            return {};
+        }
+        const Rml::Vector2f offset = element->GetAbsoluteOffset(Rml::BoxArea::Border);
+        const Rml::Vector2f size = element->GetBox().GetSize(Rml::BoxArea::Border);
+        return {doc.GetOriginX() + offset.x, doc.GetOriginY() + offset.y, size.x, size.y};
     }
 
 }  // namespace BECore::Tests::RmlUiScreens

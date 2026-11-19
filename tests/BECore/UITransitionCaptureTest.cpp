@@ -7,6 +7,7 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <CoreSDL/SDLRendererBackend.h>
@@ -56,8 +57,13 @@ namespace BECore::Tests {
   </nodes></scene>
 </scenes></SceneManager>)";
 
+        /// The pixel at (@p x, @p y) of the output; a point outside the image, or a frame that was not rendered, fails the case and is black
         Pixel PixelAtOutput(const PixelBuffer& image, uint32_t x, uint32_t y) {
             const size_t offset = (static_cast<size_t>(y) * image.width + x) * 4;
+            if (x >= image.width || y >= image.height || offset + 3 > image.rgba.size()) {
+                ADD_FAILURE() << "no pixel (" << x << ", " << y << ") in a frame of " << image.width << " x " << image.height << " with " << image.rgba.size() << " bytes";
+                return {};
+            }
             return {image.rgba[offset], image.rgba[offset + 1], image.rgba[offset + 2]};
         }
 
@@ -80,7 +86,7 @@ namespace BECore::Tests {
         }
 
         String Describe(const Pixel& pixel) {
-            return "(" + ToString(pixel[0]) + ", " + ToString(pixel[1]) + ", " + ToString(pixel[2]) + ")";
+            return Format("({}, {}, {})", pixel[0], pixel[1], pixel[2]);
         }
 
     }  // namespace
@@ -149,7 +155,7 @@ namespace BECore::Tests {
         /// The pixel at the centre of the laid-out rect of an element
         Pixel CentreOf(const PixelBuffer& image, const char* name) const {
             const UIElement* element = canvas->GetRoot().FindByName(PoolString::Intern(name));
-            if (element == nullptr || image.rgba.empty()) {
+            if (element == nullptr) {
                 ADD_FAILURE() << name;
                 return {};
             }
@@ -159,8 +165,8 @@ namespace BECore::Tests {
 
         /// A point of the panel that Spot does not cover: a tenth of its width from the left edge, half way down
         Pixel PanelOnly(const PixelBuffer& image) const {
-            const UIElement* panel = canvas->GetRoot().FindByName("Panel"_intern);
-            const Rect output = canvas->GetLayout().GetResolved().transform.ToOutput(panel->rect.x, panel->rect.y, panel->rect.w, panel->rect.h);
+            const UIElement& panel = Require(canvas->GetRoot().FindByName("Panel"_intern));
+            const Rect output = canvas->GetLayout().GetResolved().transform.ToOutput(panel.rect.x, panel.rect.y, panel.rect.w, panel.rect.h);
             return PixelAtOutput(image, static_cast<uint32_t>(output.x + output.w * 0.1f), static_cast<uint32_t>(output.y + output.h * 0.5f));
         }
 

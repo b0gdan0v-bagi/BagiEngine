@@ -7,6 +7,8 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
+#include <Common/SceneTestSupport.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <gtest/gtest.h>
 
@@ -54,16 +56,6 @@ namespace BECore::Tests {
     </components></node>
   </nodes></scene>
 </scenes></SceneManager>)";
-
-        SceneNode* Find(SceneNode& from, const char* name) {
-            const PoolString wanted = PoolString::Intern(name);
-            for (const auto& child : from.GetChildren()) {
-                if (child->GetName() == wanted) {
-                    return child.Get();
-                }
-            }
-            return nullptr;
-        }
 
         Gizmo::Item Moved(Gizmo::Item item, float dx) {
             item.x += dx;
@@ -126,15 +118,13 @@ namespace BECore::Tests {
         }
 
         SceneNode& Node(const char* sceneName, const char* name) const {
-            SceneNode* node = Find(GetScene(sceneName).GetRootNode(), name);
+            SceneNode* node = FindNodeBelow(GetScene(sceneName).GetRootNode(), name);
             EXPECT_NE(node, nullptr) << name;
-            return *node;
+            return Require(node);
         }
 
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
         TransformComponent& TransformOf(const char* name) const {
-            return *Node("Main", name).GetComponent<TransformComponent>();
+            return Require(Node("Main", name).GetComponent<TransformComponent>());
         }
 
         /// A free move of A and B (World axes, no snap) that starts at the origin, so the point of an Update is the offset
@@ -149,6 +139,8 @@ namespace BECore::Tests {
                                  snap);
         }
 
+        IntrusivePtr<RecordingRenderer> _renderer;
+        IntrusivePtrAtomic<SceneManager> _manager;
         Vector<SceneNode*> _nodes;
         Vector<Gizmo::Item> _items;
         EditRecorder _recorder;
@@ -191,6 +183,7 @@ namespace BECore::Tests {
 
     TEST_F(ViewportGizmosTest, AnItemIsTheFieldsOfTheTransformAndBack) {
         const auto transform = Node("Main", "A").GetComponent<TransformComponent>();
+        ASSERT_TRUE(transform);
         const Gizmo::Item item = ItemOf(*transform);
 
         EXPECT_EQ(item, (Gizmo::Item{10.0f, 20.0f, 100.0f, 50.0f, 30.0f, 0.25f, 0.75f}));
@@ -243,8 +236,8 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(WriteItems(GetScene("Main"), {nodes.data(), nodes.size()}, {items.data(), items.size()}));
 
-        EXPECT_FLOAT_EQ(a->GetComponent<TransformComponent>()->_x, 15.0f);
-        EXPECT_FLOAT_EQ(b->GetComponent<TransformComponent>()->_x, 193.0f);
+        EXPECT_FLOAT_EQ(Require(a->GetComponent<TransformComponent>())._x, 15.0f);
+        EXPECT_FLOAT_EQ(Require(b->GetComponent<TransformComponent>())._x, 193.0f);
     }
 
     TEST_F(ViewportGizmosTest, WriteItemsWritesNothingWhenANodeIsGoneOrTheSizesDiffer) {
@@ -255,10 +248,10 @@ namespace BECore::Tests {
 
         EXPECT_FALSE(AllAlive(GetScene("Main"), {nodes.data(), nodes.size()}));
         EXPECT_FALSE(WriteItems(GetScene("Main"), {nodes.data(), nodes.size()}, {items.data(), items.size()}));
-        EXPECT_FLOAT_EQ(a->GetComponent<TransformComponent>()->_x, 10.0f);  // the live node was not touched either
+        EXPECT_FLOAT_EQ(Require(a->GetComponent<TransformComponent>())._x, 10.0f);  // the live node was not touched either
 
         EXPECT_FALSE(WriteItems(GetScene("Main"), {nodes.data(), 1}, {items.data(), 2}));
-        EXPECT_FLOAT_EQ(a->GetComponent<TransformComponent>()->_x, 10.0f);
+        EXPECT_FLOAT_EQ(Require(a->GetComponent<TransformComponent>())._x, 10.0f);
     }
 
     // ---- a drag of the gizmo --------------------------------------------------------------------------------------------

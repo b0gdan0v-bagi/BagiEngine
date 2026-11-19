@@ -1,5 +1,6 @@
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UIThemes.h>
+#include <Fuzz/FuzzChecks.h>
 #include <Fuzz/FuzzTargets.h>
 #include <map>
 #include <set>
@@ -16,17 +17,6 @@ namespace BECore::Fuzz {
 
         constexpr StringView kStringsRoot = "UIStrings";
         constexpr StringView kThemesRoot = "UIThemes";
-
-        /// Whether @p text has a control character (a line break included): a log line made of it is more than one line
-        bool HasControlCharacter(StringView text) {
-            for (const char c : text) {
-                const auto byte = static_cast<uint8_t>(c);
-                if (byte < 0x20 || byte == 0x7F) {
-                    return true;
-                }
-            }
-            return false;
-        }
 
         void CheckComplaints(const Vector<String>& complaints) {
             for (const String& complaint : complaints) {
@@ -156,7 +146,7 @@ namespace BECore::Fuzz {
                     FUZZ_CHECK(table.SetTheme(theme));
                     const auto color = table.Find(token.ToStringView());
                     FUZZ_CHECK(color.has_value());
-                    digest += ToString(color->r) + "," + ToString(color->g) + "," + ToString(color->b) + "," + ToString(color->a) + ";";
+                    AppendFormat(digest, "{},{},{},{};", color->r, color->g, color->b, color->a);
                 }
             }
             return digest;

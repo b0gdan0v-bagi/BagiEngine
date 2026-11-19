@@ -10,15 +10,15 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
+#include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
 
     namespace {
-
-        constexpr const char* kBoxRef = "nodes/Box";
-        constexpr const char* kPanelRef = "nodes/Panel";
 
         constexpr const char* kBoxNode = R"(<node name="Box" layer="2"><components>
   <component type="TransformComponent" x="1" y="2" width="30" height="40"/>
@@ -59,28 +59,6 @@ namespace BECore::Tests {
   </component>
 </components></node>)";
 
-        void WriteFile(const std::filesystem::path& path, const String& text) {
-            std::filesystem::create_directories(path.parent_path());
-            std::ofstream(path) << text;
-        }
-
-        String Printed(pugi::xml_node node) {
-            std::ostringstream out;
-            node.print(out, "", pugi::format_raw);
-            return String(out.str().c_str());
-        }
-
-        /// The components of @p node as text: type and serialized fields, in order
-        Vector<String> ComponentTexts(const SceneNode& node) {
-            Vector<String> texts;
-            for (const auto& component : node.GetComponents()) {
-                XmlSerializer serializer;
-                component->Serialize(serializer);
-                texts.push_back(String(component->GetTypeMeta().typeName.data()) + ":" + Printed(serializer.GetRootNode()).c_str());
-            }
-            return texts;
-        }
-
     }  // namespace
 
     /// BuildNodeReference on instances of node files in a temp folder, with the engine services
@@ -106,14 +84,16 @@ namespace BECore::Tests {
 
         /// Loads a scene Main whose only node is @p nodeXml (a `<node ref>` or an inline node) and returns that node
         SceneNode& LoadNode(const String& nodeXml) {
-            const String text = "<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes>" + nodeXml + "</nodes></scene></scenes></SceneManager>";
+            const String text = SceneConfigText(nodeXml);
             const pugi::xml_parse_result parsed = _doc.load_string(text.c_str());
             EXPECT_TRUE(parsed) << parsed.description();
             _manager = LoadSceneManager(XmlNode{_doc.document_element()}, _loader);
             _manager->Initialize();
             Scene* scene = _manager->GetSceneByName("Main"_intern);
             EXPECT_NE(scene, nullptr);
-            return *scene->GetRootNode().GetChildren().front();
+            const auto& children = Require(scene).GetRootNode().GetChildren();
+            EXPECT_FALSE(children.empty());
+            return Require(children.empty() ? nullptr : children.front().Get());
         }
 
         /// BuildNodeReference into a fresh `<nodes>`; the result is the printed element that was appended, empty when nothing was
@@ -124,7 +104,7 @@ namespace BECore::Tests {
             if (!built) {
                 EXPECT_FALSE(nodesEl.first_child()) << "a refusal appended something";
             }
-            result = Printed(nodesEl).c_str();
+            result = XmlText(nodesEl).c_str();
             return built;
         }
 
@@ -146,7 +126,7 @@ namespace BECore::Tests {
             String result;
             String reason;
             ASSERT_TRUE(Build(node, result, reason)) << reason.c_str();
-            EXPECT_EQ(result, "<nodes>" + expected + "</nodes>");
+            EXPECT_EQ(result, Format("<nodes>{}</nodes>", expected));
             ExpectRoundTrip(node);
         }
 
@@ -171,15 +151,15 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeInstanceTest, OneChangedFieldIsOneAttributeInOneComponent) {
         SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
-        node.GetComponent<TransformComponent>()->_x = 7.0f;
+        Require(node.GetComponent<TransformComponent>())._x = 7.0f;
 
         ExpectBuilt(node, R"(<node ref="nodes/Box"><components><component type="TransformComponent" x="7"/></components></node>)");
     }
 
     TEST_F(SceneNodeInstanceTest, AValueChangedBackIsNoOverride) {
         SceneNode& node = LoadNode(R"(<node ref="nodes/Box" name="Crate"/>)");
-        node.GetComponent<TransformComponent>()->_x = 7.0f;
-        node.GetComponent<TransformComponent>()->_x = 1.0f;
+        Require(node.GetComponent<TransformComponent>())._x = 7.0f;
+        Require(node.GetComponent<TransformComponent>())._x = 1.0f;
         node.SetName("Box"_intern);
 
         ExpectBuilt(node, R"(<node ref="nodes/Box"/>)");
@@ -205,9 +185,9 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeInstanceTest, ChangesInTwoComponentsAreTwoComponentElements) {
         SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
-        node.GetComponent<TransformComponent>()->_y = 9.0f;
-        node.GetComponent<TransformComponent>()->_width = 31.0f;
-        node.GetComponent<QuadRendererComponent>()->_color = Color{9, 8, 7, 255};
+        Require(node.GetComponent<TransformComponent>())._y = 9.0f;
+        Require(node.GetComponent<TransformComponent>())._width = 31.0f;
+        Require(node.GetComponent<QuadRendererComponent>())._color = Color{9, 8, 7, 255};
 
         String result;
         String reason;
@@ -226,7 +206,7 @@ namespace BECore::Tests {
     TEST_F(SceneNodeInstanceTest, AFieldTheFileWritesAsAnElementIsOneOverrideInTheSpellingOfTheSerializer) {
         // kBoxNode has `<color r g b a/>`; the serializer writes a colour as an element, so that is the override
         SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
-        node.GetComponent<QuadRendererComponent>()->_color = Color{200, 100, 50, 255};
+        Require(node.GetComponent<QuadRendererComponent>())._color = Color{200, 100, 50, 255};
 
         ExpectBuilt(node, R"(<node ref="nodes/Box"><components><component type="QuadRendererComponent"><color r="200" g="100" b="50" a="255"/></component></components></node>)");
     }
@@ -237,7 +217,7 @@ namespace BECore::Tests {
         SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
         ExpectBuilt(node, R"(<node ref="nodes/Box"/>)");
 
-        node.GetComponent<QuadRendererComponent>()->_color = Color{200, 100, 50, 255};
+        Require(node.GetComponent<QuadRendererComponent>())._color = Color{200, 100, 50, 255};
 
         ExpectBuilt(node, R"(<node ref="nodes/Box"><components><component type="QuadRendererComponent"><color r="200" g="100" b="50" a="255"/></component></components></node>)");
     }
@@ -263,7 +243,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeInstanceTest, AnEmptiedListIsAnEmptyElementOrARefusal) {
         SceneNode& node = LoadNode(R"(<node ref="nodes/Panel"/>)");
-        node.GetComponent<UICanvasComponent>()->_elements.clear();
+        Require(node.GetComponent<UICanvasComponent>())._elements.clear();
 
         String result;
         String reason;
@@ -279,7 +259,7 @@ namespace BECore::Tests {
         pugi::xml_document expanded;
         String error;
         ASSERT_TRUE(ExpandNodeReference(_out.child("nodes").first_child(), _loader, false, expanded, error)) << error.c_str();
-        EXPECT_TRUE(DeserializeNode(expanded.document_element(), "check")->GetComponent<UICanvasComponent>()->_elements.empty());
+        EXPECT_TRUE(Require(DeserializeNode(expanded.document_element(), "check")->GetComponent<UICanvasComponent>())._elements.empty());
     }
 
     TEST_F(SceneNodeInstanceTest, AnAddedComponentIsRefused) {
@@ -350,7 +330,7 @@ namespace BECore::Tests {
     TEST_F(SceneNodeInstanceTest, AnEditOfAnUntidyFileIsStillOneOverride) {
         WriteFile(_dir / "nodes" / "Box.xml", kUntidyBoxNode);
         SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
-        node.GetComponent<TransformComponent>()->_rotation = 45.0f;
+        Require(node.GetComponent<TransformComponent>())._rotation = 45.0f;
 
         ExpectBuilt(node, R"(<node ref="nodes/Box"><components><component type="TransformComponent" rotation="45"/></components></node>)");
     }
@@ -364,7 +344,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(BuildNodeReference(node, _loader, nodesEl, reason)) << reason.c_str();
 
-        EXPECT_EQ(Printed(nodesEl), String(R"(<nodes><node name="First"/><node ref="nodes/Box"/></nodes>)"));
+        EXPECT_EQ(XmlText(nodesEl), String(R"(<nodes><node name="First"/><node ref="nodes/Box"/></nodes>)"));
     }
 
 }  // namespace BECore::Tests

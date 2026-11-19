@@ -8,6 +8,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <Common/UILayoutMatrix.h>
 #include <CoreSDL/SDLEvents.h>
 #include <gtest/gtest.h>
@@ -63,16 +64,6 @@ namespace BECore::Tests {
         constexpr float kViewWidth = 1280.0f;
         constexpr float kViewHeight = 720.0f;
 
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
     }  // namespace
 
     class SceneViewEndToEndTest : public ::testing::Test {
@@ -83,8 +74,8 @@ namespace BECore::Tests {
 
         void SetUp() override {
             _renderer = New<RecordingRenderer>();
-            _renderer->width = 1280.0f;
-            _renderer->height = 720.0f;
+            _renderer->width = kViewWidth;
+            _renderer->height = kViewHeight;
             CoreManager::GetRendererManager().SetRenderer(_renderer);
 
             XmlDeserializer deserializer;

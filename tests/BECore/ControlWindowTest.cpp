@@ -5,6 +5,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/UI/UIEnvironment.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <gtest/gtest.h>
@@ -86,16 +87,6 @@ namespace BECore::Tests {
             Vector<WindowSimulation> _simulations;
         };
 
-        String MakeRequest(int64_t id, StringView method, const Json& params = Json()) {
-            Json request = Json::object();
-            request["id"] = id;
-            request["method"] = ToStdString(method);
-            if (!params.is_null()) {
-                request["params"] = params;
-            }
-            return DumpJson(request);
-        }
-
         Json SizeOf(int64_t width, int64_t height) {
             Json params = Json::object();
             params["width"] = width;
@@ -110,16 +101,6 @@ namespace BECore::Tests {
             safeArea["bottom"] = bottom;
             safeArea["left"] = left;
             return safeArea;
-        }
-
-        double NumberOf(const Json* object, StringView key) {
-            const auto value = object != nullptr ? GetJsonNumber(*object, key) : Optional<double>();
-            return value ? *value : -1.0;
-        }
-
-        String StringOf(const Json* object, StringView key) {
-            const auto value = object != nullptr ? GetJsonString(*object, key) : Optional<String>();
-            return value ? *value : String();
         }
 
         constexpr float kStartUserScale = 1.25f;

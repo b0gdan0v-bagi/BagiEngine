@@ -1,11 +1,11 @@
 #include <BECore/Audio/AudioClip.h>
 #include <BECore/Audio/AudioManager.h>
 #include <BECore/Audio/AudioPreferences.h>
+#include <BECore/AudioTestSupport.h>
 #include <BECore/FakeAudioBackend.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
-#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -66,10 +66,7 @@ namespace BECore::Tests {
     TEST_F(AudioPreferencesTest, ALoadReachesTheSoundsThatPlay) {
         auto backend = New<FakeAudioBackend>();
         manager.SetBackend(backend);
-        DecodedAudio audio;
-        audio.format = AudioFormat{22050, 1};
-        audio.samples.assign(16, 0.5f);
-        const AudioHandle handle = manager.Play(*AudioClip::Create("test/clip.wav"_intern, std::move(audio)), AudioBus::Sfx);
+        const AudioHandle handle = manager.Play(*MakeTestClip(), AudioBus::Sfx);
         ASSERT_TRUE(handle.IsValid());
 
         AudioManager quiet;

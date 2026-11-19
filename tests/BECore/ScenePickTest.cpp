@@ -8,6 +8,8 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
+#include <Common/SceneTestSupport.h>
 #include <Widgets/SceneEditor/ScenePick.h>
 #include <gtest/gtest.h>
 
@@ -84,19 +86,6 @@ namespace BECore::Tests {
   </nodes></scene>
 </scenes></SceneManager>)";
 
-        SceneNode* Find(SceneNode& from, const char* name) {
-            const PoolString wanted = PoolString::Intern(name);
-            for (const auto& child : from.GetChildren()) {
-                if (child->GetName() == wanted) {
-                    return child.Get();
-                }
-                if (SceneNode* found = Find(*child, name)) {
-                    return found;
-                }
-            }
-            return nullptr;
-        }
-
         void ExpectNodes(const Vector<SceneNode*>& actual, std::initializer_list<const SceneNode*> expected) {
             ASSERT_EQ(actual.size(), expected.size());
             size_t index = 0;
@@ -163,9 +152,9 @@ namespace BECore::Tests {
         }
 
         SceneNode& Node(const char* sceneName, const char* name) const {
-            SceneNode* node = Find(GetScene(sceneName).GetRootNode(), name);
+            SceneNode* node = FindNodeBelow(GetScene(sceneName).GetRootNode(), name);
             EXPECT_NE(node, nullptr) << name;
-            return *node;
+            return Require(node);
         }
 
         ScenePick::Hit Pick(float x, float y) {

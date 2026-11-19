@@ -1,7 +1,6 @@
 #include <BECore/Animation/Lerp.h>
 #include <BECore/Math/Vec4.h>
-#include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Reflection/XmlSerializer.h>
+#include <Common/MathTestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -10,19 +9,7 @@ namespace BECore::Tests {
     static_assert(Vec4(Vec3(1.0f, 2.0f, 3.0f), 4.0f) == Vec4(1.0f, 2.0f, 3.0f, 4.0f));
     static_assert(Vec4(1.0f, 2.0f, 3.0f, 4.0f).XYZ() == Vec3(1.0f, 2.0f, 3.0f));
 
-    namespace {
-
-        struct StepVisitor {
-            Vector<String> names;
-
-            bool Visit(const char* name, float& value) {
-                names.push_back(name);
-                value += 1.0f;
-                return true;
-            }
-        };
-
-    }  // namespace
+    namespace {}  // namespace
 
     TEST(Vec4Test, CompileTimeChecks) {}
 
@@ -81,7 +68,7 @@ namespace BECore::Tests {
 
     TEST(Vec4Test, VisitPropertiesVisitsXYZWInOrder) {
         Vec4 v{1.0f, 2.0f, 3.0f, 4.0f};
-        StepVisitor visitor;
+        StepVisitor<float> visitor;
         EXPECT_TRUE(v.VisitProperties(visitor));
         ASSERT_EQ(visitor.names.size(), 4u);
         EXPECT_EQ(visitor.names[0], "x");
@@ -93,18 +80,9 @@ namespace BECore::Tests {
 
     TEST(Vec4Test, XmlRoundTrip) {
         const Vec4 original{1.5f, -2.25f, 1000.0f, 0.125f};
-        XmlSerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("v"));
-        original.Serialize(serializer);
-        serializer.EndObject();
-
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(serializer.SaveToString()));
-        ASSERT_TRUE(deserializer.BeginObject("v"));
-        Vec4 loaded;
-        loaded.Deserialize(deserializer);
-        deserializer.EndObject();
-        EXPECT_EQ(loaded, original);
+        const auto loaded = RoundTripThroughXml(original);
+        ASSERT_TRUE(loaded.has_value());
+        EXPECT_EQ(*loaded, original);
     }
 
 }  // namespace BECore::Tests

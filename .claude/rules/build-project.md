@@ -70,29 +70,41 @@ Engine:
 
 ### Tests
 
-Engine: `ctest --preset <p>` runs every gtest in its own process (`BagiEngineTests`, `StressTests`), `BagiStressControlSmoke` and `BagiStressScenario.*`, Python scripts that start `BagiStress` `--headless` and play it over the control API. The smoke test is skipped (exit code 77) when the executable is not built. A `--target` list without the product (what the argument `tests` builds) builds no game, so add the product to run the smoke test. The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests tools/perf/tests`.
+Engine: `ctest --preset <p>` runs the gtest executables `BagiEngineTests` and `StressTests` as shards (`<Exe>.Shard<k>`, `ENGINE_TEST_SHARDS` per executable, many cases in one process; a failing case, a crash and a re-run of one case: `.claude/rules/tests-module.md`, "Shards"; `-DENGINE_TESTS_PER_CASE=ON` makes one entry per case), `BagiStressControlSmoke` and `BagiStressScenario.*`, Python scripts that start `BagiStress` `--headless` and play it over the control API. The smoke test is skipped (exit code 77) when the executable is not built. A `--target` list without the product (what the argument `tests` builds) builds no game, so add the product to run the smoke test. The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests tools/perf/tests`.
 
-**Parallel run.** `ctest --preset <p>` runs 8 tests at once (`execution.jobs` 8 in `test-base` of `CMakePresets.json`; the game repositories get it through the included presets). `-j1` runs them one at a time, `-jN` sets another number; `CTEST_PARALLEL_LEVEL` does **not** override a preset. The smoke test takes the `bagi_control_smoke` lock (no other smoke test beside it; unit tests run beside it). Do not start several `ctest`s in one build folder at the same moment right after a build (`gtest_discover_tests` rewrites `<Exe>[1]_tests.cmake` and two writers corrupt it: delete `build/<p>/**/<Exe>*_tests.cmake` and run `ctest -N` once). Rules for a test that runs beside others: `.claude/rules/tests-module.md`.
+**Labels and presets.** The `be_add_*` helpers label their entries: `unit` (the gtest shards), `smoke` (control smoke tests), `scenario` (scenario files and their QA replays); `extended` marks what only the full run needs: the hygiene checks (`BagiHeadersStandalone`, `BagiTypesCheck`, `BagiIncludeStyle`, `BagiPoolStrings`, `BagiThirdPartyNotices`), `BagiFuzzMutations`, `BagiRoomServerSmoke` (also `smoke`), `BagiRoomServerHostile`, `BagiTlsLocalEndpoint`. Every test preset `<p>` has four siblings (mixins `test-*` of `CMakePresets.json`, so the games get them too):
+
+| Preset | Runs |
+|--------|------|
+| `<p>` | everything but `extended`: the everyday run of a developer and the loop |
+| `<p>-all` | every test: the full run (alltests, before a deploy, `sync-engine`) |
+| `<p>-fast` | the default set without `smoke` and `scenario` (no game is started) |
+| `<p>-smoke` | `smoke` only, `extended` ones included |
+| `<p>-scenarios` | `scenario` only |
+
+A `-L` / `-LE` on the command line narrows a preset further and never widens it: `ctest --preset <p>-all -L extended` runs the extended set alone.
+
+**Parallel run.** `ctest --preset <p>` runs 8 tests at once (`execution.jobs` 8 in `test-base` of `CMakePresets.json`; the game repositories get it through the included presets). `-j1` runs them one at a time, `-jN` sets another number; `CTEST_PARALLEL_LEVEL` does **not** override a preset. The smoke test takes the `bagi_control_smoke` lock (no other smoke test beside it; unit tests run beside it). With `ENGINE_TESTS_PER_CASE=ON` only (the shards are fixed `add_test` entries, nothing is rewritten when ctest starts), do not start several `ctest`s in one build folder at the same moment right after a build (`gtest_discover_tests` rewrites `<Exe>[1]_tests.cmake` and two writers corrupt it: delete `build/<p>/**/<Exe>*_tests.cmake` and run `ctest -N` once). Rules for a test that runs beside others: `.claude/rules/tests-module.md`.
 
 **The machine's pool of jobs.** On a machine where `tools/todo/buildslots.py install` ran, `MAKEFLAGS` names a jobserver, and `ctest` (3.29+) on macOS and Linux takes one token of it for each test beyond its first: a run then executes `min(-j, tokens + 1)` tests, so builds and test runs of every checkout share one budget, and four runs started at once do not start 32 tests. The preset's `-j` 8 stays the ceiling of one run (unlike Ninja, ctest keeps the jobserver with an explicit `-j`). Waiting for a token does not count against a test's timeout. A test executable started by hand, outside `ctest`, and every `ctest` on Windows (no jobserver client there) are outside the pool. `python3 tools/todo/buildslots.py status` shows the pools.
 
-**Fuzzing** (`tests/Fuzz/CLAUDE.md`). The corpus of every fuzz target is replayed and mutated by `FuzzCorpusTest` in every preset: `ctest --preset <p> -R Fuzz` (`BAGI_FUZZ_ITERATIONS=2000000` makes it longer). Long runs are libFuzzer with ASan + UBSan, which needs Homebrew LLVM (`brew install llvm` once; Apple clang has no libFuzzer runtime). This is the command until the CI entry `no-ci` exists:
+**Fuzzing** (`tests/Fuzz/CLAUDE.md`). The corpus of every fuzz target is replayed by `FuzzCorpusTest` in every preset, and mutated in the `extended` entry `BagiFuzzMutations`: `ctest --preset <p>-all -R Fuzz` (from `build/<p>`, `BAGI_FUZZ_ITERATIONS=2000000 bin/BagiEngineTests --gtest_filter='FuzzCorpus/*'` is a longer mutation run: a shard's entry runs the corpus with other cases, and the environment of `BagiFuzzMutations` wins over the shell's). Long runs are libFuzzer with ASan + UBSan, which needs Homebrew LLVM (`brew install llvm` once; Apple clang has no libFuzzer runtime). This is the command until the CI entry `no-ci` exists:
 
 ```bash
 cmake --preset macos-fuzz                                              # never with Homebrew LLVM on PATH: the preset names the compiler
 cmake --build --preset macos-fuzz --target BagiFuzzers BagiEngineTests # BagiFuzz<Name> go to build/macos-fuzz/bin
 python3 tools/fuzz/run_fuzzers.py --seconds 60                         # every target over a copy of its corpus; exit 1 on a finding, 77 when nothing is built
-ctest --preset macos-fuzz -R Fuzz                                      # the corpus test under the sanitizers
+ctest --preset macos-fuzz-all -R Fuzz                                  # the corpus test and its mutations under the sanitizers
 .venv/bin/python -m pytest tools/fuzz/tests                            # the run script
 ```
 
 **The shipped flags.** A shipped build has asserts and expects OFF, so an `ASSERT` on an input path compiles out and the code after it runs on the bad input. `macos-fuzz-shipped` is `macos-fuzz` with Release and those two OFF, in its own build folder; the commands are the same with the preset name (`--preset macos-fuzz-shipped` for the script), and the corpus test alone runs in the plain release preset:
 
 ```bash
-ctest --preset macos-release -R Fuzz                                   # BAGI_FUZZ_ITERATIONS=2000000 makes it longer
+ctest --preset macos-release-all -R Fuzz                               # BagiFuzzMutations; a longer run is the gtest_filter line of "Fuzzing"
 cmake --preset macos-fuzz-shipped && cmake --build --preset macos-fuzz-shipped --target BagiFuzzers BagiEngineTests
 python3 tools/fuzz/run_fuzzers.py --preset macos-fuzz-shipped --seconds 60   # 180 before a release: 12 targets, about 40 minutes
-ctest --preset macos-fuzz-shipped -R Fuzz
+ctest --preset macos-fuzz-shipped-all -R Fuzz
 ```
 
 A CI job takes these commands when the entry `no-ci` is done.

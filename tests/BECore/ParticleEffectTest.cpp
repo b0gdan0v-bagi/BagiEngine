@@ -1,6 +1,7 @@
 #include <BECore/Particles/ParticleEffect.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <BECore/UI/UIColor.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
 
@@ -76,13 +77,6 @@ namespace BECore::Tests {
             EXPECT_EQ(actual.ease, expected.ease);
         }
 
-        void ExpectColorEq(const Color& actual, const Color& expected) {
-            EXPECT_EQ(actual.r, expected.r);
-            EXPECT_EQ(actual.g, expected.g);
-            EXPECT_EQ(actual.b, expected.b);
-            EXPECT_EQ(actual.a, expected.a);
-        }
-
         void ExpectFlipbookEq(const ParticleFlipbook& actual, const ParticleFlipbook& expected) {
             EXPECT_EQ(actual.columns, expected.columns);
             EXPECT_EQ(actual.rows, expected.rows);
@@ -112,8 +106,8 @@ namespace BECore::Tests {
             EXPECT_FLOAT_EQ(actual.sizeJitter, expected.sizeJitter);
             ExpectCurveEq(actual.rotation, expected.rotation);
             EXPECT_FLOAT_EQ(actual.rotationJitter, expected.rotationJitter);
-            ExpectColorEq(actual.color.from, expected.color.from);
-            ExpectColorEq(actual.color.to, expected.color.to);
+            EXPECT_PRED2(ColorsEqual, actual.color.from, expected.color.from);
+            EXPECT_PRED2(ColorsEqual, actual.color.to, expected.color.to);
             EXPECT_EQ(actual.color.ease, expected.color.ease);
             EXPECT_EQ(actual.spriteId, expected.spriteId);
             EXPECT_EQ(actual.texturePath, expected.texturePath);
@@ -191,7 +185,7 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(loaded.rate, 5.0f);
         EXPECT_EQ(loaded.burstCount, defaults.burstCount);
         ExpectCurveEq(loaded.size, defaults.size);
-        ExpectColorEq(loaded.color.to, defaults.color.to);
+        EXPECT_PRED2(ColorsEqual, loaded.color.to, defaults.color.to);
         ExpectFlipbookEq(loaded.flipbook, defaults.flipbook);
     }
 

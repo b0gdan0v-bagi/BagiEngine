@@ -2,6 +2,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/SharedPtr.h>
+#include <Common/Wait.h>
 #include <TaskSystem/Awaitables.h>
 #include <TaskSystem/CancellationToken.h>
 #include <TaskSystem/LiveTasks.h>
@@ -50,21 +51,6 @@ namespace BECore::Tests {
             }
 
             co_return* resultA + *resultB;
-        }
-
-        /// Polls @p predicate until it holds or @p timeout expires. Replaces a fixed sleep, which is
-        /// either flaky on a loaded machine or needlessly slow. The limit only costs time when a test fails, so it is generous
-        /// (ctest -j runs many test processes on the cores of one machine).
-        template <typename Predicate>
-        bool WaitUntil(Predicate&& predicate, std::chrono::milliseconds timeout = std::chrono::milliseconds(20000)) {
-            const auto deadline = std::chrono::steady_clock::now() + timeout;
-            while (!predicate()) {
-                if (std::chrono::steady_clock::now() >= deadline) {
-                    return false;
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
-            return true;
         }
 
         /// Spins until @p gate opens, then raises @p finished. Lets a test hold a task "running" on a worker
@@ -720,7 +706,7 @@ namespace BECore::Tests {
 
         CoreManager::GetTaskManager().Run(ProbeTask(FrameGuard(probe), probe, false));  // handle dropped on the spot
 
-        std::this_thread::sleep_for(kLetWaiterBlock);  // the body is now running on a worker, held at the gate
+        std::this_thread::sleep_for(kLetWaiterBlock);  // the body may now be running on a worker, held at the gate
         EXPECT_FALSE(probe.frameDestroyed.load()) << "The coroutine frame was destroyed while the task was still running";
 
         probe.gate.store(true, std::memory_order_release);
@@ -855,6 +841,8 @@ namespace BECore::Tests {
         constexpr int kThreads = 4;
         constexpr int kHandlesPerThread = 5000;
         std::atomic<int> running{kThreads};
+        // Lives through every AbandonAll: each of them reaches it while the other handles come and go
+        const auto witness = MakeIntrusive<TaskHandle<void>>(SimpleVoidTask());
 
         Vector<std::thread> threads;
         for (int i = 0; i < kThreads; ++i) {
@@ -865,13 +853,13 @@ namespace BECore::Tests {
                 running.fetch_sub(1);
             });
         }
-        while (running.load() > 0) {
+        do {
             Detail::LiveTasks::GetInstance().AbandonAll();
-        }
+        } while (running.load() > 0);
         for (auto& thread : threads) {
             thread.join();
         }
-        SUCCEED();
+        EXPECT_EQ(witness->GetStatus(), TaskStatus::Cancelled);
     }
 
     TEST(TaskSystemTest, TaskStatistics) {

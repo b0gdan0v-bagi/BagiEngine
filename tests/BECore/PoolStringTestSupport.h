@@ -3,6 +3,8 @@
 #include <BECore/PoolString/PoolBlockSource.h>
 #include <BECore/PoolString/PoolStringStorage.h>
 #include <BECore/Types/Types.h>
+#include <Common/FreshText.h>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -68,6 +70,18 @@ namespace BECore::Tests {
             text[i] = static_cast<char>('a' + (i + static_cast<size_t>(seed)) % 26);
         }
         return text;
+    }
+
+    /// BlockText(@p length, @p seed) that is not in the PoolString table of this process yet: its first characters are a FreshText
+    inline String FreshBlockText(size_t length, char seed) {
+        for (;;) {
+            String text = BlockText(length, seed);
+            const String tag = FreshText("block");
+            text.replace(0, std::min(tag.size(), length), tag.data(), std::min(tag.size(), length));
+            if (!PoolString::Find(StringView{text}).has_value()) {
+                return text;
+            }
+        }
     }
 
     /// Runs `body(threadIndex)` on `count` threads that start together, waits up to `limit` and **always joins** every

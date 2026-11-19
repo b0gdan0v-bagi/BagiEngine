@@ -5,7 +5,6 @@
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <gtest/gtest.h>
-#include <map>
 
 namespace BECore::Tests {
 
@@ -243,6 +242,7 @@ namespace BECore::Tests {
         SpikeCapture capture;
         capture.SetSettings(AbsoluteSettings(50.0));
         capture.Update(WithASpike(80));
+        ASSERT_EQ(capture.GetSpikes().size(), 1u);
         const FrozenFrame& spike = capture.GetSpikes()[0];
         const RingSnapshot snapshot = ToSnapshot(spike);
         ASSERT_EQ(snapshot.frames.size(), 1u);
@@ -294,7 +294,7 @@ namespace BECore::Tests {
             const int64_t tid = GetJsonInt(event, "tid").value_or(-1);
             if (phase == "B" || phase == "E") {
                 const double ts = GetJsonNumber(event, "ts").value_or(-1.0);
-                EXPECT_GE(ts, lastTs) << "events of a thread are in time order";
+                EXPECT_GE(ts, lastTs) << "the events of every thread together are in time order";
                 lastTs = ts;
                 depth[tid] += phase == "B" ? 1 : -1;
                 EXPECT_GE(depth[tid], 0);

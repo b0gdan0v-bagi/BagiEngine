@@ -1,8 +1,11 @@
-#include <BECore/Rooms/JudgedTransport.h>
 #include <BECore/Rooms/ManualClock.h>
+#include <BECore/Rooms/RoomClientPlayer.h>
+#include <BECore/Rooms/RoomTableDriver.h>
+#include <BECore/Rooms/RoomTestTimings.h>
 #include <BECore/Rooms/TestRandom.h>
 #include <BECore/WebSocketTestClient.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/SharedPtr.h>
 #include <RemoteControl/Tls/TlsStream.h>
 #include <RemoteControl/WebSocketClient.h>
@@ -21,9 +24,8 @@ namespace BECore::Tests {
         using namespace std::chrono_literals;
         using Kind = RoomClientEventKind;
 
-        constexpr std::chrono::milliseconds kPlayLimit{30'000};
         constexpr std::chrono::milliseconds kShortLimit{30'000};
-        constexpr int kCardsInAHand = DemoCardGame::kTotalPlays;
+        constexpr int kCardsPlayedInAHand = DemoCardGame::kTotalPlays;
 
         /// What the test wants to know of the transports a client made, and a hand on the connection to cut it
         struct Tap {
@@ -109,9 +111,9 @@ namespace BECore::Tests {
             }
         }
 
-        /// A human at the table: a RoomClient on the native transport, judged on the wire, that plays the first action it is offered
-        struct Player {
-            explicit Player(RoomClientSettings settings = {}) : judge(MakeShared<WireJudgeLog>()) {
+        /// A RoomClientPlayer on the native transport, tapped; it takes its events and plays on every Pump() unless autoplay is off
+        struct Player : RoomClientPlayer {
+            explicit Player(RoomClientSettings settings = {}) {
                 settings.transportFactory = [this]() -> UniquePtr<IRoomTransport> {
                     auto native = MakeDefaultRoomTransport();
                     if (!native) {
@@ -122,61 +124,22 @@ namespace BECore::Tests {
                 client = MakeUnique<RoomClient>(std::move(settings));
             }
 
-            [[nodiscard]] size_t Count(Kind kind) const {
-                return static_cast<size_t>(std::count_if(events.begin(), events.end(), [kind](const RoomClientEvent& event) { return event.kind == kind; }));
+            ~Player() {
+                // The transports of the client use the tap
+                client.reset();
             }
 
-            [[nodiscard]] const RoomClientEvent* Find(Kind kind) const {
-                const auto found = std::find_if(events.begin(), events.end(), [kind](const RoomClientEvent& event) { return event.kind == kind; });
-                return found == events.end() ? nullptr : &*found;
-            }
-
-            [[nodiscard]] int TableSize() const {
-                const Json* table = FindJsonMember(client->GetView(), "table");
-                return table && table->is_array() ? static_cast<int>(table->size()) : -1;
-            }
-
-            /// How many plays of @p seat the last view shows
-            [[nodiscard]] int PlaysOf(int seat) const {
-                int plays = 0;
-                const Json* table = FindJsonMember(client->GetView(), "table");
-                for (size_t i = 0; table && table->is_array() && i < table->size(); ++i) {
-                    plays += GetJsonInt((*table)[i], "seat").value_or(-1) == seat ? 1 : 0;
-                }
-                return plays;
-            }
-
-            /// Polls, takes the events and plays the first action of the last view, once per version of it
             void Pump() {
                 client->Poll();
-                const size_t before = events.size();
-                client->DrainEvents(events);
-                for (size_t i = before; i < events.size(); ++i) {
-                    if (events[i].kind == Kind::Resumed) {
-                        // What was sent on the old connection may never have arrived
-                        acted = false;
-                    }
-                }
-                if (!autoplay || !client->IsInRoom() || !client->HasView() || client->IsFinished() || !client->GetActions().is_array() || client->GetActions().empty()) {
-                    return;
-                }
-                if (acted && actedVersion == client->GetViewVersion()) {
-                    return;
-                }
-                if (client->SendAction(client->GetActions()[0]).has_value()) {
-                    acted = true;
-                    actedVersion = client->GetViewVersion();
+                TakeEvents();
+                if (autoplay) {
+                    // A refused send (the connection just dropped) is tried again on the next pump
+                    ActIfItsTurn();
                 }
             }
 
-            // The tap and the judge are used by the transports the client makes: they outlive the client (declared first)
             Tap tap;
-            SharedPtr<WireJudgeLog> judge;
-            UniquePtr<RoomClient> client;
-            Vector<RoomClientEvent> events;
             bool autoplay = true;
-            bool acted = false;
-            uint64_t actedVersion = 0;
         };
 
         /// A client that reconnects quickly: real time passes in these tests
@@ -191,7 +154,7 @@ namespace BECore::Tests {
             RoomServerSettings settings;
             settings.tickInterval = 10ms;
             // The computers move at once (a test that needs a slower hand says so); no liveness pings, which a moved clock would turn into drops
-            settings.hub.timings = RoomTimings{30s, 10min, 0ms};
+            settings.hub.timings = NoComputerDelayTimings();
             settings.pingInterval = 0ms;
             settings.random = MakeSequence(5);
             return settings;
@@ -259,7 +222,7 @@ namespace BECore::Tests {
             void ExpectACleanFinishedHand() {
                 for (size_t i = 0; i < players.size(); ++i) {
                     const Player& player = *players[i];
-                    EXPECT_EQ(player.TableSize(), kCardsInAHand) << "player " << i;
+                    EXPECT_EQ(player.TableSize(), kCardsPlayedInAHand) << "player " << i;
                     EXPECT_GT(player.judge->texts, 3u) << "player " << i;
                     EXPECT_TRUE(player.judge->leaks.empty()) << "player " << i << " was sent " << (player.judge->leaks.empty() ? "" : player.judge->leaks.front());
                 }
@@ -277,7 +240,7 @@ namespace BECore::Tests {
     // ---- Whole hands over real sockets ---------------------------------------------------------------------------------------------
 
     TEST_F(RoomClientSocketTest, TwoHumansAndTwoComputersPlayAHandAndNobodyPeeks) {
-        StartServer();
+        ASSERT_NO_FATAL_FAILURE(StartServer());
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2));
         ASSERT_TRUE(players[0]->client->Start().has_value());
         ASSERT_TRUE(WaitFor([&] { return EveryoneSeesTheEnd(); })) << "the hand did not reach its end";
@@ -291,7 +254,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientSocketTest, FourHumansPlayAWholeHand) {
-        StartServer();
+        ASSERT_NO_FATAL_FAILURE(StartServer());
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 4));
         ASSERT_TRUE(players[0]->client->Start().has_value());
         ASSERT_TRUE(WaitFor([&] { return EveryoneSeesTheEnd(); }));
@@ -303,7 +266,7 @@ namespace BECore::Tests {
 
     TEST_F(RoomClientSocketTest, TheWireJudgeCatchesAGameThatLeaks) {
         // The negative control: the same hand on a game whose view carries every hand. If the judge could not fail, the tests above would prove nothing
-        StartServer();
+        ASSERT_NO_FATAL_FAILURE(StartServer());
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards-leaky", 2));
         ASSERT_TRUE(players[0]->client->Start().has_value());
         ASSERT_TRUE(WaitFor([&] { return EveryoneSeesTheEnd(); }));
@@ -318,7 +281,7 @@ namespace BECore::Tests {
         // Slow computers keep the hand going long enough to cut it in the middle; the clock is the real one and the grace (30 s) is far away
         RoomServerSettings settings = MakeServerSettings();
         settings.hub.timings.computerDelay = 100ms;
-        StartServer(std::move(settings));
+        ASSERT_NO_FATAL_FAILURE(StartServer(std::move(settings)));
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2));
         Player& cut = *players[1];
         const String token = cut.client->GetSession().token;
@@ -330,7 +293,7 @@ namespace BECore::Tests {
         cut.tap.Sever();
         ASSERT_TRUE(WaitFor([&] { return cut.Count(Kind::Resumed) == 1; }, kShortLimit)) << "the client did not come back";
         EXPECT_EQ(cut.Count(Kind::ConnectionLost), 1u);
-        EXPECT_TRUE(cut.Find(Kind::ConnectionLost)->willRetry);
+        EXPECT_TRUE(Require(cut.Find(Kind::ConnectionLost)).willRetry);
         EXPECT_EQ(cut.client->GetSeat(), seat);
         EXPECT_EQ(cut.client->GetSession().token, token);
         EXPECT_EQ(cut.tap.connections, 2u);
@@ -343,7 +306,7 @@ namespace BECore::Tests {
         ManualClock clock;
         RoomServerSettings settings = MakeServerSettings();
         settings.clock = clock.AsFunction();
-        StartServer(std::move(settings));
+        ASSERT_NO_FATAL_FAILURE(StartServer(std::move(settings)));
 
         // Seat 0 moves first, and seat 1 does not play until the test lets it: the hand stalls at seat 1 when the client is cut
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2, Json::object({{"firstSeat", 0}})));
@@ -384,7 +347,7 @@ namespace BECore::Tests {
     TEST_F(RoomClientSocketTest, ANewClientObjectResumesTheSavedSessionAfterTheAppRestarted) {
         RoomServerSettings settings = MakeServerSettings();
         settings.hub.timings.computerDelay = 100ms;
-        StartServer(std::move(settings));
+        ASSERT_NO_FATAL_FAILURE(StartServer(std::move(settings)));
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2));
         const RoomSession saved = players[1]->client->GetSession();
         const int seat = players[1]->client->GetSeat();
@@ -406,7 +369,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientSocketTest, AServerThatStopsIsRetriedUntilTheGiveUpTime) {
-        StartServer();
+        ASSERT_NO_FATAL_FAILURE(StartServer());
         RoomClientSettings impatient = MakeClientSettings();
         impatient.reconnectGiveUp = 700ms;
         impatient.backoffStart = 50ms;
@@ -418,10 +381,10 @@ namespace BECore::Tests {
         server->Stop();
         ASSERT_TRUE(WaitFor([&] { return host.client->GetState() == RoomClientState::Disconnected; }, kShortLimit)) << "the client never gave up";
         EXPECT_EQ(host.Count(Kind::ConnectionLost), 1u);
-        EXPECT_TRUE(host.Find(Kind::ConnectionLost)->willRetry);
+        EXPECT_TRUE(Require(host.Find(Kind::ConnectionLost)).willRetry);
         EXPECT_EQ(host.Count(Kind::Resumed), 0u);
         ASSERT_EQ(host.Count(Kind::Closed), 1u);
-        EXPECT_EQ(host.Find(Kind::Closed)->code, RoomClientCloseReasons::kGaveUp);
+        EXPECT_EQ(Require(host.Find(Kind::Closed)).code, RoomClientCloseReasons::kGaveUp);
         EXPECT_GE(host.tap.connections, 3u) << "it should have tried again, not only once";
         EXPECT_FALSE(host.client->GetSession().IsValid());
     }
@@ -446,19 +409,20 @@ namespace BECore::Tests {
         if (!IsTlsSupported()) {
             GTEST_SKIP() << "no TLS backend in this build: WssIsRefusedAtOnceWithoutATlsBackendAndTheMessageNamesTheBrowserBuild covers wss://";
         }
-        StartServer();
+        ASSERT_NO_FATAL_FAILURE(StartServer());
         Player& player = AddPlayer();
         // The address is accepted (there is a backend); the plain server does not speak TLS, so the handshake fails
         ASSERT_TRUE(player.client->Host(Format("wss://127.0.0.1:{}", port), "cards", "P0").has_value());
         ASSERT_TRUE(WaitFor([&] { return player.client->GetState() == RoomClientState::Disconnected; }, kShortLimit)) << "the TLS handshake never ended";
         ASSERT_EQ(player.Count(Kind::Closed), 1u);
-        EXPECT_EQ(player.Find(Kind::Closed)->closeCode, kRoomTransportAbnormalClosure);
-        EXPECT_NE(player.Find(Kind::Closed)->message.find("TLS"), String::npos) << player.Find(Kind::Closed)->message.c_str();
+        EXPECT_EQ(Require(player.Find(Kind::Closed)).closeCode, kRoomTransportAbnormalClosure);
+        EXPECT_NE(Require(player.Find(Kind::Closed)).message.find("TLS"), String::npos) << Require(player.Find(Kind::Closed)).message.c_str();
     }
 
     TEST_F(RoomClientSocketTest, AWrongPortGivesAClosedEventAndNoHang) {
-        // A port that was in use a moment ago and now has nobody on it
-        StartServer();
+        // A port that was in use a moment ago and now has nobody on it: another test that binds the freed port before the connect would make this pass for the wrong reason; that clash is rare enough
+        // to accept
+        ASSERT_NO_FATAL_FAILURE(StartServer());
         const String deadUrl = url;
         server->Stop();
         server.reset();
@@ -467,8 +431,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(player.client->Join(deadUrl, "ABCDE", "P0").has_value());
         ASSERT_TRUE(WaitFor([&] { return player.client->GetState() == RoomClientState::Disconnected; }, kShortLimit)) << "the connect never ended";
         ASSERT_EQ(player.Count(Kind::Closed), 1u);
-        EXPECT_EQ(player.Find(Kind::Closed)->closeCode, kRoomTransportAbnormalClosure);
-        EXPECT_FALSE(player.Find(Kind::Closed)->message.empty());
+        EXPECT_EQ(Require(player.Find(Kind::Closed)).closeCode, kRoomTransportAbnormalClosure);
+        EXPECT_FALSE(Require(player.Find(Kind::Closed)).message.empty());
         // Without a room there is nothing to bring back
         std::this_thread::sleep_for(200ms);
         player.Pump();
@@ -480,14 +444,14 @@ namespace BECore::Tests {
         RoomServerSettings settings = MakeServerSettings();
         settings.policy.loopbackOnly = false;
         settings.policy.allowedOrigins = {"https://page.example"};
-        StartServer(std::move(settings));
+        ASSERT_NO_FATAL_FAILURE(StartServer(std::move(settings)));
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2));
         EXPECT_TRUE(players[0]->client->IsInRoom());
         EXPECT_TRUE(players[1]->client->IsInRoom());
     }
 
     TEST_F(RoomClientSocketTest, TheServerAnswersTheHeartbeatPingWithPong) {
-        StartServer();
+        ASSERT_NO_FATAL_FAILURE(StartServer());
         RoomClientSettings quick = MakeClientSettings();
         quick.pingInterval = 40ms;
         Player& player = AddPlayer(std::move(quick));

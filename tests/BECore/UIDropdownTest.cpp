@@ -7,6 +7,7 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIChoice.h>
+#include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIDropdown.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIInputClicker.h>
@@ -16,7 +17,10 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
+#include <Common/UIInputEvents.h>
 #include <Common/UIPartShapeChecks.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -202,43 +206,6 @@ namespace BECore::Tests {
   </language>
 </UIStrings>)";
 
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        /// The actions the buttons emit, with the value each carried, in order
-        class ActionLog : public SubscriptionHolder {
-        public:
-            ActionLog() {
-                Subscribe<InputEvents::ActionEvent, &ActionLog::OnAction>(this);
-            }
-
-            size_t Total() const {
-                return _actions.size();
-            }
-            PoolString LastAction() const {
-                return _actions.empty() ? PoolString{} : _actions.back();
-            }
-            PoolString LastValue() const {
-                return _values.empty() ? PoolString{} : _values.back();
-            }
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                _actions.push_back(event.action);
-                _values.push_back(event.value);
-            }
-
-            Vector<PoolString> _actions;
-            Vector<PoolString> _values;
-        };
-
         void SetVar(const char* name, const char* value) {
             CoreManager::GetUIVars().Set(PoolString::Intern(name), value);
         }
@@ -255,67 +222,26 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class UIDropdownTest : public ::testing::Test {
+    class UIDropdownTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetFontAtlasLibrary().Clear();
+            UISceneFixture::SetUp();
             UIStrings& strings = CoreManager::GetUIStrings();
             strings.Clear();
             auto config = XmlConfig::Create();
             ASSERT_TRUE(config.LoadFromString(kStringsXml));
             ASSERT_TRUE(strings.LoadFromXml(config.GetRoot()).empty());
 
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kDropdownXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-
-            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kDropdownXml));
             ASSERT_TRUE(_canvas);
             Draw();
-        }
-
-        void TearDown() override {
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetUIStrings().Clear();
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
-        }
-
-        template <typename T>
-        T& Get(const char* name) const {
-            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
-            T* typed = element ? element->Cast<T>() : nullptr;
-            EXPECT_NE(typed, nullptr) << name << " is not the expected control";
-            return *typed;
         }
 
         /// Any element by name, whatever its class (`Get<T>` wants the exact type)
         UIElement& Element(const char* name) const {
             UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
-            return *element;
+            return Require(element);
         }
 
         /// The textured quads (the glyphs of a caption) drawn inside @p area in the last draw
@@ -348,17 +274,12 @@ namespace BECore::Tests {
             const bool up = CoreManager::GetUIInput().DispatchMouseButtonUp(Button(x, y, false));
             return down && up;
         }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
     };
 
     // ---- the header -------------------------------------------------------------------------------------------------------
 
     TEST_F(UIDropdownTest, ADropdownFromAFileIsAnInteractiveElementWithItsOptionsAsChildren) {
         const auto& level = Get<UIDropdown>("Level");
-        static_assert(std::is_base_of_v<UIElement, UIDropdown>);
         ASSERT_NE(level.GetComponent<UITextComponent>(), nullptr) << "the header text is a component";
         EXPECT_TRUE(level.interactive);
         EXPECT_EQ(level.bind, "level"_intern);
@@ -403,7 +324,7 @@ namespace BECore::Tests {
         SetVar("level", "easy");
         Draw();
         EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), "Easy");
-        EXPECT_EQ(Get<UIDropdown>("Level").GetComponent<UITextComponent>()->text, "Pick one");
+        EXPECT_EQ(Require(Get<UIDropdown>("Level").GetComponent<UITextComponent>()).text, "Pick one");
 
         CoreManager::GetUIVars().Remove("level"_intern);
         EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), "Pick one");
@@ -434,7 +355,7 @@ namespace BECore::Tests {
         const Rect text = UIDropdown::GetHeaderParts(level.rect).text;
         EXPECT_TRUE(SameRect(level.GetComponentArea(), text)) << "the component draws left of the arrow, not in the whole rect";
         ASSERT_NE(level.GetTextOverride(), nullptr);
-        EXPECT_EQ(*level.GetTextOverride(), UIChoice::GetText(*level.FindChosenOption())) << "the caption of the chosen option, not expanded";
+        EXPECT_EQ(*level.GetTextOverride(), UIChoice::GetText(Require(level.FindChosenOption()))) << "the caption of the chosen option, not expanded";
         const size_t glyphs = GlyphQuadsIn(text);
         EXPECT_EQ(glyphs, 6u) << "Medium: six glyphs, all inside the text area";
 
@@ -779,15 +700,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        bool SameRgba(const Color& a, const Color& b) {
-            return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
-        }
-
-        bool NearRect(const Rect& a, const Rect& b) {
-            return std::abs(a.x - b.x) < 1e-2f && std::abs(a.y - b.y) < 1e-2f && std::abs(a.w - b.w) < 1e-2f && std::abs(a.h - b.h) < 1e-2f;
-        }
-
-        enum class HeaderState { Idle, Hover, Press, Disabled };
+        CORE_ENUM(HeaderState, uint8_t, Idle, Hover, Press, Disabled)
 
         void SetState(UIDropdown& dropdown, HeaderState state) {
             dropdown.disabled = state == HeaderState::Disabled;
@@ -822,8 +735,8 @@ namespace BECore::Tests {
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Rect && NearRect(call.rect, level.rect)) {
                     ++headerRects;
-                    EXPECT_TRUE(SameRgba(call.color, Shifted(Color{40, 40, 70, 255}, state))) << static_cast<int>(state);
-                    EXPECT_TRUE(SameRgba(call.color, level.GetCurrentFill())) << static_cast<int>(state);
+                    EXPECT_PRED2(ColorsEqual, call.color, Shifted(Color{40, 40, 70, 255}, state)) << static_cast<int>(state);
+                    EXPECT_PRED2(ColorsEqual, call.color, level.GetCurrentFill()) << static_cast<int>(state);
                 }
             }
             EXPECT_EQ(headerRects, 1u) << static_cast<int>(state);
@@ -862,11 +775,11 @@ namespace BECore::Tests {
         for (const HeaderState state : kStates) {
             SetState(level, state);
             const UIStateLook::Look look = level.GetCurrentBox();
-            EXPECT_TRUE(SameRgba(look.fill, Shifted(Color{40, 40, 70, 255}, state))) << static_cast<int>(state);
-            EXPECT_TRUE(SameRgba(look.gradientEnd, Shifted(Color{120, 90, 160, 255}, state))) << static_cast<int>(state);
-            EXPECT_FALSE(SameRgba(look.fill, look.gradientEnd)) << static_cast<int>(state);
-            EXPECT_TRUE(SameRgba(look.box.gradientColor, look.gradientEnd)) << "the look says the far end twice";
-            EXPECT_TRUE(SameRgba(level.GetCurrentFill(), look.fill));
+            EXPECT_PRED2(ColorsEqual, look.fill, Shifted(Color{40, 40, 70, 255}, state)) << static_cast<int>(state);
+            EXPECT_PRED2(ColorsEqual, look.gradientEnd, Shifted(Color{120, 90, 160, 255}, state)) << static_cast<int>(state);
+            EXPECT_FALSE(ColorsEqual(look.fill, look.gradientEnd)) << static_cast<int>(state);
+            EXPECT_PRED2(ColorsEqual, look.box.gradientColor, look.gradientEnd) << "the look says the far end twice";
+            EXPECT_PRED2(ColorsEqual, level.GetCurrentFill(), look.fill);
         }
 
         SetState(level, HeaderState::Hover);
@@ -909,8 +822,8 @@ namespace BECore::Tests {
             const UIBoxStyle& box = level.GetCurrentBox().box;
             EXPECT_TRUE(box.shadow == level.box.shadow) << static_cast<int>(state);
             EXPECT_TRUE(box.glow == level.box.glow) << static_cast<int>(state);
-            EXPECT_TRUE(SameRgba(box.borderColor, level.box.borderColor)) << "hover and press keep the border as authored";
-            EXPECT_TRUE(SameRgba(box.highlight, level.box.highlight)) << "and the highlight";
+            EXPECT_PRED2(ColorsEqual, box.borderColor, level.box.borderColor) << "hover and press keep the border as authored";
+            EXPECT_PRED2(ColorsEqual, box.highlight, level.box.highlight) << "and the highlight";
         }
     }
 
@@ -918,13 +831,13 @@ namespace BECore::Tests {
         auto& level = Get<UIDropdown>("Level");
         UITextComponent& header = *level.GetComponent<UITextComponent>();
         header.textColor = UIColor{10, 20, 30, 255};
-        EXPECT_TRUE(SameRgba(level.GetCurrentArrow(), Color{10, 20, 30, 255})) << "the text colour of the header component";
+        EXPECT_PRED2(ColorsEqual, level.GetCurrentArrow(), (Color{10, 20, 30, 255})) << "the text colour of the header component";
 
         level.arrowColor = Color{1, 2, 3, 200};
-        EXPECT_TRUE(SameRgba(level.GetCurrentArrow(), Color{1, 2, 3, 200})) << "arrowColor wins";
+        EXPECT_PRED2(ColorsEqual, level.GetCurrentArrow(), (Color{1, 2, 3, 200})) << "arrowColor wins";
 
         UIDropdown bare;
-        EXPECT_TRUE(SameRgba(bare.GetCurrentArrow(), Color{255, 255, 255, 255})) << "no header component: white";
+        EXPECT_PRED2(ColorsEqual, bare.GetCurrentArrow(), (Color{255, 255, 255, 255})) << "no header component: white";
         EXPECT_EQ(bare.GetTextOverride(), nullptr);
     }
 
@@ -1158,5 +1071,9 @@ namespace BECore::Tests {
         }
         EXPECT_GE(small, 3u) << "the three composed options are under a touch target";
     }
+
+    static_assert(std::is_base_of_v<UIElement, UIDropdown>);
+
+    TEST_F(UIDropdownTest, CompileTimeChecks) {}
 
 }  // namespace BECore::Tests

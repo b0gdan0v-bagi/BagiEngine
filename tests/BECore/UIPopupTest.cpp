@@ -8,6 +8,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <gtest/gtest.h>
 
@@ -32,16 +33,6 @@ namespace BECore::Tests {
         constexpr uint8_t kCoverRed = 20;
         constexpr uint8_t kFirstOptionRed = 30;
         constexpr uint8_t kSecondOptionRed = 40;
-
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
 
         /// A test popup: a header that toggles its list on a click; the list is a column of children under the header, as wide as it, `optionHeight` high each
         class TestPopup : public UIElement {

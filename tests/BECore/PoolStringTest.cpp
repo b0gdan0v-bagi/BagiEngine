@@ -1,11 +1,10 @@
-#include <BECore/PoolString/PoolString.h>
 #include <BECore/PoolString/PoolStringStorage.h>
 #include <BECore/PoolStringTestSupport.h>
+#include <Common/FreshText.h>
 #include <Common/Printers.h>
 #include <chrono>
 #include <cstdio>
 #include <thread>
-#include <vector>
 
 namespace BECore::Tests {
 
@@ -200,16 +199,17 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST(PoolStringStatsTest, ANewTextIsAMissAndARepeatIsAHit) {
+        const String text = FreshText("pool_stats_new_text");
         const PoolStringStats before = PoolString::GetStats();
-        static_cast<void>(PoolString::Intern(StringView{"pool_stats_new_text_4b7e"}));
+        static_cast<void>(PoolString::Intern(StringView{text}));
         const PoolStringStats afterNew = PoolString::GetStats();
         EXPECT_EQ(afterNew.stringCount, before.stringCount + 1);
         EXPECT_EQ(afterNew.tableUsed, before.tableUsed + 1);
         EXPECT_EQ(afterNew.misses, before.misses + 1);
         EXPECT_EQ(afterNew.hits, before.hits);
-        EXPECT_EQ(afterNew.stringBytes, before.stringBytes + EntryBytes(StringView{"pool_stats_new_text_4b7e"}.size()));
+        EXPECT_EQ(afterNew.stringBytes, before.stringBytes + EntryBytes(text.size()));
 
-        static_cast<void>(PoolString::Intern(StringView{"pool_stats_new_text_4b7e"}));
+        static_cast<void>(PoolString::Intern(StringView{text}));
         const PoolStringStats afterRepeat = PoolString::GetStats();
         EXPECT_EQ(afterRepeat.stringCount, afterNew.stringCount);
         EXPECT_EQ(afterRepeat.misses, afterNew.misses);
@@ -242,7 +242,7 @@ namespace BECore::Tests {
         static_cast<void>(PoolString::Intern(StringView{"pool_stats_before_huge_91d4"}));
         const PoolStringStats before = PoolString::GetStats();
 
-        const String hugeText = BlockText(2 * PoolString::kBlockBytes + 5, 'g');
+        const String hugeText = FreshBlockText(2 * PoolString::kBlockBytes + 5, 'g');
         static_cast<void>(PoolString::Intern(StringView{hugeText}));
         const PoolStringStats afterHuge = PoolString::GetStats();
         EXPECT_EQ(afterHuge.blockCount, before.blockCount + 1);
@@ -260,23 +260,24 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(StartFreshBlock());
         const PoolStringStats before = PoolString::GetStats();
         // Fits a standard block but not what is left of the current one: a new standard block, not one of its own
-        static_cast<void>(PoolString::Intern(StringView{BlockText(PoolString::kBlockBytes - kEntryHeaderBytes - 1 - 32, 'k')}));
+        static_cast<void>(PoolString::Intern(StringView{FreshBlockText(PoolString::kBlockBytes - kEntryHeaderBytes - 1 - 32, 'k')}));
         const PoolStringStats afterBig = PoolString::GetStats();
         EXPECT_EQ(afterBig.blockCount, before.blockCount + 1);
         EXPECT_EQ(afterBig.blockBytes, before.blockBytes + PoolString::kBlockBytes);
         // Fewer than 100 bytes are left in that block, so the next small string starts another one
-        static_cast<void>(PoolString::Intern(StringView{BlockText(100, 'm')}));
+        static_cast<void>(PoolString::Intern(StringView{FreshBlockText(100, 'm')}));
         const PoolStringStats afterSmall = PoolString::GetStats();
         EXPECT_EQ(afterSmall.blockCount, before.blockCount + 2);
         EXPECT_EQ(afterSmall.blockBytes, before.blockBytes + 2 * PoolString::kBlockBytes);
     }
 
     TEST(PoolStringStatsTest, TheTableGrowsWhenItsLoadPassesHalf) {
+        const String prefix = Format("{}_", FreshText("pool_stats_grow"));
         const PoolStringStats before = PoolString::GetStats();
         size_t interned = 0;
         PoolStringStats current = before;
         while (current.tableCapacity == before.tableCapacity && interned < kFillGuard) {
-            static_cast<void>(PoolString::Intern(StringView{CounterName("pool_stats_grow_", interned++)}));
+            static_cast<void>(PoolString::Intern(StringView{CounterName(prefix, interned++)}));
             current = PoolString::GetStats();
         }
         EXPECT_EQ(current.tableCapacity, before.tableCapacity * 2);
@@ -288,9 +289,10 @@ namespace BECore::Tests {
     }
 
     TEST(PoolStringStatsTest, CallsOfSeveralThreadsAreAllCounted) {
+        const String prefix = Format("{}_", FreshText("pool_stats_threads"));
         Vector<String> names;
         for (size_t i = 0; i < kStatsNamesPerThread; ++i) {
-            names.push_back(CounterName("pool_stats_threads_", i));
+            names.push_back(CounterName(prefix, i));
         }
         const PoolStringStats before = PoolString::GetStats();
 
@@ -345,7 +347,7 @@ namespace BECore::Tests {
             static std::atomic<uint32_t> s_serial{0};
             Vector<String> names;
             for (int i = 0; i < kLockCostNames; ++i) {
-                names.push_back("pool_lock_cost_" + ToString(i));
+                names.push_back(Format("pool_lock_cost_{}", i));
                 static_cast<void>(PoolString::Intern(View(names.back())));
             }
             double best = 1e30;
@@ -354,7 +356,7 @@ namespace BECore::Tests {
                 for (auto& list : fresh) {
                     const size_t count = newEvery > 0 ? static_cast<size_t>(kLockCostRounds) * kLockCostNames / newEvery : 0;
                     for (size_t i = 0; i < count; ++i) {
-                        list.push_back("pool_lock_cost_new_" + ToString(s_serial.fetch_add(1)));
+                        list.push_back(Format("pool_lock_cost_new_{}", s_serial.fetch_add(1)));
                     }
                 }
                 Vector<double> results(static_cast<size_t>(threads), 0.0);
@@ -626,16 +628,17 @@ namespace BECore::Tests {
     TEST(PoolStringStorageTest, AThreadThatUsesTwoStoragesCountsEachOnesHitsInItsOwn) {
         IsolatedPool first;
         IsolatedPool second;
+        const String processText = FreshText("storage_alternate_process");
         const PoolStringStats processBefore = PoolString::GetStats();
         static_cast<void>(first.storage.Intern("storage_alternate"));
         static_cast<void>(second.storage.Intern("storage_alternate"));
-        static_cast<void>(PoolString::Intern(StringView{"storage_alternate_process"}));
+        static_cast<void>(PoolString::Intern(StringView{processText}));
         constexpr size_t kRounds = 10;
         for (size_t i = 0; i < kRounds; ++i) {
             static_cast<void>(first.storage.Intern("storage_alternate"));
             static_cast<void>(second.storage.Intern("storage_alternate"));
             static_cast<void>(second.storage.Intern("storage_alternate"));
-            static_cast<void>(PoolString::Intern(StringView{"storage_alternate_process"}));
+            static_cast<void>(PoolString::Intern(StringView{processText}));
         }
         EXPECT_EQ(first.storage.GetStats().hits, kRounds);
         EXPECT_EQ(second.storage.GetStats().hits, 2 * kRounds);

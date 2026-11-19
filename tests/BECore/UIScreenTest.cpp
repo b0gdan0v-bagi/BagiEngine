@@ -14,6 +14,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UILayoutMatrix.h>
 #include <gtest/gtest.h>
 
@@ -56,13 +57,14 @@ namespace BECore::Tests {
         constexpr const char* kHudAttributes = R"(space="Screen" scaleMode="ScaleWithScreen" referenceWidth="1280" referenceHeight="720" match="0.5" minScale="0.7" useSafeArea="true")";
 
         String HudScenesXml() {
-            return String("<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes><node name=\"Hud\" layer=\"10\"><components><component type=\"UICanvasComponent\" ") + kHudAttributes +
-                   ">" + kHudBody + "</component></components></node></nodes></scene></scenes></SceneManager>";
+            return Format("<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes><node name=\"Hud\" layer=\"10\"><components><component type=\"UICanvasComponent\" {}>{}"
+                          "</component></components></node></nodes></scene></scenes></SceneManager>",
+                          kHudAttributes, kHudBody);
         }
 
         /// A pure canvas layout with the HUD, built through the same reflected path as a scene file
         void BuildHudLayout(UICanvasLayout& layout) {
-            const String xml = String("<root>") + kHudBody + "</root>";
+            const String xml = Format("<root>{}</root>", kHudBody);
             XmlDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromString(xml));
             UIScreenContent content;
@@ -207,7 +209,7 @@ namespace BECore::Tests {
     TEST_F(UIScreenTest, AWindowTwiceAsLargeGivesTheSameScreenTwiceAsLarge) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         DrawAt(1280.0f, 720.0f);
-        const DrawCall small = *PlateFill();
+        const DrawCall small = Require(PlateFill());
         const size_t smallCalls = _renderer->calls.size();
 
         DrawAt(2560.0f, 1440.0f);
@@ -248,7 +250,7 @@ namespace BECore::Tests {
 
     TEST_F(UIScreenTest, TheScoreFollowsTheGameInBothShapes) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
-        auto* score = _canvas->GetRoot().FindByName("Score"_intern)->GetComponent<UITextComponent>();
+        auto* score = Require(_canvas->GetRoot().FindByName("Score"_intern)).GetComponent<UITextComponent>();
         ASSERT_NE(score, nullptr);
 
         CoreManager::GetUIVars().Set("score"_intern, 0);

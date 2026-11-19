@@ -7,7 +7,9 @@
 #include <BECore/Reflection/TypedRef.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/Components/TransformComponent.h>
+#include <Common/FreshText.h>
 #include <Common/Printers.h>
+#include <Common/TestText.h>
 #include <Generated/PropertyAccessTest.gen.hpp>
 #include <gtest/gtest.h>
 
@@ -33,10 +35,6 @@ namespace BECore::Tests {
             ref.type->serialize(ref.object, serializer);
             serializer.EndObject();
             return serializer.SaveToString();
-        }
-
-        bool Contains(const String& text, StringView part) {
-            return text.find(part.data(), 0, part.size()) != String::npos;
         }
 
         PropertyValue Read(TypedRef ref, StringView path) {
@@ -214,7 +212,7 @@ namespace BECore::Tests {
     TEST(PropertyAccessTest, APoolStringIsWrittenOnlyWhenInterningIsAllowed) {
         PaScalars scalars;
         const TypedRef ref = Ref(scalars);
-        const String text = "pa-interned-only-on-request";
+        const String text = FreshText("pa-interned-only-on-request");
 
         ExpectRefused(ref, "name", Text(text.c_str()), PropertyErrorCode::interning);
         EXPECT_FALSE(PoolString::Find(StringView(text.data(), text.size())).has_value());
@@ -232,7 +230,7 @@ namespace BECore::Tests {
 
         ExpectReadError(ref, kNeverInterned, PropertyErrorCode::not_found);
         ExpectRefused(ref, kNeverInterned, Int(1), PropertyErrorCode::not_found);
-        const String keyed = String("table[\"") + String(kNeverInterned.data(), kNeverInterned.size()) + "\"]";
+        const String keyed = Format("table[\"{}\"]", kNeverInterned);
         static_cast<void>(GetProperty(ref, StringView(keyed.data(), keyed.size())));
         EXPECT_FALSE(PoolString::Find(kNeverInterned).has_value());
     }

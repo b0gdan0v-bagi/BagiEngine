@@ -1,3 +1,4 @@
+#include <Common/Wait.h>
 #include <RemoteControl/Socket.h>
 #include <gtest/gtest.h>
 #include <thread>
@@ -7,8 +8,6 @@ namespace BECore::Tests {
     namespace {
 
         using namespace std::chrono_literals;
-
-        constexpr auto kWaitLimit = 30s;
 
         /// A connected pair: the client end and the end the server accepted
         struct SocketPair {
@@ -25,18 +24,6 @@ namespace BECore::Tests {
             ASSERT_TRUE(accepted.has_value());
             pair.client = std::move(*client);
             pair.accepted = std::move(*accepted);
-        }
-
-        template <typename Predicate>
-        bool WaitUntil(Predicate done) {
-            const auto deadline = std::chrono::steady_clock::now() + kWaitLimit;
-            while (std::chrono::steady_clock::now() < deadline) {
-                if (done()) {
-                    return true;
-                }
-                std::this_thread::sleep_for(1ms);
-            }
-            return false;
         }
 
     }  // namespace
@@ -183,6 +170,7 @@ namespace BECore::Tests {
     }
 
     TEST(SocketTest, ConnectToAClosedPortNamesHostAndPort) {
+        // A port that was in use a moment ago: another test that binds the freed port before the connect would make this pass for the wrong reason; that clash is rare enough to accept
         uint16_t closedPort = 0;
         {
             auto listener = Socket::Listen(0);
@@ -195,6 +183,7 @@ namespace BECore::Tests {
     }
 
     TEST(SocketTest, ConnectToAnUnresolvableNameIsAnErrorThatNamesTheHost) {
+        // `.invalid` never resolves, and without a resolver the lookup fails all the same: either way the error names the host
         const auto client = Socket::Connect("nonexistent.invalid", 80, kWaitLimit);
         ASSERT_FALSE(client.has_value());
         EXPECT_NE(client.error().find("nonexistent.invalid"), String::npos) << client.error().c_str();

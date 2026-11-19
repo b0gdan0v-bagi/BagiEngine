@@ -9,6 +9,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UILayoutValidator.h>
 #include <BECore/UI/UIPreviewOverlay.h>
@@ -19,6 +20,10 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
+#include <Common/UICanvasRoundTrip.h>
+#include <Common/UIInputEvents.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Generated/UIComponentTest.gen.hpp>
 #include <gtest/gtest.h>
@@ -121,33 +126,6 @@ namespace BECore::Tests {
         const Color kSecondMark{2, 0, 0, 255};
         const Color kKidColor{30, 30, 30, 255};
 
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        SDL_MouseMotionEvent Motion(float x, float y, SDL_MouseButtonFlags held) {
-            SDL_MouseMotionEvent event{};
-            event.type = SDL_EVENT_MOUSE_MOTION;
-            event.x = x;
-            event.y = y;
-            event.state = held;
-            return event;
-        }
-
-        String ElementToXml(const UIElement& element) {
-            XmlSerializer serializer;
-            EXPECT_TRUE(serializer.BeginObject("element"));
-            element.Serialize(serializer);
-            serializer.EndObject();
-            return serializer.SaveToString();
-        }
-
         Vector<String> TypeNames(const UIElement& element) {
             Vector<String> names;
             for (const auto& component : element.components) {
@@ -158,53 +136,26 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class UIComponentTest : public ::testing::Test {
+    class UIComponentTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
+            UISceneFixture::SetUp();
             UIComponentLog().clear();
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
 
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kComponentsXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kComponentsXml));
             ASSERT_TRUE(_canvas);
         }
 
         void TearDown() override {
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
             UIComponentLog().clear();
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
-        }
-
-        UIElement& Get(const char* name) const {
-            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
-            return *element;
+            UISceneFixture::TearDown();
         }
 
         /// The position of the first rect drawn in @p color in the last draw, -1 when there is none
         int IndexOf(const Color& color) const {
             for (size_t i = 0; i < _renderer->calls.size(); ++i) {
-                const DrawCall& call = _renderer->calls[i];
-                if (call.kind == DrawKind::Rect && call.color.r == color.r && call.color.g == color.g && call.color.b == color.b && call.color.a == color.a) {
+                const DrawCall& call = At(_renderer->calls, i);
+                if (call.kind == DrawKind::Rect && ColorsEqual(call.color, color)) {
                     return static_cast<int>(i);
                 }
             }
@@ -222,27 +173,23 @@ namespace BECore::Tests {
         bool ReleaseOn(const UIElement& element) {
             return CoreManager::GetUIInput().DispatchMouseButtonUp(Button(element.rect.x + element.rect.w * 0.5f, element.rect.y + element.rect.h * 0.5f, false));
         }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
     };
 
     // ---- the list in a file -----------------------------------------------------------------------------------------------
 
     TEST_F(UIComponentTest, TheComponentsComeFromTheFileInListOrder) {
-        const UIElement& host = Get("Host");
+        const UIElement& host = El("Host");
         ASSERT_EQ(host.components.size(), 2u);
         EXPECT_TRUE(host.components[0]->Is<UITestProbe>());
         EXPECT_TRUE(host.components[1]->Is<UITestOther>());
         EXPECT_EQ(host.components[0]->Cast<UITestProbe>()->tag, "first"_intern);
         EXPECT_TRUE(host.components[0]->Cast<UITestProbe>()->takesClicks);
         EXPECT_EQ(host.components[1]->Cast<UITestOther>()->tag, "second"_intern);
-        EXPECT_TRUE(Get("Plain").components.empty());
+        EXPECT_TRUE(El("Plain").components.empty());
     }
 
     TEST_F(UIComponentTest, TheComponentsSaveAndLoadBackInTheSameOrder) {
-        const String xml = ElementToXml(Get("Host"));
+        const String xml = ElementToXml(El("Host"));
         EXPECT_NE(xml.find("<components>"), String::npos) << xml.c_str();
 
         XmlDeserializer deserializer;
@@ -253,7 +200,7 @@ namespace BECore::Tests {
         deserializer.EndObject();
         EXPECT_FALSE(deserializer.HasErrors());
 
-        EXPECT_EQ(TypeNames(*loaded), TypeNames(Get("Host")));
+        EXPECT_EQ(TypeNames(*loaded), TypeNames(El("Host")));
         EXPECT_STREQ(ElementToXml(*loaded).c_str(), xml.c_str());
         EXPECT_EQ(loaded->components[0]->Cast<UITestProbe>()->mark.g, 0);
         EXPECT_EQ(loaded->components[0]->Cast<UITestProbe>()->mark.r, 1);
@@ -296,7 +243,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIComponentTest, AnElementWithNoComponentsSavesNoneAndLoadsNone) {
-        const String xml = ElementToXml(Get("Plain"));
+        const String xml = ElementToXml(El("Plain"));
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UIElement>();
@@ -322,22 +269,22 @@ namespace BECore::Tests {
     // ---- one of each type -------------------------------------------------------------------------------------------------
 
     TEST_F(UIComponentTest, ASecondComponentOfATypeInAFileIsDroppedAndTheFirstKept) {
-        const UIElement& twice = Get("Twice");
+        const UIElement& twice = El("Twice");
         ASSERT_EQ(twice.components.size(), 2u);
         EXPECT_EQ(twice.components[0]->Cast<UITestProbe>()->tag, "one"_intern);
         EXPECT_EQ(twice.components[1]->Cast<UITestOther>()->tag, "between"_intern);
-        EXPECT_EQ(twice.GetComponent<UITestProbe>()->tag, "one"_intern);
+        EXPECT_EQ(Require(twice.GetComponent<UITestProbe>()).tag, "one"_intern);
     }
 
     TEST_F(UIComponentTest, GetComponentFindsATypeAndAddComponentReturnsTheExistingOne) {
-        UIElement& host = Get("Host");
+        UIElement& host = El("Host");
         EXPECT_EQ(host.GetComponent<UITestProbe>(), host.components[0]->Cast<UITestProbe>());
         EXPECT_EQ(&host.AddComponent<UITestOther>(), host.components[1]->Cast<UITestOther>());
         EXPECT_EQ(host.components.size(), 2u);
     }
 
     TEST_F(UIComponentTest, AddComponentMakesTheMissingOneAtTheEndOfTheList) {
-        UIElement& passive = Get("Passive");
+        UIElement& passive = El("Passive");
         EXPECT_EQ(passive.GetComponent<UITestProbe>(), nullptr);
         UITestProbe& added = passive.AddComponent<UITestProbe>();
         ASSERT_EQ(passive.components.size(), 2u);
@@ -364,7 +311,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIComponentTest, AHiddenElementDrawsNoComponents) {
-        Get("Host").style.visible = false;
+        El("Host").style.visible = false;
         _canvas->Invalidate();
         Draw();
         EXPECT_EQ(IndexOf(kFirstMark), -1);
@@ -383,7 +330,7 @@ namespace BECore::Tests {
     TEST_F(UIComponentTest, PressDragAndClickReachTheComponentsInListOrderWithTheirOwner) {
         Draw();
         UIComponentLog().clear();
-        const UIElement& host = Get("Host");
+        const UIElement& host = El("Host");
 
         EXPECT_TRUE(PressOn(host));
         CoreManager::GetUIInput().DispatchMouseMotion(Motion(host.rect.x + 70.0f, host.rect.y + 40.0f, SDL_BUTTON_LMASK));
@@ -396,7 +343,7 @@ namespace BECore::Tests {
     TEST_F(UIComponentTest, LettingGoElsewhereCancelsTheClick) {
         Draw();
         UIComponentLog().clear();
-        EXPECT_TRUE(PressOn(Get("Host")));
+        EXPECT_TRUE(PressOn(El("Host")));
         CoreManager::GetUIInput().DispatchMouseButtonUp(Button(700.0f, 500.0f, false));
 
         EXPECT_FALSE(Contains(UIComponentLog(), "first click Host"));
@@ -405,10 +352,10 @@ namespace BECore::Tests {
 
     TEST_F(UIComponentTest, AnElementWhoseComponentsTakeNoClicksIsNotInteractiveAndNotAHitTarget) {
         Draw();
-        const UIElement& passive = Get("Passive");
+        const UIElement& passive = El("Passive");
         EXPECT_FALSE(passive.IsInteractive());
         EXPECT_FALSE(passive.IsHitTestable());
-        EXPECT_FALSE(Get("Plain").IsInteractive());
+        EXPECT_FALSE(El("Plain").IsInteractive());
 
         UIComponentLog().clear();
         EXPECT_FALSE(PressOn(passive));
@@ -417,14 +364,14 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIComponentTest, AComponentThatTakesClicksMakesTheElementInteractiveAndAHitTarget) {
-        const UIElement& host = Get("Host");
+        const UIElement& host = El("Host");
         EXPECT_FALSE(host.interactive);  // the field stays what the file says
         EXPECT_TRUE(host.IsInteractive());
         EXPECT_TRUE(host.IsHitTestable());
     }
 
     TEST_F(UIComponentTest, TheFieldInteractiveStillMakesAnElementInteractive) {
-        UIElement& plain = Get("Plain");
+        UIElement& plain = El("Plain");
         plain.interactive = true;
         EXPECT_TRUE(plain.IsInteractive());
     }
@@ -432,13 +379,13 @@ namespace BECore::Tests {
     // ---- the state look of the box ----------------------------------------------------------------------------------------
 
     TEST_F(UIComponentTest, AComponentIsNotCheckedUnlessItSaysSo) {
-        UIElement& host = Get("Host");
-        const UIElement& passive = Get("Passive");
+        UIElement& host = El("Host");
+        const UIElement& passive = El("Passive");
         EXPECT_FALSE(host.components[0]->IsChecked(host));
         EXPECT_FALSE(host.GetVisualState().checked);
         EXPECT_FALSE(passive.GetVisualState().checked);
 
-        host.GetComponent<UITestProbe>()->checked = true;
+        Require(host.GetComponent<UITestProbe>()).checked = true;
         EXPECT_TRUE(host.components[0]->IsChecked(host));
         EXPECT_TRUE(host.GetVisualState().checked) << "any component of the element is enough";
         EXPECT_FALSE(passive.GetVisualState().checked);
@@ -446,8 +393,8 @@ namespace BECore::Tests {
 
     TEST_F(UIComponentTest, TheBoxTakesTheStateLookOnlyWhenAComponentGivesIt) {
         Draw();
-        UIElement& host = Get("Host");        // a component that takes clicks gives the state look
-        UIElement& passive = Get("Passive");  // one that takes none does not: a hovered panel that merely blocks input must not light up
+        UIElement& host = El("Host");        // a component that takes clicks gives the state look
+        UIElement& passive = El("Passive");  // one that takes none does not: a hovered panel that merely blocks input must not light up
         EXPECT_TRUE(host.GivesStateLook());
         EXPECT_FALSE(passive.GivesStateLook());
 
@@ -458,36 +405,36 @@ namespace BECore::Tests {
         passive.DrawSelf(*_renderer);
 
         ASSERT_EQ(_renderer->calls.size(), 2u);
-        EXPECT_TRUE(ColorsEqual(_renderer->calls[0].color, ShiftColor(kHostColor, kHoverBrighten)));
-        EXPECT_TRUE(ColorsEqual(_renderer->calls[1].color, Color{50, 50, 50, 255}));
+        EXPECT_TRUE(ColorsEqual(At(_renderer->calls, 0).color, ShiftColor(kHostColor, kHoverBrighten)));
+        EXPECT_TRUE(ColorsEqual(At(_renderer->calls, 1).color, Color{50, 50, 50, 255}));
     }
 
     TEST_F(UIComponentTest, TheStateColorsOfTheElementAreTheFillsOfItsStates) {
         Draw();
-        UIElement& host = Get("Host");
+        UIElement& host = El("Host");
         host.pressedColor = Color{90, 91, 92, 255};
         host.disabledColor = Color{80, 81, 82, 255};
         host.hovered = true;
         host.pressed = true;
         _renderer->ClearCalls();
         host.DrawSelf(*_renderer);
-        EXPECT_TRUE(ColorsEqual(_renderer->calls[0].color, host.pressedColor));
+        EXPECT_TRUE(ColorsEqual(At(_renderer->calls, 0).color, host.pressedColor));
 
         host.groupDisabled = true;  // the group's flag disables an element as a `disabled` does a button
         _renderer->ClearCalls();
         host.DrawSelf(*_renderer);
-        EXPECT_TRUE(ColorsEqual(_renderer->calls[0].color, host.disabledColor));
+        EXPECT_TRUE(ColorsEqual(At(_renderer->calls, 0).color, host.disabledColor));
     }
 
     TEST_F(UIComponentTest, ASelectedElementThatShowsItsStateDrawsTheBarAtItsFoot) {
         Draw();
-        UIElement& host = Get("Host");
+        UIElement& host = El("Host");
         host.selected = true;
         _renderer->ClearCalls();
         host.DrawSelf(*_renderer);
         ASSERT_EQ(_renderer->calls.size(), 2u);
-        EXPECT_FLOAT_EQ(_renderer->calls[1].rect.h, UIStateLook::kSelectedBarHeight);
-        EXPECT_FLOAT_EQ(_renderer->calls[1].rect.y + _renderer->calls[1].rect.h, host.rect.y + host.rect.h);
+        EXPECT_FLOAT_EQ(At(_renderer->calls, 1).rect.h, UIStateLook::kSelectedBarHeight);
+        EXPECT_FLOAT_EQ(At(_renderer->calls, 1).rect.y + At(_renderer->calls, 1).rect.h, host.rect.y + host.rect.h);
     }
 
     // ---- touch size and content -------------------------------------------------------------------------------------------
@@ -548,7 +495,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIComponentTest, TheValidatorReportsTextThatDoesNotFitFromAComponent) {
-        auto& probe = Get("Twice").AddComponent<UITestProbe>();
+        auto& probe = El("Twice").AddComponent<UITestProbe>();
         probe.hasContent = true;
         probe.fits = false;
         Draw();
@@ -586,7 +533,7 @@ namespace BECore::Tests {
             UIComponentTest::SetUp();
             const Vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
             _texture = _renderer->CreateTexture(pixels.data(), kPictureSide, kPictureSide);
-            _image = &Get("Plain").AddComponent<UIImageComponent>();
+            _image = &El("Plain").AddComponent<UIImageComponent>();
             _image->GetSprite().SetTexture(_texture);
         }
 
@@ -647,7 +594,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIImageComponentTest, ASquarePictureInAWideRectKeepsItsShape) {
-        UIElement& host = Get("Host");
+        UIElement& host = El("Host");
         auto& image = host.AddComponent<UIImageComponent>();
         image.GetSprite().SetTexture(_texture);
         _image->tint = UIColor{0, 0, 0, 0};  // the picture of Plain is not drawn: only Host's is left
@@ -676,7 +623,7 @@ namespace BECore::Tests {
         size_t boxAt = _renderer->calls.size();
         size_t pictureAt = _renderer->calls.size();
         for (size_t i = 0; i < _renderer->calls.size(); ++i) {
-            const DrawCall& call = _renderer->calls[i];
+            const DrawCall& call = At(_renderer->calls, i);
             if (call.kind == DrawKind::Rect && call.rect.x == kPlainX) {
                 boxAt = i;
             } else if (call.kind == DrawKind::Texture) {
@@ -694,7 +641,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIImageComponentTest, AnUnknownSpriteDrawsNothing) {
-        auto& other = Get("Passive").AddComponent<UIImageComponent>();
+        auto& other = El("Passive").AddComponent<UIImageComponent>();
         other.sprite = "NoSuchSprite"_intern;
         _image->tint = UIColor{0, 0, 0, 0};
         Draw();
@@ -702,7 +649,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIImageComponentTest, TheTintFollowsTheStateOfTheOwner) {
-        UIElement& plain = Get("Plain");
+        UIElement& plain = El("Plain");
         _image->hoverTint = kHoverTint;
         _image->pressedTint = kPressedTint;
         _image->disabledTint = kDisabledTint;
@@ -726,7 +673,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIImageComponentTest, ATintThatIsNotGivenForAStateIsDerivedFromTheTint) {
-        UIElement& plain = Get("Plain");
+        UIElement& plain = El("Plain");
         _image->tint = UIColor{100, 120, 140, 200};
         const Color base = _image->tint;
         const UIStateLook::State hovered{true, false, false, false};
@@ -735,7 +682,7 @@ namespace BECore::Tests {
 
         plain.hovered = true;
         Draw();
-        EXPECT_TRUE(ColorsEqual(Picture()->color, UIStateLook::ResolveTint(base, {}, hovered)));
+        EXPECT_TRUE(ColorsEqual(Require(Picture()).color, UIStateLook::ResolveTint(base, {}, hovered)));
         EXPECT_TRUE(ColorsEqual(_image->GetStateTint(hovered), UIStateLook::ResolveTint(base, {}, hovered)));
         EXPECT_GT(_image->GetStateTint(hovered).r, base.r) << "lighter under the pointer";
         EXPECT_LT(_image->GetStateTint(pressed).r, base.r) << "darker pressed";
@@ -743,12 +690,12 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIImageComponentTest, APressThatLeftTheOwnerIsNotShownAsPressed) {
-        UIElement& plain = Get("Plain");
+        UIElement& plain = El("Plain");
         _image->pressedTint = kPressedTint;
         plain.pressed = true;
         plain.hovered = false;
         Draw();
-        EXPECT_TRUE(ColorsEqual(Picture()->color, Color(255, 255, 255, 255)));
+        EXPECT_TRUE(ColorsEqual(Require(Picture()).color, Color(255, 255, 255, 255)));
     }
 
     TEST_F(UIImageComponentTest, TheFieldsComeFromAFileAndSaveBack) {

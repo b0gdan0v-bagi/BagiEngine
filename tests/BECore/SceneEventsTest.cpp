@@ -5,8 +5,11 @@
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/UI/UIColor.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/SceneTestSupport.h>
+#include <Common/UIInputEvents.h>
 #include <Events/InputEvents.h>
 #include <Events/SceneEvents.h>
 #include <Generated/SceneEventsTest.gen.hpp>
@@ -138,48 +141,7 @@ namespace BECore::Tests {
             }
         };
 
-        SceneNode* FindNode(SceneNode& node, PoolString name) {
-            if (node.GetName() == name) {
-                return &node;
-            }
-            for (const auto& child : node.GetChildren()) {
-                if (auto* found = FindNode(*child, name)) {
-                    return found;
-                }
-            }
-            return nullptr;
-        }
-
-        constexpr uint32_t PackColor(const Color& c) {
-            return (uint32_t{c.r} << 24) | (uint32_t{c.g} << 16) | (uint32_t{c.b} << 8) | uint32_t{c.a};
-        }
-
-        constexpr uint32_t kInitialColor = (1u << 24) | (2u << 16) | (3u << 8) | 255u;
-
-        /// Collects every ActionEvent that is emitted while it is alive.
-        class ActionRecorder : public SubscriptionHolder {
-        public:
-            ActionRecorder() {
-                Subscribe<InputEvents::ActionEvent, &ActionRecorder::OnAction>(this);
-            }
-
-            Vector<PoolString> actions;
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& e) {
-                actions.push_back(e.action);
-            }
-        };
-
-        void EmitLeftClick(float x, float y) {
-            SDL_MouseButtonEvent button{};
-            button.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
-            button.button = SDL_BUTTON_LEFT;
-            button.down = true;
-            button.x = x;
-            button.y = y;
-            CoreManager::GetUIInput().DispatchMouseButtonDown(button);  // the way the window delivers it: a clickable is a target of UIInput
-        }
+        constexpr Color kInitialColor{1, 2, 3, 255};
 
     }  // namespace
 
@@ -218,7 +180,7 @@ namespace BECore::Tests {
 
         /// The SceneEventCounter on the node @p nodeName of scene @p sceneName, found at any depth. Empty if there is none.
         IntrusivePtr<SceneEventCounter> GetCounter(PoolString sceneName, PoolString nodeName) const {
-            SceneNode* node = FindNode(GetScene(sceneName).GetRootNode(), nodeName);
+            SceneNode* node = FindNodeBelow(GetScene(sceneName).GetRootNode(), nodeName.ToStringView());
             return node ? node->GetComponent<SceneEventCounter>() : IntrusivePtr<SceneEventCounter>{};
         }
 
@@ -286,16 +248,16 @@ namespace BECore::Tests {
 
     TEST_F(SceneEventsTest, ClickEmitsOnlyTheActiveScenesAction) {
         ASSERT_NO_FATAL_FAILURE(LoadScenes(kCountingScenesXml));
-        ActionRecorder recorder;
+        ActionLog recorder;
 
-        EmitLeftClick(10.0f, 10.0f);
-        ASSERT_EQ(recorder.actions.size(), 1u);
-        EXPECT_EQ(recorder.actions[0], "ActionA"_intern);
+        PressLeftAt(10.0f, 10.0f);
+        ASSERT_EQ(recorder.Total(), 1u);
+        EXPECT_EQ(recorder.ActionAt(0), "ActionA"_intern);
 
         _manager->SetActiveScene("B"_intern);
-        EmitLeftClick(10.0f, 10.0f);
-        ASSERT_EQ(recorder.actions.size(), 2u);
-        EXPECT_EQ(recorder.actions[1], "ActionB"_intern);
+        PressLeftAt(10.0f, 10.0f);
+        ASSERT_EQ(recorder.Total(), 2u);
+        EXPECT_EQ(recorder.ActionAt(1), "ActionB"_intern);
     }
 
     TEST_F(SceneEventsTest, UnknownSceneNameKeepsTheActiveScene) {
@@ -387,7 +349,7 @@ namespace BECore::Tests {
     TEST_F(SceneEventsTest, DrawsAParentThenItsChildrenThenTheNextSibling) {
         ASSERT_NO_FATAL_FAILURE(LoadScenes(kDrawOrderScenesXml));
         _manager->SetActiveScene("Nested"_intern);
-        SceneNode* parent = FindNode(GetScene("Nested"_intern).GetRootNode(), "Parent"_intern);
+        SceneNode* parent = FindNodeBelow(GetScene("Nested"_intern).GetRootNode(), "Parent");
         ASSERT_NE(parent, nullptr);
         auto child = parent->AddChild("Child"_intern);
         auto childCounter = BECore::New<SceneEventCounter>();
@@ -407,7 +369,7 @@ namespace BECore::Tests {
     TEST_F(SceneEventsTest, AChildDoesNotInheritTheLayerOfItsParent) {
         ASSERT_NO_FATAL_FAILURE(LoadScenes(kDrawOrderScenesXml));
         _manager->SetActiveScene("NestedLayer"_intern);
-        SceneNode* parent = FindNode(GetScene("NestedLayer"_intern).GetRootNode(), "Parent"_intern);
+        SceneNode* parent = FindNodeBelow(GetScene("NestedLayer"_intern).GetRootNode(), "Parent");
         ASSERT_NE(parent, nullptr);
         auto child = parent->AddChild("Child"_intern);
         auto childCounter = BECore::New<SceneEventCounter>();
@@ -446,13 +408,13 @@ namespace BECore::Tests {
         auto quadB = GetProbeComponent<QuadRendererComponent>("B"_intern);
         ASSERT_TRUE(quadA);
         ASSERT_TRUE(quadB);
-        ASSERT_EQ(PackColor(quadA->_color), kInitialColor);
-        ASSERT_EQ(PackColor(quadB->_color), kInitialColor);
+        ASSERT_PRED2(ColorsEqual, quadA->_color, kInitialColor);
+        ASSERT_PRED2(ColorsEqual, quadB->_color, kInitialColor);
 
         InputEvents::ActionEvent::Emit("AnyAction"_intern);
 
-        EXPECT_NE(PackColor(quadA->_color), kInitialColor);
-        EXPECT_EQ(PackColor(quadB->_color), kInitialColor);
+        EXPECT_FALSE(ColorsEqual(quadA->_color, kInitialColor));
+        EXPECT_PRED2(ColorsEqual, quadB->_color, kInitialColor);
     }
 
     // The view change event: decided in Draw(), announced in Update()

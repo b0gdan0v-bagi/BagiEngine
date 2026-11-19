@@ -15,11 +15,6 @@ namespace BECore::Fuzz {
         /// Depth of the nesting seed that the target refuses before it parses
         constexpr size_t kTooDeepLevels = 400;
 
-        FuzzBytes TextBytes(const String& text) {
-            const auto* begin = reinterpret_cast<const uint8_t*>(text.data());
-            return FuzzBytes(begin, begin + text.size());
-        }
-
         template <typename T>
         Json SavedJson(const T& value) {
             JsonSerializer writer;

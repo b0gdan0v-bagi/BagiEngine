@@ -6,16 +6,13 @@
 #include <Common/Printers.h>
 #include <Common/ReplayCheck.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Games/GameControl.h>
 #include <Games/GameManager.h>
 #include <Games/ReplayFile.h>
 #include <Games/SessionRecorder.h>
-#include <algorithm>
-#include <filesystem>
-#include <fstream>  //-NoStd: the test reads the file the recorder wrote and writes edited ones
 #include <gtest/gtest-spi.h>
 #include <gtest/gtest.h>
-#include <sstream>  //-NoStd: the test reads the file the recorder wrote
 
 namespace BECore::Tests {
 
@@ -39,7 +36,7 @@ namespace BECore::Tests {
             }
 
             void SetUp() override {
-                _path = TestTempPath("replay_check_" + String(::testing::UnitTest::GetInstance()->current_test_info()->name()));
+                _path = TestTempPath(Format("replay_check_{}", ::testing::UnitTest::GetInstance()->current_test_info()->name()));
                 CoreManager::GetTime().Reset();
                 ReplayTestGame::RestartSeedCounter();
                 GameManager::GetInstance().Initialize();
@@ -76,8 +73,7 @@ namespace BECore::Tests {
             }
 
             void WriteFile(StringView text) const {
-                std::ofstream file(_path, std::ios::binary);         //-NoStd: see the include
-                file << std::string_view(text.data(), text.size());  //-NoStd: the stream takes the standard view
+                Tests::WriteFile(_path, text);
             }
 
             /// The session of the committed file: reset, roll, arm, a wait of the lock, roll, set_state, roll

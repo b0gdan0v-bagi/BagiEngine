@@ -1,14 +1,14 @@
 #include "WidgetListTest.h"
 
 #include <BECore/Application/RunMode.h>
-#include <BECore/Config/ConfigFactory.h>
 #include <BECore/Config/ConfigManager.h>
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Tests/TestList.h>
 #include <BECore/Widgets/WidgetList.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/TestText.h>
 #include <Generated/WidgetListTest.gen.hpp>
 
 namespace BECore::Tests {
@@ -23,10 +23,6 @@ namespace BECore::Tests {
 
         constexpr int32_t kFirstId = 1;
         constexpr int32_t kLastId = 4;
-
-        bool Contains(StringView text, StringView part) {
-            return text.find(part) != StringView::npos;
-        }
 
         /// Loads the XML into a fresh holder; the deserializer stays with the caller to read its errors
         template <typename TList>
@@ -170,33 +166,6 @@ namespace BECore::Tests {
         const Vector<String> expected{"ImGuiWidget",         "EditorLayoutWidget", "ViewportWidget", "ClearScreenWidget", "ConfigEditorWidget", "SceneEditorWidget",
                                       "TextureEditorWidget", "ProfilerWidget",     "ConsoleWidget",  "GamePanelWidget",   "ArtGenWidget"};
         EXPECT_EQ(types, expected);
-    }
-
-    TEST_F(WidgetListTest, ATestListSkipsDisabledEntriesAndDropsUnknownTypes) {
-        XmlDeserializer deserializer;
-        const auto list = Load<TestList>(deserializer,
-                                         R"(<root><tests>
-                                              <test type="ProbeRuntimeTest" id="1" enabled="true"/>
-                                              <test type="NoSuchTest" enabled="true"/>
-                                              <test type="ProbeRuntimeTest" id="2" enabled="false"/>
-                                              <test id="3"/>
-                                              <test type="ProbeRuntimeTest" id="4"/>
-                                            </tests></root>)");
-
-        ASSERT_EQ(deserializer.GetErrors().size(), 1u);
-        const StringView message = deserializer.GetErrors()[0].errorMessage;
-        EXPECT_TRUE(Contains(message, "Unknown factory type")) << message.data();
-        EXPECT_TRUE(Contains(message, "'NoSuchTest'")) << message.data();
-        ASSERT_EQ(list->tests.size(), 2u);
-        EXPECT_EQ(list->tests[0]->Cast<ProbeRuntimeTest>()->id, kFirstId);
-        EXPECT_EQ(list->tests[1]->Cast<ProbeRuntimeTest>()->id, kLastId);
-    }
-
-    TEST_F(WidgetListTest, TheShippedTestsConfigEnablesTheEngineSmokeTest) {
-        const auto list = MakeFromConfig<TestList>("TestsConfig");
-
-        ASSERT_EQ(list->tests.size(), 1u);
-        EXPECT_EQ(list->tests[0]->GetName(), "EngineSmokeTest");
     }
 
 }  // namespace BECore::Tests

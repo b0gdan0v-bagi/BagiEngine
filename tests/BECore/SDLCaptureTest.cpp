@@ -6,6 +6,7 @@
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIEnvironment.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/DestroyTally.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -29,8 +30,25 @@ namespace BECore::Tests {
         const Color kBackground{10, 20, 30, 255};
         const Color kRed{255, 0, 0, 255};
 
+        /// The rectangle from (x0, y0) to (x1, y1) as two triangles of one color, with the whole texture over it
+        struct GeometryQuad {
+            Array<GeometryVertex, 4> vertices;
+            Array<int, 6> indices = {0, 1, 2, 0, 2, 3};
+        };
+
+        GeometryQuad Quad(float x0, float y0, float x1, float y1, Color color) {
+            GeometryQuad quad;
+            quad.vertices = {{{x0, y0, color, 0.0f, 0.0f}, {x1, y0, color, 1.0f, 0.0f}, {x1, y1, color, 1.0f, 1.0f}, {x0, y1, color, 0.0f, 1.0f}}};
+            return quad;
+        }
+
+        /// The pixel at (@p x, @p y); a failure of the case and a blank pixel when the image does not hold it (a capture that failed is empty)
         Pixel PixelAt(const PixelBuffer& image, uint32_t x, uint32_t y) {
             const size_t offset = (static_cast<size_t>(y) * image.width + x) * 4;
+            if (x >= image.width || y >= image.height || offset + 4 > image.rgba.size()) {
+                ADD_FAILURE() << "no pixel (" << x << ", " << y << ") in an image of " << image.width << " x " << image.height << " with " << image.rgba.size() << " bytes";
+                return {};
+            }
             return {image.rgba[offset], image.rgba[offset + 1], image.rgba[offset + 2], image.rgba[offset + 3]};
         }
 
@@ -189,12 +207,6 @@ namespace BECore::Tests {
         }
 
         constexpr int kBlendTolerance = 4;
-
-        String ErrorCode(const Json& response) {
-            const Json* error = FindJsonMember(response, "error");
-            const auto code = error != nullptr ? GetJsonString(*error, "code") : std::nullopt;
-            return code ? String(code->c_str(), code->size()) : String();
-        }
 
         /// A ControlService of its own with the `screenshot` method, answering from the window and renderer of SDLCaptureTest
         class ScreenshotControlTest : public SDLCaptureTest {
@@ -375,12 +387,6 @@ namespace BECore::Tests {
         EXPECT_EQ(destroyed, 1);
     }
 
-    TEST_F(SDLCaptureTest, PresentWithoutARequestIsAnOrdinaryPresent) {
-        DrawFrame();
-        renderer->Present();
-        SUCCEED();
-    }
-
     TEST_F(SDLCaptureTest, CaptureStillWorksWhenThePresentComesFromTheRenderEvent) {
         Optional<CaptureResult> captured;
         DrawFrame();
@@ -498,17 +504,11 @@ namespace BECore::Tests {
 
     TEST_F(SDLCaptureTest, HalfOpacityFadesGeometryOverBlack) {
         const Color white{255, 255, 255, 255};
-        const Vector<GeometryVertex> quad = {
-            {0.0f, 0.0f, white, 0.0f, 0.0f},
-            {100.0f, 0.0f, white, 1.0f, 0.0f},
-            {100.0f, 100.0f, white, 1.0f, 1.0f},
-            {0.0f, 100.0f, white, 0.0f, 1.0f},
-        };
-        const Vector<int> indices = {0, 1, 2, 0, 2, 3};
+        const GeometryQuad quad = Quad(0.0f, 0.0f, 100.0f, 100.0f, white);
         renderer->Clear(Color{0, 0, 0, 255});
 
         renderer->SetOpacity(0.5f);
-        renderer->DrawGeometry(nullptr, {quad.data(), quad.size()}, {indices.data(), indices.size()}, 0.0f, 0.0f);
+        renderer->DrawGeometry(nullptr, quad.vertices, quad.indices, 0.0f, 0.0f);
         renderer->SetOpacity(1.0f);
         const PixelBuffer image = PresentAndRead();
 
@@ -517,16 +517,10 @@ namespace BECore::Tests {
     }
 
     TEST_F(SDLCaptureTest, UntexturedGeometryFillsItsTrianglesWithTheVertexColors) {
-        const Vector<GeometryVertex> quad = {
-            {100.0f, 50.0f, kRed, 0.0f, 0.0f},
-            {200.0f, 50.0f, kRed, 1.0f, 0.0f},
-            {200.0f, 150.0f, kRed, 1.0f, 1.0f},
-            {100.0f, 150.0f, kRed, 0.0f, 1.0f},
-        };
-        const Vector<int> indices = {0, 1, 2, 0, 2, 3};
+        const GeometryQuad quad = Quad(100.0f, 50.0f, 200.0f, 150.0f, kRed);
         renderer->Clear(kBackground);
 
-        renderer->DrawGeometry(nullptr, {quad.data(), quad.size()}, {indices.data(), indices.size()}, 20.0f, 10.0f);
+        renderer->DrawGeometry(nullptr, quad.vertices, quad.indices, 20.0f, 10.0f);
         const PixelBuffer image = PresentAndRead();
 
         ASSERT_FALSE(image.rgba.empty());
@@ -537,16 +531,10 @@ namespace BECore::Tests {
 
     TEST_F(SDLCaptureTest, GeometryBlendsByTheAlphaOfItsVertices) {
         const Color half{255, 0, 0, 128};
-        const Vector<GeometryVertex> quad = {
-            {0.0f, 0.0f, half, 0.0f, 0.0f},
-            {100.0f, 0.0f, half, 1.0f, 0.0f},
-            {100.0f, 100.0f, half, 1.0f, 1.0f},
-            {0.0f, 100.0f, half, 0.0f, 1.0f},
-        };
-        const Vector<int> indices = {0, 1, 2, 0, 2, 3};
+        const GeometryQuad quad = Quad(0.0f, 0.0f, 100.0f, 100.0f, half);
         renderer->Clear(kBackground);
 
-        renderer->DrawGeometry(nullptr, {quad.data(), quad.size()}, {indices.data(), indices.size()}, 0.0f, 0.0f);
+        renderer->DrawGeometry(nullptr, quad.vertices, quad.indices, 0.0f, 0.0f);
         const PixelBuffer image = PresentAndRead();
 
         ASSERT_FALSE(image.rgba.empty());
@@ -558,16 +546,10 @@ namespace BECore::Tests {
         auto texture = MakeSolidTexture(4, 4, Color{255, 255, 255, 255});
         ASSERT_TRUE(texture);
         const Color green{0, 255, 0, 255};
-        const Vector<GeometryVertex> quad = {
-            {0.0f, 0.0f, green, 0.0f, 0.0f},
-            {100.0f, 0.0f, green, 1.0f, 0.0f},
-            {100.0f, 100.0f, green, 1.0f, 1.0f},
-            {0.0f, 100.0f, green, 0.0f, 1.0f},
-        };
-        const Vector<int> indices = {0, 1, 2, 0, 2, 3};
+        const GeometryQuad quad = Quad(0.0f, 0.0f, 100.0f, 100.0f, green);
         renderer->Clear(kBackground);
 
-        renderer->DrawGeometry(texture.Get(), {quad.data(), quad.size()}, {indices.data(), indices.size()}, 0.0f, 0.0f);
+        renderer->DrawGeometry(texture.Get(), quad.vertices, quad.indices, 0.0f, 0.0f);
         const PixelBuffer image = PresentAndRead();
 
         ASSERT_FALSE(image.rgba.empty());
@@ -575,17 +557,11 @@ namespace BECore::Tests {
     }
 
     TEST_F(SDLCaptureTest, GeometryIsClippedLikeARect) {
-        const Vector<GeometryVertex> quad = {
-            {0.0f, 0.0f, kRed, 0.0f, 0.0f},
-            {200.0f, 0.0f, kRed, 1.0f, 0.0f},
-            {200.0f, 200.0f, kRed, 1.0f, 1.0f},
-            {0.0f, 200.0f, kRed, 0.0f, 1.0f},
-        };
-        const Vector<int> indices = {0, 1, 2, 0, 2, 3};
+        const GeometryQuad quad = Quad(0.0f, 0.0f, 200.0f, 200.0f, kRed);
         renderer->Clear(kBackground);
 
         renderer->PushClipRect({50.0f, 50.0f, 40.0f, 40.0f});
-        renderer->DrawGeometry(nullptr, {quad.data(), quad.size()}, {indices.data(), indices.size()}, 0.0f, 0.0f);
+        renderer->DrawGeometry(nullptr, quad.vertices, quad.indices, 0.0f, 0.0f);
         renderer->PopClipRect();
         const PixelBuffer image = PresentAndRead();
 
@@ -688,19 +664,13 @@ namespace BECore::Tests {
 
     TEST_F(SDLCaptureTest, AnAddGeometryBrightensTheBackground) {
         const Color color{250, 100, 0, 255};
-        const Vector<GeometryVertex> quad = {
-            {0.0f, 0.0f, color, 0.0f, 0.0f},
-            {40.0f, 0.0f, color, 1.0f, 0.0f},
-            {40.0f, 40.0f, color, 1.0f, 1.0f},
-            {0.0f, 40.0f, color, 0.0f, 1.0f},
-        };
-        const Vector<int> indices = {0, 1, 2, 0, 2, 3};
+        const GeometryQuad quad = Quad(0.0f, 0.0f, 40.0f, 40.0f, color);
         renderer->Clear(kBackground);
 
         renderer->SetBlendMode(BlendMode::Add);
-        renderer->DrawGeometry(nullptr, {quad.data(), quad.size()}, {indices.data(), indices.size()}, 0.0f, 0.0f);
+        renderer->DrawGeometry(nullptr, quad.vertices, quad.indices, 0.0f, 0.0f);
         renderer->SetBlendMode(BlendMode::Alpha);
-        renderer->DrawGeometry(nullptr, {quad.data(), quad.size()}, {indices.data(), indices.size()}, 100.0f, 0.0f);  // after the add draw: opaque
+        renderer->DrawGeometry(nullptr, quad.vertices, quad.indices, 100.0f, 0.0f);  // after the add draw: opaque
         const PixelBuffer image = PresentAndRead();
 
         ASSERT_FALSE(image.rgba.empty());
@@ -712,19 +682,13 @@ namespace BECore::Tests {
         auto texture = MakeSolidTexture(4, 4, Color{100, 50, 200, 255});
         ASSERT_TRUE(texture);
         const Color white{255, 255, 255, 255};
-        const Vector<GeometryVertex> quad = {
-            {0.0f, 0.0f, white, 0.0f, 0.0f},
-            {40.0f, 0.0f, white, 1.0f, 0.0f},
-            {40.0f, 40.0f, white, 1.0f, 1.0f},
-            {0.0f, 40.0f, white, 0.0f, 1.0f},
-        };
-        const Vector<int> indices = {0, 1, 2, 0, 2, 3};
+        const GeometryQuad quad = Quad(0.0f, 0.0f, 40.0f, 40.0f, white);
         renderer->Clear(kBackground);
 
         renderer->SetBlendMode(BlendMode::Add);
-        renderer->DrawGeometry(texture.Get(), {quad.data(), quad.size()}, {indices.data(), indices.size()}, 0.0f, 0.0f);
+        renderer->DrawGeometry(texture.Get(), quad.vertices, quad.indices, 0.0f, 0.0f);
         renderer->SetBlendMode(BlendMode::Alpha);
-        renderer->DrawGeometry(texture.Get(), {quad.data(), quad.size()}, {indices.data(), indices.size()}, 100.0f, 0.0f);
+        renderer->DrawGeometry(texture.Get(), quad.vertices, quad.indices, 100.0f, 0.0f);
         const PixelBuffer image = PresentAndRead();
 
         ASSERT_FALSE(image.rgba.empty());
@@ -1083,11 +1047,11 @@ namespace BECore::Tests {
 
         ASSERT_EQ(responses.size(), 1u);
         ASSERT_NE(Result(0), nullptr);
-        const auto base64 = GetJsonString(*Result(0), "png_base64");
+        const auto base64 = GetJsonString(Require(Result(0)), "png_base64");
         ASSERT_TRUE(base64.has_value());
         EXPECT_TRUE(StringView(base64->data(), base64->size()).starts_with(kPngBase64Prefix));
-        const int64_t width = GetJsonInt(*Result(0), "width").value_or(0);
-        const int64_t height = GetJsonInt(*Result(0), "height").value_or(0);
+        const int64_t width = GetJsonInt(Require(Result(0)), "width").value_or(0);
+        const int64_t height = GetJsonInt(Require(Result(0)), "height").value_or(0);
         EXPECT_EQ(width, 1024);  // the window of the engine config is 1920 by 1080, cut to the default 1024
         EXPECT_EQ(height, 576);
     }
@@ -1103,8 +1067,8 @@ namespace BECore::Tests {
 
         ASSERT_EQ(responses.size(), 1u);
         ASSERT_NE(Result(0), nullptr);
-        EXPECT_EQ(GetJsonInt(*Result(0), "width").value_or(0), 200);
-        EXPECT_EQ(GetJsonInt(*Result(0), "height").value_or(0), 113);
+        EXPECT_EQ(GetJsonInt(Require(Result(0)), "width").value_or(0), 200);
+        EXPECT_EQ(GetJsonInt(Require(Result(0)), "height").value_or(0), 113);
     }
 
     TEST_F(ScreenshotControlTest, AScreenshotIsOfTheSimulatedOutputSize) {
@@ -1120,8 +1084,8 @@ namespace BECore::Tests {
 
             ASSERT_EQ(responses.size(), 1u);
             ASSERT_NE(Result(0), nullptr);
-            EXPECT_EQ(GetJsonInt(*Result(0), "width").value_or(0), expectedWidth);
-            EXPECT_EQ(GetJsonInt(*Result(0), "height").value_or(0), expectedHeight);
+            EXPECT_EQ(GetJsonInt(Require(Result(0)), "width").value_or(0), expectedWidth);
+            EXPECT_EQ(GetJsonInt(Require(Result(0)), "height").value_or(0), expectedHeight);
         }
     }
 
@@ -1162,7 +1126,7 @@ namespace BECore::Tests {
         }
 
         ASSERT_EQ(responses.size(), 2u);
-        EXPECT_EQ(GetJsonInt(*Result(0), "width").value_or(0), static_cast<int64_t>(kMinScreenshotSize));
+        EXPECT_EQ(GetJsonInt(Require(Result(0)), "width").value_or(0), static_cast<int64_t>(kMinScreenshotSize));
         EXPECT_NE(Result(1), nullptr);
     }
 

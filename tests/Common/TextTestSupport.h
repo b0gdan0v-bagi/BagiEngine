@@ -1,15 +1,28 @@
 #pragma once
 
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/Logger/LogEvent.h>
+#include <BECore/Resource/ResourceManager.h>
+#include <BECore/Text/Font.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 
 namespace BECore::Tests {
 
+    /// The regular face that ships with the engine
+    inline constexpr const char* kDefaultFontPath = "assets/fonts/PT_Sans-Web-Regular.ttf";
+
+    /// The font at @p path loaded through the resource manager, as a game loads it; null when it does not load
+    inline IntrusivePtr<Font> LoadTestFont(const char* path = kDefaultFontPath) {
+        auto handle = CoreManager::GetResourceManager().Load<Font>(path);
+        return IntrusivePtr<Font>(handle ? &*handle : nullptr);
+    }
+
     /// A font table for the tests of the face choice: the family "Test" has a regular and a bold face. Both are the PT Sans Regular that ships with the
     /// engine, under two spellings of its path (the bold file is another asset), so a test tells which face was asked for by the path it got
-    inline constexpr const char* kTestRegularPath = "assets/fonts/PT_Sans-Web-Regular.ttf";
+    inline constexpr const char* kTestRegularPath = kDefaultFontPath;
     inline constexpr const char* kTestBoldPath = "assets/fonts/./PT_Sans-Web-Regular.ttf";
+
+    /// The character a layout puts at the end of a line it cut
+    inline constexpr char32_t kEllipsis = U'\u2026';
 
     inline TextSettings MakeTestFamilySettings() {
         TextSettings settings = TextSettings::Default();
@@ -35,31 +48,6 @@ namespace BECore::Tests {
 
     private:
         TextSettings _saved;
-    };
-
-    /// Counts the warnings with @p part in the text that LogEvent::Flush() delivers while it lives
-    class WarningCounter : public SubscriptionHolder {
-    public:
-        explicit WarningCounter(String part) : _part(eastl::move(part)) {
-            Subscribe<LogEvent, &WarningCounter::OnLog>(this);
-        }
-
-        /// Delivers the pending log entries, then returns how many matched so far
-        [[nodiscard]] size_t Count() const {
-            LogEvent::Flush();
-            return _count;
-        }
-
-    private:
-        void OnLog(const LogEvent& event) {
-            const StringView message = event.message;
-            if (event.level == LogLevel::Warning && message.find(StringView(_part)) != StringView::npos) {
-                ++_count;
-            }
-        }
-
-        String _part;
-        size_t _count = 0;
     };
 
 }  // namespace BECore::Tests

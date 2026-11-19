@@ -1,3 +1,4 @@
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <Common/Printers.h>
 #include <RemoteControl/WebSocketHandshake.h>
 #include <gtest/gtest.h>
@@ -29,12 +30,12 @@ namespace BECore::Tests {
         public:
             String requestLine = "GET /control HTTP/1.1";
             Vector<String> headers = {
-                "Host: 127.0.0.1:8765", "Upgrade: websocket", "Connection: Upgrade", String("Sec-WebSocket-Key: ") + kRfcKey, "Sec-WebSocket-Version: 13",
+                "Host: 127.0.0.1:8765", "Upgrade: websocket", "Connection: Upgrade", Format("Sec-WebSocket-Key: {}", kRfcKey), "Sec-WebSocket-Version: 13",
             };
 
             /// Replaces the header @p name (any case) or adds it
             Request& Set(StringView name, StringView value) {
-                const String line = String(name) + ": " + String(value);
+                const String line = Format("{}: {}", name, value);
                 for (String& existing : headers) {
                     if (NameIs(existing, name)) {
                         existing = line;
@@ -56,11 +57,12 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] String Text() const {
-                String text = requestLine + "\r\n";
+                String text = Format("{}\r\n", requestLine);
                 for (const String& line : headers) {
-                    text += line + "\r\n";
+                    AppendFormat(text, "{}\r\n", line);
                 }
-                return text + "\r\n";
+                text += "\r\n";
+                return text;
             }
         };
 
@@ -88,7 +90,10 @@ namespace BECore::Tests {
         }
 
         void ExpectRefused(const std::expected<String, HandshakeError>& result, int status) {
-            ASSERT_FALSE(result.has_value());
+            if (result.has_value()) {
+                ADD_FAILURE() << "accepted, status " << status << " expected";
+                return;
+            }
             EXPECT_EQ(result.error().httpStatus, status) << result.error().message.c_str();
             EXPECT_FALSE(result.error().message.empty());
         }
@@ -105,8 +110,7 @@ namespace BECore::Tests {
 
         String Forwarded(const Request& request, size_t hops) {
             const String text = request.Text();
-            const String address = ParseForwardedClientAddress(View(text), hops);
-            return String(address.data(), address.size());
+            return ParseForwardedClientAddress(View(text), hops);
         }
 
     }  // namespace
@@ -226,7 +230,7 @@ namespace BECore::Tests {
     }
 
     TEST(WebSocketHandshakeTest, HeadOverTheLimitIsRefused) {
-        const String text = Request().Add("X-Padding: " + String(kMaxHandshakeBytes, 'x')).Text();
+        const String text = Request().Add(Format("X-Padding: {}", String(kMaxHandshakeBytes, 'x'))).Text();
         ExpectRefused(ParseHandshakeRequest(View(text)), 431);
     }
 
@@ -422,7 +426,7 @@ namespace BECore::Tests {
         ExpectRefused(refused, 403);
         EXPECT_NE(refused.error().message.find("https://evil.example"), String::npos);
 
-        const String huge = "https://" + String(6000, 'a') + ".example";
+        const String huge = Format("https://{}.example", String(6000, 'a'));
         const auto cut = Parse(Request().Set("Origin", huge), policy);
         ExpectRefused(cut, 403);
         EXPECT_LT(cut.error().message.size(), 200u);
@@ -439,9 +443,9 @@ namespace BECore::Tests {
 
     TEST(WebSocketHandshakeTest, AnOriginThatFillsTheWholeHeadIsRefusedAndOneOverTheLimitIs431) {
         const HandshakePolicy policy = PublicPolicy({"https://good.example"});
-        const String almost = "https://" + String(kMaxHandshakeBytes - 400, 'a');
+        const String almost = Format("https://{}", String(kMaxHandshakeBytes - 400, 'a'));
         ExpectRefused(Parse(Request().Set("Origin", almost), policy), 403);
-        const String tooMuch = "https://" + String(kMaxHandshakeBytes, 'a');
+        const String tooMuch = Format("https://{}", String(kMaxHandshakeBytes, 'a'));
         ExpectRefused(Parse(Request().Set("Origin", tooMuch), policy), 431);
     }
 
@@ -455,12 +459,12 @@ namespace BECore::Tests {
         Request post;
         post.requestLine = "POST /x HTTP/1.1";
         ExpectRefused(Parse(post, policy), 400);
-        const String text = Request().Add("X-Padding: " + String(kMaxHandshakeBytes, 'x')).Text();
+        const String text = Request().Add(Format("X-Padding: {}", String(kMaxHandshakeBytes, 'x'))).Text();
         ExpectRefused(ParseHandshakeRequest(View(text), policy), 431);
     }
 
     TEST(WebSocketHandshakeTest, AcceptResponseCompletesTheHandshake) {
-        const String response = BuildAcceptResponse(kRfcKey).c_str();
+        const String response = BuildAcceptResponse(kRfcKey);
         EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 101 Switching Protocols\r\n"));
         EXPECT_NE(response.find("Upgrade: websocket\r\n"), String::npos);
         EXPECT_NE(response.find("Connection: Upgrade\r\n"), String::npos);
@@ -469,7 +473,7 @@ namespace BECore::Tests {
     }
 
     TEST(WebSocketHandshakeTest, RejectResponseCarriesTheStatusAndTheMessage) {
-        const String response = BuildRejectResponse(HandshakeError{403, "no way"}).c_str();
+        const String response = BuildRejectResponse(HandshakeError{403, "no way"});
         EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 403 Forbidden\r\n"));
         EXPECT_NE(response.find("Connection: close\r\n"), String::npos);
         EXPECT_NE(response.find("Content-Length: 6\r\n"), String::npos);
@@ -478,7 +482,7 @@ namespace BECore::Tests {
     }
 
     TEST(WebSocketHandshakeTest, UpgradeRequiredNamesTheVersion) {
-        const String response = BuildRejectResponse(HandshakeError{426, "use 13"}).c_str();
+        const String response = BuildRejectResponse(HandshakeError{426, "use 13"});
         EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 426 Upgrade Required\r\n"));
         EXPECT_NE(response.find("Sec-WebSocket-Version: 13\r\n"), String::npos);
     }
@@ -508,7 +512,7 @@ namespace BECore::Tests {
         const HandshakePolicy policy = HealthPolicy();
         for (const char* line : {"GET / HTTP/1.1", "GET /healthz/ HTTP/1.1", "GET /health HTTP/1.1", "GET /healthzz HTTP/1.1", "GET /HEALTHZ HTTP/1.1", "GET /control HTTP/1.1",
                                  "POST /healthz HTTP/1.1", "HEAD /healthz HTTP/1.1", "GET /healthz HTTP/2", "GET /healthz", "GET  HTTP/1.1", ""}) {
-            EXPECT_FALSE(IsHealth(String(line) + "\r\nHost: a\r\n\r\n", policy)) << line;
+            EXPECT_FALSE(IsHealth(Format("{}\r\nHost: a\r\n\r\n", line), policy)) << line;
         }
     }
 
@@ -536,11 +540,11 @@ namespace BECore::Tests {
         const HandshakePolicy policy = HealthPolicy();
         EXPECT_FALSE(IsHealth("GET /healthz HTTP/1.1\r\nHost: a\r\n folded\r\n\r\n", policy));
         EXPECT_FALSE(IsHealth("GET /healthz HTTP/1.1\r\nno colon here\r\n\r\n", policy));
-        EXPECT_FALSE(IsHealth("GET /healthz HTTP/1.1\r\nHost: a\r\n\r\n" + String(kMaxHandshakeBytes, 'x'), policy));
+        EXPECT_FALSE(IsHealth(Format("GET /healthz HTTP/1.1\r\nHost: a\r\n\r\n{}", String(kMaxHandshakeBytes, 'x')), policy));
     }
 
     TEST(WebSocketHandshakeTest, HealthResponseIsAnOkThatClosesTheConnection) {
-        const String response = BuildHealthResponse().c_str();
+        const String response = BuildHealthResponse();
         EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 200 OK\r\n"));
         EXPECT_NE(response.find("Content-Type: text/plain\r\n"), String::npos);
         EXPECT_NE(response.find("Cache-Control: no-store\r\n"), String::npos);
@@ -562,12 +566,13 @@ namespace BECore::Tests {
 
         /// A request head of about kMaxHandshakeBytes: the valid lines, then @p padding repeated up to the limit
         String FullHead(const String& padding, const String& fixedLinesBefore = {}) {
-            String text = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n" + fixedLinesBefore;
+            String text = Format("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n{}", fixedLinesBefore);
             const String tail = "Connection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n";
             while (text.size() + padding.size() + tail.size() <= kMaxHandshakeBytes) {
                 text += padding;
             }
-            return text + tail;
+            text += tail;
+            return text;
         }
 
     }  // namespace
@@ -589,22 +594,30 @@ namespace BECore::Tests {
             worst = std::max(worst, ElapsedMilliseconds([&] { (void)IsHealthCheckRequest(View(head), HealthPolicy()); }));
         }
         // One header line that is a single list: the token scan is the cost
-        const String oneLongList = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: " + String(kMaxHandshakeBytes - 200, ',') + "\r\n\r\n";
+        const String oneLongList = Format("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: {}\r\n\r\n", String(kMaxHandshakeBytes - 200, ','));
         worst = std::max(worst, ElapsedMilliseconds([&] { (void)ParseHandshakeRequest(View(oneLongList), HandshakePolicy{}); }));
         std::printf("HandshakeCost server_scan_ms=%.3f\n", worst);
     }
 
     TEST(WebSocketHandshakeTest, TokenSearchDoesNotAllocatePerToken) {
         const String commas(kMaxHandshakeBytes, ',');
-        EXPECT_FALSE(HeaderHasToken(View(commas), "upgrade"));
-        EXPECT_TRUE(HeaderHasToken(View(commas + " Upgrade"), "upgrade"));
+        const String commasAndToken = Format("{} Upgrade", commas);
+        const AllocTracker::ThreadCounters before = AllocTracker::GetThreadCounters();
+        const bool inCommas = HeaderHasToken(View(commas), "upgrade");
+        const bool inCommasAndToken = HeaderHasToken(View(commasAndToken), "upgrade");
+        const AllocTracker::ThreadCounters after = AllocTracker::GetThreadCounters();
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_EQ(after.count, before.count);
+        }
+        EXPECT_FALSE(inCommas);
+        EXPECT_TRUE(inCommasAndToken);
         EXPECT_TRUE(EqualsIgnoreCase("WebSocket", "websocket"));
         EXPECT_FALSE(EqualsIgnoreCase("websockets", "websocket"));
         EXPECT_FALSE(EqualsIgnoreCase("websocke!", "websocket"));
     }
 
     TEST(WebSocketHandshakeTest, RefusalMessagesQuoteWhatThePeerSent) {
-        const String longHost = String(1000, 'h') + "\x01";
+        const String longHost = Format("{}\x01", String(1000, 'h'));
         const auto refusedHost = Parse(Request().Set("Host", longHost));
         ExpectRefused(refusedHost, 403);
         EXPECT_LT(refusedHost.error().message.size(), 200u) << "a loopback refusal repeats the Host cut like a public one repeats the Origin";
@@ -664,12 +677,12 @@ namespace BECore::Tests {
     TEST(WebSocketHandshakeTest, ForwardedEntryThatIsNotAnAddressIsIgnored) {
         for (const char* entry : {"unknown", "1.2.3", "1.2.3.4.5", "256.1.1.1", "1.2.3.-4", "1.2.3.4:8080", "01234.1.1.1", "1..3.4", "12:34", "gggg::1", "a:b:c:d:e:f:1:2:3", "[::1]", "1.2.3.4 5",
                                   "<script>", "203.0.113.9\x01"}) {
-            EXPECT_EQ(Forwarded(Request().Add(String("X-Forwarded-For: 203.0.113.1, ") + entry), 1), "") << entry;
+            EXPECT_EQ(Forwarded(Request().Add(Format("X-Forwarded-For: 203.0.113.1, {}", entry)), 1), "") << entry;
         }
         EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: 203.0.113.1,"), 1), "") << "an empty entry is not an address";
         EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: 203.0.113.1,,203.0.113.2"), 2), "") << "the empty entry counts as an entry";
-        EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: " + String(1000, '1')), 1), "");
-        EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: " + String(kMaxForwardedAddressBytes + 1, 'a')), 1), "");
+        EXPECT_EQ(Forwarded(Request().Add(Format("X-Forwarded-For: {}", String(1000, '1'))), 1), "");
+        EXPECT_EQ(Forwarded(Request().Add(Format("X-Forwarded-For: {}", String(kMaxForwardedAddressBytes + 1, 'a'))), 1), "");
     }
 
     TEST(WebSocketHandshakeTest, ForwardedClientTakesIpv6AndLowersIt) {
@@ -678,7 +691,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: ::1"), 1), "::1");
         const String longest = "0000:0000:0000:0000:0000:ffff:192.168.100.228";
         ASSERT_EQ(longest.size(), kMaxForwardedAddressBytes);
-        EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: " + longest), 1), longest) << "the longest literal fits";
+        EXPECT_EQ(Forwarded(Request().Add(Format("X-Forwarded-For: {}", longest)), 1), longest) << "the longest literal fits";
     }
 
     TEST(WebSocketHandshakeTest, ForwardedClientOfAMalformedHeadIsEmptyAndTheHandshakeDoesNotNeedIt) {

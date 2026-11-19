@@ -1,5 +1,6 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/Wait.h>
 #include <TaskSystem/Awaitables.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskHandle.h>
@@ -387,18 +388,6 @@ namespace BECore::Tests {
             std::atomic<bool> resumedOnMainThread{false};
         };
 
-        template <typename Predicate>
-        bool WaitUntilTrue(Predicate&& predicate) {
-            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-            while (!predicate()) {
-                if (std::chrono::steady_clock::now() >= deadline) {
-                    return false;
-                }
-                std::this_thread::sleep_for(milliseconds(1));
-            }
-            return true;
-        }
-
         void Resumed(GameDelayProbe& probe) {
             probe.resumedOnMainThread.store(TaskManager::GetInstance().IsMainThread(), std::memory_order_release);
             probe.stage.store(2, std::memory_order_release);
@@ -595,13 +584,13 @@ namespace BECore::Tests {
         auto handle = TaskManager::GetInstance().Run(WaitGameOnBackground(_probe));
 
         // Wait until the worker has parked the delay, so the advance below cannot come first.
-        ASSERT_TRUE(WaitUntilTrue([&] { return Scheduler().GetDelayedTaskCount() > delayed; }));
+        ASSERT_TRUE(WaitUntil([&] { return Scheduler().GetDelayedTaskCount() > delayed; }));
         Pump();
         EXPECT_EQ(Stage(), 1);
 
         Scheduler().AdvanceGameTime(0.01);
         Pump();  // ProcessDelayedTasks hands the job to the pool
-        EXPECT_TRUE(WaitUntilTrue([&] { return Stage() == 2; })) << "the background job never resumed";
+        EXPECT_TRUE(WaitUntil([&] { return Stage() == 2; })) << "the background job never resumed";
     }
 
 }  // namespace BECore::Tests

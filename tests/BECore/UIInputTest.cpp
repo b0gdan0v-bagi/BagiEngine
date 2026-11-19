@@ -107,22 +107,9 @@ namespace BECore::Tests {
 
     class UIInputTest : public ::testing::Test {
     protected:
-        void TearDown() override {
-            // A failed test must not leave a handler behind: the next one would see it
-            for (auto* handler : _registered) {
-                _input.Unregister(*handler);
-            }
-        }
-
-        void Register(RecordingHandler& handler, int order) {
-            _input.Register(handler, order);
-            _registered.push_back(&handler);
-        }
-
         UIInput _input;
         GameRecorder _game;
         Vector<int> _callLog;
-        Vector<IUIInputHandler*> _registered;
     };
 
     TEST_F(UIInputTest, WithoutHandlersEveryEventReachesTheGame) {
@@ -139,7 +126,7 @@ namespace BECore::Tests {
 
     TEST_F(UIInputTest, AHandlerThatDeclinesLeavesTheEventToTheGame) {
         RecordingHandler handler(&_callLog, 1);
-        Register(handler, 0);
+        _input.Register(handler, 0);
 
         EXPECT_FALSE(_input.DispatchMouseButtonDown(ButtonAt(10.0f)));
 
@@ -150,7 +137,7 @@ namespace BECore::Tests {
     TEST_F(UIInputTest, AConsumedEventDoesNotReachTheGame) {
         RecordingHandler handler(&_callLog, 1);
         handler.consume = true;
-        Register(handler, 0);
+        _input.Register(handler, 0);
 
         EXPECT_TRUE(_input.DispatchMouseButtonDown(ButtonAt(1.0f)));
         EXPECT_TRUE(_input.DispatchMouseButtonUp(ButtonAt(2.0f)));
@@ -171,9 +158,9 @@ namespace BECore::Tests {
         RecordingHandler back(&_callLog, 1);
         RecordingHandler middle(&_callLog, 2);
         RecordingHandler front(&_callLog, 3);
-        Register(middle, 5);
-        Register(back, -1);
-        Register(front, 10);
+        _input.Register(middle, 5);
+        _input.Register(back, -1);
+        _input.Register(front, 10);
 
         _input.DispatchMouseButtonDown(ButtonAt(0.0f));
 
@@ -183,8 +170,8 @@ namespace BECore::Tests {
     TEST_F(UIInputTest, AmongEqualOrdersTheLaterRegisteredIsAskedFirst) {
         RecordingHandler first(&_callLog, 1);
         RecordingHandler second(&_callLog, 2);
-        Register(first, 4);
-        Register(second, 4);
+        _input.Register(first, 4);
+        _input.Register(second, 4);
 
         _input.DispatchMouseButtonDown(ButtonAt(0.0f));
 
@@ -196,9 +183,9 @@ namespace BECore::Tests {
         RecordingHandler modal(&_callLog, 2);
         RecordingHandler front(&_callLog, 3);
         modal.consume = true;
-        Register(back, 0);
-        Register(modal, 1);
-        Register(front, 2);
+        _input.Register(back, 0);
+        _input.Register(modal, 1);
+        _input.Register(front, 2);
 
         EXPECT_TRUE(_input.DispatchMouseButtonDown(ButtonAt(0.0f)));
 
@@ -209,7 +196,7 @@ namespace BECore::Tests {
 
     TEST_F(UIInputTest, AnUnregisteredHandlerIsNotAskedAgain) {
         RecordingHandler handler(&_callLog, 1);
-        Register(handler, 0);
+        _input.Register(handler, 0);
         EXPECT_TRUE(_input.IsRegistered(handler));
 
         _input.Unregister(handler);
@@ -224,8 +211,8 @@ namespace BECore::Tests {
         RecordingHandler lower(&_callLog, 1);
         RecordingHandler upper(&_callLog, 2);
         upper.hook = [&]() { _input.Unregister(lower); };
-        Register(lower, 0);
-        Register(upper, 1);
+        _input.Register(lower, 0);
+        _input.Register(upper, 1);
 
         _input.DispatchMouseButtonDown(ButtonAt(0.0f));
 
@@ -238,8 +225,8 @@ namespace BECore::Tests {
         RecordingHandler self(&_callLog, 1);
         RecordingHandler other(&_callLog, 2);
         self.hook = [&]() { _input.Unregister(self); };
-        Register(other, 0);
-        Register(self, 1);
+        _input.Register(other, 0);
+        _input.Register(self, 1);
 
         _input.DispatchMouseButtonDown(ButtonAt(0.0f));
         _input.DispatchMouseButtonDown(ButtonAt(0.0f));
@@ -252,10 +239,10 @@ namespace BECore::Tests {
         RecordingHandler adder(&_callLog, 1);
         adder.hook = [&]() {
             if (!_input.IsRegistered(late)) {
-                Register(late, 10);
+                _input.Register(late, 10);
             }
         };
-        Register(adder, 0);
+        _input.Register(adder, 0);
 
         _input.DispatchMouseButtonDown(ButtonAt(0.0f));
         EXPECT_TRUE(late.downs.empty());
@@ -269,10 +256,10 @@ namespace BECore::Tests {
         RecordingHandler late(&_callLog, 2);
         RecordingHandler adder(&_callLog, 1);
         adder.hook = [&]() {
-            Register(late, 10);
+            _input.Register(late, 10);
             _input.Unregister(late);
         };
-        Register(adder, 0);
+        _input.Register(adder, 0);
 
         _input.DispatchMouseButtonDown(ButtonAt(0.0f));
         _input.DispatchMouseButtonDown(ButtonAt(0.0f));

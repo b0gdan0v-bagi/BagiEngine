@@ -1,4 +1,5 @@
 #include <BECore/Profiler/Ring/ZoneStats.h>
+#include <Common/Require.h>
 #include <EASTL/sort.h>
 #include <gtest/gtest.h>
 
@@ -80,17 +81,17 @@ namespace BECore::Tests {
         RingSnapshot snapshot = MakeSnapshot(0, 1, 100);
         AddThread(snapshot, 1).zones = {Zone(kParentSite, 0, 20, 0), Zone(kChildSite, 2, 12, 1), Zone(kOtherSite, 3, 5, 2)};
         const auto rows = ComputeZoneStats(snapshot, 0, 0);
-        EXPECT_NEAR(FindRow(rows, kParentSite)->selfMs, 10.0, kTolerance);
-        EXPECT_NEAR(FindRow(rows, kChildSite)->selfMs, 8.0, kTolerance);
-        EXPECT_NEAR(FindRow(rows, kOtherSite)->selfMs, 2.0, kTolerance);
+        EXPECT_NEAR(Require(FindRow(rows, kParentSite)).selfMs, 10.0, kTolerance);
+        EXPECT_NEAR(Require(FindRow(rows, kChildSite)).selfMs, 8.0, kTolerance);
+        EXPECT_NEAR(Require(FindRow(rows, kOtherSite)).selfMs, 2.0, kTolerance);
     }
 
     TEST(ZoneStatsTest, ASiblingAfterAZoneIsNotItsChild) {
         RingSnapshot snapshot = MakeSnapshot(0, 1, 100);
         AddThread(snapshot, 1).zones = {Zone(kParentSite, 0, 5), Zone(kChildSite, 6, 9), Zone(kOtherSite, 10, 10)};
         const auto rows = ComputeZoneStats(snapshot, 0, 0);
-        EXPECT_NEAR(FindRow(rows, kParentSite)->selfMs, 5.0, kTolerance);
-        EXPECT_NEAR(FindRow(rows, kChildSite)->selfMs, 3.0, kTolerance);
+        EXPECT_NEAR(Require(FindRow(rows, kParentSite)).selfMs, 5.0, kTolerance);
+        EXPECT_NEAR(Require(FindRow(rows, kChildSite)).selfMs, 3.0, kTolerance);
     }
 
     TEST(ZoneStatsTest, ARecursiveZoneCountsOncePerCall) {
@@ -151,7 +152,7 @@ namespace BECore::Tests {
         AddThread(snapshot, 1).zones = {Zone(kParentSite, 90, 120, 0), Zone(kChildSite, 95, 110, 1)};
         const auto first = ComputeZoneStats(snapshot, 0, 0);
         ASSERT_EQ(first.size(), 2u);
-        EXPECT_NEAR(FindRow(first, kParentSite)->selfMs, 15.0, kTolerance);  // its child runs into the next frame and is still taken off
+        EXPECT_NEAR(Require(FindRow(first, kParentSite)).selfMs, 15.0, kTolerance);  // its child runs into the next frame and is still taken off
         EXPECT_TRUE(ComputeZoneStats(snapshot, 1, 1).empty());
     }
 

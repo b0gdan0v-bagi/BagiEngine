@@ -1,4 +1,5 @@
 #include <BECore/Math/Mat4.h>
+#include <Common/MathTestSupport.h>
 #include <gtest/gtest.h>
 #include <numbers>
 
@@ -17,12 +18,6 @@ namespace BECore::Tests {
         constexpr Vec3 kAxisX{1.0f, 0.0f, 0.0f};
         constexpr Vec3 kAxisY{0.0f, 1.0f, 0.0f};
         constexpr Vec3 kAxisZ{0.0f, 0.0f, 1.0f};
-
-        void ExpectVecNear(const Vec3& actual, const Vec3& expected, float tolerance = kTolerance) {
-            EXPECT_NEAR(actual.x, expected.x, tolerance);
-            EXPECT_NEAR(actual.y, expected.y, tolerance);
-            EXPECT_NEAR(actual.z, expected.z, tolerance);
-        }
 
         void ExpectMatNear(const Mat4& actual, const Mat4& expected, float tolerance = kTolerance) {
             for (size_t row = 0; row < Mat4::kDimension; ++row) {

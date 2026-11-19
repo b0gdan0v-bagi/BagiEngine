@@ -7,6 +7,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UITestSupport.h>
 #include <Widgets/Viewport/ViewportUIGizmos.h>
 #include <gtest/gtest.h>
 
@@ -46,13 +47,6 @@ namespace BECore::Tests {
             element.style.rect.y = y;
             element.style.rect.width = width;
             element.style.rect.height = height;
-        }
-
-        void ExpectRect(const Rect& actual, const Rect& expected) {
-            EXPECT_NEAR(actual.x, expected.x, kTolerance);
-            EXPECT_NEAR(actual.y, expected.y, kTolerance);
-            EXPECT_NEAR(actual.w, expected.w, kTolerance);
-            EXPECT_NEAR(actual.h, expected.h, kTolerance);
         }
 
         /// What UIRectDragEvent told, with the specs copied

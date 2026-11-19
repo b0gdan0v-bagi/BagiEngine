@@ -27,7 +27,7 @@ namespace BECore::Tests {
             }
 
             void SetUp() override {
-                _path = TestTempPath("session_recorder_" + String(::testing::UnitTest::GetInstance()->current_test_info()->name()));
+                _path = TestTempPath(Format("session_recorder_{}", ::testing::UnitTest::GetInstance()->current_test_info()->name()));
                 CoreManager::GetTime().Reset();
                 ReplayTestGame::RestartSeedCounter();
                 GameManager::GetInstance().Initialize();

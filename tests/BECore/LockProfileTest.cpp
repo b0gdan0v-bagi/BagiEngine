@@ -4,11 +4,16 @@
 #include <BECore/Profiler/Ring/FrameRingBackend.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/SharedMutex.h>
+#include <Common/ProfilerTestSupport.h>
+#include <Common/Wait.h>
 #include <chrono>
 #include <gtest/gtest.h>
-#include <map>
 #include <thread>
-#include <vector>
+
+#if defined(__APPLE__)
+#include <mach/mach.h>
+#include <pthread.h>
+#endif
 
 namespace BECore::Tests {
 
@@ -16,8 +21,8 @@ namespace BECore::Tests {
 
     namespace {
 
-        constexpr auto kPollLimit = std::chrono::seconds(20);
-        constexpr auto kHold = std::chrono::milliseconds(200);  // the waiter has this long to reach the lock, also on a loaded machine
+        /// How long the holder keeps the lock once the waiter is blocked on it: above kTestThresholdUs, so the wait is long enough to record
+        constexpr auto kHoldWhileBlocked = std::chrono::milliseconds(20);
         constexpr uint32_t kTestThresholdUs = 1000;
         constexpr const char* kWaitZoneName = "lock wait: Test lock";
 
@@ -34,51 +39,74 @@ namespace BECore::Tests {
             ScopedThreshold& operator=(const ScopedThreshold&) = delete;
         };
 
-        /// Leaves the process with no backend and the ring off, whatever the test did. It stops the
-        /// primary backend, so declare it after every backend the test installs (locals die in reverse)
-        class ProfilerStateGuard {
+        /**
+         * Tells whether a thread is blocked in the system, so that a test can release a lock only once the waiter sits in it. The waiter
+         * calls Register() on itself first. Without a probe of the platform (only macOS has one) IsBlocked() is true kFallbackPause after
+         * Register(): there a waiter descheduled for longer than that before its lock() is not contended, and the test fails.
+         */
+        class BlockedThreadProbe {
         public:
-            ProfilerStateGuard() = default;
-            ~ProfilerStateGuard() {
-                Profiler::SetRingEnabled(false);
-                Profiler::SetBackend(nullptr);
+            void Register() {
+#if defined(__APPLE__)
+                _thread = pthread_mach_thread_np(pthread_self());
+#endif
+                _registeredAt = std::chrono::steady_clock::now();
+                _registered = true;
             }
-            ProfilerStateGuard(const ProfilerStateGuard&) = delete;
-            ProfilerStateGuard& operator=(const ProfilerStateGuard&) = delete;
-        };
 
-        bool WaitUntil(const std::atomic<bool>& flag) {
-            const auto deadline = std::chrono::steady_clock::now() + kPollLimit;
-            while (!flag.load()) {
-                if (std::chrono::steady_clock::now() > deadline) {
+            [[nodiscard]] bool IsBlocked() const {
+                if (!_registered) {
                     return false;
                 }
-                std::this_thread::yield();
+#if defined(__APPLE__)
+                thread_basic_info_data_t info{};
+                mach_msg_type_number_t count = THREAD_BASIC_INFO_COUNT;
+                if (thread_info(_thread, THREAD_BASIC_INFO, reinterpret_cast<thread_info_t>(&info), &count) != KERN_SUCCESS) {
+                    return false;
+                }
+                return info.run_state == TH_STATE_WAITING;
+#else
+                return std::chrono::steady_clock::now() - _registeredAt >= kFallbackPause;
+#endif
             }
-            return true;
-        }
+
+        private:
+            static constexpr auto kFallbackPause = std::chrono::milliseconds(200);
+
+            std::atomic<bool> _registered{false};
+            std::chrono::steady_clock::time_point _registeredAt;
+#if defined(__APPLE__)
+            mach_port_t _thread = MACH_PORT_NULL;
+#endif
+        };
 
         /**
-         * A thread takes a lock with @p acquire (it returns the guard that keeps it) and holds it until the waiting thread is about to
-         * call @p wait, then for kHold more, so @p wait blocks for about kHold. Returns the profiler id of the waiting thread.
+         * A thread takes a lock with @p acquire (it returns the guard that keeps it) and holds it until the waiting thread is blocked in
+         * @p wait, then kHoldWhileBlocked more, so a wait of the waiter is at least that long whatever the load of the machine. A @p wait
+         * that does not block (a second reader) ends on its own and the holder lets go after it. Returns the profiler id of the waiter.
          */
         template <typename TAcquire, typename TWait>
         uint32_t RunContended(TAcquire acquire, TWait wait) {
             std::atomic<bool> held{false};
-            std::atomic<bool> waiterReady{false};
+            std::atomic<bool> release{false};
             std::thread holder([&] {
                 auto guard = acquire();
                 held = true;
-                WaitUntil(waiterReady);
-                std::this_thread::sleep_for(kHold);
+                WaitUntil([&] { return release.load(); });
+                std::this_thread::sleep_for(kHoldWhileBlocked);
             });
-            EXPECT_TRUE(WaitUntil(held));
+            EXPECT_TRUE(WaitUntil([&] { return held.load(); }));
             uint32_t waiterId = 0;
+            BlockedThreadProbe probe;
+            std::atomic<bool> waited{false};
             std::thread waiter([&] {
                 waiterId = Profiler::CurrentThreadId();
-                waiterReady = true;
+                probe.Register();
                 wait();
+                waited = true;
             });
+            EXPECT_TRUE(WaitUntil([&] { return waited.load() || probe.IsBlocked(); })) << "the waiter neither blocked nor finished";
+            release = true;
             waiter.join();
             holder.join();
             return waiterId;
@@ -143,22 +171,23 @@ namespace BECore::Tests {
             return nullptr;
         }
 
-        size_t CountRingZones(const FrameRingBackend& ring, const char* name, uint32_t threadId, uint32_t* depth = nullptr, uint64_t* ticks = nullptr) {
-            size_t count = 0;
-            for (const RingThread& thread : ring.Snapshot().threads) {
-                for (const ZoneRecord& zone : thread.zones) {
-                    if (thread.threadId == threadId && String(zone.site->name) == name) {
-                        ++count;
-                        if (depth != nullptr) {
-                            *depth = zone.depth;
-                        }
-                        if (ticks != nullptr) {
-                            *ticks = zone.endTicks - zone.beginTicks;
-                        }
-                    }
+        /// Any thread, for CountNamedZones on the process's ring
+        constexpr uint32_t kAnyThread = 0;
+
+        /// The zones named @p name of @p threadId (or kAnyThread); @p depth and @p ticks receive those of the last one found
+        size_t CountNamedZones(const FrameRingBackend& ring, const char* name, uint32_t threadId, uint32_t* depth = nullptr, uint64_t* ticks = nullptr) {
+            return CountRingZones(ring, [&](const RingThread& thread, const ZoneRecord& zone) {
+                if ((threadId != kAnyThread && thread.threadId != threadId) || StringView(zone.site->name) != name) {
+                    return false;
                 }
-            }
-            return count;
+                if (depth != nullptr) {
+                    *depth = zone.depth;
+                }
+                if (ticks != nullptr) {
+                    *ticks = zone.endTicks - zone.beginTicks;
+                }
+                return true;
+            });
         }
 
         /// A backend that wants the events of every lock operation and counts them. Never destroyed: a lock may still reach it (Profiler keeps
@@ -180,11 +209,10 @@ namespace BECore::Tests {
                 announced.fetch_add(1);
                 lastName = site.function;
                 lastAnnounceKind = kind;
-                return new int(0);
+                return &_context;  // the counters need no state per lock, only a context that is not null
             }
-            void TerminateLock(void* context, LockKind /*kind*/) override {
+            void TerminateLock(void* /*context*/, LockKind /*kind*/) override {
                 terminated.fetch_add(1);
-                delete static_cast<int*>(context);
             }
             bool BeforeLock(void* /*context*/, LockKind kind) override {
                 (kind == LockKind::SharedReader ? readerBefore : writerBefore).fetch_add(1);
@@ -221,6 +249,9 @@ namespace BECore::Tests {
             std::atomic<int> tryFailed{0};
             String lastName;
             LockKind lastAnnounceKind = LockKind::Mutex;
+
+        private:
+            int _context = 0;
         };
 
         CountingLockBackend& GetCountingBackend() {
@@ -231,13 +262,13 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(LockProfileTest, TheDefaultThresholdIsFiftyMicroseconds) {
-        EXPECT_EQ(Profiler::GetLockWaitThresholdUs(), 50u);
+    TEST(LockProfileTest, AScopedThresholdRestoresTheDefaultOnExit) {
+        EXPECT_EQ(Profiler::GetLockWaitThresholdUs(), Profiler::kDefaultLockWaitThresholdUs);
         {
             const ScopedThreshold threshold(7);
             EXPECT_EQ(Profiler::GetLockWaitThresholdUs(), 7u);
         }
-        EXPECT_EQ(Profiler::GetLockWaitThresholdUs(), 50u);
+        EXPECT_EQ(Profiler::GetLockWaitThresholdUs(), Profiler::kDefaultLockWaitThresholdUs);
     }
 
     TEST(LockProfileTest, AContendedMutexRecordsALockWaitZoneOnTheWaitingThread) {
@@ -363,7 +394,7 @@ namespace BECore::Tests {
         uint32_t depth = 99;
         const uint32_t waiterId = RunContended([&] { return std::unique_lock<Mutex>(mutex); }, [&] { std::lock_guard<Mutex> lock(mutex); });
 
-        ASSERT_EQ(CountRingZones(ring, kWaitZoneName, waiterId, &depth), 1u);
+        ASSERT_EQ(CountNamedZones(ring, kWaitZoneName, waiterId, &depth), 1u);
         EXPECT_EQ(depth, 0u);
     }
 
@@ -381,10 +412,10 @@ namespace BECore::Tests {
                                                });
 
         uint32_t depth = 99;
-        EXPECT_EQ(CountRingZones(ring, kWaitZoneName, waiterId, &depth), 1u);
+        EXPECT_EQ(CountNamedZones(ring, kWaitZoneName, waiterId, &depth), 1u);
         EXPECT_EQ(depth, 1u);
         uint32_t outerDepth = 99;
-        EXPECT_EQ(CountRingZones(ring, "Outer work", waiterId, &outerDepth), 1u);
+        EXPECT_EQ(CountNamedZones(ring, "Outer work", waiterId, &outerDepth), 1u);
         EXPECT_EQ(outerDepth, 0u);
     }
 
@@ -400,7 +431,9 @@ namespace BECore::Tests {
         const uint32_t waiterId = RunContended([&] { return std::unique_lock<Mutex>(mutex); }, [&] { std::lock_guard<Mutex> lock(mutex); });
 
         EXPECT_NE(FindOnThread(FindZones(recorder.WriteJson(), kWaitZoneName), waiterId), nullptr);
-        EXPECT_EQ(CountRingZones(Profiler::GetFrameRing(), kWaitZoneName, waiterId), 1u);
+        // The process's ring outlives the case: a waiter whose std::thread::id an earlier thread had writes into that thread's buffer, under its id.
+        // The ring holds only what came after SetRingEnabled(true), so the one wait zone of this case is the one on any thread
+        EXPECT_EQ(CountNamedZones(Profiler::GetFrameRing(), kWaitZoneName, kAnyThread), 1u);
     }
 
     TEST(LockProfileTest, TheTraceStaysBalancedWithFourThreadsFightingOverALock) {
@@ -532,7 +565,9 @@ namespace BECore::Tests {
                 Vector<std::thread> threads;
                 for (int i = 0; i < kThreads; ++i) {
                     threads.emplace_back([&] {
-                        WaitUntil(go);
+                        while (!go.load()) {
+                            std::this_thread::yield();
+                        }
                         const std::lock_guard<Mutex> lock(raced);
                     });
                 }

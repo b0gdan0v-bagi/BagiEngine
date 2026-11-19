@@ -19,6 +19,10 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
+#include <Common/UICanvasRoundTrip.h>
+#include <Common/UIInputEvents.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -200,129 +204,29 @@ namespace BECore::Tests {
   </nodes></scene>
 </scenes></SceneManager>)";
 
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        bool Near(const Rect& a, const Rect& b, float tolerance = 1e-2f) {
-            return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
-        }
-
-        /// The actions the buttons emit, with the value each carried, in order
-        class ActionLog : public SubscriptionHolder {
-        public:
-            ActionLog() {
-                Subscribe<InputEvents::ActionEvent, &ActionLog::OnAction>(this);
-            }
-
-            size_t Total() const {
-                return _actions.size();
-            }
-            PoolString LastAction() const {
-                return _actions.empty() ? PoolString{} : _actions.back();
-            }
-            PoolString LastValue() const {
-                return _values.empty() ? PoolString{} : _values.back();
-            }
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                _actions.push_back(event.action);
-                _values.push_back(event.value);
-            }
-
-            Vector<PoolString> _actions;
-            Vector<PoolString> _values;
-        };
-
-        String ElementToXml(const UIElement& element) {
-            XmlSerializer serializer;
-            EXPECT_TRUE(serializer.BeginObject("element"));
-            element.Serialize(serializer);
-            serializer.EndObject();
-            return serializer.SaveToString();
-        }
-
         void SetVar(const char* name, const char* value) {
             CoreManager::GetUIVars().Set(PoolString::Intern(name), value);
         }
 
     }  // namespace
 
-    class UISegmentedTest : public ::testing::Test {
+    class UISegmentedTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kSegmentedXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-
-            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            UISceneFixture::SetUp();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kSegmentedXml));
             ASSERT_TRUE(_canvas);
-        }
-
-        void TearDown() override {
-            CoreManager::GetUIVars().Clear();
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
-        }
-
-        template <typename T>
-        T& Get(const char* name) const {
-            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
-            T* typed = element ? element->Cast<T>() : nullptr;
-            EXPECT_NE(typed, nullptr) << name << " is not the expected control";
-            return *typed;
         }
 
         bool Selected(const char* name) const {
             return Element(name).selected;
         }
 
-        /// True when the bar of a selected button was drawn at the foot of the rect of @p name in the last draw
-        bool BarDrawn(const char* name) const {
-            const UIElement& button = Element(name);
-            const Rect bar{button.rect.x, button.rect.y + button.rect.h - UIStateLook::kSelectedBarHeight, button.rect.w, UIStateLook::kSelectedBarHeight};
-            return std::any_of(_renderer->calls.begin(), _renderer->calls.end(), [&](const DrawCall& call) { return call.kind == DrawKind::Rect && Near(call.rect, bar); });
-        }
-
         /// Any element by name, whatever its class (`Get<T>` wants the exact type)
         UIElement& Element(const char* name) const {
             UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
-            return *element;
-        }
-
-        bool SelectedElement(const char* name) const {
-            return Element(name).selected;
+            return Require(element);
         }
 
         /// The colour of the bar of the selected-state look drawn at the foot of the rect of @p name in the last draw, none when there was no bar
@@ -330,7 +234,7 @@ namespace BECore::Tests {
             const UIElement& element = Element(name);
             const Rect bar{element.rect.x, element.rect.y + element.rect.h - UIStateLook::kSelectedBarHeight, element.rect.w, UIStateLook::kSelectedBarHeight};
             for (const DrawCall& call : _renderer->calls) {
-                if (call.kind == DrawKind::Rect && Near(call.rect, bar)) {
+                if (call.kind == DrawKind::Rect && NearRect(call.rect, bar)) {
                     return call.color;
                 }
             }
@@ -346,17 +250,12 @@ namespace BECore::Tests {
             ASSERT_TRUE(CoreManager::GetUIInput().DispatchMouseButtonDown(Button(x, y, true)));
             ASSERT_TRUE(CoreManager::GetUIInput().DispatchMouseButtonUp(Button(x, y, false)));
         }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
     };
 
     // ---- the selection follows the variable -------------------------------------------------------------------------------
 
     TEST_F(UISegmentedTest, AGroupBuiltFromAFileIsAStackWithTheButtonsAsSegments) {
         const auto& mode = Get<UISegmented>("Mode");
-        static_assert(std::is_base_of_v<UIStack, UISegmented>);
         EXPECT_EQ(mode.layout, UILayoutKind::Stack);
         EXPECT_EQ(mode.bind, "mode"_intern);
         EXPECT_FALSE(mode.disabled);
@@ -454,7 +353,7 @@ namespace BECore::Tests {
         SetVar("inner", "x");
         Draw();
         EXPECT_TRUE(Selected("MixedTwo")) << "the button next to a label is a segment";
-        EXPECT_EQ(Element("Caption").GetComponent<UITextComponent>()->text, "Mode") << "the label is left alone";
+        EXPECT_EQ(Require(Element("Caption").GetComponent<UITextComponent>()).text, "Mode") << "the label is left alone";
 
         EXPECT_FALSE(Selected("InnerTwo")) << "its value is the one of Mixed, but the nested group has its own variable";
         EXPECT_TRUE(Selected("InnerX"));
@@ -480,20 +379,20 @@ namespace BECore::Tests {
     TEST_F(UISegmentedTest, OnlyTheSelectedSegmentDrawsItsBar) {
         SetVar("level", "medium");
         Draw();
-        EXPECT_TRUE(BarDrawn("Medium"));
-        EXPECT_FALSE(BarDrawn("Easy"));
-        EXPECT_FALSE(BarDrawn("Hard"));
-        EXPECT_FALSE(BarDrawn("Max"));
+        EXPECT_TRUE(BarColorOf("Medium").has_value());
+        EXPECT_FALSE(BarColorOf("Easy").has_value());
+        EXPECT_FALSE(BarColorOf("Hard").has_value());
+        EXPECT_FALSE(BarColorOf("Max").has_value());
 
         SetVar("level", "max");
         Draw();
-        EXPECT_FALSE(BarDrawn("Medium"));
-        EXPECT_TRUE(BarDrawn("Max"));
+        EXPECT_FALSE(BarColorOf("Medium").has_value());
+        EXPECT_TRUE(BarColorOf("Max").has_value());
 
         SetVar("level", "");
         Draw();
         for (const char* name : {"Easy", "Medium", "Hard", "Max"}) {
-            EXPECT_FALSE(BarDrawn(name)) << name;
+            EXPECT_FALSE(BarColorOf(name).has_value()) << name;
         }
     }
 
@@ -501,19 +400,21 @@ namespace BECore::Tests {
         Draw();
         const Rect two = Element("ModeTwo").rect;
         const Rect computer = Element("ModeComputer").rect;
-        EXPECT_TRUE(Near(two, {10.0f, 10.0f, 150.0f, 48.0f})) << two.x << " " << two.y << " " << two.w << " " << two.h;
-        EXPECT_TRUE(Near(computer, {164.0f, 10.0f, 150.0f, 48.0f})) << computer.x << " " << computer.w;
+        EXPECT_TRUE(NearRect(two, {10.0f, 10.0f, 150.0f, 48.0f})) << two.x << " " << two.y << " " << two.w << " " << two.h;
+        EXPECT_TRUE(NearRect(computer, {164.0f, 10.0f, 150.0f, 48.0f})) << computer.x << " " << computer.w;
 
         const char* const levels[] = {"Easy", "Medium", "Hard", "Max"};
         for (size_t i = 0; i < 4; ++i) {
-            EXPECT_TRUE(Near(Element(levels[i]).rect, {10.0f + 104.0f * static_cast<float>(i), 100.0f, 100.0f, 48.0f})) << levels[i];
+            EXPECT_TRUE(NearRect(Element(levels[i]).rect, {10.0f + 104.0f * static_cast<float>(i), 100.0f, 100.0f, 48.0f})) << levels[i];
         }
     }
 
     TEST_F(UISegmentedTest, TheSelectionIsDrawnWithoutLayingTheLabelsOutAgain) {
         SetVar("level", "easy");
         Draw();
-        const auto layoutsOfTheTexts = [this] { return Element("Easy").GetComponent<UITextComponent>()->GetLayoutCount() + Element("Max").GetComponent<UITextComponent>()->GetLayoutCount(); };
+        const auto layoutsOfTheTexts = [this] {
+            return Require(Element("Easy").GetComponent<UITextComponent>()).GetLayoutCount() + Require(Element("Max").GetComponent<UITextComponent>()).GetLayoutCount();
+        };
         const uint32_t layouts = layoutsOfTheTexts();
         Draw();
         Draw();
@@ -594,14 +495,14 @@ namespace BECore::Tests {
         SetVar("level", "hard");
         Draw();
         EXPECT_TRUE(Element("Hard").rect.IsEmpty());
-        EXPECT_FALSE(BarDrawn("Hard"));
-        EXPECT_FALSE(BarDrawn("Easy"));
+        EXPECT_FALSE(BarColorOf("Hard").has_value());
+        EXPECT_FALSE(BarColorOf("Easy").has_value());
 
         ASSERT_TRUE(_canvas->SetElementVisible("Level"_intern, true));
         Draw();
         EXPECT_FALSE(Selected("Easy"));
         EXPECT_TRUE(Selected("Hard"));
-        EXPECT_TRUE(BarDrawn("Hard"));
+        EXPECT_TRUE(BarColorOf("Hard").has_value());
         EXPECT_FALSE(Element("Hard").rect.IsEmpty());
     }
 
@@ -611,20 +512,9 @@ namespace BECore::Tests {
         auto& level = Get<UISegmented>("Level");
         level.disabled = true;
 
-        XmlSerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        _canvas->Serialize(serializer);
-        serializer.EndObject();
-        const String xml = serializer.SaveToString();
-
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        ASSERT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
+        String xml;
+        const auto loaded = XmlRoundTrip(*_canvas, &xml);
+        ASSERT_TRUE(loaded);
 
         const auto* again = loaded->GetRoot().FindByName("Level"_intern);
         ASSERT_NE(again, nullptr);
@@ -634,39 +524,22 @@ namespace BECore::Tests {
         EXPECT_TRUE(typed->disabled);
         EXPECT_EQ(typed->children.size(), 4u);
         EXPECT_EQ(typed->layout, UILayoutKind::Stack);
-        ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
-        for (size_t i = 0; i < loaded->_elements.size(); ++i) {
-            EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
-        }
+        ExpectSameElementXml(*_canvas, *loaded);
     }
 
     TEST_F(UISegmentedTest, TheBindAndTheDisabledFlagSurviveABinaryRoundTrip) {
         Get<UISegmented>("Mode").disabled = true;
 
-        BinarySerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        _canvas->Serialize(serializer);
-        serializer.EndObject();
+        const auto loaded = BinaryRoundTrip(*_canvas);
+        ASSERT_TRUE(loaded);
 
-        BinaryDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromBuffer(serializer.GetData().data(), serializer.GetData().size()));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        ASSERT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
-
-        const auto* typed = loaded->GetRoot().FindByName("Mode"_intern)->Cast<UISegmented>();
+        const auto* typed = Require(loaded->GetRoot().FindByName("Mode"_intern)).Cast<UISegmented>();
         ASSERT_NE(typed, nullptr);
         EXPECT_EQ(typed->bind, "mode"_intern);
         EXPECT_TRUE(typed->disabled);
         ASSERT_EQ(typed->children.size(), 2u);
-        EXPECT_EQ(typed->children[1]->GetComponent<UIInputClicker>()->value, "computer"_intern);
-        ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
-        for (size_t i = 0; i < loaded->_elements.size(); ++i) {
-            EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
-        }
+        EXPECT_EQ(Require(typed->children[1]->GetComponent<UIInputClicker>()).value, "computer"_intern);
+        ExpectSameElementXml(*_canvas, *loaded);
     }
 
     // ---- composed segments: an element with a clicker is a segment ----------------------------------------
@@ -674,27 +547,27 @@ namespace BECore::Tests {
     TEST_F(UISegmentedTest, ComposedSegmentsAreSelectedByTheVariableThroughTheValueOfTheirClicker) {
         SetVar("comp", "icon");
         Draw();
-        EXPECT_FALSE(SelectedElement("CompPlain"));
-        EXPECT_TRUE(SelectedElement("CompIcon"));
-        EXPECT_FALSE(SelectedElement("CompOff"));
+        EXPECT_FALSE(Selected("CompPlain"));
+        EXPECT_TRUE(Selected("CompIcon"));
+        EXPECT_FALSE(Selected("CompOff"));
         EXPECT_FALSE(Element("CompIconCaption").selected) << "only the direct children of the group are segments";
 
         SetVar("comp", "plain");
         Draw();
-        EXPECT_TRUE(SelectedElement("CompPlain"));
-        EXPECT_FALSE(SelectedElement("CompIcon"));
+        EXPECT_TRUE(Selected("CompPlain"));
+        EXPECT_FALSE(Selected("CompIcon"));
 
         SetVar("comp", "nothing");
         Draw();
-        EXPECT_FALSE(SelectedElement("CompPlain"));
-        EXPECT_FALSE(SelectedElement("CompIcon"));
+        EXPECT_FALSE(Selected("CompPlain"));
+        EXPECT_FALSE(Selected("CompIcon"));
     }
 
     TEST_F(UISegmentedTest, TheComposedSegmentsShareTheWidthByFlexLikeButtons) {
         Draw();
-        EXPECT_TRUE(Near(Element("CompPlain").rect, {10.0f, 470.0f, 134.667f, 48.0f}, 0.1f));
-        EXPECT_TRUE(Near(Element("CompIcon").rect, {148.667f, 470.0f, 134.667f, 48.0f}, 0.1f));
-        EXPECT_TRUE(Near(Element("CompOff").rect, {287.333f, 470.0f, 134.667f, 48.0f}, 0.1f));
+        EXPECT_TRUE(NearRect(Element("CompPlain").rect, {10.0f, 470.0f, 134.667f, 48.0f}, 0.1f));
+        EXPECT_TRUE(NearRect(Element("CompIcon").rect, {148.667f, 470.0f, 134.667f, 48.0f}, 0.1f));
+        EXPECT_TRUE(NearRect(Element("CompOff").rect, {287.333f, 470.0f, 134.667f, 48.0f}, 0.1f));
     }
 
     TEST_F(UISegmentedTest, TheSelectedBarOfAComposedSegmentTakesTheColourOfItsCaption) {
@@ -718,7 +591,7 @@ namespace BECore::Tests {
         Draw();
         EXPECT_TRUE(Element("CompPlain").groupDisabled);
         EXPECT_TRUE(Element("CompIcon").IsDisabled());
-        EXPECT_TRUE(SelectedElement("CompPlain")) << "a disabled group still shows what is chosen";
+        EXPECT_TRUE(Selected("CompPlain")) << "a disabled group still shows what is chosen";
 
         ActionLog actions;
         ASSERT_NO_FATAL_FAILURE(Click("CompIcon"));
@@ -741,7 +614,7 @@ namespace BECore::Tests {
         EXPECT_EQ(actions.LastValue(), "icon"_intern);
 
         Draw();
-        EXPECT_FALSE(SelectedElement("CompIcon")) << "the group owns no choice: the click changed nothing";
+        EXPECT_FALSE(Selected("CompIcon")) << "the group owns no choice: the click changed nothing";
     }
 
     TEST_F(UISegmentedTest, ADisabledComposedSegmentTakesTheClickAndEmitsNothing) {
@@ -759,13 +632,13 @@ namespace BECore::Tests {
         SetVar("inner", "plain");
         Draw();
         EXPECT_TRUE(Selected("FormsButton"));
-        EXPECT_FALSE(SelectedElement("FormsComposed"));
-        EXPECT_EQ(Element("FormsCaption").GetComponent<UITextComponent>()->text, "Form") << "the label is no segment";
+        EXPECT_FALSE(Selected("FormsComposed"));
+        EXPECT_EQ(Require(Element("FormsCaption").GetComponent<UITextComponent>()).text, "Form") << "the label is no segment";
 
         SetVar("comp", "icon");
         Draw();
         EXPECT_FALSE(Selected("FormsButton"));
-        EXPECT_TRUE(SelectedElement("FormsComposed"));
+        EXPECT_TRUE(Selected("FormsComposed"));
 
         ActionLog actions;
         ASSERT_NO_FATAL_FAILURE(Click("FormsComposed"));
@@ -781,16 +654,20 @@ namespace BECore::Tests {
         SetVar("comp", "plain");
         SetVar("inner", "plain");
         Draw();
-        EXPECT_TRUE(SelectedElement("FormsInnerOne")) << "its variable is `inner`";
-        EXPECT_FALSE(SelectedElement("FormsInner")) << "a group is no segment of the outer one";
+        EXPECT_TRUE(Selected("FormsInnerOne")) << "its variable is `inner`";
+        EXPECT_FALSE(Selected("FormsInner")) << "a group is no segment of the outer one";
 
         SetVar("inner", "other");
         Get<UISegmented>("Forms").disabled = true;
         Draw();
-        EXPECT_FALSE(SelectedElement("FormsInnerOne"));
+        EXPECT_FALSE(Selected("FormsInnerOne"));
         EXPECT_FALSE(Element("FormsInnerOne").groupDisabled) << "the outer flag reaches its own segments only";
         EXPECT_TRUE(Element("FormsButton").groupDisabled);
         EXPECT_TRUE(Element("FormsComposed").groupDisabled);
     }
+
+    static_assert(std::is_base_of_v<UIStack, UISegmented>);
+
+    TEST_F(UISegmentedTest, CompileTimeChecks) {}
 
 }  // namespace BECore::Tests

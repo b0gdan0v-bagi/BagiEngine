@@ -24,9 +24,14 @@
 #include <BECore/UI/UIVars.h>
 #include <BECore/UIComponentTest.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/LogRecorder.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/TextTestSupport.h>
+#include <Common/UICanvasRoundTrip.h>
+#include <Common/UIInputEvents.h>
+#include <Common/UITestSupport.h>
 #include <Common/UITreeCompare.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
@@ -109,142 +114,37 @@ namespace BECore::Tests {
 
         const Color kButtonColor{40, 90, 60, 255};
 
-        SDL_MouseButtonEvent Button(float x, float y, bool down, uint8_t button = SDL_BUTTON_LEFT) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = button;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        SDL_MouseMotionEvent Motion(float x, float y, SDL_MouseButtonFlags buttonsHeld = 0) {
-            SDL_MouseMotionEvent event{};
-            event.type = SDL_EVENT_MOUSE_MOTION;
-            event.x = x;
-            event.y = y;
-            event.state = buttonsHeld;
-            return event;
-        }
-
-        /// Counts the actions the buttons emit, by name
-        class ActionRecorder : public SubscriptionHolder {
-        public:
-            ActionRecorder() {
-                Subscribe<InputEvents::ActionEvent, &ActionRecorder::OnAction>(this);
-            }
-
-            int Count(const char* action) const {
-                return static_cast<int>(std::count(_actions.begin(), _actions.end(), PoolString::Intern(action)));
-            }
-            size_t Total() const {
-                return _actions.size();
-            }
-            /// The value of the last action, empty when there was none
-            PoolString LastValue() const {
-                return _values.empty() ? PoolString{} : _values.back();
-            }
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                _actions.push_back(event.action);
-                _values.push_back(event.value);
-            }
-
-            Vector<PoolString> _actions;
-            Vector<PoolString> _values;
-        };
-
-        String ElementToXml(const UIElement& element) {
-            XmlSerializer serializer;
-            EXPECT_TRUE(serializer.BeginObject("element"));
-            element.Serialize(serializer);
-            serializer.EndObject();
-            return serializer.SaveToString();
-        }
-
-        bool Near(const Rect& a, const Rect& b, float tolerance = 1e-2f) {
-            return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
-        }
-
         Vector<uint8_t> GreyPixels(uint32_t width, uint32_t height) {
             return Vector<uint8_t>(static_cast<size_t>(width) * height * 4, 128);
         }
 
     }  // namespace
 
-    class UIControlsTest : public ::testing::Test {
+    class UIControlsTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kControlsXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-
-            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            UISceneFixture::SetUp();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kControlsXml));
             ASSERT_TRUE(_canvas);
-        }
-
-        void TearDown() override {
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetUIStrings().Clear();
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
-        }
-
-        UIElement& El(const char* name) const {
-            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
-            return *element;
         }
 
         /// The text component of the element called @p name
         UITextComponent& Text(const char* name) const {
             UITextComponent* text = El(name).GetComponent<UITextComponent>();
             EXPECT_NE(text, nullptr) << name << " has no text component";
-            return *text;
+            return Require(text);
         }
 
         UIInputClicker& Clicker(const char* name) const {
             UIInputClicker* clicker = El(name).GetComponent<UIInputClicker>();
             EXPECT_NE(clicker, nullptr) << name << " has no clicker";
-            return *clicker;
-        }
-
-        template <typename T>
-        T& Get(const char* name) const {
-            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
-            T* typed = element ? element->Cast<T>() : nullptr;
-            EXPECT_NE(typed, nullptr) << name << " is not the expected control";
-            return *typed;
+            return Require(clicker);
         }
 
         /// The color of the filled rect that was drawn exactly on the element's rect, in the last draw
         Optional<Color> FillOf(const UIElement& element) const {
             for (const DrawCall& call : _renderer->calls) {
-                if (call.kind == DrawKind::Rect && Near(call.rect, element.rect)) {
+                if (call.kind == DrawKind::Rect && NearRect(call.rect, element.rect)) {
                     return call.color;
                 }
             }
@@ -264,6 +164,16 @@ namespace BECore::Tests {
             return glyphs;
         }
 
+        /// Draws the canvas and counts the validator's issues of @p kind; a text is measured by the draw, so the text checks need it
+        size_t CountIssues(UILayoutIssueKind kind) {
+            Draw();
+            size_t count = 0;
+            for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
+                count += issue.kind == kind ? 1u : 0u;
+            }
+            return count;
+        }
+
         Rect Center(const UIElement& element) const {
             return {element.rect.x + element.rect.w * 0.5f, element.rect.y + element.rect.h * 0.5f, 0.0f, 0.0f};
         }
@@ -278,10 +188,6 @@ namespace BECore::Tests {
         void MoveTo(float x, float y, SDL_MouseButtonFlags held = 0) {
             CoreManager::GetUIInput().DispatchMouseMotion(Motion(x, y, held));
         }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
     };
 
     // ---- from a file ------------------------------------------------------------------------------------------------------
@@ -352,7 +258,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Get<UIDropdown>("Pick").bind, "pickVar"_intern);
         EXPECT_EQ(Get<UIDropdown>("Pick").action, "UIControlsTestPick"_intern);
         ASSERT_NE(Get<UIDropdown>("Pick").GetComponent<UITextComponent>(), nullptr);
-        EXPECT_EQ(Get<UIDropdown>("Pick").GetComponent<UITextComponent>()->text, "Pick one");
+        EXPECT_EQ(Require(Get<UIDropdown>("Pick").GetComponent<UITextComponent>()).text, "Pick one");
         EXPECT_FLOAT_EQ(Get<UIDropdown>("Pick").optionHeight, 48.0f);
         EXPECT_EQ(Get<UIDropdown>("Pick").arrowColor.g, 2);
         EXPECT_EQ(Get<UIDropdown>("Pick").arrowColor.a, 255);
@@ -363,20 +269,9 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, TheControlsSaveAndLoadBack) {
-        XmlSerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        _canvas->Serialize(serializer);
-        serializer.EndObject();
-        const String xml = serializer.SaveToString();
-
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        EXPECT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
+        String xml;
+        const auto loaded = XmlRoundTrip(*_canvas, &xml);
+        ASSERT_TRUE(loaded);
 
         ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
         for (size_t i = 0; i < loaded->_elements.size(); ++i) {
@@ -548,20 +443,11 @@ namespace BECore::Tests {
 
                 auto canvas = New<UICanvasComponent>();
                 canvas->_elements.push_back(original);
-                XmlSerializer serializer;
-                ASSERT_TRUE(serializer.BeginObject("component"));
-                canvas->Serialize(serializer);
-                serializer.EndObject();
-                const String xml = serializer.SaveToString();
+                String xml;
+                const auto loaded = XmlRoundTrip(*canvas, &xml);
+                ASSERT_TRUE(loaded) << type;
                 EXPECT_EQ(xml.find("@tok") != String::npos, tokens) << type << ": " << xml.c_str();
 
-                XmlDeserializer deserializer;
-                ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
-                auto loaded = New<UICanvasComponent>();
-                ASSERT_TRUE(deserializer.BeginObject("component"));
-                loaded->Deserialize(deserializer);
-                deserializer.EndObject();
-                ASSERT_FALSE(deserializer.HasErrors()) << type;
                 ASSERT_EQ(loaded->_elements.size(), 1u) << type;
 
                 EXPECT_TRUE(original->style == loaded->_elements[0]->style) << type << ": the style changed on the way";
@@ -832,12 +718,13 @@ namespace BECore::Tests {
         text.font = PoolString::Intern(kTestRegularPath);
         text.fontFamily = "Test"_intern;
         text.fontWeight = 700;
-        const WarningCounter warnings("font family");
+        const LogRecorder warnings;
 
         EXPECT_EQ(text.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
         text.fontFamily = "Nope"_intern;  // not looked at either: no warning
         EXPECT_EQ(text.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
-        EXPECT_EQ(warnings.Count(), 0u);
+        LogEvent::Flush();
+        EXPECT_EQ(warnings.Count(LogLevel::Warning, {"font family"}), 0u);
     }
 
     TEST_F(UIControlsTest, TheValidatorMeasuresWithTheFaceOfTheFamilyAndTheWeight) {
@@ -851,14 +738,8 @@ namespace BECore::Tests {
         text.overflow = TextOverflow::Clip;
         title.style.rect.height = UILength::Px(40.0f);
         _canvas->Invalidate();
-        Draw();
 
-        size_t count = 0;
-        for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
-            count += issue.kind == UILayoutIssueKind::TextDoesNotFit ? 1u : 0u;
-        }
-
-        EXPECT_EQ(count, 1u);
+        EXPECT_EQ(CountIssues(UILayoutIssueKind::TextDoesNotFit), 1u);
         EXPECT_FALSE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
         EXPECT_EQ(text.GetResolvedFontPath(), PoolString::Intern(kTestBoldPath));  // the face the check measured with
         text.text = "Short";
@@ -887,12 +768,7 @@ namespace BECore::Tests {
         title.style.rect.width = UILength::Px(box);
         const auto textIssues = [this]() {
             _canvas->Invalidate();
-            Draw();
-            size_t count = 0;
-            for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
-                count += issue.kind == UILayoutIssueKind::TextDoesNotFit ? 1u : 0u;
-            }
-            return count;
+            return CountIssues(UILayoutIssueKind::TextDoesNotFit);
         };
 
         text.fontWeight = 400;
@@ -971,7 +847,7 @@ namespace BECore::Tests {
         for (const char* bad : {"textOutline=\"2\"", "textOutline=\"-1,#000\"", "textShadow=\"1,#000000\"", "textShadow=\"a,b,#000000\""}) {
             auto element = load(bad, errors);
             EXPECT_TRUE(errors) << bad;
-            EXPECT_TRUE(element->GetComponent<UITextComponent>()->textEffects == UITextEffects{}) << bad << ": a malformed value leaves the default";
+            EXPECT_TRUE(Require(element->GetComponent<UITextComponent>()).textEffects == UITextEffects{}) << bad << ": a malformed value leaves the default";
         }
     }
 
@@ -1093,14 +969,7 @@ namespace BECore::Tests {
         text.overflow = TextOverflow::Clip;
         title.style.rect.height = UILength::Px(40.0f);  // a line of 24 units is a little over 30 high, so the fixture's 30 would not hold even "Short"
         _canvas->Invalidate();
-        const auto textIssues = [this]() {
-            Draw();
-            size_t count = 0;
-            for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
-                count += issue.kind == UILayoutIssueKind::TextDoesNotFit ? 1u : 0u;
-            }
-            return count;
-        };
+        const auto textIssues = [this]() { return CountIssues(UILayoutIssueKind::TextDoesNotFit); };
 
         CoreManager::GetUIVars().Set("line"_intern, "Short");
         EXPECT_EQ(textIssues(), 0u);
@@ -1129,7 +998,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, AHiddenButtonTakesNoClicks) {
-        ActionRecorder actions;
+        ActionLog actions;
         Draw();
         auto& ok = El("Ok");
         const Rect c = Center(ok);
@@ -1166,9 +1035,9 @@ namespace BECore::Tests {
         Draw();
 
         ASSERT_FALSE(_renderer->calls.empty());
-        EXPECT_EQ(_renderer->calls[0].kind, DrawKind::Rect);  // the plate is the first thing drawn
-        EXPECT_EQ(_renderer->calls[0].color.a, 200);
-        EXPECT_TRUE(Near(_renderer->calls[0].rect, Get<UIPanel>("Plate").rect));
+        EXPECT_EQ(At(_renderer->calls, 0).kind, DrawKind::Rect);  // the plate is the first thing drawn
+        EXPECT_EQ(At(_renderer->calls, 0).color.a, 200);
+        EXPECT_TRUE(NearRect(At(_renderer->calls, 0).rect, Get<UIPanel>("Plate").rect));
 
         const auto glyphs = GlyphsIn(El("Title"));
         EXPECT_EQ(glyphs.size(), 5u) << "one quad per glyph of 'Score'";
@@ -1268,7 +1137,7 @@ namespace BECore::Tests {
         ASSERT_FALSE(GlyphsIn(title).empty());
         bool clipped = false;
         for (const DrawCall& call : _renderer->calls) {
-            if (call.kind == DrawKind::Texture && call.clip && Near(*call.clip, title.rect)) {
+            if (call.kind == DrawKind::Texture && call.clip && NearRect(*call.clip, title.rect)) {
                 clipped = true;
             }
         }
@@ -1284,21 +1153,14 @@ namespace BECore::Tests {
         auto& text = Text("Title");
         text.text = "A text that is much too long for a label of this width";
         text.wrap = false;
-        const auto countTextIssues = [this]() {
-            Draw();
-            size_t count = 0;
-            for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
-                count += issue.kind == UILayoutIssueKind::TextDoesNotFit ? 1u : 0u;
-            }
-            return count;
-        };
+        constexpr UILayoutIssueKind kTextIssue = UILayoutIssueKind::TextDoesNotFit;
 
         text.overflow = TextOverflow::Clip;
-        EXPECT_EQ(countTextIssues(), 1u);
+        EXPECT_EQ(CountIssues(kTextIssue), 1u);
         text.overflow = TextOverflow::Ellipsis;
-        EXPECT_EQ(countTextIssues(), 0u) << "a text that ends with an ellipsis is a decision, not a defect";
+        EXPECT_EQ(CountIssues(kTextIssue), 0u) << "a text that ends with an ellipsis is a decision, not a defect";
         text.overflow = TextOverflow::AutoFit;
-        EXPECT_EQ(countTextIssues(), 0u);
+        EXPECT_EQ(CountIssues(kTextIssue), 0u);
     }
 
     TEST_F(UIControlsTest, ANineSlicePanelDrawsNinePieces) {
@@ -1314,11 +1176,11 @@ namespace BECore::Tests {
             }
         }
         ASSERT_EQ(pieces.size(), 9u);
-        EXPECT_TRUE(Near(pieces[0].rect, {300, 100, 4, 4}));
-        EXPECT_TRUE(Near(pieces[4].rect, {304, 104, 92, 52}));
-        EXPECT_TRUE(Near(pieces[8].rect, {396, 156, 4, 4}));
+        EXPECT_TRUE(NearRect(pieces[0].rect, {300, 100, 4, 4}));
+        EXPECT_TRUE(NearRect(pieces[4].rect, {304, 104, 92, 52}));
+        EXPECT_TRUE(NearRect(pieces[8].rect, {396, 156, 4, 4}));
         ASSERT_TRUE(pieces[4].source.has_value());
-        EXPECT_TRUE(Near(*pieces[4].source, {4, 4, 8, 8}));
+        EXPECT_TRUE(NearRect(*pieces[4].source, {4, 4, 8, 8}));
     }
 
     TEST_F(UIControlsTest, APanelWithoutABorderStretchesTheWholeSprite) {
@@ -1330,11 +1192,11 @@ namespace BECore::Tests {
 
         size_t drawn = 0;
         for (const DrawCall& call : _renderer->calls) {
-            if (call.kind == DrawKind::Texture && Near(call.rect, frame.rect)) {
+            if (call.kind == DrawKind::Texture && NearRect(call.rect, frame.rect)) {
                 ++drawn;
                 EXPECT_EQ(call.color.g, 20);
                 ASSERT_TRUE(call.source.has_value());
-                EXPECT_TRUE(Near(*call.source, {0, 0, 16, 16}));
+                EXPECT_TRUE(NearRect(*call.source, {0, 0, 16, 16}));
             }
         }
         EXPECT_EQ(drawn, 1u);
@@ -1354,16 +1216,16 @@ namespace BECore::Tests {
             }
         }
         ASSERT_NE(fitted, nullptr);
-        EXPECT_TRUE(Near(fitted->rect, {300, 26, 64, 32})) << "as wide as the rect, half as tall, centered";
+        EXPECT_TRUE(NearRect(fitted->rect, {300, 26, 64, 32})) << "as wide as the rect, half as tall, centered";
         EXPECT_EQ(fitted->color.a, 40);
         ASSERT_TRUE(fitted->source.has_value());
-        EXPECT_TRUE(Near(*fitted->source, {0, 0, 32, 16})) << "the whole texture when no rect is known";
+        EXPECT_TRUE(NearRect(*fitted->source, {0, 0, 32, 16})) << "the whole texture when no rect is known";
 
         icon.stretch = true;
         Draw();
         for (const DrawCall& call : _renderer->calls) {
             if (call.kind == DrawKind::Texture && call.rect.x >= 299.0f && call.rect.x <= 365.0f && call.rect.y < 80.0f) {
-                EXPECT_TRUE(Near(call.rect, {300, 10, 64, 64}));
+                EXPECT_TRUE(NearRect(call.rect, {300, 10, 64, 64}));
             }
         }
     }
@@ -1375,7 +1237,7 @@ namespace BECore::Tests {
 
         EXPECT_EQ(FillOf(icon).value_or(Color{}).b, 3);
         for (const DrawCall& call : _renderer->calls) {
-            EXPECT_FALSE(call.kind == DrawKind::Texture && Near(call.rect, icon.rect));
+            EXPECT_FALSE(call.kind == DrawKind::Texture && NearRect(call.rect, icon.rect));
         }
     }
 
@@ -1385,33 +1247,33 @@ namespace BECore::Tests {
         Draw();
         auto& ok = El("Ok");
         const Rect c = Center(ok);
-        EXPECT_EQ(FillOf(ok)->r, kButtonColor.r);
+        EXPECT_EQ(Require(FillOf(ok)).r, kButtonColor.r);
         EXPECT_FALSE(ok.hovered);
 
         MoveTo(c.x, c.y);
         Draw();
         EXPECT_TRUE(ok.hovered);
-        EXPECT_GT(FillOf(ok)->r, kButtonColor.r) << "lighter under the pointer";
+        EXPECT_GT(Require(FillOf(ok)).r, kButtonColor.r) << "lighter under the pointer";
 
         ASSERT_TRUE(Press(ok));
         Draw();
         EXPECT_TRUE(ok.pressed);
-        EXPECT_LT(FillOf(ok)->r, kButtonColor.r) << "darker while held";
+        EXPECT_LT(Require(FillOf(ok)).r, kButtonColor.r) << "darker while held";
 
         MoveTo(700.0f, 500.0f, SDL_BUTTON_LMASK);  // dragging off the button
         Draw();
         EXPECT_FALSE(ok.hovered);
         EXPECT_TRUE(ok.pressed);
-        EXPECT_EQ(FillOf(ok)->r, kButtonColor.r) << "a press that moved off is not shown as pressed";
+        EXPECT_EQ(Require(FillOf(ok)).r, kButtonColor.r) << "a press that moved off is not shown as pressed";
 
         Release(700.0f, 500.0f);
         Draw();
         EXPECT_FALSE(ok.pressed);
-        EXPECT_EQ(FillOf(ok)->r, kButtonColor.r);
+        EXPECT_EQ(Require(FillOf(ok)).r, kButtonColor.r);
     }
 
     TEST_F(UIControlsTest, AClickIsAPressAndItsReleaseOnTheButton) {
-        ActionRecorder actions;
+        ActionLog actions;
         Draw();
         auto& ok = El("Ok");
         const Rect c = Center(ok);
@@ -1423,7 +1285,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, ReleasingElsewhereCancelsTheClick) {
-        ActionRecorder actions;
+        ActionLog actions;
         Draw();
         auto& ok = El("Ok");
 
@@ -1438,7 +1300,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, OnlyTheLeftButtonClicks) {
-        ActionRecorder actions;
+        ActionLog actions;
         Draw();
         const Rect c = Center(El("Ok"));
 
@@ -1449,7 +1311,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, ADisabledButtonTakesTheClickAndDoesNothing) {
-        ActionRecorder actions;
+        ActionLog actions;
         Draw();
         auto& off = El("Off");
         const Rect c = Center(off);
@@ -1458,10 +1320,10 @@ namespace BECore::Tests {
         EXPECT_TRUE(Release(c.x, c.y));
         EXPECT_EQ(actions.Total(), 0u);
 
-        EXPECT_EQ(FillOf(off)->a, kButtonColor.a / 2) << "half transparent unless disabledColor says otherwise";
+        EXPECT_EQ(Require(FillOf(off)).a, WithAlpha(kButtonColor, kDisabledAlpha).a) << "half transparent unless disabledColor says otherwise";
         off.disabledColor = Color{50, 50, 50, 255};
         Draw();
-        EXPECT_EQ(FillOf(off)->r, 50);
+        EXPECT_EQ(Require(FillOf(off)).r, 50);
     }
 
     TEST_F(UIControlsTest, ExplicitStateColorsWin) {
@@ -1473,10 +1335,10 @@ namespace BECore::Tests {
 
         MoveTo(c.x, c.y);
         Draw();
-        EXPECT_EQ(FillOf(ok)->r, 1);
+        EXPECT_EQ(Require(FillOf(ok)).r, 1);
         Press(ok);
         Draw();
-        EXPECT_EQ(FillOf(ok)->r, 4);
+        EXPECT_EQ(Require(FillOf(ok)).r, 4);
     }
 
     TEST_F(UIControlsTest, AGameDragDoesNotLightTheButton) {
@@ -1507,7 +1369,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, TheClickOfAButtonCarriesItsValue) {
-        ActionRecorder actions;
+        ActionLog actions;
         Draw();
         auto& ok = El("Ok");
         const Rect c = Center(ok);
@@ -1549,7 +1411,7 @@ namespace BECore::Tests {
         const auto barDrawn = [&] {
             const Rect bar{ok.rect.x, ok.rect.y + ok.rect.h - UIStateLook::kSelectedBarHeight, ok.rect.w, UIStateLook::kSelectedBarHeight};  // the rect is laid out by the first draw
             for (const DrawCall& call : _renderer->calls) {
-                if (call.kind == DrawKind::Rect && Near(call.rect, bar)) {
+                if (call.kind == DrawKind::Rect && NearRect(call.rect, bar)) {
                     return Optional<Color>(call.color);
                 }
             }
@@ -1558,12 +1420,12 @@ namespace BECore::Tests {
 
         Draw();
         EXPECT_FALSE(barDrawn()) << "no bar on a button that is not selected";
-        const Color plain = *FillOf(ok);
+        const Color plain = Require(FillOf(ok));
         const Color hovered = [&] {
             const Rect c = Center(ok);
             MoveTo(c.x, c.y);
             Draw();
-            const Color result = *FillOf(ok);
+            const Color result = Require(FillOf(ok));
             MoveTo(700.0f, 500.0f);
             return result;
         }();
@@ -1571,8 +1433,8 @@ namespace BECore::Tests {
         ok.selected = true;
         Draw();
         ASSERT_TRUE(FillOf(ok));
-        EXPECT_GT(FillOf(ok)->r, hovered.r) << "the derived selected fill is lighter than the hover shift";
-        EXPECT_GT(FillOf(ok)->r, plain.r);
+        EXPECT_GT(Require(FillOf(ok)).r, hovered.r) << "the derived selected fill is lighter than the hover shift";
+        EXPECT_GT(Require(FillOf(ok)).r, plain.r);
         ASSERT_TRUE(barDrawn());
         EXPECT_EQ(barDrawn()->r, Text("Ok").textColor.r);
         EXPECT_EQ(barDrawn()->a, Text("Ok").textColor.a);
@@ -1580,7 +1442,7 @@ namespace BECore::Tests {
         ok.selected = false;
         Draw();
         EXPECT_FALSE(barDrawn());
-        EXPECT_EQ(FillOf(ok)->r, plain.r);
+        EXPECT_EQ(Require(FillOf(ok)).r, plain.r);
     }
 
     TEST_F(UIControlsTest, ASelectedColorWinsOverTheDerivedOne) {
@@ -1588,8 +1450,8 @@ namespace BECore::Tests {
         ok.selected = true;
         ok.selectedColor = Color{7, 8, 9, 255};
         Draw();
-        EXPECT_EQ(FillOf(ok)->r, 7);
-        EXPECT_EQ(FillOf(ok)->b, 9);
+        EXPECT_EQ(Require(FillOf(ok)).r, 7);
+        EXPECT_EQ(Require(FillOf(ok)).b, 9);
     }
 
     TEST_F(UIControlsTest, HoverAndPressShiftFromTheSelectedFill) {
@@ -1601,19 +1463,19 @@ namespace BECore::Tests {
 
         MoveTo(c.x, c.y);
         Draw();
-        EXPECT_GT(FillOf(ok)->r, 100) << "lighter than the selected fill under the pointer";
+        EXPECT_GT(Require(FillOf(ok)).r, 100) << "lighter than the selected fill under the pointer";
 
         ASSERT_TRUE(Press(ok));
         Draw();
-        EXPECT_LT(FillOf(ok)->r, 100) << "darker than the selected fill while held";
+        EXPECT_LT(Require(FillOf(ok)).r, 100) << "darker than the selected fill while held";
 
         ok.hoverColor = Color{1, 2, 3, 255};
         ok.pressedColor = Color{4, 5, 6, 255};
         Draw();
-        EXPECT_EQ(FillOf(ok)->r, 4) << "an explicit pressed color wins";
+        EXPECT_EQ(Require(FillOf(ok)).r, 4) << "an explicit pressed color wins";
         Release(c.x, c.y);
         Draw();
-        EXPECT_EQ(FillOf(ok)->r, 1) << "an explicit hover color wins";
+        EXPECT_EQ(Require(FillOf(ok)).r, 1) << "an explicit hover color wins";
     }
 
     TEST_F(UIControlsTest, DisabledWinsOverSelected) {
@@ -1621,16 +1483,16 @@ namespace BECore::Tests {
         off.selected = true;
         off.selectedColor = Color{200, 200, 200, 255};
         Draw();
-        EXPECT_EQ(FillOf(off)->r, kButtonColor.r) << "the grey of a disabled button, not the selected fill";
-        EXPECT_EQ(FillOf(off)->a, kButtonColor.a / 2);
+        EXPECT_EQ(Require(FillOf(off)).r, kButtonColor.r) << "the grey of a disabled button, not the selected fill";
+        EXPECT_EQ(Require(FillOf(off)).a, WithAlpha(kButtonColor, kDisabledAlpha).a);
     }
 
     TEST_F(UIControlsTest, AGroupDisabledButtonIsGreyAndSwallowsTheClick) {
-        ActionRecorder actions;
+        ActionLog actions;
         auto& ok = El("Ok");
         ok.groupDisabled = true;
         Draw();
-        EXPECT_EQ(FillOf(ok)->a, kButtonColor.a / 2);
+        EXPECT_EQ(Require(FillOf(ok)).a, WithAlpha(kButtonColor, kDisabledAlpha).a);
 
         const Rect c = Center(ok);
         EXPECT_TRUE(Press(ok)) << "the click does not fall through to what is below";
@@ -1639,7 +1501,7 @@ namespace BECore::Tests {
 
         ok.groupDisabled = false;
         Draw();
-        EXPECT_EQ(FillOf(ok)->a, kButtonColor.a);
+        EXPECT_EQ(Require(FillOf(ok)).a, kButtonColor.a);
         ASSERT_TRUE(Press(ok));
         Release(c.x, c.y);
         EXPECT_EQ(actions.Count("UIControlsTestOk"), 1);

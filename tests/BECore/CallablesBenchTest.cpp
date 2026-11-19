@@ -1,14 +1,7 @@
 #include <BECore/Profiler/Alloc/AllocTracker.h>
-#include <BECore/Utils/FixedFunction.h>
-#include <BECore/Utils/FunctionRef.h>
-#include <BECore/Utils/MoveOnlyFunction.h>
-#include <EASTL/functional.h>
-#include <atomic>
-#include <charconv>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -20,9 +13,10 @@ namespace BECore::Tests {
         constexpr uint64_t kSmokeIterations = 4000;
         constexpr uint64_t kSeed = 3;
         constexpr size_t kWordBytes = sizeof(uint64_t);
-        /// The inline bytes `eastl::function` keeps (one pointer and a word more), and the buffer of the default MoveOnlyFunction
+        /// The inline bytes `eastl::function` keeps (one pointer and a word more)
         constexpr size_t kSmallCapture = 16;
-        constexpr size_t kLargeCapture = 48;
+        /// The buffer of the default MoveOnlyFunction: the largest capture it keeps without allocating
+        constexpr size_t kLargeCapture = kDefaultFunctionInlineBytes;
         constexpr size_t kElements = 8;
         constexpr double kNanosPerSecond = 1e9;
 

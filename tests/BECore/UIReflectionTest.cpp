@@ -9,6 +9,7 @@
 #include <BECore/UI/UIValueText.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/UICanvasRoundTrip.h>
 #include <Common/UITreeCompare.h>
 #include <gtest/gtest.h>
 
@@ -116,14 +117,17 @@ namespace BECore::Tests {
             return serializer.SaveToString();
         }
 
-        IntrusivePtr<UICanvasComponent> FromXml(const String& xml, bool expectClean = true) {
+        /// The canvas read from @p xml; without @p hadErrors the read must be clean, with it the flag of the deserializer is handed back
+        IntrusivePtr<UICanvasComponent> FromXml(const String& xml, bool* hadErrors = nullptr) {
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(StringView(xml)));
             auto canvas = New<UICanvasComponent>();
             EXPECT_TRUE(deserializer.BeginObject("component"));
             canvas->Deserialize(deserializer);
             deserializer.EndObject();
-            if (expectClean) {
+            if (hadErrors) {
+                *hadErrors = deserializer.HasErrors();
+            } else {
                 EXPECT_FALSE(deserializer.HasErrors());
             }
             canvas->Initialize();
@@ -260,24 +264,13 @@ namespace BECore::Tests {
     TEST(UIReflectionTest, ABinaryStreamCarriesTheSameTree) {
         const auto canvas = MakeCanvas();
 
-        BinarySerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        canvas->Serialize(serializer);
-        serializer.EndObject();
-
-        BinaryDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromBuffer(serializer.GetData().data(), serializer.GetData().size()));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        EXPECT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
+        const auto loaded = BinaryRoundTrip(*canvas);
+        ASSERT_TRUE(loaded);
 
         ExpectSameCanvas(*canvas, *loaded);
     }
 
-    TEST(UIReflectionTest, AnOffsetIsALengthInUnitsOrPercentAndAPlainNumberSavesAsBefore) {
+    TEST(UIReflectionTest, AnOffsetIsALengthInUnitsOrPercentAndAPlainNumberSavesAsAPlainNumber) {
         const String xml = "<root><component><elements><element type=\"UIElement\" name=\"A\" x=\"12\" y=\"5%\"/></elements></component></root>";
         const auto canvas = FromXml(xml);
 
@@ -315,10 +308,10 @@ namespace BECore::Tests {
         EXPECT_EQ(ToXml(*again, true), saved);
 
         // A file that never names them gets none of them back: its second save is its first
-        const String legacy = ToXml(*MakeCanvas(), true);
-        EXPECT_EQ(legacy.find("anchorMin"), String::npos);
-        EXPECT_EQ(legacy.find("anchorMax"), String::npos);
-        EXPECT_EQ(legacy.find("pivot"), String::npos);
+        const String unnamed = ToXml(*MakeCanvas(), true);
+        EXPECT_EQ(unnamed.find("anchorMin"), String::npos);
+        EXPECT_EQ(unnamed.find("anchorMax"), String::npos);
+        EXPECT_EQ(unnamed.find("pivot"), String::npos);
         // A value equal to the shorthand's is still a choice of the author: a set field is written, even a zero one
         auto zero = New<UICanvasComponent>();
         auto element = MakeElement("Zero");
@@ -329,7 +322,7 @@ namespace BECore::Tests {
 
     TEST(UIReflectionTest, AMalformedEdgeAnchorIsReportedAndLeavesTheOtherFieldsAlone) {
         for (const char* attribute : {"anchorMin=\"1\"", "anchorMax=\"a,b\"", "pivot=\"nan,0\"", "anchorMin=\"1,2,3\""}) {
-            const String xml = String("<root><component><elements><element type=\"UIElement\" name=\"A\" x=\"5\" ") + attribute + "/></elements></component></root>";
+            const String xml = Format("<root><component><elements><element type=\"UIElement\" name=\"A\" x=\"5\" {}/></elements></component></root>", attribute);
             XmlDeserializer deserializer;
             ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
             auto canvas = New<UICanvasComponent>();
@@ -348,22 +341,16 @@ namespace BECore::Tests {
     TEST(UIReflectionTest, AMalformedValueIsReportedAndLeavesTheDefault) {
         const String xml = "<root><component><elements><element type=\"UIElement\" name=\"A\" width=\"wide\" color=\"1,2\" margin=\"1,2\" x=\"5\"/></elements>"
                            "<variants><variant when=\"orientation:sideways\"/></variants></component></root>";
-        const auto canvas = FromXml(xml, false);
+        bool hadErrors = false;
+        const auto canvas = FromXml(xml, &hadErrors);
 
+        EXPECT_TRUE(hadErrors);
         ASSERT_EQ(canvas->_elements.size(), 1u);
         const UIElement& element = *canvas->_elements[0];
         EXPECT_EQ(element.style.rect.width, UILength{});
         EXPECT_EQ(element.color.a, 0);
         EXPECT_EQ(element.style.rect.margin, UIEdges{});
         EXPECT_FLOAT_EQ(element.style.rect.x.value, 5.0f);  // the well-formed attributes still load
-
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
-        auto again = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        again->Deserialize(deserializer);
-        deserializer.EndObject();
-        EXPECT_TRUE(deserializer.HasErrors());
     }
 
     TEST(UIReflectionTest, AnUnknownElementTypeIsReported) {
@@ -494,10 +481,10 @@ namespace BECore::Tests {
         EXPECT_FALSE(FromXml(ToXml(*canvas, false))->_extendToOutput);
     }
 
-    TEST(UIReflectionTest, CompileTimeChecks) {
-        static_assert(std::is_base_of_v<Color, UIColor>);
-        static_assert(std::is_convertible_v<Color, UIColor>);
-        static_assert(std::is_same_v<decltype(UIElement::children)::value_type, IntrusivePtr<UIElement>>);
-    }
+    static_assert(std::is_base_of_v<Color, UIColor>);
+    static_assert(std::is_convertible_v<Color, UIColor>);
+    static_assert(std::is_same_v<decltype(UIElement::children)::value_type, IntrusivePtr<UIElement>>);
+
+    TEST(UIReflectionTest, CompileTimeChecks) {}
 
 }  // namespace BECore::Tests

@@ -9,8 +9,12 @@
 #include <BECore/SceneEventsTest.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/LogRecorder.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
+#include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Events/SceneEvents.h>
 #include <entt/entt.hpp>
 #include <gtest/gtest.h>
@@ -45,31 +49,7 @@ namespace BECore::Tests {
 
         constexpr const char* kBoxRef = "nodes/Box";
 
-        void WriteFile(const std::filesystem::path& path, const String& text) {
-            std::filesystem::create_directories(path.parent_path());
-            std::ofstream(path) << text;
-        }
-
-        /// A scene "Main" with the given nodes; two plain nodes, A and C, are what the instances are placed between
-        String SceneText(const String& nodesXml) {
-            return "<SceneManager><scenes><scene type=\"Scene\" name=\"Main\" viewWidth=\"800\" viewHeight=\"600\"><nodes>" + nodesXml + "</nodes></scene></scenes></SceneManager>";
-        }
-
         constexpr const char* kPlainNodes = R"(<node name="A"/><node name="C"/>)";
-
-        /// What a component writes: its type and its serialization, one text per component of the node
-        Vector<String> ComponentTexts(const SceneNode& node) {
-            Vector<String> texts;
-            for (const auto& component : node.GetComponents()) {
-                XmlSerializer serializer;
-                component->Serialize(serializer);
-                std::ostringstream out;
-                out << component->GetTypeMeta().typeName.data() << ":";
-                serializer.GetRootNode().print(out, "", pugi::format_raw);
-                texts.push_back(FromStdString(out.str()));
-            }
-            return texts;
-        }
 
         Vector<String> ChildNames(const SceneNode& parent) {
             Vector<String> names;
@@ -78,29 +58,6 @@ namespace BECore::Tests {
             }
             return names;
         }
-
-        /// Counts the errors that LogEvent::Flush() delivers while it lives and that have @p part in the text
-        class ErrorCounter : public SubscriptionHolder {
-        public:
-            explicit ErrorCounter(String part) : _part(eastl::move(part)) {
-                Subscribe<LogEvent, &ErrorCounter::OnLog>(this);
-            }
-
-            [[nodiscard]] size_t Count() const {
-                LogEvent::Flush();
-                return _count;
-            }
-
-        private:
-            void OnLog(const LogEvent& event) {
-                if (event.level == LogLevel::Error && event.message.find(StringView(_part)) != StringView::npos) {
-                    ++_count;
-                }
-            }
-
-            String _part;
-            size_t _count = 0;
-        };
 
     }  // namespace
 
@@ -133,7 +90,7 @@ namespace BECore::Tests {
             _manager->Initialize();
             Scene* scene = _manager->GetSceneByName("Main"_intern);
             EXPECT_NE(scene, nullptr);
-            return *scene;
+            return Require(scene);
         }
 
         /// A `<node ref>` element of @p text, alive as long as the fixture
@@ -145,7 +102,7 @@ namespace BECore::Tests {
 
         /// The scene Main with A and C, and the instance of @p reference between them, loaded from a file the plain way (the expected one)
         Scene& LoadExpected(const String& reference) {
-            return Load(SceneText(String("<node name=\"A\"/>") + reference + "<node name=\"C\"/>"));
+            return Load(SceneConfigText(Format("<node name=\"A\"/>{}<node name=\"C\"/>", reference), kMainSceneView800x600));
         }
 
         std::filesystem::path _dir;
@@ -156,7 +113,7 @@ namespace BECore::Tests {
     };
 
     TEST_F(SceneInstantiateTest, APlainInstanceHasTheValuesOfItsFile) {
-        Scene& scene = Load(SceneText(kPlainNodes));
+        Scene& scene = Load(SceneConfigText(kPlainNodes, kMainSceneView800x600));
         const size_t before = scene.GetRootNode().GetChildren().size();
 
         const IntrusivePtr<SceneNode> node = scene.InstantiateNode(Ref(R"(<node ref="nodes/Box"/>)"), _loader);
@@ -182,12 +139,13 @@ namespace BECore::Tests {
 
     TEST_F(SceneInstantiateTest, AReferenceWithoutOverridesFromAString) {
         // The overload without a loader reads through the FileSystem of CoreManager, which has no such node file here: an error, not a node
-        Scene& scene = Load(SceneText(kPlainNodes));
-        const ErrorCounter errors("nodes/NoSuchNode");
+        Scene& scene = Load(SceneConfigText(kPlainNodes, kMainSceneView800x600));
+        const LogRecorder log;
 
         EXPECT_FALSE(scene.InstantiateNode("nodes/NoSuchNode"));
 
-        EXPECT_EQ(errors.Count(), 1u);
+        LogEvent::Flush();
+        EXPECT_EQ(log.Count(LogLevel::Error, {"nodes/NoSuchNode"}), 1u);
         EXPECT_EQ(ChildNames(scene.GetRootNode()), (Vector<String>{"A", "C"}));
     }
 
@@ -203,7 +161,7 @@ namespace BECore::Tests {
         const PoolString expectedSource = expectedNode.GetSourceRef();
         _manager.Reset();
 
-        Scene& scene = Load(SceneText(kPlainNodes));
+        Scene& scene = Load(SceneConfigText(kPlainNodes, kMainSceneView800x600));
         const IntrusivePtr<SceneNode> node = scene.InstantiateNode(Ref(reference), _loader, nullptr, 1);
 
         ASSERT_TRUE(node);
@@ -213,12 +171,12 @@ namespace BECore::Tests {
         EXPECT_EQ(node->GetSourceRef(), expectedSource);
         EXPECT_EQ(ComponentTexts(*node), expectedTexts);
         EXPECT_EQ(scene.GetDrawRank(*node), expectedRank);
-        EXPECT_EQ(node->GetComponent<TransformComponent>()->_x, 100.0f);
-        EXPECT_EQ(node->GetComponent<TransformComponent>()->_y, 2.0f);
+        EXPECT_EQ(Require(node->GetComponent<TransformComponent>())._x, 100.0f);
+        EXPECT_EQ(Require(node->GetComponent<TransformComponent>())._y, 2.0f);
     }
 
     TEST_F(SceneInstantiateTest, AnInstanceUnderAParentThatIsNotTheRoot) {
-        Scene& scene = Load(SceneText(kPlainNodes));
+        Scene& scene = Load(SceneConfigText(kPlainNodes, kMainSceneView800x600));
         SceneNode* parent = scene.GetRootNode().GetChildren()[1].Get();
         const IntrusivePtr<SceneNode> existing = parent->AddChild("Existing"_intern);
 
@@ -232,7 +190,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneInstantiateTest, TheIndexPicksThePlaceAmongTheChildren) {
-        Scene& scene = Load(SceneText(kPlainNodes));
+        Scene& scene = Load(SceneConfigText(kPlainNodes, kMainSceneView800x600));
         const pugi::xml_node first = Ref(R"(<node ref="nodes/Box" name="M"/>)");
 
         scene.InstantiateNode(first, _loader, nullptr, 1);
@@ -250,7 +208,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneInstantiateTest, TwoInstancesOfOneFileDoNotInfluenceEachOther) {
-        Scene& scene = Load(SceneText(kPlainNodes));
+        Scene& scene = Load(SceneConfigText(kPlainNodes, kMainSceneView800x600));
 
         const auto a = scene.InstantiateNode(Ref(R"(<node ref="nodes/Box" name="One"><components><component type="TransformComponent" x="50"/></components></node>)"), _loader);
         const auto b = scene.InstantiateNode(Ref(R"(<node ref="nodes/Box" name="Two" layer="9"/>)"), _loader);
@@ -259,14 +217,14 @@ namespace BECore::Tests {
         ASSERT_TRUE(b);
         EXPECT_NE(a->GetEntity(), b->GetEntity());
         EXPECT_NE(a->GetComponent<TransformComponent>().Get(), b->GetComponent<TransformComponent>().Get());
-        EXPECT_EQ(a->GetComponent<TransformComponent>()->_x, 50.0f);
-        EXPECT_EQ(b->GetComponent<TransformComponent>()->_x, 1.0f);
+        EXPECT_EQ(Require(a->GetComponent<TransformComponent>())._x, 50.0f);
+        EXPECT_EQ(Require(b->GetComponent<TransformComponent>())._x, 1.0f);
         EXPECT_EQ(a->GetLayer(), 2);
         EXPECT_EQ(b->GetLayer(), 9);
     }
 
     TEST_F(SceneInstantiateTest, TheDrawRankFollowsThePositionAndTheLayer) {
-        Scene& scene = Load(SceneText(kPlainNodes));
+        Scene& scene = Load(SceneConfigText(kPlainNodes, kMainSceneView800x600));
         const pugi::xml_node flat = Ref(R"(<node ref="nodes/Box" layer="0"/>)");
 
         const auto first = scene.InstantiateNode(flat, _loader, nullptr, 0);
@@ -288,7 +246,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneInstantiateTest, AComponentThatSubscribesInOnAttachedReceivesEvents) {
-        Scene& scene = Load(SceneText(kPlainNodes));
+        Scene& scene = Load(SceneConfigText(kPlainNodes, kMainSceneView800x600));
         _manager->SetActiveScene("Main"_intern);
 
         const auto node = scene.InstantiateNode(Ref(R"(<node ref="nodes/Box"/>)"), _loader);
@@ -303,7 +261,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneInstantiateTest, ANodeFileWithACanvasIsALiveCanvas) {
-        Scene& scene = Load(SceneText(kPlainNodes));
+        Scene& scene = Load(SceneConfigText(kPlainNodes, kMainSceneView800x600));
         const auto node = scene.InstantiateNode(Ref(R"(<node ref="nodes/Panel"/>)"), _loader);
 
         ASSERT_TRUE(node);
@@ -325,69 +283,74 @@ namespace BECore::Tests {
         const Vector<String> expectedTexts = ComponentTexts(*expected.GetRootNode().GetChildren()[1]);
         _manager.Reset();
 
-        Scene& scene = Load(SceneText(kPlainNodes));
+        Scene& scene = Load(SceneConfigText(kPlainNodes, kMainSceneView800x600));
         const auto node = scene.InstantiateNode(Ref(reference), _loader, nullptr, 1);
 
         ASSERT_TRUE(node);
-        EXPECT_EQ(node->GetComponent<UICanvasComponent>()->_elements.size(), 1u);
+        EXPECT_EQ(Require(node->GetComponent<UICanvasComponent>())._elements.size(), 1u);
         EXPECT_EQ(ComponentTexts(*node), expectedTexts);
     }
 
     TEST_F(SceneInstantiateTest, ABadReferenceChangesNothingAndLogsOnce) {
-        Scene& scene = Load(SceneText(kPlainNodes));
+        Scene& scene = Load(SceneConfigText(kPlainNodes, kMainSceneView800x600));
         const Vector<String> before = ChildNames(scene.GetRootNode());
-        const ErrorCounter errors("Scene 'Main'");
+        const LogRecorder log;
 
         EXPECT_FALSE(scene.InstantiateNode(Ref(R"(<node ref="../Box"/>)"), _loader));
         EXPECT_FALSE(scene.InstantiateNode(Ref(R"(<node ref="nodes/Missing"/>)"), _loader));
         EXPECT_FALSE(scene.InstantiateNode(Ref(R"(<node ref="nodes/Box"><components><component type="SpriteRendererComponent"/></components></node>)"), _loader));
         EXPECT_FALSE(scene.InstantiateNode(Ref(R"(<node ref="nodes/Box" color="red"/>)"), _loader));
 
-        EXPECT_EQ(errors.Count(), 4u);
+        LogEvent::Flush();
+        EXPECT_EQ(log.Count(LogLevel::Error, {"Scene 'Main'"}), 4u);
         EXPECT_EQ(ChildNames(scene.GetRootNode()), before);
     }
 
     TEST_F(SceneInstantiateTest, ALogLineNamesTheSceneAndTheReference) {
-        Scene& scene = Load(SceneText(kPlainNodes));
-        const ErrorCounter errors("nodes/Missing");
+        Scene& scene = Load(SceneConfigText(kPlainNodes, kMainSceneView800x600));
+        const LogRecorder log;
 
         EXPECT_FALSE(scene.InstantiateNode(Ref(R"(<node ref="nodes/Missing"/>)"), _loader));
 
-        EXPECT_EQ(errors.Count(), 1u);
+        LogEvent::Flush();
+        EXPECT_EQ(log.Count(LogLevel::Error, {"nodes/Missing"}), 1u);
     }
 
     TEST_F(SceneInstantiateTest, ASceneThatIsNotInitializedGivesAnError) {
         auto scene = BECore::New<Scene>();
-        const ErrorCounter errors("not initialized");
+        const LogRecorder log;
 
         EXPECT_FALSE(scene->InstantiateNode(Ref(R"(<node ref="nodes/Box"/>)"), _loader));
 
-        EXPECT_EQ(errors.Count(), 1u);
+        LogEvent::Flush();
+        EXPECT_EQ(log.Count(LogLevel::Error, {"not initialized"}), 1u);
     }
 
     TEST_F(SceneInstantiateTest, AParentOfAnotherSceneGivesAnError) {
-        Scene& scene = Load(SceneText(kPlainNodes));
+        Scene& scene = Load(SceneConfigText(kPlainNodes, kMainSceneView800x600));
         auto other = BECore::New<Scene>();
         other->Initialize();
         SceneNode& foreign = other->GetRootNode();
-        const ErrorCounter errors("not a node of this scene");
+        const LogRecorder log;
 
         EXPECT_FALSE(scene.InstantiateNode(Ref(R"(<node ref="nodes/Box"/>)"), _loader, &foreign));
 
-        EXPECT_EQ(errors.Count(), 1u);
+        LogEvent::Flush();
+        EXPECT_EQ(log.Count(LogLevel::Error, {"not a node of this scene"}), 1u);
         EXPECT_EQ(ChildNames(scene.GetRootNode()), (Vector<String>{"A", "C"}));
         EXPECT_TRUE(foreign.GetChildren().empty());
     }
 
     TEST_F(SceneInstantiateTest, ARemovedParentGivesAnError) {
-        Scene& scene = Load(SceneText(kPlainNodes));
+        Scene& scene = Load(SceneConfigText(kPlainNodes, kMainSceneView800x600));
         const IntrusivePtr<SceneNode> removed = scene.GetRootNode().GetChildren()[0];
         scene.GetRootNode().RemoveChild(removed.Get());
-        const ErrorCounter errors("not a node of this scene");
+        const LogRecorder log;
 
         EXPECT_FALSE(scene.InstantiateNode(Ref(R"(<node ref="nodes/Box"/>)"), _loader, removed.Get()));
 
-        EXPECT_EQ(errors.Count(), 1u);
+        LogEvent::Flush();
+        EXPECT_EQ(log.Count(LogLevel::Error, {"not a node of this scene"}), 1u);
         EXPECT_TRUE(removed->GetChildren().empty());
     }
 

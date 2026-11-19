@@ -1,8 +1,11 @@
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/Rooms/FakeSeatedGame.h>
 #include <BECore/Rooms/ManualClock.h>
-#include <BECore/Rooms/RoomSocketClient.h>
+#include <BECore/Rooms/RoomTableDriver.h>
+#include <BECore/Rooms/RoomTestTimings.h>
 #include <BECore/Rooms/TestRandom.h>
+#include <Common/LogRecorder.h>
+#include <Common/Wait.h>
 #include <RoomServer/RoomWebSocketServer.h>
 #include <Rooms/RoomErrors.h>
 #include <gtest/gtest.h>
@@ -19,7 +22,8 @@ namespace BECore::Tests {
         RoomServerSettings MakeSettings() {
             RoomServerSettings settings;
             settings.tickInterval = 10ms;
-            settings.hub.timings = RoomTimings{30s, 10min, 0ms};
+            settings.hub.timings = NoComputerDelayTimings();
+            settings.pingInterval = 0ms;  // on the real clock a loaded machine would see pings; the liveness cases set their own
             settings.random = MakeSequence(7);
             return settings;
         }
@@ -36,20 +40,11 @@ namespace BECore::Tests {
             return humans;
         }
 
-        /// Frames of @p count identical text messages in one buffer
-        Vector<uint8_t> RepeatText(const String& text, int count) {
-            const auto frame = EncodeTextFrame(text, kClientMask);
-            Vector<uint8_t> batch;
-            batch.reserve(frame.size() * static_cast<size_t>(count));
-            for (int i = 0; i < count; ++i) {
-                batch.insert(batch.end(), frame.data(), frame.data() + frame.size());
-            }
-            return batch;
-        }
-
-        /// Sleeps a few ticks of the hub thread (MakeSettings() ticks every 10 ms) so that it has looked at the clock and the sockets
-        void LetTicksPass() {
-            std::this_thread::sleep_for(60ms);
+        /// Waits until the hub thread has read @p clock twice more. An event of a connection reads it once and a tick once, so at least
+        /// one of the two is a tick that saw the time as it is now, however long the machine kept the hub thread waiting
+        void LetTicksPass(const ManualClock& clock) {
+            const uint64_t before = clock.Reads();
+            EXPECT_TRUE(WaitUntil([&] { return clock.Reads() >= before + 2; })) << "the hub thread did not tick";
         }
 
         class RoomWebSocketServerTest : public ::testing::Test {
@@ -392,7 +387,8 @@ namespace BECore::Tests {
         /// Asks the server for so many answers without ever reading one: its send buffer and the client's receive buffer fill, the writer of the
         /// connection blocks in the socket and the rest of the answers wait in the outbox (`maxOutboxBytes` of the settings has to be above them)
         void FloodWithoutReading(RoomSocketClient& client) {
-            // About 80 bytes of answer for 50 sent, 13 MB in all: above the 4 MB the system lets a send buffer and a receive buffer grow to, together
+            // `join` is no message type: each is answered with a `bad_message` error, which is larger than it and spends no failed-join
+            // budget. 13 MB of answers in all, far above what the send and receive buffers of a local socket hold together
             constexpr int kChunks = 80;
             const Vector<uint8_t> chunk = RepeatText("{\"v\":1,\"type\":\"join\",\"room\":\"ZZZZ\",\"name\":\"x\"}", 2000);
             for (int i = 0; i < kChunks; ++i) {
@@ -400,13 +396,12 @@ namespace BECore::Tests {
             }
         }
 
-        /// Settings for FloodWithoutReading(): no rate limit, no end after failed joins, an outbox that holds every answer
+        /// Settings for FloodWithoutReading(): no rate limit, an outbox that holds every answer
         RoomServerSettings MakeStuckClientSettings(std::chrono::milliseconds grace) {
             RoomServerSettings settings = MakeShutdownSettings(grace);
             settings.maxOutboxBytes = 512 * 1024 * 1024;
             settings.hub.rateBurst = 100'000'000;
             settings.hub.ratePerSecond = 100'000'000.0;
-            settings.hub.maxFailedJoinsInRow = std::numeric_limits<int>::max();
             return settings;
         }
 
@@ -492,7 +487,7 @@ namespace BECore::Tests {
         std::this_thread::sleep_for(150ms);
 
         auto late = RoomSocketClient::Connect(port);
-        Optional<ServerFrame> close;
+        Optional<RawFrame> close;
         if (late) {
             close = late->WaitForClose();
         }
@@ -550,6 +545,8 @@ namespace BECore::Tests {
 
         constexpr std::chrono::milliseconds kPingInterval{1000};
         constexpr std::chrono::milliseconds kClockStep{250};
+        /// How long a step waits for the ping of its tick before the clock moves on; a ping that comes later counts for a later step
+        constexpr std::chrono::milliseconds kStepPingWait{200};
 
         /// Settings with a short liveness interval on a manual clock
         RoomServerSettings MakeLivenessSettings(ManualClock& clock, std::chrono::milliseconds pingInterval = kPingInterval) {
@@ -565,23 +562,8 @@ namespace BECore::Tests {
             ASSERT_TRUE(client.WaitFor(RoomMessageTypes::kPong).has_value());
         }
 
-        /// True when @p lobby shows a human seat that is not connected
-        bool HasAwayHuman(const ReceivedMessage& lobby) {
-            const Json* seats = FindJsonMember(lobby.json, "seats");
-            if (!seats || !seats->is_array()) {
-                return false;
-            }
-            for (const Json& seat : *seats) {
-                const Json* connected = FindJsonMember(seat, "connected");
-                if (GetJsonString(seat, "kind").value_or("") == "human" && connected && connected->is_boolean() && !connected->get<bool>()) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         /// Reads frames until a ping arrives (text frames before it are skipped); false when none does or the connection ends first
-        bool WaitForPing(RoomSocketClient& client, std::chrono::milliseconds limit = 5s) {
+        bool WaitForPing(RoomSocketClient& client, std::chrono::milliseconds limit = kWaitLimit) {
             const auto deadline = std::chrono::steady_clock::now() + limit;
             while (std::chrono::steady_clock::now() < deadline) {
                 const auto frame = client.Raw().WaitForFrame(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()));
@@ -599,17 +581,21 @@ namespace BECore::Tests {
             client.Raw().Send(AsBytes(EncodeFrame(WebSocketOpcode::kPong, {}, kClientMask)));
         }
 
-        /// Moves the clock on by kClockStep at a time until a ping reaches @p client, and tells how far it moved; nullopt when no ping came
-        /// within @p limit of clock time. The hub thread looks at the clock on its own schedule, so a test cannot know which step it
-        /// notices a silence at: it asks how long the silence had to be
+        /// Moves the clock on by kClockStep at a time, each step seen by a tick of the hub, until a ping reaches @p client, and tells how far
+        /// it moved; nullopt when no ping came for @p limit of clock time and kWaitLimit after it. A ping that is slow to arrive is counted
+        /// at a later step, so the answer is never shorter than the silence the hub waited for
         Optional<std::chrono::milliseconds> AdvanceUntilPing(ManualClock& clock, RoomSocketClient& client, std::chrono::milliseconds limit = 3 * kPingInterval) {
             std::chrono::milliseconds advanced{0};
             while (advanced < limit) {
                 clock.Advance(kClockStep);
                 advanced += kClockStep;
-                if (WaitForPing(client, 200ms)) {
+                LetTicksPass(clock);
+                if (WaitForPing(client, kStepPingWait)) {
                     return advanced;
                 }
+            }
+            if (WaitForPing(client)) {
+                return advanced;
             }
             return std::nullopt;
         }
@@ -626,7 +612,7 @@ namespace BECore::Tests {
 
         /// Reads what the server sends until @p done holds for @p client (it looks at Received(), so the cursor does not matter) or @p limit has passed
         template <typename Predicate>
-        bool ReadUntil(RoomSocketClient& client, Predicate done, std::chrono::milliseconds limit = 10s) {
+        bool ReadUntil(RoomSocketClient& client, Predicate done, std::chrono::milliseconds limit = kWaitLimit) {
             const auto deadline = std::chrono::steady_clock::now() + limit;
             while (!done()) {
                 const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
@@ -684,7 +670,7 @@ namespace BECore::Tests {
         for (int step = 0; step < 12 && !SawAwayHuman(*host); ++step) {
             clock.Advance(kClockStep);
             RoundTrip(*host);
-            LetTicksPass();  // pacing: the hub thread has to look at every clock value, or the guest would be dropped without the ping before it
+            LetTicksPass(clock);  // the hub thread has to look at every clock value, or the guest would be dropped without the ping before it
         }
         // Three intervals have passed by now, so the lobby of the drop is only a matter of delivery
         EXPECT_TRUE(ReadUntil(*host, [&] { return SawAwayHuman(*host); })) << "the host never saw the silent guest go away";
@@ -701,14 +687,15 @@ namespace BECore::Tests {
         auto client = RoomSocketClient::Connect(port);
         ASSERT_TRUE(client.has_value());
         RoundTrip(*client);
-        LetTicksPass();
+        LetTicksPass(clock);
 
         for (int step = 0; step < 16; ++step) {
             clock.Advance(kClockStep);  // four intervals in all
             RoundTrip(*client);
         }
-        LetTicksPass();
+        LetTicksPass(clock);
         EXPECT_FALSE(client->GetCloseFrame().has_value());
+        EXPECT_EQ(client->GetPingCount(), 0u);
         for (const ReceivedMessage& message : client->Received()) {
             EXPECT_EQ(message.type, RoomMessageTypes::kPong);
         }
@@ -723,7 +710,7 @@ namespace BECore::Tests {
         RoundTrip(*client);
 
         clock.Advance(25s);  // far over any interval, under the 30 s the hub lets a connection that is in no room stay silent
-        LetTicksPass();
+        LetTicksPass(clock);
         EXPECT_FALSE(client->Raw().WaitForFrame(200ms).has_value());
         RoundTrip(*client);
     }
@@ -757,37 +744,22 @@ namespace BECore::Tests {
 
         constexpr std::chrono::milliseconds kStatsInterval{1000};
 
-        /// Collects the stats lines (`Room server: <n> connections, <m> rooms`) that LogEvent::Flush() delivers while it lives
-        class StatsLines : public SubscriptionHolder {
+        /// The stats lines (`Room server: <n> connections, <m> rooms`) that LogEvent::Flush() delivers while it lives
+        class StatsLines {
         public:
-            StatsLines() {
-                LogEvent::Flush();  // what earlier tests left in the ring is not ours
-                Subscribe<LogEvent, &StatsLines::OnLog>(this);
-            }
-
             /// Delivers the pending log entries, then the lines so far
             [[nodiscard]] const Vector<String>& Lines() {
                 LogEvent::Flush();
+                _lines = _log.Messages(LogLevel::Info, {"Room server: ", " connections, ", " rooms"});
                 return _lines;
             }
 
-            /// Waits (real time, up to @p limit) until @p count lines have come
-            bool WaitForCount(size_t count, std::chrono::milliseconds limit = 3s) {
-                const auto deadline = std::chrono::steady_clock::now() + limit;
-                while (Lines().size() < count && std::chrono::steady_clock::now() < deadline) {
-                    std::this_thread::sleep_for(10ms);
-                }
-                return _lines.size() >= count;
+            bool WaitForCount(size_t count) {
+                return WaitUntil([&] { return Lines().size() >= count; });
             }
 
         private:
-            void OnLog(const LogEvent& event) {
-                const String message(event.message.data(), event.message.size());
-                if (message.find("Room server: ") != String::npos && message.find(" connections, ") != String::npos && message.find(" rooms") != String::npos) {
-                    _lines.push_back(message);
-                }
-            }
-
+            LogRecorder _log;
             Vector<String> _lines;
         };
 
@@ -818,7 +790,7 @@ namespace BECore::Tests {
         auto host = MakeHost(port);
         ASSERT_TRUE(host.has_value());
         RoundTrip(*host);
-        LetTicksPass();
+        LetTicksPass(clock);
         EXPECT_TRUE(lines.Lines().empty()) << "the interval has not passed";
 
         clock.Advance(kStatsInterval + 100ms);
@@ -826,7 +798,7 @@ namespace BECore::Tests {
         EXPECT_NE(lines.Lines()[0].find("1 connections, 1 rooms"), String::npos) << lines.Lines()[0];
 
         clock.Advance(5 * kStatsInterval);
-        LetTicksPass();
+        LetTicksPass(clock);
         EXPECT_EQ(lines.Lines().size(), 1u) << "nothing changed: no second line";
 
         auto second = RoomSocketClient::Connect(port);
@@ -838,7 +810,7 @@ namespace BECore::Tests {
         auto third = RoomSocketClient::Connect(port);
         ASSERT_TRUE(third.has_value());
         RoundTrip(*third);
-        LetTicksPass();
+        LetTicksPass(clock);
         EXPECT_EQ(lines.Lines().size(), 2u) << "a change inside the interval waits for it";
         clock.Advance(kStatsInterval + 100ms);
         ASSERT_TRUE(lines.WaitForCount(3));
@@ -857,7 +829,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(host.has_value());
         RoundTrip(*host);
         clock.Advance(1h);
-        LetTicksPass();
+        LetTicksPass(clock);
         EXPECT_TRUE(lines.Lines().empty());
     }
 
@@ -907,7 +879,6 @@ namespace BECore::Tests {
         ManualClock clock;
         RoomServerSettings settings = MakeSettings();
         settings.clock = clock.AsFunction();
-        settings.pingInterval = 0ms;
         settings.hub.lobbyTimeout = 1min;
         const uint16_t port = StartServer(std::move(settings));
         auto host = MakeHost(port);

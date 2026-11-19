@@ -5,13 +5,13 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/SceneManager.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -144,16 +144,6 @@ namespace BECore::Tests {
             params["x"] = x;
             params["y"] = y;
             return params;
-        }
-
-        static bool IsOk(const Json& response) {
-            return GetJsonBool(response, "ok").value_or(false);
-        }
-
-        static String ErrorCode(const Json& response) {
-            const Json* error = FindJsonMember(response, "error");
-            const auto code = error != nullptr ? GetJsonString(*error, "code") : Optional<String>{};
-            return code ? *code : String("<no error>");
         }
 
         static const Json& Result(const Json& response) {

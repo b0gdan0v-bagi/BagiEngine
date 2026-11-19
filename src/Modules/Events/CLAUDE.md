@@ -34,7 +34,7 @@ class MyWidget : public IWidget {   // IWidget and IRenderer already derive from
 };
 ```
 
-- Connections are held by the object and dropped in its destructor; `SubscriptionHolder::UnsubscribeAll()` drops them early.
+- Connections are held by the object and dropped in its destructor; `SubscriptionHolder::UnsubscribeAll()` drops them early. A holder is neither copied nor moved: a connection is bound to the address that subscribed.
 - `MyEvent::Unsubscribe<&Handler>(instance)` / `MyEvent::UnsubscribeAll(instance)` are the static counterparts for a single event type.
 
 ## Emitting API

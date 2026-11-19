@@ -6,6 +6,7 @@
 #include <BECore/Time/Time.h>
 #include <BECore/TimeTest.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/Wait.h>
 #include <TaskSystem/Awaitables.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskManager.h>
@@ -217,11 +218,7 @@ namespace BECore::Tests {
         TaskProbe& probe = _workerProbe;
         CoreManager::GetPause().SetPaused(true);
         TaskManager::GetInstance().Run(FinishOnWorker(probe));
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
-        while (!probe.workerFinished.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < deadline) {
-            std::this_thread::sleep_for(milliseconds(1));
-        }
-        ASSERT_TRUE(probe.workerFinished.load());
+        ASSERT_TRUE(WaitUntil([&] { return probe.workerFinished.load(std::memory_order_acquire); }));
 
         std::this_thread::sleep_for(milliseconds(50));  // the continuation is queued for the main thread by now, which makes the negative check below mean something
         for (int frame = 0; frame < 5; ++frame) {
@@ -230,11 +227,16 @@ namespace BECore::Tests {
         EXPECT_FALSE(probe.continuedOnMainThread.load()) << "a held frame runs no main-thread task";
 
         // The worker may still be about to queue the continuation; step until it arrives
-        while (!probe.continuedOnMainThread.load() && std::chrono::steady_clock::now() < deadline) {
+        bool everyFrameStepped = true;
+        WaitUntil([&] {
+            if (probe.continuedOnMainThread.load() || !everyFrameStepped) {
+                return true;
+            }
             CoreManager::GetPause().RequestSteps(1);
-            ASSERT_EQ(RunFrame(), FrameKind::Stepped);
-            std::this_thread::sleep_for(milliseconds(1));
-        }
+            everyFrameStepped = RunFrame() == FrameKind::Stepped;
+            return false;
+        });
+        EXPECT_TRUE(everyFrameStepped) << "a requested step runs a stepped frame";
         EXPECT_TRUE(probe.continuedOnMainThread.load()) << "a stepped frame runs it";
     }
 

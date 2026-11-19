@@ -24,18 +24,6 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// The border box of an element in output pixels
-        Rect BoxOf(const RmlUiDocumentComponent& doc, const char* id) {
-            Rml::Element* element = doc.GetDocument()->GetElementById(id);
-            if (!element) {
-                ADD_FAILURE() << "no element '" << id << "'";
-                return {};
-            }
-            const Rml::Vector2f offset = element->GetAbsoluteOffset(Rml::BoxArea::Border);
-            const Rml::Vector2f size = element->GetBox().GetSize(Rml::BoxArea::Border);
-            return {doc.GetOriginX() + offset.x, doc.GetOriginY() + offset.y, size.x, size.y};
-        }
-
         struct RunReport {
             size_t cases = 0;
             size_t rectMismatches = 0;
@@ -83,25 +71,13 @@ namespace BECore::Tests {
         IntrusivePtr<RmlUiDocumentComponent> Load(const Screen& screen) {
             _renderer = New<RecordingRenderer>();
             CoreManager::GetRendererManager().SetRenderer(_renderer);
-            XmlDeserializer deserializer;
-            EXPECT_TRUE(deserializer.LoadFromString(SceneXml(screen)));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            EXPECT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-            _manager->SetActiveScene("S"_intern);
-            auto doc = _manager->GetSceneByName("S"_intern)->GetRootNode().GetChildren()[0]->GetComponent<RmlUiDocumentComponent>();
-            EXPECT_TRUE(doc);
-            EXPECT_TRUE(doc && doc->SetMarkup(String(screen.rml)));
-            return doc;
+            return LoadScreen(_manager, screen);
         }
 
         static void SetVars() {
             UIVars& vars = CoreManager::GetUIVars();
             vars.Set("score"_intern, 1280);
             vars.Set("seed"_intern, 1337);
-            vars.Set("turn"_intern, "White to move");
-            vars.Set("status"_intern, "Check");
         }
 
         /// Lays the screen out in RmlUi and in the engine's own tree at every case of the size matrix and compares the rects; also checks, on RmlUi's boxes, what

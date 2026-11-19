@@ -1,6 +1,7 @@
 #include <BECore/Control/Json.h>
 #include <BECore/GameControlTest.h>
 #include <Common/Printers.h>
+#include <Common/TestText.h>
 #include <Widgets/GamePanel/GamePanelModel.h>
 #include <gtest/gtest.h>
 
@@ -10,10 +11,6 @@ namespace BECore::Tests {
 
         StringView ViewOf(const String& text) {
             return {text.data(), text.size()};
-        }
-
-        bool Contains(const String& text, StringView part) {
-            return text.find(part.data(), 0, part.size()) != String::npos;
         }
 
         Json ParseOrFail(StringView text) {

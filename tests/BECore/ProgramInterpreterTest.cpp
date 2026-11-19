@@ -2,7 +2,6 @@
 // C++ reference over edge inputs, the rules of the operations by number, the program pool and the builder. The programs are assembled by hand.
 
 #include <BECore/Reflection/TypeDesc.h>
-#include <BECore/Threading/Thread.h>
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Programs/Components.h>
 #include <BECore/Values/Programs/Interpreter.h>
@@ -10,14 +9,10 @@
 #include <BECore/Values/Programs/Program.h>
 #include <BECore/Values/Programs/ProgramBuilder.h>
 #include <Common/Printers.h>
-#include <algorithm>
+#include <Common/Require.h>
 #include <cmath>
-#include <cstdint>
-#include <cstring>
 #include <gtest/gtest.h>
-#include <limits>
 #include <numbers>
-#include <type_traits>
 
 namespace BECore::Tests {
 
@@ -421,12 +416,12 @@ namespace BECore::Tests {
             Array<uint8_t, kMaxOperandRegisters> registers{};
             size_t index = 0;
             const auto load = [&](auto value) {
-                registers[index] = builder.AcquireRegister().value();
+                registers[index] = Require(builder.AcquireRegister());
                 builder.EmitLoadConst(registers[index], value);
                 ++index;
             };
             (load(args), ...);
-            const uint8_t dst = builder.AcquireRegister().value();
+            const uint8_t dst = Require(builder.AcquireRegister());
             builder.Emit(op, dst, registers[0], registers[1], registers[2]);
             const auto program = builder.Finish(kProgramTypeOf<R>, dst);
             EXPECT_TRUE(program.has_value());
@@ -455,9 +450,9 @@ namespace BECore::Tests {
         template <typename R, typename T>
         R RunExtract(Opcode op, T value, uint32_t index) {
             ProgramBuilder builder;
-            const uint8_t source = builder.AcquireRegister().value();
+            const uint8_t source = Require(builder.AcquireRegister());
             builder.EmitLoadConst(source, value);
-            const uint8_t dst = builder.AcquireRegister().value();
+            const uint8_t dst = Require(builder.AcquireRegister());
             builder.Emit(op, dst, source, 0, 0, index);
             const auto program = builder.Finish(kProgramTypeOf<R>, dst);
             EXPECT_TRUE(program.has_value());
@@ -470,11 +465,11 @@ namespace BECore::Tests {
             ProgramBuilder builder;
             uint8_t first = 0;
             for (size_t i = 0; i < N; ++i) {
-                const uint8_t reg = builder.AcquireRegister().value();
+                const uint8_t reg = Require(builder.AcquireRegister());
                 builder.EmitLoadConst(reg, values[i]);
                 first = i == 0 ? reg : first;
             }
-            const uint8_t dst = builder.AcquireRegister().value();
+            const uint8_t dst = Require(builder.AcquireRegister());
             builder.Emit(op, dst, first);
             const auto program = builder.Finish(kProgramTypeOf<T>, dst);
             EXPECT_TRUE(program.has_value());
@@ -669,9 +664,9 @@ namespace BECore::Tests {
         /// A program with a constant result: programs that differ only in it are different programs
         Program ConstantProgram(int32_t value) {
             ProgramBuilder builder;
-            const uint8_t reg = builder.AcquireRegister().value();
+            const uint8_t reg = Require(builder.AcquireRegister());
             builder.EmitLoadConst(reg, value);
-            return builder.Finish(ProgramType::Int32, reg).value();
+            return Require(builder.Finish(ProgramType::Int32, reg));
         }
 
         SlotRef Link(const ValueWorld& world, StringView path, const TypeDesc& type) {
@@ -831,11 +826,11 @@ namespace BECore::Tests {
         const auto extract = [&](ProgramType type, StringView path, const TypeDesc& desc, uint32_t index) {
             const ComponentSet set = ComponentsOf(type);
             ProgramBuilder builder;
-            const uint8_t value = builder.AcquireRegister().value();
+            const uint8_t value = Require(builder.AcquireRegister());
             builder.EmitLoadSlot(value, type, Link(world, path, desc));
-            const uint8_t dst = builder.AcquireRegister().value();
+            const uint8_t dst = Require(builder.AcquireRegister());
             builder.Emit(OpcodeOf(ProgramOperation::Extract, type), dst, value, 0, 0, index);
-            return builder.Finish(set.type, dst).value();
+            return Require(builder.Finish(set.type, dst));
         };
         EXPECT_EQ(Run<float>(extract(ProgramType::Vec2, "caster.position", DescribeType<Vec2>(), 1), world.context), 8.25f);
         EXPECT_EQ(Run<int32_t>(extract(ProgramType::IVec2, "caster.cell", DescribeType<IVec2>(), 0), world.context), -7);
@@ -869,25 +864,25 @@ namespace BECore::Tests {
 
     TEST(ProgramInterpreterTest, FinishRefusesAComponentThatIsNotThere) {
         ProgramBuilder extract;
-        const uint8_t value = extract.AcquireRegister().value();
+        const uint8_t value = Require(extract.AcquireRegister());
         extract.EmitLoadConst(value, Vec3{});
-        const uint8_t dst = extract.AcquireRegister().value();
+        const uint8_t dst = Require(extract.AcquireRegister());
         extract.Emit(Opcode::ExtractVec3, dst, value, 0, 0, 3);
         const auto refusedExtract = extract.Finish(ProgramType::Float, dst);
         ASSERT_FALSE(refusedExtract.has_value());
         EXPECT_NE(refusedExtract.error().message.find("component 3"), String::npos) << refusedExtract.error().message;
 
         ProgramBuilder pack;
-        const uint8_t first = pack.AcquireRegister().value();
+        const uint8_t first = Require(pack.AcquireRegister());
         pack.EmitLoadConst(first, 1.0f);
-        const uint8_t second = pack.AcquireRegister().value();
+        const uint8_t second = Require(pack.AcquireRegister());
         pack.EmitLoadConst(second, 2.0f);
-        const uint8_t out = pack.AcquireRegister().value();
+        const uint8_t out = Require(pack.AcquireRegister());
         pack.Emit(Opcode::PackVec3, out, first);
         const auto refusedPack = pack.Finish(ProgramType::Vec3, out);
         EXPECT_TRUE(refusedPack.has_value()) << "three registers are acquired: the operands are r0, r1 and r2";
         ProgramBuilder tooFar;
-        const uint8_t only = tooFar.AcquireRegister().value();
+        const uint8_t only = Require(tooFar.AcquireRegister());
         tooFar.EmitLoadConst(only, 1.0f);
         tooFar.Emit(Opcode::PackVec2, only, only);
         const auto refusedTooFar = tooFar.Finish(ProgramType::Vec2, only);
@@ -1049,9 +1044,9 @@ namespace BECore::Tests {
 
         const auto load = [&](ProgramType type, StringView path, const TypeDesc& desc, auto expected) {
             ProgramBuilder builder;
-            const uint8_t reg = builder.AcquireRegister().value();
+            const uint8_t reg = Require(builder.AcquireRegister());
             builder.EmitLoadSlot(reg, type, Link(world, path, desc));
-            const Program program = builder.Finish(type, reg).value();
+            const Program program = Require(builder.Finish(type, reg));
             using T = decltype(expected);
             EXPECT_EQ(Run<T>(program, world.context), expected) << String(path).c_str();
         };
@@ -1078,9 +1073,9 @@ namespace BECore::Tests {
         const auto load = [&](ProgramType type, StringView path, const TypeDesc& desc, auto expected) {
             using T = decltype(expected);
             ProgramBuilder builder;
-            const uint8_t reg = builder.AcquireRegister().value();
+            const uint8_t reg = Require(builder.AcquireRegister());
             builder.EmitLoadSlot(reg, type, Link(world, path, desc), static_cast<uint8_t>(desc.enumBytes));
-            const Program program = builder.Finish(type, reg).value();
+            const Program program = Require(builder.Finish(type, reg));
             EXPECT_TRUE(Same<T>(Run<T>(program, world.context), expected)) << String(path).c_str();
         };
         load(ProgramType::Vec2, "caster.position", DescribeType<Vec2>(), Vec2{-1.5f, 8.25f});
@@ -1107,9 +1102,9 @@ namespace BECore::Tests {
             const auto slot = LinkSlot(declaration, path, desc);
             ASSERT_TRUE(slot.has_value()) << String(path).c_str();
             ProgramBuilder builder;
-            const uint8_t reg = builder.AcquireRegister().value();
+            const uint8_t reg = Require(builder.AcquireRegister());
             builder.EmitLoadSlot(reg, ProgramType::Enum, *slot, static_cast<uint8_t>(desc.enumBytes));
-            const Program program = builder.Finish(ProgramType::Enum, reg).value();
+            const Program program = Require(builder.Finish(ProgramType::Enum, reg));
             EXPECT_EQ(Run<E>(program, context), expected) << String(path).c_str();
             EXPECT_EQ(Run<ProgramEnum>(program, context).index, static_cast<uint32_t>(expected)) << "the index is the value of a CORE_ENUM";
         };
@@ -1134,9 +1129,9 @@ namespace BECore::Tests {
         ValueWorld world;
         const auto index = [&](StringView path, const TypeDesc& desc, uint8_t bytes) {
             ProgramBuilder builder;
-            const uint8_t reg = builder.AcquireRegister().value();
+            const uint8_t reg = Require(builder.AcquireRegister());
             builder.EmitLoadSlot(reg, ProgramType::Enum, Link(world, path, desc), bytes);
-            return Run<ProgramEnum>(builder.Finish(ProgramType::Enum, reg).value(), world.context).index;
+            return Run<ProgramEnum>(Require(builder.Finish(ProgramType::Enum, reg)), world.context).index;
         };
         world.caster.attack = -1;
         EXPECT_EQ(index("caster.attack", DescribeType<int32_t>(), 4), 0xFFFFFFFFU) << "four bytes, zero-extended: no sign";
@@ -1150,7 +1145,7 @@ namespace BECore::Tests {
         ValueWorld world;
         for (const uint8_t bytes : {uint8_t{0}, uint8_t{3}, uint8_t{16}}) {
             ProgramBuilder builder;
-            const uint8_t reg = builder.AcquireRegister().value();
+            const uint8_t reg = Require(builder.AcquireRegister());
             builder.Emit(Opcode::LoadSlotEnum, reg, 0, bytes, 0, 0);
             const auto program = builder.Finish(ProgramType::Enum, reg);
             ASSERT_FALSE(program.has_value()) << static_cast<int>(bytes);
@@ -1237,9 +1232,9 @@ namespace BECore::Tests {
     TEST(ProgramInterpreterTest, ConstantsOfTheNewTypesAreZeroPaddedAndInternedByBytes) {
         const auto constantProgram = [](auto value) {
             ProgramBuilder builder;
-            const uint8_t reg = builder.AcquireRegister().value();
+            const uint8_t reg = Require(builder.AcquireRegister());
             builder.EmitLoadConst(reg, value);
-            return builder.Finish(kProgramTypeOf<decltype(value)>, reg).value();
+            return Require(builder.Finish(kProgramTypeOf<decltype(value)>, reg));
         };
         const Program vec = constantProgram(Vec3{1.0f, 2.0f, 3.0f});
         ASSERT_EQ(vec.Constants().size(), 1U);
@@ -1248,11 +1243,11 @@ namespace BECore::Tests {
         for (size_t i = sizeof(expected); i < kProgramRegisterBytes; ++i) {
             EXPECT_EQ(vec.Constants()[0].bytes[i], 0) << i;
         }
-        EXPECT_EQ(ProgramPool::Intern(constantProgram(Vec3{1.0f, 2.0f, 3.0f})).value(), ProgramPool::Intern(constantProgram(Vec3{1.0f, 2.0f, 3.0f})).value());
-        EXPECT_NE(ProgramPool::Intern(constantProgram(Vec3{1.0f, 2.0f, 3.0f})).value(), ProgramPool::Intern(constantProgram(Vec3{1.0f, 2.0f, 4.0f})).value());
-        EXPECT_EQ(ProgramPool::Intern(constantProgram(PoolString{"burn"_intern})).value(), ProgramPool::Intern(constantProgram(PoolString{"burn"_intern})).value());
-        EXPECT_NE(ProgramPool::Intern(constantProgram(PoolString{"burn"_intern})).value(), ProgramPool::Intern(constantProgram(PoolString{"chill"_intern})).value());
-        EXPECT_NE(ProgramPool::Intern(constantProgram(ValueElement::Fire)).value(), ProgramPool::Intern(constantProgram(ValueElement::Water)).value());
+        EXPECT_EQ(Require(ProgramPool::Intern(constantProgram(Vec3{1.0f, 2.0f, 3.0f}))), Require(ProgramPool::Intern(constantProgram(Vec3{1.0f, 2.0f, 3.0f}))));
+        EXPECT_NE(Require(ProgramPool::Intern(constantProgram(Vec3{1.0f, 2.0f, 3.0f}))), Require(ProgramPool::Intern(constantProgram(Vec3{1.0f, 2.0f, 4.0f}))));
+        EXPECT_EQ(Require(ProgramPool::Intern(constantProgram(PoolString{"burn"_intern}))), Require(ProgramPool::Intern(constantProgram(PoolString{"burn"_intern}))));
+        EXPECT_NE(Require(ProgramPool::Intern(constantProgram(PoolString{"burn"_intern}))), Require(ProgramPool::Intern(constantProgram(PoolString{"chill"_intern}))));
+        EXPECT_NE(Require(ProgramPool::Intern(constantProgram(ValueElement::Fire))), Require(ProgramPool::Intern(constantProgram(ValueElement::Water))));
         EXPECT_EQ(Run<ValueElement>(constantProgram(ValueElement::Earth), Context{}), ValueElement::Earth);
         EXPECT_EQ(Run<PoolString>(constantProgram(PoolString{"burn"_intern}), Context{}), "burn"_intern);
         EXPECT_NE(constantProgram(Vec3{1.0f, 2.0f, 3.0f}).Disassemble().find("Vec3"), String::npos);
@@ -1262,13 +1257,13 @@ namespace BECore::Tests {
         ValueWorld world;
         // caster.attack * (100 + cast.level * 10) / 100
         ProgramBuilder builder;
-        const uint8_t attack = builder.AcquireRegister().value();
+        const uint8_t attack = Require(builder.AcquireRegister());
         builder.EmitLoadSlot(attack, ProgramType::Int32, Link(world, "caster.attack", DescribeType<int32_t>()));
-        const uint8_t hundred = builder.AcquireRegister().value();
+        const uint8_t hundred = Require(builder.AcquireRegister());
         builder.EmitLoadConst(hundred, 100);
-        const uint8_t level = builder.AcquireRegister().value();
+        const uint8_t level = Require(builder.AcquireRegister());
         builder.EmitLoadSlot(level, ProgramType::Int32, Link(world, "cast.level", DescribeType<int32_t>()));
-        const uint8_t ten = builder.AcquireRegister().value();
+        const uint8_t ten = Require(builder.AcquireRegister());
         builder.EmitLoadConst(ten, 10);
         builder.Emit(Opcode::MulInt32, level, level, ten);
         builder.ReleaseRegister(ten);
@@ -1276,10 +1271,10 @@ namespace BECore::Tests {
         builder.ReleaseRegister(level);
         builder.Emit(Opcode::MulInt32, attack, attack, hundred);
         builder.ReleaseRegister(hundred);
-        const uint8_t divisor = builder.AcquireRegister().value();
+        const uint8_t divisor = Require(builder.AcquireRegister());
         builder.EmitLoadConst(divisor, 100);
         builder.Emit(Opcode::DivInt32, attack, attack, divisor);
-        const Program program = builder.Finish(ProgramType::Int32, attack).value();
+        const Program program = Require(builder.Finish(ProgramType::Int32, attack));
 
         for (const int32_t attackValue : {0, 12, 100, -50}) {
             for (const int32_t levelValue : {0, 3, 10}) {
@@ -1296,9 +1291,9 @@ namespace BECore::Tests {
         ValueWorld world;
         const auto reads = [&](StringView path) {
             ProgramBuilder builder;
-            const uint8_t reg = builder.AcquireRegister().value();
+            const uint8_t reg = Require(builder.AcquireRegister());
             builder.EmitLoadSlot(reg, ProgramType::Int32, Link(world, path, DescribeType<int32_t>()));
-            return builder.Finish(ProgramType::Int32, reg).value().Reads();
+            return Require(builder.Finish(ProgramType::Int32, reg)).Reads();
         };
         EXPECT_EQ(reads("caster.attack"), LevelBit(0));
         EXPECT_EQ(reads("cast.level"), LevelBit(1));
@@ -1307,13 +1302,13 @@ namespace BECore::Tests {
 
     TEST(ProgramInterpreterTest, TheResultIsTheRegisterNamed) {
         ProgramBuilder builder;
-        const uint8_t first = builder.AcquireRegister().value();
-        const uint8_t second = builder.AcquireRegister().value();
+        const uint8_t first = Require(builder.AcquireRegister());
+        const uint8_t second = Require(builder.AcquireRegister());
         builder.EmitLoadConst(first, 11);
         builder.EmitLoadConst(second, 22);
         builder.Emit(Opcode::Copy, first, second);
-        EXPECT_EQ(Run<int32_t>(builder.Finish(ProgramType::Int32, first).value(), Context{}), 22);
-        EXPECT_EQ(Run<int32_t>(builder.Finish(ProgramType::Int32, second).value(), Context{}), 22);
+        EXPECT_EQ(Run<int32_t>(Require(builder.Finish(ProgramType::Int32, first)), Context{}), 22);
+        EXPECT_EQ(Run<int32_t>(Require(builder.Finish(ProgramType::Int32, second)), Context{}), 22);
     }
 
     TEST(ProgramInterpreterTest, TheBuilderRefusesMoreThanThirtyTwoRegisters) {
@@ -1330,12 +1325,12 @@ namespace BECore::Tests {
 
     TEST(ProgramInterpreterTest, RegistersAreAStack) {
         ProgramBuilder builder;
-        const uint8_t a = builder.AcquireRegister().value();
-        const uint8_t b = builder.AcquireRegister().value();
+        const uint8_t a = Require(builder.AcquireRegister());
+        const uint8_t b = Require(builder.AcquireRegister());
         EXPECT_EQ(a, 0);
         EXPECT_EQ(b, 1);
         builder.ReleaseRegister(b);
-        EXPECT_EQ(builder.AcquireRegister().value(), 1);
+        EXPECT_EQ(Require(builder.AcquireRegister()), 1);
     }
 
     TEST(ProgramInterpreterTest, FinishRefusesWhatCannotRun) {
@@ -1345,7 +1340,7 @@ namespace BECore::Tests {
         }
         {
             ProgramBuilder builder;
-            const uint8_t reg = builder.AcquireRegister().value();
+            const uint8_t reg = Require(builder.AcquireRegister());
             builder.Emit(Opcode::LoadConst, reg, 0, 0, 0, 3);
             const auto program = builder.Finish(ProgramType::Int32, reg);
             ASSERT_FALSE(program.has_value());
@@ -1353,21 +1348,21 @@ namespace BECore::Tests {
         }
         {
             ProgramBuilder builder;
-            const uint8_t reg = builder.AcquireRegister().value();
+            const uint8_t reg = Require(builder.AcquireRegister());
             builder.EmitLoadConst(reg, 1);
             builder.Emit(Opcode::Invalid, reg);
             EXPECT_FALSE(builder.Finish(ProgramType::Int32, reg).has_value());
         }
         {
             ProgramBuilder builder;
-            const uint8_t reg = builder.AcquireRegister().value();
+            const uint8_t reg = Require(builder.AcquireRegister());
             builder.EmitLoadConst(reg, 1);
             builder.Emit(Opcode::AddInt32, 7, reg, reg);
             EXPECT_FALSE(builder.Finish(ProgramType::Int32, reg).has_value()) << "writes a register never acquired";
         }
         {
             ProgramBuilder builder;
-            const uint8_t reg = builder.AcquireRegister().value();
+            const uint8_t reg = Require(builder.AcquireRegister());
             builder.Emit(Opcode::LoadSlotInt32, reg, static_cast<uint8_t>(kMaxContextLevels));
             EXPECT_FALSE(builder.Finish(ProgramType::Int32, reg).has_value()) << "a level beyond the context";
         }
@@ -1380,9 +1375,9 @@ namespace BECore::Tests {
     }
 
     TEST(ProgramInterpreterTest, ThePoolGivesOneIdToEqualPrograms) {
-        const ProgramId first = ProgramPool::Intern(ConstantProgram(1001)).value();
-        const ProgramId again = ProgramPool::Intern(ConstantProgram(1001)).value();
-        const ProgramId other = ProgramPool::Intern(ConstantProgram(1002)).value();
+        const ProgramId first = Require(ProgramPool::Intern(ConstantProgram(1001)));
+        const ProgramId again = Require(ProgramPool::Intern(ConstantProgram(1001)));
+        const ProgramId other = Require(ProgramPool::Intern(ConstantProgram(1002)));
         EXPECT_EQ(first, again);
         EXPECT_NE(first, other);
         EXPECT_EQ(Run<int32_t>(ProgramPool::Get(first), Context{}), 1001);
@@ -1391,16 +1386,16 @@ namespace BECore::Tests {
 
     TEST(ProgramInterpreterTest, TheSourceTextIsNotPartOfTheIdentity) {
         ProgramBuilder builder;
-        const uint8_t reg = builder.AcquireRegister().value();
+        const uint8_t reg = Require(builder.AcquireRegister());
         builder.EmitLoadConst(reg, 424242);
-        const ProgramId first = ProgramPool::Intern(builder.Finish(ProgramType::Int32, reg, "424242"_intern).value()).value();
-        const ProgramId second = ProgramPool::Intern(builder.Finish(ProgramType::Int32, reg, "424241 + 1"_intern).value()).value();
+        const ProgramId first = Require(ProgramPool::Intern(Require(builder.Finish(ProgramType::Int32, reg, "424242"_intern))));
+        const ProgramId second = Require(ProgramPool::Intern(Require(builder.Finish(ProgramType::Int32, reg, "424241 + 1"_intern))));
         EXPECT_EQ(first, second);
         EXPECT_EQ(ProgramPool::Get(first).Source(), "424242"_intern) << "the first text stays";
     }
 
     TEST(ProgramInterpreterTest, TheAddressOfAProgramNeverMoves) {
-        const ProgramId id = ProgramPool::Intern(ConstantProgram(2001)).value();
+        const ProgramId id = Require(ProgramPool::Intern(ConstantProgram(2001)));
         const Program* address = &ProgramPool::Get(id);
         constexpr int kMore = 600;  // more than two chunks of the pool
         for (int i = 0; i < kMore; ++i) {
@@ -1417,7 +1412,7 @@ namespace BECore::Tests {
         for (int t = 0; t < kThreadCount; ++t) {
             threads.emplace_back("ProgramPoolTest", [&ids, t] {
                 for (int i = 0; i < kProgramsPerThread; ++i) {
-                    ids[static_cast<size_t>(t)].push_back(ProgramPool::Intern(ConstantProgram(10000 + i)).value());
+                    ids[static_cast<size_t>(t)].push_back(Require(ProgramPool::Intern(ConstantProgram(10000 + i))));
                 }
             });
         }

@@ -7,11 +7,15 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIInputClicker.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
+#include <Common/UIInputEvents.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -97,91 +101,27 @@ namespace BECore::Tests {
         const Color kBoxPressed{20, 30, 40, 255};
         const Color kBoxDisabled{90, 91, 92, 255};
 
-        uint32_t Pack(const Color& color) {
-            return (static_cast<uint32_t>(color.r) << 24) | (static_cast<uint32_t>(color.g) << 16) | (static_cast<uint32_t>(color.b) << 8) | color.a;
-        }
-
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        SDL_MouseMotionEvent Motion(float x, float y, bool held) {
-            SDL_MouseMotionEvent event{};
-            event.type = SDL_EVENT_MOUSE_MOTION;
-            event.x = x;
-            event.y = y;
-            event.state = held ? SDL_BUTTON_LMASK : 0;
-            return event;
-        }
-
-        struct Emitted {
-            PoolString action;
-            PoolString value;
-        };
-
-        class ActionRecorder : public SubscriptionHolder {
-        public:
-            ActionRecorder() {
-                Subscribe<InputEvents::ActionEvent, &ActionRecorder::OnAction>(this);
-            }
-            [[nodiscard]] const Vector<Emitted>& All() const {
-                return _actions;
-            }
-            [[nodiscard]] size_t Total() const {
-                return _actions.size();
-            }
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                _actions.push_back({event.action, event.value});
-            }
-            Vector<Emitted> _actions;
-        };
-
     }  // namespace
 
-    class UIInputClickerTest : public ::testing::Test {
+    class UIInputClickerTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kClickerXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
+            UISceneFixture::SetUp();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kClickerXml));
             _manager->SetActiveScene("Main"_intern);
             _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_canvas);
 
             const Vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
             _texture = _renderer->CreateTexture(pixels.data(), kPictureSide, kPictureSide);
-            Get("Pic").GetComponent<UIImageComponent>()->GetSprite().SetTexture(_texture);
-            Get("PicOff").GetComponent<UIImageComponent>()->GetSprite().SetTexture(_texture);
+            Require(El("Pic").GetComponent<UIImageComponent>()).GetSprite().SetTexture(_texture);
+            Require(El("PicOff").GetComponent<UIImageComponent>()).GetSprite().SetTexture(_texture);
             Draw();
         }
 
         void TearDown() override {
             _texture.Reset();
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
+            UISceneFixture::TearDown();
         }
 
         void Draw() {
@@ -189,18 +129,12 @@ namespace BECore::Tests {
             _manager->DrawAll();
         }
 
-        UIElement& Get(const char* name) const {
-            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
-            return *element;
-        }
-
         static Vec2 CenterOf(const UIElement& element) {
             return {element.rect.x + element.rect.w * 0.5f, element.rect.y + element.rect.h * 0.5f};
         }
 
         static bool MoveTo(float x, float y, bool held = false) {
-            return CoreManager::GetUIInput().DispatchMouseMotion(Motion(x, y, held));
+            return CoreManager::GetUIInput().DispatchMouseMotion(Motion(x, y, held ? SDL_BUTTON_LMASK : 0));
         }
         static bool Press(float x, float y) {
             return CoreManager::GetUIInput().DispatchMouseButtonDown(Button(x, y, true));
@@ -232,71 +166,68 @@ namespace BECore::Tests {
             Release(at.x, at.y);
         }
 
-        /// The fill drawn for @p element in the last frame: the rect with its rect, packed; 0 when there is none
-        uint32_t FillOf(const UIElement& element) const {
+        /// The fill drawn for @p element in the last frame: the rect with its rect; all zero when there is none
+        Color FillOf(const UIElement& element) const {
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Rect && std::abs(call.rect.x - element.rect.x) < kEpsilon && std::abs(call.rect.y - element.rect.y) < kEpsilon &&
                     std::abs(call.rect.w - element.rect.w) < kEpsilon && std::abs(call.rect.h - element.rect.h) < kEpsilon) {
-                    return Pack(call.color);
+                    return call.color;
                 }
             }
-            return 0;
+            return Color{};
         }
 
-        /// The tint of the picture whose rect starts at @p top (the textured draw of the last frame there); 0 when there is none
-        uint32_t PictureTint(float top) const {
+        /// The tint of the picture whose rect starts at @p top (the textured draw of the last frame there); all zero when there is none
+        Color PictureTint(float top) const {
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Texture && std::abs(call.rect.y - top) < kEpsilon) {
-                    return Pack(call.color);
+                    return call.color;
                 }
             }
-            return 0;
+            return Color{};
         }
 
-        /// The colour of the last glyph of Cap: the text itself; 0 when nothing was drawn
-        uint32_t TextColorDrawn() const {
-            uint32_t found = 0;
+        /// The colour of the last glyph of Cap: the text itself; all zero when nothing was drawn
+        Color TextColorDrawn() const {
+            Color found{};
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Texture && call.rect.y >= kTextRowTop && call.rect.y < kTextRowBottom) {
-                    found = Pack(call.color);
+                    found = call.color;
                 }
             }
             return found;
         }
 
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
         IntrusivePtr<ITexture> _texture;
     };
 
     // ---- what the clicker is --------------------------------------------------------------------------------------------------
 
     TEST_F(UIInputClickerTest, TheClickerComesFromTheFileWithItsFields) {
-        const UIInputClicker* clicker = Get("Box").GetComponent<UIInputClicker>();
+        const UIInputClicker* clicker = El("Box").GetComponent<UIInputClicker>();
         ASSERT_NE(clicker, nullptr);
         EXPECT_EQ(clicker->action, "Boxed"_intern);
         EXPECT_EQ(clicker->value, "v1"_intern);
         EXPECT_FALSE(clicker->disabled);
-        EXPECT_TRUE(Get("Off").GetComponent<UIInputClicker>()->disabled);
+        EXPECT_TRUE(Require(El("Off").GetComponent<UIInputClicker>()).disabled);
     }
 
     TEST_F(UIInputClickerTest, AnElementWithAClickerIsInteractiveAndAHitTargetAndAPlainPanelIsNotInteractive) {
-        const Vec2 at = CenterOf(Get("Box"));
-        EXPECT_TRUE(Get("Box").IsInteractive());
-        EXPECT_TRUE(Get("Box").IsHitTestable());
-        EXPECT_EQ(_canvas->GetLayout().HitTest(at.x, at.y), &Get("Box"));
-        EXPECT_FALSE(Get("Box").interactive) << "the field is not what makes it one";
+        const Vec2 at = CenterOf(El("Box"));
+        EXPECT_TRUE(El("Box").IsInteractive());
+        EXPECT_TRUE(El("Box").IsHitTestable());
+        EXPECT_EQ(_canvas->GetLayout().HitTest(at.x, at.y), &El("Box"));
+        EXPECT_FALSE(El("Box").interactive) << "the field is not what makes it one";
 
-        EXPECT_FALSE(Get("Plain").IsInteractive());
-        EXPECT_TRUE(Get("Plain").IsHitTestable()) << "it only blocks the input";
+        EXPECT_FALSE(El("Plain").IsInteractive());
+        EXPECT_TRUE(El("Plain").IsHitTestable()) << "it only blocks the input";
     }
 
     // ---- the click --------------------------------------------------------------------------------------------------------------
 
     TEST_F(UIInputClickerTest, AClickEmitsTheActionWithItsValue) {
-        ActionRecorder actions;
-        Click(Get("Box"));
+        ActionLog actions;
+        Click(El("Box"));
 
         ASSERT_EQ(actions.Total(), 1u);
         EXPECT_EQ(actions.All()[0].action, "Boxed"_intern);
@@ -304,8 +235,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIInputClickerTest, AClickWithNoValueEmitsAnEmptyOne) {
-        ActionRecorder actions;
-        Click(Get("Pic"));
+        ActionLog actions;
+        Click(El("Pic"));
 
         ASSERT_EQ(actions.Total(), 1u);
         EXPECT_EQ(actions.All()[0].action, "PicAction"_intern);
@@ -313,8 +244,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIInputClickerTest, APressAloneEmitsNothingTheClickIsTheRelease) {
-        ActionRecorder actions;
-        const Vec2 at = CenterOf(Get("Box"));
+        ActionLog actions;
+        const Vec2 at = CenterOf(El("Box"));
         MoveTo(at.x, at.y);
         EXPECT_TRUE(Press(at.x, at.y));
         EXPECT_EQ(actions.Total(), 0u);
@@ -323,20 +254,20 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIInputClickerTest, DraggingOffTheElementCancelsTheClick) {
-        ActionRecorder actions;
-        const Vec2 at = CenterOf(Get("Box"));
+        ActionLog actions;
+        const Vec2 at = CenterOf(El("Box"));
         MoveTo(at.x, at.y);
         Press(at.x, at.y);
         MoveTo(700.0f, 500.0f, true);
         Release(700.0f, 500.0f);
 
         EXPECT_EQ(actions.Total(), 0u);
-        EXPECT_FALSE(Get("Box").pressed);
+        EXPECT_FALSE(El("Box").pressed);
     }
 
     TEST_F(UIInputClickerTest, AClickAnywhereInTheRectIsAClickOnTheElementAlsoOutsideItsPicture) {
-        ActionRecorder actions;
-        const UIElement& pic = Get("Pic");
+        ActionLog actions;
+        const UIElement& pic = El("Pic");
         const float edge = pic.rect.x + 2.0f;  // the picture is 40 wide in the middle of 120: this point is outside it
         ASSERT_LT(edge, pic.rect.x + (pic.rect.w - pic.rect.h) * 0.5f);
         const float y = pic.rect.y + pic.rect.h * 0.5f;
@@ -349,8 +280,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIInputClickerTest, AClickerWithNoActionEmitsNothingButStillTakesTheClick) {
-        ActionRecorder actions;
-        const Vec2 at = CenterOf(Get("NoAction"));
+        ActionLog actions;
+        const Vec2 at = CenterOf(El("NoAction"));
         MoveTo(at.x, at.y);
         EXPECT_TRUE(Press(at.x, at.y));
         EXPECT_TRUE(Release(at.x, at.y));
@@ -359,8 +290,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIInputClickerTest, ADisabledClickerEmitsNothingButTakesThePressAndTheRelease) {
-        ActionRecorder actions;
-        const UIElement& off = Get("Off");
+        ActionLog actions;
+        const UIElement& off = El("Off");
         EXPECT_TRUE(off.IsDisabled());
         const Vec2 at = CenterOf(off);
         MoveTo(at.x, at.y);
@@ -371,8 +302,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIInputClickerTest, AnElementOfADisabledGroupEmitsNothing) {
-        ActionRecorder actions;
-        UIElement& grouped = Get("Grouped");
+        ActionLog actions;
+        UIElement& grouped = El("Grouped");
         Click(grouped);
         ASSERT_EQ(actions.Total(), 1u);
 
@@ -388,17 +319,17 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIInputClickerTest, AnElementThatTheClickerDisablesAtRunTimeStopsEmitting) {
-        ActionRecorder actions;
-        Get("Box").GetComponent<UIInputClicker>()->disabled = true;
-        Click(Get("Box"));
+        ActionLog actions;
+        Require(El("Box").GetComponent<UIInputClicker>()).disabled = true;
+        Click(El("Box"));
 
         EXPECT_EQ(actions.Total(), 0u);
     }
 
     TEST_F(UIInputClickerTest, AHiddenElementTakesNoClick) {
-        ActionRecorder actions;
+        ActionLog actions;
         Scene& scene = *_manager->GetSceneByName("Main"_intern);
-        const Vec2 at = CenterOf(Get("Hide"));
+        const Vec2 at = CenterOf(El("Hide"));
         EXPECT_TRUE(UICanvasComponent::SetElementVisibleByName(scene, "Hide"_intern, false));
         Draw();
 
@@ -412,152 +343,152 @@ namespace BECore::Tests {
     // ---- the look follows the pointer -------------------------------------------------------------------------------------------
 
     TEST_F(UIInputClickerTest, TheBoxTakesTheFillOfTheStateItIsIn) {
-        const UIElement& box = Get("Box");
-        EXPECT_EQ(FillOf(box), Pack(kBoxColor));
+        const UIElement& box = El("Box");
+        EXPECT_PRED2(ColorsEqual, FillOf(box), kBoxColor);
 
         Hover(box);
-        EXPECT_EQ(FillOf(box), Pack(kBoxHover));
+        EXPECT_PRED2(ColorsEqual, FillOf(box), kBoxHover);
 
         const Vec2 at = CenterOf(box);
         Press(at.x, at.y);
         Draw();
-        EXPECT_EQ(FillOf(box), Pack(kBoxPressed));
+        EXPECT_PRED2(ColorsEqual, FillOf(box), kBoxPressed);
 
         Release(at.x, at.y);
         Draw();
-        EXPECT_EQ(FillOf(box), Pack(kBoxHover)) << "released, the pointer is still over it";
+        EXPECT_PRED2(ColorsEqual, FillOf(box), kBoxHover) << "released, the pointer is still over it";
 
         MoveTo(700.0f, 500.0f);
         Draw();
-        EXPECT_EQ(FillOf(box), Pack(kBoxColor));
+        EXPECT_PRED2(ColorsEqual, FillOf(box), kBoxColor);
     }
 
     TEST_F(UIInputClickerTest, APressThatMovedOffTheElementIsNotShownAsPressed) {
-        const UIElement& box = Get("Box");
+        const UIElement& box = El("Box");
         Hold(box);
-        ASSERT_EQ(FillOf(box), Pack(kBoxPressed));
+        ASSERT_PRED2(ColorsEqual, FillOf(box), kBoxPressed);
 
         MoveTo(700.0f, 500.0f, true);
         Draw();
-        EXPECT_EQ(FillOf(box), Pack(kBoxColor));
+        EXPECT_PRED2(ColorsEqual, FillOf(box), kBoxColor);
     }
 
     TEST_F(UIInputClickerTest, ADisabledElementShowsItsDisabledFillAndNoHover) {
-        const UIElement& off = Get("Off");
-        EXPECT_EQ(FillOf(off), Pack(kBoxDisabled));
+        const UIElement& off = El("Off");
+        EXPECT_PRED2(ColorsEqual, FillOf(off), kBoxDisabled);
 
         Hover(off);
-        EXPECT_EQ(FillOf(off), Pack(kBoxDisabled));
+        EXPECT_PRED2(ColorsEqual, FillOf(off), kBoxDisabled);
     }
 
     TEST_F(UIInputClickerTest, AnElementOfADisabledGroupShowsItsDisabledFill) {
-        UIElement& grouped = Get("Grouped");
+        UIElement& grouped = El("Grouped");
         grouped.groupDisabled = true;
         Draw();
 
-        EXPECT_EQ(FillOf(grouped), Pack(kBoxDisabled));
+        EXPECT_PRED2(ColorsEqual, FillOf(grouped), kBoxDisabled);
     }
 
     TEST_F(UIInputClickerTest, APanelThatOnlyBlocksInputDoesNotLightUp) {
-        const UIElement& plain = Get("Plain");
+        const UIElement& plain = El("Plain");
         Hover(plain);
 
         EXPECT_TRUE(plain.hovered);
-        EXPECT_EQ(FillOf(plain), Pack(kBoxColor));
+        EXPECT_PRED2(ColorsEqual, FillOf(plain), kBoxColor);
     }
 
     TEST_F(UIInputClickerTest, WithStateLookOffTheBoxIsPlainInEveryState) {
-        UIElement& still = Get("Still");
-        EXPECT_EQ(FillOf(still), Pack(kBoxColor));
+        UIElement& still = El("Still");
+        EXPECT_PRED2(ColorsEqual, FillOf(still), kBoxColor);
 
         Hover(still);
         ASSERT_TRUE(still.GetVisualState().hovered) << "the state is there, only the box ignores it";
-        EXPECT_EQ(FillOf(still), Pack(kBoxColor));
+        EXPECT_PRED2(ColorsEqual, FillOf(still), kBoxColor);
 
         const Vec2 at = CenterOf(still);
         Press(at.x, at.y);
         Draw();
         ASSERT_TRUE(still.GetVisualState().pressed);
-        EXPECT_EQ(FillOf(still), Pack(kBoxColor));
+        EXPECT_PRED2(ColorsEqual, FillOf(still), kBoxColor);
         Release(at.x, at.y);
 
         still.selected = true;
         Draw();
-        EXPECT_EQ(FillOf(still), Pack(kBoxColor));
-        EXPECT_EQ(FillOf(Get("StillOff")), Pack(kBoxColor)) << "disabled, still plain";
+        EXPECT_PRED2(ColorsEqual, FillOf(still), kBoxColor);
+        EXPECT_PRED2(ColorsEqual, FillOf(El("StillOff")), kBoxColor) << "disabled, still plain";
     }
 
     TEST_F(UIInputClickerTest, WithStateLookOffTheElementIsStillAClickerAndDisabledWorks) {
-        EXPECT_FALSE(Get("Still").GivesStateLook());
-        EXPECT_TRUE(Get("Still").IsInteractive());
-        EXPECT_TRUE(Get("Box").GivesStateLook()) << "the default is as before";
-        EXPECT_TRUE(Get("StillOff").IsDisabled());
-        EXPECT_TRUE(Get("StillOff").GetVisualState().disabled);
+        EXPECT_FALSE(El("Still").GivesStateLook());
+        EXPECT_TRUE(El("Still").IsInteractive());
+        EXPECT_TRUE(El("Box").GivesStateLook()) << "an element gives its state look by default";
+        EXPECT_TRUE(El("StillOff").IsDisabled());
+        EXPECT_TRUE(El("StillOff").GetVisualState().disabled);
 
-        ActionRecorder actions;
-        Click(Get("Still"));
+        ActionLog actions;
+        Click(El("Still"));
         ASSERT_EQ(actions.Total(), 1u);
         EXPECT_EQ(actions.All()[0].action, "StillAction"_intern);
-        Click(Get("StillOff"));
+        Click(El("StillOff"));
         EXPECT_EQ(actions.Total(), 1u);
     }
 
     TEST_F(UIInputClickerTest, TheStateLookFlagRoundTripsThroughXml) {
-        const UIInputClicker* clicker = Get("Still").GetComponent<UIInputClicker>();
+        const UIInputClicker* clicker = El("Still").GetComponent<UIInputClicker>();
         ASSERT_NE(clicker, nullptr);
         EXPECT_FALSE(clicker->stateLook);
-        EXPECT_TRUE(Get("Box").GetComponent<UIInputClicker>()->stateLook);
+        EXPECT_TRUE(Require(El("Box").GetComponent<UIInputClicker>()).stateLook);
 
         XmlSerializer serializer;
         ASSERT_TRUE(serializer.BeginObject("element"));
-        Get("Still").Serialize(serializer);
+        El("Still").Serialize(serializer);
         serializer.EndObject();
         const String xml = serializer.SaveToString();
         EXPECT_NE(xml.find("stateLook=\"false\""), String::npos) << xml.c_str();
 
         XmlSerializer plain;
         ASSERT_TRUE(plain.BeginObject("element"));
-        Get("Box").Serialize(plain);
+        El("Box").Serialize(plain);
         plain.EndObject();
         const String plainXml = plain.SaveToString();
         EXPECT_NE(plainXml.find("stateLook=\"true\""), String::npos) << plainXml.c_str();
     }
 
     TEST_F(UIInputClickerTest, ThePictureTakesTheTintOfTheState) {
-        const UIElement& pic = Get("Pic");
+        const UIElement& pic = El("Pic");
         const float top = pic.rect.y;  // the fitted picture is as tall as the rect
-        EXPECT_EQ(PictureTint(top), Pack(Color{255, 255, 255, 255}));
+        EXPECT_PRED2(ColorsEqual, PictureTint(top), (Color{255, 255, 255, 255}));
 
         Hover(pic);
-        EXPECT_EQ(PictureTint(top), Pack(Color{200, 210, 220, 255}));
+        EXPECT_PRED2(ColorsEqual, PictureTint(top), (Color{200, 210, 220, 255}));
 
         const Vec2 at = CenterOf(pic);
         Press(at.x, at.y);
         Draw();
-        EXPECT_EQ(PictureTint(top), Pack(Color{100, 110, 120, 255}));
+        EXPECT_PRED2(ColorsEqual, PictureTint(top), (Color{100, 110, 120, 255}));
     }
 
     TEST_F(UIInputClickerTest, ThePictureOfADisabledClickerTakesTheDisabledTint) {
-        EXPECT_EQ(PictureTint(Get("PicOff").rect.y), Pack(Color{50, 60, 70, 255}));
+        EXPECT_PRED2(ColorsEqual, PictureTint(El("PicOff").rect.y), (Color{50, 60, 70, 255}));
     }
 
     TEST_F(UIInputClickerTest, TheTextTakesTheColourOfTheState) {
-        const UIElement& cap = Get("Cap");
-        ASSERT_NE(TextColorDrawn(), 0u) << "the text is drawn";
-        EXPECT_EQ(TextColorDrawn(), Pack(Color{200, 100, 50, 255}));
+        const UIElement& cap = El("Cap");
+        ASSERT_FALSE(ColorsEqual(TextColorDrawn(), Color{})) << "the text is drawn";
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), (Color{200, 100, 50, 255}));
 
         Hover(cap);
-        EXPECT_EQ(TextColorDrawn(), Pack(Color{10, 20, 30, 255}));
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), (Color{10, 20, 30, 255}));
 
         const Vec2 at = CenterOf(cap);
         Press(at.x, at.y);
         Draw();
-        EXPECT_EQ(TextColorDrawn(), Pack(Color{40, 50, 60, 255}));
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), (Color{40, 50, 60, 255}));
 
         Release(at.x, at.y);
-        Get("Cap").groupDisabled = true;
+        El("Cap").groupDisabled = true;
         Draw();
-        EXPECT_EQ(TextColorDrawn(), Pack(Color{70, 80, 90, 255}));
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), (Color{70, 80, 90, 255}));
     }
 
 }  // namespace BECore::Tests

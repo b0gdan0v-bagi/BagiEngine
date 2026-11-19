@@ -1,5 +1,6 @@
 #include <BECore/Rooms/ManualClock.h>
 #include <BECore/Rooms/RoomTableDriver.h>
+#include <BECore/Rooms/RoomTestTimings.h>
 #include <BECore/Rooms/TestRandom.h>
 #include <RoomServer/DemoCardGame.h>
 #include <RoomServer/RoomWebSocketServer.h>
@@ -16,12 +17,11 @@ namespace BECore::Tests {
         using namespace std::chrono_literals;
 
         constexpr std::chrono::milliseconds kPause{300};
-        constexpr std::chrono::milliseconds kReconnectGrace{30'000};
 
         RoomServerSettings MakeSettings() {
             RoomServerSettings settings;
             settings.tickInterval = 10ms;
-            settings.hub.timings = RoomTimings{kReconnectGrace, 10min, 0ms};
+            settings.hub.timings = NoComputerDelayTimings();
             // No liveness pings: a test that moves the clock by half a minute would see its idle clients pinged and dropped
             settings.pingInterval = 0ms;
             settings.random = MakeSequence(7);
@@ -35,20 +35,6 @@ namespace BECore::Tests {
                     EXPECT_EQ(message.GetString("room"), client.roomCode);
                 }
             }
-        }
-
-        bool HasAwayHuman(const ReceivedMessage& lobby) {
-            const Json* seats = FindJsonMember(lobby.json, "seats");
-            if (!seats || !seats->is_array()) {
-                return false;
-            }
-            for (const Json& seat : *seats) {
-                const Json* connected = FindJsonMember(seat, "connected");
-                if (GetJsonString(seat, "kind").value_or("") == "human" && connected && connected->is_boolean() && !connected->get<bool>()) {
-                    return true;
-                }
-            }
-            return false;
         }
 
         class RoomServerScenarioTest : public ::testing::Test {
@@ -110,7 +96,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(PlayToTheEnd(clients)) << "the hand did not reach its end";
 
         for (const auto& client : clients) {
-            ExpectAllTwelveCardsPlayed(*client);
+            ExpectEveryCardPlayed(*client);
             EXPECT_EQ(CountOf(*client, RoomMessageTypes::kError), 0u);
         }
         ExpectCleanWire(clients);
@@ -129,7 +115,7 @@ namespace BECore::Tests {
         clients[0]->Start();
         ASSERT_TRUE(PlayToTheEnd(clients));
         for (const auto& client : clients) {
-            ExpectAllTwelveCardsPlayed(*client);
+            ExpectEveryCardPlayed(*client);
             EXPECT_EQ(CountOf(*client, RoomMessageTypes::kError), 0u);
         }
         ExpectCleanWire(clients);
@@ -234,8 +220,8 @@ namespace BECore::Tests {
         playing.push_back(std::move(clients[0]));
         playing.push_back(MakeUnique<RoomSocketClient>(std::move(*replacement)));
         ASSERT_TRUE(PlayToTheEnd(playing)) << "the hand did not end after the return";
-        ExpectAllTwelveCardsPlayed(*playing[0]);
-        ExpectAllTwelveCardsPlayed(*playing[1]);
+        ExpectEveryCardPlayed(*playing[0]);
+        ExpectEveryCardPlayed(*playing[1]);
         ExpectCleanWire(*back, "the replaced socket");
         ExpectCleanWire(guest, "the guest before the drop");
         ExpectCleanWire(playing);
@@ -268,7 +254,7 @@ namespace BECore::Tests {
         }
         ASSERT_TRUE(PlayToTheEnd(all));
         for (const auto& client : all) {
-            ExpectAllTwelveCardsPlayed(*client);
+            ExpectEveryCardPlayed(*client);
             ExpectOwnRoomOnly(*client);
         }
         ExpectCleanWire(all);
@@ -346,7 +332,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(PlayToTheEnd(table)) << "the hand of the other room did not finish";
         for (const auto& client : table) {
-            ExpectAllTwelveCardsPlayed(*client);
+            ExpectEveryCardPlayed(*client);
             EXPECT_EQ(CountOf(*client, RoomMessageTypes::kError), 0u);
         }
         ExpectCleanWire(table);
@@ -395,7 +381,7 @@ namespace BECore::Tests {
         playing.push_back(MakeUnique<RoomSocketClient>(std::move(*browser)));
         ASSERT_TRUE(PlayToTheEnd(playing));
         for (const auto& client : playing) {
-            ExpectAllTwelveCardsPlayed(*client);
+            ExpectEveryCardPlayed(*client);
             for (const ReceivedMessage& message : client->Received()) {
                 EXPECT_EQ(message.text.find(closed->roomCode), String::npos) << "the code of a private room reached another room: " << message.text.c_str();
             }

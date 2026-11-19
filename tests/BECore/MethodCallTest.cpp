@@ -11,6 +11,8 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
+#include <Common/TestText.h>
 #include <Generated/MethodCallTest.gen.hpp>
 #include <gtest/gtest.h>
 
@@ -47,10 +49,6 @@ namespace BECore::Tests {
             const TypedRef ref = TypedRef::Of(object);
             EXPECT_TRUE(ref);
             return ref;
-        }
-
-        bool Contains(const String& text, StringView part) {
-            return text.find(part.data(), 0, part.size()) != String::npos;
         }
 
         struct Outcome {
@@ -364,7 +362,7 @@ namespace BECore::Tests {
         const MethodRef found = registry.FindMethod(*ref.type, "Bump");
         ASSERT_TRUE(found);
         EXPECT_EQ(found.owner->Name(), "McBase");
-        EXPECT_EQ(found.offset, registry.OffsetOfBase(*ref.type, *found.owner).value());
+        EXPECT_EQ(found.offset, Require(registry.OffsetOfBase(*ref.type, *found.owner)));
 
         Json arguments = Json::object();
         arguments["by"] = 4;

@@ -1,10 +1,10 @@
 #include <BECore/Audio/AudioClip.h>
+#include <BECore/AudioTestSupport.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
-#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -12,10 +12,6 @@ namespace BECore::Tests {
     namespace {
 
         constexpr const char* kMountPoint = "test_audio_clips";
-
-        std::filesystem::path FixtureFolder() {
-            return std::filesystem::path(__FILE__).parent_path() / "AudioData";
-        }
 
     }  // namespace
 
@@ -27,7 +23,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            ASSERT_TRUE(CoreManager::GetFileSystem().Mount(PoolString::Intern(kMountPoint), FixtureFolder()));
+            ASSERT_TRUE(CoreManager::GetFileSystem().Mount(PoolString::Intern(kMountPoint), AudioFixtureFolder()));
         }
 
         void TearDown() override {

@@ -4,19 +4,19 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/ReplayTestGame.h>
 #include <BECore/Time/GamePause.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Events/ApplicationEvents.h>
 #include <Games/GameControl.h>
 #include <Games/GameManager.h>
 #include <Games/ReplayControl.h>
 #include <Games/ReplayFile.h>
 #include <Games/SessionRecorder.h>
-#include <filesystem>
-#include <fstream>  //-NoStd: the test reads the file the recorder wrote
 #include <gtest/gtest.h>
-#include <sstream>  //-NoStd: the test reads the file the recorder wrote
 
 namespace BECore::Tests {
 
@@ -29,7 +29,7 @@ namespace BECore::Tests {
             }
 
             void SetUp() override {
-                _path = TestTempPath("replay_control_" + String(::testing::UnitTest::GetInstance()->current_test_info()->name()));
+                _path = TestTempPath(Format("replay_control_{}", ::testing::UnitTest::GetInstance()->current_test_info()->name()));
                 const Span<const String> arguments = CoreManager::GetCommandLine().GetArguments();
                 _arguments.assign(arguments.begin(), arguments.end());
                 CoreManager::GetTime().Reset();
@@ -93,17 +93,6 @@ namespace BECore::Tests {
                 return response;
             }
 
-            static bool Succeeded(const Json& response) {
-                return GetJsonBool(response, "ok").value_or(false);
-            }
-
-            /// The `code` of a failed response, empty for a successful one
-            static String ErrorCode(const Json& response) {
-                const Json* error = FindJsonMember(response, "error");
-                const auto code = error != nullptr ? GetJsonString(*error, "code") : Optional<String>();
-                return code.value_or(String());
-            }
-
             static void SetCommandLine(std::initializer_list<const char*> arguments) {
                 Vector<String> list;
                 for (const char* argument : arguments) {
@@ -124,23 +113,23 @@ namespace BECore::Tests {
 
     TEST_F(ReplayControlTest, TheAcceptedCallsAreInTheFileAndTheRefusedOnesAreNot) {
         const Json started = Call("record_start", PathParams());
-        ASSERT_TRUE(Succeeded(started));
+        ASSERT_TRUE(IsOk(started));
         const Json* startedResult = FindResult(started);
         ASSERT_NE(startedResult, nullptr);
         EXPECT_EQ(GetJsonString(*startedResult, "game").value_or(String()), "ReplayTest");
         EXPECT_EQ(GetJsonString(*startedResult, "path").value_or(String()), PathText());
 
-        ASSERT_TRUE(Succeeded(Call("reset", Params(R"({"seed":9})"))));
-        ASSERT_TRUE(Succeeded(Call("perform_action", Params(R"({"type":"roll"})"))));
-        ASSERT_TRUE(Succeeded(Call("perform_action", Params(R"({"type":"arm"})"))));
+        ASSERT_TRUE(IsOk(Call("reset", Params(R"({"seed":9})"))));
+        ASSERT_TRUE(IsOk(Call("perform_action", Params(R"({"type":"roll"})"))));
+        ASSERT_TRUE(IsOk(Call("perform_action", Params(R"({"type":"arm"})"))));
         EXPECT_EQ(ErrorCode(Call("perform_action", Params(R"({"type":"roll"})"))), "illegal_action");
-        ASSERT_TRUE(Succeeded(Call("set_state", Params(R"({"rolls":[1,2]})"))));
-        EXPECT_FALSE(Succeeded(Call("reset", Params(R"({"seed":"x"})"))));
+        ASSERT_TRUE(IsOk(Call("set_state", Params(R"({"rolls":[1,2]})"))));
+        EXPECT_FALSE(IsOk(Call("reset", Params(R"({"seed":"x"})"))));
 
         const Json stopped = Call("record_stop", Json::object());
-        ASSERT_TRUE(Succeeded(stopped));
+        ASSERT_TRUE(IsOk(stopped));
         ASSERT_NE(FindResult(stopped), nullptr);
-        EXPECT_EQ(GetJsonInt(*FindResult(stopped), "entries").value_or(-1), 4);
+        EXPECT_EQ(GetJsonInt(Require(FindResult(stopped)), "entries").value_or(-1), 4);
 
         const ParsedReplay replay = ParseRecording();
         ASSERT_EQ(replay.entries.size(), 4u);
@@ -155,8 +144,8 @@ namespace BECore::Tests {
         Json params = PathParams();
         params["title"] = "a short session";
 
-        ASSERT_TRUE(Succeeded(Call("record_start", params)));
-        ASSERT_TRUE(Succeeded(Call("record_stop", Json::object())));
+        ASSERT_TRUE(IsOk(Call("record_start", params)));
+        ASSERT_TRUE(IsOk(Call("record_stop", Json::object())));
 
         EXPECT_EQ(ParseRecording().header.title, "a short session");
     }
@@ -174,7 +163,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ErrorCode(Call("record_start", unwritable)), "invalid_params");
         EXPECT_FALSE(SessionRecorder::GetInstance().IsRecording());
 
-        ASSERT_TRUE(Succeeded(Call("record_start", PathParams())));
+        ASSERT_TRUE(IsOk(Call("record_start", PathParams())));
         EXPECT_EQ(ErrorCode(Call("record_start", PathParams())), "invalid_params");
         EXPECT_TRUE(SessionRecorder::GetInstance().IsRecording());
     }
@@ -216,11 +205,11 @@ namespace BECore::Tests {
         StartRecordingFromCommandLine();
         EXPECT_FALSE(SessionRecorder::GetInstance().IsRecording());
 
-        const String flag = "--record=" + PathText();
+        const String flag = Format("--record={}", PathText());
         CoreManager::GetCommandLine().Set(Vector<String>{flag});
         StartRecordingFromCommandLine();
         ASSERT_TRUE(SessionRecorder::GetInstance().IsRecording());
-        ASSERT_TRUE(Succeeded(Call("reset", Params(R"({"seed":2})"))));
+        ASSERT_TRUE(IsOk(Call("reset", Params(R"({"seed":2})"))));
         EXPECT_EQ(SessionRecorder::GetInstance().Stop(), 1u);
 
         EXPECT_EQ(ParseRecording().header.game, "ReplayTest");
@@ -228,7 +217,7 @@ namespace BECore::Tests {
 
     TEST_F(ReplayControlTest, TheRecordFlagOnAGameThatCannotRecordLeavesNoRecording) {
         GameManager::GetInstance().SwitchTo("FakeControllable"_intern);
-        const String flag = "--record=" + PathText();
+        const String flag = Format("--record={}", PathText());
         CoreManager::GetCommandLine().Set(Vector<String>{flag});
 
         StartRecordingFromCommandLine();
@@ -240,7 +229,7 @@ namespace BECore::Tests {
     // The default game of the test binary is the first registered one, which this test does not choose: it holds the flag to what that game can do
     TEST_F(ReplayControlTest, InitializeReadsTheRecordFlagForTheDefaultGame) {
         GameManager::GetInstance().Shutdown();
-        const String flag = "--record=" + PathText();
+        const String flag = Format("--record={}", PathText());
         CoreManager::GetCommandLine().Set(Vector<String>{flag});
 
         GameManager::GetInstance().Initialize();
@@ -250,8 +239,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(ReplayControlTest, ShutdownClosesARecordingThatRuns) {
-        ASSERT_TRUE(Succeeded(Call("record_start", PathParams())));
-        ASSERT_TRUE(Succeeded(Call("reset", Params(R"({"seed":2})"))));
+        ASSERT_TRUE(IsOk(Call("record_start", PathParams())));
+        ASSERT_TRUE(IsOk(Call("reset", Params(R"({"seed":2})"))));
 
         GameManager::GetInstance().Shutdown();
 
@@ -321,8 +310,7 @@ namespace BECore::Tests {
             }
 
             void WriteFile(StringView text) const {
-                std::ofstream file(_path, std::ios::binary | std::ios::trunc);  //-NoStd: see the include
-                file << ToStd(text);
+                Tests::WriteFile(_path, text);
             }
 
             void PostReplay(int64_t id, const Json& params) {
@@ -382,7 +370,7 @@ namespace BECore::Tests {
 
         const Json& response = Replay();
 
-        ASSERT_TRUE(Succeeded(response)) << DumpJson(response).c_str();
+        ASSERT_TRUE(IsOk(response)) << DumpJson(response).c_str();
         const Json* result = FindResult(response);
         ASSERT_NE(result, nullptr);
         EXPECT_TRUE(GetJsonBool(*result, "ok").value_or(false));
@@ -404,7 +392,7 @@ namespace BECore::Tests {
 
         const Json& response = Replay();
 
-        ASSERT_TRUE(Succeeded(response)) << DumpJson(response).c_str();  // a mismatch is a result, not a protocol error
+        ASSERT_TRUE(IsOk(response)) << DumpJson(response).c_str();  // a mismatch is a result, not a protocol error
         const Json* result = FindResult(response);
         ASSERT_NE(result, nullptr);
         EXPECT_FALSE(GetJsonBool(*result, "ok").value_or(true));
@@ -440,10 +428,10 @@ namespace BECore::Tests {
 
     TEST_F(ReplayPlayControlTest, AGapLongerThanOneStepIsSteppedInChunks) {
         constexpr int kGapFrames = static_cast<int>(kMaxStepFrames) + 4;
-        WriteFile("{\"replay\":1,\"game\":\"ReplayTest\",\"engine\":\"x\"}\n"
-                  "{\"op\":\"reset\",\"params\":{\"seed\":1},\"gap\":{\"frames\":0,\"seconds\":0}}\n"
-                  "{\"op\":\"action\",\"params\":{\"type\":\"roll\"},\"gap\":{\"frames\":" +
-                  ToString(kGapFrames) + ",\"seconds\":0}}\n");
+        WriteFile(Format("{{\"replay\":1,\"game\":\"ReplayTest\",\"engine\":\"x\"}}\n"
+                         "{{\"op\":\"reset\",\"params\":{{\"seed\":1}},\"gap\":{{\"frames\":0,\"seconds\":0}}}}\n"
+                         "{{\"op\":\"action\",\"params\":{{\"type\":\"roll\"}},\"gap\":{{\"frames\":{},\"seconds\":0}}}}\n",
+                         kGapFrames));
 
         const Json& response = Replay(kGapFrames + 10);
 

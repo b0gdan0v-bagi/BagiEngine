@@ -15,9 +15,10 @@
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
+#include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
-#include <Events/SubscriptionHolder.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -122,45 +123,6 @@ namespace BECore::Tests {
         constexpr float kRectTolerance = 1e-3f;
         constexpr int kSteadyFrames = 8;
 
-        class ActionCounter : public SubscriptionHolder {
-        public:
-            ActionCounter() {
-                Subscribe<InputEvents::ActionEvent, &ActionCounter::OnAction>(this);
-            }
-            int fader = 0;
-            int open = 0;
-            int under = 0;
-            int dialog = 0;
-            int below = 0;
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                fader += event.action == "TransitionFader"_intern ? 1 : 0;
-                open += event.action == "TransitionOpen"_intern ? 1 : 0;
-                under += event.action == "TransitionUnder"_intern ? 1 : 0;
-                dialog += event.action == "CanvasDialog"_intern ? 1 : 0;
-                below += event.action == "CanvasBelow"_intern ? 1 : 0;
-            }
-        };
-
-        SDL_MouseMotionEvent Motion(float x, float y) {
-            SDL_MouseMotionEvent event{};
-            event.type = SDL_EVENT_MOUSE_MOTION;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
         bool SameRect(const Rect& a, const Rect& b) {
             return std::abs(a.x - b.x) < kRectTolerance && std::abs(a.y - b.y) < kRectTolerance && std::abs(a.w - b.w) < kRectTolerance && std::abs(a.h - b.h) < kRectTolerance;
         }
@@ -219,7 +181,7 @@ namespace BECore::Tests {
         UIElement& Get(const char* name) const {
             UIElement* element = _hud->GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
-            return *element;
+            return Require(element);
         }
 
         void Hide(const char* name) {
@@ -260,7 +222,7 @@ namespace BECore::Tests {
 
     TEST_F(UITransitionComponentTest, TheFirstLayoutDoesNotAnimateAndAnElementHiddenAtLoadStaysHidden) {
         EXPECT_EQ(AlphaAt(Get("Fader").rect), kAuthoredAlpha);
-        EXPECT_FALSE(Get("Fader").GetComponent<UITransitionComponent>()->run.IsTransitioning(CoreManager::GetTime().GetTotalTime()));
+        EXPECT_FALSE(Require(Get("Fader").GetComponent<UITransitionComponent>()).run.IsTransitioning(CoreManager::GetTime().GetTotalTime()));
         EXPECT_TRUE(Get("Late").rect.IsEmpty());
         const uint32_t runs = _hud->GetLayout().GetLayoutRuns();
         Wait(2.0);
@@ -319,7 +281,7 @@ namespace BECore::Tests {
         EXPECT_EQ(AlphaAt(rect), kAuthoredAlpha);
     }
 
-    TEST_F(UITransitionComponentTest, ANoDurationIsTheOldPop) {
+    TEST_F(UITransitionComponentTest, AZeroDurationShowsTheChangeInTheSameFrame) {
         const Rect rect = Get("Pop").rect;
         ASSERT_TRUE(AlphaAt(rect).has_value());
         Hide("Pop");
@@ -365,7 +327,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UITransitionComponentTest, WhileAnInteractiveChildHidesItsClickIsConsumedAndGivesNoAction) {
-        ActionCounter actions;
+        ActionLog actions;
         Hide("Fader");
         Draw();
         Wait(0.25);
@@ -379,11 +341,11 @@ namespace BECore::Tests {
         EXPECT_TRUE(CoreManager::GetUIInput().DispatchMouseButtonDown(Button(x, y, true)));
         EXPECT_FALSE(button.pressed);
         EXPECT_TRUE(CoreManager::GetUIInput().DispatchMouseButtonUp(Button(x, y, false)));
-        EXPECT_EQ(actions.fader, 0);
+        EXPECT_EQ(actions.Count("TransitionFader"), 0u);
     }
 
     TEST_F(UITransitionComponentTest, AClickThatBeganBeforeTheHideAndEndsDuringItIsNoClick) {
-        ActionCounter actions;
+        ActionLog actions;
         UIElement& button = Get("FaderButton");
         const float x = button.rect.x + 5.0f;
         const float y = button.rect.y + 5.0f;
@@ -394,11 +356,11 @@ namespace BECore::Tests {
         Draw();
         Wait(0.25);
         CoreManager::GetUIInput().DispatchMouseButtonUp(Button(x, y, false));
-        EXPECT_EQ(actions.fader, 0);
+        EXPECT_EQ(actions.Count("TransitionFader"), 0u);
     }
 
     TEST_F(UITransitionComponentTest, TheLockIsLiftedWhenTheShowEnds) {
-        ActionCounter actions;
+        ActionLog actions;
         Hide("Fader");
         Draw();
         Wait(1.0);
@@ -409,15 +371,15 @@ namespace BECore::Tests {
         ASSERT_FALSE(button.rect.IsEmpty());
         EXPECT_TRUE(button.inputLocked);
         Click(button.rect.x + 5.0f, button.rect.y + 5.0f);
-        EXPECT_EQ(actions.fader, 0) << "no click while it comes in";
+        EXPECT_EQ(actions.Count("TransitionFader"), 0u) << "no click while it comes in";
         Wait(0.5);
         EXPECT_FALSE(button.inputLocked);
         Click(button.rect.x + 5.0f, button.rect.y + 5.0f);
-        EXPECT_EQ(actions.fader, 1);
+        EXPECT_EQ(actions.Count("TransitionFader"), 1u);
     }
 
     TEST_F(UITransitionComponentTest, WithInputDuringTransitionTheElementIsAsLiveAsAnyOther) {
-        ActionCounter actions;
+        ActionLog actions;
         const Rect rect = Get("Open").rect;
         Hide("Open");
         Draw();
@@ -425,21 +387,21 @@ namespace BECore::Tests {
         ASSERT_TRUE(AlphaAt(rect).has_value());
         EXPECT_FALSE(Get("Open").inputLocked);
         Click(rect.x + 5.0f, rect.y + 5.0f);
-        EXPECT_EQ(actions.open, 1) << "in its laid-out rect, though it is drawn smaller";
+        EXPECT_EQ(actions.Count("TransitionOpen"), 1u) << "in its laid-out rect, though it is drawn smaller";
     }
 
     TEST_F(UITransitionComponentTest, ABlockingPanelThatIsLeavingStillShieldsWhatIsBelow) {
-        ActionCounter actions;
+        ActionLog actions;
         const Rect rect = Get("Shield").rect;
         Hide("Shield");
         Draw();
         Wait(0.25);
         EXPECT_TRUE(CoreManager::GetUIInput().DispatchMouseButtonDown(Button(rect.x + 5.0f, rect.y + 5.0f, true)));
         CoreManager::GetUIInput().DispatchMouseButtonUp(Button(rect.x + 5.0f, rect.y + 5.0f, false));
-        EXPECT_EQ(actions.under, 0);
+        EXPECT_EQ(actions.Count("TransitionUnder"), 0u);
         Wait(1.0);
         Click(rect.x + 5.0f, rect.y + 5.0f);
-        EXPECT_EQ(actions.under, 1) << "when it is gone the panel below is reachable";
+        EXPECT_EQ(actions.Count("TransitionUnder"), 1u) << "when it is gone the panel below is reachable";
     }
 
     TEST_F(UITransitionComponentTest, ATooltipIsNotShownForALockedElement) {
@@ -483,19 +445,18 @@ namespace BECore::Tests {
     }
 
     TEST_F(UITransitionComponentTest, ASteadyCanvasWithAnIdleComponentAllocatesNothing) {
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << "the allocation counters are off in this preset (ENGINE_PROFILER_ALLOC)";
+        }
         Wait(0.5);
         Wait(0.5);
-#if BE_PROFILER_ALLOC
+        ASSERT_EQ(AlphaAt(Get("Fader").rect), kAuthoredAlpha) << "the component is idle, so the frames below change nothing";
         const uint64_t before = AllocTracker::GetThreadCounters().count;
-#endif
         for (int frame = 0; frame < kSteadyFrames; ++frame) {
             CoreManager::GetTime().Advance(kStep);
             Draw();
         }
-#if BE_PROFILER_ALLOC
         EXPECT_EQ(AllocTracker::GetThreadCounters().count, before);
-#endif
-        EXPECT_EQ(AlphaAt(Get("Fader").rect), kAuthoredAlpha);
     }
 
     // ---- the canvas ----------------------------------------------------------------------------------------------------------
@@ -559,7 +520,7 @@ namespace BECore::Tests {
         UIElement& Get(UICanvasComponent& canvas, const char* name) const {
             UIElement* element = canvas.GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
-            return *element;
+            return Require(element);
         }
 
         const DrawCall* CallAt(const Rect& rect) const {
@@ -637,7 +598,7 @@ namespace BECore::Tests {
         EXPECT_EQ(AlphaAt(box), 175);
     }
 
-    TEST_F(UICanvasTransitionTest, ANoDurationIsTheOldPop) {
+    TEST_F(UICanvasTransitionTest, AZeroDurationShowsTheChangeInTheSameFrame) {
         _dialog->_transitionDuration = 0.0f;
         const Rect box = Get(*_dialog, "Box").rect;
         SetDialogVisible(false);
@@ -666,43 +627,43 @@ namespace BECore::Tests {
     }
 
     TEST_F(UICanvasTransitionTest, AModalCanvasReleasesTheScreenTheMomentItStartsToLeave) {
-        ActionCounter actions;
+        ActionLog actions;
         EXPECT_TRUE(_dialog->TakesInput());
         Click(Get(*_below, "BelowButton"));
-        EXPECT_EQ(actions.below, 0) << "a shown modal shields the canvas below";
+        EXPECT_EQ(actions.Count("CanvasBelow"), 0u) << "a shown modal shields the canvas below";
         SetDialogVisible(false);
         EXPECT_FALSE(_dialog->TakesInput()) << "before the next frame";
         Click(Get(*_below, "BelowButton"));
-        EXPECT_EQ(actions.below, 1);
+        EXPECT_EQ(actions.Count("CanvasBelow"), 1u);
         Draw();
         Wait(0.25);
         ASSERT_TRUE(CallAt(Get(*_dialog, "Box").rect));
         EXPECT_FALSE(_dialog->TakesInput()) << "it is still drawn";
         Click(Get(*_below, "BelowButton"));
-        EXPECT_EQ(actions.below, 2);
+        EXPECT_EQ(actions.Count("CanvasBelow"), 2u);
         Click(Get(*_dialog, "DialogButton"));
-        EXPECT_EQ(actions.dialog, 0);
+        EXPECT_EQ(actions.Count("CanvasDialog"), 0u);
     }
 
     TEST_F(UICanvasTransitionTest, WithTransitionInputALeavingModalKeepsTheScreenUntilItEnds) {
-        ActionCounter actions;
+        ActionLog actions;
         _dialog->_transitionInput = true;
         SetDialogVisible(false);
         Draw();
         Wait(0.25);
         EXPECT_TRUE(_dialog->TakesInput());
         Click(Get(*_below, "BelowButton"));
-        EXPECT_EQ(actions.below, 0) << "the modal still shields";
+        EXPECT_EQ(actions.Count("CanvasBelow"), 0u) << "the modal still shields";
         Click(Get(*_dialog, "DialogButton"));
-        EXPECT_EQ(actions.dialog, 1);
+        EXPECT_EQ(actions.Count("CanvasDialog"), 1u);
         Wait(1.0);
         EXPECT_FALSE(_dialog->TakesInput());
         Click(Get(*_below, "BelowButton"));
-        EXPECT_EQ(actions.below, 1) << "released when the hide ends";
+        EXPECT_EQ(actions.Count("CanvasBelow"), 1u) << "released when the hide ends";
     }
 
     TEST_F(UICanvasTransitionTest, ACanvasThatIsShowingConsumesTheEventsAndDeliversNoneUnlessItTakesInput) {
-        ActionCounter actions;
+        ActionLog actions;
         SetDialogVisible(false);
         Draw();
         Wait(1.0);
@@ -714,11 +675,11 @@ namespace BECore::Tests {
         EXPECT_FALSE(button.hovered);
         Click(button);
         Click(Get(*_below, "BelowButton"));
-        EXPECT_EQ(actions.dialog, 0);
-        EXPECT_EQ(actions.below, 0) << "the modal shields while it comes in";
+        EXPECT_EQ(actions.Count("CanvasDialog"), 0u);
+        EXPECT_EQ(actions.Count("CanvasBelow"), 0u) << "the modal shields while it comes in";
         Wait(1.0);
         Click(button);
-        EXPECT_EQ(actions.dialog, 1);
+        EXPECT_EQ(actions.Count("CanvasDialog"), 1u);
 
         _dialog->_transitionInput = true;
         SetDialogVisible(false);
@@ -728,7 +689,7 @@ namespace BECore::Tests {
         Draw();
         Wait(0.25);
         Click(button);
-        EXPECT_EQ(actions.dialog, 2) << "with the flag it is as live as a shown one";
+        EXPECT_EQ(actions.Count("CanvasDialog"), 2u) << "with the flag it is as live as a shown one";
     }
 
     TEST_F(UICanvasTransitionTest, TheTooltipIsHiddenWhileTheCanvasTransitions) {

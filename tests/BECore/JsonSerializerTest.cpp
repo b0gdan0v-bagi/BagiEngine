@@ -7,9 +7,9 @@
 #include <BECore/FuzzProbe.h>
 #include <BECore/Reflection/DataAccessor.h>
 #include <BECore/TypeRegistryTest.h>
+#include <Common/Require.h>
 #include <Fuzz/FuzzProbeAccess.h>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -198,22 +198,22 @@ namespace BECore::Tests {
         const auto parsed = ParseJson(ObjectText(all));
         ASSERT_TRUE(parsed.has_value());
 
-        EXPECT_EQ(DumpJson(*FindJsonMember(*parsed, "flag")), "true");
-        EXPECT_EQ(DumpJson(*FindJsonMember(*parsed, "tiny")), "-1");
-        EXPECT_EQ(DumpJson(*FindJsonMember(*parsed, "ratio")), "0.1");
-        EXPECT_EQ(DumpJson(*FindJsonMember(*parsed, "text")), R"("t")");
-        EXPECT_EQ(DumpJson(*FindJsonMember(*parsed, "fixedText")), R"("f")");
-        EXPECT_EQ(DumpJson(*FindJsonMember(*parsed, "name")), R"("n")");
-        EXPECT_EQ(DumpJson(*FindJsonMember(*parsed, "mode")), R"("On")");
-        EXPECT_EQ(DumpJson(*FindJsonMember(*parsed, "items")), "[1]");
-        EXPECT_EQ(DumpJson(*FindJsonMember(*parsed, "smallItems")), "[]");
-        EXPECT_EQ(DumpJson(*FindJsonMember(*parsed, "pairOfInts")), "[0,0]");
-        EXPECT_EQ(DumpJson(*FindJsonMember(*parsed, "table")), R"([{"key":"k","value":2}])");
-        EXPECT_EQ(DumpJson(*FindJsonMember(*parsed, "maybe")), "4");
-        EXPECT_EQ(DumpJson(*FindJsonMember(*parsed, "choice")), R"({"index":1,"value":"c"})");
-        EXPECT_EQ(DumpJson(*FindJsonMember(*parsed, "inner")), R"({"label":"","value":0})");
+        EXPECT_EQ(DumpJson(Require(FindJsonMember(*parsed, "flag"))), "true");
+        EXPECT_EQ(DumpJson(Require(FindJsonMember(*parsed, "tiny"))), "-1");
+        EXPECT_EQ(DumpJson(Require(FindJsonMember(*parsed, "ratio"))), "0.1");
+        EXPECT_EQ(DumpJson(Require(FindJsonMember(*parsed, "text"))), R"("t")");
+        EXPECT_EQ(DumpJson(Require(FindJsonMember(*parsed, "fixedText"))), R"("f")");
+        EXPECT_EQ(DumpJson(Require(FindJsonMember(*parsed, "name"))), R"("n")");
+        EXPECT_EQ(DumpJson(Require(FindJsonMember(*parsed, "mode"))), R"("On")");
+        EXPECT_EQ(DumpJson(Require(FindJsonMember(*parsed, "items"))), "[1]");
+        EXPECT_EQ(DumpJson(Require(FindJsonMember(*parsed, "smallItems"))), "[]");
+        EXPECT_EQ(DumpJson(Require(FindJsonMember(*parsed, "pairOfInts"))), "[0,0]");
+        EXPECT_EQ(DumpJson(Require(FindJsonMember(*parsed, "table"))), R"([{"key":"k","value":2}])");
+        EXPECT_EQ(DumpJson(Require(FindJsonMember(*parsed, "maybe"))), "4");
+        EXPECT_EQ(DumpJson(Require(FindJsonMember(*parsed, "choice"))), R"({"index":1,"value":"c"})");
+        EXPECT_EQ(DumpJson(Require(FindJsonMember(*parsed, "inner"))), R"({"label":"","value":0})");
         EXPECT_EQ(FindJsonMember(*parsed, "node"), nullptr);
-        EXPECT_EQ(DumpJson(*FindJsonMember(*parsed, "entry")), R"({"first":0,"second":""})");
+        EXPECT_EQ(DumpJson(Require(FindJsonMember(*parsed, "entry"))), R"({"first":0,"second":""})");
     }
 
     TEST(JsonSerializerTest, TheProbeStateSavesEveryFieldContentHas) {

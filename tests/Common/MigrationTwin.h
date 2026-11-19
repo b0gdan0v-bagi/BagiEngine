@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/Format/Format.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/UIInput.h>
 #include <BECore/Math/Rect.h>
@@ -18,11 +19,13 @@
 #include <BECore/UI/UIControl.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIStrings.h>
+#include <BECore/UI/UIThemes.h>
 #include <BECore/UI/UIVars.h>
 #include <BECore/Utils/FunctionRef.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <Events/SubscriptionHolder.h>
@@ -65,15 +68,18 @@ namespace BECore::Tests::MigrationTwin {
         Vector<String> names;
         const String suffix = ".before.xml";
         std::error_code error;
-        for (const auto& entry : std::filesystem::directory_iterator(folder, error)) {
-            const String file = FromStdString(entry.path().filename().string());
+        // increment(error), not a range-for: the throwing increment would abort the process, exceptions being off
+        for (std::filesystem::directory_iterator it(folder, error), end; !error && it != end; it.increment(error)) {
+            const String file = FromStdString(it->path().filename().string());
             if (file.size() > suffix.size() && file.compare(file.size() - suffix.size(), suffix.size(), suffix) == 0) {
                 const String name = file.substr(0, file.size() - suffix.size());
-                if (std::filesystem::exists(folder / ToStd(name + ".after.xml"))) {
+                std::error_code missing;
+                if (std::filesystem::exists(folder / ToStd(Format("{}.after.xml", name)), missing)) {
                     names.push_back(name);
                 }
             }
         }
+        EXPECT_FALSE(error) << folder.generic_string() << ": " << error.message();
         std::sort(names.begin(), names.end());
         return names;
     }
@@ -85,19 +91,33 @@ namespace BECore::Tests::MigrationTwin {
         return FromStdString(text.str());
     }
 
-    /// A content file as a scene manager the loader reads: a `SceneManager` is itself, a `node` goes into a scene of its own
+    /// A content file as a scene manager the loader reads: a `SceneManager` is itself, a `node` goes into a scene of its own.
+    /// A malformed file (an unclosed declaration or comment) fails the case and is handed back as it is
     inline String SceneManagerXml(String text) {
         const size_t declaration = text.find("<?xml");
         if (declaration != String::npos) {
-            text.erase(declaration, text.find("?>", declaration) + 2 - declaration);
+            const size_t declarationEnd = text.find("?>", declaration);
+            if (declarationEnd == String::npos) {
+                ADD_FAILURE() << "an XML declaration with no ?>";
+                return text;
+            }
+            text.erase(declaration, declarationEnd + 2 - declaration);
         }
         static const std::regex root(R"(<([A-Za-z][A-Za-z0-9_]*))");
         String stripped;
         for (size_t at = 0; at < text.size();) {  // the first element that is not a comment: skip the comments, which may mention tags
             const size_t comment = text.find("<!--", at);
             const size_t tag = text.find('<', at);
+            if (tag == String::npos) {
+                break;
+            }
             if (comment != String::npos && comment == tag) {
-                at = text.find("-->", comment) + 3;
+                const size_t commentEnd = text.find("-->", comment);
+                if (commentEnd == String::npos) {
+                    ADD_FAILURE() << "a comment with no -->";
+                    return text;
+                }
+                at = commentEnd + 3;
                 continue;
             }
             stripped = text.substr(tag);
@@ -105,8 +125,8 @@ namespace BECore::Tests::MigrationTwin {
         }
         std::cmatch match;
         if (std::regex_search(stripped.c_str(), match, root) && match[1] == "node") {
-            return "<SceneManager><scenes><scene type=\"Scene\" name=\"" + String(kNodeSceneName) + "\" viewWidth=\"" + ToString(static_cast<int>(kDefaultViewWidth)) + "\" viewHeight=\"" +
-                   ToString(static_cast<int>(kDefaultViewHeight)) + "\"><nodes>" + text + "</nodes></scene></scenes></SceneManager>";
+            return Format("<SceneManager><scenes><scene type=\"Scene\" name=\"{}\" viewWidth=\"{}\" viewHeight=\"{}\"><nodes>{}</nodes></scene></scenes></SceneManager>", kNodeSceneName,
+                          static_cast<int>(kDefaultViewWidth), static_cast<int>(kDefaultViewHeight), text);
         }
         return text;
     }
@@ -120,24 +140,6 @@ namespace BECore::Tests::MigrationTwin {
         return names;
     }
 
-    inline SDL_MouseButtonEvent Button(float x, float y, bool down) {
-        SDL_MouseButtonEvent event{};
-        event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-        event.button = SDL_BUTTON_LEFT;
-        event.down = down;
-        event.x = x;
-        event.y = y;
-        return event;
-    }
-
-    inline SDL_MouseMotionEvent Motion(float x, float y) {
-        SDL_MouseMotionEvent event{};
-        event.type = SDL_EVENT_MOUSE_MOTION;
-        event.x = x;
-        event.y = y;
-        return event;
-    }
-
     /// The actions that went out, as "action=value" lines
     class ActionRecorder : public SubscriptionHolder {
     public:
@@ -148,7 +150,7 @@ namespace BECore::Tests::MigrationTwin {
 
     private:
         void OnAction(const InputEvents::ActionEvent& event) {
-            emitted.push_back(String(event.action.CStr()) + "=" + String(event.value.CStr()));
+            emitted.push_back(Format("{}={}", event.action.CStr(), event.value.CStr()));
         }
     };
 
@@ -175,7 +177,7 @@ namespace BECore::Tests::MigrationTwin {
         }
         for (const Json& element : *list) {
             const String name = JsonText(element, "name");
-            const String key = canvasKey + "|" + name;
+            const String key = Format("{}|{}", canvasKey, name);
             if (!name.empty() && seen.insert(key).second) {
                 out[key] = fieldsOf(element);
             }
@@ -184,7 +186,7 @@ namespace BECore::Tests::MigrationTwin {
     }
 
     /// A screen of one form loaded into canvases on a `RecordingRenderer`; a test derives from it and looks at what the screen draws and answers
-    class Fixture : public ::testing::TestWithParam<String> {
+    class Fixture : public ::testing::Test {
     protected:
         static void SetUpTestSuite() {
             EngineEnvironment::EnsureCoreServices();
@@ -204,6 +206,7 @@ namespace BECore::Tests::MigrationTwin {
         void TearDown() override {
             CoreManager::GetUIVars().Clear();
             CoreManager::GetUIStrings().Clear();
+            CoreManager::GetUIThemes().Clear();  // a draw of a screen with no theme records its tokens as missing: the next case would see them
             EngineEnvironment::UseSceneManager({});
             _manager.Reset();
             _icon.Reset();

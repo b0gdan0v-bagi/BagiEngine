@@ -1,8 +1,6 @@
 #include <BECore/Rooms/HubTransport.h>
-#include <BECore/Rooms/JudgedTransport.h>
+#include <BECore/Rooms/RoomClientPlayer.h>
 #include <Common/Printers.h>
-#include <Common/SharedPtr.h>
-#include <RoomClient/RoomClient.h>
 #include <Rooms/RoomErrors.h>
 #include <gtest/gtest.h>
 
@@ -16,55 +14,22 @@ namespace BECore::Tests {
         constexpr StringView kUrl = "ws://hub.test";
         constexpr milliseconds kStep{10};
         constexpr int kMaxSteps = 20000;
-        constexpr int kCardsInAHand = DemoCardGame::kTotalPlays;
+        constexpr int kCardsPlayedInAHand = DemoCardGame::kTotalPlays;
 
-        /// A human at the table: a RoomClient over the hub, judged on the wire, that plays the first action it is offered
-        struct Player {
-            Player(HubWorld& world, bool judged, RoomClientSettings settings = {}) : judge(MakeShared<WireJudgeLog>()) {
+        /// A RoomClientPlayer over the hub; @p judged off leaves the wire judge out
+        struct Player : RoomClientPlayer {
+            Player(HubWorld& world, bool judged, RoomClientSettings settings = {}) {
                 RoomTransportFactory factory = world.Factory(links);
                 settings.transportFactory = judged ? MakeJudgedFactory(std::move(factory), judge) : std::move(factory);
                 client = MakeUnique<RoomClient>(std::move(settings));
             }
 
-            [[nodiscard]] size_t Count(RoomClientEventKind kind) const {
-                return static_cast<size_t>(std::count_if(events.begin(), events.end(), [kind](const RoomClientEvent& event) { return event.kind == kind; }));
-            }
-
-            [[nodiscard]] int TableSize() const {
-                const Json* table = FindJsonMember(client->GetView(), "table");
-                return table && table->is_array() ? static_cast<int>(table->size()) : -1;
-            }
-
-            void TakeEvents() {
-                const size_t before = events.size();
-                client->DrainEvents(events);
-                for (size_t i = before; i < events.size(); ++i) {
-                    if (events[i].kind == RoomClientEventKind::Resumed) {
-                        // What was sent on the old connection may never have arrived
-                        acted = false;
-                    }
-                }
-            }
-
-            /// Plays the first action of the last view, once per version of it
-            void ActIfItsTurn() {
-                if (!client->IsInRoom() || !client->HasView() || client->IsFinished() || !client->GetActions().is_array() || client->GetActions().empty()) {
-                    return;
-                }
-                if (acted && actedVersion == client->GetViewVersion()) {
-                    return;
-                }
-                actedVersion = client->GetViewVersion();
-                acted = true;
-                EXPECT_TRUE(client->SendAction(client->GetActions()[0]).has_value());
+            ~Player() {
+                // The transports of the client use the links
+                client.reset();
             }
 
             HubClientLinks links;
-            SharedPtr<WireJudgeLog> judge;
-            UniquePtr<RoomClient> client;
-            Vector<RoomClientEvent> events;
-            bool acted = false;
-            uint64_t actedVersion = 0;
         };
 
         /// A hub in memory and the clients of a table. The test moves time with Step(): the hub ticks, every client polls and acts
@@ -80,7 +45,7 @@ namespace BECore::Tests {
                 for (const auto& player : _players) {
                     player->client->Poll(World().Now());
                     player->TakeEvents();
-                    player->ActIfItsTurn();
+                    EXPECT_TRUE(player->ActIfItsTurn());
                 }
             }
 
@@ -130,11 +95,11 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST_F(RoomClientHubTest, TwoHumansAndTwoComputersPlayAHandAndNobodyPeeks) {
-        MakeLobby("cards", 2);
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 2));
         ASSERT_TRUE(_players[0]->client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));
         for (const auto& player : _players) {
-            EXPECT_EQ(player->TableSize(), kCardsInAHand);
+            EXPECT_EQ(player->TableSize(), kCardsPlayedInAHand);
             EXPECT_GT(player->judge->texts, 3u);
             EXPECT_TRUE(player->judge->leaks.empty());
             EXPECT_EQ(player->Count(Kind::Error), 0u);
@@ -145,11 +110,11 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientHubTest, FourHumansPlayAHand) {
-        MakeLobby("cards", 4);
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 4));
         ASSERT_TRUE(_players[0]->client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));
         for (const auto& player : _players) {
-            EXPECT_EQ(player->TableSize(), kCardsInAHand);
+            EXPECT_EQ(player->TableSize(), kCardsPlayedInAHand);
             EXPECT_TRUE(player->judge->leaks.empty());
             EXPECT_EQ(player->Count(Kind::Error), 0u);
         }
@@ -157,7 +122,7 @@ namespace BECore::Tests {
 
     TEST_F(RoomClientHubTest, TheJudgeCatchesAGameThatLeaks) {
         // The negative control: the same hand on a game that sends every hand. If the judge could not fail, the tests above would prove nothing
-        MakeLobby("cards-leaky", 2);
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards-leaky", 2));
         ASSERT_TRUE(_players[0]->client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));
         size_t leaks = 0;
@@ -168,7 +133,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientHubTest, AClientDroppedMidHandReconnectsInsideTheGraceAndPlaysOn) {
-        MakeLobby("cards", 2);
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 2));
         Player& dropped = *_players[1];
         const String token = dropped.client->GetSession().token;
         ASSERT_TRUE(_players[0]->client->Start().has_value());
@@ -188,7 +153,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));
         for (const auto& player : _players) {
-            EXPECT_EQ(player->TableSize(), kCardsInAHand);
+            EXPECT_EQ(player->TableSize(), kCardsPlayedInAHand);
             EXPECT_TRUE(player->judge->leaks.empty());
         }
     }
@@ -219,7 +184,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(host.client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));
         for (const auto& player : _players) {
-            EXPECT_EQ(player->TableSize(), kCardsInAHand);
+            EXPECT_EQ(player->TableSize(), kCardsPlayedInAHand);
             EXPECT_TRUE(player->judge->leaks.empty());
             EXPECT_EQ(player->Count(Kind::Error), 0u);
         }
@@ -257,7 +222,7 @@ namespace BECore::Tests {
     TEST_F(RoomClientHubTest, AClientThatReturnsAfterTheGraceFindsAComputerHasPlayedItsSeat) {
         ResetWorld(HubWorld::MakeSettings(seconds(1)));
         // Seat 0 moves first, so the hand stalls at seat 1 as soon as the client of seat 1 is gone
-        MakeLobby("cards", 2, Json::object({{"firstSeat", 0}}));
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 2, Json::object({{"firstSeat", 0}})));
         Player& away = *_players[1];
         Player& other = *_players[0];
         const String token = away.client->GetSession().token;
@@ -272,20 +237,12 @@ namespace BECore::Tests {
         for (int i = 0; i < 2500; ++i) {
             Step();
         }
-        const auto playsOfSeat = [&](const Player& player, int seat) {
-            int plays = 0;
-            const Json* table = FindJsonMember(player.client->GetView(), "table");
-            for (size_t i = 0; table && table->is_array() && i < table->size(); ++i) {
-                plays += GetJsonInt((*table)[i], "seat").value_or(-1) == seat ? 1 : 0;
-            }
-            return plays;
-        };
-        EXPECT_EQ(playsOfSeat(other, 1), 0) << "nobody acts for a seat inside the grace";
+        EXPECT_EQ(other.PlaysOf(1), 0) << "nobody acts for a seat inside the grace";
         EXPECT_FALSE(other.client->IsFinished());
 
         // Past the grace a computer plays it; the hand moves on without the client
-        ASSERT_TRUE(StepUntil([&] { return playsOfSeat(other, 1) > 0; }, 4000));
-        const int playedWhileAway = playsOfSeat(other, 1);
+        ASSERT_TRUE(StepUntil([&] { return other.PlaysOf(1) > 0; }, 4000));
+        const int playedWhileAway = other.PlaysOf(1);
         EXPECT_EQ(away.Count(Kind::Resumed), 0u);
 
         // The server is back: the client returns with the same token and takes its seat back
@@ -294,17 +251,17 @@ namespace BECore::Tests {
         EXPECT_EQ(away.Count(Kind::Resumed), 1u);
         EXPECT_EQ(away.client->GetSeat(), 1);
         EXPECT_EQ(away.client->GetSession().token, token);
-        EXPECT_GE(playsOfSeat(away, 1), playedWhileAway);
+        EXPECT_GE(away.PlaysOf(1), playedWhileAway);
 
         ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));
         for (const auto& player : _players) {
-            EXPECT_EQ(player->TableSize(), kCardsInAHand);
+            EXPECT_EQ(player->TableSize(), kCardsPlayedInAHand);
             EXPECT_TRUE(player->judge->leaks.empty());
         }
     }
 
     TEST_F(RoomClientHubTest, ASilentConnectionIsDroppedAndBroughtBack) {
-        MakeLobby("cards", 2);
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 2));
         Player& quiet = *_players[1];
         ASSERT_TRUE(_players[0]->client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return quiet.client->HasView(); }));
@@ -319,7 +276,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientHubTest, AnotherDeviceWithTheSessionTakesTheSeatAndTheFirstOneStaysOut) {
-        MakeLobby("cards", 2);
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 2));
         Player& first = *_players[1];
         ASSERT_TRUE(_players[0]->client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return first.client->HasView(); }));
@@ -345,12 +302,12 @@ namespace BECore::Tests {
 
         // The second plays the seat for the rest of the hand (the first has stopped acting)
         ASSERT_TRUE(StepUntil([&] { return _players[0]->client->IsFinished() && second.client->IsFinished(); }));
-        EXPECT_EQ(second.TableSize(), kCardsInAHand);
+        EXPECT_EQ(second.TableSize(), kCardsPlayedInAHand);
         EXPECT_TRUE(second.judge->leaks.empty());
     }
 
     TEST_F(RoomClientHubTest, ASessionOfARoomThatNoLongerExistsEndsWithRoomGone) {
-        MakeLobby("cards", 2);
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 2));
         const RoomSession session = _players[1]->client->GetSession();
         // The only members leave the lobby: the room is closed
         ASSERT_TRUE(_players[1]->client->Leave().has_value());

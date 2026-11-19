@@ -12,17 +12,6 @@ namespace BECore {
         constexpr StringView kStoppingReason = "server_stopping";
         constexpr uint32_t kThreadOrder = 210;  // the listener's threads take this and the next two, the hub thread the one after
 
-        /// What the client is told when the hub ends its connection
-        uint16_t GetCloseCode(const String& reason) {
-            if (reason == RoomCloseReasons::kRateLimited || reason == RoomCloseReasons::kTooManyFailedJoins) {
-                return WebSocketCloseCode::kPolicyViolation;
-            }
-            if (reason == RoomCloseReasons::kServerFull) {
-                return WebSocketCloseCode::kTryAgainLater;
-            }
-            return WebSocketCloseCode::kNormal;
-        }
-
         WebSocketListenerSettings MakeListenerSettings(const RoomServerSettings& settings) {
             WebSocketListenerSettings listener;
             listener.bind = settings.bind;
@@ -40,6 +29,16 @@ namespace BECore {
         }
 
     }  // namespace
+
+    uint16_t GetRoomCloseCode(StringView reason) {
+        if (reason == RoomCloseReasons::kRateLimited || reason == RoomCloseReasons::kTooManyFailedJoins) {
+            return WebSocketCloseCode::kPolicyViolation;
+        }
+        if (reason == RoomCloseReasons::kServerFull) {
+            return WebSocketCloseCode::kTryAgainLater;
+        }
+        return WebSocketCloseCode::kNormal;
+    }
 
     bool ShouldLogRoomServerStats(const RoomServerStats& current, const RoomServerStats& lastLogged, RoomTime now, RoomTime lastLoggedAt, std::chrono::milliseconds interval) {
         return interval > std::chrono::milliseconds::zero() && current != lastLogged && now - lastLoggedAt >= interval;
@@ -295,7 +294,7 @@ namespace BECore {
     void RoomWebSocketServer::CloseConnection(ConnectionId connection, const String& reason) {
         if (const auto target = FindConnection(connection)) {
             LOG_INFO("{}: a connection was closed: {}"_format(kLogName, reason));
-            target->QueueClose(GetCloseCode(reason), reason);
+            target->QueueClose(GetRoomCloseCode(reason), reason);
         }
     }
 

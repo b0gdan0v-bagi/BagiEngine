@@ -1,5 +1,6 @@
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Widgets/EditorLayout/GitBranch.h>
 
 namespace BECore::Tests {
@@ -23,12 +24,6 @@ namespace BECore::Tests {
                 std::filesystem::remove_all(_root, ec);
             }
 
-            static void WriteFile(const std::filesystem::path& path, const String& text) {
-                std::error_code ec;
-                std::filesystem::create_directories(path.parent_path(), ec);
-                std::ofstream(path, std::ios::binary) << text;
-            }
-
             std::filesystem::path _root;
         };
 
@@ -47,7 +42,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ParseGitHead("ref: refs/heads/main\n"), "main");
         EXPECT_EQ(ParseGitHead("ref: refs/heads/main\r\n"), "main");
         EXPECT_EQ(ParseGitHead("  ref: refs/heads/main \n\n"), "main");
-        EXPECT_EQ(ParseGitHead((String(kSha1) + "\r\n").c_str()), "0123456");
+        EXPECT_EQ(ParseGitHead(Format("{}\r\n", kSha1).c_str()), "0123456");
     }
 
     TEST_F(GitBranchTest, ParseADetachedHead) {
@@ -82,13 +77,13 @@ namespace BECore::Tests {
     }
 
     TEST_F(GitBranchTest, ReadFromADetachedHead) {
-        WriteFile(_root / ".git" / "HEAD", String(kSha1) + "\n");
+        WriteFile(_root / ".git" / "HEAD", Format("{}\n", kSha1));
         EXPECT_EQ(ReadGitBranch(_root), "0123456");
     }
 
     TEST_F(GitBranchTest, ReadFollowsAnAbsoluteGitdirFile) {
         WriteFile(_root / "elsewhere" / "HEAD", "ref: refs/heads/games/mahjong\n");
-        WriteFile(_root / "project" / ".git", "gitdir: " + FromStdString((_root / "elsewhere").string()) + "\n");
+        WriteFile(_root / "project" / ".git", Format("gitdir: {}\n", FromStdString((_root / "elsewhere").string())));
         EXPECT_EQ(ReadGitBranch(_root / "project"), "games/mahjong");
     }
 
@@ -109,7 +104,13 @@ namespace BECore::Tests {
     }
 
     TEST_F(GitBranchTest, ReadGivesEmptyWithoutARepository) {
-        // Assumes the system temp folder has no .git above it
+        // The read walks up past the temp folder, so a .git above it (a checkout holding the temp folder) is found first
+        for (std::filesystem::path above = _root.parent_path(); !above.empty() && above != above.parent_path(); above = above.parent_path()) {
+            std::error_code missing;
+            if (std::filesystem::exists(above / ".git", missing)) {
+                GTEST_SKIP() << "a .git above the temp folder: " << above.string();
+            }
+        }
         std::error_code ec;
         std::filesystem::create_directories(_root / "plain" / "dir", ec);
         EXPECT_EQ(ReadGitBranch(_root / "plain" / "dir"), "");

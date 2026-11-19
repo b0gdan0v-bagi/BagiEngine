@@ -19,12 +19,12 @@ namespace BECore::Fuzz {
         constexpr const char* kWebSocketFrameFolder = "ws_frame";
         constexpr const char* kWebSocketHandshakeFolder = "ws_handshake";
 
-        /// The game id and the schema versions of the save seeds against the schema of FuzzSaveEnvelope (`kSchema`)
-        constexpr StringView kSaveGame = "FuzzGame";
-        constexpr uint32_t kSaveVersionCurrent = 3;
-        constexpr uint32_t kSaveVersionOldest = 2;
-        constexpr uint32_t kSaveVersionTooOld = 1;
-        constexpr uint32_t kSaveVersionTooNew = 4;
+        /// The game id and the schema versions of the save seeds, from the schema FuzzSaveEnvelope loads with
+        constexpr StringView kSaveGame = kFuzzSaveSchema.game;
+        constexpr uint32_t kSaveVersionCurrent = kFuzzSaveSchema.version;
+        constexpr uint32_t kSaveVersionOldest = kFuzzSaveSchema.minVersion;
+        constexpr uint32_t kSaveVersionTooOld = kFuzzSaveSchema.minVersion - 1;
+        constexpr uint32_t kSaveVersionTooNew = kFuzzSaveSchema.version + 1;
 
         /// A scene that references the node file with overrides of the node and of one component
         constexpr StringView kSceneWithOverrides = R"(<SceneManager><scenes><scene type="Scene" name="Main" viewWidth="800" viewHeight="600"><nodes>
@@ -145,11 +145,6 @@ namespace BECore::Fuzz {
                 writer.EndArray();
             }
             return ToBytes(writer);
-        }
-
-        FuzzBytes TextBytes(StringView text) {
-            const auto* begin = reinterpret_cast<const uint8_t*>(text.data());
-            return FuzzBytes(begin, begin + text.size());
         }
 
         /// The input of FuzzSceneNode: the scene text, a NUL byte, the node file

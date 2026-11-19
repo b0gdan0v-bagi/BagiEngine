@@ -8,9 +8,12 @@
 #include <BECore/Scene/Components/ParticleEmitterComponent.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Time/Time.h>
+#include <BECore/UI/UIColor.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/NullPropertyVisitor.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
 
@@ -68,47 +71,8 @@ namespace BECore::Tests {
 </scenes></SceneManager>)";
 
         /// Remembers the name of every field and group an inspector would show
-        class NameRecorder : public IPropertyVisitor {
+        class NameRecorder : public NullPropertyVisitor {
         public:
-            bool Visit(StringView name, bool&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, int8_t&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, uint8_t&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, int16_t&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, uint16_t&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, int32_t&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, uint32_t&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, int64_t&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, uint64_t&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, float&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, double&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, PoolString&) override {
-                return Note(name);
-            }
-            bool Visit(StringView name, String&) override {
-                return Note(name);
-            }
             bool VisitEnum(StringView name, const StringView*, size_t, size_t&) override {
                 return Note(name);
             }
@@ -121,6 +85,11 @@ namespace BECore::Tests {
                 return eastl::find(_names.begin(), _names.end(), name) != _names.end();
             }
 
+        protected:
+            bool VisitValue(StringView name) override {
+                return Note(name);
+            }
+
         private:
             bool Note(StringView name) {
                 _names.emplace_back(name.data(), name.size());
@@ -129,13 +98,6 @@ namespace BECore::Tests {
 
             Vector<String> _names;
         };
-
-        void ExpectColor(const Color& actual, const Color& expected) {
-            EXPECT_EQ(actual.r, expected.r);
-            EXPECT_EQ(actual.g, expected.g);
-            EXPECT_EQ(actual.b, expected.b);
-            EXPECT_EQ(actual.a, expected.a);
-        }
 
         IntrusivePtr<SceneNode> FindNodeByName(Scene& scene, const char* name) {
             for (const auto& node : scene.GetRootNode().GetChildren()) {
@@ -218,9 +180,9 @@ namespace BECore::Tests {
         EXPECT_EQ(emitter->_effect.burstCount, 8);
         EXPECT_EQ(emitter->_effect.maxParticles, 32);
         EXPECT_FLOAT_EQ(emitter->_effect.lifetimeMax, 0.5f);
-        EXPECT_EQ(Emitter("Glow")->_effect.blend, BlendMode::Add);
-        EXPECT_EQ(Emitter("Manual")->_burstAction, "Pop"_intern);
-        EXPECT_FALSE(Emitter("Manual")->_playOnStart);
+        EXPECT_EQ(Require(Emitter("Glow"))._effect.blend, BlendMode::Add);
+        EXPECT_EQ(Require(Emitter("Manual"))._burstAction, "Pop"_intern);
+        EXPECT_FALSE(Require(Emitter("Manual"))._playOnStart);
     }
 
     TEST_F(ParticleEmitterComponentTest, AOneShotFiresAtTheFirstUpdateAndEnds) {
@@ -286,7 +248,7 @@ namespace BECore::Tests {
         for (const DrawCall& call : Draw()) {
             EXPECT_NE(call.vertices.size(), 0u);
         }
-        EXPECT_EQ(Emitter("OneShot")->GetLiveCount(), 0u);
+        EXPECT_EQ(Require(Emitter("OneShot")).GetLiveCount(), 0u);
     }
 
     TEST_F(ParticleEmitterComponentTest, ABurstPlacesParticlesAroundThePointWithTheTint) {
@@ -300,7 +262,7 @@ namespace BECore::Tests {
         EXPECT_NEAR(calls[0].rect.y, 115.0f, kTolerance);
         EXPECT_NEAR(calls[0].rect.w, 10.0f, kTolerance);
         EXPECT_NEAR(calls[0].rect.h, 10.0f, kTolerance);
-        ExpectColor(calls[0].vertices[0].color, Color(255, 0, 0, 255));
+        EXPECT_PRED2(ColorsEqual, calls[0].vertices[0].color, Color(255, 0, 0, 255));
     }
 
     TEST_F(ParticleEmitterComponentTest, ABurstWithoutACountUsesTheEffectsBurstCount) {
@@ -333,7 +295,7 @@ namespace BECore::Tests {
         EXPECT_EQ(inactive->GetLiveCount(), 0u);
         EXPECT_DOUBLE_EQ(inactive->GetSimulation().GetTime(), 0.0);
 
-        EXPECT_EQ(Emitter("Manual")->GetLiveCount(), 5u) << "scene A took the action";
+        EXPECT_EQ(Require(Emitter("Manual")).GetLiveCount(), 5u) << "scene A took the action";
         EXPECT_EQ(Draw().size(), 3u) << "OneShot, Glow and Manual of scene A, nothing of B";
     }
 
@@ -454,7 +416,7 @@ namespace BECore::Tests {
         EXPECT_EQ(copy->_effect.shape, ParticleShape::Rect);
         EXPECT_FLOAT_EQ(copy->_effect.size.from, 30.0f);
         EXPECT_EQ(copy->_effect.size.ease, EaseType::QuadOut);
-        ExpectColor(copy->_effect.color.to, Color(1, 2, 3, 4));
+        EXPECT_PRED2(ColorsEqual, copy->_effect.color.to, Color(1, 2, 3, 4));
         EXPECT_EQ(copy->_effect.spriteId, PoolString::Intern(kSparkSprite));
     }
 

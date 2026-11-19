@@ -1,14 +1,13 @@
 #include <BECore/Audio/AudioEvents.h>
 #include <BECore/Audio/AudioManager.h>
 #include <BECore/Audio/NullAudioBackend.h>
+#include <BECore/AudioTestSupport.h>
 #include <BECore/FakeAudioBackend.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
-#include <filesystem>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -19,10 +18,6 @@ namespace BECore::Tests {
         constexpr uint64_t kToneFrames = 5512;  ///< stereo-tone.ogg: 22050 Hz, stereo, a quarter of a second
         constexpr uint64_t kBlipFrames = 2205;  ///< mono-blip.wav: 11025 Hz, mono, a fifth of a second
         constexpr float kGainTolerance = 1e-5f;
-
-        std::filesystem::path FixtureFolder() {
-            return std::filesystem::path(__FILE__).parent_path() / "AudioData";
-        }
 
         PoolString Tone() {
             return PoolString::Intern(Format("{}/stereo-tone.ogg", kMountPoint));
@@ -46,7 +41,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            ASSERT_TRUE(CoreManager::GetFileSystem().Mount(PoolString::Intern(kMountPoint), FixtureFolder()));
+            ASSERT_TRUE(CoreManager::GetFileSystem().Mount(PoolString::Intern(kMountPoint), AudioFixtureFolder()));
             AudioSettings settings;
             settings._voices = kEffectVoices;
             manager.Initialize(settings);
@@ -86,10 +81,7 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(state.volume, 0.5f);
         EXPECT_FALSE(state.fading);
 
-        DecodedAudio audio;
-        audio.format = AudioFormat{22050, 1};
-        audio.samples.assign(16, 0.5f);
-        const auto clip = AudioClip::Create("test/effect.wav"_intern, std::move(audio));
+        const auto clip = MakeTestClip("test/effect.wav"_intern);
         for (int i = 0; i < 5; ++i) {
             manager.Play(*clip, AudioBus::Sfx);
         }

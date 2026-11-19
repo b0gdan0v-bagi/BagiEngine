@@ -2,15 +2,12 @@
 
 #include <BECore/Values/Programs/ExprAst.h>
 #include <BECore/Values/Programs/ExprParser.h>
+#include <Common/TestText.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
 
     namespace {
-
-        bool Contains(const String& text, StringView part) {
-            return text.find(part.data(), 0, part.size()) != String::npos;
-        }
 
         ExprAst Parse(StringView text) {
             auto parsed = ParseExpression(text);
@@ -294,16 +291,16 @@ namespace BECore::Tests {
         const ProgramError longText = ExpectError(Repeated("a", ExprLimits::kMaxTextBytes + 1), ExprLimits::kMaxTextBytes + 1, "longer than 4096 bytes");
         EXPECT_FALSE(longText.message.empty());
 
-        EXPECT_TRUE(ParseExpression(Repeated("(", ExprLimits::kMaxNesting) + "1" + Repeated(")", ExprLimits::kMaxNesting)).has_value());
-        ExpectError(Repeated("(", ExprLimits::kMaxNesting + 1) + "1" + Repeated(")", ExprLimits::kMaxNesting + 1), ExprLimits::kMaxNesting + 2, "nested deeper than 64 levels");
-        EXPECT_TRUE(ParseExpression(Repeated("-", ExprLimits::kMaxTreeHeight) + "1").has_value());
-        ExpectError(Repeated("-", ExprLimits::kMaxNesting + 1) + "1", ExprLimits::kMaxNesting + 2, "nested deeper than 64 levels");
-        const String calls = Repeated("f(", ExprLimits::kMaxNesting + 1) + "1" + Repeated(")", ExprLimits::kMaxNesting + 1);
+        EXPECT_TRUE(ParseExpression(Format("{}1{}", Repeated("(", ExprLimits::kMaxNesting), Repeated(")", ExprLimits::kMaxNesting))).has_value());
+        ExpectError(Format("{}1{}", Repeated("(", ExprLimits::kMaxNesting + 1), Repeated(")", ExprLimits::kMaxNesting + 1)), ExprLimits::kMaxNesting + 2, "nested deeper than 64 levels");
+        EXPECT_TRUE(ParseExpression(Format("{}1", Repeated("-", ExprLimits::kMaxTreeHeight))).has_value());
+        ExpectError(Format("{}1", Repeated("-", ExprLimits::kMaxNesting + 1)), ExprLimits::kMaxNesting + 2, "nested deeper than 64 levels");
+        const String calls = Format("{}1{}", Repeated("f(", ExprLimits::kMaxNesting + 1), Repeated(")", ExprLimits::kMaxNesting + 1));
         ExpectError(calls, 2 * (ExprLimits::kMaxNesting + 1) + 1, "nested deeper");
 
         // A call of k sums `1 + 1` has 3k + 1 nodes and is two levels high
         const size_t fits = (ExprLimits::kMaxNodes - 1) / 3;
-        const auto sums = [](size_t count) { return "f(" + Repeated("1 + 1, ", count - 1) + "1 + 1)"; };
+        const auto sums = [](size_t count) { return Format("f({}1 + 1)", Repeated("1 + 1, ", count - 1)); };
         EXPECT_EQ(Parse(sums(fits)).nodes.size(), ExprLimits::kMaxNodes - 1);
         const auto parsed = ParseExpression(sums(fits + 1));
         ASSERT_FALSE(parsed.has_value());
@@ -314,23 +311,23 @@ namespace BECore::Tests {
     TEST(ProgramParserTest, ATreeHigherThanTheHeightLimitIsRefusedWhateverMakesItHigh) {
         constexpr size_t kLevels = ExprLimits::kMaxTreeHeight;
         // A left-nested chain is a loop of the parser but a tree as high as it is long: n operators are n levels
-        const auto chain = [](size_t operators) { return "a" + Repeated(" + a", operators); };
+        const auto chain = [](size_t operators) { return Format("a{}", Repeated(" + a", operators)); };
         EXPECT_TRUE(ParseExpression(chain(kLevels)).has_value());
         const auto longChain = ParseExpression(chain(kLevels + 1));
         ASSERT_FALSE(longChain.has_value());
         EXPECT_TRUE(Contains(longChain.error().message, "more than 32 levels high")) << longChain.error().message.c_str();
         EXPECT_EQ(longChain.error().column, 4 * (kLevels + 1) - 1);
 
-        const auto members = [](size_t count) { return "(a)" + Repeated(".x", count); };
+        const auto members = [](size_t count) { return Format("(a){}", Repeated(".x", count)); };
         EXPECT_TRUE(ParseExpression(members(kLevels)).has_value());
         EXPECT_FALSE(ParseExpression(members(kLevels + 1)).has_value());
 
         // Parentheses add no node, so a chain inside them is as high as outside
-        EXPECT_FALSE(ParseExpression("(" + chain(kLevels) + ") + a").has_value());
+        EXPECT_FALSE(ParseExpression(Format("({}) + a", chain(kLevels))).has_value());
         // The calls, the unary operators and the operators of one expression add up
-        EXPECT_FALSE(ParseExpression("f(" + chain(kLevels) + ")").has_value());
-        EXPECT_FALSE(ParseExpression("-(" + chain(kLevels) + ")").has_value());
-        const auto unary = ParseExpression(Repeated("-", kLevels + 1) + "1");
+        EXPECT_FALSE(ParseExpression(Format("f({})", chain(kLevels))).has_value());
+        EXPECT_FALSE(ParseExpression(Format("-({})", chain(kLevels))).has_value());
+        const auto unary = ParseExpression(Format("{}1", Repeated("-", kLevels + 1)));
         ASSERT_FALSE(unary.has_value());
         EXPECT_TRUE(Contains(unary.error().message, "more than 32 levels high")) << unary.error().message.c_str();
         EXPECT_EQ(unary.error().column, 1U);
@@ -391,13 +388,13 @@ namespace BECore::Tests {
     }
 
     TEST(ProgramParserTest, AStringCountsInTheLimits) {
-        const String longest = "'" + Repeated("a", ExprLimits::kMaxTextBytes - 2) + "'";
+        const String longest = Format("'{}'", Repeated("a", ExprLimits::kMaxTextBytes - 2));
         const ExprAst fits = Parse(longest);
         EXPECT_EQ(fits[fits.root].text.size(), ExprLimits::kMaxTextBytes - 2);
-        ExpectError(longest + " ", ExprLimits::kMaxTextBytes + 1, "longer than 4096 bytes");
-        ExpectError("'" + Repeated("a", ExprLimits::kMaxTextBytes) + "'", ExprLimits::kMaxTextBytes + 1, "longer than 4096 bytes");
+        ExpectError(Format("{} ", longest), ExprLimits::kMaxTextBytes + 1, "longer than 4096 bytes");
+        ExpectError(Format("'{}'", Repeated("a", ExprLimits::kMaxTextBytes)), ExprLimits::kMaxTextBytes + 1, "longer than 4096 bytes");
 
-        const auto list = [](size_t count) { return "f('a'" + Repeated(", 'a'", count - 1) + ")"; };
+        const auto list = [](size_t count) { return Format("f('a'{})", Repeated(", 'a'", count - 1)); };
         EXPECT_EQ(Parse(list(ExprLimits::kMaxNodes - 1)).nodes.size(), ExprLimits::kMaxNodes);
         const auto parsed = ParseExpression(list(ExprLimits::kMaxNodes));
         ASSERT_FALSE(parsed.has_value());

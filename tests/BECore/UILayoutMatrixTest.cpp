@@ -1,6 +1,8 @@
 #include <BECore/Scene/SceneView.h>
 #include <BECore/UI/UICanvasLayout.h>
+#include <BECore/UILayoutHud.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/UILayoutMatrix.h>
 #include <gtest/gtest.h>
 
@@ -8,6 +10,7 @@ namespace BECore::Tests {
 
     namespace {
 
+        constexpr float kTolerance = 1e-3f;
         constexpr float kLandscapeWidth = 1280.0f;
         constexpr float kLandscapeHeight = 720.0f;
 
@@ -203,8 +206,6 @@ namespace BECore::Tests {
             return canvas;
         }
 
-        constexpr size_t kScreenRunsPerCase = 6;  // three scale modes, two user scales
-
     }  // namespace
 
     TEST(UILayoutMatrixTest, AnElementAnchoredByPercentInARegionTheGamePublishesIsCleanOnTheWholeMatrix) {
@@ -216,7 +217,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
         EXPECT_EQ(canvas.regions.Size(), 1u);  // the canvas gets its own set back
         ASSERT_NE(canvas.regions.Find("kept"_intern), nullptr);
-        EXPECT_FLOAT_EQ(canvas.regions.Find("kept"_intern)->h, 4.0f);
+        EXPECT_FLOAT_EQ(Require(canvas.regions.Find("kept"_intern)).h, 4.0f);
     }
 
     TEST(UILayoutMatrixTest, ARegionNameThePublisherDoesNotSetFailsEveryCaseWithMissingRegion) {
@@ -224,7 +225,7 @@ namespace BECore::Tests {
 
         const auto failures = ValidateOnMatrix(canvas, {}, {}, {}, LeftThirdAs("other"));
 
-        EXPECT_EQ(failures.size(), UILayoutMatrix().size() * kScreenRunsPerCase);
+        EXPECT_EQ(failures.size(), UILayoutMatrix().size() * kMatrixRunsPerScreenCase);
         for (const UIMatrixFailure& failure : failures) {
             ASSERT_EQ(failure.issues.size(), 1u) << failure.label.c_str();
             EXPECT_EQ(failure.issues[0].kind, UILayoutIssueKind::MissingRegion);
@@ -238,7 +239,7 @@ namespace BECore::Tests {
         const auto failures = ValidateOnMatrix(canvas, {}, {}, {}, LeftThirdAs("side"));
 
         ASSERT_FALSE(failures.empty());
-        EXPECT_LT(failures.size(), UILayoutMatrix().size() * kScreenRunsPerCase);  // the wide cases have room for it
+        EXPECT_LT(failures.size(), UILayoutMatrix().size() * kMatrixRunsPerScreenCase);  // the wide cases have room for it
         for (const UIMatrixFailure& failure : failures) {
             // A canvas narrower than the element also gets OutsideCanvas; the region is what every failing case has in common
             const bool outsideRegion = eastl::any_of(failure.issues.begin(), failure.issues.end(), [](const UILayoutIssue& issue) { return issue.kind == UILayoutIssueKind::OutsideRegion; });
@@ -254,6 +255,123 @@ namespace BECore::Tests {
 
         // The region is 100 units in a canvas of at least a few hundred: the element fills it and is inside it everywhere
         EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
+    }
+
+    // ---- the size matrix --------------------------------------------------------------------------------------------------
+
+    TEST(UILayoutMatrixTest, TheMatrixCoversEveryAspectSizeAndSafeArea) {
+        const auto& cases = UILayoutMatrix();
+
+        for (const char* aspect : {"16:9 ", "16:10 ", "3:2 ", "4:3 ", "1:1 ", "21:9 ", "32:9 ", "9:16 ", "9:19.5 ", "3:4 "}) {
+            for (const char* safe : {"no insets", "notch", "side insets"}) {
+                const bool found = std::any_of(cases.begin(), cases.end(), [&](const UIMatrixCase& c) { return c.label.find(aspect) == 0 && c.label.find(safe) != String::npos; });
+                EXPECT_TRUE(found) << aspect << " " << safe;
+            }
+        }
+
+        float smallestShortSide = 1e9f;
+        float largestLongSide = 0.0f;
+        bool hasFourK = false;
+        for (const UIMatrixCase& c : cases) {
+            smallestShortSide = std::min({smallestShortSide, c.context.outputWidth, c.context.outputHeight});
+            largestLongSide = std::max({largestLongSide, c.context.outputWidth, c.context.outputHeight});
+            hasFourK |= c.context.outputWidth == 3840.0f && c.context.outputHeight == 2160.0f;
+            EXPECT_GT(c.context.safeArea.w, 0.0f) << c.label.c_str();
+        }
+        EXPECT_FLOAT_EQ(smallestShortSide, 480.0f);
+        EXPECT_FLOAT_EQ(largestLongSide, 3840.0f);
+        EXPECT_TRUE(hasFourK);
+    }
+
+    TEST(UILayoutMatrixTest, EveryLabelIsUnique) {
+        const auto& cases = UILayoutMatrix();
+        for (size_t i = 0; i < cases.size(); ++i) {
+            for (size_t j = i + 1; j < cases.size(); ++j) {
+                ASSERT_NE(cases[i].label, cases[j].label);
+            }
+        }
+    }
+
+    TEST(UILayoutMatrixTest, ASafeAreaStaysInsideTheOutput) {
+        for (const UIMatrixCase& c : UILayoutMatrix()) {
+            const Rect& safe = c.context.safeArea;
+            EXPECT_GE(safe.x, 0.0f) << c.label.c_str();
+            EXPECT_GE(safe.y, 0.0f) << c.label.c_str();
+            EXPECT_LE(safe.x + safe.w, c.context.outputWidth + kTolerance) << c.label.c_str();
+            EXPECT_LE(safe.y + safe.h, c.context.outputHeight + kTolerance) << c.label.c_str();
+        }
+    }
+
+    TEST(UILayoutMatrixTest, TheHudPassesEveryCase) {
+        UICanvasLayout canvas;
+        BuildHud(canvas);
+
+        const auto failures = ValidateOnMatrix(canvas);
+
+        EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
+    }
+
+    TEST(UILayoutMatrixTest, AScreenThatDoesNotAdaptIsCaughtOnTheSmallAndTallCases) {
+        UICanvasLayout canvas;
+        auto banner = AddBox(*canvas.root, "Banner", 0.0f, 0.0f, 1000.0f, 80.0f);  // a fixed 1000 units wide: too wide for any phone-like canvas at scale 1
+        banner->blocksInput = true;
+        auto tiny = AddBox(*canvas.root, "Tiny", 20.0f, 100.0f, 20.0f, 20.0f);
+        tiny->interactive = true;
+        canvas.params.scaleMode = CanvasScaleMode::ConstantPixelSize;
+
+        const auto failures = ValidateOnMatrix(canvas);
+
+        ASSERT_FALSE(failures.empty());
+        bool bannerCaught = false;
+        bool tinyCaught = false;
+        for (const UIMatrixFailure& failure : failures) {
+            for (const UILayoutIssue& issue : failure.issues) {
+                bannerCaught |= issue.kind == UILayoutIssueKind::OutsideCanvas && issue.element == "Banner"_intern;
+                tinyCaught |= issue.kind == UILayoutIssueKind::TouchTargetTooSmall && issue.element == "Tiny"_intern;
+            }
+        }
+        EXPECT_TRUE(bannerCaught);
+        EXPECT_TRUE(tinyCaught);
+        EXPECT_EQ(canvas.params.scaleMode, CanvasScaleMode::ConstantPixelSize);  // the helper gives the params back
+    }
+
+    TEST(UILayoutMatrixTest, AVariantThatNarrowsThePanelMakesTheScreenPass) {
+        auto build = [](bool withVariant) {
+            auto canvas = MakeUnique<UICanvasLayout>();
+            auto panel = AddBox(*canvas->root, "Panel", 10.0f, 10.0f, 700.0f, 100.0f);
+            panel->blocksInput = true;
+            if (withVariant) {
+                UIVariant narrow;
+                narrow.when.maxWidth = 800.0f;
+                UIElementOverride shrink;
+                shrink.element = "Panel"_intern;
+                shrink.width = UILength::Percent(90.0f);
+                narrow.overrides.push_back(shrink);
+                canvas->variants.push_back(narrow);
+            }
+            return canvas;
+        };
+
+        auto without = build(false);
+        auto with = build(true);
+
+        EXPECT_FALSE(ValidateOnMatrix(*without).empty());
+        const auto failures = ValidateOnMatrix(*with);
+        EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
+    }
+
+    TEST(UILayoutMatrixTest, ASceneViewCanvasRunsOncePerCaseBecauseTheModeAndUserScaleDoNotApply) {
+        UICanvasLayout canvas;
+        canvas.params.space = CanvasSpace::SceneView;
+        UILayoutContext base;
+        base.sceneViewWidth = 840.0f;
+        base.sceneViewHeight = 760.0f;
+        AddBox(*canvas.root, "Label", 100.0f, 100.0f, 200.0f, 40.0f);
+
+        const auto failures = ValidateOnMatrix(canvas, {}, base);
+
+        EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
+        EXPECT_EQ(canvas.GetLayoutRuns(), static_cast<uint32_t>(UILayoutMatrix().size()));
     }
 
 }  // namespace BECore::Tests

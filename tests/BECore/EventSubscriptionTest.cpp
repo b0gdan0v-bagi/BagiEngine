@@ -12,36 +12,40 @@ namespace BECore::Tests {
         };
     }  // namespace TestEvents
 
-    class SimpleSubscriber : public SubscriptionHolder {
-    public:
-        // Subscribe() is protected in SubscriptionHolder; the test drives it directly.
-        using SubscriptionHolder::Subscribe;
+    namespace {
 
-        int callCount = 0;
-        int lastValue = 0;
+        class SimpleSubscriber : public SubscriptionHolder {
+        public:
+            // Subscribe() is protected in SubscriptionHolder; the test drives it directly.
+            using SubscriptionHolder::Subscribe;
 
-        void OnSimpleEvent(const TestEvents::SimpleEvent&) {
-            callCount++;
-        }
+            int callCount = 0;
+            int lastValue = 0;
 
-        void OnDataEvent(const TestEvents::DataEvent& e) {
-            callCount++;
-            lastValue = e.value;
-        }
-    };
+            void OnSimpleEvent(const TestEvents::SimpleEvent&) {
+                callCount++;
+            }
 
-    class RaiiSubscriber : public SubscriptionHolder {
-    public:
-        int callCount = 0;
+            void OnDataEvent(const TestEvents::DataEvent& e) {
+                callCount++;
+                lastValue = e.value;
+            }
+        };
 
-        void Initialize() {
-            Subscribe<TestEvents::SimpleEvent, &RaiiSubscriber::OnEvent>(this);
-        }
+        class RaiiSubscriber : public SubscriptionHolder {
+        public:
+            int callCount = 0;
 
-        void OnEvent(const TestEvents::SimpleEvent&) {
-            callCount++;
-        }
-    };
+            void Initialize() {
+                Subscribe<TestEvents::SimpleEvent, &RaiiSubscriber::OnEvent>(this);
+            }
+
+            void OnEvent(const TestEvents::SimpleEvent&) {
+                callCount++;
+            }
+        };
+
+    }  // namespace
 
     // Compile-time checks: a regression breaks the build.
     static_assert(std::is_default_constructible_v<TestEvents::SimpleEvent>);
@@ -53,45 +57,24 @@ namespace BECore::Tests {
         SUCCEED() << "The static_asserts above are the check";
     }
 
-    TEST(EventSubscriptionTest, SubscriptionHolder) {
+    TEST(EventSubscriptionTest, ADestroyedHolderIsUnsubscribed) {
         {
-            RaiiSubscriber subscriber;
-            subscriber.Initialize();
+            RaiiSubscriber first;
+            first.Initialize();
+            RaiiSubscriber second;
+            second.Initialize();
 
             TestEvents::SimpleEvent::Emit();
-            EXPECT_EQ(subscriber.callCount, 1) << "Event should be received";
-
             TestEvents::SimpleEvent::Emit();
-            EXPECT_EQ(subscriber.callCount, 2) << "Event should be received twice";
+            EXPECT_EQ(first.callCount, 2);
+            EXPECT_EQ(second.callCount, 2);
         }
 
-        // A new subscriber must be the only one that gets the event
-        RaiiSubscriber newSubscriber;
-        newSubscriber.Initialize();
-
+        // Only the subscriber that is alive gets the event
+        RaiiSubscriber later;
+        later.Initialize();
         TestEvents::SimpleEvent::Emit();
-        EXPECT_EQ(newSubscriber.callCount, 1) << "Only the new subscriber should receive the event";
-    }
-
-    TEST(EventSubscriptionTest, DestructorUnsubscribe) {
-        {
-            RaiiSubscriber sub1;
-            sub1.Initialize();
-
-            RaiiSubscriber sub2;
-            sub2.Initialize();
-
-            TestEvents::SimpleEvent::Emit();
-
-            EXPECT_EQ(sub1.callCount, 1) << "Sub1 should receive the event";
-            EXPECT_EQ(sub2.callCount, 1) << "Sub2 should receive the event";
-        }
-
-        RaiiSubscriber sub3;
-        sub3.Initialize();
-
-        TestEvents::SimpleEvent::Emit();
-        EXPECT_EQ(sub3.callCount, 1) << "Only sub3 should receive the event";
+        EXPECT_EQ(later.callCount, 1);
     }
 
     TEST(EventSubscriptionTest, UnsubscribeAll) {

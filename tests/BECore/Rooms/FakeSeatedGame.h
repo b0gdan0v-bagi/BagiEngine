@@ -10,6 +10,14 @@ namespace BECore::Tests {
     /// The negative control: the same game whose view also carries every hand ("allHands"). A leak check must catch it
     using LeakyFakeSeatedGame = LeakyDemoCardGame;
 
+    /// The action of the game that plays @p card
+    [[nodiscard]] inline Json CardAction(const String& card) {
+        Json action = Json::object();
+        action["type"] = "play";
+        action["card"] = card.c_str();
+        return action;
+    }
+
     /// The card ids that @p text mentions and that sit in the hand of a seat other than @p seat in @p game right now
     [[nodiscard]] inline Vector<String> FindLeakedCards(const String& text, int seat, const FakeSeatedGame& game) {
         return FindHiddenCards(text, seat, game);

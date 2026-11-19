@@ -3,6 +3,7 @@
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/SceneManager.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -13,11 +14,6 @@ namespace BECore::Tests {
         const Color kWhite{kOpaque, kOpaque, kOpaque, kOpaque};
         const Color kRed{kOpaque, 0, 0, kOpaque};
         constexpr uint32_t kBytesPerPixel = 4;
-
-        IntrusivePtr<ITexture> MakeTexture(RecordingRenderer& renderer, uint32_t width, uint32_t height) {
-            const Vector<uint8_t> pixels(static_cast<size_t>(width) * height * kBytesPerPixel, kOpaque);
-            return renderer.CreateTexture(pixels.data(), width, height);
-        }
 
     }  // namespace
 
@@ -107,9 +103,9 @@ namespace BECore::Tests {
         renderer.PopClipRect();
 
         ASSERT_EQ(renderer.calls.size(), 2u);
-        EXPECT_FALSE(renderer.calls[0].clip.has_value());
-        ASSERT_TRUE(renderer.calls[1].clip.has_value());
-        EXPECT_FLOAT_EQ(renderer.calls[1].clip->x, 5.0f);
+        EXPECT_FALSE(At(renderer.calls, 0).clip.has_value());
+        ASSERT_TRUE(At(renderer.calls, 1).clip.has_value());
+        EXPECT_FLOAT_EQ(At(renderer.calls, 1).clip->x, 5.0f);
     }
 
     TEST(RendererClipTest, TheClipIsInOutputPixelsAndIgnoresTheViewTransform) {
@@ -120,9 +116,9 @@ namespace BECore::Tests {
         renderer.DrawFilledRect(0.0f, 0.0f, 10.0f, 10.0f, kRed);
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_FLOAT_EQ(renderer.calls[0].clip->x, 100.0f);  // not 2 * 100 + 10
-        EXPECT_FLOAT_EQ(renderer.calls[0].rect.x, 10.0f);    // the rect is mapped, the clip is not
-        EXPECT_FLOAT_EQ(renderer.calls[0].rect.w, 20.0f);
+        EXPECT_FLOAT_EQ(At(renderer.calls, 0).clip->x, 100.0f);  // not 2 * 100 + 10
+        EXPECT_FLOAT_EQ(At(renderer.calls, 0).rect.x, 10.0f);    // the rect is mapped, the clip is not
+        EXPECT_FLOAT_EQ(At(renderer.calls, 0).rect.w, 20.0f);
     }
 
     TEST(RendererTextureTest, TheUntintedOverloadDrawsWithWhite) {
@@ -134,13 +130,13 @@ namespace BECore::Tests {
         base.DrawTexture(*texture, nullptr, 1.0f, 2.0f, 3.0f, 4.0f);
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_EQ(renderer.calls[0].kind, DrawKind::Texture);
-        EXPECT_EQ(renderer.calls[0].color.r, kOpaque);
-        EXPECT_EQ(renderer.calls[0].color.g, kOpaque);
-        EXPECT_EQ(renderer.calls[0].color.b, kOpaque);
-        EXPECT_EQ(renderer.calls[0].color.a, kOpaque);
-        EXPECT_FALSE(renderer.calls[0].source.has_value());
-        EXPECT_FLOAT_EQ(renderer.calls[0].rect.w, 3.0f);
+        EXPECT_EQ(At(renderer.calls, 0).kind, DrawKind::Texture);
+        EXPECT_EQ(At(renderer.calls, 0).color.r, kOpaque);
+        EXPECT_EQ(At(renderer.calls, 0).color.g, kOpaque);
+        EXPECT_EQ(At(renderer.calls, 0).color.b, kOpaque);
+        EXPECT_EQ(At(renderer.calls, 0).color.a, kOpaque);
+        EXPECT_FALSE(At(renderer.calls, 0).source.has_value());
+        EXPECT_FLOAT_EQ(At(renderer.calls, 0).rect.w, 3.0f);
     }
 
     TEST(RendererTextureTest, TheTintReachesTheBackend) {
@@ -152,12 +148,12 @@ namespace BECore::Tests {
         renderer.DrawTexture(*texture, &source, 0.0f, 0.0f, 8.0f, 8.0f, Color{10, 20, 30, 40});
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_EQ(renderer.calls[0].color.r, 10);
-        EXPECT_EQ(renderer.calls[0].color.g, 20);
-        EXPECT_EQ(renderer.calls[0].color.b, 30);
-        EXPECT_EQ(renderer.calls[0].color.a, 40);
-        ASSERT_TRUE(renderer.calls[0].source.has_value());
-        EXPECT_FLOAT_EQ(renderer.calls[0].source->w, 2.0f);
+        EXPECT_EQ(At(renderer.calls, 0).color.r, 10);
+        EXPECT_EQ(At(renderer.calls, 0).color.g, 20);
+        EXPECT_EQ(At(renderer.calls, 0).color.b, 30);
+        EXPECT_EQ(At(renderer.calls, 0).color.a, 40);
+        ASSERT_TRUE(At(renderer.calls, 0).source.has_value());
+        EXPECT_FLOAT_EQ(At(renderer.calls, 0).source->w, 2.0f);
     }
 
     TEST(RendererTextureTest, CreateTextureKeepsTheSizeAndThePixels) {
@@ -203,7 +199,7 @@ namespace BECore::Tests {
         renderer.DrawGeometry(nullptr, {kQuad.data(), kQuad.size()}, {kQuadIndices.data(), kQuadIndices.size()}, 5.0f, 1.0f);
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        const DrawCall& call = renderer.calls[0];
+        const DrawCall& call = At(renderer.calls, 0);
         EXPECT_EQ(call.kind, DrawKind::Geometry);
         ASSERT_EQ(call.vertices.size(), 4u);
         EXPECT_FLOAT_EQ(call.vertices[0].x, (0.0f + 5.0f) * 2.0f + 100.0f);
@@ -227,9 +223,9 @@ namespace BECore::Tests {
         renderer.PopClipRect();
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_EQ(renderer.calls[0].texture, texture.Get());
-        ASSERT_TRUE(renderer.calls[0].clip.has_value());
-        EXPECT_FLOAT_EQ(renderer.calls[0].clip->w, 30.0f);
+        EXPECT_EQ(At(renderer.calls, 0).texture, texture.Get());
+        ASSERT_TRUE(At(renderer.calls, 0).clip.has_value());
+        EXPECT_FLOAT_EQ(At(renderer.calls, 0).clip->w, 30.0f);
     }
 
     TEST(RendererGeometryTest, AnEmptyClipHidesTheDraw) {
@@ -469,10 +465,10 @@ namespace BECore::Tests {
         renderer.DrawFilledRect(0.0f, 0.0f, 10.0f, 10.0f, Color{1, 2, 3, 77});
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_EQ(renderer.calls[0].color.r, 1);
-        EXPECT_EQ(renderer.calls[0].color.g, 2);
-        EXPECT_EQ(renderer.calls[0].color.b, 3);
-        EXPECT_EQ(renderer.calls[0].color.a, 77);
+        EXPECT_EQ(At(renderer.calls, 0).color.r, 1);
+        EXPECT_EQ(At(renderer.calls, 0).color.g, 2);
+        EXPECT_EQ(At(renderer.calls, 0).color.b, 3);
+        EXPECT_EQ(At(renderer.calls, 0).color.a, 77);
     }
 
     TEST(RendererOpacityTest, HalfOpacityHalvesTheAlphaOfARect) {
@@ -482,8 +478,8 @@ namespace BECore::Tests {
         renderer.DrawFilledRect(0.0f, 0.0f, 10.0f, 10.0f, kRed);
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_EQ(renderer.calls[0].color.a, kHalfAlpha);
-        EXPECT_EQ(renderer.calls[0].color.r, kOpaque);  // only the alpha moves
+        EXPECT_EQ(At(renderer.calls, 0).color.a, kHalfAlpha);
+        EXPECT_EQ(At(renderer.calls, 0).color.r, kOpaque);  // only the alpha moves
     }
 
     TEST(RendererOpacityTest, HalfOpacityHalvesTheAlphaOfATintedTexture) {
@@ -497,8 +493,8 @@ namespace BECore::Tests {
         base.DrawTexture(*texture, nullptr, 0.0f, 0.0f, 4.0f, 4.0f);
 
         ASSERT_EQ(renderer.calls.size(), 2u);
-        EXPECT_EQ(renderer.calls[0].color.a, 100);
-        EXPECT_EQ(renderer.calls[1].color.a, kHalfAlpha);  // the white of the untinted overload fades too
+        EXPECT_EQ(At(renderer.calls, 0).color.a, 100);
+        EXPECT_EQ(At(renderer.calls, 1).color.a, kHalfAlpha);  // the white of the untinted overload fades too
     }
 
     TEST(RendererOpacityTest, HalfOpacityHalvesTheAlphaOfEveryVertex) {
@@ -508,7 +504,7 @@ namespace BECore::Tests {
         renderer.DrawGeometry(nullptr, {kFadingQuad.data(), kFadingQuad.size()}, {kQuadIndices.data(), kQuadIndices.size()}, 0.0f, 0.0f);
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        const DrawCall& call = renderer.calls[0];
+        const DrawCall& call = At(renderer.calls, 0);
         ASSERT_EQ(call.vertices.size(), 4u);
         EXPECT_EQ(call.vertices[0].color.a, 100);
         EXPECT_EQ(call.vertices[1].color.a, 50);
@@ -530,12 +526,12 @@ namespace BECore::Tests {
         renderer.DrawTransformedRect(0.0f, 0.0f, 10.0f, 10.0f, kRed, DrawTransform{});  // the identity is a plain rect
 
         ASSERT_EQ(renderer.calls.size(), 3u);
-        EXPECT_EQ(renderer.calls[0].kind, DrawKind::Geometry);
-        EXPECT_EQ(renderer.calls[0].vertices[0].color.a, kHalfAlpha);
-        EXPECT_EQ(renderer.calls[1].kind, DrawKind::Geometry);
-        EXPECT_EQ(renderer.calls[1].vertices[0].color.a, kHalfAlpha);
-        EXPECT_EQ(renderer.calls[2].kind, DrawKind::Rect);
-        EXPECT_EQ(renderer.calls[2].color.a, kHalfAlpha);
+        EXPECT_EQ(At(renderer.calls, 0).kind, DrawKind::Geometry);
+        EXPECT_EQ(At(renderer.calls, 0).vertices[0].color.a, kHalfAlpha);
+        EXPECT_EQ(At(renderer.calls, 1).kind, DrawKind::Geometry);
+        EXPECT_EQ(At(renderer.calls, 1).vertices[0].color.a, kHalfAlpha);
+        EXPECT_EQ(At(renderer.calls, 2).kind, DrawKind::Rect);
+        EXPECT_EQ(At(renderer.calls, 2).color.a, kHalfAlpha);
     }
 
     TEST(RendererOpacityTest, ScopedOpacityMultipliesWhenNestedAndRestores) {
@@ -553,7 +549,7 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(renderer.GetOpacity(), 1.0f);
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_EQ(renderer.calls[0].color.a, kQuarterAlpha);
+        EXPECT_EQ(At(renderer.calls, 0).color.a, kQuarterAlpha);
     }
 
     TEST(RendererOpacityTest, ScopedOpacityOfOneChangesNothing) {
@@ -600,7 +596,7 @@ namespace BECore::Tests {
         renderer.DrawFilledRect(0.0f, 0.0f, 10.0f, 10.0f, kRed);
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_EQ(renderer.calls[0].color.a, 0);
+        EXPECT_EQ(At(renderer.calls, 0).color.a, 0);
     }
 
 }  // namespace BECore::Tests

@@ -11,14 +11,18 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/TempPath.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <RmlUi/Core.h>
 #include <RmlUiHost/RmlUiDocumentComponent.h>
 #include <RmlUiHost/RmlUiRuntime.h>
+#include <RmlUiHost/RmlUiScreens.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
+
+    using RmlUiScreens::BoxOf;
 
     namespace {
 
@@ -165,7 +169,8 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
             CoreManager::GetUIEnvironment().SetSettings(_savedSettings);
             CoreManager::GetTime().Reset();
             if (!_directory.empty()) {
-                std::filesystem::remove_all(_directory);
+                std::error_code error;
+                std::filesystem::remove_all(_directory, error);
             }
             CoreManager::GetUIVars().Clear();
             CoreManager::GetRendererManager().SetRenderer({});
@@ -191,27 +196,16 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
             _manager->DrawAll();
         }
 
-        /// The border box of an element, in output pixels
-        static Rect BoxOf(const RmlUiDocumentComponent& doc, const char* id) {
-            Rml::Element* element = doc.GetDocument() ? doc.GetDocument()->GetElementById(id) : nullptr;
-            if (!element) {
-                ADD_FAILURE() << "no element '" << id << "'";
-                return {};
-            }
-            const Rml::Vector2f offset = element->GetAbsoluteOffset(Rml::BoxArea::Border);
-            const Rml::Vector2f size = element->GetBox().GetSize(Rml::BoxArea::Border);
-            return {doc.GetOriginX() + offset.x, doc.GetOriginY() + offset.y, size.x, size.y};
-        }
-
         static size_t CountGeometry(const RecordingRenderer& renderer) {
             return static_cast<size_t>(std::count_if(renderer.calls.begin(), renderer.calls.end(), [](const DrawCall& call) { return call.kind == DrawKind::Geometry; }));
         }
 
-        /// A directory of its own, named after the running test (the tests of one executable run in parallel processes)
+        /// An empty directory of the running test and process (TestTempDirectory), removed in TearDown
         std::filesystem::path MakeDirectory() {
-            _directory = std::filesystem::temp_directory_path() / Format("BagiEngineRmlUiHostTest_{}", ::testing::UnitTest::GetInstance()->current_test_info()->name()).c_str();
-            std::filesystem::remove_all(_directory);
-            std::filesystem::create_directories(_directory);
+            _directory = TestTempDirectory("BagiRmlUiHostTest");
+            std::error_code error;
+            std::filesystem::remove_all(_directory, error);
+            std::filesystem::create_directories(_directory, error);
             return _directory;
         }
 
@@ -733,35 +727,20 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
     // ---- a document in a file ---------------------------------------------------------------------------------------------------
 
     TEST_F(RmlUiHostTest, ADocumentIsLoadedFromAFileWithItsStylesheet) {
-        const std::filesystem::path directory = std::filesystem::temp_directory_path() / Format("BagiEngineRmlUiHostTest_{}", ::testing::UnitTest::GetInstance()->current_test_info()->name()).c_str();
-        std::filesystem::remove_all(directory);
-        std::filesystem::create_directories(directory);
-        std::ofstream(directory / "menu.rml") << R"(<rml><head><link type="text/rcss" href="menu.rcss"/></head><body><div id="box"></div></body></rml>)";
-        std::ofstream(directory / "menu.rcss") << "body { width: 100%; height: 100%; } #box { position: absolute; left: 12dp; top: 34dp; width: 56dp; height: 78dp; background-color: #123456; }";
+        const auto directory = MakeDirectory();
+        Write(directory / "menu.rml", R"(<rml><head><link type="text/rcss" href="menu.rcss"/></head><body><div id="box"></div></body></rml>)");
+        Write(directory / "menu.rcss", "body { width: 100%; height: 100%; } #box { position: absolute; left: 12dp; top: 34dp; width: 56dp; height: 78dp; background-color: #123456; }");
 
-        const String scene = Format(R"(<SceneManager><scenes><scene type="Scene" name="File"><nodes><node name="Doc"><components>
-  <component type="RmlUiDocumentComponent" space="Screen" scaleMode="ConstantPixelSize" source="{}"/>
-</components></node></nodes></scene></scenes></SceneManager>)",
-                                    (directory / "menu.rml").generic_string());
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(scene));
-        auto manager = New<SceneManager>();
-        manager->Deserialize(deserializer);
-        manager->Initialize();
-        manager->SetActiveScene("File"_intern);
-        auto doc = manager->GetSceneByName("File"_intern)->GetRootNode().GetChildren()[0]->GetComponent<RmlUiDocumentComponent>();
+        auto doc = OpenFile(directory / "menu.rml");
         ASSERT_TRUE(doc);
         ASSERT_NE(doc->GetDocument(), nullptr) << "the file was read through the file interface";
 
-        manager->DrawAll();
+        DrawFile();
 
         const Rect box = BoxOf(*doc, "box");
         EXPECT_NEAR(box.x, 12.0f, kTolerance) << "the stylesheet next to the document was found";
         EXPECT_NEAR(box.w, 56.0f, kTolerance);
         EXPECT_NEAR(box.h, 78.0f, kTolerance);
-        doc.Reset();
-        manager.Reset();
-        std::filesystem::remove_all(directory);
     }
 
     // ---- hot reload ---------------------------------------------------------------------------------------------------------------
@@ -828,7 +807,8 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         DrawFile();
         Rml::ElementDocument* before = doc->GetDocument();
 
-        std::filesystem::remove(directory / "menu.rml");
+        std::error_code error;
+        ASSERT_TRUE(std::filesystem::remove(directory / "menu.rml", error)) << error.message();
         EXPECT_FALSE(doc->ReloadIfChanged()) << "a file that is gone (an editor saves by deleting and renaming) is not a change yet";
         EXPECT_FALSE(doc->Reload());
 

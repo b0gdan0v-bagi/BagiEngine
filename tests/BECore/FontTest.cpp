@@ -4,21 +4,23 @@
 #include <BECore/Text/TextLayout.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/TextTestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
 
     namespace {
 
-        constexpr const char* kDefaultFontPath = "assets/fonts/PT_Sans-Web-Regular.ttf";
         constexpr const char* kBoldFontPath = "assets/fonts/PT_Sans-Web-Bold.ttf";
         constexpr const char* kDisplayFontPath = "assets/fonts/RussoOne-Regular.ttf";
         constexpr float kSize = 32.0f;
 
-        /// The font that ships with the engine, loaded through the resource manager like a game would
-        IntrusivePtr<Font> LoadDefaultFont() {
-            auto handle = CoreManager::GetResourceManager().Load<Font>(kDefaultFontPath);
-            return IntrusivePtr<Font>(handle ? &*handle : nullptr);
+        void ExpectCoversCyrillic(const Font& font) {
+            for (char32_t codePoint = 0x0410; codePoint <= 0x044F; ++codePoint) {  // А-я
+                EXPECT_NE(font.FindGlyph(codePoint), 0u) << "U+" << std::hex << static_cast<uint32_t>(codePoint);
+            }
+            EXPECT_NE(font.FindGlyph(0x0401), 0u);  // Ё
+            EXPECT_NE(font.FindGlyph(0x0451), 0u);  // ё
         }
 
     }  // namespace
@@ -30,7 +32,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            font = LoadDefaultFont();
+            font = LoadTestFont();
             ASSERT_TRUE(font);
             ASSERT_EQ(font->GetState(), ResourceState::Loaded);
         }
@@ -50,7 +52,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(FontTest, TheSameFileIsLoadedOnce) {
-        auto again = LoadDefaultFont();
+        auto again = LoadTestFont();
 
         EXPECT_EQ(again.Get(), font.Get());
     }
@@ -63,11 +65,7 @@ namespace BECore::Tests {
         for (char32_t codePoint = 0xA1; codePoint <= 0xFF; ++codePoint) {
             EXPECT_NE(font->FindGlyph(codePoint), 0u) << "U+" << std::hex << static_cast<uint32_t>(codePoint);
         }
-        for (char32_t codePoint = 0x0410; codePoint <= 0x044F; ++codePoint) {  // А-я
-            EXPECT_NE(font->FindGlyph(codePoint), 0u) << "U+" << std::hex << static_cast<uint32_t>(codePoint);
-        }
-        EXPECT_NE(font->FindGlyph(0x0401), 0u);  // Ё
-        EXPECT_NE(font->FindGlyph(0x0451), 0u);  // ё
+        ExpectCoversCyrillic(*font);
     }
 
     TEST_F(FontTest, CoversTheCommonPunctuation) {
@@ -142,25 +140,8 @@ namespace BECore::Tests {
         EXPECT_GT(bitmap.offsetY + static_cast<int32_t>(bitmap.height), 0);
     }
 
-    namespace {
-
-        IntrusivePtr<Font> LoadShipped(const char* path) {
-            auto handle = CoreManager::GetResourceManager().Load<Font>(path);
-            return IntrusivePtr<Font>(handle ? &*handle : nullptr);
-        }
-
-        void ExpectCoversCyrillic(const Font& font) {
-            for (char32_t codePoint = 0x0410; codePoint <= 0x044F; ++codePoint) {  // А-я
-                EXPECT_NE(font.FindGlyph(codePoint), 0u) << "U+" << std::hex << static_cast<uint32_t>(codePoint);
-            }
-            EXPECT_NE(font.FindGlyph(0x0401), 0u);  // Ё
-            EXPECT_NE(font.FindGlyph(0x0451), 0u);  // ё
-        }
-
-    }  // namespace
-
     TEST_F(FontTest, PtSansBoldLoadsAndCoversWhatTheRegularFaceCovers) {
-        auto bold = LoadShipped(kBoldFontPath);
+        auto bold = LoadTestFont(kBoldFontPath);
         ASSERT_TRUE(bold);
         ASSERT_EQ(bold->GetState(), ResourceState::Loaded);
         EXPECT_EQ(bold->GetFamilyName(), "PT Sans");
@@ -175,7 +156,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(FontTest, RussoOneLoadsAndCoversLatinAndCyrillic) {
-        auto display = LoadShipped(kDisplayFontPath);
+        auto display = LoadTestFont(kDisplayFontPath);
         ASSERT_TRUE(display);
         ASSERT_EQ(display->GetState(), ResourceState::Loaded);
         EXPECT_EQ(display->GetFamilyName(), "Russo One");
@@ -187,7 +168,7 @@ namespace BECore::Tests {
 
     // The proof that a label measures with the face it was asked for: the bold face is wider for the same text and size
     TEST_F(FontTest, TheBoldFaceIsWiderThanTheRegularOne) {
-        auto bold = LoadShipped(kBoldFontPath);
+        auto bold = LoadTestFont(kBoldFontPath);
         ASSERT_TRUE(bold);
         TextLayoutOptions options;
         options.fontSize = 24.0f;

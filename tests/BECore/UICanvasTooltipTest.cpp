@@ -14,6 +14,9 @@
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
+#include <Common/UIInputEvents.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -108,7 +111,7 @@ namespace BECore::Tests {
         constexpr float kEpsilon = 1e-3f;
         constexpr double kStep = 0.125;  // an exact binary fraction, so a sum of steps is exact too; a frame is clamped to 0.25 s anyway
 
-        SDL_MouseButtonEvent Button(float x, float y, bool down, bool touch) {
+        SDL_MouseButtonEvent PointerButton(float x, float y, bool down, bool touch) {
             SDL_MouseButtonEvent event{};
             event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
             event.which = touch ? kFingerPointerBase : 0;
@@ -119,7 +122,7 @@ namespace BECore::Tests {
             return event;
         }
 
-        SDL_MouseMotionEvent Motion(float x, float y, bool touch, bool held) {
+        SDL_MouseMotionEvent PointerMotion(float x, float y, bool touch, bool held) {
             SDL_MouseMotionEvent event{};
             event.type = SDL_EVENT_MOUSE_MOTION;
             event.which = touch ? kFingerPointerBase : 0;
@@ -127,29 +130,6 @@ namespace BECore::Tests {
             event.y = y;
             event.state = held ? SDL_BUTTON_LMASK : 0;
             return event;
-        }
-
-        class ActionRecorder : public SubscriptionHolder {
-        public:
-            ActionRecorder() {
-                Subscribe<InputEvents::ActionEvent, &ActionRecorder::OnAction>(this);
-            }
-            [[nodiscard]] int Count(const char* action) const {
-                return static_cast<int>(std::count(_actions.begin(), _actions.end(), PoolString::Intern(action)));
-            }
-            [[nodiscard]] size_t Total() const {
-                return _actions.size();
-            }
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                _actions.push_back(event.action);
-            }
-            Vector<PoolString> _actions;
-        };
-
-        bool Inside(const Rect& inner, const Rect& outer) {
-            return inner.x >= outer.x - kEpsilon && inner.y >= outer.y - kEpsilon && inner.x + inner.w <= outer.x + outer.w + kEpsilon && inner.y + inner.h <= outer.y + outer.h + kEpsilon;
         }
 
     }  // namespace
@@ -211,23 +191,19 @@ namespace BECore::Tests {
         }
 
         static bool Motion(float x, float y, bool touch = false, bool held = false) {
-            return CoreManager::GetUIInput().DispatchMouseMotion(BECore::Tests::Motion(x, y, touch, held));
+            return CoreManager::GetUIInput().DispatchMouseMotion(PointerMotion(x, y, touch, held));
         }
         static bool Press(float x, float y, bool touch = false) {
-            return CoreManager::GetUIInput().DispatchMouseButtonDown(Button(x, y, true, touch));
+            return CoreManager::GetUIInput().DispatchMouseButtonDown(PointerButton(x, y, true, touch));
         }
         static bool Release(float x, float y, bool touch = false) {
-            return CoreManager::GetUIInput().DispatchMouseButtonUp(Button(x, y, false, touch));
+            return CoreManager::GetUIInput().DispatchMouseButtonUp(PointerButton(x, y, false, touch));
         }
 
         UIElement& Get(const char* name) const {
-            return GetElement(name);
-        }
-
-        UIElement& GetElement(const char* name) const {
             UIElement* element = _hud->GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
-            return *element;
+            return Require(element);
         }
 
         static Rect CenterOf(const Rect& rect) {
@@ -250,7 +226,7 @@ namespace BECore::Tests {
         size_t GlyphsIn(const Rect& plate) const {
             size_t count = 0;
             for (const DrawCall& call : _renderer->calls) {
-                if (call.kind == DrawKind::Texture && Inside(call.rect, plate)) {
+                if (call.kind == DrawKind::Texture && RectInside(call.rect, plate)) {
                     ++count;
                 }
             }
@@ -259,7 +235,7 @@ namespace BECore::Tests {
 
         /// The pointer comes to a button and rests there until its tooltip is due; the last frame is the first one that shows it
         void HoverUntilShown(const char* name) {
-            const Rect at = CenterOf(GetElement(name).rect);
+            const Rect at = CenterOf(Get(name).rect);
             Motion(at.x, at.y);
             Wait(UITooltip::kHoverDelay);
         }
@@ -283,7 +259,7 @@ namespace BECore::Tests {
         const auto plate = Plate();
         ASSERT_TRUE(plate.has_value());
         EXPECT_GE(plate->y, icon.y + icon.h) << "under the button";
-        EXPECT_TRUE(Inside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
+        EXPECT_TRUE(RectInside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
         EXPECT_GE(GlyphsIn(*plate), 8u) << "the text of the tooltip is drawn on the plate";
     }
 
@@ -331,7 +307,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UICanvasTooltipTest, APressHidesItAndTheClickStillFires) {
-        ActionRecorder actions;
+        ActionLog actions;
         HoverUntilShown("Icon");
         ASSERT_TRUE(Plate().has_value());
 
@@ -365,7 +341,7 @@ namespace BECore::Tests {
 
         const auto plate = Plate();
         ASSERT_TRUE(plate.has_value());
-        EXPECT_TRUE(Inside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
+        EXPECT_TRUE(RectInside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
         const Rect edge = Get("Edge").rect;
         EXPECT_LE(plate->y + plate->h, edge.y - UITooltip::kGap + kEpsilon) << "no room below: above the button";
     }
@@ -379,14 +355,14 @@ namespace BECore::Tests {
         ASSERT_TRUE(plate.has_value());
 
         EXPECT_EQ(_hud->GetRoot().children.size(), elements);
-        const DrawCall& last = _renderer->calls.back();
-        EXPECT_TRUE(Inside(last.rect, *plate)) << "the last call of the frame is the text of the plate";
+        const DrawCall& last = Back(_renderer->calls);
+        EXPECT_TRUE(RectInside(last.rect, *plate)) << "the last call of the frame is the text of the plate";
         // The top strip of the plate is above Under and below Icon: no element there, plate or not
         EXPECT_EQ(_hud->GetLayout().HitTest(plate->x + plate->w * 0.5f, plate->y + 2.0f), nullptr) << "not hit-tested";
     }
 
     TEST_F(UICanvasTooltipTest, AClickAimedAtWhatLiesUnderThePlateGoesThere) {
-        ActionRecorder actions;
+        ActionLog actions;
         HoverUntilShown("Icon");
         const auto plate = Plate();
         ASSERT_TRUE(plate.has_value());
@@ -416,7 +392,7 @@ namespace BECore::Tests {
     // ---- a finger ------------------------------------------------------------------------------------------------------------------
 
     TEST_F(UICanvasTooltipTest, AFingerHeldPastTheLongPressShowsTheTooltipAndItsReleaseIsNoClick) {
-        ActionRecorder actions;
+        ActionLog actions;
         const Rect at = CenterOf(Get("Icon").rect);
         Motion(at.x, at.y, true);
         EXPECT_TRUE(Press(at.x, at.y, true));
@@ -434,9 +410,9 @@ namespace BECore::Tests {
     }
 
     TEST_F(UICanvasTooltipTest, ATouchOfTheMouseSDLSynthesizesIsAFingerToo) {
-        ActionRecorder actions;
+        ActionLog actions;
         const Rect at = CenterOf(Get("Icon").rect);
-        SDL_MouseMotionEvent motion = BECore::Tests::Motion(at.x, at.y, true, false);
+        SDL_MouseMotionEvent motion = PointerMotion(at.x, at.y, true, false);
         motion.which = SDL_TOUCH_MOUSEID;
         CoreManager::GetUIInput().DispatchMouseMotion(motion);
         SDL_MouseButtonEvent down = Button(at.x, at.y, true, true);
@@ -473,7 +449,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UICanvasTooltipTest, AShortTouchClicksAndShowsNothing) {
-        ActionRecorder actions;
+        ActionLog actions;
         const Rect at = CenterOf(Get("Icon").rect);
         Motion(at.x, at.y, true);
         Press(at.x, at.y, true);
@@ -487,7 +463,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UICanvasTooltipTest, ALongPressDoesNotSwallowTheNextShortTouch) {
-        ActionRecorder actions;
+        ActionLog actions;
         const Rect at = CenterOf(Get("Icon").rect);
         Motion(at.x, at.y, true);
         Press(at.x, at.y, true);
@@ -501,7 +477,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UICanvasTooltipTest, AFingerThatSlidesOffTheButtonShowsNothingAndClicksNothing) {
-        ActionRecorder actions;
+        ActionLog actions;
         const Rect at = CenterOf(Get("Icon").rect);
         Motion(at.x, at.y, true);
         Press(at.x, at.y, true);
@@ -515,7 +491,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UICanvasTooltipTest, AMouseClickAfterALongTouchStillFires) {
-        ActionRecorder actions;
+        ActionLog actions;
         const Rect at = CenterOf(Get("Icon").rect);
         Motion(at.x, at.y, true);
         Press(at.x, at.y, true);
@@ -591,21 +567,21 @@ namespace BECore::Tests {
     }
 
     TEST_F(UICanvasTooltipTest, ALongTooltipWrapsOnAPlateNoWiderThanTheLimit) {
-        Get("Lang").GetComponent<UITooltipComponent>()->text = "Settings of the game: the sound, the language and the size of everything on the screen";
+        Require(Get("Lang").GetComponent<UITooltipComponent>()).text = "Settings of the game: the sound, the language and the size of everything on the screen";
         HoverUntilShown("Lang");
 
         const auto plate = Plate();
         ASSERT_TRUE(plate.has_value());
         EXPECT_LE(plate->w, UITooltip::kMaxWidth + 2.0f * UITooltip::kPadding + kEpsilon);
         EXPECT_GT(plate->h, UITooltip::kFontSize * 2.0f + 2.0f * UITooltip::kPadding) << "several lines";
-        EXPECT_TRUE(Inside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
+        EXPECT_TRUE(RectInside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
     }
 
     TEST_F(UICanvasTooltipTest, ATooltipThatIsEmptiedWhileShownGoes) {
         HoverUntilShown("Icon");
         ASSERT_TRUE(Plate().has_value());
 
-        Get("Icon").GetComponent<UITooltipComponent>()->text.clear();
+        Require(Get("Icon").GetComponent<UITooltipComponent>()).text.clear();
         Draw();
         EXPECT_FALSE(Plate());
     }
@@ -613,7 +589,7 @@ namespace BECore::Tests {
     // ---- a composed element: the text of its UITooltipComponent --------------------------------------------------------------------
 
     TEST_F(UICanvasTooltipTest, AComposedElementShowsTheTooltipOfItsComponentAfterTheDelay) {
-        const Rect comp = GetElement("Comp").rect;
+        const Rect comp = Get("Comp").rect;
         const Rect at = CenterOf(comp);
         Motion(at.x, at.y);
         Wait(UITooltip::kHoverDelay - kStep);
@@ -622,7 +598,7 @@ namespace BECore::Tests {
         Wait(kStep);
         const auto plate = Plate();
         ASSERT_TRUE(plate.has_value());
-        EXPECT_TRUE(Inside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
+        EXPECT_TRUE(RectInside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
         EXPECT_EQ(GlyphsIn(*plate), 11u) << "Composed tip";
     }
 
@@ -658,8 +634,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(UICanvasTooltipTest, AFingerHeldOnAComposedElementShowsItsTooltipAndTheReleaseIsNoClick) {
-        ActionRecorder actions;
-        const Rect at = CenterOf(GetElement("Comp").rect);
+        ActionLog actions;
+        const Rect at = CenterOf(Get("Comp").rect);
         Motion(at.x, at.y, true);
         Press(at.x, at.y, true);
         Wait(UITooltip::kLongPress);
@@ -676,7 +652,7 @@ namespace BECore::Tests {
         HoverUntilShown("Comp");
         ASSERT_TRUE(Plate().has_value());
 
-        GetElement("Comp").GetComponent<UITooltipComponent>()->text.clear();
+        Require(Get("Comp").GetComponent<UITooltipComponent>()).text.clear();
         Draw();
         EXPECT_FALSE(Plate());
     }

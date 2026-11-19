@@ -4,14 +4,14 @@
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Resource/AssetParts.h>
 #include <BECore/Resource/ResourceManager.h>
-#include <Common/EngineEnvironment.h>
+#include <Common/MountedFolderTest.h>
 #include <Common/Printers.h>
-#include <Common/TempPath.h>
+#include <Common/Require.h>
+#include <Common/TestFiles.h>
 #include <Generated/AssetPartsTest.gen.hpp>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskManager.h>
 #include <chrono>
-#include <fstream>
 
 namespace BECore::Tests {
 
@@ -42,41 +42,28 @@ namespace BECore::Tests {
     }  // namespace
 
     /// Needs FileSystem, ResourceManager and TaskManager. A temp directory is mounted as a virtual path for the files.
-    class AssetPartsTest : public ::testing::Test {
+    class AssetPartsTest : public MountedFolderTest {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
+        AssetPartsTest() : MountedFolderTest(kMountPoint) {}
 
         void SetUp() override {
-            // One directory per test: ctest runs every test in its own process
-            _dir = TestTempDirectory("BagiAssetPartsTest");
-            std::filesystem::remove_all(_dir);
-            std::filesystem::create_directories(_dir);
-            ASSERT_TRUE(CoreManager::GetFileSystem().Mount(PoolString::Intern(kMountPoint), _dir));
+            MountedFolderTest::SetUp();
             PartVisualDerived::constructed = 0;
         }
 
-        void TearDown() override {
-            CoreManager::GetFileSystem().Unmount(PoolString::Intern(kMountPoint));
-            std::error_code ec;
-            std::filesystem::remove_all(_dir, ec);
-        }
-
-        void WriteFile(const char* fileName, const char* text) const {
-            std::ofstream(_dir / fileName) << text;  //-NoStd: the test writes the file below its own mounted temp folder, outside the engine's file layer
+        void WriteFile(const char* fileName, StringView text) const {
+            Tests::WriteFile(_dir / fileName, text);
         }
 
         void Age(const char* fileName, std::chrono::hours age) const {
-            std::filesystem::last_write_time(_dir / fileName, std::filesystem::file_time_type::clock::now() - age);
-        }
-
-        static String VirtualPath(const char* fileName) {
-            return Format("{}/{}", kMountPoint, fileName);
+            std::error_code error;
+            std::filesystem::last_write_time(_dir / fileName, std::filesystem::file_time_type::clock::now() - age, error);
+            EXPECT_FALSE(error) << fileName << ": " << error.message();
         }
 
         bool FileExists(const char* fileName) const {
-            return std::filesystem::exists(_dir / fileName);
+            std::error_code error;
+            return std::filesystem::exists(_dir / fileName, error);
         }
 
         /// The serialized form of an object, to compare what two loads produced
@@ -92,14 +79,12 @@ namespace BECore::Tests {
         }
 
         template <typename T>
-        static Optional<T> Load(const char* fileName, AssetPurpose part) {
+        Optional<T> Load(const char* fileName, AssetPurpose part) const {
             return CoreManager::GetResourceManager().LoadSerializedPart<T>(VirtualPath(fileName), part);
         }
-
-        std::filesystem::path _dir;
     };
 
-    TEST(AssetPartsNames, ThePartNamesAndTheSplitPath) {
+    TEST_F(AssetPartsTest, ThePartNamesAndTheSplitPath) {
         EXPECT_EQ(PartName(AssetPurpose::Sim), "sim");
         EXPECT_EQ(PartName(AssetPurpose::Visual), "visual");
         EXPECT_EQ(PartName(AssetPurpose::Editor), "editor");
@@ -266,7 +251,7 @@ namespace BECore::Tests {
         EXPECT_EQ((*result)->value, kSimValue);
     }
 
-    TEST(AssetPartsSplit, EachPartPresentBecomesADocumentRootedAtThePartElement) {
+    TEST_F(AssetPartsTest, SplitMakesEachPartPresentADocumentRootedAtThePartElement) {
         const auto texts = SplitAssetXml(R"(<?xml version="1.0"?><asset>
             <!-- a comment of the whole file -->
             <editor><PartEditorProbe value="3"/></editor>
@@ -285,7 +270,7 @@ namespace BECore::Tests {
         EXPECT_EQ(texts->sim->find("comment"), String::npos);
     }
 
-    TEST(AssetPartsSplit, ADocumentThatDoesNotSplitIsAnErrorThatNamesTheCause) {
+    TEST_F(AssetPartsTest, SplitOfADocumentThatDoesNotSplitIsAnErrorThatNamesTheCause) {
         const auto unknown = SplitAssetXml(R"(<asset><sim><PartSimProbe/></sim><audio/></asset>)");
         ASSERT_FALSE(unknown.has_value());
         EXPECT_NE(unknown.error().find("'audio'"), String::npos);
@@ -310,7 +295,8 @@ namespace BECore::Tests {
         EXPECT_TRUE(FileExists("gem.sim.xml"));
         EXPECT_TRUE(FileExists("gem.visual.xml"));
         EXPECT_TRUE(FileExists("gem.editor.xml"));
-        std::filesystem::remove(_dir / "gem.asset.xml");
+        std::error_code error;
+        ASSERT_TRUE(std::filesystem::remove(_dir / "gem.asset.xml", error)) << error.message();
 
         EXPECT_EQ(Serialized(Load<PartSimProbe>("gem.asset.xml", AssetPurpose::Sim)), simWhole);
         EXPECT_EQ(Serialized(Load<PartVisualProbe>("gem.asset.xml", AssetPurpose::Visual)), visualWhole);
@@ -325,10 +311,10 @@ namespace BECore::Tests {
         WriteFile("gem.asset.xml", R"(<asset><sim><PartSimProbe value="7"/></sim></asset>)");
         // The edit made the split files stale: the whole file serves until it is split again
         Age("gem.sim.xml", kOlder);
-        EXPECT_EQ(Load<PartSimProbe>("gem.asset.xml", AssetPurpose::Sim)->value, 7);
+        EXPECT_EQ(Require(Load<PartSimProbe>("gem.asset.xml", AssetPurpose::Sim)).value, 7);
 
         ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml")));
-        EXPECT_EQ(Load<PartSimProbe>("gem.asset.xml", AssetPurpose::Sim)->value, 7);
+        EXPECT_EQ(Require(Load<PartSimProbe>("gem.asset.xml", AssetPurpose::Sim)).value, 7);
         EXPECT_FALSE(Load<PartVisualProbe>("gem.asset.xml", AssetPurpose::Visual).has_value());
     }
 
@@ -347,7 +333,8 @@ namespace BECore::Tests {
 
     TEST_F(AssetPartsTest, TheOutputFolderTakesTheFilesAndTheSourceFolderNone) {
         WriteFile("gem.asset.xml", kWholeXml);
-        std::filesystem::create_directories(_dir / "packed");
+        std::error_code error;
+        ASSERT_TRUE(std::filesystem::create_directories(_dir / "packed", error)) << error.message();
 
         ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml"), VirtualPath("packed")));
         ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml"), VirtualPath("made/deep")));

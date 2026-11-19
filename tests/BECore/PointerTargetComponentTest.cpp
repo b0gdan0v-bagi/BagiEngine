@@ -12,6 +12,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Generated/PointerTargetComponentTest.gen.hpp>
 #include <gtest/gtest.h>
@@ -237,8 +238,9 @@ namespace BECore::Tests {
         PointerTargetTestComponent& Bind(const char* name, TargetScript& script) {
             const auto target = Node(name).GetComponent<PointerTargetTestComponent>();
             EXPECT_TRUE(target) << name;
-            target->script = &script;
-            return *target;
+            PointerTargetTestComponent& component = Require(target);
+            component.script = &script;
+            return component;
         }
 
         IntrusivePtr<RecordingRenderer> _renderer;
@@ -255,7 +257,7 @@ namespace BECore::Tests {
         ASSERT_NE(derived, nullptr);
 
         EXPECT_TRUE(registry.IsDerivedFrom(*derived, *base));
-        EXPECT_TRUE(registry.IsDerivedFrom(*base, *registry.Find("IComponent")));
+        EXPECT_TRUE(registry.IsDerivedFrom(*base, Require(registry.Find("IComponent"))));
     }
 
     TEST_F(PointerTargetComponentTest, APressCarriesTheSceneAndOutputPositionTheButtonTheClicksAndThePointer) {
@@ -494,7 +496,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(PointerTargetComponentTest, ATargetDrawnAboveTakesThePointerAndTheOneBelowExitsOnce) {
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(TargetNode("Low", 0, 0, kBoxSize, kBoxSize) + TargetNode("High", kBoxSize / 2, 0, kBoxSize, kBoxSize)));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", TargetNode("Low", 0, 0, kBoxSize, kBoxSize), TargetNode("High", kBoxSize / 2, 0, kBoxSize, kBoxSize))));
         Draw();
         Bind("Low", _a);
         Bind("High", _b);
@@ -513,7 +515,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(PointerTargetComponentTest, TwoPointersKeepTheirOwnPressHoverAndRelease) {
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(TargetNode("A", 0, 0, kBoxSize, kBoxSize) + TargetNode("B", 200, 0, kBoxSize, kBoxSize)));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", TargetNode("A", 0, 0, kBoxSize, kBoxSize), TargetNode("B", 200, 0, kBoxSize, kBoxSize))));
         Draw();
         Bind("A", _a);
         Bind("B", _b);
@@ -741,7 +743,7 @@ namespace BECore::Tests {
   <component type="ClipPopTestComponent"/>
 </components></node>)",
                                       kBoxSize / 2, kBoxSize, kBoxSize, kBoxSize);
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(TargetNode("Under", 0, 0, kBoxSize, kBoxSize) + clipped));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", TargetNode("Under", 0, 0, kBoxSize, kBoxSize), clipped)));
         Draw();
         Bind("Under", _a);
         Bind("Clipped", _b);

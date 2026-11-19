@@ -3,11 +3,11 @@
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/SharedMutex.h>
 #include <Common/SharedPtr.h>
+#include <Common/Wait.h>
 #include <chrono>
 #include <gtest/gtest-spi.h>
 #include <gtest/gtest.h>
 #include <thread>
-#include <vector>
 
 namespace BECore::Tests {
 
@@ -15,20 +15,7 @@ namespace BECore::Tests {
 
         constexpr int kContendingThreads = 4;
         constexpr int kIncrementsPerThread = 20000;
-        constexpr auto kPollLimit = std::chrono::seconds(20);
         constexpr auto kShortWait = std::chrono::milliseconds(20);
-
-        template <typename TCondition>
-        bool WaitUntil(TCondition condition) {
-            const auto deadline = std::chrono::steady_clock::now() + kPollLimit;
-            while (!condition()) {
-                if (std::chrono::steady_clock::now() > deadline) {
-                    return false;
-                }
-                std::this_thread::yield();
-            }
-            return true;
-        }
 
     }  // namespace
 
@@ -259,7 +246,7 @@ namespace BECore::Tests {
         });
 
         std::unique_lock<Mutex> lock(mutex);
-        EXPECT_TRUE(changed.wait_for(lock, kPollLimit, [&] { return ready; }));
+        EXPECT_TRUE(changed.wait_for(lock, kWaitLimit, [&] { return ready; }));
         lock.unlock();
         notifier.join();
     }
@@ -484,6 +471,12 @@ namespace BECore::Tests {
 #endif
         }
 
+        /// The profiler names the first Profiler::kMaxThreads threads of a process only, and an id is never given twice: a process that ran
+        /// many cases before (`--gtest_repeat`, a whole run in one process) has none left for a new thread, so a case about the name has nothing to check
+        bool HasNoNamedIdLeft(uint32_t threadId) {
+            return threadId >= Profiler::kMaxThreads;
+        }
+
     }  // namespace
 
     TEST(ThreadingTest, ThreadRunsTheBodyOnAnotherThreadAndJoins) {
@@ -499,38 +492,50 @@ namespace BECore::Tests {
 
     TEST(ThreadingTest, ThreadIsNamedBeforeItsBodyRuns) {
         String seen;
+#if BE_PROFILER
         uint32_t seenSortIndex = 0;
+#endif
+        uint32_t threadId = 0;
         Thread thread("Test named", [&] {
+            threadId = Profiler::CurrentThreadId();
             seen = CurrentThreadNameInProfiler();
 #if BE_PROFILER
             seenSortIndex = Profiler::GetThreadSortIndex(Profiler::CurrentThreadId());
 #endif
         });
         thread.join();
+        if (HasNoNamedIdLeft(threadId)) {
+            GTEST_SKIP() << "the profiler has no named thread id left in this process";
+        }
 #if BE_PROFILER
         EXPECT_EQ(seen, "Test named");
         EXPECT_EQ(seenSortIndex, Profiler::kNoSortIndex);
 #else
         EXPECT_TRUE(seen.empty());
-        static_cast<void>(seenSortIndex);
 #endif
     }
 
     TEST(ThreadingTest, ThreadKeepsItsSortIndex) {
         String seen;
+#if BE_PROFILER
         uint32_t seenSortIndex = 0;
+#endif
+        uint32_t threadId = 0;
         Thread thread("Test sorted", kTestSortIndex, [&] {
+            threadId = Profiler::CurrentThreadId();
             seen = CurrentThreadNameInProfiler();
 #if BE_PROFILER
             seenSortIndex = Profiler::GetThreadSortIndex(Profiler::CurrentThreadId());
 #endif
         });
         thread.join();
+        if (HasNoNamedIdLeft(threadId)) {
+            GTEST_SKIP() << "the profiler has no named thread id left in this process";
+        }
 #if BE_PROFILER
         EXPECT_EQ(seen, "Test sorted");
         EXPECT_EQ(seenSortIndex, kTestSortIndex);
 #else
-        static_cast<void>(seenSortIndex);
         EXPECT_TRUE(seen.empty());
 #endif
     }
@@ -538,17 +543,22 @@ namespace BECore::Tests {
     TEST(ThreadingTest, ThreadCopiesARunTimeName) {
         std::atomic<bool> nameGone{false};
         String seen;
+        uint32_t threadId = 0;
         auto name = MakeUnique<String>("Test run-time name 7");
         Thread thread(name->c_str(), [&] {
             while (!nameGone.load()) {
                 std::this_thread::yield();
             }
+            threadId = Profiler::CurrentThreadId();
             seen = CurrentThreadNameInProfiler();
         });
         // The thread may not have started yet; the name must not be needed after the constructor returned
         name.reset();
         nameGone.store(true);
         thread.join();
+        if (HasNoNamedIdLeft(threadId)) {
+            GTEST_SKIP() << "the profiler has no named thread id left in this process";
+        }
 #if BE_PROFILER
         EXPECT_EQ(seen, "Test run-time name 7");
 #else
@@ -616,7 +626,7 @@ namespace BECore::Tests {
     TEST(ThreadingTest, ThreadStartsNothingInASingleThreadBuild) {
         EXPECT_FALSE(Thread::kAvailable);
         bool ran = false;
-#if BE_LOCK_ORDER_CHECK
+#if ENGINE_ENABLE_ASSERTS
         EXPECT_NONFATAL_FAILURE(Thread("Test single", [&] { ran = true; }), "no thread can start");
 #else
         Thread thread("Test single", [&] { ran = true; });

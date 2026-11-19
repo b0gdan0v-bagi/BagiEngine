@@ -16,7 +16,11 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
+#include <Common/UICanvasRoundTrip.h>
+#include <Common/UIInputEvents.h>
 #include <Common/UIPartShapeChecks.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -133,135 +137,31 @@ namespace BECore::Tests {
 
         constexpr float kEpsilon = 1e-2f;
 
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        SDL_MouseMotionEvent Motion(float x, float y, SDL_MouseButtonFlags held = 0) {
-            SDL_MouseMotionEvent event{};
-            event.type = SDL_EVENT_MOUSE_MOTION;
-            event.x = x;
-            event.y = y;
-            event.state = held;
-            return event;
-        }
-
-        bool Near(const Rect& a, const Rect& b, float tolerance = kEpsilon) {
-            return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
-        }
-
-        bool Inside(const Rect& inner, const Rect& outer, float tolerance = 1e-3f) {
-            return inner.x >= outer.x - tolerance && inner.y >= outer.y - tolerance && inner.x + inner.w <= outer.x + outer.w + tolerance && inner.y + inner.h <= outer.y + outer.h + tolerance;
-        }
-
-        /// The actions the sliders emit, with the value each carried, in order
-        class ActionLog : public SubscriptionHolder {
-        public:
-            ActionLog() {
-                Subscribe<InputEvents::ActionEvent, &ActionLog::OnAction>(this);
-            }
-
-            size_t Total() const {
-                return _actions.size();
-            }
-            size_t Count(const char* action) const {
-                return static_cast<size_t>(std::count(_actions.begin(), _actions.end(), PoolString::Intern(action)));
-            }
-            String LastValue() const {
-                return _values.empty() ? String{} : String(_values.back().ToStringView().data(), _values.back().ToStringView().size());
-            }
-            /// The values of one action, joined with spaces
-            String Values(const char* action) const {
-                String joined;
-                for (size_t i = 0; i < _actions.size(); ++i) {
-                    if (_actions[i] == PoolString::Intern(action)) {
-                        joined += joined.empty() ? "" : " ";
-                        joined.append(_values[i].ToStringView().data(), _values[i].ToStringView().size());
-                    }
-                }
-                return joined;
-            }
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                _actions.push_back(event.action);
-                _values.push_back(event.value);
-            }
-
-            Vector<PoolString> _actions;
-            Vector<PoolString> _values;
-        };
-
-        String ElementToXml(const UIElement& element) {
-            XmlSerializer serializer;
-            EXPECT_TRUE(serializer.BeginObject("element"));
-            element.Serialize(serializer);
-            serializer.EndObject();
-            return serializer.SaveToString();
-        }
-
         void SetVar(const char* name, const char* value) {
             CoreManager::GetUIVars().Set(PoolString::Intern(name), value);
         }
 
     }  // namespace
 
-    class UISliderComponentTest : public ::testing::Test {
+    class UISliderComponentTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kSliderXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-
-            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            UISceneFixture::SetUp();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kSliderXml));
             ASSERT_TRUE(_canvas);
             Draw();
-        }
-
-        void TearDown() override {
-            CoreManager::GetUIVars().Clear();
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
         }
 
         UIElement& Element(const char* name) const {
             UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
-            return *element;
+            return Require(element);
         }
 
         UISliderComponent& Slider(const char* name) const {
             UISliderComponent* slider = Element(name).GetComponent<UISliderComponent>();
             EXPECT_NE(slider, nullptr) << name << " is not a slider";
-            return *slider;
+            return Require(slider);
         }
 
         const Rect& RectOf(const char* name) const {
@@ -271,7 +171,7 @@ namespace BECore::Tests {
         /// The rect call of the last draw that has exactly this destination, or null
         const DrawCall* FindRect(const Rect& wanted) const {
             for (const DrawCall& call : _renderer->calls) {
-                if (call.kind == DrawKind::Rect && Near(call.rect, wanted)) {
+                if (call.kind == DrawKind::Rect && NearRect(call.rect, wanted, kEpsilon)) {
                     return &call;
                 }
             }
@@ -305,10 +205,6 @@ namespace BECore::Tests {
             ASSERT_TRUE(Down(name, x));
             ASSERT_TRUE(Up(x, MiddleY(name)));
         }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
     };
 
     // ---- the thumb follows the variable --------------------------------------------------------------------------------------
@@ -320,7 +216,7 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(volume.minValue, 0.0f);
         EXPECT_FLOAT_EQ(volume.maxValue, 1.0f);
         EXPECT_FLOAT_EQ(volume.step, 0.1f);
-        EXPECT_TRUE(Element("Off").GetComponent<UIInputClicker>()->disabled);
+        EXPECT_TRUE(Require(Element("Off").GetComponent<UIInputClicker>()).disabled);
 
         const auto made = AbstractFactory<UIComponent>::GetInstance().Create("UISliderComponent");
         ASSERT_TRUE(made);
@@ -339,7 +235,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(Element("Volume").interactive) << "the component makes it one, not the field";
         EXPECT_TRUE(Element("Volume").IsHitTestable());
         EXPECT_FALSE(Element("Volume").GivesStateLook()) << "stateLook=\"false\": the plate is still";
-        EXPECT_TRUE(Element("Volume").GetComponent<UIInputClicker>()->action.Empty());
+        EXPECT_TRUE(Require(Element("Volume").GetComponent<UIInputClicker>()).action.Empty());
     }
 
     TEST_F(UISliderComponentTest, AClickerlessSliderStillWorksButCannotBeDisabled) {
@@ -349,7 +245,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(volume.IsInteractive());
         ActionLog actions;
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.5f));
-        EXPECT_EQ(actions.LastValue(), "0.5");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.5");
         EXPECT_FALSE(volume.IsDisabled());
     }
 
@@ -395,8 +291,8 @@ namespace BECore::Tests {
                 const auto parts = UISliderComponent::GetParts(rect, fraction);
                 EXPECT_NEAR(parts.thumb.w, parts.thumb.h, 1e-4f) << name;
                 EXPECT_NEAR(parts.thumb.h, std::min(rect.h, rect.w), 1e-4f) << name;
-                EXPECT_TRUE(Inside(parts.thumb, rect)) << name << " at " << fraction;
-                EXPECT_TRUE(Inside(parts.track, rect)) << name;
+                EXPECT_TRUE(RectInside(parts.thumb, rect)) << name << " at " << fraction;
+                EXPECT_TRUE(RectInside(parts.track, rect)) << name;
                 EXPECT_LE(parts.track.h, UISliderComponent::kTrackHeight + 1e-4f) << name;
             }
         }
@@ -413,6 +309,7 @@ namespace BECore::Tests {
         const DrawCall* track = FindRect(parts.track);
         const DrawCall* filled = FindRect(parts.filled);
         const DrawCall* thumb = FindRect(parts.thumb);
+        ASSERT_NE(thumb, nullptr);
         ASSERT_TRUE(track && filled && thumb);
         EXPECT_EQ(track->color.r, 10);
         EXPECT_EQ(filled->color.r, 40);
@@ -436,10 +333,10 @@ namespace BECore::Tests {
         CoreManager::GetUIInput().DispatchMouseMotion(Motion(XAt("Volume", 0.5f), MiddleY("Volume")));
         Draw();
         ASSERT_TRUE(Element("Volume").hovered);
-        EXPECT_EQ(FindRect(rect)->color.r, 30) << "hovered: the plate stays";
+        EXPECT_EQ(Require(FindRect(rect)).color.r, 30) << "hovered: the plate stays";
         ASSERT_TRUE(Down("Volume", XAt("Volume", 0.5f)));
         Draw();
-        EXPECT_EQ(FindRect(rect)->color.r, 30) << "pressed: the plate stays";
+        EXPECT_EQ(Require(FindRect(rect)).color.r, 30) << "pressed: the plate stays";
         ASSERT_TRUE(Up(XAt("Volume", 0.5f), MiddleY("Volume")));
     }
 
@@ -450,23 +347,23 @@ namespace BECore::Tests {
         const Rect& volume = RectOf("Volume");
 
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.0f));
-        EXPECT_EQ(actions.LastValue(), "0");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0");
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.5f));
-        EXPECT_EQ(actions.LastValue(), "0.5");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.5");
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 1.0f));
-        EXPECT_EQ(actions.LastValue(), "1");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "1");
         EXPECT_EQ(actions.Count("SliderCompVolume"), 3u);
 
         // The edges of the rect and everything within half a thumb of them are the ends
         for (const float x : {volume.x, volume.x + 1.0f, volume.x + 27.0f}) {
             ASSERT_TRUE(Down("Volume", x));
             ASSERT_TRUE(Up(x, MiddleY("Volume")));
-            EXPECT_EQ(actions.LastValue(), "0") << x;
+            EXPECT_EQ(actions.LastValue().ToStringView(), "0") << x;
         }
         for (const float x : {volume.x + volume.w - 27.0f, volume.x + volume.w - 1.0f, volume.x + volume.w - 0.01f}) {
             ASSERT_TRUE(Down("Volume", x));
             ASSERT_TRUE(Up(x, MiddleY("Volume")));
-            EXPECT_EQ(actions.LastValue(), "1") << x;
+            EXPECT_EQ(actions.LastValue().ToStringView(), "1") << x;
         }
     }
 
@@ -476,7 +373,7 @@ namespace BECore::Tests {
         const Rect& rect = RectOf("Volume");
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.3f));
         ASSERT_EQ(actions.Total(), 1u);
-        EXPECT_EQ(actions.LastValue(), "0.3");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.3");
 
         Draw();
         EXPECT_FALSE(CoreManager::GetUIVars().Has("volume"_intern)) << "the slider does not set the variable";
@@ -494,41 +391,41 @@ namespace BECore::Tests {
         ActionLog actions;
         // step 0.1: 0.3 and never 0.30000001
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.3f));
-        EXPECT_EQ(actions.LastValue(), "0.3");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.3");
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.7f));
-        EXPECT_EQ(actions.LastValue(), "0.7");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.7");
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.34f));
-        EXPECT_EQ(actions.LastValue(), "0.3");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.3");
         ASSERT_NO_FATAL_FAILURE(Tap("Volume", 0.36f));
-        EXPECT_EQ(actions.LastValue(), "0.4");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.4");
         // step 1 over 0..10: "7", not "7.0"
         ASSERT_NO_FATAL_FAILURE(Tap("Unit", 0.7f));
-        EXPECT_EQ(actions.LastValue(), "7");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "7");
         ASSERT_NO_FATAL_FAILURE(Tap("Fine", 0.35f));
-        EXPECT_EQ(actions.LastValue(), "35");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "35");
         ASSERT_NO_FATAL_FAILURE(Tap("Fine", 0.372f));
-        EXPECT_EQ(actions.LastValue(), "35");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "35");
         ASSERT_NO_FATAL_FAILURE(Tap("Fine", 0.39f));
-        EXPECT_EQ(actions.LastValue(), "40");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "40");
         ASSERT_NO_FATAL_FAILURE(Tap("Quarter", 0.3f));
-        EXPECT_EQ(actions.LastValue(), "0.25");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.25");
         ASSERT_NO_FATAL_FAILURE(Tap("Quarter", 0.4f));
-        EXPECT_EQ(actions.LastValue(), "0.5");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.5");
         // a continuous slider writes what is under the pointer, short
         ASSERT_NO_FATAL_FAILURE(Tap("Free", 0.5f));
-        EXPECT_EQ(actions.LastValue(), "0.5");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.5");
     }
 
     TEST_F(UISliderComponentTest, ARangeThatIsNotAWholeNumberOfStepsStillReachesItsMaximum) {
         ActionLog actions;
         ASSERT_NO_FATAL_FAILURE(Tap("Odd", 1.0f));
-        EXPECT_EQ(actions.LastValue(), "1");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "1");
         ASSERT_NO_FATAL_FAILURE(Tap("Odd", 0.9f));
-        EXPECT_EQ(actions.LastValue(), "0.9");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.9");
         ASSERT_NO_FATAL_FAILURE(Tap("Odd", 0.3f));
-        EXPECT_EQ(actions.LastValue(), "0.3");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0.3");
         ASSERT_NO_FATAL_FAILURE(Tap("Odd", 0.0f));
-        EXPECT_EQ(actions.LastValue(), "0");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0");
     }
 
     TEST_F(UISliderComponentTest, AValueReadBackFromTheVariableLandsOnTheSameThumb) {
@@ -672,20 +569,20 @@ namespace BECore::Tests {
     TEST_F(UISliderComponentTest, AnEmptyOrReversedRangeAsksForTheMinimumOnly) {
         ActionLog actions;
         ASSERT_NO_FATAL_FAILURE(Tap("Reversed", 0.7f));
-        EXPECT_EQ(actions.LastValue(), "1") << "the minimum value of the range as written";
+        EXPECT_EQ(actions.LastValue().ToStringView(), "1") << "the minimum value of the range as written";
         EXPECT_FLOAT_EQ(Slider("Reversed").GetFraction(), 0.0f);
         SetVar("reversed", "0.5");
         EXPECT_FLOAT_EQ(Slider("Reversed").GetFraction(), 0.0f);
         const auto parts = UISliderComponent::GetParts(RectOf("Reversed"), Slider("Reversed").GetFraction());
-        EXPECT_TRUE(Inside(parts.thumb, RectOf("Reversed")));
+        EXPECT_TRUE(RectInside(parts.thumb, RectOf("Reversed")));
     }
 
     TEST_F(UISliderComponentTest, ASliderNarrowerThanItsThumbStillWorks) {
         ActionLog actions;
         const Rect& narrow = RectOf("Narrow");
-        EXPECT_TRUE(Inside(UISliderComponent::GetParts(narrow, 1.0f).thumb, narrow));
+        EXPECT_TRUE(RectInside(UISliderComponent::GetParts(narrow, 1.0f).thumb, narrow));
         ASSERT_NO_FATAL_FAILURE(Tap("Narrow", 1.0f));
-        EXPECT_EQ(actions.LastValue(), "0");
+        EXPECT_EQ(actions.LastValue().ToStringView(), "0");
         const float x = narrow.x + narrow.w - 1.0f;
         ASSERT_TRUE(Down("Narrow", x));
         ASSERT_TRUE(Up(x, MiddleY("Narrow")));
@@ -726,66 +623,38 @@ namespace BECore::Tests {
     // ---- files --------------------------------------------------------------------------------------------------------------------
 
     TEST_F(UISliderComponentTest, TheFieldsSurviveAnXmlRoundTrip) {
-        XmlSerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        _canvas->Serialize(serializer);
-        serializer.EndObject();
-        const String xml = serializer.SaveToString();
+        String xml;
+        const auto loaded = XmlRoundTrip(*_canvas, &xml);
+        ASSERT_TRUE(loaded);
 
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        ASSERT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
-
-        const auto* fine = loaded->GetRoot().FindByName("Fine"_intern)->GetComponent<UISliderComponent>();
+        const auto* fine = Require(loaded->GetRoot().FindByName("Fine"_intern)).GetComponent<UISliderComponent>();
         ASSERT_NE(fine, nullptr);
         EXPECT_EQ(fine->bind, "fine"_intern);
         EXPECT_EQ(fine->action, "SliderCompFine"_intern);
         EXPECT_FLOAT_EQ(fine->maxValue, 100.0f);
         EXPECT_FLOAT_EQ(fine->step, 5.0f);
-        const auto* free = loaded->GetRoot().FindByName("Free"_intern)->GetComponent<UISliderComponent>();
+        const auto* free = Require(loaded->GetRoot().FindByName("Free"_intern)).GetComponent<UISliderComponent>();
         ASSERT_NE(free, nullptr);
         EXPECT_EQ(free->trackColor.g, 20);
         EXPECT_EQ(free->fillColor.g, 50);
         EXPECT_EQ(free->thumbColor.g, 80);
-        EXPECT_FALSE(loaded->GetRoot().FindByName("Free"_intern)->GetComponent<UIInputClicker>()->stateLook);
-        EXPECT_TRUE(loaded->GetRoot().FindByName("Off"_intern)->GetComponent<UIInputClicker>()->disabled);
-        EXPECT_FLOAT_EQ(loaded->GetRoot().FindByName("Reversed"_intern)->GetComponent<UISliderComponent>()->minValue, 1.0f);
-        EXPECT_EQ(loaded->GetRoot().FindByName("Round"_intern)->GetComponent<UISliderComponent>()->partShape, UIPartShape::Round);
-        ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
-        for (size_t i = 0; i < loaded->_elements.size(); ++i) {
-            EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
-        }
+        EXPECT_FALSE(Require(Require(loaded->GetRoot().FindByName("Free"_intern)).GetComponent<UIInputClicker>()).stateLook);
+        EXPECT_TRUE(Require(Require(loaded->GetRoot().FindByName("Off"_intern)).GetComponent<UIInputClicker>()).disabled);
+        EXPECT_FLOAT_EQ(Require(Require(loaded->GetRoot().FindByName("Reversed"_intern)).GetComponent<UISliderComponent>()).minValue, 1.0f);
+        EXPECT_EQ(Require(Require(loaded->GetRoot().FindByName("Round"_intern)).GetComponent<UISliderComponent>()).partShape, UIPartShape::Round);
+        ExpectSameElementXml(*_canvas, *loaded);
     }
 
     TEST_F(UISliderComponentTest, TheFieldsSurviveABinaryRoundTrip) {
         Slider("Volume").step = 0.05f;
-        BinarySerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        _canvas->Serialize(serializer);
-        serializer.EndObject();
+        const auto loaded = BinaryRoundTrip(*_canvas);
+        ASSERT_TRUE(loaded);
 
-        BinaryDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromBuffer(serializer.GetData().data(), serializer.GetData().size()));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        ASSERT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
-
-        const auto* free = loaded->GetRoot().FindByName("Free"_intern)->GetComponent<UISliderComponent>();
+        const auto* free = Require(loaded->GetRoot().FindByName("Free"_intern)).GetComponent<UISliderComponent>();
         ASSERT_NE(free, nullptr);
         EXPECT_EQ(free->thumbColor.b, 90);
-        EXPECT_FLOAT_EQ(loaded->GetRoot().FindByName("Volume"_intern)->GetComponent<UISliderComponent>()->step, 0.05f);
-        ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
-        for (size_t i = 0; i < loaded->_elements.size(); ++i) {
-            EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
-        }
+        EXPECT_FLOAT_EQ(Require(Require(loaded->GetRoot().FindByName("Volume"_intern)).GetComponent<UISliderComponent>()).step, 0.05f);
+        ExpectSameElementXml(*_canvas, *loaded);
     }
 
     TEST_F(UISliderComponentTest, ThePartShapeIsSkippedAsADefaultWhenAsked) {
@@ -876,7 +745,6 @@ namespace BECore::Tests {
         const DrawCall* thumb = FindRect(UISliderComponent::GetParts(RectOf("Volume"), 0.0f).thumb);
         ASSERT_NE(thumb, nullptr);
         EXPECT_TRUE(ColorsEqual(thumb->color, Color{9, 8, 7, 255}));
-        themes.Clear();
     }
 
 }  // namespace BECore::Tests

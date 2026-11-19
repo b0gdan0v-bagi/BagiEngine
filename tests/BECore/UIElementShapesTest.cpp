@@ -2,6 +2,7 @@
 #include <BECore/UI/UIElementShapes.h>
 #include <BECore/UI/UIVariant.h>
 #include <Common/Printers.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -14,13 +15,6 @@ namespace BECore::Tests {
         constexpr float kCornerWidth = 100.0f;
         constexpr float kPortraitCornerWidth = 200.0f;
         constexpr float kTransitionSeconds = 1.0f;
-
-        void ExpectRect(const Rect& actual, const Rect& expected) {
-            EXPECT_NEAR(actual.x, expected.x, kTolerance);
-            EXPECT_NEAR(actual.y, expected.y, kTolerance);
-            EXPECT_NEAR(actual.w, expected.w, kTolerance);
-            EXPECT_NEAR(actual.h, expected.h, kTolerance);
-        }
 
         UILayoutContext Output(float width, float height) {
             UILayoutContext context;

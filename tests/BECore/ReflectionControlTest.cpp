@@ -11,6 +11,8 @@
 #include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Reflection/TypedRef.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <Common/ControlTestSupport.h>
+#include <Common/FreshText.h>
 #include <Common/Printers.h>
 #include <Games/GameControl.h>
 #include <Generated/ReflectionControlTest.gen.hpp>
@@ -78,20 +80,6 @@ namespace BECore::Tests {
                 return Ask("set_property", std::move(params));
             }
 
-            static bool IsOk(const Json& response) {
-                return GetJsonBool(response, "ok").value_or(false);
-            }
-
-            static String CodeOf(const Json& response) {
-                const Json* error = FindJsonMember(response, "error");
-                return error != nullptr ? GetJsonString(*error, "code").value_or(String()) : String();
-            }
-
-            static String MessageOf(const Json& response) {
-                const Json* error = FindJsonMember(response, "error");
-                return error != nullptr ? GetJsonString(*error, "message").value_or(String()) : String();
-            }
-
             /// The `value` of an answer, null when there is none
             static const Json* ValueOf(const Json& response) {
                 const Json* result = FindJsonMember(response, "result");
@@ -103,7 +91,7 @@ namespace BECore::Tests {
                 const String before = Snapshot(box);
                 const Json response = Set(root, path, std::move(value));
                 EXPECT_FALSE(IsOk(response)) << String(path).c_str();
-                EXPECT_EQ(CodeOf(response), String(code)) << String(path).c_str() << ": " << MessageOf(response).c_str();
+                EXPECT_EQ(ErrorCode(response), String(code)) << String(path).c_str() << ": " << ErrorMessage(response).c_str();
                 EXPECT_EQ(Snapshot(box), before) << String(path).c_str();
             }
 
@@ -126,7 +114,7 @@ namespace BECore::Tests {
                 const int32_t before = tool.calls;
                 const Json response = Call(root, method, std::move(arguments));
                 EXPECT_FALSE(IsOk(response)) << String(method).c_str();
-                EXPECT_EQ(CodeOf(response), String(code)) << String(method).c_str() << ": " << MessageOf(response).c_str();
+                EXPECT_EQ(ErrorCode(response), String(code)) << String(method).c_str() << ": " << ErrorMessage(response).c_str();
                 EXPECT_EQ(tool.calls, before) << String(method).c_str();
             }
 
@@ -150,7 +138,7 @@ namespace BECore::Tests {
 
         const auto check = [this](StringView path, const Json& expected) {
             const Json response = Get("box", path);
-            ASSERT_TRUE(IsOk(response)) << String(path).c_str() << ": " << MessageOf(response).c_str();
+            ASSERT_TRUE(IsOk(response)) << String(path).c_str() << ": " << ErrorMessage(response).c_str();
             const Json* value = ValueOf(response);
             ASSERT_NE(value, nullptr);
             EXPECT_EQ(*value, expected) << String(path).c_str();
@@ -180,13 +168,13 @@ namespace BECore::Tests {
         EXPECT_TRUE(IsOk(Get("box", "secret")));
         const Json locked = Get("box", "locked");
         ASSERT_TRUE(IsOk(locked));
-        EXPECT_EQ(GetJsonInt(*FindJsonMember(locked, "result"), "value").value_or(0), 7);
+        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(locked, "result")), "value").value_or(0), 7);
     }
 
     TEST_F(ReflectionControlTest, SetPropertyWritesEveryKindAndAnswersWithTheValueReadBack) {
         const auto write = [this](StringView path, Json value, const Json& expected) {
             const Json response = Set("box", path, std::move(value));
-            ASSERT_TRUE(IsOk(response)) << String(path).c_str() << ": " << MessageOf(response).c_str();
+            ASSERT_TRUE(IsOk(response)) << String(path).c_str() << ": " << ErrorMessage(response).c_str();
             const Json* readBack = ValueOf(response);
             ASSERT_NE(readBack, nullptr);
             EXPECT_EQ(*readBack, expected) << String(path).c_str();
@@ -235,26 +223,26 @@ namespace BECore::Tests {
 
     TEST_F(ReflectionControlTest, AStructIsNotAValue) {
         const Json response = Get("box", "leaf");
-        EXPECT_EQ(CodeOf(response), "not_a_value");
+        EXPECT_EQ(ErrorCode(response), "not_a_value");
         ExpectRefused("box", "leaf", Json(1), "not_a_value");
     }
 
     TEST_F(ReflectionControlTest, ABadPathAndAMissingFieldAreRefused) {
-        EXPECT_EQ(CodeOf(Get("box", "count..x")), "invalid_path");
-        EXPECT_EQ(CodeOf(Get("box", "")), "invalid_path");
-        EXPECT_EQ(CodeOf(Get("box", "nothing")), "not_found");
-        EXPECT_EQ(CodeOf(Get("box", "numbers[0]")), "not_found");
+        EXPECT_EQ(ErrorCode(Get("box", "count..x")), "invalid_path");
+        EXPECT_EQ(ErrorCode(Get("box", "")), "invalid_path");
+        EXPECT_EQ(ErrorCode(Get("box", "nothing")), "not_found");
+        EXPECT_EQ(ErrorCode(Get("box", "numbers[0]")), "not_found");
         ExpectRefused("box", "nothing", Json(1), "not_found");
     }
 
     TEST_F(ReflectionControlTest, APathOverTheLimitsIsInvalid) {
-        EXPECT_EQ(CodeOf(Get("box", String(1000, 'a'))), "invalid_path");
+        EXPECT_EQ(ErrorCode(Get("box", String(1000, 'a'))), "invalid_path");
         String manySegments = "leaf";
         for (int i = 0; i < 40; ++i) {
             manySegments += ".id";
         }
-        EXPECT_EQ(CodeOf(Get("box", manySegments)), "invalid_path");
-        EXPECT_EQ(CodeOf(Set("box", String(1000, 'a'), Json(1))), "invalid_path");
+        EXPECT_EQ(ErrorCode(Get("box", manySegments)), "invalid_path");
+        EXPECT_EQ(ErrorCode(Set("box", String(1000, 'a'), Json(1))), "invalid_path");
     }
 
     TEST_F(ReflectionControlTest, AValueThatIsNoBoolNumberOrStringIsInvalidParams) {
@@ -276,7 +264,7 @@ namespace BECore::Tests {
                     // Only a float field takes a double, and the value read back is a finite number
                     EXPECT_TRUE(path == "ratio" || path == "wide") << String(path).c_str() << " " << String(text).c_str();
                 } else {
-                    EXPECT_FALSE(CodeOf(response).empty()) << String(path).c_str();
+                    EXPECT_FALSE(ErrorCode(response).empty()) << String(path).c_str();
                 }
             }
             EXPECT_EQ(box._count, 3);
@@ -288,38 +276,38 @@ namespace BECore::Tests {
     TEST_F(ReflectionControlTest, AMissingOrWrongTypedParamIsInvalidParams) {
         Json noRoot = Json::object();
         noRoot["path"] = MakeJsonString("count");
-        EXPECT_EQ(CodeOf(Ask("get_property", noRoot)), "invalid_params");
+        EXPECT_EQ(ErrorCode(Ask("get_property", noRoot)), "invalid_params");
 
         Json numberRoot = noRoot;
         numberRoot["root"] = 5;
-        EXPECT_EQ(CodeOf(Ask("get_property", numberRoot)), "invalid_params");
+        EXPECT_EQ(ErrorCode(Ask("get_property", numberRoot)), "invalid_params");
 
         Json noPath = Json::object();
         noPath["root"] = MakeJsonString("box");
-        EXPECT_EQ(CodeOf(Ask("get_property", noPath)), "invalid_params");
+        EXPECT_EQ(ErrorCode(Ask("get_property", noPath)), "invalid_params");
 
         Json arrayPath = noPath;
         arrayPath["path"] = Json::array({"count"});
-        EXPECT_EQ(CodeOf(Ask("get_property", arrayPath)), "invalid_params");
+        EXPECT_EQ(ErrorCode(Ask("get_property", arrayPath)), "invalid_params");
 
         Json noValue = noPath;
         noValue["path"] = MakeJsonString("count");
-        EXPECT_EQ(CodeOf(Ask("set_property", noValue)), "invalid_params");
+        EXPECT_EQ(ErrorCode(Ask("set_property", noValue)), "invalid_params");
 
-        EXPECT_EQ(CodeOf(Ask("get_property", Json::object())), "invalid_params");
+        EXPECT_EQ(ErrorCode(Ask("get_property", Json::object())), "invalid_params");
     }
 
     TEST_F(ReflectionControlTest, AnUnknownRootAndARootWithoutAnObjectAreRefused) {
-        EXPECT_EQ(CodeOf(Get("nothing", "count")), "unknown_root");
-        EXPECT_EQ(CodeOf(Set("nothing", "count", Json(1))), "unknown_root");
-        EXPECT_EQ(CodeOf(Get("empty", "count")), "no_object");
-        EXPECT_EQ(CodeOf(Set("empty", "count", Json(1))), "no_object");
+        EXPECT_EQ(ErrorCode(Get("nothing", "count")), "unknown_root");
+        EXPECT_EQ(ErrorCode(Set("nothing", "count", Json(1))), "unknown_root");
+        EXPECT_EQ(ErrorCode(Get("empty", "count")), "no_object");
+        EXPECT_EQ(ErrorCode(Set("empty", "count", Json(1))), "no_object");
     }
 
     TEST_F(ReflectionControlTest, TheRootIsResolvedOnEveryCall) {
         EXPECT_TRUE(IsOk(Get("box", "count")));
         service.Roots().Register("box", ControlRoot{[] { return TypedRef{}; }});
-        EXPECT_EQ(CodeOf(Get("box", "count")), "no_object");
+        EXPECT_EQ(ErrorCode(Get("box", "count")), "no_object");
     }
 
     TEST_F(ReflectionControlTest, APoolStringFieldNeedsARootThatAllowsInterning) {
@@ -327,15 +315,15 @@ namespace BECore::Tests {
         EXPECT_FALSE(PoolString::Find(kClientTag).has_value());
 
         const Json response = Set("open", "tag", MakeJsonString("rc_tag_written_through_open"));
-        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response).c_str();
         EXPECT_EQ(box.tag.ToStringView(), "rc_tag_written_through_open");
     }
 
     TEST_F(ReflectionControlTest, TextOfAClientIsNeverInterned) {
-        EXPECT_EQ(CodeOf(Get(kClientRoot, "count")), "unknown_root");
-        EXPECT_EQ(CodeOf(Get("box", kClientPath)), "not_found");
-        EXPECT_EQ(CodeOf(Set("box", kClientPath, MakeJsonString(kClientTag))), "not_found");
-        EXPECT_EQ(CodeOf(Ask("get_property", Json::object())), "invalid_params");
+        EXPECT_EQ(ErrorCode(Get(kClientRoot, "count")), "unknown_root");
+        EXPECT_EQ(ErrorCode(Get("box", kClientPath)), "not_found");
+        EXPECT_EQ(ErrorCode(Set("box", kClientPath, MakeJsonString(kClientTag))), "not_found");
+        EXPECT_EQ(ErrorCode(Ask("get_property", Json::object())), "invalid_params");
 
         EXPECT_FALSE(PoolString::Find(kClientRoot).has_value());
         EXPECT_FALSE(PoolString::Find(kClientPath).has_value());
@@ -344,7 +332,7 @@ namespace BECore::Tests {
 
     TEST_F(ReflectionControlTest, ALongNameIsCutInTheMessage) {
         const String longRoot(5000, 'r');
-        const String message = MessageOf(Get(longRoot, "count"));
+        const String message = ErrorMessage(Get(longRoot, "count"));
         EXPECT_LT(message.size(), 200U);
     }
 
@@ -360,7 +348,7 @@ namespace BECore::Tests {
             response = parsed ? std::move(*parsed) : Json();
         });
         other.Drain();
-        EXPECT_EQ(CodeOf(response), "invalid_params");
+        EXPECT_EQ(ErrorCode(response), "invalid_params");
     }
 
     // =========================================================================
@@ -372,7 +360,7 @@ namespace BECore::Tests {
         arguments["first"] = 2;
         arguments["second"] = 3;
         const Json response = Call("tool", "Add", arguments);
-        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response).c_str();
         const Json* result = FindJsonMember(response, "result");
         ASSERT_NE(result, nullptr);
         EXPECT_EQ(GetJsonString(*result, "root").value_or(String()), "tool");
@@ -397,7 +385,7 @@ namespace BECore::Tests {
         Json shift = Json::object();
         shift["leaf"] = leaf;
         const Json shifted = Call("tool", "Shift", shift);
-        ASSERT_TRUE(IsOk(shifted)) << MessageOf(shifted).c_str();
+        ASSERT_TRUE(IsOk(shifted)) << ErrorMessage(shifted).c_str();
         ASSERT_NE(ResultOf(shifted), nullptr);
         EXPECT_EQ(GetJsonInt(*ResultOf(shifted), "id").value_or(0), 5);
         EXPECT_EQ(GetJsonString(*ResultOf(shifted), "label").value_or(String()), "x");
@@ -408,7 +396,7 @@ namespace BECore::Tests {
         params["root"] = MakeJsonString("tool");
         params["method"] = MakeJsonString("Touch");
         const Json response = Ask("call_method", params);
-        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response).c_str();
         EXPECT_EQ(ResultOf(response), nullptr);
         EXPECT_EQ(tool.calls, 1);
     }
@@ -416,7 +404,7 @@ namespace BECore::Tests {
     TEST_F(ReflectionControlTest, AConstMethodRunsOnAConstRoot) {
         tool.calls = 4;
         const Json response = Call("tool_const", "Count", Json::object());
-        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response).c_str();
         EXPECT_EQ(*ResultOf(response), Json(4));
     }
 
@@ -457,25 +445,27 @@ namespace BECore::Tests {
     }
 
     TEST_F(ReflectionControlTest, ARootThatIsUnknownOrHasNoObjectIsRefused) {
-        EXPECT_EQ(CodeOf(Call("nothing", "Touch", Json::object())), "unknown_root");
-        EXPECT_EQ(CodeOf(Call("empty", "Touch", Json::object())), "no_object");
+        EXPECT_EQ(ErrorCode(Call("nothing", "Touch", Json::object())), "unknown_root");
+        EXPECT_EQ(ErrorCode(Call("empty", "Touch", Json::object())), "no_object");
     }
 
     TEST_F(ReflectionControlTest, AMethodWithTextForThePoolNeedsARootThatAllowsInterning) {
+        // The open root interns the text at the end, so it is a text of its own: kClientTag stays out of the pool for the other cases
+        const String clientTag = FreshText("rc_method_tag");
         Json name = Json::object();
-        name["name"] = MakeJsonString(kClientTag);
+        name["name"] = MakeJsonString(clientTag);
         ExpectCallRefused("tool", "Name", name, "interning");
-        EXPECT_FALSE(PoolString::Find(kClientTag).has_value());
+        EXPECT_FALSE(PoolString::Find(StringView(clientTag)).has_value());
 
         Json tagged = Json::object();
-        tagged["tagged"] = Json{{"id", 1}, {"tag", MakeJsonString(kClientTag)}};
+        tagged["tagged"] = Json{{"id", 1}, {"tag", MakeJsonString(clientTag)}};
         ExpectCallRefused("tool", "Tag", tagged, "interning");
         ExpectCallRefused("tool", "Tag", Json::object(), "interning");  // refused before the arguments are read
-        EXPECT_FALSE(PoolString::Find(kClientTag).has_value());
+        EXPECT_FALSE(PoolString::Find(StringView(clientTag)).has_value());
 
         EXPECT_TRUE(IsOk(Call("tool_open", "Name", name)));
         EXPECT_TRUE(IsOk(Call("tool_open", "Tag", tagged)));
-        EXPECT_TRUE(PoolString::Find(kClientTag).has_value());
+        EXPECT_TRUE(PoolString::Find(StringView(clientTag)).has_value());
         EXPECT_EQ(tool.calls, 2);
     }
 
@@ -496,7 +486,7 @@ namespace BECore::Tests {
         params["root"] = MakeJsonString("tool");
         params["method"] = MakeJsonString("Total");
         params["arguments"] = std::move(arguments);
-        EXPECT_EQ(CodeOf(Ask("call_method", params)), "invalid_request");
+        EXPECT_EQ(ErrorCode(Ask("call_method", params)), "invalid_request");
         EXPECT_EQ(tool.calls, 0);
     }
 
@@ -509,7 +499,7 @@ namespace BECore::Tests {
         Json arguments = Json::object();
         arguments["node"] = std::move(node);
         const Json response = Call("tool", "Nest", arguments);
-        EXPECT_TRUE(IsOk(response) || CodeOf(response) == "bad_arguments") << MessageOf(response).c_str();
+        EXPECT_TRUE(IsOk(response) || ErrorCode(response) == "bad_arguments") << ErrorMessage(response).c_str();
     }
 
     TEST_F(ReflectionControlTest, ALongTextArgumentReachesTheMethodWhole) {
@@ -517,8 +507,8 @@ namespace BECore::Tests {
         Json arguments = Json::object();
         arguments["text"] = MakeJsonString(longText);
         const Json response = Call("tool", "Echo", arguments);
-        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
-        EXPECT_EQ(GetJsonString(*FindJsonMember(response, "result"), "result").value_or(String()).size(), longText.size());
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response).c_str();
+        EXPECT_EQ(GetJsonString(Require(FindJsonMember(response, "result")), "result").value_or(String()).size(), longText.size());
     }
 
     TEST_F(ReflectionControlTest, ALongTextInTheWrongPlaceIsCutInTheMessage) {
@@ -526,28 +516,28 @@ namespace BECore::Tests {
         arguments["first"] = MakeJsonString(String(100000, 'y'));
         arguments["second"] = 1;
         const Json response = Call("tool", "Add", arguments);
-        EXPECT_EQ(CodeOf(response), "bad_arguments");
-        EXPECT_LT(MessageOf(response).size(), 2000U);
+        EXPECT_EQ(ErrorCode(response), "bad_arguments");
+        EXPECT_LT(ErrorMessage(response).size(), 2000U);
         EXPECT_EQ(tool.calls, 0);
     }
 
     TEST_F(ReflectionControlTest, ANameOfAMethodTheClientSendsIsNeverInterned) {
-        EXPECT_EQ(CodeOf(Call("tool", kClientPath, Json::object())), "unknown_function");
+        EXPECT_EQ(ErrorCode(Call("tool", kClientPath, Json::object())), "unknown_function");
         EXPECT_FALSE(PoolString::Find(kClientPath).has_value());
     }
 
     TEST_F(ReflectionControlTest, ParamsOfCallMethodAreChecked) {
         Json noMethod = Json::object();
         noMethod["root"] = MakeJsonString("tool");
-        EXPECT_EQ(CodeOf(Ask("call_method", noMethod)), "invalid_params");
+        EXPECT_EQ(ErrorCode(Ask("call_method", noMethod)), "invalid_params");
 
         Json numberMethod = noMethod;
         numberMethod["method"] = 3;
-        EXPECT_EQ(CodeOf(Ask("call_method", numberMethod)), "invalid_params");
+        EXPECT_EQ(ErrorCode(Ask("call_method", numberMethod)), "invalid_params");
 
         Json noRoot = Json::object();
         noRoot["method"] = MakeJsonString("Touch");
-        EXPECT_EQ(CodeOf(Ask("call_method", noRoot)), "invalid_params");
+        EXPECT_EQ(ErrorCode(Ask("call_method", noRoot)), "invalid_params");
     }
 
     // =========================================================================
@@ -595,7 +585,7 @@ namespace BECore::Tests {
 
     TEST_F(ReflectionControlTest, ListTypesListsEveryTypeSortedByName) {
         const Json response = Ask("list_types", Json::object());
-        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response).c_str();
         const Vector<String> names = TypeNames(response);
         EXPECT_TRUE(Contains(names, "RcBox"));
         EXPECT_TRUE(Contains(names, "RcTool"));
@@ -607,7 +597,7 @@ namespace BECore::Tests {
     TEST_F(ReflectionControlTest, ListTypesWithABaseListsItsDerivedTypes) {
         // The registry's own hierarchy: IWidget is a factory base with derived widgets
         const Json response = Ask("list_types", Named("base", "IWidget"));
-        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response).c_str();
         const Vector<String> names = TypeNames(response);
         EXPECT_FALSE(names.empty());
         EXPECT_FALSE(Contains(names, "IWidget"));
@@ -630,23 +620,23 @@ namespace BECore::Tests {
     }
 
     TEST_F(ReflectionControlTest, ListTypesRefusesAnUnknownBaseAndBadParams) {
-        EXPECT_EQ(CodeOf(Ask("list_types", Named("base", kClientType))), "unknown_type");
+        EXPECT_EQ(ErrorCode(Ask("list_types", Named("base", kClientType))), "unknown_type");
         Json numberBase = Json::object();
         numberBase["base"] = 3;
-        EXPECT_EQ(CodeOf(Ask("list_types", numberBase)), "invalid_params");
+        EXPECT_EQ(ErrorCode(Ask("list_types", numberBase)), "invalid_params");
 
         Json badRecursive = Named("base", "IWidget");
         badRecursive["recursive"] = "yes";
-        EXPECT_EQ(CodeOf(Ask("list_types", badRecursive)), "invalid_params");
+        EXPECT_EQ(ErrorCode(Ask("list_types", badRecursive)), "invalid_params");
 
         Json badCreatable = Json::object();
         badCreatable["creatable"] = 1;
-        EXPECT_EQ(CodeOf(Ask("list_types", badCreatable)), "invalid_params");
+        EXPECT_EQ(ErrorCode(Ask("list_types", badCreatable)), "invalid_params");
     }
 
     TEST_F(ReflectionControlTest, DescribeTypeAnswersTheTypeWithItsFieldsAndMethods) {
         const Json response = Ask("describe_type", Named("name", "RcTool"));
-        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response).c_str();
         const Json* result = FindJsonMember(response, "result");
         ASSERT_NE(result, nullptr);
         EXPECT_EQ(GetJsonString(*result, "name").value_or(String()), "RcTool");
@@ -662,11 +652,11 @@ namespace BECore::Tests {
     }
 
     TEST_F(ReflectionControlTest, DescribeTypeRefusesAnUnknownTypeAndBadParams) {
-        EXPECT_EQ(CodeOf(Ask("describe_type", Named("name", kClientType))), "unknown_type");
-        EXPECT_EQ(CodeOf(Ask("describe_type", Json::object())), "invalid_params");
+        EXPECT_EQ(ErrorCode(Ask("describe_type", Named("name", kClientType))), "unknown_type");
+        EXPECT_EQ(ErrorCode(Ask("describe_type", Json::object())), "invalid_params");
         Json numberName = Json::object();
         numberName["name"] = 5;
-        EXPECT_EQ(CodeOf(Ask("describe_type", numberName)), "invalid_params");
+        EXPECT_EQ(ErrorCode(Ask("describe_type", numberName)), "invalid_params");
     }
 
     TEST_F(ReflectionControlTest, ATypeNameFromAClientIsNeverInterned) {
@@ -678,7 +668,7 @@ namespace BECore::Tests {
 
     TEST_F(ReflectionControlTest, SchemaEqualsTheExportOfTheRegistryAndListsTheRoots) {
         const Json response = Ask("schema", Json::object());
-        ASSERT_TRUE(IsOk(response)) << MessageOf(response).c_str();
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response).c_str();
         const Json* result = FindJsonMember(response, "result");
         ASSERT_NE(result, nullptr);
         EXPECT_EQ(*result, BuildSchemaJson(TypeRegistry::GetInstance(), service.Roots()));
@@ -708,13 +698,13 @@ namespace BECore::Tests {
         Json named = Json::object();
         named["root"] = "game";
         named["path"] = "x";
-        EXPECT_EQ(CodeOf(Ask("get_property", named)), "no_object");
+        EXPECT_EQ(ErrorCode(Ask("get_property", named)), "no_object");
         named["value"] = 1;
-        EXPECT_EQ(CodeOf(Ask("set_property", named)), "no_object");
+        EXPECT_EQ(ErrorCode(Ask("set_property", named)), "no_object");
         Json call = Json::object();
         call["root"] = "game";
         call["method"] = "Anything";
-        EXPECT_EQ(CodeOf(Ask("call_method", call)), "no_object");
+        EXPECT_EQ(ErrorCode(Ask("call_method", call)), "no_object");
 
         const Json schema = Ask("schema", Json::object());
         const Json* roots = ResultMember(schema, "roots");

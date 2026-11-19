@@ -1,4 +1,6 @@
 #include <BECore/WebSocketTestClient.h>
+#include <Common/Require.h>
+#include <Common/TestText.h>
 #include <RemoteControl/Tls/TlsStream.h>
 #include <RemoteControl/WebSocketClient.h>
 #include <gtest/gtest.h>
@@ -33,10 +35,6 @@ namespace BECore::Tests {
             //-NoStd: the bytes arrive through a std::istreambuf_iterator, an input iterator that eastl::vector does not take
             const std::vector<char> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
             return Vector<uint8_t>(reinterpret_cast<const uint8_t*>(bytes.data()), reinterpret_cast<const uint8_t*>(bytes.data()) + bytes.size());
-        }
-
-        [[nodiscard]] bool Contains(const String& text, const char* part) {
-            return text.find(part) != String::npos;
         }
 
         class TlsLocalEndpointTest : public ::testing::Test {
@@ -115,7 +113,7 @@ namespace BECore::Tests {
 
         client.Close(1000, "done");
         ASSERT_TRUE(WaitFor(WebSocketClientEventKind::Closed));
-        EXPECT_EQ(Find(WebSocketClientEventKind::Closed)->closeCode, 1000u);
+        EXPECT_EQ(Require(Find(WebSocketClientEventKind::Closed)).closeCode, 1000u);
     }
 
     TEST_F(TlsLocalEndpointTest, ACertificateOfAnUnknownCaIsRefusedWithoutTheAnchor) {

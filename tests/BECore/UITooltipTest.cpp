@@ -1,7 +1,6 @@
 #include <BECore/UI/UIElement.h>
-#include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UITooltip.h>
-#include <Common/EngineEnvironment.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -11,14 +10,6 @@ namespace BECore::Tests {
         constexpr float kEpsilon = 1e-3f;
         constexpr Rect kBounds{0.0f, 0.0f, 800.0f, 600.0f};
         constexpr Vec2 kPlate{120.0f, 40.0f};
-
-        bool Near(const Rect& a, const Rect& b) {
-            return std::abs(a.x - b.x) <= kEpsilon && std::abs(a.y - b.y) <= kEpsilon && std::abs(a.w - b.w) <= kEpsilon && std::abs(a.h - b.h) <= kEpsilon;
-        }
-
-        bool Inside(const Rect& inner, const Rect& outer) {
-            return inner.x >= outer.x - kEpsilon && inner.y >= outer.y - kEpsilon && inner.x + inner.w <= outer.x + outer.w + kEpsilon && inner.y + inner.h <= outer.y + outer.h + kEpsilon;
-        }
 
         bool Disjoint(const Rect& a, const Rect& b) {
             return a.x + a.w <= b.x + kEpsilon || b.x + b.w <= a.x + kEpsilon || a.y + a.h <= b.y + kEpsilon || b.y + b.h <= a.y + kEpsilon;
@@ -32,7 +23,7 @@ namespace BECore::Tests {
         const Rect target{300.0f, 100.0f, 48.0f, 48.0f};
         const Rect plate = UITooltip::Place(target, kPlate, kBounds);
 
-        EXPECT_TRUE(Near(plate, {300.0f + 24.0f - 60.0f, 100.0f + 48.0f + UITooltip::kGap, kPlate.x, kPlate.y}));
+        EXPECT_TRUE(NearRect(plate, {300.0f + 24.0f - 60.0f, 100.0f + 48.0f + UITooltip::kGap, kPlate.x, kPlate.y}));
     }
 
     TEST(UITooltipPlaceTest, WithNoRoomBelowAndRoomAboveItGoesAboveTheButton) {
@@ -49,7 +40,7 @@ namespace BECore::Tests {
         const Rect target{300.0f, 30.0f, 48.0f, 48.0f};  // 30 above, 22 below: a 40 high plate fits neither side
         const Rect plate = UITooltip::Place(target, kPlate, shortBounds);
 
-        EXPECT_TRUE(Inside(plate, shortBounds));
+        EXPECT_TRUE(RectInside(plate, shortBounds));
         EXPECT_NEAR(plate.w, kPlate.x, kEpsilon);
         EXPECT_NEAR(plate.h, kPlate.y, kEpsilon);
     }
@@ -58,14 +49,14 @@ namespace BECore::Tests {
         const Rect plate = UITooltip::Place({0.0f, 100.0f, 48.0f, 48.0f}, kPlate, kBounds);
 
         EXPECT_NEAR(plate.x, kBounds.x, kEpsilon);
-        EXPECT_TRUE(Inside(plate, kBounds));
+        EXPECT_TRUE(RectInside(plate, kBounds));
     }
 
     TEST(UITooltipPlaceTest, AButtonAtTheRightEdgeKeepsThePlateInside) {
         const Rect plate = UITooltip::Place({752.0f, 100.0f, 48.0f, 48.0f}, kPlate, kBounds);
 
         EXPECT_NEAR(plate.x + plate.w, kBounds.x + kBounds.w, kEpsilon);
-        EXPECT_TRUE(Inside(plate, kBounds));
+        EXPECT_TRUE(RectInside(plate, kBounds));
     }
 
     TEST(UITooltipPlaceTest, TheSafeAreaIsTheLimitNotTheCanvas) {
@@ -73,7 +64,7 @@ namespace BECore::Tests {
         const Rect plate = UITooltip::Place({20.0f, 40.0f, 48.0f, 48.0f}, kPlate, safe);
 
         EXPECT_NEAR(plate.x, 20.0f, kEpsilon);
-        EXPECT_TRUE(Inside(plate, safe));
+        EXPECT_TRUE(RectInside(plate, safe));
     }
 
     TEST(UITooltipPlaceTest, APlateLargerThanTheBoundsStartsAtTheirTopLeftEdge) {
@@ -247,82 +238,6 @@ namespace BECore::Tests {
         EXPECT_FALSE(_tracker.IsLongPress());
         _tracker.Update(&_a, false, false, 1.1 + UITooltip::kHoverDelay);
         EXPECT_TRUE(_tracker.IsShown(&_a));
-    }
-
-    // ---- MeasureText ---------------------------------------------------------------------------------------------------------
-
-    class UITextMeasureTest : public ::testing::Test {
-    protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
-        /// A text element at the tooltip's font size
-        struct Text {
-            IntrusivePtr<UIElement> element;
-
-            [[nodiscard]] Vec2 MeasureText(float maxWidth, float scale) const {
-                return element->GetComponent<UITextComponent>()->MeasureText(*element, maxWidth, scale);
-            }
-            const Text* operator->() const {
-                return this;
-            }
-        };
-
-        static Text MakeLabel(const char* text) {
-            auto element = New<UIElement>();
-            element->AddComponent<UITextComponent>().text = text;
-            element->active.fontSize = UITooltip::kFontSize;
-            return {element};
-        }
-    };
-
-    TEST_F(UITextMeasureTest, AShortTextIsOneLineNarrowerThanTheLimit) {
-        const auto label = MakeLabel("Settings");
-        const Vec2 size = label->MeasureText(UITooltip::kMaxWidth, 1.0f);
-
-        EXPECT_GT(size.x, 0.0f);
-        EXPECT_LT(size.x, UITooltip::kMaxWidth);
-        EXPECT_GE(size.y, UITooltip::kFontSize) << "a line is at least as high as the font is";
-        EXPECT_LT(size.y, UITooltip::kFontSize * 2.0f) << "one line";
-    }
-
-    TEST_F(UITextMeasureTest, ALongTextWrapsAtTheLimitAndGrowsTaller) {
-        const auto shortLabel = MakeLabel("Settings");
-        const auto longLabel = MakeLabel("Settings of the game: the sound, the language and the size of everything on the screen");
-        const Vec2 shortSize = shortLabel->MeasureText(UITooltip::kMaxWidth, 1.0f);
-        const Vec2 longSize = longLabel->MeasureText(UITooltip::kMaxWidth, 1.0f);
-
-        EXPECT_LE(longSize.x, UITooltip::kMaxWidth + kEpsilon);
-        EXPECT_GT(longSize.x, shortSize.x);
-        EXPECT_GT(longSize.y, shortSize.y * 1.5f) << "several lines";
-    }
-
-    TEST_F(UITextMeasureTest, ANarrowerLimitMakesItTaller) {
-        const auto label = MakeLabel("Settings of the game and the sound");
-        const Vec2 wide = label->MeasureText(400.0f, 1.0f);
-        const Vec2 narrow = label->MeasureText(100.0f, 1.0f);
-
-        EXPECT_LE(narrow.x, 100.0f + kEpsilon);
-        EXPECT_GT(narrow.y, wide.y);
-    }
-
-    TEST_F(UITextMeasureTest, TheSizeIsInCanvasUnitsWhateverTheScale) {
-        const auto label = MakeLabel("Settings");
-        const Vec2 one = label->MeasureText(UITooltip::kMaxWidth, 1.0f);
-        const Vec2 two = label->MeasureText(UITooltip::kMaxWidth, 2.0f);
-
-        EXPECT_NEAR(two.x, one.x, one.x * 0.1f) << "twice the pixels, twice the divisor";
-        EXPECT_NEAR(two.y, one.y, one.y * 0.1f);
-    }
-
-    TEST_F(UITextMeasureTest, AnEmptyTextOrNoRoomIsZero) {
-        const auto empty = MakeLabel("");
-        EXPECT_EQ(empty->MeasureText(UITooltip::kMaxWidth, 1.0f), Vec2{});
-
-        const auto label = MakeLabel("Settings");
-        EXPECT_EQ(label->MeasureText(0.0f, 1.0f), Vec2{});
-        EXPECT_EQ(label->MeasureText(UITooltip::kMaxWidth, 0.0f), Vec2{});
     }
 
 }  // namespace BECore::Tests

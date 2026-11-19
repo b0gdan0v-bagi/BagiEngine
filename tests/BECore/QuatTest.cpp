@@ -1,6 +1,5 @@
 #include <BECore/Math/Quat.h>
-#include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Reflection/XmlSerializer.h>
+#include <Common/MathTestSupport.h>
 #include <gtest/gtest.h>
 #include <numbers>
 
@@ -19,22 +18,6 @@ namespace BECore::Tests {
         constexpr Vec3 kAxisX{1.0f, 0.0f, 0.0f};
         constexpr Vec3 kAxisY{0.0f, 1.0f, 0.0f};
         constexpr Vec3 kAxisZ{0.0f, 0.0f, 1.0f};
-
-        struct StepVisitor {
-            Vector<String> names;
-
-            bool Visit(const char* name, float& value) {
-                names.push_back(name);
-                value += 1.0f;
-                return true;
-            }
-        };
-
-        void ExpectVecNear(const Vec3& actual, const Vec3& expected, float tolerance = kTolerance) {
-            EXPECT_NEAR(actual.x, expected.x, tolerance);
-            EXPECT_NEAR(actual.y, expected.y, tolerance);
-            EXPECT_NEAR(actual.z, expected.z, tolerance);
-        }
 
         void ExpectQuatNear(const Quat& actual, const Quat& expected, float tolerance = kTolerance) {
             EXPECT_NEAR(actual.x, expected.x, tolerance);
@@ -188,7 +171,7 @@ namespace BECore::Tests {
 
     TEST(QuatTest, VisitPropertiesVisitsXYZWInOrder) {
         Quat q{1.0f, 2.0f, 3.0f, 4.0f};
-        StepVisitor visitor;
+        StepVisitor<float> visitor;
         EXPECT_TRUE(q.VisitProperties(visitor));
         ASSERT_EQ(visitor.names.size(), 4u);
         EXPECT_EQ(visitor.names[0], "x");
@@ -198,18 +181,9 @@ namespace BECore::Tests {
 
     TEST(QuatTest, XmlRoundTrip) {
         const Quat original = Quat::FromAxisAngle(Vec3(1.0f, 2.0f, 3.0f), 0.75f);
-        XmlSerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("q"));
-        original.Serialize(serializer);
-        serializer.EndObject();
-
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(serializer.SaveToString()));
-        ASSERT_TRUE(deserializer.BeginObject("q"));
-        Quat loaded;
-        loaded.Deserialize(deserializer);
-        deserializer.EndObject();
-        EXPECT_EQ(loaded, original);
+        const auto loaded = RoundTripThroughXml(original);
+        ASSERT_TRUE(loaded.has_value());
+        EXPECT_EQ(*loaded, original);
     }
 
 }  // namespace BECore::Tests

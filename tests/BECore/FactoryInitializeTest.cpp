@@ -6,6 +6,7 @@
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/Printers.h>
+#include <Common/TestText.h>
 #include <Generated/FactoryInitializeTest.gen.hpp>
 
 namespace BECore::Tests {
@@ -26,10 +27,6 @@ namespace BECore::Tests {
         constexpr int32_t kLastId = 4;
         constexpr int32_t kFirstExtra = 11;
         constexpr int32_t kLastExtra = 44;
-
-        bool Contains(StringView text, StringView part) {
-            return text.find(part) != StringView::npos;
-        }
 
         /// Loads the XML into a fresh InitProbeList; the deserializer stays with the caller to read its errors
         IntrusivePtrNonAtomic<InitProbeList> Load(XmlDeserializer& deserializer, const char* xml) {
@@ -104,7 +101,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(list->probes[0]->Is<InitProbeReads>());
     }
 
-    TEST_F(FactoryInitializeTest, ABaseWithoutTheMethodLoadsAsBefore) {
+    TEST_F(FactoryInitializeTest, ABaseWithoutTheHookLoadsItsElementsWithoutACall) {
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(
             R"(<root><items>

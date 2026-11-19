@@ -11,15 +11,19 @@
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/UILayoutMatrix.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
 
     /*
      * The screen test of composed buttons (`UIElement` with `UIImageComponent`, `UITextComponent`, `UIInputClicker`, `UITooltipComponent`; .claude/rules/ui-controls.md,
-     * "Components"), on the validator matrix like `UIIconButtonScreenTest`: the touch rule and the text fit are held on every case of the matrix for the forms a button is written in (icon only,
+     * "Components"), on the validator matrix: the touch rule and the text fit are held on every case of the matrix for the forms a button is written in (icon only,
      * with a tooltip, disabled, captioned, icon-left, from HTML). An icon-left button is a stack holding an image child and a text child (named `Left/Icon`, `Left/Text`: the part
      * before the `/` is the button).
+     *
+     * The touch-size rule is the validator's and does not know icons: the target is the rect of the button, never the icon drawn in it, so an icon button passes or fails by its
+     * rect alone, and the icon and the tooltip add no finding of their own (the icon bar below, four round icon-only buttons and an icon-left one).
      *
      * The canvas is a SceneView canvas of a 480 x 300 view: the width of the narrowest window of the matrix, so the view is drawn at scale 1 or more and a button of 48 units is 48
      * window units on screen on every case.
@@ -31,6 +35,7 @@ namespace BECore::Tests {
         constexpr float kViewHeight = 300.0f;
         constexpr float kTouchSize = 48.0f;  // the least side of a touch target on the smallest scale of the matrix (1.0)
         constexpr float kSmallSide = 40.0f;  // a button that is a hair too small
+        constexpr size_t kRoundButtons = 4;
         constexpr float kEpsilon = 1e-3f;
         // What the HTML compiler and the migration step write for an icon button: a picture child of this share of the button, or of this share of its height next to a caption
         constexpr float kIconOnlyShare = UIImageComponent::kIconOnlyShare;
@@ -91,6 +96,53 @@ namespace BECore::Tests {
           </element>
 )";
 
+        // The bar in the exact forms the HTML compiler and the migration write (ui-controls.md, "Components"). Row one: four icon-only buttons (@SIDE@ units, `aspectRatio` 1, a picture child at 60%);
+        // row two: an icon-left button (200 x 48), the tooltips are plain text and a `{#key}`.
+        constexpr const char* kIconBarXml = R"(
+<SceneManager><scenes>
+  <scene type="Scene" name="Main" viewWidth="480" viewHeight="300"><nodes>
+    <node name="Bar" layer="10"><components>
+      <component type="UICanvasComponent" space="SceneView">
+        <elements>
+          <element type="UIElement" name="Round0" aspectRatio="1" x="10" y="10" width="@SIDE@" height="@SIDE@" color="40,60,90,255">
+            <components><component type="UIInputClicker" action="IconBar0"/><component type="UITooltipComponent" text="First"/></components>
+            <children>
+              <element type="UIElement" name="Round0Icon" anchor="Center" width="60%" height="60%" aspectRatio="1"><components><component type="UIImageComponent" sprite="BarIcon"/></components></element>
+            </children>
+          </element>
+          <element type="UIElement" name="Round1" aspectRatio="1" x="70" y="10" width="@SIDE@" height="@SIDE@" color="40,60,90,255">
+            <components><component type="UIInputClicker" action="IconBar1"/><component type="UITooltipComponent" text="{#bar.second}"/></components>
+            <children>
+              <element type="UIElement" name="Round1Icon" anchor="Center" width="60%" height="60%" aspectRatio="1"><components><component type="UIImageComponent" sprite="BarIcon"/></components></element>
+            </children>
+          </element>
+          <element type="UIElement" name="Round2" aspectRatio="1" x="130" y="10" width="@SIDE@" height="@SIDE@" color="40,60,90,255">
+            <components><component type="UIInputClicker" action="IconBar2"/></components>
+            <children>
+              <element type="UIElement" name="Round2Icon" anchor="Center" width="60%" height="60%" aspectRatio="1"><components><component type="UIImageComponent" sprite="BarIcon"/></components></element>
+            </children>
+          </element>
+          <element type="UIElement" name="Round3" aspectRatio="1" x="190" y="10" width="@SIDE@" height="@SIDE@" color="40,60,90,255">
+            <components><component type="UIInputClicker" action="IconBar3"/><component type="UITooltipComponent" text="Fourth"/></components>
+            <children>
+              <element type="UIElement" name="Round3Icon" anchor="Center" width="60%" height="60%" aspectRatio="1"><components><component type="UIImageComponent" sprite="BarIcon"/></components></element>
+            </children>
+          </element>
+          <element type="UIElement" name="WithText" x="10" y="100" width="200" height="48" layout="Stack" direction="Horizontal" padding="8,0,0,0" spacing="6" crossAlign="Center" color="40,60,90,255">
+            <components><component type="UIInputClicker" action="IconBarText"/></components>
+            <children>
+              <element type="UIElement" name="WithTextIcon" height="50%" aspectRatio="1"><components><component type="UIImageComponent" sprite="BarIcon"/></components></element>
+              <element type="UIElement" name="WithTextCaption" flex="1" height="100%" fontSize="24">
+                <components><component type="UITextComponent" text="Go" align="Center" verticalAlign="Center" wrap="false"/></components>
+              </element>
+            </children>
+          </element>
+        </elements>
+      </component>
+    </components></node>
+  </nodes></scene>
+</scenes></SceneManager>)";
+
         // The scene around a list of elements, for the screens that are not written in XML here
         constexpr const char* kSceneHead = R"(<SceneManager><scenes>
   <scene type="Scene" name="Main" viewWidth="480" viewHeight="300"><nodes>
@@ -101,42 +153,43 @@ namespace BECore::Tests {
   </nodes></scene>
 </scenes></SceneManager>)";
 
-        // Two buttons written in HTML + CSS: an icon-only one and an icon-left one
-        String HtmlBarXml(float side) {
-            const String sideUnits = ToString(static_cast<int>(side));
-            const String sidePx = sideUnits + "px";
-            const String source = "<style>#Icon { left: 10px; top: 10px; width: " + sidePx + "; height: " + sidePx +
-                                  "; background: #283c5a } #Left { left: 70px; top: 10px; width: 200px; height: " + sidePx + "; background: #283c5a }</style>" +
-                                  R"(<button id="Icon" data-icon="BarIcon" data-action="IconBar"></button><button id="Left" data-icon="BarIcon" data-action="LeftBar">Go</button>)";
+        /// The scene of these tests with the elements that @p source (HTML + CSS) compiles to; a failure of the case and an empty scene when the
+        /// compiled text has no element list
+        String CompiledSceneXml(const String& source) {
             UIWebReport report;
             const String compiled = UIWebCompiler::Compile(source, {}, report);
             EXPECT_TRUE(report.issues.empty());
-            const String xml(compiled.c_str());
-            const size_t begin = xml.find("<elements>") + String("<elements>").size();
-            const size_t end = xml.find("</elements>");
-            return kSceneHead + xml.substr(begin, end - begin) + kSceneTail;
+            constexpr StringView kOpen = "<elements>";
+            const size_t open = compiled.find(kOpen.data(), 0, kOpen.size());
+            const size_t end = compiled.find("</elements>");
+            if (open == String::npos || end == String::npos || end < open) {
+                ADD_FAILURE() << "no element list in the compiled screen: " << compiled.c_str();
+                return Format("{}{}", kSceneHead, kSceneTail);
+            }
+            const size_t begin = open + kOpen.size();
+            return Format("{}{}{}", kSceneHead, compiled.substr(begin, end - begin), kSceneTail);
+        }
+
+        // Two buttons written in HTML + CSS: an icon-only one and an icon-left one
+        String HtmlBarXml(float side) {
+            const String sideUnits = ToString(static_cast<int>(side));
+            const String sidePx = Format("{}px", sideUnits);
+            const String source = Format("<style>#Icon {{ left: 10px; top: 10px; width: {0}; height: {0}; background: #283c5a }} #Left {{ left: 70px; top: 10px; width: 200px; height: {0}; "
+                                         "background: #283c5a }}</style>"
+                                         R"(<button id="Icon" data-icon="BarIcon" data-action="IconBar"></button><button id="Left" data-icon="BarIcon" data-action="LeftBar">Go</button>)",
+                                         sidePx);
+            return CompiledSceneXml(source);
         }
 
         // A segmented group written in HTML + CSS: an icon-only segment, an icon-left one and a plain one, in a row (the segments are composed like any button)
         String HtmlGroupXml(float side) {
-            const String sidePx = ToString(static_cast<int>(side)) + "px";
-            const String source =
-                "<style>#Seg { display: flex; gap: 4px; left: 10px; top: 10px; width: 400px; height: " + sidePx + "; background: #1e1e1e } #Seg button { flex: 1; height: " + sidePx +
-                "; background: #283c5a }</style>" +
-                R"(<div id="Seg" data-widget="segmented" data-bind="seg"><button id="SegA" data-value="a" data-icon="BarIcon"></button><button id="SegB" data-value="b" data-icon="BarIcon">Go</button><button id="SegC" data-value="c">Plain</button></div>)";
-            UIWebReport report;
-            const String compiled = UIWebCompiler::Compile(source, {}, report);
-            EXPECT_TRUE(report.issues.empty());
-            const String xml(compiled.c_str());
-            const size_t begin = xml.find("<elements>") + String("<elements>").size();
-            const size_t end = xml.find("</elements>");
-            return kSceneHead + xml.substr(begin, end - begin) + kSceneTail;
-        }
-
-        void ReplaceAll(String& text, const String& what, const String& with) {
-            for (size_t at = text.find(what); at != String::npos; at = text.find(what, at + with.size())) {
-                text.replace(at, what.size(), with);
-            }
+            const String sidePx = Format("{}px", static_cast<int>(side));
+            const String source = Format(
+                "<style>#Seg {{ display: flex; gap: 4px; left: 10px; top: 10px; width: 400px; height: {0}; background: #1e1e1e }} #Seg button {{ flex: 1; height: {0}; "
+                "background: #283c5a }}</style>"
+                R"(<div id="Seg" data-widget="segmented" data-bind="seg"><button id="SegA" data-value="a" data-icon="BarIcon"></button><button id="SegB" data-value="b" data-icon="BarIcon">Go</button><button id="SegC" data-value="c">Plain</button></div>)",
+                sidePx);
+            return CompiledSceneXml(source);
         }
 
         String BarXml(float side, bool narrow) {
@@ -144,6 +197,18 @@ namespace BECore::Tests {
             ReplaceAll(xml, "@SIDE@", ToString(static_cast<int>(side)));
             ReplaceAll(xml, "@EXTRA@", narrow ? kNarrowXml : "");
             return xml;
+        }
+
+        String IconBarXml(float side) {
+            String xml = kIconBarXml;
+            ReplaceAll(xml, "@SIDE@", ToString(static_cast<int>(side)));
+            return xml;
+        }
+
+        // One of the four round buttons themselves ("Round0" .. "Round3"), not a part of one
+        bool IsRound(const UILayoutIssue& issue) {
+            const StringView name = issue.element.ToStringView();
+            return name.size() == StringView("Round0").size() && name.substr(0, StringView("Round").size()) == "Round";
         }
 
         // The button an element name belongs to: "Left/Text" is a part of "Left"
@@ -169,24 +234,12 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class UIComposedButtonScreenTest : public ::testing::Test {
+    class UIComposedButtonScreenTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
+            UISceneFixture::SetUp();
             _renderer->width = kViewWidth;
             _renderer->height = kViewHeight;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-        }
-
-        void TearDown() override {
-            _bar.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
         }
 
         void Load(float side, bool narrow = false) {
@@ -194,19 +247,9 @@ namespace BECore::Tests {
         }
 
         void LoadXml(const String& xml) {
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(xml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-            for (const auto& node : _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren()) {
-                if (node->GetName() == "Bar"_intern) {
-                    _bar = node->GetComponent<UICanvasComponent>();
-                }
-            }
-            ASSERT_TRUE(_bar);
-            _bar->UpdateLayout(1280.0f, 720.0f);  // the reflected fields of the component reach the layout on its first update
+            ASSERT_NO_FATAL_FAILURE(LoadScene(xml));
+            ASSERT_NO_FATAL_FAILURE(UseCanvas("Bar"_intern));
+            _canvas->UpdateLayout(1280.0f, 720.0f);  // the reflected fields of the component reach the layout on its first update
         }
 
         Vector<UIMatrixFailure> OnMatrix() const {
@@ -215,21 +258,8 @@ namespace BECore::Tests {
             UILayoutContext context;
             context.sceneViewWidth = kViewWidth;
             context.sceneViewHeight = kViewHeight;
-            return ValidateOnMatrix(_bar->GetLayout(), options, context);
+            return ValidateOnMatrix(_canvas->GetLayout(), options, context);
         }
-
-        UIElement& Get(const char* name) const {
-            UIElement* element = _bar->GetRoot().FindByName(PoolString::Intern(name));
-            if (!element) {
-                ADD_FAILURE() << "no element " << name;
-                std::abort();
-            }
-            return *element;
-        }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _bar;
     };
 
     TEST_F(UIComposedButtonScreenTest, ABarOfComposedButtonsOfTheTouchSizeIsCleanOnTheWholeMatrix) {
@@ -275,15 +305,15 @@ namespace BECore::Tests {
             EXPECT_NEAR(expected.h, actual.h, 1.0f) << what;
         };
         // Icon left of a caption: padding on the left, the icon a square of half the height centred on the cross axis, a gap, then the caption takes the rest of the width
-        const Rect left = Get("Left").rect;
+        const Rect left = El("Left").rect;
         const float icon = left.h * kIconWithTextShare;
-        expectRect({left.x + kIconPadding, left.y + (left.h - icon) * 0.5f, icon, icon}, Get("LeftIcon").rect, "the icon of the icon-left button");
+        expectRect({left.x + kIconPadding, left.y + (left.h - icon) * 0.5f, icon, icon}, El("LeftIcon").rect, "the icon of the icon-left button");
         const float captionX = left.x + kIconPadding + icon + kIconGap;
-        expectRect({captionX, left.y, left.x + left.w - captionX, left.h}, Get("LeftCaption").rect, "the caption of the icon-left button");
+        expectRect({captionX, left.y, left.x + left.w - captionX, left.h}, El("LeftCaption").rect, "the caption of the icon-left button");
         // Icon only: a centred square of 60% of the button
-        const Rect only = Get("Icon").rect;
+        const Rect only = El("Icon").rect;
         const float side = std::min(only.w, only.h) * kIconOnlyShare;
-        expectRect({only.x + (only.w - side) * 0.5f, only.y + (only.h - side) * 0.5f, side, side}, Get("IconIcon").rect, "the icon of the icon-only button");
+        expectRect({only.x + (only.w - side) * 0.5f, only.y + (only.h - side) * 0.5f, side, side}, El("IconIcon").rect, "the icon of the icon-only button");
     }
 
     TEST_F(UIComposedButtonScreenTest, TheSegmentsOfAnHtmlGroupAreTargetsOfTheMatrixByTheirClickers) {
@@ -291,7 +321,7 @@ namespace BECore::Tests {
         const auto failures = OnMatrix();
         EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
         for (const char* segment : {"SegA", "SegB", "SegC"}) {
-            EXPECT_TRUE(Get(segment).IsInteractive()) << segment;
+            EXPECT_TRUE(El(segment).IsInteractive()) << segment;
         }
 
         ASSERT_NO_FATAL_FAILURE(LoadXml(HtmlGroupXml(kSmallSide)));
@@ -309,22 +339,22 @@ namespace BECore::Tests {
 
     TEST_F(UIComposedButtonScreenTest, TheTargetOfAClickerIsTheRectOfItsElementNotTheImage) {
         ASSERT_NO_FATAL_FAILURE(Load(kTouchSize));
-        UIElement& icon = Get("Icon");
+        UIElement& icon = El("Icon");
         ASSERT_TRUE(icon.IsInteractive());
-        EXPECT_TRUE(Get("Left").IsInteractive());
-        EXPECT_FALSE(Get("Left/Icon").IsInteractive()) << "the image child of a stack button is no target of its own";
+        EXPECT_TRUE(El("Left").IsInteractive());
+        EXPECT_FALSE(El("Left/Icon").IsInteractive()) << "the image child of a stack button is no target of its own";
 
         // The rect of the icon-only element is 48 x 48 and the picture is fitted in it: a point at the very corner is outside the picture and is still the button
-        const UICanvasLayout& layout = _bar->GetLayout();
+        const UICanvasLayout& layout = _canvas->GetLayout();
         const Rect rect = icon.rect;
         EXPECT_EQ(layout.HitTest(rect.x + kEpsilon, rect.y + kEpsilon), &icon);
         EXPECT_EQ(layout.HitTest(rect.x + rect.w * 0.5f, rect.y + rect.h * 0.5f), &icon);
         EXPECT_EQ(layout.HitTest(rect.x + rect.w + 1.0f, rect.y + rect.h * 0.5f), nullptr);
 
         // The image child and the text child of the stack hand the press to the stack
-        UIElement& left = Get("Left");
+        UIElement& left = El("Left");
         for (const char* part : {"Left/Icon", "Left/Text"}) {
-            const Rect inner = Get(part).rect;
+            const Rect inner = El(part).rect;
             ASSERT_FALSE(inner.IsEmpty()) << part;
             EXPECT_EQ(layout.HitTest(inner.x + inner.w * 0.5f, inner.y + inner.h * 0.5f), &left) << part;
         }
@@ -332,14 +362,51 @@ namespace BECore::Tests {
 
     TEST_F(UIComposedButtonScreenTest, TheTooltipOfAComposedButtonIsItsComponentsText) {
         ASSERT_NO_FATAL_FAILURE(Load(kTouchSize));
-        EXPECT_EQ(Get("Tip").GetTooltipText(), "{#bar.tip}");
-        EXPECT_TRUE(Get("Icon").GetTooltipText().empty());
+        EXPECT_EQ(El("Tip").GetTooltipText(), "{#bar.tip}");
+        EXPECT_TRUE(El("Icon").GetTooltipText().empty());
     }
 
     TEST_F(UIComposedButtonScreenTest, ADisabledComposedButtonIsStillATargetOfTheMatrix) {
         ASSERT_NO_FATAL_FAILURE(Load(kTouchSize));
-        EXPECT_TRUE(Get("Off").IsDisabled());
-        EXPECT_TRUE(Get("Off").IsInteractive());
+        EXPECT_TRUE(El("Off").IsDisabled());
+        EXPECT_TRUE(El("Off").IsInteractive());
+    }
+
+    // ---- the icon bar: the rect of the button is the target ----------------------------------------------------------------
+
+    TEST_F(UIComposedButtonScreenTest, TheRectOfTheButtonIsTheTargetNotTheIconInIt) {
+        ASSERT_NO_FATAL_FAILURE(LoadXml(IconBarXml(kTouchSize)));
+        const auto clean = OnMatrix();
+        EXPECT_TRUE(clean.empty()) << DescribeMatrixFailures(clean).c_str();
+
+        ASSERT_NO_FATAL_FAILURE(LoadXml(IconBarXml(kSmallSide)));
+        const auto failures = OnMatrix();
+        ASSERT_FALSE(failures.empty()) << "a round button of 40 units is under the touch size of 48 however big its icon is";
+
+        Vector<PoolString> reported;
+        for (const UIMatrixFailure& failure : failures) {
+            for (const UILayoutIssue& issue : failure.issues) {
+                EXPECT_EQ(issue.kind, UILayoutIssueKind::TouchTargetTooSmall) << failure.label.c_str() << " " << issue.element.CStr();
+                EXPECT_TRUE(IsRound(issue)) << issue.element.CStr() << " is 48 units or more and fine";
+                if (eastl::find(reported.begin(), reported.end(), issue.element) == reported.end()) {
+                    reported.push_back(issue.element);
+                }
+            }
+        }
+        EXPECT_EQ(reported.size(), kRoundButtons) << "every round button is reported, with a tooltip or without";
+    }
+
+    TEST_F(UIComposedButtonScreenTest, AnIconBiggerThanTheRectDoesNotMakeTheTargetBigger) {
+        ASSERT_NO_FATAL_FAILURE(LoadXml(IconBarXml(kSmallSide)));
+        UIElement& round = El("Round0");
+        UIElement& icon = El("Round0Icon");
+        ASSERT_FALSE(HasFatalFailure());
+        icon.style.rect.width = UILength::Px(200.0f);  // the picture asks for far more than the button has
+        icon.style.rect.height = UILength::Px(200.0f);
+        _canvas->Invalidate();
+        EXPECT_FALSE(OnMatrix().empty()) << "the target is still the 40 units of the button";
+        EXPECT_FLOAT_EQ(round.rect.w, kSmallSide);
+        EXPECT_FALSE(icon.IsInteractive()) << "the picture is not a target";
     }
 
 }  // namespace BECore::Tests

@@ -97,26 +97,4 @@ namespace BECore::Tests {
         EXPECT_EQ(Chord(ImGuiKey_F1, 0).ToImGui(), static_cast<int>(ImGuiKey_F1));
     }
 
-    TEST(KeyChordTest, EveryCommandHasATitleAndAUniqueId) {
-        const auto commands = GetEditorCommands();
-        ASSERT_FALSE(commands.empty());
-        for (size_t i = 0; i < commands.size(); ++i) {
-            EXPECT_FALSE(commands[i].title.empty());
-            EXPECT_FALSE(commands[i].id.Empty());
-            for (size_t j = i + 1; j < commands.size(); ++j) {
-                EXPECT_NE(commands[i].id, commands[j].id);
-                if (commands[i].defaultChord && commands[j].defaultChord) {
-                    EXPECT_NE(*commands[i].defaultChord, *commands[j].defaultChord) << commands[i].id.CStr() << " and " << commands[j].id.CStr();
-                }
-            }
-        }
-    }
-
-    TEST(KeyChordTest, FindEditorCommandByIdOnly) {
-        const EditorCommand* toggle = FindEditorCommand(EditorCommandIds::kModeToggle);
-        ASSERT_NE(toggle, nullptr);
-        EXPECT_FALSE(toggle->rebindable);
-        EXPECT_EQ(FindEditorCommand("no.such"_intern), nullptr);
-    }
-
 }  // namespace BECore::Tests

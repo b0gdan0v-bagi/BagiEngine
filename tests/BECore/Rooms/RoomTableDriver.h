@@ -4,6 +4,7 @@
 #include <BECore/Rooms/RoomSocketClient.h>
 #include <BECore/Rooms/WireJudge.h>
 #include <BECore/Types/Types.h>
+#include <Common/Require.h>
 #include <RoomServer/DemoCardGame.h>
 #include <algorithm>
 #include <chrono>
@@ -17,8 +18,8 @@
 
 namespace BECore::Tests {
 
-    /// What the socket tests of a room server share: humans at a table of the demo card game, played over real sockets
-    /// (RoomServerScenarioTest, RoomServerHostileTest). The judge of the wire is WireJudge.h.
+    // What the socket tests of a room server share: humans at a table of the demo card game, played over real sockets
+    // (RoomServerScenarioTest, RoomServerHostileTest). The judge of the wire is WireJudge.h.
 
     inline constexpr std::chrono::milliseconds kPlayLimit{30'000};
     inline constexpr int kHumansAtFullTable = 4;
@@ -28,17 +29,11 @@ namespace BECore::Tests {
 
     /// The last message of @p type the client received, or null
     inline const ReceivedMessage* LastOf(const RoomSocketClient& client, StringView type) {
-        const auto& received = client.Received();
-        for (size_t i = received.size(); i > 0; --i) {
-            if (received[i - 1].type == type) {
-                return &received[i - 1];
-            }
-        }
-        return nullptr;
+        return LastOfType(client.Received(), type);
     }
 
     inline size_t CountOf(const RoomSocketClient& client, StringView type) {
-        return static_cast<size_t>(std::count_if(client.Received().begin(), client.Received().end(), [&](const ReceivedMessage& message) { return message.type == type; }));
+        return CountOfType(client.Received(), type);
     }
 
     /// The `view.table` of the last view of the client; null when it has none
@@ -92,7 +87,7 @@ namespace BECore::Tests {
             }
             ActionMessage action;
             action.version = version;
-            action.action = (*FindJsonMember(view->json, "actions"))[0];
+            action.action = Require(FindJsonMember(view->json, "actions"))[0];
             _client.Send(action);
             _acted = true;
             _actedVersion = version;
@@ -124,13 +119,7 @@ namespace BECore::Tests {
 
     /// What the judge says of every text the client received: the ids of the cards it must not have seen
     inline Vector<String> LeaksOf(const RoomSocketClient& client) {
-        Vector<String> leaks;
-        for (const ReceivedMessage& message : client.Received()) {
-            for (String& id : FindLeakedCardIds(StringView(message.text.c_str(), message.text.size()), client.seat)) {
-                leaks.push_back(std::move(id));
-            }
-        }
-        return leaks;
+        return LeaksOf(client.Received(), client.seat);
     }
 
     /// The server sent only unmasked text frames (a binary frame, or a masked one, is a failure of its own), and the judge finds no leak
@@ -143,12 +132,12 @@ namespace BECore::Tests {
 
     inline void ExpectCleanWire(const Clients& clients) {
         for (size_t i = 0; i < clients.size(); ++i) {
-            ExpectCleanWire(*clients[i], ("client " + ToString(i)).c_str());
+            ExpectCleanWire(*clients[i], Format("client {}", i).c_str());
         }
     }
 
-    /// The end of a hand: the last view of the client is `finished` and shows every one of the twelve played cards once
-    inline void ExpectAllTwelveCardsPlayed(const RoomSocketClient& client) {
+    /// The end of a hand: the last view of the client is `finished` and shows every card played in the hand once
+    inline void ExpectEveryCardPlayed(const RoomSocketClient& client) {
         ASSERT_TRUE(SeesTheEnd(client));
         const Json* table = LastTable(client);
         ASSERT_NE(table, nullptr);
@@ -157,10 +146,26 @@ namespace BECore::Tests {
         EXPECT_EQ(Set<String>(ids.begin(), ids.end()).size(), static_cast<size_t>(DemoCardGame::kTotalPlays));
     }
 
+    /// True when @p lobby shows a human seat that is not connected
+    inline bool HasAwayHuman(const ReceivedMessage& lobby) {
+        const Json* seats = FindJsonMember(lobby.json, "seats");
+        if (!seats || !seats->is_array()) {
+            return false;
+        }
+        for (const Json& seat : *seats) {
+            const Json* connected = FindJsonMember(seat, "connected");
+            if (GetJsonString(seat, "kind").value_or("") == "human" && connected && connected->is_boolean() && !connected->get<bool>()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// Frames of @p count identical text messages in one buffer
     inline Vector<uint8_t> RepeatText(const String& text, int count) {
         const auto frame = EncodeTextFrame(text, kClientMask);
         Vector<uint8_t> batch;
+        batch.reserve(frame.size() * static_cast<size_t>(count));
         for (int i = 0; i < count; ++i) {
             batch.insert(batch.end(), frame.data(), frame.data() + frame.size());
         }
@@ -168,7 +173,7 @@ namespace BECore::Tests {
     }
 
     /// Reads frames until the server's close frame; nullopt when none comes
-    inline Optional<ServerFrame> ReadUntilClose(WebSocketTestClient& client) {
+    inline Optional<RawFrame> ReadUntilClose(WebSocketTestClient& client) {
         for (;;) {
             const auto frame = client.WaitForFrame();
             if (!frame) {

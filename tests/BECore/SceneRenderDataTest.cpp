@@ -6,6 +6,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneRenderData.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <entt/entt.hpp>
 #include <gtest/gtest.h>
 
@@ -62,7 +63,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneRenderDataTest, ADrawMirrorsTheTransformAndTheQuadOfANode) {
         auto node = AddNode(*_scene, "Quad", 5.0f, true);
-        node->GetComponent<QuadRendererComponent>()->_color = kGreen;
+        Require(node->GetComponent<QuadRendererComponent>())._color = kGreen;
         auto bare = AddNode(*_scene, "Bare", 9.0f, false);
 
         _scene->Draw();
@@ -99,6 +100,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Registry().get<QuadDrawData>(node->GetEntity()).blend, BlendMode::Alpha);
 
         auto transform = node->GetComponent<TransformComponent>();
+        ASSERT_TRUE(transform);
         transform->_rotation = 30.0f;
         transform->_pivotX = 0.0f;
         transform->_pivotY = 1.0f;
@@ -117,7 +119,7 @@ namespace BECore::Tests {
         _scene->Draw();
         ASSERT_EQ(Registry().get<QuadDrawData>(node->GetEntity()).blend, BlendMode::Alpha);
 
-        node->GetComponent<QuadRendererComponent>()->_blend = BlendMode::Multiply;
+        Require(node->GetComponent<QuadRendererComponent>())._blend = BlendMode::Multiply;
         EXPECT_EQ(Registry().get<QuadDrawData>(node->GetEntity()).blend, BlendMode::Alpha);
         _scene->Draw();
 
@@ -155,8 +157,8 @@ namespace BECore::Tests {
         _scene->Draw();
         ASSERT_EQ(Registry().get<TransformData>(node->GetEntity()).x, 1.0f);
 
-        node->GetComponent<TransformComponent>()->_x = 40.0f;
-        node->GetComponent<QuadRendererComponent>()->_color = kGreen;
+        Require(node->GetComponent<TransformComponent>())._x = 40.0f;
+        Require(node->GetComponent<QuadRendererComponent>())._color = kGreen;
 
         // The mirror is refreshed by the draw, not by the write
         EXPECT_EQ(Registry().get<TransformData>(node->GetEntity()).x, 1.0f);

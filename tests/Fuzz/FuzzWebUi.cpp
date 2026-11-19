@@ -1,6 +1,7 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/UI/UIScreenContent.h>
 #include <BECore/UI/UIWebCompiler.h>
+#include <Fuzz/FuzzChecks.h>
 #include <Fuzz/FuzzTargets.h>
 
 namespace BECore::Fuzz {
@@ -21,17 +22,6 @@ namespace BECore::Fuzz {
                 }
             }
             return lines;
-        }
-
-        /// Whether @p text has a control character (a line break included): a log line made of it is more than one line
-        bool HasControlCharacter(StringView text) {
-            for (const char c : text) {
-                const auto byte = static_cast<uint8_t>(c);
-                if (byte < 0x20 || byte == 0x7F) {
-                    return true;
-                }
-            }
-            return false;
         }
 
         bool SameReport(const UIWebReport& a, const UIWebReport& b) {

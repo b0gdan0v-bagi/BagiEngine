@@ -4,11 +4,6 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Scene/SceneManager.h>
 
-// Defined by the generated source of BagiEngineTestSupport (be_link_content_roots)
-namespace BagiContentRoots {
-    extern const char* const kEngine;
-}  // namespace BagiContentRoots
-
 namespace BECore::Tests {
 
     namespace {

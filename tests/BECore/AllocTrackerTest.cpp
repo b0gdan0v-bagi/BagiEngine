@@ -1,6 +1,7 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
+#include <Common/Require.h>
 #include <chrono>
 #include <cstdio>
 #include <gtest/gtest.h>
@@ -155,7 +156,7 @@ namespace BECore::Tests {
         const auto parsed = ParseJson(recorder.WriteJson());
         ASSERT_TRUE(parsed.has_value());
         bool found = false;
-        for (const Json& event : *FindJsonMember(*parsed, "traceEvents")) {
+        for (const Json& event : Require(FindJsonMember(*parsed, "traceEvents"))) {
             if (GetJsonString(event, "ph") == String("E")) {
                 const Json* args = FindJsonMember(event, "args");
                 ASSERT_NE(args, nullptr);
@@ -182,7 +183,7 @@ namespace BECore::Tests {
 
     // ---- Cost (run by hand: --gtest_also_run_disabled_tests --gtest_filter='ProfilerCost*') ----
 
-    TEST(ProfilerCostTest, DISABLED_NewAndDelete) {
+    TEST(AllocTrackerTest, DISABLED_TheCostOfNewAndDelete) {
         constexpr int kCalls = 1000000;
         const auto start = std::chrono::steady_clock::now();
         for (int i = 0; i < kCalls; ++i) {

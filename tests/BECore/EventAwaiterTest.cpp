@@ -1,11 +1,11 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/Wait.h>
 #include <Events/EventBase.h>
 #include <TaskSystem/EventAwaiter.h>
 #include <TaskSystem/TaskManager.h>
 #include <chrono>
 #include <coroutine>
-#include <limits>
 #include <thread>
 
 namespace BECore::Tests {
@@ -79,7 +79,6 @@ namespace BECore::Tests {
     protected:
         static constexpr auto kShortTimeout = std::chrono::milliseconds(1);
         static constexpr auto kLongTimeout = std::chrono::hours(1);
-        static constexpr auto kWaitLimit = std::chrono::seconds(30);
 
         static void SetUpTestSuite() {
             EngineEnvironment::EnsureCoreServices();
@@ -95,12 +94,11 @@ namespace BECore::Tests {
 
         /// Runs the main-thread stage of the frames until every timeout this test scheduled has come due
         void RunUntilTheTimeoutsAreDue() const {
-            const auto limit = std::chrono::steady_clock::now() + kWaitLimit;
-            do {
+            WaitUntil([this] {
                 Scheduler().ProcessDelayedTasks();
                 Scheduler().ProcessMainThreadTasks();
-                std::this_thread::yield();
-            } while (Scheduler().GetDelayedTaskCount() > _delayedBefore && std::chrono::steady_clock::now() < limit);
+                return Scheduler().GetDelayedTaskCount() <= _delayedBefore;
+            });
             Scheduler().ProcessMainThreadTasks();
         }
 
@@ -180,12 +178,11 @@ namespace BECore::Tests {
         AwaitWithTimeout(kShortTimeout, shortWait);
         AwaitWithTimeout(kLongTimeout, longWait);
 
-        const auto limit = std::chrono::steady_clock::now() + kWaitLimit;
-        while (shortWait.resumes == 0 && std::chrono::steady_clock::now() < limit) {
+        WaitUntil([&] {
             Scheduler().ProcessDelayedTasks();
             Scheduler().ProcessMainThreadTasks();
-            std::this_thread::yield();
-        }
+            return shortWait.resumes != 0;
+        });
         EXPECT_EQ(shortWait.resumes, 1);
         EXPECT_EQ(longWait.resumes, 0);
 

@@ -1,7 +1,10 @@
 #pragma once
 
+#include <BECore/Format/Format.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <BECore/Utils/StringUtils.h>
+#include <Common/Wait.h>
 #include <RemoteControl/Socket.h>
 #include <RemoteControl/WebSocketFrame.h>
 #include <gtest/gtest.h>
@@ -14,9 +17,7 @@ namespace BECore::Tests {
 
     inline constexpr WebSocketMask kClientMask = {0x12, 0x34, 0x56, 0x78};
     inline constexpr const char* kClientKey = "dGhlIHNhbXBsZSBub25jZQ==";
-    inline constexpr std::chrono::seconds kClientWaitLimit{30};
-    /// Tries of a client that waits for a free connection slot, 10 ms apart: the accept thread may be starved on a loaded machine
-    inline constexpr int kSlotRetryAttempts = 3000;
+    inline constexpr std::chrono::seconds kClientWaitLimit = kWaitLimit;
 
     /// Something a test thread does while it waits (the server tests drain the control service); may be empty. A client owns its pump:
     /// a test that gives one pump to several clients passes the lambda itself each time, not a `WaitPump` it made once
@@ -25,17 +26,14 @@ namespace BECore::Tests {
     /// Calls @p pump and @p done every millisecond until @p done is true or @p limit has passed
     template <typename Predicate>
     bool WaitUntil(const WaitPump& pump, Predicate done, std::chrono::milliseconds limit = kClientWaitLimit) {
-        const auto deadline = std::chrono::steady_clock::now() + limit;
-        while (std::chrono::steady_clock::now() < deadline) {
-            if (pump) {
-                pump();
-            }
-            if (done()) {
-                return true;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-        return false;
+        return WaitUntil(
+            [&] {
+                if (pump) {
+                    pump();
+                }
+                return done();
+            },
+            limit);
     }
 
     inline Span<const uint8_t> AsBytes(const String& text) {
@@ -48,27 +46,125 @@ namespace BECore::Tests {
 
     /// The opening handshake of the RFC for a server on @p port; @p host replaces the `Host` header value when it is not empty
     inline String HandshakeRequest(uint16_t port, const String& extraHeaders = "", const String& host = "") {
-        const String hostValue = host.empty() ? "127.0.0.1:" + ToString(port) : host;
-        return "GET /control HTTP/1.1\r\nHost: " + hostValue + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " + String(kClientKey) + "\r\nSec-WebSocket-Version: 13\r\n" +
-               extraHeaders + "\r\n";
+        const String hostValue = host.empty() ? Format("127.0.0.1:{}", port) : host;
+        return Format("GET /control HTTP/1.1\r\nHost: {}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {}\r\nSec-WebSocket-Version: 13\r\n{}\r\n", hostValue, kClientKey,
+                      extraHeaders);
     }
 
-    /// A frame of the server (not masked)
-    struct ServerFrame {
+    /// A frame as it came off the wire, the payload unmasked. A server's frame must not be masked (RFC 6455, 5.1), a client's must
+    struct RawFrame {
         uint8_t opcode = 0;
         String payload;
-        /// The mask bit of the header: a server must never set it (RFC 6455, 5.1)
+        /// The mask bit of the header
         bool masked = false;
+        /// The masking key when masked
+        WebSocketMask key{};
     };
 
-    inline uint16_t CloseCodeOf(const ServerFrame& frame) {
+    /// The code of a close frame; a payload too short to hold one fails the case and is 0, which no close code is
+    inline uint16_t CloseCodeOf(const RawFrame& frame) {
+        if (frame.payload.size() < 2) {
+            ADD_FAILURE() << "a close frame of " << frame.payload.size() << " bytes has no code";
+            return 0;
+        }
         return static_cast<uint16_t>((static_cast<uint8_t>(frame.payload[0]) << 8) | static_cast<uint8_t>(frame.payload[1]));
     }
 
     /// The reason of a close frame (after the two bytes of the code)
-    inline String CloseReasonOf(const ServerFrame& frame) {
+    inline String CloseReasonOf(const RawFrame& frame) {
         return frame.payload.size() > 2 ? frame.payload.substr(2) : String();
     }
+
+    /**
+     * @brief The receiving half of a hand-written WebSocket peer: what a socket delivered, and the frames parsed from it.
+     *
+     * The raw client below reads a server's frames with it, a scripted server (WebSocketClientTest) a client's; both also read an
+     * HTTP head from Buffered() before the first frame.
+     */
+    class RawFrameReader {
+    public:
+        /// Changes the bytes as they arrive (a fake TLS layer); may be empty
+        using Filter = FunctionRef<void(uint8_t* data, size_t size)>;
+
+        /// Reads everything that has arrived (up to kMaxChunksPerFill chunks); a loop, because WaitUntil sleeps 1 ms between its
+        /// calls, which is 15 ms on Windows, and a megabyte in chunks of 4 KiB would take seconds
+        void Fill(Socket& socket, Optional<Filter> filter = std::nullopt) {
+            Array<uint8_t, 4096> chunk;
+            for (int i = 0; i < kMaxChunksPerFill; ++i) {
+                const auto received = socket.Receive(Span<uint8_t>(chunk.data(), chunk.size()));
+                if (!received) {
+                    if (received.error() != SocketError::TimedOut) {
+                        _ended = true;
+                    }
+                    return;
+                }
+                if (filter) {
+                    (*filter)(chunk.data(), *received);
+                }
+                _buffer.append(reinterpret_cast<const char*>(chunk.data()), *received);
+            }
+        }
+
+        /// The next complete frame of the buffer (unmasked when the mask bit is set), nullopt when it is not all there yet
+        Optional<RawFrame> Parse() {
+            if (_buffer.size() < 2) {
+                return std::nullopt;
+            }
+            const auto byteAt = [this](size_t index) { return static_cast<uint8_t>(_buffer[index]); };
+            RawFrame frame;
+            frame.opcode = byteAt(0) & 0x0F;
+            frame.masked = (byteAt(1) & 0x80) != 0;
+            size_t length = byteAt(1) & 0x7F;
+            size_t offset = 2;
+            if (length == 126 || length == 127) {
+                const size_t lengthBytes = length == 126 ? 2 : 8;
+                if (_buffer.size() < offset + lengthBytes) {
+                    return std::nullopt;
+                }
+                length = 0;
+                for (size_t i = 0; i < lengthBytes; ++i) {
+                    length = (length << 8) | byteAt(offset + i);
+                }
+                offset += lengthBytes;
+            }
+            if (frame.masked) {
+                if (_buffer.size() < offset + frame.key.size()) {
+                    return std::nullopt;
+                }
+                for (size_t i = 0; i < frame.key.size(); ++i) {
+                    frame.key[i] = byteAt(offset + i);
+                }
+                offset += frame.key.size();
+            }
+            if (_buffer.size() < offset + length) {
+                return std::nullopt;
+            }
+            frame.payload = _buffer.substr(offset, length);
+            if (frame.masked) {
+                for (size_t i = 0; i < frame.payload.size(); ++i) {
+                    frame.payload[i] = static_cast<char>(static_cast<uint8_t>(frame.payload[i]) ^ frame.key[i % frame.key.size()]);
+                }
+            }
+            _buffer.erase(0, offset + length);
+            return frame;
+        }
+
+        /// What arrived and was not parsed yet
+        [[nodiscard]] String& Buffered() {
+            return _buffer;
+        }
+
+        /// The peer ended the connection
+        [[nodiscard]] bool HasEnded() const {
+            return _ended;
+        }
+
+    private:
+        static constexpr int kMaxChunksPerFill = 1024;
+
+        String _buffer;
+        bool _ended = false;
+    };
 
     class WebSocketTestClient {
     public:
@@ -103,17 +199,19 @@ namespace BECore::Tests {
             Send(AsBytes(EncodeTextFrame(text, kClientMask)));
         }
 
-        /// The response head of the handshake, and the body when it says Content-Length. Empty when nothing came in time
+        /// The response head of the handshake, and the body when it says Content-Length. Empty when nothing came in time, or when the
+        /// server ended the connection before a whole answer: a listener closes a refused client without an answer when its queue of
+        /// refusals is full, and a client that waited the full limit for that would outlast the poll of the test that retries it
         String ReadHttpResponse() {
             constexpr StringView kHeadEnd = "\r\n\r\n";
             String response;
             size_t bodyExpected = 0;
             const bool complete = WaitUntil(_pump, [&] {
-                FillBuffer();
-                const String text(reinterpret_cast<const char*>(_buffer.data()), _buffer.size());
+                _reader.Fill(_socket);
+                String& text = _reader.Buffered();
                 const size_t headEnd = text.find(kHeadEnd.data(), 0, kHeadEnd.size());
                 if (headEnd == String::npos) {
-                    return false;
+                    return _reader.HasEnded();
                 }
                 const size_t lengthAt = text.find("Content-Length: ");
                 if (lengthAt == String::npos || lengthAt > headEnd) {
@@ -123,10 +221,10 @@ namespace BECore::Tests {
                     bodyExpected = StringUtils::ParseNumber<size_t>(value.substr(0, value.find('\r'))).value_or(0);
                 }
                 if (text.size() < headEnd + kHeadEnd.size() + bodyExpected) {
-                    return false;
+                    return _reader.HasEnded();
                 }
                 response = text.substr(0, headEnd + kHeadEnd.size() + bodyExpected);
-                _buffer.erase(_buffer.begin(), _buffer.begin() + static_cast<ptrdiff_t>(response.size()));
+                text.erase(0, response.size());
                 return true;
             });
             return complete ? response : String();
@@ -139,17 +237,17 @@ namespace BECore::Tests {
         }
 
         /// The next complete frame of the server, nullopt when none came yet
-        Optional<ServerFrame> TryReadFrame() {
-            if (const auto frame = ParseBuffered()) {
+        Optional<RawFrame> TryReadFrame() {
+            if (auto frame = _reader.Parse()) {
                 return frame;
             }
-            FillBuffer();
-            return ParseBuffered();
+            _reader.Fill(_socket);
+            return _reader.Parse();
         }
 
         /// Waits up to @p limit for the next frame
-        Optional<ServerFrame> WaitForFrame(std::chrono::milliseconds limit = kClientWaitLimit) {
-            Optional<ServerFrame> frame;
+        Optional<RawFrame> WaitForFrame(std::chrono::milliseconds limit = kClientWaitLimit) {
+            Optional<RawFrame> frame;
             WaitUntil(
                 _pump,
                 [&] {
@@ -163,8 +261,8 @@ namespace BECore::Tests {
         /// True when the server ended the connection (and every frame it sent before has been read)
         bool WaitForEndOfStream() {
             return WaitUntil(_pump, [&] {
-                FillBuffer();
-                return _ended;
+                _reader.Fill(_socket);
+                return _reader.HasEnded();
             });
         }
 
@@ -175,60 +273,25 @@ namespace BECore::Tests {
         }
 
     private:
-        static constexpr int kMaxChunksPerFill = 1024;
-
         WebSocketTestClient() = default;
-
-        /// Reads everything that has arrived (up to kMaxChunksPerFill chunks); a loop, because WaitUntil sleeps 1 ms
-        /// between its calls, which is 15 ms on Windows, and a megabyte in chunks of 4 KiB would take seconds
-        void FillBuffer() {
-            Array<uint8_t, 4096> chunk;
-            for (int i = 0; i < kMaxChunksPerFill; ++i) {
-                const auto received = _socket.Receive(Span<uint8_t>(chunk.data(), chunk.size()));
-                if (!received) {
-                    if (received.error() != SocketError::TimedOut) {
-                        _ended = true;
-                    }
-                    return;
-                }
-                // Pointers, not std::array iterators: EASTL's insert does not take MSVC's class iterator
-                _buffer.insert(_buffer.end(), chunk.data(), chunk.data() + *received);
-            }
-        }
-
-        /// The frames of a server are not masked
-        Optional<ServerFrame> ParseBuffered() {
-            if (_buffer.size() < 2) {
-                return std::nullopt;
-            }
-            size_t length = _buffer[1] & 0x7F;
-            size_t headerSize = 2;
-            if (length == 126 || length == 127) {
-                const size_t lengthBytes = (length == 126) ? 2 : 8;
-                if (_buffer.size() < 2 + lengthBytes) {
-                    return std::nullopt;
-                }
-                length = 0;
-                for (size_t i = 0; i < lengthBytes; ++i) {
-                    length = (length << 8) | _buffer[2 + i];
-                }
-                headerSize += lengthBytes;
-            }
-            if (_buffer.size() < headerSize + length) {
-                return std::nullopt;
-            }
-            ServerFrame frame;
-            frame.opcode = _buffer[0] & 0x0F;
-            frame.masked = (_buffer[1] & 0x80) != 0;
-            frame.payload.assign(reinterpret_cast<const char*>(_buffer.data()) + headerSize, length);
-            _buffer.erase(_buffer.begin(), _buffer.begin() + static_cast<ptrdiff_t>(headerSize + length));
-            return frame;
-        }
 
         Socket _socket;
         WaitPump _pump;
-        Vector<uint8_t> _buffer;
-        bool _ended = false;
+        RawFrameReader _reader;
     };
+
+    /// Whether a new client of @p port has its handshake accepted within kWaitLimit. The slot of a client that left is free only
+    /// once the server's reader of that client has finished, a moment after the client saw the end of its stream: a client that comes
+    /// before is refused, and the next one tries again
+    inline bool WaitForHandshakeAccepted(uint16_t port, const String& extraHeaders = "", const String& host = "") {
+        return WaitUntil([&] {
+            auto client = WebSocketTestClient::Open(port);
+            if (!client) {
+                return false;
+            }
+            client->Send(HandshakeRequest(port, extraHeaders, host));
+            return StringView(client->ReadHttpResponse()).starts_with("HTTP/1.1 101 ");
+        });
+    }
 
 }  // namespace BECore::Tests

@@ -9,7 +9,8 @@ Presets of `CMakePresets.json` build into `build/<preset>/` (`bin`, `lib`); the 
 ```bash
 cmake --preset macos-debug           # configure, regenerates reflection code
 cmake --build --preset macos-debug   # BagiStress and the test executables
-ctest --preset macos-debug           # each test in its own process, 8 at a time
+ctest --preset macos-debug           # each gtest executable in shards, 8 at a time, without label extended
+ctest --preset macos-debug-all       # every test (build-project.md, "Tests")
 ```
 
 - Exceptions are disabled. Re-run `cmake --preset` after changing `BE_CLASS` / `BE_REFLECT_FIELD` or adding files (sources are globbed).

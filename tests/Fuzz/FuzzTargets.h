@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Save/SaveGame.h>
 #include <BECore/Types/Types.h>
 #include <cstddef>
 #include <cstdint>
@@ -89,6 +90,9 @@ namespace BECore::Fuzz {
     /// DecodeFlac (BECore/Audio, the vendored dr_flac) with a frame limit: a sound the engine plays or a refusal that says why, the same twice, the same
     /// samples read as a stream, and a lossless round trip through EncodeWav
     void FuzzAudioFlac(const uint8_t* data, size_t size);
+
+    /// The schema FuzzSaveEnvelope loads with; the save seeds are named after its versions (current, oldest, one outside each end)
+    inline constexpr SaveSchema kFuzzSaveSchema{"FuzzGame", 3, 2};
 
     /// A save file as the seeds make it: the bytes SaveGameService::Save writes for the probe state under the given game id and schema version
     Vector<uint8_t> MakeSaveFileBytes(StringView game, uint32_t version);

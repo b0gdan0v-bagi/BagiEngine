@@ -1,23 +1,12 @@
 #include <BECore/Audio/AudioClip.h>
 #include <BECore/Audio/AudioManager.h>
 #include <BECore/Audio/NullAudioBackend.h>
+#include <BECore/AudioTestSupport.h>
 #include <BECore/FakeAudioBackend.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
-
-    namespace {
-
-        IntrusivePtr<AudioClip> MakeClip() {
-            DecodedAudio audio;
-            audio.format = AudioFormat{22050, 1};
-            audio.samples.assign(64, 0.25f);
-            return AudioClip::Create("test/clip.wav"_intern, std::move(audio));
-        }
-
-    }  // namespace
 
     class AudioManagerTest : public ::testing::Test {
     protected:
@@ -33,7 +22,7 @@ namespace BECore::Tests {
 
         AudioManager manager;
         IntrusivePtr<FakeAudioBackend> backend;
-        IntrusivePtr<AudioClip> clip = MakeClip();
+        IntrusivePtr<AudioClip> clip = MakeTestClip();
     };
 
     TEST_F(AudioManagerTest, WithoutABackendNothingPlays) {

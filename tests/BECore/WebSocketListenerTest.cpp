@@ -3,7 +3,6 @@
 #include <RemoteControl/WebSocketFrame.h>
 #include <RemoteControl/WebSocketListener.h>
 #include <gtest/gtest.h>
-#include <map>
 #include <thread>
 
 namespace BECore::Tests {
@@ -76,18 +75,18 @@ namespace BECore::Tests {
                 WebSocketHandler handler;
                 handler.onOpen = [this](const WebSocketHandler::ConnectionPtr& connection) {
                     recorder.AddConnection(connection);
-                    recorder.Add("open:" + ToString(connection->GetId()));
+                    recorder.Add(Format("open:{}", connection->GetId()));
                 };
                 handler.onMessage = [this](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessage message) {
                     const String text(message.GetText().data(), message.GetText().size());
-                    recorder.Add("text:" + ToString(connection->GetId()) + ":" + text);
+                    recorder.Add(Format("text:{}:{}", connection->GetId(), text));
                     if (text == "quit") {
                         return false;
                     }
                     connection->QueueText(message.GetText());
                     return true;
                 };
-                handler.onClosed = [this](const WebSocketHandler::ConnectionPtr& connection) { recorder.Add("closed:" + ToString(connection->GetId())); };
+                handler.onClosed = [this](const WebSocketHandler::ConnectionPtr& connection) { recorder.Add(Format("closed:{}", connection->GetId())); };
 
                 listener = MakeUnique<WebSocketListener>(std::move(settings), std::move(handler));
                 const auto port = listener->Start(0);
@@ -236,14 +235,11 @@ namespace BECore::Tests {
         // One byte now and then, each well inside the timeout, and never the blank line that ends the head: the timeout counts from
         // the connect, not from the last byte, so the server has to hang up although the client never goes quiet for long
         constexpr std::chrono::milliseconds kDripInterval{50};
-        const auto start = std::chrono::steady_clock::now();
-        const auto giveUp = start + 5 * settings.handshakeTimeout;
         dripper->Send(String("GET / HTTP/1.1\r\nX-Slow: "));
-        bool hungUp = false;
-        while (!hungUp && std::chrono::steady_clock::now() < giveUp) {
+        const bool hungUp = WaitUntil([&] {
             std::this_thread::sleep_for(kDripInterval);
-            hungUp = !dripper->TrySend(AsBytes(String("a")));
-        }
+            return !dripper->TrySend(AsBytes(String("a")));
+        });
         EXPECT_TRUE(hungUp) << "a client that sends a byte every " << kDripInterval.count() << " ms held its slot past the handshake timeout";
         EXPECT_TRUE(dripper->WaitForEndOfStream());
         EXPECT_TRUE(recorder.Events().empty()) << "the handler must never hear of it";
@@ -276,14 +272,7 @@ namespace BECore::Tests {
         // The two are not affected, and when one leaves the slot is free again
         second->Send(AsBytes(EncodeCloseFrame(WebSocketCloseCode::kNormal, {}, kClientMask)));
         ASSERT_TRUE(second->WaitForEndOfStream());
-        bool connected = false;
-        for (int attempt = 0; attempt < kSlotRetryAttempts && !connected; ++attempt) {
-            connected = StringView(TryHandshake(port)).starts_with("HTTP/1.1 101 ");
-            if (!connected) {
-                std::this_thread::sleep_for(10ms);  // the accept thread reaps finished connections every 50 ms
-            }
-        }
-        EXPECT_TRUE(connected);
+        EXPECT_TRUE(WaitForHandshakeAccepted(port));
         first->SendText("still here");
         EXPECT_TRUE(first->WaitForFrame().has_value());
     }
@@ -390,14 +379,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(recorder.Events().empty()) << "the handler must never hear of a health check";
 
         // Each probe freed its slot (one connection per address is allowed): a client can still connect
-        bool connected = false;
-        for (int attempt = 0; attempt < kSlotRetryAttempts && !connected; ++attempt) {
-            connected = StringView(TryHandshake(port, "", "game.example.net")).starts_with("HTTP/1.1 101 ");
-            if (!connected) {
-                std::this_thread::sleep_for(10ms);  // the accept thread reaps finished connections every 50 ms
-            }
-        }
-        EXPECT_TRUE(connected);
+        EXPECT_TRUE(WaitForHandshakeAccepted(port, "", "game.example.net"));
     }
 
     TEST_F(WebSocketListenerTest, OtherRequestsOfAPublicListenerWithAHealthPathAreJudgedAsBefore) {
@@ -505,7 +487,7 @@ namespace BECore::Tests {
         }
         occupant->Drop();
 
-        EXPECT_TRUE(WaitUntil({}, [&] { return StringView(TryHandshake(port)).starts_with("HTTP/1.1 101 "); })) << "the free slot was never given out";
+        EXPECT_TRUE(WaitForHandshakeAccepted(port)) << "the free slot was never given out";
     }
 
     TEST_F(WebSocketListenerTest, StopEndsOpenAndUnfinishedConnectionsPromptly) {
@@ -615,14 +597,7 @@ namespace BECore::Tests {
         // The slot of a client that leaves is free again
         first->Send(AsBytes(EncodeCloseFrame(WebSocketCloseCode::kNormal, {}, kClientMask)));
         ASSERT_TRUE(first->WaitForEndOfStream());
-        bool connected = false;
-        for (int attempt = 0; attempt < kSlotRetryAttempts && !connected; ++attempt) {
-            connected = StringView(TryHandshake(port, "X-Forwarded-For: 203.0.113.1\r\n")).starts_with("HTTP/1.1 101 ");
-            if (!connected) {
-                std::this_thread::sleep_for(10ms);
-            }
-        }
-        EXPECT_TRUE(connected);
+        EXPECT_TRUE(WaitForHandshakeAccepted(port, "X-Forwarded-For: 203.0.113.1\r\n"));
     }
 
     TEST_F(WebSocketListenerTest, TrustedProxyHopsFallsBackToThePeerAddressWithoutAUsableEntry) {

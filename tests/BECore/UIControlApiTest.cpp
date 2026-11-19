@@ -16,9 +16,12 @@
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIVars.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
+#include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -35,9 +38,9 @@ namespace BECore::Tests {
         //   Debug (layer 5): Tiny (400, 10, 20 x 20) is a button below the touch size, and a second Ok (500, 100, 80 x 40) with another action.
         //   Menu (layer 20): a modal canvas, hidden at first.
         // "Fit": 400 x 300 units, shown in a 1000 x 600 output: scale 2, offset (100, 0). View is a SceneView canvas with the button Go (10, 10, 50 x 40) and the slider Slide (10, 100, 200 x 40,
-        // range 0..100). "Choice": 800 x 600 in window pixels. Panel holds Side, a UISegmented bound to `uiApiSide` with the buttons Left and Right (the same action, values "left" and "right"; 150 x
-        // 56
-        //   and 150 x 56 at x = 100, 252, y = 100), and Plain (100, 300, 80 x 40) is a button without a value.
+        //   range 0..100).
+        // "Choice": 800 x 600 in window pixels. Panel holds Side, a UISegmented bound to `uiApiSide` with the buttons Left and Right (the same action, values "left" and "right";
+        //   150 x 56 each at x = 100, 252, y = 100), and Plain (100, 300, 80 x 40) is a button without a value.
         // "Values": 800 x 600 in window pixels. Loading is a UIProgressBar (100, 300, 400 x 24, `uiApiLoad`, range 0..100); CSound a
         //   toggle row (100, 500, 300 x 56; `uiApiCSound`, values "on" / "off", the caption child CSoundCaption and the switch child CSoundSwitch), CLocked a disabled one (520, 300, 240 x 56),
         //   CSilent one without an action (520, 400, 240 x 56), CVolume a slider (450, 100, 340 x 56; `uiApiCVolume`, range 0..1, steps of 0.1) and CQuiet a disabled one (450, 500, 300 x 56).
@@ -550,16 +553,6 @@ namespace BECore::Tests {
   <scene type="Scene" name="Empty"><nodes/></scene>
 </scenes></SceneManager>)";
 
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
         /// Counts the actions the buttons emit and the mouse events that reach game code
         class Recorder : public SubscriptionHolder {
         public:
@@ -677,39 +670,13 @@ namespace BECore::Tests {
 
         /// Sends a request, runs the frame stage that answers it and returns the whole response
         Json Call(StringView method, const Json& params = Json()) {
-            Json request = Json::object();
-            request["id"] = ++_nextId;
-            request["method"] = ToStdString(method);
-            if (!params.is_null()) {
-                request["params"] = params;
-            }
-            Json response;
-            _service.Post(DumpJson(request), [&response](String text) {
-                auto parsed = ParseJson(text);
-                response = parsed ? std::move(*parsed) : Json();
-            });
-            _service.Drain();
-            return response;
+            return CallControl(_service, ++_nextId, method, params);
         }
 
         static Json Click(const char* name) {
             Json params = Json::object();
             params["name"] = ToStdString(name);
             return params;
-        }
-
-        static bool IsOk(const Json& response) {
-            return BoolMember(response, "ok");
-        }
-
-        static String ErrorCode(const Json& response) {
-            const Json* error = Member(response, "error");
-            return error != nullptr ? StringMember(*error, "code") : String("<no error>");
-        }
-
-        static String ErrorMessage(const Json& response) {
-            const Json* error = Member(response, "error");
-            return error != nullptr ? StringMember(*error, "message") : String("<no error>");
         }
 
         /// The canvas of the result named after a scene node
@@ -793,7 +760,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* hud = FindCanvas(*Member(response, "result"), "Hud");
+        const Json* hud = FindCanvas(Require(Member(response, "result")), "Hud");
         ASSERT_NE(hud, nullptr);
         EXPECT_FALSE(BoolMember(*hud, "laidOut"));
         EXPECT_EQ(Member(*hud, "bounds"), nullptr);
@@ -813,7 +780,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json& result = *Member(response, "result");
+        const Json& result = Require(Member(response, "result"));
         EXPECT_EQ(StringMember(result, "scene"), "Main");
         const Json* canvases = Member(result, "canvases");
         ASSERT_NE(canvases, nullptr);
@@ -871,7 +838,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* canvas = FindCanvas(*Member(response, "result"), "Panel");
+        const Json* canvas = FindCanvas(Require(Member(response, "result")), "Panel");
         ASSERT_NE(canvas, nullptr);
         const Json* flat = FindElement(*canvas, "Flat");
         ASSERT_NE(flat, nullptr);
@@ -887,7 +854,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* canvas = FindCanvas(*Member(response, "result"), "Panel");
+        const Json* canvas = FindCanvas(Require(Member(response, "result")), "Panel");
         ASSERT_NE(canvas, nullptr);
         const Json* fancy = FindElement(*canvas, "Fancy");
         ASSERT_NE(fancy, nullptr);
@@ -925,7 +892,7 @@ namespace BECore::Tests {
         Show("Boxes");
         const Json response = Call("ui_tree");
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* canvas = FindCanvas(*Member(response, "result"), "Panel");
+        const Json* canvas = FindCanvas(Require(Member(response, "result")), "Panel");
         ASSERT_NE(canvas, nullptr);
         const Json* round = FindElement(*canvas, "Round");
         ASSERT_NE(round, nullptr);
@@ -950,7 +917,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* hud = FindCanvas(*Member(response, "result"), "Hud");
+        const Json* hud = FindCanvas(Require(Member(response, "result")), "Hud");
         ASSERT_NE(hud, nullptr);
         const Json* title = FindElement(*hud, "Title");
         ASSERT_NE(title, nullptr);
@@ -963,14 +930,14 @@ namespace BECore::Tests {
         strings.Set("de"_intern, "uiApi.title", "Punkte");
         CoreManager::GetUIVars().Set("score"_intern, 42);
         Show("Main");
-        auto* title = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>()->GetRoot().FindByName("Title"_intern);
+        auto* title = Require(_manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>()).GetRoot().FindByName("Title"_intern);
         ASSERT_NE(title, nullptr);
-        title->GetComponent<UITextComponent>()->text = "{#uiApi.title}: {score}";
+        Require(title->GetComponent<UITextComponent>()).text = "{#uiApi.title}: {score}";
 
         const auto shownText = [this]() {
             const Json response = Call("ui_tree");
             EXPECT_TRUE(IsOk(response)) << ErrorMessage(response);
-            const Json* hud = FindCanvas(*Member(response, "result"), "Hud");
+            const Json* hud = FindCanvas(Require(Member(response, "result")), "Hud");
             const Json* label = hud ? FindElement(*hud, "Title") : nullptr;
             return label ? StringMember(*label, "text") : String("<no such element>");
         };
@@ -988,7 +955,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* hud = FindCanvas(*Member(response, "result"), "Hud");
+        const Json* hud = FindCanvas(Require(Member(response, "result")), "Hud");
         ASSERT_NE(hud, nullptr);
         const Json* note = FindElement(*hud, "Note");
         ASSERT_NE(note, nullptr);
@@ -1004,7 +971,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json& result = *Member(response, "result");
+        const Json& result = Require(Member(response, "result"));
         const Json* hud = FindCanvas(result, "Hud");
         const Json* debug = FindCanvas(result, "Debug");
         ASSERT_TRUE(hud != nullptr && debug != nullptr);
@@ -1028,7 +995,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* bar = FindCanvas(*Member(response, "result"), "Bar");
+        const Json* bar = FindCanvas(Require(Member(response, "result")), "Bar");
         ASSERT_NE(bar, nullptr);
         const Json* gear = FindElement(*bar, "Gear");
         ASSERT_NE(gear, nullptr);
@@ -1044,7 +1011,7 @@ namespace BECore::Tests {
         ASSERT_NE(words, nullptr);
         EXPECT_FALSE(words->contains("icon"));
         EXPECT_FALSE(words->contains("tooltip"));
-        EXPECT_EQ(StringMember(*words, "action"), "UIControlApiWords") << "the rest of a button's entry is as before";
+        EXPECT_EQ(StringMember(*words, "action"), "UIControlApiWords") << "a button without words still names its action";
     }
 
     TEST_F(UIControlApiTest, ACanvasWithNoRegionsHasAnEmptyObjectAndItsElementsHaveNoRegionMember) {
@@ -1053,7 +1020,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* hud = FindCanvas(*Member(response, "result"), "Hud");
+        const Json* hud = FindCanvas(Require(Member(response, "result")), "Hud");
         ASSERT_NE(hud, nullptr);
         const Json* regions = Member(*hud, "regions");
         ASSERT_NE(regions, nullptr);
@@ -1067,14 +1034,14 @@ namespace BECore::Tests {
     TEST_F(UIControlApiTest, ARegionIsListedWithItsRectAndTheElementThatNamesItShowsTheName) {
         auto hudCanvas = Canvas("Main", "Hud");
         hudCanvas->SetRegion("hud.corner"_intern, {10.0f, 20.0f, 300.0f, 100.0f});
-        hudCanvas->GetLayout().root->FindByName("Ok"_intern)->style.rect.region = "hud.corner"_intern;
+        Require(hudCanvas->GetLayout().root->FindByName("Ok"_intern)).style.rect.region = "hud.corner"_intern;
         hudCanvas->Invalidate();
         Show("Main");
 
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* hud = FindCanvas(*Member(response, "result"), "Hud");
+        const Json* hud = FindCanvas(Require(Member(response, "result")), "Hud");
         ASSERT_NE(hud, nullptr);
         const Json* regions = Member(*hud, "regions");
         ASSERT_NE(regions, nullptr);
@@ -1092,16 +1059,16 @@ namespace BECore::Tests {
 
     TEST_F(UIControlApiTest, AnUnpublishedRegionIsNamedOnTheElementAndReportedAsMissing) {
         auto hudCanvas = Canvas("Main", "Hud");
-        hudCanvas->GetLayout().root->FindByName("Ok"_intern)->style.rect.region = "hud.gone"_intern;
+        Require(hudCanvas->GetLayout().root->FindByName("Ok"_intern)).style.rect.region = "hud.gone"_intern;
         hudCanvas->Invalidate();
         Show("Main");
 
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* hud = FindCanvas(*Member(response, "result"), "Hud");
+        const Json* hud = FindCanvas(Require(Member(response, "result")), "Hud");
         ASSERT_NE(hud, nullptr);
-        EXPECT_EQ(StringMember(*FindElement(*hud, "Ok"), "region"), "hud.gone");
+        EXPECT_EQ(StringMember(Require(FindElement(*hud, "Ok")), "region"), "hud.gone");
         const Json* issues = Member(*hud, "issues");
         ASSERT_NE(issues, nullptr);
         ASSERT_EQ(issues->size(), 1u) << DumpJson(*issues).c_str();
@@ -1117,10 +1084,10 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* hud = FindCanvas(*Member(response, "result"), "Hud");
+        const Json* hud = FindCanvas(Require(Member(response, "result")), "Hud");
         ASSERT_NE(hud, nullptr);
         EXPECT_FALSE(BoolMember(*hud, "laidOut"));
-        ExpectRect(Member(*Member(*hud, "regions"), "hud.corner"), 1.0f, 2.0f, 3.0f, 4.0f);
+        ExpectRect(Member(Require(Member(*hud, "regions")), "hud.corner"), 1.0f, 2.0f, 3.0f, 4.0f);
     }
 
     TEST_F(UIControlApiTest, OutputRectsAreInTheOutputPixelsOfTheCanvasTransform) {
@@ -1129,7 +1096,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* view = FindCanvas(*Member(response, "result"), "View");
+        const Json* view = FindCanvas(Require(Member(response, "result")), "View");
         ASSERT_NE(view, nullptr);
         EXPECT_EQ(StringMember(*view, "space"), "SceneView");
         EXPECT_NEAR(NumberMember(*view, "scale"), 2.0, kTolerance);
@@ -1148,7 +1115,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* panel = FindCanvas(*Member(response, "result"), "Panel");
+        const Json* panel = FindCanvas(Require(Member(response, "result")), "Panel");
         ASSERT_NE(panel, nullptr);
         const Json* side = FindElement(*panel, "Side");
         ASSERT_NE(side, nullptr);
@@ -1177,15 +1144,15 @@ namespace BECore::Tests {
         const Json second = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(first) && IsOk(second));
-        const Json* before = FindElement(*FindCanvas(*Member(first, "result"), "Panel"), "Side");
-        const Json* after = FindElement(*FindCanvas(*Member(second, "result"), "Panel"), "Side");
+        const Json* before = FindElement(Require(FindCanvas(Require(Member(first, "result")), "Panel")), "Side");
+        const Json* after = FindElement(Require(FindCanvas(Require(Member(second, "result")), "Panel")), "Side");
         ASSERT_TRUE(before != nullptr && after != nullptr);
         EXPECT_EQ(StringMember(*before, "selectedValue"), "left");
-        EXPECT_TRUE(BoolMember(*FindElement(*before, "Left"), "selected"));
-        EXPECT_FALSE(BoolMember(*FindElement(*before, "Right"), "selected"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(*before, "Left")), "selected"));
+        EXPECT_FALSE(BoolMember(Require(FindElement(*before, "Right")), "selected"));
         EXPECT_EQ(StringMember(*after, "selectedValue"), "right");
-        EXPECT_FALSE(BoolMember(*FindElement(*after, "Left"), "selected"));
-        EXPECT_TRUE(BoolMember(*FindElement(*after, "Right"), "selected"));
+        EXPECT_FALSE(BoolMember(Require(FindElement(*after, "Left")), "selected"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(*after, "Right")), "selected"));
     }
 
     TEST_F(UIControlApiTest, AnUnsetVariableSelectsNothingAndATreeBeforeTheFirstDrawStillSaysSo) {
@@ -1194,11 +1161,11 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* side = FindElement(*FindCanvas(*Member(response, "result"), "Panel"), "Side");
+        const Json* side = FindElement(Require(FindCanvas(Require(Member(response, "result")), "Panel")), "Side");
         ASSERT_NE(side, nullptr);
         EXPECT_EQ(StringMember(*side, "selectedValue"), "");
-        EXPECT_FALSE(BoolMember(*FindElement(*side, "Left"), "selected"));
-        EXPECT_FALSE(BoolMember(*FindElement(*side, "Right"), "selected"));
+        EXPECT_FALSE(BoolMember(Require(FindElement(*side, "Left")), "selected"));
+        EXPECT_FALSE(BoolMember(Require(FindElement(*side, "Right")), "selected"));
     }
 
     TEST_F(UIControlApiTest, ADisabledGroupShowsItsSegmentsAsDisabled) {
@@ -1210,12 +1177,12 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* group = FindElement(*FindCanvas(*Member(response, "result"), "Panel"), "Side");
+        const Json* group = FindElement(Require(FindCanvas(Require(Member(response, "result")), "Panel")), "Side");
         ASSERT_NE(group, nullptr);
         EXPECT_TRUE(BoolMember(*group, "disabled"));
-        EXPECT_TRUE(BoolMember(*FindElement(*group, "Left"), "disabled")) << "a click on it does nothing, which is what the field says";
-        EXPECT_TRUE(BoolMember(*FindElement(*group, "Right"), "disabled"));
-        EXPECT_FALSE(BoolMember(*FindElement(*FindCanvas(*Member(response, "result"), "Panel"), "Plain"), "disabled"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(*group, "Left")), "disabled")) << "a click on it does nothing, which is what the field says";
+        EXPECT_TRUE(BoolMember(Require(FindElement(*group, "Right")), "disabled"));
+        EXPECT_FALSE(BoolMember(Require(FindElement(Require(FindCanvas(Require(Member(response, "result")), "Panel")), "Plain")), "disabled"));
     }
 
     TEST_F(UIControlApiTest, AButtonAboveASceneTargetTakesTheClickAndTheTargetGetsNothing) {
@@ -1225,11 +1192,11 @@ namespace BECore::Tests {
         const Json clicked = Call("ui_click", Click("Press"));
 
         ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
-        EXPECT_TRUE(BoolMember(*Member(clicked, "result"), "consumed"));
+        EXPECT_TRUE(BoolMember(Require(Member(clicked, "result")), "consumed"));
         EXPECT_EQ(recorder.Count("UIControlApiPress"), 1);
         EXPECT_EQ(recorder.Count("UIControlApiBack"), 0) << "the target below the canvas shielded by the button took the press";
-        EXPECT_EQ(StringMember(*Member(clicked, "result"), "takenBy"), "element");
-        EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "UIControlApiPress");
+        EXPECT_EQ(StringMember(Require(Member(clicked, "result")), "takenBy"), "element");
+        EXPECT_EQ(StringMember(Require(Member(clicked, "result")), "action"), "UIControlApiPress");
     }
 
     TEST_F(UIControlApiTest, ASceneTargetAboveAButtonTakesTheClickAsItWouldFromAPerson) {
@@ -1239,14 +1206,14 @@ namespace BECore::Tests {
         const Json clicked = Call("ui_click", Click("Covered"));
 
         ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
-        EXPECT_TRUE(BoolMember(*Member(clicked, "result"), "consumed"));
+        EXPECT_TRUE(BoolMember(Require(Member(clicked, "result")), "consumed"));
         EXPECT_EQ(recorder.Count("UIControlApiFront"), 1);
         EXPECT_EQ(recorder.Count("UIControlApiCovered"), 0) << "the button under the target got the click";
         EXPECT_EQ(recorder.downs, 0) << "the press did not reach the game";
         EXPECT_EQ(recorder.ups, 0);
-        EXPECT_EQ(StringMember(*Member(clicked, "result"), "takenBy"), "target");
-        EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "") << "the element emitted nothing, the target did";
-        EXPECT_EQ(StringMember(*Member(clicked, "result"), "value"), "");
+        EXPECT_EQ(StringMember(Require(Member(clicked, "result")), "takenBy"), "target");
+        EXPECT_EQ(StringMember(Require(Member(clicked, "result")), "action"), "") << "the element emitted nothing, the target did";
+        EXPECT_EQ(StringMember(Require(Member(clicked, "result")), "value"), "");
     }
 
     TEST_F(UIControlApiTest, AClickAtAPointThatNoTargetCoversStillReachesTheButton) {
@@ -1260,8 +1227,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
         EXPECT_EQ(recorder.Count("UIControlApiCovered"), 1);
         EXPECT_EQ(recorder.Count("UIControlApiFront"), 0);
-        EXPECT_EQ(StringMember(*Member(clicked, "result"), "takenBy"), "element");
-        EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "UIControlApiCovered");
+        EXPECT_EQ(StringMember(Require(Member(clicked, "result")), "takenBy"), "element");
+        EXPECT_EQ(StringMember(Require(Member(clicked, "result")), "action"), "UIControlApiCovered");
     }
 
     TEST_F(UIControlApiTest, AClickOnASegmentAnswersWithTheActionAndTheValueAndTheListenerGetsThem) {
@@ -1272,7 +1239,7 @@ namespace BECore::Tests {
         const Json clicked = Call("ui_click", Click("Right"));
 
         ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
-        const Json& result = *Member(clicked, "result");
+        const Json& result = Require(Member(clicked, "result"));
         EXPECT_EQ(StringMember(result, "action"), "UIControlApiSide");
         EXPECT_EQ(StringMember(result, "value"), "right");
         EXPECT_EQ(recorder.Count("UIControlApiSide"), 1);
@@ -1284,21 +1251,22 @@ namespace BECore::Tests {
         Show("Choice");
         const Json before = Call("ui_tree");
         ASSERT_TRUE(IsOk(before));
-        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(before, "result"), "Panel"), "Left"), "selected"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(Require(FindCanvas(Require(Member(before, "result")), "Panel")), "Left")), "selected"));
 
         // The click only reports; the game (here the test) answers by setting the variable
         ASSERT_TRUE(IsOk(Call("ui_click", Click("Right"))));
         const Json unchanged = Call("ui_tree");
         ASSERT_TRUE(IsOk(unchanged));
-        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(unchanged, "result"), "Panel"), "Left"), "selected")) << "a click selects nothing by itself";
-        EXPECT_FALSE(BoolMember(*FindElement(*FindCanvas(*Member(unchanged, "result"), "Panel"), "Right"), "selected"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(Require(FindCanvas(Require(Member(unchanged, "result")), "Panel")), "Left")), "selected")) << "a click selects nothing by itself";
+        EXPECT_FALSE(BoolMember(Require(FindElement(Require(FindCanvas(Require(Member(unchanged, "result")), "Panel")), "Right")), "selected"));
 
         CoreManager::GetUIVars().Set("uiApiSide"_intern, "right");
         const Json after = Call("ui_tree");
         ASSERT_TRUE(IsOk(after));
-        const Json* panel = FindCanvas(*Member(after, "result"), "Panel");
-        EXPECT_FALSE(BoolMember(*FindElement(*panel, "Left"), "selected"));
-        EXPECT_TRUE(BoolMember(*FindElement(*panel, "Right"), "selected"));
+        const Json* panel = FindCanvas(Require(Member(after, "result")), "Panel");
+        ASSERT_NE(panel, nullptr);
+        EXPECT_FALSE(BoolMember(Require(FindElement(*panel, "Left")), "selected"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(*panel, "Right")), "selected"));
     }
 
     TEST_F(UIControlApiTest, ADisabledGroupTakesTheClickAndEmitsNothing) {
@@ -1322,19 +1290,19 @@ namespace BECore::Tests {
         const Json clicked = Call("ui_click", Click("Plain"));
 
         ASSERT_TRUE(IsOk(tree) && IsOk(clicked));
-        const Json* plain = FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "Plain");
+        const Json* plain = FindElement(Require(FindCanvas(Require(Member(tree, "result")), "Panel")), "Plain");
         ASSERT_NE(plain, nullptr);
         EXPECT_NE(Member(*plain, "value"), nullptr);
         EXPECT_EQ(StringMember(*plain, "value"), "");
         EXPECT_FALSE(BoolMember(*plain, "selected"));
         EXPECT_EQ(Member(*plain, "bind"), nullptr) << "only a choice group has a bind";
-        EXPECT_EQ(StringMember(*Member(clicked, "result"), "value"), "");
+        EXPECT_EQ(StringMember(Require(Member(clicked, "result")), "value"), "");
         EXPECT_EQ(recorder.Count("UIControlApiPlain"), 1);
         EXPECT_EQ(recorder.LastValue(), "");
 
         Show("Main");
         const Json main = Call("ui_tree");
-        const Json* note = FindElement(*FindCanvas(*Member(main, "result"), "Hud"), "Note");
+        const Json* note = FindElement(Require(FindCanvas(Require(Member(main, "result")), "Hud")), "Note");
         ASSERT_NE(note, nullptr);
         EXPECT_EQ(Member(*note, "value"), nullptr);
         EXPECT_EQ(Member(*note, "selected"), nullptr);
@@ -1349,7 +1317,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* panel = FindCanvas(*Member(response, "result"), "Panel");
+        const Json* panel = FindCanvas(Require(Member(response, "result")), "Panel");
         ASSERT_NE(panel, nullptr);
         const Json* level = FindElement(*panel, "Level");
         ASSERT_NE(level, nullptr);
@@ -1368,12 +1336,12 @@ namespace BECore::Tests {
             ASSERT_NE(item, nullptr) << option;
             EXPECT_FALSE(BoolMember(*item, "visible")) << option << " is hidden while the list is closed";
         }
-        EXPECT_TRUE(BoolMember(*FindElement(*level, "Normal"), "selected"));
-        EXPECT_FALSE(BoolMember(*FindElement(*level, "Easy"), "selected"));
-        EXPECT_TRUE(BoolMember(*FindElement(*level, "Locked"), "disabled"));
-        EXPECT_EQ(StringMember(*FindElement(*level, "Hard"), "value"), "hard");
-        EXPECT_EQ(StringMember(*FindElement(*level, "Hard"), "action"), "") << "the options keep no action of their own";
-        EXPECT_EQ(Member(*FindElement(*panel, "Below"), "open"), nullptr) << "only a dropdown has open";
+        EXPECT_TRUE(BoolMember(Require(FindElement(*level, "Normal")), "selected"));
+        EXPECT_FALSE(BoolMember(Require(FindElement(*level, "Easy")), "selected"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(*level, "Locked")), "disabled"));
+        EXPECT_EQ(StringMember(Require(FindElement(*level, "Hard")), "value"), "hard");
+        EXPECT_EQ(StringMember(Require(FindElement(*level, "Hard")), "action"), "") << "the options keep no action of their own";
+        EXPECT_EQ(Member(Require(FindElement(*panel, "Below")), "open"), nullptr) << "only a dropdown has open";
     }
 
     TEST_F(UIControlApiTest, TheSelectionOfADropdownFollowsTheVariableWithNoDraw) {
@@ -1384,11 +1352,11 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response));
-        const Json* level = FindElement(*FindCanvas(*Member(response, "result"), "Panel"), "Level");
+        const Json* level = FindElement(Require(FindCanvas(Require(Member(response, "result")), "Panel")), "Level");
         ASSERT_NE(level, nullptr);
         EXPECT_EQ(StringMember(*level, "selectedValue"), "hard");
-        EXPECT_TRUE(BoolMember(*FindElement(*level, "Hard"), "selected"));
-        EXPECT_FALSE(BoolMember(*FindElement(*level, "Easy"), "selected"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(*level, "Hard")), "selected"));
+        EXPECT_FALSE(BoolMember(Require(FindElement(*level, "Easy")), "selected"));
     }
 
     TEST_F(UIControlApiTest, AnUnsetDropdownShowsThePlaceholderAndSelectsNothing) {
@@ -1397,11 +1365,11 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response));
-        const Json* level = FindElement(*FindCanvas(*Member(response, "result"), "Panel"), "Level");
+        const Json* level = FindElement(Require(FindCanvas(Require(Member(response, "result")), "Panel")), "Level");
         ASSERT_NE(level, nullptr);
         EXPECT_EQ(StringMember(*level, "selectedValue"), "");
         EXPECT_EQ(StringMember(*level, "text"), "Pick");
-        EXPECT_FALSE(BoolMember(*FindElement(*level, "Easy"), "selected"));
+        EXPECT_FALSE(BoolMember(Require(FindElement(*level, "Easy")), "selected"));
     }
 
     TEST_F(UIControlApiTest, AClickOnTheHeaderOpensTheListAndEmitsNothing) {
@@ -1411,7 +1379,7 @@ namespace BECore::Tests {
         const Json clicked = Call("ui_click", Click("Level"));
 
         ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
-        const Json& result = *Member(clicked, "result");
+        const Json& result = Require(Member(clicked, "result"));
         EXPECT_TRUE(BoolMember(result, "consumed"));
         EXPECT_EQ(Member(result, "action"), nullptr);
         EXPECT_EQ(Member(result, "value"), nullptr);
@@ -1419,18 +1387,18 @@ namespace BECore::Tests {
 
         // The open list gets its rects at the next draw
         const Json stale = Call("ui_tree");
-        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(stale, "result"), "Panel"), "Level"), "open"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(Require(FindCanvas(Require(Member(stale, "result")), "Panel")), "Level")), "open"));
         Show("Pick");
         const Json tree = Call("ui_tree");
         ASSERT_TRUE(IsOk(tree));
-        const Json* level = FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "Level");
+        const Json* level = FindElement(Require(FindCanvas(Require(Member(tree, "result")), "Panel")), "Level");
         ASSERT_NE(level, nullptr);
         EXPECT_TRUE(BoolMember(*level, "open"));
         for (const char* option : {"Easy", "Normal", "Hard", "Locked"}) {
-            EXPECT_TRUE(BoolMember(*FindElement(*level, option), "visible")) << option;
+            EXPECT_TRUE(BoolMember(Require(FindElement(*level, option)), "visible")) << option;
         }
-        ExpectRect(Member(*FindElement(*level, "Easy"), "rect"), 100.0f, 156.0f, 240.0f, 56.0f);
-        ExpectRect(Member(*FindElement(*level, "Locked"), "rect"), 100.0f, 324.0f, 240.0f, 56.0f);
+        ExpectRect(Member(Require(FindElement(*level, "Easy")), "rect"), 100.0f, 156.0f, 240.0f, 56.0f);
+        ExpectRect(Member(Require(FindElement(*level, "Locked")), "rect"), 100.0f, 324.0f, 240.0f, 56.0f);
     }
 
     TEST_F(UIControlApiTest, AClickOnAnOptionAnswersWithTheActionAndTheValueAndTheListClosesAtTheNextFrame) {
@@ -1443,7 +1411,7 @@ namespace BECore::Tests {
         const Json clicked = Call("ui_click", Click("Hard"));
 
         ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
-        const Json& result = *Member(clicked, "result");
+        const Json& result = Require(Member(clicked, "result"));
         EXPECT_TRUE(BoolMember(result, "consumed"));
         EXPECT_EQ(StringMember(result, "action"), "UIControlApiLevel");
         EXPECT_EQ(StringMember(result, "value"), "hard");
@@ -1452,16 +1420,16 @@ namespace BECore::Tests {
 
         Show("Pick");
         const Json tree = Call("ui_tree");
-        const Json* level = FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "Level");
+        const Json* level = FindElement(Require(FindCanvas(Require(Member(tree, "result")), "Panel")), "Level");
         ASSERT_NE(level, nullptr);
         EXPECT_FALSE(BoolMember(*level, "open"));
-        EXPECT_FALSE(BoolMember(*FindElement(*level, "Hard"), "visible"));
+        EXPECT_FALSE(BoolMember(Require(FindElement(*level, "Hard")), "visible"));
         EXPECT_EQ(StringMember(*level, "selectedValue"), "easy") << "the choice is the game's: a click sets no variable";
         EXPECT_EQ(StringMember(*level, "text"), "Easy");
 
         CoreManager::GetUIVars().Set("uiApiLevel"_intern, "hard");  // the game answers
         const Json after = Call("ui_tree");
-        EXPECT_EQ(StringMember(*FindElement(*FindCanvas(*Member(after, "result"), "Panel"), "Level"), "text"), "Hard");
+        EXPECT_EQ(StringMember(Require(FindElement(Require(FindCanvas(Require(Member(after, "result")), "Panel")), "Level")), "text"), "Hard");
         const Json again = Call("ui_click", Click("Hard"));
         EXPECT_EQ(ErrorCode(again), "not_clickable") << "the list is closed again";
     }
@@ -1485,14 +1453,14 @@ namespace BECore::Tests {
         const Json clicked = Call("ui_click", Click("Locked"));
 
         ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
-        const Json& result = *Member(clicked, "result");
+        const Json& result = Require(Member(clicked, "result"));
         EXPECT_TRUE(BoolMember(result, "consumed"));
         EXPECT_EQ(StringMember(result, "action"), "") << "nothing was emitted";
         EXPECT_EQ(StringMember(result, "value"), "");
         EXPECT_EQ(recorder.Total(), 0u);
         Show("Pick");
         const Json tree = Call("ui_tree");
-        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "Level"), "open"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(Require(FindCanvas(Require(Member(tree, "result")), "Panel")), "Level")), "open"));
     }
 
     TEST_F(UIControlApiTest, AClickElsewhereWhileTheListIsOpenClosesItAndIsConsumed) {
@@ -1504,14 +1472,14 @@ namespace BECore::Tests {
         const Json clicked = Call("ui_click", Click("Below"));
 
         ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
-        EXPECT_TRUE(BoolMember(*Member(clicked, "result"), "consumed"));
-        EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "") << "the answer must not report what the press did not emit";
-        EXPECT_EQ(StringMember(*Member(clicked, "result"), "value"), "");
+        EXPECT_TRUE(BoolMember(Require(Member(clicked, "result")), "consumed"));
+        EXPECT_EQ(StringMember(Require(Member(clicked, "result")), "action"), "") << "the answer must not report what the press did not emit";
+        EXPECT_EQ(StringMember(Require(Member(clicked, "result")), "value"), "");
         EXPECT_EQ(recorder.Count("UIControlApiBelow"), 0) << "the press only closed the list";
         EXPECT_EQ(recorder.Total(), 0u);
         Show("Pick");
         const Json tree = Call("ui_tree");
-        EXPECT_FALSE(BoolMember(*FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "Level"), "open"));
+        EXPECT_FALSE(BoolMember(Require(FindElement(Require(FindCanvas(Require(Member(tree, "result")), "Panel")), "Level")), "open"));
     }
 
     TEST_F(UIControlApiTest, ADisabledDropdownTakesTheClickAndNeverOpens) {
@@ -1520,14 +1488,14 @@ namespace BECore::Tests {
         const Json clicked = Call("ui_click", Click("Frozen"));
 
         ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
-        EXPECT_EQ(Member(*Member(clicked, "result"), "action"), nullptr);
+        EXPECT_EQ(Member(Require(Member(clicked, "result")), "action"), nullptr);
         Show("Pick");
         const Json tree = Call("ui_tree");
-        const Json* frozen = FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "Frozen");
+        const Json* frozen = FindElement(Require(FindCanvas(Require(Member(tree, "result")), "Panel")), "Frozen");
         ASSERT_NE(frozen, nullptr);
         EXPECT_TRUE(BoolMember(*frozen, "disabled"));
         EXPECT_FALSE(BoolMember(*frozen, "open"));
-        EXPECT_FALSE(BoolMember(*FindElement(*frozen, "Only"), "visible"));
+        EXPECT_FALSE(BoolMember(Require(FindElement(*frozen, "Only")), "visible"));
     }
 
     TEST_F(UIControlApiTest, ADropdownCanBeDrivenEndToEnd) {
@@ -1538,10 +1506,10 @@ namespace BECore::Tests {
         Show("Pick");  // the "step"
         const Json open = Call("ui_tree");
         ASSERT_TRUE(IsOk(open));
-        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(open, "result"), "Panel"), "Normal"), "visible"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(Require(FindCanvas(Require(Member(open, "result")), "Panel")), "Normal")), "visible"));
         const Json picked = Call("ui_click", Click("Normal"));
         ASSERT_TRUE(IsOk(picked)) << ErrorMessage(picked);
-        EXPECT_EQ(StringMember(*Member(picked, "result"), "value"), "normal");
+        EXPECT_EQ(StringMember(Require(Member(picked, "result")), "value"), "normal");
         Show("Pick");
 
         EXPECT_EQ(recorder.Count("UIControlApiLevel"), 1);
@@ -1557,7 +1525,7 @@ namespace BECore::Tests {
         const Json tree = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(tree)) << ErrorMessage(tree);
-        const Json* canvas = FindCanvas(*Member(tree, "result"), "Settings");
+        const Json* canvas = FindCanvas(Require(Member(tree, "result")), "Settings");
         ASSERT_NE(canvas, nullptr);
 
         const Json* loading = FindElement(*canvas, "Loading");
@@ -1577,19 +1545,20 @@ namespace BECore::Tests {
         Show("Values");
         const Json before = Call("ui_tree");
         ASSERT_TRUE(IsOk(before));
-        const Json* canvas = FindCanvas(*Member(before, "result"), "Settings");
-        EXPECT_NEAR(NumberMember(*FindElement(*canvas, "Loading"), "fraction"), 0.0, kTolerance);
+        const Json* canvas = FindCanvas(Require(Member(before, "result")), "Settings");
+        ASSERT_NE(canvas, nullptr);
+        EXPECT_NEAR(NumberMember(Require(FindElement(*canvas, "Loading")), "fraction"), 0.0, kTolerance);
 
         CoreManager::GetUIVars().Set("uiApiLoad"_intern, "50");
         const Json after = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(after));
-        canvas = FindCanvas(*Member(after, "result"), "Settings");
-        EXPECT_NEAR(NumberMember(*FindElement(*canvas, "Loading"), "fraction"), 0.5, kTolerance);
+        canvas = FindCanvas(Require(Member(after, "result")), "Settings");
+        EXPECT_NEAR(NumberMember(Require(FindElement(*canvas, "Loading")), "fraction"), 0.5, kTolerance);
 
         CoreManager::GetUIVars().Set("uiApiLoad"_intern, "not a number");
         const Json bad = Call("ui_tree");
-        EXPECT_NEAR(NumberMember(*FindElement(*FindCanvas(*Member(bad, "result"), "Settings"), "Loading"), "fraction"), 0.0, kTolerance);
+        EXPECT_NEAR(NumberMember(Require(FindElement(Require(FindCanvas(Require(Member(bad, "result")), "Settings")), "Loading")), "fraction"), 0.0, kTolerance);
     }
 
     TEST_F(UIControlApiTest, ASliderWithoutAtIsPressedInTheMiddleAndAnIntegerAtIsAccepted) {
@@ -1598,13 +1567,13 @@ namespace BECore::Tests {
 
         const Json middle = Call("ui_click", Click("CVolume"));
         ASSERT_TRUE(IsOk(middle)) << ErrorMessage(middle);
-        EXPECT_EQ(StringMember(*Member(middle, "result"), "value"), "0.5");
+        EXPECT_EQ(StringMember(Require(Member(middle, "result")), "value"), "0.5");
 
         Json one = Click("CVolume");
         one["at"] = 1;  // an integer in the JSON text
         const Json end = Call("ui_click", one);
         ASSERT_TRUE(IsOk(end)) << ErrorMessage(end);
-        EXPECT_EQ(StringMember(*Member(end, "result"), "value"), "1");
+        EXPECT_EQ(StringMember(Require(Member(end, "result")), "value"), "1");
     }
 
     TEST_F(UIControlApiTest, AClientSetsASliderEndToEnd) {
@@ -1614,11 +1583,12 @@ namespace BECore::Tests {
         ASSERT_TRUE(IsOk(Call("ui_click", params)));
 
         const Json unchanged = Call("ui_tree");
-        EXPECT_NEAR(NumberMember(*FindElement(*FindCanvas(*Member(unchanged, "result"), "Settings"), "CVolume"), "value"), 0.0, kTolerance) << "the game has not answered";
+        EXPECT_NEAR(NumberMember(Require(FindElement(Require(FindCanvas(Require(Member(unchanged, "result")), "Settings")), "CVolume")), "value"), 0.0, kTolerance) << "the game has not answered";
 
         CoreManager::GetUIVars().Set("uiApiCVolume"_intern, "1");
         const Json answered = Call("ui_tree");
-        const Json* volume = FindElement(*FindCanvas(*Member(answered, "result"), "Settings"), "CVolume");
+        const Json* volume = FindElement(Require(FindCanvas(Require(Member(answered, "result")), "Settings")), "CVolume");
+        ASSERT_NE(volume, nullptr);
         EXPECT_NEAR(NumberMember(*volume, "value"), 1.0, kTolerance);
         EXPECT_NEAR(NumberMember(*volume, "fraction"), 1.0, kTolerance);
     }
@@ -1655,7 +1625,7 @@ namespace BECore::Tests {
             params["canvas"] = "Hud";
             const Json response = Call("ui_click", params);
             ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-            EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
+            EXPECT_TRUE(BoolMember(Require(Member(response, "result")), "consumed"));
         }
         EXPECT_EQ(recorder.Count("UIControlApiOk"), 2);
 
@@ -1675,7 +1645,7 @@ namespace BECore::Tests {
         const Json tree = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(tree)) << ErrorMessage(tree);
-        const Json* canvas = FindCanvas(*Member(tree, "result"), "Settings");
+        const Json* canvas = FindCanvas(Require(Member(tree, "result")), "Settings");
         ASSERT_NE(canvas, nullptr);
 
         const Json* sound = FindElement(*canvas, "CSound");
@@ -1714,26 +1684,27 @@ namespace BECore::Tests {
         EXPECT_FALSE(BoolMember(*volume, "disabled"));
         EXPECT_EQ(Member(*volume, "text"), nullptr);
         EXPECT_TRUE(BoolMember(*volume, "interactive"));
-        EXPECT_TRUE(BoolMember(*FindElement(*canvas, "CQuiet"), "disabled"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(*canvas, "CQuiet")), "disabled"));
     }
 
     TEST_F(UIControlApiTest, TheComposedValuesFollowTheVariablesBetweenTwoTreeCallsWithNoDraw) {
         Show("Values");
         const Json before = Call("ui_tree");
         ASSERT_TRUE(IsOk(before));
-        const Json* canvas = FindCanvas(*Member(before, "result"), "Settings");
-        EXPECT_FALSE(BoolMember(*FindElement(*canvas, "CSound"), "checked"));
-        EXPECT_NEAR(NumberMember(*FindElement(*canvas, "CVolume"), "value"), 0.0, kTolerance);
+        const Json* canvas = FindCanvas(Require(Member(before, "result")), "Settings");
+        ASSERT_NE(canvas, nullptr);
+        EXPECT_FALSE(BoolMember(Require(FindElement(*canvas, "CSound")), "checked"));
+        EXPECT_NEAR(NumberMember(Require(FindElement(*canvas, "CVolume")), "value"), 0.0, kTolerance);
 
         CoreManager::GetUIVars().Set("uiApiCSound"_intern, "on");
         CoreManager::GetUIVars().Set("uiApiCVolume"_intern, "0.7");
         const Json after = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(after));
-        canvas = FindCanvas(*Member(after, "result"), "Settings");
-        EXPECT_TRUE(BoolMember(*FindElement(*canvas, "CSound"), "checked"));
-        EXPECT_NEAR(NumberMember(*FindElement(*canvas, "CVolume"), "value"), 0.7, kTolerance);
-        EXPECT_NEAR(NumberMember(*FindElement(*canvas, "CVolume"), "fraction"), 0.7, kTolerance);
+        canvas = FindCanvas(Require(Member(after, "result")), "Settings");
+        EXPECT_TRUE(BoolMember(Require(FindElement(*canvas, "CSound")), "checked"));
+        EXPECT_NEAR(NumberMember(Require(FindElement(*canvas, "CVolume")), "value"), 0.7, kTolerance);
+        EXPECT_NEAR(NumberMember(Require(FindElement(*canvas, "CVolume")), "fraction"), 0.7, kTolerance);
     }
 
     TEST_F(UIControlApiTest, AClickOnAComposedToggleAnswersWithTheValueItAsksForAndTheListenerGetsIt) {
@@ -1743,8 +1714,8 @@ namespace BECore::Tests {
         const Json turnOn = Call("ui_click", Click("CSound"));
 
         ASSERT_TRUE(IsOk(turnOn)) << ErrorMessage(turnOn);
-        EXPECT_EQ(StringMember(*Member(turnOn, "result"), "action"), "UIControlApiCSound");
-        EXPECT_EQ(StringMember(*Member(turnOn, "result"), "value"), "on");
+        EXPECT_EQ(StringMember(Require(Member(turnOn, "result")), "action"), "UIControlApiCSound");
+        EXPECT_EQ(StringMember(Require(Member(turnOn, "result")), "value"), "on");
         EXPECT_EQ(recorder.Count("UIControlApiCSound"), 1);
         EXPECT_EQ(recorder.LastValue(), "on");
 
@@ -1752,12 +1723,12 @@ namespace BECore::Tests {
         const Json turnOff = Call("ui_click", Click("CSound"));
 
         ASSERT_TRUE(IsOk(turnOff));
-        EXPECT_EQ(StringMember(*Member(turnOff, "result"), "value"), "off");
+        EXPECT_EQ(StringMember(Require(Member(turnOff, "result")), "value"), "off");
         EXPECT_EQ(recorder.Count("UIControlApiCSound"), 2);
         EXPECT_EQ(recorder.LastValue(), "off");
 
         const Json tree = Call("ui_tree");
-        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(tree, "result"), "Settings"), "CSound"), "checked")) << "a click changes nothing by itself";
+        EXPECT_TRUE(BoolMember(Require(FindElement(Require(FindCanvas(Require(Member(tree, "result")), "Settings")), "CSound")), "checked")) << "a click changes nothing by itself";
     }
 
     TEST_F(UIControlApiTest, TheCaptionAndTheSwitchOfAComposedToggleBothClickTheRow) {
@@ -1781,9 +1752,9 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("CLocked"));
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
-        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "");
-        EXPECT_EQ(StringMember(*Member(response, "result"), "value"), "");
+        EXPECT_TRUE(BoolMember(Require(Member(response, "result")), "consumed"));
+        EXPECT_EQ(StringMember(Require(Member(response, "result")), "action"), "");
+        EXPECT_EQ(StringMember(Require(Member(response, "result")), "value"), "");
         EXPECT_EQ(recorder.Total(), 0u);
     }
 
@@ -1794,9 +1765,9 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("CSilent"));
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
-        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "");
-        EXPECT_EQ(StringMember(*Member(response, "result"), "value"), "");
+        EXPECT_TRUE(BoolMember(Require(Member(response, "result")), "consumed"));
+        EXPECT_EQ(StringMember(Require(Member(response, "result")), "action"), "");
+        EXPECT_EQ(StringMember(Require(Member(response, "result")), "value"), "");
         EXPECT_EQ(recorder.Total(), 0u);
     }
 
@@ -1814,7 +1785,7 @@ namespace BECore::Tests {
             const Json response = Call("ui_click", params);
 
             ASSERT_TRUE(IsOk(response)) << "at " << item.at << ": " << ErrorMessage(response);
-            const Json& result = *Member(response, "result");
+            const Json& result = Require(Member(response, "result"));
             EXPECT_TRUE(BoolMember(result, "consumed")) << "at " << item.at;
             EXPECT_EQ(StringMember(result, "action"), "UIControlApiCVolume");
             EXPECT_EQ(StringMember(result, "value"), item.value) << "at " << item.at;
@@ -1830,9 +1801,9 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("CQuiet"));
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
-        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "");
-        EXPECT_EQ(StringMember(*Member(response, "result"), "value"), "");
+        EXPECT_TRUE(BoolMember(Require(Member(response, "result")), "consumed"));
+        EXPECT_EQ(StringMember(Require(Member(response, "result")), "action"), "");
+        EXPECT_EQ(StringMember(Require(Member(response, "result")), "value"), "");
         EXPECT_EQ(recorder.Total(), 0u);
     }
 
@@ -1846,14 +1817,14 @@ namespace BECore::Tests {
             }
         }
         ASSERT_NE(volume, nullptr);
-        volume->GetComponent<UIInputClicker>()->disabled = true;
+        Require(volume->GetComponent<UIInputClicker>()).disabled = true;
         Recorder recorder;
 
         const Json response = Call("ui_click", Click("CVolume"));
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "");
-        EXPECT_EQ(StringMember(*Member(response, "result"), "value"), "");
+        EXPECT_EQ(StringMember(Require(Member(response, "result")), "action"), "");
+        EXPECT_EQ(StringMember(Require(Member(response, "result")), "value"), "");
         EXPECT_EQ(recorder.Total(), 0u);
     }
 
@@ -1867,9 +1838,9 @@ namespace BECore::Tests {
             const Json clicked = Call("ui_click", Click(name));
 
             ASSERT_TRUE(IsOk(clicked)) << name << ": " << ErrorMessage(clicked);
-            EXPECT_TRUE(BoolMember(*Member(clicked, "result"), "consumed")) << name;
-            EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "") << name;
-            EXPECT_EQ(StringMember(*Member(clicked, "result"), "value"), "") << name;
+            EXPECT_TRUE(BoolMember(Require(Member(clicked, "result")), "consumed")) << name;
+            EXPECT_EQ(StringMember(Require(Member(clicked, "result")), "action"), "") << name;
+            EXPECT_EQ(StringMember(Require(Member(clicked, "result")), "value"), "") << name;
             EXPECT_EQ(recorder.Total(), 0u) << name << ": the press only closed the list";
         }
     }
@@ -1885,7 +1856,7 @@ namespace BECore::Tests {
         EXPECT_EQ(recorder.Total(), 0u);
     }
 
-    TEST_F(UIControlApiTest, AButtonAndASegmentStillAnswerAsBeforeWhenAtIsGiven) {
+    TEST_F(UIControlApiTest, AButtonAndASegmentAreClickedInTheirMiddleWhenAtIsGiven) {
         Show("Choice");
         Recorder recorder;
         Json params = Click("Right");
@@ -1894,11 +1865,11 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", params);
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "UIControlApiSide");
-        EXPECT_EQ(StringMember(*Member(response, "result"), "value"), "right");
+        EXPECT_EQ(StringMember(Require(Member(response, "result")), "action"), "UIControlApiSide");
+        EXPECT_EQ(StringMember(Require(Member(response, "result")), "value"), "right");
         EXPECT_EQ(recorder.LastValue(), "right");
         // x of the middle of Right (252..402 -> 327), unchanged from the click without `at`
-        EXPECT_NEAR(NumberMember(*Member(response, "result"), "x"), 327.0, kTolerance);
+        EXPECT_NEAR(NumberMember(Require(Member(response, "result")), "x"), 327.0, kTolerance);
     }
 
     TEST_F(UIControlApiTest, ASliderInASceneViewCanvasIsPressedAtTheScaledPoint) {
@@ -1910,9 +1881,9 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", params);
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        EXPECT_NEAR(NumberMember(*Member(response, "result"), "x"), 320.0, kTolerance);  // canvas x 110
-        EXPECT_NEAR(NumberMember(*Member(response, "result"), "y"), 240.0, kTolerance);  // canvas y 120
-        EXPECT_EQ(StringMember(*Member(response, "result"), "value"), "50");
+        EXPECT_NEAR(NumberMember(Require(Member(response, "result")), "x"), 320.0, kTolerance);  // canvas x 110
+        EXPECT_NEAR(NumberMember(Require(Member(response, "result")), "y"), 240.0, kTolerance);  // canvas y 120
+        EXPECT_EQ(StringMember(Require(Member(response, "result")), "value"), "50");
         EXPECT_EQ(recorder.LastValue(), "50");
     }
 
@@ -1925,7 +1896,7 @@ namespace BECore::Tests {
         const Json clicked = Call("ui_click", Click("Ok"));  // the Hud one: the first of the two named Ok in the scene order
 
         ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
-        const Json& result = *Member(clicked, "result");
+        const Json& result = Require(Member(clicked, "result"));
         EXPECT_EQ(StringMember(result, "clicked"), "Ok");
         EXPECT_EQ(StringMember(result, "canvas"), "Hud");
         EXPECT_EQ(StringMember(result, "action"), "UIControlApiOk");
@@ -1945,7 +1916,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("Go"));
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json& result = *Member(response, "result");
+        const Json& result = Require(Member(response, "result"));
         EXPECT_NEAR(NumberMember(result, "x"), 170.0, kTolerance);  // (10 + 25) * 2 + 100
         EXPECT_NEAR(NumberMember(result, "y"), 60.0, kTolerance);   // (10 + 20) * 2
         EXPECT_EQ(recorder.Count("UIControlApiGo"), 1);
@@ -1961,13 +1932,13 @@ namespace BECore::Tests {
         const Json clicked = Call("ui_click", Click("Go"));
 
         ASSERT_TRUE(IsOk(landscape) && IsOk(portrait) && IsOk(clicked));
-        const Json* before = FindElement(*FindCanvas(*Member(landscape, "result"), "View"), "Go");
-        const Json* after = FindElement(*FindCanvas(*Member(portrait, "result"), "View"), "Go");
+        const Json* before = FindElement(Require(FindCanvas(Require(Member(landscape, "result")), "View")), "Go");
+        const Json* after = FindElement(Require(FindCanvas(Require(Member(portrait, "result")), "View")), "Go");
         ASSERT_TRUE(before != nullptr && after != nullptr);
         ExpectRect(Member(*before, "outputRect"), 20.0f, 20.0f, 100.0f, 80.0f);
         ExpectRect(Member(*after, "rect"), 125.0f, 350.0f, 50.0f, 40.0f);
         ExpectRect(Member(*after, "outputRect"), 250.0f, 700.0f, 100.0f, 80.0f);
-        const Json& result = *Member(clicked, "result");
+        const Json& result = Require(Member(clicked, "result"));
         EXPECT_NEAR(NumberMember(result, "x"), 300.0, kTolerance);
         EXPECT_NEAR(NumberMember(result, "y"), 740.0, kTolerance);
         EXPECT_EQ(recorder.Count("UIControlApiViewGo"), 1);
@@ -1980,8 +1951,8 @@ namespace BECore::Tests {
         const Json portrait = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(landscape) && IsOk(portrait));
-        const Json* before = Member(*FindCanvas(*Member(landscape, "result"), "View"), "view");
-        const Json* after = Member(*FindCanvas(*Member(portrait, "result"), "View"), "view");
+        const Json* before = Member(Require(FindCanvas(Require(Member(landscape, "result")), "View")), "view");
+        const Json* after = Member(Require(FindCanvas(Require(Member(portrait, "result")), "View")), "view");
         ASSERT_TRUE(before != nullptr && after != nullptr);
         EXPECT_EQ(StringMember(*before, "name"), "");
         EXPECT_NEAR(NumberMember(*before, "width"), 400.0, kTolerance);
@@ -1993,7 +1964,7 @@ namespace BECore::Tests {
         Show("Main");
         const Json main = Call("ui_tree");
         ASSERT_TRUE(IsOk(main));
-        EXPECT_EQ(Member(*FindCanvas(*Member(main, "result"), "Hud"), "view"), nullptr);
+        EXPECT_EQ(Member(Require(FindCanvas(Require(Member(main, "result")), "Hud")), "view"), nullptr);
     }
 
     TEST_F(UIControlApiTest, ASceneWithoutViewVariantsReportsItsOneView) {
@@ -2002,7 +1973,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response));
-        const Json* view = Member(*FindCanvas(*Member(response, "result"), "View"), "view");
+        const Json* view = Member(Require(FindCanvas(Require(Member(response, "result")), "View")), "view");
         ASSERT_NE(view, nullptr);
         EXPECT_EQ(StringMember(*view, "name"), "");
         EXPECT_NEAR(NumberMember(*view, "width"), 400.0, kTolerance);
@@ -2015,9 +1986,9 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response));
-        const Json* go = FindElement(*FindCanvas(*Member(response, "result"), "View"), "Go");
+        const Json* go = FindElement(Require(FindCanvas(Require(Member(response, "result")), "View")), "Go");
         ASSERT_NE(go, nullptr);
-        const Json& output = *Member(*go, "outputRect");
+        const Json& output = Require(Member(*go, "outputRect"));
         bool found = false;
         for (const DrawCall& call : _renderer->calls) {
             if (call.kind == DrawKind::Rect && std::abs(call.rect.x - static_cast<float>(NumberMember(output, "x"))) < kTolerance &&
@@ -2037,7 +2008,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", params);
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        EXPECT_EQ(StringMember(*Member(response, "result"), "canvas"), "Debug");
+        EXPECT_EQ(StringMember(Require(Member(response, "result")), "canvas"), "Debug");
         EXPECT_EQ(recorder.Count("UIControlApiDebugOk"), 1);
         EXPECT_EQ(recorder.Count("UIControlApiOk"), 0);
     }
@@ -2049,7 +2020,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("Off"));
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
+        EXPECT_TRUE(BoolMember(Require(Member(response, "result")), "consumed"));
         EXPECT_EQ(recorder.Total(), 0u);
         EXPECT_EQ(recorder.downs, 0);
     }
@@ -2063,10 +2034,10 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("Ok"));
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
+        EXPECT_TRUE(BoolMember(Require(Member(response, "result")), "consumed"));
         EXPECT_EQ(recorder.Total(), 0u) << "the modal canvas took the click, as it would take a user's";
         EXPECT_EQ(recorder.downs, 0);
-        EXPECT_EQ(StringMember(*Member(response, "result"), "takenBy"), "target") << "a canvas above the element's own is a handler above it";
+        EXPECT_EQ(StringMember(Require(Member(response, "result")), "takenBy"), "target") << "a canvas above the element's own is a handler above it";
     }
 
     TEST_F(UIControlApiTest, AnElementThatDoesNotExistIsNotFoundAndItsNameIsNotInterned) {
@@ -2169,12 +2140,12 @@ namespace BECore::Tests {
     TEST_F(UIControlApiTest, AComposedButtonTellsItsComponentsAndTheFieldsOfAButton) {
         CoreManager::GetUIVars().Set("user"_intern, "Ann");
         Show("Composed");
-        Canvas("Composed", "Bar")->GetRoot().FindByName("Play"_intern)->selected = true;
+        Require(Canvas("Composed", "Bar")->GetRoot().FindByName("Play"_intern)).selected = true;
 
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* bar = FindCanvas(*Member(response, "result"), "Bar");
+        const Json* bar = FindCanvas(Require(Member(response, "result")), "Bar");
         ASSERT_NE(bar, nullptr);
         const Json* play = FindElement(*bar, "Play");
         ASSERT_NE(play, nullptr);
@@ -2203,7 +2174,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* bar = FindCanvas(*Member(response, "result"), "Bar");
+        const Json* bar = FindCanvas(Require(Member(response, "result")), "Bar");
         ASSERT_NE(bar, nullptr);
 
         const Json* pad = FindElement(*bar, "Pad");
@@ -2224,10 +2195,10 @@ namespace BECore::Tests {
         EXPECT_EQ(StringMember(*mix, "value"), "m");
         EXPECT_EQ(StringMember(*mix, "tooltip"), "Mix tip");
         EXPECT_FALSE(BoolMember(*mix, "disabled"));
-        EXPECT_EQ(StringMember(*FindElement(*mix, "MixCaption"), "text"), "Mix Ann");
-        EXPECT_EQ(StringMember(*FindElement(*mix, "MixIcon"), "icon"), "MixSprite");
-        EXPECT_FALSE(FindElement(*mix, "MixCaption")->contains("icon"));
-        EXPECT_FALSE(FindElement(*mix, "MixIcon")->contains("text"));
+        EXPECT_EQ(StringMember(Require(FindElement(*mix, "MixCaption")), "text"), "Mix Ann");
+        EXPECT_EQ(StringMember(Require(FindElement(*mix, "MixIcon")), "icon"), "MixSprite");
+        EXPECT_FALSE(Require(FindElement(*mix, "MixCaption")).contains("icon"));
+        EXPECT_FALSE(Require(FindElement(*mix, "MixIcon")).contains("text"));
     }
 
     TEST_F(UIControlApiTest, AClickerWithNothingBelowItAnswersNeitherTextNorIcon) {
@@ -2236,7 +2207,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* bar = FindCanvas(*Member(response, "result"), "Bar");
+        const Json* bar = FindCanvas(Require(Member(response, "result")), "Bar");
         ASSERT_NE(bar, nullptr);
         const Json* hollow = FindElement(*bar, "Hollow");
         ASSERT_NE(hollow, nullptr);
@@ -2251,7 +2222,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* bar = FindCanvas(*Member(response, "result"), "Bar");
+        const Json* bar = FindCanvas(Require(Member(response, "result")), "Bar");
         ASSERT_NE(bar, nullptr);
         const Json* outer = FindElement(*bar, "Outer");
         ASSERT_NE(outer, nullptr);
@@ -2271,7 +2242,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("Mix"));
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json& result = *Member(response, "result");
+        const Json& result = Require(Member(response, "result"));
         EXPECT_TRUE(BoolMember(result, "consumed"));
         EXPECT_EQ(StringMember(result, "action"), "UIControlApiMix");
         EXPECT_EQ(StringMember(result, "value"), "m");
@@ -2283,16 +2254,16 @@ namespace BECore::Tests {
     TEST_F(UIControlApiTest, AComposedButtonIsDisabledByItsClickerAndByItsGroup) {
         Show("Composed");
         UICanvasComponent& bar = *Canvas("Composed", "Bar");
-        bar.GetRoot().FindByName("Wide"_intern)->groupDisabled = true;
+        Require(bar.GetRoot().FindByName("Wide"_intern)).groupDisabled = true;
 
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* node = FindCanvas(*Member(response, "result"), "Bar");
+        const Json* node = FindCanvas(Require(Member(response, "result")), "Bar");
         ASSERT_NE(node, nullptr);
-        EXPECT_TRUE(BoolMember(*FindElement(*node, "Dead"), "disabled"));
-        EXPECT_TRUE(BoolMember(*FindElement(*node, "Wide"), "disabled"));
-        EXPECT_FALSE(BoolMember(*FindElement(*node, "Play"), "disabled"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(*node, "Dead")), "disabled"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(*node, "Wide")), "disabled"));
+        EXPECT_FALSE(BoolMember(Require(FindElement(*node, "Play")), "disabled"));
     }
 
     TEST_F(UIControlApiTest, AnElementWithNoClickerTellsOnlyWhatItHas) {
@@ -2301,7 +2272,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* bar = FindCanvas(*Member(response, "result"), "Bar");
+        const Json* bar = FindCanvas(Require(Member(response, "result")), "Bar");
         ASSERT_NE(bar, nullptr);
         const Json* badge = FindElement(*bar, "Badge");
         ASSERT_NE(badge, nullptr);
@@ -2315,7 +2286,7 @@ namespace BECore::Tests {
 
         const Json* bare = FindElement(*bar, "Bare");
         ASSERT_NE(bare, nullptr);
-        EXPECT_FALSE(bare->contains("components")) << "the entry of an element with none is as before";
+        EXPECT_FALSE(bare->contains("components")) << "an element with no components has no components member";
         EXPECT_FALSE(bare->contains("icon"));
         EXPECT_FALSE(bare->contains("tooltip"));
     }
@@ -2327,7 +2298,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("Play"));
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json& result = *Member(response, "result");
+        const Json& result = Require(Member(response, "result"));
         EXPECT_TRUE(BoolMember(result, "consumed"));
         EXPECT_EQ(StringMember(result, "action"), "UIControlApiPlay");
         EXPECT_EQ(StringMember(result, "value"), "easy");
@@ -2343,7 +2314,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", Click("Dead"));
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json& result = *Member(response, "result");
+        const Json& result = Require(Member(response, "result"));
         EXPECT_TRUE(BoolMember(result, "consumed"));
         EXPECT_EQ(StringMember(result, "action"), "");
         EXPECT_EQ(StringMember(result, "value"), "");
@@ -2352,13 +2323,13 @@ namespace BECore::Tests {
 
     TEST_F(UIControlApiTest, AComposedButtonOfADisabledGroupEmitsNothingEither) {
         Show("Composed");
-        Canvas("Composed", "Bar")->GetRoot().FindByName("Wide"_intern)->groupDisabled = true;
+        Require(Canvas("Composed", "Bar")->GetRoot().FindByName("Wide"_intern)).groupDisabled = true;
         Recorder recorder;
 
         const Json response = Call("ui_click", Click("Wide"));
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "");
+        EXPECT_EQ(StringMember(Require(Member(response, "result")), "action"), "");
         EXPECT_EQ(recorder.Total(), 0u);
     }
 
@@ -2391,7 +2362,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_click", params);
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json& result = *Member(response, "result");
+        const Json& result = Require(Member(response, "result"));
         EXPECT_NEAR(NumberMember(result, "x"), 10.0f, 1.0f) << "the left edge, a hair inside";
         EXPECT_EQ(StringMember(result, "action"), "UIControlApiWide");
         EXPECT_EQ(recorder.Count("UIControlApiWide"), 1);
@@ -2406,7 +2377,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* side = FindElement(*FindCanvas(*Member(response, "result"), "Panel"), "CSide");
+        const Json* side = FindElement(Require(FindCanvas(Require(Member(response, "result")), "Panel")), "CSide");
         ASSERT_NE(side, nullptr);
         EXPECT_EQ(StringMember(*side, "type"), "UISegmented");
         EXPECT_EQ(StringMember(*side, "bind"), "uiApiCSide");
@@ -2439,14 +2410,15 @@ namespace BECore::Tests {
         CoreManager::GetUIVars().Set("uiApiCSide"_intern, "left");
         Show("Choices");
         const Json first = Call("ui_tree");
-        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(first, "result"), "Panel"), "CLeft"), "selected"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(Require(FindCanvas(Require(Member(first, "result")), "Panel")), "CLeft")), "selected"));
 
         CoreManager::GetUIVars().Set("uiApiCSide"_intern, "right");  // no draw in between
         const Json second = Call("ui_tree");
-        const Json* panel = FindCanvas(*Member(second, "result"), "Panel");
-        EXPECT_FALSE(BoolMember(*FindElement(*panel, "CLeft"), "selected"));
-        EXPECT_TRUE(BoolMember(*FindElement(*panel, "CRight"), "selected"));
-        EXPECT_EQ(StringMember(*FindElement(*panel, "CSide"), "selectedValue"), "right");
+        const Json* panel = FindCanvas(Require(Member(second, "result")), "Panel");
+        ASSERT_NE(panel, nullptr);
+        EXPECT_FALSE(BoolMember(Require(FindElement(*panel, "CLeft")), "selected"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(*panel, "CRight")), "selected"));
+        EXPECT_EQ(StringMember(Require(FindElement(*panel, "CSide")), "selectedValue"), "right");
     }
 
     TEST_F(UIControlApiTest, AClickOnAComposedSegmentAnswersWithItsActionAndValueAndTheListenerGetsThem) {
@@ -2456,7 +2428,7 @@ namespace BECore::Tests {
         const Json clicked = Call("ui_click", Click("CRight"));
 
         ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
-        const Json& result = *Member(clicked, "result");
+        const Json& result = Require(Member(clicked, "result"));
         EXPECT_TRUE(BoolMember(result, "consumed"));
         EXPECT_EQ(StringMember(result, "action"), "UIControlApiCSide");
         EXPECT_EQ(StringMember(result, "value"), "right");
@@ -2470,18 +2442,18 @@ namespace BECore::Tests {
 
         const Json gone = Call("ui_click", Click("CGone"));
         ASSERT_TRUE(IsOk(gone)) << ErrorMessage(gone);
-        EXPECT_TRUE(BoolMember(*Member(gone, "result"), "consumed"));
-        EXPECT_EQ(StringMember(*Member(gone, "result"), "action"), "");
-        EXPECT_EQ(StringMember(*Member(gone, "result"), "value"), "");
+        EXPECT_TRUE(BoolMember(Require(Member(gone, "result")), "consumed"));
+        EXPECT_EQ(StringMember(Require(Member(gone, "result")), "action"), "");
+        EXPECT_EQ(StringMember(Require(Member(gone, "result")), "value"), "");
 
         auto canvas = Canvas("Choices", "Panel");
         ASSERT_TRUE(canvas);
-        canvas->GetRoot().FindByName("CSide"_intern)->Cast<UISegmented>()->disabled = true;
+        Require(canvas->GetRoot().FindByName("CSide"_intern)).Cast<UISegmented>()->disabled = true;
         Show("Choices");
         const Json left = Call("ui_click", Click("CLeft"));
         ASSERT_TRUE(IsOk(left)) << ErrorMessage(left);
-        EXPECT_EQ(StringMember(*Member(left, "result"), "action"), "");
-        EXPECT_EQ(StringMember(*Member(left, "result"), "value"), "");
+        EXPECT_EQ(StringMember(Require(Member(left, "result")), "action"), "");
+        EXPECT_EQ(StringMember(Require(Member(left, "result")), "value"), "");
         EXPECT_EQ(recorder.Total(), 0u);
     }
 
@@ -2491,7 +2463,7 @@ namespace BECore::Tests {
         Recorder recorder;
 
         const Json tree = Call("ui_tree");
-        const Json* mix = FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "Mix");
+        const Json* mix = FindElement(Require(FindCanvas(Require(Member(tree, "result")), "Panel")), "Mix");
         ASSERT_NE(mix, nullptr);
         EXPECT_EQ(StringMember(*mix, "selectedValue"), "composed");
         const Json* button = FindElement(*mix, "MixButton");
@@ -2508,8 +2480,8 @@ namespace BECore::Tests {
         EXPECT_FALSE(BoolMember(*button, "selected"));
         EXPECT_TRUE(BoolMember(*composed, "selected"));
 
-        EXPECT_EQ(StringMember(*Member(Call("ui_click", Click("MixButton")), "result"), "value"), "button");
-        EXPECT_EQ(StringMember(*Member(Call("ui_click", Click("MixComposed")), "result"), "value"), "composed");
+        EXPECT_EQ(StringMember(Require(Member(Call("ui_click", Click("MixButton")), "result")), "value"), "button");
+        EXPECT_EQ(StringMember(Require(Member(Call("ui_click", Click("MixComposed")), "result")), "value"), "composed");
         EXPECT_EQ(recorder.Count("UIControlApiMix"), 2);
     }
 
@@ -2520,7 +2492,7 @@ namespace BECore::Tests {
         const Json response = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* level = FindElement(*FindCanvas(*Member(response, "result"), "Panel"), "CLevel");
+        const Json* level = FindElement(Require(FindCanvas(Require(Member(response, "result")), "Panel")), "CLevel");
         ASSERT_NE(level, nullptr);
         EXPECT_EQ(StringMember(*level, "type"), "UIDropdown");
         EXPECT_EQ(StringMember(*level, "selectedValue"), "hard");
@@ -2532,13 +2504,13 @@ namespace BECore::Tests {
             ASSERT_NE(item, nullptr) << option;
             EXPECT_FALSE(BoolMember(*item, "visible")) << option << " is hidden while the list is closed";
         }
-        EXPECT_TRUE(BoolMember(*FindElement(*level, "CHard"), "selected"));
-        EXPECT_FALSE(BoolMember(*FindElement(*level, "CEasy"), "selected"));
-        EXPECT_TRUE(BoolMember(*FindElement(*level, "CLocked"), "disabled"));
-        EXPECT_EQ(StringMember(*FindElement(*level, "CHard"), "value"), "hard");
-        EXPECT_EQ(StringMember(*FindElement(*level, "CHard"), "icon"), "HardIcon");
-        EXPECT_EQ(StringMember(*FindElement(*level, "CEasy"), "text"), "Easy");
-        EXPECT_EQ(StringMember(*FindElement(*level, "CHard"), "action"), "") << "the options keep no action of their own";
+        EXPECT_TRUE(BoolMember(Require(FindElement(*level, "CHard")), "selected"));
+        EXPECT_FALSE(BoolMember(Require(FindElement(*level, "CEasy")), "selected"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(*level, "CLocked")), "disabled"));
+        EXPECT_EQ(StringMember(Require(FindElement(*level, "CHard")), "value"), "hard");
+        EXPECT_EQ(StringMember(Require(FindElement(*level, "CHard")), "icon"), "HardIcon");
+        EXPECT_EQ(StringMember(Require(FindElement(*level, "CEasy")), "text"), "Easy");
+        EXPECT_EQ(StringMember(Require(FindElement(*level, "CHard")), "action"), "") << "the options keep no action of their own";
     }
 
     TEST_F(UIControlApiTest, AClickOnAComposedOptionAnswersWithTheActionOfTheDropdownAndTheListCloses) {
@@ -2547,16 +2519,17 @@ namespace BECore::Tests {
         ASSERT_TRUE(IsOk(Call("ui_click", Click("CLevel"))));
         Show("Choices");
         const Json open = Call("ui_tree");
-        const Json* openLevel = FindElement(*FindCanvas(*Member(open, "result"), "Panel"), "CLevel");
+        const Json* openLevel = FindElement(Require(FindCanvas(Require(Member(open, "result")), "Panel")), "CLevel");
+        ASSERT_NE(openLevel, nullptr);
         EXPECT_TRUE(BoolMember(*openLevel, "open"));
-        EXPECT_TRUE(BoolMember(*FindElement(*openLevel, "CHard"), "visible"));
-        ExpectRect(Member(*FindElement(*openLevel, "CHard"), "rect"), 100.0f, 412.0f, 240.0f, 56.0f);
+        EXPECT_TRUE(BoolMember(Require(FindElement(*openLevel, "CHard")), "visible"));
+        ExpectRect(Member(Require(FindElement(*openLevel, "CHard")), "rect"), 100.0f, 412.0f, 240.0f, 56.0f);
         Recorder recorder;
 
         const Json clicked = Call("ui_click", Click("CHard"));
 
         ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
-        const Json& result = *Member(clicked, "result");
+        const Json& result = Require(Member(clicked, "result"));
         EXPECT_TRUE(BoolMember(result, "consumed"));
         EXPECT_EQ(StringMember(result, "action"), "UIControlApiCLevel");
         EXPECT_EQ(StringMember(result, "value"), "hard");
@@ -2565,11 +2538,12 @@ namespace BECore::Tests {
 
         Show("Choices");
         const Json tree = Call("ui_tree");
-        const Json* level = FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "CLevel");
+        const Json* level = FindElement(Require(FindCanvas(Require(Member(tree, "result")), "Panel")), "CLevel");
+        ASSERT_NE(level, nullptr);
         EXPECT_FALSE(BoolMember(*level, "open"));
-        EXPECT_FALSE(BoolMember(*FindElement(*level, "CHard"), "visible"));
+        EXPECT_FALSE(BoolMember(Require(FindElement(*level, "CHard")), "visible"));
         EXPECT_EQ(StringMember(*level, "selectedValue"), "easy") << "the choice is the game's: a click sets no variable";
-        EXPECT_EQ(Member(*FindElement(*level, "CHard"), "open"), nullptr);
+        EXPECT_EQ(Member(Require(FindElement(*level, "CHard")), "open"), nullptr);
         EXPECT_EQ(ErrorCode(Call("ui_click", Click("CHard"))), "not_clickable") << "the list is closed again";
     }
 
@@ -2591,13 +2565,13 @@ namespace BECore::Tests {
         const Json clicked = Call("ui_click", Click("CLocked"));
 
         ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
-        EXPECT_TRUE(BoolMember(*Member(clicked, "result"), "consumed"));
-        EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "");
-        EXPECT_EQ(StringMember(*Member(clicked, "result"), "value"), "");
+        EXPECT_TRUE(BoolMember(Require(Member(clicked, "result")), "consumed"));
+        EXPECT_EQ(StringMember(Require(Member(clicked, "result")), "action"), "");
+        EXPECT_EQ(StringMember(Require(Member(clicked, "result")), "value"), "");
         EXPECT_EQ(recorder.Total(), 0u);
         Show("Choices");
         const Json tree = Call("ui_tree");
-        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "CLevel"), "open"));
+        EXPECT_TRUE(BoolMember(Require(FindElement(Require(FindCanvas(Require(Member(tree, "result")), "Panel")), "CLevel")), "open"));
     }
 
     TEST_F(UIControlApiTest, AClickElsewhereWhileAComposedListIsOpenClosesItAndIsConsumed) {
@@ -2609,12 +2583,12 @@ namespace BECore::Tests {
         const Json clicked = Call("ui_click", Click("CBelow"));
 
         ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
-        EXPECT_TRUE(BoolMember(*Member(clicked, "result"), "consumed"));
-        EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "");
+        EXPECT_TRUE(BoolMember(Require(Member(clicked, "result")), "consumed"));
+        EXPECT_EQ(StringMember(Require(Member(clicked, "result")), "action"), "");
         EXPECT_EQ(recorder.Total(), 0u) << "the press only closed the list";
         Show("Choices");
         const Json tree = Call("ui_tree");
-        EXPECT_FALSE(BoolMember(*FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "CLevel"), "open"));
+        EXPECT_FALSE(BoolMember(Require(FindElement(Require(FindCanvas(Require(Member(tree, "result")), "Panel")), "CLevel")), "open"));
     }
 
     TEST_F(UIControlApiTest, ADropdownOfComposedOptionsCanBeDrivenEndToEnd) {
@@ -2625,7 +2599,7 @@ namespace BECore::Tests {
         Show("Choices");  // the "step"
         const Json picked = Call("ui_click", Click("CEasy"));
         ASSERT_TRUE(IsOk(picked)) << ErrorMessage(picked);
-        EXPECT_EQ(StringMember(*Member(picked, "result"), "value"), "easy");
+        EXPECT_EQ(StringMember(Require(Member(picked, "result")), "value"), "easy");
         Show("Choices");
 
         EXPECT_EQ(recorder.Count("UIControlApiCLevel"), 1);

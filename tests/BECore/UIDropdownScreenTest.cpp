@@ -1,10 +1,5 @@
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/Input/UIInput.h>
-#include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
-#include <BECore/Scene/SceneManager.h>
-#include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIDropdown.h>
 #include <BECore/UI/UIEnvironment.h>
@@ -13,11 +8,10 @@
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIVars.h>
-#include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
-#include <Common/RecordingRenderer.h>
-#include <Common/UILayoutMatrix.h>
-#include <CoreSDL/SDLEvents.h>
+#include <Common/Require.h>
+#include <Common/TestText.h>
+#include <Common/UIScreenTestSupport.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
 
@@ -39,9 +33,8 @@ namespace BECore::Tests {
         constexpr float kViewHeight = 800.0f;
         constexpr float kPortraitWidth = 560.0f;
         constexpr float kPortraitHeight = 840.0f;
-        constexpr float kRowHeight = 56.0f;  // a touch target at the smallest fit scale of the matrix
-        constexpr float kButtonAir = 8.0f;   // the text of a button keeps this much from each edge of its fill
         constexpr size_t kOptionCount = 5;
+        constexpr size_t kLanguageCount = 3;
 
         // Plate: 16 + 44 (title) + 12 + 56 (the dropdown) + 12 + 56 (OK) + 16 = 212, taller by 8 for the rounding of a stack: 220. The options have no height of their own: `optionHeight`.
         constexpr const char* kLevelsXml = R"(
@@ -158,26 +151,6 @@ namespace BECore::Tests {
         constexpr const char* kOptionKeys[] = {"level.novice", "level.easy", "level.normal", "level.hard", "level.master"};
         constexpr const char* kOptionNames[] = {"LevelNovice", "LevelEasy", "LevelNormal", "LevelHard", "LevelMaster"};
 
-        String SceneXml(float viewWidth, float viewHeight, FunctionRef<void(String&)> edit = NoTextEdit) {
-            String xml = kLevelsXml;
-            const auto replace = [&xml](const String& what, const String& with) {
-                for (size_t at = xml.find(what); at != String::npos; at = xml.find(what, at + with.size())) {
-                    xml.replace(at, what.size(), with);
-                }
-            };
-            replace("@VIEW_W@", ToString(static_cast<int>(viewWidth)));
-            replace("@VIEW_H@", ToString(static_cast<int>(viewHeight)));
-            edit(xml);
-            return xml;
-        }
-
-        /// Replaces the first @p what in @p xml, and fails the test when it is not there (a broken copy that changed nothing would prove nothing)
-        void Replace(String& xml, const String& what, const String& with) {
-            const size_t at = xml.find(what);
-            ASSERT_NE(at, String::npos) << what;
-            xml.replace(at, what.size(), with);
-        }
-
         /// The second option with an icon on its left: an image child and a caption child under the clicker (the other four are a caption on the element and a clicker)
         void GiveEasyAnIcon(String& xml) {
             const size_t begin = xml.find("<element type=\"UIElement\" name=\"LevelEasy\"");
@@ -191,26 +164,6 @@ namespace BECore::Tests {
                 "<element type=\"UIElement\" name=\"LevelEasyCaption\" flex=\"1\" height=\"100%\"><components><component type=\"UITextComponent\" text=\"{#level.easy}\" align=\"Center\" "
                 "verticalAlign=\"Center\" overflow=\"Ellipsis\" wrap=\"false\"/></components></element></children></element>";
             xml.replace(begin, endTag + String("</element>").size() - begin, icon);
-        }
-
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        size_t Characters(StringView text) {
-            size_t count = 0;
-            for (const char c : text) {
-                if ((static_cast<unsigned char>(c) & 0xC0u) != 0x80u) {
-                    ++count;
-                }
-            }
-            return count;
         }
 
         /// The part of the game: it shows and hides the panel and answers a choice with the variable the dropdown is bound to. It records every action with its value
@@ -252,191 +205,27 @@ namespace BECore::Tests {
             Vector<PoolString> _values;
         };
 
-        /// Every control of the tree that shows text or takes a press, depth first. The options of a closed list have no rect and are not looked at
-        void CollectControls(const UIElement& element, Vector<const UIElement*>& found) {
-            if (element.Cast<UIDropdown>() || element.GetComponent<UITextComponent>()) {
-                found.push_back(&element);
-            }
-            if (element.HasPopupChildren() && !element.IsPopupOpen()) {
-                return;
-            }
-            for (const auto& child : element.children) {
-                CollectControls(*child, found);
-            }
-        }
-
-        /// The header text as shown: the chosen caption, else the placeholder
-        String HeaderText(const UIDropdown& dropdown) {
-            const UITextComponent* header = dropdown.GetComponent<UITextComponent>();
-            return header ? String(header->GetDisplayText(dropdown)) : String();
-        }
-
-        String ShownText(const UIElement& element) {
-            if (const UITextComponent* caption = element.GetComponent<UITextComponent>()) {
-                return String(caption->GetDisplayText(element));  // with the owner: a dropdown shows the chosen caption
-            }
-            return String();
-        }
-
-        /// What is wrong with a laid-out panel in the language that is set now, one problem to a line, nothing when it is right: a control with no rect, text that its control cuts
-        /// (the header against the area left of its arrow), and a control that takes a press and is under kRowHeight
-        String Problems(const UICanvasLayout& layout) {
-            String problems;
-            const float scale = layout.GetResolved().scale;
-            Vector<const UIElement*> controls;
-            CollectControls(*layout.root, controls);
-            for (const UIElement* control : controls) {
-                if (control->rect.IsEmpty()) {
-                    if (control->active.visible) {
-                        problems += Format("{} '{}' has an empty rect (a missing height?)\n", control->name.ToStringView(), ShownText(*control).c_str());
-                    }
-                    continue;
-                }
-                const float air = control->GetComponent<UIInputClicker>() && control->GetComponent<UITextComponent>() ? kButtonAir : 0.0f;  // a button: a caption and a clicker
-                const UIContentFit fit = control->CheckContent(control->rect.w - 2.0f * air, control->rect.h, scale);
-                if (fit.hasContent && !fit.fits) {
-                    problems += Format("{} cuts '{}': {:.1f} units wide with {:.1f} of air each side, at scale {:.3f}\n", control->name.ToStringView(), ShownText(*control).c_str(), control->rect.w,
-                                       air, scale);
-                }
-                if (control->IsInteractive() && control->rect.h < kRowHeight - 0.01f) {
-                    problems += Format("{} is {:.1f} units high, under {:.0f}\n", control->name.ToStringView(), control->rect.h, kRowHeight);
-                }
-            }
-            return problems;
-        }
-
-        /// Runs @p check once for every language of the table and puts the language that was current back
-        template <typename Check>
-        void ForEachLanguage(Check&& check) {
-            UIStrings& strings = CoreManager::GetUIStrings();
-            const PoolString saved = strings.GetLanguage();
-            const Vector<PoolString> languages = strings.GetLanguages();
-            for (const PoolString language : languages) {
-                ASSERT_TRUE(strings.SetLanguage(language)) << language.ToStringView().data();
-                check(language);
-            }
-            strings.SetLanguage(saved);
-        }
-
     }  // namespace
 
-    class UIDropdownScreenTest : public ::testing::Test {
+    class UIDropdownScreenTest : public UIPanelScreenTest {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
+        UIDropdownScreenTest() : UIPanelScreenTest("Levels"_intern) {}
 
         void SetUp() override {
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-            LoadStrings(kStringsXml);
+            UIPanelScreenTest::SetUp();
+            LoadStrings(kStringsXml, kLanguageCount);
             CoreManager::GetUIVars().Set("level"_intern, "master");
         }
 
         void TearDown() override {
             _game.reset();
-            _hud.Reset();
-            _levels.Reset();
-            _manager.Reset();
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetUIStrings().Clear();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
-        }
-
-        /// The table of the screen, through the reader of the file; the first language is the default one and the current one
-        static void LoadStrings(const String& xml) {
-            UIStrings& strings = CoreManager::GetUIStrings();
-            strings.Clear();
-            auto config = XmlConfig::Create();
-            ASSERT_TRUE(config.LoadFromString(xml));
-            const Vector<String> problems = strings.LoadFromXml(config.GetRoot());
-            EXPECT_TRUE(problems.empty()) << (problems.empty() ? "" : problems[0].c_str());
-            ASSERT_EQ(strings.GetLanguages().size(), 3u);
+            UIPanelScreenTest::TearDown();
         }
 
         void LoadScene(float viewWidth = kViewWidth, float viewHeight = kViewHeight, FunctionRef<void(String&)> edit = NoTextEdit) {
             _game.reset();
-            _hud.Reset();
-            _levels.Reset();
-            XmlDeserializer deserializer;
-            const String xml = SceneXml(viewWidth, viewHeight, edit);
-            ASSERT_TRUE(deserializer.LoadFromString(xml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-            _renderer->width = viewWidth;
-            _renderer->height = viewHeight;
-
-            for (const auto& node : GetScene().GetRootNode().GetChildren()) {
-                if (node->GetName() == "Hud"_intern) {
-                    _hud = node->GetComponent<UICanvasComponent>();
-                } else if (node->GetName() == "Levels"_intern) {
-                    _levels = node->GetComponent<UICanvasComponent>();
-                }
-            }
-            ASSERT_TRUE(_hud);
-            ASSERT_TRUE(_levels);
-            _hud->UpdateLayout(1280.0f, 720.0f);
-            _levels->UpdateLayout(1280.0f, 720.0f);
+            ASSERT_NO_FATAL_FAILURE(LoadPanelScene(SceneXml(kLevelsXml, viewWidth, viewHeight, edit), viewWidth, viewHeight));
             _game.emplace(GetScene());
-        }
-
-        Scene& GetScene() const {
-            return *_manager->GetSceneByName("Main"_intern);
-        }
-
-        void Show() {
-            ASSERT_TRUE(UICanvasComponent::SetVisibleByName(GetScene(), "Levels"_intern, true));
-            Draw();
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
-        }
-
-        UILayoutContext ViewContext() const {
-            UILayoutContext context;
-            context.sceneViewWidth = GetScene().GetViewWidth();
-            context.sceneViewHeight = GetScene().GetViewHeight();
-            return context;
-        }
-
-        template <typename T>
-        T& Get(const char* name) const {
-            UIElement* element = _levels->GetRoot().FindByName(PoolString::Intern(name));
-            T* typed = element ? element->Cast<T>() : nullptr;
-            if (typed == nullptr) {
-                ADD_FAILURE() << name << (element ? " is not the expected control" : " is not in the panel");
-                std::abort();
-            }
-            return *typed;
-        }
-
-        /// Any element of the panel by name, whatever its class (`Get<T>` wants the exact type)
-        UIElement& Find(const char* name) const {
-            UIElement* element = _levels->GetRoot().FindByName(PoolString::Intern(name));
-            if (element == nullptr) {
-                ADD_FAILURE() << name << " is not in the panel";
-                std::abort();
-            }
-            return *element;
-        }
-
-        static Pair<float, float> CenterOf(const UIElement& element) {
-            return {element.rect.x + element.rect.w * 0.5f, element.rect.y + element.rect.h * 0.5f};
-        }
-
-        bool Click(const UIElement& element) {
-            const auto [x, y] = CenterOf(element);
-            const bool pressed = CoreManager::GetUIInput().DispatchMouseButtonDown(Button(x, y, true));
-            const bool released = CoreManager::GetUIInput().DispatchMouseButtonUp(Button(x, y, false));
-            return pressed && released;
         }
 
         /// The panel shown, the list opened by a click on the header, and drawn: the state the rest of the test looks at
@@ -445,50 +234,9 @@ namespace BECore::Tests {
             ASSERT_TRUE(Click(Get<UIDropdown>("Level")));
             Draw();
             ASSERT_TRUE(Get<UIDropdown>("Level").IsOpen());
-            ASSERT_FALSE(Find("LevelMaster").rect.IsEmpty());
+            ASSERT_FALSE(El("LevelMaster").rect.IsEmpty());
         }
 
-        /// The panel on the whole matrix once for every language: the findings of the validator, each case named with its language
-        Vector<UIMatrixFailure> ValidatePanel(UICanvasComponent& canvas) const {
-            UILayoutValidatorOptions options;
-            options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
-            Vector<UIMatrixFailure> all;
-            ForEachLanguage([&](PoolString language) {
-                for (UIMatrixFailure& failure : ValidateOnMatrix(canvas.GetLayout(), options, ViewContext())) {
-                    failure.label = Format("[{}] {}", language.ToStringView(), failure.label.c_str());
-                    all.push_back(std::move(failure));
-                }
-            });
-            return all;
-        }
-
-        /// Problems() on every case of the matrix, in every language: the first lines of the first cases that have any
-        String ProblemsOnMatrix(UICanvasComponent& canvas) const {
-            constexpr size_t kReported = 4;
-            String report;
-            size_t reported = 0;
-            UICanvasLayout& layout = canvas.GetLayout();
-            ForEachLanguage([&](PoolString language) {
-                for (const UIMatrixCase& matrixCase : UILayoutMatrix()) {
-                    UILayoutContext context = ViewContext();
-                    context.outputWidth = matrixCase.context.outputWidth;
-                    context.outputHeight = matrixCase.context.outputHeight;
-                    context.safeArea = matrixCase.context.safeArea;
-                    layout.Update(context);
-                    const String problems = Problems(layout);
-                    if (!problems.empty() && reported++ < kReported) {
-                        report += Format("[{}] {}:\n{}", language.ToStringView(), matrixCase.label.c_str(), problems.c_str());
-                    }
-                }
-            });
-            layout.Invalidate();
-            return report;
-        }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _hud;
-        IntrusivePtr<UICanvasComponent> _levels;
         Optional<LevelsGame> _game;
     };
 
@@ -497,7 +245,7 @@ namespace BECore::Tests {
     TEST_F(UIDropdownScreenTest, TheClosedPanelPassesTheSizeMatrixInEveryLanguage) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(Show());
-        const auto failures = ValidatePanel(*_levels);
+        const auto failures = ValidatePanel(*_panel);
         EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
         const auto hudFailures = ValidatePanel(*_hud);
         EXPECT_TRUE(hudFailures.empty()) << DescribeMatrixFailures(hudFailures).c_str();
@@ -507,7 +255,7 @@ namespace BECore::Tests {
         for (const auto [width, height] : {Pair<float, float>{kViewWidth, kViewHeight}, Pair<float, float>{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height));
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-            const auto failures = ValidatePanel(*_levels);
+            const auto failures = ValidatePanel(*_panel);
             EXPECT_TRUE(failures.empty()) << width << " x " << height << ": " << DescribeMatrixFailures(failures).c_str();
         }
     }
@@ -516,11 +264,11 @@ namespace BECore::Tests {
         for (const auto [width, height] : {Pair<float, float>{kViewWidth, kViewHeight}, Pair<float, float>{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height));
             ASSERT_NO_FATAL_FAILURE(Show());
-            const String closed = ProblemsOnMatrix(*_levels);
+            const String closed = ProblemsOnMatrix(*_panel);
             EXPECT_TRUE(closed.empty()) << width << " closed: " << closed.c_str();
 
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-            const String open = ProblemsOnMatrix(*_levels);
+            const String open = ProblemsOnMatrix(*_panel);
             EXPECT_TRUE(open.empty()) << width << " open: " << open.c_str();
         }
     }
@@ -529,7 +277,7 @@ namespace BECore::Tests {
         // The same walk as Problems(), written out for the open list: the header and the five options, each with the width it got
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-        UICanvasLayout& layout = _levels->GetLayout();
+        UICanvasLayout& layout = _panel->GetLayout();
         size_t languages = 0;
         ForEachLanguage([&](PoolString language) {
             ++languages;
@@ -541,7 +289,7 @@ namespace BECore::Tests {
             EXPECT_TRUE(headerFit.hasContent) << language.ToStringView().data();
             EXPECT_TRUE(headerFit.fits) << language.ToStringView().data() << " header '" << ShownText(header).c_str() << "'";
             for (const char* name : kOptionNames) {
-                const UIElement& option = Find(name);
+                const UIElement& option = El(name);
                 EXPECT_FALSE(option.rect.IsEmpty()) << name;
                 const UIContentFit fit = option.CheckContent(option.rect.w - 2.0f * kButtonAir, option.rect.h, scale);
                 EXPECT_TRUE(fit.hasContent && fit.fits) << language.ToStringView().data() << " " << name << " '" << ShownText(option).c_str() << "'";
@@ -557,15 +305,15 @@ namespace BECore::Tests {
         ForEachLanguage([&](PoolString language) {
             size_t longest = 0;
             for (const char* key : kOptionKeys) {
-                longest = std::max(longest, Characters(*strings.Find(key)));
+                longest = std::max(longest, Characters(Require(strings.Find(key))));
             }
-            EXPECT_EQ(longest, Characters(*strings.Find("level.master"))) << language.ToStringView().data();
+            EXPECT_EQ(longest, Characters(Require(strings.Find("level.master")))) << language.ToStringView().data();
         });
         for (const char* key : kOptionKeys) {
             ASSERT_TRUE(strings.SetLanguage("en"_intern));
-            english += Characters(*strings.Find(key));
+            english += Characters(Require(strings.Find(key)));
             ASSERT_TRUE(strings.SetLanguage("de"_intern));
-            german += Characters(*strings.Find(key));
+            german += Characters(Require(strings.Find(key)));
         }
         strings.SetLanguage("en"_intern);
         EXPECT_GE(static_cast<float>(german), 1.4f * static_cast<float>(english));
@@ -579,10 +327,10 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
         const UIDropdown& header = Get<UIDropdown>("Level");
         for (const char* name : kOptionNames) {
-            EXPECT_LE(Find(name).rect.y + Find(name).rect.h, header.rect.y + 0.01f) << name << " is above the header";
-            EXPECT_GE(Find(name).rect.y, 0.0f) << name;
+            EXPECT_LE(El(name).rect.y + El(name).rect.h, header.rect.y + 0.01f) << name << " is above the header";
+            EXPECT_GE(El(name).rect.y, 0.0f) << name;
         }
-        const auto failures = ValidatePanel(*_levels);
+        const auto failures = ValidatePanel(*_panel);
         EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
     }
 
@@ -590,10 +338,10 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
         const UIDropdown& header = Get<UIDropdown>("Level");
-        EXPECT_NEAR(Find("LevelNovice").rect.y, header.rect.y + header.rect.h, 0.01f);
-        EXPECT_GE(Find("LevelMaster").rect.w, header.rect.w - 0.01f);
-        EXPECT_GT(Find("LevelMaster").rect.y + Find("LevelMaster").rect.h, Find("Ok").rect.y) << "the list covers the OK button";
-        EXPECT_EQ(_levels->GetLayout().HitTest(CenterOf(Find("LevelEasy")).first, CenterOf(Find("LevelEasy")).second), &Find("LevelEasy"));
+        EXPECT_NEAR(El("LevelNovice").rect.y, header.rect.y + header.rect.h, 0.01f);
+        EXPECT_GE(El("LevelMaster").rect.w, header.rect.w - 0.01f);
+        EXPECT_GT(El("LevelMaster").rect.y + El("LevelMaster").rect.h, El("Ok").rect.y) << "the list covers the OK button";
+        EXPECT_EQ(_panel->GetLayout().HitTest(CenterOf(El("LevelEasy")).first, CenterOf(El("LevelEasy")).second), &El("LevelEasy"));
     }
 
     // ---- the game's part ----------------------------------------------------------------------------------------------------
@@ -601,24 +349,24 @@ namespace BECore::Tests {
     TEST_F(UIDropdownScreenTest, AChoiceIsAnActionTheGameAnswersWithTheVariableAndTheHeaderFollows) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-        EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), String("Grandmaster"));
+        EXPECT_EQ(ShownText(Get<UIDropdown>("Level")), String("Grandmaster"));
 
-        ASSERT_TRUE(Click(Find("LevelHard")));
+        ASSERT_TRUE(Click(El("LevelHard")));
         EXPECT_EQ(_game->CountOf("SetLevel"), 1u);
         EXPECT_EQ(_game->LastValue(), "hard"_intern);
         EXPECT_EQ(_game->CountOf("LevelsClose"), 0u) << "the option took the click, not the OK button under it";
         EXPECT_FALSE(Get<UIDropdown>("Level").IsOpen());
 
         Draw();
-        EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), String("Hard"));
-        EXPECT_TRUE(Find("LevelEasy").rect.IsEmpty()) << "closed again";
+        EXPECT_EQ(ShownText(Get<UIDropdown>("Level")), String("Hard"));
+        EXPECT_TRUE(El("LevelEasy").rect.IsEmpty()) << "closed again";
     }
 
     TEST_F(UIDropdownScreenTest, APressOutsideTheListClosesItAndNothingElseHappens) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
         const size_t before = _game->Total();
-        ASSERT_TRUE(Click(Find("Title")));
+        ASSERT_TRUE(Click(El("Title")));
         EXPECT_FALSE(Get<UIDropdown>("Level").IsOpen());
         EXPECT_EQ(_game->Total(), before);
     }
@@ -628,25 +376,25 @@ namespace BECore::Tests {
     TEST_F(UIDropdownScreenTest, AnOptionOfThirtyUnitsIsReportedByTheValidatorAndByProblems) {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, "name=\"LevelEasy\"", "name=\"LevelEasy\" height=\"30\""); }));
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-        EXPECT_FALSE(ValidatePanel(*_levels).empty());
-        EXPECT_NE(Problems(_levels->GetLayout()).find("LevelEasy is 30.0 units high"), String::npos);
+        EXPECT_FALSE(ValidatePanel(*_panel).empty());
+        EXPECT_NE(Problems(_panel->GetLayout()).find("LevelEasy is 30.0 units high"), String::npos);
     }
 
     TEST_F(UIDropdownScreenTest, AWordThatIsTooLongIsReportedByProblemsAndNotByTheValidator) {
         String xml = kStringsXml;
         Replace(xml, "text=\"Grandmaster\"", "text=\"Grandmaster of the Eastern Wind Tournament Circuit, the Final Round, with Every Rule Enabled\"");
-        ASSERT_NO_FATAL_FAILURE(LoadStrings(xml));
+        ASSERT_NO_FATAL_FAILURE(LoadStrings(xml, kLanguageCount));
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-        const String problems = ProblemsOnMatrix(*_levels);
+        const String problems = ProblemsOnMatrix(*_panel);
         EXPECT_NE(problems.find("cuts 'Grandmaster of"), String::npos) << problems.c_str();
-        EXPECT_TRUE(ValidatePanel(*_levels).empty()) << "an ellipsis label can shrink: only CheckContent sees it";
+        EXPECT_TRUE(ValidatePanel(*_panel).empty()) << "an ellipsis label can shrink: only CheckContent sees it";
     }
 
     TEST_F(UIDropdownScreenTest, AListThatCannotFitIsReportedByTheValidator) {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, "optionHeight=\"56\"", "optionHeight=\"200\""); }));
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-        const auto failures = ValidatePanel(*_levels);
+        const auto failures = ValidatePanel(*_panel);
         ASSERT_FALSE(failures.empty());
         bool outside = false;
         for (const UIMatrixFailure& failure : failures) {
@@ -660,7 +408,7 @@ namespace BECore::Tests {
     TEST_F(UIDropdownScreenTest, AHeaderWithNoHeightIsReportedByProblems) {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, "height=\"56\" optionHeight=\"56\"", "optionHeight=\"56\""); }));
         ASSERT_NO_FATAL_FAILURE(Show());
-        const String problems = Problems(_levels->GetLayout());
+        const String problems = Problems(_panel->GetLayout());
         EXPECT_NE(problems.find("Level 'Grandmaster' has an empty rect"), String::npos) << problems.c_str();
     }
 
@@ -670,11 +418,11 @@ namespace BECore::Tests {
         for (const auto [width, height] : {Pair<float, float>{kViewWidth, kViewHeight}, Pair<float, float>{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height, GiveEasyAnIcon));
             ASSERT_NO_FATAL_FAILURE(Show());
-            const auto closed = ValidatePanel(*_levels);
+            const auto closed = ValidatePanel(*_panel);
             EXPECT_TRUE(closed.empty()) << width << " closed: " << DescribeMatrixFailures(closed).c_str();
 
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-            const auto open = ValidatePanel(*_levels);
+            const auto open = ValidatePanel(*_panel);
             EXPECT_TRUE(open.empty()) << width << " open: " << DescribeMatrixFailures(open).c_str();
         }
     }
@@ -683,7 +431,7 @@ namespace BECore::Tests {
         for (const auto [width, height] : {Pair<float, float>{kViewWidth, kViewHeight}, Pair<float, float>{kPortraitWidth, kPortraitHeight}}) {
             ASSERT_NO_FATAL_FAILURE(LoadScene(width, height, GiveEasyAnIcon));
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-            const String open = ProblemsOnMatrix(*_levels);
+            const String open = ProblemsOnMatrix(*_panel);
             EXPECT_TRUE(open.empty()) << width << " open: " << open.c_str();
         }
     }
@@ -694,12 +442,12 @@ namespace BECore::Tests {
             Replace(xml, "name=\"LevelNovice\" fontSize=\"24\"", "name=\"LevelNovice\" height=\"30\" fontSize=\"24\"");
         }));
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-        EXPECT_FALSE(ValidatePanel(*_levels).empty());
-        EXPECT_NE(Problems(_levels->GetLayout()).find("LevelNovice is 30.0 units high"), String::npos);
+        EXPECT_FALSE(ValidatePanel(*_panel).empty());
+        EXPECT_NE(Problems(_panel->GetLayout()).find("LevelNovice is 30.0 units high"), String::npos);
 
         Vector<const UIElement*> controls;
-        CollectControls(*_levels->GetLayout().root, controls);
-        EXPECT_NE(eastl::find(controls.begin(), controls.end(), &Find("LevelEasyCaption")), controls.end()) << "the caption child is checked on its own";
+        CollectControls(*_panel->GetLayout().root, controls);
+        EXPECT_NE(eastl::find(controls.begin(), controls.end(), &El("LevelEasyCaption")), controls.end()) << "the caption child is checked on its own";
     }
 
     TEST_F(UIDropdownScreenTest, AnIconOptionHasTheRectOfAPlainOne) {
@@ -708,7 +456,7 @@ namespace BECore::Tests {
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
             Vector<Rect> buttons;
             for (const char* name : kOptionNames) {
-                buttons.push_back(Find(name).rect);
+                buttons.push_back(El(name).rect);
             }
             const Rect headerOfButtons = Get<UIDropdown>("Level").rect;
 
@@ -716,7 +464,7 @@ namespace BECore::Tests {
             ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
             EXPECT_FLOAT_EQ(Get<UIDropdown>("Level").rect.y, headerOfButtons.y);
             for (size_t i = 0; i < kOptionCount; ++i) {
-                const Rect& composed = Find(kOptionNames[i]).rect;
+                const Rect& composed = El(kOptionNames[i]).rect;
                 EXPECT_FLOAT_EQ(composed.x, buttons[i].x) << kOptionNames[i];
                 EXPECT_FLOAT_EQ(composed.y, buttons[i].y) << kOptionNames[i];
                 EXPECT_FLOAT_EQ(composed.w, buttons[i].w) << kOptionNames[i];
@@ -728,25 +476,26 @@ namespace BECore::Tests {
     TEST_F(UIDropdownScreenTest, AChoiceOfAnIconOptionIsAnActionTheGameAnswersAndTheHeaderFollowsInEveryLanguage) {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, GiveEasyAnIcon));
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-        EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), String("Grandmaster"));
+        EXPECT_EQ(ShownText(Get<UIDropdown>("Level")), String("Grandmaster"));
 
-        ASSERT_TRUE(Click(Find("LevelEasy")));
+        ASSERT_TRUE(Click(El("LevelEasy")));
         EXPECT_EQ(_game->CountOf("SetLevel"), 1u);
         EXPECT_EQ(_game->LastValue(), "easy"_intern);
         EXPECT_EQ(_game->CountOf("LevelsClose"), 0u) << "the option took the click, not the OK button under it";
         EXPECT_FALSE(Get<UIDropdown>("Level").IsOpen());
 
         Draw();
-        EXPECT_TRUE(Find("LevelEasy").rect.IsEmpty()) << "closed again";
-        EXPECT_TRUE(Find("LevelEasyCaption").rect.IsEmpty());
-        ForEachLanguage([&](PoolString language) { EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), String(*CoreManager::GetUIStrings().Find("level.easy"))) << language.ToStringView().data(); });
+        EXPECT_TRUE(El("LevelEasy").rect.IsEmpty()) << "closed again";
+        EXPECT_TRUE(El("LevelEasyCaption").rect.IsEmpty());
+        ForEachLanguage(
+            [&](PoolString language) { EXPECT_EQ(ShownText(Get<UIDropdown>("Level")), String(Require(CoreManager::GetUIStrings().Find("level.easy")))) << language.ToStringView().data(); });
     }
 
     TEST_F(UIDropdownScreenTest, APressOutsideAListWithAnIconOptionClosesItAndNothingElseHappens) {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, GiveEasyAnIcon));
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
         const size_t before = _game->Total();
-        ASSERT_TRUE(Click(Find("Title")));
+        ASSERT_TRUE(Click(El("Title")));
         EXPECT_FALSE(Get<UIDropdown>("Level").IsOpen());
         EXPECT_EQ(_game->Total(), before);
     }

@@ -1,5 +1,8 @@
 #include <BECore/Renderer/DrawTransform.h>
+#include <BECore/UI/UIColor.h>
+#include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -12,7 +15,6 @@ namespace BECore::Tests {
 
         constexpr float kTolerance = 1e-4f;
         constexpr uint8_t kOpaque = 255;
-        constexpr uint32_t kBytesPerPixel = 4;
         const Color kRed{kOpaque, 0, 0, kOpaque};
         const Color kTint{10, 20, 30, 40};
         const Vector<int> kExpectedIndices = {0, 1, 2, 2, 1, 3};
@@ -27,18 +29,6 @@ namespace BECore::Tests {
             EXPECT_NEAR(vertex.y, y, kTolerance);
             EXPECT_NEAR(vertex.u, u, kTolerance);
             EXPECT_NEAR(vertex.v, v, kTolerance);
-        }
-
-        void ExpectColor(const Color& actual, const Color& expected) {
-            EXPECT_EQ(actual.r, expected.r);
-            EXPECT_EQ(actual.g, expected.g);
-            EXPECT_EQ(actual.b, expected.b);
-            EXPECT_EQ(actual.a, expected.a);
-        }
-
-        IntrusivePtr<ITexture> MakeTexture(RecordingRenderer& renderer, uint32_t width, uint32_t height) {
-            const Vector<uint8_t> pixels(static_cast<size_t>(width) * height * kBytesPerPixel, kOpaque);
-            return renderer.CreateTexture(pixels.data(), width, height);
         }
 
     }  // namespace
@@ -103,10 +93,10 @@ namespace BECore::Tests {
         renderer.DrawTransformedRect(10.0f, 20.0f, 30.0f, 40.0f, kRed, DrawTransform{0.0f, 15.0f, 25.0f});
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_EQ(renderer.calls[0].kind, DrawKind::Rect);
-        EXPECT_FLOAT_EQ(renderer.calls[0].rect.x, 10.0f);
-        EXPECT_FLOAT_EQ(renderer.calls[0].rect.h, 40.0f);
-        ExpectColor(renderer.calls[0].color, kRed);
+        EXPECT_EQ(At(renderer.calls, 0).kind, DrawKind::Rect);
+        EXPECT_FLOAT_EQ(At(renderer.calls, 0).rect.x, 10.0f);
+        EXPECT_FLOAT_EQ(At(renderer.calls, 0).rect.h, 40.0f);
+        EXPECT_PRED2(ColorsEqual, At(renderer.calls, 0).color, kRed);
     }
 
     TEST(RendererTransformTest, AnIdentityTextureIsThePlainTextureCall) {
@@ -117,11 +107,11 @@ namespace BECore::Tests {
         renderer.DrawTransformedTexture(*texture, &source, 10.0f, 20.0f, 30.0f, 40.0f, kTint, DrawTransform{});
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_EQ(renderer.calls[0].kind, DrawKind::Texture);
-        EXPECT_EQ(renderer.calls[0].texture, texture.Get());
-        ExpectColor(renderer.calls[0].color, kTint);
-        ASSERT_TRUE(renderer.calls[0].source.has_value());
-        EXPECT_FLOAT_EQ(renderer.calls[0].source->w, 2.0f);
+        EXPECT_EQ(At(renderer.calls, 0).kind, DrawKind::Texture);
+        EXPECT_EQ(At(renderer.calls, 0).texture, texture.Get());
+        EXPECT_PRED2(ColorsEqual, At(renderer.calls, 0).color, kTint);
+        ASSERT_TRUE(At(renderer.calls, 0).source.has_value());
+        EXPECT_FLOAT_EQ(At(renderer.calls, 0).source->w, 2.0f);
     }
 
     TEST(RendererTransformTest, ARotatedRectIsOneGeometryCallInOutputPixels) {
@@ -131,7 +121,7 @@ namespace BECore::Tests {
         renderer.DrawTransformedRect(0.0f, 0.0f, 100.0f, 50.0f, kRed, DrawTransform{90.0f, 50.0f, 25.0f});
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        const DrawCall& call = renderer.calls[0];
+        const DrawCall& call = At(renderer.calls, 0);
         EXPECT_EQ(call.kind, DrawKind::Geometry);
         EXPECT_EQ(call.texture, nullptr);
         ASSERT_EQ(call.vertices.size(), 4u);
@@ -142,7 +132,7 @@ namespace BECore::Tests {
         ExpectVertex(call.vertices[2], 60.0f, -30.0f, 0.0f, 1.0f);
         ExpectVertex(call.vertices[3], 60.0f, 170.0f, 1.0f, 1.0f);
         for (const GeometryVertex& vertex : call.vertices) {
-            ExpectColor(vertex.color, kRed);
+            EXPECT_PRED2(ColorsEqual, vertex.color, kRed);
         }
     }
 
@@ -153,7 +143,7 @@ namespace BECore::Tests {
         renderer.DrawTransformedTexture(*texture, nullptr, 0.0f, 0.0f, 100.0f, 50.0f, kTint, DrawTransform{90.0f, 50.0f, 25.0f});
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        const DrawCall& call = renderer.calls[0];
+        const DrawCall& call = At(renderer.calls, 0);
         EXPECT_EQ(call.kind, DrawKind::Geometry);
         EXPECT_EQ(call.texture, texture.Get());
         ASSERT_EQ(call.vertices.size(), 4u);
@@ -161,7 +151,7 @@ namespace BECore::Tests {
         ExpectVertex(call.vertices[0], 75.0f, -25.0f, 0.0f, 0.0f);
         ExpectVertex(call.vertices[3], 25.0f, 75.0f, 1.0f, 1.0f);
         for (const GeometryVertex& vertex : call.vertices) {
-            ExpectColor(vertex.color, kTint);
+            EXPECT_PRED2(ColorsEqual, vertex.color, kTint);
         }
     }
 
@@ -173,7 +163,7 @@ namespace BECore::Tests {
         renderer.DrawTransformedTexture(*texture, &source, 0.0f, 0.0f, 10.0f, 10.0f, kTint, DrawTransform{45.0f, 5.0f, 5.0f});
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        const DrawCall& call = renderer.calls[0];
+        const DrawCall& call = At(renderer.calls, 0);
         ASSERT_EQ(call.vertices.size(), 4u);
         EXPECT_NEAR(call.vertices[0].u, 0.25f, kTolerance);
         EXPECT_NEAR(call.vertices[0].v, 0.0f, kTolerance);
@@ -189,9 +179,9 @@ namespace BECore::Tests {
         renderer.DrawTransformedTexture(*texture, &source, 0.0f, 0.0f, 10.0f, 10.0f, kTint, DrawTransform{45.0f, 5.0f, 5.0f});
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_NEAR(renderer.calls[0].vertices[0].u, 0.0f, kTolerance);
-        EXPECT_NEAR(renderer.calls[0].vertices[3].u, 1.0f, kTolerance);
-        EXPECT_NEAR(renderer.calls[0].vertices[3].v, 1.0f, kTolerance);
+        EXPECT_NEAR(At(renderer.calls, 0).vertices[0].u, 0.0f, kTolerance);
+        EXPECT_NEAR(At(renderer.calls, 0).vertices[3].u, 1.0f, kTolerance);
+        EXPECT_NEAR(At(renderer.calls, 0).vertices[3].v, 1.0f, kTolerance);
     }
 
     TEST(RendererTransformTest, AFlipSwapsTheUVsAndLeavesTheCorners) {
@@ -203,13 +193,13 @@ namespace BECore::Tests {
 
         ASSERT_EQ(renderer.calls.size(), 2u);
         // flip X: the left corners take the right edge of the picture
-        ExpectVertex(renderer.calls[0].vertices[0], 10.0f, 20.0f, 1.0f, 0.0f);
-        ExpectVertex(renderer.calls[0].vertices[1], 40.0f, 20.0f, 0.0f, 0.0f);
-        ExpectVertex(renderer.calls[0].vertices[2], 10.0f, 60.0f, 1.0f, 1.0f);
-        ExpectVertex(renderer.calls[0].vertices[3], 40.0f, 60.0f, 0.0f, 1.0f);
+        ExpectVertex(At(renderer.calls, 0).vertices[0], 10.0f, 20.0f, 1.0f, 0.0f);
+        ExpectVertex(At(renderer.calls, 0).vertices[1], 40.0f, 20.0f, 0.0f, 0.0f);
+        ExpectVertex(At(renderer.calls, 0).vertices[2], 10.0f, 60.0f, 1.0f, 1.0f);
+        ExpectVertex(At(renderer.calls, 0).vertices[3], 40.0f, 60.0f, 0.0f, 1.0f);
         // flip Y: the top corners take the bottom edge
-        ExpectVertex(renderer.calls[1].vertices[0], 10.0f, 20.0f, 0.0f, 1.0f);
-        ExpectVertex(renderer.calls[1].vertices[3], 40.0f, 60.0f, 1.0f, 0.0f);
+        ExpectVertex(At(renderer.calls, 1).vertices[0], 10.0f, 20.0f, 0.0f, 1.0f);
+        ExpectVertex(At(renderer.calls, 1).vertices[3], 40.0f, 60.0f, 1.0f, 0.0f);
     }
 
     TEST(RendererTransformTest, AFlipSwapsTheUVsOfTheSourceRect) {
@@ -220,7 +210,7 @@ namespace BECore::Tests {
         renderer.DrawTransformedTexture(*texture, &source, 0.0f, 0.0f, 10.0f, 10.0f, kTint, DrawTransform{0.0f, 0.0f, 0.0f, true, true});
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        const DrawCall& call = renderer.calls[0];
+        const DrawCall& call = At(renderer.calls, 0);
         EXPECT_NEAR(call.vertices[0].u, 0.75f, kTolerance);
         EXPECT_NEAR(call.vertices[0].v, 1.0f, kTolerance);
         EXPECT_NEAR(call.vertices[3].u, 0.25f, kTolerance);
@@ -250,11 +240,11 @@ namespace BECore::Tests {
         renderer.DrawTransformedTexture(*texture, nullptr, 0.0f, 0.0f, 10.0f, 10.0f, kTint, DrawTransform{30.0f, 5.0f, 5.0f});
 
         ASSERT_EQ(renderer.calls.size(), 5u);
-        EXPECT_EQ(renderer.calls[0].blend, BlendMode::Alpha);
-        EXPECT_EQ(renderer.calls[1].blend, BlendMode::Add);
-        EXPECT_EQ(renderer.calls[2].blend, BlendMode::Add);
-        EXPECT_EQ(renderer.calls[3].blend, BlendMode::Add);
-        EXPECT_EQ(renderer.calls[4].blend, BlendMode::Multiply);
+        EXPECT_EQ(At(renderer.calls, 0).blend, BlendMode::Alpha);
+        EXPECT_EQ(At(renderer.calls, 1).blend, BlendMode::Add);
+        EXPECT_EQ(At(renderer.calls, 2).blend, BlendMode::Add);
+        EXPECT_EQ(At(renderer.calls, 3).blend, BlendMode::Add);
+        EXPECT_EQ(At(renderer.calls, 4).blend, BlendMode::Multiply);
     }
 
     TEST(RendererTransformTest, ScopedBlendModeRestoresThePreviousMode) {
@@ -295,8 +285,8 @@ namespace BECore::Tests {
         renderer.DrawTransformedRect(0.0f, 0.0f, 10.0f, 10.0f, kRed, DrawTransform{30.0f, 5.0f, 5.0f});
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        ASSERT_TRUE(renderer.calls[0].clip.has_value());
-        EXPECT_FLOAT_EQ(renderer.calls[0].clip->w, 50.0f);
+        ASSERT_TRUE(At(renderer.calls, 0).clip.has_value());
+        EXPECT_FLOAT_EQ(At(renderer.calls, 0).clip->w, 50.0f);
         renderer.PopClipRect();
     }
 

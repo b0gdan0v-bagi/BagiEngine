@@ -16,6 +16,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UILayoutMatrix.h>
 #include <Common/UIThemeTestSupport.h>
 #include <gtest/gtest.h>
@@ -141,22 +142,28 @@ namespace BECore::Tests {
             return (std::max(first, second) + 0.05f) / (std::min(first, second) + 0.05f);
         }
 
+        /// kThemeSceneXml with @p note in place of its marker
         String Spliced(const String& note) {
+            constexpr StringView kMarker = "@NOTE@";
             String xml = kThemeSceneXml;
-            const String marker = "@NOTE@";
-            xml.replace(xml.find(marker), marker.size(), note);
+            const size_t at = xml.find(kMarker.data(), 0, kMarker.size());
+            EXPECT_NE(at, String::npos) << "kThemeSceneXml has no " << kMarker.data();
+            if (at != String::npos) {
+                xml.replace(at, kMarker.size(), note);
+            }
             return xml;
         }
 
         /// The elements of a compiled `<ui><elements>...</elements></ui>`, as text to put into another file
-        String CompiledElements(const String& xml) {
-            const String text(xml.c_str(), xml.size());
-            const size_t begin = text.find("<elements>");
-            const size_t end = text.rfind("</elements>");
-            if (begin == String::npos || end == String::npos) {
+        String CompiledElements(StringView xml) {
+            constexpr StringView kOpen = "<elements>";
+            constexpr StringView kClose = "</elements>";
+            const size_t begin = xml.find(kOpen);
+            const size_t end = xml.rfind(kClose);
+            if (begin == StringView::npos || end == StringView::npos || end < begin + kOpen.size()) {
                 return {};
             }
-            return text.substr(begin + String("<elements>").size(), end - begin - String("<elements>").size());
+            return String(xml.substr(begin + kOpen.size(), end - begin - kOpen.size()));
         }
 
     }  // namespace
@@ -190,7 +197,7 @@ namespace BECore::Tests {
             _canvas.Reset();
             _manager.Reset();
             UIWebReport report;
-            const String source = String("<style>") + css + "</style>" + kNoteHtml;
+            const String source = Format("<style>{}</style>{}", css, kNoteHtml);
             const String compiled = UIWebCompiler::Compile(source, {}, report);
             ASSERT_FALSE(report.HasIssues()) << report.issues[0].message.c_str() << " / " << compiled.c_str();
             const String note = CompiledElements(compiled);
@@ -221,11 +228,8 @@ namespace BECore::Tests {
 
         UIElement& Find(const char* name) const {
             UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            if (element == nullptr) {
-                ADD_FAILURE() << name << " is not in the screen";
-                std::abort();  // a reference to nothing cannot be returned; the failure above is printed first
-            }
-            return *element;
+            EXPECT_NE(element, nullptr) << name << " is not in the screen";
+            return Require(element);
         }
 
         UILayoutContext ViewContext() const {
@@ -273,8 +277,8 @@ namespace BECore::Tests {
                 const char* what;
                 Color text;
                 Color plate;
-            } pairs[] = {{"Title on the card", Find("Title").GetComponent<UITextComponent>()->textColor, panel},
-                         {"Sound on the card", Find("SoundCaption").GetComponent<UITextComponent>()->textColor, panel},
+            } pairs[] = {{"Title on the card", Require(Find("Title").GetComponent<UITextComponent>()).textColor, panel},
+                         {"Sound on the card", Require(Find("SoundCaption").GetComponent<UITextComponent>()).textColor, panel},
                          {"Go on its button", goText ? Color(goText->textColor) : Color{}, Find("Action").color},
                          {"Note on its plate", noteText ? Color(noteText->textColor) : Color{}, Find("Note").color}};
             String problems;
@@ -391,7 +395,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(themes.SetTheme(PoolString::Intern(kSoft)));
         EXPECT_FALSE(themes.HasToken(PoolString::Intern(kSoft), "track"));
         Draw();
-        EXPECT_TRUE(ColorsEqual(Find("SoundSwitch").GetComponent<UISwitchComponent>()->trackColor, Color{150, 150, 150, 255})) << "soft has no track: the light one is drawn";
+        EXPECT_TRUE(ColorsEqual(Require(Find("SoundSwitch").GetComponent<UISwitchComponent>()).trackColor, Color{150, 150, 150, 255})) << "soft has no track: the light one is drawn";
         EXPECT_TRUE(themes.GetMissing().empty()) << "a fallback is not a missing token";
     }
 
@@ -416,7 +420,7 @@ namespace BECore::Tests {
         UIThemes& themes = CoreManager::GetUIThemes();
         const PoolString washed = "washed"_intern;
         for (const char* token : {"panel", "accent", "button", "buttonHover", "buttonText", "track", "note"}) {
-            themes.Set(washed, token, *themes.Find(token));
+            themes.Set(washed, token, Require(themes.Find(token)));
         }
         themes.Set(washed, "text", Color{235, 235, 225, 255});  // the card is 240,240,230
         ASSERT_TRUE(themes.SetTheme(washed));

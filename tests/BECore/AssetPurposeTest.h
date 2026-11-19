@@ -12,7 +12,7 @@ namespace BECore::Tests {
 
     namespace AssetPurposeTestTypes {
 
-        /// One reflected type of each purpose; shared by the purpose, filter and asset part tests.
+        /// One reflected type of each purpose, for the purpose and filter tests.
         struct PurposeSimProbe {
             BE_CLASS(PurposeSimProbe, PURPOSE = sim)
 

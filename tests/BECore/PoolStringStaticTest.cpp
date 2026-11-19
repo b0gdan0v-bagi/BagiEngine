@@ -1,20 +1,17 @@
 #include <BECore/PoolString/PoolBlock.h>
-#include <BECore/PoolString/PoolString.h>
-#include <BECore/PoolString/PoolStringMap.h>
-#include <BECore/PoolString/StaticPoolString.h>
 #include <BECore/PoolStringTestSupport.h>
 #include <Common/Printers.h>
-#include <chrono>
-#include <cstring>
+#include <Common/Wait.h>
 
 // The pool is the process's and cannot un-intern, so each test uses literals no other test names. Counters are deltas
-// of two snapshots of the shared pool: nothing else interns while a test runs.
+// of two snapshots of the shared pool: nothing else interns while a test runs. A literal registers once per process, so a case
+// that pins its first registration skips itself when it runs again in the same process (`--gtest_repeat`).
 
 namespace BECore::Tests {
 
     namespace {
 
-        constexpr std::chrono::milliseconds kThreadLimit{10000};
+        constexpr const char* kRegisteredBefore = "the literal registered in an earlier run of this case in this process";
 
         bool IsEntry(const PoolString& value, const Details::PoolStringEntry& entry) {
             return value.CStr() == entry.data;
@@ -24,6 +21,9 @@ namespace BECore::Tests {
 
     TEST(PoolStringStaticTest, ARuntimeInternFirstKeepsItsEntryAndTheLiteralLoses) {
         using Literal = StaticPoolString<"static_runtime_first_41c9">;
+        if (PoolString::Find(StringView{"static_runtime_first_41c9"}).has_value()) {
+            GTEST_SKIP() << kRegisteredBefore;
+        }
         const PoolString runtime = PoolString::Intern(StringView{"static_runtime_first_41c9"});
         const PoolStringStats before = PoolString::GetStats();
 
@@ -40,6 +40,9 @@ namespace BECore::Tests {
 
     TEST(PoolStringStaticTest, ALiteralFirstIsTheEntryOfEveryLaterRuntimeCall) {
         using Literal = StaticPoolString<"static_literal_first_7be2">;
+        if (PoolString::Find(StringView{"static_literal_first_7be2"}).has_value()) {
+            GTEST_SKIP() << kRegisteredBefore;
+        }
         const PoolStringStats before = PoolString::GetStats();
 
         const PoolString literal = Literal::ToPoolString();
@@ -80,6 +83,9 @@ namespace BECore::Tests {
 
     TEST(PoolStringStaticTest, ALiteralTakesTheEntryOfAnAdoptedBlock) {
         using Literal = StaticPoolString<"static_adopted_first_d305">;
+        if (PoolString::Find(StringView{"static_adopted_first_d305"}).has_value()) {
+            GTEST_SKIP() << kRegisteredBefore;
+        }
         constexpr StringView kText = "static_adopted_first_d305";
         PoolBlock block = PoolString::AllocateBlock(Details::PoolEntryBytes(kText.size()));
         const char* const base = block.Data();
@@ -101,6 +107,9 @@ namespace BECore::Tests {
 
     TEST(PoolStringStaticTest, ToPoolStringTwiceIsOneRegistration) {
         using Literal = StaticPoolString<"static_twice_a4f8">;
+        if (PoolString::Find(StringView{"static_twice_a4f8"}).has_value()) {
+            GTEST_SKIP() << kRegisteredBefore;
+        }
         const PoolStringStats before = PoolString::GetStats();
 
         const PoolString first = Literal::ToPoolString();
@@ -117,11 +126,14 @@ namespace BECore::Tests {
 
     TEST(PoolStringStaticTest, ThreadsCallingAFreshLiteralAtOnceShareOneEntry) {
         using Literal = StaticPoolString<"static_threads_9d12">;
+        if (PoolString::Find(StringView{"static_threads_9d12"}).has_value()) {
+            GTEST_SKIP() << kRegisteredBefore;
+        }
         constexpr int kThreads = 8;
         const PoolStringStats before = PoolString::GetStats();
         PoolString results[kThreads];
 
-        EXPECT_TRUE(RunThreadsTogether(kThreads, kThreadLimit, [&](int t) { results[t] = Literal::ToPoolString(); }));
+        EXPECT_TRUE(RunThreadsTogether(kThreads, kWaitLimit, [&](int t) { results[t] = Literal::ToPoolString(); }));
 
         for (const PoolString& result : results) {
             EXPECT_EQ(result, results[0]);

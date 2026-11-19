@@ -80,7 +80,7 @@ namespace BECore {
     }
 
     float TestData::Player::GetHealthPercent() const {
-        return static_cast<float>(health);  // Assuming max health is 100
+        return static_cast<float>(health) * kPercent / static_cast<float>(kFullHealth);
     }
 
 }  // namespace BECore
@@ -423,7 +423,7 @@ namespace BECore::Tests {
             ExpectBinaryRoundTrip(original, Map<String, int32_t>{{"stale", 99}});
         }
         {
-            SCOPED_TRACE("eastl::unordered_map");
+            SCOPED_TRACE("eastl::hash_map");
             const HashMap<String, int32_t> original = {{"zebra", 26}, {"apple", 1}, {"mango", 13}};
             ExpectBinaryRoundTrip(original, HashMap<String, int32_t>{{"stale", 99}});
         }
@@ -457,10 +457,6 @@ namespace BECore::Tests {
         {
             SCOPED_TRACE("Optional without value: the key is absent and loading resets the target");
             ExpectBinaryRoundTrip(Optional<int32_t>{}, Optional<int32_t>(55));
-        }
-        {
-            SCOPED_TRACE("std::optional with value");
-            ExpectBinaryRoundTrip(Optional<int32_t>(123), Optional<int32_t>{});
         }
         {
             SCOPED_TRACE("empty eastl::vector");
@@ -1333,18 +1329,6 @@ namespace BECore::Tests {
 
             EXPECT_FALSE(loaded.has_value()) << "should be nullopt after loading an absent key";
         }
-
-        {
-            SCOPED_TRACE("std::optional with value");
-            const Optional<int32_t> original = 123;
-            const String xml = SaveToXml("StdOptTest", "value", original);
-
-            Optional<int32_t> loaded;
-            ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "StdOptTest", "value", loaded));
-
-            ASSERT_TRUE(loaded.has_value());
-            EXPECT_EQ(*loaded, 123);
-        }
     }
 
     TEST(ReflectionTest, ErrorReporting) {
@@ -1378,35 +1362,6 @@ namespace BECore::Tests {
 
         EXPECT_NE(pathStr.find("player"), String::npos) << "error path '" << pathStr.c_str() << "'";
         EXPECT_NE(pathStr.find("inventory"), String::npos) << "error path '" << pathStr.c_str() << "'";
-    }
-
-    TEST(ReflectionTest, UnorderedMapSortedKeys) {
-        HashMap<String, int32_t> original;
-        original["zebra"] = 26;
-        original["apple"] = 1;
-        original["mango"] = 13;
-
-        const String xml = SaveToXml("MapSortTest", "entries", original);
-
-        // Keys must appear in alphabetical order in the XML text
-        const size_t posApple = xml.find("apple");
-        const size_t posMango = xml.find("mango");
-        const size_t posZebra = xml.find("zebra");
-
-        ASSERT_NE(posApple, String::npos) << xml.c_str();
-        ASSERT_NE(posMango, String::npos) << xml.c_str();
-        ASSERT_NE(posZebra, String::npos) << xml.c_str();
-        EXPECT_TRUE(posApple < posMango && posMango < posZebra) << "keys not sorted: apple=" << posApple << ", mango=" << posMango << ", zebra=" << posZebra;
-
-        HashMap<String, int32_t> loaded;
-        ASSERT_NO_FATAL_FAILURE(LoadFromXml(xml, "MapSortTest", "entries", loaded));
-
-        ASSERT_EQ(loaded.size(), original.size());
-        for (const auto& [k, v] : original) {
-            auto it = loaded.find(k);
-            ASSERT_TRUE(it != loaded.end()) << "entry '" << k.c_str() << "' is missing";
-            EXPECT_EQ(it->second, v) << "entry '" << k.c_str() << "'";
-        }
     }
 
 }  // namespace BECore::Tests

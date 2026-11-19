@@ -6,6 +6,7 @@
 #include <BECore/Values/Programs/ProgramBuilder.h>
 #include <BECore/Values/Value.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -25,24 +26,24 @@ namespace BECore::Tests {
         /// `caster.attack * 3`, interned, as the value a loader would make from the text @p text
         Value<int32_t> AttackTimesThree(const ValueWorld& world, StringView text) {
             ProgramBuilder builder;
-            const uint8_t attack = builder.AcquireRegister().value();
+            const uint8_t attack = Require(builder.AcquireRegister());
             builder.EmitLoadSlot(attack, ProgramType::Int32, Link(world, "caster.attack", DescribeType<int32_t>()));
-            const uint8_t factor = builder.AcquireRegister().value();
+            const uint8_t factor = Require(builder.AcquireRegister());
             builder.EmitLoadConst(factor, kFactor);
             builder.Emit(Opcode::MulInt32, attack, attack, factor);
-            const ProgramId id = ProgramPool::Intern(builder.Finish(ProgramType::Int32, attack, PoolString::Intern(text)).value()).value();
+            const ProgramId id = Require(ProgramPool::Intern(Require(builder.Finish(ProgramType::Int32, attack, PoolString::Intern(text)))));
             return Value<int32_t>::FromProgram(id, PoolString::Intern(text));
         }
 
         /// A program that reads only the level `cast`: `cast.power * 2.0f`
         Value<float> PowerTimesTwo(const ValueWorld& world) {
             ProgramBuilder builder;
-            const uint8_t power = builder.AcquireRegister().value();
+            const uint8_t power = Require(builder.AcquireRegister());
             builder.EmitLoadSlot(power, ProgramType::Float, Link(world, "cast.power", DescribeType<float>()));
-            const uint8_t two = builder.AcquireRegister().value();
+            const uint8_t two = Require(builder.AcquireRegister());
             builder.EmitLoadConst(two, 2.0f);
             builder.Emit(Opcode::MulFloat, power, power, two);
-            const ProgramId id = ProgramPool::Intern(builder.Finish(ProgramType::Float, power).value()).value();
+            const ProgramId id = Require(ProgramPool::Intern(Require(builder.Finish(ProgramType::Float, power))));
             return Value<float>::FromProgram(id, "cast.power * 2"_intern);
         }
 
@@ -72,20 +73,20 @@ namespace BECore::Tests {
         ValueWorld world;
         // cast.target + (1, 2, 3)
         ProgramBuilder vector;
-        const uint8_t target = vector.AcquireRegister().value();
+        const uint8_t target = Require(vector.AcquireRegister());
         vector.EmitLoadSlot(target, ProgramType::Vec3, Link(world, "cast.target", DescribeType<Vec3>()));
-        const uint8_t offset = vector.AcquireRegister().value();
+        const uint8_t offset = Require(vector.AcquireRegister());
         vector.EmitLoadConst(offset, Vec3{1.0f, 2.0f, 3.0f});
         vector.Emit(Opcode::AddVec3, target, target, offset);
-        const ProgramId vectorId = ProgramPool::Intern(vector.Finish(ProgramType::Vec3, target).value()).value();
+        const ProgramId vectorId = Require(ProgramPool::Intern(Require(vector.Finish(ProgramType::Vec3, target))));
         const Value<Vec3> shifted = Value<Vec3>::FromProgram(vectorId, "cast.target + vec3(1, 2, 3)"_intern);
         EXPECT_EQ(shifted.Evaluate(world.context), world.cast.target + Vec3(1.0f, 2.0f, 3.0f));
 
         // The element of the caster: the register holds the index, the value is the enumerator of its own enum
         ProgramBuilder element;
-        const uint8_t loaded = element.AcquireRegister().value();
+        const uint8_t loaded = Require(element.AcquireRegister());
         element.EmitLoadSlot(loaded, ProgramType::Enum, Link(world, "caster.element", DescribeType<ValueElement>()), static_cast<uint8_t>(DescribeType<ValueElement>().enumBytes));
-        const ProgramId elementId = ProgramPool::Intern(element.Finish(ProgramType::Enum, loaded).value()).value();
+        const ProgramId elementId = Require(ProgramPool::Intern(Require(element.Finish(ProgramType::Enum, loaded))));
         const Value<ValueElement> chosen = Value<ValueElement>::FromProgram(elementId, "caster.element"_intern);
         for (const ValueElement value : {ValueElement::Fire, ValueElement::Water, ValueElement::Earth}) {
             world.caster.element = value;
@@ -94,14 +95,14 @@ namespace BECore::Tests {
 
         // select(caster.alive, 'burn', 'chill'): a string is the bytes of an interned text
         ProgramBuilder text;
-        const uint8_t condition = text.AcquireRegister().value();
+        const uint8_t condition = Require(text.AcquireRegister());
         text.EmitLoadSlot(condition, ProgramType::Bool, Link(world, "caster.alive", DescribeType<bool>()));
-        const uint8_t burn = text.AcquireRegister().value();
+        const uint8_t burn = Require(text.AcquireRegister());
         text.EmitLoadConst(burn, PoolString{"burn"_intern});
-        const uint8_t chill = text.AcquireRegister().value();
+        const uint8_t chill = Require(text.AcquireRegister());
         text.EmitLoadConst(chill, PoolString{"chill"_intern});
         text.Emit(Opcode::SelectString, condition, condition, burn, chill);
-        const ProgramId textId = ProgramPool::Intern(text.Finish(ProgramType::String, condition).value()).value();
+        const ProgramId textId = Require(ProgramPool::Intern(Require(text.Finish(ProgramType::String, condition))));
         const Value<PoolString> label = Value<PoolString>::FromProgram(textId, "select(caster.alive, 'burn', 'chill')"_intern);
         world.caster.alive = true;
         EXPECT_EQ(label.Evaluate(world.context), "burn"_intern);

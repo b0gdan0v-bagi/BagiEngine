@@ -22,10 +22,8 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(RateLimiterTest, CompileTimeChecks) {
-        static_assert(std::is_copy_constructible_v<RateLimiter>);
-        SUCCEED();
-    }
+    // PeekTokens refills a copy, so the limiter must stay copyable
+    static_assert(std::is_copy_constructible_v<RateLimiter>);
 
     TEST(RateLimiterTest, BurstIsAllowedAtOnceThenRefused) {
         RateLimiter limiter(3, 10.0);
@@ -67,16 +65,17 @@ namespace BECore::Tests {
     }
 
     TEST(RateLimiterTest, SteadyRateIsHeldOverALongRun) {
-        RateLimiter limiter(5, 10.0);
+        constexpr int kBurst = 5;
+        // 50 attempts a second for 20 seconds: the burst, then one token per 100 ms of the 19.98 s after the first attempt
+        constexpr int kRefilled = 199;
+        RateLimiter limiter(kBurst, 10.0);
         int taken = 0;
-        // 50 attempts a second for 20 seconds: about 10 a second get through, plus the burst
         for (int step = 0; step < 1000; ++step) {
             if (limiter.TryTake(kStart + milliseconds(step * 20))) {
                 ++taken;
             }
         }
-        EXPECT_NEAR(taken, 5 + 10 * 20 - 10, 15);
-        EXPECT_LE(taken, 5 + 10 * 20);
+        EXPECT_EQ(taken, kBurst + kRefilled);
     }
 
     TEST(RateLimiterTest, TimeGoingBackAddsNothing) {

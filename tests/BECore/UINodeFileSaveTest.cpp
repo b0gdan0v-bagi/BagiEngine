@@ -8,9 +8,8 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
-#include <fstream>
+#include <Common/TestFiles.h>
 #include <gtest/gtest.h>
-#include <sstream>
 
 namespace BECore::Tests {
 
@@ -69,11 +68,6 @@ namespace BECore::Tests {
   </component>
 </components></node>
 )";
-
-        void WriteFile(const std::filesystem::path& path, const String& text) {
-            std::filesystem::create_directories(path.parent_path());
-            std::ofstream(path, std::ios::binary) << text.c_str();  //-NoStd: the test writes its own temporary node files
-        }
 
         String ReadFile(const std::filesystem::path& path) {
             std::ifstream stream(path, std::ios::binary);  //-NoStd: the test reads back its own temporary node files
@@ -149,7 +143,7 @@ namespace BECore::Tests {
 
         /// Loads the scene Main with @p nodesXml as its nodes; the scene is kept in `_scene`
         void LoadScene(const String& nodesXml) {
-            const String text = "<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes>" + nodesXml + "</nodes></scene></scenes></SceneManager>";
+            const String text = Format("<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes>{}</nodes></scene></scenes></SceneManager>", nodesXml);
             const pugi::xml_parse_result parsed = _doc.load_string(text.c_str());
             ASSERT_TRUE(parsed) << parsed.description();
             _manager = LoadSceneManager(XmlNode{_doc.document_element()}, _loader);
@@ -188,7 +182,7 @@ namespace BECore::Tests {
                 error = "disk on fire";
                 return false;
             }
-            const auto path = _dir / (String(ref) + ".xml").c_str();
+            const auto path = _dir / Format("{}.xml", ref).c_str();
             if (!std::filesystem::exists(path)) {
                 error = "no file";
                 return false;
@@ -203,12 +197,12 @@ namespace BECore::Tests {
                 error = "read only";
                 return false;
             }
-            WriteFile(_dir / (String(ref) + ".xml").c_str(), String(text));
+            WriteFile(_dir / Format("{}.xml", ref).c_str(), String(text));
             return true;
         }
 
         String FileText(const char* ref) const {
-            return ReadFile(_dir / (String(ref) + ".xml").c_str());
+            return ReadFile(_dir / Format("{}.xml", ref).c_str());
         }
 
         /// The reference of @p node as the editor would save it, printed

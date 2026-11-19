@@ -8,6 +8,7 @@
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <BECore/Values/Value.h>
 #include <Common/Printers.h>
+#include <Common/TestText.h>
 #include <cmath>
 #include <gtest/gtest.h>
 
@@ -16,10 +17,6 @@ namespace BECore::Tests {
     using namespace ValueTestData;
 
     namespace {
-
-        bool Contains(const String& text, StringView part) {
-            return text.find(part.data(), 0, part.size()) != String::npos;
-        }
 
         /// The field values a formula is run over: a few states of the two objects of a `ValueWorld`
         struct State {
@@ -354,7 +351,7 @@ namespace BECore::Tests {
     }
 
     TEST(ProgramCompilerTest, ALongTextShowsAWindowAroundTheColumn) {
-        const String text = String(100, 'a') + "b" + String(100, 'c');
+        const String text = Format("{}b{}", String(100, 'a'), String(100, 'c'));
         const String line = FormatProgramError(text, ProgramError{"bad", 101});
         const String expected = Format("bad (column 101)\n  ...{}b{}...\n  {}^", String(32, 'a'), String(27, 'c'), String(3 + 32, ' '));
         EXPECT_EQ(line, expected);

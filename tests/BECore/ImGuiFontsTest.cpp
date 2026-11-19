@@ -4,7 +4,7 @@
 #include <Widgets/ImGuiFonts.h>
 #include <cmath>
 #include <imgui.h>
-#include <limits>
+#include <imgui_internal.h>
 
 namespace BECore::Tests {
 
@@ -153,9 +153,14 @@ namespace BECore::Tests {
     }
 
     TEST_F(ImGuiFontsTest, TheMonoScopeDoesNothingWithoutAFont) {
-        EXPECT_EQ(GetImGuiFonts().mono, nullptr);
-        ScopedMonoFont scope;
-        ScopedMonoFont explicitNull(nullptr);
+        ASSERT_EQ(GetImGuiFonts().mono, nullptr);
+        const int depth = ImGui::GetCurrentContext()->FontStack.Size;
+        {
+            const ScopedMonoFont scope;
+            const ScopedMonoFont explicitNull(nullptr);
+            EXPECT_EQ(ImGui::GetCurrentContext()->FontStack.Size, depth) << "a scope without a font pushes nothing";
+        }
+        EXPECT_EQ(ImGui::GetCurrentContext()->FontStack.Size, depth) << "and pops nothing";
     }
 
     TEST_F(ImGuiFontsTest, ActiveFontsAreSetAndCleared) {

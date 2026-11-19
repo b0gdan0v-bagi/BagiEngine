@@ -12,7 +12,7 @@ namespace BECore::Fuzz {
         /// The scene an input without a NUL byte is a node file for: one reference, no override
         constexpr const char* kReferenceScene = R"(<SceneManager><scenes><scene type="Scene" name="Fuzz"><nodes><node ref="nodes/Fuzz"/></nodes></scene></scenes></SceneManager>)";
 
-        /// Whether @p text is a node file the loader accepts: parses, and its document element is a `node` that is no reference
+        /// Whether @p document is a node file the loader accepts: parses, and its document element is a `node` that is no reference
         bool IsNodeFile(const pugi::xml_document& document) {
             const pugi::xml_node root = document.document_element();
             return root && StringView(root.name()) == kNodeElementName && !root.attribute(kNodeRefAttribute.data());

@@ -5,6 +5,7 @@
 #include <BECore/Renderer/RendererManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/TestText.h>
 #include <Widgets/ProfilerOverlayWidget.h>
 #include <gtest/gtest.h>
 
@@ -12,13 +13,8 @@ namespace BECore::Tests {
 
     namespace {
 
-        bool Contains(const Vector<String>& lines, const char* text) {
-            for (const String& line : lines) {
-                if (line.find(text) != String::npos) {
-                    return true;
-                }
-            }
-            return false;
+        bool AnyLineContains(const Vector<String>& lines, StringView part) {
+            return eastl::any_of(lines.begin(), lines.end(), [part](const String& line) { return Contains(line, part); });
         }
 
         FrameStats SampleFrame() {
@@ -49,26 +45,26 @@ namespace BECore::Tests {
         AllocTotals totals;
         totals.liveBytes = 3 * 1024 * 1024;
         const Vector<String> lines = FormatOverlayLines(SampleFrame(), totals, true);
-        EXPECT_TRUE(Contains(lines, "Frame 42"));
-        EXPECT_TRUE(Contains(lines, "50 fps"));
-        EXPECT_TRUE(Contains(lines, "Draw calls 12"));
-        EXPECT_TRUE(Contains(lines, "Texture switches 3"));
-        EXPECT_TRUE(Contains(lines, "Allocations 7 (2.0 KB)"));
-        EXPECT_TRUE(Contains(lines, "Live 3.0 MB"));
-        EXPECT_TRUE(Contains(lines, "ImGui draw calls 9"));
+        EXPECT_TRUE(AnyLineContains(lines, "Frame 42"));
+        EXPECT_TRUE(AnyLineContains(lines, "50 fps"));
+        EXPECT_TRUE(AnyLineContains(lines, "Draw calls 12"));
+        EXPECT_TRUE(AnyLineContains(lines, "Texture switches 3"));
+        EXPECT_TRUE(AnyLineContains(lines, "Allocations 7 (2.0 KB)"));
+        EXPECT_TRUE(AnyLineContains(lines, "Live 3.0 MB"));
+        EXPECT_TRUE(AnyLineContains(lines, "ImGui draw calls 9"));
     }
 
     TEST(FrameStatsTextTest, OnlyAHeldFrameSaysPaused) {
         FrameStats frame = SampleFrame();
-        EXPECT_FALSE(Contains(FormatOverlayLines(frame, AllocTotals{}, true), "paused"));
+        EXPECT_FALSE(AnyLineContains(FormatOverlayLines(frame, AllocTotals{}, true), "paused"));
         frame.paused = true;
-        EXPECT_TRUE(Contains(FormatOverlayLines(frame, AllocTotals{}, true), "paused"));
+        EXPECT_TRUE(AnyLineContains(FormatOverlayLines(frame, AllocTotals{}, true), "paused"));
     }
 
     TEST(FrameStatsTextTest, WithoutTrackingTheLineSaysSo) {
         const Vector<String> lines = FormatOverlayLines(SampleFrame(), AllocTotals{}, false);
-        EXPECT_TRUE(Contains(lines, "ENGINE_PROFILER_ALLOC=OFF"));
-        EXPECT_FALSE(Contains(lines, "Live"));
+        EXPECT_TRUE(AnyLineContains(lines, "ENGINE_PROFILER_ALLOC=OFF"));
+        EXPECT_FALSE(AnyLineContains(lines, "Live"));
     }
 
     TEST(FrameStatsTextTest, BytesAreReadable) {

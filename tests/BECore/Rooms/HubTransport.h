@@ -6,11 +6,11 @@
 #include <Games/SeatedGameRegistry.h>
 #include <RoomClient/RoomTransport.h>
 #include <RoomServer/DemoCardGame.h>
+#include <RoomServer/RoomWebSocketServer.h>
 #include <Rooms/RoomHub.h>
 #include <Rooms/RoomLimits.h>
 #include <deque>
 #include <memory>
-#include <vector>
 
 namespace BECore::Tests {
 
@@ -66,10 +66,10 @@ namespace BECore::Tests {
     public:
         explicit HubWorld(RoomHubSettings settings, RandomFn random = MakeSequence(11)) : _hub(MakeRegistry(), std::move(settings), std::move(random), MakeSink()) {}
 
-        /// A zero computer delay and the usual grace and timeouts
+        /// The usual grace and abandon timeout with @p computerDelay between the moves of computers
         static RoomHubSettings MakeSettings(std::chrono::milliseconds computerDelay = std::chrono::milliseconds(0)) {
             RoomHubSettings settings;
-            settings.timings = RoomTimings{RoomLimits::kReconnectGrace, RoomLimits::kAbandonedTimeout, computerDelay};
+            settings.timings.computerDelay = computerDelay;
             return settings;
         }
 
@@ -136,20 +136,10 @@ namespace BECore::Tests {
                 }
                 found->second->open = false;
                 if (!found->second->blackhole) {
-                    found->second->QueueClosed(GetCloseCode(reason), reason);
+                    found->second->QueueClosed(GetRoomCloseCode(reason), reason);
                 }
             };
             return sink;
-        }
-
-        /// What RoomWebSocketServer tells the client when the hub ends its connection
-        static uint16_t GetCloseCode(const String& reason) {
-            constexpr uint16_t kPolicyViolation = 1008;
-            constexpr uint16_t kTryAgainLater = 1013;
-            if (reason == "rate_limited" || reason == "too_many_failed_joins") {
-                return kPolicyViolation;
-            }
-            return reason == "server_full" ? kTryAgainLater : kRoomTransportNormalClosure;
         }
 
         // The registry is destroyed after the hub, which holds a reference to it

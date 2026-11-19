@@ -4,11 +4,12 @@
 #include <BECore/Profiler/ProfilerSettings.h>
 #include <BECore/Profiler/ScopedTrace.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <chrono>
 #include <cstdio>
 #include <gtest/gtest.h>
-#include <map>
 #include <thread>
 
 namespace BECore::Tests {
@@ -106,10 +107,15 @@ namespace BECore::Tests {
     }
 
     TEST(ProfilerSettingsTest, ProfilerFlagPicksTheBackend) {
-        EXPECT_EQ(ResolveProfilerSettings(Args{"--profiler=chrome"}, kChromeOnlyBuild)->backend, ProfilerBackendKind::ChromeTrace);
-        EXPECT_EQ(ResolveProfilerSettings(Args{"--profiler=none"}, kFullBuild)->backend, ProfilerBackendKind::None);
-        EXPECT_EQ(ResolveProfilerSettings(Args{"--profiler=tracy"}, kFullBuild)->backend, ProfilerBackendKind::Tracy);
-        EXPECT_EQ(ResolveProfilerSettings(Args{"--profiler=chrome", "--trace=t.json"}, kChromeOnlyBuild)->backend, ProfilerBackendKind::ChromeTrace);
+        const auto backendOf = [](const Args& args, ProfilerBuild build) {
+            const auto settings = ResolveProfilerSettings(args, build);
+            EXPECT_TRUE(settings.has_value()) << args.front();
+            return settings ? Optional<ProfilerBackendKind>(settings->backend) : std::nullopt;
+        };
+        EXPECT_EQ(backendOf(Args{"--profiler=chrome"}, kChromeOnlyBuild), ProfilerBackendKind::ChromeTrace);
+        EXPECT_EQ(backendOf(Args{"--profiler=none"}, kFullBuild), ProfilerBackendKind::None);
+        EXPECT_EQ(backendOf(Args{"--profiler=tracy"}, kFullBuild), ProfilerBackendKind::Tracy);
+        EXPECT_EQ(backendOf(Args{"--profiler=chrome", "--trace=t.json"}, kChromeOnlyBuild), ProfilerBackendKind::ChromeTrace);
     }
 
     TEST(ProfilerSettingsTest, BareEmptyUnknownAndConflictingFlagsAreErrors) {
@@ -164,9 +170,9 @@ namespace BECore::Tests {
                 begun.push_back(Member(event, "name"));
             } else if (phase == "C") {
                 EXPECT_EQ(Member(event, "name"), "Score");
-                EXPECT_EQ(GetJsonNumber(*FindJsonMember(event, "args"), "value"), 2.5);
+                EXPECT_EQ(GetJsonNumber(Require(FindJsonMember(event, "args")), "value"), 2.5);
             } else if (phase == "M") {
-                EXPECT_EQ(Member(*FindJsonMember(event, "args"), "name"), "Test main");
+                EXPECT_EQ(Member(Require(FindJsonMember(event, "args")), "name"), "Test main");
             }
         }
         EXPECT_EQ(begun, (Vector<String>{"Outer", "Inner \"quoted\"\\"}));
@@ -299,11 +305,21 @@ namespace BECore::Tests {
     }
 
     TEST(ProfileMacrosTest, NothingIsRecordedWithoutABackend) {
+        // The recorder was installed and taken away: a macro that still reached it would add to what it holds
         ChromeTraceBackend recorder;
-        Profiler::SetBackend(nullptr);
+        {
+            ScopedBackend installed(&recorder);
+            EXPECT_EQ(EarlyReturn(false), 2);
+        }
+        const size_t recorded = CountPhase(ParseEvents(recorder.WriteJson()), "B");
+        ASSERT_EQ(recorded, 2u);
+
         EXPECT_EQ(EarlyReturn(false), 2);
         BE_PROFILE_FRAME();
-        EXPECT_EQ(CountPhase(ParseEvents(recorder.WriteJson()), "B"), 0u);
+
+        const Json events = ParseEvents(recorder.WriteJson());
+        EXPECT_EQ(CountPhase(events, "B"), recorded);
+        EXPECT_EQ(CountPhase(events, "i"), 0u);
     }
 
     TEST(ProfileMacrosTest, AZoneEndsOnTheBackendItBeganOn) {
@@ -321,7 +337,7 @@ namespace BECore::Tests {
 
     TEST(ScopedTraceTest, WritesTheZonesOfItsScope) {
         const std::filesystem::path folder = TestTempDirectory("profiler");
-        std::filesystem::create_directories(folder);
+        MakeDirectory(folder);
         const std::filesystem::path file = folder / "trace.json";
         {
             ScopedTrace trace(String(file.string().c_str()));
@@ -336,7 +352,7 @@ namespace BECore::Tests {
         const Json events = ParseEvents(text);
         EXPECT_EQ(CountPhase(events, "B"), 2u);
         ExpectBalanced(events);
-        std::filesystem::remove_all(folder);
+        RemoveDirectory(folder);
     }
 
 #else

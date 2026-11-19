@@ -1,10 +1,9 @@
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/TextureEditor/SpriteAtlas.h>
-#include <algorithm>
 #include <cstdio>
-#include <fstream>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -877,7 +876,7 @@ namespace BECore::Tests {
         EXPECT_EQ(*firstSize, *secondSize);
         const auto record = ParseJson(StringView(ReadText(second->provenanceFile)));
         ASSERT_TRUE(record.has_value());
-        EXPECT_EQ(GetJsonString(*FindJsonMember(*record, "accepted"), "frame").value_or(String()), "set");
+        EXPECT_EQ(GetJsonString(Require(FindJsonMember(*record, "accepted")), "frame").value_or(String()), "set");
     }
 
     TEST_F(ArtGenAcceptTest, AnImageWithNothingDrawnIsRefusedAndWritesNothing) {

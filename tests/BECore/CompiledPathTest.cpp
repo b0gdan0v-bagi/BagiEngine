@@ -7,6 +7,7 @@
 #include <BECore/Reflection/CompiledPath.h>
 #include <BECore/TypeRegistryTest.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -19,7 +20,7 @@ namespace BECore::Tests {
         const TypeInfo& InfoOf(StringView name) {
             const TypeInfo* info = TypeRegistry::GetInstance().Find(name);
             EXPECT_NE(info, nullptr) << String(name).c_str();
-            return *info;
+            return Require(info);
         }
 
         template <typename Object>

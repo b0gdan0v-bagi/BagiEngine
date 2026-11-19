@@ -1,12 +1,12 @@
 #include <BECore/Audio/AudioEvents.h>
 #include <BECore/Audio/AudioManager.h>
+#include <BECore/AudioTestSupport.h>
 #include <BECore/FakeAudioBackend.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
-#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -15,18 +15,8 @@ namespace BECore::Tests {
 
         constexpr const char* kMountPoint = "test_audio_playback";
 
-        std::filesystem::path FixtureFolder() {
-            return std::filesystem::path(__FILE__).parent_path() / "AudioData";
-        }
-
         PoolString FixturePath(const char* file) {
             return PoolString::Intern(Format("{}/{}", kMountPoint, file));
-        }
-
-        AudioPlayRecord LastRecord(const AudioManager& manager) {
-            Vector<AudioPlayRecord> records;
-            manager.GetRecentPlays(records);
-            return records.empty() ? AudioPlayRecord{} : records.back();
         }
 
     }  // namespace
@@ -39,7 +29,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            ASSERT_TRUE(CoreManager::GetFileSystem().Mount(PoolString::Intern(kMountPoint), FixtureFolder()));
+            ASSERT_TRUE(CoreManager::GetFileSystem().Mount(PoolString::Intern(kMountPoint), AudioFixtureFolder()));
             backend = New<FakeAudioBackend>();
             CoreManager::GetAudio().SetBackend(backend);
             ASSERT_TRUE(CoreManager::GetAudio().GetBackend());

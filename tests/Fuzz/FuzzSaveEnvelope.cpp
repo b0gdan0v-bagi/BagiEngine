@@ -10,15 +10,15 @@ namespace BECore::Fuzz {
         constexpr StringView kSlot = "fuzz";
 
         /// The game the loads below belong to; a seed of another game is a refusal
-        constexpr StringView kGame = "FuzzGame";
-        constexpr SaveSchema kSchema{kGame, 3, 2};
+        constexpr SaveSchema kSchema = kFuzzSaveSchema;
+        constexpr StringView kGame = kSchema.game;
 
         /// The slot folder of the process, made on the first input and removed when the process ends normally
         class SlotWorkspace {
         public:
             SlotWorkspace() : _service(_fileSystem) {
                 const String tag = Format("{:08x}", std::random_device{}());
-                _directory = std::filesystem::temp_directory_path() / ToStd("BagiFuzzSave_" + tag);
+                _directory = std::filesystem::temp_directory_path() / ToStd(Format("BagiFuzzSave_{}", tag));
                 std::error_code ignored;
                 std::filesystem::remove_all(_directory, ignored);
                 FUZZ_CHECK(_service.Initialize(_directory));
@@ -121,7 +121,7 @@ namespace BECore::Fuzz {
 
     Vector<uint8_t> MakeSaveFileBytes(StringView game, uint32_t version) {
         const String tag = Format("{:08x}", std::random_device{}());
-        const std::filesystem::path directory = std::filesystem::temp_directory_path() / ToStd("BagiFuzzSeed_" + tag);
+        const std::filesystem::path directory = std::filesystem::temp_directory_path() / ToStd(Format("BagiFuzzSeed_{}", tag));
         Vector<uint8_t> bytes;
         {
             FileSystem fileSystem;

@@ -6,16 +6,36 @@
 #if BE_PROFILER_TRACY
 #include <BECore/Profiler/Backends/TracyProfilerBackend.h>
 #include <thread>
-#include <vector>
 #endif
 
 namespace BECore::Tests {
 
 #if BE_PROFILER_TRACY
 
+    namespace {
+
+        /// Whether a case of this process has shut Tracy down: Tracy does not start twice in one process, and a shard or a
+        /// one-process run holds several cases of this suite
+        bool& TracyShutDownInThisProcess() {
+            static bool shutDown = false;
+            return shutDown;
+        }
+
+        void ShutDownTracy() {
+            TracyProfilerBackend::Shutdown();
+            TracyShutDownInThisProcess() = true;
+        }
+
+        constexpr const char* kTracyGone = "Tracy was shut down by an earlier case of this process and does not start again";
+
+    }  // namespace
+
     // The layout of ProfileSite against Tracy's source location is checked by static_asserts in TracyProfilerBackend.cpp,
     // the one file that sees Tracy's headers
     TEST(TracyBackendTest, StartsRecordsWithoutAViewerAndShutsDown) {
+        if (TracyShutDownInThisProcess()) {
+            GTEST_SKIP() << kTracyGone;
+        }
         TracyProfilerBackend& tracy = GetTracyBackend();
         ASSERT_TRUE(Profiler::SetBackend(&tracy));
         EXPECT_TRUE(TracyProfilerBackend::IsRunning());
@@ -39,7 +59,7 @@ namespace BECore::Tests {
         worker.join();
 
         Profiler::SetBackend(nullptr);
-        TracyProfilerBackend::Shutdown();
+        ShutDownTracy();
         EXPECT_FALSE(TracyProfilerBackend::IsRunning());
         // A zone after the shutdown is dropped, not a crash; Tracy does not start twice in one process
         static constexpr ProfileSite kSite{"After shutdown", "Test", __FILE__, 1, 0};
@@ -50,10 +70,11 @@ namespace BECore::Tests {
     }
 
     TEST(TracyBackendTest, ZonesDeeperThanTheStackAreSkippedAndBalanced) {
-        TracyProfilerBackend& tracy = GetTracyBackend();
-        if (!Profiler::SetBackend(&tracy)) {
-            GTEST_SKIP() << "Tracy was shut down by another test of this process (ctest runs each test alone)";
+        if (TracyShutDownInThisProcess()) {
+            GTEST_SKIP() << kTracyGone;
         }
+        TracyProfilerBackend& tracy = GetTracyBackend();
+        ASSERT_TRUE(Profiler::SetBackend(&tracy));
         static constexpr ProfileSite kSite{"Deep", "Test", __FILE__, 1, 0};
         Vector<uint64_t> tokens;
         for (uint32_t i = 0; i < TracyProfilerBackend::kMaxZoneDepth + 4; ++i) {
@@ -66,7 +87,7 @@ namespace BECore::Tests {
         EXPECT_EQ(again, 0u);
         tracy.EndZone(again, kSite, {});
         Profiler::SetBackend(nullptr);
-        TracyProfilerBackend::Shutdown();
+        ShutDownTracy();
     }
 
     namespace {
@@ -91,7 +112,7 @@ namespace BECore::Tests {
                         }
                         {
                             const std::shared_lock<SharedMutex> reader(shared);
-                            static_cast<void>(sharedCounter);
+                            EXPECT_LE(sharedCounter, kThreads * kRounds);
                         }
                         if (std::unique_lock<Mutex> attempt(mutex, std::try_to_lock); attempt.owns_lock()) {
                             ++counter;
@@ -109,6 +130,9 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST(TracyBackendTest, LocksOfBothKindsRunUnderTracyAndAfterItsShutdown) {
+        if (TracyShutDownInThisProcess()) {
+            GTEST_SKIP() << kTracyGone;
+        }
         Mutex outlives{BE_LOCK_SITE("Tracy test outlives")};  // made before Tracy runs
         SharedMutex sharedOutlives{BE_LOCK_SITE("Tracy test shared outlives")};
         {
@@ -134,25 +158,31 @@ namespace BECore::Tests {
         ASSERT_TRUE(Profiler::SetBackend(&tracy));
         UseBothLocks(outlives, sharedOutlives);  // installed again: the context made earlier is used again
         Profiler::SetBackend(nullptr);
-        TracyProfilerBackend::Shutdown();
+        ShutDownTracy();
 
         // Tracy is gone: the locks work, and ending their contexts at the end of the test is a no-op
         UseBothLocks(outlives, sharedOutlives);
     }
 
     TEST(TracyBackendTest, ALockEndedAfterTheShutdownIsSafe) {
+        if (TracyShutDownInThisProcess()) {
+            GTEST_SKIP() << kTracyGone;
+        }
         TracyProfilerBackend& tracy = GetTracyBackend();
         ASSERT_TRUE(Profiler::SetBackend(&tracy));
-        auto* mutex = new Mutex(BE_LOCK_SITE("Tracy test late end"));
-        auto* shared = new SharedMutex(BE_LOCK_SITE("Tracy test shared late end"));
+        auto mutex = MakeUnique<Mutex>(BE_LOCK_SITE("Tracy test late end"));
+        auto shared = MakeUnique<SharedMutex>(BE_LOCK_SITE("Tracy test shared late end"));
         UseBothLocks(*mutex, *shared);
         Profiler::SetBackend(nullptr);
-        TracyProfilerBackend::Shutdown();
-        delete mutex;  // its context cannot be ended any more; nothing is called into the stopped client
-        delete shared;
+        ShutDownTracy();
+        mutex.reset();  // its context cannot be ended any more; nothing is called into the stopped client
+        shared.reset();
     }
 
     TEST(TracyBackendTest, TheTracyBackendAsksForLockEventsAndTheFanOutPassesThemOn) {
+        if (TracyShutDownInThisProcess()) {
+            GTEST_SKIP() << kTracyGone;
+        }
         TracyProfilerBackend& tracy = GetTracyBackend();
         EXPECT_TRUE(tracy.WantsLockEvents());
         ASSERT_TRUE(Profiler::SetBackend(&tracy));
@@ -166,7 +196,7 @@ namespace BECore::Tests {
         Profiler::SetRingEnabled(false);
         Profiler::SetBackend(nullptr);
         EXPECT_FALSE(LockHooks::EventsActive());
-        TracyProfilerBackend::Shutdown();
+        ShutDownTracy();
     }
 
 #else

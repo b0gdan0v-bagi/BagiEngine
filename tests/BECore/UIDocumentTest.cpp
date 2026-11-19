@@ -10,6 +10,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/UICanvasRoundTrip.h>
 #include <Common/UITreeCompare.h>
 #include <gtest/gtest.h>
 
@@ -36,34 +37,11 @@ namespace BECore::Tests {
   </variants>)";
 
         String ScenesXml(const String& componentAttributes, const String& componentBody) {
-            return "<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes><node name=\"Hud\"><components>"
-                   "<component type=\"UICanvasComponent\" space=\"Screen\" scaleMode=\"ScaleWithScreen\" referenceWidth=\"1280\" referenceHeight=\"720\" match=\"0.5\" " +
-                   componentAttributes + ">" + componentBody + "</component></components></node></nodes></scene></scenes></SceneManager>";
+            return Format("<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes><node name=\"Hud\"><components>"
+                          "<component type=\"UICanvasComponent\" space=\"Screen\" scaleMode=\"ScaleWithScreen\" referenceWidth=\"1280\" referenceHeight=\"720\" match=\"0.5\" {}>{}"
+                          "</component></components></node></nodes></scene></scenes></SceneManager>",
+                          componentAttributes, componentBody);
         }
-
-        /// A directory of our own under the system's temporary one, removed with the object
-        class TempDirectory {
-        public:
-            // One directory per test: ctest runs them in parallel processes, and the constructor clears the directory
-            TempDirectory() : _path(TestTempDirectory("BagiEngineUIDocumentTest")) {
-                std::filesystem::remove_all(_path);
-                std::filesystem::create_directories(_path);
-            }
-            ~TempDirectory() {
-                std::error_code ignored;
-                std::filesystem::remove_all(_path, ignored);
-            }
-
-            /// Writes a file and returns its absolute path, which the file system takes as it is
-            String Write(const char* name, const String& content) const {
-                const auto file = _path / name;
-                std::ofstream(file) << content;
-                return FromStdString(file.generic_string());
-            }
-
-        private:
-            std::filesystem::path _path;
-        };
 
         /// What a front-end that is not XML hands over: a type, a name, the declarations of the element and its children
         struct BagElement {
@@ -119,14 +97,14 @@ namespace BECore::Tests {
         }
 
         static String SourceAttribute(const String& path) {
-            return "source=\"" + path + "\"";
+            return Format("source=\"{}\"", path);
         }
 
         static String DocumentXml(const String& body) {
-            return "<ui>" + body + "</ui>";
+            return Format("<ui>{}</ui>", body);
         }
 
-        TempDirectory _temp;
+        TestTempFolder _temp{"BagiEngineUIDocumentTest"};
         IntrusivePtrAtomic<SceneManager> _manager;
     };
 
@@ -277,19 +255,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(canvas->GetLayout().variants[0].overrides[0].region.has_value());
         EXPECT_EQ(*canvas->GetLayout().variants[0].overrides[0].region, "table.plate.2"_intern);
 
-        XmlSerializer serializer;
-        ASSERT_TRUE(serializer.BeginObject("component"));
-        canvas->Serialize(serializer);
-        serializer.EndObject();
-        const String xml = serializer.SaveToString();
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
-        auto loaded = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        loaded->Deserialize(deserializer);
-        deserializer.EndObject();
-        EXPECT_FALSE(deserializer.HasErrors());
-        loaded->Initialize();
+        String xml;
+        const auto loaded = XmlRoundTrip(*canvas, &xml);
+        ASSERT_TRUE(loaded);
 
         ExpectSameElements(canvas->GetRoot().children, loaded->GetRoot().children);
         EXPECT_TRUE(canvas->GetLayout().variants == loaded->GetLayout().variants);
@@ -298,7 +266,7 @@ namespace BECore::Tests {
     // ---- failures ---------------------------------------------------------------------------------------------------------
 
     TEST_F(UIDocumentTest, AMissingFileLeavesTheInlineScreen) {
-        const String path = FromStdString((std::filesystem::temp_directory_path() / "BagiEngineUIDocumentTest" / "missing.ui.xml").generic_string());
+        const String path = _temp.PathOf("missing.ui.xml");
         const auto canvas = LoadCanvas(SourceAttribute(path), R"(<elements><element type="UIElement" name="Inline"/></elements>)");
         ASSERT_TRUE(canvas);
 
@@ -333,8 +301,8 @@ namespace BECore::Tests {
         EXPECT_EQ(content.elements[1]->style.rect.width, UILength::Px(50.0f));
     }
 
-    TEST_F(UIDocumentTest, CompileTimeChecks) {
-        static_assert(std::is_base_of_v<IResource, UIDocument>);
-    }
+    static_assert(std::is_base_of_v<IResource, UIDocument>);
+
+    TEST_F(UIDocumentTest, CompileTimeChecks) {}
 
 }  // namespace BECore::Tests

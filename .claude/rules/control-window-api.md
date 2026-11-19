@@ -62,7 +62,7 @@ Client data, so a violation is `invalid_params` whose message names the field an
 | `--density=D` | a finite number | the start pixel density; without it 1 |
 
 - Both need `--headless` (and so `--control`), else the start-up stops with the `ControlSettings` message: a real window's size and density belong to the system. They are flags only, no `ApplicationConfig` attributes (a per-run QA choice, not a game setting); a game's `headless="true"` in its config does satisfy them.
-- `ResolveControlSettings` reads them with the limits of `WindowLimits` (`ValidateWindowSimulation`): a bare flag, a value that is not `WxH` of integers (or a number), a size or density outside its range, and the output side of both together are errors that name the flag. A flag that appears twice: the last wins. Unknown lookalikes (`--windows=`) are ignored like every unknown flag.
+- `ResolveControlSettings` reads them with the limits of `WindowLimits` (`ValidateWindowSimulation`): a bare flag, a value that is not `WxH` of integers (or a number), a size or density outside its range, and the output side of both together are errors that name the flag. A flag that appears twice keeps its first value, as for every flag read through `CommandLine` (`Control/CLAUDE.md`). Unknown lookalikes (`--windows=`) are ignored like every unknown flag.
 - Path: `ControlSettings` -> `ApplicationOptions` -> `SDL3ApplicationFabric::Create` -> `SDLMainWindow::SetHeadlessSimulation` before `Initialize()`, which creates the dummy window at `round(size * density)` pixels. `--density` alone keeps the config's size, whose output side only `Initialize()` can check (the check of the previous section).
 
 ## The Python side and the checks

@@ -15,6 +15,8 @@
 
 namespace BECore::Tests {
 
+    using RmlUiScreens::BoxOf;
+
     namespace {
 
         constexpr const char* kWindowConfig = "config/SDLWindowConfig.xml";
@@ -54,17 +56,6 @@ namespace BECore::Tests {
             return count;
         }
 
-        Rect BoxOf(const RmlUiDocumentComponent& doc, const char* id) {
-            Rml::Element* element = doc.GetDocument()->GetElementById(id);
-            if (!element) {
-                ADD_FAILURE() << "no element '" << id << "'";
-                return {};
-            }
-            const Rml::Vector2f offset = element->GetAbsoluteOffset(Rml::BoxArea::Border);
-            const Rml::Vector2f size = element->GetBox().GetSize(Rml::BoxArea::Border);
-            return {doc.GetOriginX() + offset.x, doc.GetOriginY() + offset.y, size.x, size.y};
-        }
-
         /// Writes the image as a PNG into the directory named by BAGI_TEST_SCREENSHOT_DIR, when it is set (for a look at what the test drew)
         void MaybeSavePng(const PixelBuffer& image, const char* name) {
             const char* directory = std::getenv(kScreenshotDirVariable);
@@ -74,7 +65,7 @@ namespace BECore::Tests {
             SDL_Surface* surface = SDL_CreateSurfaceFrom(static_cast<int>(image.width), static_cast<int>(image.height), SDL_PIXELFORMAT_RGBA32, const_cast<uint8_t*>(image.rgba.data()),
                                                          static_cast<int>(image.width * 4));
             if (surface != nullptr) {
-                const String path = String(directory) + "/" + name + ".png";
+                const String path = Format("{}/{}.png", directory, name);
                 IMG_SavePNG(surface, path.c_str());
                 SDL_DestroySurface(surface);
             }
@@ -118,16 +109,7 @@ namespace BECore::Tests {
         }
 
         IntrusivePtr<RmlUiDocumentComponent> Load(const RmlUiScreens::Screen& screen) {
-            XmlDeserializer deserializer;
-            EXPECT_TRUE(deserializer.LoadFromString(RmlUiScreens::SceneXml(screen)));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            _manager->Initialize();
-            _manager->SetActiveScene("S"_intern);
-            auto doc = _manager->GetSceneByName("S"_intern)->GetRootNode().GetChildren()[0]->GetComponent<RmlUiDocumentComponent>();
-            EXPECT_TRUE(doc);
-            EXPECT_TRUE(doc && doc->SetMarkup(String(screen.rml)));
-            return doc;
+            return RmlUiScreens::LoadScreen(_manager, screen);
         }
 
         /// Draws the frame and presents it; returns what was on the back buffer
@@ -172,23 +154,20 @@ namespace BECore::Tests {
         EXPECT_GT(bright, 100u) << "full coverage of a glyph comes out white, so the premultiplied glyph texture was undone right";
     }
 
-    TEST_F(RmlUiSdlTest, TheHudsAreDrawn) {
-        for (size_t i = 1; i < std::size(RmlUiScreens::kScreens); ++i) {
-            const RmlUiScreens::Screen& screen = RmlUiScreens::kScreens[i];
-            auto doc = Load(screen);
-            CoreManager::GetUIVars().Set("score"_intern, 1280);
-            CoreManager::GetUIVars().Set("seed"_intern, 1337);
+    TEST_F(RmlUiSdlTest, TheHudIsDrawn) {
+        const RmlUiScreens::Screen& screen = RmlUiScreens::kScreens[1];
+        auto doc = Load(screen);
+        CoreManager::GetUIVars().Set("score"_intern, 1280);
+        CoreManager::GetUIVars().Set("seed"_intern, 1337);
 
-            const PixelBuffer image = DrawFrame();
-            MaybeSavePng(image, "rmlui-game-hud");
+        const PixelBuffer image = DrawFrame();
+        MaybeSavePng(image, "rmlui-game-hud");
 
-            ASSERT_FALSE(image.rgba.empty());
-            const Rect reset = BoxOf(*doc, "Reset");
-            EXPECT_TRUE(IsNear(PixelAt(image, static_cast<int>(reset.x) + 5, static_cast<int>(reset.y + reset.h * 0.5f)), {40, 90, 60, 255}, kBlendTolerance)) << screen.name;
-            const Rect first = BoxOf(*doc, screen.ids[0]);
-            EXPECT_GT(CountInk(image, first), 50u) << screen.name << " " << screen.ids[0] << ": the text is drawn from the variables";
-            _manager.Reset();
-        }
+        ASSERT_FALSE(image.rgba.empty());
+        const Rect reset = BoxOf(*doc, "Reset");
+        EXPECT_TRUE(IsNear(PixelAt(image, static_cast<int>(reset.x) + 5, static_cast<int>(reset.y + reset.h * 0.5f)), {40, 90, 60, 255}, kBlendTolerance));
+        const Rect first = BoxOf(*doc, screen.ids[0]);
+        EXPECT_GT(CountInk(image, first), 50u) << screen.ids[0] << ": the text is drawn from the variables";
     }
 
     TEST_F(RmlUiSdlTest, ATranslucentBoxBlendsLikeAnEngineRect) {

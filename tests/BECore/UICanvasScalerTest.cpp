@@ -1,4 +1,5 @@
 #include <BECore/UI/UICanvasScaler.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -6,13 +7,6 @@ namespace BECore::Tests {
     namespace {
 
         constexpr float kTolerance = 1e-3f;
-
-        void ExpectRect(const Rect& rect, float x, float y, float w, float h) {
-            EXPECT_NEAR(rect.x, x, kTolerance);
-            EXPECT_NEAR(rect.y, y, kTolerance);
-            EXPECT_NEAR(rect.w, w, kTolerance);
-            EXPECT_NEAR(rect.h, h, kTolerance);
-        }
 
         UILayoutContext Output(float width, float height) {
             UILayoutContext context;
@@ -308,7 +302,7 @@ namespace BECore::Tests {
         ExpectRect(resolved.contentBounds, -380.0f, 0.0f, 1760.0f, 1000.0f);
     }
 
-    TEST(UICanvasScalerTest, WithoutTheFlagTheNumbersAreTheOldOnes) {
+    TEST(UICanvasScalerTest, WithoutTheFlagTheCanvasIsTheSceneViewAndTheSafeAreaIsClippedToIt) {
         UILayoutContext context = ViewInOutput(1000.0f, 1000.0f, 2000.0f, 1000.0f);
         context.safeArea = {0.0f, 100.0f, 2000.0f, 900.0f};
 
@@ -399,27 +393,21 @@ namespace BECore::Tests {
         const UILayoutContext base = Output(1280.0f, 720.0f);
         EXPECT_TRUE(base == Output(1280.0f, 720.0f));
 
-        UILayoutContext changed = base;
-        changed.outputWidth = 1281.0f;
-        EXPECT_FALSE(base == changed);
-        changed = base;
-        changed.pixelDensity = 2.0f;
-        EXPECT_FALSE(base == changed);
-        changed = base;
-        changed.displayScale = 2.0f;
-        EXPECT_FALSE(base == changed);
-        changed = base;
-        changed.safeArea.y = 1.0f;
-        EXPECT_FALSE(base == changed);
-        changed = base;
-        changed.userScale = 1.5f;
-        EXPECT_FALSE(base == changed);
-        changed = base;
-        changed.sceneViewHeight = 5.0f;
-        EXPECT_FALSE(base == changed);
-        changed = base;
-        changed.worldBox.w = 5.0f;
-        EXPECT_FALSE(base == changed);
+        // Each change of one field, or of one component of a rect, must make the contexts differ
+        const auto changes = {
+            +[](UILayoutContext& c) { c.outputWidth += 1.0f; },   +[](UILayoutContext& c) { c.outputHeight += 1.0f; },   +[](UILayoutContext& c) { c.pixelDensity = 2.0f; },
+            +[](UILayoutContext& c) { c.displayScale = 2.0f; },   +[](UILayoutContext& c) { c.safeArea.x = 1.0f; },      +[](UILayoutContext& c) { c.safeArea.y = 1.0f; },
+            +[](UILayoutContext& c) { c.safeArea.w = 1.0f; },     +[](UILayoutContext& c) { c.safeArea.h = 1.0f; },      +[](UILayoutContext& c) { c.userScale = 1.5f; },
+            +[](UILayoutContext& c) { c.sceneViewWidth = 5.0f; }, +[](UILayoutContext& c) { c.sceneViewHeight = 5.0f; }, +[](UILayoutContext& c) { c.worldBox.x = 5.0f; },
+            +[](UILayoutContext& c) { c.worldBox.y = 5.0f; },     +[](UILayoutContext& c) { c.worldBox.w = 5.0f; },      +[](UILayoutContext& c) { c.worldBox.h = 5.0f; },
+        };
+        size_t index = 0;
+        for (void (*change)(UILayoutContext&) : changes) {
+            UILayoutContext changed = base;
+            change(changed);
+            EXPECT_FALSE(base == changed) << "change " << index;
+            ++index;
+        }
     }
 
 }  // namespace BECore::Tests

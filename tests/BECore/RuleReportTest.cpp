@@ -60,24 +60,6 @@ namespace BECore::Tests {
             return MakeInteractionTable(Span<const size_t>(order), splash);
         }
 
-        /// The combo table of `RuleTableTest`: rules #0 and #1, #2 and #3 are mirror pairs, #4 is its own mirror.
-        RuleTable<String> MakeComboTable() {
-            const TagTree tags = BakedTags({"special"});
-            Vector<RuleAxis> axes;
-            for (const StringView name : {"first", "second"}) {
-                RuleAxis axis = MakeNamedAxis(name, {"bomb", "color_bomb", "rocket", "gem"}, tags);
-                for (const StringView special : {"bomb", "color_bomb", "rocket"}) {
-                    EXPECT_TRUE(axis.SetTags(special, {"special"}).has_value());
-                }
-                axes.push_back(std::move(axis));
-            }
-            RuleTable<String> table(std::move(axes));
-            EXPECT_TRUE(table.AddSymmetric("tag:special", "color_bomb", "clear_all", "combo:1").has_value());
-            EXPECT_TRUE(table.AddSymmetric("bomb", "color_bomb", "super", "combo:2").has_value());
-            EXPECT_TRUE(table.AddSymmetric("tag:special", "tag:special", "merge", "combo:3").has_value());
-            return table;
-        }
-
         Vector<String> SplitLines(const String& text) {
             Vector<String> lines;
             size_t begin = 0;

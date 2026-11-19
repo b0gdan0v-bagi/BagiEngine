@@ -1,5 +1,6 @@
 #include <BECore/RuleTestSupport.h>
 #include <BECore/Rules/RuleBaker.h>
+#include <Common/TestText.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -22,10 +23,6 @@ namespace BECore::Tests {
                 classes.push_back(rule == kNoRule ? kUnset : rules[rule].valueClass);
             }
             return classes;
-        }
-
-        bool Contains(const String& text, StringView part) {
-            return text.find(String(part)) != String::npos;
         }
 
         /// One axis whose values are the tags of `match`, `match.3`, `match.3.h`, `match.4`, `other` (ids 0 to 4).

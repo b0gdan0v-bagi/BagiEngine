@@ -11,7 +11,7 @@ namespace BECore::Tests {
         public:
             AttributeCase(StringView text, bool strict) {
                 _deserializer.SetStrictValues(strict);
-                const String xml = "<root a=\"" + String(text.data(), text.size()) + "\"/>";
+                const String xml = Format("<root a=\"{}\"/>", text);
                 EXPECT_TRUE(_deserializer.LoadFromString(StringView(xml)));
             }
 

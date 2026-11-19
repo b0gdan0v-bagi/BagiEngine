@@ -13,9 +13,10 @@
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
+#include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
-#include <Events/SubscriptionHolder.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -74,37 +75,6 @@ namespace BECore::Tests {
         constexpr double kStep = 0.125;  // an exact binary fraction; a frame is clamped to 0.25 s anyway
         constexpr uint8_t kAuthoredAlpha = 200;
 
-        class ActionCounter : public SubscriptionHolder {
-        public:
-            ActionCounter() {
-                Subscribe<InputEvents::ActionEvent, &ActionCounter::OnAction>(this);
-            }
-            int count = 0;
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                count += event.action == "OpacityZero"_intern ? 1 : 0;
-            }
-        };
-
-        SDL_MouseMotionEvent Motion(float x, float y) {
-            SDL_MouseMotionEvent event{};
-            event.type = SDL_EVENT_MOUSE_MOTION;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
     }  // namespace
 
     class UIOpacityTest : public ::testing::Test {
@@ -151,7 +121,7 @@ namespace BECore::Tests {
         UIElement& Get(const char* name) const {
             UIElement* element = _hud->GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
-            return *element;
+            return Require(element);
         }
 
         /// The alpha of the one Rect call of the last frame that has the position and the size of @p name (the elements of the screen differ in size where they share a corner)
@@ -218,11 +188,11 @@ namespace BECore::Tests {
         EXPECT_EQ(AlphaOf("Zero"), 0);
         EXPECT_EQ(_hud->GetLayout().HitTest(rect.x + 5.0f, rect.y + 5.0f), &Get("ZeroButton"));
 
-        ActionCounter actions;
+        ActionLog actions;
         CoreManager::GetUIInput().DispatchMouseMotion(Motion(rect.x + 5.0f, rect.y + 5.0f));
         CoreManager::GetUIInput().DispatchMouseButtonDown(Button(rect.x + 5.0f, rect.y + 5.0f, true));
         CoreManager::GetUIInput().DispatchMouseButtonUp(Button(rect.x + 5.0f, rect.y + 5.0f, false));
-        EXPECT_EQ(actions.count, 1);
+        EXPECT_EQ(actions.Count("OpacityZero"), 1u);
     }
 
     TEST_F(UIOpacityTest, TheTooltipPlateIsNotFadedByTheCanvas) {

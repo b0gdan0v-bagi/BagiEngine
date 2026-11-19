@@ -1,5 +1,6 @@
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -41,18 +42,18 @@ namespace BECore::Tests {
 
         Draw(renderer, large, largeIndices);
         Draw(renderer, small, smallIndices);
-        const GeometryVertex* const firstVertices = renderer.calls[0].vertices.data();
-        const GeometryVertex* const secondVertices = renderer.calls[1].vertices.data();
-        const int* const firstIndices = renderer.calls[0].indices.data();
+        const GeometryVertex* const firstVertices = At(renderer.calls, 0).vertices.data();
+        const GeometryVertex* const secondVertices = At(renderer.calls, 1).vertices.data();
+        const int* const firstIndices = At(renderer.calls, 0).indices.data();
 
         renderer.ClearCalls();
         Draw(renderer, large, largeIndices);
         Draw(renderer, small, smallIndices);
 
         ASSERT_EQ(renderer.calls.size(), 2u);
-        EXPECT_EQ(renderer.calls[0].vertices.data(), firstVertices);
-        EXPECT_EQ(renderer.calls[1].vertices.data(), secondVertices);
-        EXPECT_EQ(renderer.calls[0].indices.data(), firstIndices);
+        EXPECT_EQ(At(renderer.calls, 0).vertices.data(), firstVertices);
+        EXPECT_EQ(At(renderer.calls, 1).vertices.data(), secondVertices);
+        EXPECT_EQ(At(renderer.calls, 0).indices.data(), firstIndices);
     }
 
     TEST(RecordingRendererTest, ReusedStorageHoldsOnlyTheGeometryOfTheNewDraw) {
@@ -63,7 +64,7 @@ namespace BECore::Tests {
         Draw(renderer, MakeVertices(kSmallVertexCount, 2.0f), MakeIndices(kSmallVertexCount));
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        const DrawCall& call = renderer.calls[0];
+        const DrawCall& call = At(renderer.calls, 0);
         EXPECT_EQ(call.kind, DrawKind::Geometry);
         ASSERT_EQ(call.vertices.size(), kSmallVertexCount);
         EXPECT_EQ(call.indices.size(), kSmallVertexCount);

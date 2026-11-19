@@ -1,15 +1,13 @@
 // The corpus of every fuzz target replayed, then mutated by the deterministic mutator: the part of fuzzing that runs in every build and on
-// every platform. The long runs are libFuzzer (tests/Fuzz/CLAUDE.md).
+// every platform. The everyday run only replays; the mutations need BAGI_FUZZ_ITERATIONS, which the ctest entry BagiFuzzMutations (label
+// extended) sets. The long runs are libFuzzer (tests/Fuzz/CLAUDE.md).
 
+#include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Fuzz/FuzzChecks.h>
 #include <Fuzz/FuzzMutator.h>
 #include <Fuzz/FuzzSeeds.h>
 #include <Fuzz/FuzzTargets.h>
-
-// Defined by the generated source of BagiEngineTestSupport (be_link_content_roots): no ordinary source names the checkout path
-namespace BagiContentRoots {
-    extern const char* const kEngine;
-}  // namespace BagiContentRoots
 
 namespace BECore::Tests {
 
@@ -19,14 +17,8 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// Mutations per target in an ordinary run: about two seconds in a Debug build for a target of cost weight 1 (BAGI_FUZZ_ITERATIONS=<n> replaces it)
-        constexpr uint64_t kDefaultIterations = 50000;
-
         /// The seed of the generator; mixed with the name of the target so the targets do not mutate the same way
         constexpr uint64_t kReplaySeed = 0x42414749465A5A31ull;
-
-        constexpr uint64_t kFnvOffset = 0xCBF29CE484222325ull;
-        constexpr uint64_t kFnvPrime = 0x100000001B3ull;
 
         /// Most mutations stacked on one seed
         constexpr uint32_t kMaxStackedMutations = 3;
@@ -41,25 +33,26 @@ namespace BECore::Tests {
             FuzzBytes bytes;
         };
 
-        /// BAGI_FUZZ_ITERATIONS as it is for every target; without it the default count, shorter for a target whose input costs more
+        /// BAGI_FUZZ_ITERATIONS divided by the cost weight, so a target whose input costs more takes about the same time; none without it
+        /// (or when it is not a number): the mutations belong to the extended run, the replay of the corpus to every run
         uint64_t IterationCount(const FuzzTarget& target) {
-            const uint64_t byDefault = kDefaultIterations / std::max<uint32_t>(target.costWeight, 1);
             const char* text = std::getenv("BAGI_FUZZ_ITERATIONS");
             if (text == nullptr || *text == '\0') {
-                return byDefault;
+                return 0;
             }
             uint64_t value = 0;
             const char* end = text + std::strlen(text);
             const auto result = std::from_chars(text, end, value);
-            return (result.ec == std::errc() && result.ptr == end) ? value : byDefault;
+            if (result.ec != std::errc() || result.ptr != end) {
+                return 0;
+            }
+            return value / std::max<uint32_t>(target.costWeight, 1);
         }
 
         uint64_t HashName(StringView name) {
-            uint64_t value = kFnvOffset;
-            for (const char symbol : name) {
-                value = (value ^ static_cast<uint8_t>(symbol)) * kFnvPrime;
-            }
-            return value;
+            Fuzz::FuzzDigest digest;
+            digest.AddBytes(name.data(), name.size());
+            return digest.Value();
         }
 
         /// The files of a corpus folder in the order of their names (the order of a directory listing is not defined)

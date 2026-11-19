@@ -1,5 +1,6 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/PropertyVisitorDispatch.h>
+#include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
@@ -19,6 +20,8 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -133,13 +136,10 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class UIThemeResolveTest : public ::testing::Test {
+    class UIThemeResolveTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
+            UISceneFixture::SetUp();
             UIThemes& themes = CoreManager::GetUIThemes();
             themes.Set("light"_intern, "panel", kLightPanel);
             themes.Set("light"_intern, "hover", kLightHover);
@@ -151,36 +151,14 @@ namespace BECore::Tests {
             themes.Set("dark"_intern, "shadow", kDarkShadow);
 
             CoreManager::GetUIVars().Set("barValue"_intern, 0.5f);
-            CoreManager::GetUIVars().Set("switchOn"_intern, 0);
 
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kThemeScreenXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kThemeScreenXml));
             ASSERT_TRUE(_canvas);
         }
 
         void TearDown() override {
             CoreManager::GetUIThemes().Clear();
-            CoreManager::GetUIVars().Clear();
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
+            UISceneFixture::TearDown();
         }
 
         template <typename T = UIElement>
@@ -189,7 +167,7 @@ namespace BECore::Tests {
             EXPECT_NE(element, nullptr) << name;
             T* typed = element ? element->Cast<T>() : nullptr;
             EXPECT_NE(typed, nullptr) << name << " is not the expected type";
-            return *typed;
+            return Require(typed);
         }
 
         /// The colour of the rect the last draw filled at (@p x, @p y); the alpha 0 colour when none was
@@ -210,10 +188,6 @@ namespace BECore::Tests {
         static void ExpectColor(const Color& actual, const Color& expected) {
             EXPECT_TRUE(ColorsEqual(actual, expected)) << "got " << int(actual.r) << "," << int(actual.g) << "," << int(actual.b) << "," << int(actual.a);
         }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
     };
 
     TEST_F(UIThemeResolveTest, ATokenFillIsDrawnInTheCurrentThemeAndFollowsASwitch) {
@@ -411,10 +385,10 @@ namespace BECore::Tests {
         EXPECT_EQ(element.color.g, GreenEditor::kEditedGreen) << "the edit survives the resolve";
     }
 
-    TEST_F(UIThemeResolveTest, ThePartsOfAProgressBarAndAToggleFollowASwitch) {
+    TEST_F(UIThemeResolveTest, ThePartsOfAProgressBarAndASwitchFollowTheTheme) {
         Draw();
         EXPECT_TRUE(HasFill(kLightHover)) << "the filled part of the bar";
-        EXPECT_TRUE(HasFill(kLightLine)) << "the thumb of the toggle";
+        EXPECT_TRUE(HasFill(kLightLine)) << "the thumb of the switch";
         EXPECT_FALSE(HasFill(kDarkHover));
         EXPECT_FALSE(HasFill(kDarkLine));
 
@@ -449,12 +423,12 @@ namespace BECore::Tests {
 
         template <typename C>
         ColorField OfComponent(const char* attribute, UIColor C::* member) {
-            return {attribute, "", [member](UIElement& element) -> const Color& { return element.GetComponent<C>()->*member; }};
+            return {attribute, "", [member](UIElement& element) -> const Color& { return Require(element.GetComponent<C>()).*member; }};
         }
 
         template <typename C>
         ColorField EffectOfComponent(const char* attribute, const char* prefix, UIColor UITextEffects::* member) {
-            return {attribute, prefix, [member](UIElement& element) -> const Color& { return element.GetComponent<C>()->textEffects.*member; }};
+            return {attribute, prefix, [member](UIElement& element) -> const Color& { return Require(element.GetComponent<C>()).textEffects.*member; }};
         }
 
         // The attributes of every element: its fills and the colours of its box
@@ -477,7 +451,8 @@ namespace BECore::Tests {
             return first;
         }
 
-        // THE LIST OF COLOUR FIELDS: a control that gets a new UIColor field (or a new UIBoxStyle / UITextEffects colour) and forgets to resolve it fails only if the field is added here
+        // THE LIST OF COLOUR FIELDS. A UIColor field of a control or a component that is not here fails TheListNamesEveryColourFieldOfTheControls; a new colour inside
+        // UIBoxStyle or UITextEffects (opaque to the type registry) is checked only once it is added here
         Vector<ControlColors> AllControlColors() {
             return {
                 {"UIElement", nullptr, ElementColors()},
@@ -561,6 +536,42 @@ namespace BECore::Tests {
             }
         }
         EXPECT_TRUE(themes.GetMissing().empty());
+    }
+
+    TEST_F(UIThemeResolveTest, TheListNamesEveryColourFieldOfTheControls) {
+        Vector<String> listed;
+        for (const ControlColors& control : AllControlColors()) {
+            for (const ColorField& field : control.fields) {
+                listed.push_back(Format("{}.{}", control.component ? control.component : control.type, field.attribute));
+            }
+        }
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        String missing;
+        size_t found = 0;
+        for (const uint64_t baseHash : {UIElement::GetStaticTypeMeta().typeHash, UIComponent::GetStaticTypeMeta().typeHash}) {
+            const TypeInfo* base = registry.Find(baseHash);
+            ASSERT_NE(base, nullptr);
+            Vector<const TypeInfo*> types = registry.Derived(*base, true);
+            types.push_back(base);
+            for (const TypeInfo* type : types) {
+                // The probes of UIComponentTest are no control: their colour is a mark that test reads, never a themed look
+                if (type->Name() == "UITestProbe" || type->Name() == "UITestOther") {
+                    continue;
+                }
+                for (const FieldRef& ref : registry.AllFields(*type)) {
+                    if (ref.owner != type || !SameType(*ref.field->type, DescribeType<UIColor>())) {
+                        continue;  // a parent's field is counted at the parent
+                    }
+                    ++found;
+                    const String name = Format("{}.{}", type->Name(), ref.field->name);
+                    if (std::find(listed.begin(), listed.end(), name) == listed.end()) {
+                        missing += Format("{} ", name);
+                    }
+                }
+            }
+        }
+        EXPECT_GT(found, 20u) << "the walk found the colour fields at all";
+        EXPECT_TRUE(missing.empty()) << "colour fields the list does not resolve: " << missing.c_str();
     }
 
 }  // namespace BECore::Tests

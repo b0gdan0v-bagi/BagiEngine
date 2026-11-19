@@ -1,5 +1,5 @@
-#include <BECore/Rooms/ManualClock.h>
 #include <BECore/Rooms/RoomTableDriver.h>
+#include <BECore/Rooms/RoomTestTimings.h>
 #include <BECore/Rooms/TestRandom.h>
 #include <RoomServer/DemoCardGame.h>
 #include <RoomServer/RoomWebSocketServer.h>
@@ -28,7 +28,7 @@ namespace BECore::Tests {
         RoomServerSettings MakeSettings() {
             RoomServerSettings settings;
             settings.tickInterval = 10ms;
-            settings.hub.timings = RoomTimings{30s, 10min, 0ms};
+            settings.hub.timings = NoComputerDelayTimings();
             // A client that only writes bytes would be pinged and dropped; the liveness rule has its own tests
             settings.pingInterval = 0ms;
             settings.random = MakeSequence(7);
@@ -87,7 +87,7 @@ namespace BECore::Tests {
             void ExpectTheTableFinishes(Clients& table) {
                 ASSERT_TRUE(PlayToTheEnd(table)) << "the hand of the good table did not finish";
                 for (const auto& client : table) {
-                    ExpectAllTwelveCardsPlayed(*client);
+                    ExpectEveryCardPlayed(*client);
                     EXPECT_EQ(CountOf(*client, RoomMessageTypes::kError), 0u);
                 }
                 ExpectCleanWire(table);
@@ -265,7 +265,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(OpenTable(port, "cards", kHumansOfAPair, table));
         const String realCode = table[0]->roomCode;
 
-        // Each socket has its own 5 guesses; the address has 8 in all
+        // Each socket has its own guesses; the address has a smaller budget in all
         int wrong = 0;
         int refused = 0;
         for (int socket = 0; socket < kGuessers; ++socket) {

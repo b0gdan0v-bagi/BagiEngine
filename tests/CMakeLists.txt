@@ -27,6 +27,17 @@ add_subdirectory(Fuzz)
 
 be_add_game_tests(BagiEngineTests SOURCES ${TESTS_SOURCES} LINK RemoteControlModule RoomsModule RoomClientModule RoomServerModule RuntimeModule BagiFuzzTargets)
 
+# The FuzzCorpus cases of the shards only replay the corpus; this entry runs them again with the mutations (tests/Fuzz/CLAUDE.md). 50000 per target
+# of cost weight 1 is about 2 s in Debug; the targets run one after the other in this one process.
+# A filter that matches nothing (a renamed instantiation) exits 0, and the vendored gtest has no --gtest_fail_if_no_test_selected: the
+# count line fails it instead. FAIL_, not PASS_REGULAR_EXPRESSION, which would stop ctest from reading the exit code.
+add_test(NAME BagiFuzzMutations COMMAND BagiEngineTests --gtest_filter=FuzzCorpus/* --gtest_brief=1)
+set_tests_properties(BagiFuzzMutations PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    FAIL_REGULAR_EXPRESSION "\\] 0 tests from 0 test suites ran"
+    ENVIRONMENT "BAGI_FUZZ_ITERATIONS=50000"
+    LABELS extended)
+
 # VulkanSwapchainPolicy.h is header only (<vulkan/vulkan.h>, BECore's EnumUtils.h for SwapchainStatus and
 # SwapchainRecreateResult, and the standard library), so the test needs the headers and the include path but not
 # VulkanModule: its loader library is not deployed next to the test executable (BagiEngineTests links BECore).
@@ -61,7 +72,7 @@ if(Python3_FOUND)
     # 4 compiles at once, so no RUN_SERIAL (it would stop the other slots while it waits and runs).
     set(HEADERS_STANDALONE_EXCLUDE)
     if(NOT ENGINE_UI_RMLUI)
-        set(HEADERS_STANDALONE_EXCLUDE --exclude src/Modules/RmlUiHost)
+        set(HEADERS_STANDALONE_EXCLUDE --exclude src/Modules/RmlUiHost --exclude tests/RmlUiHost)
     endif()
     add_test(NAME BagiHeadersStandalone
         COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_headers.py --root ${BAGI_ENGINE_DIR} --build ${CMAKE_BINARY_DIR}
@@ -69,6 +80,8 @@ if(Python3_FOUND)
     set_tests_properties(BagiHeadersStandalone PROPERTIES
         SKIP_RETURN_CODE 77
         TIMEOUT 1800)  # it compiles every header beside the other tests: only a hang may end it
+    # The hygiene checks read the whole tree and none of them tests behaviour: the full run (<preset>-all) has them, the everyday one does not
+    set_tests_properties(BagiThirdPartyNotices BagiIncludeStyle BagiPoolStrings BagiTypesCheck BagiHeadersStandalone PROPERTIES LABELS extended)
 endif()
 
 # A real TLS handshake of the platform's backend against local servers: tls_local_check.py starts a Python `ssl` WebSocket echo server
@@ -79,5 +92,6 @@ if(Python3_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/BECore/Tls/tls_local_check.py --exe $<TARGET_FILE:BagiEngineTests>)
     set_tests_properties(BagiTlsLocalEndpoint PROPERTIES
         SKIP_RETURN_CODE 77
-        TIMEOUT 120)
+        TIMEOUT 120
+        LABELS extended)
 endif()

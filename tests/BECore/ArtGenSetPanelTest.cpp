@@ -1,6 +1,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
@@ -83,7 +84,10 @@ namespace BECore::Tests {
         }
 
         static ImGuiID HostId() {
-            return ImGui::FindWindowByName(kHostName)->ID;
+            // ImGuiWindow has no default constructor, so Require() cannot stand in for it
+            const ImGuiWindow* host = ImGui::FindWindowByName(kHostName);
+            EXPECT_NE(host, nullptr);
+            return host != nullptr ? host->ID : 0;
         }
 
         /// The id of the first row's Subject field
@@ -181,7 +185,7 @@ namespace BECore::Tests {
         }
 
         const ArtGenSetJob& JobOf(const char* job) {
-            return *FindJob(*session.FindSet("chess"), job);
+            return Require(FindJob(Require(session.FindSet("chess")), job));
         }
 
         /// A point of the screen over the control @p id: the mouse is moved over a grid until ImGui says it is over it
@@ -277,12 +281,12 @@ namespace BECore::Tests {
         // Retry belongs to the selected set: the newer one has nothing to retry
         ClickAt(Locate(RetryId()));
         ASSERT_NE(session.FindSet("older"), nullptr);
-        EXPECT_EQ(session.FindSet("older")->jobs[0].state, ArtGenSetJobState::Failed);
+        EXPECT_EQ(Require(session.FindSet("older")).jobs[0].state, ArtGenSetJobState::Failed);
 
         ClickAt(Locate(SetEntryId("older")));
         Frame();
         ClickAt(Locate(RetryId()));
-        EXPECT_EQ(session.FindSet("older")->jobs[0].state, ArtGenSetJobState::Pending);
+        EXPECT_EQ(Require(session.FindSet("older")).jobs[0].state, ArtGenSetJobState::Pending);
     }
 
     TEST_F(ArtGenSetPanelTest, AQueuedSetIsSelected) {
@@ -296,7 +300,7 @@ namespace BECore::Tests {
 
         // The new set has a job waiting: its Cancel set is on, the older set's is off
         ClickAt(Locate(ImHashStr(ICON_LC_X " Cancel set", 0, HostId())));
-        EXPECT_EQ(session.FindSet(StringView(queued))->jobs[0].state, ArtGenSetJobState::Cancelled);
+        EXPECT_EQ(Require(session.FindSet(StringView(queued))).jobs[0].state, ArtGenSetJobState::Cancelled);
     }
 
     TEST_F(ArtGenSetPanelTest, MoreVariantsIsOffWhileTheSetRunsAndAClickDoesNothing) {
@@ -340,8 +344,8 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadSets({set}));
 
         ClickAt(Locate(MoreVariantsId()));
-        EXPECT_FALSE(FindJob(*session.FindSet("chess"), "queen")->more.has_value());
-        EXPECT_EQ(FindJob(*session.FindSet("chess"), "queen")->state, ArtGenSetJobState::Done);
+        EXPECT_FALSE(Require(FindJob(Require(session.FindSet("chess")), "queen")).more.has_value());
+        EXPECT_EQ(Require(FindJob(Require(session.FindSet("chess")), "queen")).state, ArtGenSetJobState::Done);
     }
 
     TEST_F(ArtGenSetPanelTest, MoreVariantsOfAFinishedSetQueuesTheRowsThatAreNotKept) {

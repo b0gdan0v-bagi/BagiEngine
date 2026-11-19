@@ -10,6 +10,7 @@
 #include <BECore/Scene/SceneDrawSystem.h>
 #include <BECore/Scene/SceneRenderData.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Generated/SceneDrawSystemTest.gen.hpp>
 #include <entt/entt.hpp>
 #include <gtest/gtest.h>
@@ -304,8 +305,8 @@ namespace BECore::Tests {
         // The sprite is first in the scene, the quad on layer -1 is drawn before it
         EXPECT_EQ(ids, (Vector<float>{2.0f, 1.0f}));
         ASSERT_EQ(_renderer->calls.size(), 2u);
-        EXPECT_EQ(_renderer->calls[0].kind, DrawKind::Rect);
-        EXPECT_EQ(_renderer->calls[1].kind, DrawKind::Texture);
+        EXPECT_EQ(At(_renderer->calls, 0).kind, DrawKind::Rect);
+        EXPECT_EQ(At(_renderer->calls, 1).kind, DrawKind::Texture);
     }
 
     TEST_F(SceneDrawSystemTest, ANodeWithNothingSetMakesThePlainCallsWithAlphaBlend) {
@@ -315,10 +316,10 @@ namespace BECore::Tests {
         Draw();
 
         ASSERT_EQ(_renderer->calls.size(), 2u);
-        EXPECT_EQ(_renderer->calls[0].kind, DrawKind::Rect);
-        EXPECT_EQ(_renderer->calls[0].blend, BlendMode::Alpha);
-        EXPECT_EQ(_renderer->calls[1].kind, DrawKind::Texture);
-        EXPECT_EQ(_renderer->calls[1].blend, BlendMode::Alpha);
+        EXPECT_EQ(At(_renderer->calls, 0).kind, DrawKind::Rect);
+        EXPECT_EQ(At(_renderer->calls, 0).blend, BlendMode::Alpha);
+        EXPECT_EQ(At(_renderer->calls, 1).kind, DrawKind::Texture);
+        EXPECT_EQ(At(_renderer->calls, 1).blend, BlendMode::Alpha);
         EXPECT_EQ(_renderer->GetBlendMode(), BlendMode::Alpha);
     }
 
@@ -328,7 +329,7 @@ namespace BECore::Tests {
         Draw();
 
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        const DrawCall& call = _renderer->calls[0];
+        const DrawCall& call = At(_renderer->calls, 0);
         EXPECT_EQ(call.kind, DrawKind::Geometry);
         EXPECT_EQ(call.texture, nullptr);
         ASSERT_EQ(call.vertices.size(), 4u);
@@ -346,7 +347,7 @@ namespace BECore::Tests {
         Draw();
 
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        const DrawCall& call = _renderer->calls[0];
+        const DrawCall& call = At(_renderer->calls, 0);
         ASSERT_EQ(call.vertices.size(), 4u);
         ExpectCorner(call.vertices[0], 10.0f, 20.0f);
         ExpectCorner(call.vertices[1], 10.0f, 120.0f);
@@ -357,15 +358,16 @@ namespace BECore::Tests {
     TEST_F(SceneDrawSystemTest, ARotatedContainSpriteTurnsAboutThePivotOfTheNodeNotOfTheFittedRect) {
         // A square texture in a 100 x 50 node: the fitted rect is (25, 0, 50, 50)
         auto node = AddSprite(kQuarterTurn);
-        node->GetComponent<SpriteRendererComponent>()->_fit = SpriteFit::Contain;
+        Require(node->GetComponent<SpriteRendererComponent>())._fit = SpriteFit::Contain;
         auto transform = node->GetComponent<TransformComponent>();
+        ASSERT_TRUE(transform);
         transform->_pivotX = 0.0f;
         transform->_pivotY = 0.0f;
 
         Draw();
 
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        const DrawCall& call = _renderer->calls[0];
+        const DrawCall& call = At(_renderer->calls, 0);
         EXPECT_EQ(call.kind, DrawKind::Geometry);
         EXPECT_NE(call.texture, nullptr);
         ASSERT_EQ(call.vertices.size(), 4u);
@@ -378,12 +380,12 @@ namespace BECore::Tests {
 
     TEST_F(SceneDrawSystemTest, ARotatedContainSpriteTurnsAboutTheCenterOfTheNodeByDefault) {
         auto node = AddSprite(kQuarterTurn);
-        node->GetComponent<SpriteRendererComponent>()->_fit = SpriteFit::Contain;
+        Require(node->GetComponent<SpriteRendererComponent>())._fit = SpriteFit::Contain;
 
         Draw();
 
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        const DrawCall& call = _renderer->calls[0];
+        const DrawCall& call = At(_renderer->calls, 0);
         ASSERT_EQ(call.vertices.size(), 4u);
         // The center of the node (50, 25) is the center of the fitted square (25, 0, 50, 50): a quarter turn about it keeps the square's box
         ExpectCorner(call.vertices[0], 75.0f, 0.0f);
@@ -395,12 +397,13 @@ namespace BECore::Tests {
     TEST_F(SceneDrawSystemTest, AFlippedSpriteSwapsTheUVsAndDrawsAsGeometry) {
         auto node = AddSprite(0.0f);
         auto sprite = node->GetComponent<SpriteRendererComponent>();
+        ASSERT_TRUE(sprite);
         sprite->_flipX = true;
 
         Draw();
 
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        const DrawCall& call = _renderer->calls[0];
+        const DrawCall& call = At(_renderer->calls, 0);
         EXPECT_EQ(call.kind, DrawKind::Geometry);
         ASSERT_EQ(call.vertices.size(), 4u);
         // Not turned: the corners are the node's rect, the left corners show the right edge of the texture
@@ -414,44 +417,44 @@ namespace BECore::Tests {
         sprite->_flipY = true;
         Draw();
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        EXPECT_NEAR(_renderer->calls[0].vertices[0].u, 0.0f, kCornerTolerance);
-        EXPECT_NEAR(_renderer->calls[0].vertices[0].v, 1.0f, kCornerTolerance);
+        EXPECT_NEAR(At(_renderer->calls, 0).vertices[0].u, 0.0f, kCornerTolerance);
+        EXPECT_NEAR(At(_renderer->calls, 0).vertices[0].v, 1.0f, kCornerTolerance);
     }
 
     TEST_F(SceneDrawSystemTest, TheBlendModeIsOnTheCallOfTheNodeThatAsksForItAndNotOnTheNextOnes) {
         auto additive = AddQuad(*_scene, nullptr, "Additive", 1.0f);
-        additive->GetComponent<QuadRendererComponent>()->_blend = BlendMode::Add;
+        Require(additive->GetComponent<QuadRendererComponent>())._blend = BlendMode::Add;
         // [Quad(Add), Marker]: the OnDraw() of the next component of the same node sees Alpha again
         auto marker = BECore::New<DrawMarkerComponent>();
         marker->marker = kMarkerId;
         additive->AddComponent(marker);
         AddQuad(*_scene, nullptr, "Plain", 2.0f);
         auto spriteNode = AddSprite(0.0f);
-        spriteNode->GetComponent<SpriteRendererComponent>()->_blend = BlendMode::Multiply;
+        Require(spriteNode->GetComponent<SpriteRendererComponent>())._blend = BlendMode::Multiply;
         AddQuad(*_scene, nullptr, "Last", 3.0f);
 
         Draw();
 
         ASSERT_EQ(_renderer->calls.size(), 5u);
-        EXPECT_EQ(_renderer->calls[0].blend, BlendMode::Add);
-        EXPECT_EQ(_renderer->calls[1].rect.x, kMarkerId);
-        EXPECT_EQ(_renderer->calls[1].blend, BlendMode::Alpha);
-        EXPECT_EQ(_renderer->calls[2].blend, BlendMode::Alpha);
-        EXPECT_EQ(_renderer->calls[3].kind, DrawKind::Texture);
-        EXPECT_EQ(_renderer->calls[3].blend, BlendMode::Multiply);
-        EXPECT_EQ(_renderer->calls[4].blend, BlendMode::Alpha);
+        EXPECT_EQ(At(_renderer->calls, 0).blend, BlendMode::Add);
+        EXPECT_EQ(At(_renderer->calls, 1).rect.x, kMarkerId);
+        EXPECT_EQ(At(_renderer->calls, 1).blend, BlendMode::Alpha);
+        EXPECT_EQ(At(_renderer->calls, 2).blend, BlendMode::Alpha);
+        EXPECT_EQ(At(_renderer->calls, 3).kind, DrawKind::Texture);
+        EXPECT_EQ(At(_renderer->calls, 3).blend, BlendMode::Multiply);
+        EXPECT_EQ(At(_renderer->calls, 4).blend, BlendMode::Alpha);
         EXPECT_EQ(_renderer->GetBlendMode(), BlendMode::Alpha);
     }
 
     TEST_F(SceneDrawSystemTest, ARotatedAdditiveQuadHasTheBlendOnItsGeometryCall) {
         auto node = AddTurnedQuad(*_scene, 0.0f, 0.0f, 30.0f);
-        node->GetComponent<QuadRendererComponent>()->_blend = BlendMode::Add;
+        Require(node->GetComponent<QuadRendererComponent>())._blend = BlendMode::Add;
 
         Draw();
 
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        EXPECT_EQ(_renderer->calls[0].kind, DrawKind::Geometry);
-        EXPECT_EQ(_renderer->calls[0].blend, BlendMode::Add);
+        EXPECT_EQ(At(_renderer->calls, 0).kind, DrawKind::Geometry);
+        EXPECT_EQ(At(_renderer->calls, 0).blend, BlendMode::Add);
         EXPECT_EQ(_renderer->GetBlendMode(), BlendMode::Alpha);
     }
 
@@ -459,49 +462,50 @@ namespace BECore::Tests {
         auto node = AddTurnedQuad(*_scene, 0.0f, 0.0f, 0.0f);
         Draw();
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        EXPECT_EQ(_renderer->calls[0].kind, DrawKind::Rect);
+        EXPECT_EQ(At(_renderer->calls, 0).kind, DrawKind::Rect);
 
-        node->GetComponent<TransformComponent>()->_rotation = kQuarterTurn;
+        Require(node->GetComponent<TransformComponent>())._rotation = kQuarterTurn;
         Draw();
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        EXPECT_EQ(_renderer->calls[0].kind, DrawKind::Geometry);
+        EXPECT_EQ(At(_renderer->calls, 0).kind, DrawKind::Geometry);
 
-        node->GetComponent<TransformComponent>()->_rotation = 0.0f;
+        Require(node->GetComponent<TransformComponent>())._rotation = 0.0f;
         Draw();
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        EXPECT_EQ(_renderer->calls[0].kind, DrawKind::Rect);
+        EXPECT_EQ(At(_renderer->calls, 0).kind, DrawKind::Rect);
     }
 
     TEST_F(SceneDrawSystemTest, TheOrderOfDrawIsTheSameForRotatedAndBlendedNodes) {
         auto front = AddTurnedQuad(*_scene, 1.0f, 0.0f, 30.0f);
         front->SetLayer(1);
         auto middle = AddQuad(*_scene, nullptr, "Middle", 2.0f);
-        middle->GetComponent<QuadRendererComponent>()->_blend = BlendMode::Add;
+        Require(middle->GetComponent<QuadRendererComponent>())._blend = BlendMode::Add;
         AddQuad(*_scene, nullptr, "Back", 3.0f, -1);
 
         Draw();
 
         ASSERT_EQ(_renderer->calls.size(), 3u);
-        EXPECT_EQ(_renderer->calls[0].rect.x, 3.0f);
-        EXPECT_EQ(_renderer->calls[1].rect.x, 2.0f);
-        EXPECT_EQ(_renderer->calls[2].kind, DrawKind::Geometry);
+        EXPECT_EQ(At(_renderer->calls, 0).rect.x, 3.0f);
+        EXPECT_EQ(At(_renderer->calls, 1).rect.x, 2.0f);
+        EXPECT_EQ(At(_renderer->calls, 2).kind, DrawKind::Geometry);
     }
 
     TEST_F(SceneDrawSystemTest, AColorChangedBetweenTwoDrawsChangesTheSecondDraw) {
         auto node = AddQuad(*_scene, nullptr, "A", 1.0f);
         auto quad = node->GetComponent<QuadRendererComponent>();
+        ASSERT_TRUE(quad);
         quad->_color = Color{10, 20, 30, 255};
 
         Draw();
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        EXPECT_EQ(_renderer->calls[0].color.r, 10);
+        EXPECT_EQ(At(_renderer->calls, 0).color.r, 10);
 
         quad->_color = Color{200, 100, 50, 255};
         Draw();
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        EXPECT_EQ(_renderer->calls[0].color.r, 200);
-        EXPECT_EQ(_renderer->calls[0].color.g, 100);
-        EXPECT_EQ(_renderer->calls[0].color.b, 50);
+        EXPECT_EQ(At(_renderer->calls, 0).color.r, 200);
+        EXPECT_EQ(At(_renderer->calls, 0).color.g, 100);
+        EXPECT_EQ(At(_renderer->calls, 0).color.b, 50);
     }
 
     TEST_F(SceneDrawSystemTest, AHiddenNodeDrawsNothingAndTheOthersKeepTheirOrder) {
@@ -562,8 +566,8 @@ namespace BECore::Tests {
         auto node = AddQuad(*_scene, nullptr, "A", 1.0f);
         node->SetEditorFlags(EditorFlags::Hidden);
 
-        // The mirror of a hidden node is synced as before, so showing it again needs no extra frame
-        node->GetComponent<TransformComponent>()->_x = 7.0f;
+        // The mirror of a hidden node is still synced, so showing it again needs no extra frame
+        Require(node->GetComponent<TransformComponent>())._x = 7.0f;
         Draw();
         EXPECT_EQ(_scene->GetRegistry().get<TransformData>(node->GetEntity()).x, 7.0f);
 

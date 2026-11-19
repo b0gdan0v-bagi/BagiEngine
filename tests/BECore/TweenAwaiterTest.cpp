@@ -2,6 +2,7 @@
 #include <BECore/Animation/TweenManager.h>
 #include <BECore/Time/Time.h>
 #include <Common/DestroyTally.h>
+#include <Common/Require.h>
 #include <TaskSystem/Task.h>
 #include <chrono>
 #include <gtest/gtest.h>
@@ -119,7 +120,7 @@ namespace BECore::Tests {
 
         EXPECT_EQ(log.order, (Vector<int>{1}));
         ASSERT_EQ(log.results.size(), 1u);
-        EXPECT_EQ(log.results[0], TweenResult::Completed);
+        EXPECT_EQ(At(log.results, 0), TweenResult::Completed);
         EXPECT_TRUE(task.IsDone());
     }
 
@@ -173,7 +174,7 @@ namespace BECore::Tests {
         tweens.Advance(time.GetDeltaTime());
 
         EXPECT_EQ(log.order, (Vector<int>{1}));
-        EXPECT_EQ(log.results[0], TweenResult::Completed);
+        EXPECT_EQ(At(log.results, 0), TweenResult::Completed);
     }
 
     TEST(TweenAwaiterTest, CancelResumesTheWaiterWithCancelled) {
@@ -187,7 +188,7 @@ namespace BECore::Tests {
         handle->Cancel();
 
         EXPECT_EQ(log.order, (Vector<int>{1}));
-        EXPECT_EQ(log.results[0], TweenResult::Cancelled);
+        EXPECT_EQ(At(log.results, 0), TweenResult::Cancelled);
         EXPECT_EQ(events, (Vector<int>{-2}));  // the cancel callback ran, the completion did not
         EXPECT_TRUE(task.IsDone());
     }
@@ -233,7 +234,7 @@ namespace BECore::Tests {
         }  // the destructor cancels the tween and the coroutine continues in there
 
         EXPECT_EQ(log.order, (Vector<int>{1}));
-        EXPECT_EQ(log.results[0], TweenResult::Cancelled);
+        EXPECT_EQ(At(log.results, 0), TweenResult::Cancelled);
     }
 
     TEST(TweenAwaiterTest, AFinishedHandleDoesNotSuspend) {
@@ -256,8 +257,8 @@ namespace BECore::Tests {
         first.Resume();
         second.Resume();  // both run to the end at once, no Advance
         EXPECT_EQ(log.order, (Vector<int>{1, 2}));
-        EXPECT_EQ(log.results[0], TweenResult::Completed);
-        EXPECT_EQ(log.results[1], TweenResult::Cancelled);
+        EXPECT_EQ(At(log.results, 0), TweenResult::Completed);
+        EXPECT_EQ(At(log.results, 1), TweenResult::Cancelled);
     }
 
     TEST(TweenAwaiterTest, ARunningHandleSuspendsAndAnEmptyOneReadsCancelled) {
@@ -280,7 +281,7 @@ namespace BECore::Tests {
         task.Resume();
 
         EXPECT_EQ(log.order, (Vector<int>{1}));
-        EXPECT_EQ(log.results[0], TweenResult::Cancelled);
+        EXPECT_EQ(At(log.results, 0), TweenResult::Cancelled);
     }
 
     TEST(TweenAwaiterTest, ClearNeverResumesAWaiterAndTheFrameIsFreedByDroppingTheTask) {
@@ -418,7 +419,7 @@ namespace BECore::Tests {
 
         EXPECT_EQ(log.order, (Vector<int>{1, 2}));  // the cancelled tween resumed its own waiter inside the cancel
         ASSERT_EQ(log.results.size(), 1u);
-        EXPECT_EQ(log.results[0], TweenResult::Cancelled);
+        EXPECT_EQ(At(log.results, 0), TweenResult::Cancelled);
         EXPECT_TRUE(slow->IsCancelled());
         EXPECT_EQ(tweens.GetActiveCount(), 0u);
     }
@@ -434,7 +435,7 @@ namespace BECore::Tests {
         tweens.Advance(kQuarterSecond);
 
         EXPECT_EQ(log.order, (Vector<int>{1}));
-        EXPECT_EQ(log.results[0], TweenResult::Completed);
+        EXPECT_EQ(At(log.results, 0), TweenResult::Completed);
     }
 
     TEST(TweenAwaiterTest, DelayRunsItsCallbacksLikeATweenWithNoSetter) {
@@ -479,7 +480,7 @@ namespace BECore::Tests {
         tweens.Advance(kQuarterSecond);
 
         EXPECT_EQ(log.order, (Vector<int>{1}));
-        EXPECT_EQ(log.results[0], TweenResult::Completed);
+        EXPECT_EQ(At(log.results, 0), TweenResult::Completed);
     }
 
 }  // namespace BECore::Tests

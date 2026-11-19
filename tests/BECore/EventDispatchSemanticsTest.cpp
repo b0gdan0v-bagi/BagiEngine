@@ -36,57 +36,77 @@ namespace BECore::Tests {
 
     using namespace SemanticsEvents;
 
-    // Every listener writes its id into the log of the test.
-    class Listener : public SubscriptionHolder {
-    public:
-        // Subscribe() and UnsubscribeAll() are protected in SubscriptionHolder; the test drives them directly.
-        using SubscriptionHolder::Subscribe;
-        using SubscriptionHolder::UnsubscribeAll;
+    namespace {
 
-        Listener(int listenerId, Vector<int>& sharedLog) : id(listenerId), log(&sharedLog) {}
+        // Every listener writes its id into the log of the test.
+        class Listener : public SubscriptionHolder {
+        public:
+            // Subscribe() and UnsubscribeAll() are protected in SubscriptionHolder; the test drives them directly.
+            using SubscriptionHolder::Subscribe;
+            using SubscriptionHolder::UnsubscribeAll;
 
-        int id;
-        Vector<int>* log;
-        int pings = 0;
-        int lastCount = 0;
-        double lastRatio = 0.0;
-        String lastLabel;
+            Listener(int listenerId, Vector<int>& sharedLog) : id(listenerId), log(&sharedLog) {}
 
-        void OnPing(const PingEvent&) {
-            ++pings;
-            log->push_back(id);
+            int id;
+            Vector<int>* log;
+            int pings = 0;
+            int lastCount = 0;
+            double lastRatio = 0.0;
+            String lastLabel;
+
+            void OnPing(const PingEvent&) {
+                ++pings;
+                log->push_back(id);
+            }
+
+            void OnPingToo(const PingEvent&) {
+                log->push_back(id + 100);
+            }
+
+            void OnPingWithoutArgument() {
+                log->push_back(id + 200);
+            }
+
+            void OnOther(const OtherEvent&) {
+                log->push_back(id + 300);
+            }
+
+            void OnSum(const SumEvent& e) {
+                lastCount = e.count;
+                lastRatio = e.ratio;
+                lastLabel = e.label;
+            }
+
+            void OnQueued(const QueuedEvent& e) {
+                log->push_back(e.value);
+            }
+        };
+
+        // A free handler: the instance is the first argument, the shape of IComponent::InvokeInActiveScene.
+        void FreeOnPing(Listener* listener, const PingEvent&) {
+            listener->log->push_back(listener->id + 400);
         }
 
-        void OnPingToo(const PingEvent&) {
-            log->push_back(id + 100);
-        }
+        /// Records the value of every QueuedEvent; the event 1 enqueues the event 2 from inside the update
+        struct Chain : SubscriptionHolder {
+            using SubscriptionHolder::Subscribe;
+            Vector<int>* log = nullptr;
 
-        void OnPingWithoutArgument() {
-            log->push_back(id + 200);
-        }
+            void OnQueued(const QueuedEvent& e) {
+                log->push_back(e.value);
+                if (e.value == 1) {
+                    QueuedEvent::Enqueue(2);
+                }
+            }
+        };
 
-        void OnOther(const OtherEvent&) {
-            log->push_back(id + 300);
-        }
-
-        void OnSum(const SumEvent& e) {
-            lastCount = e.count;
-            lastRatio = e.ratio;
-            lastLabel = e.label;
-        }
-
-        void OnQueued(const QueuedEvent& e) {
-            log->push_back(e.value);
-        }
-    };
-
-    // A free handler: the instance is the first argument, the shape of IComponent::InvokeInActiveScene.
-    void FreeOnPing(Listener* listener, const PingEvent&) {
-        listener->log->push_back(listener->id + 400);
-    }
+    }  // namespace
 
     static_assert(std::is_default_constructible_v<PingEvent>);
     static_assert(!std::is_default_constructible_v<SumEvent>);
+    // A connection is bound to the address that subscribed: a holder that could move would call into the object it left once that one died
+    static_assert(!std::is_move_constructible_v<SubscriptionHolder> && !std::is_move_assignable_v<SubscriptionHolder>);
+    static_assert(!std::is_move_constructible_v<Listener>);
 
     TEST(EventDispatchSemanticsTest, CompileTimeChecks) {
         SUCCEED() << "The static_asserts above are the check";
@@ -290,18 +310,6 @@ namespace BECore::Tests {
     }
 
     TEST(EventDispatchSemanticsTest, AnEventEnqueuedByAHandlerDuringUpdateWaitsForTheNextUpdate) {
-        struct Chain : SubscriptionHolder {
-            using SubscriptionHolder::Subscribe;
-            Vector<int>* log = nullptr;
-
-            void OnQueued(const QueuedEvent& e) {
-                log->push_back(e.value);
-                if (e.value == 1) {
-                    QueuedEvent::Enqueue(2);
-                }
-            }
-        };
-
         Vector<int> log;
         Chain chain;
         chain.log = &log;
@@ -350,18 +358,6 @@ namespace BECore::Tests {
     }
 
     TEST(EventDispatchSemanticsTest, TheFirstEnqueueRegistersUpdateInTheQueueRegistryOnce) {
-        struct Chain : SubscriptionHolder {
-            using SubscriptionHolder::Subscribe;
-            Vector<int>* log = nullptr;
-
-            void OnQueued(const QueuedEvent& e) {
-                log->push_back(e.value);
-                if (e.value == 1) {
-                    QueuedEvent::Enqueue(2);
-                }
-            }
-        };
-
         Vector<int> log;
         Chain chain;
         chain.log = &log;
@@ -416,6 +412,12 @@ namespace BECore::Tests {
     };
 
     TEST(EventDispatchSemanticsTest, ATypeEnqueuedForTheFirstTimeByAHandlerDuringUpdateAllIsUpdatedByTheNextUpdateAll) {
+        // A type registers in EventsQueueRegistry at its first Enqueue and stays for the life of the process, so only the first run of the case in a
+        // process sees the registration (`--gtest_repeat` runs it again)
+        static bool ranBefore = false;
+        if (std::exchange(ranBefore, true)) {
+            GTEST_SKIP() << "the burst types registered in an earlier run of this case in this process";
+        }
         BurstListener burst;
         burst.Subscribe<TriggerEvent, &BurstListener::OnTrigger>(&burst);
         burst.Subscribe<TailEvent, &BurstListener::OnTail>(&burst);
@@ -468,24 +470,6 @@ namespace BECore::Tests {
         a.Subscribe<PingEvent, &Listener::OnPing>(&a);
         PingEvent::Emit();
         EXPECT_EQ(log, (Vector<int>{1}));
-    }
-
-    // The defaulted move of SubscriptionHolder moves the connections and leaves them bound to the address that
-    // subscribed, so the moved-to object receives nothing.
-    TEST(EventDispatchSemanticsTest, AMovedHolderKeepsTheConnectionsBoundToTheOriginalInstance) {
-        Vector<int> log;
-        Listener moved(1, log);
-        moved.Subscribe<PingEvent, &Listener::OnPing>(&moved);
-        {
-            Listener target(std::move(moved));
-            PingEvent::Emit();
-            EXPECT_EQ(moved.pings, 1) << "the connection still calls the instance that subscribed";
-            EXPECT_EQ(target.pings, 0);
-        }
-
-        // `target` held the connection and has gone out of scope.
-        PingEvent::Emit();
-        EXPECT_EQ(moved.pings, 1);
     }
 
 }  // namespace BECore::Tests

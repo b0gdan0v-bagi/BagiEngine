@@ -2,12 +2,15 @@
 
 #include <BECore/Format/Format.h>
 #include <BECore/Rooms/FakeSeatedGame.h>
+#include <BECore/Rooms/RoomTestTimings.h>
 #include <BECore/Rooms/TestRandom.h>
+#include <BECore/Rooms/WireJudge.h>
 #include <BECore/Types/Types.h>
 #include <Common/Printers.h>
 #include <Rooms/RoomErrors.h>
 #include <Rooms/RoomHub.h>
 #include <Rooms/RoomProtocol.h>
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -30,6 +33,34 @@ namespace BECore::Tests {
         }
     };
 
+    // What the hub harness's TestClient and the socket tests' RoomSocketClient both read from the messages they received
+
+    [[nodiscard]] inline size_t CountOfType(const Vector<ReceivedMessage>& received, StringView type) {
+        return static_cast<size_t>(std::count_if(received.begin(), received.end(), [type](const ReceivedMessage& message) { return message.type == type; }));
+    }
+
+    /// The last message of @p type, or null
+    [[nodiscard]] inline const ReceivedMessage* LastOfType(const Vector<ReceivedMessage>& received, StringView type) {
+        for (size_t i = received.size(); i > 0; --i) {
+            if (received[i - 1].type == type) {
+                return &received[i - 1];
+            }
+        }
+        return nullptr;
+    }
+
+    /// The types, in order, as one text ("joined,lobby,view")
+    [[nodiscard]] inline String TypesOf(const Vector<ReceivedMessage>& received) {
+        String result;
+        for (const ReceivedMessage& message : received) {
+            if (!result.empty()) {
+                result += ",";
+            }
+            result += message.type;
+        }
+        return result;
+    }
+
     /// A fake client connection: records everything the hub sent it and whether the hub closed it
     struct TestClient {
         ConnectionId id = 0;
@@ -44,21 +75,12 @@ namespace BECore::Tests {
         String lastSent;
 
         [[nodiscard]] size_t Count(StringView type) const {
-            size_t count = 0;
-            for (const ReceivedMessage& message : received) {
-                count += message.type == type ? 1 : 0;
-            }
-            return count;
+            return CountOfType(received, type);
         }
 
         /// The last message of the type, or null
         [[nodiscard]] const ReceivedMessage* Last(StringView type) const {
-            for (size_t i = received.size(); i > 0; --i) {
-                if (received[i - 1].type == type) {
-                    return &received[i - 1];
-                }
-            }
-            return nullptr;
+            return LastOfType(received, type);
         }
 
         /// The `code` of the last `error` message ("" when none)
@@ -69,14 +91,7 @@ namespace BECore::Tests {
 
         /// The types received, in order, as one text ("joined,lobby,view")
         [[nodiscard]] String Types() const {
-            String result;
-            for (const ReceivedMessage& message : received) {
-                if (!result.empty()) {
-                    result += ",";
-                }
-                result += message.type;
-            }
-            return result;
+            return TypesOf(received);
         }
 
         void Clear() {
@@ -108,10 +123,9 @@ namespace BECore::Tests {
             EXPECT_TRUE(_registry.Register(SeatedGameInfo{"fake-started", FakeSeatedGame::kSeatCount, {}, true}, factory));
         }
 
-        /// Small times for tests: no computer delay, the usual grace and timeouts
         static RoomHubSettings MakeSettings() {
             RoomHubSettings settings;
-            settings.timings = RoomTimings{std::chrono::seconds(30), std::chrono::minutes(10), std::chrono::milliseconds(0)};
+            settings.timings = NoComputerDelayTimings();
             return settings;
         }
 
@@ -201,7 +215,7 @@ namespace BECore::Tests {
             Send(id, PingMessage{});
         }
 
-        /// Creates a room with a host and @p guests more humans; returns the connections (host first). The room is in the lobby.
+        /// Creates a room of @p humans humans, the host and the guests who joined it by its code; returns the connections (host first). The room is in the lobby.
         Vector<ConnectionId> MakeLobby(int humans) {
             Vector<ConnectionId> ids;
             const ConnectionId host = Connect();
@@ -329,5 +343,77 @@ namespace BECore::Tests {
         size_t _leaks = 0;
         bool _failOnLeak = true;
     };
+
+    /// How many ticks the play helpers below give a hand before they give up: far more than a hand of the fake game takes
+    inline constexpr int kHubPlaySteps = 400;
+
+    /// The number of texts the client received that contain @p needle
+    [[nodiscard]] inline size_t CountTextsContaining(const TestClient& client, const String& needle) {
+        size_t count = 0;
+        for (const ReceivedMessage& message : client.received) {
+            count += message.text.find(needle) != String::npos ? 1 : 0;
+        }
+        return count;
+    }
+
+    /// What the wire judge says of every text in @p received, sent to @p seat: the ids of the cards it must not have seen
+    [[nodiscard]] inline Vector<String> LeaksOf(const Vector<ReceivedMessage>& received, int seat) {
+        Vector<String> leaks;
+        for (const ReceivedMessage& message : received) {
+            for (String& id : FindLeakedCardIds(StringView(message.text.c_str(), message.text.size()), seat)) {
+                leaks.push_back(std::move(id));
+            }
+        }
+        return leaks;
+    }
+
+    [[nodiscard]] inline Vector<String> LeaksOf(const TestClient& client) {
+        return LeaksOf(client.received, client.seat);
+    }
+
+    /// The last view the client got says the hand is over
+    [[nodiscard]] inline bool IsFinishedFor(HubHarness& harness, ConnectionId id) {
+        const ReceivedMessage* view = harness.Client(id).Last(RoomMessageTypes::kView);
+        return view && GetJsonBool(view->json, "finished").value_or(false);
+    }
+
+    /// The first of @p humans whose last view offers an action (the one whose turn it is), or 0
+    [[nodiscard]] inline ConnectionId FindHumanOnTurn(HubHarness& harness, const Vector<ConnectionId>& humans) {
+        for (const ConnectionId id : humans) {
+            const ReceivedMessage* view = harness.Client(id).Last(RoomMessageTypes::kView);
+            const Json* actions = view ? FindJsonMember(view->json, "actions") : nullptr;
+            if (actions && actions->is_array() && !actions->empty()) {
+                return id;
+            }
+        }
+        return 0;
+    }
+
+    /// Ticks the clock and lets the humans play their first action until every one has seen the end
+    inline bool PlayToTheEnd(HubHarness& harness, const Vector<ConnectionId>& humans) {
+        for (int step = 0; step < kHubPlaySteps; ++step) {
+            harness.Tick(std::chrono::milliseconds(10));
+            bool allDone = true;
+            for (const ConnectionId id : humans) {
+                harness.PlayFirstAction(id);
+                allDone = allDone && IsFinishedFor(harness, id);
+            }
+            if (allDone) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// Ticks until one of the humans has an action; the connection, or 0
+    inline ConnectionId WaitForAHumanTurn(HubHarness& harness, const Vector<ConnectionId>& humans) {
+        for (int step = 0; step < kHubPlaySteps; ++step) {
+            if (const ConnectionId id = FindHumanOnTurn(harness, humans)) {
+                return id;
+            }
+            harness.Tick(std::chrono::milliseconds(10));
+        }
+        return 0;
+    }
 
 }  // namespace BECore::Tests

@@ -33,7 +33,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(IsWebPostPathValid(kGoodPath));
         EXPECT_TRUE(IsWebPostPathValid("/"));
         EXPECT_TRUE(IsWebPostPathValid("/a.b/c?d=1"));
-        EXPECT_TRUE(IsWebPostPathValid(String("/") + String(kWebPostMaxPathBytes - 1, 'a')));
+        EXPECT_TRUE(IsWebPostPathValid(Format("/{}", String(kWebPostMaxPathBytes - 1, 'a'))));
     }
 
     TEST(WebPostTest, ThePathRuleRefusesAnythingElse) {
@@ -51,7 +51,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(IsWebPostPathValid("/a/../b"));
         EXPECT_FALSE(IsWebPostPathValid("/.."));
         EXPECT_FALSE(IsWebPostPathValid("/\xc3\xa9"));
-        EXPECT_FALSE(IsWebPostPathValid(String("/") + String(kWebPostMaxPathBytes, 'a')));
+        EXPECT_FALSE(IsWebPostPathValid(Format("/{}", String(kWebPostMaxPathBytes, 'a'))));
     }
 
     TEST(WebPostTest, PollingNothingOrAnUnknownIdIsFailedAndDoesNotCrash) {

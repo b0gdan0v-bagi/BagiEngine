@@ -3,6 +3,7 @@
 #include <BECore/UI/UITreeLayout.h>
 #include <BECore/UI/UIVariant.h>
 #include <Common/Printers.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -10,13 +11,6 @@ namespace BECore::Tests {
     namespace {
 
         constexpr float kTolerance = 1e-2f;
-
-        void ExpectRect(const Rect& rect, const Rect& expected) {
-            EXPECT_NEAR(rect.x, expected.x, kTolerance);
-            EXPECT_NEAR(rect.y, expected.y, kTolerance);
-            EXPECT_NEAR(rect.w, expected.w, kTolerance);
-            EXPECT_NEAR(rect.h, expected.h, kTolerance);
-        }
 
         /// The anchors a grid of specs walks through: the ten shorthands and edge anchors (a stretched axis beside a point, both stretched, a pivot of its own)
         struct AnchorCase {
@@ -73,18 +67,26 @@ namespace BECore::Tests {
 
     // ---- the inverse -----------------------------------------------------------------------------------------------------
 
-    /// Over specs (point and stretched axes, units and percent, a margin) and parents (a region is one): the result lays out at the wanted rect
+    /// Over specs (point and stretched axes, units and percent, a margin) and parents (a region is one): the result lays out at the wanted rect.
+    /// The grid stops at the first case that fails, which it names: one regression would fail thousands of cases alike.
     TEST(UIRectEditTest, TheResultLaysOutAtTheWantedRect) {
+        const Vector<AnchorCase> anchorCases = AnchorCases();
         size_t checked = 0;
-        for (const AnchorCase& anchors : AnchorCases()) {
+        for (size_t anchorIndex = 0; anchorIndex < anchorCases.size(); ++anchorIndex) {
             for (const UIUnit sizeUnit : {UIUnit::Pixels, UIUnit::Percent}) {
                 for (const UIUnit offsetUnit : {UIUnit::Pixels, UIUnit::Percent}) {
-                    const UIRectSpec spec = MakeSpec(anchors, sizeUnit, offsetUnit);
+                    const UIRectSpec spec = MakeSpec(anchorCases[anchorIndex], sizeUnit, offsetUnit);
                     for (const Rect& parent : kParents) {
                         for (const Rect& wanted : WantedRects(parent)) {
                             const UIRectEditResult result = UIRectEdit::SpecForRect(parent, spec, wanted);
-                            EXPECT_TRUE(result.exact);
-                            ExpectRect(UILayout::ResolveRect(parent, result.spec), wanted);
+                            const Rect resolved = UILayout::ResolveRect(parent, result.spec);
+                            if (!result.exact || !NearRect(resolved, wanted, kTolerance)) {
+                                const auto describe = [](const Rect& r) { return Format("({}, {}, {} x {})", r.x, r.y, r.w, r.h); };
+                                ADD_FAILURE() << Format("anchor case {}, size in {}, offset in {}, parent {}, wanted {}: exact {}, laid out at {}", anchorIndex, EnumUtils<UIUnit>::ToString(sizeUnit),
+                                                        EnumUtils<UIUnit>::ToString(offsetUnit), describe(parent), describe(wanted), result.exact, describe(resolved))
+                                                     .c_str();
+                                return;
+                            }
                             ++checked;
                         }
                     }
@@ -154,7 +156,7 @@ namespace BECore::Tests {
 
         const UIRectEditResult fits = UIRectEdit::SpecForRect(parent, spec, {10.0f, 20.0f, 90.0f, 35.0f});
         EXPECT_TRUE(fits.exact);
-        ExpectRect(UILayout::ResolveRect(parent, fits.spec), {10.0f, 20.0f, 90.0f, 35.0f});
+        ExpectRect(UILayout::ResolveRect(parent, fits.spec), {10.0f, 20.0f, 90.0f, 35.0f}, kTolerance);
 
         const UIRectEditResult tooWide = UIRectEdit::SpecForRect(parent, spec, {10.0f, 20.0f, 150.0f, 35.0f});
         EXPECT_FALSE(tooWide.exact);
@@ -178,7 +180,7 @@ namespace BECore::Tests {
 
         const UIRectEditResult moved = UIRectEdit::SpecForRect(parent, spec, {100.0f, 0.0f, 250.0f, 400.0f});
         EXPECT_TRUE(moved.exact);
-        ExpectRect(UILayout::ResolveRect(parent, moved.spec), {100.0f, 0.0f, 250.0f, 400.0f});
+        ExpectRect(UILayout::ResolveRect(parent, moved.spec), {100.0f, 0.0f, 250.0f, 400.0f}, kTolerance);
 
         EXPECT_FALSE(UIRectEdit::SpecForRect(parent, spec, {100.0f, 0.0f, 500.0f, 400.0f}).exact);
     }
@@ -193,7 +195,7 @@ namespace BECore::Tests {
 
         const UIRectEditResult fits = UIRectEdit::SpecForRect(parent, spec, {30.0f, 40.0f, 120.0f, 60.0f});
         EXPECT_TRUE(fits.exact);
-        ExpectRect(UILayout::ResolveRect(parent, fits.spec), {30.0f, 40.0f, 120.0f, 60.0f});
+        ExpectRect(UILayout::ResolveRect(parent, fits.spec), {30.0f, 40.0f, 120.0f, 60.0f}, kTolerance);
 
         const UIRectEditResult wrongShape = UIRectEdit::SpecForRect(parent, spec, {30.0f, 40.0f, 120.0f, 100.0f});
         EXPECT_FALSE(wrongShape.exact);
@@ -258,7 +260,7 @@ namespace BECore::Tests {
         UITreeLayout::Run(*root, canvas, canvas, regions);
 
         EXPECT_TRUE(result.exact);
-        ExpectRect(bar->rect, wanted);
+        ExpectRect(bar->rect, wanted, kTolerance);
     }
 
     // ---- the unit switch and the region choices ----------------------------------------------------------------------------

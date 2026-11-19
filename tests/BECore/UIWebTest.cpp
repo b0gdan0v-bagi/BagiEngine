@@ -26,21 +26,33 @@
 #include <BECore/UI/UIVars.h>
 #include <BECore/UI/UIWebCompiler.h>
 #include <BECore/UI/UIWebText.h>
+#include <BECore/UIScreenFixtures.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Common/UILayoutMatrix.h>
 #include <Common/UITreeCompare.h>
 #include <chrono>
 #include <gtest/gtest.h>
-#include <set>
 
 namespace BECore::Tests {
 
     namespace {
 
         constexpr float kTolerance = 0.01f;
+
+        /// The number of issues of @p report whose message contains @p text
+        size_t CountIssuesMentioning(const UIWebReport& report, const char* text) {
+            size_t count = 0;
+            for (const UIWebIssue& issue : report.issues) {
+                if (issue.message.find(text) != String::npos) {
+                    ++count;
+                }
+            }
+            return count;
+        }
 
         /// What a compile gives: the XML, the report, the XML read back into the reflected content, and a handle on the XML nodes by element name
         struct Compiled {
@@ -84,13 +96,7 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] size_t IssuesMentioning(const char* text) const {
-                size_t count = 0;
-                for (const UIWebIssue& issue : report.issues) {
-                    if (issue.message.find(text) != String::npos) {
-                        ++count;
-                    }
-                }
-                return count;
+                return CountIssuesMentioning(report, text);
             }
 
             [[nodiscard]] UIElement* Element(const char* name) const {
@@ -118,7 +124,7 @@ namespace BECore::Tests {
 
         UniquePtr<Compiled> Compile(const String& html, const String& css = {}) {
             auto compiled = MakeUnique<Compiled>();
-            const String source = css.empty() ? html : "<style>" + css + "</style>" + html;
+            const String source = css.empty() ? html : Format("<style>{}</style>{}", css, html);
             compiled->xml = UIWebCompiler::Compile(source, {}, compiled->report);
             EXPECT_TRUE(compiled->document.load_string(compiled->xml.c_str())) << compiled->xml.c_str();
             XmlDeserializer deserializer;
@@ -317,210 +323,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 #Seed    { left: 96px; bottom: 26px; width: 300px; height: 24px; font-size: 16px; color: rgb(190, 190, 190); }
 )";
 
-        // The plate of the choice panel of UISelectorScreenTest (the panel shape of the Chess opponent panel), without the dim behind it, and the same plate in HTML + CSS.
-        // The XML is that test's, with `selectedColor` on every segment and `blocksInput` on the filled groups (a background takes clicks in the HTML front-end)
-        constexpr const char* kPanelXml = R"(<ui><elements>
-  <element type="UIStack" name="Plate" anchor="Center" width="94%" maxWidth="640" height="416" direction="Vertical" spacing="12" padding="16" crossAlign="Stretch" color="36,40,52,255" blocksInput="true">
-    <children>
-      <element type="UIElement" name="Title" height="44" fontSize="30">
-        <components>
-          <component type="UITextComponent" text="Opponent" align="Center"/>
-        </components>
-      </element>
-      <element type="UIStack" name="ModeRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
-        <children>
-          <element type="UIElement" name="ModeCaption" width="150" height="56" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="Opponent" verticalAlign="Center"/>
-            </components>
-          </element>
-          <element type="UISegmented" name="Mode" bind="opponentMode" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
-            <children>
-              <element type="UIElement" name="ModeTwo" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Two players" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorMode" value="two"/>
-                </components>
-              </element>
-              <element type="UIElement" name="ModeComputer" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Computer" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorMode" value="computer"/>
-                </components>
-              </element>
-            </children>
-          </element>
-        </children>
-      </element>
-      <element type="UIStack" name="ColorRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
-        <children>
-          <element type="UIElement" name="ColorCaption" width="150" height="56" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="Play as" verticalAlign="Center"/>
-            </components>
-          </element>
-          <element type="UISegmented" name="Color" bind="opponentColor" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
-            <children>
-              <element type="UIElement" name="ColorWhite" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="White" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorColor" value="white"/>
-                </components>
-              </element>
-              <element type="UIElement" name="ColorBlack" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Black" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorColor" value="black"/>
-                </components>
-              </element>
-            </children>
-          </element>
-        </children>
-      </element>
-      <element type="UIStack" name="EngineRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
-        <children>
-          <element type="UIElement" name="EngineCaption" width="150" height="56" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="Engine" verticalAlign="Center"/>
-            </components>
-          </element>
-          <element type="UISegmented" name="Engine" bind="opponentEngine" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
-            <children>
-              <element type="UIElement" name="EngineStockfish" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Stockfish" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorEngine" value="stockfish"/>
-                </components>
-              </element>
-              <element type="UIElement" name="EngineOwn" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Own engine" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorEngine" value="own"/>
-                </components>
-              </element>
-            </children>
-          </element>
-        </children>
-      </element>
-      <element type="UIStack" name="LevelRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
-        <children>
-          <element type="UIElement" name="LevelCaption" width="150" height="56" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="Level" verticalAlign="Center"/>
-            </components>
-          </element>
-          <element type="UISegmented" name="Level" bind="opponentLevel" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
-            <children>
-              <element type="UIElement" name="LevelEasy" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Easy" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorLevel" value="easy"/>
-                </components>
-              </element>
-              <element type="UIElement" name="LevelMedium" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Medium" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorLevel" value="medium"/>
-                </components>
-              </element>
-              <element type="UIElement" name="LevelHard" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Hard" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorLevel" value="hard"/>
-                </components>
-              </element>
-              <element type="UIElement" name="LevelMax" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Max" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorLevel" value="max"/>
-                </components>
-              </element>
-            </children>
-          </element>
-        </children>
-      </element>
-      <element type="UIElement" name="Ok" height="56" fontSize="26" color="40,90,60,255">
-        <components>
-          <component type="UITextComponent" text="OK" align="Center" verticalAlign="Center" wrap="false"/>
-          <component type="UIInputClicker" action="SelectorClose"/>
-        </components>
-      </element>
-    </children>
-  </element>
-</elements>
-<variants>
-  <variant when="orientation:portrait">
-    <overrides>
-      <set element="Plate" height="576" />
-      <set element="ModeRow" direction="Vertical" height="96" />
-      <set element="ModeCaption" height="32" />
-      <set element="ColorRow" direction="Vertical" height="96" />
-      <set element="ColorCaption" height="32" />
-      <set element="EngineRow" direction="Vertical" height="96" />
-      <set element="EngineCaption" height="32" />
-      <set element="LevelRow" direction="Vertical" height="96" />
-      <set element="LevelCaption" height="32" />
-      <set element="LevelEasy" fontSize="22" />
-      <set element="LevelMedium" fontSize="22" />
-      <set element="LevelHard" fontSize="22" />
-      <set element="LevelMax" fontSize="22" />
-    </overrides>
-  </variant>
-</variants></ui>)";
-
-        constexpr const char* kPanelHtml = R"(
-<div id="Plate">
-  <span id="Title">Opponent</span>
-  <div id="ModeRow" class="row">
-    <span id="ModeCaption" class="caption">Opponent</span>
-    <div id="Mode" class="group" data-widget="segmented" data-bind="opponentMode">
-      <button id="ModeTwo" data-action="SelectorMode" data-value="two">Two players</button>
-      <button id="ModeComputer" data-action="SelectorMode" data-value="computer">Computer</button>
-    </div>
-  </div>
-  <div id="ColorRow" class="row">
-    <span id="ColorCaption" class="caption">Play as</span>
-    <div id="Color" class="group" data-widget="segmented" data-bind="opponentColor">
-      <button id="ColorWhite" data-action="SelectorColor" data-value="white">White</button>
-      <button id="ColorBlack" data-action="SelectorColor" data-value="black">Black</button>
-    </div>
-  </div>
-  <div id="EngineRow" class="row">
-    <span id="EngineCaption" class="caption">Engine</span>
-    <div id="Engine" class="group" data-widget="segmented" data-bind="opponentEngine">
-      <button id="EngineStockfish" data-action="SelectorEngine" data-value="stockfish">Stockfish</button>
-      <button id="EngineOwn" data-action="SelectorEngine" data-value="own">Own engine</button>
-    </div>
-  </div>
-  <div id="LevelRow" class="row">
-    <span id="LevelCaption" class="caption">Level</span>
-    <div id="Level" class="group" data-widget="segmented" data-bind="opponentLevel">
-      <button id="LevelEasy" data-action="SelectorLevel" data-value="easy">Easy</button>
-      <button id="LevelMedium" data-action="SelectorLevel" data-value="medium">Medium</button>
-      <button id="LevelHard" data-action="SelectorLevel" data-value="hard">Hard</button>
-      <button id="LevelMax" data-action="SelectorLevel" data-value="max">Max</button>
-    </div>
-  </div>
-  <button id="Ok" data-action="SelectorClose">OK</button>
-</div>)";
-
-        constexpr const char* kPanelCss = R"(
-#Plate    { anchor: center; display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 16px; width: 94%; max-width: 640px; height: 416px; background: rgb(36, 40, 52); }
-#Title    { height: 44px; font-size: 30px; text-align: center; }
-.row      { display: flex; flex-direction: row; align-items: stretch; gap: 8px; height: 56px; }
-.caption  { width: 150px; height: 56px; font-size: 24px; vertical-align: middle; }
-.group    { display: flex; flex-direction: row; gap: 4px; flex: 1; height: 56px; background: rgb(30, 30, 30); }
-.group button { flex: 1; height: 56px; font-size: 24px; background: rgb(70, 70, 100); }
-.group button:checked { background: rgb(110, 130, 200); }
-#Ok       { height: 56px; font-size: 26px; background: rgb(40, 90, 60); }
-@media (orientation: portrait) {
-  #Plate    { height: 576px; }
-  .row      { flex-direction: column; height: 96px; }
-  .caption  { height: 32px; }
-  #Level button { font-size: 22px; }
-}
-)";
-
         /// Every attribute of every `element` of @p expected is on the same element of @p actual with the same text, and the other way round: the two XML texts say the same.
         /// Three spellings are the same thing and are not compared: a `UIStack` is a `UIElement` with `layout="Stack"` (the compile writes the second), and a `Vertical`
         /// direction is the default and is not written
@@ -565,167 +367,16 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             EXPECT_FALSE(a) << name << " has more children than expected";
         }
 
-        const char* const kPanelNames[] = {"Plate",      "Title",       "ModeRow",   "ModeCaption",   "Mode",   "ModeTwo",         "ModeComputer", "ColorRow", "ColorCaption", "Color",
-                                           "ColorWhite", "ColorBlack",  "EngineRow", "EngineCaption", "Engine", "EngineStockfish", "EngineOwn",    "LevelRow", "LevelCaption", "Level",
-                                           "LevelEasy",  "LevelMedium", "LevelHard", "LevelMax",      "Ok"};
+        /// The choice panel of UISelectorScreenTest and the settings panel of UISettingsScreenTest as the documents their HTML + CSS compile to (UIScreenFixtures.h)
+        const String& SelectorPanelXml() {
+            static const String xml = UIWebPanelXml(kSelectorPlate, kSelectorVariants);
+            return xml;
+        }
 
-        // The plate of the settings panel of UISettingsScreenTest (kSettingsXml: the `Plate` element of its `Settings` canvas, with its portrait variant), without the dim behind
-        // it and without the `Hud` canvas that opens it. **This mirrors that constant** (it is in an anonymous namespace of that file, so it is copied, as kPanelXml copies the
-        // selector panel): when the settings screen changes, change this too. The one difference is `blocksInput="true"` on the Language group, because a background takes clicks
-        // in the HTML front-end (the same as kPanelXml).
-        constexpr const char* kSettingsPanelXml = R"(<ui><elements>
-  <element type="UIStack" name="Plate" anchor="Center" width="94%" maxWidth="640" height="416" direction="Vertical" spacing="12" padding="16" crossAlign="Stretch" color="36,40,52,255" blocksInput="true">
-    <children>
-      <element type="UIElement" name="Title" height="44" fontSize="30">
-        <components>
-          <component type="UITextComponent" text="{#settings.title}" align="Center"/>
-        </components>
-      </element>
-      <element type="UIElement" name="Sound" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
-        <components>
-          <component type="UIInputClicker"/>
-          <component type="UIToggleComponent" bind="soundOn" action="SettingsSound"/>
-        </components>
-        <children>
-          <element type="UIElement" name="SoundCaption" flex="1" height="100%" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="{#settings.sound}" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
-            </components>
-          </element>
-          <element type="UIElement" name="SoundSwitch" height="100%" aspectRatio="1.25">
-            <components>
-              <component type="UISwitchComponent"/>
-            </components>
-          </element>
-        </children>
-      </element>
-      <element type="UIStack" name="MusicRow" height="56" direction="Horizontal" spacing="8" crossAlign="Center">
-        <children>
-          <element type="UIElement" name="MusicCaption" width="220" height="56" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="{#settings.music}" verticalAlign="Center"/>
-            </components>
-          </element>
-          <element type="UIElement" name="Volume" flex="1" height="56">
-            <components>
-              <component type="UIInputClicker" stateLook="false"/>
-              <component type="UISliderComponent" bind="volume" action="SettingsVolume" minValue="0" maxValue="1" step="0.1"/>
-            </components>
-          </element>
-        </children>
-      </element>
-      <element type="UIStack" name="DownloadRow" height="56" direction="Horizontal" spacing="8" crossAlign="Center">
-        <children>
-          <element type="UIElement" name="DownloadCaption" width="220" height="56" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="{#settings.download}" verticalAlign="Center"/>
-            </components>
-          </element>
-          <element type="UIProgressBar" name="Progress" bind="progress" minValue="0" maxValue="100" flex="1" height="24"/>
-          <element type="UIElement" name="Percent" width="64" height="56" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="{progress}%" align="Right" verticalAlign="Center"/>
-            </components>
-          </element>
-        </children>
-      </element>
-      <element type="UIStack" name="LanguageRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
-        <children>
-          <element type="UIElement" name="LanguageCaption" width="220" height="56" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="{#settings.language}" verticalAlign="Center"/>
-            </components>
-          </element>
-          <element type="UISegmented" name="Language" bind="language" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
-            <children>
-              <element type="UIElement" name="LanguageEn" flex="1" height="56" fontSize="24" color="70,70,100,255">
-                <components>
-                  <component type="UITextComponent" text="{#lang.en}" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SettingsLanguage" value="en"/>
-                </components>
-              </element>
-              <element type="UIElement" name="LanguageRu" flex="1" height="56" fontSize="24" color="70,70,100,255">
-                <components>
-                  <component type="UITextComponent" text="{#lang.ru}" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SettingsLanguage" value="ru"/>
-                </components>
-              </element>
-              <element type="UIElement" name="LanguageDe" flex="1" height="56" fontSize="24" color="70,70,100,255">
-                <components>
-                  <component type="UITextComponent" text="{#lang.de}" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SettingsLanguage" value="de"/>
-                </components>
-              </element>
-            </children>
-          </element>
-        </children>
-      </element>
-      <element type="UIElement" name="Ok" height="56" fontSize="26" color="40,90,60,255">
-        <components>
-          <component type="UITextComponent" text="{#settings.ok}" align="Center" verticalAlign="Center" wrap="false"/>
-          <component type="UIInputClicker" action="SettingsClose"/>
-        </components>
-      </element>
-    </children>
-  </element>
-</elements>
-<variants>
-  <variant when="orientation:portrait">
-    <overrides>
-      <set element="Plate" height="456"/>
-      <set element="LanguageRow" direction="Vertical" height="96"/>
-      <set element="LanguageCaption" height="32"/>
-    </overrides>
-  </variant>
-</variants></ui>)";
-
-        constexpr const char* kSettingsPanelHtml = R"(
-<div id="Plate">
-  <span id="Title">{#settings.title}</span>
-  <div id="Sound" data-widget="toggle" data-bind="soundOn" data-action="SettingsSound">{#settings.sound}</div>
-  <div id="MusicRow" class="row centered">
-    <span id="MusicCaption" class="caption">{#settings.music}</span>
-    <div id="Volume" data-widget="slider" data-bind="volume" data-action="SettingsVolume" data-min="0" data-max="1" data-step="0.1"></div>
-  </div>
-  <div id="DownloadRow" class="row centered">
-    <span id="DownloadCaption" class="caption">{#settings.download}</span>
-    <div id="Progress" data-widget="progress" data-bind="progress" data-min="0" data-max="100"></div>
-    <span id="Percent">{progress}%</span>
-  </div>
-  <div id="LanguageRow" class="row">
-    <span id="LanguageCaption" class="caption">{#settings.language}</span>
-    <div id="Language" class="group" data-widget="segmented" data-bind="language">
-      <button id="LanguageEn" data-action="SettingsLanguage" data-value="en">{#lang.en}</button>
-      <button id="LanguageRu" data-action="SettingsLanguage" data-value="ru">{#lang.ru}</button>
-      <button id="LanguageDe" data-action="SettingsLanguage" data-value="de">{#lang.de}</button>
-    </div>
-  </div>
-  <button id="Ok" data-action="SettingsClose">{#settings.ok}</button>
-</div>)";
-
-        constexpr const char* kSettingsPanelCss = R"(
-#Plate    { anchor: center; display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 16px; width: 94%; max-width: 640px; height: 416px; background: rgb(36, 40, 52); }
-#Title    { height: 44px; font-size: 30px; text-align: center; }
-#Sound    { height: 56px; font-size: 24px; vertical-align: middle; }
-.row      { display: flex; flex-direction: row; align-items: stretch; gap: 8px; height: 56px; }
-.centered { align-items: center; }
-.caption  { width: 220px; height: 56px; font-size: 24px; vertical-align: middle; }
-#Volume   { flex: 1; height: 56px; }
-#Progress { flex: 1; height: 24px; }
-#Percent  { width: 64px; height: 56px; font-size: 24px; text-align: right; vertical-align: middle; }
-.group    { display: flex; flex-direction: row; gap: 4px; flex: 1; height: 56px; background: rgb(30, 30, 30); }
-.group button { flex: 1; height: 56px; font-size: 24px; background: rgb(70, 70, 100); }
-#Ok       { height: 56px; font-size: 26px; background: rgb(40, 90, 60); }
-@media (orientation: portrait) {
-  #Plate          { height: 456px; }
-  #LanguageRow    { flex-direction: column; height: 96px; }
-  #LanguageCaption { height: 32px; }
-}
-)";
-
-        const char* const kSettingsPanelNames[] = {"Plate",       "Title",           "Sound",    "MusicRow",   "MusicCaption", "Volume",     "DownloadRow", "DownloadCaption", "Progress", "Percent",
-                                                   "LanguageRow", "LanguageCaption", "Language", "LanguageEn", "LanguageRu",   "LanguageDe", "Ok"};
-
+        const String& SettingsPanelXml() {
+            static const String xml = UIWebPanelXml(kSettingsPlate, kSettingsVariants);
+            return xml;
+        }
     }  // namespace
 
     class UIWebTest : public ::testing::Test {
@@ -960,8 +611,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         ASSERT_GE(doc.nodes.size(), 4u);
         const UIHtmlNode& div = doc.nodes[doc.nodes[0].children.at(0)];
         EXPECT_EQ(div.tag, "div");
-        EXPECT_EQ(*div.FindAttribute("id"), "a");
-        EXPECT_EQ(*div.FindAttribute("data-n"), "5");
+        EXPECT_EQ(Require(div.FindAttribute("id")), "a");
+        EXPECT_EQ(Require(div.FindAttribute("data-n")), "5");
         EXPECT_TRUE(div.HasAttribute("hidden"));
         EXPECT_TRUE(div.HasClass("x"));
         EXPECT_TRUE(div.HasClass("y"));
@@ -975,7 +626,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         UIWebReport report;
         const auto doc = UIHtmlParser::Parse(R"(<p title="a &amp; b">1 &lt; 2 &#65;&#x42; &unknown; &copy</p>)", report);
         const UIHtmlNode& p = doc.nodes[doc.nodes[0].children.at(0)];
-        EXPECT_EQ(*p.FindAttribute("title"), "a & b");
+        EXPECT_EQ(Require(p.FindAttribute("title")), "a & b");
         EXPECT_EQ(doc.nodes[p.children.at(0)].text, "1 < 2 AB &unknown; &copy");
     }
 
@@ -1106,15 +757,15 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_TRUE(expected.variants == compiled->content.variants) << compiled->xml.c_str();
 
         // The fields the tree comparison does not look at
-        const auto* score = compiled->Element("Score")->GetComponent<UITextComponent>();
+        const auto* score = Require(compiled->Element("Score")).GetComponent<UITextComponent>();
         ASSERT_NE(score, nullptr);
         EXPECT_EQ(score->text, "Score: {score}");
         const UIElement* reset = compiled->Element("Reset");
         ASSERT_NE(reset, nullptr);
         ASSERT_NE(reset->GetComponent<UITextComponent>(), nullptr);
         ASSERT_NE(reset->GetComponent<UIInputClicker>(), nullptr);
-        EXPECT_EQ(reset->GetComponent<UITextComponent>()->text, "Reset");
-        EXPECT_EQ(reset->GetComponent<UIInputClicker>()->action.ToStringView(), "GameReset");
+        EXPECT_EQ(Require(reset->GetComponent<UITextComponent>()).text, "Reset");
+        EXPECT_EQ(Require(reset->GetComponent<UIInputClicker>()).action.ToStringView(), "GameReset");
         EXPECT_EQ(reset->hoverColor.r, 51);
         EXPECT_EQ(reset->hoverColor.g, 170);
         EXPECT_EQ(compiled->report.elements, 3u);
@@ -1153,11 +804,11 @@ button   { width: 124px; height: 48px; font-size: 24px; }
                 ExpectSameRect(xml.Find(name), web.Find(name), name);
             }
         }
-        const auto* title = compiled->Element("Title")->GetComponent<UITextComponent>();
+        const auto* title = Require(compiled->Element("Title")).GetComponent<UITextComponent>();
         ASSERT_NE(title, nullptr);
         EXPECT_EQ(title->align, TextAlign::Center);
         EXPECT_EQ(title->verticalAlign, UIVerticalAlign::Center);
-        EXPECT_EQ(compiled->Element("Column")->layout, UILayoutKind::Stack);
+        EXPECT_EQ(Require(compiled->Element("Column")).layout, UILayoutKind::Stack);
     }
 
     TEST_F(UIWebTest, TheMenuInHtmlPassesTheSizeMatrix) {
@@ -1187,7 +838,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
                 ExpectSameRect(xml.Find(name), web.Find(name), name);
             }
         }
-        EXPECT_EQ(compiled->Element("Seed")->GetComponent<UITextComponent>()->textColor.r, 190);
+        EXPECT_EQ(Require(Require(compiled->Element("Seed")).GetComponent<UITextComponent>()).textColor.r, 190);
     }
 
     TEST_F(UIWebTest, TheGameHudInHtmlPassesTheSizeMatrixInTheMarginsOfItsView) {
@@ -1211,21 +862,21 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     // ---- choice groups -------------------------------------------------------------------------------------------------------
 
     TEST_F(UIWebTest, ThePanelInHtmlAndCssBuildsTheElementsOfTheXml) {
-        const auto compiled = Compile(kPanelHtml, kPanelCss);
+        const auto compiled = Compile(kSelectorHtml, kSelectorCss);
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
         EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str() << " / " << compiled->xml.c_str();
 
         pugi::xml_document reference;
-        ASSERT_TRUE(reference.load_string(kPanelXml));
+        ASSERT_TRUE(reference.load_string(SelectorPanelXml().c_str()));
         ExpectSameAttributes(reference.child("ui").child("elements").child("element"), compiled->document.child("ui").child("elements").child("element"));
 
-        const UIScreenContent expected = ReadXml(kPanelXml);
+        const UIScreenContent expected = ReadXml(SelectorPanelXml());
         ExpectSameElements(expected.elements, compiled->content.elements);
         EXPECT_TRUE(expected.variants == compiled->content.variants) << compiled->xml.c_str();
         EXPECT_EQ(compiled->report.variants, 1u);
 
         // The fields the tree comparison does not look at
-        const auto* level = dynamic_cast<UISegmented*>(compiled->Element("Level"));
+        const auto* level = Require(compiled->Element("Level")).Cast<UISegmented>();
         ASSERT_NE(level, nullptr) << "a data-widget=\"segmented\" div is a UISegmented";
         EXPECT_EQ(level->bind.ToStringView(), "opponentLevel");
         EXPECT_EQ(level->layout, UILayoutKind::Stack);
@@ -1242,10 +893,10 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     }
 
     TEST_F(UIWebTest, ThePanelInHtmlLaysOutLikeTheXmlInLandscapeAndPortrait) {
-        const auto compiled = Compile(kPanelHtml, kPanelCss);
+        const auto compiled = Compile(kSelectorHtml, kSelectorCss);
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        const UIScreenContent expectedContent = ReadXml(kPanelXml);
-        // The view of the Chess board (landscape: the portrait variant is off) and a portrait view (the variant is on)
+        const UIScreenContent expectedContent = ReadXml(SelectorPanelXml());
+        // A landscape view of a square play area (the portrait variant is off) and a portrait view (the variant is on)
         for (const auto& [viewWidth, viewHeight] : {Pair<float, float>{840.0f, 800.0f}, {560.0f, 840.0f}}) {
             LaidOut web(compiled->content);
             LaidOut xml(expectedContent);
@@ -1254,7 +905,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             for (const auto& [width, height] : {Pair<float, float>{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
                 web.At(width, height);
                 xml.At(width, height);
-                for (const char* name : kPanelNames) {
+                for (const char* name : kSelectorPlateNames) {
                     SCOPED_TRACE(Format("{} in a {}x{} view at {}x{}", name, viewWidth, viewHeight, width, height).c_str());
                     ExpectSameRect(xml.Find(name), web.Find(name), name);
                 }
@@ -1270,13 +921,13 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             LaidOut web(compiled->content);
             web.InSceneView(shape.viewWidth, shape.viewHeight);
             web.At(1280.0f, 720.0f);
-            EXPECT_FLOAT_EQ(web.Find("LevelRow")->rect.h, shape.rowHeight) << shape.viewWidth;
+            EXPECT_FLOAT_EQ(Require(web.Find("LevelRow")).rect.h, shape.rowHeight) << shape.viewWidth;
         }
     }
 
     TEST_F(UIWebTest, ThePanelInHtmlFollowsTheVariablesAndPassesItsClicksOn) {
-        const auto compiled = Compile(kPanelHtml, kPanelCss);
-        auto* color = dynamic_cast<UISegmented*>(compiled->Element("Color"));
+        const auto compiled = Compile(kSelectorHtml, kSelectorCss);
+        auto* color = Require(compiled->Element("Color")).Cast<UISegmented>();
         UIElement* white = compiled->Element("ColorWhite");
         UIElement* black = compiled->Element("ColorBlack");
         ASSERT_TRUE(color != nullptr && white != nullptr && black != nullptr);
@@ -1296,11 +947,11 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->ComponentAttr("a", "UIInputClicker", "disabled"), "") << "the group greys its buttons at run time, the button is not disabled itself";
         EXPECT_EQ(compiled->ComponentAttr("a", "UIInputClicker", "value"), "x");
         EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str();
-        auto* group = dynamic_cast<UISegmented*>(compiled->Element("g"));
+        auto* group = Require(compiled->Element("g")).Cast<UISegmented>();
         ASSERT_NE(group, nullptr);
         EXPECT_TRUE(group->disabled);
         group->SyncChildren();
-        EXPECT_TRUE(compiled->Element("a")->groupDisabled);
+        EXPECT_TRUE(Require(compiled->Element("a")).groupDisabled);
     }
 
     TEST_F(UIWebTest, CheckedAndHoverOnOneButton) {
@@ -1370,38 +1021,38 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     // ---- toggle, slider and progress bar ------------------------------------------------------------------------------------------
 
     TEST_F(UIWebTest, TheSettingsPanelInHtmlAndCssBuildsTheElementsOfTheXml) {
-        const auto compiled = Compile(kSettingsPanelHtml, kSettingsPanelCss);
+        const auto compiled = Compile(kSettingsHtml, kSettingsCss);
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
         EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str() << " / " << compiled->xml.c_str();
 
         pugi::xml_document reference;
-        ASSERT_TRUE(reference.load_string(kSettingsPanelXml));
+        ASSERT_TRUE(reference.load_string(SettingsPanelXml().c_str()));
         ExpectSameAttributes(reference.child("ui").child("elements").child("element"), compiled->document.child("ui").child("elements").child("element"));
 
-        const UIScreenContent expected = ReadXml(kSettingsPanelXml);
+        const UIScreenContent expected = ReadXml(SettingsPanelXml());
         ExpectSameElements(expected.elements, compiled->content.elements);
         EXPECT_TRUE(expected.variants == compiled->content.variants) << compiled->xml.c_str();
         EXPECT_EQ(compiled->report.variants, 1u);
 
         // The types and the fields the tree comparison does not look at
-        const auto* sound = compiled->Element("Sound")->GetComponent<UIToggleComponent>();
+        const auto* sound = Require(compiled->Element("Sound")).GetComponent<UIToggleComponent>();
         ASSERT_NE(sound, nullptr) << "a data-widget=\"toggle\" div is a row with a UIToggleComponent";
         EXPECT_EQ(sound->bind.ToStringView(), "soundOn");
         EXPECT_EQ(sound->action.ToStringView(), "SettingsSound");
         EXPECT_EQ(sound->onValue.ToStringView(), "true") << "data-on and data-off were not written, so the defaults stand";
         EXPECT_EQ(sound->offValue.ToStringView(), "false");
-        EXPECT_EQ(compiled->Element("SoundCaption")->GetComponent<UITextComponent>()->text, "{#settings.sound}") << "the caption of a toggle is its text";
-        EXPECT_NE(compiled->Element("SoundSwitch")->GetComponent<UISwitchComponent>(), nullptr);
-        EXPECT_TRUE(compiled->Element("Sound")->IsInteractive());
-        const auto* volume = compiled->Element("Volume")->GetComponent<UISliderComponent>();
+        EXPECT_EQ(Require(Require(compiled->Element("SoundCaption")).GetComponent<UITextComponent>()).text, "{#settings.sound}") << "the caption of a toggle is its text";
+        EXPECT_NE(Require(compiled->Element("SoundSwitch")).GetComponent<UISwitchComponent>(), nullptr);
+        EXPECT_TRUE(Require(compiled->Element("Sound")).IsInteractive());
+        const auto* volume = Require(compiled->Element("Volume")).GetComponent<UISliderComponent>();
         ASSERT_NE(volume, nullptr) << "a data-widget=\"slider\" div is an element with a UISliderComponent";
-        EXPECT_FALSE(compiled->Element("Volume")->GetComponent<UIInputClicker>()->stateLook) << "the plate of a slider stays still";
+        EXPECT_FALSE(Require(Require(compiled->Element("Volume")).GetComponent<UIInputClicker>()).stateLook) << "the plate of a slider stays still";
         EXPECT_EQ(volume->bind.ToStringView(), "volume");
         EXPECT_EQ(volume->action.ToStringView(), "SettingsVolume");
         EXPECT_FLOAT_EQ(volume->minValue, 0.0f);
         EXPECT_FLOAT_EQ(volume->maxValue, 1.0f);
         EXPECT_FLOAT_EQ(volume->step, 0.1f);
-        const auto* progress = compiled->Element("Progress")->Cast<UIProgressBar>();
+        const auto* progress = Require(compiled->Element("Progress")).Cast<UIProgressBar>();
         ASSERT_NE(progress, nullptr) << "a data-widget=\"progress\" div is a UIProgressBar";
         EXPECT_EQ(progress->bind.ToStringView(), "progress");
         EXPECT_FLOAT_EQ(progress->maxValue, 100.0f);
@@ -1410,10 +1061,10 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     }
 
     TEST_F(UIWebTest, TheSettingsPanelInHtmlLaysOutLikeTheXmlInLandscapeAndPortrait) {
-        const auto compiled = Compile(kSettingsPanelHtml, kSettingsPanelCss);
+        const auto compiled = Compile(kSettingsHtml, kSettingsCss);
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        const UIScreenContent expectedContent = ReadXml(kSettingsPanelXml);
-        // The view of the Chess board (landscape: the portrait variant is off) and a portrait view (the variant is on)
+        const UIScreenContent expectedContent = ReadXml(SettingsPanelXml());
+        // A landscape view of a square play area (the portrait variant is off) and a portrait view (the variant is on)
         for (const auto& [viewWidth, viewHeight] : {Pair<float, float>{840.0f, 800.0f}, {560.0f, 840.0f}}) {
             LaidOut web(compiled->content);
             LaidOut xml(expectedContent);
@@ -1422,7 +1073,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             for (const auto& [width, height] : {Pair<float, float>{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
                 web.At(width, height);
                 xml.At(width, height);
-                for (const char* name : kSettingsPanelNames) {
+                for (const char* name : kSettingsPlateNames) {
                     SCOPED_TRACE(Format("{} in a {}x{} view at {}x{}", name, viewWidth, viewHeight, width, height).c_str());
                     ExpectSameRect(xml.Find(name), web.Find(name), name);
                 }
@@ -1438,23 +1089,23 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             LaidOut web(compiled->content);
             web.InSceneView(shape.viewWidth, shape.viewHeight);
             web.At(1280.0f, 720.0f);
-            EXPECT_FLOAT_EQ(web.Find("Plate")->rect.h, shape.plateHeight) << shape.viewWidth;
-            EXPECT_FLOAT_EQ(web.Find("Volume")->rect.h, 56.0f);
-            EXPECT_GT(web.Find("Volume")->rect.w, 100.0f);
-            EXPECT_FLOAT_EQ(web.Find("Progress")->rect.h, 24.0f);
-            EXPECT_FLOAT_EQ(web.Find("Sound")->rect.h, 56.0f);
+            EXPECT_FLOAT_EQ(Require(web.Find("Plate")).rect.h, shape.plateHeight) << shape.viewWidth;
+            EXPECT_FLOAT_EQ(Require(web.Find("Volume")).rect.h, 56.0f);
+            EXPECT_GT(Require(web.Find("Volume")).rect.w, 100.0f);
+            EXPECT_FLOAT_EQ(Require(web.Find("Progress")).rect.h, 24.0f);
+            EXPECT_FLOAT_EQ(Require(web.Find("Sound")).rect.h, 56.0f);
         }
     }
 
     TEST_F(UIWebTest, TheSettingsPanelInHtmlFollowsTheVariablesAndTheStrings) {
-        const auto compiled = Compile(kSettingsPanelHtml, kSettingsPanelCss);
+        const auto compiled = Compile(kSettingsHtml, kSettingsCss);
         UIStrings& strings = CoreManager::GetUIStrings();
         strings.Set("en"_intern, "settings.sound", "Sound");
         strings.Set("de"_intern, "settings.sound", "Geraeuscheffekte");
-        auto* sound = compiled->Element("Sound")->GetComponent<UIToggleComponent>();
-        auto* caption = compiled->Element("SoundCaption")->GetComponent<UITextComponent>();
-        auto* volume = compiled->Element("Volume")->GetComponent<UISliderComponent>();
-        auto* progress = compiled->Element("Progress")->Cast<UIProgressBar>();
+        auto* sound = Require(compiled->Element("Sound")).GetComponent<UIToggleComponent>();
+        auto* caption = Require(compiled->Element("SoundCaption")).GetComponent<UITextComponent>();
+        auto* volume = Require(compiled->Element("Volume")).GetComponent<UISliderComponent>();
+        auto* progress = Require(compiled->Element("Progress")).Cast<UIProgressBar>();
         ASSERT_TRUE(sound != nullptr && caption != nullptr && volume != nullptr && progress != nullptr);
 
         EXPECT_FALSE(sound->IsOn());
@@ -1524,16 +1175,16 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_FALSE(compiled->Component("d", "UISliderComponent").attribute("minValue")) << "nothing written, nothing invented";
         EXPECT_FALSE(compiled->Component("d", "UISliderComponent").attribute("step"));
 
-        const auto* toggle = compiled->Element("t")->GetComponent<UIToggleComponent>();
-        const auto* look = compiled->Element("tSwitch")->GetComponent<UISwitchComponent>();
-        const auto* slider = compiled->Element("s")->GetComponent<UISliderComponent>();
+        const auto* toggle = Require(compiled->Element("t")).GetComponent<UIToggleComponent>();
+        const auto* look = Require(compiled->Element("tSwitch")).GetComponent<UISwitchComponent>();
+        const auto* slider = Require(compiled->Element("s")).GetComponent<UISliderComponent>();
         ASSERT_TRUE(toggle != nullptr && look != nullptr && slider != nullptr);
-        EXPECT_TRUE(compiled->Element("t")->IsDisabled());
+        EXPECT_TRUE(Require(compiled->Element("t")).IsDisabled());
         EXPECT_EQ(toggle->onValue.ToStringView(), "1");
         EXPECT_EQ(look->fillColor.g, 200);
         EXPECT_FLOAT_EQ(slider->minValue, -5.0f);
         EXPECT_FLOAT_EQ(slider->step, 0.5f);
-        EXPECT_TRUE(compiled->Element("s")->IsDisabled());
+        EXPECT_TRUE(Require(compiled->Element("s")).IsDisabled());
     }
 
     TEST_F(UIWebTest, NumbersOfTheWidgetsAreWrittenAsNumbers) {
@@ -1777,7 +1428,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->ComponentAttr("h", "UITextComponent", "textOutline"), "2,#000000FF");
         EXPECT_TRUE(compiled->report.issues.empty());
 
-        auto* label = compiled->Element("h")->GetComponent<UITextComponent>();
+        auto* label = Require(compiled->Element("h")).GetComponent<UITextComponent>();
         ASSERT_NE(label, nullptr);
         EXPECT_EQ(label->fontFamily, "Russo One"_intern);
         EXPECT_EQ(label->fontWeight, 700);
@@ -1796,7 +1447,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->ComponentAttr("b", "UITextComponent", "textOutline"), "1,#FFFFFFFF");
         EXPECT_EQ(compiled->Attr("b", "hoverColor"), "48,48,48,255");
         EXPECT_TRUE(compiled->report.issues.empty());
-        const auto* text = compiled->Element("b")->GetComponent<UITextComponent>();
+        const auto* text = Require(compiled->Element("b")).GetComponent<UITextComponent>();
         ASSERT_NE(text, nullptr);
         EXPECT_EQ(text->fontWeight, 700);
         EXPECT_FLOAT_EQ(text->textEffects.shadowOffsetY, 1.0f);
@@ -1866,9 +1517,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         strings.Set("de"_intern, "menu.start", "Los");
         strings.Set("de"_intern, "score.title", "Punkte");
         CoreManager::GetUIVars().Set("score"_intern, 3);
-        auto* button = compiled->Element("b")->GetComponent<UITextComponent>();
-        auto* span = compiled->Element("s")->GetComponent<UITextComponent>();
-        auto* quoted = compiled->Element("q")->GetComponent<UITextComponent>();
+        auto* button = Require(compiled->Element("b")).GetComponent<UITextComponent>();
+        auto* span = Require(compiled->Element("s")).GetComponent<UITextComponent>();
+        auto* quoted = Require(compiled->Element("q")).GetComponent<UITextComponent>();
         ASSERT_NE(button, nullptr) << compiled->xml.c_str();
         ASSERT_NE(span, nullptr);
         ASSERT_NE(quoted, nullptr);
@@ -1968,9 +1619,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->ComponentAttr("a", "UIInputClicker", "action"), "Pick");
         EXPECT_EQ(compiled->ComponentAttr("a", "UIInputClicker", "value"), "x");
         EXPECT_EQ(compiled->Attr("b", "type"), "UIElement");
-        EXPECT_NE(dynamic_cast<UISegmented*>(compiled->Element("g")), nullptr);
-        EXPECT_NE(compiled->Element("a")->GetComponent<UIInputClicker>(), nullptr) << "the group finds its segments by the clicker";
-        EXPECT_NE(compiled->Element("b")->GetComponent<UIInputClicker>(), nullptr);
+        EXPECT_NE(Require(compiled->Element("g")).Cast<UISegmented>(), nullptr);
+        EXPECT_NE(Require(compiled->Element("a")).GetComponent<UIInputClicker>(), nullptr) << "the group finds its segments by the clicker";
+        EXPECT_NE(Require(compiled->Element("b")).GetComponent<UIInputClicker>(), nullptr);
         EXPECT_TRUE(compiled->report.issues.empty());
     }
 
@@ -1986,7 +1637,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         }
 
         UIBoxStyle BoxFromXml(const char* attributes) {
-            const String xml = String("<ui><elements><element type=\"UIElement\" name=\"x\" ") + attributes + "/></elements></ui>";
+            const String xml = Format("<ui><elements><element type=\"UIElement\" name=\"x\" {}/></elements></ui>", attributes);
             const UIScreenContent content = ReadXml(xml);
             EXPECT_EQ(content.elements.size(), 1u);
             return content.elements.empty() ? UIBoxStyle{} : content.elements[0]->box;
@@ -2025,7 +1676,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Attr("gradient", "gradientColor"), "68,85,102,255");
         EXPECT_EQ(compiled->Attr("gradient", "gradientDirection"), "Horizontal");
         EXPECT_EQ(BoxOf(*compiled, "gradient"), BoxFromXml("gradientDirection=\"Horizontal\" gradientColor=\"68,85,102,255\""));
-        EXPECT_EQ(compiled->Element("gradient")->color.r, 17);
+        EXPECT_EQ(Require(compiled->Element("gradient")).color.r, 17);
 
         EXPECT_EQ(compiled->Attr("shadow", "shadow"), "0,2,6,1,#00000080");
         EXPECT_FALSE(compiled->Has("shadow", "glow"));
@@ -2056,13 +1707,13 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
         LaidOut web(compiled->content);
         web.At(1280.0f, 720.0f);
-        EXPECT_NEAR(web.Find("card")->rect.w, 120.0f, kTolerance) << "the box paint is not layout";
+        EXPECT_NEAR(Require(web.Find("card")).rect.w, 120.0f, kTolerance) << "the box paint is not layout";
     }
 
     TEST_F(UIWebTest, APillIsARadiusOfAThousandPixels) {
         const auto compiled = Compile(R"(<button id="b" data-action="Go">Go</button>)", "#b { width: 120px; height: 40px; border-radius: 999px; background: #336699 }");
         EXPECT_EQ(compiled->Attr("b", "cornerRadius"), "999");
-        EXPECT_EQ(compiled->Element("b")->box.cornerRadius, UICorners::Uniform(999.0f));
+        EXPECT_EQ(Require(compiled->Element("b")).box.cornerRadius, UICorners::Uniform(999.0f));
         EXPECT_TRUE(compiled->report.issues.empty());
     }
 
@@ -2125,9 +1776,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->IssuesMentioning("-be-shape applies to a toggle, slider or progress bar only"), 1u);
         EXPECT_EQ(compiled->report.issues.size(), 1u);
         EXPECT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_EQ(compiled->Element("tSwitch")->GetComponent<UISwitchComponent>()->partShape, UIPartShape::Round);
-        EXPECT_EQ(compiled->Element("s")->GetComponent<UISliderComponent>()->partShape, UIPartShape::Round);
-        EXPECT_EQ(compiled->Element("p")->Cast<UIProgressBar>()->partShape, UIPartShape::Round);
+        EXPECT_EQ(Require(Require(compiled->Element("tSwitch")).GetComponent<UISwitchComponent>()).partShape, UIPartShape::Round);
+        EXPECT_EQ(Require(Require(compiled->Element("s")).GetComponent<UISliderComponent>()).partShape, UIPartShape::Round);
+        EXPECT_EQ(Require(compiled->Element("p")).Cast<UIProgressBar>()->partShape, UIPartShape::Round);
     }
 
     TEST_F(UIWebTest, AToggleWithATextColorGetsTheTrackAndThumbTheClassDerivedFromIt) {
@@ -2171,7 +1822,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Attr("tCaption", "fontSize"), "20");
         EXPECT_FALSE(compiled->Has("t", "fontSize"));
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        const String xml = compiled->xml.c_str();
+        const String& xml = compiled->xml;
         EXPECT_NE(xml.find(R"(<set element="tCaption" fontSize="14")"), String::npos) << xml;
         EXPECT_EQ(xml.find(R"(<set element="t" fontSize)"), String::npos) << xml;
     }
@@ -2210,22 +1861,22 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             EXPECT_FALSE(compiled->Has("Only", key)) << key;
         }
         EXPECT_EQ(compiled->Attr("OnlyIcon", "anchor"), "Center");
-        EXPECT_EQ(compiled->Attr("OnlyIcon", "width"), "60%");
-        EXPECT_EQ(compiled->Attr("OnlyIcon", "height"), "60%");
+        const String onlyShare = Format("{}%", std::lround(UIImageComponent::kIconOnlyShare * 100.0f));
+        EXPECT_EQ(compiled->Attr("OnlyIcon", "width"), onlyShare);
+        EXPECT_EQ(compiled->Attr("OnlyIcon", "height"), onlyShare);
         EXPECT_EQ(compiled->Attr("OnlyIcon", "aspectRatio"), "1");
         EXPECT_EQ(compiled->ComponentAttr("OnlyIcon", "UIImageComponent", "sprite"), "Settings");
         EXPECT_EQ(compiled->ComponentAttr("OnlyIcon", "UIImageComponent", "tint"), "255,204,0,255");
         EXPECT_EQ(compiled->ComponentAttr("Only", "UIInputClicker", "action"), "Opt");
         EXPECT_EQ(compiled->ComponentAttr("Only", "UITooltipComponent", "text"), "Options");
         EXPECT_TRUE(compiled->Component("Only", "UITextComponent").empty()) << "no caption, no text component";
-        EXPECT_EQ(static_cast<float>(UIImageComponent::kIconOnlyShare), 0.6f) << "the 60% above is the share of UIImageComponent";
 
         EXPECT_EQ(compiled->Attr("Left", "layout"), "Stack");
         EXPECT_EQ(compiled->Attr("Left", "direction"), "Horizontal");
-        EXPECT_EQ(compiled->Attr("Left", "padding"), "8,0,0,0");
-        EXPECT_EQ(compiled->Attr("Left", "spacing"), "6");
+        EXPECT_EQ(compiled->Attr("Left", "padding"), Format("{},0,0,0", UIImageComponent::kIconPadding));
+        EXPECT_EQ(compiled->Attr("Left", "spacing"), Format("{}", UIImageComponent::kIconGap));
         EXPECT_EQ(compiled->Attr("Left", "crossAlign"), "Center");
-        EXPECT_EQ(compiled->Attr("LeftIcon", "height"), "50%");
+        EXPECT_EQ(compiled->Attr("LeftIcon", "height"), Format("{}%", std::lround(UIImageComponent::kIconWithTextShare * 100.0f)));
         EXPECT_EQ(compiled->Attr("LeftIcon", "aspectRatio"), "1");
         EXPECT_FALSE(compiled->Has("LeftIcon", "width"));
         EXPECT_FALSE(compiled->Has("LeftIcon", "anchor"));
@@ -2237,9 +1888,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_TRUE(compiled->Component("Left", "UITextComponent").empty()) << "the text is the caption's";
         EXPECT_TRUE(compiled->Component("Left", "UITooltipComponent").empty());
         EXPECT_FALSE(compiled->Component("LeftIcon", "UIImageComponent").attribute("tint")) << "no tint: the icon follows the text colour";
-        EXPECT_EQ(static_cast<float>(UIImageComponent::kIconWithTextShare), 0.5f);
-        EXPECT_EQ(static_cast<float>(UIImageComponent::kIconPadding), 8.0f);
-        EXPECT_EQ(static_cast<float>(UIImageComponent::kIconGap), 6.0f);
 
         EXPECT_EQ(compiled->Attr("Above", "layout"), "Stack");
         EXPECT_EQ(compiled->ComponentAttr("Above", "UITooltipComponent", "text"), "{#opt.tip}");
@@ -2309,7 +1957,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->ComponentAttr("a", "UITooltipComponent", "text"), "T");
         EXPECT_EQ(compiled->ComponentAttr("b", "UITextComponent", "textColor"), "17,34,51,255") << "an icon-only segment keeps the colour for its bar";
 
-        auto* group = dynamic_cast<UISegmented*>(compiled->Element("g"));
+        auto* group = Require(compiled->Element("g")).Cast<UISegmented>();
         UIElement* a = compiled->Element("a");
         UIElement* b = compiled->Element("b");
         ASSERT_TRUE(group != nullptr && a != nullptr && b != nullptr);
@@ -2382,7 +2030,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     }
 
     TEST_F(UIWebTest, AnIconOnlyButtonThatIsTooSmallIsReportedByItsRect) {
-        const auto compiled = Compile(kIconButtonsHtml, String(kIconButtonsCss) + "#Only { width: 32px; height: 32px; }");
+        const auto compiled = Compile(kIconButtonsHtml, Format("{}#Only {{ width: 32px; height: 32px; }}", kIconButtonsCss));
         LaidOut web(compiled->content);
         UILayoutValidatorOptions options;
         options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
@@ -2437,7 +2085,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Attr("b", "pressedColor"), "5,5,5,255");
         EXPECT_EQ(compiled->IssuesMentioning("the far end of a state gradient is derived from its start color"), 1u) << "once, for both states";
         EXPECT_EQ(compiled->report.issues.size(), 1u);
-        EXPECT_EQ(compiled->Element("b")->box.gradientColor.r, 16) << "the box of the base look, the state shifts come from the start color";
+        EXPECT_EQ(Require(compiled->Element("b")).box.gradientColor.r, 16) << "the box of the base look, the state shifts come from the start color";
     }
 
     TEST_F(UIWebTest, ABoxPropertyInAStateRuleIsReported) {
@@ -2517,15 +2165,16 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         RecordingRenderer renderer;
         card->DrawSelf(renderer);
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_EQ(renderer.calls[0].kind, DrawKind::Geometry);
+        EXPECT_EQ(At(renderer.calls, 0).kind, DrawKind::Geometry);
 
         const auto flat = Compile(R"(<div id="card"></div>)", "#card { width: 100px; height: 40px; background: #ff0000 }");
         UIElement* plain = flat->Element("card");
+        ASSERT_NE(plain, nullptr);
         plain->rect = {0.0f, 0.0f, 100.0f, 40.0f};
         renderer.ClearCalls();
         plain->DrawSelf(renderer);
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_EQ(renderer.calls[0].kind, DrawKind::Rect) << "no box property, the plain rect as before";
+        EXPECT_EQ(At(renderer.calls, 0).kind, DrawKind::Rect) << "no box property: one plain rect";
     }
 
     // ---- variants from @media ------------------------------------------------------------------------------------------------
@@ -2554,9 +2203,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         // The base screen has it hidden; wide enough (in canvas units: the scale is kept at 0.7 or more, so 480 px are 685 units), the variant shows it
         LaidOut web(compiled->content);
         web.At(480.0f, 270.0f);
-        EXPECT_TRUE(web.Find("a")->rect.IsEmpty());
+        EXPECT_TRUE(Require(web.Find("a")).rect.IsEmpty());
         web.At(1920.0f, 1080.0f);
-        EXPECT_FALSE(web.Find("a")->rect.IsEmpty());
+        EXPECT_FALSE(Require(web.Find("a")).rect.IsEmpty());
     }
 
     TEST_F(UIWebTest, AQueryListMakesOneVariantForEachAlternative) {
@@ -2642,36 +2291,10 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
     // ---- as a resource -------------------------------------------------------------------------------------------------------
 
-    namespace {
-
-        class TempDirectory {
-        public:
-            // One directory per test: ctest runs them in parallel processes, and the constructor clears the directory
-            TempDirectory() : _path(TestTempDirectory("BagiEngineUIWebTest")) {
-                std::filesystem::remove_all(_path);
-                std::filesystem::create_directories(_path);
-            }
-            ~TempDirectory() {
-                std::error_code ignored;
-                std::filesystem::remove_all(_path, ignored);
-            }
-
-            String Write(const char* name, const String& content) const {
-                const auto file = _path / name;
-                std::ofstream(file) << content;
-                return FromStdString(file.generic_string());
-            }
-
-        private:
-            std::filesystem::path _path;
-        };
-
-    }  // namespace
-
     TEST_F(UIWebTest, ADocumentInHtmlLoadsThroughTheResourceManagerAndBuildsTheSameElements) {
-        TempDirectory temp;
+        const TestTempFolder temp("BagiEngineUIWebTest");
         temp.Write("hud.css", kHudCss);
-        const String path = temp.Write("hud.ui.html", String("<link rel=\"stylesheet\" href=\"hud.css\">") + kHudHtml);
+        const String path = temp.Write("hud.ui.html", Format("<link rel=\"stylesheet\" href=\"hud.css\">{}", kHudHtml));
 
         auto handle = CoreManager::GetResourceManager().Load<UIDocument>(path);
         ASSERT_TRUE(handle);
@@ -2777,7 +2400,7 @@ button  { height: 56px; font-size: 28px; }
         const auto* card = compiled->Element("card");
         ASSERT_NE(card, nullptr);
         EXPECT_EQ(card->color.token.ToStringView(), "panel");
-        const auto* label = compiled->Element("text")->GetComponent<UITextComponent>();
+        const auto* label = Require(compiled->Element("text")).GetComponent<UITextComponent>();
         ASSERT_NE(label, nullptr);
         EXPECT_EQ(label->textColor.token.ToStringView(), "line");
         EXPECT_EQ(label->textEffects.shadowColor.token.ToStringView(), "shade");
@@ -2894,6 +2517,7 @@ button:checked { background: var(--panel); }
         EXPECT_TRUE(ColorsEqual(play->color, Color{20, 160, 90, 255}));
         EXPECT_EQ(play->color.token.ToStringView(), "play");
         UIElement* quit = compiled->Element("Quit");
+        ASSERT_NE(quit, nullptr);
         quit->ResolveTheme(themes);
         EXPECT_TRUE(ColorsEqual(quit->color, Color{160, 40, 60, 255}));
         EXPECT_TRUE(themes.GetMissing().empty());
@@ -2913,7 +2537,7 @@ button:checked { background: var(--panel); }
             renderer.ClearCalls();
             card->ResolveTheme(themes);
             card->DrawSelf(renderer);
-            return renderer.calls.empty() ? Color{} : renderer.calls[0].color;
+            return renderer.calls.empty() ? Color{} : At(renderer.calls, 0).color;
         };
         EXPECT_TRUE(ColorsEqual(drawn(), Color{240, 240, 230, 255}));
         ASSERT_TRUE(themes.SetTheme("dark"_intern));
@@ -2922,6 +2546,7 @@ button:checked { background: var(--panel); }
 
         const auto ghost = Compile(R"(<div id="ghost"></div>)", "#ghost { width: 10px; height: 10px; background: var(--nowhere); }");
         UIElement* element = ghost->Element("ghost");
+        ASSERT_NE(element, nullptr);
         element->rect = {0.0f, 0.0f, 10.0f, 10.0f};
         element->ResolveTheme(themes);
         EXPECT_TRUE(ColorsEqual(element->color, kMissingTokenColor));
@@ -2951,7 +2576,7 @@ button:checked { background: var(--panel); }
 
         CompiledWithSheet CompileWithSheet(const String& html, const String& css) {
             CompiledWithSheet result;
-            const String source = "<link rel=\"stylesheet\" href=\"a.css\">" + html;
+            const String source = Format("<link rel=\"stylesheet\" href=\"a.css\">{}", html);
             const UIWebCompiler::StylesheetLoader loader = [&css](StringView) { return Optional<String>(String(css.data(), css.size())); };
             result.xml = UIWebCompiler::Compile(source, loader, result.report);
             return result;
@@ -2967,7 +2592,7 @@ button:checked { background: var(--panel); }
         }
 
         bool Mentions(const UIWebReport& report, const char* text) {
-            return std::any_of(report.issues.begin(), report.issues.end(), [&](const UIWebIssue& issue) { return issue.message.find(text) != String::npos; });
+            return CountIssuesMentioning(report, text) > 0;
         }
 
     }  // namespace
@@ -2981,7 +2606,7 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, ANestingAtTheLimitIsKeptWhole) {
-        const String html = Repeat("<div>", UIHtmlParser::kMaxDepth) + Repeat("</div>", UIHtmlParser::kMaxDepth);
+        const String html = Format("{}{}", Repeat("<div>", UIHtmlParser::kMaxDepth), Repeat("</div>", UIHtmlParser::kMaxDepth));
         const auto compiled = Compile(html);
         EXPECT_FALSE(Mentions(compiled->report, "nested deeper"));
         EXPECT_EQ(compiled->report.elements, UIHtmlParser::kMaxDepth);
@@ -2995,7 +2620,7 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, ADocumentOverTheSizeLimitIsCutWithAnEntry) {
-        const String html = "<span id=\"s\">" + String(2 * UIHtmlParser::kMaxDocumentBytes, 'a') + "</span>";
+        const String html = Format("<span id=\"s\">{}</span>", String(2 * UIHtmlParser::kMaxDocumentBytes, 'a'));
         const auto compiled = Compile(html);
         EXPECT_TRUE(Mentions(compiled->report, "document is longer than 1048576 bytes"));
     }
@@ -3009,7 +2634,7 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, ASelectorOfOneMegabyteIsLeftOutAndTheRuleAfterItStays) {
-        const String css = "." + String(1024 * 1024 - 100, 'a') + " { width: 5px; }\n#b { width: 7px; }";
+        const String css = Format(".{} {{ width: 5px; }}\n#b {{ width: 7px; }}", String(1024 * 1024 - 100, 'a'));
         const CompiledWithSheet compiled = CompileWithSheet("<div id=\"b\"></div>", css);
         EXPECT_TRUE(Mentions(compiled.report, "selector longer than 1024 bytes"));
         EXPECT_EQ(compiled.report.rules, 1u);
@@ -3019,22 +2644,22 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, ASelectorOfTooManyPartsAndARuleOfTooManySelectorsAreLeftOut) {
-        const String parts = Repeat("div ", UICssParser::kMaxSelectorParts) + "span";
-        const auto tooLong = Compile("<div id=\"a\"></div>", parts + " { width: 1px; }");
+        const String parts = Format("{}span", Repeat("div ", UICssParser::kMaxSelectorParts));
+        const auto tooLong = Compile("<div id=\"a\"></div>", Format("{} {{ width: 1px; }}", parts));
         EXPECT_TRUE(Mentions(tooLong->report, "more than 16 parts"));
         EXPECT_EQ(tooLong->report.rules, 0u);
 
-        const String atTheLimit = Repeat("div ", UICssParser::kMaxSelectorParts - 1) + "span";
-        const auto fits = Compile("<div id=\"a\"></div>", atTheLimit + " { width: 1px; }");
+        const String atTheLimit = Format("{}span", Repeat("div ", UICssParser::kMaxSelectorParts - 1));
+        const auto fits = Compile("<div id=\"a\"></div>", Format("{} {{ width: 1px; }}", atTheLimit));
         EXPECT_FALSE(Mentions(fits->report, "more than 16 parts"));
         EXPECT_EQ(fits->report.rules, 1u);
 
-        const auto list = Compile("<div id=\"a\"></div>", Repeat("a, ", 40) + "#a { width: 3px; }");
+        const auto list = Compile("<div id=\"a\"></div>", Format("{}#a {{ width: 3px; }}", Repeat("a, ", 40)));
         EXPECT_TRUE(Mentions(list->report, "more than 32 selectors"));
     }
 
     TEST_F(UIWebTest, DeclarationsRulesAndMediaBlocksPastTheirLimitsAreLeftOut) {
-        const auto declarations = Compile("<div id=\"a\"></div>", "#a { " + Repeat("width: 1px; ", 300) + "}");
+        const auto declarations = Compile("<div id=\"a\"></div>", Format("#a {{ {}}}", Repeat("width: 1px; ", 300)));
         EXPECT_TRUE(Mentions(declarations->report, "more than 256 declarations"));
         EXPECT_EQ(declarations->report.declarations, UICssParser::kMaxDeclarationsPerRule);
 
@@ -3042,24 +2667,24 @@ button:checked { background: var(--panel); }
         EXPECT_EQ(rules->report.rules, UICssParser::kMaxRules);
         EXPECT_TRUE(Mentions(rules->report, "more than 1024 rules"));
 
-        const auto totalDeclarations = Compile("<div id=\"a\"></div>", Repeat(".x { " + Repeat("width: 1px; ", 200) + "}\n", 100));
+        const auto totalDeclarations = Compile("<div id=\"a\"></div>", Repeat(Format(".x {{ {}}}\n", Repeat("width: 1px; ", 200)), 100));
         EXPECT_TRUE(Mentions(totalDeclarations->report, "more than 16384 declarations"));
 
         const auto medias = Compile("<div id=\"a\"></div>", Repeat("@media (min-width: 100px) { #a { width: 1px; } }\n", 20));
         EXPECT_EQ(medias->report.mediaBlocks, UICssParser::kMaxMediaBlocks);
         EXPECT_TRUE(Mentions(medias->report, "more than 16 @media blocks"));
 
-        const auto queries = Compile("<div id=\"a\"></div>", "@media " + Repeat("(min-width: 100px), ", 12) + "(max-width: 90px) { #a { width: 1px; } }");
+        const auto queries = Compile("<div id=\"a\"></div>", Format("@media {}(max-width: 90px) {{ #a {{ width: 1px; }} }}", Repeat("(min-width: 100px), ", 12)));
         EXPECT_TRUE(Mentions(queries->report, "more than 8 queries"));
         EXPECT_LE(queries->report.variants, UICssParser::kMaxMediaAlternatives);
     }
 
     TEST_F(UIWebTest, AnElementWithTooManyOrTooLongAttributesLosesThem) {
-        const auto many = Compile("<div id=\"a\" " + Repeat("data-x=\"1\" ", 100) + "></div>");
+        const auto many = Compile(Format("<div id=\"a\" {}></div>", Repeat("data-x=\"1\" ", 100)));
         EXPECT_TRUE(Mentions(many->report, "more than 64 attributes"));
         EXPECT_TRUE(static_cast<bool>(many->Find("a"))) << "the element itself stays";
 
-        const auto longValue = Compile("<div id=\"a\" title=\"" + String(UIHtmlParser::kMaxAttributeBytes + 1, 'x') + "\"></div>");
+        const auto longValue = Compile(Format("<div id=\"a\" title=\"{}\"></div>", String(UIHtmlParser::kMaxAttributeBytes + 1, 'x')));
         EXPECT_TRUE(Mentions(longValue->report, "longer than 16384 bytes"));
         EXPECT_EQ(longValue->report.elements, 1u);
     }
@@ -3076,7 +2701,7 @@ button:checked { background: var(--panel); }
     TEST_F(UIWebTest, MoreIssuesThanTheReportKeepsAreCountedAndSaidOnce) {
         String css = "#a {";
         for (size_t i = 0; i < 500; ++i) {
-            css += " unknown-" + ToString(i) + ": 1;";
+            AppendFormat(css, " unknown-{}: 1;", i);
         }
         css += " }";
         const auto compiled = Compile("<div id=\"a\"></div>", css);
@@ -3087,17 +2712,17 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, AMessageThatRepeatsTheFileHasNoLineBreakAndIsCut) {
-        const String name = "bad\nname" + String(1000, 'z');
-        const auto compiled = Compile("<div id=\"a\"></div>", "#a { " + name + ": 1; }");
+        const String name = Format("bad\nname{}", String(1000, 'z'));
+        const auto compiled = Compile("<div id=\"a\"></div>", Format("#a {{ {}: 1; }}", name));
         ASSERT_TRUE(compiled->report.HasIssues());
         for (const UIWebIssue& issue : compiled->report.issues) {
             EXPECT_LE(issue.message.size(), UIWebReport::kMaxMessageBytes);
             EXPECT_EQ(issue.message.find('\n'), String::npos);
         }
         // A cut never leaves half of a UTF-8 character: the text is Cyrillic, two bytes a letter, and the cut falls between the two bytes of one
-        const auto cyrillic = Compile("<div id=\"a\"></div>", "#a { " + Repeat("\xD0\xB1", 400) + ": 1; }");
+        const auto cyrillic = Compile("<div id=\"a\"></div>", Format("#a {{ {}: 1; }}", Repeat("\xD0\xB1", 400)));
         ASSERT_TRUE(cyrillic->report.HasIssues());
-        const String message = cyrillic->report.issues[0].message.c_str();
+        const String& message = cyrillic->report.issues[0].message;
         const size_t dots = message.find("...");
         ASSERT_NE(dots, String::npos);
         EXPECT_EQ(static_cast<uint8_t>(message[dots - 1]) & 0xC0, 0x80) << "the character before the dots is whole: it ends in a continuation byte";
@@ -3131,9 +2756,10 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, ADescendantSelectorOverADeepChainCostsTheChainNotTheNumberOfWaysThroughIt) {
-        // `span` is never an ancestor, so every way down the chain of 60 divs fails at the end: without memory that is the number of ways to choose 14 of 60
-        const String selector = "span " + Repeat("div ", 14) + "div";
-        const auto compiled = Compile(Repeat("<div>", 60) + Repeat("</div>", 60), selector + " { width: 1px; }");
+        // `span` is never an ancestor, so every way down the chain of 60 divs fails at the end: without memory that is the number of ways to choose 14 of 60,
+        // and the case never ends (the ctest timeout fails it); what it costs with the memory is the benchmark `ui-web-limits`
+        const String selector = Format("span {}div", Repeat("div ", 14));
+        const auto compiled = Compile(Format("{}{}", Repeat("<div>", 60), Repeat("</div>", 60)), Format("{} {{ width: 1px; }}", selector));
         EXPECT_FALSE(compiled->report.HasIssues());
     }
 
@@ -3166,12 +2792,12 @@ button:checked { background: var(--panel); }
         (void)Compile(Repeat("<div></div>", 20000));
         (void)CompileWithSheet("<div id=\"a\" class=\"a\"></div>", Repeat(".a { width: 1px; }\n", 10 * 1024 * 1024 / 19));
         (void)Compile(Repeat("<div class=\"x\"></div>", 4000), Repeat(".x { width: 1px; }\n", 1000));
-        (void)Compile(Repeat("<div>", 60) + Repeat("</div>", 60), "span " + Repeat("div ", 14) + "div { width: 1px; }");
+        (void)Compile(Format("{}{}", Repeat("<div>", 60), Repeat("</div>", 60)), Format("span {}div {{ width: 1px; }}", Repeat("div ", 14)));
         std::printf("UIWebLimits total_ms=%.1f\n", watch.Seconds() * 1000.0);
     }
 
-    TEST_F(UIWebTest, ThousandsOfVariantElementsWithoutAnIdGetNamesInLinearTime) {
-        const auto compiled = Compile("<div id=\"div-2\"></div>" + Repeat("<div class=\"x\"></div>", 2000), "@media (min-width: 1px) { .x { width: 5px; } }");
+    TEST_F(UIWebTest, ThousandsOfVariantElementsWithoutAnIdGetNamesOfTheirOwn) {
+        const auto compiled = Compile(Format("<div id=\"div-2\"></div>{}", Repeat("<div class=\"x\"></div>", 2000)), "@media (min-width: 1px) { .x { width: 5px; } }");
         Set<String> names;
         for (const pugi::xpath_node node : compiled->document.select_nodes("//element")) {
             names.insert(node.node().attribute("name").as_string());
@@ -3208,8 +2834,8 @@ button:checked { background: var(--panel); }
         EXPECT_EQ(compiled->IssuesMentioning("'opacity: 1.5' is not understood"), 1u);
         EXPECT_EQ(compiled->IssuesMentioning("'opacity: half' is not understood"), 1u);
         EXPECT_EQ(compiled->report.issues.size(), 2u);
-        EXPECT_FLOAT_EQ(compiled->Element("a")->opacity, 0.5f);
-        EXPECT_FLOAT_EQ(compiled->Element("c")->opacity, 0.0f);
+        EXPECT_FLOAT_EQ(Require(compiled->Element("a")).opacity, 0.5f);
+        EXPECT_FLOAT_EQ(Require(compiled->Element("c")).opacity, 0.0f);
     }
 
     TEST_F(UIWebTest, APanelWithOpacityAndAFadeCompilesToTheXmlWrittenByHand) {
@@ -3218,7 +2844,7 @@ button:checked { background: var(--panel); }
         const UIScreenContent expected = ReadXml(R"(<ui><elements><element type="UIElement" name="p" color="17,34,51,255" width="200" height="100" opacity="0.8" blocksInput="true">
             <components><component type="UITransitionComponent" duration="0.2"/></components></element></elements></ui>)");
         ExpectSameElements(expected.elements, compiled->content.elements);
-        const auto* transition = compiled->Element("p")->GetComponent<UITransitionComponent>();
+        const auto* transition = Require(compiled->Element("p")).GetComponent<UITransitionComponent>();
         ASSERT_NE(transition, nullptr) << compiled->xml.c_str();
         EXPECT_TRUE(transition->fade);
         EXPECT_FLOAT_EQ(transition->duration, 0.2f);
@@ -3233,7 +2859,7 @@ button:checked { background: var(--panel); }
         const auto compiled =
             Compile(R"(<div id="p"></div>)", "#p { transition: opacity 150ms linear, transform 150ms linear; -be-transition-scale: 0.9; -be-transition-slide: 0px 24px; -be-transition-input: allow }");
         EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str();
-        const auto* transition = compiled->Element("p")->GetComponent<UITransitionComponent>();
+        const auto* transition = Require(compiled->Element("p")).GetComponent<UITransitionComponent>();
         ASSERT_NE(transition, nullptr) << compiled->xml.c_str();
         EXPECT_TRUE(transition->fade);
         EXPECT_FLOAT_EQ(transition->duration, 0.15f);
@@ -3245,7 +2871,7 @@ button:checked { background: var(--panel); }
 
         const auto onlyMove = Compile(R"(<div id="p"></div>)", "#p { transition: transform .3s ease-in; -be-transition-slide: -40px 0px }");
         EXPECT_FALSE(onlyMove->report.HasIssues());
-        const auto* move = onlyMove->Element("p")->GetComponent<UITransitionComponent>();
+        const auto* move = Require(onlyMove->Element("p")).GetComponent<UITransitionComponent>();
         ASSERT_NE(move, nullptr) << onlyMove->xml.c_str();
         EXPECT_FALSE(move->fade) << "no opacity in the list: no fade";
         EXPECT_FLOAT_EQ(move->slideX, -40.0f);
@@ -3254,20 +2880,20 @@ button:checked { background: var(--panel); }
 
     TEST_F(UIWebTest, TheFirstTimeOfOpacityAndTransformIsTheDuration) {
         const auto transformFirst = Compile(R"(<div id="p"></div>)", "#p { transition: transform 300ms, opacity 100ms; -be-transition-scale: 0.9 }");
-        const auto* first = transformFirst->Element("p")->GetComponent<UITransitionComponent>();
+        const auto* first = Require(transformFirst->Element("p")).GetComponent<UITransitionComponent>();
         ASSERT_NE(first, nullptr) << transformFirst->xml.c_str();
         EXPECT_FLOAT_EQ(first->duration, 0.3f);
         EXPECT_EQ(transformFirst->IssuesMentioning("share one duration"), 1u);
 
         const auto opacityFirst = Compile(R"(<div id="p"></div>)", "#p { transition: opacity 100ms, transform 300ms; -be-transition-scale: 0.9 }");
-        const auto* second = opacityFirst->Element("p")->GetComponent<UITransitionComponent>();
+        const auto* second = Require(opacityFirst->Element("p")).GetComponent<UITransitionComponent>();
         ASSERT_NE(second, nullptr) << opacityFirst->xml.c_str();
         EXPECT_FLOAT_EQ(second->duration, 0.1f);
         EXPECT_EQ(opacityFirst->IssuesMentioning("share one duration"), 1u);
 
         // A transform with no end values does nothing, so it does not take the time of the fade
         const auto noEnd = Compile(R"(<div id="p"></div>)", "#p { transition: transform 300ms, opacity 100ms }");
-        const auto* fadeOnly = noEnd->Element("p")->GetComponent<UITransitionComponent>();
+        const auto* fadeOnly = Require(noEnd->Element("p")).GetComponent<UITransitionComponent>();
         ASSERT_NE(fadeOnly, nullptr) << noEnd->xml.c_str();
         EXPECT_FLOAT_EQ(fadeOnly->duration, 0.1f);
     }
@@ -3275,7 +2901,7 @@ button:checked { background: var(--panel); }
     TEST_F(UIWebTest, AZeroTransitionScaleIsAccepted) {
         const auto compiled = Compile(R"(<div id="p"></div>)", "#p { transition: opacity .2s, transform .2s; -be-transition-scale: 0 }");
         EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str();
-        const auto* transition = compiled->Element("p")->GetComponent<UITransitionComponent>();
+        const auto* transition = Require(compiled->Element("p")).GetComponent<UITransitionComponent>();
         ASSERT_NE(transition, nullptr) << compiled->xml.c_str();
         EXPECT_FLOAT_EQ(transition->scaleFrom, 0.0f);
 
@@ -3287,14 +2913,14 @@ button:checked { background: var(--panel); }
         const Pair<const char*, EaseType> cases[] = {{"linear", EaseType::Linear},    {"ease", EaseType::QuadInOut},        {"ease-in", EaseType::QuadIn},
                                                      {"ease-out", EaseType::QuadOut}, {"ease-in-out", EaseType::QuadInOut}, {"", EaseType::QuadInOut}};
         for (const auto& [word, ease] : cases) {
-            const auto compiled = Compile(R"(<div id="p"></div>)", String("#p { transition: opacity .1s ") + word + " }");
-            const auto* transition = compiled->Element("p")->GetComponent<UITransitionComponent>();
+            const auto compiled = Compile(R"(<div id="p"></div>)", Format("#p {{ transition: opacity .1s {} }}", word));
+            const auto* transition = Require(compiled->Element("p")).GetComponent<UITransitionComponent>();
             ASSERT_NE(transition, nullptr) << word;
             EXPECT_EQ(transition->ease, ease) << "'" << word << "' (no word is CSS's `ease`)";
             EXPECT_FALSE(compiled->report.HasIssues()) << word;
         }
         const auto bezier = Compile(R"(<div id="p"></div>)", "#p { transition: opacity .1s cubic-bezier(0, 0, 1, 1) }");
-        EXPECT_EQ(bezier->Element("p")->GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_EQ(Require(bezier->Element("p")).GetComponent<UITransitionComponent>(), nullptr);
         EXPECT_EQ(bezier->IssuesMentioning("'transition: opacity .1s cubic-bezier(0, 0, 1, 1)' is not understood"), 1u);
     }
 
@@ -3307,8 +2933,8 @@ button:checked { background: var(--panel); }
         EXPECT_EQ(compiled->Attr("b", "stateDuration"), "0.15");
         EXPECT_EQ(compiled->Attr("c", "stateDuration"), "0.2");
         EXPECT_EQ(compiled->Attr("d", "stateDuration"), "0.1");
-        EXPECT_FLOAT_EQ(compiled->Element("b")->stateDuration, 0.15f);
-        EXPECT_EQ(compiled->Element("b")->GetComponent<UITransitionComponent>(), nullptr) << "the state look is not a show / hide";
+        EXPECT_FLOAT_EQ(Require(compiled->Element("b")).stateDuration, 0.15f);
+        EXPECT_EQ(Require(compiled->Element("b")).GetComponent<UITransitionComponent>(), nullptr) << "the state look is not a show / hide";
         EXPECT_TRUE(compiled->Find("b").child("components").child("component").attribute("type"));
     }
 
@@ -3316,8 +2942,8 @@ button:checked { background: var(--panel); }
         const auto compiled =
             Compile(R"(<div id="t" data-widget="toggle" data-bind="v">T</div><div id="s" data-widget="slider" data-bind="w"></div>)", "#t, #s { transition: opacity .25s ease-out; opacity: .9 }");
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_NE(compiled->Element("t")->GetComponent<UITransitionComponent>(), nullptr);
-        EXPECT_NE(compiled->Element("s")->GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_NE(Require(compiled->Element("t")).GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_NE(Require(compiled->Element("s")).GetComponent<UITransitionComponent>(), nullptr);
         EXPECT_FALSE(compiled->Has("t", "duration"));
         EXPECT_FALSE(compiled->Has("s", "duration"));
         EXPECT_EQ(compiled->Attr("t", "opacity"), "0.9");
@@ -3341,17 +2967,17 @@ button:checked { background: var(--panel); }
         EXPECT_EQ(compiled->IssuesMentioning("only apply with `transform` in transition"), 1u);
         EXPECT_EQ(compiled->IssuesMentioning("'-be-transition-input: maybe' is not understood"), 1u);
         EXPECT_EQ(compiled->report.issues.size(), 7u);
-        EXPECT_NE(compiled->Element("a")->GetComponent<UITransitionComponent>(), nullptr) << "the fade stays, the delay is dropped";
-        EXPECT_NE(compiled->Element("b")->GetComponent<UITransitionComponent>(), nullptr);
-        EXPECT_EQ(compiled->Element("c")->GetComponent<UITransitionComponent>(), nullptr);
-        EXPECT_EQ(compiled->Element("e")->GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_NE(Require(compiled->Element("a")).GetComponent<UITransitionComponent>(), nullptr) << "the fade stays, the delay is dropped";
+        EXPECT_NE(Require(compiled->Element("b")).GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_EQ(Require(compiled->Element("c")).GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_EQ(Require(compiled->Element("e")).GetComponent<UITransitionComponent>(), nullptr);
     }
 
     TEST_F(UIWebTest, ATransitionNoneAndATimeOfZeroMakeNoComponent) {
         const auto compiled = Compile(R"(<div id="a" class="x"></div><div id="b"></div>)", ".x { transition: opacity .2s } #a { transition: none } #b { transition: opacity 0s }");
         EXPECT_FALSE(compiled->report.HasIssues());
-        EXPECT_EQ(compiled->Element("a")->GetComponent<UITransitionComponent>(), nullptr);
-        EXPECT_EQ(compiled->Element("b")->GetComponent<UITransitionComponent>(), nullptr) << "a time of 0 is no animation";
+        EXPECT_EQ(Require(compiled->Element("a")).GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_EQ(Require(compiled->Element("b")).GetComponent<UITransitionComponent>(), nullptr) << "a time of 0 is no animation";
     }
 
 }  // namespace BECore::Tests

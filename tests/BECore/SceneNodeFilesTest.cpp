@@ -1,7 +1,9 @@
 #include <BECore/Config/ContentVersion.h>
 #include <BECore/Scene/SceneNodeFiles.h>
 #include <Common/Printers.h>
+#include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 
 namespace BECore::Tests {
 
@@ -16,22 +18,11 @@ namespace BECore::Tests {
   <component type="TransformComponent" x="5" y="6" width="7" height="8"/>
 </components></node>)";
 
-        void WriteFile(const std::filesystem::path& path, const String& text) {
-            std::filesystem::create_directories(path.parent_path());
-            std::ofstream(path) << text;
-        }
-
         pugi::xml_document Parse(const char* text) {
             pugi::xml_document doc;
             const pugi::xml_parse_result result = doc.load_string(text);
             EXPECT_TRUE(result) << result.description();
             return doc;
-        }
-
-        String Saved(const pugi::xml_node& node) {
-            std::ostringstream out;
-            node.print(out, "  ", pugi::format_indent);
-            return FromStdString(out.str());
         }
 
         /// The names of the `<node>` elements of the scene `sceneName`, in order
@@ -48,13 +39,9 @@ namespace BECore::Tests {
             return names;
         }
 
-        String SceneConfigWith(const String& nodesXml) {
-            return "<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes>" + nodesXml + "</nodes></scene></scenes></SceneManager>";
-        }
-
         /// A node file at the current content version, as the file-system loader wants it
         String CurrentNode(const char* name) {
-            return String("<node name=\"") + name + "\" contentVersion=\"" + ToString(kContentVersion) + "\"/>";
+            return Format("<node name=\"{}\" contentVersion=\"{}\"/>", name, kContentVersion);
         }
 
         /// The text of a file, to see that a node file is not changed by the instances made of it
@@ -155,7 +142,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeFilesTest, ReferenceIsReplacedInPlace) {
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node name="A"/><node ref="nodes/Hud"/><node name="C"/>)"), doc);
+        const auto result = Expand(SceneConfigText(R"(<node name="A"/><node ref="nodes/Hud"/><node name="C"/>)"), doc);
 
         EXPECT_TRUE(result.Ok());
         EXPECT_EQ(result.expanded, 1u);
@@ -173,7 +160,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeFilesTest, ReferencesKeepTheOrderOfTheReferences) {
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node ref="nodes/B"/><node name="A"/><node ref="nodes/Hud"/><node ref="nodes/B"/>)"), doc);
+        const auto result = Expand(SceneConfigText(R"(<node ref="nodes/B"/><node name="A"/><node ref="nodes/Hud"/><node ref="nodes/B"/>)"), doc);
 
         EXPECT_TRUE(result.Ok());
         EXPECT_EQ(result.expanded, 3u);
@@ -204,13 +191,13 @@ namespace BECore::Tests {
 </scenes></SceneManager>)";
         pugi::xml_document doc;
         ASSERT_TRUE(doc.load_string(text));
-        const String before = Saved(doc);
+        const String before = XmlTextIndented(doc);
 
         const auto result = ExpandNodeReferences(doc.document_element(), MakeDirectoryNodeLoader(_dir));
 
         EXPECT_TRUE(result.Ok());
         EXPECT_EQ(result.expanded, 0u);
-        EXPECT_EQ(Saved(doc), before);
+        EXPECT_EQ(XmlTextIndented(doc), before);
     }
 
     TEST_F(SceneNodeFilesTest, ConfigWithoutScenesIsHarmless) {
@@ -226,7 +213,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeFilesTest, MissingFileIsOneErrorAndTheNeighboursStay) {
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node name="A"/><node ref="nodes/Nothing"/><node name="C"/>)"), doc);
+        const auto result = Expand(SceneConfigText(R"(<node name="A"/><node ref="nodes/Nothing"/><node name="C"/>)"), doc);
 
         ExpectOneError(result, "nodes/Nothing");
         EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<String>{"A", "C"}));
@@ -235,7 +222,7 @@ namespace BECore::Tests {
     TEST_F(SceneNodeFilesTest, DocumentElementThatIsNotANodeIsAnError) {
         WriteFile(_dir / "nodes" / "NotNode.xml", R"(<scene name="X"/>)");
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node name="A"/><node ref="nodes/NotNode"/><node name="C"/>)"), doc);
+        const auto result = Expand(SceneConfigText(R"(<node name="A"/><node ref="nodes/NotNode"/><node name="C"/>)"), doc);
 
         ExpectOneError(result, "nodes/NotNode");
         EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<String>{"A", "C"}));
@@ -244,7 +231,7 @@ namespace BECore::Tests {
     TEST_F(SceneNodeFilesTest, NodeThatIsAReferenceItselfIsAnError) {
         WriteFile(_dir / "nodes" / "Nested.xml", R"(<node ref="nodes/B"/>)");
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node name="A"/><node ref="nodes/Nested"/><node name="C"/>)"), doc);
+        const auto result = Expand(SceneConfigText(R"(<node name="A"/><node ref="nodes/Nested"/><node name="C"/>)"), doc);
 
         ExpectOneError(result, "nodes/Nested");
         EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<String>{"A", "C"}));
@@ -253,7 +240,7 @@ namespace BECore::Tests {
     TEST_F(SceneNodeFilesTest, SelfReferenceCannotLoop) {
         WriteFile(_dir / "nodes" / "Self.xml", R"(<node ref="nodes/Self"/>)");
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node ref="nodes/Self"/>)"), doc);
+        const auto result = Expand(SceneConfigText(R"(<node ref="nodes/Self"/>)"), doc);
 
         ExpectOneError(result, "nodes/Self");
         EXPECT_TRUE(NodeNames(doc.document_element(), "Main").empty());
@@ -262,7 +249,7 @@ namespace BECore::Tests {
     TEST_F(SceneNodeFilesTest, FileThatDoesNotParseIsAnError) {
         WriteFile(_dir / "nodes" / "Broken.xml", "<node name=\"Broken\"><components></node>");
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node name="A"/><node ref="nodes/Broken"/><node name="C"/>)"), doc);
+        const auto result = Expand(SceneConfigText(R"(<node name="A"/><node ref="nodes/Broken"/><node name="C"/>)"), doc);
 
         ExpectOneError(result, "nodes/Broken");
         EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<String>{"A", "C"}));
@@ -270,7 +257,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeFilesTest, InvalidReferenceIsAnError) {
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node name="A"/><node ref="../nodes/B"/><node name="C"/>)"), doc);
+        const auto result = Expand(SceneConfigText(R"(<node name="A"/><node ref="../nodes/B"/><node name="C"/>)"), doc);
 
         ExpectOneError(result, "../nodes/B");
         EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<String>{"A", "C"}));
@@ -278,7 +265,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeFilesTest, ReferenceWithAnUnsupportedAttributeIsAnError) {
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node name="A"/><node ref="nodes/B" foo="1"/><node name="C"/>)"), doc);
+        const auto result = Expand(SceneConfigText(R"(<node name="A"/><node ref="nodes/B" foo="1"/><node name="C"/>)"), doc);
 
         ExpectOneError(result, "nodes/B");
         EXPECT_TRUE(Mentions(result.errors[0], "'foo'")) << result.errors[0].c_str();
@@ -287,7 +274,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeFilesTest, ReferenceWithAChildThatIsNotComponentsIsAnError) {
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node name="A"/><node ref="nodes/B"><children/></node><node name="C"/>)"), doc);
+        const auto result = Expand(SceneConfigText(R"(<node name="A"/><node ref="nodes/B"><children/></node><node name="C"/>)"), doc);
 
         ExpectOneError(result, "nodes/B");
         EXPECT_TRUE(Mentions(result.errors[0], "'children'")) << result.errors[0].c_str();
@@ -296,7 +283,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeFilesTest, ErrorsAndExpansionsAreCountedTogether) {
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node ref="nodes/Hud"/><node ref="nodes/Nothing"/><node ref="nodes/B"/><node ref="bad ref"/>)"), doc);
+        const auto result = Expand(SceneConfigText(R"(<node ref="nodes/Hud"/><node ref="nodes/Nothing"/><node ref="nodes/B"/><node ref="bad ref"/>)"), doc);
 
         EXPECT_FALSE(result.Ok());
         EXPECT_EQ(result.expanded, 2u);
@@ -314,7 +301,7 @@ namespace BECore::Tests {
             error = "unknown";
             return false;
         };
-        pugi::xml_document doc = Parse(SceneConfigWith(R"(<node ref="known"/><node ref="other"/>)").c_str());
+        pugi::xml_document doc = Parse(SceneConfigText(R"(<node ref="known"/><node ref="other"/>)").c_str());
 
         const auto result = ExpandNodeReferences(doc.document_element(), loader);
 
@@ -372,7 +359,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneNodeFilesTest, LoadSceneDocumentExpandsNextToTheFile) {
-        WriteFile(_dir / "SceneConfig.xml", SceneConfigWith(R"(<node name="A"/><node ref="nodes/Hud"/><node ref="nodes/B"/>)"));
+        WriteFile(_dir / "SceneConfig.xml", SceneConfigText(R"(<node name="A"/><node ref="nodes/Hud"/><node ref="nodes/B"/>)"));
 
         pugi::xml_document doc;
         const auto result = LoadSceneDocument(_dir / "SceneConfig.xml", doc);
@@ -383,7 +370,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneNodeFilesTest, LoadSceneDocumentReportsABadReferenceAndKeepsTheScene) {
-        WriteFile(_dir / "SceneConfig.xml", SceneConfigWith(R"(<node name="A"/><node ref="nodes/Nothing"/>)"));
+        WriteFile(_dir / "SceneConfig.xml", SceneConfigText(R"(<node name="A"/><node ref="nodes/Nothing"/>)"));
 
         pugi::xml_document doc;
         const auto result = LoadSceneDocument(_dir / "SceneConfig.xml", doc);
@@ -418,8 +405,8 @@ namespace BECore::Tests {
     TEST_F(SceneNodeFilesTest, FileSystemLoaderRefusesAnOlderAndANewerNodeFile) {
         ASSERT_GT(kContentVersion, 0u);
         const auto root = _dir / "root";
-        WriteFile(root / "config" / "nodes" / "Old.xml", "<node name=\"Old\" contentVersion=\"" + ToString(kContentVersion - 1) + "\"/>");
-        WriteFile(root / "config" / "nodes" / "New.xml", "<node name=\"New\" contentVersion=\"" + ToString(kContentVersion + 1) + "\"/>");
+        WriteFile(root / "config" / "nodes" / "Old.xml", Format("<node name=\"Old\" contentVersion=\"{}\"/>", kContentVersion - 1));
+        WriteFile(root / "config" / "nodes" / "New.xml", Format("<node name=\"New\" contentVersion=\"{}\"/>", kContentVersion + 1));
         WriteFile(root / "config" / "nodes" / "Bad.xml", R"(<node name="Bad" contentVersion="two"/>)");
         WriteFile(root / "config" / "nodes" / "Now.xml", CurrentNode("Now"));
         FileSystem fs;
@@ -445,14 +432,14 @@ namespace BECore::Tests {
     TEST_F(SceneNodeFilesTest, AnOlderNodeFileIsADroppedReferenceInTheExpansion) {
         ASSERT_GT(kContentVersion, 0u);
         const auto root = _dir / "root";
-        WriteFile(root / "config" / "nodes" / "Old.xml", "<node name=\"Old\" contentVersion=\"" + ToString(kContentVersion - 1) + "\"/>");
+        WriteFile(root / "config" / "nodes" / "Old.xml", Format("<node name=\"Old\" contentVersion=\"{}\"/>", kContentVersion - 1));
         WriteFile(root / "config" / "nodes" / "Now.xml", CurrentNode("Now"));
         FileSystem fs;
         fs.AddContentRoot(root);
         fs.Initialize();
 
         pugi::xml_document doc;
-        ASSERT_TRUE(doc.load_string(SceneConfigWith(R"(<node ref="nodes/Now"/><node ref="nodes/Old"/><node name="Inline"/>)").c_str()));
+        ASSERT_TRUE(doc.load_string(SceneConfigText(R"(<node ref="nodes/Now"/><node ref="nodes/Old"/><node name="Inline"/>)").c_str()));
         const NodeExpansion result = ExpandNodeReferences(doc.document_element(), MakeFileSystemNodeLoader(fs));
 
         EXPECT_EQ(result.expanded, 1u);
@@ -467,16 +454,16 @@ namespace BECore::Tests {
         WriteFile(_dir / "nodes" / "Zero.xml", R"(<node name="Zero" contentVersion="0"/>)");
         WriteFile(_dir / "nodes" / "Far.xml", R"(<node name="Far" contentVersion="999"/>)");
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node ref="nodes/Zero"/><node ref="nodes/Far"/>)"), doc);
+        const auto result = Expand(SceneConfigText(R"(<node ref="nodes/Zero"/><node ref="nodes/Far"/>)"), doc);
 
         EXPECT_TRUE(result.Ok());
         EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<String>{"Zero", "Far"}));
     }
 
     TEST_F(SceneNodeFilesTest, TheExpandedCopyHasNoContentVersion) {
-        WriteFile(_dir / "nodes" / "Stamped.xml", "<node name=\"Stamped\" layer=\"3\" contentVersion=\"" + ToString(kContentVersion) + "\"/>");
+        WriteFile(_dir / "nodes" / "Stamped.xml", Format("<node name=\"Stamped\" layer=\"3\" contentVersion=\"{}\"/>", kContentVersion));
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node ref="nodes/Stamped"/>)"), doc);
+        const auto result = Expand(SceneConfigText(R"(<node ref="nodes/Stamped"/>)"), doc);
 
         ASSERT_TRUE(result.Ok());
         const pugi::xml_node node = doc.document_element().child("scenes").child("scene").child("nodes").child("node");
@@ -489,7 +476,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeFilesTest, NameAndLayerOverrideTheNodes) {
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node ref="nodes/Hud" name="Left" layer="3"/><node ref="nodes/B" layer="5"/>)"), doc);
+        const auto result = Expand(SceneConfigText(R"(<node ref="nodes/Hud" name="Left" layer="3"/><node ref="nodes/B" layer="5"/>)"), doc);
 
         ASSERT_TRUE(result.Ok()) << (result.errors.empty() ? "" : result.errors[0].c_str());
         EXPECT_EQ(result.expanded, 2u);
@@ -505,7 +492,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeFilesTest, NameOnlyKeepsTheLayerOfTheFile) {
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node ref="nodes/Hud" name="Left"/>)"), doc);
+        const auto result = Expand(SceneConfigText(R"(<node ref="nodes/Hud" name="Left"/>)"), doc);
 
         ASSERT_TRUE(result.Ok());
         EXPECT_STREQ(FirstNode(doc).attribute("name").as_string(), "Left");
@@ -514,7 +501,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeFilesTest, ComponentAttributeOverrideChangesOneValueAndAddsNewOnes) {
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node ref="nodes/Hud"><components>
+        const auto result = Expand(SceneConfigText(R"(<node ref="nodes/Hud"><components>
   <component type="TransformComponent" x="40" rotation="15"/>
 </components></node>)"),
                                    doc);
@@ -531,7 +518,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeFilesTest, ChildElementOverrideReplacesTheFilesElementWhole) {
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node ref="nodes/Hud"><components>
+        const auto result = Expand(SceneConfigText(R"(<node ref="nodes/Hud"><components>
   <component type="QuadRendererComponent"><color r="10" g="20"/></component>
 </components></node>)"),
                                    doc);
@@ -552,7 +539,7 @@ namespace BECore::Tests {
   <component type="QuadRendererComponent" color="1,2,3,4" other="x"/>
 </components></node>)");
         pugi::xml_document doc;
-        ASSERT_TRUE(Expand(SceneConfigWith(R"(<node ref="nodes/AsAttribute"><components>
+        ASSERT_TRUE(Expand(SceneConfigText(R"(<node ref="nodes/AsAttribute"><components>
   <component type="QuadRendererComponent"><color r="9" g="8"/></component>
 </components></node><node ref="nodes/Hud"><components>
   <component type="QuadRendererComponent" color="5,6,7,8"/>
@@ -582,7 +569,7 @@ namespace BECore::Tests {
   </component>
 </components></node>)");
         pugi::xml_document doc;
-        ASSERT_TRUE(Expand(SceneConfigWith(R"(<node ref="nodes/Canvas"><components>
+        ASSERT_TRUE(Expand(SceneConfigText(R"(<node ref="nodes/Canvas"><components>
   <component type="UICanvasComponent"><elements><element name="Only"/></elements><extra v="1"/></component>
 </components></node>)"),
                            doc)
@@ -603,7 +590,7 @@ namespace BECore::Tests {
     TEST_F(SceneNodeFilesTest, InstancesOfOneFileDoNotInfluenceEachOther) {
         const String before = ReadFile(_dir / "nodes" / "Hud.xml");
         pugi::xml_document doc;
-        ASSERT_TRUE(Expand(SceneConfigWith(R"(<node ref="nodes/Hud" name="One"><components>
+        ASSERT_TRUE(Expand(SceneConfigText(R"(<node ref="nodes/Hud" name="One"><components>
   <component type="TransformComponent" x="100"/>
 </components></node><node ref="nodes/Hud" name="Two" layer="4"><components>
   <component type="TransformComponent" y="200"/><component type="QuadRendererComponent"><color r="1"/></component>
@@ -624,13 +611,13 @@ namespace BECore::Tests {
         // The third is the file as it is
         pugi::xml_document plain;
         ASSERT_TRUE(plain.load_string(kHudNode));
-        EXPECT_EQ(Saved(three), Saved(plain.document_element()));
+        EXPECT_EQ(XmlTextIndented(three), XmlTextIndented(plain.document_element()));
         EXPECT_EQ(ReadFile(_dir / "nodes" / "Hud.xml"), before);
     }
 
     TEST_F(SceneNodeFilesTest, OverridesOfTwoComponentsOfOneReferenceAndTheRestIsTheFiles) {
         pugi::xml_document doc;
-        ASSERT_TRUE(Expand(SceneConfigWith(R"(<node name="A"/><node ref="nodes/Hud" name="H"><components>
+        ASSERT_TRUE(Expand(SceneConfigText(R"(<node name="A"/><node ref="nodes/Hud" name="H"><components>
   <component type="QuadRendererComponent"><color r="1" g="2" b="3" a="4"/></component>
   <component type="TransformComponent" width="30"/>
 </components></node><node name="C"/>)"),
@@ -647,22 +634,22 @@ namespace BECore::Tests {
         // A node of the file that is not overridden is saved as the file has it
         WriteFile(_dir / "nodes" / "Two.xml", R"(<node name="T"><components><component type="TransformComponent" x="1"/><component type="QuadRendererComponent" size="3"/></components></node>)");
         pugi::xml_document second;
-        ASSERT_TRUE(Expand(SceneConfigWith(R"(<node ref="nodes/Two"><components><component type="TransformComponent" x="9"/></components></node>)"), second).Ok());
+        ASSERT_TRUE(Expand(SceneConfigText(R"(<node ref="nodes/Two"><components><component type="TransformComponent" x="9"/></components></node>)"), second).Ok());
         pugi::xml_document file;
         ASSERT_TRUE(file.load_file((_dir / "nodes" / "Two.xml").c_str()));
-        EXPECT_EQ(Saved(ComponentOf(FirstNode(second), "QuadRendererComponent")), Saved(ComponentOf(file.document_element(), "QuadRendererComponent")));
+        EXPECT_EQ(XmlTextIndented(ComponentOf(FirstNode(second), "QuadRendererComponent")), XmlTextIndented(ComponentOf(file.document_element(), "QuadRendererComponent")));
     }
 
     TEST_F(SceneNodeFilesTest, EmptyComponentsAndNoAttributesIsAPlainReference) {
         pugi::xml_document plain;
-        ASSERT_TRUE(Expand(SceneConfigWith(R"(<node ref="nodes/Hud"/>)"), plain).Ok());
+        ASSERT_TRUE(Expand(SceneConfigText(R"(<node ref="nodes/Hud"/>)"), plain).Ok());
         pugi::xml_document empty;
-        ASSERT_TRUE(Expand(SceneConfigWith(R"(<node ref="nodes/Hud"><components/></node>)"), empty).Ok());
+        ASSERT_TRUE(Expand(SceneConfigText(R"(<node ref="nodes/Hud"><components/></node>)"), empty).Ok());
         pugi::xml_document commented;
-        ASSERT_TRUE(Expand(SceneConfigWith(R"(<node ref="nodes/Hud"> text <!-- a comment --><components> <!-- c --> </components></node>)"), commented).Ok());
+        ASSERT_TRUE(Expand(SceneConfigText(R"(<node ref="nodes/Hud"> text <!-- a comment --><components> <!-- c --> </components></node>)"), commented).Ok());
 
-        EXPECT_EQ(Saved(FirstNode(empty)), Saved(FirstNode(plain)));
-        EXPECT_EQ(Saved(FirstNode(commented)), Saved(FirstNode(plain)));
+        EXPECT_EQ(XmlTextIndented(FirstNode(empty)), XmlTextIndented(FirstNode(plain)));
+        EXPECT_EQ(XmlTextIndented(FirstNode(commented)), XmlTextIndented(FirstNode(plain)));
     }
 
     /// Every way an override is invalid: one error naming the scene and the reference, the reference dropped, the neighbours kept
@@ -670,7 +657,7 @@ namespace BECore::Tests {
         for (const char* reference : kInvalidReferences) {
             SCOPED_TRACE(reference);
             pugi::xml_document doc;
-            const auto result = Expand(SceneConfigWith(String(R"(<node name="A"/>)") + reference + R"(<node name="C"/>)"), doc);
+            const auto result = Expand(SceneConfigText(Format(R"(<node name="A"/>{}<node name="C"/>)", reference)), doc);
 
             ExpectOneError(result, "nodes/Hud");
             EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<String>{"A", "C"}));
@@ -679,7 +666,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeFilesTest, AnUnknownComponentNamesTheTypeAndAppliesNothingBeforeIt) {
         pugi::xml_document doc;
-        const auto result = Expand(SceneConfigWith(R"(<node ref="nodes/Hud"><components>
+        const auto result = Expand(SceneConfigText(R"(<node ref="nodes/Hud"><components>
   <component type="TransformComponent" x="99"/>
   <component type="NoSuchComponent" x="1"/>
 </components></node>)"),
@@ -711,23 +698,23 @@ namespace BECore::Tests {
         for (const char* text : kInvalidReferences) {
             SCOPED_TRACE(text);
             pugi::xml_document file = Parse(kHudNode);
-            const String before = Saved(file);
+            const String before = XmlTextIndented(file);
             pugi::xml_document reference = Parse(text);
             String error;
 
             EXPECT_FALSE(ApplyNodeOverrides(file.document_element(), reference.document_element(), error));
             EXPECT_FALSE(error.empty());
-            EXPECT_EQ(Saved(file), before);
+            EXPECT_EQ(XmlTextIndented(file), before);
         }
 
         pugi::xml_document file = Parse(kHudNode);
-        const String before = Saved(file);
+        const String before = XmlTextIndented(file);
         pugi::xml_document reference = Parse(R"(<node ref="nodes/Hud" name="Late" layer="1"><components>
   <component type="TransformComponent" x="99"/><component type="Nothing"/>
 </components></node>)");
         String error;
         EXPECT_FALSE(ApplyNodeOverrides(file.document_element(), reference.document_element(), error));
-        EXPECT_EQ(Saved(file), before);
+        EXPECT_EQ(XmlTextIndented(file), before);
     }
 
     TEST_F(SceneNodeFilesTest, NodeFileWithoutComponentsHasNoComponentToOverride) {
@@ -750,7 +737,7 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(error.empty());
         pugi::xml_document file = Parse(kHudNode);
-        EXPECT_EQ(Saved(out.document_element()), Saved(file.document_element()));
+        EXPECT_EQ(XmlTextIndented(out.document_element()), XmlTextIndented(file.document_element()));
         EXPECT_STREQ(reference.document_element().attribute("ref").as_string(), "nodes/Hud");
     }
 
@@ -761,14 +748,14 @@ namespace BECore::Tests {
   <component type="QuadRendererComponent"><color r="1" g="2"/></component>
 </components></node>)";
         pugi::xml_document scene;
-        ASSERT_TRUE(Expand(SceneConfigWith(kReference), scene).Ok());
+        ASSERT_TRUE(Expand(SceneConfigText(kReference), scene).Ok());
 
         pugi::xml_document reference = Parse(kReference);
         pugi::xml_document out;
         String error;
         ASSERT_TRUE(ExpandNodeReference(reference.document_element(), MakeDirectoryNodeLoader(_dir), false, out, error)) << error.c_str();
 
-        EXPECT_EQ(Saved(out.document_element()), Saved(FirstNode(scene)));
+        EXPECT_EQ(XmlTextIndented(out.document_element()), XmlTextIndented(FirstNode(scene)));
         EXPECT_STREQ(out.document_element().attribute("name").as_string(), "Left");
         EXPECT_STREQ(out.document_element().attribute("layer").as_string(), "3");
     }
@@ -812,7 +799,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeFilesTest, MarkSourceSetsOnlyTheSourceRefOnTheCopy) {
         WriteFile(_dir / "nodes" / "Stamped.xml",
-                  "<node name=\"Stamped\" layer=\"3\" contentVersion=\"" + ToString(kContentVersion) + "\"><components><component type=\"TransformComponent\" x=\"1\"/></components></node>");
+                  Format("<node name=\"Stamped\" layer=\"3\" contentVersion=\"{}\"><components><component type=\"TransformComponent\" x=\"1\"/></components></node>", kContentVersion));
         pugi::xml_document reference = Parse(R"(<node ref="nodes/Stamped" name="Own"><components><component type="TransformComponent" x="9"/></components></node>)");
         pugi::xml_document plain;
         pugi::xml_document marked;
@@ -825,12 +812,12 @@ namespace BECore::Tests {
         EXPECT_FALSE(marked.document_element().attribute("contentVersion"));
         // Nothing else differs: the mark removed, the two copies are the same text
         marked.document_element().remove_attribute(kNodeSourceAttribute.data());
-        EXPECT_EQ(Saved(marked.document_element()), Saved(plain.document_element()));
+        EXPECT_EQ(XmlTextIndented(marked.document_element()), XmlTextIndented(plain.document_element()));
     }
 
     TEST_F(SceneNodeFilesTest, ExpandNodeReferencesWithoutTheFlagLeavesNoSourceRef) {
         pugi::xml_document doc;
-        ASSERT_TRUE(Expand(SceneConfigWith(R"(<node ref="nodes/Hud"/><node name="Own"/><node ref="nodes/B" name="X"/>)"), doc).Ok());
+        ASSERT_TRUE(Expand(SceneConfigText(R"(<node ref="nodes/Hud"/><node name="Own"/><node ref="nodes/B" name="X"/>)"), doc).Ok());
 
         for (pugi::xml_node node : doc.document_element().child("scenes").child("scene").child("nodes").children("node")) {
             EXPECT_FALSE(node.attribute(kNodeSourceAttribute.data())) << node.attribute("name").as_string();
@@ -840,7 +827,7 @@ namespace BECore::Tests {
     TEST_F(SceneNodeFilesTest, ExpandNodeReferencesWithTheFlagMarksTheExpandedNodesOnly) {
         const String hudBefore = ReadFile(_dir / "nodes" / "Hud.xml");
         pugi::xml_document doc;
-        ASSERT_TRUE(doc.load_string(SceneConfigWith(R"(<node ref="nodes/Hud"/><node name="Own"/><node ref="nodes/B" name="X"/>)").c_str()));
+        ASSERT_TRUE(doc.load_string(SceneConfigText(R"(<node ref="nodes/Hud"/><node name="Own"/><node ref="nodes/B" name="X"/>)").c_str()));
 
         const auto result = ExpandNodeReferences(doc.document_element(), MakeDirectoryNodeLoader(_dir), true);
 
@@ -857,7 +844,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneNodeFilesTest, LoadSceneDocumentAppliesOverridesNextToTheFile) {
-        WriteFile(_dir / "SceneConfig.xml", SceneConfigWith(R"(<node name="A"/><node ref="nodes/Hud" name="Left" layer="1"><components>
+        WriteFile(_dir / "SceneConfig.xml", SceneConfigText(R"(<node name="A"/><node ref="nodes/Hud" name="Left" layer="1"><components>
   <component type="TransformComponent" x="40"/>
 </components></node><node ref="nodes/Hud" name="Right"/>)"));
 

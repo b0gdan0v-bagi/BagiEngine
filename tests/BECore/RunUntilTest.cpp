@@ -4,6 +4,7 @@
 #include <BECore/GameControlTest.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Time/Time.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Games/GameControl.h>
 #include <Games/GameManager.h>
@@ -18,12 +19,6 @@ namespace BECore::Tests {
 
         StringView View(StringView text) {
             return text;
-        }
-
-        String ErrorCode(const Json& response) {
-            const Json* error = FindJsonMember(response, "error");
-            const auto code = error != nullptr ? GetJsonString(*error, "code") : Optional<String>();
-            return code ? *code : String();
         }
 
         Json ConditionPointer(StringView pointer, Json equals) {
@@ -57,16 +52,6 @@ namespace BECore::Tests {
                 params["maxFrames"] = maxFrames;
             }
             return params;
-        }
-
-        String MakeRequest(int64_t id, StringView method, const Json& params = Json()) {
-            Json request = Json::object();
-            request["id"] = id;
-            request["method"] = ToStdString(method);
-            if (!params.is_null()) {
-                request["params"] = params;
-            }
-            return DumpJson(request);
         }
 
         class RunUntilTest : public ::testing::TestWithParam<RunUntilClock> {
@@ -307,9 +292,9 @@ namespace BECore::Tests {
         const Json* results = FindJsonMember(*result, "results");
         ASSERT_NE(results, nullptr);
         ASSERT_EQ(results->size(), 4u);
-        EXPECT_FALSE(GetJsonBool(*FindJsonMember((*results)[1], "result"), "met").value_or(true));
-        EXPECT_FALSE(GetJsonBool(*FindJsonMember((*results)[3], "result"), "met").value_or(true));
-        EXPECT_EQ(GetJsonInt(*FindJsonMember((*results)[3], "result"), "version").value_or(-1), 2);
+        EXPECT_FALSE(GetJsonBool(Require(FindJsonMember((*results)[1], "result")), "met").value_or(true));
+        EXPECT_FALSE(GetJsonBool(Require(FindJsonMember((*results)[3], "result")), "met").value_or(true));
+        EXPECT_EQ(GetJsonInt(Require(FindJsonMember((*results)[3], "result")), "version").value_or(-1), 2);
     }
 
     TEST_P(RunUntilTest, EventIsMetWhenItIsPublished) {
@@ -494,14 +479,14 @@ namespace BECore::Tests {
         service.Drain();
 
         ASSERT_EQ(responses.size(), 2u);
-        const Json* results = FindJsonMember(*Result(0), "results");
+        const Json* results = FindJsonMember(Require(Result(0)), "results");
         ASSERT_NE(results, nullptr);
         ASSERT_EQ(results->size(), 2u);
         const Json* waited = FindJsonMember((*results)[0], "result");
         ASSERT_NE(waited, nullptr);
         EXPECT_TRUE(GetJsonBool(*waited, "met").value_or(false));
         EXPECT_EQ(GetJsonInt(*waited, "frames").value_or(-1), 2);
-        const Json* state = FindJsonMember(*FindJsonMember((*results)[1], "result"), "state");
+        const Json* state = FindJsonMember(Require(FindJsonMember((*results)[1], "result")), "state");
         ASSERT_NE(state, nullptr);
         EXPECT_EQ(GetJsonInt(*state, "counter").value_or(-1), 2);
         EXPECT_EQ(GetJsonInt(responses[1], "id").value_or(-1), 2);

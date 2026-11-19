@@ -57,7 +57,7 @@ Numbers are range-checked; an unknown flag or a bad number or variable is an err
 
 ## Close codes
 
-What `HubSink::close(reason)` becomes on the wire (the reason is the text of the close frame, `Rooms/CLAUDE.md`, "RoomHub"):
+What `HubSink::close(reason)` becomes on the wire (`GetRoomCloseCode`, also used by the tests' `HubWorld`; the reason is the close frame's text, `Rooms/CLAUDE.md`, "RoomHub"):
 
 | Reason | Code |
 |--------|------|

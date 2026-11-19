@@ -1,5 +1,6 @@
 #include <Common/RecordingGpuDevice.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <CoreSDL/SDLRendererBackend.h>
 #include <gtest/gtest.h>
 
@@ -40,7 +41,7 @@ namespace BECore::Tests {
             Fixture() {
                 auto made = device.CreatePipeline(MakeLitDesc());
                 EXPECT_TRUE(made.has_value());
-                pipeline = made.value();
+                pipeline = Require(made);
                 const Vector<std::byte> vertices(kVertexStride * 4, std::byte{1});
                 const Vector<std::byte> indices(kCubeIndexCount * sizeof(uint32_t), std::byte{2});
                 vertexBuffer = device.CreateBuffer(BufferDesc{BufferUsage::Vertex, static_cast<uint32_t>(vertices.size()), "vertices"_intern}, {vertices.data(), vertices.size()});
@@ -206,6 +207,10 @@ namespace BECore::Tests {
         EXPECT_EQ(depth->GetFormat(), DepthFormat::Depth32Float);
         EXPECT_FALSE(device.CreateDepthTexture(0, 480));
     }
+
+    // The pass and draw state rules below (a call outside a pass, a draw without a pipeline, the constants a new pipeline drops, a buffer of the wrong
+    // usage, a texture slot past the limit) are checked by RecordingGpuDevice only: the Vulkan device shares the descriptor checks of GpuValidation.h
+    // and not these, so the cases are tests of the fake's contract until the state checks move into the engine
 
     TEST(GpuInterfacePassTest, APassWithDepthIsRecordedWithItsDescription) {
         Fixture f;
@@ -449,7 +454,7 @@ namespace BECore::Tests {
         renderer.DrawFilledRect(1.0f, 2.0f, 3.0f, 4.0f, Color{255, 0, 0, 255});
 
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_EQ(renderer.calls[0].kind, DrawKind::Rect);
+        EXPECT_EQ(At(renderer.calls, 0).kind, DrawKind::Rect);
     }
 
 }  // namespace BECore::Tests

@@ -1,7 +1,6 @@
 // The type checker of formulas (Values/Programs/ExprChecker, ExprFunctions): the type rules of the language, the literals, the paths and the errors with
 // their columns. The text is parsed with the real parser; the typed tree is read back node by node.
 
-#include <BECore/Threading/Thread.h>
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Programs/CompileOptions.h>
 #include <BECore/Values/Programs/ExprAst.h>
@@ -12,7 +11,7 @@
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <BECore/Values/ValueTables.h>
 #include <Common/Printers.h>
-#include <cstring>
+#include <Common/TestText.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -20,10 +19,6 @@ namespace BECore::Tests {
     using namespace ValueTestData;
 
     namespace {
-
-        bool Contains(const String& text, StringView part) {
-            return text.find(part.data(), 0, part.size()) != String::npos;
-        }
 
         /// The levels the tests read: `caster` and `cast` as in `ValueWorld`, and `behind`, whose members are not all fixed
         struct CheckerContext {
@@ -1179,14 +1174,14 @@ namespace BECore::Tests {
     /// that limit allows (a chain of operators, calls over a chain, unary operators over a chain, the deepest parentheses) must fit the stack of a secondary thread
     TEST(ProgramCheckerTest, TheHighestTreesTheLimitAllowsFitTheStackOfAThread) {
         constexpr size_t kLevels = ExprLimits::kMaxTreeHeight;
-        const auto chain = [](size_t operators) { return "caster.attack" + Repeated(" + caster.attack", operators); };
+        const auto chain = [](size_t operators) { return Format("caster.attack{}", Repeated(" + caster.attack", operators)); };
         const String texts[] = {
             chain(kLevels),
-            Repeated("abs(", kLevels / 2) + chain(kLevels / 2 - 1) + Repeated(")", kLevels / 2),
-            "-(" + chain(kLevels - 1) + ")",
-            Repeated("-", kLevels / 2) + chain(kLevels / 2),
-            Repeated("(", ExprLimits::kMaxNesting) + "caster.attack" + Repeated(")", ExprLimits::kMaxNesting),
-            Repeated("-", kLevels) + "caster.attack",
+            Format("{}{}{}", Repeated("abs(", kLevels / 2), chain(kLevels / 2 - 1), Repeated(")", kLevels / 2)),
+            Format("-({})", chain(kLevels - 1)),
+            Format("{}{}", Repeated("-", kLevels / 2), chain(kLevels / 2)),
+            Format("{}caster.attack{}", Repeated("(", ExprLimits::kMaxNesting), Repeated(")", ExprLimits::kMaxNesting)),
+            Format("{}caster.attack", Repeated("-", kLevels)),
         };
         const CheckerContext context;
         for (const String& text : texts) {

@@ -1,13 +1,11 @@
 #include <BECore/Audio/AudioDecode.h>
+#include <Fuzz/FuzzChecks.h>
 #include <Fuzz/FuzzTargets.h>
 #include <cmath>
 
 namespace BECore::Fuzz {
 
     namespace {
-
-        /// What a refusal of the decoder may be: the loader logs it after the file name
-        constexpr size_t kMaxReasonBytes = 200;
 
         /// A FLAC frame of a few bytes may stand for 65535 samples a channel: the target bounds the decode, as the engine's default does
         constexpr size_t kMaxFrames = 1U << 16U;
@@ -22,7 +20,7 @@ namespace BECore::Fuzz {
         const AudioDecodeResult first = DecodeFlac(bytes, kMaxFrames);
         if (!first) {
             FUZZ_CHECK(!first.error().empty());
-            FUZZ_CHECK(first.error().size() <= kMaxReasonBytes);
+            FUZZ_CHECK(first.error().size() <= kMaxRefusalBytes);
             FUZZ_CHECK(!DecodeFlac(bytes, kMaxFrames).has_value());
             return;
         }

@@ -29,6 +29,10 @@ namespace BECore {
     /// A zero or negative @p interval is off
     [[nodiscard]] bool ShouldLogRoomServerStats(const RoomServerStats& current, const RoomServerStats& lastLogged, RoomTime now, RoomTime lastLoggedAt, std::chrono::milliseconds interval);
 
+    /// The close code the client gets when the hub ends its connection with @p reason (`RoomCloseReasons`); the table is in RoomServer/CLAUDE.md, "Close codes".
+    /// Public so that an in-memory test world closes its links exactly as the wire does
+    [[nodiscard]] uint16_t GetRoomCloseCode(StringView reason);
+
     /**
      * @brief The Rooms hub on the network: a WebSocket server whose every text message is a message of the room protocol.
      *

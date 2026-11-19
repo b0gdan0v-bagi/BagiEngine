@@ -1,5 +1,5 @@
 // The limits of the readers (Reflection/ReaderLimits.h): what a deserializer refuses with an error instead of allocating or recursing for it.
-// The fuzz targets (tests/Fuzz) found them; the regression seeds are tests/Fuzz/corpus/*/fix-*.
+// The regression seeds of these limits are tests/Fuzz/corpus/*/fix-*.
 
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
@@ -232,7 +232,7 @@ namespace BECore::Tests {
 
     TEST(ReaderLimitsTest, XmlStrictErrorQuotesAShortPieceOfTheValue) {
         const String junk(1000, 'z');
-        const String xml = "<root a=\"" + junk + "\"/>";
+        const String xml = Format("<root a=\"{}\"/>", junk);
         XmlDeserializer reader;
         reader.SetStrictValues(true);
         ASSERT_TRUE(reader.LoadFromString(xml));

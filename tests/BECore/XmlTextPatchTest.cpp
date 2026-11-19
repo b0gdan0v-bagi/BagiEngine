@@ -196,10 +196,11 @@ namespace BECore::Tests {
     TEST(XmlTextPatchTest, EverythingOutsideTheTagIsIdentical) {
         const String head = Prefix(kUtf8Bom, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<!-- a <b x=\"1\"/> in a comment -->\r\n<?pi data?>\r\n");
         const String body = "<root>\r\n  <!-- before -->\r\n  <b x=\"1\"/>  text &amp; more\r\n  <a x=\"1\" y=\"2\">\r\n    <![CDATA[<a x=\"1\"/>]]>\r\n  </a>\r\n</root>\r\n<!-- after -->\r\n\r\n";
-        const Result result = PatchOne(head + body, "a", {Set("x", "9")});
+        const Result result = PatchOne(Format("{}{}", head, body), "a", {Set("x", "9")});
         ASSERT_TRUE(result.ok) << result.error.c_str();
-        EXPECT_EQ(result.text,
-                  head + "<root>\r\n  <!-- before -->\r\n  <b x=\"1\"/>  text &amp; more\r\n  <a x=\"9\" y=\"2\">\r\n    <![CDATA[<a x=\"1\"/>]]>\r\n  </a>\r\n</root>\r\n<!-- after -->\r\n\r\n");
+        EXPECT_EQ(
+            result.text,
+            Format("{}<root>\r\n  <!-- before -->\r\n  <b x=\"1\"/>  text &amp; more\r\n  <a x=\"9\" y=\"2\">\r\n    <![CDATA[<a x=\"1\"/>]]>\r\n  </a>\r\n</root>\r\n<!-- after -->\r\n\r\n", head));
     }
 
     TEST(XmlTextPatchTest, NoEditReturnsTheSameBytes) {
@@ -259,7 +260,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(XmlTextPatch::Parse(text, doc, error));
         const Vector<ElementEdit> edits{{doc.child("root").child("a"), {Set("x", "2")}}};
         String out;
-        EXPECT_FALSE(XmlTextPatch::Apply("<!--shifted-->" + text, edits, out, error));
+        EXPECT_FALSE(XmlTextPatch::Apply(Format("<!--shifted-->{}", text), edits, out, error));
         EXPECT_FALSE(XmlTextPatch::Apply("<root><a z=\"1\"/></root>", edits, out, error));
         EXPECT_FALSE(XmlTextPatch::Apply("<root><a x=\"1\" y=\"2\"/></root>", edits, out, error));
         EXPECT_TRUE(XmlTextPatch::Apply(text, edits, out, error)) << error.c_str();
@@ -430,7 +431,7 @@ namespace BECore::Tests {
                 }
             }
 
-            const String text = Prefix("<root>\n<!-- c -->", tag.text) + "\n</root>\n";
+            const String text = Format("{}\n</root>\n", Prefix("<root>\n<!-- c -->", tag.text));
             const Result result = PatchOne(text, "e", edits);
             ASSERT_TRUE(result.ok) << result.error.c_str() << "\n" << text.c_str();
 

@@ -20,6 +20,11 @@ namespace BECore::Tests {
             _state->elapsedMs += step.count();
         }
 
+        /// How many times anyone has read the time, so a test can wait until the hub thread has looked at a value
+        [[nodiscard]] uint64_t Reads() const {
+            return _state->reads.load();
+        }
+
         [[nodiscard]] MoveOnlyFunction<RoomTime()> AsFunction() {
             return [state = _state] { return state->Now(); };
         }
@@ -28,8 +33,10 @@ namespace BECore::Tests {
         struct State {
             const RoomTime start = std::chrono::steady_clock::now();
             std::atomic<int64_t> elapsedMs{0};
+            mutable std::atomic<uint64_t> reads{0};
 
             RoomTime Now() const {
+                reads.fetch_add(1);
                 return start + std::chrono::milliseconds(elapsedMs.load());
             }
         };

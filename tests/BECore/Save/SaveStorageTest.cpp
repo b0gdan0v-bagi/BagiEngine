@@ -1,8 +1,8 @@
 #include <BECore/Save/SaveGame.h>
 #include <BECore/Save/SaveStorage.h>
+#include <BECore/Save/SaveTestSupport.h>
 #include <Common/DestroyTally.h>
 #include <Common/Printers.h>
-#include <Common/TempPath.h>
 
 namespace BECore::Tests {
 
@@ -18,30 +18,21 @@ namespace BECore::Tests {
             }
         };
 
-        Vector<uint8_t> Bytes(std::initializer_list<uint8_t> values) {
-            return Vector<uint8_t>(values);
-        }
-
     }  // namespace
 
-    /// Counts the calls of NotifySaveChanged() with a fake handler; a local FileSystem and temp folder per test
-    class SaveStorageTest : public ::testing::Test {
+    /// Counts the calls of NotifySaveChanged() with a fake handler
+    class SaveStorageTest : public SaveFolderTest {
     protected:
         void SetUp() override {
-            _base = TestTempDirectory("BagiSaveStorageTest");
-            std::filesystem::remove_all(_base);
-            std::filesystem::create_directories(_base);
+            ASSERT_NO_FATAL_FAILURE(SaveFolderTest::SetUp());
             SetSaveChangedHandler([this] { ++_notifications; });
         }
 
         void TearDown() override {
             SetSaveChangedHandler({});
-            std::error_code ec;
-            std::filesystem::remove_all(_base, ec);
+            SaveFolderTest::TearDown();
         }
 
-        std::filesystem::path _base;
-        FileSystem _fileSystem;
         int _notifications = 0;
     };
 

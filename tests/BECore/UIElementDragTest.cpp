@@ -5,6 +5,7 @@
 #include <BECore/UI/UIRectEdit.h>
 #include <BECore/UI/UIVariant.h>
 #include <Common/Printers.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -13,13 +14,6 @@ namespace BECore::Tests {
 
         constexpr float kTolerance = 1e-3f;
         constexpr float kHandle = 10.0f;
-
-        void ExpectRect(const Rect& actual, const Rect& expected) {
-            EXPECT_NEAR(actual.x, expected.x, kTolerance);
-            EXPECT_NEAR(actual.y, expected.y, kTolerance);
-            EXPECT_NEAR(actual.w, expected.w, kTolerance);
-            EXPECT_NEAR(actual.h, expected.h, kTolerance);
-        }
 
         UILayoutContext Output(float width, float height) {
             UILayoutContext context;

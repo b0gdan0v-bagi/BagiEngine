@@ -1,4 +1,6 @@
 #include <BECore/UI/UILayout.h>
+#include <Common/Require.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -6,13 +8,6 @@ namespace BECore::Tests {
     namespace {
 
         constexpr float kTolerance = 1e-3f;
-
-        void ExpectRect(const Rect& rect, float x, float y, float w, float h) {
-            EXPECT_NEAR(rect.x, x, kTolerance);
-            EXPECT_NEAR(rect.y, y, kTolerance);
-            EXPECT_NEAR(rect.w, w, kTolerance);
-            EXPECT_NEAR(rect.h, h, kTolerance);
-        }
 
         UIRectSpec Sized(float width, float height) {
             UIRectSpec spec;
@@ -233,9 +228,9 @@ namespace BECore::Tests {
         UILayout::LayoutStack(kParent, stack, children, rects);
 
         ASSERT_EQ(rects.size(), 3u);
-        ExpectRect(rects[0], 100.0f, 50.0f, 100.0f, 30.0f);
-        ExpectRect(rects[1], 100.0f, 88.0f, 60.0f, 40.0f);
-        ExpectRect(rects[2], 100.0f, 136.0f, 80.0f, 20.0f);
+        ExpectRect(At(rects, 0), 100.0f, 50.0f, 100.0f, 30.0f);
+        ExpectRect(At(rects, 1), 100.0f, 88.0f, 60.0f, 40.0f);
+        ExpectRect(At(rects, 2), 100.0f, 136.0f, 80.0f, 20.0f);
     }
 
     TEST(UIStackTest, AHorizontalStackPutsThemSideBySide) {
@@ -247,8 +242,8 @@ namespace BECore::Tests {
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
-        ExpectRect(rects[0], 100.0f, 50.0f, 50.0f, 30.0f);
-        ExpectRect(rects[1], 160.0f, 50.0f, 70.0f, 40.0f);
+        ExpectRect(At(rects, 0), 100.0f, 50.0f, 50.0f, 30.0f);
+        ExpectRect(At(rects, 1), 160.0f, 50.0f, 70.0f, 40.0f);
     }
 
     TEST(UIStackTest, PaddingInsetsTheContent) {
@@ -259,7 +254,7 @@ namespace BECore::Tests {
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
-        ExpectRect(rects[0], 110.0f, 70.0f, 50.0f, 30.0f);
+        ExpectRect(At(rects, 0), 110.0f, 70.0f, 50.0f, 30.0f);
     }
 
     TEST(UIStackTest, FlexChildrenShareWhatTheFixedOnesLeaveByWeight) {
@@ -276,9 +271,9 @@ namespace BECore::Tests {
         UILayout::LayoutStack(kParent, stack, children, rects);
 
         // 400 wide: 60 fixed, two gaps of 10, so 320 is shared 1:3
-        ExpectRect(rects[0], 100.0f, 50.0f, 60.0f, 20.0f);
-        ExpectRect(rects[1], 170.0f, 50.0f, 80.0f, 20.0f);
-        ExpectRect(rects[2], 260.0f, 50.0f, 240.0f, 20.0f);
+        ExpectRect(At(rects, 0), 100.0f, 50.0f, 60.0f, 20.0f);
+        ExpectRect(At(rects, 1), 170.0f, 50.0f, 80.0f, 20.0f);
+        ExpectRect(At(rects, 2), 260.0f, 50.0f, 240.0f, 20.0f);
     }
 
     TEST(UIStackTest, AFlexChildIsClampedByItsLimitsWithoutGivingTheRestToTheOthers) {
@@ -294,8 +289,8 @@ namespace BECore::Tests {
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
-        EXPECT_NEAR(rects[0].w, 50.0f, kTolerance);
-        EXPECT_NEAR(rects[1].w, 200.0f, kTolerance);  // half of 400, not the 350 that are left
+        EXPECT_NEAR(At(rects, 0).w, 50.0f, kTolerance);
+        EXPECT_NEAR(At(rects, 1).w, 200.0f, kTolerance);  // half of 400, not the 350 that are left
     }
 
     TEST(UIStackTest, FlexGetsNothingWhenTheFixedChildrenFillTheLine) {
@@ -308,8 +303,8 @@ namespace BECore::Tests {
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
-        EXPECT_FLOAT_EQ(rects[0].w, 500.0f);  // the fixed child is not cut
-        EXPECT_FLOAT_EQ(rects[1].w, 0.0f);
+        EXPECT_FLOAT_EQ(At(rects, 0).w, 500.0f);  // the fixed child is not cut
+        EXPECT_FLOAT_EQ(At(rects, 1).w, 0.0f);
     }
 
     TEST(UIStackTest, PercentSizesOnTheMainAxisAreOfTheContent) {
@@ -323,7 +318,7 @@ namespace BECore::Tests {
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
-        EXPECT_FLOAT_EQ(rects[0].h, 50.0f);
+        EXPECT_FLOAT_EQ(At(rects, 0).h, 50.0f);
     }
 
     TEST(UIStackTest, CrossAlignmentPlacesTheChildrenInTheContentAcross) {
@@ -333,16 +328,16 @@ namespace BECore::Tests {
 
         stack.crossAlign = UIStackAlign::Start;
         UILayout::LayoutStack(kParent, stack, children, rects);
-        EXPECT_FLOAT_EQ(rects[1].x, 100.0f);
+        EXPECT_FLOAT_EQ(At(rects, 1).x, 100.0f);
 
         stack.crossAlign = UIStackAlign::Center;
         UILayout::LayoutStack(kParent, stack, children, rects);
-        EXPECT_FLOAT_EQ(rects[0].x, 250.0f);  // (400 - 100) / 2
-        EXPECT_FLOAT_EQ(rects[1].x, 280.0f);
+        EXPECT_FLOAT_EQ(At(rects, 0).x, 250.0f);  // (400 - 100) / 2
+        EXPECT_FLOAT_EQ(At(rects, 1).x, 280.0f);
 
         stack.crossAlign = UIStackAlign::End;
         UILayout::LayoutStack(kParent, stack, children, rects);
-        EXPECT_FLOAT_EQ(rects[1].x, 460.0f);
+        EXPECT_FLOAT_EQ(At(rects, 1).x, 460.0f);
     }
 
     TEST(UIStackTest, StretchMakesTheChildrenAsWideAsTheContentAndKeepsTheirLimits) {
@@ -355,8 +350,8 @@ namespace BECore::Tests {
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
-        EXPECT_FLOAT_EQ(rects[0].w, 400.0f);
-        EXPECT_FLOAT_EQ(rects[1].w, 120.0f);
+        EXPECT_FLOAT_EQ(At(rects, 0).w, 400.0f);
+        EXPECT_FLOAT_EQ(At(rects, 1).w, 120.0f);
     }
 
     TEST(UIStackTest, WithoutWrapTheChildrenStayOnOneLineEvenWhenTheyOverflow) {
@@ -367,8 +362,8 @@ namespace BECore::Tests {
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
-        EXPECT_FLOAT_EQ(rects[0].y, rects[1].y);
-        EXPECT_FLOAT_EQ(rects[1].x, 350.0f);
+        EXPECT_FLOAT_EQ(At(rects, 0).y, At(rects, 1).y);
+        EXPECT_FLOAT_EQ(At(rects, 1).x, 350.0f);
     }
 
     TEST(UIStackTest, WrapStartsANewLineWhenTheNextChildDoesNotFit) {
@@ -382,10 +377,10 @@ namespace BECore::Tests {
         UILayout::LayoutStack(kParent, stack, children, rects);
 
         // 400 wide: 150 + 10 + 150 = 310 fits, a third 150 does not; the line is as tall as its tallest child
-        ExpectRect(rects[0], 100.0f, 50.0f, 150.0f, 20.0f);
-        ExpectRect(rects[1], 260.0f, 50.0f, 150.0f, 30.0f);
-        ExpectRect(rects[2], 100.0f, 90.0f, 150.0f, 25.0f);
-        ExpectRect(rects[3], 260.0f, 90.0f, 90.0f, 10.0f);  // 150 + 10 + 90 = 250 still fits the second line
+        ExpectRect(At(rects, 0), 100.0f, 50.0f, 150.0f, 20.0f);
+        ExpectRect(At(rects, 1), 260.0f, 50.0f, 150.0f, 30.0f);
+        ExpectRect(At(rects, 2), 100.0f, 90.0f, 150.0f, 25.0f);
+        ExpectRect(At(rects, 3), 260.0f, 90.0f, 90.0f, 10.0f);  // 150 + 10 + 90 = 250 still fits the second line
     }
 
     TEST(UIStackTest, AChildWiderThanTheLineGetsALineOfItsOwnWhenWrapping) {
@@ -397,9 +392,9 @@ namespace BECore::Tests {
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
-        EXPECT_FLOAT_EQ(rects[0].y, 50.0f);
-        EXPECT_FLOAT_EQ(rects[1].y, 70.0f);
-        EXPECT_FLOAT_EQ(rects[1].x, 100.0f);
+        EXPECT_FLOAT_EQ(At(rects, 0).y, 50.0f);
+        EXPECT_FLOAT_EQ(At(rects, 1).y, 70.0f);
+        EXPECT_FLOAT_EQ(At(rects, 1).x, 100.0f);
     }
 
     TEST(UIStackTest, WrappedLinesShareTheirFlexChildrenPerLine) {
@@ -414,9 +409,9 @@ namespace BECore::Tests {
         UILayout::LayoutStack(kParent, stack, children, rects);
 
         // Line 1: 300 + 100 = 400 fits; the flex child takes the 100 that is left. Line 2: the last child alone takes 400
-        EXPECT_NEAR(rects[1].w, 100.0f, kTolerance);
-        EXPECT_NEAR(rects[2].w, 400.0f, kTolerance);
-        EXPECT_NEAR(rects[2].x, 100.0f, kTolerance);
+        EXPECT_NEAR(At(rects, 1).w, 100.0f, kTolerance);
+        EXPECT_NEAR(At(rects, 2).w, 400.0f, kTolerance);
+        EXPECT_NEAR(At(rects, 2).x, 100.0f, kTolerance);
     }
 
     // A stack child with an aspect ratio that gives exactly one side gets the other (an icon square next to a caption)
@@ -456,8 +451,8 @@ namespace BECore::Tests {
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
-        ExpectRect(rects[0], 100.0f, 50.0f, 200.0f, 100.0f);  // 50% of the 200 content height, twice as wide
-        ExpectRect(rects[1], 310.0f, 50.0f, 40.0f, 40.0f);
+        ExpectRect(At(rects, 0), 100.0f, 50.0f, 200.0f, 100.0f);  // 50% of the 200 content height, twice as wide
+        ExpectRect(At(rects, 1), 310.0f, 50.0f, 40.0f, 40.0f);
     }
 
     TEST(UIStackTest, AHorizontalChildWithAWidthAndARatioGetsItsHeight) {
@@ -466,7 +461,7 @@ namespace BECore::Tests {
 
         UILayout::LayoutStack(kParent, Horizontal(), children, rects);
 
-        ExpectRect(rects[0], 100.0f, 50.0f, 80.0f, 40.0f);
+        ExpectRect(At(rects, 0), 100.0f, 50.0f, 80.0f, 40.0f);
     }
 
     TEST(UIStackTest, AVerticalChildWithOnlyAWidthIsAsHighAsTheRatioSays) {
@@ -477,8 +472,8 @@ namespace BECore::Tests {
 
         UILayout::LayoutStack(kParent, stack, children, rects);
 
-        ExpectRect(rects[0], 100.0f, 50.0f, 100.0f, 50.0f);
-        ExpectRect(rects[1], 100.0f, 108.0f, 200.0f, 50.0f);  // a percent cross size is of the content width
+        ExpectRect(At(rects, 0), 100.0f, 50.0f, 100.0f, 50.0f);
+        ExpectRect(At(rects, 1), 100.0f, 108.0f, 200.0f, 50.0f);  // a percent cross size is of the content width
     }
 
     TEST(UIStackTest, AChildWithBothSidesOrNoneKeepsItsSpecEvenWithARatio) {
@@ -487,8 +482,8 @@ namespace BECore::Tests {
 
         UILayout::LayoutStack(kParent, Horizontal(), children, rects);
 
-        ExpectRect(rects[0], 100.0f, 50.0f, 100.0f, 40.0f);
-        ExpectRect(rects[1], 200.0f, 50.0f, 0.0f, 0.0f);
+        ExpectRect(At(rects, 0), 100.0f, 50.0f, 100.0f, 40.0f);
+        ExpectRect(At(rects, 1), 200.0f, 50.0f, 0.0f, 0.0f);
     }
 
     TEST(UIStackTest, AFlexChildKeepsItsShareDespiteARatio) {
@@ -499,7 +494,7 @@ namespace BECore::Tests {
 
         UILayout::LayoutStack(kParent, Horizontal(), children, rects);
 
-        ExpectRect(rects[0], 100.0f, 50.0f, 400.0f, 100.0f);
+        ExpectRect(At(rects, 0), 100.0f, 50.0f, 400.0f, 100.0f);
     }
 
     TEST(UIStackTest, TheLimitsClampTheDerivedSide) {
@@ -512,8 +507,8 @@ namespace BECore::Tests {
 
         UILayout::LayoutStack(kParent, Horizontal(), children, rects);
 
-        ExpectRect(rects[0], 100.0f, 50.0f, 150.0f, 100.0f);
-        ExpectRect(rects[1], 250.0f, 50.0f, 60.0f, 20.0f);
+        ExpectRect(At(rects, 0), 100.0f, 50.0f, 150.0f, 100.0f);
+        ExpectRect(At(rects, 1), 250.0f, 50.0f, 60.0f, 20.0f);
     }
 
     TEST(UIStackTest, ADerivedSizeIsPlacedByCrossAlign) {
@@ -523,11 +518,11 @@ namespace BECore::Tests {
 
         stack.crossAlign = UIStackAlign::Center;
         UILayout::LayoutStack(kParent, stack, children, rects);
-        ExpectRect(rects[0], 100.0f, 130.0f, 40.0f, 40.0f);
+        ExpectRect(At(rects, 0), 100.0f, 130.0f, 40.0f, 40.0f);
 
         stack.crossAlign = UIStackAlign::Stretch;  // the line's height replaces the cross size; the main size stays
         UILayout::LayoutStack(kParent, stack, children, rects);
-        ExpectRect(rects[0], 100.0f, 50.0f, 40.0f, 200.0f);
+        ExpectRect(At(rects, 0), 100.0f, 50.0f, 40.0f, 200.0f);
     }
 
     TEST(UIStackTest, AnEmptyStackGivesNoRects) {
