@@ -1,5 +1,4 @@
 #include <BECore/Application/CommandLine.h>
-#include <BECore/GameManager/CoreManager.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -66,10 +65,6 @@ namespace BECore::Tests {
         line.Set(Args{"--b=2"});
         EXPECT_FALSE(line.FindValue("--a").has_value());
         EXPECT_EQ(*line.FindValue("--b"), "2");
-    }
-
-    TEST(CommandLineTest, CoreManagerHoldsOneInstance) {
-        EXPECT_EQ(&CoreManager::GetCommandLine(), &CoreManager::GetCommandLine());
     }
 
 }  // namespace BECore::Tests

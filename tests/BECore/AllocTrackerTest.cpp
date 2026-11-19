@@ -183,7 +183,7 @@ namespace BECore::Tests {
 
     // ---- Cost (run by hand: --gtest_also_run_disabled_tests --gtest_filter='ProfilerCost*') ----
 
-    TEST(ProfilerCostTest, DISABLED_NewAndDelete) {
+    TEST(AllocTrackerTest, DISABLED_TheCostOfNewAndDelete) {
         constexpr int kCalls = 1000000;
         const auto start = std::chrono::steady_clock::now();
         for (int i = 0; i < kCalls; ++i) {

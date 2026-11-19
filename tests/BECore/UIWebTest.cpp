@@ -2173,7 +2173,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         renderer.ClearCalls();
         plain->DrawSelf(renderer);
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_EQ(At(renderer.calls, 0).kind, DrawKind::Rect) << "no box property, the plain rect as before";
+        EXPECT_EQ(At(renderer.calls, 0).kind, DrawKind::Rect) << "no box property: one plain rect";
     }
 
     // ---- variants from @media ------------------------------------------------------------------------------------------------

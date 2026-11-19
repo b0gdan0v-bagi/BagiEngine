@@ -62,7 +62,7 @@ namespace BECore::Tests {
 
         EXPECT_EQ(hint.options, kOfferedSinkTypes);
 
-        // The names of the removed hand-written enum are not class names, the loader would drop them
+        // A name that is not a class name is not offered: the loader would drop it
         EXPECT_FALSE(Contains(hint.options, "Console"));
         EXPECT_FALSE(Contains(hint.options, "File"));
         EXPECT_FALSE(Contains(hint.options, "Output"));

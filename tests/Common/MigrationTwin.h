@@ -169,7 +169,7 @@ namespace BECore::Tests::MigrationTwin {
     }
 
     /// A screen of one form loaded into canvases on a `RecordingRenderer`; a test derives from it and looks at what the screen draws and answers
-    class Fixture : public ::testing::TestWithParam<String> {
+    class Fixture : public ::testing::Test {
     protected:
         static void SetUpTestSuite() {
             EngineEnvironment::EnsureCoreServices();

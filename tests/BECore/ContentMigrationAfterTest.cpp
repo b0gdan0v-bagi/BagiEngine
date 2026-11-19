@@ -28,7 +28,7 @@ namespace BECore::Tests {
      *     `disabled`), a toggle with its variable unset and on;
      *   - a click emits the `ActionEvent` the fixture says (a toggle: the value it flips to, from the caption, the switch and the row; a slider: the value under the pointer), and
      *     nothing when the control is `disabled` by itself or by its group (one that is not a member of a `UISegmented`), nor when the click is on no control.
-     * Nothing here builds the class that a fixture's `.before.xml` names (`UIButton`, `UIToggle`, `UISlider`), so the classes can go: the pairs are held by the pytest of each step
+     * Nothing here builds the class that a fixture's `.before.xml` names (`UIButton`, `UIToggle`, `UISlider`), so none of them has to exist: the pairs are held by the pytest of each step
      * (`tools/migrate/tests/`) and the composed controls by their component tests (`UIToggleComponentTest`, `UISliderComponentTest`, `UIComposedButtonScreenTest`), which hold the
      * geometry and the draw. A test that compared a migrated screen with the class's draw would need the class.
      *
@@ -193,7 +193,8 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class ContentMigrationAfterTest : public Fixture {
+    /// What the composed-screen cases share: loading a case into scenes and looking at it
+    class ContentMigrationAfterFixture : public Fixture {
     protected:
         void LoadCase(const String& xml) {
             ASSERT_TRUE(Load(xml));
@@ -350,7 +351,7 @@ namespace BECore::Tests {
         Vector<CanvasRef> _canvases;
     };
 
-    TEST(ContentMigrationAfterFixtures, EveryFixtureIsLoadedOrSkippedWithAReason) {
+    TEST(ContentMigrationAfterFixturesTest, EveryFixtureIsLoadedOrSkippedWithAReason) {
         Set<String> found;
         for (const char* folder : {"ui_button", "ui_group", "ui_value", "ui_text"}) {
             ASSERT_TRUE(std::filesystem::is_directory(FixtureFolder(folder))) << FixtureFolder(folder).string();
@@ -368,7 +369,7 @@ namespace BECore::Tests {
         EXPECT_EQ(found, known) << "a fixture pair with no entry in Expectations() or kSkipped, or an entry with no pair";
     }
 
-    TEST(ContentMigrationAfterFixtures, ASkippedFixtureHoldsATypeALaterStepRewrites) {
+    TEST(ContentMigrationAfterFixturesTest, ASkippedFixtureHoldsATypeALaterStepRewrites) {
         static const std::regex removed(R"re(type="(UIButton|UILabel|UIImage|UIToggle|UISlider|UIDropdown)")re");
         static const std::regex removedInText(R"re(type="(UIButton|UILabel|UIImage|UIToggle|UISlider)")re");
         for (const char* skipped : kSkipped) {
@@ -388,8 +389,11 @@ namespace BECore::Tests {
         }
     }
 
+    /// The parameter is the index of the case in Expectations()
+    class ContentMigrationAfterTest : public ContentMigrationAfterFixture, public ::testing::WithParamInterface<size_t> {};
+
     TEST_P(ContentMigrationAfterTest, TheComposedScreenBehaves) {
-        const Expectation& expectation = Expectations()[Require(StringUtils::ParseNumber<size_t>(GetParam()))];
+        const Expectation& expectation = Expectations()[GetParam()];
         const String label = Key(expectation.folder, expectation.name);
         const String xml = SceneManagerXml(ReadFile(FixtureFolder(expectation.folder) / ToStd(Format("{}.after.xml", expectation.name))));
         ASSERT_FALSE(xml.empty());
@@ -418,7 +422,7 @@ namespace BECore::Tests {
 
     /// The pictures of a claim button (`ui_text/picture_under_clicker`): a picture component follows the state of the clicker above it, and the step writes its three state tints equal
     /// to its tint so that it keeps the colour the `UIImage` had; the tints of every picture drawn are the same at rest, under the pointer, pressed and disabled
-    class ContentMigrationPictureTest : public ContentMigrationAfterTest {
+    class ContentMigrationPictureTest : public ContentMigrationAfterFixture {
     protected:
         /// The tints of the pictures drawn in the last frame (the test gives every sprite the same texture), in draw order
         Vector<uint32_t> PictureTints() const {
@@ -432,7 +436,7 @@ namespace BECore::Tests {
         }
     };
 
-    TEST_P(ContentMigrationPictureTest, APictureUnderAClickerKeepsItsColourInEveryState) {
+    TEST_F(ContentMigrationPictureTest, APictureUnderAClickerKeepsItsColourInEveryState) {
         LoadCase(SceneManagerXml(ReadFile(FixtureFolder("ui_text") / "picture_under_clicker.after.xml")));
         ASSERT_NE(_scene, nullptr);
         Draw(kLargeWidth, kLargeHeight);
@@ -467,18 +471,9 @@ namespace BECore::Tests {
         }
     }
 
-    INSTANTIATE_TEST_SUITE_P(Fixtures, ContentMigrationPictureTest, ::testing::Values(String("picture_under_clicker")));
-
-    INSTANTIATE_TEST_SUITE_P(Fixtures, ContentMigrationAfterTest, ::testing::ValuesIn([] {
-                                 Vector<String> indices;
-                                 for (size_t i = 0; i < Expectations().size(); ++i) {
-                                     indices.push_back(ToString(i));
-                                 }
-                                 return indices;
-                             }()),
-                             [](const ::testing::TestParamInfo<String>& info) {
-                                 const Expectation& expectation = Expectations()[Require(StringUtils::ParseNumber<size_t>(info.param))];
-                                 return std::string(expectation.folder) + "_" + expectation.name;  //-NoStd: gtest takes the test name from a std::string
-                             });
+    INSTANTIATE_TEST_SUITE_P(Fixtures, ContentMigrationAfterTest, ::testing::Range<size_t>(0, Expectations().size()), [](const ::testing::TestParamInfo<size_t>& info) {
+        const Expectation& expectation = Expectations()[info.param];
+        return std::string(expectation.folder) + "_" + expectation.name;  //-NoStd: gtest takes the test name from a std::string
+    });
 
 }  // namespace BECore::Tests

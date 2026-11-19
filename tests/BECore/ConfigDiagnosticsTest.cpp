@@ -79,9 +79,13 @@ namespace BECore::Tests {
     }
 
     TEST_F(ConfigDiagnosticsTest, CreateDeserializerHasTheMode) {
-        EXPECT_EQ(CoreManager::GetConfigManager().CreateDeserializer(kTestsConfig)->GetDiagnostics(), DiagnosticsMode::Warn);
+        const auto warning = CoreManager::GetConfigManager().CreateDeserializer(kTestsConfig);
+        ASSERT_NE(warning, nullptr);
+        EXPECT_EQ(warning->GetDiagnostics(), DiagnosticsMode::Warn);
         SetStrictConfig();
-        EXPECT_EQ(CoreManager::GetConfigManager().CreateDeserializer(kTestsConfig)->GetDiagnostics(), DiagnosticsMode::Error);
+        const auto strict = CoreManager::GetConfigManager().CreateDeserializer(kTestsConfig);
+        ASSERT_NE(strict, nullptr);
+        EXPECT_EQ(strict->GetDiagnostics(), DiagnosticsMode::Error);
     }
 
     TEST_F(ConfigDiagnosticsTest, ABareDeserializerStaysOff) {

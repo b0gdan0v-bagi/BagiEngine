@@ -484,7 +484,7 @@ namespace BECore::Tests {
         ExpectRect(flat->GetLayout().GetResolved().bounds, 0.0f, 0.0f, 800.0f, 1200.0f);  // the output at scale 1, as for any Screen canvas
     }
 
-    TEST_F(UICanvasComponentTest, ASceneWithoutViewVariantsLaysOutAsBefore) {
+    TEST_F(UICanvasComponentTest, ASceneWithoutViewVariantsLaysOutInTheOneView) {
         auto view = Canvas("Fit", "ViewCanvas");
         _renderer->width = 600.0f;  // a tall output does not change the only view
         _renderer->height = 800.0f;

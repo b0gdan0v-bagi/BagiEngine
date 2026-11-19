@@ -22,7 +22,7 @@ namespace BECore::Tests {
 
         /// The layout rule of the ten anchors with pixel or percent sizes and offsets, without anchorMin / anchorMax / pivot. The reference of the
         /// equivalence test; it must not change with the layout.
-        Rect LegacyResolveRect(const Rect& parent, const UIRectSpec& spec) {
+        Rect ReferenceResolveRect(const Rect& parent, const UIRectSpec& spec) {
             const bool stretch = spec.anchor == UIAnchor::Stretch;
             const Rect area = stretch ? UILayout::Inset(parent, spec.margin) : parent;
 
@@ -127,9 +127,9 @@ namespace BECore::Tests {
         EXPECT_EQ(anchors.pivot, (Vec2{1.0f, 1.0f}));
     }
 
-    /// For every anchor, a grid of parents, sizes, offsets, margins, limits and aspect settings: the rect is the one of LegacyResolveRect, with the new fields
-    /// unset and with them set to the shorthand's own values
-    TEST(UIEdgeAnchorTest, WithoutNewValuesEveryAnchorLaysOutAsItAlwaysDid) {
+    /// For every anchor, a grid of parents, sizes, offsets, margins, limits and aspect settings: the rect is the one of ReferenceResolveRect, with anchorMin /
+    /// anchorMax / pivot unset and with them set to the shorthand's own values
+    TEST(UIEdgeAnchorTest, WithoutAnchorMinMaxOrPivotEveryAnchorLaysOutByTheReferenceRule) {
         const Rect parents[] = {{0.0f, 0.0f, 1280.0f, 720.0f}, {100.0f, 50.0f, 400.0f, 200.0f}, {-30.0f, 17.5f, 333.0f, 91.0f}, {10.0f, 10.0f, 0.0f, 0.0f}};
         const UILength lengths[] = {UILength::Px(0.0f), UILength::Px(96.0f), UILength::Percent(35.0f), UILength::Percent(150.0f)};
         const UILength offsets[] = {UILength::Px(0.0f), UILength::Px(-12.5f), UILength::Percent(5.0f)};
@@ -167,7 +167,7 @@ namespace BECore::Tests {
                                         spec.maxHeight = limit.maximum;
                                         spec.aspectRatio = aspect.ratio;
                                         spec.aspectMode = aspect.mode;
-                                        const Rect expected = LegacyResolveRect(parent, spec);
+                                        const Rect expected = ReferenceResolveRect(parent, spec);
 
                                         const Rect plain = UILayout::ResolveRect(parent, spec);
                                         SpellOutShorthand(spec);

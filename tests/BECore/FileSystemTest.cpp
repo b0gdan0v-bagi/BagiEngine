@@ -19,7 +19,7 @@ namespace BECore::Tests {
     class FileSystemTest : public ::testing::Test {
     protected:
         void SetUp() override {
-            // One directory per test: ctest runs every test in its own process
+            // One directory per test and per process: ctest runs the tests in parallel processes, two checkouts may run the same one (TempPath.h)
             _base = TestTempDirectory("BagiFileSystemTest");
             RemoveDirectory(_base);
             _engine = _base / "engine";
