@@ -1,7 +1,8 @@
 """
 The checks of a cut-out sprite (tools/artgen/CLAUDE.md, "The service"): from the alpha channel of a variant they find what a
 person sees at a glance: nothing drawn, an object cut by the frame, several pieces, a wide soft halo, a background that was
-not removed, a dot, an object far from the centre, several objects that touch. A verdict is plain data for the provenance file and the progress event.
+not removed, a dot, an object far from the centre, several objects that touch or stand on one thin base. A verdict is plain data
+for the provenance file and the progress event.
 
 The object is every pixel with alpha at or above `cut`. The shape checks run on a mask reduced to at most `MAX_SIDE` pixels on
 its longer side (a reduced pixel is set when any pixel of its cell is), so a 1024 picture costs well under a second. Standard
@@ -20,6 +21,7 @@ DEFAULTS = {
     "minPieceArea": 0.01,  # a piece counts when it holds at least this fraction of the object's area (specks do not)
     "maxValley": 0.7,  # how deep a valley between two bodies may go, as a fraction of the lower one's height (1: no limit)
     "minBodyWidth": 0.04,  # a part narrower than this fraction of the object's width is no body (a crown's tip, an antenna)
+    "minFloor": 0.22,  # two bodies may not stand on a base thinner than this fraction of the object's height (0: no limit)
     "maxHalo": 0.10,  # the share of semi-transparent pixels among the non-transparent ones
     "maxFill": 0.85,  # the share of the frame the object may cover before the background counts as not removed
     "minCover": 0.10,  # the share of the frame's area the object's bounding box must cover
@@ -34,6 +36,7 @@ RANGES = {
     "minPieceArea": FRACTION,
     "maxValley": FRACTION,
     "minBodyWidth": FRACTION,
+    "minFloor": FRACTION,
     "maxHalo": FRACTION,
     "maxFill": FRACTION,
     "minCover": FRACTION,
@@ -42,6 +45,7 @@ RANGES = {
 CHECK_NAMES = ("empty", "edge", "pieces", "bodies", "halo", "background", "small", "offCentre")
 
 MAX_SIDE = 256
+FLOOR_MIN_DEPTH = 0.3  # a valley this deep (over the lower peak) is between two bodies, so its floor is the base they share
 TRANSPARENT_BELOW = 8  # alpha under this is transparent for the halo's count
 SEMI_ABOVE = 247  # alpha above this is opaque for the halo's count and for the corners
 METRIC_DIGITS = 4
@@ -140,8 +144,10 @@ def _opened(profile, window):
 
 
 def _valley(mask, width, height, min_body_width):
-    """How deep the deepest valley between two bodies of the silhouette goes: its depth over the lower of the two peaks
-    around it (water-fill over the opened column heights), 0 for one body, 1 when it reaches the floor."""
+    """(depth, floor) of the valleys between bodies of the silhouette (water-fill over the opened column heights). The depth is
+    the deepest valley's over the lower of the two peaks around it: 0 for one body, 1 when it reaches the floor. The floor is
+    the lowest bottom of a valley of at least FLOOR_MIN_DEPTH depth, as a fraction of the object's height (1: no such valley):
+    a small neighbour keeps the depth low (it is measured over the neighbour's height), the floor does not depend on it."""
     heights = _column_heights(mask, width, height)
     profile = _opened(heights, max(1, round(min_body_width * len(heights))))
     count = len(profile)
@@ -155,12 +161,17 @@ def _valley(mask, width, height, min_body_width):
     for i in range(count - 1, -1, -1):
         peak = max(peak, profile[i])
         right_peak[i] = peak
-    valley = 0.0
+    tallest = left_peak[-1]
+    depth = 0.0
+    floor = 1.0
     for i in range(count):
         lower = min(left_peak[i], right_peak[i])
         if lower > 0:
-            valley = max(valley, (lower - profile[i]) / lower)
-    return valley
+            valley = (lower - profile[i]) / lower
+            depth = max(depth, valley)
+            if valley >= FLOOR_MIN_DEPTH:
+                floor = min(floor, profile[i] / tallest)
+    return depth, floor
 
 
 def _bounding_box(mask, width, height):
@@ -208,6 +219,7 @@ def check_alpha(alpha, thresholds=None):
         left, top, right, bottom = _bounding_box(reduced, reduced_width, reduced_height)
         reduced_area = reduced.count(1)
         pieces = _pieces(reduced, reduced_width, reduced_height, used["minPieceArea"] * reduced_area)
+        valley, floor = _valley(reduced, reduced_width, reduced_height, used["minBodyWidth"])
         non_transparent = pixels.translate(NON_TRANSPARENT_TABLE).count(1)
         semi = pixels.translate(SEMI_TABLE).count(1)
         corners = (pixels[0], pixels[width - 1], pixels[(height - 1) * width], pixels[-1])
@@ -215,7 +227,8 @@ def check_alpha(alpha, thresholds=None):
             "fill": area / len(pixels),
             "edgeRun": _edge_run(mask, width, height),
             "pieces": pieces,
-            "valley": _valley(reduced, reduced_width, reduced_height, used["minBodyWidth"]),
+            "valley": valley,
+            "floor": floor,
             "halo": semi / non_transparent if non_transparent else 0.0,
             "cover": (right - left) * (bottom - top),
             "offset": math.hypot((left + right) / 2 - 0.5, (top + bottom) / 2 - 0.5),
@@ -224,7 +237,7 @@ def check_alpha(alpha, thresholds=None):
             failed.append("edge")
         if pieces > used["maxPieces"]:
             failed.append("pieces")
-        elif metrics["valley"] > used["maxValley"]:
+        elif valley > used["maxValley"] or floor < used["minFloor"]:
             failed.append("bodies")
         if metrics["halo"] > used["maxHalo"]:
             failed.append("halo")
