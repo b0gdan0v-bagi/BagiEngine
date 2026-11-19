@@ -206,6 +206,47 @@ namespace BECore::Tests {
         }
     }
 
+    TEST(ArtGenSetTest, AnAtlasGroupRoundTripsAndNoGroupIsWrittenAsNull) {
+        ArtGenSet set = MakeSet();
+        EXPECT_TRUE(FindJsonMember(ArtGenSetToJson(set), "atlas")->is_null()) << "no group: the key is there, null";
+
+        set.atlas = "pieces";
+        const Json json = ArtGenSetToJson(set);
+        EXPECT_EQ(*FindJsonMember(json, "atlas"), Json("pieces"));
+        const auto back = ArtGenSetFromJson(json);
+        ASSERT_TRUE(back.has_value()) << back.error();
+        EXPECT_EQ(back->atlas, "pieces");
+        EXPECT_EQ(ArtGenSetToJson(*back), json);
+    }
+
+    TEST(ArtGenSetTest, AManifestFromBeforeAtlasesOrWithANullOneReadsAsNoGroup) {
+        Json json = ArtGenSetToJson(MakeSet());
+        json.erase("atlas");
+        const auto without = ArtGenSetFromJson(json);
+        ASSERT_TRUE(without.has_value()) << without.error();
+        EXPECT_TRUE(without->atlas.empty());
+
+        const auto minimal = ArtGenSetFromJson(Manifest(kMinimalManifest));
+        ASSERT_TRUE(minimal.has_value()) << minimal.error();
+        EXPECT_TRUE(minimal->atlas.empty());
+        EXPECT_TRUE(FindJsonMember(ArtGenSetToJson(*minimal), "atlas")->is_null()) << "rewritten as none, nothing invented";
+
+        json["atlas"] = Json(nullptr);
+        const auto nulled = ArtGenSetFromJson(json);
+        ASSERT_TRUE(nulled.has_value()) << nulled.error();
+        EXPECT_TRUE(nulled->atlas.empty());
+    }
+
+    TEST(ArtGenSetTest, AnAtlasGroupThatIsNotAGroupNameIsAnErrorThatNamesTheKey) {
+        for (const char* bad : {"5", R"("")", R"("a b")", R"("../x")", "[]", "true"}) {
+            Json json = ArtGenSetToJson(MakeSet());
+            json["atlas"] = Manifest(bad);
+            const String error = ErrorOf(ArtGenSetFromJson(json));
+            EXPECT_TRUE(Contains(error, "manifest: ")) << error;
+            EXPECT_TRUE(Contains(error, "'atlas'")) << bad << " -> " << error;
+        }
+    }
+
     TEST(ArtGenSetTest, PathsInTheManifestUseForwardSlashes) {
         const Json json = ArtGenSetToJson(MakeSet());
         const Json& variant = (*FindJsonMember(json, "jobs"))[0]["variants"][0];

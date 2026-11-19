@@ -308,6 +308,50 @@ namespace BECore::Tests {
         EXPECT_LT(reference, note);
     }
 
+    TEST(ArtGenPresetFormTest, TheAtlasGroupIsKeptAsTheFileHasItAndComesAfterAccept) {
+        ArtGenPreset preset = WoodPreset();
+        preset.data["accept"] = Json{{"maxSize", 64}};
+        preset.data["atlas"] = "pieces";
+        preset.data["reference"] = Json{{"mode", "init"}, {"image", "a.png"}};
+        EXPECT_TRUE(CheckArtGenPresetShape(preset.data).has_value());
+
+        ArtGenPresetForm form;
+        form.Load(preset);
+        EXPECT_EQ(form.ToJson(), preset.data);
+        EXPECT_FALSE(form.IsDirty());
+        EXPECT_EQ(FormatArtGenPresetFile(form.ToJson()), FormatArtGenPresetFile(preset.data));
+
+        const String text = FormatArtGenPresetFile(preset.data);
+        const size_t accept = text.find("\"accept\"");
+        const size_t atlas = text.find("\"atlas\"");
+        const size_t reference = text.find("\"reference\"");
+        const size_t note = text.find("\"note\"");
+        ASSERT_NE(atlas, String::npos);
+        EXPECT_LT(accept, atlas);
+        EXPECT_LT(atlas, reference);
+        EXPECT_LT(reference, note);
+
+        form.Duplicate();
+        EXPECT_EQ(*FindJsonMember(form.ToJson(), "atlas"), Json("pieces")) << "a copy keeps it";
+        form.MarkSaved();
+        EXPECT_EQ(*FindJsonMember(form.ToJson(), "atlas"), Json("pieces"));
+    }
+
+    TEST(ArtGenPresetFormTest, ABadAtlasGroupIsRefusedBeforeASaveAndNamesTheKey) {
+        ArtGenPreset preset = WoodPreset();
+        for (const Json& bad : {Json(5), Json(""), Json("a b"), Json("../x"), Json(String(65, 'a').c_str()), Json::array(), Json(nullptr)}) {
+            preset.data["atlas"] = bad;
+            const auto shape = CheckArtGenPresetShape(preset.data);
+            ASSERT_FALSE(shape.has_value()) << DumpJson(bad).c_str();
+            EXPECT_NE(shape.error().find("atlas"), String::npos) << DumpJson(bad).c_str();
+            ArtGenPresetForm form;
+            form.Load(preset);
+            EXPECT_EQ(form.ToJson(), preset.data) << "nothing of the file is lost";
+        }
+        preset.data.erase("atlas");
+        EXPECT_TRUE(CheckArtGenPresetShape(preset.data).has_value());
+    }
+
     TEST(ArtGenPresetFormTest, AMalformedReferenceIsKeptAndRefusedBeforeASave) {
         ArtGenPreset preset = WoodPreset();
         preset.data["reference"] = Json{{"mode", "init"}, {"image", "a.png"}, {"weight", "heavy"}};
