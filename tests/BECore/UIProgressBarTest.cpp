@@ -9,9 +9,11 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIProgressBar.h>
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UIPartShapeChecks.h>
@@ -49,10 +51,6 @@ namespace BECore::Tests {
     </components></node>
   </nodes></scene>
 </scenes></SceneManager>)";
-
-        bool Same(const Color& a, const Color& b) {
-            return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
-        }
 
         bool Near(const Rect& a, const Rect& b, float tolerance = 1e-2f) {
             return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
@@ -352,9 +350,9 @@ namespace BECore::Tests {
         Draw();
         const auto rects = RectsIn(Bar("Unit").rect);
         ASSERT_EQ(rects.size(), 2u);
-        EXPECT_TRUE(Same(rects[0].color, UIProgressBar::kTrackFallback));
-        EXPECT_TRUE(Same(rects[1].color, kFillFallback));
-        EXPECT_TRUE(Same(Bar("Unit").GetCurrentTrack(), UIProgressBar::kTrackFallback));
+        EXPECT_PRED2(ColorsEqual, rects[0].color, UIProgressBar::kTrackFallback);
+        EXPECT_PRED2(ColorsEqual, rects[1].color, kFillFallback);
+        EXPECT_PRED2(ColorsEqual, Bar("Unit").GetCurrentTrack(), UIProgressBar::kTrackFallback);
         EXPECT_EQ(Bar("Custom").GetCurrentFill().g, 50);
     }
 

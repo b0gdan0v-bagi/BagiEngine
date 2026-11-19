@@ -1,10 +1,11 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
 #include <BECore/PoolString/PoolString.h>
 #include <gtest/gtest.h>
 #include <ostream>
 
-// gtest cannot print EASTL strings or PoolString on its own (it falls back to a byte dump),
+// gtest cannot print EASTL strings, PoolString or Color on its own (it falls back to a byte dump),
 // so failure messages would be unreadable. ADL finds PrintTo only in the type's own namespace.
 namespace eastl {
 
@@ -29,6 +30,11 @@ namespace BECore {
 
     inline void PrintTo(const PoolString& value, std::ostream* os) {
         *os << "PoolString(\"" << value.CStr() << "\")";
+    }
+
+    /// Color has no `operator==`: compare with `EXPECT_PRED2(ColorsEqual, a, b)` (UI/UIColor.h), which prints both through this
+    inline void PrintTo(const Color& value, std::ostream* os) {
+        *os << "Color{" << static_cast<int>(value.r) << ", " << static_cast<int>(value.g) << ", " << static_cast<int>(value.b) << ", " << static_cast<int>(value.a) << "}";
     }
 
 }  // namespace BECore

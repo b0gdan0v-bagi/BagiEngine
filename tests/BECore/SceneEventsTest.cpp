@@ -5,6 +5,7 @@
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/UI/UIColor.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/UIInputEvents.h>
@@ -151,11 +152,7 @@ namespace BECore::Tests {
             return nullptr;
         }
 
-        constexpr uint32_t PackColor(const Color& c) {
-            return (uint32_t{c.r} << 24) | (uint32_t{c.g} << 16) | (uint32_t{c.b} << 8) | uint32_t{c.a};
-        }
-
-        constexpr uint32_t kInitialColor = (1u << 24) | (2u << 16) | (3u << 8) | 255u;
+        constexpr Color kInitialColor{1, 2, 3, 255};
 
     }  // namespace
 
@@ -422,13 +419,13 @@ namespace BECore::Tests {
         auto quadB = GetProbeComponent<QuadRendererComponent>("B"_intern);
         ASSERT_TRUE(quadA);
         ASSERT_TRUE(quadB);
-        ASSERT_EQ(PackColor(quadA->_color), kInitialColor);
-        ASSERT_EQ(PackColor(quadB->_color), kInitialColor);
+        ASSERT_PRED2(ColorsEqual, quadA->_color, kInitialColor);
+        ASSERT_PRED2(ColorsEqual, quadB->_color, kInitialColor);
 
         InputEvents::ActionEvent::Emit("AnyAction"_intern);
 
-        EXPECT_NE(PackColor(quadA->_color), kInitialColor);
-        EXPECT_EQ(PackColor(quadB->_color), kInitialColor);
+        EXPECT_FALSE(ColorsEqual(quadA->_color, kInitialColor));
+        EXPECT_PRED2(ColorsEqual, quadB->_color, kInitialColor);
     }
 
     // The view change event: decided in Draw(), announced in Update()

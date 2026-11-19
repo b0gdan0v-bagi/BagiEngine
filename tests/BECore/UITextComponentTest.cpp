@@ -6,6 +6,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIColor.h>
 #include <BECore/UI/UILayoutValidator.h>
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UITextComponent.h>
@@ -51,11 +52,6 @@ namespace BECore::Tests {
 </scenes></SceneManager>)";
 
         const Color kTextColor{200, 100, 50, 255};
-
-        /// A colour as one number: Color has no comparison, and a failed EXPECT_EQ then prints the four channels in one
-        uint32_t Pack(const Color& color) {
-            return (static_cast<uint32_t>(color.r) << 24) | (static_cast<uint32_t>(color.g) << 16) | (static_cast<uint32_t>(color.b) << 8) | color.a;
-        }
 
         bool SameRect(const Rect& a, const Rect& b) {
             return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
@@ -133,10 +129,10 @@ namespace BECore::Tests {
             return glyphs;
         }
 
-        /// The colour of the last glyph (packed): the text itself comes after its outline and its shadow; 0 when nothing was drawn
-        uint32_t TextColorDrawn() const {
+        /// The colour of the last glyph: the text itself comes after its outline and its shadow; all zero when nothing was drawn
+        Color TextColorDrawn() const {
             const auto glyphs = Glyphs();
-            return glyphs.empty() ? 0u : Pack(glyphs.back().color);
+            return glyphs.empty() ? Color{} : glyphs.back().color;
         }
 
         IntrusivePtr<RecordingRenderer> _renderer;
@@ -147,9 +143,9 @@ namespace BECore::Tests {
     TEST_F(UITextComponentTest, TheFieldsComeFromTheFileUnderTheNamesOfALabel) {
         const UITextComponent& caption = CaptionOf("Cap");
         EXPECT_EQ(caption.text, "Score");
-        EXPECT_EQ(Pack(caption.textColor), Pack(kTextColor));
-        EXPECT_EQ(Pack(caption.hoverTextColor), Pack({10, 20, 30, 255}));
-        EXPECT_EQ(Pack(caption.disabledTextColor), Pack({70, 80, 90, 100}));
+        EXPECT_PRED2(ColorsEqual, caption.textColor, kTextColor);
+        EXPECT_PRED2(ColorsEqual, caption.hoverTextColor, (Color{10, 20, 30, 255}));
+        EXPECT_PRED2(ColorsEqual, caption.disabledTextColor, (Color{70, 80, 90, 100}));
         EXPECT_EQ(caption.align, TextAlign::Center);
         EXPECT_EQ(caption.verticalAlign, UIVerticalAlign::Center);
         EXPECT_EQ(caption.textEffects.outlineWidth, 2.0f);
@@ -326,25 +322,25 @@ namespace BECore::Tests {
         UIElement& cap = Get("Cap");
         const UITextComponent& caption = CaptionOf("Cap");
         Draw();
-        EXPECT_EQ(TextColorDrawn(), Pack(kTextColor));
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), kTextColor);
 
         cap.hovered = true;
         Draw();
-        EXPECT_EQ(TextColorDrawn(), Pack(caption.hoverTextColor));
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), caption.hoverTextColor);
 
         cap.pressed = true;
         Draw();
-        EXPECT_EQ(TextColorDrawn(), Pack(caption.pressedTextColor));
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), caption.pressedTextColor);
 
         cap.pressed = false;
         cap.hovered = false;
         cap.selected = true;
         Draw();
-        EXPECT_EQ(TextColorDrawn(), Pack(caption.selectedTextColor));
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), caption.selectedTextColor);
 
         cap.groupDisabled = true;
         Draw();
-        EXPECT_EQ(TextColorDrawn(), Pack(caption.disabledTextColor)) << "disabled wins over selected";
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), caption.disabledTextColor) << "disabled wins over selected";
     }
 
     TEST_F(UITextComponentTest, APressThatLeftTheOwnerIsNotShownAsPressed) {
@@ -352,7 +348,7 @@ namespace BECore::Tests {
         cap.pressed = true;
         cap.hovered = false;
         Draw();
-        EXPECT_EQ(TextColorDrawn(), Pack(kTextColor));
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), kTextColor);
     }
 
     TEST_F(UITextComponentTest, AStateWithNoColourLeavesTheTextColourAlone) {
@@ -363,7 +359,7 @@ namespace BECore::Tests {
         cap.hovered = true;
         cap.groupDisabled = true;
         Draw();
-        EXPECT_EQ(TextColorDrawn(), Pack(kTextColor));
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), kTextColor);
     }
 
     TEST_F(UITextComponentTest, FadeWhenDisabledDrawsTheTextAtHalfAlphaUnlessTheStateHasAColourOfItsOwn) {
@@ -372,20 +368,20 @@ namespace BECore::Tests {
         UIElement& cap = Get("Cap");
         cap.groupDisabled = true;
         Draw();
-        EXPECT_EQ(TextColorDrawn(), Pack(kTextColor)) << "off by default: a button does not fade its caption";
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), kTextColor) << "off by default: a button does not fade its caption";
 
         caption.fadeWhenDisabled = true;
         Draw();
-        EXPECT_EQ(TextColorDrawn(), Pack(WithAlpha(caption.textColor, kDisabledAlpha)));
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), WithAlpha(caption.textColor, kDisabledAlpha));
 
         cap.groupDisabled = false;
         Draw();
-        EXPECT_EQ(TextColorDrawn(), Pack(kTextColor)) << "only while disabled";
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), kTextColor) << "only while disabled";
 
         caption.disabledTextColor = UIColor{70, 80, 90, 255};
         cap.groupDisabled = true;
         Draw();
-        EXPECT_EQ(TextColorDrawn(), Pack(caption.disabledTextColor)) << "a colour of the state wins";
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), caption.disabledTextColor) << "a colour of the state wins";
     }
 
     TEST_F(UITextComponentTest, ADisabledTextFadesItsOutlineByTheSameShare) {
@@ -416,8 +412,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(UITextComponentTest, TheStateAccentOfAnElementWithATextComponentIsItsTextColour) {
-        EXPECT_EQ(Pack(Get("Cap").GetStateAccent()), Pack(kTextColor));
-        EXPECT_EQ(Pack(Get("Narrow").GetStateAccent()), Pack({255, 255, 255, 255})) << "the text component of Narrow keeps the default white";
+        EXPECT_PRED2(ColorsEqual, Get("Cap").GetStateAccent(), kTextColor);
+        EXPECT_PRED2(ColorsEqual, Get("Narrow").GetStateAccent(), (Color{255, 255, 255, 255})) << "the text component of Narrow keeps the default white";
     }
 
 }  // namespace BECore::Tests

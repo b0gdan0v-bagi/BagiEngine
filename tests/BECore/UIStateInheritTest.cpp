@@ -6,6 +6,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIDropdown.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIInputClicker.h>
@@ -180,10 +181,6 @@ namespace BECore::Tests {
         const Color kCapPressed{40, 50, 60, 255};
         const Color kCapDisabled{70, 80, 90, 255};
 
-        uint32_t Pack(const Color& color) {
-            return (static_cast<uint32_t>(color.r) << 24) | (static_cast<uint32_t>(color.g) << 16) | (static_cast<uint32_t>(color.b) << 8) | color.a;
-        }
-
     }  // namespace
 
     class UIStateInheritTest : public ::testing::Test {
@@ -261,36 +258,36 @@ namespace BECore::Tests {
             return inner.x >= outer.x - kEpsilon && inner.y >= outer.y - kEpsilon && inner.x + inner.w <= outer.x + outer.w + kEpsilon && inner.y + inner.h <= outer.y + outer.h + kEpsilon;
         }
 
-        /// The tint of the picture drawn inside @p element in the last frame; 0 when there is none
-        uint32_t PictureTint(const UIElement& element) const {
+        /// The tint of the picture drawn inside @p element in the last frame; all zero when there is none
+        Color PictureTint(const UIElement& element) const {
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Texture && call.texture == _texture.Get() && Inside(element.rect, call.rect)) {
-                    return Pack(call.color);
+                    return call.color;
                 }
             }
-            return 0;
+            return Color{};
         }
 
-        /// The colour of the last glyph drawn inside @p element (the textured draws that are not the picture); 0 when there is none
-        uint32_t TextColorDrawn(const UIElement& element) const {
-            uint32_t found = 0;
+        /// The colour of the last glyph drawn inside @p element (the textured draws that are not the picture); all zero when there is none
+        Color TextColorDrawn(const UIElement& element) const {
+            Color found{};
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Texture && call.texture != _texture.Get() && Inside(element.rect, call.rect)) {
-                    found = Pack(call.color);
+                    found = call.color;
                 }
             }
             return found;
         }
 
-        /// The colour of the bar of 4 units along the foot of @p element; 0 when there is none
-        uint32_t BarColor(const UIElement& element) const {
+        /// The colour of the bar of 4 units along the foot of @p element; all zero when there is none
+        Color BarColor(const UIElement& element) const {
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Rect && std::abs(call.rect.h - UIStateLook::kSelectedBarHeight) < kEpsilon &&
                     std::abs(call.rect.y - (element.rect.y + element.rect.h - UIStateLook::kSelectedBarHeight)) < kEpsilon && std::abs(call.rect.x - element.rect.x) < kEpsilon) {
-                    return Pack(call.color);
+                    return call.color;
                 }
             }
-            return 0;
+            return Color{};
         }
 
         IntrusivePtr<RecordingRenderer> _renderer;
@@ -300,15 +297,15 @@ namespace BECore::Tests {
     };
 
     TEST_F(UIStateInheritTest, TheChildrenOfAButtonAtRestAreInTheNormalLook) {
-        EXPECT_EQ(PictureTint(Get("Icon")), Pack(kWhite));
-        EXPECT_EQ(TextColorDrawn(Get("Cap")), Pack(kCapNormal));
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("Icon")), kWhite);
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(Get("Cap")), kCapNormal);
     }
 
     TEST_F(UIStateInheritTest, HoveringTheButtonHoversTheLookOfItsChildren) {
         Hover(Get("Btn"));
 
-        EXPECT_EQ(PictureTint(Get("Icon")), Pack(kIconHover));
-        EXPECT_EQ(TextColorDrawn(Get("Cap")), Pack(kCapHover));
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("Icon")), kIconHover);
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(Get("Cap")), kCapHover);
         EXPECT_FALSE(Get("Icon").hovered) << "the child is drawn so, it is not hovered";
         EXPECT_TRUE(Get("Btn").hovered);
     }
@@ -316,8 +313,8 @@ namespace BECore::Tests {
     TEST_F(UIStateInheritTest, APressOnTheButtonPressesTheLookOfItsChildren) {
         Hold(Get("Btn"));
 
-        EXPECT_EQ(PictureTint(Get("Icon")), Pack(kIconPressed));
-        EXPECT_EQ(TextColorDrawn(Get("Cap")), Pack(kCapPressed));
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("Icon")), kIconPressed);
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(Get("Cap")), kCapPressed);
     }
 
     TEST_F(UIStateInheritTest, APressThatMovedOffTheButtonIsNoLongerShownOnTheChildren) {
@@ -325,25 +322,25 @@ namespace BECore::Tests {
         MoveTo(700.0f, 500.0f, true);
         Draw();
 
-        EXPECT_EQ(PictureTint(Get("Icon")), Pack(kWhite));
-        EXPECT_EQ(TextColorDrawn(Get("Cap")), Pack(kCapNormal));
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("Icon")), kWhite);
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(Get("Cap")), kCapNormal);
     }
 
     TEST_F(UIStateInheritTest, ADisabledClickerDisablesTheLookOfTheChildren) {
-        EXPECT_EQ(PictureTint(Get("OffIcon")), Pack(kIconDisabled));
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("OffIcon")), kIconDisabled);
 
         Get("Btn").GetComponent<UIInputClicker>()->disabled = true;
         Draw();
-        EXPECT_EQ(PictureTint(Get("Icon")), Pack(kIconDisabled));
-        EXPECT_EQ(TextColorDrawn(Get("Cap")), Pack(kCapDisabled));
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("Icon")), kIconDisabled);
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(Get("Cap")), kCapDisabled);
     }
 
     TEST_F(UIStateInheritTest, TheGroupDisablingTheButtonDisablesTheLookOfTheChildren) {
         Get("Btn").groupDisabled = true;
         Draw();
 
-        EXPECT_EQ(PictureTint(Get("Icon")), Pack(kIconDisabled));
-        EXPECT_EQ(TextColorDrawn(Get("Cap")), Pack(kCapDisabled));
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("Icon")), kIconDisabled);
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(Get("Cap")), kCapDisabled);
     }
 
     TEST_F(UIStateInheritTest, AChildHasTheTintAndTheColourOfTheSameComponentOnTheButtonItself) {
@@ -353,8 +350,8 @@ namespace BECore::Tests {
         Hover(Get("Btn"));
 
         const UIStateLook::State hovered{true, false, false, false};
-        EXPECT_EQ(PictureTint(Get("Icon")), Pack(icon.GetStateTint(hovered)));
-        EXPECT_EQ(TextColorDrawn(Get("Cap")), Pack(caption.GetStateColor(hovered)));
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("Icon")), icon.GetStateTint(hovered));
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(Get("Cap")), caption.GetStateColor(hovered));
     }
 
     TEST_F(UIStateInheritTest, ASelectedButtonDrawsItsBarInTheColourOfTheCaptionChild) {
@@ -362,9 +359,9 @@ namespace BECore::Tests {
         Get("Plain").selected = true;
         Draw();
 
-        EXPECT_EQ(BarColor(Get("Bare")), Pack(kCapNormal));
+        EXPECT_PRED2(ColorsEqual, BarColor(Get("Bare")), kCapNormal);
         EXPECT_EQ(Get("Bare").GetStateAccent().r, kCapNormal.r);
-        EXPECT_EQ(BarColor(Get("Plain")), Pack(kWhite)) << "no caption anywhere: the default accent";
+        EXPECT_PRED2(ColorsEqual, BarColor(Get("Plain")), kWhite) << "no caption anywhere: the default accent";
     }
 
     TEST_F(UIStateInheritTest, ASelectedButtonIsSelectedForItsChildrenToo) {
@@ -373,35 +370,35 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(Get("Icon").GetVisualState().selected);
         EXPECT_FALSE(Get("Dead").GetVisualState().selected);
-        EXPECT_EQ(BarColor(Get("Btn")), Pack(kCapNormal)) << "the accent is the caption child's, as if the button had the text";
+        EXPECT_PRED2(ColorsEqual, BarColor(Get("Btn")), kCapNormal) << "the accent is the caption child's, as if the button had the text";
     }
 
     TEST_F(UIStateInheritTest, AGrandchildFollowsTheButtonToo) {
         Hover(Get("Deep"));
 
-        EXPECT_EQ(PictureTint(Get("DeepIcon")), Pack(kIconHover));
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("DeepIcon")), kIconHover);
         Hold(Get("Deep"));
-        EXPECT_EQ(PictureTint(Get("DeepIcon")), Pack(kIconPressed));
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("DeepIcon")), kIconPressed);
     }
 
     TEST_F(UIStateInheritTest, TheChildrenOfAnElementWithNoClickerAreNeverTintedByAState) {
         Hover(Get("Dead"));
 
         ASSERT_TRUE(Get("Dead").hovered) << "the panel is hovered (it blocks the input)";
-        EXPECT_EQ(PictureTint(Get("DeadIcon")), Pack(kWhite));
-        EXPECT_EQ(TextColorDrawn(Get("DeadCap")), Pack(kCapNormal));
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("DeadIcon")), kWhite);
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(Get("DeadCap")), kCapNormal);
         EXPECT_FALSE(Get("DeadIcon").GetVisualState().hovered);
     }
 
     TEST_F(UIStateInheritTest, TwoButtonsSideBySideDoNotShareTheirState) {
         Hover(Get("Btn"));
 
-        EXPECT_EQ(PictureTint(Get("Icon")), Pack(kIconHover));
-        EXPECT_EQ(PictureTint(Get("OtherIcon")), Pack(kWhite));
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("Icon")), kIconHover);
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("OtherIcon")), kWhite);
 
         Hover(Get("Other"));
-        EXPECT_EQ(PictureTint(Get("Icon")), Pack(kWhite));
-        EXPECT_EQ(PictureTint(Get("OtherIcon")), Pack(kIconHover));
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("Icon")), kWhite);
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("OtherIcon")), kIconHover);
     }
 
     TEST_F(UIStateInheritTest, TheOwnFlagsOfAnElementAndOfItsChildrenAreNotChanged) {
@@ -419,7 +416,7 @@ namespace BECore::Tests {
         MoveTo(700.0f, 500.0f);
         Draw();
 
-        EXPECT_EQ(PictureTint(Get("Icon")), Pack(kWhite));
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("Icon")), kWhite);
         EXPECT_FALSE(Get("Icon").GetVisualState().hovered);
     }
 
@@ -436,16 +433,16 @@ namespace BECore::Tests {
         ASSERT_TRUE(holder.hovered);
         ASSERT_FALSE(button.hovered);
         EXPECT_FALSE(button.GetVisualState().hovered);
-        EXPECT_EQ(Pack(button.GetStateLook().fill), Pack(Color{40, 40, 40, 255}));
+        EXPECT_PRED2(ColorsEqual, button.GetStateLook().fill, (Color{40, 40, 40, 255}));
 
         // Over the button both are hovered: its own look, not the holder's fill
         Hover(button);
         EXPECT_TRUE(button.GetVisualState().hovered);
-        EXPECT_EQ(Pack(button.GetStateLook().fill), Pack(Color{60, 70, 80, 255}));
+        EXPECT_PRED2(ColorsEqual, button.GetStateLook().fill, (Color{60, 70, 80, 255}));
 
         Hold(button);
         EXPECT_TRUE(button.GetVisualState().pressed);
-        EXPECT_EQ(Pack(button.GetStateLook().fill), Pack(Color{20, 30, 40, 255}));
+        EXPECT_PRED2(ColorsEqual, button.GetStateLook().fill, (Color{20, 30, 40, 255}));
         MoveTo(700.0f, 500.0f);
         CoreManager::GetUIInput().DispatchMouseButtonUp(Button(700.0f, 500.0f, false));
         Draw();
@@ -453,14 +450,14 @@ namespace BECore::Tests {
         button.GetComponent<UIInputClicker>()->disabled = true;
         Draw();
         EXPECT_TRUE(button.GetVisualState().disabled);
-        EXPECT_EQ(Pack(button.GetStateLook().fill), Pack(Color{90, 91, 92, 255}));
+        EXPECT_PRED2(ColorsEqual, button.GetStateLook().fill, (Color{90, 91, 92, 255}));
         button.GetComponent<UIInputClicker>()->disabled = false;
 
         button.selected = true;
         Draw();
         EXPECT_TRUE(button.GetVisualState().selected);
         EXPECT_FALSE(holder.GetVisualState().selected) << "the holder's flags are its own";
-        EXPECT_EQ(Pack(button.GetStateLook().fill), Pack(Color{30, 90, 30, 255}));
+        EXPECT_PRED2(ColorsEqual, button.GetStateLook().fill, (Color{30, 90, 30, 255}));
     }
 
     TEST_F(UIStateInheritTest, ADisabledAncestorDoesNotDisableAButton) {

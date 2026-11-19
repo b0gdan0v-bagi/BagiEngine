@@ -9,6 +9,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UILayoutValidator.h>
 #include <BECore/UI/UIPreviewOverlay.h>
@@ -186,7 +187,7 @@ namespace BECore::Tests {
         int IndexOf(const Color& color) const {
             for (size_t i = 0; i < _renderer->calls.size(); ++i) {
                 const DrawCall& call = _renderer->calls[i];
-                if (call.kind == DrawKind::Rect && call.color.r == color.r && call.color.g == color.g && call.color.b == color.b && call.color.a == color.a) {
+                if (call.kind == DrawKind::Rect && ColorsEqual(call.color, color)) {
                     return static_cast<int>(i);
                 }
             }

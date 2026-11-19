@@ -7,6 +7,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIInputClicker.h>
 #include <Common/EngineEnvironment.h>
@@ -98,10 +99,6 @@ namespace BECore::Tests {
         const Color kBoxPressed{20, 30, 40, 255};
         const Color kBoxDisabled{90, 91, 92, 255};
 
-        uint32_t Pack(const Color& color) {
-            return (static_cast<uint32_t>(color.r) << 24) | (static_cast<uint32_t>(color.g) << 16) | (static_cast<uint32_t>(color.b) << 8) | color.a;
-        }
-
     }  // namespace
 
     class UIInputClickerTest : public ::testing::Test {
@@ -190,33 +187,33 @@ namespace BECore::Tests {
             Release(at.x, at.y);
         }
 
-        /// The fill drawn for @p element in the last frame: the rect with its rect, packed; 0 when there is none
-        uint32_t FillOf(const UIElement& element) const {
+        /// The fill drawn for @p element in the last frame: the rect with its rect; all zero when there is none
+        Color FillOf(const UIElement& element) const {
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Rect && std::abs(call.rect.x - element.rect.x) < kEpsilon && std::abs(call.rect.y - element.rect.y) < kEpsilon &&
                     std::abs(call.rect.w - element.rect.w) < kEpsilon && std::abs(call.rect.h - element.rect.h) < kEpsilon) {
-                    return Pack(call.color);
+                    return call.color;
                 }
             }
-            return 0;
+            return Color{};
         }
 
-        /// The tint of the picture whose rect starts at @p top (the textured draw of the last frame there); 0 when there is none
-        uint32_t PictureTint(float top) const {
+        /// The tint of the picture whose rect starts at @p top (the textured draw of the last frame there); all zero when there is none
+        Color PictureTint(float top) const {
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Texture && std::abs(call.rect.y - top) < kEpsilon) {
-                    return Pack(call.color);
+                    return call.color;
                 }
             }
-            return 0;
+            return Color{};
         }
 
-        /// The colour of the last glyph of Cap: the text itself; 0 when nothing was drawn
-        uint32_t TextColorDrawn() const {
-            uint32_t found = 0;
+        /// The colour of the last glyph of Cap: the text itself; all zero when nothing was drawn
+        Color TextColorDrawn() const {
+            Color found{};
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Texture && call.rect.y >= kTextRowTop && call.rect.y < kTextRowBottom) {
-                    found = Pack(call.color);
+                    found = call.color;
                 }
             }
             return found;
@@ -371,41 +368,41 @@ namespace BECore::Tests {
 
     TEST_F(UIInputClickerTest, TheBoxTakesTheFillOfTheStateItIsIn) {
         const UIElement& box = Get("Box");
-        EXPECT_EQ(FillOf(box), Pack(kBoxColor));
+        EXPECT_PRED2(ColorsEqual, FillOf(box), kBoxColor);
 
         Hover(box);
-        EXPECT_EQ(FillOf(box), Pack(kBoxHover));
+        EXPECT_PRED2(ColorsEqual, FillOf(box), kBoxHover);
 
         const Vec2 at = CenterOf(box);
         Press(at.x, at.y);
         Draw();
-        EXPECT_EQ(FillOf(box), Pack(kBoxPressed));
+        EXPECT_PRED2(ColorsEqual, FillOf(box), kBoxPressed);
 
         Release(at.x, at.y);
         Draw();
-        EXPECT_EQ(FillOf(box), Pack(kBoxHover)) << "released, the pointer is still over it";
+        EXPECT_PRED2(ColorsEqual, FillOf(box), kBoxHover) << "released, the pointer is still over it";
 
         MoveTo(700.0f, 500.0f);
         Draw();
-        EXPECT_EQ(FillOf(box), Pack(kBoxColor));
+        EXPECT_PRED2(ColorsEqual, FillOf(box), kBoxColor);
     }
 
     TEST_F(UIInputClickerTest, APressThatMovedOffTheElementIsNotShownAsPressed) {
         const UIElement& box = Get("Box");
         Hold(box);
-        ASSERT_EQ(FillOf(box), Pack(kBoxPressed));
+        ASSERT_PRED2(ColorsEqual, FillOf(box), kBoxPressed);
 
         MoveTo(700.0f, 500.0f, true);
         Draw();
-        EXPECT_EQ(FillOf(box), Pack(kBoxColor));
+        EXPECT_PRED2(ColorsEqual, FillOf(box), kBoxColor);
     }
 
     TEST_F(UIInputClickerTest, ADisabledElementShowsItsDisabledFillAndNoHover) {
         const UIElement& off = Get("Off");
-        EXPECT_EQ(FillOf(off), Pack(kBoxDisabled));
+        EXPECT_PRED2(ColorsEqual, FillOf(off), kBoxDisabled);
 
         Hover(off);
-        EXPECT_EQ(FillOf(off), Pack(kBoxDisabled));
+        EXPECT_PRED2(ColorsEqual, FillOf(off), kBoxDisabled);
     }
 
     TEST_F(UIInputClickerTest, AnElementOfADisabledGroupShowsItsDisabledFill) {
@@ -413,7 +410,7 @@ namespace BECore::Tests {
         grouped.groupDisabled = true;
         Draw();
 
-        EXPECT_EQ(FillOf(grouped), Pack(kBoxDisabled));
+        EXPECT_PRED2(ColorsEqual, FillOf(grouped), kBoxDisabled);
     }
 
     TEST_F(UIInputClickerTest, APanelThatOnlyBlocksInputDoesNotLightUp) {
@@ -421,28 +418,28 @@ namespace BECore::Tests {
         Hover(plain);
 
         EXPECT_TRUE(plain.hovered);
-        EXPECT_EQ(FillOf(plain), Pack(kBoxColor));
+        EXPECT_PRED2(ColorsEqual, FillOf(plain), kBoxColor);
     }
 
     TEST_F(UIInputClickerTest, WithStateLookOffTheBoxIsPlainInEveryState) {
         UIElement& still = Get("Still");
-        EXPECT_EQ(FillOf(still), Pack(kBoxColor));
+        EXPECT_PRED2(ColorsEqual, FillOf(still), kBoxColor);
 
         Hover(still);
         ASSERT_TRUE(still.GetVisualState().hovered) << "the state is there, only the box ignores it";
-        EXPECT_EQ(FillOf(still), Pack(kBoxColor));
+        EXPECT_PRED2(ColorsEqual, FillOf(still), kBoxColor);
 
         const Vec2 at = CenterOf(still);
         Press(at.x, at.y);
         Draw();
         ASSERT_TRUE(still.GetVisualState().pressed);
-        EXPECT_EQ(FillOf(still), Pack(kBoxColor));
+        EXPECT_PRED2(ColorsEqual, FillOf(still), kBoxColor);
         Release(at.x, at.y);
 
         still.selected = true;
         Draw();
-        EXPECT_EQ(FillOf(still), Pack(kBoxColor));
-        EXPECT_EQ(FillOf(Get("StillOff")), Pack(kBoxColor)) << "disabled, still plain";
+        EXPECT_PRED2(ColorsEqual, FillOf(still), kBoxColor);
+        EXPECT_PRED2(ColorsEqual, FillOf(Get("StillOff")), kBoxColor) << "disabled, still plain";
     }
 
     TEST_F(UIInputClickerTest, WithStateLookOffTheElementIsStillAClickerAndDisabledWorks) {
@@ -484,38 +481,38 @@ namespace BECore::Tests {
     TEST_F(UIInputClickerTest, ThePictureTakesTheTintOfTheState) {
         const UIElement& pic = Get("Pic");
         const float top = pic.rect.y;  // the fitted picture is as tall as the rect
-        EXPECT_EQ(PictureTint(top), Pack(Color{255, 255, 255, 255}));
+        EXPECT_PRED2(ColorsEqual, PictureTint(top), (Color{255, 255, 255, 255}));
 
         Hover(pic);
-        EXPECT_EQ(PictureTint(top), Pack(Color{200, 210, 220, 255}));
+        EXPECT_PRED2(ColorsEqual, PictureTint(top), (Color{200, 210, 220, 255}));
 
         const Vec2 at = CenterOf(pic);
         Press(at.x, at.y);
         Draw();
-        EXPECT_EQ(PictureTint(top), Pack(Color{100, 110, 120, 255}));
+        EXPECT_PRED2(ColorsEqual, PictureTint(top), (Color{100, 110, 120, 255}));
     }
 
     TEST_F(UIInputClickerTest, ThePictureOfADisabledClickerTakesTheDisabledTint) {
-        EXPECT_EQ(PictureTint(Get("PicOff").rect.y), Pack(Color{50, 60, 70, 255}));
+        EXPECT_PRED2(ColorsEqual, PictureTint(Get("PicOff").rect.y), (Color{50, 60, 70, 255}));
     }
 
     TEST_F(UIInputClickerTest, TheTextTakesTheColourOfTheState) {
         const UIElement& cap = Get("Cap");
-        ASSERT_NE(TextColorDrawn(), 0u) << "the text is drawn";
-        EXPECT_EQ(TextColorDrawn(), Pack(Color{200, 100, 50, 255}));
+        ASSERT_FALSE(ColorsEqual(TextColorDrawn(), Color{})) << "the text is drawn";
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), (Color{200, 100, 50, 255}));
 
         Hover(cap);
-        EXPECT_EQ(TextColorDrawn(), Pack(Color{10, 20, 30, 255}));
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), (Color{10, 20, 30, 255}));
 
         const Vec2 at = CenterOf(cap);
         Press(at.x, at.y);
         Draw();
-        EXPECT_EQ(TextColorDrawn(), Pack(Color{40, 50, 60, 255}));
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), (Color{40, 50, 60, 255}));
 
         Release(at.x, at.y);
         Get("Cap").groupDisabled = true;
         Draw();
-        EXPECT_EQ(TextColorDrawn(), Pack(Color{70, 80, 90, 255}));
+        EXPECT_PRED2(ColorsEqual, TextColorDrawn(), (Color{70, 80, 90, 255}));
     }
 
 }  // namespace BECore::Tests

@@ -7,6 +7,7 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIChoice.h>
+#include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIDropdown.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIInputClicker.h>
@@ -743,10 +744,6 @@ namespace BECore::Tests {
 
     namespace {
 
-        bool SameRgba(const Color& a, const Color& b) {
-            return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
-        }
-
         bool NearRect(const Rect& a, const Rect& b) {
             return std::abs(a.x - b.x) < 1e-2f && std::abs(a.y - b.y) < 1e-2f && std::abs(a.w - b.w) < 1e-2f && std::abs(a.h - b.h) < 1e-2f;
         }
@@ -786,8 +783,8 @@ namespace BECore::Tests {
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Rect && NearRect(call.rect, level.rect)) {
                     ++headerRects;
-                    EXPECT_TRUE(SameRgba(call.color, Shifted(Color{40, 40, 70, 255}, state))) << static_cast<int>(state);
-                    EXPECT_TRUE(SameRgba(call.color, level.GetCurrentFill())) << static_cast<int>(state);
+                    EXPECT_PRED2(ColorsEqual, call.color, Shifted(Color{40, 40, 70, 255}, state)) << static_cast<int>(state);
+                    EXPECT_PRED2(ColorsEqual, call.color, level.GetCurrentFill()) << static_cast<int>(state);
                 }
             }
             EXPECT_EQ(headerRects, 1u) << static_cast<int>(state);
@@ -826,11 +823,11 @@ namespace BECore::Tests {
         for (const HeaderState state : kStates) {
             SetState(level, state);
             const UIStateLook::Look look = level.GetCurrentBox();
-            EXPECT_TRUE(SameRgba(look.fill, Shifted(Color{40, 40, 70, 255}, state))) << static_cast<int>(state);
-            EXPECT_TRUE(SameRgba(look.gradientEnd, Shifted(Color{120, 90, 160, 255}, state))) << static_cast<int>(state);
-            EXPECT_FALSE(SameRgba(look.fill, look.gradientEnd)) << static_cast<int>(state);
-            EXPECT_TRUE(SameRgba(look.box.gradientColor, look.gradientEnd)) << "the look says the far end twice";
-            EXPECT_TRUE(SameRgba(level.GetCurrentFill(), look.fill));
+            EXPECT_PRED2(ColorsEqual, look.fill, Shifted(Color{40, 40, 70, 255}, state)) << static_cast<int>(state);
+            EXPECT_PRED2(ColorsEqual, look.gradientEnd, Shifted(Color{120, 90, 160, 255}, state)) << static_cast<int>(state);
+            EXPECT_FALSE(ColorsEqual(look.fill, look.gradientEnd)) << static_cast<int>(state);
+            EXPECT_PRED2(ColorsEqual, look.box.gradientColor, look.gradientEnd) << "the look says the far end twice";
+            EXPECT_PRED2(ColorsEqual, level.GetCurrentFill(), look.fill);
         }
 
         SetState(level, HeaderState::Hover);
@@ -873,8 +870,8 @@ namespace BECore::Tests {
             const UIBoxStyle& box = level.GetCurrentBox().box;
             EXPECT_TRUE(box.shadow == level.box.shadow) << static_cast<int>(state);
             EXPECT_TRUE(box.glow == level.box.glow) << static_cast<int>(state);
-            EXPECT_TRUE(SameRgba(box.borderColor, level.box.borderColor)) << "hover and press keep the border as authored";
-            EXPECT_TRUE(SameRgba(box.highlight, level.box.highlight)) << "and the highlight";
+            EXPECT_PRED2(ColorsEqual, box.borderColor, level.box.borderColor) << "hover and press keep the border as authored";
+            EXPECT_PRED2(ColorsEqual, box.highlight, level.box.highlight) << "and the highlight";
         }
     }
 
@@ -882,13 +879,13 @@ namespace BECore::Tests {
         auto& level = Get<UIDropdown>("Level");
         UITextComponent& header = *level.GetComponent<UITextComponent>();
         header.textColor = UIColor{10, 20, 30, 255};
-        EXPECT_TRUE(SameRgba(level.GetCurrentArrow(), Color{10, 20, 30, 255})) << "the text colour of the header component";
+        EXPECT_PRED2(ColorsEqual, level.GetCurrentArrow(), (Color{10, 20, 30, 255})) << "the text colour of the header component";
 
         level.arrowColor = Color{1, 2, 3, 200};
-        EXPECT_TRUE(SameRgba(level.GetCurrentArrow(), Color{1, 2, 3, 200})) << "arrowColor wins";
+        EXPECT_PRED2(ColorsEqual, level.GetCurrentArrow(), (Color{1, 2, 3, 200})) << "arrowColor wins";
 
         UIDropdown bare;
-        EXPECT_TRUE(SameRgba(bare.GetCurrentArrow(), Color{255, 255, 255, 255})) << "no header component: white";
+        EXPECT_PRED2(ColorsEqual, bare.GetCurrentArrow(), (Color{255, 255, 255, 255})) << "no header component: white";
         EXPECT_EQ(bare.GetTextOverride(), nullptr);
     }
 

@@ -1,8 +1,10 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UIPanel.h>
+#include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <gtest/gtest.h>
 
@@ -11,10 +13,6 @@ namespace BECore::Tests {
     namespace {
 
         constexpr float kPixelTolerance = 1.5f;  // the feather ring lies about a pixel outside the rect
-
-        bool SameColor(const Color& a, const Color& b) {
-            return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
-        }
 
         IntrusivePtr<UIElement> MakeElement(const Rect& rect = {10.0f, 20.0f, 100.0f, 50.0f}, const Color& color = {200, 100, 50, 255}) {
             auto element = New<UIElement>();
@@ -98,7 +96,7 @@ namespace BECore::Tests {
         const auto calls = Draw(*element, renderer);
         ASSERT_EQ(calls.size(), 1u);
         EXPECT_EQ(calls[0].kind, DrawKind::Rect);
-        EXPECT_TRUE(SameColor(calls[0].color, element->color));
+        EXPECT_PRED2(ColorsEqual, calls[0].color, element->color);
         EXPECT_FLOAT_EQ(calls[0].rect.x, 10.0f);
         EXPECT_FLOAT_EQ(calls[0].rect.y, 20.0f);
         EXPECT_FLOAT_EQ(calls[0].rect.w, 100.0f);
@@ -389,12 +387,12 @@ namespace BECore::Tests {
         const UIBoxStyle& box = loaded.Get().box;
         EXPECT_TRUE(box.cornerRadius == UICorners::Uniform(16.0f));
         EXPECT_FLOAT_EQ(box.borderWidth, 2.0f);
-        EXPECT_TRUE(SameColor(box.borderColor, Color{255, 255, 255, 128}));
+        EXPECT_PRED2(ColorsEqual, box.borderColor, (Color{255, 255, 255, 128}));
         EXPECT_EQ(box.gradientDirection, UIGradientDirection::Vertical);
-        EXPECT_TRUE(SameColor(box.gradientColor, Color{10, 20, 30, 255}));
+        EXPECT_PRED2(ColorsEqual, box.gradientColor, (Color{10, 20, 30, 255}));
         EXPECT_TRUE(box.shadow == (UIShadowSpec{0.0f, 4.0f, 12.0f, 0.0f, Color{0, 0, 0, 153}}));
         EXPECT_TRUE(box.glow == (UIShadowSpec{0.0f, 0.0f, 8.0f, 2.0f, Color{255, 200, 0, 128}}));
-        EXPECT_TRUE(SameColor(box.highlight, Color{255, 255, 255, 60}));
+        EXPECT_PRED2(ColorsEqual, box.highlight, (Color{255, 255, 255, 60}));
     }
 
     TEST(UIBoxStyleTest, AMalformedValueIsReportedAndTheDefaultStays) {
@@ -423,7 +421,7 @@ namespace BECore::Tests {
         const UIElement& element = loaded.Get();
         EXPECT_TRUE(element.box == UIBoxStyle{});
         EXPECT_FALSE(element.box.HasEffect());
-        EXPECT_TRUE(SameColor(element.color, Color{40, 90, 60, 255}));
+        EXPECT_PRED2(ColorsEqual, element.color, (Color{40, 90, 60, 255}));
         EXPECT_FLOAT_EQ(element.style.rect.x.value, 10.0f);
         EXPECT_FALSE(element.blocksInput);
     }
