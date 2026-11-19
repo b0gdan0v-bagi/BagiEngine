@@ -8,7 +8,9 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIEnvironment.h>
+#include <BECore/Utils/ScopeGuard.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/LogRecorder.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
@@ -478,8 +480,11 @@ namespace BECore::Tests {
         _renderer->width = 800.0f;
         _renderer->height = 1200.0f;
 
+        LogRecorder recorder;
         Draw("Extended");
-        Draw("Extended");  // the warning is logged once, not per draw
+        Draw("Extended");
+        LogEvent::Flush();
+        EXPECT_EQ(recorder.Count(LogLevel::Warning, {"extendToOutput applies to a SceneView canvas only"}), 1u) << "once, not per draw";
 
         ExpectRect(flat->GetLayout().GetResolved().bounds, 0.0f, 0.0f, 800.0f, 1200.0f);  // the output at scale 1, as for any Screen canvas
     }
@@ -561,12 +566,10 @@ namespace BECore::Tests {
         auto hud = Canvas("Main", "Hud");
         AddSquare(*hud, "Square", 10.0f, 10.0f, 10.0f);
         CoreManager::GetUIEnvironment().SetUserScale(2.0f);
+        const ScopeGuard restoreScale([] { CoreManager::GetUIEnvironment().SetUserScale(1.0f); });
 
         Draw("Main");
-        const Rect rect = Back(_renderer->calls).rect;
-        CoreManager::GetUIEnvironment().SetUserScale(1.0f);
-
-        ExpectRect(rect, 20.0f, 20.0f, 20.0f, 20.0f);
+        ExpectRect(Back(_renderer->calls).rect, 20.0f, 20.0f, 20.0f, 20.0f);
     }
 
     // ---- draw and input order ---------------------------------------------------------------------------------------------

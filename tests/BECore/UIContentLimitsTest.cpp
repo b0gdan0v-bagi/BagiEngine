@@ -101,7 +101,8 @@ namespace BECore::Tests {
             return spec;
         }
 
-        /// Every float field of a spec, one at a time (a pointer into the spec it was made for)
+        /// Every float field of a spec, one at a time (a pointer into the spec it was made for). It first sets every optional field of
+        /// @p spec to a value, so that each optional has a float to point at: the spec is changed, not only read
         Vector<float*> FloatFields(UIRectSpec& spec) {
             Vector<float*> fields = {&spec.x.value,     &spec.y.value,    &spec.width.value,  &spec.height.value,  &spec.aspectRatio,
                                      &spec.margin.left, &spec.margin.top, &spec.margin.right, &spec.margin.bottom, &spec.flex};
@@ -362,7 +363,7 @@ namespace BECore::Tests {
                 EXPECT_GE(radius, 0.0f);
             }
         }
-        EXPECT_GE(UIBoxMesh::CornerSegments(kNan), 0);
+        EXPECT_EQ(UIBoxMesh::CornerSegments(kNan), 0);
         EXPECT_EQ(UIBoxMesh::CornerSegments(kInfinity), UIBoxMesh::kMaxCornerSegments);
         EXPECT_EQ(UIBoxMesh::CornerSegments(-1.0f), 0);
     }

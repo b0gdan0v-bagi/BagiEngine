@@ -140,7 +140,7 @@ namespace BECore::Tests {
     }
 
     TEST(UIBoxButtonTest, ADefaultStyleElementDrawsTheCallsItDidBefore) {
-        const Color expected[] = {kFill, ShiftColor(kFill, kHoverBrighten), ShiftColor(kFill, -kPressDarken), ShiftColor(kFill, 56), WithAlpha(kFill, kDisabledAlpha)};
+        const Color expected[] = {kFill, ShiftColor(kFill, kHoverBrighten), ShiftColor(kFill, -kPressDarken), ShiftColor(kFill, UIStateLook::kSelectedBrighten), WithAlpha(kFill, kDisabledAlpha)};
         for (size_t i = 0; i < std::size(kAllStates); ++i) {
             const auto button = MakeElement(kAllStates[i], false);
             button->selectedColor = Color{};

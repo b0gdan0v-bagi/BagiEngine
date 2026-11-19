@@ -22,7 +22,7 @@ namespace BECore::Tests {
         const Color kBackground{10, 20, 30, 255};
         const Pixel kBackgroundPixel{10, 20, 30};
 
-        // The sample screen in UI units: a panel (rounded 16, a 3 unit white border, a vertical gradient red to blue, a black shadow 12 units down, a glow) and a rounded button
+        // The sample screen in UI units: a panel (rounded, a white border, a vertical gradient red to blue, a black shadow below it, a glow) and a rounded button
         constexpr Rect kPanel{40.0f, 40.0f, 160.0f, 100.0f};
         constexpr Rect kButton{260.0f, 40.0f, 120.0f, 48.0f};
         constexpr float kPanelRadius = 16.0f;
@@ -33,15 +33,18 @@ namespace BECore::Tests {
         const Pixel kBorderPixel{255, 255, 255};
         const Pixel kButtonPixel{40, 90, 60};
 
-        constexpr const char* kSampleXml = R"(<root><component><elements>
-  <element type="UIPanel" name="Panel" color="200,40,40,255" cornerRadius="16" borderWidth="3" borderColor="255,255,255,255" gradientDirection="Vertical" gradientColor="40,40,200,255"
-           shadow="0,12,6,0,#000000C8" glow="0,0,6,0,#FFD70050"/>
-  <element type="UIElement" name="Button" color="40,90,60,255" cornerRadius="12">
+        String SampleXml() {
+            return Format(R"(<root><component><elements>
+  <element type="UIPanel" name="Panel" color="200,40,40,255" cornerRadius="{}" borderWidth="{}" borderColor="255,255,255,255" gradientDirection="Vertical" gradientColor="40,40,200,255"
+           shadow="0,{},{},0,#000000C8" glow="0,0,{},0,#FFD70050"/>
+  <element type="UIElement" name="Button" color="40,90,60,255" cornerRadius="{}">
     <components>
       <component type="UIInputClicker"/>
     </components>
   </element>
-</elements></component></root>)";
+</elements></component></root>)",
+                          kPanelRadius, kBorderWidth, kShadowOffsetY, kBlur, kBlur, kButtonRadius);
+        }
 
         Pixel PixelAtOutput(const PixelBuffer& image, uint32_t x, uint32_t y) {
             const size_t offset = (static_cast<size_t>(y) * image.width + x) * 4;
@@ -87,7 +90,7 @@ namespace BECore::Tests {
                 }
 
                 XmlDeserializer deserializer;
-                ASSERT_TRUE(deserializer.LoadFromString(kSampleXml));
+                ASSERT_TRUE(deserializer.LoadFromString(SampleXml()));
                 canvas = New<UICanvasComponent>();
                 ASSERT_TRUE(deserializer.BeginObject("component"));
                 canvas->Deserialize(deserializer);

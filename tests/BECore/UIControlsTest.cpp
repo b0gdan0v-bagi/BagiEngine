@@ -1333,7 +1333,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(Release(c.x, c.y));
         EXPECT_EQ(actions.Total(), 0u);
 
-        EXPECT_EQ(Require(FillOf(off)).a, kButtonColor.a / 2) << "half transparent unless disabledColor says otherwise";
+        EXPECT_EQ(Require(FillOf(off)).a, WithAlpha(kButtonColor, kDisabledAlpha).a) << "half transparent unless disabledColor says otherwise";
         off.disabledColor = Color{50, 50, 50, 255};
         Draw();
         EXPECT_EQ(Require(FillOf(off)).r, 50);
@@ -1497,7 +1497,7 @@ namespace BECore::Tests {
         off.selectedColor = Color{200, 200, 200, 255};
         Draw();
         EXPECT_EQ(Require(FillOf(off)).r, kButtonColor.r) << "the grey of a disabled button, not the selected fill";
-        EXPECT_EQ(Require(FillOf(off)).a, kButtonColor.a / 2);
+        EXPECT_EQ(Require(FillOf(off)).a, WithAlpha(kButtonColor, kDisabledAlpha).a);
     }
 
     TEST_F(UIControlsTest, AGroupDisabledButtonIsGreyAndSwallowsTheClick) {
@@ -1505,7 +1505,7 @@ namespace BECore::Tests {
         auto& ok = El("Ok");
         ok.groupDisabled = true;
         Draw();
-        EXPECT_EQ(Require(FillOf(ok)).a, kButtonColor.a / 2);
+        EXPECT_EQ(Require(FillOf(ok)).a, WithAlpha(kButtonColor, kDisabledAlpha).a);
 
         const Rect c = Center(ok);
         EXPECT_TRUE(Press(ok)) << "the click does not fall through to what is below";
