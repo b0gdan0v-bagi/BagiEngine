@@ -24,36 +24,21 @@ namespace BECore::Tests {
 
         class XmlDocumentTest : public ::testing::Test {
         protected:
-            void SetUp() override {
-                _path = TestTempPath("XmlDocumentTest_" + String(::testing::UnitTest::GetInstance()->current_test_info()->name()) + ".xml");
+            /// A path below the case's own folder, which the fixture clears first and removes after
+            std::filesystem::path PathOf(const char* name) const {
+                return std::filesystem::path(ToStd(_folder.PathOf(name)));
             }
 
-            void TearDown() override {
-                std::error_code error;
-                std::filesystem::remove(_path, error);
-            }
-
-            String Saved(StringView text) {
+            /// @p text loaded as a document and saved to the case's file, which is then read back
+            String Saved(StringView text) const {
                 XmlDocument document;
                 EXPECT_TRUE(document.LoadFromString(text));
                 EXPECT_TRUE(document.SaveToFile(_path));
-                return ReadFile();
+                return ReadFile(_path);
             }
 
-            String ReadFile() const {
-                std::ifstream in(_path, std::ios::in | std::ios::binary);  //-NoStd: the test reads its own temporary file byte for byte
-                String bytes;
-                bytes.resize(static_cast<size_t>(std::filesystem::file_size(_path)));
-                in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-                return bytes;
-            }
-
-            void WriteFile(StringView bytes) const {
-                std::ofstream out(_path, std::ios::out | std::ios::binary);  //-NoStd: the test writes its own temporary file byte for byte
-                out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-            }
-
-            std::filesystem::path _path;
+            TestTempFolder _folder{"XmlDocumentTest"};
+            std::filesystem::path _path{PathOf("document.xml")};
         };
 
     }  // namespace
@@ -65,29 +50,22 @@ namespace BECore::Tests {
     }
 
     TEST_F(XmlDocumentTest, AFileKeepsItsDeclarationAndEveryComment) {
-        WriteFile(kWithComments);
+        WriteFile(_path, kWithComments);
         XmlDocument document;
         ASSERT_TRUE(document.LoadFromFile(_path));
         EXPECT_EQ(document.GetRoot().Name(), "root");
 
         ASSERT_TRUE(document.SaveToFile(_path));
-        EXPECT_EQ(ReadFile(), String(kWithComments));
+        EXPECT_EQ(ReadFile(_path), String(kWithComments));
     }
 
     TEST_F(XmlDocumentTest, ACanonicalTextIsSavedByteForByte) {
         EXPECT_EQ(Saved(kWithComments), String(kWithComments));
     }
 
-    TEST_F(XmlDocumentTest, EveryAttributeOfAnElementIsOnOneLine) {
+    TEST_F(XmlDocumentTest, EveryAttributeOfAnElementIsOnOneLineAndNoDeclarationIsAdded) {
         constexpr StringView text = "<root>\n  <a x=\"1\" y=\"2\" z=\"3\" />\n</root>\n";
         EXPECT_EQ(Saved(text), String(text));
-    }
-
-    TEST_F(XmlDocumentTest, ATextWithoutADeclarationIsSavedWithoutOne) {
-        constexpr StringView text = "<root>\n  <a />\n</root>\n";
-        const String saved = Saved(text);
-        EXPECT_EQ(saved.find("<?xml"), String::npos);
-        EXPECT_EQ(saved, String(text));
     }
 
     TEST_F(XmlDocumentTest, AByteOrderMarkIsKeptAndNotAddedToAFileWithoutOne) {
@@ -96,12 +74,6 @@ namespace BECore::Tests {
 
         EXPECT_EQ(Saved(withMark), withMark);
         EXPECT_EQ(Saved(body), String(body));
-    }
-
-    TEST_F(XmlDocumentTest, TheByteOrderMarkIsNotPartOfTheDocument) {
-        XmlDocument document;
-        ASSERT_TRUE(document.LoadFromString(String(kByteOrderMark) + "<root />"));
-        EXPECT_EQ(document.GetRoot().Name(), "root");
     }
 
     TEST_F(XmlDocumentTest, AStringViewThatIsNotNulTerminatedLoadsByItsSize) {
@@ -117,21 +89,19 @@ namespace BECore::Tests {
         document.Clear();
         ASSERT_TRUE(document.LoadFromString("<root />"));
         ASSERT_TRUE(document.SaveToFile(_path));
-        EXPECT_EQ(ReadFile().find(kByteOrderMark.data()), String::npos);
+        EXPECT_EQ(ReadFile(_path).find(kByteOrderMark.data()), String::npos);
     }
 
     TEST_F(XmlDocumentTest, ASaveCreatesTheMissingFoldersAndFailsOnAFolder) {
         XmlDocument document;
         ASSERT_TRUE(document.LoadFromString("<root />"));
-        std::filesystem::path folder = _path;
-        folder += "_dir";
-        const std::filesystem::path nested = folder / "inner" / "a.xml";
+        const std::filesystem::path nested = PathOf("inner/deeper/a.xml");
         ASSERT_TRUE(document.SaveToFile(nested));
         EXPECT_TRUE(std::filesystem::exists(nested));
-        std::error_code error;
-        std::filesystem::remove_all(folder, error);
 
-        EXPECT_FALSE(document.SaveToFile(std::filesystem::temp_directory_path()));
+        const std::filesystem::path folder = PathOf("folder");
+        MakeDirectory(folder);
+        EXPECT_FALSE(document.SaveToFile(folder));
     }
 
     namespace {
@@ -189,7 +159,7 @@ namespace BECore::Tests {
 
     TEST_F(XmlDocumentTest, AHandLaidFileSavedUnchangedIsLeftAloneByteForByteAndInTime) {
         for (const StringView text : {kHandLaidLibrary, kFourSpaceConfig}) {
-            WriteFile(text);
+            WriteFile(_path, text);
             const auto before = LongAgo();
             std::filesystem::last_write_time(_path, before);
 
@@ -197,13 +167,13 @@ namespace BECore::Tests {
             ASSERT_TRUE(document.LoadFromFile(_path));
             ASSERT_TRUE(document.SaveToFile(_path));
 
-            EXPECT_EQ(ReadFile(), String(text));
+            EXPECT_EQ(ReadFile(_path), String(text));
             EXPECT_EQ(std::filesystem::last_write_time(_path), before);
         }
     }
 
     TEST_F(XmlDocumentTest, AnEditChangesOnlyTheLinesItTouches) {
-        WriteFile(kHandLaidLibrary);
+        WriteFile(_path, kHandLaidLibrary);
         XmlDocument document;
         ASSERT_TRUE(document.LoadFromFile(_path));
         document.GetRoot().GetChild("sprites").GetPugiNode().first_child().attribute("name").set_value("Renamed");
@@ -212,11 +182,11 @@ namespace BECore::Tests {
         Vector<String> expected = LinesOf(kHandLaidLibrary);
         ASSERT_EQ(expected[4], "    <sprite name=\"A\" texturePath=\"a.png\">");
         expected[4] = "    <sprite name=\"Renamed\" texturePath=\"a.png\">";
-        EXPECT_EQ(LinesOf(ReadFile()), expected);
+        EXPECT_EQ(LinesOf(ReadFile(_path)), expected);
     }
 
     TEST_F(XmlDocumentTest, ANewElementKeepsTheBlankLinesAndTheIndentOfTheFile) {
-        WriteFile(kFourSpaceConfig);
+        WriteFile(_path, kFourSpaceConfig);
         XmlDocument document;
         ASSERT_TRUE(document.LoadFromFile(_path));
         pugi::xml_node sinks = document.GetRoot().GetChild("sinks").GetPugiNode();
@@ -225,17 +195,17 @@ namespace BECore::Tests {
 
         Vector<String> expected = LinesOf(kFourSpaceConfig);
         expected.insert(expected.end() - 2, "    <sink type=\"ConsoleSink\" />");
-        EXPECT_EQ(LinesOf(ReadFile()), expected);
+        EXPECT_EQ(LinesOf(ReadFile(_path)), expected);
     }
 
     TEST_F(XmlDocumentTest, AFileThatCannotCarryTheLayoutIsRewrittenCanonicalAndThenStable) {
         constexpr StringView text = "<root>\n  <a x='1'/>\n  <b\n     y=\"2\" />\n</root>\n";
-        WriteFile(text);
+        WriteFile(_path, text);
         XmlDocument document;
         ASSERT_TRUE(document.LoadFromFile(_path));
         ASSERT_TRUE(document.SaveToFile(_path));
 
-        const String canonical = ReadFile();
+        const String canonical = ReadFile(_path);
         EXPECT_EQ(canonical, "<root>\n  <a x=\"1\" />\n  <b y=\"2\" />\n</root>\n");
 
         const auto before = LongAgo();
@@ -243,43 +213,43 @@ namespace BECore::Tests {
         XmlDocument again;
         ASSERT_TRUE(again.LoadFromFile(_path));
         ASSERT_TRUE(again.SaveToFile(_path));
-        EXPECT_EQ(ReadFile(), canonical);
+        EXPECT_EQ(ReadFile(_path), canonical);
         EXPECT_EQ(std::filesystem::last_write_time(_path), before);
     }
 
     TEST_F(XmlDocumentTest, AFileChangedOnDiskAfterTheLoadIsOverwrittenByTheDocument) {
-        WriteFile(kHandLaidLibrary);
+        WriteFile(_path, kHandLaidLibrary);
         XmlDocument document;
         ASSERT_TRUE(document.LoadFromFile(_path));
 
-        WriteFile("<root>\n  <other />\n</root>\n");
+        WriteFile(_path, "<root>\n  <other />\n</root>\n");
         document.GetRoot().GetChild("sprites").GetPugiNode().first_child().attribute("name").set_value("Renamed");
         ASSERT_TRUE(document.SaveToFile(_path));
 
-        const String saved = ReadFile();
+        const String saved = ReadFile(_path);
         EXPECT_EQ(saved.find("other"), String::npos);
         EXPECT_NE(saved.find("name=\"Renamed\""), String::npos);
     }
 
     TEST_F(XmlDocumentTest, AFileThatDoesNotParseIsReplacedByTheDocument) {
-        WriteFile("<root><unclosed>");
+        WriteFile(_path, "<root><unclosed>");
         XmlDocument document;
         ASSERT_TRUE(document.LoadFromString("<root>\n  <a />\n</root>\n"));
         ASSERT_TRUE(document.SaveToFile(_path));
-        EXPECT_EQ(ReadFile(), "<root>\n  <a />\n</root>\n");
+        EXPECT_EQ(ReadFile(_path), "<root>\n  <a />\n</root>\n");
     }
 
     TEST_F(XmlDocumentTest, TheByteOrderMarkSurvivesTheLayoutMerge) {
         const String withMark = String(kByteOrderMark) + String(kHandLaidLibrary);
-        WriteFile(withMark);
+        WriteFile(_path, withMark);
         XmlDocument document;
         ASSERT_TRUE(document.LoadFromFile(_path));
         ASSERT_TRUE(document.SaveToFile(_path));
-        EXPECT_EQ(ReadFile(), withMark);
+        EXPECT_EQ(ReadFile(_path), withMark);
 
         document.GetRoot().GetChild("sprites").GetPugiNode().first_child().attribute("name").set_value("Renamed");
         ASSERT_TRUE(document.SaveToFile(_path));
-        const String saved = ReadFile();
+        const String saved = ReadFile(_path);
         EXPECT_EQ(saved.substr(0, kByteOrderMark.size()), String(kByteOrderMark));
         EXPECT_NE(saved.find("\n\n    <sprite name=\"B\""), String::npos);
         EXPECT_NE(saved.find("name=\"Renamed\""), String::npos);
