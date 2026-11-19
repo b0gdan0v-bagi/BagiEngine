@@ -100,6 +100,7 @@ namespace BECore {
         ArtGenCopied copied;
         uint32_t reloadedSprites = 0;
         Optional<AtlasWritten> repacked;  // the atlas of a packed sprite, written again
+        String atlasGroup;                // the group the plan named (`ArtGenImagePlan::atlas`); empty: none
     };
 
     /**
@@ -109,6 +110,9 @@ namespace BECore {
      * sprite of an atlas group keeps its link, and a packed one has its atlas repacked, see AcceptIntoLibrary) and saves the library, drops the old
      * textures of the paths from the resource cache and reloads every sprite of the active scene that uses them, so the new picture shows at once. Fails without changing the library when the game has
      * no assets folder or no TextureLibrary.xml.
+     *
+     * With `plan.atlas` the sprite joins that group and the group is packed (`AcceptIntoGroup`; not packed with `plan.deferPack`, the caller
+     * packs once later). A packed member of another group is refused before anything is written.
      */
     std::expected<ArtGenAccepted, String> AcceptVariant(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan);
 
@@ -159,8 +163,9 @@ namespace BECore {
     /**
      * @brief The editor's ArtGenSession::Acceptor: AcceptVariant, then UseSpriteOn @p node when one is given (the scene editor is told the scene changed).
      *
-     * Answers `{sprite, texturePath, png, width, height, processing, reloadedSprites, atlas, usedOn}` (the size is the written file's; `processing` is
-     * `{trim, padding, maxSize, crop, scale, size, frame}`); a failure is `artgen_accept_failed` with the reason.
+     * Answers `{sprite, texturePath, png, width, height, processing, reloadedSprites, atlasGroup, atlas, usedOn}` (the size is the written file's;
+     * `processing` is `{trim, padding, maxSize, crop, scale, size, frame}`; `atlasGroup` the group the sprite joined or null, `atlas` the packed
+     * file or null, also while a pack is deferred); a failure is `artgen_accept_failed` with the reason.
      */
     std::expected<Json, ControlError> AcceptForControl(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node);
 

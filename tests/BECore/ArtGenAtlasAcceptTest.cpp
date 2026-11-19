@@ -411,4 +411,44 @@ namespace BECore::Tests {
         EXPECT_EQ(save.saves, 0);
     }
 
+    TEST(ArtGenAtlasAcceptTest, TheRowAnswerNamesTheGroupAndTheAtlas) {
+        AtlasWritten written;
+        written.name = "pieces"_intern;
+        written.texturePath = PoolString::Intern(kPiecesAtlas);
+        written.width = 64;
+        written.height = 32;
+        written.changed = {"queen"_intern, "rook"_intern};
+        Json reply = Json::object();
+
+        AddAtlasKeysToReply(reply, "pieces", written);
+
+        EXPECT_EQ(GetJsonString(reply, "atlasGroup").value_or(String()), "pieces");
+        const Json* atlas = FindJsonMember(reply, "atlas");
+        ASSERT_NE(atlas, nullptr);
+        EXPECT_EQ(GetJsonString(*atlas, "texturePath").value_or(String()), kPiecesAtlas);
+        EXPECT_EQ(GetJsonInt(*atlas, "members").value_or(0), 2);
+    }
+
+    TEST(ArtGenAtlasAcceptTest, TheRowAnswerOfADeferredPackNamesTheGroupAndHasNoAtlas) {
+        Json reply = Json::object();
+
+        AddAtlasKeysToReply(reply, "pieces", Optional<AtlasWritten>{});
+
+        EXPECT_EQ(GetJsonString(reply, "atlasGroup").value_or(String()), "pieces");
+        ASSERT_NE(FindJsonMember(reply, "atlas"), nullptr);
+        EXPECT_TRUE(FindJsonMember(reply, "atlas")->is_null());
+    }
+
+    TEST(ArtGenAtlasAcceptTest, TheRowAnswerWithNoGroupHasBothKeysNull) {
+        Json reply = Json::object();
+
+        AddAtlasKeysToReply(reply, "", Optional<AtlasWritten>{});
+
+        ASSERT_NE(FindJsonMember(reply, "atlasGroup"), nullptr);
+        EXPECT_TRUE(FindJsonMember(reply, "atlasGroup")->is_null());
+
+        ASSERT_NE(FindJsonMember(reply, "atlas"), nullptr);
+        EXPECT_TRUE(FindJsonMember(reply, "atlas")->is_null());
+    }
+
 }  // namespace BECore::Tests

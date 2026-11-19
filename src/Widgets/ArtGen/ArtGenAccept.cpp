@@ -10,6 +10,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNode.h>
+#include <Widgets/ArtGen/ArtGenAtlasAccept.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <Widgets/EditorLayout/UserFileIo.h>
@@ -566,6 +567,13 @@ namespace BECore {
             return std::unexpected(String("the game has no assets folder"));
         }
         auto& library = CoreManager::GetTextureLibrary();
+        if (!plan.atlas.empty()) {
+            // Refuse a join the library cannot take before the PNG replaces the file of the sprite
+            const PoolString texturePath = PoolString::Intern(ArtGenGameFile(sprite, kKindImage));
+            if (auto joined = AcceptedSpriteEntryInGroup(library, PoolString::Intern(sprite), texturePath, 0, 0, StringView(plan.atlas)); !joined) {
+                return std::unexpected(joined.error());
+            }
+        }
         auto copied = CopyVariantIntoAssets(PathOf(variant.path), PathOf(variant.provenancePath), assetsDir, sprite, plan);
         if (!copied) {
             return std::unexpected(copied.error());
@@ -574,7 +582,8 @@ namespace BECore {
         auto& files = CoreManager::GetFileSystem();
         auto resolve = [&files](StringView path) { return files.ResolvePath(path); };
         const AtlasIo io{assetsDir, resolve};
-        auto stored = AcceptIntoLibrary(library, *copied, sprite, io, [&library] { return library.Save(); });
+        auto save = [&library] { return library.Save(); };
+        auto stored = plan.atlas.empty() ? AcceptIntoLibrary(library, *copied, sprite, io, save) : AcceptIntoGroup(library, *copied, sprite, StringView(plan.atlas), plan.deferPack, io, save);
         if (!stored) {
             return std::unexpected(stored.error());
         }
@@ -590,6 +599,7 @@ namespace BECore {
         ArtGenAccepted accepted;
         accepted.copied = std::move(*copied);
         accepted.repacked = std::move(stored->repacked);
+        accepted.atlasGroup = plan.atlas;
         if (Scene* scene = CoreManager::GetSceneManager().GetActiveScene()) {
             accepted.reloadedSprites = ReloadSpritesUsing(scene->GetRootNode(), name, texturePath);
             if (accepted.repacked) {
@@ -699,7 +709,7 @@ namespace BECore {
         reply["height"] = accepted->copied.height;
         reply["processing"] = ProcessingToJson(accepted->copied);
         reply["reloadedSprites"] = accepted->reloadedSprites;
-        reply["atlas"] = AtlasReplyToJson(accepted->repacked);
+        AddAtlasKeysToReply(reply, StringView(accepted->atlasGroup), accepted->repacked);
         reply["usedOn"] = Json();
         if (node != nullptr) {
             if (auto used = UseSpriteOn(*node, PoolString::Intern(sprite)); !used) {

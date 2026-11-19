@@ -1,5 +1,12 @@
 #include "ArtGenAtlasAccept.h"
 
+#include <BECore/FileSystem/FileSystem.h>
+#include <BECore/FileSystem/MountPoints.h>
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Resource/ResourceManager.h>
+#include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneManager.h>
+
 namespace BECore {
 
     namespace {
@@ -112,6 +119,35 @@ namespace BECore {
         }
         packed->saved = packed->saved || result.saved;
         return packed;
+    }
+
+    void AddAtlasKeysToReply(Json& reply, StringView group, const Optional<AtlasWritten>& repacked) {
+        reply["atlasGroup"] = group.empty() ? Json() : Json(ToStdString(group));
+        reply["atlas"] = AtlasReplyToJson(repacked);
+    }
+
+    std::expected<Json, ControlError> PackAtlasForControl(StringView group) {
+        auto fail = [](const String& message) { return std::unexpected(ControlError{String("artgen_accept_failed"), message}); };
+        auto& files = CoreManager::GetFileSystem();
+        const std::filesystem::path assetsDir = files.GetMountedPath(MountPoints::assets);
+        if (assetsDir.empty()) {
+            return fail(String("the game has no assets folder"));
+        }
+        auto& library = CoreManager::GetTextureLibrary();
+        auto resolve = [&files](StringView path) { return files.ResolvePath(path); };
+        const AtlasIo io{assetsDir, resolve};
+        auto packed = PackGroupAfterAccept(library, group, io, [&library] { return library.Save(); }, StringView());
+        if (!packed) {
+            return fail(packed.error());
+        }
+        // The old pictures of the atlas path may be cached: drop them so the reload reads the new file
+        CoreManager::GetResourceManager().Evict(packed->repacked->texturePath.ToStringView());
+        if (Scene* scene = CoreManager::GetSceneManager().GetActiveScene()) {
+            for (const PoolString member : packed->repacked->changed) {
+                ReloadSpritesUsing(scene->GetRootNode(), member, PoolString{});
+            }
+        }
+        return AtlasReplyToJson(packed->repacked);
     }
 
 }  // namespace BECore

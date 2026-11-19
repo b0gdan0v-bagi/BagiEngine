@@ -58,4 +58,19 @@ namespace BECore {
     std::expected<AcceptStored, String> AcceptIntoGroup(TextureLibrary& library, const ArtGenCopied& copied, StringView sprite, StringView group, bool deferPack, const AtlasIo& io,
                                                         FunctionRef<bool()> save);
 
+    /**
+     * @brief The atlas keys of the row answer of `artgen_accept`, added to @p reply: `atlasGroup` is @p group (null for none) and `atlas`
+     * is `AtlasReplyToJson` of @p repacked (null with no group and while a pack is deferred).
+     */
+    void AddAtlasKeysToReply(Json& reply, StringView group, const Optional<AtlasWritten>& repacked);
+
+    /**
+     * @brief Packs group @p group of the game's library (`PackGroupAfterAccept`, which has the order and what a failure leaves), drops the
+     * atlas file from the resource cache and reloads every `SpriteRendererComponent` of the active scene that names a member the pack moved.
+     * The editor's way to pack once after the rows of a set.
+     *
+     * Answers `AtlasReplyToJson`'s object; a failure is `artgen_accept_failed` with the reason.
+     */
+    std::expected<Json, ControlError> PackAtlasForControl(StringView group);
+
 }  // namespace BECore
