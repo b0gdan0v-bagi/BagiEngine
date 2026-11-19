@@ -27,19 +27,26 @@ namespace BECore {
             return false;
         }
 
-        VkDescriptorPoolSize poolSize{};
-        poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSize.descriptorCount = 512;
+        if (CreateDescriptorPool(device) == VK_NULL_HANDLE) {
+            return false;
+        }
 
-        VkDescriptorPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-        poolInfo.maxSets = 512;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
+        VkSamplerCreateInfo samplerInfo{};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.maxAnisotropy = 1.0f;
+        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
-        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &_descriptorPool) != VK_SUCCESS) {
-            LOG_ERROR("VulkanTexturePipeline: failed to create descriptor pool");
+        if (vkCreateSampler(device, &samplerInfo, nullptr, &_sampler) != VK_SUCCESS) {
+            LOG_ERROR("VulkanTexturePipeline: failed to create sampler");
             return false;
         }
 
@@ -86,9 +93,13 @@ namespace BECore {
             vkDestroyPipelineLayout(device, _pipelineLayout, nullptr);
             _pipelineLayout = VK_NULL_HANDLE;
         }
-        if (_descriptorPool != VK_NULL_HANDLE) {
-            vkDestroyDescriptorPool(device, _descriptorPool, nullptr);
-            _descriptorPool = VK_NULL_HANDLE;
+        for (VkDescriptorPool pool : _descriptorPools) {
+            vkDestroyDescriptorPool(device, pool, nullptr);
+        }
+        _descriptorPools.clear();
+        if (_sampler != VK_NULL_HANDLE) {
+            vkDestroySampler(device, _sampler, nullptr);
+            _sampler = VK_NULL_HANDLE;
         }
         if (_descriptorSetLayout != VK_NULL_HANDLE) {
             vkDestroyDescriptorSetLayout(device, _descriptorSetLayout, nullptr);
@@ -96,21 +107,58 @@ namespace BECore {
         }
     }
 
-    VkDescriptorSet VulkanTexturePipeline::AllocateDescriptorSet(VkDevice device, VkImageView imageView, VkSampler sampler) {
+    VkDescriptorPool VulkanTexturePipeline::CreateDescriptorPool(VkDevice device) {
+        VkDescriptorPoolSize poolSize{};
+        poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        poolSize.descriptorCount = kSetsPerPool;
+
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+        poolInfo.maxSets = kSetsPerPool;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+
+        VkDescriptorPool pool = VK_NULL_HANDLE;
+        if (const VkResult result = vkCreateDescriptorPool(device, &poolInfo, nullptr, &pool); result != VK_SUCCESS) {
+            LOG_ERROR("VulkanTexturePipeline: vkCreateDescriptorPool failed with VkResult {}"_format(static_cast<int>(result)));
+            return VK_NULL_HANDLE;
+        }
+        _descriptorPools.push_back(pool);
+        return pool;
+    }
+
+    VulkanTexturePipeline::DescriptorAllocation VulkanTexturePipeline::AllocateDescriptorSet(VkDevice device, VkImageView imageView) {
+        if (_descriptorPools.empty()) {
+            LOG_ERROR("VulkanTexturePipeline: AllocateDescriptorSet before Initialize");
+            return {};
+        }
+
         VkDescriptorSetAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = _descriptorPool;
         allocInfo.descriptorSetCount = 1;
         allocInfo.pSetLayouts = &_descriptorSetLayout;
 
+        VkDescriptorPool pool = _descriptorPools.back();
+        allocInfo.descriptorPool = pool;
         VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
-        if (vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet) != VK_SUCCESS) {
-            LOG_ERROR("VulkanTexturePipeline: failed to allocate descriptor set");
-            return VK_NULL_HANDLE;
+        VkResult result = vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet);
+        // The two results a full pool gives; a fresh pool always has room for one set, so one retry is enough
+        if (result == VK_ERROR_OUT_OF_POOL_MEMORY || result == VK_ERROR_FRAGMENTED_POOL) {
+            pool = CreateDescriptorPool(device);
+            if (pool == VK_NULL_HANDLE) {
+                return {};
+            }
+            allocInfo.descriptorPool = pool;
+            result = vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet);
+        }
+        if (result != VK_SUCCESS) {
+            LOG_ERROR("VulkanTexturePipeline: vkAllocateDescriptorSets failed with VkResult {}"_format(static_cast<int>(result)));
+            return {};
         }
 
         VkDescriptorImageInfo imageInfo{};
-        imageInfo.sampler = sampler;
+        imageInfo.sampler = _sampler;
         imageInfo.imageView = imageView;
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
@@ -125,7 +173,7 @@ namespace BECore {
 
         vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 
-        return descriptorSet;
+        return {descriptorSet, pool};
     }
 
     void VulkanTexturePipeline::Draw(VkCommandBuffer cmd, VkDescriptorSet descriptorSet, const PushConstants& pc, const VkRect2D& scissor) const {
