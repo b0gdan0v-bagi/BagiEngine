@@ -66,7 +66,7 @@ def test_a_reference_gets_the_default_weight():
 @pytest.mark.parametrize("data, message", [
     ("a.png", "must be an object"),
     ({"image": "a.png"}, "reference.mode"),
-    ({"mode": "structure", "image": "a.png"}, "reference.mode.*init, style"),
+    ({"mode": "depth", "image": "a.png"}, "reference.mode.*init, style, structure"),
     ({"mode": 3, "image": "a.png"}, "reference.mode"),
     ({"mode": "init"}, "reference.image"),
     ({"mode": "init", "image": ""}, "reference.image"),
@@ -96,9 +96,22 @@ def test_the_weight_of_style_goes_to_the_adapter_as_it_is():
     assert artgen_reference.weight_value("style", 1.3) == 1.3
 
 
+def test_structure_takes_its_default_weight_and_a_weight_in_its_open_range():
+    assert artgen_reference.parse_reference({"mode": "structure", "image": "a.png"}, "x") == {"mode": "structure", "image": "a.png", "weight": 0.8}
+    assert artgen_reference.parse_reference({"mode": "structure", "image": "a.png", "weight": 1.9}, "x")["weight"] == 1.9
+    for weight in (0, 2, 2.5, -0.1):
+        with pytest.raises(artgen_preset.PresetError, match="reference.weight\" of the mode 'structure' must be a number above 0.0 and below 2.0"):
+            artgen_reference.parse_reference({"mode": "structure", "image": "a.png", "weight": weight}, "x")
+
+
+def test_the_weight_of_structure_goes_to_the_controlnet_as_it_is():
+    assert artgen_reference.weight_value("structure", 1.1) == 1.1
+
+
 def test_only_a_mode_beyond_the_image_models_names_a_kind():
     assert artgen_reference.MODES["init"].kind is None
     assert artgen_reference.MODES["style"].kind == "style"
+    assert artgen_reference.MODES["structure"].kind == "structure"
 
 
 def test_the_weight_of_init_is_the_part_that_stays():
@@ -149,7 +162,7 @@ def test_a_preset_with_a_reference_key_loads_and_keeps_it(game):
 @pytest.mark.parametrize("reference, message", [
     ("x.png", "must be an object"),
     ({"mode": "init", "image": "a.png", "weight": 2}, "reference.weight"),
-    ({"mode": "structure", "image": "a.png"}, "reference.mode"),
+    ({"mode": "depth", "image": "a.png"}, "reference.mode"),
 ])
 def test_a_malformed_reference_of_a_preset_is_refused_with_the_file_named(game, reference, message):
     path = write_preset(game, "bad", {**PRESET, "reference": reference})
@@ -182,12 +195,14 @@ def test_the_requests_reference_replaces_the_presets_whole(game):
 
 def test_the_map_names_the_workflow_that_runs_a_mode(game):
     base = artgen_preset.load_workflow("sdxl_cutout", game)
-    assert base.reference == {"init": "sdxl_img2img_cutout", "style": "sdxl_ipadapter_cutout"}
+    assert base.reference == {"init": "sdxl_img2img_cutout", "style": "sdxl_ipadapter_cutout", "structure": "sdxl_controlnet_cutout"}
     assert artgen_reference.effective_workflow(base, "init", game).name == "sdxl_img2img_cutout"
     assert artgen_reference.effective_workflow(base, "style", game).name == "sdxl_ipadapter_cutout"
+    assert artgen_reference.effective_workflow(base, "structure", game).name == "sdxl_controlnet_cutout"
     plain = artgen_preset.load_workflow("sdxl_basic")
     assert artgen_reference.effective_workflow(plain, "init").name == "sdxl_img2img"
     assert artgen_reference.effective_workflow(plain, "style").name == "sdxl_ipadapter"
+    assert artgen_reference.effective_workflow(plain, "structure").name == "sdxl_controlnet"
 
 
 def test_a_workflow_that_takes_the_picture_serves_its_own_mode(game):
@@ -198,8 +213,8 @@ def test_a_workflow_that_takes_the_picture_serves_its_own_mode(game):
 def test_a_mode_the_workflow_cannot_run_is_refused_naming_the_modes_it_has(game):
     with pytest.raises(artgen_preset.PresetError, match=r"'sao_sfx' cannot run the reference mode 'init' \(its modes: none\)"):
         artgen_reference.effective_workflow(artgen_preset.load_workflow("sao_sfx"), "init")
-    with pytest.raises(artgen_preset.PresetError, match=r"'sdxl_basic' cannot run the reference mode 'structure' \(its modes: init, style\)"):
-        artgen_reference.effective_workflow(artgen_preset.load_workflow("sdxl_basic"), "structure")
+    with pytest.raises(artgen_preset.PresetError, match=r"'sdxl_img2img' cannot run the reference mode 'structure' \(its modes: init\)"):
+        artgen_reference.effective_workflow(artgen_preset.load_workflow("sdxl_img2img"), "structure")
 
 
 def test_a_preset_whose_workflow_cannot_run_its_reference_is_refused_at_load(game):
@@ -262,6 +277,43 @@ def test_the_style_graphs_start_from_noise_and_hand_the_adapter_the_picture_over
                 assert {k: v for k, v in graph[node].items() if k != "inputs"} == {k: v for k, v in value.items() if k != "inputs"}
 
 
+CONTROL_INPUTS = ("reference_image", "control_strength", "control_net", "canny_low", "canny_high", "control_end")
+
+
+def test_the_structure_graphs_start_from_noise_and_hold_the_edges_of_the_picture_over_grey():
+    for base_name, variant_name in (("sdxl_basic", "sdxl_controlnet"), ("sdxl_cutout", "sdxl_controlnet_cutout")):
+        base, variant = artgen_preset.load_workflow(base_name), artgen_preset.load_workflow(variant_name)
+        graph = variant.graph
+        for key in CONTROL_INPUTS:
+            assert key in variant.inputs, key
+        apply = graph["3"]["inputs"]["positive"][0]
+        assert graph[apply]["class_type"] == "ControlNetApplyAdvanced"
+        assert graph["3"]["inputs"]["positive"] == [apply, 0] and graph["3"]["inputs"]["negative"] == [apply, 1]
+        assert graph[apply]["inputs"]["positive"] == ["6", 0] and graph[apply]["inputs"]["negative"] == ["7", 0], "between the two prompts and the sampler"
+        assert graph[apply]["inputs"]["vae"] == ["10", 0]
+        assert graph[graph[apply]["inputs"]["control_net"][0]]["class_type"] == "ControlNetLoader"
+        canny = graph[apply]["inputs"]["image"][0]
+        assert graph[canny]["class_type"] == "Canny"
+        assert graph[graph[canny]["inputs"]["image"][0]]["class_type"] == "ImageCompositeMasked", "the picture goes in over flat grey"
+        assert graph["3"]["inputs"]["model"] == ["4", 0], "the ControlNet patches the conditioning, not the model"
+        assert graph["3"]["inputs"]["latent_image"] == ["5", 0] and graph["3"]["inputs"]["denoise"] == 1.0
+        assert graph["5"]["class_type"] == "EmptyLatentImage"
+        assert "denoise" not in variant.inputs, "the weight of the mode is the ControlNet's strength, not a denoise"
+        assert variant.inputs["control_strength"] == [apply, "strength"] and variant.inputs["control_end"] == [apply, "end_percent"]
+        assert variant.inputs["canny_low"] == [canny, "low_threshold"] and variant.inputs["canny_high"] == [canny, "high_threshold"]
+        assert variant.graph[variant.inputs["output"]]["class_type"] == base.graph[base.inputs["output"]]["class_type"]
+        for node, value in base.graph.items():
+            if node in ("8", "9", "11", "12", "13", "14"):
+                assert {k: v for k, v in graph[node].items() if k != "inputs"} == {k: v for k, v in value.items() if k != "inputs"}
+
+
+def test_the_structure_graphs_size_the_latent_the_picture_and_the_grey_by_the_same_width_and_height():
+    for name in ("sdxl_controlnet", "sdxl_controlnet_cutout"):
+        variant = artgen_preset.load_workflow(name)
+        assert variant.inputs["width"] == [["5", "width"], ["21", "width"], ["24", "width"], ["26", "width"]]
+        assert variant.inputs["height"] == [["5", "height"], ["21", "height"], ["24", "height"], ["26", "height"]]
+
+
 @pytest.mark.parametrize("name", sorted(p.name[:-len(".json")] for p in artgen_preset.ENGINE_WORKFLOWS.glob("*.json") if not p.name.endswith(".inputs.json")))
 def test_every_link_of_an_engine_graph_points_to_a_node_of_it(name):
     graph, _ = engine_workflow(name)
@@ -290,7 +342,7 @@ def test_a_mapped_workflow_that_lacks_what_its_base_has_is_refused(game, change,
     assert "base.inputs.json" in str(error.value)
 
 
-@pytest.mark.parametrize("reference", [["init"], {"structure": "sdxl_img2img"}, {"init": ""}, {"init": 3}, {"init": "nope"}])
+@pytest.mark.parametrize("reference", [["init"], {"depth": "sdxl_img2img"}, {"init": ""}, {"init": 3}, {"init": "nope"}])
 def test_a_malformed_map_is_refused(game, reference):
     graph, inputs = engine_workflow("sdxl_basic")
     inputs["reference"] = reference
@@ -345,6 +397,19 @@ def test_a_style_graph_sets_the_picture_and_the_adapter_weight_and_has_no_denois
     assert (graph["5"]["inputs"]["width"], graph["5"]["inputs"]["height"]) == (512, 768)
     assert graph["12"]["class_type"] == "RemoveBackground"
     assert artgen_preset.models_of(graph)["ipadapter_file"] == ["ip-adapter-plus_sdxl_vit-h.safetensors"]
+
+
+def test_a_structure_graph_sets_the_picture_the_strength_and_the_sizes_and_has_no_denoise_to_touch(game):
+    preset = preset_with(game, workflow="sdxl_cutout")
+    reference = use_of(preset, mode="structure", weight=1.1)
+    graph = artgen_preset.build_graph(preset, "knight", 7, reference=reference)
+    assert graph["20"]["inputs"]["image"] == "artgen_ref_x.png"
+    assert graph["42"]["inputs"]["strength"] == 1.1
+    assert graph["3"]["inputs"]["denoise"] == 1.0, "the mode has no denoise: the sampler starts from noise"
+    for node in ("5", "21", "24", "26"):
+        assert (graph[node]["inputs"]["width"], graph[node]["inputs"]["height"]) == (512, 768)
+    assert graph["12"]["class_type"] == "RemoveBackground"
+    assert artgen_preset.models_of(graph)["control_net_name"] == ["xinsir-controlnet-canny-sdxl-1.0.safetensors"]
 
 
 def test_a_graph_without_a_reference_is_what_it_was(game):

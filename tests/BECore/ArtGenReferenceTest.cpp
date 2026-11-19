@@ -135,20 +135,23 @@ namespace BECore::Tests {
     TEST(ArtGenReferenceTest, EveryModeIsLookedUpByItsKey) {
         EXPECT_EQ(ArtGenReferenceModeOf("init").mode, "init");
         EXPECT_EQ(ArtGenReferenceModeOf("style").mode, "style");
+        EXPECT_EQ(ArtGenReferenceModeOf("structure").mode, "structure");
         EXPECT_DOUBLE_EQ(ArtGenReferenceDefaultWeight("init"), 0.4);
         EXPECT_DOUBLE_EQ(ArtGenReferenceDefaultWeight("style"), 0.8);
+        EXPECT_DOUBLE_EQ(ArtGenReferenceDefaultWeight("structure"), 0.8);
     }
 
     TEST(ArtGenReferenceTest, AnUnknownModeGetsTheFirstRow) {
-        EXPECT_EQ(&ArtGenReferenceModeOf("structure"), &kArtGenReferenceModes[0]);
+        EXPECT_EQ(&ArtGenReferenceModeOf("depth"), &kArtGenReferenceModes[0]);
         EXPECT_EQ(&ArtGenReferenceModeOf(""), &kArtGenReferenceModes[0]);
-        EXPECT_DOUBLE_EQ(ArtGenReferenceDefaultWeight("structure"), kArtGenReferenceModes[0].defaultWeight);
+        EXPECT_DOUBLE_EQ(ArtGenReferenceDefaultWeight("depth"), kArtGenReferenceModes[0].defaultWeight);
     }
 
-    TEST(ArtGenReferenceTest, InitIsTheFirstModeAndStyleFollows) {
-        ASSERT_EQ(kArtGenReferenceModes.size(), 2u);
+    TEST(ArtGenReferenceTest, InitIsTheFirstModeThenStyleAndStructure) {
+        ASSERT_EQ(kArtGenReferenceModes.size(), 3u);
         EXPECT_EQ(kArtGenReferenceModes[0].mode, "init");
         EXPECT_EQ(kArtGenReferenceModes[1].mode, "style");
+        EXPECT_EQ(kArtGenReferenceModes[2].mode, "structure");
     }
 
     TEST(ArtGenReferenceTest, TheDefaultWeightOfEveryModeIsInsideItsSlidersRange) {

@@ -11,6 +11,6 @@
   "checkpoint": ["4", "ckpt_name"],
   "vae": ["10", "vae_name"],
   "output": "9",
-  "reference": {"init": "sdxl_img2img_cutout", "style": "sdxl_ipadapter_cutout"},
+  "reference": {"init": "sdxl_img2img_cutout", "style": "sdxl_ipadapter_cutout", "structure": "sdxl_controlnet_cutout"},
   "bg_model": ["11", "bg_removal_name"]
 }

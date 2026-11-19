@@ -18,9 +18,10 @@ namespace BECore {
     };
 
     /// The modes the panel offers, in the combo's order; the first is the fallback for a mode the table does not know
-    inline constexpr Array<ArtGenReferenceModeRow, 2> kArtGenReferenceModes = {{
+    inline constexpr Array<ArtGenReferenceModeRow, 3> kArtGenReferenceModes = {{
         {"init", 0.4, 0.05f, 0.95f, "Redraw this picture: the weight is how much of it is kept"},
         {"style", 0.8, 0.1f, 1.5f, "Draw something new in the style of this picture: the weight is how strongly the style is applied"},
+        {"structure", 0.8, 0.1f, 1.5f, "Keep the shape of this picture or sketch: the weight is how strictly it is followed"},
     }};
 
     /// The reference picture of a run: `{"mode", "image", "weight"}` of tools/artgen/CLAUDE.md, "Presets". Only the shape is held here;
