@@ -1197,6 +1197,10 @@ namespace BECore {
             if (IconTextButton(ICON_LC_IMAGE_PLUS, "Use as reference", kArtGenUseAsReferenceTip)) {
                 session.SetReferenceSlot(ArtGenReferenceOfSprite(StringView(_acceptedSprite)));
             }
+            ImGui::SameLine();
+            if (IconTextButton(ICON_LC_SHAPES, "Use as shape", kArtGenUseAsShapeTip)) {
+                session.SetReferenceSlot(ArtGenReferenceOfSprite(StringView(_acceptedSprite), "structure"));
+            }
         }
     }
 

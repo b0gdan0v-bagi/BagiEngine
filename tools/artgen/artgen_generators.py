@@ -356,7 +356,7 @@ class FakeGenerator(Generator):
         self.steps = steps
         self.state = state
         self.fail = fail
-        self.kinds = ["audio", "image", "style"]  # what status() says the models make; a test removes one
+        self.kinds = ["audio", "image", "structure", "style"]  # what status() says the models make; a test removes one
         self.graphs = []
         self.uploads = []  # (name, data) of every upload_image
 

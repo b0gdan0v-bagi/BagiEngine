@@ -323,6 +323,47 @@ def test_a_generator_without_the_style_kind_refuses_a_style_run_and_writes_nothi
     assert artgen_service.generate(artgen_service.Request(preset_of(game), "x", 1, 1, tmp_path / "p"), generator), "nor does a run with no reference"
 
 
+STRUCTURE = {"mode": "structure", "image": "assets/artgen/rook.png", "weight": 1.1}
+
+
+def test_a_structure_request_runs_the_controlnet_workflow_and_records_it(game, picture, tmp_path):
+    generator = FakeGenerator()
+    results = artgen_service.generate(reference_request(game, tmp_path / "o", STRUCTURE), generator)
+    name = f"artgen_ref_{hashlib.sha256(REFERENCE_PNG).hexdigest()[:16]}.png"
+    for graph in generator.graphs:
+        assert graph["20"]["inputs"]["image"] == name and graph["42"]["inputs"]["strength"] == 1.1 and graph["3"]["inputs"]["denoise"] == 1.0
+    provenance = results[0].provenance
+    assert provenance["reference"] == {"mode": "structure", "image": "assets/artgen/rook.png", "hash": hashlib.sha256(REFERENCE_PNG).hexdigest(),
+                                       "weight": 1.1, "workflow": "sdxl_controlnet"}
+    assert provenance["workflow"] == "sdxl_controlnet"
+    assert provenance["models"]["control_net_name"] == ["xinsir-controlnet-canny-sdxl-1.0.safetensors"]
+
+
+def test_a_structure_request_without_a_weight_takes_the_default(game, picture, tmp_path):
+    generator = FakeGenerator()
+    artgen_service.generate(reference_request(game, tmp_path / "o", {"mode": "structure", "image": "assets/artgen/rook.png"}), generator)
+    assert generator.graphs[0]["42"]["inputs"]["strength"] == 0.8
+
+
+def test_a_generator_without_the_structure_kind_refuses_a_structure_run_and_writes_nothing(game, picture, tmp_path):
+    generator = FakeGenerator()
+    generator.kinds = ["audio", "image", "style"]
+    out = tmp_path / "o"
+    with pytest.raises(artgen_service.RequestError, match=r"cannot run the reference mode 'structure'.*\(python tools/artgen/artgen_setup.py install --structure\)"):
+        artgen_service.generate(reference_request(game, out, STRUCTURE), generator)
+    assert generator.graphs == [] and generator.uploads == [] and not out.exists()
+    assert artgen_service.generate(reference_request(game, out), generator), "an init run does not need the structure model"
+    assert artgen_service.generate(reference_request(game, tmp_path / "s", STYLE), generator), "nor does a style run"
+
+
+def test_a_structure_run_does_not_need_the_style_parts(game, picture, tmp_path):
+    generator = FakeGenerator()
+    generator.kinds = ["audio", "image", "structure"]
+    assert artgen_service.generate(reference_request(game, tmp_path / "o", STRUCTURE), generator)
+    with pytest.raises(artgen_service.RequestError, match="install --style"):
+        artgen_service.generate(reference_request(game, tmp_path / "p", STYLE), generator)
+
+
 def test_a_generator_that_does_not_list_kinds_is_not_refused(game, picture, tmp_path):
     class Unlisted(FakeGenerator):
         def status(self):
@@ -331,6 +372,7 @@ def test_a_generator_that_does_not_list_kinds_is_not_refused(game, picture, tmp_
             return status
 
     assert artgen_service.generate(reference_request(game, tmp_path / "o", STYLE), Unlisted())
+    assert artgen_service.generate(reference_request(game, tmp_path / "p", STRUCTURE), Unlisted())
 
 
 def test_a_preset_of_the_style_workflow_serves_style_and_is_refused_for_init(game, picture, tmp_path):
@@ -339,6 +381,15 @@ def test_a_preset_of_the_style_workflow_serves_style_and_is_refused_for_init(gam
     results = artgen_service.generate(reference_request(game, tmp_path / "o", STYLE, preset="direct"), generator)
     assert results[0].provenance["workflow"] == "sdxl_ipadapter"
     with pytest.raises(artgen_preset.PresetError, match=r"'sdxl_ipadapter' cannot run the reference mode 'init' \(its modes: style\)"):
+        artgen_service.generate(reference_request(game, tmp_path / "p", REFERENCE, preset="direct"), generator)
+
+
+def test_a_preset_of_the_structure_workflow_serves_structure_and_is_refused_for_init(game, picture, tmp_path):
+    write_preset(game, "direct", {**PRESET, "workflow": "sdxl_controlnet"})
+    generator = FakeGenerator()
+    results = artgen_service.generate(reference_request(game, tmp_path / "o", STRUCTURE, preset="direct"), generator)
+    assert results[0].provenance["workflow"] == "sdxl_controlnet"
+    with pytest.raises(artgen_preset.PresetError, match=r"'sdxl_controlnet' cannot run the reference mode 'init' \(its modes: structure\)"):
         artgen_service.generate(reference_request(game, tmp_path / "p", REFERENCE, preset="direct"), generator)
 
 
@@ -1271,7 +1322,7 @@ def test_cli_generate_refuses_a_bad_flag_like_any_request_error(game, tmp_path, 
 
 # --- a run with a reference gets the checks and the extra images like any other
 
-@pytest.mark.parametrize("reference", [REFERENCE, STYLE], ids=["init", "style"])
+@pytest.mark.parametrize("reference", [REFERENCE, STYLE, STRUCTURE], ids=["init", "style", "structure"])
 def test_a_reference_run_gets_the_verdicts_and_the_extra_images_of_its_request(game, picture, tmp_path, reference):
     generator = CutOutGenerator()
     events = []
@@ -1292,6 +1343,14 @@ def test_a_style_run_of_a_cut_out_workflow_is_checked_and_regenerated_by_the_pre
     assert {r.provenance["workflow"] for r in results} == {"sdxl_ipadapter_cutout"}
     assert [r.provenance["checks"]["passed"] for r in results] == [True, False, True]
     assert results[0].provenance["checks"]["thresholds"] == artgen_checks.DEFAULTS
+
+
+def test_a_structure_run_of_a_cut_out_workflow_is_checked_and_regenerated_by_the_preset(game, picture, tmp_path):
+    write_preset(game, "cut", {**PRESET, "workflow": "sdxl_cutout", "regenerate": {"extra": 3, "minPass": 2}})
+    results = artgen_service.generate(reference_request(game, tmp_path, STRUCTURE, preset="cut"), CutOutGenerator())
+    assert seeds_of(results) == [40, 41, 42], "41 is cut, so the preset's regenerate adds 42, which passes"
+    assert {r.provenance["workflow"] for r in results} == {"sdxl_controlnet_cutout"}
+    assert [r.provenance["checks"]["passed"] for r in results] == [True, False, True]
 
 
 def test_a_style_run_that_cannot_pass_ends_ok_after_the_extra_limit(game, picture, tmp_path):

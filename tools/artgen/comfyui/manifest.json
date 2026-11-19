@@ -121,6 +121,16 @@
       "sha256": "6ca9667da1ca9e0b0f75e46bb030f7e011f44f86cbfb8d5a36590fcd7507b030",
       "licence": "MIT (OpenCLIP ViT-H-14 laion2B-s32B-b79K, LAION; the copy of the IP-Adapter repository, Apache 2.0)",
       "source": "https://huggingface.co/h94/IP-Adapter"
+    },
+    {
+      "name": "xinsir-controlnet-canny-sdxl-1.0.safetensors",
+      "folder": "controlnet",
+      "kind": "structure",
+      "url": "https://huggingface.co/xinsir/controlnet-canny-sdxl-1.0/resolve/1271357eda52d54b857c650cacb5b51144643ccb/diffusion_pytorch_model.safetensors",
+      "size": 2502139104,
+      "sha256": "bf47cd757ceaf2572c53321329ef819ea38c09a6e3783588387913cd94dff47c",
+      "licence": "Apache 2.0 (ControlNet canny for SDXL, xinsir)",
+      "source": "https://huggingface.co/xinsir/controlnet-canny-sdxl-1.0"
     }
   ],
   "customNodes": [

@@ -7,7 +7,7 @@ it would download and where (size, licence), asks, then installs with progress a
 matches the manifest is left alone, so a second run only checks. It never overwrites or deletes what it did not create.
 
     python tools/artgen/artgen_setup.py detect            the platform key and the GPUs seen
-    python tools/artgen/artgen_setup.py install [--root DIR] [--yes] [--dry-run] [--json] [--skip-models] [--audio] [--style]
+    python tools/artgen/artgen_setup.py install [--root DIR] [--yes] [--dry-run] [--json] [--skip-models] [--audio] [--style] [--structure]
     python tools/artgen/artgen_setup.py start [--wait S] [-- ARGS]  ComfyUI in the background on the address of local.json
     python tools/artgen/artgen_setup.py stop              only the ComfyUI this tool started
     python tools/artgen/artgen_setup.py status            ready / not_running / not_installed and why
@@ -175,10 +175,12 @@ def model_path(root, model):
 KIND_IMAGE = "image"
 KIND_AUDIO = "audio"
 KIND_STYLE = "style"
-# The kinds an install adds to the image ones, each by the flag of its own name (`--audio`, `--style`; both may be given).
+KIND_STRUCTURE = "structure"
+# The kinds an install adds to the image ones, each by the flag of its own name (`--audio`, `--style`, `--structure`; all may be given).
 OPTIONAL_KINDS = {
     KIND_AUDIO: "also the sound effects model (Stable Audio Open: gated, needs HF_TOKEN)",
     KIND_STYLE: "also the style reference: the IP-Adapter models and its custom node (about 3.4 GB, git at a pinned commit)",
+    KIND_STRUCTURE: "also the structure reference: the canny ControlNet for SDXL (about 2.5 GB)",
 }
 HF_API = "https://huggingface.co/api/models"
 CUSTOM_NODES_DIR = "custom_nodes"
@@ -186,7 +188,7 @@ RESTART_NOTE = "restart ComfyUI after the install: it loads a custom node only w
 
 
 def model_kind(model):
-    """What a model or a custom node of the manifest is for: `image` (the default), `audio` or `style`."""
+    """What a model or a custom node of the manifest is for: `image` (the default), `audio`, `style` or `structure`."""
     return model.get("kind", KIND_IMAGE)
 
 
@@ -245,7 +247,8 @@ def gated_sha256(model, token, opener=None):
 def make_plan(manifest, key, root, skip_models=False, kinds=(KIND_IMAGE,), git_head=read_git_head):
     """The steps of an install of platform `key` into `root`, or SetupError when something there is not this tool's. `kinds` picks the
     models and the custom nodes: the image ones by default, `audio` adds the sound effects model (gated: it needs a token, `hf_token`),
-    `style` the IP-Adapter models and its custom node. A custom node is `present` when its folder is a checkout of the pinned commit."""
+    `style` the IP-Adapter models and its custom node, `structure` the canny ControlNet model (no custom node). A custom node is `present`
+    when its folder is a checkout of the pinned commit."""
     root = Path(root)
     comfy = manifest["comfyui"]
     var = variant(manifest, key)

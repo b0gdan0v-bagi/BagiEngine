@@ -6,8 +6,8 @@ The health check of the ComfyUI that art generation uses (tools/artgen/comfyui/C
 
 It asks ComfyUI for its version and devices (`/system_stats`) and for the files of every model folder the manifest names
 (`/models/<folder>`) and for the classes of the manifest's custom nodes (`/object_info/<class>`), and compares both with
-`comfyui/manifest.json`: the image models make it ready, the audio and the style parts (installed with `artgen_setup.py install
---audio` / `--style`) are reported in `kinds`, and a missing one is a warning. `--generate` also queues `workflows/sdxl_basic.json` (`--generate
+`comfyui/manifest.json`: the image models make it ready, the audio, style and structure parts (installed with `artgen_setup.py install
+--audio` / `--style` / `--structure`) are reported in `kinds`, and a missing one is a warning. `--generate` also queues `workflows/sdxl_basic.json` (`--generate
 audio`: `workflows/sao_sfx.json`) (`POST /prompt`) and waits for its output (`/history/<id>`), so the GPU path is proven, not only the
 server.
 
@@ -78,7 +78,7 @@ def _request(url, data=None):
 
 
 def model_kind(entry):
-    """What a model or custom node of the manifest is for: `image` (the default), `audio` or `style`."""
+    """What a model or custom node of the manifest is for: `image` (the default), `audio`, `style` or `structure`."""
     return entry.get("kind", "image")
 
 
@@ -92,7 +92,7 @@ def _node_class_present(url, node_class):
 
 def check(url, manifest):
     """The report as a dict; `ready` is true when the server runs and every image model of the manifest is there. `kinds` names what it
-    can make: `image`, and `audio` / `style` when every model (and, for style, every custom node class) of that kind is there."""
+    can make: `image`, and `audio` / `style` / `structure` when every model (and every custom node class) of that kind is there."""
     report = {"url": url, "reachable": False, "ready": False, "problems": [], "warnings": []}
     try:
         stats = _request(f"{url}/system_stats")
