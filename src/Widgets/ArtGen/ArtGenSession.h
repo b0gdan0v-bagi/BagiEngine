@@ -111,6 +111,7 @@ namespace BECore {
         String name;                          // the set's folder name; empty: DefaultArtGenSetName
         String frameOf;                       // an image set whose frame this set takes over (a replacement of one of its rows); empty: its own frame
         Optional<ArtGenReference> reference;  // the picture every job starts from (the set keeps it); none: the preset's own `reference`
+        Optional<String> atlas;               // an image set's atlas group; none: the preset's `atlas` at enqueue time, "": no group even when the preset has one
     };
 
     /// What an edit of a set found: the set (or job) unknown, a pick of a seed the job has not, or a switch of a live row whose write failed
@@ -148,6 +149,9 @@ namespace BECore {
         using FrameMeasurer = std::expected<ArtGenImageFrame, String> (*)(const Vector<String>& pngFiles, const ArtGenImageSettings& settings);
         /// Writes into the game's provenance file of @p name (a sprite or a clip, by @p kind) that the choice with @p seed was kept on @p date
         using Keeper = std::expected<void, ControlError> (*)(StringView kind, StringView name, int64_t seed, StringView date);
+        /// Packs the atlas group @p group once, after the rows of an Accept all that were written without packing and before the batch
+        /// ends; the answer is the `atlas` of `artgen_accept_set` (`PackAtlasForControl` in the editor, a fake in the tests)
+        using AtlasPacker = std::expected<Json, ControlError> (*)(StringView group);
         /// Opens and closes the batch of one Accept all of images: the acceptors called between them write their files and change the library
         /// in memory only, and the end saves it once. The end's failure says the library was not saved
         using BatchBegin = void (*)();
@@ -226,6 +230,11 @@ namespace BECore {
         void SetKeeper(Keeper keeper) {
             _keeper = keeper;
         }
+        /// What an Accept all of a set with an atlas group packs it with, once after the rows. With none installed each row packs through its
+        /// own acceptor and the answer's `atlas` stays null
+        void SetAtlasPacker(AtlasPacker packer) {
+            _atlasPacker = packer;
+        }
         /// What the first Accept all of an image set measures its frame with (ArtGenAccept.h in the editor; a fake in the tests)
         void SetFrameMeasurer(FrameMeasurer measurer) {
             _frameMeasurer = measurer;
@@ -246,9 +255,12 @@ namespace BECore {
         /// The image settings of the current run's preset: a draft's own `accept` (none: the defaults), else the saved preset's by name;
         /// a malformed key is the defaults
         [[nodiscard]] ArtGenImageSettings ImageSettingsOfRun() const;
+        /// The atlas group of the current run's preset (the same preset lookup as ImageSettingsOfRun()); empty when it names none
+        [[nodiscard]] String AtlasOfRun() const;
         /// Accepts the variant @p seed as @p sprite, and puts it on the selected node when @p useOnSelected. The image is processed by
-        /// @p settings (the panel's form), or by ImageSettingsOfRun() when null; a single image has no frame of a set, so it is trimmed on its own
-        std::expected<Json, ControlError> Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings = nullptr);
+        /// @p settings (the panel's form), or by ImageSettingsOfRun() when null; a single image has no frame of a set, so it is trimmed on its own.
+        /// The sprite joins the atlas group @p atlas and the group is packed (`ArtGenImagePlan::atlas`); null is AtlasOfRun(), "" no group
+        std::expected<Json, ControlError> Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings = nullptr, const String* atlas = nullptr);
         /// Accepts the sound variant @p seed as a clip at @p target, processed by @p settings; on the selected node's AudioSourceComponent
         /// when @p useOnSelected
         std::expected<Json, ControlError> AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected);
@@ -301,7 +313,11 @@ namespace BECore {
         /// manifest (Sets/CLAUDE.md, "Accept all"): the pick, else for images the first variant. A kept row and a row another set replaced are skipped. The checks come first and a
         /// refusal by them changes nothing. With the batch hooks an image set's files are written first and the library is saved once; the
         /// rows are marked only after that save went through, so the manifest never names a row whose library entry was rolled back. A
-        /// failure halfway leaves the rows before it accepted (and marked); a failed save marks none and says which files were written
+        /// failure halfway leaves the rows before it accepted (and marked); a failed save marks none and says which files were written.
+        /// A set with an atlas group and an installed AtlasPacker writes its rows into the group without packing it and packs it once after
+        /// the last row, inside the batch, so nothing reaches TextureLibrary.xml before the batch's one save (the answer's `atlas`; a set of
+        /// only kept or replaced rows packs nothing). A failed row or a failed pack leaves the rows done marked and in the game, says the
+        /// group is not packed, and calling again finishes it
         std::expected<Json, ControlError> AcceptSet(StringView name);
         /// Fixes the choice of every live row of a set, or of @p job only: the Keeper writes the kept seed into the game first, then the row is
         /// kept (its other variants leave the manifest) and the manifest written. Final; nothing live to keep is `invalid_params`, and so is a named
@@ -358,6 +374,8 @@ namespace BECore {
         void SaveSet(const ArtGenSet& set);
         /// The image settings a preset (a draft's @p presetData, else the saved one by @p preset) asks for; a malformed `accept` is the defaults
         [[nodiscard]] ArtGenImageSettings ImageSettingsOf(const Json& presetData, StringView preset) const;
+        /// The `atlas` group a preset (a draft's @p presetData, else the saved one by @p preset) names; empty when none, or when the value is not a valid name
+        [[nodiscard]] String AtlasOf(const Json& presetData, StringView preset) const;
         /// What the rows of an image set are written with: the set's own processing, else (the first Accept all) one measured now over every
         /// variant of every Done job; none (the identity plan) for a legacy set or settings that change nothing. Nothing is stored here
         [[nodiscard]] std::expected<Optional<ArtGenSetProcessing>, String> ProcessingOfSet(const ArtGenSet& set, const std::filesystem::path& root) const;
@@ -379,6 +397,7 @@ namespace BECore {
         SoundAcceptor _soundAcceptor = nullptr;
         Keeper _keeper = nullptr;
         FrameMeasurer _frameMeasurer = nullptr;
+        AtlasPacker _atlasPacker = nullptr;
         BatchBegin _batchBegin = nullptr;
         BatchEnd _batchEnd = nullptr;
         IntrusivePtr<SceneNode> _selectedNode;
