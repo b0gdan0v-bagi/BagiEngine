@@ -78,7 +78,7 @@ def _request(url, data=None):
 
 
 def model_kind(entry):
-    """What a model or custom node of the manifest is for: `image` (the default), `audio` or `style`."""
+    """What a model or custom node of the manifest is for: `image` (the default), `audio`, `style` or `structure`."""
     return entry.get("kind", "image")
 
 
