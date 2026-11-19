@@ -1,9 +1,11 @@
 #include <BECore/Control/Json.h>
+#include <BECore/Format/Format.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Widgets/ArtGen/ArtGenVerdict.h>
 #include <Widgets/EditorLayout/UserFileIo.h>
+#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -29,6 +31,29 @@ namespace BECore::Tests {
             return ArtGenVerdictFromProvenance(record);
         }
 
+        /// The names of `CHECK_NAMES` in the service (`tools/artgen/artgen_checks.py`), read from the source so the list is not a hand copy
+        Vector<String> CheckNamesOfTheService() {
+            const std::filesystem::path file = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "tools" / "artgen" / "artgen_checks.py";  //-NoStd: a path
+            const String text = ReadFile(file);
+            constexpr StringView kDeclaration = "CHECK_NAMES = (";
+            Vector<String> names;
+            const size_t begin = StringView(text).find(kDeclaration);
+            const size_t end = begin == StringView::npos ? begin : StringView(text).find(')', begin);
+            if (end == StringView::npos) {
+                return names;
+            }
+            StringView list = StringView(text).substr(begin + kDeclaration.size(), end - begin - kDeclaration.size());
+            for (size_t open = list.find('"'); open != StringView::npos; open = list.find('"')) {
+                const size_t close = list.find('"', open + 1);
+                if (close == StringView::npos) {
+                    break;
+                }
+                names.push_back(String(list.substr(open + 1, close - open - 1)));
+                list.remove_prefix(close + 1);
+            }
+            return names;
+        }
+
         constexpr StringView kUnreadableTip = "Checks could not read the picture";
 
         // The keys of provenance_of around the checks of a real record
@@ -49,6 +74,15 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(verdict.tip, "Checks failed"));
         EXPECT_TRUE(Contains(verdict.tip, "touches the edge of the frame"));
         EXPECT_TRUE(Contains(verdict.tip, "half-transparent"));
+    }
+
+    TEST(ArtGenVerdictTest, EveryNameOfTheServiceHasAMeaning) {
+        const Vector<String> names = CheckNamesOfTheService();
+        EXPECT_GE(names.size(), 8u) << "CHECK_NAMES was not read from artgen_checks.py";
+        for (const String& name : names) {
+            const ArtGenVerdict verdict = VerdictOf(Format(R"({{"checks":{{"passed":false,"failed":["{}"]}}}})", name));
+            EXPECT_TRUE(Contains(verdict.tip, " (")) << name;
+        }
     }
 
     TEST(ArtGenVerdictTest, AnUnknownNameIsShownAsItIs) {

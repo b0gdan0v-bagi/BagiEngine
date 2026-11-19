@@ -25,7 +25,12 @@ namespace BECore::Tests {
             ADD_FAILURE() << "could not read " << path.string();
             return {};
         }
-        Vector<uint8_t> bytes(static_cast<size_t>(file.tellg()));
+        const std::streamoff size = file.tellg();
+        if (size < 0) {
+            ADD_FAILURE() << "could not read " << path.string();
+            return {};
+        }
+        Vector<uint8_t> bytes(static_cast<size_t>(size));
         file.seekg(0);
         file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
         EXPECT_TRUE(file.good()) << "could not read " << path.string();
