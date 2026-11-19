@@ -27,7 +27,7 @@ add_subdirectory(Fuzz)
 
 be_add_game_tests(BagiEngineTests SOURCES ${TESTS_SOURCES} LINK RemoteControlModule RoomsModule RoomClientModule RoomServerModule RuntimeModule BagiFuzzTargets)
 
-# The discovered FuzzCorpus cases only replay the corpus; this entry runs them again with the mutations (tests/Fuzz/CLAUDE.md). 50000 per target
+# The FuzzCorpus cases of the shards only replay the corpus; this entry runs them again with the mutations (tests/Fuzz/CLAUDE.md). 50000 per target
 # of cost weight 1 is about 2 s in Debug; the targets run one after the other in this one process.
 add_test(NAME BagiFuzzMutations COMMAND BagiEngineTests --gtest_filter=FuzzCorpus/* --gtest_brief=1)
 set_tests_properties(BagiFuzzMutations PROPERTIES

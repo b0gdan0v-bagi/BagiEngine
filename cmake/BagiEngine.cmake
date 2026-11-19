@@ -193,6 +193,12 @@ endif()
 # Added after the exception options above on purpose: gtest then inherits the same
 # -fno-exceptions / ENGINE_NO_EXCEPTIONS as the test translation units.
 option(ENGINE_BUILD_TESTS "Build the gtest executables (BagiEngineTests and the game test executables)" ON)
+# How be_add_game_tests registers a gtest executable with ctest (the function's comment says why shards are the default)
+option(ENGINE_TESTS_PER_CASE "One ctest entry and process per gtest case instead of ENGINE_TEST_SHARDS shards" OFF)
+set(ENGINE_TEST_SHARDS 16 CACHE STRING "ctest entries (gtest shards) per gtest executable")
+if(NOT ENGINE_TEST_SHARDS MATCHES "^[1-9][0-9]*$")
+    message(FATAL_ERROR "ENGINE_TEST_SHARDS must be a positive integer, not '${ENGINE_TEST_SHARDS}'")
+endif()
 
 if(ENGINE_BUILD_TESTS)
     if(NOT EXISTS "${BAGI_ENGINE_DIR}/external/googletest/CMakeLists.txt")
@@ -821,11 +827,16 @@ if(ENGINE_BUILD_TESTS)
     # set_tests_properties.
 
     # be_add_game_tests(<Name> SOURCES <files>... [LINK <targets>...])
-    # gtest executable on top of BagiEngineTestSupport, registered with ctest (one process per test, so the
-    # global engine state cannot leak between tests). Tests run in the top build folder (inside the repository, so
+    # gtest executable on top of BagiEngineTestSupport, registered with ctest as ENGINE_TEST_SHARDS entries
+    # <Name>.Shard<k>: gtest's own sharding (GTEST_TOTAL_SHARDS / GTEST_SHARD_INDEX in the entry's environment) deals the
+    # cases out by index, so the cases of one slow suite land in different shards and a shard is a few seconds. Starting the engine
+    # environment costs more CPU than most cases, so cases share a process and a case leaves no state for the next one
+    # (.claude/rules/tests-module.md, "Rules"). A failing shard prints its gtest output: the failed cases are listed at its end,
+    # a crash or a timeout ends on the [ RUN ] line of the case that was running. ENGINE_TESTS_PER_CASE=ON registers one entry per
+    # case instead (gtest_discover_tests, listed when ctest starts). Tests run in the top build folder (inside the repository, so
     # FileSystem finds config/ by walking up from it), the folder the compiler runs in: with a ccache base_dir
     # (cmake/BagiCompilerCache.cmake) __FILE__ is relative to it, and the tests that read the source tree through
-    # __FILE__ find it from there and from nowhere else. WORKING_DIRECTORY also decides where
+    # __FILE__ find it from there and from nowhere else. WORKING_DIRECTORY also decides where (per case)
     # cmake_test_discovery_*.json is written: the build folder, never the source tree.
     # The test presets run ctest in parallel (execution.jobs of test-base in CMakePresets.json), so a test case
     # runs beside others, in other processes: it may share read-only inputs (config/, the
@@ -873,7 +884,22 @@ if(ENGINE_BUILD_TESTS)
 
         be_deploy_runtime_libs(${NAME})
 
-        gtest_discover_tests(${NAME} DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" PROPERTIES LABELS unit)
+        if(ENGINE_TESTS_PER_CASE)
+            gtest_discover_tests(${NAME} DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" PROPERTIES LABELS unit)
+            return()
+        endif()
+        # A hung case stops its whole shard, not one entry: the limit ends it with the output that names the case. It is far
+        # above a shard's run under the sanitizers on a loaded machine.
+        set(shardTimeoutSeconds 600)
+        math(EXPR lastShard "${ENGINE_TEST_SHARDS} - 1")
+        foreach(shard RANGE ${lastShard})
+            add_test(NAME ${NAME}.Shard${shard} COMMAND ${NAME} WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+            set_tests_properties(${NAME}.Shard${shard} PROPERTIES
+                ENVIRONMENT "GTEST_TOTAL_SHARDS=${ENGINE_TEST_SHARDS};GTEST_SHARD_INDEX=${shard}"
+                TIMEOUT ${shardTimeoutSeconds}
+                LABELS unit
+            )
+        endforeach()
     endfunction()
 
     # be_add_game_control_tests(<ExeTarget> [SCRIPT <file>])
