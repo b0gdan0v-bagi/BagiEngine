@@ -193,14 +193,14 @@ namespace BECore::Tests {
         }
 
         UISwitchComponent& Switch(const char* name) const {
-            UISwitchComponent* component = El((String(name) + "Switch").c_str()).GetComponent<UISwitchComponent>();
+            UISwitchComponent* component = El(Format("{}Switch", name).c_str()).GetComponent<UISwitchComponent>();
             EXPECT_NE(component, nullptr) << name;
             return Require(component);
         }
 
         /// The rect of the switch child of row @p name
         const Rect& SwitchRect(const char* name) const {
-            return El((String(name) + "Switch").c_str()).rect;
+            return El(Format("{}Switch", name).c_str()).rect;
         }
 
         UISwitchComponent::Parts PartsOf(const char* name) const {
@@ -476,7 +476,7 @@ namespace BECore::Tests {
     TEST_F(UIToggleComponentTest, TheSwitchIsAtTheRightEndAndTheCaptionTakesTheRoomItLeaves) {
         for (const char* name : {"Sound", "Custom", "Off", "Round"}) {
             const Rect& row = El(name).rect;
-            const Rect& caption = El((String(name) + "Caption").c_str()).rect;
+            const Rect& caption = El(Format("{}Caption", name).c_str()).rect;
             const Rect& sw = SwitchRect(name);
             EXPECT_NEAR(sw.h, row.h, kEpsilon) << name;
             EXPECT_NEAR(sw.w, row.h * UISwitchComponent::kAreaAspect, kEpsilon) << name;

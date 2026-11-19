@@ -475,7 +475,7 @@ namespace BECore::Tests {
 
         // A two-byte character that straddles the limit goes whole
         EditorPreferences wild;
-        wild.externalEditor = String(kMaxExternalEditorLength - 1, 'x') + "\xC3\xA9" + "yyy";
+        wild.externalEditor = Format("{}\xC3\xA9yyy", String(kMaxExternalEditorLength - 1, 'x'));
         settings.SetPreferences(wild);
         EXPECT_EQ(settings.GetPreferences().externalEditor, String(kMaxExternalEditorLength - 1, 'x'));
     }

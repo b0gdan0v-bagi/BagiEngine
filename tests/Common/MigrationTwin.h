@@ -72,7 +72,7 @@ namespace BECore::Tests::MigrationTwin {
             const String file = FromStdString(entry.path().filename().string());
             if (file.size() > suffix.size() && file.compare(file.size() - suffix.size(), suffix.size(), suffix) == 0) {
                 const String name = file.substr(0, file.size() - suffix.size());
-                if (std::filesystem::exists(folder / ToStd(name + ".after.xml"))) {
+                if (std::filesystem::exists(folder / ToStd(Format("{}.after.xml", name)))) {
                     names.push_back(name);
                 }
             }

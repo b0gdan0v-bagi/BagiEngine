@@ -277,11 +277,11 @@ namespace BECore::Tests {
             EXPECT_EQ(line->second, TreeLine("UIElement", control, false)) << label << " " << control.name << " in ui_tree";
 
             const String action = control.action;
-            const String expected = control.disabled || action.empty() ? ""
-                                                                       : action + "=" +
-                                                                             (control.kind == Kind::Toggle   ? control.on
-                                                                              : control.kind == Kind::Slider ? control.middle
-                                                                                                             : control.value);
+            const String expected = control.disabled || action.empty() ? String()
+                                                                       : Format("{}={}", action,
+                                                                                control.kind == Kind::Toggle   ? control.on
+                                                                                : control.kind == Kind::Slider ? control.middle
+                                                                                                               : control.value);
             const auto emitted = [&](const Vector<String>& actions) { return actions.empty() ? String() : actions.front(); };
 
             Vector<const UIElement*> targets{element};
@@ -375,12 +375,12 @@ namespace BECore::Tests {
             const String key = skipped;
             const String folder = key.substr(0, key.find('/'));
             const String name = key.substr(key.find('/') + 1);
-            const String xml = ReadFile(FixtureFolder(folder.c_str()) / ToStd(name + ".after.xml"));
+            const String xml = ReadFile(FixtureFolder(folder.c_str()) / ToStd(Format("{}.after.xml", name)));
             ASSERT_FALSE(xml.empty()) << key;
             EXPECT_TRUE(std::regex_search(xml.c_str(), removed)) << key << " holds no such element: load it instead of skipping it";
         }
         for (const Expectation& expectation : Expectations()) {
-            const String xml = ReadFile(FixtureFolder(expectation.folder) / ToStd(String(expectation.name) + ".after.xml"));
+            const String xml = ReadFile(FixtureFolder(expectation.folder) / ToStd(Format("{}.after.xml", expectation.name)));
             ASSERT_FALSE(xml.empty()) << expectation.name;
             // The dropdown stays a class: in `ui_text/` it is the final form, with its header as a text component
             const bool isText = String(expectation.folder) == "ui_text";
@@ -391,7 +391,7 @@ namespace BECore::Tests {
     TEST_P(ContentMigrationAfterTest, TheComposedScreenBehaves) {
         const Expectation& expectation = Expectations()[Require(StringUtils::ParseNumber<size_t>(GetParam()))];
         const String label = Key(expectation.folder, expectation.name);
-        const String xml = SceneManagerXml(ReadFile(FixtureFolder(expectation.folder) / ToStd(String(expectation.name) + ".after.xml")));
+        const String xml = SceneManagerXml(ReadFile(FixtureFolder(expectation.folder) / ToStd(Format("{}.after.xml", expectation.name))));
         ASSERT_FALSE(xml.empty());
         LoadCase(xml);
         ASSERT_NE(_scene, nullptr);

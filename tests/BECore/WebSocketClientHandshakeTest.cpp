@@ -27,11 +27,12 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] String Text() const {
-                String text = statusLine + "\r\n";
+                String text = Format("{}\r\n", statusLine);
                 for (const String& line : headers) {
-                    text += line + "\r\n";
+                    AppendFormat(text, "{}\r\n", line);
                 }
-                return text + "\r\n";
+                text += "\r\n";
+                return text;
             }
 
             [[nodiscard]] std::expected<void, String> Check() const {

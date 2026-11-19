@@ -182,7 +182,7 @@ namespace BECore::Tests {
                 error = "disk on fire";
                 return false;
             }
-            const auto path = _dir / (String(ref) + ".xml").c_str();
+            const auto path = _dir / Format("{}.xml", ref).c_str();
             if (!std::filesystem::exists(path)) {
                 error = "no file";
                 return false;
@@ -197,12 +197,12 @@ namespace BECore::Tests {
                 error = "read only";
                 return false;
             }
-            WriteFile(_dir / (String(ref) + ".xml").c_str(), String(text));
+            WriteFile(_dir / Format("{}.xml", ref).c_str(), String(text));
             return true;
         }
 
         String FileText(const char* ref) const {
-            return ReadFile(_dir / (String(ref) + ".xml").c_str());
+            return ReadFile(_dir / Format("{}.xml", ref).c_str());
         }
 
         /// The reference of @p node as the editor would save it, printed

@@ -212,7 +212,7 @@ namespace BECore::Tests {
             std::filesystem::remove_all(_dir);
             std::filesystem::create_directories(_dir);
             for (int i = 0; i < 3; ++i) {
-                WriteFile(_dir / "nodes" / ToStd(String(kNodeNames[i]) + ".xml"), kNodeTexts[i]);
+                WriteFile(_dir / "nodes" / ToStd(Format("{}.xml", kNodeNames[i])), kNodeTexts[i]);
             }
             _renderer = New<RecordingRenderer>();
             _renderer->width = 800.0f;
@@ -362,7 +362,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneSplitTest, AMissingReferenceLeavesTheOtherNodesInOrder) {
         pugi::xml_document doc;
-        const auto manager = Load(SceneConfigText(String("<node ref=\"nodes/Board\"/><node ref=\"nodes/Nowhere\"/>") + "<node ref=\"nodes/Menu\"/>", kMainSceneView800x600), doc);
+        const auto manager = Load(SceneConfigText("<node ref=\"nodes/Board\"/><node ref=\"nodes/Nowhere\"/><node ref=\"nodes/Menu\"/>", kMainSceneView800x600), doc);
 
         EXPECT_EQ(NodeNamesOf(Main(manager)), (Vector<String>{"Board", "Menu"}));
     }
@@ -430,8 +430,8 @@ namespace BECore::Tests {
     TEST_F(SceneSplitOverrideTest, InstancesWithOverridesLoadAsTheInlineScene) {
         pugi::xml_document inlineDoc;
         pugi::xml_document splitDoc;
-        const auto inlined = Load(SceneConfigText(PanelInlineA() + PanelInlineB() + PanelInlineC(), kMainSceneView800x600), inlineDoc);
-        const auto split = Load(SceneConfigText(kPanelRefA + kPanelRefB + kPanelRefC, kMainSceneView800x600), splitDoc);
+        const auto inlined = Load(SceneConfigText(Format("{}{}{}", PanelInlineA(), PanelInlineB(), PanelInlineC()), kMainSceneView800x600), inlineDoc);
+        const auto split = Load(SceneConfigText(Format("{}{}{}", kPanelRefA, kPanelRefB, kPanelRefC), kMainSceneView800x600), splitDoc);
 
         ExpectSameScene(Main(inlined), Main(split));
         EXPECT_EQ(NodeNamesOf(Main(split)), (Vector<String>{"PanelA", "PanelB", "PanelC"}));
@@ -463,7 +463,7 @@ namespace BECore::Tests {
 
     /// The mark is on the live node only: the document a tool reads has no `sourceRef`, and the given node is not changed
     TEST_F(SceneSplitOverrideTest, NoSourceRefReachesTheDocuments) {
-        WriteFile(_dir / "SceneConfig.xml", SceneConfigText(kPanelRefA + kPanelRefB, kMainSceneView800x600));
+        WriteFile(_dir / "SceneConfig.xml", SceneConfigText(Format("{}{}", kPanelRefA, kPanelRefB), kMainSceneView800x600));
         pugi::xml_document split;
         ASSERT_TRUE(LoadSceneDocument(_dir / "SceneConfig.xml", split).Ok());
         EXPECT_EQ(XmlText(split.document_element()).find("sourceRef"), String::npos);
@@ -479,8 +479,8 @@ namespace BECore::Tests {
         pugi::xml_document inlineDoc;
         pugi::xml_document splitDoc;
         pugi::xml_document plainDoc;
-        const auto inlined = Load(SceneConfigText(PanelInlineA() + PanelInlineB() + PanelInlineC(), kMainSceneView800x600), inlineDoc);
-        const auto split = Load(SceneConfigText(kPanelRefA + kPanelRefB + kPanelRefC, kMainSceneView800x600), splitDoc);
+        const auto inlined = Load(SceneConfigText(Format("{}{}{}", PanelInlineA(), PanelInlineB(), PanelInlineC()), kMainSceneView800x600), inlineDoc);
+        const auto split = Load(SceneConfigText(Format("{}{}{}", kPanelRefA, kPanelRefB, kPanelRefC), kMainSceneView800x600), splitDoc);
         const auto plain = Load(SceneConfigText("<node ref=\"nodes/Panel\"/>", kMainSceneView800x600), plainDoc);
 
         const String expectedTree = UiTree(inlined);
@@ -515,8 +515,8 @@ namespace BECore::Tests {
         const String bad = "<node ref=\"nodes/Panel\" name=\"Broken\"><components><component type=\"QuadRendererComponent\"/></components></node>";
         pugi::xml_document withBadDoc;
         pugi::xml_document withoutDoc;
-        const auto withBad = Load(SceneConfigText(kPanelRefA + bad + kPanelRefC, kMainSceneView800x600), withBadDoc);
-        const auto without = Load(SceneConfigText(kPanelRefA + kPanelRefC, kMainSceneView800x600), withoutDoc);
+        const auto withBad = Load(SceneConfigText(Format("{}{}{}", kPanelRefA, bad, kPanelRefC), kMainSceneView800x600), withBadDoc);
+        const auto without = Load(SceneConfigText(Format("{}{}", kPanelRefA, kPanelRefC), kMainSceneView800x600), withoutDoc);
 
         EXPECT_EQ(NodeNamesOf(Main(withBad)), (Vector<String>{"PanelA", "PanelC"}));
         ExpectSameScene(Main(without), Main(withBad));
@@ -525,7 +525,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneSplitOverrideTest, LoadSceneManagerLeavesTheGivenNodeWithItsReferencesAndOverrides) {
         pugi::xml_document doc;
-        ASSERT_TRUE(doc.load_string(SceneConfigText(kPanelRefA + kPanelRefB + kPanelRefC, kMainSceneView800x600).c_str()));
+        ASSERT_TRUE(doc.load_string(SceneConfigText(Format("{}{}{}", kPanelRefA, kPanelRefB, kPanelRefC), kMainSceneView800x600).c_str()));
         const String before = XmlText(doc.document_element());
 
         const auto manager = LoadSceneManager(XmlNode{doc.document_element()}, MakeDirectoryNodeLoader(_dir));
@@ -538,13 +538,13 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneSplitOverrideTest, LoadSceneDocumentWithOverridesEqualsTheInlineDocument) {
-        WriteFile(_dir / "SceneConfig.xml", SceneConfigText(kPanelRefA + kPanelRefB + kPanelRefC, kMainSceneView800x600));
+        WriteFile(_dir / "SceneConfig.xml", SceneConfigText(Format("{}{}{}", kPanelRefA, kPanelRefB, kPanelRefC), kMainSceneView800x600));
 
         pugi::xml_document split;
         const NodeExpansion result = LoadSceneDocument(_dir / "SceneConfig.xml", split);
 
         pugi::xml_document inlined;
-        ASSERT_TRUE(inlined.load_string(SceneConfigText(PanelInlineA() + PanelInlineB() + PanelInlineC(), kMainSceneView800x600).c_str()));
+        ASSERT_TRUE(inlined.load_string(SceneConfigText(Format("{}{}{}", PanelInlineA(), PanelInlineB(), PanelInlineC()), kMainSceneView800x600).c_str()));
         EXPECT_TRUE(result.Ok()) << (result.errors.empty() ? "" : result.errors[0].c_str());
         EXPECT_EQ(result.expanded, 3u);
         EXPECT_EQ(XmlText(split.document_element()), XmlText(inlined.document_element()));

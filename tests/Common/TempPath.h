@@ -22,7 +22,7 @@ namespace BECore::Tests {
 
     /// TestTempPath("<prefix>_<name of the running test>"): one folder per test and per process
     inline std::filesystem::path TestTempDirectory(const String& prefix) {
-        return TestTempPath(prefix + "_" + ::testing::UnitTest::GetInstance()->current_test_info()->name());
+        return TestTempPath(Format("{}_{}", prefix, ::testing::UnitTest::GetInstance()->current_test_info()->name()));
     }
 
 }  // namespace BECore::Tests

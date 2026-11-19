@@ -2029,7 +2029,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     }
 
     TEST_F(UIWebTest, AnIconOnlyButtonThatIsTooSmallIsReportedByItsRect) {
-        const auto compiled = Compile(kIconButtonsHtml, String(kIconButtonsCss) + "#Only { width: 32px; height: 32px; }");
+        const auto compiled = Compile(kIconButtonsHtml, Format("{}#Only {{ width: 32px; height: 32px; }}", kIconButtonsCss));
         LaidOut web(compiled->content);
         UILayoutValidatorOptions options;
         options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
@@ -2669,17 +2669,17 @@ button:checked { background: var(--panel); }
     }
 
     TEST_F(UIWebTest, ASelectorOfTooManyPartsAndARuleOfTooManySelectorsAreLeftOut) {
-        const String parts = Repeat("div ", UICssParser::kMaxSelectorParts) + "span";
-        const auto tooLong = Compile("<div id=\"a\"></div>", parts + " { width: 1px; }");
+        const String parts = Format("{}span", Repeat("div ", UICssParser::kMaxSelectorParts));
+        const auto tooLong = Compile("<div id=\"a\"></div>", Format("{} {{ width: 1px; }}", parts));
         EXPECT_TRUE(Mentions(tooLong->report, "more than 16 parts"));
         EXPECT_EQ(tooLong->report.rules, 0u);
 
-        const String atTheLimit = Repeat("div ", UICssParser::kMaxSelectorParts - 1) + "span";
-        const auto fits = Compile("<div id=\"a\"></div>", atTheLimit + " { width: 1px; }");
+        const String atTheLimit = Format("{}span", Repeat("div ", UICssParser::kMaxSelectorParts - 1));
+        const auto fits = Compile("<div id=\"a\"></div>", Format("{} {{ width: 1px; }}", atTheLimit));
         EXPECT_FALSE(Mentions(fits->report, "more than 16 parts"));
         EXPECT_EQ(fits->report.rules, 1u);
 
-        const auto list = Compile("<div id=\"a\"></div>", Repeat("a, ", 40) + "#a { width: 3px; }");
+        const auto list = Compile("<div id=\"a\"></div>", Format("{}#a {{ width: 3px; }}", Repeat("a, ", 40)));
         EXPECT_TRUE(Mentions(list->report, "more than 32 selectors"));
     }
 

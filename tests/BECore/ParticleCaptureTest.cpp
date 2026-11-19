@@ -55,11 +55,11 @@ namespace BECore::Tests {
         using Pixel = Array<int, 3>;
 
         String SceneXml() {
-            return String(R"(<SceneManager><scenes><scene type="Scene" name="Sparks"><nodes>
+            return Format(R"(<SceneManager><scenes><scene type="Scene" name="Sparks"><nodes>
   <node name="Emitter"><components>
     <component type="TransformComponent" x="0" y="0" width="0" height="0"/>
-    <component type="ParticleEmitterComponent" playOnStart="false">)") +
-                   kExampleEffect + "</component></components></node></nodes></scene></scenes></SceneManager>";
+    <component type="ParticleEmitterComponent" playOnStart="false">{}</component></components></node></nodes></scene></scenes></SceneManager>)",
+                          kExampleEffect);
         }
 
         Pixel PixelAt(const PixelBuffer& image, int x, int y) {

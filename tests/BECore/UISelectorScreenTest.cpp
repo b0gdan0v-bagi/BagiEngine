@@ -191,7 +191,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         Draw();
         for (const char* row : {"Mode", "Color", "Engine", "Level"}) {
-            const UIElement& caption = El((String(row) + "Caption").c_str());
+            const UIElement& caption = El(Format("{}Caption", row).c_str());
             const UIElement& group = Get<UISegmented>(row);
             EXPECT_LT(caption.rect.x + caption.rect.w, group.rect.x + 0.01f) << row;
             EXPECT_NEAR(caption.rect.y, group.rect.y, 0.01f) << row;
@@ -206,7 +206,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kPortraitWidth, kPortraitHeight));
         Draw();
         for (const char* row : {"Mode", "Color", "Engine", "Level"}) {
-            const UIElement& caption = El((String(row) + "Caption").c_str());
+            const UIElement& caption = El(Format("{}Caption", row).c_str());
             const UIElement& group = Get<UISegmented>(row);
             EXPECT_LT(caption.rect.y + caption.rect.h, group.rect.y + 0.01f) << row;
             EXPECT_NEAR(caption.rect.x, group.rect.x, 0.01f) << row;

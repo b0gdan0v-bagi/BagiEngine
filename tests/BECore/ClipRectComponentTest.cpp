@@ -145,7 +145,7 @@ namespace BECore::Tests {
         // Drawn in the order Parent (layer 0), Sibling (layer 3), Child (layer 5): the clip is pushed, popped and pushed again
         const String child = Node("Child", 0, 0, kWide, kWide, 5, kQuad);
         const String parent = Node("Parent", 0, 0, kClipSize, kClipSize, 0, Format("{}{}", kClip, kQuad).c_str(), child);
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(parent + Node("Sibling", 0, 0, kWide, kWide, 3, kQuad)));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", parent, Node("Sibling", 0, 0, kWide, kWide, 3, kQuad))));
 
         const Vector<DrawCall>& calls = Draw();
 
@@ -171,7 +171,7 @@ namespace BECore::Tests {
 
     TEST_F(ClipRectComponentTest, ASiblingAfterAnInnerClipFallsBackToTheOuterClip) {
         const String inner = Node("Inner", 50, 50, kClipSize, kClipSize, 0, Format("{}{}", kClip, kQuad).c_str());
-        const String outer = Node("Outer", 0, 0, 120, 120, 0, kClip, inner + Node("Plain", 0, 0, kWide, kWide, 0, kQuad));
+        const String outer = Node("Outer", 0, 0, 120, 120, 0, kClip, Format("{}{}", inner, Node("Plain", 0, 0, kWide, kWide, 0, kQuad)));
         ASSERT_NO_FATAL_FAILURE(LoadNodes(outer));
 
         const Vector<DrawCall>& calls = Draw();
@@ -203,7 +203,7 @@ namespace BECore::Tests {
         Vector<ClipSample> samples;
         const String probe = R"(<component type="ClipProbeTestComponent"/>)";
         const String hidden = Node("Hidden", 0, 0, kClipSize, kClipSize, 0, Format("{}{}", kClip, kQuad).c_str(), Node("Under", 0, 0, 1, 1, 0, probe.c_str()));
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(hidden + Node("After", 0, 0, kWide, kWide, 0, (probe + kQuad).c_str())));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", hidden, Node("After", 0, 0, kWide, kWide, 0, Format("{}{}", probe, kQuad).c_str()))));
         ASSERT_NO_FATAL_FAILURE(Probe("After", samples));
         ASSERT_NO_FATAL_FAILURE(Probe("Under", samples));
         At("Hidden").SetEditorFlags(EditorFlags::Hidden);
@@ -246,7 +246,7 @@ namespace BECore::Tests {
     TEST_F(ClipRectComponentTest, AClickableUnderTheClipTakesAPressInsideAndTheOneBelowTakesAPressOutside) {
         const String below = Node("Below", 0, 0, kWide, kWide, 0, R"(<component type="ClickableComponent" actionName="ActBelow"/>)");
         const String inside = Node("Inside", 0, 0, kWide, kWide, 0, R"(<component type="ClickableComponent" actionName="ActInside"/>)");
-        ASSERT_NO_FATAL_FAILURE(LoadNodes(below + Node("Clipper", 0, 0, kClipSize, kClipSize, 0, kClip, inside)));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(Format("{}{}", below, Node("Clipper", 0, 0, kClipSize, kClipSize, 0, kClip, inside))));
         Draw();
         ActionLog recorder;
 
@@ -260,8 +260,8 @@ namespace BECore::Tests {
 
     TEST_F(ClipRectComponentTest, APointerTargetUnderTheClipLeavesAPressOutsideToTheOneBelow) {
         const String target = R"(<component type="PointerTargetTestComponent"/>)";
-        ASSERT_NO_FATAL_FAILURE(
-            LoadNodes(Node("Below", 0, 0, kWide, kWide, 0, target.c_str()) + Node("Clipper", 0, 0, kClipSize, kClipSize, 0, kClip, Node("Inside", 0, 0, kWide, kWide, 0, target.c_str()))));
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(
+            Format("{}{}", Node("Below", 0, 0, kWide, kWide, 0, target.c_str()), Node("Clipper", 0, 0, kClipSize, kClipSize, 0, kClip, Node("Inside", 0, 0, kWide, kWide, 0, target.c_str())))));
         TargetScript below;
         TargetScript inside;
         Require(At("Below").GetComponent<PointerTargetTestComponent>()).script = &below;

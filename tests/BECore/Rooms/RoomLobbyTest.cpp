@@ -208,7 +208,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(room.FindByToken(first).has_value());
         EXPECT_FALSE(room.FindByToken(last).has_value());
         EXPECT_FALSE(room.FindByToken(StringView(a.token.data(), a.token.size() - 1)).has_value());
-        EXPECT_FALSE(room.FindByToken(String(a.token) + "0").has_value());
+        EXPECT_FALSE(room.FindByToken(Format("{}0", a.token)).has_value());
     }
 
     TEST(RoomLobbyTest, ARemovedMembersTokenNoLongerWorks) {

@@ -427,10 +427,10 @@ namespace BECore::Tests {
 
     TEST_F(ReplayPlayControlTest, AGapLongerThanOneStepIsSteppedInChunks) {
         constexpr int kGapFrames = static_cast<int>(kMaxStepFrames) + 4;
-        WriteFile("{\"replay\":1,\"game\":\"ReplayTest\",\"engine\":\"x\"}\n"
-                  "{\"op\":\"reset\",\"params\":{\"seed\":1},\"gap\":{\"frames\":0,\"seconds\":0}}\n"
-                  "{\"op\":\"action\",\"params\":{\"type\":\"roll\"},\"gap\":{\"frames\":" +
-                  ToString(kGapFrames) + ",\"seconds\":0}}\n");
+        WriteFile(Format("{{\"replay\":1,\"game\":\"ReplayTest\",\"engine\":\"x\"}}\n"
+                         "{{\"op\":\"reset\",\"params\":{{\"seed\":1}},\"gap\":{{\"frames\":0,\"seconds\":0}}}}\n"
+                         "{{\"op\":\"action\",\"params\":{{\"type\":\"roll\"}},\"gap\":{{\"frames\":{},\"seconds\":0}}}}\n",
+                         kGapFrames));
 
         const Json& response = Replay(kGapFrames + 10);
 

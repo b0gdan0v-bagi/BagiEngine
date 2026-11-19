@@ -484,10 +484,10 @@ namespace BECore::Tests {
             for (const auto& [name, value] : attributes) {
                 element += random.Chance() ? "\n      " : " ";
                 const char quote = random.Chance() ? '"' : '\'';
-                element += name + (random.Chance() ? "=" : " = ") + quote + value + quote;
+                AppendFormat(element, "{}{}{}{}{}", name, random.Chance() ? "=" : " = ", quote, value, quote);
             }
             element += ">";
-            const String text = head + element + tail;
+            const String text = Format("{}{}{}", head, element, tail);
 
             pugi::xml_document doc;
             String error;

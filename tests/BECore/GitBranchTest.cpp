@@ -42,7 +42,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ParseGitHead("ref: refs/heads/main\n"), "main");
         EXPECT_EQ(ParseGitHead("ref: refs/heads/main\r\n"), "main");
         EXPECT_EQ(ParseGitHead("  ref: refs/heads/main \n\n"), "main");
-        EXPECT_EQ(ParseGitHead((String(kSha1) + "\r\n").c_str()), "0123456");
+        EXPECT_EQ(ParseGitHead(Format("{}\r\n", kSha1).c_str()), "0123456");
     }
 
     TEST_F(GitBranchTest, ParseADetachedHead) {
@@ -77,7 +77,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(GitBranchTest, ReadFromADetachedHead) {
-        WriteFile(_root / ".git" / "HEAD", String(kSha1) + "\n");
+        WriteFile(_root / ".git" / "HEAD", Format("{}\n", kSha1));
         EXPECT_EQ(ReadGitBranch(_root), "0123456");
     }
 

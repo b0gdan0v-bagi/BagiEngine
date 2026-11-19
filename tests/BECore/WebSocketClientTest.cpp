@@ -172,7 +172,7 @@ namespace BECore::Tests {
             void Accept(const String& extraBytes = "") {
                 const String key = RequestHeader("Sec-WebSocket-Key");
                 const String accept = ComputeAcceptKey(key);
-                SendRaw(AcceptResponse(accept) + extraBytes);
+                SendRaw(Format("{}{}", AcceptResponse(accept), extraBytes));
             }
 
             void SendRaw(const String& bytes) {
@@ -688,7 +688,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(session.WaitForCount(WebSocketClientEventKind::Text, kMessages));
         const Vector<String> texts = session.Texts();
         for (int i = 0; i < kMessages; ++i) {
-            EXPECT_TRUE(StringView(texts[static_cast<size_t>(i)]).starts_with(ToString(i) + ":")) << "message " << i;
+            EXPECT_TRUE(StringView(texts[static_cast<size_t>(i)]).starts_with(Format("{}:", i))) << "message " << i;
         }
     }
 

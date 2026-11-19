@@ -293,8 +293,8 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(ParseExpression(Format("{}1{}", Repeated("(", ExprLimits::kMaxNesting), Repeated(")", ExprLimits::kMaxNesting))).has_value());
         ExpectError(Format("{}1{}", Repeated("(", ExprLimits::kMaxNesting + 1), Repeated(")", ExprLimits::kMaxNesting + 1)), ExprLimits::kMaxNesting + 2, "nested deeper than 64 levels");
-        EXPECT_TRUE(ParseExpression(Repeated("-", ExprLimits::kMaxTreeHeight) + "1").has_value());
-        ExpectError(Repeated("-", ExprLimits::kMaxNesting + 1) + "1", ExprLimits::kMaxNesting + 2, "nested deeper than 64 levels");
+        EXPECT_TRUE(ParseExpression(Format("{}1", Repeated("-", ExprLimits::kMaxTreeHeight))).has_value());
+        ExpectError(Format("{}1", Repeated("-", ExprLimits::kMaxNesting + 1)), ExprLimits::kMaxNesting + 2, "nested deeper than 64 levels");
         const String calls = Format("{}1{}", Repeated("f(", ExprLimits::kMaxNesting + 1), Repeated(")", ExprLimits::kMaxNesting + 1));
         ExpectError(calls, 2 * (ExprLimits::kMaxNesting + 1) + 1, "nested deeper");
 
@@ -327,7 +327,7 @@ namespace BECore::Tests {
         // The calls, the unary operators and the operators of one expression add up
         EXPECT_FALSE(ParseExpression(Format("f({})", chain(kLevels))).has_value());
         EXPECT_FALSE(ParseExpression(Format("-({})", chain(kLevels))).has_value());
-        const auto unary = ParseExpression(Repeated("-", kLevels + 1) + "1");
+        const auto unary = ParseExpression(Format("{}1", Repeated("-", kLevels + 1)));
         ASSERT_FALSE(unary.has_value());
         EXPECT_TRUE(Contains(unary.error().message, "more than 32 levels high")) << unary.error().message.c_str();
         EXPECT_EQ(unary.error().column, 1U);
@@ -391,7 +391,7 @@ namespace BECore::Tests {
         const String longest = Format("'{}'", Repeated("a", ExprLimits::kMaxTextBytes - 2));
         const ExprAst fits = Parse(longest);
         EXPECT_EQ(fits[fits.root].text.size(), ExprLimits::kMaxTextBytes - 2);
-        ExpectError(longest + " ", ExprLimits::kMaxTextBytes + 1, "longer than 4096 bytes");
+        ExpectError(Format("{} ", longest), ExprLimits::kMaxTextBytes + 1, "longer than 4096 bytes");
         ExpectError(Format("'{}'", Repeated("a", ExprLimits::kMaxTextBytes)), ExprLimits::kMaxTextBytes + 1, "longer than 4096 bytes");
 
         const auto list = [](size_t count) { return Format("f('a'{})", Repeated(", 'a'", count - 1)); };

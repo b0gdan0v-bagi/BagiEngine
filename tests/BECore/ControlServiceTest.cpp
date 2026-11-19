@@ -75,7 +75,7 @@ namespace BECore::Tests {
                     [this, name, frames](ControlCall& call) {
                         order.push_back(name);
                         call.DeferFrames(frames, [this, name](ControlCall& done) {
-                            order.push_back(name + "-done");
+                            order.push_back(Format("{}-done", name));
                             done.Reply(Json::object());
                         });
                     },

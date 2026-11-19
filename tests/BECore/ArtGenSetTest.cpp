@@ -263,7 +263,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ArtGenNameFromSubject("Rook 2"), "rook_2");
         EXPECT_EQ(ArtGenNameFromSubject("!!!"), "");
         EXPECT_EQ(ArtGenNameFromSubject(""), "");
-        const String longName = ArtGenNameFromSubject(String(100, 'a') + " b");
+        const String longName = ArtGenNameFromSubject(Format("{} b", String(100, 'a')));
         EXPECT_EQ(longName.size(), 64u);
         EXPECT_NE(longName.back(), '_');
     }
