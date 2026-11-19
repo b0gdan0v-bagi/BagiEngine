@@ -2,7 +2,8 @@
 
 The environment steers them: FAKE_CALLS (a file every call appends its arguments to, one JSON list per line), FAKE_FAIL_STEP
 (`configure` or `build`: cmake fails there), FAKE_TESTS (the test names), FAKE_FAILING (fail in both runs), FAKE_FLAKY (fail only
-in the first run), FAKE_STORE (the JSON file the fake todo CLI keeps its entries in)."""
+in the first run), FAKE_SKIPPED (skip, as exit 77 does), FAKE_SMOKE (labelled `smoke`), FAKE_STORE (the JSON file the fake todo CLI
+keeps its entries in)."""
 
 import json
 import os
@@ -40,7 +41,11 @@ def ctest(args: list[str]) -> int:
         tests = [name for name in tests if name in set(names("FAKE_FAILING")) | set(names("FAKE_FLAKY"))]
     cases = []
     for name in tests:
-        if name in failing:
+        labels = '<properties><property name="cmake_labels" value="smoke"/></properties>' if name in names("FAKE_SMOKE") else "<properties/>"
+        if name in names("FAKE_SKIPPED"):
+            cases.append(f'<testcase name="{escape(name)}" status="notrun"><skipped message="SKIP_RETURN_CODE=77"/>{labels}'
+                         f'<system-out>no executable</system-out></testcase>')
+        elif name in failing:
             output = escape(f"[ RUN      ] {name}\nExpected: 1\n  Actual: 2 {'(rerun)' if rerun else '(first run)'}\n")
             cases.append(f'<testcase name="{escape(name)}" status="fail"><failure message="Failed"/><system-out>{output}</system-out></testcase>')
         else:

@@ -20,11 +20,12 @@ Exit code 0 green, 3 red, 1 an error (nothing recorded). `--preset` is the confi
 - **Nothing reads a remote.** The base is the local branch (pushes and pulls are the owner's). Each submodule that is initialised in the repository is cloned from that local copy (hard links) and checked out at the commit the tested commit records; one that is not initialised there is left out, and a recorded commit missing from the local copy is an error that says to update it there.
 - **The venv is linked** from the repository (`.venv`, and `engine/.venv` of a game), as the loop's workers share theirs: without it the configure takes a system Python that may lack the reflection generator's packages.
 - The build is `cmake --preset <p>` and `cmake --build --preset <p>` (every target, so the smoke tests that need the product run), then `ctest --preset <p>-all --output-junit`. The failed names are run once more with `--rerun-failed`: one that passes alone is reported as flaky and is not a failure, as a name that fails under load is not a finding until it fails alone.
+- Skipped tests (exit 77, disabled) are counted and named in the summary line and the result. A skipped test labelled `smoke` makes the run red and is filed: it skips when its product or Python is missing, so a green run would have proved nothing of the product.
 - The JUnit file is read with patterns, not `xml.etree`: a Homebrew Python can lack a working `pyexpat`.
 
 ## The results file and the deploy gate
 
-`alltests_results.py` owns `results.json`: per commit `status` (`green` / `red`), `preset`, `finished`, `failed`, `flaky`, the entries filed; and `failing`, each failing test with the commit it was first seen failing at. It is written through a rename, so a deploy never reads half of it. `--dry-run` does not write it.
+`alltests_results.py` owns `results.json`: per commit `status` (`green` / `red`), `preset`, `finished`, `failed`, `flaky`, `skipped`, the entries filed; and `failing`, each failing test with the commit it was first seen failing at. It is written through a rename, so a deploy never reads half of it. `--dry-run` does not write it.
 
 `tools/web/build_and_deploy.py` and `tools/rooms/build_and_deploy.py` import it: `--deploy` stops (exit 2, before any build) unless HEAD of `--source-dir` has a green result, and the message says how to get one; `--skip-alltests` deploys anyway and prints that it did; `--dry-run` only reports the gate; `--alltests-results` names another file. A tree with uncommitted changes is judged by its HEAD.
 

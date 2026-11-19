@@ -66,6 +66,12 @@ VENV_FOLDERS = (Path(".venv"), Path("engine") / ".venv")
 JUNIT_CASE = re.compile(r"<testcase\b(?P<attributes>[^>]*?)(?:/>|>(?P<content>.*?)</testcase>)", re.S)
 JUNIT_ATTRIBUTE = re.compile(r'(\w+)="([^"]*)"')
 JUNIT_OUTPUT = re.compile(r"<system-out>(.*?)</system-out>", re.S)
+JUNIT_LABELS = re.compile(r'<property\s+name="cmake_labels"\s+value="([^"]*)"')
+# ctest's status of a test that did not run: a skip (SKIP_RETURN_CODE, DISABLED) or a missing requirement
+JUNIT_NOT_RUN = {"notrun", "disabled"}
+SMOKE_LABEL = "smoke"
+# A smoke test proves that a product starts; it skips (exit 77) when the product or its Python is missing, which a full run must not pass
+SMOKE_SKIPPED = "skipped (exit 77): a smoke test that skips found no product or no Python, so the full run proved nothing of it"
 
 
 class RunError(Exception):
@@ -84,6 +90,16 @@ class Outcome(NamedTuple):
     flaky: list[str]
     tests: int
     texts: dict[str, str]
+    skipped: list[str]
+
+
+class Junit(NamedTuple):
+    failed: list[str]
+    tests: int
+    texts: dict[str, str]
+    skipped: list[str]
+    # The skipped tests labelled `smoke`, with their output
+    smoke_skipped: dict[str, str]
 
 
 def now() -> str:
@@ -204,24 +220,31 @@ def has_commit(repo: Path, commit: str) -> bool:
 # --- The build and the tests -----------------------------------------------------------------------------------------------------
 
 
-def read_junit(path: Path) -> tuple[list[str], int, dict[str, str]]:
-    """The failed test names in the file's order, the count of tests and the output of each failed one.
+def read_junit(path: Path) -> Junit:
+    """The failed test names in the file's order, the count of tests, the output of each failed one, the skipped names and the
+    skipped smoke tests with their output.
 
     Read with patterns rather than an XML parser: ctest writes a fixed form, and the parser needs pyexpat, which a Homebrew Python
     can lack (a library of the OS older than the one it was built against)."""
     if not path.is_file():
         raise RunError(f"ctest wrote no {path.name}: see the log beside it")
-    failed, texts, count = [], {}, 0
-    for match in JUNIT_CASE.finditer(path.read_text(encoding="utf-8", errors="replace")):
-        count += 1
+    cases = list(JUNIT_CASE.finditer(path.read_text(encoding="utf-8", errors="replace")))
+    junit = Junit([], len(cases), {}, [], {})
+    for match in cases:
         attributes = {key: html.unescape(value) for key, value in JUNIT_ATTRIBUTE.findall(match["attributes"])}
         content = match["content"] or ""
+        name = attributes.get("name", "")
+        output = JUNIT_OUTPUT.search(content)
+        text = html.unescape(output[1]) if output else ""
         if attributes.get("status") == "fail" or "<failure" in content or "<error" in content:
-            name = attributes.get("name", "")
-            failed.append(name)
-            output = JUNIT_OUTPUT.search(content)
-            texts[name] = html.unescape(output[1]) if output else ""
-    return failed, count, texts
+            junit.failed.append(name)
+            junit.texts[name] = text
+        elif attributes.get("status") in JUNIT_NOT_RUN or "<skipped" in content:
+            junit.skipped.append(name)
+            labels = JUNIT_LABELS.search(content)
+            if labels and SMOKE_LABEL in html.unescape(labels[1]).split(";"):
+                junit.smoke_skipped[name] = text
+    return junit
 
 
 def build_and_test(tools: Tools, worktree: Path, preset: str, logs: Path) -> Outcome:
@@ -230,20 +253,22 @@ def build_and_test(tools: Tools, worktree: Path, preset: str, logs: Path) -> Out
     for step, command in (("configure", [*tools.cmake, "--preset", preset]), ("build", [*tools.cmake, "--build", "--preset", preset])):
         if run_logged(command, worktree, logs / f"{step}.log"):
             text = (logs / f"{step}.log").read_text(encoding="utf-8", errors="replace")
-            return Outcome(results.RED, [BUILD_FAILURE], [], 0, {BUILD_FAILURE: f"$ {shlex.join(command)}\n{tail(text)}"})
+            return Outcome(results.RED, [BUILD_FAILURE], [], 0, {BUILD_FAILURE: f"$ {shlex.join(command)}\n{tail(text)}"}, [])
     test_preset = preset + ALL_SUFFIX
     code = run_logged([*tools.ctest, "--preset", test_preset, "--output-junit", str(logs / "ctest.xml")], worktree, logs / "ctest.log")
-    failed, count, _ = read_junit(logs / "ctest.xml")
-    if code and not failed:
+    first = read_junit(logs / "ctest.xml")
+    if code and not first.failed:
         raise RunError(f"ctest failed with exit code {code} and no failed test: {tail((logs / 'ctest.log').read_text(errors='replace'), 10)}")
-    if not failed:
-        return Outcome(results.GREEN, [], [], count, {})
+    # A skipped smoke test is a failure of its own: it is not run again, as nothing on the machine changes between the two runs
+    smoke = {name: f"{SMOKE_SKIPPED}\n{text}" for name, text in first.smoke_skipped.items()}
+    if not first.failed:
+        return Outcome(results.RED if smoke else results.GREEN, list(smoke), [], first.tests, smoke, first.skipped)
     # Once more alone: a case that is only slow under the load of a full run passes here, and the second output is the one filed
     run_logged([*tools.ctest, "--preset", test_preset, "--rerun-failed", "--output-junit", str(logs / "rerun.xml")], worktree, logs / "rerun.log")
-    again, _, texts = read_junit(logs / "rerun.xml")
-    still = [name for name in failed if name in again]
-    flaky = [name for name in failed if name not in again]
-    return Outcome(results.RED if still else results.GREEN, still, flaky, count, texts)
+    again = read_junit(logs / "rerun.xml")
+    still = [name for name in first.failed if name in again.failed] + list(smoke)
+    flaky = [name for name in first.failed if name not in again.failed]
+    return Outcome(results.RED if still else results.GREEN, still, flaky, first.tests, {**again.texts, **smoke}, first.skipped)
 
 
 # --- The todo entries ----------------------------------------------------------------------------------------------------------
@@ -466,6 +491,7 @@ def run_checked(args: argparse.Namespace) -> int:
         data["results"][commit] = {
             "status": outcome.status, "preset": args.preset + ALL_SUFFIX, "base": args.base, "finished": now(),
             "failed": outcome.failed, "flaky": outcome.flaky, "entries": entries, "tests": outcome.tests,
+            "skipped": outcome.skipped,
         }
         if args.dry_run:
             print(f"dry run: {results_file} is not written", flush=True)
@@ -476,10 +502,14 @@ def run_checked(args: argparse.Namespace) -> int:
 
 
 def report(outcome: Outcome, commit: str, entries: list[str], results_file: Path, logs: Path) -> None:
+    skipped = f", {len(outcome.skipped)} skipped" + (f": {', '.join(outcome.skipped)}" if outcome.skipped else "")
     if outcome.status == results.GREEN:
-        print(f"alltests: green {commit[:12]}, {outcome.tests} tests", flush=True)
+        print(f"alltests: green {commit[:12]}, {outcome.tests} tests{skipped}", flush=True)
     else:
-        print(f"alltests: red {commit[:12]}, {len(outcome.failed)} failed: {', '.join(outcome.failed)}", flush=True)
+        print(f"alltests: red {commit[:12]}, {len(outcome.failed)} failed: {', '.join(outcome.failed)}{skipped}", flush=True)
+    smoke = [name for name in outcome.failed if outcome.texts.get(name, "").startswith(SMOKE_SKIPPED)]
+    if smoke:
+        print(f"alltests: red because smoke tests were skipped (exit 77: no product or no Python): {', '.join(smoke)}", flush=True)
     if outcome.flaky:
         print(f"alltests: flaky (failed once, passed alone): {', '.join(outcome.flaky)}", flush=True)
     if entries:

@@ -4,7 +4,7 @@ The deploy scripts (`tools/web/build_and_deploy.py`, `tools/rooms/build_and_depl
 standard library only and knows nothing of the run itself. The file is JSON, one per repository:
 
     {"format": 1, "repo": "<name>", "results": {"<sha>": {"status": "green" | "red", "preset": ..., "base": ..., "finished": ...,
-     "failed": [...], "flaky": [...], "entries": [...]}}, "failing": {"<test>": {"since": "<sha>", "entry": "alltests-..."}}}
+     "failed": [...], "flaky": [...], "skipped": [...], "entries": [...]}}, "failing": {"<test>": {"since": "<sha>", "entry": "alltests-..."}}}
 """
 
 import json

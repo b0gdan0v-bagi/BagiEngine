@@ -31,7 +31,8 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setenv("FAKE_CALLS", str(tmp_path / "calls.jsonl"))
     monkeypatch.setenv("FAKE_STORE", str(tmp_path / "store.json"))
     monkeypatch.setenv("FAKE_TESTS", TESTS)
-    for name in ("FAKE_FAILING", "FAKE_FLAKY", "FAKE_FAIL_STEP"):
+    monkeypatch.setenv("FAKE_SMOKE", "BagiStressControlSmoke")
+    for name in ("FAKE_FAILING", "FAKE_FLAKY", "FAKE_FAIL_STEP", "FAKE_SKIPPED"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -156,6 +157,22 @@ def test_a_test_that_passes_alone_is_flaky_not_a_failure(rig, monkeypatch, capsy
     assert "--rerun-failed" in rig.calls("ctest")[1]
     assert rig.store() == {}
     assert "flaky" in capsys.readouterr().out
+
+
+def test_a_skipped_test_is_counted_and_named_and_leaves_the_run_green(rig, monkeypatch, capsys):
+    monkeypatch.setenv("FAKE_SKIPPED", "Core.Sorts")
+    assert rig.run() == alltests.EXIT_GREEN
+    assert rig.results()["results"][rig.first]["skipped"] == ["Core.Sorts"]
+    assert "4 tests, 1 skipped: Core.Sorts" in capsys.readouterr().out
+
+
+def test_a_skipped_smoke_test_makes_the_run_red_and_files_it_with_the_reason(rig, monkeypatch, capsys):
+    monkeypatch.setenv("FAKE_SKIPPED", "BagiStressControlSmoke")
+    assert rig.run() == alltests.EXIT_RED
+    result = rig.results()["results"][rig.first]
+    assert (result["status"], result["failed"]) == ("red", ["BagiStressControlSmoke"])
+    assert alltests.SMOKE_SKIPPED in rig.store()["alltests-BagiStressControlSmoke"]["body"]
+    assert "smoke tests were skipped" in capsys.readouterr().out
 
 
 def test_a_broken_build_is_one_entry_and_runs_no_test(rig, monkeypatch):
@@ -299,7 +316,15 @@ boom
 def test_the_junit_of_ctest_gives_the_failed_names_the_count_and_the_output(tmp_path):
     path = tmp_path / "ctest.xml"
     path.write_text(REAL_JUNIT, encoding="utf-8")
-    assert alltests.read_junit(path) == (["Bad/Case.0"], 3, {"Bad/Case.0": "line1 <a & b>\nboom\n"})
+    assert alltests.read_junit(path) == (["Bad/Case.0"], 3, {"Bad/Case.0": "line1 <a & b>\nboom\n"}, ["Skip"], {})
+
+
+def test_a_skipped_test_labelled_smoke_is_read_from_the_labels_ctest_writes(tmp_path):
+    path = tmp_path / "ctest.xml"
+    path.write_text(REAL_JUNIT.replace("<properties/>\n\t\t<system-out></system-out>",
+                                       '<properties>\n\t\t\t<property name="cmake_labels" value="smoke;extended"/>\n\t\t</properties>\n\t\t<system-out>gone</system-out>'),
+                    encoding="utf-8")
+    assert alltests.read_junit(path).smoke_skipped == {"Skip": "gone"}
 
 
 class TestGate:
