@@ -100,10 +100,13 @@ namespace BECore {
     [[nodiscard]] std::expected<ArtGenPixels, String> ProcessArtGenImage(const ArtGenPixels& pixels, const ArtGenImageFrame& frame);
 
     /// What Accept does with one image: the settings and, for a set, the frame fixed for all its files; no frame is the image's own
-    /// (the frame over its single drawn box)
+    /// (the frame over its single drawn box). `atlas` names the group the sprite joins and `deferPack` leaves packing it to the caller
+    /// (`ArtGenAtlasAccept.h`); `CopyVariantIntoAssets` ignores both
     struct ArtGenImagePlan {
         ArtGenImageSettings settings;
         Optional<ArtGenImageFrame> frame;
+        String atlas;
+        bool deferPack = false;
     };
 
     /// Decodes a PNG (any format `LoadRgbaImage` reads) into 8-bit straight RGBA; `hasAlpha` follows the file's format
