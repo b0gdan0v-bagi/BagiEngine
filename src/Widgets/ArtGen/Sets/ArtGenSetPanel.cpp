@@ -3,6 +3,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/ArtGen/ArtGenDrag.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/Reference/ArtGenReference.h>
@@ -787,10 +788,16 @@ namespace BECore {
         if (audio || offerReference) {
             ImGui::SetNextItemAllowOverlap();
         }
-        // A kept row is final and a replaced one has nothing to switch: its cells only show the variants
+        // A kept row is final and a replaced one has nothing to switch: its cells only show the variants. The button stays enabled all the same,
+        // because a disabled item cannot be dragged and every image cell is a drag source
         const bool kept = job.accepted && job.accepted->kept;
-        ImGui::BeginDisabled(kept || replaced);
-        if (ImGui::InvisibleButton("##pick", ImVec2(kThumbnailSize, kThumbnailSize))) {
+        const bool clicked = ImGui::InvisibleButton("##pick", ImVec2(kThumbnailSize, kThumbnailSize));
+        const ITexture* texture = thumb != nullptr ? thumb->texture.Get() : nullptr;
+        const bool pictureLoaded = texture != nullptr && texture->GetState() == ResourceState::Loaded;
+        if (!audio && !missing && pictureLoaded) {
+            DrawArtGenVariantDragSource([&] { return MakeArtGenDragPayload(ArtGenDragKind::Image, variant.seed, StringView(set.name), StringView(job.name), StringView(job.name)); }, texture);
+        }
+        if (clicked && !kept && !replaced) {
             ArtGenSwitch write;
             if (session.PickVariant(StringView(set.name), StringView(job.name), variant.seed, &write) == ArtGenSetEdit::WriteFailed) {
                 _acceptFailed = true;
@@ -800,7 +807,6 @@ namespace BECore {
                 _acceptMessage.clear();
             }
         }
-        ImGui::EndDisabled();
         const char* tip = IsLive(job) ? "Show this variant in the game" : "Pick this variant";
         if (replaced) {
             tip = "A newer set holds this name in the game";
@@ -811,8 +817,7 @@ namespace BECore {
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         const ImVec2 corner(origin.x + kThumbnailSize, origin.y + kThumbnailSize);
-        const ITexture* texture = thumb != nullptr ? thumb->texture.Get() : nullptr;
-        if (texture != nullptr && texture->GetState() == ResourceState::Loaded) {
+        if (pictureLoaded) {
             const auto id = static_cast<ImTextureID>(reinterpret_cast<std::uintptr_t>(texture->GetNativeHandle()));
             DrawArtGenChecker(drawList, origin, kThumbnailSize, ImGui::GetColorU32(palette.panelBg), ImGui::GetColorU32(palette.frameBg));
             drawList->AddImage(id, origin, corner);

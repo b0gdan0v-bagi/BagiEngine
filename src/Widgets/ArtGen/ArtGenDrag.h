@@ -3,12 +3,15 @@
 #include <BECore/Resource/TextureLibrary.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <Events/EventBase.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <cstdint>
 #include <type_traits>
 
 namespace BECore {
+
+    class ITexture;
 
     /**
      * @file
@@ -42,6 +45,14 @@ namespace BECore {
     /// The sprite name a dragged variant offers: the row's @p job name for a set row, else the name of @p subject (`ArtGenNameFromSubject`);
     /// `sprite` when the subject has no letter or digit. Always a valid sprite name
     [[nodiscard]] String SuggestedArtGenSpriteName(StringView job, StringView subject);
+
+    /**
+     * @brief The drag source of an image variant, called right after the item that is dragged (an `InvisibleButton`): a drag of it carries the
+     * payload @p makePayload makes (called only while a drag runs) as `kArtGenVariantPayload` and shows its thumbnail over the checkerboard
+     * and the suggested name beside the pointer. A click without movement is not a drag, so the item's own click is unchanged. @p thumbnail
+     * may be null (nothing drawn but the name).
+     */
+    void DrawArtGenVariantDragSource(FunctionRef<ArtGenDragPayload()> makePayload, const ITexture* thumbnail);
 
     CORE_ENUM(ArtGenDropMode, uint8_t, New, Replace, Refused)
 

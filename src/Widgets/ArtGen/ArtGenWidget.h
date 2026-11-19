@@ -2,6 +2,8 @@
 
 #include <BECore/Audio/AudioClip.h>
 #include <BECore/Audio/AudioTypes.h>
+#include <BECore/Control/ControlTypes.h>
+#include <BECore/Control/Json.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Resource/ResourceHandle.h>
@@ -16,6 +18,7 @@
 #include <Widgets/ArtGen/Sets/ArtGenSetPanel.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <cstdint>
+#include <expected>
 
 namespace BECore {
 
@@ -24,6 +27,7 @@ namespace BECore {
     struct ArtGenSetup;
     struct ArtGenVariant;
     struct SceneSelectionChangedEvent;
+    struct ArtGenVariantDropEvent;
 
     /**
      * @brief The editor's Generate panel: a style preset of the game and a subject become image variants through the art generation
@@ -46,6 +50,10 @@ namespace BECore {
     private:
         void OnCommand(const EditorCommandEvent& event);
         void OnSelectionChanged(const SceneSelectionChangedEvent& event);
+        /// A panel dropped a dragged variant (ArtGenDrag.h): accepts it as the sprite the event names and answers in the event's result
+        void OnVariantDropped(const ArtGenVariantDropEvent& event);
+        /// Takes the answer of an image Accept (the button's or a drop's) into the message line and the sprite Use as reference takes
+        void NoteImageAccepted(StringView sprite, const std::expected<Json, ControlError>& result);
 
         void DrawServiceLine(ArtGenSession& session);
         void DrawSetup(ArtGenSession& session);
