@@ -18,8 +18,11 @@ namespace BECore {
         /**
          * @brief The texture to draw, or null when there is none.
          *
-         * Loads the sprite of @p name on the first call and again whenever the name changes. A name the library does not know, or a texture that does not load,
-         * is logged once and gives null until the name changes.
+         * Loads the sprite of @p name on the first call and again whenever the name changes, or when the resource cache no longer holds the texture
+         * (an Accept or a switch of the Generate panel rewrote the file and evicted the path): the library entry is read again too. A name the
+         * library does not know, or a texture that does not load, is logged once and gives null until the name changes.
+         *
+         * Noticing an evict costs a shared lock and a lookup per call of a loaded sprite, no allocation. A texture given with SetTexture() is never checked.
          */
         [[nodiscard]] ITexture* Resolve(PoolString name);
 
@@ -37,6 +40,7 @@ namespace BECore {
         IntrusivePtr<ITexture> _texture;
         Rect _source;
         PoolString _loadedName;
+        PoolString _loadedPath;  ///< the path `_texture` was loaded from; empty for none or a direct texture
         bool _direct = false;
     };
 

@@ -247,12 +247,30 @@ namespace BECore {
                 if (!row.accepted || row.accepted->as != job.accepted->as) {
                     continue;
                 }
+                // Equal dates are the legacy case: an accept now takes a date strictly after the others' (NewAcceptDate), but a manifest written
+                // before that rule can hold two within one second, and then the set later in the list is the newer
                 if (row.accepted->date > job.accepted->date || (row.accepted->date == job.accepted->date && laterInList)) {
                     return &other;
                 }
             }
         }
         return nullptr;
+    }
+
+    String ArtGenSession::NewAcceptDate(const ArtGenSet& set, StringView name) const {
+        // The dates are one format, so the text compares as the time does; a date of a hand-edited manifest that is not that format is not one
+        StringView latest;
+        for (const ArtGenSet& other : _sets) {
+            if (&other == &set || other.kind != set.kind) {
+                continue;
+            }
+            for (const ArtGenSetJob& row : other.jobs) {
+                if (row.accepted && StringView(row.accepted->as) == name && StringView(row.accepted->date) > latest && ParseArtGenTimestamp(row.accepted->date)) {
+                    latest = row.accepted->date;
+                }
+            }
+        }
+        return ArtGenAcceptDate(std::chrono::system_clock::now(), latest);
     }
 
     ArtGenSetJob* ArtGenSession::RunningJobOfRun(ArtGenSet*& set) {
@@ -683,10 +701,10 @@ namespace BECore {
         auto answer =
             sound ? _soundAcceptor(*variant, ArtGenSoundTarget{name, String()}, ArtGenSoundSettings{}, nullptr) : _acceptor(*variant, name, PlanOf(set->processing, set->atlas, false), nullptr);
         if (!answer) {
-            return fail(Format("the job '{}': {}", job->name, answer.error().message));
+            return fail(Format("the job '{}': {}; the row still names seed {}", job->name, answer.error().message, job->pick ? *job->pick : 0));
         }
         job->pick = seed;
-        job->accepted->date = ArtGenTimestamp(std::chrono::system_clock::now());
+        job->accepted->date = NewAcceptDate(*set, name);
         SaveSet(*set);
         ++_version;
         if (write != nullptr) {
@@ -1034,10 +1052,29 @@ namespace BECore {
         const bool deferPack = !sound && !set->atlas.empty() && _atlasPacker != nullptr;
         const ArtGenImagePlan imagePlan = PlanOf(processing, sound ? String() : set->atlas, deferPack);
 
-        // A failure halfway leaves the rows done marked in the manifest; the call can be made again, an accept replaces the same name
+        // A failure halfway leaves the rows done accepted; the call can be made again, an accept replaces the same name. With the batch hooks
+        // the library is saved once after the last file and the rows are marked only then, so a rolled-back library entry is never marked
+        const bool batched = !sound && !planned.empty() && _batchBegin != nullptr && _batchEnd != nullptr;
+        struct Written {
+            ArtGenSetJob* job = nullptr;
+            int64_t seed = 0;
+        };
+        Vector<Written> written;
+        auto markRow = [&](ArtGenSetJob& job, int64_t seed) {
+            job.pick = seed;
+            job.accepted = ArtGenSetAccepted{job.name, NewAcceptDate(*set, job.name), false};
+            // The frame is kept with the first row written, so a refusal or a failed first row leaves the set as it was
+            if (!sound && !set->processing) {
+                set->processing = processing;
+            }
+        };
         Json accepted = Json::array();
         Vector<String> done;
+        Optional<String> rowFailure;
         size_t next = 0;
+        if (batched) {
+            _batchBegin();
+        }
         for (size_t row = 0; row < set->jobs.size(); ++row) {
             ArtGenSetJob& job = set->jobs[row];
             Json item = Json::object();
@@ -1056,22 +1093,20 @@ namespace BECore {
             if (!answer) {
                 String doneNames;
                 AppendNames(doneNames, "accepted before it", done);
-                String message =
-                    Format("the job '{}' (row {} of {}): {}; {}", job.name, row + 1, set->jobs.size(), answer.error().message, done.empty() ? String("accepted before it: none") : doneNames);
+                rowFailure = Format("the job '{}' (row {} of {}): {}; {}", job.name, row + 1, set->jobs.size(), answer.error().message, done.empty() ? String("accepted before it: none") : doneNames);
                 if (deferPack && !done.empty()) {
-                    message += Format("; the atlas '{}' is not packed, call artgen_accept_set again to finish it", set->atlas);
+                    *rowFailure += Format("; the atlas '{}' is not packed, call artgen_accept_set again to finish it", set->atlas);
                 }
-                return std::unexpected(MakeError(kAcceptFailedCode, message));
-            }
-            job.pick = plan.seed;
-            job.accepted = ArtGenSetAccepted{job.name, ArtGenTimestamp(std::chrono::system_clock::now()), false};
-            // The frame is kept with the first row written, so a refusal or a failed first row leaves the set as it was
-            if (!sound && !set->processing) {
-                set->processing = processing;
+                break;
             }
             done.push_back(job.name);
-            SaveSet(*set);
-            ++_version;
+            if (batched) {
+                written.push_back(Written{&job, plan.seed});
+            } else {
+                markRow(job, plan.seed);
+                SaveSet(*set);
+                ++_version;
+            }
             item["as"] = ToJsonString(job.name);
             if (answer->is_object()) {
                 for (const auto& [key, value] : answer->items()) {
@@ -1079,8 +1114,35 @@ namespace BECore {
                 }
             }
             item["seed"] = plan.seed;
-            item["alternatives"] = AlternativesOf(job);
+            item["alternatives"] = AlternativesBesides(job, plan.seed);
             accepted.push_back(std::move(item));
+        }
+        Optional<String> saveFailure;
+        if (batched) {
+            auto ended = _batchEnd();
+            if (ended) {
+                for (const Written& row : written) {
+                    markRow(*row.job, row.seed);
+                }
+                if (!written.empty()) {
+                    SaveSet(*set);
+                    ++_version;
+                }
+            } else {
+                saveFailure = ended.error().message;
+            }
+        }
+        if (saveFailure) {
+            String doneNames;
+            AppendNames(doneNames, "files written", done);
+            const String notMarked = Format("the library was not saved ({}), so no row of the set is marked; call again to finish: an accept replaces the same name", *saveFailure);
+            if (rowFailure) {
+                return std::unexpected(MakeError(kAcceptFailedCode, Format("{}; {}", *rowFailure, notMarked)));
+            }
+            return std::unexpected(MakeError(kAcceptFailedCode, Format("the set '{}': {}; {}", setName, doneNames, notMarked)));
+        }
+        if (rowFailure) {
+            return std::unexpected(MakeError(kAcceptFailedCode, *rowFailure));
         }
         Json reply = Json::object();
         reply["set"] = ToJsonString(set->name);

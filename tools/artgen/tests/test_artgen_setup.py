@@ -604,3 +604,68 @@ def test_the_style_flag_adds_the_parts_to_the_plan_and_dry_run_prints_it(manifes
     assert "Node_plus" in out and "ipadapter/ip.safetensors" in out and "restart ComfyUI" in out
     assert not root.exists() and not server.requests
     assert artgen_setup.main(["install", "--root", str(root), "--dry-run", "--audio", "--style"], probe=probe) == artgen_setup.EXIT_OK
+
+
+# --- the structure model: a ControlNet file, no custom node ---------------------------------------------------------------------
+
+
+def with_structure(manifest, server):
+    data = b"controlnet model" * 3000
+    model = {"name": "canny.safetensors", "folder": "controlnet", "kind": "structure", "url": f"{server.url}/canny", "size": len(data),
+             "sha256": server.add("/canny", data), "licence": "Apache 2.0", "source": "x"}
+    manifest["models"].append(model)
+    return model, data
+
+
+def test_the_structure_model_is_planned_only_with_structure_and_needs_no_custom_node(manifest, server, tmp_path):
+    model, _ = with_structure(manifest, server)
+    root = tmp_path / "root"
+    assert "controlnet/canny.safetensors" not in [s.what for s in artgen_setup.make_plan(manifest, "windows-nvidia", root)]
+    steps = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "structure"))
+    assert [s.kind for s in steps] == ["comfyui", "model", "model", "model"]
+    step = next(s for s in steps if s.what == "controlnet/canny.safetensors")
+    assert step.state == "download" and step.size == model["size"] and step.licence == "Apache 2.0"
+    assert Path(step.dest) == root / "ComfyUI" / "models" / "controlnet" / "canny.safetensors"
+    assert artgen_setup.RESTART_NOTE not in artgen_setup.describe(steps)
+
+
+def test_the_structure_and_style_kinds_are_planned_together(manifest, server, tmp_path):
+    with_structure(manifest, server)
+    with_style(manifest, server)
+    root = tmp_path / "root"
+    both = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "style", "structure"))
+    assert sorted(s.what for s in both if s.kind == "model") == ["checkpoints/a.safetensors", "controlnet/canny.safetensors",
+                                                                 "ipadapter/ip.safetensors", "vae/b.safetensors"]
+    assert [s.kind for s in both].count("customnode") == 1
+    only_style = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "style"))
+    assert "controlnet/canny.safetensors" not in [s.what for s in only_style]
+
+
+def test_the_structure_model_is_downloaded_and_hash_checked_like_the_style_models(manifest, server, tmp_path):
+    model, data = with_structure(manifest, server)
+    root = tmp_path / "root"
+    steps = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "structure"))
+    Installer(manifest, "windows-nvidia", root, unpack=fake_unpack()).install(steps)
+    assert artgen_setup.model_path(root, model).read_bytes() == data
+    again = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "structure"))
+    assert [s.state for s in again if s.what == "controlnet/canny.safetensors"] == ["verify"]
+    artgen_setup.model_path(root, model).write_bytes(b"x" * len(data))
+    with pytest.raises(SetupError):
+        Installer(manifest, "windows-nvidia", root, unpack=fake_unpack()).install(again)
+
+
+def test_the_structure_flag_adds_the_model_to_the_plan_and_dry_run_prints_it(manifest, server, tmp_path, monkeypatch, capsys):
+    with_structure(manifest, server)
+    with_style(manifest, server)
+    monkeypatch.setattr(comfyui_check, "load_manifest", lambda path=None: manifest)
+    root = tmp_path / "root"
+    probe = lambda: Probe("win32", "AMD64", ["NVIDIA GeForce RTX 3070"])  # noqa: E731
+    assert artgen_setup.main(["install", "--root", str(root), "--dry-run"], probe=probe) == artgen_setup.EXIT_OK
+    assert "controlnet/canny" not in capsys.readouterr().out
+    assert artgen_setup.main(["install", "--root", str(root), "--dry-run", "--structure"], probe=probe) == artgen_setup.EXIT_OK
+    out = capsys.readouterr().out
+    assert "controlnet/canny.safetensors" in out and "Node_plus" not in out and "restart ComfyUI" not in out
+    assert artgen_setup.main(["install", "--root", str(root), "--dry-run", "--style", "--structure"], probe=probe) == artgen_setup.EXIT_OK
+    out = capsys.readouterr().out
+    assert "controlnet/canny.safetensors" in out and "ipadapter/ip.safetensors" in out and "restart ComfyUI" in out
+    assert not root.exists() and not server.requests

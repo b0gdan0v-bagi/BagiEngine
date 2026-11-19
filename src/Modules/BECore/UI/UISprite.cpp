@@ -7,10 +7,15 @@
 namespace BECore {
 
     ITexture* UISprite::Resolve(PoolString name) {
-        if (_direct || name == _loadedName) {
+        if (_direct) {
+            return _texture.Get();
+        }
+        // A failed load leaves no texture, so it is not asked again here (it is logged once, until the name changes)
+        if (name == _loadedName && (!_texture || CoreManager::GetResourceManager().GetCache().Holds(_loadedPath, _texture.Get()))) {
             return _texture.Get();
         }
         _loadedName = name;
+        _loadedPath = PoolString();
         _texture.Reset();
         _source = {};
         if (name.Empty()) {
@@ -28,12 +33,14 @@ namespace BECore {
             return nullptr;
         }
         _texture = handle.GetPtr();
+        _loadedPath = entry->texturePath;
         _source = entry->srcRect;
         return _texture.Get();
     }
 
     void UISprite::SetTexture(IntrusivePtr<ITexture> texture, const Rect& source) {
         _texture = std::move(texture);
+        _loadedPath = PoolString();
         _source = source;
         _direct = static_cast<bool>(_texture);
     }

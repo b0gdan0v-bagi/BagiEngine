@@ -533,6 +533,34 @@ namespace BECore::Tests {
         EXPECT_EQ(ArtGenTimestamp(epoch), "1970-01-01T00:00:00Z");
     }
 
+    TEST(ArtGenSetTest, ATimestampParsesBackToTheSameSecond) {
+        using namespace std::chrono;
+        const system_clock::time_point time = sys_days{year{2026} / November / 17} + hours{12} + minutes{34} + seconds{56};
+        const auto parsed = ParseArtGenTimestamp("2026-11-17T12:34:56Z");
+        ASSERT_TRUE(parsed.has_value());
+        EXPECT_EQ(*parsed, time);
+        EXPECT_EQ(ArtGenTimestamp(*parsed), "2026-11-17T12:34:56Z");
+        EXPECT_EQ(ArtGenTimestamp(*ParseArtGenTimestamp("1970-01-01T00:00:00Z")), "1970-01-01T00:00:00Z");
+    }
+
+    TEST(ArtGenSetTest, ATextThatIsNotTheTimestampFormatDoesNotParse) {
+        for (const StringView text : {"", "2026-11-17", "2026-11-17 12:34:56Z", "2026-11-17T12:34:56", "2026-11-17T12:34:56+01:00", "2026-11-17T12:34:5xZ", "2026-13-17T12:34:56Z",
+                                      "2026-02-30T12:34:56Z", "2026-11-17T24:00:00Z", "2026-11-17T12:60:00Z", "2026-11-17T12:34:60Z", "20261117T123456Z"}) {
+            EXPECT_FALSE(ParseArtGenTimestamp(text).has_value()) << String(text).c_str();
+        }
+    }
+
+    TEST(ArtGenSetTest, AnAcceptDateSortsAfterTheLatestOtherDate) {
+        using namespace std::chrono;
+        const system_clock::time_point now = sys_days{year{2026} / November / 17} + hours{12} + minutes{34} + seconds{56} + milliseconds{700};
+        EXPECT_EQ(ArtGenAcceptDate(now, ""), "2026-11-17T12:34:56Z") << "no other date: the stamp of now";
+        EXPECT_EQ(ArtGenAcceptDate(now, "2026-11-17T12:34:55Z"), "2026-11-17T12:34:56Z") << "an earlier one changes nothing";
+        EXPECT_EQ(ArtGenAcceptDate(now, "2026-11-17T12:34:56Z"), "2026-11-17T12:34:57Z") << "the same second is a tie: the next second";
+        EXPECT_EQ(ArtGenAcceptDate(now, "2026-11-17T12:59:59Z"), "2026-11-17T13:00:00Z") << "later: one second after it, across the minute and the hour";
+        EXPECT_EQ(ArtGenAcceptDate(now, "2999-01-01T00:00:00Z"), "2999-01-01T00:00:01Z");
+        EXPECT_EQ(ArtGenAcceptDate(now, "not a date"), "2026-11-17T12:34:56Z") << "an unparsable one is ignored";
+    }
+
     TEST(ArtGenSetTest, DefaultNameStaysAValidName) {
         using namespace std::chrono;
         const system_clock::time_point time = sys_days{year{2026} / January / 2} + hours{3};

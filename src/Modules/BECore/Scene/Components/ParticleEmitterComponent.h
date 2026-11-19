@@ -72,7 +72,8 @@ namespace BECore {
          * @brief Draw the particles with a texture that does not come from the library or a path
          *
          * For a texture made from pixels (`IRenderer::CreateTexture()`). The part of it comes from the sprite (`spriteId`), else the
-         * whole texture. A change of `spriteId` or `texturePath` of the effect loads the sprite again and drops this texture.
+         * whole texture. A change of `spriteId` or `texturePath` of the effect loads the sprite again and drops this texture. This texture is never
+         * replaced by an evict of the cache.
          */
         void SetTexture(IntrusivePtr<ITexture> texture);
 
@@ -82,6 +83,8 @@ namespace BECore {
         // The texture is a GPU object, and components outlive the renderer: it goes when the application cleans up
         void OnApplicationCleanUp();
 
+        /// Loads the texture of the effect's sprite or path. `OnUpdate` calls it again when the effect names another one, and when the cache no
+        /// longer holds the loaded texture (an Accept or a switch of the Generate panel evicted the path); a texture of `SetTexture` is not checked
         void ResolveSprite();
         void ReservePools();
         [[nodiscard]] Rect NodeRect() const;
@@ -91,6 +94,7 @@ namespace BECore {
         Rect _source{};                ///< the part of the texture in pixels; empty is the whole texture
         PoolString _resolvedSpriteId;  ///< the `spriteId` and `texturePath` the texture was loaded for
         PoolString _resolvedTexturePath;
+        PoolString _loadedPath;  ///< the path `_texture` was loaded from; empty for none or a `SetTexture` one
         bool _resolved = false;
         int32_t _reservedParticles = 0;    ///< the pool size reserved so far
         Vector<GeometryVertex> _vertices;  ///< scratch of `OnDraw`, reserved with the pool

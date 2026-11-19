@@ -183,13 +183,15 @@ def test_manifest_pins_every_download():
     for model in MANIFEST["models"]:
         # A gated model's hash is shown only to an account with access: the install reads it with the owner's token until it is pinned
         assert (SHA256.match(model["sha256"]) if not model.get("gated") or model["sha256"] else True) and model["size"] > 0, model["name"]
-        assert model.get("kind", "image") in ("image", "audio", "style"), model["name"]
+        assert model.get("kind", "image") in ("image", "audio", "style", "structure"), model["name"]
         # A Hugging Face URL names a commit, never a branch: the hash must stay true.
         assert re.search(r"/resolve/[0-9a-f]{40}/", model["url"]), model["url"]
         assert model["url"].endswith(Path(model["name"]).suffix)
         assert model["licence"] and model["source"]
         assert (model["folder"], model["name"]) not in names
         names.add((model["folder"], model["name"]))
+    structure = [m for m in MANIFEST["models"] if m.get("kind") == "structure"]
+    assert structure and all(m["folder"] == "controlnet" for m in structure)
     # A custom node is fetched by git at a pinned commit, never a branch: the commit is its integrity check
     nodes = set()
     for node in MANIFEST["customNodes"]:
@@ -207,6 +209,7 @@ LOADERS = {
     "LoadBackgroundRemovalModel": ("background_removal", "bg_removal_name"),
     "IPAdapterModelLoader": ("ipadapter", "ipadapter_file"),
     "CLIPVisionLoader": ("clip_vision", "clip_name"),
+    "ControlNetLoader": ("controlnet", "control_net_name"),
 }
 
 
@@ -232,18 +235,27 @@ def test_the_style_models_of_the_manifest_are_the_ones_the_style_workflows_load(
     assert style and {pair for pair in loaded if pair[0] in ("ipadapter", "clip_vision")} == style
 
 
+def test_the_structure_models_of_the_manifest_are_the_ones_the_structure_workflows_load():
+    loaded = set()
+    for name in ("sdxl_controlnet", "sdxl_controlnet_cutout"):
+        workflow = json.loads((comfyui_check.WORKFLOW.parent / f"{name}.json").read_text(encoding="utf-8"))
+        loaded |= {(LOADERS[n["class_type"]][0], n["inputs"][LOADERS[n["class_type"]][1]]) for n in workflow.values() if n["class_type"] == "ControlNetLoader"}
+    structure = {(m["folder"], m["name"]) for m in MANIFEST["models"] if m.get("kind") == "structure"}
+    assert structure and loaded == structure
+
+
 def test_missing_audio_models_only_warn_and_say_what_it_makes(fake):
     for model in MANIFEST["models"]:
         if model.get("kind") == "audio":
             fake.models[model["folder"]].remove(model["name"])
     report = comfyui_check.check(fake.url, MANIFEST)
-    assert report["ready"] and report["kinds"] == ["image", "style"]
+    assert report["ready"] and report["kinds"] == ["image", "structure", "style"]
     assert any("install --audio" in w for w in report["warnings"])
     assert not any("install --style" in w for w in report["warnings"])
 
 
 def test_with_every_model_it_makes_images_and_sounds(fake):
-    assert comfyui_check.check(fake.url, MANIFEST)["kinds"] == ["audio", "image", "style"]
+    assert comfyui_check.check(fake.url, MANIFEST)["kinds"] == ["audio", "image", "structure", "style"]
 
 
 def style_parts():
@@ -254,7 +266,7 @@ def test_a_missing_style_model_only_warns_and_takes_the_style_kind_away(fake):
     models, _ = style_parts()
     fake.models[models[0]["folder"]].remove(models[0]["name"])
     report = comfyui_check.check(fake.url, MANIFEST)
-    assert report["ready"] and report["problems"] == [] and report["kinds"] == ["audio", "image"]
+    assert report["ready"] and report["problems"] == [] and report["kinds"] == ["audio", "image", "structure"]
     assert any(w.startswith(f"style model {models[0]['folder']}/{models[0]['name']} is missing") and "install --style" in w
                for w in report["warnings"])
 
@@ -263,7 +275,7 @@ def test_a_missing_style_node_only_warns_and_takes_the_style_kind_away(fake):
     _, nodes = style_parts()
     fake.nodes.clear()
     report = comfyui_check.check(fake.url, MANIFEST)
-    assert report["ready"] and report["problems"] == [] and report["kinds"] == ["audio", "image"]
+    assert report["ready"] and report["problems"] == [] and report["kinds"] == ["audio", "image", "structure"]
     assert report["customNodes"] == [{"name": nodes[0]["name"], "kind": "style", "present": False}]
     assert any(w.startswith(f"style custom node {nodes[0]['name']} is missing") and "install --style" in w for w in report["warnings"])
     assert all(m["present"] for m in report["models"])
@@ -281,6 +293,38 @@ def test_a_folder_that_answers_404_is_a_problem_for_an_image_model_only(fake):
     fake.missing_folders = {"vae"}
     broken = comfyui_check.check(fake.url, MANIFEST)
     assert not broken["ready"] and any("/models/vae" in p for p in broken["problems"]) and broken["kinds"] == []
+
+
+def structure_models():
+    return [m for m in MANIFEST["models"] if m.get("kind") == "structure"]
+
+
+def test_a_missing_structure_model_only_warns_and_leaves_the_other_kinds(fake):
+    model = structure_models()[0]
+    fake.models[model["folder"]].remove(model["name"])
+    report = comfyui_check.check(fake.url, MANIFEST)
+    assert report["ready"] and report["problems"] == [] and report["kinds"] == ["audio", "image", "style"]
+    assert f"structure model {model['folder']}/{model['name']} is missing: no structure until artgen_setup.py install --structure" in report["warnings"]
+    assert not any("install --style" in w or "install --audio" in w for w in report["warnings"])
+    assert [m["present"] for m in report["models"] if m["kind"] == "structure"] == [False]
+
+
+def test_a_controlnet_folder_that_answers_404_is_a_warning_not_a_problem(fake):
+    fake.missing_folders.add(structure_models()[0]["folder"])
+    report = comfyui_check.check(fake.url, MANIFEST)
+    assert report["ready"] and report["problems"] == [] and "structure" not in report["kinds"]
+    assert any("install --structure" in w for w in report["warnings"])
+    assert {"audio", "image", "style"} <= set(report["kinds"])
+
+
+def test_the_report_prints_the_structure_model(fake, capsys):
+    model = structure_models()[0]
+    comfyui_check.print_report(comfyui_check.check(fake.url, MANIFEST))
+    assert f"ok      {model['folder']}/{model['name']} (structure)" in capsys.readouterr().out
+    fake.models[model["folder"]].remove(model["name"])
+    comfyui_check.print_report(comfyui_check.check(fake.url, MANIFEST))
+    out = capsys.readouterr().out
+    assert f"MISSING {model['folder']}/{model['name']} (structure)" in out and "makes: audio, image, style" in out
 
 
 def test_the_report_lists_the_custom_nodes_and_prints_them(fake, capsys):

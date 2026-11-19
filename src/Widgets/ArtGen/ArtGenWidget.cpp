@@ -143,6 +143,7 @@ namespace BECore {
         session.SetKeeper(&KeepForControl);
         session.SetAtlasPacker(&PackAtlasForControl);
         session.SetFrameMeasurer(&MeasureFrameForControl);
+        session.SetAcceptBatch(&BeginAcceptBatch, &EndAcceptBatch);
         session.RegisterControl(CoreManager::GetControlService());
         return true;
     }
@@ -1197,6 +1198,10 @@ namespace BECore {
         if (!_acceptedSprite.empty() && PresetMakesImages(session)) {
             if (IconTextButton(ICON_LC_IMAGE_PLUS, "Use as reference", kArtGenUseAsReferenceTip)) {
                 session.SetReferenceSlot(ArtGenReferenceOfSprite(StringView(_acceptedSprite)));
+            }
+            ImGui::SameLine();
+            if (IconTextButton(ICON_LC_SHAPES, "Use as shape", kArtGenUseAsShapeTip)) {
+                session.SetReferenceSlot(ArtGenReferenceOfSprite(StringView(_acceptedSprite), "structure"));
             }
         }
     }

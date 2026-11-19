@@ -60,6 +60,7 @@ namespace BECore {
 
     void ParticleEmitterComponent::SetTexture(IntrusivePtr<ITexture> texture) {
         _texture = ResourceHandle<ITexture>(std::move(texture));
+        _loadedPath = PoolString();
     }
 
     Rect ParticleEmitterComponent::NodeRect() const {
@@ -74,6 +75,7 @@ namespace BECore {
         _resolvedSpriteId = _effect.spriteId;
         _resolvedTexturePath = _effect.texturePath;
         _texture.Reset();
+        _loadedPath = PoolString();
         _source = Rect();
 
         PoolString path = _effect.texturePath;
@@ -93,7 +95,9 @@ namespace BECore {
         _texture = CoreManager::GetResourceManager().Load<ITexture>(path.ToStringView());
         if (!_texture) {
             LOG_ERROR(Format("ParticleEmitterComponent: failed to load texture '{}'", path.ToStringView()).c_str());
+            return;
         }
+        _loadedPath = path;
     }
 
     void ParticleEmitterComponent::ReservePools() {
@@ -107,7 +111,9 @@ namespace BECore {
     }
 
     void ParticleEmitterComponent::OnUpdate(const SceneEvents::SceneUpdateEvent& e) {
-        if (_effect.spriteId != _resolvedSpriteId || _effect.texturePath != _resolvedTexturePath) {
+        // The lookup of a loaded texture in the cache is a shared lock per update, no allocation: the price of noticing an evict
+        const bool evicted = _texture && !_loadedPath.Empty() && !CoreManager::GetResourceManager().GetCache().Holds(_loadedPath, _texture.Get());
+        if (evicted || _effect.spriteId != _resolvedSpriteId || _effect.texturePath != _resolvedTexturePath) {
             ResolveSprite();
         }
         ReservePools();

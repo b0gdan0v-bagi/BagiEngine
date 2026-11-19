@@ -37,15 +37,19 @@ class Mode:
 
 
 KIND_STYLE = "style"
+KIND_STRUCTURE = "structure"
 
 # A mode that needs more than the image models names that kind in `kind`; `artgen_service.generate` refuses it on a generator whose
-# status lacks it. The structure mode (ControlNet) joins the same way, with its own kind.
+# status lacks it.
 # `init` starts from the picture instead of from noise: the sampler's denoise is the part of the picture that is redrawn.
 # `style` starts from noise: the weight is the IP-Adapter's own `weight` (its node takes -1 to 5; a negative one inverts the style,
 # which is no mode of ours).
+# `structure` starts from noise and holds the picture's edges through a ControlNet: the weight is its `strength` (the node takes 0 to
+# 10; above 2 only breaks the picture).
 MODES = {
     "init": Mode(weight_input="denoise", default_weight=0.4, weight_range=(0.0, 1.0), to_input=lambda weight: 1.0 - weight),
     "style": Mode(weight_input="adapter_weight", default_weight=0.8, weight_range=(0.0, 2.0), to_input=lambda weight: weight, kind=KIND_STYLE),
+    "structure": Mode(weight_input="control_strength", default_weight=0.8, weight_range=(0.0, 2.0), to_input=lambda weight: weight, kind=KIND_STRUCTURE),
 }
 
 
