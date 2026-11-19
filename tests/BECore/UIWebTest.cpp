@@ -30,6 +30,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Common/UILayoutMatrix.h>
 #include <Common/UITreeCompare.h>
@@ -752,15 +753,15 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_TRUE(expected.variants == compiled->content.variants) << compiled->xml.c_str();
 
         // The fields the tree comparison does not look at
-        const auto* score = compiled->Element("Score")->GetComponent<UITextComponent>();
+        const auto* score = Require(compiled->Element("Score")).GetComponent<UITextComponent>();
         ASSERT_NE(score, nullptr);
         EXPECT_EQ(score->text, "Score: {score}");
         const UIElement* reset = compiled->Element("Reset");
         ASSERT_NE(reset, nullptr);
         ASSERT_NE(reset->GetComponent<UITextComponent>(), nullptr);
         ASSERT_NE(reset->GetComponent<UIInputClicker>(), nullptr);
-        EXPECT_EQ(reset->GetComponent<UITextComponent>()->text, "Reset");
-        EXPECT_EQ(reset->GetComponent<UIInputClicker>()->action.ToStringView(), "GameReset");
+        EXPECT_EQ(Require(reset->GetComponent<UITextComponent>()).text, "Reset");
+        EXPECT_EQ(Require(reset->GetComponent<UIInputClicker>()).action.ToStringView(), "GameReset");
         EXPECT_EQ(reset->hoverColor.r, 51);
         EXPECT_EQ(reset->hoverColor.g, 170);
         EXPECT_EQ(compiled->report.elements, 3u);
@@ -799,11 +800,11 @@ button   { width: 124px; height: 48px; font-size: 24px; }
                 ExpectSameRect(xml.Find(name), web.Find(name), name);
             }
         }
-        const auto* title = compiled->Element("Title")->GetComponent<UITextComponent>();
+        const auto* title = Require(compiled->Element("Title")).GetComponent<UITextComponent>();
         ASSERT_NE(title, nullptr);
         EXPECT_EQ(title->align, TextAlign::Center);
         EXPECT_EQ(title->verticalAlign, UIVerticalAlign::Center);
-        EXPECT_EQ(compiled->Element("Column")->layout, UILayoutKind::Stack);
+        EXPECT_EQ(Require(compiled->Element("Column")).layout, UILayoutKind::Stack);
     }
 
     TEST_F(UIWebTest, TheMenuInHtmlPassesTheSizeMatrix) {
@@ -833,7 +834,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
                 ExpectSameRect(xml.Find(name), web.Find(name), name);
             }
         }
-        EXPECT_EQ(compiled->Element("Seed")->GetComponent<UITextComponent>()->textColor.r, 190);
+        EXPECT_EQ(Require(Require(compiled->Element("Seed")).GetComponent<UITextComponent>()).textColor.r, 190);
     }
 
     TEST_F(UIWebTest, TheGameHudInHtmlPassesTheSizeMatrixInTheMarginsOfItsView) {
@@ -946,7 +947,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         ASSERT_NE(group, nullptr);
         EXPECT_TRUE(group->disabled);
         group->SyncChildren();
-        EXPECT_TRUE(compiled->Element("a")->groupDisabled);
+        EXPECT_TRUE(Require(compiled->Element("a")).groupDisabled);
     }
 
     TEST_F(UIWebTest, CheckedAndHoverOnOneButton) {
@@ -1030,24 +1031,24 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->report.variants, 1u);
 
         // The types and the fields the tree comparison does not look at
-        const auto* sound = compiled->Element("Sound")->GetComponent<UIToggleComponent>();
+        const auto* sound = Require(compiled->Element("Sound")).GetComponent<UIToggleComponent>();
         ASSERT_NE(sound, nullptr) << "a data-widget=\"toggle\" div is a row with a UIToggleComponent";
         EXPECT_EQ(sound->bind.ToStringView(), "soundOn");
         EXPECT_EQ(sound->action.ToStringView(), "SettingsSound");
         EXPECT_EQ(sound->onValue.ToStringView(), "true") << "data-on and data-off were not written, so the defaults stand";
         EXPECT_EQ(sound->offValue.ToStringView(), "false");
-        EXPECT_EQ(compiled->Element("SoundCaption")->GetComponent<UITextComponent>()->text, "{#settings.sound}") << "the caption of a toggle is its text";
-        EXPECT_NE(compiled->Element("SoundSwitch")->GetComponent<UISwitchComponent>(), nullptr);
-        EXPECT_TRUE(compiled->Element("Sound")->IsInteractive());
-        const auto* volume = compiled->Element("Volume")->GetComponent<UISliderComponent>();
+        EXPECT_EQ(Require(Require(compiled->Element("SoundCaption")).GetComponent<UITextComponent>()).text, "{#settings.sound}") << "the caption of a toggle is its text";
+        EXPECT_NE(Require(compiled->Element("SoundSwitch")).GetComponent<UISwitchComponent>(), nullptr);
+        EXPECT_TRUE(Require(compiled->Element("Sound")).IsInteractive());
+        const auto* volume = Require(compiled->Element("Volume")).GetComponent<UISliderComponent>();
         ASSERT_NE(volume, nullptr) << "a data-widget=\"slider\" div is an element with a UISliderComponent";
-        EXPECT_FALSE(compiled->Element("Volume")->GetComponent<UIInputClicker>()->stateLook) << "the plate of a slider stays still";
+        EXPECT_FALSE(Require(Require(compiled->Element("Volume")).GetComponent<UIInputClicker>()).stateLook) << "the plate of a slider stays still";
         EXPECT_EQ(volume->bind.ToStringView(), "volume");
         EXPECT_EQ(volume->action.ToStringView(), "SettingsVolume");
         EXPECT_FLOAT_EQ(volume->minValue, 0.0f);
         EXPECT_FLOAT_EQ(volume->maxValue, 1.0f);
         EXPECT_FLOAT_EQ(volume->step, 0.1f);
-        const auto* progress = compiled->Element("Progress")->Cast<UIProgressBar>();
+        const auto* progress = Require(compiled->Element("Progress")).Cast<UIProgressBar>();
         ASSERT_NE(progress, nullptr) << "a data-widget=\"progress\" div is a UIProgressBar";
         EXPECT_EQ(progress->bind.ToStringView(), "progress");
         EXPECT_FLOAT_EQ(progress->maxValue, 100.0f);
@@ -1097,10 +1098,10 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         UIStrings& strings = CoreManager::GetUIStrings();
         strings.Set("en"_intern, "settings.sound", "Sound");
         strings.Set("de"_intern, "settings.sound", "Geraeuscheffekte");
-        auto* sound = compiled->Element("Sound")->GetComponent<UIToggleComponent>();
-        auto* caption = compiled->Element("SoundCaption")->GetComponent<UITextComponent>();
-        auto* volume = compiled->Element("Volume")->GetComponent<UISliderComponent>();
-        auto* progress = compiled->Element("Progress")->Cast<UIProgressBar>();
+        auto* sound = Require(compiled->Element("Sound")).GetComponent<UIToggleComponent>();
+        auto* caption = Require(compiled->Element("SoundCaption")).GetComponent<UITextComponent>();
+        auto* volume = Require(compiled->Element("Volume")).GetComponent<UISliderComponent>();
+        auto* progress = Require(compiled->Element("Progress")).Cast<UIProgressBar>();
         ASSERT_TRUE(sound != nullptr && caption != nullptr && volume != nullptr && progress != nullptr);
 
         EXPECT_FALSE(sound->IsOn());
@@ -1170,16 +1171,16 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_FALSE(compiled->Component("d", "UISliderComponent").attribute("minValue")) << "nothing written, nothing invented";
         EXPECT_FALSE(compiled->Component("d", "UISliderComponent").attribute("step"));
 
-        const auto* toggle = compiled->Element("t")->GetComponent<UIToggleComponent>();
-        const auto* look = compiled->Element("tSwitch")->GetComponent<UISwitchComponent>();
-        const auto* slider = compiled->Element("s")->GetComponent<UISliderComponent>();
+        const auto* toggle = Require(compiled->Element("t")).GetComponent<UIToggleComponent>();
+        const auto* look = Require(compiled->Element("tSwitch")).GetComponent<UISwitchComponent>();
+        const auto* slider = Require(compiled->Element("s")).GetComponent<UISliderComponent>();
         ASSERT_TRUE(toggle != nullptr && look != nullptr && slider != nullptr);
-        EXPECT_TRUE(compiled->Element("t")->IsDisabled());
+        EXPECT_TRUE(Require(compiled->Element("t")).IsDisabled());
         EXPECT_EQ(toggle->onValue.ToStringView(), "1");
         EXPECT_EQ(look->fillColor.g, 200);
         EXPECT_FLOAT_EQ(slider->minValue, -5.0f);
         EXPECT_FLOAT_EQ(slider->step, 0.5f);
-        EXPECT_TRUE(compiled->Element("s")->IsDisabled());
+        EXPECT_TRUE(Require(compiled->Element("s")).IsDisabled());
     }
 
     TEST_F(UIWebTest, NumbersOfTheWidgetsAreWrittenAsNumbers) {
@@ -1423,7 +1424,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->ComponentAttr("h", "UITextComponent", "textOutline"), "2,#000000FF");
         EXPECT_TRUE(compiled->report.issues.empty());
 
-        auto* label = compiled->Element("h")->GetComponent<UITextComponent>();
+        auto* label = Require(compiled->Element("h")).GetComponent<UITextComponent>();
         ASSERT_NE(label, nullptr);
         EXPECT_EQ(label->fontFamily, "Russo One"_intern);
         EXPECT_EQ(label->fontWeight, 700);
@@ -1442,7 +1443,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->ComponentAttr("b", "UITextComponent", "textOutline"), "1,#FFFFFFFF");
         EXPECT_EQ(compiled->Attr("b", "hoverColor"), "48,48,48,255");
         EXPECT_TRUE(compiled->report.issues.empty());
-        const auto* text = compiled->Element("b")->GetComponent<UITextComponent>();
+        const auto* text = Require(compiled->Element("b")).GetComponent<UITextComponent>();
         ASSERT_NE(text, nullptr);
         EXPECT_EQ(text->fontWeight, 700);
         EXPECT_FLOAT_EQ(text->textEffects.shadowOffsetY, 1.0f);
@@ -1512,9 +1513,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         strings.Set("de"_intern, "menu.start", "Los");
         strings.Set("de"_intern, "score.title", "Punkte");
         CoreManager::GetUIVars().Set("score"_intern, 3);
-        auto* button = compiled->Element("b")->GetComponent<UITextComponent>();
-        auto* span = compiled->Element("s")->GetComponent<UITextComponent>();
-        auto* quoted = compiled->Element("q")->GetComponent<UITextComponent>();
+        auto* button = Require(compiled->Element("b")).GetComponent<UITextComponent>();
+        auto* span = Require(compiled->Element("s")).GetComponent<UITextComponent>();
+        auto* quoted = Require(compiled->Element("q")).GetComponent<UITextComponent>();
         ASSERT_NE(button, nullptr) << compiled->xml.c_str();
         ASSERT_NE(span, nullptr);
         ASSERT_NE(quoted, nullptr);
@@ -1615,8 +1616,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->ComponentAttr("a", "UIInputClicker", "value"), "x");
         EXPECT_EQ(compiled->Attr("b", "type"), "UIElement");
         EXPECT_NE(dynamic_cast<UISegmented*>(compiled->Element("g")), nullptr);
-        EXPECT_NE(compiled->Element("a")->GetComponent<UIInputClicker>(), nullptr) << "the group finds its segments by the clicker";
-        EXPECT_NE(compiled->Element("b")->GetComponent<UIInputClicker>(), nullptr);
+        EXPECT_NE(Require(compiled->Element("a")).GetComponent<UIInputClicker>(), nullptr) << "the group finds its segments by the clicker";
+        EXPECT_NE(Require(compiled->Element("b")).GetComponent<UIInputClicker>(), nullptr);
         EXPECT_TRUE(compiled->report.issues.empty());
     }
 
@@ -1671,7 +1672,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Attr("gradient", "gradientColor"), "68,85,102,255");
         EXPECT_EQ(compiled->Attr("gradient", "gradientDirection"), "Horizontal");
         EXPECT_EQ(BoxOf(*compiled, "gradient"), BoxFromXml("gradientDirection=\"Horizontal\" gradientColor=\"68,85,102,255\""));
-        EXPECT_EQ(compiled->Element("gradient")->color.r, 17);
+        EXPECT_EQ(Require(compiled->Element("gradient")).color.r, 17);
 
         EXPECT_EQ(compiled->Attr("shadow", "shadow"), "0,2,6,1,#00000080");
         EXPECT_FALSE(compiled->Has("shadow", "glow"));
@@ -1708,7 +1709,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     TEST_F(UIWebTest, APillIsARadiusOfAThousandPixels) {
         const auto compiled = Compile(R"(<button id="b" data-action="Go">Go</button>)", "#b { width: 120px; height: 40px; border-radius: 999px; background: #336699 }");
         EXPECT_EQ(compiled->Attr("b", "cornerRadius"), "999");
-        EXPECT_EQ(compiled->Element("b")->box.cornerRadius, UICorners::Uniform(999.0f));
+        EXPECT_EQ(Require(compiled->Element("b")).box.cornerRadius, UICorners::Uniform(999.0f));
         EXPECT_TRUE(compiled->report.issues.empty());
     }
 
@@ -1771,9 +1772,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->IssuesMentioning("-be-shape applies to a toggle, slider or progress bar only"), 1u);
         EXPECT_EQ(compiled->report.issues.size(), 1u);
         EXPECT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_EQ(compiled->Element("tSwitch")->GetComponent<UISwitchComponent>()->partShape, UIPartShape::Round);
-        EXPECT_EQ(compiled->Element("s")->GetComponent<UISliderComponent>()->partShape, UIPartShape::Round);
-        EXPECT_EQ(compiled->Element("p")->Cast<UIProgressBar>()->partShape, UIPartShape::Round);
+        EXPECT_EQ(Require(Require(compiled->Element("tSwitch")).GetComponent<UISwitchComponent>()).partShape, UIPartShape::Round);
+        EXPECT_EQ(Require(Require(compiled->Element("s")).GetComponent<UISliderComponent>()).partShape, UIPartShape::Round);
+        EXPECT_EQ(Require(compiled->Element("p")).Cast<UIProgressBar>()->partShape, UIPartShape::Round);
     }
 
     TEST_F(UIWebTest, AToggleWithATextColorGetsTheTrackAndThumbTheClassDerivedFromIt) {
@@ -2083,7 +2084,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Attr("b", "pressedColor"), "5,5,5,255");
         EXPECT_EQ(compiled->IssuesMentioning("the far end of a state gradient is derived from its start color"), 1u) << "once, for both states";
         EXPECT_EQ(compiled->report.issues.size(), 1u);
-        EXPECT_EQ(compiled->Element("b")->box.gradientColor.r, 16) << "the box of the base look, the state shifts come from the start color";
+        EXPECT_EQ(Require(compiled->Element("b")).box.gradientColor.r, 16) << "the box of the base look, the state shifts come from the start color";
     }
 
     TEST_F(UIWebTest, ABoxPropertyInAStateRuleIsReported) {
@@ -2163,15 +2164,16 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         RecordingRenderer renderer;
         card->DrawSelf(renderer);
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_EQ(renderer.calls[0].kind, DrawKind::Geometry);
+        EXPECT_EQ(At(renderer.calls, 0).kind, DrawKind::Geometry);
 
         const auto flat = Compile(R"(<div id="card"></div>)", "#card { width: 100px; height: 40px; background: #ff0000 }");
         UIElement* plain = flat->Element("card");
+        ASSERT_NE(plain, nullptr);
         plain->rect = {0.0f, 0.0f, 100.0f, 40.0f};
         renderer.ClearCalls();
         plain->DrawSelf(renderer);
         ASSERT_EQ(renderer.calls.size(), 1u);
-        EXPECT_EQ(renderer.calls[0].kind, DrawKind::Rect) << "no box property, the plain rect as before";
+        EXPECT_EQ(At(renderer.calls, 0).kind, DrawKind::Rect) << "no box property, the plain rect as before";
     }
 
     // ---- variants from @media ------------------------------------------------------------------------------------------------
@@ -2423,7 +2425,7 @@ button  { height: 56px; font-size: 28px; }
         const auto* card = compiled->Element("card");
         ASSERT_NE(card, nullptr);
         EXPECT_EQ(card->color.token.ToStringView(), "panel");
-        const auto* label = compiled->Element("text")->GetComponent<UITextComponent>();
+        const auto* label = Require(compiled->Element("text")).GetComponent<UITextComponent>();
         ASSERT_NE(label, nullptr);
         EXPECT_EQ(label->textColor.token.ToStringView(), "line");
         EXPECT_EQ(label->textEffects.shadowColor.token.ToStringView(), "shade");
@@ -2540,6 +2542,7 @@ button:checked { background: var(--panel); }
         EXPECT_TRUE(ColorsEqual(play->color, Color{20, 160, 90, 255}));
         EXPECT_EQ(play->color.token.ToStringView(), "play");
         UIElement* quit = compiled->Element("Quit");
+        ASSERT_NE(quit, nullptr);
         quit->ResolveTheme(themes);
         EXPECT_TRUE(ColorsEqual(quit->color, Color{160, 40, 60, 255}));
         EXPECT_TRUE(themes.GetMissing().empty());
@@ -2559,7 +2562,7 @@ button:checked { background: var(--panel); }
             renderer.ClearCalls();
             card->ResolveTheme(themes);
             card->DrawSelf(renderer);
-            return renderer.calls.empty() ? Color{} : renderer.calls[0].color;
+            return renderer.calls.empty() ? Color{} : At(renderer.calls, 0).color;
         };
         EXPECT_TRUE(ColorsEqual(drawn(), Color{240, 240, 230, 255}));
         ASSERT_TRUE(themes.SetTheme("dark"_intern));
@@ -2568,6 +2571,7 @@ button:checked { background: var(--panel); }
 
         const auto ghost = Compile(R"(<div id="ghost"></div>)", "#ghost { width: 10px; height: 10px; background: var(--nowhere); }");
         UIElement* element = ghost->Element("ghost");
+        ASSERT_NE(element, nullptr);
         element->rect = {0.0f, 0.0f, 10.0f, 10.0f};
         element->ResolveTheme(themes);
         EXPECT_TRUE(ColorsEqual(element->color, kMissingTokenColor));
@@ -2855,8 +2859,8 @@ button:checked { background: var(--panel); }
         EXPECT_EQ(compiled->IssuesMentioning("'opacity: 1.5' is not understood"), 1u);
         EXPECT_EQ(compiled->IssuesMentioning("'opacity: half' is not understood"), 1u);
         EXPECT_EQ(compiled->report.issues.size(), 2u);
-        EXPECT_FLOAT_EQ(compiled->Element("a")->opacity, 0.5f);
-        EXPECT_FLOAT_EQ(compiled->Element("c")->opacity, 0.0f);
+        EXPECT_FLOAT_EQ(Require(compiled->Element("a")).opacity, 0.5f);
+        EXPECT_FLOAT_EQ(Require(compiled->Element("c")).opacity, 0.0f);
     }
 
     TEST_F(UIWebTest, APanelWithOpacityAndAFadeCompilesToTheXmlWrittenByHand) {
@@ -2865,7 +2869,7 @@ button:checked { background: var(--panel); }
         const UIScreenContent expected = ReadXml(R"(<ui><elements><element type="UIElement" name="p" color="17,34,51,255" width="200" height="100" opacity="0.8" blocksInput="true">
             <components><component type="UITransitionComponent" duration="0.2"/></components></element></elements></ui>)");
         ExpectSameElements(expected.elements, compiled->content.elements);
-        const auto* transition = compiled->Element("p")->GetComponent<UITransitionComponent>();
+        const auto* transition = Require(compiled->Element("p")).GetComponent<UITransitionComponent>();
         ASSERT_NE(transition, nullptr) << compiled->xml.c_str();
         EXPECT_TRUE(transition->fade);
         EXPECT_FLOAT_EQ(transition->duration, 0.2f);
@@ -2880,7 +2884,7 @@ button:checked { background: var(--panel); }
         const auto compiled =
             Compile(R"(<div id="p"></div>)", "#p { transition: opacity 150ms linear, transform 150ms linear; -be-transition-scale: 0.9; -be-transition-slide: 0px 24px; -be-transition-input: allow }");
         EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str();
-        const auto* transition = compiled->Element("p")->GetComponent<UITransitionComponent>();
+        const auto* transition = Require(compiled->Element("p")).GetComponent<UITransitionComponent>();
         ASSERT_NE(transition, nullptr) << compiled->xml.c_str();
         EXPECT_TRUE(transition->fade);
         EXPECT_FLOAT_EQ(transition->duration, 0.15f);
@@ -2892,7 +2896,7 @@ button:checked { background: var(--panel); }
 
         const auto onlyMove = Compile(R"(<div id="p"></div>)", "#p { transition: transform .3s ease-in; -be-transition-slide: -40px 0px }");
         EXPECT_FALSE(onlyMove->report.HasIssues());
-        const auto* move = onlyMove->Element("p")->GetComponent<UITransitionComponent>();
+        const auto* move = Require(onlyMove->Element("p")).GetComponent<UITransitionComponent>();
         ASSERT_NE(move, nullptr) << onlyMove->xml.c_str();
         EXPECT_FALSE(move->fade) << "no opacity in the list: no fade";
         EXPECT_FLOAT_EQ(move->slideX, -40.0f);
@@ -2901,20 +2905,20 @@ button:checked { background: var(--panel); }
 
     TEST_F(UIWebTest, TheFirstTimeOfOpacityAndTransformIsTheDuration) {
         const auto transformFirst = Compile(R"(<div id="p"></div>)", "#p { transition: transform 300ms, opacity 100ms; -be-transition-scale: 0.9 }");
-        const auto* first = transformFirst->Element("p")->GetComponent<UITransitionComponent>();
+        const auto* first = Require(transformFirst->Element("p")).GetComponent<UITransitionComponent>();
         ASSERT_NE(first, nullptr) << transformFirst->xml.c_str();
         EXPECT_FLOAT_EQ(first->duration, 0.3f);
         EXPECT_EQ(transformFirst->IssuesMentioning("share one duration"), 1u);
 
         const auto opacityFirst = Compile(R"(<div id="p"></div>)", "#p { transition: opacity 100ms, transform 300ms; -be-transition-scale: 0.9 }");
-        const auto* second = opacityFirst->Element("p")->GetComponent<UITransitionComponent>();
+        const auto* second = Require(opacityFirst->Element("p")).GetComponent<UITransitionComponent>();
         ASSERT_NE(second, nullptr) << opacityFirst->xml.c_str();
         EXPECT_FLOAT_EQ(second->duration, 0.1f);
         EXPECT_EQ(opacityFirst->IssuesMentioning("share one duration"), 1u);
 
         // A transform with no end values does nothing, so it does not take the time of the fade
         const auto noEnd = Compile(R"(<div id="p"></div>)", "#p { transition: transform 300ms, opacity 100ms }");
-        const auto* fadeOnly = noEnd->Element("p")->GetComponent<UITransitionComponent>();
+        const auto* fadeOnly = Require(noEnd->Element("p")).GetComponent<UITransitionComponent>();
         ASSERT_NE(fadeOnly, nullptr) << noEnd->xml.c_str();
         EXPECT_FLOAT_EQ(fadeOnly->duration, 0.1f);
     }
@@ -2922,7 +2926,7 @@ button:checked { background: var(--panel); }
     TEST_F(UIWebTest, AZeroTransitionScaleIsAccepted) {
         const auto compiled = Compile(R"(<div id="p"></div>)", "#p { transition: opacity .2s, transform .2s; -be-transition-scale: 0 }");
         EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str();
-        const auto* transition = compiled->Element("p")->GetComponent<UITransitionComponent>();
+        const auto* transition = Require(compiled->Element("p")).GetComponent<UITransitionComponent>();
         ASSERT_NE(transition, nullptr) << compiled->xml.c_str();
         EXPECT_FLOAT_EQ(transition->scaleFrom, 0.0f);
 
@@ -2935,13 +2939,13 @@ button:checked { background: var(--panel); }
                                                      {"ease-out", EaseType::QuadOut}, {"ease-in-out", EaseType::QuadInOut}, {"", EaseType::QuadInOut}};
         for (const auto& [word, ease] : cases) {
             const auto compiled = Compile(R"(<div id="p"></div>)", Format("#p {{ transition: opacity .1s {} }}", word));
-            const auto* transition = compiled->Element("p")->GetComponent<UITransitionComponent>();
+            const auto* transition = Require(compiled->Element("p")).GetComponent<UITransitionComponent>();
             ASSERT_NE(transition, nullptr) << word;
             EXPECT_EQ(transition->ease, ease) << "'" << word << "' (no word is CSS's `ease`)";
             EXPECT_FALSE(compiled->report.HasIssues()) << word;
         }
         const auto bezier = Compile(R"(<div id="p"></div>)", "#p { transition: opacity .1s cubic-bezier(0, 0, 1, 1) }");
-        EXPECT_EQ(bezier->Element("p")->GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_EQ(Require(bezier->Element("p")).GetComponent<UITransitionComponent>(), nullptr);
         EXPECT_EQ(bezier->IssuesMentioning("'transition: opacity .1s cubic-bezier(0, 0, 1, 1)' is not understood"), 1u);
     }
 
@@ -2954,8 +2958,8 @@ button:checked { background: var(--panel); }
         EXPECT_EQ(compiled->Attr("b", "stateDuration"), "0.15");
         EXPECT_EQ(compiled->Attr("c", "stateDuration"), "0.2");
         EXPECT_EQ(compiled->Attr("d", "stateDuration"), "0.1");
-        EXPECT_FLOAT_EQ(compiled->Element("b")->stateDuration, 0.15f);
-        EXPECT_EQ(compiled->Element("b")->GetComponent<UITransitionComponent>(), nullptr) << "the state look is not a show / hide";
+        EXPECT_FLOAT_EQ(Require(compiled->Element("b")).stateDuration, 0.15f);
+        EXPECT_EQ(Require(compiled->Element("b")).GetComponent<UITransitionComponent>(), nullptr) << "the state look is not a show / hide";
         EXPECT_TRUE(compiled->Find("b").child("components").child("component").attribute("type"));
     }
 
@@ -2963,8 +2967,8 @@ button:checked { background: var(--panel); }
         const auto compiled =
             Compile(R"(<div id="t" data-widget="toggle" data-bind="v">T</div><div id="s" data-widget="slider" data-bind="w"></div>)", "#t, #s { transition: opacity .25s ease-out; opacity: .9 }");
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_NE(compiled->Element("t")->GetComponent<UITransitionComponent>(), nullptr);
-        EXPECT_NE(compiled->Element("s")->GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_NE(Require(compiled->Element("t")).GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_NE(Require(compiled->Element("s")).GetComponent<UITransitionComponent>(), nullptr);
         EXPECT_FALSE(compiled->Has("t", "duration"));
         EXPECT_FALSE(compiled->Has("s", "duration"));
         EXPECT_EQ(compiled->Attr("t", "opacity"), "0.9");
@@ -2988,17 +2992,17 @@ button:checked { background: var(--panel); }
         EXPECT_EQ(compiled->IssuesMentioning("only apply with `transform` in transition"), 1u);
         EXPECT_EQ(compiled->IssuesMentioning("'-be-transition-input: maybe' is not understood"), 1u);
         EXPECT_EQ(compiled->report.issues.size(), 7u);
-        EXPECT_NE(compiled->Element("a")->GetComponent<UITransitionComponent>(), nullptr) << "the fade stays, the delay is dropped";
-        EXPECT_NE(compiled->Element("b")->GetComponent<UITransitionComponent>(), nullptr);
-        EXPECT_EQ(compiled->Element("c")->GetComponent<UITransitionComponent>(), nullptr);
-        EXPECT_EQ(compiled->Element("e")->GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_NE(Require(compiled->Element("a")).GetComponent<UITransitionComponent>(), nullptr) << "the fade stays, the delay is dropped";
+        EXPECT_NE(Require(compiled->Element("b")).GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_EQ(Require(compiled->Element("c")).GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_EQ(Require(compiled->Element("e")).GetComponent<UITransitionComponent>(), nullptr);
     }
 
     TEST_F(UIWebTest, ATransitionNoneAndATimeOfZeroMakeNoComponent) {
         const auto compiled = Compile(R"(<div id="a" class="x"></div><div id="b"></div>)", ".x { transition: opacity .2s } #a { transition: none } #b { transition: opacity 0s }");
         EXPECT_FALSE(compiled->report.HasIssues());
-        EXPECT_EQ(compiled->Element("a")->GetComponent<UITransitionComponent>(), nullptr);
-        EXPECT_EQ(compiled->Element("b")->GetComponent<UITransitionComponent>(), nullptr) << "a time of 0 is no animation";
+        EXPECT_EQ(Require(compiled->Element("a")).GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_EQ(Require(compiled->Element("b")).GetComponent<UITransitionComponent>(), nullptr) << "a time of 0 is no animation";
     }
 
 }  // namespace BECore::Tests

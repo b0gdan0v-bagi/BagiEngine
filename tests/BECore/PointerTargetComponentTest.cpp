@@ -12,6 +12,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Generated/PointerTargetComponentTest.gen.hpp>
 #include <gtest/gtest.h>
@@ -237,8 +238,9 @@ namespace BECore::Tests {
         PointerTargetTestComponent& Bind(const char* name, TargetScript& script) {
             const auto target = Node(name).GetComponent<PointerTargetTestComponent>();
             EXPECT_TRUE(target) << name;
-            target->script = &script;
-            return *target;
+            PointerTargetTestComponent& component = Require(target);
+            component.script = &script;
+            return component;
         }
 
         IntrusivePtr<RecordingRenderer> _renderer;

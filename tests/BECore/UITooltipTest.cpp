@@ -2,6 +2,7 @@
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UITooltip.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/Require.h>
 #include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
@@ -255,7 +256,7 @@ namespace BECore::Tests {
             IntrusivePtr<UIElement> element;
 
             [[nodiscard]] Vec2 MeasureText(float maxWidth, float scale) const {
-                return element->GetComponent<UITextComponent>()->MeasureText(*element, maxWidth, scale);
+                return Require(element->GetComponent<UITextComponent>()).MeasureText(*element, maxWidth, scale);
             }
             const Text* operator->() const {
                 return this;

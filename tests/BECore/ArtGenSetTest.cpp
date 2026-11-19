@@ -1,5 +1,6 @@
 #include <BECore/Control/Json.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TestText.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
@@ -75,7 +76,7 @@ namespace BECore::Tests {
             ArtGenSet set = MakeSet();
             set.jobs[0].accepted->kept = kept;
             const Json json = ArtGenSetToJson(set);
-            EXPECT_EQ(GetJsonBool((*FindJsonMember(json, "jobs"))[0]["accepted"], "kept"), Optional<bool>(kept));
+            EXPECT_EQ(GetJsonBool((Require(FindJsonMember(json, "jobs")))[0]["accepted"], "kept"), Optional<bool>(kept));
             const auto back = ArtGenSetFromJson(json);
             ASSERT_TRUE(back.has_value()) << back.error();
             EXPECT_EQ(back->jobs[0].accepted->kept, kept);
@@ -128,7 +129,7 @@ namespace BECore::Tests {
         set.processing = ArtGenSetProcessing{ArtGenImageSettings{true, 5, 128}, ArtGenImageFrame{10, 20, 300, 400, 96, 128}};
         EXPECT_FALSE(IsLegacyAccepted(set));
         const Json json = ArtGenSetToJson(set);
-        EXPECT_EQ(GetJsonInt(*FindJsonMember(*FindJsonMember(json, "processing"), "frame"), "outHeight"), Optional<int64_t>(128));
+        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(*FindJsonMember(json, "processing"), "frame")), "outHeight"), Optional<int64_t>(128));
         const auto back = ArtGenSetFromJson(json);
         ASSERT_TRUE(back.has_value()) << back.error();
         EXPECT_EQ(back->processing, set.processing);
@@ -154,7 +155,7 @@ namespace BECore::Tests {
 
     TEST(ArtGenSetTest, PathsInTheManifestUseForwardSlashes) {
         const Json json = ArtGenSetToJson(MakeSet());
-        const Json& variant = (*FindJsonMember(json, "jobs"))[0]["variants"][0];
+        const Json& variant = (Require(FindJsonMember(json, "jobs")))[0]["variants"][0];
         EXPECT_EQ(GetJsonString(variant, "file"), "white_knight/white_knight_4242.png");
         EXPECT_EQ(GetJsonString(variant, "file")->find('\\'), String::npos);
     }

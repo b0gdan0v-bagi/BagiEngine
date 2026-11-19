@@ -10,6 +10,7 @@
 #include <BECore/Values/Value.h>
 #include <BECore/Values/ValueTables.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Generated/ProgramFusionTest.gen.hpp>
 #include <bit>
 #include <cmath>
@@ -494,13 +495,13 @@ namespace BECore::Tests {
 
     TEST(ProgramFusionTest, AFinishedProgramOfFusedCodeIsRefusedWhenItsFieldsAreNot) {
         ProgramBuilder builder;
-        const uint8_t reg = builder.AcquireRegister().value();
+        const uint8_t reg = Require(builder.AcquireRegister());
         const uint32_t k = builder.AddConstant(int32_t{3});
         builder.Emit(Opcode::MulAddSlotInt32, reg, 0, static_cast<uint8_t>(k), static_cast<uint8_t>(k + 1), 4);
         EXPECT_FALSE(builder.Finish(ProgramType::Int32, reg).has_value());
 
         ProgramBuilder good;
-        const uint8_t out = good.AcquireRegister().value();
+        const uint8_t out = Require(good.AcquireRegister());
         const uint32_t constK = good.AddConstant(int32_t{3});
         const uint32_t constB = good.AddConstant(int32_t{7});
         good.Emit(Opcode::MulAddSlotInt32, out, 1, static_cast<uint8_t>(constK), static_cast<uint8_t>(constB), 4);
@@ -509,7 +510,7 @@ namespace BECore::Tests {
         EXPECT_EQ(program->Reads(), LevelBit(1));
 
         ProgramBuilder tooHigh;
-        const uint8_t high = tooHigh.AcquireRegister().value();
+        const uint8_t high = Require(tooHigh.AcquireRegister());
         static_cast<void>(tooHigh.AddConstant(int32_t{3}));
         tooHigh.Emit(Opcode::MulAddSlotInt32, high, static_cast<uint8_t>(kMaxContextLevels), 0, 0, 4);
         EXPECT_FALSE(tooHigh.Finish(ProgramType::Int32, high).has_value());
@@ -517,13 +518,13 @@ namespace BECore::Tests {
 
     TEST(ProgramFusionTest, AFinishedProgramOfVec3FusedCodeIsRefusedWhenItsConstantsAreNot) {
         ProgramBuilder builder;
-        const uint8_t reg = builder.AcquireRegister().value();
+        const uint8_t reg = Require(builder.AcquireRegister());
         const uint32_t k = builder.AddConstant(1.0f);
         builder.Emit(Opcode::MulAddSlotVec3, reg, 0, static_cast<uint8_t>(k), static_cast<uint8_t>(k + 1), 4);
         EXPECT_FALSE(builder.Finish(ProgramType::Vec3, reg).has_value());
 
         ProgramBuilder good;
-        const uint8_t out = good.AcquireRegister().value();
+        const uint8_t out = Require(good.AcquireRegister());
         const uint32_t constK = good.AddConstant(2.0f);
         const uint32_t constB = good.AddConstant(Vec3{1.0f, 2.0f, 3.0f});
         good.Emit(Opcode::MulAddSlotVec3, out, 1, static_cast<uint8_t>(constK), static_cast<uint8_t>(constB), 4);
@@ -753,8 +754,8 @@ namespace BECore::Tests {
 
     TEST(ProgramFusionTest, FinishCountsAndChecksTheFieldsOfTheNewInstructions) {
         ProgramBuilder builder;
-        const uint8_t reg = builder.AcquireRegister().value();
-        const uint8_t weight = builder.AcquireRegister().value();
+        const uint8_t reg = Require(builder.AcquireRegister());
+        const uint8_t weight = Require(builder.AcquireRegister());
         builder.EmitLoadConst(weight, 0.5f);
         builder.Emit(Opcode::LerpSlotsFloat, reg, 1, 2, weight, PackHalves(0, 4));
         const auto program = builder.Finish(ProgramType::Float, reg);
@@ -762,12 +763,12 @@ namespace BECore::Tests {
         EXPECT_EQ(program->Reads(), static_cast<LevelMask>(LevelBit(1) | LevelBit(2)));
 
         ProgramBuilder beyond;
-        const uint8_t out = beyond.AcquireRegister().value();
+        const uint8_t out = Require(beyond.AcquireRegister());
         beyond.Emit(Opcode::LerpSlotsFloat, out, 0, static_cast<uint8_t>(kMaxContextLevels), out, 0);
         EXPECT_FALSE(beyond.Finish(ProgramType::Float, out).has_value());
 
         ProgramBuilder outside;
-        const uint8_t dst = outside.AcquireRegister().value();
+        const uint8_t dst = Require(outside.AcquireRegister());
         static_cast<void>(outside.AddConstant(int32_t{1}));
         Instruction table{Opcode::LoadTableSlot, dst, 0, 0, 0, PackHalves(0, 0)};
         SetTableEntryCount(table, 2);
@@ -775,13 +776,13 @@ namespace BECore::Tests {
         EXPECT_FALSE(outside.Finish(ProgramType::Int32, dst).has_value());
 
         ProgramBuilder empty;
-        const uint8_t result = empty.AcquireRegister().value();
+        const uint8_t result = Require(empty.AcquireRegister());
         static_cast<void>(empty.AddConstant(int32_t{1}));
         empty.Emit(Opcode::LoadTableSlot, result, 0, 0, 0, PackHalves(0, 0));
         EXPECT_FALSE(empty.Finish(ProgramType::Int32, result).has_value());
 
         ProgramBuilder fits;
-        const uint8_t value = fits.AcquireRegister().value();
+        const uint8_t value = Require(fits.AcquireRegister());
         const Array<int32_t, 2> entries = {5, 6};
         Vector<RegisterImage> images(entries.size());
         std::memcpy(images[0].bytes.data(), &entries[0], sizeof(int32_t));

@@ -2,6 +2,7 @@
 #include <BECore/AudioTestSupport.h>
 #include <BECore/Control/Json.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
@@ -185,7 +186,7 @@ namespace BECore::Tests {
         const Json* accepted = FindJsonMember(*provenance, "accepted");
         ASSERT_NE(accepted, nullptr);
         EXPECT_EQ(GetJsonString(*accepted, "clip"), Optional<String>("assets/artgen/knock.wav"));
-        EXPECT_EQ(*FindJsonMember(*accepted, "processing"), ArtGenSoundSettingsToJson(ArtGenSoundSettings{}));
+        EXPECT_EQ(Require(FindJsonMember(*accepted, "processing")), ArtGenSoundSettingsToJson(ArtGenSoundSettings{}));
     }
 
     TEST_F(ArtGenSoundAcceptTest, AClipOfTheGameIsReplacedAndTheWavDecodes) {

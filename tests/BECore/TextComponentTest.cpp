@@ -8,6 +8,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/TextTestSupport.h>
 #include <gtest/gtest.h>
 
@@ -111,17 +112,17 @@ namespace BECore::Tests {
         Draw("Plain");
 
         ASSERT_FALSE(_renderer->calls.empty());
-        EXPECT_EQ(_renderer->calls[0].color.r, 255);
-        EXPECT_EQ(_renderer->calls[0].color.g, 128);
-        EXPECT_EQ(_renderer->calls[0].color.b, 0);
-        EXPECT_EQ(_renderer->calls[0].color.a, 200);
+        EXPECT_EQ(At(_renderer->calls, 0).color.r, 255);
+        EXPECT_EQ(At(_renderer->calls, 0).color.g, 128);
+        EXPECT_EQ(At(_renderer->calls, 0).color.b, 0);
+        EXPECT_EQ(At(_renderer->calls, 0).color.a, 200);
     }
 
     TEST_F(TextComponentTest, TheTextStartsAtTheTransformOrigin) {
         Draw("Plain");
 
         ASSERT_FALSE(_renderer->calls.empty());
-        const DrawCall& first = _renderer->calls[0];
+        const DrawCall& first = At(_renderer->calls, 0);
         const TextLayoutResult& layout = Label("Plain")->GetLastLayout();
         // The pen of the first glyph is at the origin; the picture is where the glyph's offset puts it
         EXPECT_NEAR(first.rect.x, 10.0f, 4.0f);
@@ -134,7 +135,7 @@ namespace BECore::Tests {
 
         ASSERT_EQ(_renderer->calls.size(), kInkedGlyphsInHello);
         for (size_t i = 1; i < _renderer->calls.size(); ++i) {
-            EXPECT_GT(_renderer->calls[i].rect.x, _renderer->calls[i - 1].rect.x);
+            EXPECT_GT(At(_renderer->calls, i).rect.x, _renderer->calls[i - 1].rect.x);
         }
     }
 
@@ -190,7 +191,7 @@ namespace BECore::Tests {
         ASSERT_EQ(_renderer->calls.size(), kInkedGlyphsInHello);
         const TextLayoutResult& layout = Label("Fit")->GetLastLayout();
         // The origin (10, 20) is at output (20, 40) under the scale of 2; glyphs of a 48 px atlas are at least a few px wide
-        EXPECT_NEAR(_renderer->calls[0].rect.x, 20.0f, 8.0f);
+        EXPECT_NEAR(At(_renderer->calls, 0).rect.x, 20.0f, 8.0f);
         for (const DrawCall& call : _renderer->calls) {
             EXPECT_EQ(call.rect.w, call.source->w);
             EXPECT_EQ(call.rect.h, call.source->h);
@@ -300,7 +301,7 @@ namespace BECore::Tests {
         ASSERT_EQ(_renderer->calls.size(), 3 * kInkedGlyphsInHello);
         constexpr float kOutlineOutputPixels = 3.0f;
         for (size_t i = 0; i < kInkedGlyphsInHello; ++i) {
-            const DrawCall& shadow = _renderer->calls[i];
+            const DrawCall& shadow = At(_renderer->calls, i);
             const DrawCall& outline = _renderer->calls[kInkedGlyphsInHello + i];
             const DrawCall& fill = _renderer->calls[2 * kInkedGlyphsInHello + i];
             EXPECT_EQ(shadow.color.r, 4);

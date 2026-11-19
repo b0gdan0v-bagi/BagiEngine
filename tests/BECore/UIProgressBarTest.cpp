@@ -15,6 +15,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UICanvasRoundTrip.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UIPartShapeChecks.h>
@@ -118,7 +119,7 @@ namespace BECore::Tests {
             EXPECT_NE(element, nullptr) << name;
             UIProgressBar* typed = element ? element->Cast<UIProgressBar>() : nullptr;
             EXPECT_NE(typed, nullptr) << name << " is not a progress bar";
-            return *typed;
+            return Require(typed);
         }
 
         /// The rect calls of the last draw that lie inside @p area, in order
@@ -348,16 +349,16 @@ namespace BECore::Tests {
         const auto loaded = XmlRoundTrip(*_canvas, &xml);
         ASSERT_TRUE(loaded);
 
-        const auto* signedBar = loaded->GetRoot().FindByName("Signed"_intern)->Cast<UIProgressBar>();
+        const auto* signedBar = Require(loaded->GetRoot().FindByName("Signed"_intern)).Cast<UIProgressBar>();
         ASSERT_NE(signedBar, nullptr);
         EXPECT_EQ(signedBar->bind, "signed"_intern);
         EXPECT_FLOAT_EQ(signedBar->minValue, -50.0f);
         EXPECT_FLOAT_EQ(signedBar->maxValue, 50.0f);
-        const auto* custom = loaded->GetRoot().FindByName("Custom"_intern)->Cast<UIProgressBar>();
+        const auto* custom = Require(loaded->GetRoot().FindByName("Custom"_intern)).Cast<UIProgressBar>();
         ASSERT_NE(custom, nullptr);
         EXPECT_EQ(custom->trackColor.g, 20);
         EXPECT_EQ(custom->fillColor.g, 50);
-        const auto* unit = loaded->GetRoot().FindByName("Unit"_intern)->Cast<UIProgressBar>();
+        const auto* unit = Require(loaded->GetRoot().FindByName("Unit"_intern)).Cast<UIProgressBar>();
         ASSERT_NE(unit, nullptr);
         EXPECT_FLOAT_EQ(unit->maxValue, 1.0f) << "the defaults come back as the defaults";
         ExpectSameElementXml(*_canvas, *loaded);
@@ -368,10 +369,10 @@ namespace BECore::Tests {
         const auto loaded = BinaryRoundTrip(*_canvas);
         ASSERT_TRUE(loaded);
 
-        const auto* custom = loaded->GetRoot().FindByName("Custom"_intern)->Cast<UIProgressBar>();
+        const auto* custom = Require(loaded->GetRoot().FindByName("Custom"_intern)).Cast<UIProgressBar>();
         ASSERT_NE(custom, nullptr);
         EXPECT_EQ(custom->fillColor.b, 60);
-        EXPECT_EQ(loaded->GetRoot().FindByName("Unit"_intern)->Cast<UIProgressBar>()->maxValue, 7.5f);
+        EXPECT_EQ(Require(loaded->GetRoot().FindByName("Unit"_intern)).Cast<UIProgressBar>()->maxValue, 7.5f);
         ExpectSameElementXml(*_canvas, *loaded);
     }
 
@@ -432,8 +433,8 @@ namespace BECore::Tests {
         String xml;
         const auto loaded = XmlRoundTrip(*_canvas, &xml);
         ASSERT_TRUE(loaded);
-        EXPECT_EQ(loaded->GetRoot().FindByName("Unit"_intern)->Cast<UIProgressBar>()->partShape, UIPartShape::Round);
-        EXPECT_EQ(loaded->GetRoot().FindByName("Percent"_intern)->Cast<UIProgressBar>()->partShape, UIPartShape::Square);
+        EXPECT_EQ(Require(loaded->GetRoot().FindByName("Unit"_intern)).Cast<UIProgressBar>()->partShape, UIPartShape::Round);
+        EXPECT_EQ(Require(loaded->GetRoot().FindByName("Percent"_intern)).Cast<UIProgressBar>()->partShape, UIPartShape::Square);
     }
 
 }  // namespace BECore::Tests

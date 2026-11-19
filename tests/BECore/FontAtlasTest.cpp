@@ -8,6 +8,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -106,6 +107,7 @@ namespace BECore::Tests {
         atlas->Prepare(*renderer, glyphs);
 
         const AtlasGlyph* found = atlas->Find(glyphs[0]);
+        ASSERT_NE(found, nullptr);
         const RecordedTexture* page = AsRecorded(atlas->GetPage(found->page));
         const auto& pixels = page->GetPixels();
         const auto width = static_cast<uint32_t>(page->GetWidth());
@@ -134,6 +136,7 @@ namespace BECore::Tests {
             for (size_t j = i + 1; j < glyphs.size(); ++j) {
                 const AtlasGlyph* a = atlas->Find(glyphs[i]);
                 const AtlasGlyph* b = atlas->Find(glyphs[j]);
+                ASSERT_NE(b, nullptr);
                 if (a->page != b->page) {
                     continue;
                 }
@@ -482,8 +485,8 @@ namespace BECore::Tests {
         TextRenderer::Draw(*renderer, *atlas, layout, 0.0f, 0.0f, Color{10, 20, 30, 40});
 
         ASSERT_EQ(renderer->calls.size(), 1u);
-        EXPECT_EQ(renderer->calls[0].color.r, 10);
-        EXPECT_EQ(renderer->calls[0].color.a, 40);
+        EXPECT_EQ(At(renderer->calls, 0).color.r, 10);
+        EXPECT_EQ(At(renderer->calls, 0).color.a, 40);
     }
 
     TEST_F(TextRendererTest, AGlyphIsDrawnFromItsAtlasRectAtItsOwnSize) {
@@ -494,7 +497,7 @@ namespace BECore::Tests {
 
         ASSERT_EQ(renderer->calls.size(), 1u);
         const AtlasGlyph& glyph = *atlas->Find(layout.glyphs[0].glyph);
-        const DrawCall& call = renderer->calls[0];
+        const DrawCall& call = At(renderer->calls, 0);
         ASSERT_TRUE(call.source.has_value());
         EXPECT_FLOAT_EQ(call.source->x, glyph.source.x);
         EXPECT_FLOAT_EQ(call.source->w, glyph.source.w);
@@ -524,8 +527,8 @@ namespace BECore::Tests {
         TextRenderer::Draw(*renderer, *atlas, layout, 100.0f, 50.0f, Color{255, 255, 255, 255});
 
         ASSERT_EQ(renderer->calls.size(), 2u);
-        EXPECT_FLOAT_EQ(renderer->calls[1].rect.x - renderer->calls[0].rect.x, 100.0f);
-        EXPECT_FLOAT_EQ(renderer->calls[1].rect.y - renderer->calls[0].rect.y, 50.0f);
+        EXPECT_FLOAT_EQ(At(renderer->calls, 1).rect.x - At(renderer->calls, 0).rect.x, 100.0f);
+        EXPECT_FLOAT_EQ(At(renderer->calls, 1).rect.y - At(renderer->calls, 0).rect.y, 50.0f);
     }
 
     TEST_F(TextRendererTest, TheViewTransformMapsTheOriginButNotTheGlyphSize) {
@@ -538,9 +541,9 @@ namespace BECore::Tests {
 
         ASSERT_EQ(renderer->calls.size(), 1u);
         const AtlasGlyph& glyph = *atlas->Find(layout.glyphs[0].glyph);
-        EXPECT_FLOAT_EQ(renderer->calls[0].rect.w, glyph.source.w);
+        EXPECT_FLOAT_EQ(At(renderer->calls, 0).rect.w, glyph.source.w);
         // The origin (10, 0) is at output x = 10 * 2 + 40 = 60
-        EXPECT_FLOAT_EQ(renderer->calls[0].rect.x, std::round(60.0f + layout.glyphs[0].x + glyph.offsetX));
+        EXPECT_FLOAT_EQ(At(renderer->calls, 0).rect.x, std::round(60.0f + layout.glyphs[0].x + glyph.offsetX));
     }
 
     TEST_F(TextRendererTest, MissingGlyphsAreDrawnIntoNewPagesBeforeTheDraw) {
@@ -615,9 +618,9 @@ namespace BECore::Tests {
         ASSERT_EQ(renderer->calls.size(), 6u);
         const Color expected[] = {kShadowColor, kShadowColor, kOutlineColor, kOutlineColor, kFill, kFill};
         for (size_t i = 0; i < 6; ++i) {
-            EXPECT_EQ(renderer->calls[i].color.r, expected[i].r) << i;
-            EXPECT_EQ(renderer->calls[i].color.a, expected[i].a) << i;
-            EXPECT_EQ(renderer->calls[i].texture, i < 4 ? outline->GetPage(0) : fill->GetPage(0)) << i;
+            EXPECT_EQ(At(renderer->calls, i).color.r, expected[i].r) << i;
+            EXPECT_EQ(At(renderer->calls, i).color.a, expected[i].a) << i;
+            EXPECT_EQ(At(renderer->calls, i).texture, i < 4 ? outline->GetPage(0) : fill->GetPage(0)) << i;
         }
     }
 
@@ -629,7 +632,7 @@ namespace BECore::Tests {
         TextRenderer::Draw(*renderer, *fill, outline.Get(), layout, 10.0f, 20.0f, kFill, BothEffects());
 
         for (size_t glyph = 0; glyph < 2; ++glyph) {
-            const DrawCall& shadow = renderer->calls[glyph];
+            const DrawCall& shadow = At(renderer->calls, glyph);
             const DrawCall& ring = renderer->calls[2 + glyph];
             const DrawCall& body = renderer->calls[4 + glyph];
             EXPECT_FLOAT_EQ(ring.rect.x, body.rect.x - kOutlineRadius);
@@ -652,10 +655,10 @@ namespace BECore::Tests {
 
         EXPECT_EQ(drawn, 4u);
         ASSERT_EQ(renderer->calls.size(), 4u);
-        EXPECT_EQ(renderer->calls[0].color.a, kShadowColor.a);
-        EXPECT_EQ(renderer->calls[2].color.a, kFill.a);
-        EXPECT_FLOAT_EQ(renderer->calls[0].rect.x, renderer->calls[2].rect.x + 3.0f);
-        EXPECT_FLOAT_EQ(renderer->calls[0].rect.w, renderer->calls[2].rect.w);
+        EXPECT_EQ(At(renderer->calls, 0).color.a, kShadowColor.a);
+        EXPECT_EQ(At(renderer->calls, 2).color.a, kFill.a);
+        EXPECT_FLOAT_EQ(At(renderer->calls, 0).rect.x, At(renderer->calls, 2).rect.x + 3.0f);
+        EXPECT_FLOAT_EQ(At(renderer->calls, 0).rect.w, At(renderer->calls, 2).rect.w);
         EXPECT_EQ(Library().GetAtlasCount(), 1u);  // a text with no outline makes one atlas
     }
 
@@ -680,9 +683,9 @@ namespace BECore::Tests {
 
         ASSERT_EQ(renderer->calls.size(), plain.size());
         for (size_t i = 0; i < plain.size(); ++i) {
-            EXPECT_FLOAT_EQ(renderer->calls[i].rect.x, plain[i].rect.x);
-            EXPECT_FLOAT_EQ(renderer->calls[i].rect.y, plain[i].rect.y);
-            EXPECT_EQ(renderer->calls[i].color.r, plain[i].color.r);
+            EXPECT_FLOAT_EQ(At(renderer->calls, i).rect.x, plain[i].rect.x);
+            EXPECT_FLOAT_EQ(At(renderer->calls, i).rect.y, plain[i].rect.y);
+            EXPECT_EQ(At(renderer->calls, i).color.r, plain[i].color.r);
         }
         EXPECT_EQ(outline->GetGlyphCount(), 0u);  // not even prepared
     }
@@ -719,8 +722,8 @@ namespace BECore::Tests {
         TextRenderer::Draw(*renderer, *fill, nullptr, layout, 0.0f, 0.0f, kFill, effects);
 
         ASSERT_EQ(renderer->calls.size(), 2u);
-        EXPECT_FLOAT_EQ(renderer->calls[0].rect.x, std::round(layout.glyphs[0].x + fill->Find(layout.glyphs[0].glyph)->offsetX + 2.6f));
-        EXPECT_FLOAT_EQ(renderer->calls[0].rect.x, std::round(renderer->calls[0].rect.x));
+        EXPECT_FLOAT_EQ(At(renderer->calls, 0).rect.x, std::round(layout.glyphs[0].x + fill->Find(layout.glyphs[0].glyph)->offsetX + 2.6f));
+        EXPECT_FLOAT_EQ(At(renderer->calls, 0).rect.x, std::round(At(renderer->calls, 0).rect.x));
     }
 
 }  // namespace BECore::Tests

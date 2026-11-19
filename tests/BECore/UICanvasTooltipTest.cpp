@@ -14,6 +14,7 @@
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
@@ -206,7 +207,7 @@ namespace BECore::Tests {
         UIElement& GetElement(const char* name) const {
             UIElement* element = _hud->GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
-            return *element;
+            return Require(element);
         }
 
         static Rect CenterOf(const Rect& rect) {
@@ -358,7 +359,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(plate.has_value());
 
         EXPECT_EQ(_hud->GetRoot().children.size(), elements);
-        const DrawCall& last = _renderer->calls.back();
+        const DrawCall& last = Back(_renderer->calls);
         EXPECT_TRUE(RectInside(last.rect, *plate)) << "the last call of the frame is the text of the plate";
         // The top strip of the plate is above Under and below Icon: no element there, plate or not
         EXPECT_EQ(_hud->GetLayout().HitTest(plate->x + plate->w * 0.5f, plate->y + 2.0f), nullptr) << "not hit-tested";
@@ -570,7 +571,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UICanvasTooltipTest, ALongTooltipWrapsOnAPlateNoWiderThanTheLimit) {
-        Get("Lang").GetComponent<UITooltipComponent>()->text = "Settings of the game: the sound, the language and the size of everything on the screen";
+        Require(Get("Lang").GetComponent<UITooltipComponent>()).text = "Settings of the game: the sound, the language and the size of everything on the screen";
         HoverUntilShown("Lang");
 
         const auto plate = Plate();
@@ -584,7 +585,7 @@ namespace BECore::Tests {
         HoverUntilShown("Icon");
         ASSERT_TRUE(Plate().has_value());
 
-        Get("Icon").GetComponent<UITooltipComponent>()->text.clear();
+        Require(Get("Icon").GetComponent<UITooltipComponent>()).text.clear();
         Draw();
         EXPECT_FALSE(Plate());
     }
@@ -655,7 +656,7 @@ namespace BECore::Tests {
         HoverUntilShown("Comp");
         ASSERT_TRUE(Plate().has_value());
 
-        GetElement("Comp").GetComponent<UITooltipComponent>()->text.clear();
+        Require(GetElement("Comp").GetComponent<UITooltipComponent>()).text.clear();
         Draw();
         EXPECT_FALSE(Plate());
     }

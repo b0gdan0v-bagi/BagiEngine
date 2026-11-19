@@ -292,9 +292,9 @@ namespace BECore::Tests {
         const Json* results = FindJsonMember(*result, "results");
         ASSERT_NE(results, nullptr);
         ASSERT_EQ(results->size(), 4u);
-        EXPECT_FALSE(GetJsonBool(*FindJsonMember((*results)[1], "result"), "met").value_or(true));
-        EXPECT_FALSE(GetJsonBool(*FindJsonMember((*results)[3], "result"), "met").value_or(true));
-        EXPECT_EQ(GetJsonInt(*FindJsonMember((*results)[3], "result"), "version").value_or(-1), 2);
+        EXPECT_FALSE(GetJsonBool(Require(FindJsonMember((*results)[1], "result")), "met").value_or(true));
+        EXPECT_FALSE(GetJsonBool(Require(FindJsonMember((*results)[3], "result")), "met").value_or(true));
+        EXPECT_EQ(GetJsonInt(Require(FindJsonMember((*results)[3], "result")), "version").value_or(-1), 2);
     }
 
     TEST_P(RunUntilTest, EventIsMetWhenItIsPublished) {
@@ -479,14 +479,14 @@ namespace BECore::Tests {
         service.Drain();
 
         ASSERT_EQ(responses.size(), 2u);
-        const Json* results = FindJsonMember(*Result(0), "results");
+        const Json* results = FindJsonMember(Require(Result(0)), "results");
         ASSERT_NE(results, nullptr);
         ASSERT_EQ(results->size(), 2u);
         const Json* waited = FindJsonMember((*results)[0], "result");
         ASSERT_NE(waited, nullptr);
         EXPECT_TRUE(GetJsonBool(*waited, "met").value_or(false));
         EXPECT_EQ(GetJsonInt(*waited, "frames").value_or(-1), 2);
-        const Json* state = FindJsonMember(*FindJsonMember((*results)[1], "result"), "state");
+        const Json* state = FindJsonMember(Require(FindJsonMember((*results)[1], "result")), "state");
         ASSERT_NE(state, nullptr);
         EXPECT_EQ(GetJsonInt(*state, "counter").value_or(-1), 2);
         EXPECT_EQ(GetJsonInt(responses[1], "id").value_or(-1), 2);

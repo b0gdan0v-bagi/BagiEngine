@@ -6,6 +6,7 @@
 #include <BECore/UI/UIPanel.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UICanvasRoundTrip.h>
 #include <gtest/gtest.h>
 
@@ -283,7 +284,7 @@ namespace BECore::Tests {
         ASSERT_EQ(renderer.calls.size(), 1u);
         bool hasStart = false;
         bool hasEnd = false;
-        for (const GeometryVertex& vertex : renderer.calls[0].vertices) {
+        for (const GeometryVertex& vertex : At(renderer.calls, 0).vertices) {
             hasStart |= vertex.color.r == 10 && vertex.color.a == 255;
             hasEnd |= vertex.color.r == 200 && vertex.color.a == 255;
         }

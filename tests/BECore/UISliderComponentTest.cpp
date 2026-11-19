@@ -16,6 +16,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UICanvasRoundTrip.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UIPartShapeChecks.h>
@@ -154,13 +155,13 @@ namespace BECore::Tests {
         UIElement& Element(const char* name) const {
             UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
-            return *element;
+            return Require(element);
         }
 
         UISliderComponent& Slider(const char* name) const {
             UISliderComponent* slider = Element(name).GetComponent<UISliderComponent>();
             EXPECT_NE(slider, nullptr) << name << " is not a slider";
-            return *slider;
+            return Require(slider);
         }
 
         const Rect& RectOf(const char* name) const {
@@ -215,7 +216,7 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(volume.minValue, 0.0f);
         EXPECT_FLOAT_EQ(volume.maxValue, 1.0f);
         EXPECT_FLOAT_EQ(volume.step, 0.1f);
-        EXPECT_TRUE(Element("Off").GetComponent<UIInputClicker>()->disabled);
+        EXPECT_TRUE(Require(Element("Off").GetComponent<UIInputClicker>()).disabled);
 
         const auto made = AbstractFactory<UIComponent>::GetInstance().Create("UISliderComponent");
         ASSERT_TRUE(made);
@@ -234,7 +235,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(Element("Volume").interactive) << "the component makes it one, not the field";
         EXPECT_TRUE(Element("Volume").IsHitTestable());
         EXPECT_FALSE(Element("Volume").GivesStateLook()) << "stateLook=\"false\": the plate is still";
-        EXPECT_TRUE(Element("Volume").GetComponent<UIInputClicker>()->action.Empty());
+        EXPECT_TRUE(Require(Element("Volume").GetComponent<UIInputClicker>()).action.Empty());
     }
 
     TEST_F(UISliderComponentTest, AClickerlessSliderStillWorksButCannotBeDisabled) {
@@ -308,6 +309,7 @@ namespace BECore::Tests {
         const DrawCall* track = FindRect(parts.track);
         const DrawCall* filled = FindRect(parts.filled);
         const DrawCall* thumb = FindRect(parts.thumb);
+        ASSERT_NE(thumb, nullptr);
         ASSERT_TRUE(track && filled && thumb);
         EXPECT_EQ(track->color.r, 10);
         EXPECT_EQ(filled->color.r, 40);
@@ -331,10 +333,10 @@ namespace BECore::Tests {
         CoreManager::GetUIInput().DispatchMouseMotion(Motion(XAt("Volume", 0.5f), MiddleY("Volume")));
         Draw();
         ASSERT_TRUE(Element("Volume").hovered);
-        EXPECT_EQ(FindRect(rect)->color.r, 30) << "hovered: the plate stays";
+        EXPECT_EQ(Require(FindRect(rect)).color.r, 30) << "hovered: the plate stays";
         ASSERT_TRUE(Down("Volume", XAt("Volume", 0.5f)));
         Draw();
-        EXPECT_EQ(FindRect(rect)->color.r, 30) << "pressed: the plate stays";
+        EXPECT_EQ(Require(FindRect(rect)).color.r, 30) << "pressed: the plate stays";
         ASSERT_TRUE(Up(XAt("Volume", 0.5f), MiddleY("Volume")));
     }
 
@@ -625,21 +627,21 @@ namespace BECore::Tests {
         const auto loaded = XmlRoundTrip(*_canvas, &xml);
         ASSERT_TRUE(loaded);
 
-        const auto* fine = loaded->GetRoot().FindByName("Fine"_intern)->GetComponent<UISliderComponent>();
+        const auto* fine = Require(loaded->GetRoot().FindByName("Fine"_intern)).GetComponent<UISliderComponent>();
         ASSERT_NE(fine, nullptr);
         EXPECT_EQ(fine->bind, "fine"_intern);
         EXPECT_EQ(fine->action, "SliderCompFine"_intern);
         EXPECT_FLOAT_EQ(fine->maxValue, 100.0f);
         EXPECT_FLOAT_EQ(fine->step, 5.0f);
-        const auto* free = loaded->GetRoot().FindByName("Free"_intern)->GetComponent<UISliderComponent>();
+        const auto* free = Require(loaded->GetRoot().FindByName("Free"_intern)).GetComponent<UISliderComponent>();
         ASSERT_NE(free, nullptr);
         EXPECT_EQ(free->trackColor.g, 20);
         EXPECT_EQ(free->fillColor.g, 50);
         EXPECT_EQ(free->thumbColor.g, 80);
-        EXPECT_FALSE(loaded->GetRoot().FindByName("Free"_intern)->GetComponent<UIInputClicker>()->stateLook);
-        EXPECT_TRUE(loaded->GetRoot().FindByName("Off"_intern)->GetComponent<UIInputClicker>()->disabled);
-        EXPECT_FLOAT_EQ(loaded->GetRoot().FindByName("Reversed"_intern)->GetComponent<UISliderComponent>()->minValue, 1.0f);
-        EXPECT_EQ(loaded->GetRoot().FindByName("Round"_intern)->GetComponent<UISliderComponent>()->partShape, UIPartShape::Round);
+        EXPECT_FALSE(Require(Require(loaded->GetRoot().FindByName("Free"_intern)).GetComponent<UIInputClicker>()).stateLook);
+        EXPECT_TRUE(Require(Require(loaded->GetRoot().FindByName("Off"_intern)).GetComponent<UIInputClicker>()).disabled);
+        EXPECT_FLOAT_EQ(Require(Require(loaded->GetRoot().FindByName("Reversed"_intern)).GetComponent<UISliderComponent>()).minValue, 1.0f);
+        EXPECT_EQ(Require(Require(loaded->GetRoot().FindByName("Round"_intern)).GetComponent<UISliderComponent>()).partShape, UIPartShape::Round);
         ExpectSameElementXml(*_canvas, *loaded);
     }
 
@@ -648,10 +650,10 @@ namespace BECore::Tests {
         const auto loaded = BinaryRoundTrip(*_canvas);
         ASSERT_TRUE(loaded);
 
-        const auto* free = loaded->GetRoot().FindByName("Free"_intern)->GetComponent<UISliderComponent>();
+        const auto* free = Require(loaded->GetRoot().FindByName("Free"_intern)).GetComponent<UISliderComponent>();
         ASSERT_NE(free, nullptr);
         EXPECT_EQ(free->thumbColor.b, 90);
-        EXPECT_FLOAT_EQ(loaded->GetRoot().FindByName("Volume"_intern)->GetComponent<UISliderComponent>()->step, 0.05f);
+        EXPECT_FLOAT_EQ(Require(Require(loaded->GetRoot().FindByName("Volume"_intern)).GetComponent<UISliderComponent>()).step, 0.05f);
         ExpectSameElementXml(*_canvas, *loaded);
     }
 

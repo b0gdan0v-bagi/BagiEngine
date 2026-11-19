@@ -4,6 +4,7 @@
 #include <BECore/UI/UITreeLayout.h>
 #include <BECore/UI/UIVariant.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
@@ -145,12 +146,14 @@ namespace BECore::Tests {
 
         EXPECT_EQ(matched, 1u);
         UIElement* hud = root->FindByName("Hud"_intern);
+        ASSERT_NE(hud, nullptr);
         EXPECT_EQ(hud->active.rect.anchor, UIAnchor::Top);
         EXPECT_EQ(hud->active.rect.width, UILength::Percent(90.0f));
         EXPECT_FLOAT_EQ(hud->active.rect.y.value, 16.0f);  // not named: stays
         EXPECT_EQ(hud->active.rect.height, UILength::Px(96.0f));
         EXPECT_EQ(hud->style.rect.anchor, UIAnchor::TopLeft);  // the authored style is never touched
         UIElement* score = root->FindByName("Score"_intern);
+        ASSERT_NE(score, nullptr);
         EXPECT_EQ(score->active, score->style);
     }
 
@@ -172,6 +175,7 @@ namespace BECore::Tests {
         EXPECT_EQ(UIVariants::Apply(*root, variants, kLandscape), 2u);
 
         UIElement* hud = root->FindByName("Hud"_intern);
+        ASSERT_NE(hud, nullptr);
         EXPECT_FLOAT_EQ(hud->active.rect.x.value, 300.0f);  // the second wins
         EXPECT_FLOAT_EQ(hud->active.rect.y.value, 200.0f);  // the first one's y stays
     }
@@ -189,7 +193,7 @@ namespace BECore::Tests {
 
         UIVariants::Apply(*root, variants, kPortrait);
 
-        EXPECT_FLOAT_EQ(root->FindByName("Hud"_intern)->active.rect.x.value, 1.0f);
+        EXPECT_FLOAT_EQ(Require(root->FindByName("Hud"_intern)).active.rect.x.value, 1.0f);
     }
 
     TEST(UIVariantsTest, GoingBackToAShapeNoVariantMatchesRestoresTheAuthoredStyle) {
@@ -200,6 +204,7 @@ namespace BECore::Tests {
         UIVariants::Apply(*root, variants, kLandscape);
 
         UIElement* hud = root->FindByName("Hud"_intern);
+        ASSERT_NE(hud, nullptr);
         EXPECT_EQ(hud->active, hud->style);
     }
 
@@ -214,7 +219,7 @@ namespace BECore::Tests {
 
         EXPECT_EQ(UIVariants::Apply(*root, variants, kLandscape), 1u);
 
-        EXPECT_TRUE(root->FindByName("Hud"_intern)->active.visible);
+        EXPECT_TRUE(Require(root->FindByName("Hud"_intern)).active.visible);
     }
 
     TEST(UIVariantsTest, EveryPropertyOfAnOverrideReachesTheStyle) {
@@ -397,9 +402,9 @@ namespace BECore::Tests {
         UITreeLayout::Run(*root, kLandscape, kLandscape);
 
         ExpectRect(root->rect, 0.0f, 0.0f, 1280.0f, 720.0f);
-        ExpectRect(root->FindByName("Hud"_intern)->rect, 16.0f, 16.0f, 220.0f, 96.0f);
-        ExpectRect(root->FindByName("Score"_intern)->rect, 28.0f, 26.0f, 120.0f, 28.0f);
-        ExpectRect(root->FindByName("Reset"_intern)->rect, 16.0f + 220.0f - 12.0f - 96.0f, 16.0f + 96.0f - 10.0f - 32.0f, 96.0f, 32.0f);
+        ExpectRect(Require(root->FindByName("Hud"_intern)).rect, 16.0f, 16.0f, 220.0f, 96.0f);
+        ExpectRect(Require(root->FindByName("Score"_intern)).rect, 28.0f, 26.0f, 120.0f, 28.0f);
+        ExpectRect(Require(root->FindByName("Reset"_intern)).rect, 16.0f + 220.0f - 12.0f - 96.0f, 16.0f + 96.0f - 10.0f - 32.0f, 96.0f, 32.0f);
     }
 
     TEST(UITreeLayoutTest, ThePortraitVariantMovesAndWidensTheHud) {
@@ -410,9 +415,9 @@ namespace BECore::Tests {
         UITreeLayout::Run(*root, kPortrait, kPortrait);
 
         // Top center, 90% of 720 wide; the children follow their parent
-        ExpectRect(root->FindByName("Hud"_intern)->rect, 36.0f, 16.0f, 648.0f, 96.0f);
-        ExpectRect(root->FindByName("Score"_intern)->rect, 48.0f, 26.0f, 120.0f, 28.0f);
-        const Rect reset = root->FindByName("Reset"_intern)->rect;
+        ExpectRect(Require(root->FindByName("Hud"_intern)).rect, 36.0f, 16.0f, 648.0f, 96.0f);
+        ExpectRect(Require(root->FindByName("Score"_intern)).rect, 48.0f, 26.0f, 120.0f, 28.0f);
+        const Rect reset = Require(root->FindByName("Reset"_intern)).rect;
         EXPECT_NEAR(reset.x + reset.w, 36.0f + 648.0f - 12.0f, kTolerance);  // still pinned to the right edge of the wider panel
     }
 
@@ -599,8 +604,8 @@ namespace BECore::Tests {
         UIVariants::Apply(*root, variants, kLandscape);
         UITreeLayout::Run(*root, kLandscape, kLandscape);
 
-        EXPECT_TRUE(root->FindByName("Reset"_intern)->rect.IsEmpty());
-        EXPECT_FALSE(root->FindByName("Score"_intern)->rect.IsEmpty());
+        EXPECT_TRUE(Require(root->FindByName("Reset"_intern)).rect.IsEmpty());
+        EXPECT_FALSE(Require(root->FindByName("Score"_intern)).rect.IsEmpty());
     }
 
     TEST(UITreeLayoutTest, ABackgroundThatIgnoresTheSafeAreaUsesTheWholeCanvas) {
@@ -646,7 +651,7 @@ namespace BECore::Tests {
 
         EXPECT_EQ(root->FindByName("Root"_intern), root.Get());
         ASSERT_NE(root->FindByName("Reset"_intern), nullptr);
-        EXPECT_EQ(root->FindByName("Reset"_intern)->name, "Reset"_intern);
+        EXPECT_EQ(Require(root->FindByName("Reset"_intern)).name, "Reset"_intern);
         EXPECT_EQ(root->FindByName("Missing"_intern), nullptr);
     }
 

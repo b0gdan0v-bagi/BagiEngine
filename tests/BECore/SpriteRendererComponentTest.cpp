@@ -7,6 +7,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -204,7 +205,7 @@ namespace BECore::Tests {
         Draw("Plain");
 
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        const DrawCall& call = _renderer->calls[0];
+        const DrawCall& call = At(_renderer->calls, 0);
         EXPECT_EQ(call.kind, DrawKind::Texture);
         EXPECT_TRUE(RectNear(call.rect, 10.0f, 20.0f, kSquare, kSquare));
         ASSERT_TRUE(call.source.has_value());
@@ -217,7 +218,7 @@ namespace BECore::Tests {
         Draw("Plain");
 
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        const DrawCall& call = _renderer->calls[0];
+        const DrawCall& call = At(_renderer->calls, 0);
         EXPECT_EQ(call.kind, DrawKind::Texture);
         EXPECT_TRUE(RectNear(call.rect, 10.0f + (kSquare - kFittedWidth) * 0.5f, 20.0f, kFittedWidth, kSquare));
         // The source rect is not touched by the fit, and the aspect is the one of the cell, not of the 20 x 40 texture
@@ -231,8 +232,8 @@ namespace BECore::Tests {
         Draw("Plain");
 
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        EXPECT_TRUE(RectNear(_renderer->calls[0].rect, 100.0f, 100.0f, kSquare, kSquare));
-        EXPECT_FALSE(_renderer->calls[0].source.has_value());
+        EXPECT_TRUE(RectNear(At(_renderer->calls, 0).rect, 100.0f, 100.0f, kSquare, kSquare));
+        EXPECT_FALSE(At(_renderer->calls, 0).source.has_value());
     }
 
     TEST_F(SpriteRendererComponentTest, AnEmptySourceTakesTheAspectOfTheTexture) {
@@ -242,8 +243,8 @@ namespace BECore::Tests {
 
         // 20 x 40 in 80 x 80 is 40 x 80, 20 units from each side
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        EXPECT_TRUE(RectNear(_renderer->calls[0].rect, 120.0f, 100.0f, 40.0f, 80.0f));
-        EXPECT_FALSE(_renderer->calls[0].source.has_value());
+        EXPECT_TRUE(RectNear(At(_renderer->calls, 0).rect, 120.0f, 100.0f, 40.0f, 80.0f));
+        EXPECT_FALSE(At(_renderer->calls, 0).source.has_value());
     }
 
     TEST_F(SpriteRendererComponentTest, TheFitIsComputedInSceneUnits) {
@@ -258,9 +259,9 @@ namespace BECore::Tests {
         const ViewTransform view = ViewTransform::Fit(400.0f, 200.0f, _renderer->width, _renderer->height);
         const Rect expected = view.ToOutput(fitted.x, fitted.y, fitted.w, fitted.h);
         ASSERT_EQ(_renderer->calls.size(), 1u);
-        EXPECT_TRUE(RectNear(_renderer->calls[0].rect, expected.x, expected.y, expected.w, expected.h));
+        EXPECT_TRUE(RectNear(At(_renderer->calls, 0).rect, expected.x, expected.y, expected.w, expected.h));
         // The scale is 2 and the view is moved down by 100 pixels
-        EXPECT_TRUE(RectNear(_renderer->calls[0].rect, 80.0f, 120.0f, 120.0f, 120.0f));
+        EXPECT_TRUE(RectNear(At(_renderer->calls, 0).rect, 80.0f, 120.0f, 120.0f, 120.0f));
     }
 
     TEST_F(SpriteRendererComponentTest, ReloadingTheTextureDropsTheOneFromSetTexture) {

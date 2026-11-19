@@ -1,12 +1,11 @@
-#include <BECore/Config/XmlConfig.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/Require.h>
 #include <CoreSDL/SDLEvents.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <CoreSDL/SDLUtils.h>
-#include <Events/SubscriptionHolder.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -242,8 +241,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(config.LoadFromFile(CoreManager::GetFileSystem().ResolvePath(kWindowConfig)));
         const XmlNode node = config.GetRoot().GetChild("window");
 
-        EXPECT_EQ(window->GetWidth(), node.ParseAttribute<int>("width").value());
-        EXPECT_EQ(window->GetHeight(), node.ParseAttribute<int>("height").value());
+        EXPECT_EQ(window->GetWidth(), Require(node.ParseAttribute<int>("width")));
+        EXPECT_EQ(window->GetHeight(), Require(node.ParseAttribute<int>("height")));
     }
 
     TEST_F(SDLWindowMetricsTest, AfterDestroyTheSizeIsNeutralAgain) {

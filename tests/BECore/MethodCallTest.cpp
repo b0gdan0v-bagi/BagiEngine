@@ -11,6 +11,7 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TestText.h>
 #include <Generated/MethodCallTest.gen.hpp>
 #include <gtest/gtest.h>
@@ -361,7 +362,7 @@ namespace BECore::Tests {
         const MethodRef found = registry.FindMethod(*ref.type, "Bump");
         ASSERT_TRUE(found);
         EXPECT_EQ(found.owner->Name(), "McBase");
-        EXPECT_EQ(found.offset, registry.OffsetOfBase(*ref.type, *found.owner).value());
+        EXPECT_EQ(found.offset, Require(registry.OffsetOfBase(*ref.type, *found.owner)));
 
         Json arguments = Json::object();
         arguments["by"] = 4;

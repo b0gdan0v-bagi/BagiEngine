@@ -15,6 +15,7 @@
 #include <BECore/UI/UIStateLook.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
@@ -94,7 +95,7 @@ namespace BECore::Tests {
             const Vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
             _texture = _renderer->CreateTexture(pixels.data(), kPictureSide, kPictureSide);
             for (const char* icon : {"BtnIcon", "PlainIcon"}) {
-                El(icon).GetComponent<UIImageComponent>()->GetSprite().SetTexture(_texture);
+                Require(El(icon).GetComponent<UIImageComponent>()).GetSprite().SetTexture(_texture);
             }
         }
 

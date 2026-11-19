@@ -275,6 +275,7 @@ namespace BECore::Tests {
         for (const auto& pair : pairs) {
             const UIElement* caption = FindElement(pair.caption);
             const UIElement* control = FindElement(pair.control);
+            ASSERT_NE(control, nullptr);
             ASSERT_TRUE(caption && control) << pair.caption;
             EXPECT_LT(caption->rect.x + caption->rect.w, control->rect.x + 0.01f) << pair.caption;
             EXPECT_GE(control->rect.w, 200.0f) << pair.control << " keeps room to be used";

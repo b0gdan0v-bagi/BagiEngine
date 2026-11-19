@@ -26,6 +26,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/TextTestSupport.h>
 #include <Common/UICanvasRoundTrip.h>
 #include <Common/UIInputEvents.h>
@@ -130,13 +131,13 @@ namespace BECore::Tests {
         UITextComponent& Text(const char* name) const {
             UITextComponent* text = El(name).GetComponent<UITextComponent>();
             EXPECT_NE(text, nullptr) << name << " has no text component";
-            return *text;
+            return Require(text);
         }
 
         UIInputClicker& Clicker(const char* name) const {
             UIInputClicker* clicker = El(name).GetComponent<UIInputClicker>();
             EXPECT_NE(clicker, nullptr) << name << " has no clicker";
-            return *clicker;
+            return Require(clicker);
         }
 
         /// The color of the filled rect that was drawn exactly on the element's rect, in the last draw
@@ -246,7 +247,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Get<UIDropdown>("Pick").bind, "pickVar"_intern);
         EXPECT_EQ(Get<UIDropdown>("Pick").action, "UIControlsTestPick"_intern);
         ASSERT_NE(Get<UIDropdown>("Pick").GetComponent<UITextComponent>(), nullptr);
-        EXPECT_EQ(Get<UIDropdown>("Pick").GetComponent<UITextComponent>()->text, "Pick one");
+        EXPECT_EQ(Require(Get<UIDropdown>("Pick").GetComponent<UITextComponent>()).text, "Pick one");
         EXPECT_FLOAT_EQ(Get<UIDropdown>("Pick").optionHeight, 48.0f);
         EXPECT_EQ(Get<UIDropdown>("Pick").arrowColor.g, 2);
         EXPECT_EQ(Get<UIDropdown>("Pick").arrowColor.a, 255);
@@ -845,7 +846,7 @@ namespace BECore::Tests {
         for (const char* bad : {"textOutline=\"2\"", "textOutline=\"-1,#000\"", "textShadow=\"1,#000000\"", "textShadow=\"a,b,#000000\""}) {
             auto element = load(bad, errors);
             EXPECT_TRUE(errors) << bad;
-            EXPECT_TRUE(element->GetComponent<UITextComponent>()->textEffects == UITextEffects{}) << bad << ": a malformed value leaves the default";
+            EXPECT_TRUE(Require(element->GetComponent<UITextComponent>()).textEffects == UITextEffects{}) << bad << ": a malformed value leaves the default";
         }
     }
 
@@ -1040,9 +1041,9 @@ namespace BECore::Tests {
         Draw();
 
         ASSERT_FALSE(_renderer->calls.empty());
-        EXPECT_EQ(_renderer->calls[0].kind, DrawKind::Rect);  // the plate is the first thing drawn
-        EXPECT_EQ(_renderer->calls[0].color.a, 200);
-        EXPECT_TRUE(NearRect(_renderer->calls[0].rect, Get<UIPanel>("Plate").rect));
+        EXPECT_EQ(At(_renderer->calls, 0).kind, DrawKind::Rect);  // the plate is the first thing drawn
+        EXPECT_EQ(At(_renderer->calls, 0).color.a, 200);
+        EXPECT_TRUE(NearRect(At(_renderer->calls, 0).rect, Get<UIPanel>("Plate").rect));
 
         const auto glyphs = GlyphsIn(El("Title"));
         EXPECT_EQ(glyphs.size(), 5u) << "one quad per glyph of 'Score'";
@@ -1259,29 +1260,29 @@ namespace BECore::Tests {
         Draw();
         auto& ok = El("Ok");
         const Rect c = Center(ok);
-        EXPECT_EQ(FillOf(ok)->r, kButtonColor.r);
+        EXPECT_EQ(Require(FillOf(ok)).r, kButtonColor.r);
         EXPECT_FALSE(ok.hovered);
 
         MoveTo(c.x, c.y);
         Draw();
         EXPECT_TRUE(ok.hovered);
-        EXPECT_GT(FillOf(ok)->r, kButtonColor.r) << "lighter under the pointer";
+        EXPECT_GT(Require(FillOf(ok)).r, kButtonColor.r) << "lighter under the pointer";
 
         ASSERT_TRUE(Press(ok));
         Draw();
         EXPECT_TRUE(ok.pressed);
-        EXPECT_LT(FillOf(ok)->r, kButtonColor.r) << "darker while held";
+        EXPECT_LT(Require(FillOf(ok)).r, kButtonColor.r) << "darker while held";
 
         MoveTo(700.0f, 500.0f, SDL_BUTTON_LMASK);  // dragging off the button
         Draw();
         EXPECT_FALSE(ok.hovered);
         EXPECT_TRUE(ok.pressed);
-        EXPECT_EQ(FillOf(ok)->r, kButtonColor.r) << "a press that moved off is not shown as pressed";
+        EXPECT_EQ(Require(FillOf(ok)).r, kButtonColor.r) << "a press that moved off is not shown as pressed";
 
         Release(700.0f, 500.0f);
         Draw();
         EXPECT_FALSE(ok.pressed);
-        EXPECT_EQ(FillOf(ok)->r, kButtonColor.r);
+        EXPECT_EQ(Require(FillOf(ok)).r, kButtonColor.r);
     }
 
     TEST_F(UIControlsTest, AClickIsAPressAndItsReleaseOnTheButton) {
@@ -1332,10 +1333,10 @@ namespace BECore::Tests {
         EXPECT_TRUE(Release(c.x, c.y));
         EXPECT_EQ(actions.Total(), 0u);
 
-        EXPECT_EQ(FillOf(off)->a, kButtonColor.a / 2) << "half transparent unless disabledColor says otherwise";
+        EXPECT_EQ(Require(FillOf(off)).a, kButtonColor.a / 2) << "half transparent unless disabledColor says otherwise";
         off.disabledColor = Color{50, 50, 50, 255};
         Draw();
-        EXPECT_EQ(FillOf(off)->r, 50);
+        EXPECT_EQ(Require(FillOf(off)).r, 50);
     }
 
     TEST_F(UIControlsTest, ExplicitStateColorsWin) {
@@ -1347,10 +1348,10 @@ namespace BECore::Tests {
 
         MoveTo(c.x, c.y);
         Draw();
-        EXPECT_EQ(FillOf(ok)->r, 1);
+        EXPECT_EQ(Require(FillOf(ok)).r, 1);
         Press(ok);
         Draw();
-        EXPECT_EQ(FillOf(ok)->r, 4);
+        EXPECT_EQ(Require(FillOf(ok)).r, 4);
     }
 
     TEST_F(UIControlsTest, AGameDragDoesNotLightTheButton) {
@@ -1432,12 +1433,12 @@ namespace BECore::Tests {
 
         Draw();
         EXPECT_FALSE(barDrawn()) << "no bar on a button that is not selected";
-        const Color plain = *FillOf(ok);
+        const Color plain = Require(FillOf(ok));
         const Color hovered = [&] {
             const Rect c = Center(ok);
             MoveTo(c.x, c.y);
             Draw();
-            const Color result = *FillOf(ok);
+            const Color result = Require(FillOf(ok));
             MoveTo(700.0f, 500.0f);
             return result;
         }();
@@ -1445,8 +1446,8 @@ namespace BECore::Tests {
         ok.selected = true;
         Draw();
         ASSERT_TRUE(FillOf(ok));
-        EXPECT_GT(FillOf(ok)->r, hovered.r) << "the derived selected fill is lighter than the hover shift";
-        EXPECT_GT(FillOf(ok)->r, plain.r);
+        EXPECT_GT(Require(FillOf(ok)).r, hovered.r) << "the derived selected fill is lighter than the hover shift";
+        EXPECT_GT(Require(FillOf(ok)).r, plain.r);
         ASSERT_TRUE(barDrawn());
         EXPECT_EQ(barDrawn()->r, Text("Ok").textColor.r);
         EXPECT_EQ(barDrawn()->a, Text("Ok").textColor.a);
@@ -1454,7 +1455,7 @@ namespace BECore::Tests {
         ok.selected = false;
         Draw();
         EXPECT_FALSE(barDrawn());
-        EXPECT_EQ(FillOf(ok)->r, plain.r);
+        EXPECT_EQ(Require(FillOf(ok)).r, plain.r);
     }
 
     TEST_F(UIControlsTest, ASelectedColorWinsOverTheDerivedOne) {
@@ -1462,8 +1463,8 @@ namespace BECore::Tests {
         ok.selected = true;
         ok.selectedColor = Color{7, 8, 9, 255};
         Draw();
-        EXPECT_EQ(FillOf(ok)->r, 7);
-        EXPECT_EQ(FillOf(ok)->b, 9);
+        EXPECT_EQ(Require(FillOf(ok)).r, 7);
+        EXPECT_EQ(Require(FillOf(ok)).b, 9);
     }
 
     TEST_F(UIControlsTest, HoverAndPressShiftFromTheSelectedFill) {
@@ -1475,19 +1476,19 @@ namespace BECore::Tests {
 
         MoveTo(c.x, c.y);
         Draw();
-        EXPECT_GT(FillOf(ok)->r, 100) << "lighter than the selected fill under the pointer";
+        EXPECT_GT(Require(FillOf(ok)).r, 100) << "lighter than the selected fill under the pointer";
 
         ASSERT_TRUE(Press(ok));
         Draw();
-        EXPECT_LT(FillOf(ok)->r, 100) << "darker than the selected fill while held";
+        EXPECT_LT(Require(FillOf(ok)).r, 100) << "darker than the selected fill while held";
 
         ok.hoverColor = Color{1, 2, 3, 255};
         ok.pressedColor = Color{4, 5, 6, 255};
         Draw();
-        EXPECT_EQ(FillOf(ok)->r, 4) << "an explicit pressed color wins";
+        EXPECT_EQ(Require(FillOf(ok)).r, 4) << "an explicit pressed color wins";
         Release(c.x, c.y);
         Draw();
-        EXPECT_EQ(FillOf(ok)->r, 1) << "an explicit hover color wins";
+        EXPECT_EQ(Require(FillOf(ok)).r, 1) << "an explicit hover color wins";
     }
 
     TEST_F(UIControlsTest, DisabledWinsOverSelected) {
@@ -1495,8 +1496,8 @@ namespace BECore::Tests {
         off.selected = true;
         off.selectedColor = Color{200, 200, 200, 255};
         Draw();
-        EXPECT_EQ(FillOf(off)->r, kButtonColor.r) << "the grey of a disabled button, not the selected fill";
-        EXPECT_EQ(FillOf(off)->a, kButtonColor.a / 2);
+        EXPECT_EQ(Require(FillOf(off)).r, kButtonColor.r) << "the grey of a disabled button, not the selected fill";
+        EXPECT_EQ(Require(FillOf(off)).a, kButtonColor.a / 2);
     }
 
     TEST_F(UIControlsTest, AGroupDisabledButtonIsGreyAndSwallowsTheClick) {
@@ -1504,7 +1505,7 @@ namespace BECore::Tests {
         auto& ok = El("Ok");
         ok.groupDisabled = true;
         Draw();
-        EXPECT_EQ(FillOf(ok)->a, kButtonColor.a / 2);
+        EXPECT_EQ(Require(FillOf(ok)).a, kButtonColor.a / 2);
 
         const Rect c = Center(ok);
         EXPECT_TRUE(Press(ok)) << "the click does not fall through to what is below";
@@ -1513,7 +1514,7 @@ namespace BECore::Tests {
 
         ok.groupDisabled = false;
         Draw();
-        EXPECT_EQ(FillOf(ok)->a, kButtonColor.a);
+        EXPECT_EQ(Require(FillOf(ok)).a, kButtonColor.a);
         ASSERT_TRUE(Press(ok));
         Release(c.x, c.y);
         EXPECT_EQ(actions.Count("UIControlsTestOk"), 1);

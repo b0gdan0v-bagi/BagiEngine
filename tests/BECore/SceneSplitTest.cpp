@@ -17,6 +17,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
@@ -240,7 +241,7 @@ namespace BECore::Tests {
         static BECore::Scene& Main(const IntrusivePtrAtomic<SceneManager>& manager) {
             BECore::Scene* scene = manager->GetSceneByName("Main"_intern);
             EXPECT_NE(scene, nullptr);
-            return *scene;
+            return Require(scene);
         }
 
         /// The `ui_tree` answer of the active scene "Main" after a draw, as text
@@ -440,10 +441,10 @@ namespace BECore::Tests {
         const auto& nodes = Main(split).GetRootNode().GetChildren();
         EXPECT_EQ(nodes[0]->GetLayer(), 7);
         EXPECT_EQ(nodes[1]->GetLayer(), 2);
-        EXPECT_EQ(nodes[0]->GetComponent<TransformComponent>()->_x, 100.0f);
-        EXPECT_EQ(nodes[0]->GetComponent<TransformComponent>()->_y, 20.0f);
-        EXPECT_EQ(nodes[1]->GetComponent<TransformComponent>()->_x, 10.0f);
-        EXPECT_EQ(nodes[1]->GetComponent<TransformComponent>()->_y, 55.0f);
+        EXPECT_EQ(Require(nodes[0]->GetComponent<TransformComponent>())._x, 100.0f);
+        EXPECT_EQ(Require(nodes[0]->GetComponent<TransformComponent>())._y, 20.0f);
+        EXPECT_EQ(Require(nodes[1]->GetComponent<TransformComponent>())._x, 10.0f);
+        EXPECT_EQ(Require(nodes[1]->GetComponent<TransformComponent>())._y, 55.0f);
     }
 
     /// A node with overrides, also under another name, keeps the reference of its file
@@ -504,9 +505,9 @@ namespace BECore::Tests {
         EXPECT_EQ(nodes[0]->GetLayer(), 9);
         EXPECT_EQ(nodes[1]->GetLayer(), 4);
         EXPECT_NE(nodes[0].Get(), nodes[1].Get());
-        EXPECT_EQ(nodes[0]->GetComponent<TransformComponent>()->_x, 10.0f);
-        EXPECT_EQ(nodes[1]->GetComponent<TransformComponent>()->_x, 10.0f);
-        EXPECT_EQ(nodes[0]->GetComponent<UICanvasComponent>()->_elements.size(), 2u);
+        EXPECT_EQ(Require(nodes[0]->GetComponent<TransformComponent>())._x, 10.0f);
+        EXPECT_EQ(Require(nodes[1]->GetComponent<TransformComponent>())._x, 10.0f);
+        EXPECT_EQ(Require(nodes[0]->GetComponent<UICanvasComponent>())._elements.size(), 2u);
     }
 
     TEST_F(SceneSplitOverrideTest, AnOverrideThatErrorsDropsThatInstanceOnly) {
@@ -559,7 +560,7 @@ namespace BECore::Tests {
         const UIElement* title = canvas->_elements[0].Get();
         ASSERT_NE(title->GetComponent<UITextComponent>(), nullptr);
         EXPECT_EQ(title->name, "Title"_intern);
-        EXPECT_EQ(title->GetComponent<UITextComponent>()->text, "C");
+        EXPECT_EQ(Require(title->GetComponent<UITextComponent>()).text, "C");
     }
 
     // ---- layering ---------------------------------------------------------------------------------------------------------

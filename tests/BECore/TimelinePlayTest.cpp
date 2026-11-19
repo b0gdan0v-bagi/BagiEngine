@@ -1,6 +1,7 @@
 #include <BECore/Animation/ScopedTween.h>
 #include <BECore/Animation/TweenManager.h>
 #include <BECore/Time/Time.h>
+#include <Common/Require.h>
 #include <TaskSystem/Task.h>
 #include <gtest/gtest.h>
 
@@ -391,7 +392,7 @@ namespace BECore::Tests {
                 tweens.Advance(time.GetDeltaTime());
             }
             EXPECT_TRUE(handle->IsFinished()) << framesPerSecond;
-            EXPECT_EQ(calls.back().second, kTo) << framesPerSecond;
+            EXPECT_EQ(Back(calls).second, kTo) << framesPerSecond;
             finishedByRate.push_back(FinishedIds(calls));
         }
         EXPECT_EQ(finishedByRate[0], (Vector<int>{0, 1, 2, 3}));

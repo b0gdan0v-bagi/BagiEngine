@@ -1,5 +1,6 @@
 #include <BECore/Rooms/TestClient.h>
 #include <BECore/Rooms/WireJudge.h>
+#include <Common/Require.h>
 
 namespace BECore::Tests {
 
@@ -198,7 +199,7 @@ namespace BECore::Tests {
         harness.JoinByToken(replacement, code, token);
         const TestClient& old = harness.Client(ids[1]);
         ASSERT_TRUE(old.closed);
-        ASSERT_EQ(old.Last(RoomMessageTypes::kLeft)->GetString("reason"), "replaced");
+        ASSERT_EQ(Require(old.Last(RoomMessageTypes::kLeft)).GetString("reason"), "replaced");
         const size_t receivedAtTheEnd = old.received.size();
         EXPECT_EQ(old.received.back().type, RoomMessageTypes::kLeft);
 

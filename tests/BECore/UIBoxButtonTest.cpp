@@ -7,6 +7,7 @@
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -132,7 +133,7 @@ namespace BECore::Tests {
         const auto glowOff = Draw(*glowing);
         ASSERT_EQ(glowOff.size(), 1u);
         EXPECT_FALSE(outside(glowOff[0])) << "a glow is dropped too";
-        glowing->GetComponent<UIInputClicker>()->disabled = false;
+        Require(glowing->GetComponent<UIInputClicker>()).disabled = false;
         const auto glowOn = Draw(*glowing);
         ASSERT_EQ(glowOn.size(), 1u);
         EXPECT_TRUE(outside(glowOn[0]));
@@ -229,7 +230,7 @@ namespace BECore::Tests {
         Vector<IntrusivePtr<UIElement>> segments;
         for (const char* value : {"one", "two", "three"}) {
             auto segment = MakeElement(State::Normal);
-            segment->GetComponent<UIInputClicker>()->value = PoolString::Intern(value);
+            Require(segment->GetComponent<UIInputClicker>()).value = PoolString::Intern(value);
             group->children.push_back(segment);
             segments.push_back(segment);
         }

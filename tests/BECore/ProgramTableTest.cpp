@@ -8,6 +8,7 @@
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <BECore/Values/Value.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -23,7 +24,7 @@ namespace BECore::Tests {
         template <typename T>
         std::expected<Program, ProgramError> TableProgram(const Vector<T>& entries, int32_t index) {
             ProgramBuilder builder;
-            const uint8_t indexReg = builder.AcquireRegister().value();
+            const uint8_t indexReg = Require(builder.AcquireRegister());
             builder.EmitLoadConst(indexReg, index);
             Vector<RegisterImage> images;
             images.reserve(entries.size());
@@ -33,7 +34,7 @@ namespace BECore::Tests {
                 images.push_back(image);
             }
             const uint32_t first = builder.AddConstantRun(Span<const RegisterImage>(images.data(), images.size()));
-            const uint8_t dst = builder.AcquireRegister().value();
+            const uint8_t dst = Require(builder.AcquireRegister());
             builder.EmitLoadTable(dst, indexReg, first, static_cast<uint32_t>(entries.size()));
             return builder.Finish(kProgramTypeOf<T>, dst);
         }
@@ -124,7 +125,7 @@ namespace BECore::Tests {
 
     TEST(ProgramTableTest, TheEntriesAreConsecutiveWhateverTheConstantsBefore) {
         ProgramBuilder builder;
-        const uint8_t indexReg = builder.AcquireRegister().value();
+        const uint8_t indexReg = Require(builder.AcquireRegister());
         builder.EmitLoadConst(indexReg, 1);
         const uint32_t before = builder.AddConstant(int32_t{20});
         const Vector<int32_t> entries{10, 20, 30};
@@ -135,9 +136,9 @@ namespace BECore::Tests {
         const uint32_t first = builder.AddConstantRun(Span<const RegisterImage>(images.data(), images.size()));
         // 20 is one of the entries and also a constant already: the run is appended as it is, so the table stays one run
         EXPECT_NE(first, before);
-        const uint8_t dst = builder.AcquireRegister().value();
+        const uint8_t dst = Require(builder.AcquireRegister());
         builder.EmitLoadTable(dst, indexReg, first, 3);
-        const Program program = builder.Finish(ProgramType::Int32, dst).value();
+        const Program program = Require(builder.Finish(ProgramType::Int32, dst));
         EXPECT_EQ(Run<int32_t>(program, Context{}), 20);
         EXPECT_EQ(program.Constants().size(), 5U);
     }
@@ -146,9 +147,9 @@ namespace BECore::Tests {
         // The pool holds @p constants constants in all: the load of the index is the first
         const auto finish = [](const Instruction& ins, size_t constants) {
             ProgramBuilder builder;
-            const uint8_t indexReg = builder.AcquireRegister().value();
+            const uint8_t indexReg = Require(builder.AcquireRegister());
             builder.EmitLoadConst(indexReg, 0);
-            const uint8_t dst = builder.AcquireRegister().value();
+            const uint8_t dst = Require(builder.AcquireRegister());
             for (size_t i = 1; i < constants; ++i) {
                 static_cast<void>(builder.AddConstant(static_cast<int32_t>(i + 100)));
             }
@@ -175,22 +176,22 @@ namespace BECore::Tests {
 
     TEST(ProgramTableTest, FinishRefusesATableOverTheLimit) {
         ProgramBuilder builder;
-        const uint8_t indexReg = builder.AcquireRegister().value();
+        const uint8_t indexReg = Require(builder.AcquireRegister());
         builder.EmitLoadConst(indexReg, 0);
         Vector<RegisterImage> images(kMaxTableEntries + 1);
         const uint32_t first = builder.AddConstantRun(Span<const RegisterImage>(images.data(), images.size()));
-        const uint8_t dst = builder.AcquireRegister().value();
+        const uint8_t dst = Require(builder.AcquireRegister());
         builder.EmitLoadTable(dst, indexReg, first, kMaxTableEntries + 1);
         const auto refused = builder.Finish(ProgramType::Int32, dst);
         ASSERT_FALSE(refused.has_value());
         EXPECT_NE(refused.error().message.find(Format("at most {}", kMaxTableEntries)), String::npos) << refused.error().message;
 
         ProgramBuilder exact;
-        const uint8_t exactIndex = exact.AcquireRegister().value();
+        const uint8_t exactIndex = Require(exact.AcquireRegister());
         exact.EmitLoadConst(exactIndex, 0);
         images.resize(kMaxTableEntries);
         const uint32_t exactFirst = exact.AddConstantRun(Span<const RegisterImage>(images.data(), images.size()));
-        const uint8_t exactDst = exact.AcquireRegister().value();
+        const uint8_t exactDst = Require(exact.AcquireRegister());
         exact.EmitLoadTable(exactDst, exactIndex, exactFirst, kMaxTableEntries);
         EXPECT_TRUE(exact.Finish(ProgramType::Int32, exactDst).has_value());
     }
@@ -213,9 +214,9 @@ namespace BECore::Tests {
     }
 
     TEST(ProgramTableTest, TwoProgramsWithTheSameCodeAndOtherEntriesAreTwoPrograms) {
-        const Program first = TableProgram<int32_t>({1, 2, 3}, 1).value();
-        const Program second = TableProgram<int32_t>({1, 2, 4}, 1).value();
-        const Program same = TableProgram<int32_t>({1, 2, 3}, 1).value();
+        const Program first = Require(TableProgram<int32_t>({1, 2, 3}, 1));
+        const Program second = Require(TableProgram<int32_t>({1, 2, 4}, 1));
+        const Program same = Require(TableProgram<int32_t>({1, 2, 3}, 1));
         EXPECT_EQ(first.Code().size(), second.Code().size());
         EXPECT_FALSE(first.SameCode(second));
         EXPECT_TRUE(first.SameCode(same));
@@ -228,7 +229,7 @@ namespace BECore::Tests {
     }
 
     TEST(ProgramTableTest, TheDisassemblyNamesTheRunOfAnEntry) {
-        const Program program = TableProgram<int32_t>({7, 8, 9}, 1).value();
+        const Program program = Require(TableProgram<int32_t>({7, 8, 9}, 1));
         const String text = program.Disassemble();
         EXPECT_NE(text.find("LoadTable"), String::npos) << text;
         EXPECT_NE(text.find("3 entries"), String::npos) << text;

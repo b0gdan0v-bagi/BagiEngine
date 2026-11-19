@@ -19,6 +19,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UICanvasRoundTrip.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UITestSupport.h>
@@ -232,7 +233,7 @@ namespace BECore::Tests {
         UIElement& Element(const char* name) const {
             UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
-            return *element;
+            return Require(element);
         }
 
         bool SelectedElement(const char* name) const {
@@ -364,7 +365,7 @@ namespace BECore::Tests {
         SetVar("inner", "x");
         Draw();
         EXPECT_TRUE(Selected("MixedTwo")) << "the button next to a label is a segment";
-        EXPECT_EQ(Element("Caption").GetComponent<UITextComponent>()->text, "Mode") << "the label is left alone";
+        EXPECT_EQ(Require(Element("Caption").GetComponent<UITextComponent>()).text, "Mode") << "the label is left alone";
 
         EXPECT_FALSE(Selected("InnerTwo")) << "its value is the one of Mixed, but the nested group has its own variable";
         EXPECT_TRUE(Selected("InnerX"));
@@ -423,7 +424,9 @@ namespace BECore::Tests {
     TEST_F(UISegmentedTest, TheSelectionIsDrawnWithoutLayingTheLabelsOutAgain) {
         SetVar("level", "easy");
         Draw();
-        const auto layoutsOfTheTexts = [this] { return Element("Easy").GetComponent<UITextComponent>()->GetLayoutCount() + Element("Max").GetComponent<UITextComponent>()->GetLayoutCount(); };
+        const auto layoutsOfTheTexts = [this] {
+            return Require(Element("Easy").GetComponent<UITextComponent>()).GetLayoutCount() + Require(Element("Max").GetComponent<UITextComponent>()).GetLayoutCount();
+        };
         const uint32_t layouts = layoutsOfTheTexts();
         Draw();
         Draw();
@@ -542,12 +545,12 @@ namespace BECore::Tests {
         const auto loaded = BinaryRoundTrip(*_canvas);
         ASSERT_TRUE(loaded);
 
-        const auto* typed = loaded->GetRoot().FindByName("Mode"_intern)->Cast<UISegmented>();
+        const auto* typed = Require(loaded->GetRoot().FindByName("Mode"_intern)).Cast<UISegmented>();
         ASSERT_NE(typed, nullptr);
         EXPECT_EQ(typed->bind, "mode"_intern);
         EXPECT_TRUE(typed->disabled);
         ASSERT_EQ(typed->children.size(), 2u);
-        EXPECT_EQ(typed->children[1]->GetComponent<UIInputClicker>()->value, "computer"_intern);
+        EXPECT_EQ(Require(typed->children[1]->GetComponent<UIInputClicker>()).value, "computer"_intern);
         ExpectSameElementXml(*_canvas, *loaded);
     }
 
@@ -642,7 +645,7 @@ namespace BECore::Tests {
         Draw();
         EXPECT_TRUE(Selected("FormsButton"));
         EXPECT_FALSE(SelectedElement("FormsComposed"));
-        EXPECT_EQ(Element("FormsCaption").GetComponent<UITextComponent>()->text, "Form") << "the label is no segment";
+        EXPECT_EQ(Require(Element("FormsCaption").GetComponent<UITextComponent>()).text, "Form") << "the label is no segment";
 
         SetVar("comp", "icon");
         Draw();

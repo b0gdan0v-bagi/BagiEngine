@@ -18,6 +18,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
@@ -196,7 +197,7 @@ namespace BECore::Tests {
             const Vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
             _texture = _renderer->CreateTexture(pixels.data(), kPictureSide, kPictureSide);
             for (const char* icon : {"Icon", "DeepIcon", "DeadIcon", "OtherIcon", "OffIcon"}) {
-                El(icon).GetComponent<UIImageComponent>()->GetSprite().SetTexture(_texture);
+                Require(El(icon).GetComponent<UIImageComponent>()).GetSprite().SetTexture(_texture);
             }
             Draw();
         }
@@ -300,7 +301,7 @@ namespace BECore::Tests {
     TEST_F(UIStateInheritTest, ADisabledClickerDisablesTheLookOfTheChildren) {
         EXPECT_PRED2(ColorsEqual, PictureTint(El("OffIcon")), kIconDisabled);
 
-        El("Btn").GetComponent<UIInputClicker>()->disabled = true;
+        Require(El("Btn").GetComponent<UIInputClicker>()).disabled = true;
         Draw();
         EXPECT_PRED2(ColorsEqual, PictureTint(El("Icon")), kIconDisabled);
         EXPECT_PRED2(ColorsEqual, TextColorDrawn(El("Cap")), kCapDisabled);
@@ -418,11 +419,11 @@ namespace BECore::Tests {
         CoreManager::GetUIInput().DispatchMouseButtonUp(Button(700.0f, 500.0f, false));
         Draw();
 
-        button.GetComponent<UIInputClicker>()->disabled = true;
+        Require(button.GetComponent<UIInputClicker>()).disabled = true;
         Draw();
         EXPECT_TRUE(button.GetVisualState().disabled);
         EXPECT_PRED2(ColorsEqual, button.GetStateLook().fill, (Color{90, 91, 92, 255}));
-        button.GetComponent<UIInputClicker>()->disabled = false;
+        Require(button.GetComponent<UIInputClicker>()).disabled = false;
 
         button.selected = true;
         Draw();
@@ -434,7 +435,7 @@ namespace BECore::Tests {
     TEST_F(UIStateInheritTest, ADisabledAncestorDoesNotDisableAButton) {
         auto& holder = El("Holder");
         auto& button = El("HolderButton");
-        holder.GetComponent<UIInputClicker>()->disabled = true;
+        Require(holder.GetComponent<UIInputClicker>()).disabled = true;
         Draw();
 
         EXPECT_TRUE(holder.GetVisualState().disabled);
@@ -465,7 +466,7 @@ namespace BECore::Tests {
 
     TEST_F(UIStateInheritTest, TheDisabledOfTheHolderIsNotTheDisabledOfADropdownAToggleOrASliderAndTheirOwnIs) {
         auto& holder = El("Holder2");
-        holder.GetComponent<UIInputClicker>()->disabled = true;
+        Require(holder.GetComponent<UIInputClicker>()).disabled = true;
         Draw();
 
         ASSERT_TRUE(holder.IsDisabled());
@@ -474,14 +475,14 @@ namespace BECore::Tests {
         EXPECT_FALSE(El("HolderSlider").GetVisualState().disabled);
 
         El("HolderDrop").Cast<UIDropdown>()->disabled = true;
-        El("HolderToggle").GetComponent<UIInputClicker>()->disabled = true;
-        El("HolderSlider").GetComponent<UIInputClicker>()->disabled = true;
+        Require(El("HolderToggle").GetComponent<UIInputClicker>()).disabled = true;
+        Require(El("HolderSlider").GetComponent<UIInputClicker>()).disabled = true;
         for (const char* name : {"HolderDrop", "HolderToggle", "HolderSlider"}) {
             EXPECT_TRUE(El(name).IsDisabled()) << name;
             EXPECT_TRUE(El(name).GetVisualState().disabled) << name;
         }
         El("HolderToggle").groupDisabled = true;
-        El("HolderToggle").GetComponent<UIInputClicker>()->disabled = false;
+        Require(El("HolderToggle").GetComponent<UIInputClicker>()).disabled = false;
         EXPECT_TRUE(El("HolderToggle").IsDisabled()) << "the group's too";
     }
 

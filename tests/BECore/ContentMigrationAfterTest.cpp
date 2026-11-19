@@ -7,6 +7,7 @@
 #include <BECore/UI/UIToggleComponent.h>
 #include <BECore/UI/UIVars.h>
 #include <Common/MigrationTwin.h>
+#include <Common/Require.h>
 #include <Common/UILayoutMatrix.h>
 #include <cstdio>
 #include <gtest/gtest.h>
@@ -388,7 +389,7 @@ namespace BECore::Tests {
     }
 
     TEST_P(ContentMigrationAfterTest, TheComposedScreenBehaves) {
-        const Expectation& expectation = Expectations()[StringUtils::ParseNumber<size_t>(GetParam()).value()];
+        const Expectation& expectation = Expectations()[Require(StringUtils::ParseNumber<size_t>(GetParam()))];
         const String label = Key(expectation.folder, expectation.name);
         const String xml = SceneManagerXml(ReadFile(FixtureFolder(expectation.folder) / ToStd(String(expectation.name) + ".after.xml")));
         ASSERT_FALSE(xml.empty());
@@ -476,7 +477,7 @@ namespace BECore::Tests {
                                  return indices;
                              }()),
                              [](const ::testing::TestParamInfo<String>& info) {
-                                 const Expectation& expectation = Expectations()[StringUtils::ParseNumber<size_t>(info.param).value()];
+                                 const Expectation& expectation = Expectations()[Require(StringUtils::ParseNumber<size_t>(info.param))];
                                  return std::string(expectation.folder) + "_" + expectation.name;  //-NoStd: gtest takes the test name from a std::string
                              });
 

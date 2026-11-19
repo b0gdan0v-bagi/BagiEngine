@@ -11,6 +11,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/LogRecorder.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
@@ -89,7 +90,7 @@ namespace BECore::Tests {
             _manager->Initialize();
             Scene* scene = _manager->GetSceneByName("Main"_intern);
             EXPECT_NE(scene, nullptr);
-            return *scene;
+            return Require(scene);
         }
 
         /// A `<node ref>` element of @p text, alive as long as the fixture
@@ -170,8 +171,8 @@ namespace BECore::Tests {
         EXPECT_EQ(node->GetSourceRef(), expectedSource);
         EXPECT_EQ(ComponentTexts(*node), expectedTexts);
         EXPECT_EQ(scene.GetDrawRank(*node), expectedRank);
-        EXPECT_EQ(node->GetComponent<TransformComponent>()->_x, 100.0f);
-        EXPECT_EQ(node->GetComponent<TransformComponent>()->_y, 2.0f);
+        EXPECT_EQ(Require(node->GetComponent<TransformComponent>())._x, 100.0f);
+        EXPECT_EQ(Require(node->GetComponent<TransformComponent>())._y, 2.0f);
     }
 
     TEST_F(SceneInstantiateTest, AnInstanceUnderAParentThatIsNotTheRoot) {
@@ -216,8 +217,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(b);
         EXPECT_NE(a->GetEntity(), b->GetEntity());
         EXPECT_NE(a->GetComponent<TransformComponent>().Get(), b->GetComponent<TransformComponent>().Get());
-        EXPECT_EQ(a->GetComponent<TransformComponent>()->_x, 50.0f);
-        EXPECT_EQ(b->GetComponent<TransformComponent>()->_x, 1.0f);
+        EXPECT_EQ(Require(a->GetComponent<TransformComponent>())._x, 50.0f);
+        EXPECT_EQ(Require(b->GetComponent<TransformComponent>())._x, 1.0f);
         EXPECT_EQ(a->GetLayer(), 2);
         EXPECT_EQ(b->GetLayer(), 9);
     }
@@ -286,7 +287,7 @@ namespace BECore::Tests {
         const auto node = scene.InstantiateNode(Ref(reference), _loader, nullptr, 1);
 
         ASSERT_TRUE(node);
-        EXPECT_EQ(node->GetComponent<UICanvasComponent>()->_elements.size(), 1u);
+        EXPECT_EQ(Require(node->GetComponent<UICanvasComponent>())._elements.size(), 1u);
         EXPECT_EQ(ComponentTexts(*node), expectedTexts);
     }
 

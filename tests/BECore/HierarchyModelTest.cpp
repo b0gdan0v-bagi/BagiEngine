@@ -3,6 +3,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
@@ -67,7 +68,7 @@ namespace BECore::Tests {
         SceneNode& Node(const char* name) {
             SceneNode* node = FindNodeBelow(_scene->GetRootNode(), name);
             EXPECT_NE(node, nullptr) << name;
-            return *node;
+            return Require(node);
         }
 
         SceneNode& Root() {

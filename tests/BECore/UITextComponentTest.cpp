@@ -14,6 +14,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/TextTestSupport.h>
 #include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
@@ -79,7 +80,7 @@ namespace BECore::Tests {
         UITextComponent& CaptionOf(const char* name) const {
             UITextComponent* caption = El(name).GetComponent<UITextComponent>();
             EXPECT_NE(caption, nullptr) << name;
-            return *caption;
+            return Require(caption);
         }
 
         /// The textured draws of the row of Cap in the last frame (the glyphs; the outline is drawn first, in its own colour). Narrow and Shrinking start at y 100

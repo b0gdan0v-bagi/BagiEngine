@@ -1,6 +1,7 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
+#include <Common/Require.h>
 #include <chrono>
 #include <cstdio>
 #include <gtest/gtest.h>
@@ -155,7 +156,7 @@ namespace BECore::Tests {
         const auto parsed = ParseJson(recorder.WriteJson());
         ASSERT_TRUE(parsed.has_value());
         bool found = false;
-        for (const Json& event : *FindJsonMember(*parsed, "traceEvents")) {
+        for (const Json& event : Require(FindJsonMember(*parsed, "traceEvents"))) {
             if (GetJsonString(event, "ph") == String("E")) {
                 const Json* args = FindJsonMember(event, "args");
                 ASSERT_NE(args, nullptr);

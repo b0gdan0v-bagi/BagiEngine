@@ -16,6 +16,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UILayoutMatrix.h>
 #include <Common/UIThemeTestSupport.h>
 #include <gtest/gtest.h>
@@ -221,11 +222,8 @@ namespace BECore::Tests {
 
         UIElement& Find(const char* name) const {
             UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            if (element == nullptr) {
-                ADD_FAILURE() << name << " is not in the screen";
-                std::abort();  // a reference to nothing cannot be returned; the failure above is printed first
-            }
-            return *element;
+            EXPECT_NE(element, nullptr) << name << " is not in the screen";
+            return Require(element);
         }
 
         UILayoutContext ViewContext() const {
@@ -273,8 +271,8 @@ namespace BECore::Tests {
                 const char* what;
                 Color text;
                 Color plate;
-            } pairs[] = {{"Title on the card", Find("Title").GetComponent<UITextComponent>()->textColor, panel},
-                         {"Sound on the card", Find("SoundCaption").GetComponent<UITextComponent>()->textColor, panel},
+            } pairs[] = {{"Title on the card", Require(Find("Title").GetComponent<UITextComponent>()).textColor, panel},
+                         {"Sound on the card", Require(Find("SoundCaption").GetComponent<UITextComponent>()).textColor, panel},
                          {"Go on its button", goText ? Color(goText->textColor) : Color{}, Find("Action").color},
                          {"Note on its plate", noteText ? Color(noteText->textColor) : Color{}, Find("Note").color}};
             String problems;
@@ -391,7 +389,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(themes.SetTheme(PoolString::Intern(kSoft)));
         EXPECT_FALSE(themes.HasToken(PoolString::Intern(kSoft), "track"));
         Draw();
-        EXPECT_TRUE(ColorsEqual(Find("SoundSwitch").GetComponent<UISwitchComponent>()->trackColor, Color{150, 150, 150, 255})) << "soft has no track: the light one is drawn";
+        EXPECT_TRUE(ColorsEqual(Require(Find("SoundSwitch").GetComponent<UISwitchComponent>()).trackColor, Color{150, 150, 150, 255})) << "soft has no track: the light one is drawn";
         EXPECT_TRUE(themes.GetMissing().empty()) << "a fallback is not a missing token";
     }
 
@@ -416,7 +414,7 @@ namespace BECore::Tests {
         UIThemes& themes = CoreManager::GetUIThemes();
         const PoolString washed = "washed"_intern;
         for (const char* token : {"panel", "accent", "button", "buttonHover", "buttonText", "track", "note"}) {
-            themes.Set(washed, token, *themes.Find(token));
+            themes.Set(washed, token, Require(themes.Find(token)));
         }
         themes.Set(washed, "text", Color{235, 235, 225, 255});  // the card is 240,240,230
         ASSERT_TRUE(themes.SetTheme(washed));

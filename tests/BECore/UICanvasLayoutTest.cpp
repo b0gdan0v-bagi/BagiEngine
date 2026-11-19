@@ -1,6 +1,7 @@
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UITextComponent.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/UILayoutMatrix.h>
 #include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
@@ -233,13 +234,13 @@ namespace BECore::Tests {
         canvas.variants.push_back(portrait);
 
         canvas.Update(Output(1280.0f, 720.0f));
-        ExpectRect(canvas.root->FindByName("Hud"_intern)->rect, 16.0f, 16.0f, 220.0f, 96.0f);
+        ExpectRect(Require(canvas.root->FindByName("Hud"_intern)).rect, 16.0f, 16.0f, 220.0f, 96.0f);
 
         canvas.Update(Output(720.0f, 1280.0f));
-        ExpectRect(canvas.root->FindByName("Hud"_intern)->rect, 36.0f, 16.0f, 648.0f, 96.0f);
+        ExpectRect(Require(canvas.root->FindByName("Hud"_intern)).rect, 36.0f, 16.0f, 648.0f, 96.0f);
 
         canvas.Update(Output(1280.0f, 720.0f));  // and back
-        ExpectRect(canvas.root->FindByName("Hud"_intern)->rect, 16.0f, 16.0f, 220.0f, 96.0f);
+        ExpectRect(Require(canvas.root->FindByName("Hud"_intern)).rect, 16.0f, 16.0f, 220.0f, 96.0f);
     }
 
     TEST(UICanvasLayoutTest, AChangedViewSizeInTheContextLaysOutAgainAndChoosesTheVariantsAgain) {
@@ -264,12 +265,12 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(canvas.Update(inView(400.0f, 300.0f)));
         ExpectRect(canvas.GetResolved().bounds, 0.0f, 0.0f, 400.0f, 300.0f);
-        ExpectRect(canvas.root->FindByName("Hud"_intern)->rect, 16.0f, 16.0f, 220.0f, 96.0f);
+        ExpectRect(Require(canvas.root->FindByName("Hud"_intern)).rect, 16.0f, 16.0f, 220.0f, 96.0f);
         EXPECT_FALSE(canvas.Update(inView(400.0f, 300.0f)));
 
         EXPECT_TRUE(canvas.Update(inView(300.0f, 400.0f)));
         ExpectRect(canvas.GetResolved().bounds, 0.0f, 0.0f, 300.0f, 400.0f);
-        ExpectRect(canvas.root->FindByName("Hud"_intern)->rect, 40.0f, 16.0f, 220.0f, 96.0f);  // the variant: centered at the top
+        ExpectRect(Require(canvas.root->FindByName("Hud"_intern)).rect, 40.0f, 16.0f, 220.0f, 96.0f);  // the variant: centered at the top
         EXPECT_EQ(canvas.GetVariantRuns(), 2u);
     }
 
@@ -351,11 +352,11 @@ namespace BECore::Tests {
         AddBox(*canvas.root, "Box", 0.0f, 0.0f, 100.0f, 40.0f);
 
         EXPECT_TRUE(canvas.Update(ViewWithBars()));
-        EXPECT_NEAR(canvas.root->FindByName("Box"_intern)->rect.w, 100.0f, kTolerance);  // bounds 400 x 300: landscape
+        EXPECT_NEAR(Require(canvas.root->FindByName("Box"_intern)).rect.w, 100.0f, kTolerance);  // bounds 400 x 300: landscape
 
         canvas.params.extendToOutput = true;
-        EXPECT_TRUE(canvas.Update(ViewWithBars()));                                      // the cache sees the flag
-        EXPECT_NEAR(canvas.root->FindByName("Box"_intern)->rect.w, 300.0f, kTolerance);  // bounds 400 x 600: portrait
+        EXPECT_TRUE(canvas.Update(ViewWithBars()));                                              // the cache sees the flag
+        EXPECT_NEAR(Require(canvas.root->FindByName("Box"_intern)).rect.w, 300.0f, kTolerance);  // bounds 400 x 600: portrait
     }
 
     // ---- hit testing ------------------------------------------------------------------------------------------------------

@@ -13,6 +13,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
@@ -113,8 +114,8 @@ namespace BECore::Tests {
 
             const Vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
             _texture = _renderer->CreateTexture(pixels.data(), kPictureSide, kPictureSide);
-            El("Pic").GetComponent<UIImageComponent>()->GetSprite().SetTexture(_texture);
-            El("PicOff").GetComponent<UIImageComponent>()->GetSprite().SetTexture(_texture);
+            Require(El("Pic").GetComponent<UIImageComponent>()).GetSprite().SetTexture(_texture);
+            Require(El("PicOff").GetComponent<UIImageComponent>()).GetSprite().SetTexture(_texture);
             Draw();
         }
 
@@ -208,7 +209,7 @@ namespace BECore::Tests {
         EXPECT_EQ(clicker->action, "Boxed"_intern);
         EXPECT_EQ(clicker->value, "v1"_intern);
         EXPECT_FALSE(clicker->disabled);
-        EXPECT_TRUE(El("Off").GetComponent<UIInputClicker>()->disabled);
+        EXPECT_TRUE(Require(El("Off").GetComponent<UIInputClicker>()).disabled);
     }
 
     TEST_F(UIInputClickerTest, AnElementWithAClickerIsInteractiveAndAHitTargetAndAPlainPanelIsNotInteractive) {
@@ -319,7 +320,7 @@ namespace BECore::Tests {
 
     TEST_F(UIInputClickerTest, AnElementThatTheClickerDisablesAtRunTimeStopsEmitting) {
         ActionLog actions;
-        El("Box").GetComponent<UIInputClicker>()->disabled = true;
+        Require(El("Box").GetComponent<UIInputClicker>()).disabled = true;
         Click(El("Box"));
 
         EXPECT_EQ(actions.Total(), 0u);
@@ -436,7 +437,7 @@ namespace BECore::Tests {
         const UIInputClicker* clicker = El("Still").GetComponent<UIInputClicker>();
         ASSERT_NE(clicker, nullptr);
         EXPECT_FALSE(clicker->stateLook);
-        EXPECT_TRUE(El("Box").GetComponent<UIInputClicker>()->stateLook);
+        EXPECT_TRUE(Require(El("Box").GetComponent<UIInputClicker>()).stateLook);
 
         XmlSerializer serializer;
         ASSERT_TRUE(serializer.BeginObject("element"));

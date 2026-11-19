@@ -305,7 +305,7 @@ namespace BECore::Tests {
         for (const char* key : {"frame", "paused", "frameMs", "cpuMs", "stagesMs", "textureSwitches", "allocCount", "allocBytes", "liveBytes", "counters"}) {
             EXPECT_NE(FindJsonMember(last, key), nullptr) << key;
         }
-        EXPECT_NE(FindJsonMember(*FindJsonMember(last, "stagesMs"), "SceneDraw"), nullptr);
+        EXPECT_NE(FindJsonMember(Require(FindJsonMember(last, "stagesMs")), "SceneDraw"), nullptr);
         EXPECT_EQ(GetJsonBool(*result, "allocTracking"), AllocTracker::kEnabled);
     }
 
@@ -319,7 +319,7 @@ namespace BECore::Tests {
         Json params = Json::object();
         params["frames"] = 2;
         const Json response = Call("frame_stats", params);
-        const Json* frames = FindJsonMember(*FindJsonMember(response, "result"), "frames");
+        const Json* frames = FindJsonMember(Require(FindJsonMember(response, "result")), "frames");
         ASSERT_NE(frames, nullptr);
         ASSERT_EQ(frames->size(), 2u);
         EXPECT_EQ(GetJsonBool((*frames)[0], "paused"), false);

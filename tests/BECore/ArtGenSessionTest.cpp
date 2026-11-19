@@ -111,7 +111,7 @@ namespace BECore::Tests {
 
         /// Runs a request to its end with images of @p seeds, as the service would
         uint32_t RunWithImages(std::initializer_list<int64_t> seeds, bool keep = false) {
-            const uint32_t id = session.Request("wood", "queen", static_cast<int32_t>(seeds.size()), *seeds.begin(), keep).value();
+            const uint32_t id = Require(session.Request("wood", "queen", static_cast<int32_t>(seeds.size()), *seeds.begin(), keep));
             Call("artgen_poll", ReadyPoll());
             for (int64_t seed : seeds) {
                 Json image = Report(id);
@@ -179,7 +179,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, ProgressImagesAndDoneFillTheRun) {
-        const uint32_t id = session.Request("wood", "rook", 2, Optional<int64_t>()).value();
+        const uint32_t id = Require(session.Request("wood", "rook", 2, Optional<int64_t>()));
         Call("artgen_poll", ReadyPoll());
         const Json request = Result(Call("artgen_poll", ReadyPoll()));
         EXPECT_EQ(FindJsonMember(request, "request"), nullptr);
@@ -217,7 +217,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, AFailureKeepsItsReason) {
-        const uint32_t id = session.Request("wood", "rook", 1, 3).value();
+        const uint32_t id = Require(session.Request("wood", "rook", 1, 3));
         Call("artgen_poll", ReadyPoll());
         Json done = Report(id);
         done["status"] = "failed";
@@ -228,12 +228,12 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, ReportsAboutAnOlderRunAreStale) {
-        const uint32_t first = session.Request("wood", "a", 1, 1).value();
+        const uint32_t first = Require(session.Request("wood", "a", 1, 1));
         Call("artgen_poll", ReadyPoll());
         Json done = Report(first);
         done["status"] = "cancelled";
         Call("artgen_done", done);
-        const uint32_t second = session.Request("wood", "b", 1, 1).value();
+        const uint32_t second = Require(session.Request("wood", "b", 1, 1));
         EXPECT_NE(first, second);
         Call("artgen_poll", ReadyPoll());
 
@@ -246,14 +246,14 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, CancelBeforeTheServiceTookItNeedsNoService) {
-        session.Request("wood", "a", 1, 1).value();
+        Require(session.Request("wood", "a", 1, 1));
         Call("artgen_cancel");
         EXPECT_EQ(session.GetRun().state, ArtGenRunState::Cancelled);
         EXPECT_EQ(FindJsonMember(Result(Call("artgen_poll", ReadyPoll())), "request"), nullptr);
     }
 
     TEST_F(ArtGenSessionTest, CancelOfARunningRequestGoesToTheServiceOnTheNextPoll) {
-        const uint32_t id = session.Request("wood", "a", 3, 1).value();
+        const uint32_t id = Require(session.Request("wood", "a", 3, 1));
         Call("artgen_poll", ReadyPoll());
         session.Cancel();
         EXPECT_TRUE(session.GetRun().cancelRequested);
@@ -393,7 +393,7 @@ namespace BECore::Tests {
         EXPECT_EQ(session.GetSetup().platform, "windows-nvidia");
 
         // The install keeps the plan the owner saw on screen, and reports its progress
-        const uint32_t install = session.RequestSetup(ArtGenSetupAction::Install).value();
+        const uint32_t install = Require(session.RequestSetup(ArtGenSetupAction::Install));
         EXPECT_EQ(session.GetSetup().plan.size(), 1u);
         Call("artgen_poll", ReadyPoll());
         Json progress = Report(install);
@@ -412,7 +412,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, ASetupAndARunNeverRunTogether) {
-        const uint32_t setup = session.RequestSetup(ArtGenSetupAction::Start).value();
+        const uint32_t setup = Require(session.RequestSetup(ArtGenSetupAction::Start));
         Call("artgen_poll", ReadyPoll());
         EXPECT_FALSE(session.Request("wood", "a", 1, 1).has_value());
         EXPECT_FALSE(session.RequestSetup(ArtGenSetupAction::Stop).has_value());
@@ -429,13 +429,13 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, ACancelOfASetupGoesToTheServiceAndOldReportsAreStale) {
-        const uint32_t first = session.RequestSetup(ArtGenSetupAction::Install).value();
+        const uint32_t first = Require(session.RequestSetup(ArtGenSetupAction::Install));
         Json cancel = Object();
         cancel["action"] = "cancel";
         EXPECT_EQ(FindJsonMember(Call("artgen_setup", cancel), "error"), nullptr);
         EXPECT_EQ(session.GetSetup().state, ArtGenSetupState::Failed);  // queued: the service never saw it
 
-        const uint32_t second = session.RequestSetup(ArtGenSetupAction::Install).value();
+        const uint32_t second = Require(session.RequestSetup(ArtGenSetupAction::Install));
         Call("artgen_poll", ReadyPoll());
         session.CancelSetup();
         EXPECT_EQ(GetJsonInt(Result(Call("artgen_poll", ReadyPoll())), "setupCancel"), Optional<int64_t>(second));
@@ -449,7 +449,7 @@ namespace BECore::Tests {
         Json bad = Object();
         bad["action"] = "Dance";
         EXPECT_EQ(ErrorCode(Call("artgen_setup", bad)), "invalid_params");
-        EXPECT_EQ(GetJsonString(*FindJsonMember(Result(Call("artgen_state")), "setup"), "state"), Optional<String>("Running"));
+        EXPECT_EQ(GetJsonString(Require(FindJsonMember(Result(Call("artgen_state")), "setup")), "state"), Optional<String>("Running"));
     }
 
     TEST_F(ArtGenSessionTest, ThePollSaysWhetherTheGeneratorWasStartedHere) {
@@ -539,10 +539,10 @@ namespace BECore::Tests {
         const Json poll = Call("artgen_poll", CatalogPoll());
         const Json* request = FindJsonMember(Result(poll), "request");
         ASSERT_NE(request, nullptr);
-        EXPECT_EQ(*FindJsonMember(*request, "preset"), DraftPreset());
+        EXPECT_EQ(Require(FindJsonMember(*request, "preset")), DraftPreset());
         EXPECT_EQ(GetJsonString(*request, "presetName"), Optional<String>("wood"));
         const Json state = Call("artgen_state");
-        EXPECT_EQ(GetJsonBool(*FindJsonMember(Result(state), "run"), "draft"), Optional<bool>(true));
+        EXPECT_EQ(GetJsonBool(Require(FindJsonMember(Result(state), "run")), "draft"), Optional<bool>(true));
     }
 
     TEST_F(ArtGenSessionTest, ADraftThatIsNotAPresetIsRefusedHere) {
@@ -610,7 +610,7 @@ namespace BECore::Tests {
         EXPECT_EQ(session.FindPreset("sprite")->kind, "image") << "image when the service says nothing";
         EXPECT_EQ(session.FindWorkflow("sdxl_basic")->kind, "audio");
 
-        const uint32_t id = session.Request("wood", "knock", 2, Optional<int64_t>(1)).value();
+        const uint32_t id = Require(session.Request("wood", "knock", 2, Optional<int64_t>(1)));
         Call("artgen_poll", params);
         Json sound = Report(id);
         sound["seed"] = 1;
@@ -625,7 +625,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(session.GetRun().variants[0].IsAudio());
         EXPECT_FALSE(session.GetRun().variants[1].IsAudio());
         const Json state = Call("artgen_state");
-        EXPECT_EQ(GetJsonString((*FindJsonMember(*FindJsonMember(Result(state), "run"), "variants"))[0], "kind"), Optional<String>("audio"));
+        EXPECT_EQ(GetJsonString((Require(FindJsonMember(*FindJsonMember(Result(state), "run"), "variants")))[0], "kind"), Optional<String>("audio"));
 
         session.SetAcceptor(&FakeAcceptor);
         auto accepted = session.Accept(1, "knock", false);
@@ -635,7 +635,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, ASoundIsAcceptedAsAClipWithItsSettings) {
-        const uint32_t id = session.Request("wood", "knock", 1, Optional<int64_t>(7)).value();
+        const uint32_t id = Require(session.Request("wood", "knock", 1, Optional<int64_t>(7)));
         Call("artgen_poll", ReadyPoll());
         Json sound = Report(id);
         sound["seed"] = 7;
@@ -743,7 +743,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, ASoundIgnoresTheImageParameter) {
-        const uint32_t id = session.Request("wood", "knock", 1, Optional<int64_t>(7)).value();
+        const uint32_t id = Require(session.Request("wood", "knock", 1, Optional<int64_t>(7)));
         Call("artgen_poll", ReadyPoll());
         Json sound = Report(id);
         sound["seed"] = 7;

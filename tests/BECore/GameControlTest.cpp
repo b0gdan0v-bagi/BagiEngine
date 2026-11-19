@@ -278,7 +278,7 @@ namespace BECore::Tests {
         const Json response = Call("list_games");
 
         ASSERT_TRUE(Succeeded(response));
-        const Json* active = FindJsonMember(*Result(response), "active");
+        const Json* active = FindJsonMember(Require(Result(response)), "active");
         ASSERT_NE(active, nullptr);
         EXPECT_TRUE(active->is_null());
     }
@@ -290,7 +290,7 @@ namespace BECore::Tests {
         const Json response = Call("switch_game", params);
 
         ASSERT_TRUE(Succeeded(response));
-        EXPECT_EQ(GetJsonString(*Result(response), "active").value_or("").c_str(), String("FakePlain"));
+        EXPECT_EQ(GetJsonString(Require(Result(response)), "active").value_or("").c_str(), String("FakePlain"));
         ASSERT_NE(GameManager::GetInstance().GetActive(), nullptr);
         EXPECT_EQ(GameManager::GetInstance().GetActive()->GetName(), "FakePlain"_intern);
     }
@@ -335,7 +335,7 @@ namespace BECore::Tests {
         const Json response = Call("list_actions");
 
         ASSERT_TRUE(Succeeded(response));
-        const Json* actions = FindJsonMember(*Result(response), "actions");
+        const Json* actions = FindJsonMember(Require(Result(response)), "actions");
         ASSERT_NE(actions, nullptr);
         ASSERT_TRUE(actions->is_array());
         ASSERT_EQ(actions->size(), 1u);
@@ -347,7 +347,7 @@ namespace BECore::Tests {
         action["type"] = "inc";
         const Json before = Call("get_state");
         ASSERT_TRUE(Succeeded(before));
-        const int64_t versionBefore = GetJsonInt(*Result(before), "version").value_or(-1);
+        const int64_t versionBefore = GetJsonInt(Require(Result(before)), "version").value_or(-1);
 
         const Json response = Call("perform_action", action);
 
@@ -400,7 +400,7 @@ namespace BECore::Tests {
         service.Drain();
 
         ASSERT_EQ(responses.size(), 4u);
-        const Json* state = FindJsonMember(*Result(responses[3]), "state");
+        const Json* state = FindJsonMember(Require(Result(responses[3])), "state");
         ASSERT_NE(state, nullptr);
         EXPECT_EQ(GetJsonInt(*state, "counter"), 3);
     }
@@ -415,7 +415,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(Succeeded(response));
         EXPECT_EQ(Controllable()->counter, 4);
         EXPECT_EQ(Controllable()->plainResetCalls, 0);  // the controllable path, not IGame::Reset()
-        EXPECT_TRUE(FindJsonMember(*Result(response), "version") != nullptr);
+        EXPECT_TRUE(FindJsonMember(Require(Result(response)), "version") != nullptr);
     }
 
     TEST_F(GameControlTest, ResetRefusesBadOptionsAndChangesNothing) {
@@ -436,8 +436,8 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(Succeeded(response));
         EXPECT_EQ(Plain()->resetCalls, 1);
-        EXPECT_EQ(GetJsonString(*Result(response), "game").value_or("").c_str(), String("FakePlain"));
-        EXPECT_EQ(FindJsonMember(*Result(response), "version"), nullptr);  // it has no version to report
+        EXPECT_EQ(GetJsonString(Require(Result(response)), "game").value_or("").c_str(), String("FakePlain"));
+        EXPECT_EQ(FindJsonMember(Require(Result(response)), "version"), nullptr);  // it has no version to report
     }
 
     TEST_F(GameControlTest, SetStateLoadsTheStateOfTheGame) {
@@ -593,8 +593,8 @@ namespace BECore::Tests {
         service.EndFrame();
 
         ASSERT_EQ(collector.events.size(), 2u);
-        EXPECT_EQ(GetJsonInt(*FindJsonMember(*EventData(collector.events[0]), "state"), "counter").value_or(-1), 10);
-        EXPECT_EQ(GetJsonInt(*FindJsonMember(*EventData(collector.events[1]), "state"), "counter").value_or(-1), 20);
+        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(*EventData(collector.events[0]), "state")), "counter").value_or(-1), 10);
+        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(*EventData(collector.events[1]), "state")), "counter").value_or(-1), 20);
     }
 
     TEST_F(GameControlTest, AGameThatCannotBeControlledPushesNothing) {

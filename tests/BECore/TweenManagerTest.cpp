@@ -3,6 +3,7 @@
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Time/Time.h>
 #include <Common/DestroyTally.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -73,7 +74,7 @@ namespace BECore::Tests {
             }
 
             ASSERT_FALSE(recorder.values.empty());
-            EXPECT_EQ(recorder.values.back(), kTo) << framesPerSecond;
+            EXPECT_EQ(Back(recorder.values), kTo) << framesPerSecond;
             EXPECT_EQ(recorder.values.size(), static_cast<size_t>(framesPerSecond));
             EXPECT_EQ(recorder.completed, 1);
             EXPECT_EQ(recorder.cancelled, 0);
@@ -211,7 +212,7 @@ namespace BECore::Tests {
         EXPECT_EQ(handle->GetState(), TweenState::Waiting);
 
         tweens.Advance(kHalfSecond);
-        EXPECT_EQ(recorder.values.back(), kHalfTo);
+        EXPECT_EQ(Back(recorder.values), kHalfTo);
     }
 
     TEST(TweenManagerTest, CompletionRunsOnceAfterTheLastValueAndNothingMoreAfterIt) {
@@ -677,7 +678,7 @@ namespace BECore::Tests {
         }
 
         EXPECT_EQ(recorder.values.size(), static_cast<size_t>(kFramesInASecond));
-        EXPECT_EQ(recorder.values.back(), kTo);
+        EXPECT_EQ(Back(recorder.values), kTo);
         EXPECT_EQ(recorder.completed, 1);
     }
 

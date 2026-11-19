@@ -3,6 +3,7 @@
 #include <BECore/UI/UIThemes.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -53,7 +54,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(themes.Set("light"_intern, "primary", LightPrimary));
 
         ASSERT_TRUE(themes.Find("primary").has_value());
-        EXPECT_TRUE(ColorsEqual(*themes.Find("primary"), LightPrimary));
+        EXPECT_TRUE(ColorsEqual(Require(themes.Find("primary")), LightPrimary));
         EXPECT_FALSE(themes.Find("text").has_value());
     }
 
@@ -73,7 +74,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(themes.SetTheme("dark"_intern));
 
         EXPECT_EQ(themes.GetTheme(), "dark"_intern);
-        EXPECT_TRUE(ColorsEqual(*themes.Find("primary"), DarkPrimary));
+        EXPECT_TRUE(ColorsEqual(Require(themes.Find("primary")), DarkPrimary));
     }
 
     TEST_F(UIThemesTest, ATokenMissingInTheCurrentThemeFallsBackToTheDefaultOne) {
@@ -81,7 +82,7 @@ namespace BECore::Tests {
         themes.SetTheme("dark"_intern);
 
         ASSERT_TRUE(themes.Find("text").has_value());
-        EXPECT_TRUE(ColorsEqual(*themes.Find("text"), LightText));
+        EXPECT_TRUE(ColorsEqual(Require(themes.Find("text")), LightText));
         EXPECT_FALSE(themes.HasToken("dark"_intern, "text"));
     }
 
@@ -230,11 +231,11 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(problems.empty());
         EXPECT_EQ(themes.GetDefaultTheme(), "dark"_intern);
-        EXPECT_TRUE(ColorsEqual(*themes.Find("primary"), DarkPrimary));
+        EXPECT_TRUE(ColorsEqual(Require(themes.Find("primary")), DarkPrimary));
         EXPECT_FALSE(themes.Find("text").has_value());
         themes.SetTheme("light"_intern);
-        EXPECT_TRUE(ColorsEqual(*themes.Find("primary"), LightPrimary));
-        EXPECT_TRUE(ColorsEqual(*themes.Find("text"), LightText));
+        EXPECT_TRUE(ColorsEqual(Require(themes.Find("primary")), LightPrimary));
+        EXPECT_TRUE(ColorsEqual(Require(themes.Find("text")), LightText));
     }
 
     TEST_F(UIThemesTest, LoadFromXmlReportsWhatItSkipsAndLoadsTheRest) {
@@ -270,8 +271,8 @@ namespace BECore::Tests {
 
         EXPECT_EQ(themes.GetDefaultTheme(), "light"_intern);
         ASSERT_EQ(themes.GetThemes().size(), 1u);
-        EXPECT_TRUE(ColorsEqual(*themes.Find("dup"), Color{17, 17, 17, 255}));
-        EXPECT_TRUE(ColorsEqual(*themes.Find("good"), Color{51, 51, 51, 255}));
+        EXPECT_TRUE(ColorsEqual(Require(themes.Find("dup")), Color{17, 17, 17, 255}));
+        EXPECT_TRUE(ColorsEqual(Require(themes.Find("good")), Color{51, 51, 51, 255}));
         EXPECT_EQ(themes.GetTokens().size(), 2u);
     }
 

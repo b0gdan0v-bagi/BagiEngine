@@ -11,6 +11,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
@@ -264,9 +265,9 @@ namespace BECore::Tests {
 
         // The Board quad is on layer 5, the canvas on layer 10: the canvas is drawn after it
         ASSERT_EQ(_renderer->calls.size(), 2u);
-        EXPECT_EQ(_renderer->calls[0].color.r, 255);
-        ExpectRect(_renderer->calls[1].rect, 20.0f, 30.0f, 40.0f, 40.0f);
-        EXPECT_EQ(_renderer->calls[1].color.b, 3);
+        EXPECT_EQ(At(_renderer->calls, 0).color.r, 255);
+        ExpectRect(At(_renderer->calls, 1).rect, 20.0f, 30.0f, 40.0f, 40.0f);
+        EXPECT_EQ(At(_renderer->calls, 1).color.b, 3);
     }
 
     TEST_F(UICanvasComponentTest, TheScaleFollowsTheOutputSize) {
@@ -277,12 +278,12 @@ namespace BECore::Tests {
         _renderer->width = 1280.0f;
         _renderer->height = 720.0f;
         Draw("Main");
-        ExpectRect(_renderer->calls.back().rect, 100.0f, 50.0f, 40.0f, 40.0f);
+        ExpectRect(Back(_renderer->calls).rect, 100.0f, 50.0f, 40.0f, 40.0f);
 
         _renderer->width = 2560.0f;
         _renderer->height = 1440.0f;
         Draw("Main");
-        ExpectRect(_renderer->calls.back().rect, 200.0f, 100.0f, 80.0f, 80.0f);
+        ExpectRect(Back(_renderer->calls).rect, 200.0f, 100.0f, 80.0f, 80.0f);
     }
 
     TEST_F(UICanvasComponentTest, TheCanvasGivesTheScenesViewTransformBack) {
@@ -294,7 +295,7 @@ namespace BECore::Tests {
         // The canvas is on layer 0 in pixels (scale 1); the Quad on layer 1 is drawn after it through the scene's fit (scale 2)
         ASSERT_GE(_renderer->calls.size(), 2u);
         ExpectRect(_renderer->calls.front().rect, 10.0f, 10.0f, 20.0f, 20.0f);
-        ExpectRect(_renderer->calls.back().rect, 20.0f, 20.0f, 40.0f, 40.0f);
+        ExpectRect(Back(_renderer->calls).rect, 20.0f, 20.0f, 40.0f, 40.0f);
         EXPECT_FLOAT_EQ(_renderer->GetViewTransform().scale, 1.0f);  // and nothing leaks out of the pass
     }
 
@@ -340,6 +341,7 @@ namespace BECore::Tests {
         ExpectRect(find()->rect, 200.0f, 120.0f, 20.0f, 20.0f);  // (100, 60) in scene units, times the fit of 2
 
         auto transform = world->GetNode().GetComponent<TransformComponent>();
+        ASSERT_TRUE(transform);
         transform->_x = 150.0f;  // the node moved
         Draw("Fit");
         ExpectRect(find()->rect, 300.0f, 120.0f, 20.0f, 20.0f);
@@ -371,7 +373,7 @@ namespace BECore::Tests {
 
     TEST_F(UICanvasComponentTest, ACanvasVariantFollowsTheViewTheSceneSwitchesTo) {
         auto view = Canvas("Views", "ViewCanvas");
-        auto go = [&]() { return view->GetRoot().FindByName("Go"_intern)->rect; };
+        auto go = [&]() { return Require(view->GetRoot().FindByName("Go"_intern)).rect; };
 
         Draw("Views");
         ExpectRect(go(), 10.0f, 10.0f, 50.0f, 40.0f);
@@ -452,7 +454,7 @@ namespace BECore::Tests {
         EXPECT_NEAR(resolved.transform.scale, 2.0f, kTolerance);
         EXPECT_NEAR(resolved.transform.offsetY, 300.0f, kTolerance);
         // The canvas is portrait (400 x 600), so the variant widened the button; it lies on the bar below the view: scene y 400..440, pixels 1100..1180
-        ExpectRect(canvas->GetRoot().FindByName("Bar"_intern)->rect, 100.0f, 400.0f, 200.0f, 40.0f);
+        ExpectRect(Require(canvas->GetRoot().FindByName("Bar"_intern)).rect, 100.0f, 400.0f, 200.0f, 40.0f);
         ExpectRect(bar()->rect, 200.0f, 1100.0f, 400.0f, 80.0f);
     }
 
@@ -561,7 +563,7 @@ namespace BECore::Tests {
         CoreManager::GetUIEnvironment().SetUserScale(2.0f);
 
         Draw("Main");
-        const Rect rect = _renderer->calls.back().rect;
+        const Rect rect = Back(_renderer->calls).rect;
         CoreManager::GetUIEnvironment().SetUserScale(1.0f);
 
         ExpectRect(rect, 20.0f, 20.0f, 20.0f, 20.0f);
@@ -580,8 +582,8 @@ namespace BECore::Tests {
 
         // Board (layer 5), Hud (10), Menu (20)
         ASSERT_EQ(_renderer->calls.size(), 3u);
-        EXPECT_EQ(_renderer->calls[1].color.r, 1);
-        EXPECT_EQ(_renderer->calls[2].color.r, 2);
+        EXPECT_EQ(At(_renderer->calls, 1).color.r, 1);
+        EXPECT_EQ(At(_renderer->calls, 2).color.r, 2);
     }
 
     TEST_F(UICanvasComponentTest, TheInputOrderIsTheDrawOrder) {

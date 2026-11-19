@@ -20,6 +20,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UICanvasRoundTrip.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UITestSupport.h>
@@ -153,7 +154,7 @@ namespace BECore::Tests {
         /// The position of the first rect drawn in @p color in the last draw, -1 when there is none
         int IndexOf(const Color& color) const {
             for (size_t i = 0; i < _renderer->calls.size(); ++i) {
-                const DrawCall& call = _renderer->calls[i];
+                const DrawCall& call = At(_renderer->calls, i);
                 if (call.kind == DrawKind::Rect && ColorsEqual(call.color, color)) {
                     return static_cast<int>(i);
                 }
@@ -272,7 +273,7 @@ namespace BECore::Tests {
         ASSERT_EQ(twice.components.size(), 2u);
         EXPECT_EQ(twice.components[0]->Cast<UITestProbe>()->tag, "one"_intern);
         EXPECT_EQ(twice.components[1]->Cast<UITestOther>()->tag, "between"_intern);
-        EXPECT_EQ(twice.GetComponent<UITestProbe>()->tag, "one"_intern);
+        EXPECT_EQ(Require(twice.GetComponent<UITestProbe>()).tag, "one"_intern);
     }
 
     TEST_F(UIComponentTest, GetComponentFindsATypeAndAddComponentReturnsTheExistingOne) {
@@ -384,7 +385,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(host.GetVisualState().checked);
         EXPECT_FALSE(passive.GetVisualState().checked);
 
-        host.GetComponent<UITestProbe>()->checked = true;
+        Require(host.GetComponent<UITestProbe>()).checked = true;
         EXPECT_TRUE(host.components[0]->IsChecked(host));
         EXPECT_TRUE(host.GetVisualState().checked) << "any component of the element is enough";
         EXPECT_FALSE(passive.GetVisualState().checked);
@@ -404,8 +405,8 @@ namespace BECore::Tests {
         passive.DrawSelf(*_renderer);
 
         ASSERT_EQ(_renderer->calls.size(), 2u);
-        EXPECT_TRUE(ColorsEqual(_renderer->calls[0].color, ShiftColor(kHostColor, kHoverBrighten)));
-        EXPECT_TRUE(ColorsEqual(_renderer->calls[1].color, Color{50, 50, 50, 255}));
+        EXPECT_TRUE(ColorsEqual(At(_renderer->calls, 0).color, ShiftColor(kHostColor, kHoverBrighten)));
+        EXPECT_TRUE(ColorsEqual(At(_renderer->calls, 1).color, Color{50, 50, 50, 255}));
     }
 
     TEST_F(UIComponentTest, TheStateColorsOfTheElementAreTheFillsOfItsStates) {
@@ -417,12 +418,12 @@ namespace BECore::Tests {
         host.pressed = true;
         _renderer->ClearCalls();
         host.DrawSelf(*_renderer);
-        EXPECT_TRUE(ColorsEqual(_renderer->calls[0].color, host.pressedColor));
+        EXPECT_TRUE(ColorsEqual(At(_renderer->calls, 0).color, host.pressedColor));
 
         host.groupDisabled = true;  // the group's flag disables an element as a `disabled` does a button
         _renderer->ClearCalls();
         host.DrawSelf(*_renderer);
-        EXPECT_TRUE(ColorsEqual(_renderer->calls[0].color, host.disabledColor));
+        EXPECT_TRUE(ColorsEqual(At(_renderer->calls, 0).color, host.disabledColor));
     }
 
     TEST_F(UIComponentTest, ASelectedElementThatShowsItsStateDrawsTheBarAtItsFoot) {
@@ -432,8 +433,8 @@ namespace BECore::Tests {
         _renderer->ClearCalls();
         host.DrawSelf(*_renderer);
         ASSERT_EQ(_renderer->calls.size(), 2u);
-        EXPECT_FLOAT_EQ(_renderer->calls[1].rect.h, UIStateLook::kSelectedBarHeight);
-        EXPECT_FLOAT_EQ(_renderer->calls[1].rect.y + _renderer->calls[1].rect.h, host.rect.y + host.rect.h);
+        EXPECT_FLOAT_EQ(At(_renderer->calls, 1).rect.h, UIStateLook::kSelectedBarHeight);
+        EXPECT_FLOAT_EQ(At(_renderer->calls, 1).rect.y + At(_renderer->calls, 1).rect.h, host.rect.y + host.rect.h);
     }
 
     // ---- touch size and content -------------------------------------------------------------------------------------------
@@ -622,7 +623,7 @@ namespace BECore::Tests {
         size_t boxAt = _renderer->calls.size();
         size_t pictureAt = _renderer->calls.size();
         for (size_t i = 0; i < _renderer->calls.size(); ++i) {
-            const DrawCall& call = _renderer->calls[i];
+            const DrawCall& call = At(_renderer->calls, i);
             if (call.kind == DrawKind::Rect && call.rect.x == kPlainX) {
                 boxAt = i;
             } else if (call.kind == DrawKind::Texture) {
@@ -681,7 +682,7 @@ namespace BECore::Tests {
 
         plain.hovered = true;
         Draw();
-        EXPECT_TRUE(ColorsEqual(Picture()->color, UIStateLook::ResolveTint(base, {}, hovered)));
+        EXPECT_TRUE(ColorsEqual(Require(Picture()).color, UIStateLook::ResolveTint(base, {}, hovered)));
         EXPECT_TRUE(ColorsEqual(_image->GetStateTint(hovered), UIStateLook::ResolveTint(base, {}, hovered)));
         EXPECT_GT(_image->GetStateTint(hovered).r, base.r) << "lighter under the pointer";
         EXPECT_LT(_image->GetStateTint(pressed).r, base.r) << "darker pressed";
@@ -694,7 +695,7 @@ namespace BECore::Tests {
         plain.pressed = true;
         plain.hovered = false;
         Draw();
-        EXPECT_TRUE(ColorsEqual(Picture()->color, Color(255, 255, 255, 255)));
+        EXPECT_TRUE(ColorsEqual(Require(Picture()).color, Color(255, 255, 255, 255)));
     }
 
     TEST_F(UIImageComponentTest, TheFieldsComeFromAFileAndSaveBack) {

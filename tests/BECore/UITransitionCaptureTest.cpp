@@ -7,6 +7,7 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <CoreSDL/SDLRendererBackend.h>
@@ -159,8 +160,8 @@ namespace BECore::Tests {
 
         /// A point of the panel that Spot does not cover: a tenth of its width from the left edge, half way down
         Pixel PanelOnly(const PixelBuffer& image) const {
-            const UIElement* panel = canvas->GetRoot().FindByName("Panel"_intern);
-            const Rect output = canvas->GetLayout().GetResolved().transform.ToOutput(panel->rect.x, panel->rect.y, panel->rect.w, panel->rect.h);
+            const UIElement& panel = Require(canvas->GetRoot().FindByName("Panel"_intern));
+            const Rect output = canvas->GetLayout().GetResolved().transform.ToOutput(panel.rect.x, panel.rect.y, panel.rect.w, panel.rect.h);
             return PixelAtOutput(image, static_cast<uint32_t>(output.x + output.w * 0.1f), static_cast<uint32_t>(output.y + output.h * 0.5f));
         }
 

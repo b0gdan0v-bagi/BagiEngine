@@ -5,6 +5,7 @@
 #include <BECore/SceneEventsTest.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
 #include <Events/SceneEvents.h>
 #include <entt/entt.hpp>
@@ -61,7 +62,7 @@ namespace BECore::Tests {
         SceneNode& Node(const char* name) {
             SceneNode* node = FindNodeBelow(_scene->GetRootNode(), name);
             EXPECT_NE(node, nullptr) << name;
-            return *node;
+            return Require(node);
         }
 
         String Tree() const {
@@ -203,15 +204,15 @@ namespace BECore::Tests {
 
         // OnAttached ran once for the copy's counter: one update, one count; the original's own count is its own
         SceneEvents::SceneUpdateEvent::Emit();
-        EXPECT_EQ(copy->GetComponent<SceneEventCounter>()->updateCount, 1);
-        EXPECT_EQ(a.GetComponent<SceneEventCounter>()->updateCount, 1);
+        EXPECT_EQ(Require(copy->GetComponent<SceneEventCounter>()).updateCount, 1);
+        EXPECT_EQ(Require(a.GetComponent<SceneEventCounter>()).updateCount, 1);
 
         auto copyTransform = copy->GetComponent<TransformComponent>();
         ASSERT_TRUE(copyTransform);
         EXPECT_FLOAT_EQ(copyTransform->_x, kOriginalX);
         copyTransform->_x = kEditedX;
         copy->SetLayer(7);
-        EXPECT_FLOAT_EQ(a.GetComponent<TransformComponent>()->_x, kOriginalX);
+        EXPECT_FLOAT_EQ(Require(a.GetComponent<TransformComponent>())._x, kOriginalX);
         EXPECT_EQ(a.GetLayer(), 0);
     }
 

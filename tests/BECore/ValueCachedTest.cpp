@@ -8,6 +8,7 @@
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <Common/LogRecorder.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -60,7 +61,7 @@ namespace BECore::Tests {
         /// A program with no `Reads()` that computes 42: what the compiler would have folded to a `Const`
         Value<int32_t> HandAssembledConstant() {
             ProgramBuilder builder;
-            const uint8_t reg = builder.AcquireRegister().value();
+            const uint8_t reg = Require(builder.AcquireRegister());
             builder.EmitLoadConst(reg, int32_t{42});
             const auto program = builder.Finish(ProgramType::Int32, reg, "cached test: forty-two"_intern);
             EXPECT_TRUE(program.has_value());
@@ -187,7 +188,7 @@ namespace BECore::Tests {
     TEST(ValueCachedTest, ALevelWithNoCounterRunsTheProgramOnEveryCallAndSaysSoOnce) {
         ValueWorld world;
         constexpr StringView kUnversionedFormula = "caster.attack * 5 - 11";
-        CachedValue<int32_t> cached(CompileValue<int32_t>(kUnversionedFormula, world.declaration).value());
+        CachedValue<int32_t> cached(Require(CompileValue<int32_t>(kUnversionedFormula, world.declaration)));
 
         LogRecorder recorder;
         constexpr uint32_t kCalls = 5;

@@ -15,6 +15,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
@@ -353,7 +354,7 @@ namespace BECore::Tests {
         transform->_rotation = kSavedRotation;
         transform->_pivotX = kSavedPivotX;
         transform->_pivotY = kSavedPivotY;
-        board->GetComponent<QuadRendererComponent>()->_blend = BlendMode::Add;
+        Require(board->GetComponent<QuadRendererComponent>())._blend = BlendMode::Add;
         auto sprite = New<SpriteRendererComponent>();
         sprite->_blend = BlendMode::Multiply;
         sprite->_flipX = true;
@@ -370,7 +371,7 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(savedTransform->_rotation, kSavedRotation);
         EXPECT_FLOAT_EQ(savedTransform->_pivotX, kSavedPivotX);
         EXPECT_FLOAT_EQ(savedTransform->_pivotY, kSavedPivotY);
-        EXPECT_EQ(saved->GetComponent<QuadRendererComponent>()->_blend, BlendMode::Add);
+        EXPECT_EQ(Require(saved->GetComponent<QuadRendererComponent>())._blend, BlendMode::Add);
         auto savedSprite = saved->GetComponent<SpriteRendererComponent>();
         ASSERT_TRUE(savedSprite);
         EXPECT_EQ(savedSprite->_blend, BlendMode::Multiply);
@@ -687,11 +688,11 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
 
         // A field of the first instance, the name and the layer of the third, the title of the canvas of the fourth
-        Child("Main", 0).GetComponent<TransformComponent>()->_x = kEditedX;
+        Require(Child("Main", 0).GetComponent<TransformComponent>())._x = kEditedX;
         SceneNode& box = Child("Main", 2);
         box.SetName("Crate"_intern);
         box.SetLayer(kEditedLayer);
-        Child("Main", 3).GetComponent<UICanvasComponent>()->_elements[0]->name = "Heading"_intern;
+        Require(Child("Main", 3).GetComponent<UICanvasComponent>())._elements[0]->name = "Heading"_intern;
 
         ASSERT_TRUE(Save(GetScene("Main")));
         EXPECT_TRUE(_notes.empty());
@@ -715,7 +716,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneEditorSaveReferencesTest, AnInlineNodeNextToInstancesStaysInline) {
         ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
-        Child("Main", 1).GetComponent<TransformComponent>()->_x = kEditedX;
+        Require(Child("Main", 1).GetComponent<TransformComponent>())._x = kEditedX;
 
         ASSERT_TRUE(Save(GetScene("Main")));
 
@@ -974,7 +975,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneEditorSaveReferencesTest, SavingTwiceGivesTheSameDocument) {
         ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
-        Child("Main", 0).GetComponent<TransformComponent>()->_x = kEditedX;
+        Require(Child("Main", 0).GetComponent<TransformComponent>())._x = kEditedX;
 
         ASSERT_TRUE(Save(GetScene("Main")));
         const String once = XmlTextIndented(ConfigRoot());
@@ -1025,7 +1026,7 @@ namespace BECore::Tests {
         const auto& savedGrand = savedBoard->GetChildren()[0]->GetChildren()[0];
         EXPECT_EQ(savedGrand->GetParent(), savedBoard->GetChildren()[0].Get());
         ASSERT_TRUE(savedGrand->GetComponent<QuadRendererComponent>());
-        EXPECT_EQ(savedGrand->GetComponent<QuadRendererComponent>()->_color.g, 5);
+        EXPECT_EQ(Require(savedGrand->GetComponent<QuadRendererComponent>())._color.g, 5);
     }
 
     TEST_F(SceneEditorSaveTest, ALoadedNestedTreeSurvivesASaveUnchanged) {
@@ -1041,7 +1042,7 @@ namespace BECore::Tests {
         ASSERT_NE(inner, nullptr);
         EXPECT_EQ(inner->GetLayer(), kPieceLayer);
         ASSERT_TRUE(inner->GetComponent<TransformComponent>());
-        EXPECT_FLOAT_EQ(inner->GetComponent<TransformComponent>()->_x, kMovedX);
+        EXPECT_FLOAT_EQ(Require(inner->GetComponent<TransformComponent>())._x, kMovedX);
         const String once = XmlTextIndented(ConfigRoot());
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
         EXPECT_EQ(XmlTextIndented(ConfigRoot()), once);

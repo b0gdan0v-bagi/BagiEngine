@@ -8,6 +8,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
 #include <Widgets/SceneEditor/ScenePick.h>
 #include <gtest/gtest.h>
@@ -153,7 +154,7 @@ namespace BECore::Tests {
         SceneNode& Node(const char* sceneName, const char* name) const {
             SceneNode* node = FindNodeBelow(GetScene(sceneName).GetRootNode(), name);
             EXPECT_NE(node, nullptr) << name;
-            return *node;
+            return Require(node);
         }
 
         ScenePick::Hit Pick(float x, float y) {

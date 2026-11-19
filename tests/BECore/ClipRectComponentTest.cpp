@@ -13,6 +13,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
 #include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
@@ -263,8 +264,8 @@ namespace BECore::Tests {
             LoadNodes(Node("Below", 0, 0, kWide, kWide, 0, target.c_str()) + Node("Clipper", 0, 0, kClipSize, kClipSize, 0, kClip, Node("Inside", 0, 0, kWide, kWide, 0, target.c_str()))));
         TargetScript below;
         TargetScript inside;
-        At("Below").GetComponent<PointerTargetTestComponent>()->script = &below;
-        At("Inside").GetComponent<PointerTargetTestComponent>()->script = &inside;
+        Require(At("Below").GetComponent<PointerTargetTestComponent>()).script = &below;
+        Require(At("Inside").GetComponent<PointerTargetTestComponent>()).script = &inside;
         _manager->DrawAll();
 
         EXPECT_TRUE(Press(kInside, kInside));

@@ -17,6 +17,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UIPartShapeChecks.h>
 #include <Common/UITestSupport.h>
@@ -240,7 +241,7 @@ namespace BECore::Tests {
         UIElement& Element(const char* name) const {
             UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
-            return *element;
+            return Require(element);
         }
 
         /// The textured quads (the glyphs of a caption) drawn inside @p area in the last draw
@@ -324,7 +325,7 @@ namespace BECore::Tests {
         SetVar("level", "easy");
         Draw();
         EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), "Easy");
-        EXPECT_EQ(Get<UIDropdown>("Level").GetComponent<UITextComponent>()->text, "Pick one");
+        EXPECT_EQ(Require(Get<UIDropdown>("Level").GetComponent<UITextComponent>()).text, "Pick one");
 
         CoreManager::GetUIVars().Remove("level"_intern);
         EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), "Pick one");

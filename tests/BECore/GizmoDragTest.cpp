@@ -1,3 +1,4 @@
+#include <Common/Require.h>
 #include <Widgets/Viewport/GizmoDrag.h>
 #include <gtest/gtest.h>
 
@@ -100,33 +101,33 @@ namespace BECore::Tests {
     TEST(GizmoDragTest, TranslateFreeMovesByThePointersOffset) {
         const auto result = DragOne(Tool::Translate, Handle::Free, MakeItem(10.0f, 20.0f, 40.0f, 30.0f), {100.0f, 100.0f}, {130.0f, 90.0f});
         ASSERT_EQ(result.size(), 1u);
-        ExpectItem(MakeItem(40.0f, 10.0f, 40.0f, 30.0f), result[0]);
+        ExpectItem(MakeItem(40.0f, 10.0f, 40.0f, 30.0f), At(result, 0));
     }
 
     TEST(GizmoDragTest, TranslateAlongAWorldAxisKeepsTheOtherCoordinate) {
         const Item item = MakeItem(10.0f, 20.0f, 40.0f, 30.0f);
-        ExpectItem(MakeItem(40.0f, 20.0f, 40.0f, 30.0f), DragOne(Tool::Translate, Handle::AxisX, item, {100.0f, 100.0f}, {130.0f, 90.0f})[0]);
-        ExpectItem(MakeItem(10.0f, 10.0f, 40.0f, 30.0f), DragOne(Tool::Translate, Handle::AxisY, item, {100.0f, 100.0f}, {130.0f, 90.0f})[0]);
+        ExpectItem(MakeItem(40.0f, 20.0f, 40.0f, 30.0f), At(DragOne(Tool::Translate, Handle::AxisX, item, {100.0f, 100.0f}, {130.0f, 90.0f}), 0));
+        ExpectItem(MakeItem(10.0f, 10.0f, 40.0f, 30.0f), At(DragOne(Tool::Translate, Handle::AxisY, item, {100.0f, 100.0f}, {130.0f, 90.0f}), 0));
     }
 
     TEST(GizmoDragTest, TranslateAlongALocalAxisOfAQuarterTurnedItem) {
         const Item item = MakeItem(10.0f, 20.0f, 40.0f, 30.0f, 90.0f);
         // Turned a quarter clockwise, the item's X axis points down the screen and its Y axis to the left
         const auto alongX = DragOne(Tool::Translate, Handle::AxisX, item, {100.0f, 100.0f}, {130.0f, 140.0f}, {}, false, false, Space::Local);
-        ExpectItem(MakeItem(10.0f, 60.0f, 40.0f, 30.0f, 90.0f), alongX[0]);
+        ExpectItem(MakeItem(10.0f, 60.0f, 40.0f, 30.0f, 90.0f), At(alongX, 0));
         const auto alongY = DragOne(Tool::Translate, Handle::AxisY, item, {100.0f, 100.0f}, {130.0f, 140.0f}, {}, false, false, Space::Local);
-        ExpectItem(MakeItem(40.0f, 20.0f, 40.0f, 30.0f, 90.0f), alongY[0]);
+        ExpectItem(MakeItem(40.0f, 20.0f, 40.0f, 30.0f, 90.0f), At(alongY, 0));
         // The same drag in World space follows the screen's X axis
         const auto world = DragOne(Tool::Translate, Handle::AxisX, item, {100.0f, 100.0f}, {130.0f, 140.0f});
-        ExpectItem(MakeItem(40.0f, 20.0f, 40.0f, 30.0f, 90.0f), world[0]);
+        ExpectItem(MakeItem(40.0f, 20.0f, 40.0f, 30.0f, 90.0f), At(world, 0));
     }
 
     TEST(GizmoDragTest, TranslateMovesAGroupAsOne) {
         const Item items[] = {MakeItem(0.0f, 0.0f, 10.0f, 10.0f), MakeItem(30.0f, 20.0f, 10.0f, 10.0f, 45.0f)};
         const auto result = Drag(Tool::Translate, Space::World, Handle::Free, items, {5.0f, 5.0f}, {15.0f, -5.0f});
         ASSERT_EQ(result.size(), 2u);
-        ExpectItem(MakeItem(10.0f, -10.0f, 10.0f, 10.0f), result[0]);
-        ExpectItem(MakeItem(40.0f, 10.0f, 10.0f, 10.0f, 45.0f), result[1]);
+        ExpectItem(MakeItem(10.0f, -10.0f, 10.0f, 10.0f), At(result, 0));
+        ExpectItem(MakeItem(40.0f, 10.0f, 10.0f, 10.0f, 45.0f), At(result, 1));
     }
 
     TEST(GizmoDragTest, TranslateSnapRoundsTheFirstItemAndMovesTheOthersByTheSameOffset) {
@@ -134,19 +135,19 @@ namespace BECore::Tests {
         snap.position = true;
         const Item items[] = {MakeItem(3.0f, 5.0f, 10.0f, 10.0f), MakeItem(100.0f, 101.0f, 10.0f, 10.0f)};
         const auto result = Drag(Tool::Translate, Space::World, Handle::Free, items, {0.0f, 0.0f}, {10.0f, 10.0f}, snap);
-        ExpectItem(MakeItem(16.0f, 16.0f, 10.0f, 10.0f), result[0]);
+        ExpectItem(MakeItem(16.0f, 16.0f, 10.0f, 10.0f), At(result, 0));
         // The same offset (13, 11) as the first item got, so the group keeps its shape
-        ExpectItem(MakeItem(113.0f, 112.0f, 10.0f, 10.0f), result[1]);
+        ExpectItem(MakeItem(113.0f, 112.0f, 10.0f, 10.0f), At(result, 1));
     }
 
     TEST(GizmoDragTest, TranslateSnapIsOffByDefaultAndTheModifierInvertsIt) {
         const Item item = MakeItem(3.0f, 5.0f, 10.0f, 10.0f);
-        ExpectItem(MakeItem(13.0f, 15.0f, 10.0f, 10.0f), DragOne(Tool::Translate, Handle::Free, item, {0.0f, 0.0f}, {10.0f, 10.0f})[0]);
-        ExpectItem(MakeItem(16.0f, 16.0f, 10.0f, 10.0f), DragOne(Tool::Translate, Handle::Free, item, {0.0f, 0.0f}, {10.0f, 10.0f}, {}, true)[0]);
+        ExpectItem(MakeItem(13.0f, 15.0f, 10.0f, 10.0f), At(DragOne(Tool::Translate, Handle::Free, item, {0.0f, 0.0f}, {10.0f, 10.0f}), 0));
+        ExpectItem(MakeItem(16.0f, 16.0f, 10.0f, 10.0f), At(DragOne(Tool::Translate, Handle::Free, item, {0.0f, 0.0f}, {10.0f, 10.0f}, {}, true), 0));
         SnapSettings on;
         on.position = true;
-        ExpectItem(MakeItem(16.0f, 16.0f, 10.0f, 10.0f), DragOne(Tool::Translate, Handle::Free, item, {0.0f, 0.0f}, {10.0f, 10.0f}, on)[0]);
-        ExpectItem(MakeItem(13.0f, 15.0f, 10.0f, 10.0f), DragOne(Tool::Translate, Handle::Free, item, {0.0f, 0.0f}, {10.0f, 10.0f}, on, true)[0]);
+        ExpectItem(MakeItem(16.0f, 16.0f, 10.0f, 10.0f), At(DragOne(Tool::Translate, Handle::Free, item, {0.0f, 0.0f}, {10.0f, 10.0f}, on), 0));
+        ExpectItem(MakeItem(13.0f, 15.0f, 10.0f, 10.0f), At(DragOne(Tool::Translate, Handle::Free, item, {0.0f, 0.0f}, {10.0f, 10.0f}, on, true), 0));
     }
 
     TEST(GizmoDragTest, TranslateSnapAlongAScreenAxisRoundsOnlyThatCoordinate) {
@@ -154,8 +155,8 @@ namespace BECore::Tests {
         snap.position = true;
         const Item item = MakeItem(3.0f, 5.0f, 10.0f, 10.0f);
         const auto result = DragOne(Tool::Translate, Handle::AxisX, item, {0.0f, 0.0f}, {10.0f, 7.0f}, snap);
-        EXPECT_FLOAT_EQ(result[0].x, 16.0f);
-        EXPECT_FLOAT_EQ(result[0].y, 5.0f);
+        EXPECT_FLOAT_EQ(At(result, 0).x, 16.0f);
+        EXPECT_FLOAT_EQ(At(result, 0).y, 5.0f);
         const auto vertical = DragOne(Tool::Translate, Handle::AxisY, item, {0.0f, 0.0f}, {10.0f, 7.0f}, snap);
         EXPECT_FLOAT_EQ(vertical[0].x, 3.0f);
         EXPECT_FLOAT_EQ(vertical[0].y, 16.0f);
@@ -167,8 +168,8 @@ namespace BECore::Tests {
         const Item item = MakeItem(0.0f, 0.0f, 10.0f, 10.0f, 30.0f);
         const Vec2 axis{kThirtyDegreesCos, kThirtyDegreesSin};
         const auto result = DragOne(Tool::Translate, Handle::AxisX, item, {0.0f, 0.0f}, axis * 10.0f, snap, false, false, Space::Local);
-        EXPECT_NEAR(result[0].x, axis.x * 8.0f, kTolerance);
-        EXPECT_NEAR(result[0].y, axis.y * 8.0f, kTolerance);
+        EXPECT_NEAR(At(result, 0).x, axis.x * 8.0f, kTolerance);
+        EXPECT_NEAR(At(result, 0).y, axis.y * 8.0f, kTolerance);
     }
 
     TEST(GizmoDragTest, ComingBackToThePressGivesTheStartValues) {
@@ -183,10 +184,10 @@ namespace BECore::Tests {
 
     TEST(GizmoDragTest, RotateOneItemChangesOnlyItsRotation) {
         const auto result = DragOne(Tool::Rotate, Handle::Ring, kFlat, {150.0f, 25.0f}, {50.0f, 125.0f});
-        EXPECT_EQ(result[0].x, kFlat.x);
-        EXPECT_EQ(result[0].y, kFlat.y);
-        EXPECT_EQ(result[0].width, kFlat.width);
-        EXPECT_NEAR(result[0].rotation, 90.0f, kTolerance);
+        EXPECT_EQ(At(result, 0).x, kFlat.x);
+        EXPECT_EQ(At(result, 0).y, kFlat.y);
+        EXPECT_EQ(At(result, 0).width, kFlat.width);
+        EXPECT_NEAR(At(result, 0).rotation, 90.0f, kTolerance);
     }
 
     TEST(GizmoDragTest, RotateIsMeasuredFromThePressSoThereIsNoJump) {
@@ -194,7 +195,7 @@ namespace BECore::Tests {
         item.rotation = 10.0f;
         // Pressed at 45 degrees off the item's own angle: no movement yet, no change
         const Vec2 press = OnCircle(kFlatCenter, 60.0f, 45.0f);
-        EXPECT_EQ(DragOne(Tool::Rotate, Handle::Ring, item, press, press)[0].rotation, 10.0f);
+        EXPECT_EQ(At(DragOne(Tool::Rotate, Handle::Ring, item, press, press), 0).rotation, 10.0f);
         const auto swept = DragOne(Tool::Rotate, Handle::Ring, item, press, OnCircle(kFlatCenter, 90.0f, 75.0f));
         EXPECT_NEAR(swept[0].rotation, 40.0f, kTolerance);
         const auto back = DragOne(Tool::Rotate, Handle::Ring, item, press, OnCircle(kFlatCenter, 90.0f, 15.0f));
@@ -205,16 +206,16 @@ namespace BECore::Tests {
         const Item item = MakeItem(0.0f, 0.0f, 100.0f, 50.0f, 0.0f, 0.0f, 0.0f);
         // The pivot is the top left corner (0, 0): a sweep is measured around it
         const auto result = DragOne(Tool::Rotate, Handle::Ring, item, {60.0f, 0.0f}, {0.0f, 60.0f});
-        EXPECT_NEAR(result[0].rotation, 90.0f, kTolerance);
-        EXPECT_EQ(result[0].x, 0.0f);
-        EXPECT_EQ(result[0].y, 0.0f);
+        EXPECT_NEAR(At(result, 0).rotation, 90.0f, kTolerance);
+        EXPECT_EQ(At(result, 0).x, 0.0f);
+        EXPECT_EQ(At(result, 0).y, 0.0f);
     }
 
     TEST(GizmoDragTest, RotateWrapsPastAFullTurn) {
         Item item = kFlat;
         item.rotation = 350.0f;
         const auto result = DragOne(Tool::Rotate, Handle::Ring, item, OnCircle(kFlatCenter, 60.0f, 0.0f), OnCircle(kFlatCenter, 60.0f, 20.0f));
-        EXPECT_NEAR(result[0].rotation, 10.0f, kTolerance);
+        EXPECT_NEAR(At(result, 0).rotation, 10.0f, kTolerance);
         Item back = kFlat;
         back.rotation = 10.0f;
         const auto negative = DragOne(Tool::Rotate, Handle::Ring, back, OnCircle(kFlatCenter, 60.0f, 0.0f), OnCircle(kFlatCenter, 60.0f, -20.0f));
@@ -224,23 +225,23 @@ namespace BECore::Tests {
     TEST(GizmoDragTest, RotateTakesTheShortWayAcrossTheBranchCut) {
         // From 170 to -170 degrees on the circle is a sweep of +20, not -340
         const auto result = DragOne(Tool::Rotate, Handle::Ring, kFlat, OnCircle(kFlatCenter, 60.0f, 170.0f), OnCircle(kFlatCenter, 60.0f, 190.0f));
-        EXPECT_NEAR(result[0].rotation, 20.0f, kTolerance);
+        EXPECT_NEAR(At(result, 0).rotation, 20.0f, kTolerance);
     }
 
     TEST(GizmoDragTest, RotateSnapRoundsTheSweepToTheStep) {
         SnapSettings snap;
         snap.angle = true;
         const Vec2 press = OnCircle(kFlatCenter, 60.0f, 0.0f);
-        EXPECT_NEAR(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, 22.0f), snap)[0].rotation, 15.0f, kTolerance);
-        EXPECT_NEAR(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, 23.0f), snap)[0].rotation, 30.0f, kTolerance);
-        EXPECT_NEAR(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, -22.0f), snap)[0].rotation, -15.0f, kTolerance);
-        EXPECT_NEAR(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, 22.0f))[0].rotation, 22.0f, kTolerance);
-        EXPECT_NEAR(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, 22.0f), {}, true)[0].rotation, 15.0f, kTolerance);
-        EXPECT_NEAR(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, 22.0f), snap, true)[0].rotation, 22.0f, kTolerance);
+        EXPECT_NEAR(At(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, 22.0f), snap), 0).rotation, 15.0f, kTolerance);
+        EXPECT_NEAR(At(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, 23.0f), snap), 0).rotation, 30.0f, kTolerance);
+        EXPECT_NEAR(At(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, -22.0f), snap), 0).rotation, -15.0f, kTolerance);
+        EXPECT_NEAR(At(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, 22.0f)), 0).rotation, 22.0f, kTolerance);
+        EXPECT_NEAR(At(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, 22.0f), {}, true), 0).rotation, 15.0f, kTolerance);
+        EXPECT_NEAR(At(DragOne(Tool::Rotate, Handle::Ring, kFlat, press, OnCircle(kFlatCenter, 60.0f, 22.0f), snap, true), 0).rotation, 22.0f, kTolerance);
         // A snapped sweep leaves the item that starts off the step off it too
         Item odd = kFlat;
         odd.rotation = 7.0f;
-        EXPECT_NEAR(DragOne(Tool::Rotate, Handle::Ring, odd, press, OnCircle(kFlatCenter, 60.0f, 22.0f), snap)[0].rotation, 22.0f, kTolerance);
+        EXPECT_NEAR(At(DragOne(Tool::Rotate, Handle::Ring, odd, press, OnCircle(kFlatCenter, 60.0f, 22.0f), snap), 0).rotation, 22.0f, kTolerance);
     }
 
     TEST(GizmoDragTest, RotateAGroupTurnsEveryItemAboutTheCentreOfTheirBounds) {
@@ -250,8 +251,8 @@ namespace BECore::Tests {
         const auto result = Drag(Tool::Rotate, Space::World, Handle::Ring, items, centre + Vec2{50.0f, 0.0f}, centre + Vec2{0.0f, 50.0f});
         ASSERT_EQ(result.size(), 2u);
         // A quarter turn clockwise sends the left item to the top and the right item to the bottom
-        ExpectItem(MakeItem(15.0f, -15.0f, 10.0f, 10.0f, 90.0f), result[0]);
-        ExpectItem(MakeItem(15.0f, 15.0f, 10.0f, 10.0f, 90.0f), result[1]);
+        ExpectItem(MakeItem(15.0f, -15.0f, 10.0f, 10.0f, 90.0f), At(result, 0));
+        ExpectItem(MakeItem(15.0f, 15.0f, 10.0f, 10.0f, 90.0f), At(result, 1));
     }
 
     TEST(GizmoDragTest, RotateAGroupKeepsEachItemsPivotOnItsCircle) {
@@ -269,7 +270,7 @@ namespace BECore::Tests {
 
     TEST(GizmoDragTest, ScaleEachHandleOfAnUnturnedItemMovesItsSidesAndKeepsTheOppositeOnes) {
         const Vec2 pull{10.0f, 6.0f};
-        const auto drag = [&](Handle handle) { return DragOne(Tool::Scale, handle, kFlat, {0.0f, 0.0f}, pull)[0]; };
+        const auto drag = [&](Handle handle) { return At(DragOne(Tool::Scale, handle, kFlat, {0.0f, 0.0f}, pull), 0); };
         ExpectItem(MakeItem(0.0f, 0.0f, 110.0f, 56.0f), drag(Handle::Corner2));
         ExpectItem(MakeItem(10.0f, 6.0f, 90.0f, 44.0f), drag(Handle::Corner0));
         ExpectItem(MakeItem(0.0f, 6.0f, 110.0f, 44.0f), drag(Handle::Corner1));
@@ -289,7 +290,7 @@ namespace BECore::Tests {
                 const Vec2 anchor = HandleAnchor(handle);
                 const Vec2 press = WorldPointOf(item, anchor.x, anchor.y);
                 const auto result = DragOne(Tool::Scale, handle, item, press, press + pull);
-                const Item& scaled = result[0];
+                const Item& scaled = At(result, 0);
                 // The point opposite the handle (the middle of an axis the handle does not move) is where it was
                 const float fixedU = sides.x == 0.0f ? 0.5f : (sides.x > 0.0f ? 0.0f : 1.0f);
                 const float fixedV = sides.y == 0.0f ? 0.5f : (sides.y > 0.0f ? 0.0f : 1.0f);
@@ -307,9 +308,9 @@ namespace BECore::Tests {
 
     TEST(GizmoDragTest, ScaleNeverGoesBelowTheMinimumOrFlips) {
         const auto result = DragOne(Tool::Scale, Handle::Corner2, kFlat, {100.0f, 50.0f}, {-1000.0f, -1000.0f});
-        EXPECT_FLOAT_EQ(result[0].width, kMinItemSize);
-        EXPECT_FLOAT_EQ(result[0].height, kMinItemSize);
-        ExpectVec({0.0f, 0.0f}, WorldPointOf(result[0], 0.0f, 0.0f));
+        EXPECT_FLOAT_EQ(At(result, 0).width, kMinItemSize);
+        EXPECT_FLOAT_EQ(At(result, 0).height, kMinItemSize);
+        ExpectVec({0.0f, 0.0f}, WorldPointOf(At(result, 0), 0.0f, 0.0f));
         const auto edge = DragOne(Tool::Scale, Handle::Edge3, kFlat, {0.0f, 25.0f}, {500.0f, 25.0f});
         EXPECT_FLOAT_EQ(edge[0].width, kMinItemSize);
         ExpectVec({100.0f, 0.0f}, WorldPointOf(edge[0], 1.0f, 0.0f));
@@ -318,37 +319,37 @@ namespace BECore::Tests {
     TEST(GizmoDragTest, ScaleAnEdgeLeavesTheUnmovedAxisAloneEvenUnderTheMinimum) {
         const float thin = kMinItemSize * 0.5f;
         const auto result = DragOne(Tool::Scale, Handle::Edge3, MakeItem(0.0f, 0.0f, 100.0f, thin), {0.0f, thin * 0.5f}, {-50.0f, thin * 0.5f});
-        EXPECT_NEAR(result[0].width, 150.0f, kTolerance);
-        EXPECT_FLOAT_EQ(result[0].height, thin);
+        EXPECT_NEAR(At(result, 0).width, 150.0f, kTolerance);
+        EXPECT_FLOAT_EQ(At(result, 0).height, thin);
     }
 
     TEST(GizmoDragTest, ScaleKeepAspectMakesTheChangeUniform) {
         const Item item = kFlat;
         // The corner moves 20 right and not at all down: the wider change decides, 120 x 60
         auto result = DragOne(Tool::Scale, Handle::Corner2, item, {100.0f, 50.0f}, {120.0f, 50.0f}, {}, false, true);
-        ExpectItem(MakeItem(0.0f, 0.0f, 120.0f, 60.0f), result[0]);
+        ExpectItem(MakeItem(0.0f, 0.0f, 120.0f, 60.0f), At(result, 0));
         // Pulled up by half the height: the change in y decides, 50 x 25
         result = DragOne(Tool::Scale, Handle::Corner2, item, {100.0f, 50.0f}, {100.0f, 25.0f}, {}, false, true);
-        ExpectItem(MakeItem(0.0f, 0.0f, 50.0f, 25.0f), result[0]);
+        ExpectItem(MakeItem(0.0f, 0.0f, 50.0f, 25.0f), At(result, 0));
         result = DragOne(Tool::Scale, Handle::Edge1, item, {100.0f, 25.0f}, {120.0f, 25.0f}, {}, false, true);
-        ExpectItem(MakeItem(0.0f, -5.0f, 120.0f, 60.0f), result[0]);
+        ExpectItem(MakeItem(0.0f, -5.0f, 120.0f, 60.0f), At(result, 0));
         result = DragOne(Tool::Scale, Handle::Edge2, item, {50.0f, 50.0f}, {50.0f, 75.0f}, {}, false, true);
-        ExpectItem(MakeItem(-25.0f, 0.0f, 150.0f, 75.0f), result[0]);
+        ExpectItem(MakeItem(-25.0f, 0.0f, 150.0f, 75.0f), At(result, 0));
     }
 
     TEST(GizmoDragTest, ScaleKeepAspectOfATurnedItemKeepsTheOppositeCorner) {
         const Item item = MakeItem(30.0f, 40.0f, 80.0f, 60.0f, 30.0f);
         const Vec2 press = WorldPointOf(item, 1.0f, 1.0f);
         const auto result = DragOne(Tool::Scale, Handle::Corner2, item, press, press + Vec2{20.0f, 20.0f}, {}, false, true);
-        EXPECT_NEAR(result[0].width / result[0].height, item.width / item.height, kTolerance);
-        ExpectVec(WorldPointOf(item, 0.0f, 0.0f), WorldPointOf(result[0], 0.0f, 0.0f));
+        EXPECT_NEAR(At(result, 0).width / At(result, 0).height, item.width / item.height, kTolerance);
+        ExpectVec(WorldPointOf(item, 0.0f, 0.0f), WorldPointOf(At(result, 0), 0.0f, 0.0f));
     }
 
     TEST(GizmoDragTest, ScaleKeepAspectHoldsTheMinimumOnBothSides) {
         const auto result = DragOne(Tool::Scale, Handle::Corner2, kFlat, {100.0f, 50.0f}, {-1000.0f, -1000.0f}, {}, false, true);
-        EXPECT_GE(result[0].width, kMinItemSize);
-        EXPECT_GE(result[0].height, kMinItemSize);
-        EXPECT_NEAR(result[0].width / result[0].height, 2.0f, kTolerance);
+        EXPECT_GE(At(result, 0).width, kMinItemSize);
+        EXPECT_GE(At(result, 0).height, kMinItemSize);
+        EXPECT_NEAR(At(result, 0).width / At(result, 0).height, 2.0f, kTolerance);
     }
 
     TEST(GizmoDragTest, ScaleSnapRoundsTheFactorOnTheStartSize) {
@@ -356,27 +357,27 @@ namespace BECore::Tests {
         snap.scale = true;
         // 123.4 / 100 is 1.234, which rounds to 1.2
         auto result = DragOne(Tool::Scale, Handle::Edge1, kFlat, {100.0f, 25.0f}, {123.4f, 25.0f}, snap);
-        EXPECT_NEAR(result[0].width, 120.0f, kTolerance);
-        EXPECT_NEAR(result[0].height, 50.0f, kTolerance);
+        EXPECT_NEAR(At(result, 0).width, 120.0f, kTolerance);
+        EXPECT_NEAR(At(result, 0).height, 50.0f, kTolerance);
         // A corner snaps each axis: x by 1.234 to 1.2, y by 1.07 to 1.1
         result = DragOne(Tool::Scale, Handle::Corner2, kFlat, {100.0f, 50.0f}, {123.4f, 53.5f}, snap);
-        EXPECT_NEAR(result[0].width, 120.0f, kTolerance);
-        EXPECT_NEAR(result[0].height, 55.0f, kTolerance);
+        EXPECT_NEAR(At(result, 0).width, 120.0f, kTolerance);
+        EXPECT_NEAR(At(result, 0).height, 55.0f, kTolerance);
         result = DragOne(Tool::Scale, Handle::Edge1, kFlat, {100.0f, 25.0f}, {123.4f, 25.0f}, snap, true);
-        EXPECT_NEAR(result[0].width, 123.4f, kTolerance);
+        EXPECT_NEAR(At(result, 0).width, 123.4f, kTolerance);
         result = DragOne(Tool::Scale, Handle::Edge1, kFlat, {100.0f, 25.0f}, {123.4f, 25.0f}, {}, true);
-        EXPECT_NEAR(result[0].width, 120.0f, kTolerance);
+        EXPECT_NEAR(At(result, 0).width, 120.0f, kTolerance);
         // With the aspect locked the one factor snaps and both sides follow
         result = DragOne(Tool::Scale, Handle::Corner2, kFlat, {100.0f, 50.0f}, {123.4f, 50.0f}, snap, false, true);
-        EXPECT_NEAR(result[0].width, 120.0f, kTolerance);
-        EXPECT_NEAR(result[0].height, 60.0f, kTolerance);
+        EXPECT_NEAR(At(result, 0).width, 120.0f, kTolerance);
+        EXPECT_NEAR(At(result, 0).height, 60.0f, kTolerance);
     }
 
     TEST(GizmoDragTest, ScaleSnapNeverSnapsBelowTheMinimum) {
         SnapSettings snap;
         snap.scale = true;
         const auto result = DragOne(Tool::Scale, Handle::Edge1, kFlat, {100.0f, 25.0f}, {1.0f, 25.0f}, snap);
-        EXPECT_FLOAT_EQ(result[0].width, kMinItemSize);
+        EXPECT_FLOAT_EQ(At(result, 0).width, kMinItemSize);
     }
 
     TEST(GizmoDragTest, ScaleAGroupIsUniformAboutTheCentreOfItsBounds) {
@@ -386,8 +387,8 @@ namespace BECore::Tests {
         const auto result = Drag(Tool::Scale, Space::World, Handle::Corner2, items, centre + Vec2{50.0f, 0.0f}, centre + Vec2{0.0f, 100.0f});
         ASSERT_EQ(result.size(), 2u);
         // Factor 2: each item's pivot is twice as far from the centre, and each side is twice as long
-        ExpectItem(MakeItem(-20.0f, -5.0f, 20.0f, 20.0f), result[0]);
-        ExpectItem(MakeItem(40.0f, -5.0f, 20.0f, 20.0f), result[1]);
+        ExpectItem(MakeItem(-20.0f, -5.0f, 20.0f, 20.0f), At(result, 0));
+        ExpectItem(MakeItem(40.0f, -5.0f, 20.0f, 20.0f), At(result, 1));
         ExpectVec(centre, Pivot(result));
     }
 
@@ -420,8 +421,8 @@ namespace BECore::Tests {
         const Item items[] = {MakeItem(0.0f, 0.0f, 10.0f, 10.0f), MakeItem(30.0f, 0.0f, 10.0f, 10.0f)};
         const Vec2 centre{20.0f, 5.0f};
         const auto result = Drag(Tool::Scale, Space::World, Handle::Edge1, items, centre + Vec2{20.0f, 0.0f}, centre + Vec2{40.0f, 0.0f});
-        EXPECT_NEAR(result[0].width, 20.0f, kTolerance);
-        EXPECT_NEAR(result[0].height, 20.0f, kTolerance);
+        EXPECT_NEAR(At(result, 0).width, 20.0f, kTolerance);
+        EXPECT_NEAR(At(result, 0).height, 20.0f, kTolerance);
     }
 
     TEST(GizmoDragTest, ACancelGivesBackTheSnapshotExactlyAndEndsTheDrag) {
@@ -462,7 +463,7 @@ namespace BECore::Tests {
 
     TEST(GizmoDragTest, AHandleOfAnotherToolChangesNothing) {
         const auto result = DragOne(Tool::Scale, Handle::Ring, kFlat, {0.0f, 0.0f}, {10.0f, 10.0f});
-        EXPECT_EQ(result[0], kFlat);
+        EXPECT_EQ(At(result, 0), kFlat);
         const auto rotate = DragOne(Tool::Rotate, Handle::AxisX, kFlat, {0.0f, 0.0f}, {10.0f, 10.0f});
         EXPECT_EQ(rotate[0], kFlat);
         const auto translate = DragOne(Tool::Translate, Handle::Corner0, kFlat, {0.0f, 0.0f}, {10.0f, 10.0f});

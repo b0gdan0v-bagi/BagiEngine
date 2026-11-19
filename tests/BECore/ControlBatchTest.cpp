@@ -161,7 +161,7 @@ namespace BECore::Tests {
 
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_TRUE(IsOk(responses[0]));
-        EXPECT_EQ(GetJsonInt(*FindJsonMember(responses[0], "result"), "ran").value_or(-1), 2);
+        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(responses[0], "result")), "ran").value_or(-1), 2);
         EXPECT_FALSE(service.IsStepDue());
         ASSERT_EQ(answers.size(), 2u);
         ASSERT_TRUE(answers[0].has_value());
@@ -182,7 +182,7 @@ namespace BECore::Tests {
         EXPECT_EQ(RunDueFrames(), 3);
         ASSERT_EQ(responses.size(), 1u);  // the outer is answered; the request behind it is still in the inbox
         EXPECT_EQ(IdOf(responses[0]), 1);
-        EXPECT_EQ(GetJsonInt(*FindJsonMember(responses[0], "result"), "ran").value_or(-1), 3);
+        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(responses[0], "result")), "ran").value_or(-1), 3);
         ASSERT_EQ(answers.size(), 3u);
         ASSERT_TRUE(answers[1].has_value());
         EXPECT_NE(FindJsonMember(*answers[1], "frame"), nullptr);  // the answer of `step`
@@ -201,7 +201,7 @@ namespace BECore::Tests {
         EXPECT_EQ(RunDueFrames(), 5);
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_TRUE(IsOk(responses[0]));
-        EXPECT_EQ(GetJsonInt(*FindJsonMember(responses[0], "result"), "ran").value_or(-1), 3);
+        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(responses[0], "result")), "ran").value_or(-1), 3);
         EXPECT_EQ(order, (Vector<String>{"outer", "continued", "continued", "count"}));
         EXPECT_FALSE(service.IsStepDue());
     }
@@ -327,9 +327,9 @@ namespace BECore::Tests {
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_TRUE(IsOk(responses[0]));
         ASSERT_EQ(ResultCount(0), 3u);
-        EXPECT_TRUE(GetJsonBool(*FindJsonMember(*EntryOf(0, 0), "result"), "pong").value_or(false));
+        EXPECT_TRUE(GetJsonBool(Require(FindJsonMember(*EntryOf(0, 0), "result")), "pong").value_or(false));
         EXPECT_TRUE(GetJsonBool(*EntryOf(0, 1), "ok").value_or(false));
-        EXPECT_NE(FindJsonMember(*FindJsonMember(*EntryOf(0, 2), "result"), "frame"), nullptr);
+        EXPECT_NE(FindJsonMember(Require(FindJsonMember(*EntryOf(0, 2), "result")), "frame"), nullptr);
         EXPECT_EQ(FindJsonMember(*ResultOf(0), "stopped"), nullptr);
     }
 
@@ -341,8 +341,8 @@ namespace BECore::Tests {
         EXPECT_TRUE(IsOk(responses[0]));  // the request is fine whatever its calls answered
         ASSERT_EQ(ResultCount(0), 2u);
         EXPECT_FALSE(GetJsonBool(*EntryOf(0, 1), "ok").value_or(true));
-        EXPECT_EQ(GetJsonString(*FindJsonMember(*EntryOf(0, 1), "error"), "code").value_or(""), "boom");
-        EXPECT_EQ(GetJsonString(*FindJsonMember(*EntryOf(0, 1), "error"), "message").value_or(""), "it failed");
+        EXPECT_EQ(GetJsonString(Require(FindJsonMember(*EntryOf(0, 1), "error")), "code").value_or(""), "boom");
+        EXPECT_EQ(GetJsonString(Require(FindJsonMember(*EntryOf(0, 1), "error")), "message").value_or(""), "it failed");
         EXPECT_EQ(GetJsonInt(*ResultOf(0), "stopped").value_or(-1), 1);
         EXPECT_EQ(order, (Vector<String>{"count", "fail"}));
     }
@@ -353,7 +353,7 @@ namespace BECore::Tests {
 
         ASSERT_EQ(ResultCount(0), 4u);
         EXPECT_EQ(FindJsonMember(*ResultOf(0), "stopped"), nullptr);
-        EXPECT_EQ(GetJsonString(*FindJsonMember(*EntryOf(0, 2), "error"), "code").value_or(""), ControlErrors::kUnknownMethod);
+        EXPECT_EQ(GetJsonString(Require(FindJsonMember(*EntryOf(0, 2), "error")), "code").value_or(""), ControlErrors::kUnknownMethod);
         EXPECT_TRUE(GetJsonBool(*EntryOf(0, 3), "ok").value_or(false));
         EXPECT_EQ(order, (Vector<String>{"count", "fail", "count"}));
     }
@@ -363,7 +363,7 @@ namespace BECore::Tests {
         service.Drain();
 
         ASSERT_EQ(ResultCount(0), 1u);
-        EXPECT_EQ(GetJsonString(*FindJsonMember(*EntryOf(0, 0), "error"), "code").value_or(""), ControlErrors::kUnknownMethod);
+        EXPECT_EQ(GetJsonString(Require(FindJsonMember(*EntryOf(0, 0), "error")), "code").value_or(""), ControlErrors::kUnknownMethod);
         EXPECT_EQ(GetJsonInt(*ResultOf(0), "stopped").value_or(-1), 0);
         EXPECT_TRUE(order.empty());
     }
@@ -378,7 +378,7 @@ namespace BECore::Tests {
         ASSERT_EQ(ResultCount(0), 3u);
         for (size_t index = 0; index < 2; ++index) {
             EXPECT_FALSE(GetJsonBool(*EntryOf(0, index), "ok").value_or(true));
-            EXPECT_EQ(GetJsonString(*FindJsonMember(*EntryOf(0, index), "error"), "code").value_or(""), ControlErrors::kInvalidParams);
+            EXPECT_EQ(GetJsonString(Require(FindJsonMember(*EntryOf(0, index), "error")), "code").value_or(""), ControlErrors::kInvalidParams);
         }
         EXPECT_EQ(quits.count, 0);
         EXPECT_EQ(order, (Vector<String>{"count"}));  // the inner batch did not run either
@@ -443,7 +443,7 @@ namespace BECore::Tests {
         service.Drain();
 
         ASSERT_EQ(ResultCount(0), 1u);  // `step` refused its own parameters; the batch carried them
-        EXPECT_EQ(GetJsonString(*FindJsonMember(*EntryOf(0, 0), "error"), "code").value_or(""), ControlErrors::kInvalidParams);
+        EXPECT_EQ(GetJsonString(Require(FindJsonMember(*EntryOf(0, 0), "error")), "code").value_or(""), ControlErrors::kInvalidParams);
     }
 
     TEST_F(ControlBatchTest, StepInTheMiddleHoldsTheCallsBehindIt) {

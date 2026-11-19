@@ -1,4 +1,5 @@
 #include <BECore/Rooms/TestClient.h>
+#include <Common/Require.h>
 
 namespace BECore::Tests {
 
@@ -106,8 +107,8 @@ namespace BECore::Tests {
         harness.Send(host, CreateRoomMessage{"fake", "Ann", Json::object(), false});
         const ConnectionId publicHost = MakePublicRoom(harness, "Bob");
         EXPECT_EQ(ListedCount(harness.Client(Browse(harness))), 1u);
-        EXPECT_EQ(FindJsonMember(harness.Client(publicHost).Last(RoomMessageTypes::kLobby)->json, "public"), nullptr);
-        EXPECT_EQ(FindJsonMember(harness.Client(publicHost).Last(RoomMessageTypes::kJoined)->json, "public"), nullptr);
+        EXPECT_EQ(FindJsonMember(Require(harness.Client(publicHost).Last(RoomMessageTypes::kLobby)).json, "public"), nullptr);
+        EXPECT_EQ(FindJsonMember(Require(harness.Client(publicHost).Last(RoomMessageTypes::kJoined)).json, "public"), nullptr);
     }
 
     TEST(RoomHubTest, APublicRoomIsListedWithTheHostTheSeatsAndTheOptions) {
@@ -144,7 +145,7 @@ namespace BECore::Tests {
         const ConnectionId plainHost = MakePublicRoom(harness, "Bob");
         harness.List(browser);
         EXPECT_EQ(FindJsonMember((*RoomsOf(client))[0], "options"), nullptr);
-        const auto parsed = ParseServerMessage(client.Last(RoomMessageTypes::kRooms)->text);
+        const auto parsed = ParseServerMessage(Require(client.Last(RoomMessageTypes::kRooms)).text);
         ASSERT_TRUE(parsed.has_value());
         EXPECT_TRUE(std::holds_alternative<RoomListMessage>(*parsed));
         EXPECT_EQ(harness.Client(plainHost).roomCode, GetJsonString((*RoomsOf(client))[0], "room").value_or(String()));
@@ -195,11 +196,11 @@ namespace BECore::Tests {
         EXPECT_EQ(harness.Client(late).LastErrorCode(), RoomErrors::kGameStarted);
 
         // Played to the end the room is no longer listed, even for the game that lists started rooms
-        for (int step = 0; step < 400 && !GetJsonBool(harness.Client(listing).Last(RoomMessageTypes::kView)->json, "finished").value_or(false); ++step) {
+        for (int step = 0; step < 400 && !GetJsonBool(Require(harness.Client(listing).Last(RoomMessageTypes::kView)).json, "finished").value_or(false); ++step) {
             harness.Tick(milliseconds(10));
             harness.PlayFirstAction(listing);
         }
-        ASSERT_TRUE(GetJsonBool(harness.Client(listing).Last(RoomMessageTypes::kView)->json, "finished").value_or(false));
+        ASSERT_TRUE(GetJsonBool(Require(harness.Client(listing).Last(RoomMessageTypes::kView)).json, "finished").value_or(false));
         EXPECT_FALSE(IsListed(harness.Client(Browse(harness, "fake-started")), listingCode));
     }
 
@@ -222,7 +223,7 @@ namespace BECore::Tests {
         const ConnectionId third = Browse(harness);
         EXPECT_EQ(ListedCount(harness.Client(third)), 0u);
         EXPECT_EQ(harness.Client(third).Types(), "rooms");
-        EXPECT_EQ(GetJsonBool(harness.Client(third).Last(RoomMessageTypes::kRooms)->json, "more"), false);
+        EXPECT_EQ(GetJsonBool(Require(harness.Client(third).Last(RoomMessageTypes::kRooms)).json, "more"), false);
     }
 
     TEST(RoomHubTest, ListingAsksForOneGameOnly) {
@@ -243,13 +244,13 @@ namespace BECore::Tests {
         const ConnectionId browser = harness.Connect();
         harness.List(browser, "no-such-game");
         EXPECT_EQ(harness.Client(browser).LastErrorCode(), RoomErrors::kUnknownGame);
-        EXPECT_EQ(harness.Client(browser).Last(RoomMessageTypes::kError)->GetString("ref"), "list_rooms");
+        EXPECT_EQ(Require(harness.Client(browser).Last(RoomMessageTypes::kError)).GetString("ref"), "list_rooms");
         EXPECT_EQ(harness.Client(browser).Count(RoomMessageTypes::kRooms), 0u);
 
         harness.Client(host).Clear();
         harness.List(host);
         EXPECT_EQ(harness.Client(host).LastErrorCode(), RoomErrors::kAlreadyInRoom);
-        EXPECT_EQ(harness.Client(host).Last(RoomMessageTypes::kError)->GetString("ref"), "list_rooms");
+        EXPECT_EQ(Require(harness.Client(host).Last(RoomMessageTypes::kError)).GetString("ref"), "list_rooms");
         EXPECT_EQ(harness.Client(host).Types(), "error");
         // The members of a room are not told anything by a list that was refused
         EXPECT_FALSE(harness.Client(host).closed);
@@ -266,7 +267,7 @@ namespace BECore::Tests {
         ASSERT_EQ(ListedCount(client), 2u);
         EXPECT_EQ(CodeAt(client, 0), codes[0]);
         EXPECT_EQ(CodeAt(client, 1), codes[1]);
-        EXPECT_EQ(GetJsonBool(client.Last(RoomMessageTypes::kRooms)->json, "more"), true);
+        EXPECT_EQ(GetJsonBool(Require(client.Last(RoomMessageTypes::kRooms)).json, "more"), true);
 
         // Exactly at the cap is not "more"
         HubHarness exact(SettingsWith(3));
@@ -275,7 +276,7 @@ namespace BECore::Tests {
         }
         const ConnectionId other = Browse(exact);
         EXPECT_EQ(ListedCount(exact.Client(other)), 3u);
-        EXPECT_EQ(GetJsonBool(exact.Client(other).Last(RoomMessageTypes::kRooms)->json, "more"), false);
+        EXPECT_EQ(GetJsonBool(Require(exact.Client(other).Last(RoomMessageTypes::kRooms)).json, "more"), false);
     }
 
     TEST(RoomHubTest, TheCapOfTheSettingsNeverGoesAboveTheLimitOfTheProtocol) {
@@ -285,9 +286,9 @@ namespace BECore::Tests {
         }
         const ConnectionId browser = Browse(harness);
         EXPECT_EQ(ListedCount(harness.Client(browser)), RoomLimits::kMaxListedRooms);
-        EXPECT_EQ(GetJsonBool(harness.Client(browser).Last(RoomMessageTypes::kRooms)->json, "more"), true);
+        EXPECT_EQ(GetJsonBool(Require(harness.Client(browser).Last(RoomMessageTypes::kRooms)).json, "more"), true);
         // What the hub sends is what a client accepts
-        EXPECT_TRUE(ParseServerMessage(harness.Client(browser).Last(RoomMessageTypes::kRooms)->text).has_value());
+        EXPECT_TRUE(ParseServerMessage(Require(harness.Client(browser).Last(RoomMessageTypes::kRooms)).text).has_value());
     }
 
     TEST(RoomHubTest, TheOrderIsTheOrderOfCreationWhateverTheCodes) {
@@ -302,9 +303,9 @@ namespace BECore::Tests {
             EXPECT_EQ(CodeAt(harness.Client(browser), i), codes[i]) << i;
         }
         // Two answers in a row are the same
-        const String first = harness.Client(browser).Last(RoomMessageTypes::kRooms)->text;
+        const String first = Require(harness.Client(browser).Last(RoomMessageTypes::kRooms)).text;
         harness.List(browser);
-        EXPECT_EQ(harness.Client(browser).Last(RoomMessageTypes::kRooms)->text, first);
+        EXPECT_EQ(Require(harness.Client(browser).Last(RoomMessageTypes::kRooms)).text, first);
     }
 
     TEST(RoomHubTest, TheListBucketAnswersRateLimitedKeepsTheConnectionAndRefills) {
@@ -337,7 +338,7 @@ namespace BECore::Tests {
         // The connection still works: it joins the room it saw
         const String code = CodeAt(harness.Client(browser), 0);
         harness.JoinByName(browser, code, "Bob");
-        EXPECT_EQ(harness.Client(browser).Last(RoomMessageTypes::kJoined)->GetString("room"), code);
+        EXPECT_EQ(Require(harness.Client(browser).Last(RoomMessageTypes::kJoined)).GetString("room"), code);
     }
 
     TEST(RoomHubTest, TheListBucketBelongsToTheConnection) {
@@ -407,7 +408,7 @@ namespace BECore::Tests {
         // The budgets of the address and of the server are still full: a join works, then a wrong code spends one, and so on
         const ConnectionId guest = harness.Connect("10.0.0.1");
         harness.JoinByName(guest, code, "Bob");
-        EXPECT_EQ(harness.Client(guest).Last(RoomMessageTypes::kJoined)->GetString("room"), code);
+        EXPECT_EQ(Require(harness.Client(guest).Last(RoomMessageTypes::kJoined)).GetString("room"), code);
         const ConnectionId guesser = harness.Connect("10.0.0.1");
         harness.JoinByName(guesser, "ZZZZZ", "Eve");
         EXPECT_EQ(harness.Client(guesser).LastErrorCode(), RoomErrors::kUnknownRoom);
@@ -445,7 +446,7 @@ namespace BECore::Tests {
                 return Format("closed:{}", client.closeReason);
             }
             if (client.Last(RoomMessageTypes::kError) != nullptr) {
-                return client.Last(RoomMessageTypes::kError)->text;
+                return Require(client.Last(RoomMessageTypes::kError)).text;
             }
             return client.Types();
         }

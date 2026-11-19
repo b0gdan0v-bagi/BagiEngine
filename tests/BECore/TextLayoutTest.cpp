@@ -4,6 +4,7 @@
 #include <BECore/Text/TextLayout.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -107,7 +108,7 @@ namespace BECore::Tests {
         ASSERT_EQ(result.lines.size(), 2u);
         EXPECT_EQ(LineText(result, 0), Codes(U"ab"));
         EXPECT_EQ(LineText(result, 1), Codes(U"cd"));
-        EXPECT_NEAR(result.lines[1].baseline - result.lines[0].baseline, result.lineHeight, 0.01f);
+        EXPECT_NEAR(At(result.lines, 1).baseline - At(result.lines, 0).baseline, result.lineHeight, 0.01f);
         EXPECT_NEAR(result.height, result.lineHeight * 2.0f, 0.01f);
     }
 
@@ -123,14 +124,14 @@ namespace BECore::Tests {
         const TextLayoutResult result = Layout("ab\n");
 
         ASSERT_EQ(result.lines.size(), 2u);
-        EXPECT_EQ(result.lines[1].glyphCount, 0u);
+        EXPECT_EQ(At(result.lines, 1).glyphCount, 0u);
     }
 
     TEST_F(TextLayoutTest, BlankLinesInTheMiddleAreKept) {
         const TextLayoutResult result = Layout("a\n\nb");
 
         ASSERT_EQ(result.lines.size(), 3u);
-        EXPECT_EQ(result.lines[1].glyphCount, 0u);
+        EXPECT_EQ(At(result.lines, 1).glyphCount, 0u);
     }
 
     TEST_F(TextLayoutTest, ATabIsFourSpaces) {
@@ -147,8 +148,8 @@ namespace BECore::Tests {
 
         ASSERT_GE(result.lines.size(), 2u);
         EXPECT_EQ(LineText(result, 0), Codes(U"aaaa"));
-        EXPECT_EQ(result.glyphs[result.lines[1].firstGlyph].codePoint, U'b');
-        EXPECT_FLOAT_EQ(result.glyphs[result.lines[1].firstGlyph].x, 0.0f);  // no space hangs at the start of the line
+        EXPECT_EQ(result.glyphs[At(result.lines, 1).firstGlyph].codePoint, U'b');
+        EXPECT_FLOAT_EQ(result.glyphs[At(result.lines, 1).firstGlyph].x, 0.0f);  // no space hangs at the start of the line
         for (const TextLine& line : result.lines) {
             EXPECT_LE(line.width, options.maxWidth + 0.01f);
         }
@@ -217,9 +218,9 @@ namespace BECore::Tests {
         const TextLayoutResult right = Layout("Hi");
 
         const float width = left.width;
-        EXPECT_FLOAT_EQ(left.lines[0].x, 0.0f);
-        EXPECT_NEAR(center.lines[0].x, (200.0f - width) * 0.5f, 0.01f);
-        EXPECT_NEAR(right.lines[0].x, 200.0f - width, 0.01f);
+        EXPECT_FLOAT_EQ(At(left.lines, 0).x, 0.0f);
+        EXPECT_NEAR(At(center.lines, 0).x, (200.0f - width) * 0.5f, 0.01f);
+        EXPECT_NEAR(At(right.lines, 0).x, 200.0f - width, 0.01f);
         EXPECT_NEAR(right.glyphs[0].x, 200.0f - width, 0.01f);
     }
 
@@ -228,8 +229,8 @@ namespace BECore::Tests {
 
         const TextLayoutResult result = Layout("a\nabcdef");
 
-        EXPECT_NEAR(result.lines[1].x, 0.0f, 0.01f);
-        EXPECT_NEAR(result.lines[0].x, result.width - result.lines[0].width, 0.01f);
+        EXPECT_NEAR(At(result.lines, 1).x, 0.0f, 0.01f);
+        EXPECT_NEAR(At(result.lines, 0).x, result.width - At(result.lines, 0).width, 0.01f);
     }
 
     TEST_F(TextLayoutTest, EachLineIsAlignedOnItsOwn) {
@@ -238,9 +239,9 @@ namespace BECore::Tests {
 
         const TextLayoutResult result = Layout("a\nabcdef");
 
-        EXPECT_GT(result.lines[0].x, result.lines[1].x);
-        EXPECT_NEAR(result.lines[0].x + result.lines[0].width * 0.5f, 150.0f, 0.01f);
-        EXPECT_NEAR(result.lines[1].x + result.lines[1].width * 0.5f, 150.0f, 0.01f);
+        EXPECT_GT(At(result.lines, 0).x, At(result.lines, 1).x);
+        EXPECT_NEAR(At(result.lines, 0).x + At(result.lines, 0).width * 0.5f, 150.0f, 0.01f);
+        EXPECT_NEAR(At(result.lines, 1).x + At(result.lines, 1).width * 0.5f, 150.0f, 0.01f);
     }
 
     TEST_F(TextLayoutTest, LineSpacingScalesTheLineHeight) {
@@ -336,7 +337,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(result.truncated);
         EXPECT_EQ(LastCodePoint(result), static_cast<char32_t>(kEllipsisCodePoint));
         EXPECT_LE(result.height, options.maxHeight + 0.01f);
-        EXPECT_LE(result.lines[1].width, options.maxWidth + 0.01f);
+        EXPECT_LE(At(result.lines, 1).width, options.maxWidth + 0.01f);
     }
 
     TEST_F(TextLayoutTest, EllipsisKeepsAtLeastOneLineInAShortBox) {

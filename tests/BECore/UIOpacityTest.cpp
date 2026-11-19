@@ -13,10 +13,10 @@
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
-#include <Events/SubscriptionHolder.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -121,7 +121,7 @@ namespace BECore::Tests {
         UIElement& Get(const char* name) const {
             UIElement* element = _hud->GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
-            return *element;
+            return Require(element);
         }
 
         /// The alpha of the one Rect call of the last frame that has the position and the size of @p name (the elements of the screen differ in size where they share a corner)

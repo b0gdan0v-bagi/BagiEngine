@@ -12,6 +12,7 @@
 #include <Common/NullPropertyVisitor.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
 
@@ -185,9 +186,9 @@ namespace BECore::Tests {
         EXPECT_EQ(emitter->_effect.burstCount, 8);
         EXPECT_EQ(emitter->_effect.maxParticles, 32);
         EXPECT_FLOAT_EQ(emitter->_effect.lifetimeMax, 0.5f);
-        EXPECT_EQ(Emitter("Glow")->_effect.blend, BlendMode::Add);
-        EXPECT_EQ(Emitter("Manual")->_burstAction, "Pop"_intern);
-        EXPECT_FALSE(Emitter("Manual")->_playOnStart);
+        EXPECT_EQ(Require(Emitter("Glow"))._effect.blend, BlendMode::Add);
+        EXPECT_EQ(Require(Emitter("Manual"))._burstAction, "Pop"_intern);
+        EXPECT_FALSE(Require(Emitter("Manual"))._playOnStart);
     }
 
     TEST_F(ParticleEmitterComponentTest, AOneShotFiresAtTheFirstUpdateAndEnds) {
@@ -253,7 +254,7 @@ namespace BECore::Tests {
         for (const DrawCall& call : Draw()) {
             EXPECT_NE(call.vertices.size(), 0u);
         }
-        EXPECT_EQ(Emitter("OneShot")->GetLiveCount(), 0u);
+        EXPECT_EQ(Require(Emitter("OneShot")).GetLiveCount(), 0u);
     }
 
     TEST_F(ParticleEmitterComponentTest, ABurstPlacesParticlesAroundThePointWithTheTint) {
@@ -300,7 +301,7 @@ namespace BECore::Tests {
         EXPECT_EQ(inactive->GetLiveCount(), 0u);
         EXPECT_DOUBLE_EQ(inactive->GetSimulation().GetTime(), 0.0);
 
-        EXPECT_EQ(Emitter("Manual")->GetLiveCount(), 5u) << "scene A took the action";
+        EXPECT_EQ(Require(Emitter("Manual")).GetLiveCount(), 5u) << "scene A took the action";
         EXPECT_EQ(Draw().size(), 3u) << "OneShot, Glow and Manual of scene A, nothing of B";
     }
 

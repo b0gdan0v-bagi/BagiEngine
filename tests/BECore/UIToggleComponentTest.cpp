@@ -18,6 +18,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UICanvasRoundTrip.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UIPartShapeChecks.h>
@@ -188,13 +189,13 @@ namespace BECore::Tests {
         UIToggleComponent& Toggle(const char* name) const {
             UIToggleComponent* toggle = El(name).GetComponent<UIToggleComponent>();
             EXPECT_NE(toggle, nullptr) << name;
-            return *toggle;
+            return Require(toggle);
         }
 
         UISwitchComponent& Switch(const char* name) const {
             UISwitchComponent* component = El((String(name) + "Switch").c_str()).GetComponent<UISwitchComponent>();
             EXPECT_NE(component, nullptr) << name;
-            return *component;
+            return Require(component);
         }
 
         /// The rect of the switch child of row @p name
@@ -380,7 +381,7 @@ namespace BECore::Tests {
 
     TEST_F(UIToggleComponentTest, TheClickerOfTheRowEmitsNothingOfItsOwn) {
         ActionLog actions;
-        EXPECT_TRUE(El("Sound").GetComponent<UIInputClicker>()->action.Empty());
+        EXPECT_TRUE(Require(El("Sound").GetComponent<UIInputClicker>()).action.Empty());
         Click("Sound");
         EXPECT_EQ(actions.Total(), 1u) << "one click, one action";
     }
@@ -463,6 +464,7 @@ namespace BECore::Tests {
         const DrawCall* enabledTrack = FindRect(enabled.track);
         const DrawCall* disabledTrack = FindRect(disabled.track);
         const DrawCall* disabledThumb = FindRect(disabled.thumbOn);
+        ASSERT_NE(disabledThumb, nullptr);
         ASSERT_TRUE(enabledTrack && disabledTrack && disabledThumb);
         EXPECT_NEAR(disabledTrack->color.a, enabledTrack->color.a / 2.0f, 1.0f);
         EXPECT_NEAR(disabledThumb->color.a, 127.0f, 1.0f);
@@ -565,7 +567,7 @@ namespace BECore::Tests {
 
     TEST_F(UIToggleComponentTest, AClippedCaptionThatDoesNotFitCannotShrink) {
         UIElement& caption = El("LongCaption");
-        caption.GetComponent<UITextComponent>()->overflow = TextOverflow::Clip;
+        Require(caption.GetComponent<UITextComponent>()).overflow = TextOverflow::Clip;
         const UIContentFit fit = caption.CheckContent(caption.rect.w, caption.rect.h, 1.0f);
         EXPECT_FALSE(fit.fits);
         EXPECT_FALSE(fit.canShrink) << "a clipped text cannot shrink, so the validator reports TextDoesNotFit";
@@ -633,7 +635,7 @@ namespace BECore::Tests {
         CoreManager::GetUIInput().DispatchMouseButtonUp(Button(at.x, at.y, false));
         CoreManager::GetUIInput().DispatchMouseMotion(Motion(700.0f, 550.0f));
         Draw();
-        EXPECT_TRUE(ColorsEqual(FindRect(parts.track)->color, kOffTrackAuthored));
+        EXPECT_TRUE(ColorsEqual(Require(FindRect(parts.track)).color, kOffTrackAuthored));
     }
 
     // ---- the shape ---------------------------------------------------------------------------------------------------------
@@ -707,20 +709,20 @@ namespace BECore::Tests {
         const auto loaded = XmlRoundTrip(*_canvas, &xml);
         ASSERT_TRUE(loaded);
 
-        const auto* custom = loaded->GetRoot().FindByName("Custom"_intern)->GetComponent<UIToggleComponent>();
+        const auto* custom = Require(loaded->GetRoot().FindByName("Custom"_intern)).GetComponent<UIToggleComponent>();
         ASSERT_NE(custom, nullptr);
         EXPECT_EQ(custom->bind, "mode"_intern);
         EXPECT_EQ(custom->action, "ToggleCompCustom"_intern);
         EXPECT_EQ(custom->onValue, "1"_intern);
         EXPECT_EQ(custom->offValue, "0"_intern);
-        const auto* sw = loaded->GetRoot().FindByName("CustomSwitch"_intern)->GetComponent<UISwitchComponent>();
+        const auto* sw = Require(loaded->GetRoot().FindByName("CustomSwitch"_intern)).GetComponent<UISwitchComponent>();
         ASSERT_NE(sw, nullptr);
         EXPECT_TRUE(ColorsEqual(sw->trackColor, kOffTrackAuthored));
         EXPECT_TRUE(ColorsEqual(sw->fillColor, kOnTrackAuthored));
         EXPECT_TRUE(ColorsEqual(sw->thumbColor, kThumbAuthored));
-        EXPECT_EQ(loaded->GetRoot().FindByName("RoundSwitch"_intern)->GetComponent<UISwitchComponent>()->partShape, UIPartShape::Round);
-        EXPECT_TRUE(loaded->GetRoot().FindByName("Off"_intern)->GetComponent<UIInputClicker>()->disabled);
-        const auto* sound = loaded->GetRoot().FindByName("Sound"_intern)->GetComponent<UIToggleComponent>();
+        EXPECT_EQ(Require(Require(loaded->GetRoot().FindByName("RoundSwitch"_intern)).GetComponent<UISwitchComponent>()).partShape, UIPartShape::Round);
+        EXPECT_TRUE(Require(Require(loaded->GetRoot().FindByName("Off"_intern)).GetComponent<UIInputClicker>()).disabled);
+        const auto* sound = Require(loaded->GetRoot().FindByName("Sound"_intern)).GetComponent<UIToggleComponent>();
         ASSERT_NE(sound, nullptr);
         EXPECT_EQ(sound->onValue, "true"_intern) << "the defaults come back as the defaults";
         EXPECT_EQ(sound->offValue, "false"_intern);
@@ -732,11 +734,11 @@ namespace BECore::Tests {
         const auto loaded = BinaryRoundTrip(*_canvas);
         ASSERT_TRUE(loaded);
 
-        const auto* custom = loaded->GetRoot().FindByName("Custom"_intern)->GetComponent<UIToggleComponent>();
+        const auto* custom = Require(loaded->GetRoot().FindByName("Custom"_intern)).GetComponent<UIToggleComponent>();
         ASSERT_NE(custom, nullptr);
         EXPECT_EQ(custom->onValue, "1"_intern);
-        EXPECT_EQ(loaded->GetRoot().FindByName("CustomSwitch"_intern)->GetComponent<UISwitchComponent>()->thumbColor.b, kThumbAuthored.b);
-        EXPECT_EQ(loaded->GetRoot().FindByName("Sound"_intern)->GetComponent<UIToggleComponent>()->offValue, "off"_intern);
+        EXPECT_EQ(Require(Require(loaded->GetRoot().FindByName("CustomSwitch"_intern)).GetComponent<UISwitchComponent>()).thumbColor.b, kThumbAuthored.b);
+        EXPECT_EQ(Require(Require(loaded->GetRoot().FindByName("Sound"_intern)).GetComponent<UIToggleComponent>()).offValue, "off"_intern);
         ExpectSameElementXml(*_canvas, *loaded);
     }
 

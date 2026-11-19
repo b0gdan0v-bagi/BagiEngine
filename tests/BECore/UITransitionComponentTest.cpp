@@ -15,10 +15,10 @@
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
-#include <Events/SubscriptionHolder.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -181,7 +181,7 @@ namespace BECore::Tests {
         UIElement& Get(const char* name) const {
             UIElement* element = _hud->GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
-            return *element;
+            return Require(element);
         }
 
         void Hide(const char* name) {
@@ -222,7 +222,7 @@ namespace BECore::Tests {
 
     TEST_F(UITransitionComponentTest, TheFirstLayoutDoesNotAnimateAndAnElementHiddenAtLoadStaysHidden) {
         EXPECT_EQ(AlphaAt(Get("Fader").rect), kAuthoredAlpha);
-        EXPECT_FALSE(Get("Fader").GetComponent<UITransitionComponent>()->run.IsTransitioning(CoreManager::GetTime().GetTotalTime()));
+        EXPECT_FALSE(Require(Get("Fader").GetComponent<UITransitionComponent>()).run.IsTransitioning(CoreManager::GetTime().GetTotalTime()));
         EXPECT_TRUE(Get("Late").rect.IsEmpty());
         const uint32_t runs = _hud->GetLayout().GetLayoutRuns();
         Wait(2.0);
@@ -521,7 +521,7 @@ namespace BECore::Tests {
         UIElement& Get(UICanvasComponent& canvas, const char* name) const {
             UIElement* element = canvas.GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
-            return *element;
+            return Require(element);
         }
 
         const DrawCall* CallAt(const Rect& rect) const {

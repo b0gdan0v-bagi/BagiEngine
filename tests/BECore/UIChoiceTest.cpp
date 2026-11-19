@@ -2,6 +2,7 @@
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UITextComponent.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -39,7 +40,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(UIChoice::IsOption(*element));
         EXPECT_EQ(UIChoice::GetValue(*element), "hard"_intern);
         EXPECT_EQ(UIChoice::GetText(*element), "Hard");
-        EXPECT_EQ(&UIChoice::GetText(*element), &element->GetComponent<UITextComponent>()->text) << "a view of the string, not a copy";
+        EXPECT_EQ(&UIChoice::GetText(*element), &Require(element->GetComponent<UITextComponent>()).text) << "a view of the string, not a copy";
     }
 
     TEST_F(UIChoiceTest, APlainElementIsNoOption) {
@@ -91,7 +92,7 @@ namespace BECore::Tests {
     TEST_F(UIChoiceTest, DisabledIsTheAnswerOfTheElement) {
         const auto element = MakeClickerElement("a");
         EXPECT_FALSE(element->IsDisabled());
-        element->GetComponent<UIInputClicker>()->disabled = true;
+        Require(element->GetComponent<UIInputClicker>()).disabled = true;
         EXPECT_TRUE(element->IsDisabled());
     }
 

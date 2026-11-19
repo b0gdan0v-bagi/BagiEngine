@@ -10,6 +10,7 @@
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
@@ -102,7 +103,7 @@ namespace BECore::Tests {
             const Vector<uint8_t> pixels(static_cast<size_t>(kIconPixels) * kIconPixels * 4, 200);
             _icon = _renderer->CreateTexture(pixels.data(), kIconPixels, kIconPixels);
             for (const char* name : {"OnlyIcon", "LeftIcon", "LongIcon"}) {
-                El(name).GetComponent<UIImageComponent>()->GetSprite().SetTexture(_icon);
+                Require(El(name).GetComponent<UIImageComponent>()).GetSprite().SetTexture(_icon);
             }
         }
 
@@ -189,7 +190,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIButtonIconDrawTest, ASpriteThatIsNotInTheLibraryDrawsNoIconButStillTheCaption) {
-        El("LeftIcon").GetComponent<UIImageComponent>()->GetSprite() = UISprite{};  // no direct texture, and the name "TestIcon" is not in the TextureLibrary
+        Require(El("LeftIcon").GetComponent<UIImageComponent>()).GetSprite() = UISprite{};  // no direct texture, and the name "TestIcon" is not in the TextureLibrary
         Draw();
         EXPECT_EQ(IconCalls().size(), 2u);
         EXPECT_TRUE(GlyphBounds(El("Left").rect).has_value());

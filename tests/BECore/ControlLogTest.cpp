@@ -3,8 +3,8 @@
 #include <BECore/Control/ControlLog.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Logger/LogEvent.h>
-#include <BECore/Threading/Thread.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -358,6 +358,7 @@ namespace BECore::Tests {
 
         EXPECT_EQ(FindJsonMember(all, "lines")->size(), 3U);
         const Json* lines = FindJsonMember(errorsOnly, "lines");
+        ASSERT_NE(lines, nullptr);
         ASSERT_EQ(lines->size(), 2U);
         EXPECT_EQ(GetJsonString((*lines)[0], "level").value_or(""), "error");
         EXPECT_EQ(GetJsonString((*lines)[1], "level").value_or(""), "fatal");
@@ -400,6 +401,7 @@ namespace BECore::Tests {
         const Json since = ResultOf(Call("log_since", params));
 
         const Json* lines = FindJsonMember(since, "lines");
+        ASSERT_NE(lines, nullptr);
         ASSERT_EQ(lines->size(), ControlLog::kMaxLogSinceLines);
         EXPECT_EQ(GetJsonString(lines->back(), "message").value_or(""), Format("ControlLogTest cap {}", kLines - 1));
         EXPECT_EQ(GetJsonBool(since, "truncated"), true);
@@ -435,7 +437,7 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString(*data, "time").value_or("").size(), kLogTimeLength - 1);
         EXPECT_NE(GetJsonInt(*data, "sequence").value_or(0), 0);
         EXPECT_EQ(FindJsonMember(*data, "skipped"), nullptr);
-        EXPECT_EQ(GetJsonString(*FindJsonMember(events[1], "data"), "level").value_or(""), "error");
+        EXPECT_EQ(GetJsonString(Require(FindJsonMember(events[1], "data")), "level").value_or(""), "error");
 
         service.EndFrame();
         EXPECT_EQ(events.size(), 2U);
@@ -465,7 +467,7 @@ namespace BECore::Tests {
         service.EndFrame();
 
         ASSERT_EQ(events.size(), 1U);
-        EXPECT_EQ(GetJsonString(*FindJsonMember(events[0], "data"), "message").value_or(""), "ControlLogTest loud error");
+        EXPECT_EQ(GetJsonString(Require(FindJsonMember(events[0], "data")), "message").value_or(""), "ControlLogTest loud error");
     }
 
     TEST_F(ControlLogMethodsTest, MoreThanTheCapInAFrameSaysHowManyWereSkipped) {
@@ -482,9 +484,9 @@ namespace BECore::Tests {
 
         ASSERT_EQ(events.size(), ControlLog::kMaxLogPushPerFrame);
         for (size_t i = 0; i + 1 < events.size(); ++i) {
-            EXPECT_EQ(FindJsonMember(*FindJsonMember(events[i], "data"), "skipped"), nullptr);
+            EXPECT_EQ(FindJsonMember(Require(FindJsonMember(events[i], "data")), "skipped"), nullptr);
         }
-        const Json& last = *FindJsonMember(events.back(), "data");
+        const Json& last = Require(FindJsonMember(events.back(), "data"));
         EXPECT_EQ(Number(last, "skipped"), static_cast<uint64_t>(kSurplusLines));
         EXPECT_EQ(GetJsonString(last, "message").value_or(""), Format("ControlLogTest burst {}", ControlLog::kMaxLogPushPerFrame - 1));
 
