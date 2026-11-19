@@ -3332,4 +3332,115 @@ namespace BECore::Tests {
         EXPECT_EQ(job.pick, Optional<int64_t>(kSetSeed + 1));
     }
 
+    TEST_F(ArtGenSetSessionTest, ADroppedVariantOfAFramedSetIsWrittenThroughTheSetsFrameAndAtlas) {
+        ArtGenSetRequest request;
+        request.preset = "wood";
+        request.subjects = ParseArtGenSubjects("a\nb").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "framed";
+        request.atlas = String("pieces");
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAndPickAll("framed"));
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
+        gAccepted.clear();
+        gPlans.clear();
+        const ArtGenSet before = OnDisk("framed");
+        ASSERT_TRUE(before.processing.has_value());
+
+        const auto answer = session.AcceptSetVariant("framed", "a", kSetSeed, "queen");
+        ASSERT_TRUE(answer.has_value()) << answer.error().message.c_str();
+        EXPECT_EQ(GetJsonString(*answer, "sprite"), Optional<String>("queen"));
+        ASSERT_EQ(gAccepted.size(), 1u);
+        EXPECT_EQ(gAccepted[0].name, "queen");
+        EXPECT_EQ(gAccepted[0].seed, kSetSeed) << "the variant dropped, not the row's pick";
+        EXPECT_EQ(gAccepted[0].path, Format("{}/artgen/out/framed/a/a_{}.png", PathText(_root), kSetSeed));
+        EXPECT_FALSE(gAccepted[0].withNode);
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_EQ(gPlans[0].frame, Optional<ArtGenImageFrame>(kFakeFrame)) << "a pawn stays smaller than a king";
+        EXPECT_EQ(gPlans[0].settings, before.processing->settings);
+        EXPECT_EQ(gPlans[0].atlas, "pieces");
+        EXPECT_FALSE(gPlans[0].deferPack);
+
+        EXPECT_EQ(ArtGenSetToJson(OnDisk("framed")), ArtGenSetToJson(before)) << "no pick, no accepted, nothing in the manifest";
+        EXPECT_EQ(session.FindSet("framed")->jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
+        EXPECT_EQ(session.FindSet("framed")->jobs[0].accepted->as, "a");
+    }
+
+    TEST_F(ArtGenSetSessionTest, ADroppedVariantOfASetNotAcceptedYetUsesThePresetsSettingsAndAFrameOfItsOwn) {
+        ArtGenSetRequest request;
+        request.preset = "form";
+        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","accept":{"trim":true,"padding":7,"maxSize":128}})").value();
+        request.subjects = ParseArtGenSubjects("a").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "fresh";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAll());
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("fresh"));
+
+        const auto answer = session.AcceptSetVariant("fresh", "a", kSetSeed + 1, "rook");
+        ASSERT_TRUE(answer.has_value()) << answer.error().message.c_str();
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_EQ(gPlans[0].settings, (ArtGenImageSettings{true, 7, 128}));
+        EXPECT_FALSE(gPlans[0].frame.has_value());
+        EXPECT_TRUE(gPlans[0].atlas.empty());
+        EXPECT_TRUE(gMeasures.empty()) << "a frame is measured by the first Accept all only";
+        EXPECT_FALSE(session.FindSet("fresh")->processing.has_value());
+        EXPECT_FALSE(session.FindSet("fresh")->jobs[0].accepted.has_value());
+        EXPECT_FALSE(session.FindSet("fresh")->jobs[0].pick.has_value());
+    }
+
+    TEST_F(ArtGenSetSessionTest, ADroppedVariantNamesWhatIsWrongAndWritesNothing) {
+        ASSERT_TRUE(Enqueue("bad", "a").has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAll());
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("bad"));
+
+        const auto code = [&](StringView set, StringView job, int64_t seed, StringView sprite) {
+            const auto answer = session.AcceptSetVariant(set, job, seed, sprite);
+            return answer ? String() : answer.error().code;
+        };
+        EXPECT_EQ(code("nope", "a", kSetSeed, "x"), "artgen_no_set");
+        EXPECT_EQ(code("bad", "nope", kSetSeed, "x"), "artgen_no_set");
+        EXPECT_EQ(code("bad", "a", 999, "x"), "artgen_no_variant");
+        EXPECT_EQ(code("bad", "a", kSetSeed, "not a name"), "artgen_accept_failed");
+        EXPECT_EQ(code("bad", "a", kSetSeed, ""), "artgen_accept_failed");
+        EXPECT_TRUE(gAccepted.empty());
+
+        std::filesystem::remove(AbsoluteInSet(_root, "bad", "a/a_40.png"));
+        const auto gone = session.AcceptSetVariant("bad", "a", kSetSeed, "x");
+        ASSERT_FALSE(gone.has_value());
+        EXPECT_EQ(gone.error().code, "artgen_accept_failed");
+        EXPECT_NE(gone.error().message.find("is gone"), String::npos) << gone.error().message.c_str();
+        EXPECT_TRUE(gAccepted.empty()) << "the files are checked before the acceptor is asked";
+
+        gFailOn = "x";
+        EXPECT_EQ(code("bad", "a", kSetSeed + 1, "x"), "artgen_accept_failed") << "the acceptor's refusal is passed on";
+        gFailOn.clear();
+
+        session.SetAcceptor(nullptr);
+        EXPECT_EQ(code("bad", "a", kSetSeed + 1, "x"), "artgen_accept_failed");
+        EXPECT_TRUE(gAccepted.empty());
+    }
+
+    TEST_F(ArtGenSetSessionTest, ADroppedVariantOfASoundSetIsRefused) {
+        Poll();  // the catalog tells the kind of the preset
+        ArtGenSetRequest request;
+        request.preset = "knock";
+        request.subjects = ParseArtGenSubjects("knock: a wooden knock").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "sounds";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAll("audio"));
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("sounds"));
+
+        const auto answer = session.AcceptSetVariant("sounds", "knock", kSetSeed, "x");
+        ASSERT_FALSE(answer.has_value());
+        EXPECT_EQ(answer.error().code, "artgen_accept_failed");
+        EXPECT_NE(answer.error().message.find("not a sprite"), String::npos) << answer.error().message.c_str();
+        EXPECT_TRUE(gAccepted.empty());
+    }
+
 }  // namespace BECore::Tests

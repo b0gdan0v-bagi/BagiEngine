@@ -3,10 +3,12 @@
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/ArtGen/ArtGenDrag.h>
 #include <Widgets/TextureEditor/SpriteAtlas.h>
 #include <Widgets/TextureEditor/SpriteTextureCache.h>
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <gtest/gtest.h>
 
@@ -1242,6 +1244,106 @@ namespace BECore::Tests {
         EXPECT_NE(mixed.error().find("different sizes"), String::npos) << mixed.error().c_str();
 
         EXPECT_FALSE(MeasureFrameForControl(Vector<String>{text(folder / "out" / "gone.png")}, noPadding).has_value());
+    }
+
+    TEST(ArtGenDragTest, ThePayloadIsPlainBytesAndKeepsItsFieldsThroughACopy) {
+        static_assert(std::is_trivially_copyable_v<ArtGenDragPayload>);
+        const ArtGenDragPayload payload = MakeArtGenDragPayload(ArtGenDragKind::Audio, -7, "pieces", "rook", "white_rook");
+
+        char bytes[sizeof(ArtGenDragPayload)];
+        std::memcpy(bytes, &payload, sizeof(bytes));
+        ArtGenDragPayload copy;
+        std::memcpy(&copy, bytes, sizeof(bytes));
+
+        EXPECT_EQ(copy.kind, ArtGenDragKind::Audio);
+        EXPECT_EQ(copy.seed, -7);
+        EXPECT_EQ(StringView(copy.set), "pieces");
+        EXPECT_EQ(StringView(copy.job), "rook");
+        EXPECT_EQ(StringView(copy.suggestedName), "white_rook");
+    }
+
+    TEST(ArtGenDragTest, ATextLongerThanItsBufferIsCutAndStaysTerminated) {
+        const String longName(100, 'a');
+        const ArtGenDragPayload payload = MakeArtGenDragPayload(ArtGenDragKind::Image, 1, longName, "", longName);
+        EXPECT_EQ(StringView(payload.set).size(), kMaxSpriteNameLength);
+        EXPECT_EQ(StringView(payload.suggestedName).size(), kMaxSpriteNameLength);
+        EXPECT_TRUE(StringView(payload.job).empty());
+    }
+
+    TEST(ArtGenDragTest, TheSuggestedNameIsTheJobsOrTheSubjects) {
+        EXPECT_EQ(SuggestedArtGenSpriteName("white_rook", "a white rook"), "white_rook") << "a set row keeps its job's name";
+        EXPECT_EQ(SuggestedArtGenSpriteName("", "A White Knight!"), "a_white_knight");
+        EXPECT_EQ(SuggestedArtGenSpriteName("", "!!!"), "sprite") << "a subject with no letter still gives a valid name";
+        EXPECT_TRUE(IsValidSpriteName(StringView(SuggestedArtGenSpriteName("", String(300, 'x')))));
+    }
+
+    class ArtGenDropPlanTest : public ::testing::Test {
+    protected:
+        void SetUp() override {
+            library.AddOrUpdate(LibraryEntry("queen", "assets/pieces/queen.png", Rect(0, 0, 64, 64)));
+        }
+
+        static ArtGenDragPayload Image(StringView suggested) {
+            return MakeArtGenDragPayload(ArtGenDragKind::Image, 5, "", "", suggested);
+        }
+
+        TextureLibrary library;
+    };
+
+    TEST_F(ArtGenDropPlanTest, ADropForANewSpriteTakesTheSuggestedNameWhenItIsFree) {
+        const ArtGenDropPlan plan = PlanArtGenDrop(Image("king"), "", library);
+        EXPECT_EQ(plan.mode, ArtGenDropMode::New);
+        EXPECT_EQ(plan.sprite, "king");
+        EXPECT_TRUE(plan.reason.empty());
+    }
+
+    TEST_F(ArtGenDropPlanTest, ATakenSuggestedNameGetsASuffix) {
+        library.AddOrUpdate(LibraryEntry("queen_2", "assets/pieces/queen2.png", Rect(0, 0, 64, 64)));
+        const ArtGenDropPlan plan = PlanArtGenDrop(Image("queen"), "", library);
+        EXPECT_EQ(plan.mode, ArtGenDropMode::New);
+        EXPECT_EQ(plan.sprite, "queen_3");
+    }
+
+    TEST_F(ArtGenDropPlanTest, ATakenNameOfTheLongestLengthStaysAValidName) {
+        const String longest(kMaxSpriteNameLength, 'q');
+        library.AddOrUpdate(LibraryEntry(longest.c_str(), "assets/pieces/q.png", Rect(0, 0, 64, 64)));
+        const ArtGenDropPlan plan = PlanArtGenDrop(Image(longest), "", library);
+        ASSERT_EQ(plan.mode, ArtGenDropMode::New);
+        EXPECT_TRUE(IsValidSpriteName(StringView(plan.sprite))) << plan.sprite.c_str();
+        EXPECT_EQ(library.GetSprite(PoolString::Intern(StringView(plan.sprite))), nullptr) << "the name is free";
+    }
+
+    TEST_F(ArtGenDropPlanTest, ADropOntoASpriteReplacesItUnderItsOwnName) {
+        const ArtGenDropPlan plan = PlanArtGenDrop(Image("king"), "queen", library);
+        EXPECT_EQ(plan.mode, ArtGenDropMode::Replace);
+        EXPECT_EQ(plan.sprite, "queen") << "the suggested name does not matter for a replace";
+    }
+
+    TEST_F(ArtGenDropPlanTest, ANameAcceptCannotWriteIsRefusedWithTheRule) {
+        const ArtGenDropPlan onto = PlanArtGenDrop(Image("king"), "ui/button", library);
+        EXPECT_EQ(onto.mode, ArtGenDropMode::Refused);
+        EXPECT_NE(onto.reason.find("ui/button"), String::npos) << onto.reason.c_str();
+        EXPECT_NE(onto.reason.find("A-Z a-z 0-9 _ -"), String::npos) << onto.reason.c_str();
+        EXPECT_TRUE(onto.sprite.empty());
+
+        EXPECT_EQ(PlanArtGenDrop(Image("two words"), "", library).mode, ArtGenDropMode::Refused);
+        EXPECT_EQ(PlanArtGenDrop(Image(""), "", library).mode, ArtGenDropMode::Refused);
+    }
+
+    TEST_F(ArtGenDropPlanTest, ASoundIsNotASpriteWhereverItIsDropped) {
+        const ArtGenDragPayload sound = MakeArtGenDragPayload(ArtGenDragKind::Audio, 5, "", "", "knock");
+        for (const StringView target : {StringView(""), StringView("queen")}) {
+            const ArtGenDropPlan plan = PlanArtGenDrop(sound, target, library);
+            EXPECT_EQ(plan.mode, ArtGenDropMode::Refused);
+            EXPECT_EQ(plan.reason, "a sound is not a sprite");
+        }
+    }
+
+    TEST(ArtGenDragTest, ADropNobodyAnsweredSaysSoAndIsNotOk) {
+        ArtGenDropResult result;
+        ArtGenVariantDropEvent::Emit(MakeArtGenDragPayload(ArtGenDragKind::Image, 1, "", "", "x"), StringView("x"), &result);
+        EXPECT_FALSE(result.ok);
+        EXPECT_NE(result.message.find("not available"), String::npos) << result.message.c_str();
     }
 
 }  // namespace BECore::Tests

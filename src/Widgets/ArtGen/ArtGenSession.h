@@ -309,6 +309,11 @@ namespace BECore {
         /// (also a row that another set replaced, FindNewerOwner) is `WriteFailed` and changes nothing. A kept row takes no other pick
         /// (`NoVariant`). @p write gets what the write answered
         ArtGenSetEdit PickVariant(StringView set, StringView job, int64_t seed, ArtGenSwitch* write = nullptr);
+        /// Accepts one image variant of a set row as the sprite @p sprite, through the acceptor of Accept (a drop of the variant, ArtGenDrag.h):
+        /// the set's own processing (settings and frame, so a pawn stays smaller than a king), else the settings of its preset with a frame
+        /// of its own; the set's atlas group. Only a write: the manifest, the pick and the row's `accepted` stay as they were, and no node is
+        /// touched. The acceptor's answer, or `artgen_no_set`, `artgen_no_variant`, `artgen_accept_failed` (a sound variant, a bad name, a gone file)
+        std::expected<Json, ControlError> AcceptSetVariant(StringView set, StringView job, int64_t seed, StringView sprite);
         /// Accepts the candidate of every job of a finished set as its job's name, through the acceptors Accept uses, marking each row in the
         /// manifest (Sets/CLAUDE.md, "Accept all"): the pick, else for images the first variant. A kept row and a row another set replaced are skipped. The checks come first and a
         /// refusal by them changes nothing. With the batch hooks an image set's files are written first and the library is saved once; the
