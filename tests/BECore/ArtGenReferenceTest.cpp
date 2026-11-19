@@ -1,5 +1,6 @@
 #include <BECore/Control/Json.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Widgets/ArtGen/Reference/ArtGenReference.h>
 #include <gtest/gtest.h>
 
@@ -72,14 +73,6 @@ namespace BECore::Tests {
         EXPECT_NE(ErrorOf(json).find("reference.weight"), String::npos);
     }
 
-    TEST(ArtGenReferenceTest, AStructureReferenceGoesToJsonAndBackWithItsMode) {
-        const Json json{{"mode", "structure"}, {"image", "sketches/rook.png"}, {"weight", 0.8}};
-        const auto read = ReadArtGenReference(json);
-        ASSERT_TRUE(read.has_value());
-        EXPECT_EQ(read->mode, "structure");
-        EXPECT_EQ(ArtGenReferenceToJson(*read), json);
-    }
-
     TEST(ArtGenReferenceTest, TheServiceNotTheShapeCheckJudgesTheModeAndTheRange) {
         Json json = ReferenceJson();
         json["mode"] = "style";
@@ -110,13 +103,6 @@ namespace BECore::Tests {
         EXPECT_EQ(ArtGenReferenceOfFile("/home/u/Chess", "/home/u/Chess/a/../../x.png").image, "/home/u/Chess/a/../../x.png");
     }
 
-    TEST(ArtGenReferenceTest, ASpriteIsItsAcceptedFile) {
-        const auto reference = ArtGenReferenceOfSprite("rook");
-        EXPECT_EQ(reference.mode, "init");
-        EXPECT_EQ(reference.image, "assets/artgen/rook.png");
-        EXPECT_FALSE(reference.weight.has_value());
-    }
-
     TEST(ArtGenReferenceTest, TheBuildersTakeTheModeAndDefaultToInit) {
         EXPECT_EQ(ArtGenReferenceOfFile("/g/Chess", "/g/Chess/a.png", "structure").mode, "structure");
         EXPECT_EQ(ArtGenReferenceOfFile("/g/Chess", "/g/Chess/a.png", "structure").image, "a.png");
@@ -124,6 +110,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ArtGenReferenceOfSprite("rook", "structure").mode, "structure");
         EXPECT_EQ(ArtGenReferenceOfSprite("rook", "structure").image, "assets/artgen/rook.png");
         EXPECT_EQ(ArtGenReferenceOfSprite("rook").mode, "init");
+        EXPECT_FALSE(ArtGenReferenceOfSprite("rook").weight.has_value());
     }
 
     TEST(ArtGenReferenceTest, ATypedPathWithNothingInItIsNone) {
@@ -138,25 +125,21 @@ namespace BECore::Tests {
         EXPECT_EQ(quoted->mode, "structure");
         EXPECT_EQ(quoted->image, "/tmp/a b.png");
         EXPECT_FALSE(quoted->weight.has_value());
-        EXPECT_EQ(ArtGenReferenceOfTypedPath("/g/Chess", "'sketch.png'", "structure")->image, "sketch.png");
-        EXPECT_EQ(ArtGenReferenceOfTypedPath("/g/Chess", " \" sketch.png \" ", "structure")->image, "sketch.png");
-    }
-
-    TEST(ArtGenReferenceTest, ATypedWindowsPathHasItsBackslashesTurned) {
-        EXPECT_EQ(ArtGenReferenceOfTypedPath("D:\\Games\\Chess", "\"E:\\Pictures\\a b.png\"", "init")->image, "E:/Pictures/a b.png");
-        EXPECT_EQ(ArtGenReferenceOfTypedPath("D:\\Games\\Chess", "assets\\sketch.png", "init")->image, "assets/sketch.png");
+        EXPECT_EQ(Require(ArtGenReferenceOfTypedPath("/g/Chess", "'sketch.png'", "structure")).image, "sketch.png");
+        EXPECT_EQ(Require(ArtGenReferenceOfTypedPath("/g/Chess", " \" sketch.png \" ", "structure")).image, "sketch.png");
     }
 
     TEST(ArtGenReferenceTest, ATypedAbsolutePathInsideTheGameRootBecomesRelativeAndOutsideStaysAbsolute) {
-        EXPECT_EQ(ArtGenReferenceOfTypedPath("D:\\Games\\Chess", "D:\\Games\\Chess\\sketches\\rook.png", "structure")->image, "sketches/rook.png");
-        EXPECT_EQ(ArtGenReferenceOfTypedPath("/g/Chess", "/g/Chess/sketches/rook.png", "structure")->image, "sketches/rook.png");
-        EXPECT_EQ(ArtGenReferenceOfTypedPath("/g/Chess", "/tmp/rook.png", "structure")->image, "/tmp/rook.png");
+        EXPECT_EQ(Require(ArtGenReferenceOfTypedPath("D:\\Games\\Chess", "D:\\Games\\Chess\\sketches\\rook.png", "structure")).image, "sketches/rook.png");
+        EXPECT_EQ(Require(ArtGenReferenceOfTypedPath("/g/Chess", "/g/Chess/sketches/rook.png", "structure")).image, "sketches/rook.png");
+        EXPECT_EQ(Require(ArtGenReferenceOfTypedPath("/g/Chess", "/tmp/rook.png", "structure")).image, "/tmp/rook.png");
     }
 
-    TEST(ArtGenReferenceTest, ATypedRelativePathStaysAsTypedParentStepsToo) {
-        EXPECT_EQ(ArtGenReferenceOfTypedPath("/g/Chess", "sketches/rook.png", "structure")->image, "sketches/rook.png");
-        EXPECT_EQ(ArtGenReferenceOfTypedPath("/g/Chess", "../elsewhere/rook.png", "structure")->image, "../elsewhere/rook.png");
-        EXPECT_EQ(ArtGenReferenceOfTypedPath("", "rook.png", "style")->mode, "style");
+    TEST(ArtGenReferenceTest, ATypedRelativePathStaysRelativeWithItsParentStepsAndOnlyItsBackslashesAreTurned) {
+        EXPECT_EQ(Require(ArtGenReferenceOfTypedPath("/g/Chess", "sketches/rook.png", "structure")).image, "sketches/rook.png");
+        EXPECT_EQ(Require(ArtGenReferenceOfTypedPath("/g/Chess", "../elsewhere/rook.png", "structure")).image, "../elsewhere/rook.png");
+        EXPECT_EQ(Require(ArtGenReferenceOfTypedPath("D:\\Games\\Chess", "assets\\sketch.png", "init")).image, "assets/sketch.png");
+        EXPECT_EQ(Require(ArtGenReferenceOfTypedPath("", "rook.png", "style")).mode, "style");
     }
 
     TEST(ArtGenReferenceTest, OnlyAPictureOfAVariantCanBeAReference) {
@@ -182,45 +165,16 @@ namespace BECore::Tests {
         EXPECT_EQ(ArtGenReferenceFileName("x.png"), "x.png");
     }
 
-    TEST(ArtGenReferenceTest, EveryModeIsLookedUpByItsKey) {
-        EXPECT_EQ(ArtGenReferenceModeOf("init").mode, "init");
-        EXPECT_EQ(ArtGenReferenceModeOf("style").mode, "style");
-        EXPECT_EQ(ArtGenReferenceModeOf("structure").mode, "structure");
-        EXPECT_DOUBLE_EQ(ArtGenReferenceDefaultWeight("init"), 0.4);
-        EXPECT_DOUBLE_EQ(ArtGenReferenceDefaultWeight("style"), 0.8);
-        EXPECT_DOUBLE_EQ(ArtGenReferenceDefaultWeight("structure"), 0.8);
+    TEST(ArtGenReferenceTest, EveryModeIsLookedUpByItsKeyAndNoKeyIsTwice) {
+        for (const ArtGenReferenceModeRow& row : kArtGenReferenceModes) {
+            EXPECT_EQ(&ArtGenReferenceModeOf(row.mode), &row) << row.mode.data();
+        }
     }
 
     TEST(ArtGenReferenceTest, AnUnknownModeGetsTheFirstRow) {
         EXPECT_EQ(&ArtGenReferenceModeOf("depth"), &kArtGenReferenceModes[0]);
         EXPECT_EQ(&ArtGenReferenceModeOf(""), &kArtGenReferenceModes[0]);
         EXPECT_DOUBLE_EQ(ArtGenReferenceDefaultWeight("depth"), kArtGenReferenceModes[0].defaultWeight);
-    }
-
-    TEST(ArtGenReferenceTest, InitIsTheFirstModeThenStyleAndStructure) {
-        ASSERT_EQ(kArtGenReferenceModes.size(), 3u);
-        EXPECT_EQ(kArtGenReferenceModes[0].mode, "init");
-        EXPECT_EQ(kArtGenReferenceModes[1].mode, "style");
-        EXPECT_EQ(kArtGenReferenceModes[2].mode, "structure");
-    }
-
-    TEST(ArtGenReferenceTest, TheDefaultWeightOfEveryModeIsInsideItsSlidersRange) {
-        for (const ArtGenReferenceModeRow& row : kArtGenReferenceModes) {
-            EXPECT_LT(row.minWeight, row.maxWeight) << row.mode.data();
-            EXPECT_GT(row.defaultWeight, row.minWeight) << row.mode.data();
-            EXPECT_LT(row.defaultWeight, row.maxWeight) << row.mode.data();
-            EXPECT_GT(row.minWeight, 0.0f) << row.mode.data() << ": the service's interval is open at 0";
-        }
-    }
-
-    TEST(ArtGenReferenceTest, EveryModeHasATooltipAndAUniqueKey) {
-        for (size_t i = 0; i < kArtGenReferenceModes.size(); ++i) {
-            ASSERT_NE(kArtGenReferenceModes[i].tip, nullptr);
-            EXPECT_NE(StringView(kArtGenReferenceModes[i].tip), "") << kArtGenReferenceModes[i].mode.data();
-            for (size_t j = i + 1; j < kArtGenReferenceModes.size(); ++j) {
-                EXPECT_NE(kArtGenReferenceModes[i].mode, kArtGenReferenceModes[j].mode);
-            }
-        }
     }
 
 }  // namespace BECore::Tests

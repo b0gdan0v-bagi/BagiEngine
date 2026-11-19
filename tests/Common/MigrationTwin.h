@@ -25,6 +25,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/TestFiles.h>
 #include <Common/UIInputEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
@@ -33,12 +34,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <gtest/gtest.h>
 #include <map>
 #include <regex>
 #include <set>
-#include <sstream>
 #include <utility>
 
 namespace BECore::Tests::MigrationTwin {
@@ -82,13 +81,6 @@ namespace BECore::Tests::MigrationTwin {
         EXPECT_FALSE(error) << folder.generic_string() << ": " << error.message();
         std::sort(names.begin(), names.end());
         return names;
-    }
-
-    inline String ReadFile(const std::filesystem::path& path) {
-        std::ifstream file(path, std::ios::binary);
-        std::ostringstream text;
-        text << file.rdbuf();
-        return FromStdString(text.str());
     }
 
     /// A content file as a scene manager the loader reads: a `SceneManager` is itself, a `node` goes into a scene of its own.

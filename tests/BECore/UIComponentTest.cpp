@@ -663,7 +663,7 @@ namespace BECore::Tests {
         const IntrusivePtr<IResource> keepFirst = probe.Cached();
         EXPECT_EQ(keepFirst.Get(), first);
         Draw();
-        EXPECT_EQ(Picture()->texture, first) << "an untouched cache keeps the loaded texture";
+        EXPECT_EQ(Require(Picture()).texture, first) << "an untouched cache keeps the loaded texture";
 
         probe.SetSource({0.0f, 0.0f, 4.0f, 4.0f});
         probe.Evict();
@@ -674,7 +674,7 @@ namespace BECore::Tests {
         EXPECT_NE(Picture()->source->w, firstWidth) << "the library entry is read again with it";
         const ITexture* second = Picture()->texture;
         Draw();
-        EXPECT_EQ(Picture()->texture, second) << "and the new texture is held";
+        EXPECT_EQ(Require(Picture()).texture, second) << "and the new texture is held";
     }
 
     TEST_F(UIImageComponentTest, ATextureGivenDirectlyIsNotReplacedByAnEvict) {

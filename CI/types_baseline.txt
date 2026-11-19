@@ -35,11 +35,9 @@ tests/BECore/ReflectionTest.cpp fstream 1
 tests/BECore/Save/SaveGameFilesTest.cpp directory-iterator 1
 tests/BECore/Save/SaveGameFilesTest.cpp fstream 7
 tests/BECore/Save/SaveStorageTest.cpp fstream 1
-tests/BECore/SceneNodeFilesTest.cpp fstream 1
 tests/BECore/SpikeCaptureTest.cpp fstream 1
 tests/BECore/Tls/TlsLocalEndpointTest.cpp fstream 1
 tests/Common/ContentFilesCheck.h directory-iterator 1
 tests/Common/MigrationTwin.h directory-iterator 1
-tests/Common/MigrationTwin.h fstream 1
 tests/Fuzz/FuzzSeeds.cpp fstream 1
 tests/RmlUiHost/RmlUiHostTest.cpp fstream 1

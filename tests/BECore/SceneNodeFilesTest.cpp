@@ -44,14 +44,6 @@ namespace BECore::Tests {
             return Format("<node name=\"{}\" contentVersion=\"{}\"/>", name, kContentVersion);
         }
 
-        /// The text of a file, to see that a node file is not changed by the instances made of it
-        String ReadFile(const std::filesystem::path& path) {
-            std::ifstream in(path);
-            std::ostringstream content;
-            content << in.rdbuf();
-            return FromStdString(content.str());
-        }
-
         /// The first `<node>` of the first scene
         pugi::xml_node FirstNode(const pugi::xml_document& doc) {
             return doc.document_element().child("scenes").child("scene").child("nodes").child("node");
@@ -117,15 +109,13 @@ namespace BECore::Tests {
         void SetUp() override {
             // One folder per test and per process (ctest runs the tests in parallel processes)
             _dir = TestTempDirectory("BagiSceneNodeFilesTest");
-            std::filesystem::remove_all(_dir);
-            std::filesystem::create_directories(_dir);
+            MakeEmptyDirectory(_dir);
             WriteFile(_dir / "nodes" / "Hud.xml", kHudNode);
             WriteFile(_dir / "nodes" / "B.xml", kPlainNode);
         }
 
         void TearDown() override {
-            std::error_code ignored;
-            std::filesystem::remove_all(_dir, ignored);
+            RemoveDirectory(_dir);
         }
 
         /// Expands @p sceneXml (a SceneConfig text) against the folder
