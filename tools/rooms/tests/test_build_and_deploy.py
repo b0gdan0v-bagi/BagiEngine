@@ -2,6 +2,7 @@
 (--dry-run) or handed to a fake runner. Run: python3 -m unittest discover tools/rooms/tests"""
 
 import contextlib
+import functools
 import importlib.util
 import io
 import re
@@ -22,6 +23,13 @@ DOCKER_PATH = "/usr/bin/docker"
 RAILWAY_PATH = "/usr/bin/railway"
 RAILWAY_CMD = r"C:\Users\me\AppData\Roaming\npm\railway.cmd"
 BINARY_BYTES = b"\x7fELF fake server"
+alltests_results = build_and_deploy.alltests_results
+GREEN_COMMIT = "a" * 40
+
+
+def green_gate(source_dir: Path, results_file: Path | None) -> "alltests_results.Verdict":
+    """The deploy gate of a commit with a green full test run, so the tests of the other steps need no repository."""
+    return alltests_results.Verdict(True, GREEN_COMMIT, "green")
 
 
 def have_tools(name: str) -> str | None:
@@ -76,12 +84,12 @@ class DeployTestCase(unittest.TestCase):
         self.source.mkdir()
         self.stage = self.source / "build" / "rooms-deploy"
 
-    def run_script(self, *argv, which=have_tools, runner=None):
+    def run_script(self, *argv, which=have_tools, runner=None, gate=green_gate):
         out, err = io.StringIO(), io.StringIO()
         runner = runner or FakeRunner()
         arguments = ["--source-dir", str(self.source), *argv]
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = build_and_deploy.run(arguments, which=which, runner=runner)
+            code = build_and_deploy.run(arguments, which=which, runner=runner, gate=gate)
         return code, out.getvalue(), err.getvalue(), runner
 
 
@@ -267,6 +275,45 @@ class RunTest(DeployTestCase):
         self.assertIn("room-server", err)
         self.assertEqual(len(runner.calls), 4)
         self.assertFalse((self.stage / "Dockerfile").exists())
+
+
+class AlltestsGateTest(DeployTestCase):
+    """The gate reads a fake results file of tools/alltests; HEAD of the source is given, so the source needs no repository."""
+
+    def setUp(self):
+        super().setUp()
+        self.results = Path(self._temp.name) / "results.json"
+        data = alltests_results.empty_results("source")
+        data["results"][GREEN_COMMIT] = {"status": "green", "preset": "macos-debug-all", "finished": "2026-11-19T10:00:00Z", "failed": []}
+        alltests_results.save(self.results, data)
+
+    def deploy(self, commit: str, *argv: str):
+        gate = functools.partial(alltests_results.check, head=lambda _: commit)
+        return self.run_script("--deploy", "--alltests-results", str(self.results), *argv, gate=gate)
+
+    def test_a_commit_without_a_green_result_is_refused_before_the_docker_build(self):
+        code, _, err, runner = self.deploy("c" * 40)
+        self.assertEqual(code, 2)
+        self.assertEqual(runner.calls, [])
+        self.assertIn("alltests.py", err)
+        self.assertIn("--skip-alltests", err)
+
+    def test_a_green_commit_is_deployed(self):
+        code, _, err, runner = self.deploy(GREEN_COMMIT)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(runner.calls[-1][0][:2], [RAILWAY_PATH, "up"])
+
+    def test_skip_alltests_deploys_anyway_and_says_so(self):
+        code, out, err, runner = self.deploy("c" * 40, "--skip-alltests")
+        self.assertEqual(code, 0, err)
+        self.assertIn("skipped (--skip-alltests)", out)
+        self.assertEqual(runner.calls[-1][0][:2], [RAILWAY_PATH, "up"])
+
+    def test_a_dry_run_only_reports_the_gate(self):
+        code, out, err, runner = self.deploy("c" * 40, "--dry-run")
+        self.assertEqual(code, 0, err)
+        self.assertIn("--deploy would stop here", out)
+        self.assertEqual(runner.calls, [])
 
 
 class RuntimeDockerfileTest(unittest.TestCase):

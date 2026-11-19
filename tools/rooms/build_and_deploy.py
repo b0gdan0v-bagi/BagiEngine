@@ -12,7 +12,8 @@ The steps, in order:
   2. docker create, docker cp <container>:/out/. <stage>/app, docker rm: the executable `room-server` and its shared libraries are taken out
   3. stage Dockerfile.prebuilt as <stage>/Dockerfile (debian-slim, libstdc++6, COPY, USER nobody, the settings of the real Dockerfile)
   4. with --deploy: `railway up <stage> --path-as-root --service <name> --detach` (the Railway CLI, logged in and the project linked with
-     `railway link`, or RAILWAY_TOKEN of the project). The upload is the stage folder only, a few MB.
+     `railway link`, or RAILWAY_TOKEN of the project). The upload is the stage folder only, a few MB. Before step 1, --deploy checks the
+     deploy gate: a green full test run of HEAD of the source (tools/alltests); --skip-alltests passes it, --dry-run only reports it.
 The service must exist and use the Dockerfile builder; its settings (health check /healthz, variables) are not part of the upload.
 Standard library only. Nothing here reads or writes a secret.
 """
@@ -27,6 +28,10 @@ from pathlib import Path
 from typing import NamedTuple
 
 TOOLS_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(TOOLS_DIR.parent / "alltests"))
+
+import alltests_results  # noqa: E402
+
 BUILD_DOCKERFILE = TOOLS_DIR / "Dockerfile"
 RUNTIME_DOCKERFILE = TOOLS_DIR / "Dockerfile.prebuilt"
 DEFAULT_SERVER_TARGET = "BagiRoomServer"
@@ -135,7 +140,7 @@ def run_step(step: Step, dry_run: bool, which, runner) -> int:
     return completed.returncode
 
 
-def run(argv: list[str] | None = None, which=shutil.which, runner=subprocess.run) -> int:
+def run(argv: list[str] | None = None, which=shutil.which, runner=subprocess.run, gate=alltests_results.check) -> int:
     parser = argparse.ArgumentParser(description="Build the room server for Linux in Docker and deploy the binary to Railway.")
     parser.add_argument("--server-target", default=DEFAULT_SERVER_TARGET, help=f"the server target (default: {DEFAULT_SERVER_TARGET})")
     parser.add_argument("--preset", default=DEFAULT_PRESET, help=f"the Linux preset of the build stage (default: {DEFAULT_PRESET}; a game names one that includes the engine's)")
@@ -144,6 +149,8 @@ def run(argv: list[str] | None = None, which=shutil.which, runner=subprocess.run
     parser.add_argument("--deploy", action="store_true", help="after staging, run `railway up`")
     parser.add_argument("--service", default=DEFAULT_SERVICE, help=f"the Railway service for --deploy (default: {DEFAULT_SERVICE})")
     parser.add_argument("--dry-run", action="store_true", help="print the commands and run nothing")
+    parser.add_argument("--skip-alltests", action="store_true", help="deploy even when HEAD of the source has no green full test run (tools/alltests)")
+    parser.add_argument("--alltests-results", type=Path, help="the results file of tools/alltests (default: the one of the source's repository)")
     args = parser.parse_args(argv)
     source_dir = (args.source_dir or Path.cwd()).resolve()
     stage_dir = (args.stage_dir or source_dir / STAGE_FOLDER).resolve()
@@ -152,6 +159,9 @@ def run(argv: list[str] | None = None, which=shutil.which, runner=subprocess.run
         check_environment(args, which)
     except DeployError as error:
         print(f"build_and_deploy.py: {error}", file=sys.stderr)
+        return 2
+    # Before the build: a deploy that the gate stops costs no Docker build
+    if args.deploy and not alltests_results.allows_deploy(gate(source_dir, args.alltests_results), args.skip_alltests, args.dry_run):
         return 2
 
     build, create, copy, remove, *upload = plan_commands(args, source_dir, stage_dir, f"bagi-room-extract-{os.getpid()}")

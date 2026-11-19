@@ -2,6 +2,7 @@
 commands are printed (--dry-run) or handed to a fake runner. Run: python -m unittest discover tools/web/tests"""
 
 import contextlib
+import functools
 import io
 import re
 import tempfile
@@ -16,6 +17,13 @@ import build_and_deploy
 
 TOOLS_WEB = Path(build_and_deploy.__file__).resolve().parent
 ENGINE_DIR = TOOLS_WEB.parents[1]
+alltests_results = build_and_deploy.alltests_results
+GREEN_COMMIT, OTHER_COMMIT = "a" * 40, "b" * 40
+
+
+def green_gate(source_dir: Path, results_file: Path | None) -> "alltests_results.Verdict":
+    """The deploy gate of a commit with a green full test run, so the tests of the other steps need no repository."""
+    return alltests_results.Verdict(True, GREEN_COMMIT, "green")
 
 
 RAILWAY_PATH = "/usr/bin/railway"
@@ -67,12 +75,12 @@ class DeployTestCase(unittest.TestCase):
             (emsdk / name).parent.mkdir(parents=True, exist_ok=True)
             (emsdk / name).write_text("", encoding="utf-8")
 
-    def run_script(self, *argv, emsdk=None, which=no_tools, runner=None):
+    def run_script(self, *argv, emsdk=None, which=no_tools, runner=None, gate=green_gate):
         out, err = io.StringIO(), io.StringIO()
         runner = runner or FakeRunner()
         arguments = ["--source-dir", str(self.source), *argv]
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = build_and_deploy.run(arguments, emsdk_dir=emsdk or self.emsdk, which=which, runner=runner)
+            code = build_and_deploy.run(arguments, emsdk_dir=emsdk or self.emsdk, which=which, runner=runner, gate=gate)
         return code, out.getvalue(), err.getvalue(), runner
 
 
@@ -325,6 +333,62 @@ class RunTest(DeployTestCase):
         self.assertEqual(code, 3)
         self.assertEqual(len(runner.calls), 1)
         self.assertIn("`cmake` failed", err)
+
+
+class AlltestsGateTest(DeployTestCase):
+    """The gate reads a fake results file of tools/alltests; HEAD of the source is given, so the source needs no repository."""
+
+    def setUp(self):
+        super().setUp()
+        self.results = Path(self._temp.name) / "results.json"
+        data = alltests_results.empty_results("source")
+        data["results"][GREEN_COMMIT] = {"status": "green", "preset": "macos-debug-all", "finished": "2026-11-19T10:00:00Z", "failed": []}
+        data["results"][OTHER_COMMIT] = {"status": "red", "preset": "macos-debug-all", "finished": "2026-11-19T11:00:00Z", "failed": ["Core.Sorts"]}
+        alltests_results.save(self.results, data)
+        (self.source / "dist").mkdir()
+
+    def deploy(self, commit: str, *argv: str):
+        gate = functools.partial(alltests_results.check, head=lambda _: commit)
+        return self.run_script("--deploy", "--alltests-results", str(self.results), *argv, which=have_railway, gate=gate)
+
+    def test_a_commit_without_a_result_is_not_deployed_and_the_message_says_how_to_run_the_tests(self):
+        code, _, err, runner = self.deploy("c" * 40)
+        self.assertEqual(code, 2)
+        self.assertEqual(runner.calls, [])
+        self.assertIn("alltests.py", err)
+        self.assertIn("--commit cccccccccccc", err)
+        self.assertIn("--skip-alltests", err)
+
+    def test_a_red_commit_is_not_deployed_and_the_failures_are_named(self):
+        code, _, err, runner = self.deploy(OTHER_COMMIT)
+        self.assertEqual(code, 2)
+        self.assertEqual(runner.calls, [])
+        self.assertIn("Core.Sorts", err)
+
+    def test_a_green_commit_is_deployed(self):
+        code, out, err, runner = self.deploy(GREEN_COMMIT)
+        self.assertEqual(code, 0, err)
+        self.assertIn("alltests gate: alltests is green", out)
+        self.assertEqual(runner.calls[-1][0][:2], [RAILWAY_PATH, "up"])
+
+    def test_skip_alltests_deploys_anyway_and_says_so(self):
+        code, out, err, runner = self.deploy("c" * 40, "--skip-alltests")
+        self.assertEqual(code, 0, err)
+        self.assertIn("skipped (--skip-alltests)", out)
+        self.assertEqual(runner.calls[-1][0][:2], [RAILWAY_PATH, "up"])
+
+    def test_a_dry_run_only_reports_the_gate(self):
+        code, out, err, _ = self.deploy("c" * 40, "--dry-run")
+        self.assertEqual(code, 0, err)
+        self.assertIn("--deploy would stop here", out)
+        self.assertIn("railway up", out)
+
+    def test_without_deploy_the_gate_is_not_asked(self):
+        def no_gate(*_):
+            raise AssertionError("the gate was asked")
+
+        code, _, err, _ = self.run_script("--dry-run", gate=no_gate)
+        self.assertEqual(code, 0, err)
 
 
 class DeployFilesTest(unittest.TestCase):
