@@ -14,7 +14,7 @@ You review work you did not write, from nothing but the diff, the plan and the r
 
 The conductor gives you the area of the entry (`<area>`, `<R>`, `<base>`, `<engine>`: the terms of `.claude/skills/todo-loop/SKILL.md`; read `.claude/rules/todo-project.md`, and run git as `git -C <R>`), the commit range (`<base>...HEAD`, or `<parent branch>...HEAD` for a branch stacked on another unmerged branch: the parent's commits were reviewed under the parent; `<slice start>...HEAD` for a later slice of a through entry, whose earlier slices were reviewed already; `<remarks start>...HEAD` for a remarks round, with the owner's remarks file: then check that each remark is done and nothing else broke, instead of the plan's WPs), the plan path `~/.claude/plans/todo-loop-<branch-id>.md`, the baseline file, one of `checklist: available` / `checklist: unavailable`, and `shots: <folder> | none` (the folder of the pictures, `~/.claude/plans/todo-loop-<plan id>-shots/`, whose `before/` the conductor took at the slice start).
 
-**Second round** (`final-r2`): the conductor also gives the first answer. Check that each of its blocking findings is fixed, read the fix commits (`Review fixes: ...`) as fully as the first round read the slice, and build and test again; do not reopen what the first round approved unless a fix broke it.
+**Second round** (`final-r2`): the conductor gives the first answer and the fix range `<review start>..HEAD` instead of the slice's range; it starts you only when the fixes touch more than docs and comments (`todo-loop/SKILL.md`, "Scoped check"). Read only that range and the findings: run each blocking finding's `verify:`, check that the fix does what the finding asks and breaks nothing next to it, then build and run `ctest --preset <p>`. Checks 3–8 apply to the fix diff only; nothing round 1 approved is reopened unless a fix broke it.
 
 ## What to check
 
@@ -40,12 +40,13 @@ VERDICT: APPROVE | CHANGES
 Build: <command> -> ok | failed (first error, file:line)
 Tests: <command> -> <n passed, names of failing tests, compared with the baseline>
 Findings:
-- [blocking|followup|note] file:line — what is wrong and what would be right [checklist]
+- [blocking:<kind>] file:line — what is wrong and what would be right; verify: <check> [checklist]
+- [followup|note] file:line — what is wrong and what would be right [checklist]
 Checklist: used | checklist not installed on this machine
 Shots: <n changed of m, images opened: names | unavailable: reason>     (only with a shots folder; then one line per changed pair: <folder>/before/<file> and <folder>/after/<file>)
 ```
 
-`CHANGES` only for a blocking finding: a bug, a failing or missing test, a broken build, a rule of the repository broken, a doc made false, a change out of scope. The other two levels never turn `APPROVE` into `CHANGES`:
+`CHANGES` only for a blocking finding: a bug, a failing or missing test, a broken build, a rule of the repository broken, a doc made false, a change out of scope. Each blocking finding names its **kind**, what its fix will touch: `docs` (a `*.md` file only), `comment` (comments in C-family sources only, no code token), `test` or `code`. It ends with **`verify:`**, the one check that proves the fix: a `grep` with its expected result, a test `Suite.Case`, a command, or the doc line that must read so. The second round runs exactly the `verify:` lines, and a fix that touches only docs or comments gets no reviewer agent and no build, so a `verify:` must be checkable without you, and a finding whose fix needs code is never `docs`. The other two levels never turn `APPROVE` into `CHANGES`:
 
 - `followup`: a concrete defect of the code the diff wrote or touched that is not worth a second round (a stale or AI-slop comment, duplication, a misleading name, a missing test of an edge case, a magic number) and that you would still want fixed. It names the fix, small enough for one developer run. `todo-merge` files every `followup` of a merged branch into the area's rolling entry `<area>-review-followups`, so write it for a reader who sees only that line and the code at the merge.
 - `note`: a style preference, an idea, an open question, anything a reasonable developer could leave as it is. Nobody files it.
