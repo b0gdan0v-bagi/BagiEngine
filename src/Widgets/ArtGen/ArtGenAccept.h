@@ -51,9 +51,19 @@ namespace BECore {
      * With an identity plan both files are copied byte for byte. Otherwise the PNG is cut and scaled by the plan's frame (or, with none, by
      * the frame over this image's own drawn box), and the provenance is the generation's record plus `accepted`. A picture with nothing drawn,
      * or one the plan's frame would cut, is an error and nothing is written.
+     *
+     * A variant with no provenance file (@p provenance empty or missing) leaves none of an earlier accept of the name: the identity plan
+     * removes it (a missing file is fine, a failed removal is an error), the other plans write a record with `accepted` only.
      */
     std::expected<ArtGenCopied, String> CopyVariantIntoAssets(const std::filesystem::path& png, const std::filesystem::path& provenance, const std::filesystem::path& assetsDir, StringView sprite,
                                                               const ArtGenImagePlan& plan);
+
+    /**
+     * @brief The cache step of an accept: calls @p evict with the picture's path and, for a repacked sprite, the atlas's path. @p evict is
+     * `ResourceManager::Evict` in the editor; a holder of a texture (the Sprite Library, a canvas image) finds the evict with
+     * `IsEvictedHandle`, and the test that ties the two is this function's.
+     */
+    void EvictAcceptedTextures(const ArtGenCopied& copied, const Optional<AtlasWritten>& repacked, FunctionRef<bool(StringView)> evict);
 
     /// Calls ReloadTexture on every SpriteRendererComponent under @p root that names @p sprite or @p texturePath; returns how many
     uint32_t ReloadSpritesUsing(SceneNode& root, PoolString sprite, PoolString texturePath);

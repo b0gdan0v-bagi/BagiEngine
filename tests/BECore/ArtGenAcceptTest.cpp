@@ -1,7 +1,10 @@
+#include <BECore/Resource/IResource.h>
+#include <BECore/Resource/ResourceCache.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/TextureEditor/SpriteAtlas.h>
+#include <Widgets/TextureEditor/SpriteTextureCache.h>
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
@@ -900,6 +903,141 @@ namespace BECore::Tests {
         WriteText(provenance, "{\"seed\": 8}");
         ASSERT_TRUE(CopyVariantIntoAssets(png, provenance, folder / "assets", "queen", kIdentity).has_value());
         EXPECT_EQ(ReadText(copied->provenanceFile).find("kept"), String::npos);
+    }
+
+    TEST_F(ArtGenAcceptTest, AnIdentityAcceptOfAVariantWithNoProvenanceRemovesTheOldRecord) {
+        const auto first = CopyVariantIntoAssets(png, provenance, folder / "assets", "queen", kIdentity);
+        ASSERT_TRUE(first.has_value());
+        ASSERT_TRUE(MarkProvenanceKept(first->provenanceFile, 7, "2026-11-17T10:00:00Z").has_value());
+
+        std::filesystem::remove(provenance);
+        const auto second = CopyVariantIntoAssets(png, provenance, folder / "assets", "queen", kIdentity);
+        ASSERT_TRUE(second.has_value()) << second.error().c_str();
+        EXPECT_FALSE(std::filesystem::exists(second->provenanceFile)) << "a record with the earlier seed and its `kept` is not this variant's";
+
+        const auto withEmptyPath = CopyVariantIntoAssets(png, std::filesystem::path(), folder / "assets", "queen", kIdentity);
+        ASSERT_TRUE(withEmptyPath.has_value());
+        EXPECT_FALSE(std::filesystem::exists(withEmptyPath->provenanceFile));
+    }
+
+    TEST_F(ArtGenAcceptTest, ADefaultAcceptOfAVariantWithNoProvenanceReplacesTheOldRecordWithAnAcceptedOnlyOne) {
+        const auto source = folder / "out" / "real.png";
+        ASSERT_NO_FATAL_FAILURE(WriteRealPng(source, 256, 256, {40, 40, 100, 100}));
+        const auto first = CopyVariantIntoAssets(source, provenance, folder / "assets", "queen", ArtGenImagePlan{});
+        ASSERT_TRUE(first.has_value());
+        ASSERT_TRUE(MarkProvenanceKept(first->provenanceFile, 7, "2026-11-17T10:00:00Z").has_value());
+
+        std::filesystem::remove(provenance);
+        const auto second = CopyVariantIntoAssets(source, provenance, folder / "assets", "queen", ArtGenImagePlan{});
+        ASSERT_TRUE(second.has_value()) << second.error().c_str();
+        const auto record = ParseJson(StringView(ReadText(second->provenanceFile)));
+        ASSERT_TRUE(record.has_value());
+        EXPECT_NE(FindJsonMember(*record, "accepted"), nullptr);
+        EXPECT_EQ(FindJsonMember(*record, "kept"), nullptr);
+        EXPECT_EQ(FindJsonMember(*record, "seed"), nullptr) << "the earlier variant's seed is not carried over";
+    }
+
+    namespace {
+
+        class FakeTexture : public IResource {
+        public:
+            explicit FakeTexture(PoolString path) : _path(path) {}
+
+            ResourceState GetState() const override {
+                return ResourceState::Loaded;
+            }
+            PoolString GetPath() const override {
+                return _path;
+            }
+            uint64_t GetMemoryUsage() const override {
+                return 1;
+            }
+            PoolString GetTypeName() const override {
+                return "FakeTexture"_intern;
+            }
+
+        private:
+            PoolString _path;
+        };
+
+        /// What a holder that keeps a texture of the cache sees of an accept: the handle it kept and the cache after the accept's evict
+        struct EvictScene {
+            ResourceCache cache;
+            Vector<String> evicted;
+
+            IntrusivePtr<IResource> Put(PoolString path) {
+                cache.Put(path, New<FakeTexture>(path));
+                return cache.Get(path);
+            }
+
+            void Evict(const ArtGenCopied& copied, const Optional<AtlasWritten>& repacked) {
+                EvictAcceptedTextures(copied, repacked, [this](StringView path) {
+                    evicted.push_back(String(path));
+                    return cache.Remove(PoolString::Intern(path));
+                });
+            }
+        };
+
+        ArtGenCopied CopiedAt(const char* texturePath) {
+            ArtGenCopied copied;
+            copied.texturePath = texturePath;
+            return copied;
+        }
+
+    }  // namespace
+
+    TEST(ArtGenEvictTest, AReAcceptAndASwitchOfTheSameNameFlipTheHoldersPredicate) {
+        EvictScene scene;
+        const auto queen = "assets/artgen/queen.png"_intern;
+        const auto rook = "assets/artgen/rook.png"_intern;
+        const IntrusivePtr<IResource> queenHandle = scene.Put(queen);
+        const IntrusivePtr<IResource> rookHandle = scene.Put(rook);
+        EXPECT_FALSE(IsEvictedHandle(scene.cache, queen, queenHandle.Get()));
+
+        // A re-accept of the name writes the same path
+        scene.Evict(CopiedAt("assets/artgen/queen.png"), {});
+        EXPECT_TRUE(IsEvictedHandle(scene.cache, queen, queenHandle.Get()));
+        EXPECT_FALSE(IsEvictedHandle(scene.cache, rook, rookHandle.Get())) << "a path that was not accepted stays held";
+
+        // The holder loads the path again; a switch to another variant of the same name is the same path again
+        const IntrusivePtr<IResource> reloaded = scene.Put(queen);
+        EXPECT_FALSE(IsEvictedHandle(scene.cache, queen, reloaded.Get())) << "the fresh resource is the held one";
+        EXPECT_TRUE(IsEvictedHandle(scene.cache, queen, queenHandle.Get())) << "the old handle stays evicted";
+        scene.Evict(CopiedAt("assets/artgen/queen.png"), {});
+        EXPECT_TRUE(IsEvictedHandle(scene.cache, queen, reloaded.Get()));
+        EXPECT_FALSE(IsEvictedHandle(scene.cache, rook, rookHandle.Get()));
+    }
+
+    TEST(ArtGenEvictTest, ARepackEvictsTheAtlasPathToo) {
+        EvictScene scene;
+        const auto sprite = "assets/artgen/queen.png"_intern;
+        const auto atlas = "assets/atlases/pieces.png"_intern;
+        const IntrusivePtr<IResource> spriteHandle = scene.Put(sprite);
+        const IntrusivePtr<IResource> atlasHandle = scene.Put(atlas);
+        const IntrusivePtr<IResource> otherHandle = scene.Put("assets/atlases/other.png"_intern);
+
+        AtlasWritten repacked;
+        repacked.texturePath = atlas;
+        scene.Evict(CopiedAt("assets/artgen/queen.png"), repacked);
+
+        EXPECT_TRUE(IsEvictedHandle(scene.cache, sprite, spriteHandle.Get()));
+        EXPECT_TRUE(IsEvictedHandle(scene.cache, atlas, atlasHandle.Get()));
+        EXPECT_FALSE(IsEvictedHandle(scene.cache, "assets/atlases/other.png"_intern, otherHandle.Get()));
+        ASSERT_EQ(scene.evicted.size(), 2u);
+        EXPECT_EQ(scene.evicted[0], "assets/artgen/queen.png");
+        EXPECT_EQ(scene.evicted[1], "assets/atlases/pieces.png");
+    }
+
+    TEST(ArtGenEvictTest, AnAcceptWithNoRepackEvictsOnlyThePicture) {
+        EvictScene scene;
+        scene.Evict(CopiedAt("assets/artgen/queen.png"), {});
+        ASSERT_EQ(scene.evicted.size(), 1u);
+        EXPECT_EQ(scene.evicted[0], "assets/artgen/queen.png");
+    }
+
+    TEST(ArtGenEvictTest, ANullHandleIsNeverEvicted) {
+        ResourceCache cache;
+        EXPECT_FALSE(IsEvictedHandle(cache, "assets/artgen/queen.png"_intern, nullptr));
     }
 
     TEST_F(ArtGenAcceptTest, AnIdentityPlanCopiesBothFilesByteForByte) {

@@ -3,9 +3,18 @@
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/PoolString/PoolStringMap.h>
 #include <BECore/Renderer/ITexture.h>
+#include <BECore/Resource/ResourceCache.h>
 #include <BECore/Resource/ResourceHandle.h>
 
 namespace BECore {
+
+    /**
+     * @brief Whether @p handle, kept for @p path, is a picture the cache has dropped: an Accept or a switch of the Generate panel (or Pack and
+     * Unpack) rewrote the file and evicted the path, so the handle is the old picture and the path is to be loaded again.
+     *
+     * @return false for a null handle (nothing was loaded yet, which is not an evict)
+     */
+    [[nodiscard]] bool IsEvictedHandle(const ResourceCache& cache, PoolString path, const IResource* handle);
 
     /**
      * @brief Textures of the Sprite Library's list and atlas preview, one handle per virtual path.

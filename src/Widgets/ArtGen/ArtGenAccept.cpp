@@ -270,8 +270,7 @@ namespace BECore {
         accepted["seconds"] = written.seconds;
         accepted["peakDb"] = written.peakDb;
         record["accepted"] = std::move(accepted);
-        const std::string text = record.dump(kProvenanceIndent, ' ', false, Json::error_handler_t::replace) + "\n";  //-NoStd: nlohmann's dump
-        if (auto result = WriteTextFileAtomically(written.provenanceFile, StringView(text.data(), text.size())); !result) {
+        if (auto result = WriteProvenance(written.provenanceFile, record); !result) {
             return std::unexpected(result.error());
         }
         return written;
@@ -450,8 +449,21 @@ namespace BECore {
             if (auto result = CopyOver(provenance, copied.provenanceFile); !result) {
                 return std::unexpected(result.error());
             }
+        } else {
+            // No record for this picture: the file an earlier accept of the name left describes another variant (its seed, its `kept`)
+            std::filesystem::remove(copied.provenanceFile, error);
+            if (error) {
+                return std::unexpected(Format("cannot remove the old '{}': {}", copied.provenanceFile.generic_string(), error.message()));
+            }
         }
         return copied;
+    }
+
+    void EvictAcceptedTextures(const ArtGenCopied& copied, const Optional<AtlasWritten>& repacked, FunctionRef<bool(StringView)> evict) {
+        evict(copied.texturePath);
+        if (repacked) {
+            evict(repacked->texturePath.ToStringView());
+        }
     }
 
     uint32_t ReloadSpritesUsing(SceneNode& root, PoolString sprite, PoolString texturePath) {
@@ -640,10 +652,7 @@ namespace BECore {
         const PoolString texturePath = PoolString::Intern(copied->texturePath);
         // The old pictures of these paths may be cached: drop them so the reload reads the new files
         auto& resources = CoreManager::GetResourceManager();
-        resources.Evict(copied->texturePath);
-        if (stored->repacked) {
-            resources.Evict(stored->repacked->texturePath.ToStringView());
-        }
+        EvictAcceptedTextures(*copied, stored->repacked, [&resources](StringView path) { return resources.Evict(path); });
         ArtGenAccepted accepted;
         accepted.copied = std::move(*copied);
         accepted.repacked = std::move(stored->repacked);

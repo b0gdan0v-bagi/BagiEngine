@@ -14,6 +14,7 @@
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/TextureEditor/SpriteAtlas.h>
+#include <Widgets/TextureEditor/SpriteTextureCache.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -226,7 +227,7 @@ namespace BECore {
         int sheetHeight = 0;
         if (!entry.texturePath.Empty()) {
             // A file rewritten on disk is evicted from the cache (the Generate panel's Accept and switch do): the handle held here is the old picture
-            const bool evicted = _previewTexture && !CoreManager::GetResourceManager().GetCache().Holds(_previewLoadedPath, _previewTexture.Get());
+            const bool evicted = IsEvictedHandle(CoreManager::GetResourceManager().GetCache(), _previewLoadedPath, _previewTexture.Get());
             if (entry.texturePath != _previewLoadedPath || evicted) {
                 _previewTexture = CoreManager::GetResourceManager().Load<ITexture>(entry.texturePath.ToStringView());
                 _previewLoadedPath = entry.texturePath;
