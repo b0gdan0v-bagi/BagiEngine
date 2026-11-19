@@ -10,8 +10,8 @@ namespace BECore::Fuzz {
         constexpr StringView kSlot = "fuzz";
 
         /// The game the loads below belong to; a seed of another game is a refusal
-        constexpr StringView kGame = "FuzzGame";
-        constexpr SaveSchema kSchema{kGame, 3, 2};
+        constexpr SaveSchema kSchema = kFuzzSaveSchema;
+        constexpr StringView kGame = kSchema.game;
 
         /// The slot folder of the process, made on the first input and removed when the process ends normally
         class SlotWorkspace {

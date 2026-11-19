@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Utils/EnumUtils.h>
 #include <Games/SeatedGameRegistry.h>
 #include <RoomServer/DemoCardGame.h>
 #include <Rooms/RoomHub.h>
@@ -22,13 +23,10 @@ namespace BECore::Fuzz {
 
     namespace RoomHubInput {
 
-        /// FuzzRoomHub: a stream of operations, each `[op: 2 bits | connection: 6 bits][length: u16, little endian]`, and for a message `length` bytes of text follow
-        enum class Op : uint8_t {
-            Message = 0,     ///< `length` bytes of text arrive from the connection
-            Connect = 1,     ///< the transport opens the connection
-            Disconnect = 2,  ///< the transport reports the connection dropped
-            Tick = 3,        ///< `length` milliseconds pass and the hub is ticked
-        };
+        /// FuzzRoomHub: a stream of operations, each `[op: 2 bits | connection: 6 bits][length: u16, little endian]`, and for a message `length` bytes of text follow.
+        /// The value of an operation is its place in the list, which the seeds on disk depend on: Message (`length` bytes of text arrive from the connection),
+        /// Connect (the transport opens the connection), Disconnect (the transport reports the connection dropped), Tick (`length` milliseconds pass and the hub is ticked)
+        CORE_ENUM(Op, uint8_t, Message, Connect, Disconnect, Tick)
 
         inline constexpr uint8_t kOpMask = 0x03;
         inline constexpr uint8_t kConnectionShift = 2;

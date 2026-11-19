@@ -14,7 +14,10 @@ namespace BECore::Tests {
 
         void ExpectRefused(StringView text, StringView messagePart = {}) {
             const auto url = ParseWebSocketUrl(text);
-            ASSERT_FALSE(url.has_value()) << String(text.data(), text.size());
+            if (url.has_value()) {
+                ADD_FAILURE() << "accepted: " << String(text.data(), text.size());
+                return;
+            }
             if (!messagePart.empty()) {
                 EXPECT_NE(StringView(url.error().c_str()).find(messagePart), StringView::npos) << url.error().c_str();
             }

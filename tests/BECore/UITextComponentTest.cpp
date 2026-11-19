@@ -13,6 +13,7 @@
 #include <BECore/UI/UITooltip.h>
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/LogRecorder.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
@@ -182,12 +183,13 @@ namespace BECore::Tests {
     TEST_F(UITextComponentTest, AKeyMissingEverywhereShowsTheKeyAndIsLoggedOnce) {
         UITextComponent& caption = CaptionOf("Cap");
         caption.text = "{#menu.nowhere}";
-        const WarningCounter warnings("menu.nowhere");
+        const LogRecorder warnings;
 
         for (int i = 0; i < 3; ++i) {
             EXPECT_EQ(caption.GetDisplayText(), "menu.nowhere");
         }
-        EXPECT_EQ(warnings.Count(), 1u);
+        LogEvent::Flush();
+        EXPECT_EQ(warnings.Count(LogLevel::Warning, {"menu.nowhere"}), 1u);
     }
 
     TEST_F(UITextComponentTest, ItFollowsAVariable) {
@@ -230,11 +232,12 @@ namespace BECore::Tests {
         EXPECT_EQ(caption.GetResolvedFontPath(), PoolString::Intern(kTestBoldPath));
 
         caption.fontFamily = "Nope"_intern;
-        const WarningCounter warnings("font family 'Nope'");
+        const LogRecorder warnings;
         for (int frame = 0; frame < 3; ++frame) {
             Draw();
         }
-        EXPECT_EQ(warnings.Count(), 1u);
+        LogEvent::Flush();
+        EXPECT_EQ(warnings.Count(LogLevel::Warning, {"font family 'Nope'"}), 1u);
         EXPECT_FALSE(Glyphs().empty());
     }
 

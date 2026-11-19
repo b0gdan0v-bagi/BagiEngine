@@ -15,6 +15,8 @@
 
 namespace BECore::Tests {
 
+    using RmlUiScreens::BoxOf;
+
     namespace {
 
         constexpr const char* kWindowConfig = "config/SDLWindowConfig.xml";
@@ -52,17 +54,6 @@ namespace BECore::Tests {
                 }
             }
             return count;
-        }
-
-        Rect BoxOf(const RmlUiDocumentComponent& doc, const char* id) {
-            Rml::Element* element = doc.GetDocument()->GetElementById(id);
-            if (!element) {
-                ADD_FAILURE() << "no element '" << id << "'";
-                return {};
-            }
-            const Rml::Vector2f offset = element->GetAbsoluteOffset(Rml::BoxArea::Border);
-            const Rml::Vector2f size = element->GetBox().GetSize(Rml::BoxArea::Border);
-            return {doc.GetOriginX() + offset.x, doc.GetOriginY() + offset.y, size.x, size.y};
         }
 
         /// Writes the image as a PNG into the directory named by BAGI_TEST_SCREENSHOT_DIR, when it is set (for a look at what the test drew)
@@ -118,16 +109,7 @@ namespace BECore::Tests {
         }
 
         IntrusivePtr<RmlUiDocumentComponent> Load(const RmlUiScreens::Screen& screen) {
-            XmlDeserializer deserializer;
-            EXPECT_TRUE(deserializer.LoadFromString(RmlUiScreens::SceneXml(screen)));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            _manager->Initialize();
-            _manager->SetActiveScene("S"_intern);
-            auto doc = _manager->GetSceneByName("S"_intern)->GetRootNode().GetChildren()[0]->GetComponent<RmlUiDocumentComponent>();
-            EXPECT_TRUE(doc);
-            EXPECT_TRUE(doc && doc->SetMarkup(String(screen.rml)));
-            return doc;
+            return RmlUiScreens::LoadScreen(_manager, screen);
         }
 
         /// Draws the frame and presents it; returns what was on the back buffer

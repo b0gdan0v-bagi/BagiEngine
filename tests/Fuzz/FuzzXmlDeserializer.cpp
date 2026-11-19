@@ -16,6 +16,9 @@ namespace BECore::Fuzz {
         /// How many elements of one array the walk enters
         constexpr size_t kWalkArrayElementLimit = 3;
 
+        /// How many child objects of the earlier document a refused load is probed for
+        constexpr size_t kGoneObjectProbes = 3;
+
         /// The value a read target holds before the read; a read that fails must leave it as it is
         template <typename T>
         T Sentinel() {
@@ -232,11 +235,8 @@ namespace BECore::Fuzz {
 
         private:
             void WalkArray(pugi::xml_node arrayNode, StringView name, size_t depth) {
-                size_t expectedCount = 0;
-                for (const pugi::xml_node element : arrayNode.children()) {
-                    (void)element;
-                    ++expectedCount;
-                }
+                const auto children = arrayNode.children();
+                const size_t expectedCount = static_cast<size_t>(std::distance(children.begin(), children.end()));
                 size_t count = 0;
                 FUZZ_CHECK(_reader.BeginArray(name, "item", count));
                 FUZZ_CHECK(count == expectedCount);
@@ -276,7 +276,7 @@ namespace BECore::Fuzz {
             FUZZ_CHECK(!reader.BeginArray("fuzz-no-such-name", "item", count));
             size_t checked = 0;
             for (const pugi::xml_node child : earlierRoot.children()) {
-                if (child.type() == pugi::node_element && checked++ < kWalkArrayElementLimit) {
+                if (child.type() == pugi::node_element && checked++ < kGoneObjectProbes) {
                     FUZZ_CHECK(!reader.BeginObject(NameOf(child.name())));
                 }
             }

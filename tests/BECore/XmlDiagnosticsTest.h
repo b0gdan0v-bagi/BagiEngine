@@ -6,7 +6,7 @@
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Utils/EnumUtils.h>
 
-namespace BECore {
+namespace BECore::Tests {
 
     // =========================================================================
     // Reflected test data for the load diagnostics. The .gen.hpp is generated from this header and included in
@@ -111,4 +111,4 @@ namespace BECore {
 
     }  // namespace XmlDiagnosticsTestData
 
-}  // namespace BECore
+}  // namespace BECore::Tests

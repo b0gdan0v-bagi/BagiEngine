@@ -9,29 +9,22 @@
 #include <CoreSDL/SDLWebCanvas.h>
 #include <gtest/gtest.h>
 
+namespace BagiContentRoots {
+    extern const char* const kEngine;
+}  // namespace BagiContentRoots
+
 namespace BECore::Tests {
 
     namespace {
 
-        /// web/config/<fileName> of this engine checkout, found by walking up from the working directory (inside the repository, like FileSystem does for config/)
+        /// web/config/<fileName> under the engine's content root, the checkout the test was built from
         std::filesystem::path WebConfigPath(const char* fileName) {
-            std::error_code error;
-            for (std::filesystem::path dir = std::filesystem::current_path(error); !dir.empty(); dir = dir.parent_path()) {
-                const std::filesystem::path candidate = dir / "web" / "config" / fileName;
-                if (std::filesystem::exists(candidate, error)) {
-                    return candidate;
-                }
-                if (dir == dir.parent_path()) {
-                    break;
-                }
-            }
-            return {};
+            return std::filesystem::path(BagiContentRoots::kEngine) / "web" / "config" / fileName;
         }
 
         /// The first child of the root of an XML file with the given name, or an empty node
         pugi::xml_node FirstChildOfRoot(pugi::xml_document& document, const char* fileName, const char* childName) {
             const std::filesystem::path path = WebConfigPath(fileName);
-            EXPECT_FALSE(path.empty()) << fileName << " is not under web/config";
             EXPECT_TRUE(document.load_file(path.c_str())) << path;
             return document.child("root").child(childName);
         }
@@ -42,17 +35,15 @@ namespace BECore::Tests {
         for (const char* fileName : {"ApplicationConfig.xml", "SDLWindowConfig.xml", "LoggerConfig.xml"}) {
             SCOPED_TRACE(fileName);
             const std::filesystem::path path = WebConfigPath(fileName);
-            ASSERT_FALSE(path.empty());
             pugi::xml_document document;
             const pugi::xml_parse_result result = document.load_file(path.c_str());
-            EXPECT_TRUE(result) << result.description();
+            EXPECT_TRUE(result) << path << ": " << result.description();
             EXPECT_TRUE(document.child("root"));
         }
     }
 
     TEST(WebConfigTest, ApplicationConfigAsksForTheSdlRendererInGameMode) {
         const std::filesystem::path path = WebConfigPath("ApplicationConfig.xml");
-        ASSERT_FALSE(path.empty());
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromFile(path));
 
@@ -83,7 +74,6 @@ namespace BECore::Tests {
 
     TEST(WebConfigTest, LoggerWritesToTheConsoleOnlyWithoutColors) {
         const std::filesystem::path path = WebConfigPath("LoggerConfig.xml");
-        ASSERT_FALSE(path.empty());
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromFile(path));
 

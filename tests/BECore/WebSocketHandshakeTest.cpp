@@ -1,3 +1,4 @@
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <Common/Printers.h>
 #include <RemoteControl/WebSocketHandshake.h>
 #include <gtest/gtest.h>
@@ -88,7 +89,10 @@ namespace BECore::Tests {
         }
 
         void ExpectRefused(const std::expected<String, HandshakeError>& result, int status) {
-            ASSERT_FALSE(result.has_value());
+            if (result.has_value()) {
+                ADD_FAILURE() << "accepted, status " << status << " expected";
+                return;
+            }
             EXPECT_EQ(result.error().httpStatus, status) << result.error().message.c_str();
             EXPECT_FALSE(result.error().message.empty());
         }
@@ -105,8 +109,7 @@ namespace BECore::Tests {
 
         String Forwarded(const Request& request, size_t hops) {
             const String text = request.Text();
-            const String address = ParseForwardedClientAddress(View(text), hops);
-            return String(address.data(), address.size());
+            return ParseForwardedClientAddress(View(text), hops);
         }
 
     }  // namespace
@@ -460,7 +463,7 @@ namespace BECore::Tests {
     }
 
     TEST(WebSocketHandshakeTest, AcceptResponseCompletesTheHandshake) {
-        const String response = BuildAcceptResponse(kRfcKey).c_str();
+        const String response = BuildAcceptResponse(kRfcKey);
         EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 101 Switching Protocols\r\n"));
         EXPECT_NE(response.find("Upgrade: websocket\r\n"), String::npos);
         EXPECT_NE(response.find("Connection: Upgrade\r\n"), String::npos);
@@ -469,7 +472,7 @@ namespace BECore::Tests {
     }
 
     TEST(WebSocketHandshakeTest, RejectResponseCarriesTheStatusAndTheMessage) {
-        const String response = BuildRejectResponse(HandshakeError{403, "no way"}).c_str();
+        const String response = BuildRejectResponse(HandshakeError{403, "no way"});
         EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 403 Forbidden\r\n"));
         EXPECT_NE(response.find("Connection: close\r\n"), String::npos);
         EXPECT_NE(response.find("Content-Length: 6\r\n"), String::npos);
@@ -478,7 +481,7 @@ namespace BECore::Tests {
     }
 
     TEST(WebSocketHandshakeTest, UpgradeRequiredNamesTheVersion) {
-        const String response = BuildRejectResponse(HandshakeError{426, "use 13"}).c_str();
+        const String response = BuildRejectResponse(HandshakeError{426, "use 13"});
         EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 426 Upgrade Required\r\n"));
         EXPECT_NE(response.find("Sec-WebSocket-Version: 13\r\n"), String::npos);
     }
@@ -540,7 +543,7 @@ namespace BECore::Tests {
     }
 
     TEST(WebSocketHandshakeTest, HealthResponseIsAnOkThatClosesTheConnection) {
-        const String response = BuildHealthResponse().c_str();
+        const String response = BuildHealthResponse();
         EXPECT_TRUE(StringView(response).starts_with("HTTP/1.1 200 OK\r\n"));
         EXPECT_NE(response.find("Content-Type: text/plain\r\n"), String::npos);
         EXPECT_NE(response.find("Cache-Control: no-store\r\n"), String::npos);
@@ -596,8 +599,16 @@ namespace BECore::Tests {
 
     TEST(WebSocketHandshakeTest, TokenSearchDoesNotAllocatePerToken) {
         const String commas(kMaxHandshakeBytes, ',');
-        EXPECT_FALSE(HeaderHasToken(View(commas), "upgrade"));
-        EXPECT_TRUE(HeaderHasToken(View(commas + " Upgrade"), "upgrade"));
+        const String commasAndToken = Format("{} Upgrade", commas);
+        const AllocTracker::ThreadCounters before = AllocTracker::GetThreadCounters();
+        const bool inCommas = HeaderHasToken(View(commas), "upgrade");
+        const bool inCommasAndToken = HeaderHasToken(View(commasAndToken), "upgrade");
+        const AllocTracker::ThreadCounters after = AllocTracker::GetThreadCounters();
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_EQ(after.count, before.count);
+        }
+        EXPECT_FALSE(inCommas);
+        EXPECT_TRUE(inCommasAndToken);
         EXPECT_TRUE(EqualsIgnoreCase("WebSocket", "websocket"));
         EXPECT_FALSE(EqualsIgnoreCase("websockets", "websocket"));
         EXPECT_FALSE(EqualsIgnoreCase("websocke!", "websocket"));

@@ -17,9 +17,12 @@
 #include <RmlUi/Core.h>
 #include <RmlUiHost/RmlUiDocumentComponent.h>
 #include <RmlUiHost/RmlUiRuntime.h>
+#include <RmlUiHost/RmlUiScreens.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
+
+    using RmlUiScreens::BoxOf;
 
     namespace {
 
@@ -191,18 +194,6 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
             _manager->SetActiveScene(PoolString::Intern(sceneName));
             _renderer->ClearCalls();
             _manager->DrawAll();
-        }
-
-        /// The border box of an element, in output pixels
-        static Rect BoxOf(const RmlUiDocumentComponent& doc, const char* id) {
-            Rml::Element* element = doc.GetDocument() ? doc.GetDocument()->GetElementById(id) : nullptr;
-            if (!element) {
-                ADD_FAILURE() << "no element '" << id << "'";
-                return {};
-            }
-            const Rml::Vector2f offset = element->GetAbsoluteOffset(Rml::BoxArea::Border);
-            const Rml::Vector2f size = element->GetBox().GetSize(Rml::BoxArea::Border);
-            return {doc.GetOriginX() + offset.x, doc.GetOriginY() + offset.y, size.x, size.y};
         }
 
         static size_t CountGeometry(const RecordingRenderer& renderer) {
@@ -816,7 +807,8 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         DrawFile();
         Rml::ElementDocument* before = doc->GetDocument();
 
-        std::filesystem::remove(directory / "menu.rml");
+        std::error_code error;
+        ASSERT_TRUE(std::filesystem::remove(directory / "menu.rml", error)) << error.message();
         EXPECT_FALSE(doc->ReloadIfChanged()) << "a file that is gone (an editor saves by deleting and renaming) is not a change yet";
         EXPECT_FALSE(doc->Reload());
 

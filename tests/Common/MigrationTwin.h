@@ -68,15 +68,18 @@ namespace BECore::Tests::MigrationTwin {
         Vector<String> names;
         const String suffix = ".before.xml";
         std::error_code error;
-        for (const auto& entry : std::filesystem::directory_iterator(folder, error)) {
-            const String file = FromStdString(entry.path().filename().string());
+        // increment(error), not a range-for: the throwing increment would abort the process, exceptions being off
+        for (std::filesystem::directory_iterator it(folder, error), end; !error && it != end; it.increment(error)) {
+            const String file = FromStdString(it->path().filename().string());
             if (file.size() > suffix.size() && file.compare(file.size() - suffix.size(), suffix.size(), suffix) == 0) {
                 const String name = file.substr(0, file.size() - suffix.size());
-                if (std::filesystem::exists(folder / ToStd(name + ".after.xml"))) {
+                std::error_code missing;
+                if (std::filesystem::exists(folder / ToStd(Format("{}.after.xml", name)), missing)) {
                     names.push_back(name);
                 }
             }
         }
+        EXPECT_FALSE(error) << folder.generic_string() << ": " << error.message();
         std::sort(names.begin(), names.end());
         return names;
     }
@@ -88,19 +91,33 @@ namespace BECore::Tests::MigrationTwin {
         return FromStdString(text.str());
     }
 
-    /// A content file as a scene manager the loader reads: a `SceneManager` is itself, a `node` goes into a scene of its own
+    /// A content file as a scene manager the loader reads: a `SceneManager` is itself, a `node` goes into a scene of its own.
+    /// A malformed file (an unclosed declaration or comment) fails the case and is handed back as it is
     inline String SceneManagerXml(String text) {
         const size_t declaration = text.find("<?xml");
         if (declaration != String::npos) {
-            text.erase(declaration, text.find("?>", declaration) + 2 - declaration);
+            const size_t declarationEnd = text.find("?>", declaration);
+            if (declarationEnd == String::npos) {
+                ADD_FAILURE() << "an XML declaration with no ?>";
+                return text;
+            }
+            text.erase(declaration, declarationEnd + 2 - declaration);
         }
         static const std::regex root(R"(<([A-Za-z][A-Za-z0-9_]*))");
         String stripped;
         for (size_t at = 0; at < text.size();) {  // the first element that is not a comment: skip the comments, which may mention tags
             const size_t comment = text.find("<!--", at);
             const size_t tag = text.find('<', at);
+            if (tag == String::npos) {
+                break;
+            }
             if (comment != String::npos && comment == tag) {
-                at = text.find("-->", comment) + 3;
+                const size_t commentEnd = text.find("-->", comment);
+                if (commentEnd == String::npos) {
+                    ADD_FAILURE() << "a comment with no -->";
+                    return text;
+                }
+                at = commentEnd + 3;
                 continue;
             }
             stripped = text.substr(tag);

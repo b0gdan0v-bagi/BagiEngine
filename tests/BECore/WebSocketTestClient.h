@@ -61,7 +61,12 @@ namespace BECore::Tests {
         WebSocketMask key{};
     };
 
+    /// The code of a close frame; a payload too short to hold one fails the case and is 0, which no close code is
     inline uint16_t CloseCodeOf(const RawFrame& frame) {
+        if (frame.payload.size() < 2) {
+            ADD_FAILURE() << "a close frame of " << frame.payload.size() << " bytes has no code";
+            return 0;
+        }
         return static_cast<uint16_t>((static_cast<uint8_t>(frame.payload[0]) << 8) | static_cast<uint8_t>(frame.payload[1]));
     }
 

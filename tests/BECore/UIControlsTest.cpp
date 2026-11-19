@@ -24,6 +24,7 @@
 #include <BECore/UI/UIVars.h>
 #include <BECore/UIComponentTest.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/LogRecorder.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
@@ -717,12 +718,13 @@ namespace BECore::Tests {
         text.font = PoolString::Intern(kTestRegularPath);
         text.fontFamily = "Test"_intern;
         text.fontWeight = 700;
-        const WarningCounter warnings("font family");
+        const LogRecorder warnings;
 
         EXPECT_EQ(text.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
         text.fontFamily = "Nope"_intern;  // not looked at either: no warning
         EXPECT_EQ(text.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
-        EXPECT_EQ(warnings.Count(), 0u);
+        LogEvent::Flush();
+        EXPECT_EQ(warnings.Count(LogLevel::Warning, {"font family"}), 0u);
     }
 
     TEST_F(UIControlsTest, TheValidatorMeasuresWithTheFaceOfTheFamilyAndTheWeight) {

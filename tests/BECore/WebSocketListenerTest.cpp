@@ -3,7 +3,6 @@
 #include <RemoteControl/WebSocketFrame.h>
 #include <RemoteControl/WebSocketListener.h>
 #include <gtest/gtest.h>
-#include <map>
 #include <thread>
 
 namespace BECore::Tests {

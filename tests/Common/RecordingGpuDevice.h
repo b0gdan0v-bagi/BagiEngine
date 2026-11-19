@@ -106,7 +106,9 @@ namespace BECore::Tests {
         [[nodiscard]] T ConstantsAs(ConstantsSlot slot) const {
             T value{};
             const Vector<std::byte>& bytes = constants[static_cast<size_t>(slot)];
-            std::memcpy(&value, bytes.data(), std::min(bytes.size(), sizeof(T)));
+            if (!bytes.empty()) {  // an unset slot has no data pointer, and memcpy from null is undefined even for no bytes
+                std::memcpy(&value, bytes.data(), std::min(bytes.size(), sizeof(T)));
+            }
             return value;
         }
     };

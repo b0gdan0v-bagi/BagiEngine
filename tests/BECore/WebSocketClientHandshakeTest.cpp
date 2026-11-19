@@ -42,7 +42,10 @@ namespace BECore::Tests {
 
         void ExpectRefused(const Response& response, StringView messagePart) {
             const auto result = response.Check();
-            ASSERT_FALSE(result.has_value()) << response.Text();
+            if (result.has_value()) {
+                ADD_FAILURE() << "accepted: " << response.Text();
+                return;
+            }
             EXPECT_NE(StringView(result.error().c_str()).find(messagePart), StringView::npos) << result.error().c_str();
         }
 

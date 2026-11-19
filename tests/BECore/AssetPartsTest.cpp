@@ -51,8 +51,10 @@ namespace BECore::Tests {
         void SetUp() override {
             // One directory per test: ctest runs every test in its own process
             _dir = TestTempDirectory("BagiAssetPartsTest");
-            std::filesystem::remove_all(_dir);
-            std::filesystem::create_directories(_dir);
+            std::error_code error;
+            std::filesystem::remove_all(_dir, error);
+            std::filesystem::create_directories(_dir, error);
+            ASSERT_FALSE(error) << _dir.generic_string() << ": " << error.message();
             ASSERT_TRUE(CoreManager::GetFileSystem().Mount(PoolString::Intern(kMountPoint), _dir));
             PartVisualDerived::constructed = 0;
         }
@@ -68,7 +70,9 @@ namespace BECore::Tests {
         }
 
         void Age(const char* fileName, std::chrono::hours age) const {
-            std::filesystem::last_write_time(_dir / fileName, std::filesystem::file_time_type::clock::now() - age);
+            std::error_code error;
+            std::filesystem::last_write_time(_dir / fileName, std::filesystem::file_time_type::clock::now() - age, error);
+            EXPECT_FALSE(error) << fileName << ": " << error.message();
         }
 
         static String VirtualPath(const char* fileName) {
@@ -76,7 +80,8 @@ namespace BECore::Tests {
         }
 
         bool FileExists(const char* fileName) const {
-            return std::filesystem::exists(_dir / fileName);
+            std::error_code error;
+            return std::filesystem::exists(_dir / fileName, error);
         }
 
         /// The serialized form of an object, to compare what two loads produced
@@ -310,7 +315,8 @@ namespace BECore::Tests {
         EXPECT_TRUE(FileExists("gem.sim.xml"));
         EXPECT_TRUE(FileExists("gem.visual.xml"));
         EXPECT_TRUE(FileExists("gem.editor.xml"));
-        std::filesystem::remove(_dir / "gem.asset.xml");
+        std::error_code error;
+        ASSERT_TRUE(std::filesystem::remove(_dir / "gem.asset.xml", error)) << error.message();
 
         EXPECT_EQ(Serialized(Load<PartSimProbe>("gem.asset.xml", AssetPurpose::Sim)), simWhole);
         EXPECT_EQ(Serialized(Load<PartVisualProbe>("gem.asset.xml", AssetPurpose::Visual)), visualWhole);
@@ -347,7 +353,8 @@ namespace BECore::Tests {
 
     TEST_F(AssetPartsTest, TheOutputFolderTakesTheFilesAndTheSourceFolderNone) {
         WriteFile("gem.asset.xml", kWholeXml);
-        std::filesystem::create_directories(_dir / "packed");
+        std::error_code error;
+        ASSERT_TRUE(std::filesystem::create_directories(_dir / "packed", error)) << error.message();
 
         ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml"), VirtualPath("packed")));
         ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml"), VirtualPath("made/deep")));

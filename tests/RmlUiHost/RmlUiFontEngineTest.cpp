@@ -138,7 +138,7 @@ namespace BECore::Tests {
         EXPECT_EQ(_engine.GetFaceCount(), 1u);
     }
 
-    TEST_F(RmlUiFontEngineTest, ReleasingTheResourcesKeepsTheFacesAndInvalidatesTheHandles) {
+    TEST_F(RmlUiFontEngineTest, ReleasingTheResourcesKeepsTheFacesDropsThePagesAndHandsOutAHandleAgain) {
         ASSERT_NE(Handle(kSmall), 0u);
 
         _engine.ReleaseFontResources();
