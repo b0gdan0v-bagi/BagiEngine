@@ -26,6 +26,9 @@ namespace BECore {
     /// The ImGui payload type of a dragged variant (`ImGui::SetDragDropPayload`, at most 32 characters)
     inline constexpr const char* kArtGenVariantPayload = "ARTGEN_VARIANT";
 
+    /// Why an audio variant is taken by no sprite target; the one text of every refusal
+    inline constexpr const char* kArtGenSoundIsNotASprite = "a sound is not a sprite";
+
     CORE_ENUM(ArtGenDragKind, uint8_t, Image, Audio)
 
     /// Which variant is dragged. Trivially copyable, because ImGui copies the bytes; the names are fixed buffers cut to fit
@@ -65,7 +68,8 @@ namespace BECore {
 
     /**
      * @brief The decision of a drop of @p payload. A non-empty @p targetSprite is a drop onto that sprite (Replace); an empty one is a drop
-     * for a new sprite, named by `payload.suggestedName` and made free in @p library (`name_2`, ... kept within a valid name's length).
+     * for a new sprite, named by `payload.suggestedName` and made free in @p library (`name_2`, ...). A name too long to take a suffix is
+     * cut first, so for a taken name of the longest length the result is its free prefix.
      *
      * Refused, with the reason: an audio variant (a sound is not a sprite), and a name that is not `IsValidSpriteName`, because Accept
      * writes `assets/artgen/<name>.png`.

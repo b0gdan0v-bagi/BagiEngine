@@ -10,7 +10,6 @@ namespace BECore {
     namespace {
 
         constexpr StringView kFallbackName = "sprite";
-        constexpr StringView kSoundIsNotASprite = "a sound is not a sprite";
         // "_" and the digits of a suffix: a name cut to kMaxSpriteNameLength - kSuffixRoom still has `_<n>` to spare
         constexpr size_t kSuffixRoom = 6;
         constexpr float kDragPreviewSize = 64.0f;
@@ -33,7 +32,8 @@ namespace BECore {
         }
 
         /// @p base when the library has no sprite of that name, else `base_2`, `base_3`, ... through `MakeUniqueName`, with the base cut first
-        /// so the suffix does not make a valid name too long
+        /// so the suffix does not make a valid name too long (the cut may itself be free: then it is the result). Only a taken name reaches
+        /// `MakeUniqueName`, which interns its candidates
         String FreeNameIn(const TextureLibrary& library, StringView base) {
             // Find, not Intern: a name typed live in a popup must not fill the pool with every half-typed text
             const Optional<PoolString> taken = PoolString::Find(base);
@@ -86,7 +86,7 @@ namespace BECore {
 
     ArtGenDropPlan PlanArtGenDrop(const ArtGenDragPayload& payload, StringView targetSprite, const TextureLibrary& library) {
         if (payload.kind == ArtGenDragKind::Audio) {
-            return Refuse(String(kSoundIsNotASprite));
+            return Refuse(String(kArtGenSoundIsNotASprite));
         }
         ArtGenDropPlan plan;
         if (!targetSprite.empty()) {

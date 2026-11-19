@@ -3392,6 +3392,33 @@ namespace BECore::Tests {
         EXPECT_FALSE(session.FindSet("fresh")->jobs[0].pick.has_value());
     }
 
+    TEST_F(ArtGenSetSessionTest, ADroppedVariantOfALegacySetKeepsTheIdentityPlanEvenWhenThePresetTrims) {
+        ArtGenSetRequest request;
+        request.preset = "form";
+        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","accept":{"trim":true,"padding":7,"maxSize":128}})").value();
+        request.subjects = ParseArtGenSubjects("a\nb").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "old";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        RunAndPickAll("old");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("old"));
+        ArtGenSet disk = OnDisk("old");
+        disk.jobs[0].accepted = ArtGenSetAccepted{"a", "2026-11-17T00:00:00Z", false};
+        ASSERT_TRUE(WriteManifest(_root, disk).has_value());
+        ReloadFromDisk();
+        ASSERT_TRUE(IsLegacyAccepted(*session.FindSet("old")));
+        gPlans.clear();
+
+        const auto answer = session.AcceptSetVariant("old", "b", kSetSeed + 1, "rook");
+
+        ASSERT_TRUE(answer.has_value()) << answer.error().message.c_str();
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_TRUE(gPlans[0].settings.IsIdentity()) << "the rows of a legacy set are full frames: a trimmed one would differ in scale";
+        EXPECT_FALSE(gPlans[0].frame.has_value());
+        EXPECT_TRUE(gMeasures.empty());
+    }
+
     TEST_F(ArtGenSetSessionTest, ADroppedVariantNamesWhatIsWrongAndWritesNothing) {
         ASSERT_TRUE(Enqueue("bad", "a").has_value());
         ASSERT_NO_FATAL_FAILURE(RunAll());

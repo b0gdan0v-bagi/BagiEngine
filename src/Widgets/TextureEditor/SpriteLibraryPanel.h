@@ -28,7 +28,8 @@ namespace BECore {
      * a selected sprite the filter hides is still the selected one.
      *
      * It is also the drop target of a dragged variant (`ArtGenDrag.h`): it only reports where the payload was released (`TakeDrop`) and
-     * makes no accept. The free area is submitted before the rows, because the last target under the pointer wins and a row must beat it.
+     * makes no accept. The free area covers the whole list and ImGui accepts the smallest target under the pointer,
+     * so a row beats it wherever they overlap.
      */
     class SpriteLibraryPanel {
     public:

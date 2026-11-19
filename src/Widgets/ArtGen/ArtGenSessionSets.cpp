@@ -736,8 +736,8 @@ namespace BECore {
             return std::unexpected(MakeError(kAcceptFailedCode, Format("the job '{}': {}", jobName, variant.error())));
         }
         ArtGenImagePlan plan = PlanOf(set->processing, set->atlas, false);
-        if (!set->processing) {
-            // Not accepted as a whole yet (or a legacy set): the preset's settings, a frame of this image's own
+        if (!set->processing && !IsLegacyAccepted(*set)) {
+            // Not accepted as a whole yet: the preset's settings, a frame of this image's own. A legacy set keeps the identity plan
             plan.settings = ImageSettingsOf(set->presetData, StringView(set->preset));
         }
         return _acceptor(*variant, sprite, plan, nullptr);

@@ -21,7 +21,6 @@ namespace BECore {
         constexpr float kDropTintAlpha = 0.18f;
 
         const char* const kNewSpriteHint = "Drop for a new sprite";
-        const char* const kSoundNotSpriteHint = "A sound is not a sprite";
 
         const char* const kAllLabel = ICON_LC_LIBRARY " All sprites";
         const char* const kNoAtlasLabel = ICON_LC_IMAGE " No atlas";
@@ -110,7 +109,7 @@ namespace BECore {
                 return false;
             }
             if (dragged->kind == ArtGenDragKind::Audio) {
-                ImGui::SetTooltip("%s", kSoundNotSpriteHint);
+                ImGui::SetTooltip("%s", kArtGenSoundIsNotASprite);
                 return false;
             }
             hot = true;

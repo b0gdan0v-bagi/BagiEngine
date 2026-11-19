@@ -168,7 +168,7 @@ namespace BECore {
         auto& session = ArtGenSession::GetInstance();
         const ArtGenDragPayload& payload = event.payload;
         if (payload.kind == ArtGenDragKind::Audio) {
-            *event.result = ArtGenDropResult{false, String("a sound is not a sprite")};
+            *event.result = ArtGenDropResult{false, String(kArtGenSoundIsNotASprite)};
             return;
         }
         std::expected<Json, ControlError> result;
