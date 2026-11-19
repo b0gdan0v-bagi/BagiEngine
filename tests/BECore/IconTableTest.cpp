@@ -90,8 +90,8 @@ namespace BECore::Tests {
                 return false;
             }
             std::error_code error;
-            const std::filesystem::recursive_directory_iterator finished;
-            for (std::filesystem::recursive_directory_iterator it(root, error); !error && it != finished; it.increment(error)) {
+            const std::filesystem::recursive_directory_iterator finished;                                                         //-NoStd: a test walks the widget sources once, outside the file layer
+            for (std::filesystem::recursive_directory_iterator it(root, error); !error && it != finished; it.increment(error)) {  //-NoStd: see above
                 const std::filesystem::directory_entry& entry = *it;
                 if (!entry.is_regular_file() || (entry.path().extension() != ".cpp" && entry.path().extension() != ".h")) {
                     continue;
