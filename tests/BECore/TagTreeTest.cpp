@@ -20,6 +20,21 @@ namespace BECore::Tests {
             return result.has_value() ? String{} : result.error();
         }
 
+        /// A tag of @p depth one-letter segments: "a.b.c" for 3
+        String TagOfDepth(size_t depth) {
+            String tag;
+            for (size_t i = 0; i < depth; ++i) {
+                tag.append(i == 0 ? "" : ".");
+                tag.push_back(static_cast<char>('a' + i));
+            }
+            return tag;
+        }
+
+        /// The name of tag @p index padded to kMaxTagNameLength characters: "t000...0<index>"
+        String LongestName(size_t index) {
+            return Format("t{:0{}}", index, kMaxTagNameLength - 1);
+        }
+
         bool Mentions(const String& text, StringView part) {
             return text.find(String(part)) != String::npos;
         }
@@ -260,16 +275,16 @@ namespace BECore::Tests {
 
     TEST(TagTreeTest, TheLimitsAreInclusive) {
         TagTree tree;
-        EXPECT_TRUE(tree.Add("a.b.c.d.e.f.g.h").has_value());  // kMaxTagDepth segments
+        EXPECT_TRUE(tree.Add(TagOfDepth(kMaxTagDepth)).has_value());
         EXPECT_TRUE(tree.Add(String(kMaxTagNameLength, 'n')).has_value());
         tree.Bake();
-        EXPECT_EQ(tree.Depth(*tree.Find("a.b.c.d.e.f.g.h")), kMaxTagDepth);
+        EXPECT_EQ(tree.Depth(*tree.Find(TagOfDepth(kMaxTagDepth))), kMaxTagDepth);
         EXPECT_TRUE(tree.Find(String(kMaxTagNameLength, 'n')).has_value());
     }
 
     TEST(TagTreeTest, TooDeepAndTooLongNamesAreErrorsThatNameTheTag) {
         TagTree tree;
-        const String tooDeep = "a.b.c.d.e.f.g.h.i";
+        const String tooDeep = TagOfDepth(kMaxTagDepth + 1);
         const auto deep = tree.Add(tooDeep);
         ASSERT_FALSE(deep.has_value());
         EXPECT_TRUE(Mentions(deep.error(), tooDeep));
@@ -321,11 +336,11 @@ namespace BECore::Tests {
         constexpr size_t kFit = kMaxTagNameBlob / (kMaxTagNameLength + 1);
         TagTree tree;
         for (size_t i = 0; i < kFit; ++i) {
-            ASSERT_TRUE(tree.Add(Format("t{:063}", i)).has_value()) << i;
+            ASSERT_TRUE(tree.Add(LongestName(i)).has_value()) << i;
         }
         ASSERT_EQ(tree.Count(), kFit);
 
-        const String doesNotFit = Format("t{:063}", kFit);
+        const String doesNotFit = LongestName(kFit);
         const auto overflow = tree.Add(doesNotFit);
         ASSERT_FALSE(overflow.has_value());
         EXPECT_TRUE(Mentions(overflow.error(), doesNotFit));
@@ -345,7 +360,7 @@ namespace BECore::Tests {
         constexpr size_t kFit = kMaxTagNameBlob / (kMaxTagNameLength + 1);
         TagTree tree;
         for (size_t i = 0; i + 1 < kFit; ++i) {
-            ASSERT_TRUE(tree.Add(Format("t{:063}", i)).has_value()) << i;
+            ASSERT_TRUE(tree.Add(LongestName(i)).has_value()) << i;
         }
         // A name of the longest length still fits the rest of the blob; with its parent `pp` it does not.
         EXPECT_FALSE(tree.Add(Format("pp.{}", String(kMaxTagNameLength - 3, 'a'))).has_value());

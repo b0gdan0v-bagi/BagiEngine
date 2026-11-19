@@ -170,6 +170,7 @@ namespace BECore::Tests {
     }
 
     TEST(SocketTest, ConnectToAClosedPortNamesHostAndPort) {
+        // A port that was in use a moment ago: another test that binds the freed port before the connect would make this pass for the wrong reason; that clash is rare enough to accept
         uint16_t closedPort = 0;
         {
             auto listener = Socket::Listen(0);
@@ -182,6 +183,7 @@ namespace BECore::Tests {
     }
 
     TEST(SocketTest, ConnectToAnUnresolvableNameIsAnErrorThatNamesTheHost) {
+        // `.invalid` never resolves, and without a resolver the lookup fails all the same: either way the error names the host
         const auto client = Socket::Connect("nonexistent.invalid", 80, kWaitLimit);
         ASSERT_FALSE(client.has_value());
         EXPECT_NE(client.error().find("nonexistent.invalid"), String::npos) << client.error().c_str();

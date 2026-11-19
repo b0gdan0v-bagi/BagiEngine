@@ -74,8 +74,8 @@ namespace BECore::Tests {
 
         void SetUp() override {
             _renderer = New<RecordingRenderer>();
-            _renderer->width = 1280.0f;
-            _renderer->height = 720.0f;
+            _renderer->width = kViewWidth;
+            _renderer->height = kViewHeight;
             CoreManager::GetRendererManager().SetRenderer(_renderer);
 
             XmlDeserializer deserializer;

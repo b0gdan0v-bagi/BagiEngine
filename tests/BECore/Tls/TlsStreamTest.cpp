@@ -29,15 +29,14 @@ namespace BECore::Tests {
                 return _listener.GetLocalPort();
             }
 
-            /// Accepts the client and answers its hello (@p rejectReason empty: accepts it); @p stall keeps the answer back
-            void StartHandshake(String rejectReason = {}, std::chrono::milliseconds stall = 0ms) {
-                _thread = std::thread([this, rejectReason = std::move(rejectReason), stall] {
+            /// Accepts the client and answers its hello (@p rejectReason empty: accepts it)
+            void StartHandshake(String rejectReason = {}) {
+                _thread = std::thread([this, rejectReason = std::move(rejectReason)] {
                     auto accepted = _listener.Accept(kWaitLimit);
                     if (!accepted) {
                         return;
                     }
                     _peer = std::move(*accepted);
-                    std::this_thread::sleep_for(stall);
                     _done = _side.Handshake(_peer, rejectReason);
                 });
             }
@@ -187,7 +186,8 @@ namespace BECore::Tests {
     TEST(TlsStreamTest, AConnectionRefusedNamesTheAddress) {
         uint16_t closedPort = 0;
         {
-            FakeServer server;  // its port is free again when it is gone
+            // Its port is free again when it is gone: another test that binds the freed port before the connect would make this pass for the wrong reason; that clash is rare enough to accept
+            FakeServer server;
             closedPort = server.GetPort();
         }
         FakeTlsStream stream;

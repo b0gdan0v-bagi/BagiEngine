@@ -174,8 +174,15 @@ namespace BECore::Tests {
         EXPECT_FALSE(known);
     }
 
-    TEST(TextSettingsTest, TheShippedConfigMatchesTheDefaults) {
-        EngineEnvironment::EnsureCoreServices();
+    /// The engine's own config/TextConfig.xml, read through the core services
+    class TextSettingsShippedTest : public ::testing::Test {
+    protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
+    };
+
+    TEST_F(TextSettingsShippedTest, TheShippedConfigMatchesTheDefaults) {
         const XmlNode node = CoreManager::GetConfigManager().GetConfig("TextConfig"_intern);
         ASSERT_TRUE(node);
 

@@ -59,6 +59,9 @@ namespace BECore::Tests {
     }
 
     TEST(ScopeGuardTest, ItAllocatesNothing) {
+        if (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << "the allocation counters are on only in a build with ENGINE_PROFILER_ALLOC";
+        }
         int runs = 0;
         const AllocTracker::ThreadCounters before = AllocTracker::GetThreadCounters();
         {

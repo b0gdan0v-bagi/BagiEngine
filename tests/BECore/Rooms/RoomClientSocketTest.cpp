@@ -419,7 +419,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientSocketTest, AWrongPortGivesAClosedEventAndNoHang) {
-        // A port that was in use a moment ago and now has nobody on it
+        // A port that was in use a moment ago and now has nobody on it: another test that binds the freed port before the connect would make this pass for the wrong reason; that clash is rare enough
+        // to accept
         ASSERT_NO_FATAL_FAILURE(StartServer());
         const String deadUrl = url;
         server->Stop();

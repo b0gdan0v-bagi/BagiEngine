@@ -566,7 +566,7 @@ namespace BECore::Tests {
         auto node = AddQuad(*_scene, nullptr, "A", 1.0f);
         node->SetEditorFlags(EditorFlags::Hidden);
 
-        // The mirror of a hidden node is synced as before, so showing it again needs no extra frame
+        // The mirror of a hidden node is still synced, so showing it again needs no extra frame
         Require(node->GetComponent<TransformComponent>())._x = 7.0f;
         Draw();
         EXPECT_EQ(_scene->GetRegistry().get<TransformData>(node->GetEntity()).x, 7.0f);

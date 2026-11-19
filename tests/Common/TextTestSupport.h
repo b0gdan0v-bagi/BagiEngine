@@ -11,6 +11,9 @@ namespace BECore::Tests {
     inline constexpr const char* kTestRegularPath = "assets/fonts/PT_Sans-Web-Regular.ttf";
     inline constexpr const char* kTestBoldPath = "assets/fonts/./PT_Sans-Web-Regular.ttf";
 
+    /// The character a layout puts at the end of a line it cut
+    inline constexpr char32_t kEllipsis = U'\u2026';
+
     inline TextSettings MakeTestFamilySettings() {
         TextSettings settings = TextSettings::Default();
         FontFamily family;

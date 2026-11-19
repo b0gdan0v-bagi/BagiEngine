@@ -91,7 +91,7 @@ namespace BECore::Tests {
                         }
                         {
                             const std::shared_lock<SharedMutex> reader(shared);
-                            static_cast<void>(sharedCounter);
+                            EXPECT_LE(sharedCounter, kThreads * kRounds);
                         }
                         if (std::unique_lock<Mutex> attempt(mutex, std::try_to_lock); attempt.owns_lock()) {
                             ++counter;
@@ -143,13 +143,13 @@ namespace BECore::Tests {
     TEST(TracyBackendTest, ALockEndedAfterTheShutdownIsSafe) {
         TracyProfilerBackend& tracy = GetTracyBackend();
         ASSERT_TRUE(Profiler::SetBackend(&tracy));
-        auto* mutex = new Mutex(BE_LOCK_SITE("Tracy test late end"));
-        auto* shared = new SharedMutex(BE_LOCK_SITE("Tracy test shared late end"));
+        auto mutex = MakeUnique<Mutex>(BE_LOCK_SITE("Tracy test late end"));
+        auto shared = MakeUnique<SharedMutex>(BE_LOCK_SITE("Tracy test shared late end"));
         UseBothLocks(*mutex, *shared);
         Profiler::SetBackend(nullptr);
         TracyProfilerBackend::Shutdown();
-        delete mutex;  // its context cannot be ended any more; nothing is called into the stopped client
-        delete shared;
+        mutex.reset();  // its context cannot be ended any more; nothing is called into the stopped client
+        shared.reset();
     }
 
     TEST(TracyBackendTest, TheTracyBackendAsksForLockEventsAndTheFanOutPassesThemOn) {

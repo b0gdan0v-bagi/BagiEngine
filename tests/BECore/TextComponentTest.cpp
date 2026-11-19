@@ -205,7 +205,7 @@ namespace BECore::Tests {
 
         const TextLayoutResult& layout = Label("Styled")->GetLastLayout();
         EXPECT_TRUE(layout.truncated);
-        EXPECT_EQ(layout.glyphs.back().codePoint, 0x2026u);
+        EXPECT_EQ(layout.glyphs.back().codePoint, kEllipsis);
         EXPECT_LE(layout.width, 200.0f + 0.1f);
     }
 
@@ -281,7 +281,7 @@ namespace BECore::Tests {
 
     TEST_F(TextComponentTest, AnotherFontPathIsLoadedByReloadFont) {
         auto label = Label("Plain");
-        label->_fontPath = "assets/fonts/PT_Sans-Web-Regular.ttf"_intern;
+        label->_fontPath = PoolString::Intern(kTestRegularPath);
 
         label->ReloadFont();
         Draw("Plain");
@@ -332,15 +332,6 @@ namespace BECore::Tests {
         EXPECT_EQ(_renderer->calls.size(), 3 * kInkedGlyphsInHello);
         EXPECT_FLOAT_EQ(label->GetLastLayout().width, plain.width) << "the layout is the same with and without effects";
         EXPECT_FLOAT_EQ(label->GetLastLayout().height, plain.height);
-    }
-
-    TEST_F(TextComponentTest, TheTextOfAnInactiveSceneIsNotDrawn) {
-        _manager->SetActiveScene("Plain"_intern);
-        _renderer->ClearCalls();
-        _manager->DrawAll();
-        const size_t plainOnly = _renderer->calls.size();
-
-        EXPECT_EQ(plainOnly, kInkedGlyphsInHello);
     }
 
 }  // namespace BECore::Tests

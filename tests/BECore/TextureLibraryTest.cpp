@@ -10,20 +10,20 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// The shape of the Chess game's config/TextureLibrary.xml: a header comment, two rows of the atlas
-        constexpr StringView kChessShaped = R"(<?xml version="1.0"?>
+        /// A texture library file as a game writes it: a header comment, then sprites from two rows of an atlas
+        constexpr StringView kAtlasFile = R"(<?xml version="1.0"?>
 <!--
   Sprite atlas, a 3x2 grid. Cell width 116.67, cell height 190.5.
 -->
 <root>
   <sprites>
-    <sprite name="WhiteKing" texturePath="assets/chess_test.png">
+    <sprite name="RowOneFirst" texturePath="assets/sheet_test.png">
       <srcRect x="0" y="0" w="116.67" h="190.5" />
     </sprite>
-    <sprite name="WhiteQueen" texturePath="assets/chess_test.png">
+    <sprite name="RowOneSecond" texturePath="assets/sheet_test.png">
       <srcRect x="116.67" y="0" w="116.67" h="190.5" />
     </sprite>
-    <sprite name="BlackKing" texturePath="assets/chess_test.png">
+    <sprite name="RowTwoFirst" texturePath="assets/sheet_test.png">
       <srcRect x="0" y="190.5" w="116.67" h="190.5" />
     </sprite>
   </sprites>
@@ -49,28 +49,28 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(TextureLibraryTest, LoadsTheChessShapedFileInOrder) {
+    TEST(TextureLibraryTest, LoadsAnAtlasFileInOrder) {
         TextureLibrary library;
         Vector<DeserializeError> errors;
-        ASSERT_NO_FATAL_FAILURE(LoadInto(library, kChessShaped, &errors));
+        ASSERT_NO_FATAL_FAILURE(LoadInto(library, kAtlasFile, &errors));
         EXPECT_TRUE(errors.empty());
 
         ASSERT_EQ(library.GetAll().size(), 3u);
-        EXPECT_EQ(library.GetAll()[0].name.ToStringView(), "WhiteKing");
-        EXPECT_EQ(library.GetAll()[1].name.ToStringView(), "WhiteQueen");
-        EXPECT_EQ(library.GetAll()[2].name.ToStringView(), "BlackKing");
+        EXPECT_EQ(library.GetAll()[0].name.ToStringView(), "RowOneFirst");
+        EXPECT_EQ(library.GetAll()[1].name.ToStringView(), "RowOneSecond");
+        EXPECT_EQ(library.GetAll()[2].name.ToStringView(), "RowTwoFirst");
 
-        const SpriteEntry* king = library.GetSprite("WhiteKing"_intern);
-        ASSERT_NE(king, nullptr);
-        EXPECT_EQ(king->texturePath.ToStringView(), "assets/chess_test.png");
-        EXPECT_FLOAT_EQ(king->srcRect.x, 0.0f);
-        EXPECT_FLOAT_EQ(king->srcRect.y, 0.0f);
-        EXPECT_FLOAT_EQ(king->srcRect.w, 116.67f);
-        EXPECT_FLOAT_EQ(king->srcRect.h, 190.5f);
+        const SpriteEntry* first = library.GetSprite("RowOneFirst"_intern);
+        ASSERT_NE(first, nullptr);
+        EXPECT_EQ(first->texturePath.ToStringView(), "assets/sheet_test.png");
+        EXPECT_FLOAT_EQ(first->srcRect.x, 0.0f);
+        EXPECT_FLOAT_EQ(first->srcRect.y, 0.0f);
+        EXPECT_FLOAT_EQ(first->srcRect.w, 116.67f);
+        EXPECT_FLOAT_EQ(first->srcRect.h, 190.5f);
 
-        const SpriteEntry* second = library.GetSprite("BlackKing"_intern);
-        ASSERT_NE(second, nullptr);
-        EXPECT_FLOAT_EQ(second->srcRect.y, 190.5f);
+        const SpriteEntry* secondRow = library.GetSprite("RowTwoFirst"_intern);
+        ASSERT_NE(secondRow, nullptr);
+        EXPECT_FLOAT_EQ(secondRow->srcRect.y, 190.5f);
         EXPECT_EQ(library.GetSprite("Nothing"_intern), nullptr);
     }
 
@@ -137,7 +137,7 @@ namespace BECore::Tests {
     TEST(TextureLibraryTest, LoadReplacesWhatWasThere) {
         TextureLibrary library;
         library.AddOrUpdate(MakeEntry("Old", "old.png", Rect(1, 2, 3, 4)));
-        ASSERT_NO_FATAL_FAILURE(LoadInto(library, kChessShaped));
+        ASSERT_NO_FATAL_FAILURE(LoadInto(library, kAtlasFile));
         EXPECT_EQ(library.GetAll().size(), 3u);
         EXPECT_EQ(library.GetSprite("Old"_intern), nullptr);
     }
@@ -222,7 +222,7 @@ namespace BECore::Tests {
 
     TEST(TextureLibraryTest, WriteThenLoadGivesTheSameLibrary) {
         TextureLibrary original;
-        ASSERT_NO_FATAL_FAILURE(LoadInto(original, kChessShaped));
+        ASSERT_NO_FATAL_FAILURE(LoadInto(original, kAtlasFile));
 
         XmlSerializer serializer;
         original.Write(serializer);
@@ -380,7 +380,7 @@ namespace BECore::Tests {
     TEST(TextureLibraryTest, AFileWithoutAtlasesLoadsWithNoLinkAndWritesNone) {
         TextureLibrary library;
         Vector<DeserializeError> errors;
-        ASSERT_NO_FATAL_FAILURE(LoadInto(library, kChessShaped, &errors));
+        ASSERT_NO_FATAL_FAILURE(LoadInto(library, kAtlasFile, &errors));
         EXPECT_TRUE(errors.empty());
         for (const SpriteEntry& entry : library.GetAll()) {
             EXPECT_FALSE(entry.atlas.has_value()) << entry.name.ToStringView().data();
@@ -392,9 +392,9 @@ namespace BECore::Tests {
 
         // The same text as for entries built by hand, which never had the field
         TextureLibrary byHand;
-        byHand.AddOrUpdate(MakeEntry("WhiteKing", "assets/chess_test.png", Rect(0, 0, 116.67f, 190.5f)));
-        byHand.AddOrUpdate(MakeEntry("WhiteQueen", "assets/chess_test.png", Rect(116.67f, 0, 116.67f, 190.5f)));
-        byHand.AddOrUpdate(MakeEntry("BlackKing", "assets/chess_test.png", Rect(0, 190.5f, 116.67f, 190.5f)));
+        byHand.AddOrUpdate(MakeEntry("RowOneFirst", "assets/sheet_test.png", Rect(0, 0, 116.67f, 190.5f)));
+        byHand.AddOrUpdate(MakeEntry("RowOneSecond", "assets/sheet_test.png", Rect(116.67f, 0, 116.67f, 190.5f)));
+        byHand.AddOrUpdate(MakeEntry("RowTwoFirst", "assets/sheet_test.png", Rect(0, 190.5f, 116.67f, 190.5f)));
         EXPECT_EQ(written, WriteToString(byHand));
     }
 

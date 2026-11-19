@@ -20,9 +20,6 @@ namespace BECore::Tests {
 
     namespace {
 
-        constexpr const char* kBoxRef = "nodes/Box";
-        constexpr const char* kPanelRef = "nodes/Panel";
-
         constexpr const char* kBoxNode = R"(<node name="Box" layer="2"><components>
   <component type="TransformComponent" x="1" y="2" width="30" height="40"/>
   <component type="QuadRendererComponent"><color r="1" g="2" b="3" a="255"/></component>

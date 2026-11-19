@@ -14,7 +14,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        // A tall atlas cell (116.67 x 190.5), the case that started SpriteFit
+        // A tall atlas cell (116.67 x 190.5): its aspect differs from the node it is fitted into
         constexpr float kCellX = 583.33f;
         constexpr float kCellWidth = 116.67f;
         constexpr float kCellHeight = 190.5f;

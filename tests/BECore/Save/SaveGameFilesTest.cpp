@@ -1,15 +1,11 @@
 #include <BECore/Save/SaveGame.h>
+#include <BECore/Save/SaveTestSupport.h>
 #include <Common/FreshText.h>
 #include <Common/Printers.h>
-#include <Common/TempPath.h>
 
 namespace BECore::Tests {
 
     namespace {
-
-        Vector<uint8_t> Bytes(std::initializer_list<uint8_t> values) {
-            return Vector<uint8_t>(values);
-        }
 
         Vector<String> Names(const Vector<PoolString>& slots) {
             Vector<String> names;
@@ -37,25 +33,7 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    /// A local FileSystem and a temp folder per test: no global services, so the tests run beside each other
-    class SaveGameFilesTest : public ::testing::Test {
-    protected:
-        void SetUp() override {
-            _base = TestTempDirectory("BagiSaveGameTest");
-            std::filesystem::remove_all(_base);
-            std::filesystem::create_directories(_base);
-            _saves = _base / "saves";
-        }
-
-        void TearDown() override {
-            std::error_code ec;
-            std::filesystem::remove_all(_base, ec);
-        }
-
-        std::filesystem::path _base;
-        std::filesystem::path _saves;
-        FileSystem _fileSystem;
-    };
+    class SaveGameFilesTest : public SaveFolderTest {};
 
     TEST_F(SaveGameFilesTest, WrittenBytesAreReadBack) {
         SaveGameService service(_fileSystem);

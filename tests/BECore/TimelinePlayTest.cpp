@@ -27,7 +27,7 @@ namespace BECore::Tests {
         constexpr int kCallbackAfterTheCancel = 2;
         constexpr int kParentAfterTheCancel = 3;
         constexpr int kManyTimelines = 1000;
-        constexpr int kTwoRepeats = 2;
+        constexpr int kRepeats = 2;
         constexpr int kNeverCalled = -1;
         constexpr int kManySteps = 10000;
         constexpr int kLongRunSteps = 100;
@@ -168,7 +168,7 @@ namespace BECore::Tests {
         for (int frame = 0; frame < kFramesForTheChain - 1; ++frame) {
             tweens.Advance(kThreeEighthsSecond);
         }
-        EXPECT_LT(finished, kClipCount);  // the timeline of the test above is done in kFramesForTheSequence frames, the chain is not
+        EXPECT_LT(finished, kClipCount);  // a timeline of the same clips is done in kFramesForTheSequence frames, the chain is not
 
         tweens.Advance(kThreeEighthsSecond);
         EXPECT_EQ(finished, kClipCount);
@@ -350,7 +350,7 @@ namespace BECore::Tests {
         TweenManager tweens;
         Vector<float> values;
         Timeline timeline;
-        timeline.Append<float>(0.0f, kTo, Settings(kHalfSecond), [&values](const float& value) { values.push_back(value); }).Repeat(kTwoRepeats);
+        timeline.Append<float>(0.0f, kTo, Settings(kHalfSecond), [&values](const float& value) { values.push_back(value); }).Repeat(kRepeats);
         ASSERT_EQ(timeline.GetDuration(), kOneSecond);
         const auto handle = tweens.Play(std::move(timeline));
 

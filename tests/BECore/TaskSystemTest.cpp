@@ -706,7 +706,7 @@ namespace BECore::Tests {
 
         CoreManager::GetTaskManager().Run(ProbeTask(FrameGuard(probe), probe, false));  // handle dropped on the spot
 
-        std::this_thread::sleep_for(kLetWaiterBlock);  // the body is now running on a worker, held at the gate
+        std::this_thread::sleep_for(kLetWaiterBlock);  // the body may now be running on a worker, held at the gate
         EXPECT_FALSE(probe.frameDestroyed.load()) << "The coroutine frame was destroyed while the task was still running";
 
         probe.gate.store(true, std::memory_order_release);
@@ -841,6 +841,8 @@ namespace BECore::Tests {
         constexpr int kThreads = 4;
         constexpr int kHandlesPerThread = 5000;
         std::atomic<int> running{kThreads};
+        // Lives through every AbandonAll: each of them reaches it while the other handles come and go
+        const auto witness = MakeIntrusive<TaskHandle<void>>(SimpleVoidTask());
 
         Vector<std::thread> threads;
         for (int i = 0; i < kThreads; ++i) {
@@ -851,13 +853,13 @@ namespace BECore::Tests {
                 running.fetch_sub(1);
             });
         }
-        while (running.load() > 0) {
+        do {
             Detail::LiveTasks::GetInstance().AbandonAll();
-        }
+        } while (running.load() > 0);
         for (auto& thread : threads) {
             thread.join();
         }
-        SUCCEED();
+        EXPECT_EQ(witness->GetStatus(), TaskStatus::Cancelled);
     }
 
     TEST(TaskSystemTest, TaskStatistics) {

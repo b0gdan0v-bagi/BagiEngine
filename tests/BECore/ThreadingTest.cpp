@@ -493,7 +493,9 @@ namespace BECore::Tests {
 
     TEST(ThreadingTest, ThreadIsNamedBeforeItsBodyRuns) {
         String seen;
+#if BE_PROFILER
         uint32_t seenSortIndex = 0;
+#endif
         uint32_t threadId = 0;
         Thread thread("Test named", [&] {
             threadId = Profiler::CurrentThreadId();
@@ -511,13 +513,14 @@ namespace BECore::Tests {
         EXPECT_EQ(seenSortIndex, Profiler::kNoSortIndex);
 #else
         EXPECT_TRUE(seen.empty());
-        static_cast<void>(seenSortIndex);
 #endif
     }
 
     TEST(ThreadingTest, ThreadKeepsItsSortIndex) {
         String seen;
+#if BE_PROFILER
         uint32_t seenSortIndex = 0;
+#endif
         uint32_t threadId = 0;
         Thread thread("Test sorted", kTestSortIndex, [&] {
             threadId = Profiler::CurrentThreadId();
@@ -534,7 +537,6 @@ namespace BECore::Tests {
         EXPECT_EQ(seen, "Test sorted");
         EXPECT_EQ(seenSortIndex, kTestSortIndex);
 #else
-        static_cast<void>(seenSortIndex);
         EXPECT_TRUE(seen.empty());
 #endif
     }
@@ -625,7 +627,7 @@ namespace BECore::Tests {
     TEST(ThreadingTest, ThreadStartsNothingInASingleThreadBuild) {
         EXPECT_FALSE(Thread::kAvailable);
         bool ran = false;
-#if BE_LOCK_ORDER_CHECK
+#if ENGINE_ENABLE_ASSERTS
         EXPECT_NONFATAL_FAILURE(Thread("Test single", [&] { ran = true; }), "no thread can start");
 #else
         Thread thread("Test single", [&] { ran = true; });
