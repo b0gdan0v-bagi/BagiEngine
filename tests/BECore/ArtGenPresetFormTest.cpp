@@ -2,7 +2,6 @@
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
-#include <cstring>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -269,10 +268,223 @@ namespace BECore::Tests {
     }
 
     TEST(ArtGenPresetFormTest, TheServiceFillsItsOwnInputs) {
-        for (const char* input : {"prompt", "negative", "seed", "width", "height", "output"}) {
+        for (const char* input : {"prompt", "negative", "seed", "width", "height", "output", "reference_image"}) {
             EXPECT_TRUE(IsArtGenServiceInput(input)) << input;
         }
         EXPECT_FALSE(IsArtGenServiceInput("steps"));
+    }
+
+    TEST(ArtGenPresetFormTest, AReferenceKeyOfTheFileRoundTripsByteForByte) {
+        ArtGenPreset preset = WoodPreset();
+        preset.data["reference"] = Json{{"mode", "init"}, {"image", "assets/artgen/rook.png"}, {"weight", 0.35}};
+        const String fileText = FormatArtGenPresetFile(preset.data);
+
+        ArtGenPresetForm form;
+        form.Load(preset);
+        EXPECT_FALSE(form.IsDirty());
+        EXPECT_EQ(form.ToJson(), preset.data);
+        EXPECT_EQ(FormatArtGenPresetFile(form.ToJson()), fileText);
+
+        form.Duplicate();
+        EXPECT_EQ(*FindJsonMember(form.ToJson(), "reference"), preset.data["reference"]) << "a copy keeps it";
+        form.Load(preset);
+        std::strcpy(form.prompt, "changed");
+        form.Touch();
+        form.Revert();
+        EXPECT_EQ(form.ToJson(), preset.data);
+        form.New("sdxl_basic");
+        EXPECT_FALSE(form.ToJson().contains("reference")) << "a new preset has none";
+    }
+
+    TEST(ArtGenPresetFormTest, TheReferenceComesAfterAcceptAndBeforeTheOtherKeys) {
+        ArtGenPreset preset = WoodPreset();
+        preset.data["accept"] = Json{{"maxSize", 64}};
+        preset.data["reference"] = Json{{"mode", "init"}, {"image", "a.png"}};
+        const String text = FormatArtGenPresetFile(preset.data);
+        const size_t accept = text.find("\"accept\"");
+        const size_t reference = text.find("\"reference\"");
+        const size_t note = text.find("\"note\"");
+        ASSERT_NE(reference, String::npos);
+        EXPECT_LT(accept, reference);
+        EXPECT_LT(reference, note);
+    }
+
+    TEST(ArtGenPresetFormTest, TheAtlasGroupIsKeptAsTheFileHasItAndComesAfterAccept) {
+        ArtGenPreset preset = WoodPreset();
+        preset.data["accept"] = Json{{"maxSize", 64}};
+        preset.data["atlas"] = "pieces";
+        preset.data["reference"] = Json{{"mode", "init"}, {"image", "a.png"}};
+        EXPECT_TRUE(CheckArtGenPresetShape(preset.data).has_value());
+
+        ArtGenPresetForm form;
+        form.Load(preset);
+        EXPECT_EQ(form.ToJson(), preset.data);
+        EXPECT_FALSE(form.IsDirty());
+        EXPECT_EQ(FormatArtGenPresetFile(form.ToJson()), FormatArtGenPresetFile(preset.data));
+
+        const String text = FormatArtGenPresetFile(preset.data);
+        const size_t accept = text.find("\"accept\"");
+        const size_t atlas = text.find("\"atlas\"");
+        const size_t reference = text.find("\"reference\"");
+        const size_t note = text.find("\"note\"");
+        ASSERT_NE(atlas, String::npos);
+        EXPECT_LT(accept, atlas);
+        EXPECT_LT(atlas, reference);
+        EXPECT_LT(reference, note);
+
+        form.Duplicate();
+        EXPECT_EQ(*FindJsonMember(form.ToJson(), "atlas"), Json("pieces")) << "a copy keeps it";
+        form.MarkSaved();
+        EXPECT_EQ(*FindJsonMember(form.ToJson(), "atlas"), Json("pieces"));
+    }
+
+    TEST(ArtGenPresetFormTest, ABadAtlasGroupIsRefusedBeforeASaveAndNamesTheKey) {
+        ArtGenPreset preset = WoodPreset();
+        for (const Json& bad : {Json(5), Json(""), Json("a b"), Json("../x"), Json(String(65, 'a').c_str()), Json::array(), Json(nullptr)}) {
+            preset.data["atlas"] = bad;
+            const auto shape = CheckArtGenPresetShape(preset.data);
+            ASSERT_FALSE(shape.has_value()) << DumpJson(bad).c_str();
+            EXPECT_NE(shape.error().find("atlas"), String::npos) << DumpJson(bad).c_str();
+            ArtGenPresetForm form;
+            form.Load(preset);
+            EXPECT_EQ(form.ToJson(), preset.data) << "nothing of the file is lost";
+        }
+        preset.data.erase("atlas");
+        EXPECT_TRUE(CheckArtGenPresetShape(preset.data).has_value());
+    }
+
+    TEST(ArtGenPresetFormTest, AMalformedReferenceIsKeptAndRefusedBeforeASave) {
+        ArtGenPreset preset = WoodPreset();
+        preset.data["reference"] = Json{{"mode", "init"}, {"image", "a.png"}, {"weight", "heavy"}};
+        ArtGenPresetForm form;
+        form.Load(preset);
+        EXPECT_EQ(form.ToJson(), preset.data) << "nothing of the file is lost";
+
+        const auto shape = CheckArtGenPresetShape(preset.data);
+        ASSERT_FALSE(shape.has_value());
+        EXPECT_NE(shape.error().find("reference.weight"), String::npos);
+        for (const Json& bad : {Json("a.png"), Json::array(), Json::object(), Json{{"mode", "init"}, {"image", ""}}}) {
+            preset.data["reference"] = bad;
+            EXPECT_FALSE(CheckArtGenPresetShape(preset.data).has_value()) << DumpJson(bad).c_str();
+        }
+        preset.data["reference"] = Json{{"mode", "init"}, {"image", "a.png"}};
+        EXPECT_TRUE(CheckArtGenPresetShape(preset.data).has_value());
+    }
+
+    TEST(ArtGenPresetFormTest, AReferenceWithoutAWeightOrWithANullOneRoundTripsAsTheFileHasIt) {
+        for (const Json& written : {Json{{"mode", "style"}, {"image", "a.png"}}, Json{{"mode", "style"}, {"image", "a.png"}, {"weight", nullptr}}}) {
+            ArtGenPreset preset = WoodPreset();
+            preset.data["reference"] = written;
+            ArtGenPresetForm form;
+            form.Load(preset);
+            ASSERT_TRUE(form.GetReference().has_value());
+            EXPECT_EQ(form.GetReference()->mode, "style");
+            EXPECT_FALSE(form.GetReference()->weight.has_value());
+            EXPECT_FALSE(form.IsDirty());
+            EXPECT_EQ(FormatArtGenPresetFile(form.ToJson()), FormatArtGenPresetFile(preset.data));
+        }
+    }
+
+    TEST(ArtGenPresetFormTest, EditingTheReferenceMakesTheFormDirtyAndTheFileHasTheNewValue) {
+        ArtGenPreset preset = WoodPreset();
+        preset.data["reference"] = Json{{"mode", "init"}, {"image", "assets/artgen/rook.png"}, {"weight", 0.35}};
+        ArtGenPresetForm form;
+        form.Load(preset);
+
+        ArtGenReference edited = *form.GetReference();
+        edited.mode = "style";
+        edited.image = "assets/artgen/king.png";
+        edited.weight = 0.8;
+        form.SetReference(edited);
+        EXPECT_TRUE(form.IsDirty());
+        const Json written = *FindJsonMember(form.ToJson(), "reference");
+        EXPECT_EQ(written, (Json{{"mode", "style"}, {"image", "assets/artgen/king.png"}, {"weight", 0.8}}));
+
+        form.MarkSaved();
+        EXPECT_FALSE(form.IsDirty());
+        EXPECT_EQ(*FindJsonMember(form.ToJson(), "reference"), written);
+
+        form.SetReference(*ReadArtGenReference(*FindJsonMember(preset.data, "reference")));
+        EXPECT_TRUE(form.IsDirty()) << "back to the first value is a change from the saved one";
+        form.Revert();
+        EXPECT_FALSE(form.IsDirty());
+        EXPECT_EQ(form.GetReference()->image, "assets/artgen/king.png");
+    }
+
+    TEST(ArtGenPresetFormTest, TheEditedReferenceSurvivesADuplicateAndRevertGoesBackToTheFile) {
+        ArtGenPreset preset = WoodPreset();
+        preset.data["reference"] = Json{{"mode", "init"}, {"image", "a.png"}};
+        ArtGenPresetForm form;
+        form.Load(preset);
+        form.SetReference(ArtGenReference{"style", "b.png", 0.5});
+        form.Duplicate();
+        EXPECT_TRUE(form.IsDirty());
+        EXPECT_EQ(form.GetReference()->image, "b.png");
+
+        form.Load(preset);
+        form.SetReference(ArtGenReference{"style", "b.png", 0.5});
+        form.Revert();
+        EXPECT_EQ(form.ToJson(), preset.data);
+        EXPECT_FALSE(form.IsDirty());
+    }
+
+    TEST(ArtGenPresetFormTest, SettingAReferenceOnAPresetWithNoneAddsTheKeyAndRemovingItDropsTheKey) {
+        ArtGenPresetForm form;
+        form.Load(WoodPreset());
+        form.SetReference(ArtGenReference{"init", "a.png", std::nullopt});
+        EXPECT_TRUE(form.IsDirty());
+        EXPECT_EQ(*FindJsonMember(form.ToJson(), "reference"), (Json{{"mode", "init"}, {"image", "a.png"}}));
+
+        form.ClearReference();
+        EXPECT_FALSE(form.ToJson().contains("reference"));
+        EXPECT_FALSE(form.IsDirty()) << "the file had none";
+
+        ArtGenPreset preset = WoodPreset();
+        preset.data["reference"] = Json{{"mode", "init"}, {"image", "a.png"}};
+        form.Load(preset);
+        form.ClearReference();
+        EXPECT_TRUE(form.IsDirty());
+        EXPECT_FALSE(form.ToJson().contains("reference"));
+    }
+
+    TEST(ArtGenPresetFormTest, AnUnreadableReferenceIsKeptUntilItIsReplacedOrRemoved) {
+        ArtGenPreset preset = WoodPreset();
+        preset.data["reference"] = Json{{"mode", "init"}, {"image", "a.png"}, {"weight", "heavy"}};
+        ArtGenPresetForm form;
+        form.Load(preset);
+        EXPECT_FALSE(form.GetReference().has_value());
+        EXPECT_TRUE(form.HasUnreadableReference());
+        EXPECT_FALSE(form.IsDirty());
+        EXPECT_EQ(FormatArtGenPresetFile(form.ToJson()), FormatArtGenPresetFile(preset.data)) << "an untouched file is written as it is";
+
+        form.SetReference(ArtGenReference{"init", "b.png", 0.4});
+        EXPECT_FALSE(form.HasUnreadableReference());
+        EXPECT_TRUE(CheckArtGenPresetShape(form.ToJson()).has_value());
+        EXPECT_TRUE(form.IsDirty());
+
+        form.Revert();
+        EXPECT_TRUE(form.HasUnreadableReference());
+        form.ClearReference();
+        EXPECT_FALSE(form.HasUnreadableReference());
+        EXPECT_FALSE(form.ToJson().contains("reference"));
+        EXPECT_TRUE(form.IsDirty());
+    }
+
+    TEST(ArtGenPresetFormTest, ANewReferenceWithAnEmptyImageIsRefusedBeforeASave) {
+        ArtGenPresetForm form;
+        form.Load(WoodPreset());
+        form.SetReference(ArtGenReference{"init", "", std::nullopt});
+        const auto shape = CheckArtGenPresetShape(form.ToJson());
+        ASSERT_FALSE(shape.has_value());
+        EXPECT_NE(shape.error().find("reference.image"), String::npos);
+    }
+
+    TEST(ArtGenPresetFormTest, AWorkflowWithTheReferenceImageInputIsAReferenceVariant) {
+        ArtGenWorkflow plain = Workflow("sdxl_basic", true);
+        EXPECT_FALSE(plain.IsReferenceVariant());
+        ArtGenWorkflow variant = Workflow("sdxl_img2img", true);
+        variant.inputs.push_back(ArtGenWorkflowInput{"reference_image", Json("example.png"), Json()});
+        EXPECT_TRUE(variant.IsReferenceVariant());
     }
 
 }  // namespace BECore::Tests

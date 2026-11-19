@@ -56,8 +56,10 @@ renamed.
 The art generation tools (`tools/artgen/`) ship nothing: ComfyUI and its models stay on the generator's machine, pinned with their licences
 in `tools/artgen/comfyui/manifest.json`. What they make can go into a game, under the licence of the model that made it: the image
 models allow commercial use of their output; **Stable Audio Open 1.0** (the sound effects) is under the Stability AI Community License,
-which allows commercial use only while the business makes under USD 1M a year (above it, Stability's Enterprise licence). The provenance
-file next to every generated asset names its model.
+which allows commercial use only while the business makes under USD 1M a year (above it, Stability's Enterprise licence). The style
+reference (`install --style`) adds the IP-Adapter model (Apache 2.0) and its CLIP vision model (MIT), and the custom node
+`ComfyUI_IPAdapter_plus` (GPL-3.0): ComfyUI, itself GPL-3.0, loads it from its own `custom_nodes/` folder after a `git` fetch at a pinned
+commit; it is never linked, copied into this repository or shipped. The structure reference (`install --structure`) adds the canny ControlNet for SDXL (xinsir, Apache 2.0), a model file the owner downloads and ComfyUI's own nodes run: it is never copied into this repository or shipped. The provenance file next to every generated asset names its model.
 
 ## Open points for the owner
 

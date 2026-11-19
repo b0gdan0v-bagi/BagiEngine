@@ -78,6 +78,11 @@ class Generator:
         {} when it cannot say. Asked when it becomes ready, not every poll."""
         return {}
 
+    def upload_image(self, data, name):
+        """Hands a picture to the generator (the input of a run that starts from one) and returns the name to put into the graph.
+        The caller names the file by its content, so the same picture is one file."""
+        raise GenerationError(f"the {self.name} generator cannot take a reference picture")
+
 
 def combo_choices(object_info):
     """{node class: {input: [values]}} of the combo inputs in ComfyUI's /object_info: `[[values], {...}]`, or the newer
@@ -113,9 +118,10 @@ class ComfyUIGenerator(Generator):
         self.manifest = manifest or comfyui_check.load_manifest()
         self._version = None
 
-    def _http(self, path, data=None, raw=False):
-        body = None if data is None else json.dumps(data).encode("utf-8")
-        request = urllib.request.Request(f"{self.url}{path}", data=body, headers={"Content-Type": "application/json"} if body else {})
+    def _http(self, path, data=None, raw=False, form=None):
+        """A GET, or a POST of `data` as JSON, or of `form` (body, content type) as it is."""
+        body, content_type = form if form else (None if data is None else json.dumps(data).encode("utf-8"), "application/json")
+        request = urllib.request.Request(f"{self.url}{path}", data=body, headers={"Content-Type": content_type} if body else {})
         try:
             with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_S) as response:
                 payload = response.read()
@@ -156,6 +162,22 @@ class ComfyUIGenerator(Generator):
             return combo_choices(self._http("/object_info"))
         except (GenerationError, ValueError):
             return {}
+
+    def upload_image(self, data, name):
+        if not name or any(c in name for c in '"\r\n\\/'):
+            raise GenerationError(f"ComfyUI: '{name}' is not a file name for an upload")
+        boundary = uuid.uuid4().hex
+        parts = [
+            (f'Content-Disposition: form-data; name="image"; filename="{name}"\r\nContent-Type: application/octet-stream', data),
+            ('Content-Disposition: form-data; name="type"', b"input"),
+            ('Content-Disposition: form-data; name="overwrite"', b"true"),
+        ]
+        body = b"".join(f"--{boundary}\r\n{head}\r\n\r\n".encode("utf-8") + payload + b"\r\n" for head, payload in parts)
+        body += f"--{boundary}--\r\n".encode("utf-8")
+        answer = self._http("/upload/image", form=(body, f"multipart/form-data; boundary={boundary}"))
+        if not isinstance(answer, dict) or not isinstance(answer.get("name"), str):
+            raise GenerationError(f"ComfyUI answered the upload of '{name}' without a name: {json.dumps(answer)[:200]}")
+        return f"{answer['subfolder']}/{answer['name']}" if answer.get("subfolder") else answer["name"]
 
     def _open_progress(self, client_id):
         parsed = urllib.parse.urlparse(self.url)
@@ -326,7 +348,7 @@ def flac_info(data):
 
 class FakeGenerator(Generator):
     """Records the graphs and answers each with a small PNG whose colour follows the seed, or a short FLAC tone for a graph that saves
-    audio; `state` and `fail` steer it."""
+    audio; `state`, `fail` and `kinds` steer it."""
 
     name = "fake"
 
@@ -334,10 +356,12 @@ class FakeGenerator(Generator):
         self.steps = steps
         self.state = state
         self.fail = fail
+        self.kinds = ["audio", "image", "structure", "style"]  # what status() says the models make; a test removes one
         self.graphs = []
+        self.uploads = []  # (name, data) of every upload_image
 
     def status(self):
-        return GeneratorStatus(self.state, "" if self.state == GeneratorState.READY else f"fake: {self.state}", {"kinds": ["audio", "image"]})
+        return GeneratorStatus(self.state, "" if self.state == GeneratorState.READY else f"fake: {self.state}", {"kinds": list(self.kinds)})
 
     def info(self):
         return {"name": self.name, "version": "1"}
@@ -349,6 +373,10 @@ class FakeGenerator(Generator):
             "KSampler": {"sampler_name": ["euler", "dpmpp_2m"], "scheduler": ["normal", "karras"]},
             "LoadBackgroundRemovalModel": {"bg_removal_name": ["birefnet.safetensors"]},
         }
+
+    def upload_image(self, data, name):
+        self.uploads.append((name, data))
+        return name
 
     def run(self, graph, on_progress=None, cancel=None, timeout_s=DEFAULT_RUN_TIMEOUT_S):
         self.graphs.append(graph)

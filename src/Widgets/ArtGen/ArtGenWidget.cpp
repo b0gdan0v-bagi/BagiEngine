@@ -11,8 +11,12 @@
 #include <Events/ApplicationEvents.h>
 #include <Generated/ArtGenWidget.gen.hpp>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/ArtGen/ArtGenAtlasAccept.h>
+#include <Widgets/ArtGen/ArtGenDrag.h>
 #include <Widgets/ArtGen/ArtGenLaunch.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
+#include <Widgets/ArtGen/ArtGenVerdict.h>
+#include <Widgets/ArtGen/Reference/ArtGenReference.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetPanel.h>
 #include <Widgets/EditorLayout/EditorControls.h>
@@ -126,18 +130,22 @@ namespace BECore {
         StopSound();
         DropThumbnails();
         DropSounds();
+        _referencePanel.DropThumbnail();
     }
 
     bool ArtGenWidget::Initialize(IDeserializer& /*deserializer*/) {
         Subscribe<EditorCommandEvent, &ArtGenWidget::OnCommand>(this);
         Subscribe<SceneSelectionChangedEvent, &ArtGenWidget::OnSelectionChanged>(this);
+        Subscribe<ArtGenVariantDropEvent, &ArtGenWidget::OnVariantDropped>(this);
         auto& session = ArtGenSession::GetInstance();
         const std::string root = CoreManager::GetFileSystem().GetRootPath().generic_string();  //-NoStd: std::filesystem gives a std::string
         session.SetGameRoot(StringView(root.data(), root.size()));
         session.SetAcceptor(&AcceptForControl);
         session.SetSoundAcceptor(&AcceptSoundForControl);
         session.SetKeeper(&KeepForControl);
+        session.SetAtlasPacker(&PackAtlasForControl);
         session.SetFrameMeasurer(&MeasureFrameForControl);
+        session.SetAcceptBatch(&BeginAcceptBatch, &EndAcceptBatch);
         session.RegisterControl(CoreManager::GetControlService());
         return true;
     }
@@ -151,6 +159,45 @@ namespace BECore {
     void ArtGenWidget::OnSelectionChanged(const SceneSelectionChangedEvent& event) {
         // The pointers are valid for this event only: the session holds the node and checks it alive before use
         ArtGenSession::GetInstance().SetSelectedNode(event.nodes.empty() ? IntrusivePtr<SceneNode>() : IntrusivePtr<SceneNode>(event.nodes.back()));
+    }
+
+    void ArtGenWidget::OnVariantDropped(const ArtGenVariantDropEvent& event) {
+        if (event.result == nullptr) {
+            return;
+        }
+        auto& session = ArtGenSession::GetInstance();
+        const ArtGenDragPayload& payload = event.payload;
+        if (payload.kind == ArtGenDragKind::Audio) {
+            *event.result = ArtGenDropResult{false, String(kArtGenSoundIsNotASprite)};
+            return;
+        }
+        std::expected<Json, ControlError> result;
+        if (payload.set[0] == '\0') {
+            // Exactly the Accept button: the form's settings, the preset's atlas group, no node
+            const ArtGenImageSettings settings = _form.GetImageAccept();
+            result = session.Accept(payload.seed, event.sprite, false, &settings);
+        } else {
+            result = session.AcceptSetVariant(StringView(payload.set), StringView(payload.job), payload.seed, event.sprite);
+        }
+        NoteImageAccepted(event.sprite, result);
+        *event.result = ArtGenDropResult{result.has_value(), _acceptMessage};
+    }
+
+    void ArtGenWidget::NoteImageAccepted(StringView sprite, const std::expected<Json, ControlError>& result) {
+        _acceptFailed = !result.has_value();
+        _acceptedSprite.clear();
+        if (!result) {
+            _acceptMessage = result.error().message;
+            return;
+        }
+        _acceptedSprite = String(sprite);
+        const auto reloaded = GetJsonInt(*result, "reloadedSprites").value_or(0);
+        const auto texture = GetJsonString(*result, "texturePath").value_or(String());
+        _acceptMessage = Format("Accepted as '{}' ({}); {} sprite(s) reloaded", sprite, texture, reloaded);
+        if (const Json* atlas = FindJsonMember(*result, "atlas"); atlas != nullptr && atlas->is_object()) {
+            _acceptMessage +=
+                Format("; atlas '{}' repacked ({}x{})", GetJsonString(*atlas, "name").value_or(String()), GetJsonInt(*atlas, "width").value_or(0), GetJsonInt(*atlas, "height").value_or(0));
+        }
     }
 
     void ArtGenWidget::Draw() {}
@@ -179,7 +226,7 @@ namespace BECore {
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem(ICON_LC_LIST_CHECKS " Set")) {
-                const ArtGenSetPanelForm form{_form};
+                const ArtGenSetPanelForm form{_form, PresetMakesImages(session)};
                 const auto play = [this](const AudioClip& clip) { PlaySound(clip, kSetTabRow); };
                 const auto stop = [this] { StopSound(); };
                 _setPanel.DrawSetTab(session, form, ArtGenSetPanelSound{play, stop, _playingRow == kSetTabRow});
@@ -388,7 +435,18 @@ namespace BECore {
         }
     }
 
+    bool ArtGenWidget::PresetMakesImages(const ArtGenSession& session) const {
+        const ArtGenWorkflow* workflow = session.FindWorkflow(StringView(_form.GetWorkflow()));
+        return workflow == nullptr || workflow->kind != kKindAudio;
+    }
+
     void ArtGenWidget::DrawRunForm(ArtGenSession& session) {
+        const bool images = PresetMakesImages(session);
+        if (images) {
+            _referencePanel.Draw(session);
+        } else {
+            _referencePanel.DropThumbnail();
+        }
         ImGui::InputTextWithHint("Subject", "white knight, a red gem, ...", _subject, sizeof(_subject));
         {
             ScopedMonoFont mono;
@@ -412,8 +470,9 @@ namespace BECore {
         if (IconTextButton(ICON_LC_SPARKLES, "Generate", "Ask the service for the images with the form as it is, saved or not (it may still be starting: the request waits)")) {
             const Optional<int64_t> seed = _randomSeed ? Optional<int64_t>() : Optional<int64_t>(_seed);
             // A saved preset goes by name, so its provenance names the file; anything else goes inline as a draft
-            auto result = _form.IsDirty() ? session.RequestDraft(StringView(_form.name), _form.ToJson(), StringView(_subject), _count, seed, _keepVariants)
-                                          : session.Request(StringView(_form.GetBaseName()), StringView(_subject), _count, seed, _keepVariants);
+            const Optional<ArtGenReference> reference = images ? session.GetReferenceSlot() : Optional<ArtGenReference>();
+            auto result = _form.IsDirty() ? session.RequestDraft(StringView(_form.name), _form.ToJson(), StringView(_subject), _count, seed, _keepVariants, reference)
+                                          : session.Request(StringView(_form.GetBaseName()), StringView(_subject), _count, seed, _keepVariants, reference);
             _requestError = result ? String() : result.error();
         }
         ImGui::EndDisabled();
@@ -567,6 +626,10 @@ namespace BECore {
         const auto& workflows = session.GetServiceStatus().workflows;
         if (ImGui::BeginCombo("Workflow", _form.GetWorkflow().c_str())) {
             for (const auto& workflow : workflows) {
+                // A variant that a map of its base reaches is not picked by hand, unless the preset already names it
+                if (workflow.IsReferenceVariant() && workflow.name != _form.GetWorkflow()) {
+                    continue;
+                }
                 char label[160];
                 std::snprintf(label, sizeof(label), "%s%s  (%s, %s)", workflow.error.empty() ? "" : ICON_LC_CIRCLE_ALERT " ", workflow.name.c_str(), workflow.kind.c_str(), workflow.source.c_str());
                 ImGui::BeginDisabled(!workflow.error.empty());
@@ -606,6 +669,10 @@ namespace BECore {
             }
             if (workflow->kind != kKindAudio && ImGui::TreeNodeEx("Accept (image)")) {
                 DrawImageAcceptFields("##presetAccept");
+                ImGui::TreePop();
+            }
+            if (workflow->kind != kKindAudio && ImGui::TreeNodeEx("Reference")) {
+                ArtGenReferencePanel::DrawPresetReference(session, _form);
                 ImGui::TreePop();
             }
             ImGui::TreePop();
@@ -814,7 +881,7 @@ namespace BECore {
             DrawSounds(run);
         } else {
             DrawAccept(session);
-            DrawVariants(run);
+            DrawVariants(session, run);
         }
     }
 
@@ -1142,19 +1209,7 @@ namespace BECore {
         ImGui::BeginDisabled(!validName);
         if (IconTextButton(ICON_LC_CHECK, "Accept", AcceptImageNote())) {
             const ArtGenImageSettings settings = _form.GetImageAccept();
-            auto result = session.Accept(*_selectedSeed, StringView(_spriteName), _useOnSelected, &settings);
-            _acceptFailed = !result.has_value();
-            if (result) {
-                const auto reloaded = GetJsonInt(*result, "reloadedSprites").value_or(0);
-                const auto texture = GetJsonString(*result, "texturePath").value_or(String());
-                _acceptMessage = Format("Accepted as '{}' ({}); {} sprite(s) reloaded", StringView(_spriteName), texture, reloaded);
-                if (const Json* atlas = FindJsonMember(*result, "atlas"); atlas != nullptr && atlas->is_object()) {
-                    _acceptMessage +=
-                        Format("; atlas '{}' repacked ({}x{})", GetJsonString(*atlas, "name").value_or(String()), GetJsonInt(*atlas, "width").value_or(0), GetJsonInt(*atlas, "height").value_or(0));
-                }
-            } else {
-                _acceptMessage = result.error().message;
-            }
+            NoteImageAccepted(StringView(_spriteName), session.Accept(*_selectedSeed, StringView(_spriteName), _useOnSelected, &settings));
         }
         ImGui::EndDisabled();
         if (!validName && _spriteName[0] != '\0') {
@@ -1167,9 +1222,18 @@ namespace BECore {
         if (!_acceptMessage.empty()) {
             ImGui::TextColored(_acceptFailed ? palette.error : palette.success, "%s", _acceptMessage.c_str());
         }
+        if (!_acceptedSprite.empty() && PresetMakesImages(session)) {
+            if (IconTextButton(ICON_LC_IMAGE_PLUS, "Use as reference", kArtGenUseAsReferenceTip)) {
+                session.SetReferenceSlot(ArtGenReferenceOfSprite(StringView(_acceptedSprite)));
+            }
+            ImGui::SameLine();
+            if (IconTextButton(ICON_LC_SHAPES, "Use as shape", kArtGenUseAsShapeTip)) {
+                session.SetReferenceSlot(ArtGenReferenceOfSprite(StringView(_acceptedSprite), "structure"));
+            }
+        }
     }
 
-    void ArtGenWidget::DrawVariants(const ArtGenRun& run) {
+    void ArtGenWidget::DrawVariants(ArtGenSession& session, const ArtGenRun& run) {
         if (run.variants.empty()) {
             return;
         }
@@ -1188,15 +1252,19 @@ namespace BECore {
             if (ImGui::InvisibleButton("##thumb", ImVec2(kThumbnailSize, kThumbnailSize))) {
                 if (_selectedSeed != variant.seed) {
                     _acceptMessage.clear();
+                    _acceptedSprite.clear();
                 }
                 _selectedSeed = variant.seed;
                 if (_spriteName[0] == '\0') {
                     FillNameFromSubject(run.subject, _spriteName, sizeof(_spriteName));
                 }
             }
+            const ITexture* texture = i < _thumbnails.size() ? _thumbnails[i].Get() : nullptr;
+            if (!variant.IsAudio() && texture != nullptr && texture->GetState() == ResourceState::Loaded) {
+                DrawArtGenVariantDragSource([&] { return MakeArtGenDragPayload(ArtGenDragKind::Image, variant.seed, {}, {}, SuggestedArtGenSpriteName({}, StringView(run.subject))); }, texture);
+            }
             ImDrawList* drawList = ImGui::GetWindowDrawList();
             const ImVec2 corner(origin.x + kThumbnailSize, origin.y + kThumbnailSize);
-            const ITexture* texture = i < _thumbnails.size() ? _thumbnails[i].Get() : nullptr;
             if (variant.IsAudio()) {
                 drawList->AddRectFilled(origin, corner, ImGui::GetColorU32(palette.frameBg));
                 const ImVec2 iconSize = ImGui::CalcTextSize(ICON_LC_AUDIO_LINES);
@@ -1211,9 +1279,20 @@ namespace BECore {
             if (_selectedSeed == variant.seed) {
                 drawList->AddRect(origin, corner, ImGui::GetColorU32(palette.accent), 0.0f, 0, kSelectedBorder);
             }
+            if (!variant.IsAudio() && texture != nullptr && texture->GetState() == ResourceState::Loaded && i < _verdicts.size()) {
+                DrawArtGenVerdictMark(drawList, origin, kThumbnailSize, _verdicts[i]);
+            }
             if (IconButton(ICON_LC_DICES, "Use this seed for the next Generate (with another subject, a close picture)", "##seed")) {
                 _randomSeed = false;
                 _seed = variant.seed;
+            }
+            if (_selectedSeed == variant.seed && !variant.IsAudio()) {
+                ImGui::SameLine();
+                if (IconButton(ICON_LC_IMAGE_PLUS, kArtGenUseAsReferenceTip, "##reference")) {
+                    if (auto reference = ArtGenReferenceOfVariant(StringView(session.GetGameRoot()), kKindImage, StringView(variant.path))) {
+                        session.SetReferenceSlot(std::move(*reference));
+                    }
+                }
             }
             ImGui::SameLine();
             {
@@ -1241,6 +1320,8 @@ namespace BECore {
             // A sound has no picture: its slot stays empty and the grid draws a sound tile (playing it is the sound panel's)
             _thumbnails.push_back(variant.IsAudio() ? ResourceHandle<ITexture>() : resources.Load<ITexture>(StringView(variant.path.data(), variant.path.size())));
             _thumbnailPaths.push_back(variant.path);
+            // Read once with the thumbnail: the service's image report carries no verdict, its provenance file does
+            _verdicts.push_back(variant.IsAudio() ? ArtGenVerdict() : ReadArtGenVerdict(std::filesystem::path(variant.provenancePath.c_str())));
         }
     }
 
@@ -1254,6 +1335,7 @@ namespace BECore {
         }
         _thumbnails.clear();
         _thumbnailPaths.clear();
+        _verdicts.clear();
     }
 
 }  // namespace BECore

@@ -205,4 +205,29 @@ namespace BECore::Tests {
         }
     }
 
+    TEST(TextSettingsTest, CommentsInTheTablesAreNoFamiliesNorRanges) {
+        pugi::xml_document document;
+        ASSERT_TRUE(document.load_string(R"(<TextConfig defaultFamily="Body">
+            <!-- the families -->
+            <families>
+              <!-- first -->
+              <family name="Body"><!-- faces --><face weight="400" path="body.ttf"/><!-- last face --></family>
+              <!-- between -->
+              <family name="Display"><face weight="400" path="display.ttf"/></family>
+              <!-- last -->
+            </families>
+            <preload><!-- ranges --><range from="65" to="90"/><!-- done --></preload>
+            </TextConfig>)",
+                                         pugi::parse_full));
+
+        const TextSettings settings = TextSettings::FromConfig(XmlNode(document.document_element()));
+
+        ASSERT_EQ(settings.families.size(), 2u);
+        EXPECT_EQ(settings.families[0].name, "Body"_intern);
+        ASSERT_EQ(settings.families[0].faces.size(), 1u);
+        EXPECT_EQ(settings.families[1].name, "Display"_intern);
+        ASSERT_EQ(settings.preload.size(), 1u);
+        EXPECT_EQ(settings.preload[0].last, U'Z');
+    }
+
 }  // namespace BECore::Tests

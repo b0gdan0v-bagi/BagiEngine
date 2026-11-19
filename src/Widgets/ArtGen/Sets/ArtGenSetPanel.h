@@ -5,6 +5,7 @@
 #include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
+#include <Widgets/ArtGen/ArtGenVerdict.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <cstdint>
 #include <imgui.h>
@@ -21,6 +22,17 @@ namespace BECore {
     /// A checkerboard over a square, so an image with a transparent background shows as transparent
     void DrawArtGenChecker(ImDrawList* drawList, ImVec2 origin, float size, ImU32 light, ImU32 dark);
 
+    /// The icon of a verdict's mark; null for None, which draws nothing
+    [[nodiscard]] const char* ArtGenVerdictIcon(ArtGenVerdictKind kind);
+
+    /**
+     * @brief Draws the mark of @p verdict in the top-right corner of the square thumbnail at @p origin of side @p size, over a dim backing so it reads on
+     * the checkerboard and on a bright picture, and shows `verdict.tip` as the tooltip while the mouse is over the mark. Nothing for None.
+     *
+     * Call it after the cell's own tooltip: ImGui keeps one tooltip per frame and this one must win over the hover of the whole cell. Builds no string.
+     */
+    void DrawArtGenVerdictMark(ImDrawList* drawList, ImVec2 origin, float size, const ArtGenVerdict& verdict);
+
     /// The widths of the Subject and Name fields of a row, in pixels
     struct ArtGenRowWidths {
         float subject = 0.0f;
@@ -34,10 +46,21 @@ namespace BECore {
     /// after the remove button) is less than the two
     [[nodiscard]] ArtGenRowWidths ArtGenRowFieldWidths(float available, float fontSize);
 
+    /// The reference Queue sends with a set: the panel's slot for an image preset, none for a sound (it has no reference)
+    [[nodiscard]] Optional<ArtGenReference> ArtGenQueueReference(const Optional<ArtGenReference>& slot, bool makesImages);
+
+    /// The line under the subject rows: what Queue will send as the set's reference (the slot's file name, mode and weight), or that none goes and
+    /// whose reference applies instead. Written into @p out, so the frame builds no string
+    void FormatArtGenQueueReference(const Optional<ArtGenReference>& slot, bool makesImages, char* out, size_t size);
+
+    /// `<file name> (<mode>, weight <w>)` of @p reference, the weight being the mode's default when the reference names none
+    void FormatArtGenReferenceSummary(const ArtGenReference& reference, char* out, size_t size);
+
     /// What the Set tab shares with the Generate tab: the preset it queues with (by name when saved and unchanged, else as a draft, as Generate
-    /// decides). The count and seed are the Set tab's own
+    /// decides) and whether it makes images (the slot goes only with those). The count and seed are the Set tab's own
     struct ArtGenSetPanelForm {
         const ArtGenPresetForm& preset;
+        bool makesImages = true;
     };
 
     /// How the Set tab plays a sound variant: the widget's own player, so one sound plays at a time
@@ -63,12 +86,17 @@ namespace BECore {
         /// Evicts every picture and clip the rows loaded (the tab is hidden, the set changed, the panel dies)
         void DropThumbnails();
 
+        /// The verdict the row @p jobIndex holds for the variant of @p seed; null when no thumbnail of it is loaded. A seam for the tests: the cache is read
+        /// once when the thumbnail loads, so a test can see what was read
+        [[nodiscard]] const ArtGenVerdict* VerdictOf(size_t jobIndex, int64_t seed) const;
+
     private:
         /// One variant of a row: its picture, or its clip for a sound. A file that is gone is kept as a gap
         struct Thumb {
             int64_t seed = 0;
             String path;
             bool missing = false;
+            ArtGenVerdict verdict;  // read with the picture; None for a sound, a gap or a file without checks
             ResourceHandle<ITexture> texture;
             ResourceHandle<AudioClip> clip;
         };
@@ -101,7 +129,8 @@ namespace BECore {
         /// Makes the row's "in the game or not, and which file" line again when its status, names or kind changed
         static void RefreshStatusLine(RowThumbs& row, const ArtGenSet& set, const ArtGenSetJob& job, ArtGenRowStatus status, const ArtGenSet* newer);
         void DrawJobRow(ArtGenSession& session, const ArtGenSet& set, size_t index, int32_t columns, const ArtGenSetPanelSound& sound);
-        void DrawVariantCell(ArtGenSession& session, const ArtGenSet& set, size_t jobIndex, size_t variantIndex, const ArtGenSetPanelSound& sound);
+        /// @p replaced: a newer set owns the row's name (`_newerOwners`), so a click switches nothing
+        void DrawVariantCell(ArtGenSession& session, const ArtGenSet& set, size_t jobIndex, size_t variantIndex, bool replaced, const ArtGenSetPanelSound& sound);
         void DrawSetFooter(ArtGenSession& session, const ArtGenSet& set);
         /// Loads what the row's variants need and evicts what a Retry took away
         void SyncRow(const ArtGenSession& session, const ArtGenSet& set, size_t index);
@@ -123,6 +152,11 @@ namespace BECore {
         String _acceptMessage;   // the last Accept all, switch or Keep: its answer or its error, shown under the rows
         bool _acceptFailed = false;
         Vector<RowThumbs> _rows;  // by job index
+        // Made by DrawSetRows once per frame (`FindNewerOwner` scans every set), read by the rows, their cells and the footer
+        Vector<const ArtGenSet*> _newerOwners;  // by job index; null: the row owns its name
+        int32_t _liveRows = 0;
+        int32_t _keptRows = 0;
+        int32_t _replacedRows = 0;
         uint64_t _frame = 0;
         int64_t _playingSeed = 0;
         int32_t _playingJob = -1;

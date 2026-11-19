@@ -167,6 +167,7 @@ namespace BECore {
         Thread _writer;  // started and joined by the reader thread
         std::atomic<bool> _finished{false};
         std::atomic<uint64_t> _bytesReceived{0};
+        std::atomic<bool> _closeSent{false};  // set by the writer: what arrives from now on is discarded
 
         mutable Mutex _mutex{BE_LOCK_SITE("WebSocket connection")};  // guards everything below
         ConditionVariable _wake;

@@ -9,6 +9,9 @@ namespace BECore {
         constexpr int kHeaderTooLarge = 431;
         constexpr int kServiceUnavailable = 503;
 
+        /// How long a client that keeps sending after the close frame holds its connection
+        constexpr std::chrono::milliseconds kCloseLinger{1000};
+
     }  // namespace
 
     WebSocketConnection::WebSocketConnection(WebSocketConnectionId id, Socket socket, String peerAddress, WebSocketConnectionSettings settings)
@@ -36,6 +39,9 @@ namespace BECore {
 
     std::expected<size_t, SocketError> WebSocketConnection::Receive(Span<uint8_t> buffer) {
         const auto received = _socket.Receive(buffer);
+        if (_closeSent.load(std::memory_order_acquire)) {
+            return std::unexpected(SocketError::Closed);  // the writer is discarding the rest: a part of a frame must not reach the parser
+        }
         if (received) {
             _bytesReceived.fetch_add(*received, std::memory_order_relaxed);
         }
@@ -184,7 +190,9 @@ namespace BECore {
                 return;
             }
             if (frame.isClose) {
-                _socket.ShutdownBoth();  // the client sees the end of the stream after the close frame
+                _closeSent.store(true, std::memory_order_release);
+                _socket.FinishSending(kCloseLinger);  // the client sees the end of the stream after the close frame, and a client still sending does not lose that frame to a reset
+                _socket.ShutdownBoth();
                 return;
             }
         }

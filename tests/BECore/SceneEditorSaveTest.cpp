@@ -414,6 +414,30 @@ namespace BECore::Tests {
         EXPECT_TRUE(game.next_sibling() == creditsComment);
     }
 
+    TEST_F(SceneEditorSaveTest, TheCommentsAroundTheScenesStayAndTheOnesInsideTheReplacedSceneAreLost) {
+        ASSERT_NO_FATAL_FAILURE(LoadScenes());
+        pugi::xml_node scenes = ConfigRoot().child("scenes");
+        ConfigRoot().insert_child_before(pugi::node_comment, scenes).set_value(" before the scenes ");
+        scenes.append_child(pugi::node_comment).set_value(" after the last scene ");
+        FindSceneElement(ConfigRoot(), "Game").prepend_child(pugi::node_comment).set_value(" inside the scene ");
+        _manager->SetActiveScene("Game"_intern);
+
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), *_manager->GetActiveScene()));
+
+        EXPECT_EQ(SceneOrder(ConfigRoot()), "Menu,Game,Credits");
+        ASSERT_EQ(scenes.previous_sibling().type(), pugi::node_comment);
+        EXPECT_STREQ(scenes.previous_sibling().value(), " before the scenes ");
+        ASSERT_EQ(scenes.last_child().type(), pugi::node_comment);
+        EXPECT_STREQ(scenes.last_child().value(), " after the last scene ");
+        const pugi::xml_node game = FindSceneElement(ConfigRoot(), "Game");
+        ASSERT_EQ(game.previous_sibling().type(), pugi::node_comment);
+        EXPECT_STREQ(game.previous_sibling().value(), kGameComment);
+        EXPECT_FALSE(game.child("nodes").empty());
+        for (const pugi::xml_node child : game.children()) {
+            EXPECT_NE(child.type(), pugi::node_comment);
+        }
+    }
+
     TEST_F(SceneEditorSaveTest, TheSceneKeepsItsPlace) {
         ASSERT_NO_FATAL_FAILURE(LoadScenes());
 

@@ -10,6 +10,7 @@
 #include <BECore/Time/Time.h>
 #include <BECore/UI/UIColor.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/EvictProbe.h>
 #include <Common/NullPropertyVisitor.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -322,6 +323,70 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(spark->vertices[0].v, 0.0f);
         EXPECT_FLOAT_EQ(spark->vertices[2].u, 1.0f);
         EXPECT_FLOAT_EQ(spark->vertices[2].v, 0.5f);
+    }
+
+    namespace {
+
+        const DrawCall* TexturedCall(const Vector<DrawCall>& calls, const ITexture* texture) {
+            for (const DrawCall& call : calls) {
+                if (call.texture == texture) {
+                    return &call;
+                }
+            }
+            return nullptr;
+        }
+
+    }  // namespace
+
+    TEST_F(ParticleEmitterComponentTest, ASpriteLoadsItsTextureAgainWhenTheCacheEvictedTheFile) {
+        const EvictProbeSprite probe("ParticleEvictProbe");
+        auto emitter = Emitter("Spark");
+        emitter->_effect.spriteId = probe.Name();
+        Frame();
+        emitter->Burst(0.0f, 0.0f);
+
+        const auto before = Draw();
+        const DrawCall* sparkBefore = nullptr;
+        for (const DrawCall& call : before) {
+            if (call.texture != nullptr) {
+                sparkBefore = &call;
+            }
+        }
+        ASSERT_NE(sparkBefore, nullptr);
+        const ITexture* first = sparkBefore->texture;
+        const IntrusivePtr<IResource> keepFirst = probe.Cached();  // a freed texture's address could be the next one's
+        ASSERT_EQ(keepFirst.Get(), first);
+        Frame();
+        EXPECT_NE(TexturedCall(Draw(), first), nullptr) << "an untouched cache keeps the loaded texture";
+
+        probe.Evict();
+        Frame();
+        const auto after = Draw();
+        EXPECT_EQ(TexturedCall(after, first), nullptr) << "the evicted texture is not drawn any more";
+        const DrawCall* sparkAfter = nullptr;
+        for (const DrawCall& call : after) {
+            if (call.texture != nullptr) {
+                sparkAfter = &call;
+            }
+        }
+        ASSERT_NE(sparkAfter, nullptr) << "the path is loaded again";
+        Frame();
+        EXPECT_NE(TexturedCall(Draw(), sparkAfter->texture), nullptr) << "and the new texture is held";
+    }
+
+    TEST_F(ParticleEmitterComponentTest, ATextureGivenDirectlyIsNotReplacedByAnEvict) {
+        const EvictProbeSprite probe("ParticleEvictProbeDirect");
+        auto emitter = Emitter("Spark");
+        emitter->_effect.spriteId = probe.Name();
+        const Vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * kBytesPerPixel, 255);
+        auto texture = _renderer->CreateTexture(pixels.data(), kTextureSize, kTextureSize);
+        Frame();  // the sprite is loaded
+        emitter->SetTexture(texture);
+        emitter->Burst(0.0f, 0.0f);
+
+        probe.Evict();
+        Frame();
+        EXPECT_NE(TexturedCall(Draw(), texture.Get()), nullptr);
     }
 
     TEST_F(ParticleEmitterComponentTest, AnUnknownSpriteFallsBackToPlainSquares) {

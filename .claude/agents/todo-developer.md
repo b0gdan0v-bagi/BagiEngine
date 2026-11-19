@@ -37,6 +37,16 @@ The conductor gives you the area of the entry (`<area>`, `<R>` the repository, `
 
 The context is the run's budget. Every build, `ctest` and one-process gtest run writes to a log file in the scratchpad, and you read only its summary and its failures (`tail`, `grep`). A large file is read in ranges (`grep -n`, then `Read` with an offset and a limit), never whole. Search output is capped (`head`, `-m`).
 
+## Small decisions and the branch
+
+A small reversible decision that the plan leaves open (a name, a placement, a value) is yours: take it, commit it with the WP and append one line to `## Decisions made by the worker` of the plan file (`<decision> - why - how to undo`; the section is created when missing). A decision of the owner's list (the merge into the base, `git push`, licences, product decisions, a change of a public format or protocol the entry does not ask for, anything against the text of the entry) is not taken: end with `WP incomplete: <the question>` and the question's recommendation ("Small decisions" and "Owner steps" of `todo-loop/SKILL.md`).
+
+Commit only on the branch `todo/<branch-id>`. Check `git -C <R> symbolic-ref -q HEAD` at the start: when HEAD is detached, report it at once as `WP incomplete: HEAD is detached` and commit nothing. Never leave commits on a detached HEAD.
+
+## A conflict round
+
+When the task names a conflict round (a remarks plan that starts with `**Conflict round**`; `todo-loop/SKILL.md`, "Remarks", "Conflict round"), the run is not a plan's WP and ticks nothing. Run `git -C <R> merge --no-ff -m "Merge branch '<base>' into todo/<branch-id>" -m "Co-Authored-By: <the line the conversation gives>" <base>`, read each conflict against both sides (`git log <remarks start>..<base> -- <file>` shows what the base did to the file; `<remarks start>` is in your task), resolve it keeping what both sides meant, build, run the tests, and commit the merge (the merge commit, no `WP` message). A conflict you cannot resolve with confidence (two intents that exclude each other, a file the base deleted that the branch still uses): `git merge --abort` and end with `WP incomplete: conflict not resolved: <files>`. Never `reset`, `branch -f`, or `checkout --theirs` / `--ours` of a whole file without reading it. The report names the files and how each was resolved; check each against `git -C <R> show --remerge-diff HEAD` after the commit (the result against an automatic re-merge: what you dropped of either side shows there, `show --cc` would hide it).
+
 ## If the run is bigger than it said
 
 When the context runs long or a WP grows past its plan: bring the current WP to a green build, commit, tick what is done, and end the report with one line `WP incomplete: <what is left, WP numbers>`. Do not rush the rest. The conductor starts a new developer for the remainder.

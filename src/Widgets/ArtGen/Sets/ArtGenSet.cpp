@@ -428,6 +428,44 @@ namespace BECore {
         return Format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", civil.year, civil.month, civil.day, civil.hour, civil.minute, civil.second);
     }
 
+    Optional<std::chrono::system_clock::time_point> ParseArtGenTimestamp(StringView text) {
+        // "yyyy-mm-ddThh:mm:ssZ": a digit at every place but the separators
+        constexpr StringView kShape = "dddd-dd-ddTdd:dd:ddZ";
+        if (text.size() != kShape.size()) {
+            return {};
+        }
+        for (size_t i = 0; i < kShape.size(); ++i) {
+            const bool digit = text[i] >= '0' && text[i] <= '9';
+            if (kShape[i] == 'd' ? !digit : text[i] != kShape[i]) {
+                return {};
+            }
+        }
+        const auto number = [&](size_t from, size_t length) {
+            int value = 0;
+            for (size_t i = from; i < from + length; ++i) {
+                value = value * 10 + (text[i] - '0');
+            }
+            return value;
+        };
+        const std::chrono::year_month_day date{std::chrono::year{number(0, 4)}, std::chrono::month{static_cast<unsigned>(number(5, 2))}, std::chrono::day{static_cast<unsigned>(number(8, 2))}};
+        const int hour = number(11, 2);
+        const int minute = number(14, 2);
+        const int second = number(17, 2);
+        if (!date.ok() || hour > 23 || minute > 59 || second > 59) {
+            return {};
+        }
+        return std::chrono::system_clock::time_point(std::chrono::sys_days{date} + std::chrono::hours{hour} + std::chrono::minutes{minute} + std::chrono::seconds{second});
+    }
+
+    String ArtGenAcceptDate(std::chrono::system_clock::time_point now, StringView latestOther) {
+        const auto other = ParseArtGenTimestamp(latestOther);
+        const auto nowSecond = std::chrono::floor<std::chrono::seconds>(now);
+        if (other && *other >= nowSecond) {
+            return ArtGenTimestamp(*other + std::chrono::seconds{1});
+        }
+        return ArtGenTimestamp(now);
+    }
+
     String DefaultArtGenSetName(StringView presetName, std::chrono::system_clock::time_point time, int32_t attempt) {
         const String attemptSuffix = attempt > 1 ? Format("-{}", attempt) : String();
         String prefix;
@@ -501,6 +539,8 @@ namespace BECore {
         } else {
             manifest["processing"] = Json(nullptr);
         }
+        manifest["reference"] = set.reference ? ArtGenReferenceToJson(*set.reference) : Json(nullptr);
+        manifest["atlas"] = set.atlas.empty() ? Json(nullptr) : MakeJsonString(set.atlas);
         return manifest;
     }
 
@@ -592,6 +632,28 @@ namespace BECore {
             }
             set.processing = *read;
         }
+
+        const Json* reference = FindJsonMember(manifest, "reference");
+        if (reference != nullptr && !reference->is_null()) {
+            auto read = ReadArtGenReference(*reference);
+            if (!read) {
+                return std::unexpected(Format("manifest: {}", read.error()));
+            }
+            set.reference = std::move(*read);
+        }
+
+        // Absent in a manifest from before atlases (the format number stays 1: the key is additive)
+        const Json* atlas = FindJsonMember(manifest, "atlas");
+        if (atlas != nullptr && !atlas->is_null()) {
+            auto group = RequireString(manifest, "atlas", top);
+            if (!group) {
+                return std::unexpected(group.error());
+            }
+            if (!IsValidSpriteName(*group)) {
+                return std::unexpected(Format("manifest: 'atlas' '{}' is not a valid atlas group name", *group));
+            }
+            set.atlas = std::move(*group);
+        }
         return set;
     }
 
@@ -633,8 +695,12 @@ namespace BECore {
         return job.accepted->kept ? ArtGenRowStatus::Kept : ArtGenRowStatus::Live;
     }
 
+    int32_t AlternativesBesides(const ArtGenSetJob& job, int64_t seed) {
+        return static_cast<int32_t>(std::count_if(job.variants.begin(), job.variants.end(), [seed](const ArtGenSetVariant& variant) { return variant.seed != seed; }));
+    }
+
     int32_t AlternativesOf(const ArtGenSetJob& job) {
-        return static_cast<int32_t>(std::count_if(job.variants.begin(), job.variants.end(), [&job](const ArtGenSetVariant& variant) { return !job.pick || variant.seed != *job.pick; }));
+        return job.pick ? AlternativesBesides(job, *job.pick) : static_cast<int32_t>(job.variants.size());
     }
 
     const char* ArtGenMoreBlocker(const ArtGenSet& set, int32_t count) {
@@ -686,14 +752,23 @@ namespace BECore {
         job.more.reset();
     }
 
+    namespace {
+
+        /// @p TSet is `ArtGenSet` or `const ArtGenSet`, so the two public overloads share one body
+        template <typename TSet>
+        auto* FindJobIn(TSet& set, StringView name) {
+            const auto it = std::find_if(set.jobs.begin(), set.jobs.end(), [&](const ArtGenSetJob& job) { return StringView(job.name) == name; });
+            return it == set.jobs.end() ? nullptr : &*it;
+        }
+
+    }  // namespace
+
     ArtGenSetJob* FindJob(ArtGenSet& set, StringView name) {
-        const auto it = std::find_if(set.jobs.begin(), set.jobs.end(), [&](const ArtGenSetJob& job) { return StringView(job.name) == name; });
-        return it == set.jobs.end() ? nullptr : &*it;
+        return FindJobIn(set, name);
     }
 
     const ArtGenSetJob* FindJob(const ArtGenSet& set, StringView name) {
-        const auto it = std::find_if(set.jobs.begin(), set.jobs.end(), [&](const ArtGenSetJob& job) { return StringView(job.name) == name; });
-        return it == set.jobs.end() ? nullptr : &*it;
+        return FindJobIn(set, name);
     }
 
     const ArtGenSetVariant* FindVariant(const ArtGenSetJob& job, int64_t seed) {

@@ -74,6 +74,10 @@ namespace BECore {
         /// Ends the connection in both directions and wakes the threads blocked in Receive() or SendAll() on it (on Windows within kWakeInterval)
         void ShutdownBoth();
 
+        /// Ends the sending direction, then reads and drops what the peer still sends until it closes, ShutdownBoth() is called or
+        /// @p limit ran out. Closing a socket with unread data resets the connection, and a reset destroys what the peer has not read yet
+        void FinishSending(std::chrono::milliseconds limit);
+
         void Close();
 
         [[nodiscard]] bool IsValid() const {

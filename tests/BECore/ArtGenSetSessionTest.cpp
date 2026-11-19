@@ -56,11 +56,32 @@ namespace BECore::Tests {
         Vector<AcceptedRow> gAccepted;
         String gFailOn;  // a row of this name is refused by the fake acceptors
 
+        /// The calls of the batch hooks, the acceptors and the packer in the order they came: "begin", "accept <name>", "pack <group>", "end"
+        Vector<String> gEvents;
+        bool gEndFails = false;               // the fake end of the batch answers that the library was not saved
+        MoveOnlyFunction<void()> gDuringEnd;  // what a test looks at while the fake end runs: the library is saved there, the rows are not marked yet
+
+        void FakeBegin() {
+            gEvents.push_back("begin");
+        }
+
+        std::expected<void, ControlError> FakeEnd() {
+            gEvents.push_back("end");
+            if (gDuringEnd) {
+                gDuringEnd();
+            }
+            if (gEndFails) {
+                return std::unexpected(ControlError{String("artgen_accept_failed"), String("TextureLibrary.xml could not be saved")});
+            }
+            return {};
+        }
+
         std::expected<Json, ControlError> Answer(const ArtGenVariant& variant, StringView name, bool image, bool withNode, bool defaultSettings) {
             if (name == gFailOn) {
                 return std::unexpected(ControlError{String("artgen_accept_failed"), String("the disk is full")});
             }
             gAccepted.push_back(AcceptedRow{variant.seed, variant.path, variant.provenancePath, String(name), image, withNode, defaultSettings});
+            gEvents.push_back(Format("accept {}", name));
             Json reply = Json::object();
             reply[image ? "sprite" : "clip"] = ToStdString(name);
             return reply;
@@ -92,6 +113,23 @@ namespace BECore::Tests {
                 gPlans.push_back(plan);
             }
             return answer;
+        }
+
+        /// The group of each call of the fake packer, and how many rows the fake acceptor had written when it was called
+        struct PackCall {
+            String group;
+            size_t acceptedBefore = 0;
+        };
+        Vector<PackCall> gPacks;
+        String gPackFail;  // the fake packer fails with this text when it is not empty
+
+        std::expected<Json, ControlError> FakePacker(StringView group) {
+            gPacks.push_back(PackCall{String(group), gAccepted.size()});
+            gEvents.push_back(Format("pack {}", group));
+            if (!gPackFail.empty()) {
+                return std::unexpected(ControlError{String("artgen_accept_failed"), gPackFail});
+            }
+            return Json{{"name", ToStdString(group)}, {"members", static_cast<int64_t>(gAccepted.size())}};
         }
 
         struct MeasureCall {
@@ -130,11 +168,17 @@ namespace BECore::Tests {
             session.SetSoundAcceptor(&FakeSoundAcceptor);
             session.SetKeeper(&FakeKeeper);
             session.SetFrameMeasurer(&FakeMeasurer);
+            session.SetAtlasPacker(&FakePacker);
+            gPacks.clear();
+            gPackFail.clear();
             gAccepted.clear();
             gPlans.clear();
             gMeasures.clear();
             gMeasureFail.clear();
             gFailOn.clear();
+            gEvents.clear();
+            gEndFails = false;
+            gDuringEnd = nullptr;
             gKept.clear();
             gKeepFailOn.clear();
         }
@@ -210,6 +254,24 @@ namespace BECore::Tests {
             if (!error.empty()) {
                 done["error"] = ToStdString(error);
             }
+            Call("artgen_done", done);
+        }
+
+        /// What the service does when it makes @p images images for a request that asked for fewer (extra images of a regenerating run): seeds from the request's, then the end
+        void FinishWithImages(const Json& request, int64_t images) {
+            const uint32_t id = static_cast<uint32_t>(GetJsonInt(request, "id").value());
+            const int64_t seed = GetJsonInt(request, "seed").value();
+            const String outDir = GetJsonString(request, "outDir").value();
+            const String name = GetJsonString(request, "name").value();
+            for (int64_t i = 0; i < images; ++i) {
+                Json image = Report(id);
+                image["seed"] = seed + i;
+                image["path"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.png", PathText(_root), outDir, name, seed + i));
+                image["provenance"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.artgen.json", PathText(_root), outDir, name, seed + i));
+                Call("artgen_image", image);
+            }
+            Json done = Report(id);
+            done["status"] = "ok";
             Call("artgen_done", done);
         }
 
@@ -1123,6 +1185,159 @@ namespace BECore::Tests {
         }
     }
 
+    TEST_F(ArtGenSetSessionTest, AcceptAllOfImagesRunsItsAcceptorsInsideOneBatchAndMarksTheRowsAfterIt) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(Enqueue("batch", "a\nb\nc").has_value());
+        RunAndPickAll("batch");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("batch"));
+        size_t markedWhileEnding = 99;
+        gDuringEnd = [this, &markedWhileEnding] {
+            markedWhileEnding = 0;
+            for (const ArtGenSetJob& job : OnDisk("batch").jobs) {
+                markedWhileEnding += job.accepted.has_value() ? 1 : 0;
+            }
+        };
+
+        const Json answer = Result(AcceptAllCall("batch"));
+
+        const Vector<String> expected{"begin", "accept a", "accept b", "accept c", "end"};
+        EXPECT_EQ(gEvents, expected);
+        EXPECT_EQ(markedWhileEnding, 0u) << "the library is saved before any row is marked";
+        ASSERT_NE(FindJsonMember(answer, "accepted"), nullptr);
+        const Json& rows = *FindJsonMember(answer, "accepted");
+        ASSERT_EQ(rows.size(), 3u);
+        EXPECT_EQ(GetJsonString(rows[2], "as"), Optional<String>("c"));
+        EXPECT_EQ(GetJsonString(rows[2], "sprite"), Optional<String>("c"));
+        EXPECT_EQ(GetJsonInt(rows[2], "seed"), Optional<int64_t>(kSetSeed + 1));
+        const ArtGenSet disk = OnDisk("batch");
+        for (const ArtGenSetJob& job : disk.jobs) {
+            ASSERT_TRUE(job.accepted.has_value());
+            EXPECT_EQ(job.pick, Optional<int64_t>(kSetSeed + 1));
+            EXPECT_FALSE(job.accepted->kept);
+        }
+        EXPECT_TRUE(disk.processing.has_value());
+    }
+
+    TEST_F(ArtGenSetSessionTest, ABatchedAcceptAllCountsTheAlternativesOfARowThatHasNoPickYet) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(Enqueue("nopick", "a\nb").has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAll());
+        ASSERT_EQ(session.PickVariant("nopick", "b", kSetSeed + 1), ArtGenSetEdit::Ok);
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("nopick"));
+
+        const Json answer = Result(AcceptAllCall("nopick"));
+
+        ASSERT_NE(FindJsonMember(answer, "accepted"), nullptr);
+        const Json& rows = *FindJsonMember(answer, "accepted");
+        ASSERT_EQ(rows.size(), 2u);
+        EXPECT_EQ(GetJsonInt(rows[0], "seed"), Optional<int64_t>(kSetSeed)) << "the first variant is the candidate of a row without a pick";
+        EXPECT_EQ(GetJsonInt(rows[0], "alternatives"), Optional<int64_t>(1));
+        EXPECT_EQ(GetJsonInt(rows[1], "alternatives"), Optional<int64_t>(1));
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailureHalfwayInABatchEndsItMarksTheRowsDoneAndTheNextCallFinishes) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(Enqueue("five", "a\nb\nc\nd\ne").has_value());
+        RunAndPickAll("five");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("five"));
+
+        gFailOn = "c";
+        const Json refused = AcceptAllCall("five");
+
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        const String message = ErrorMessage(refused);
+        EXPECT_NE(message.find("row 3 of 5"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("accepted before it: a, b"), String::npos) << message.c_str();
+        const Vector<String> expected{"begin", "accept a", "accept b", "end"};
+        EXPECT_EQ(gEvents, expected) << "the batch ends once, on the failure path too";
+        const ArtGenSet disk = OnDisk("five");
+        EXPECT_TRUE(disk.jobs[0].accepted.has_value());
+        EXPECT_TRUE(disk.jobs[1].accepted.has_value());
+        EXPECT_FALSE(disk.jobs[2].accepted.has_value());
+
+        gFailOn.clear();
+        gEvents.clear();
+        EXPECT_EQ(ErrorCode(AcceptAllCall("five")), "");
+        EXPECT_EQ(gEvents.size(), 7u) << "begin, five accepts, end";
+        for (const ArtGenSetJob& job : OnDisk("five").jobs) {
+            EXPECT_TRUE(job.accepted.has_value());
+        }
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailedLibrarySaveMarksNoRowAndNamesTheFilesWritten) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(Enqueue("lost", "a\nb\nc").has_value());
+        RunAndPickAll("lost");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("lost"));
+        const uint64_t versionBefore = session.Version();
+
+        gEndFails = true;
+        const Json refused = AcceptAllCall("lost");
+
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        const String message = ErrorMessage(refused);
+        EXPECT_NE(message.find("files written: a, b, c"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("library was not saved"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("call again"), String::npos) << message.c_str();
+        for (const ArtGenSetJob& job : OnDisk("lost").jobs) {
+            EXPECT_FALSE(job.accepted.has_value());
+        }
+        EXPECT_FALSE(OnDisk("lost").processing.has_value());
+        EXPECT_EQ(session.Version(), versionBefore) << "nothing of the set changed";
+
+        gEndFails = false;
+        EXPECT_EQ(ErrorCode(AcceptAllCall("lost")), "");
+        for (const ArtGenSetJob& job : OnDisk("lost").jobs) {
+            EXPECT_TRUE(job.accepted.has_value());
+        }
+    }
+
+    TEST_F(ArtGenSetSessionTest, ARowFailureAndAFailedLibrarySaveAreBothInTheError) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(Enqueue("both", "a\nb\nc").has_value());
+        RunAndPickAll("both");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("both"));
+
+        gFailOn = "b";
+        gEndFails = true;
+        const String message = ErrorMessage(AcceptAllCall("both"));
+
+        EXPECT_NE(message.find("'b'"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("the disk is full"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("library was not saved"), String::npos) << message.c_str();
+        EXPECT_FALSE(OnDisk("both").jobs[0].accepted.has_value()) << "the row before the failure is not marked either";
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASetWithNothingToWriteAndASoundSetCallNoBatchHook) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(Enqueue("done", "a").has_value());
+        RunAndPickAll("done");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("done"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("done")), "");
+        ASSERT_NO_FATAL_FAILURE(KeepOnDisk("done", "a"));
+        gEvents.clear();
+        EXPECT_EQ(ErrorCode(AcceptAllCall("done")), "");
+        EXPECT_TRUE(gEvents.empty()) << "every row is kept: nothing is written, no batch is opened";
+
+        Poll();
+        ArtGenSetRequest request;
+        request.preset = "knock";
+        request.subjects = ParseArtGenSubjects("knock: a wooden knock\ntap: a soft tap").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "heard";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAll("audio"));
+        ASSERT_EQ(session.PickVariant("heard", "knock", kSetSeed), ArtGenSetEdit::Ok);
+        ASSERT_EQ(session.PickVariant("heard", "tap", kSetSeed), ArtGenSetEdit::Ok);
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("heard"));
+        gEvents.clear();
+        EXPECT_EQ(ErrorCode(AcceptAllCall("heard")), "");
+        const Vector<String> expected{"accept knock", "accept tap"};
+        EXPECT_EQ(gEvents, expected) << "a sound touches no library";
+        EXPECT_TRUE(OnDisk("heard").jobs[1].accepted.has_value());
+    }
+
     TEST_F(ArtGenSetSessionTest, AcceptAllOfRowsWithNoPickTakesTheFirstVariantAndRecordsItAsThePick) {
         ASSERT_TRUE(Enqueue("firsts", "a\nb").has_value());
         ASSERT_NO_FATAL_FAILURE(RunAll());
@@ -1270,6 +1485,7 @@ namespace BECore::Tests {
         ArtGenSwitch write;
         EXPECT_EQ(session.PickVariant("fail", "a", kSetSeed, &write), ArtGenSetEdit::WriteFailed);
         EXPECT_NE(write.error.find("the disk is full"), String::npos) << write.error.c_str();
+        EXPECT_NE(write.error.find(Format("the row still names seed {}", kSetSeed + 1)), String::npos) << write.error.c_str();
         const Json refused = Call("artgen_pick", pick);
         EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
         EXPECT_EQ(ArtGenSetToJson(OnDisk("fail")), ArtGenSetToJson(before));
@@ -1535,6 +1751,63 @@ namespace BECore::Tests {
         ASSERT_EQ(gAccepted.size(), 1u);
     }
 
+    TEST_F(ArtGenSetSessionTest, AnAcceptOfANameAnotherSetHoldsWithALaterDateTakesTheNextSecondAndOwnsTheName) {
+        ASSERT_TRUE(Enqueue("first", "a\nb").has_value());
+        ASSERT_TRUE(Enqueue("second", "a").has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAndPickAll("first"));
+        ASSERT_EQ(session.PickVariant("second", "a", kSetSeed + 1), ArtGenSetEdit::Ok);
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("first"));
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("second"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("second")), "");
+        ArtGenSet disk = OnDisk("second");
+        disk.jobs[0].accepted->date = "2999-01-01T00:00:00Z";
+        ASSERT_TRUE(WriteManifest(_root, disk).has_value());
+        ReloadFromDisk();
+
+        ASSERT_EQ(ErrorCode(AcceptAllCall("first")), "");
+
+        const ArtGenSet& first = *session.FindSet("first");
+        const ArtGenSet& second = *session.FindSet("second");
+        EXPECT_EQ(first.jobs[0].accepted->date, "2999-01-01T00:00:01Z");
+        EXPECT_EQ(OnDisk("first").jobs[0].accepted->date, "2999-01-01T00:00:01Z");
+        EXPECT_EQ(session.FindNewerOwner(second, second.jobs[0]), &first);
+        EXPECT_EQ(session.FindNewerOwner(first, first.jobs[0]), nullptr);
+        EXPECT_LT(first.jobs[1].accepted->date, String("2999")) << "a name no other set holds keeps the stamp of now";
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASwitchOfTheOwnerTakesADateAfterTheOtherSetsDateAndKeepsTheName) {
+        ASSERT_NO_FATAL_FAILURE(AcceptTwoSetsOfOneName());
+        for (const char* name : {"first", "second"}) {
+            ArtGenSet disk = OnDisk(name);
+            disk.jobs[0].accepted->date = "2999-01-01T00:00:00Z";
+            ASSERT_TRUE(WriteManifest(_root, disk).has_value());
+        }
+        ReloadFromDisk();
+        const ArtGenSet& first = *session.FindSet("first");
+        const ArtGenSet& second = *session.FindSet("second");
+        ASSERT_EQ(session.FindNewerOwner(first, first.jobs[0]), &second) << "manifests that hold equal dates: the later set in the list owns the name";
+        ASSERT_EQ(session.FindNewerOwner(second, second.jobs[0]), nullptr);
+        EXPECT_EQ(session.PickVariant("first", "a", kSetSeed), ArtGenSetEdit::WriteFailed);
+
+        ASSERT_EQ(session.PickVariant("second", "a", kSetSeed), ArtGenSetEdit::Ok);
+
+        EXPECT_EQ(second.jobs[0].accepted->date, "2999-01-01T00:00:01Z");
+        EXPECT_EQ(session.FindNewerOwner(first, first.jobs[0]), &second);
+        EXPECT_EQ(session.FindNewerOwner(second, second.jobs[0]), nullptr);
+    }
+
+    TEST_F(ArtGenSetSessionTest, TheNextSingleRunDoesNotCarryTheDraftsOfASetsJob) {
+        ASSERT_TRUE(Enqueue("drafts", "a").has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAll());
+        ASSERT_FALSE(session.GetRun().variants.empty()) << "the job's drafts are the run's variants when it ends";
+
+        ASSERT_TRUE(session.Request("wood", "b", 1, 5, true).has_value());
+
+        EXPECT_TRUE(session.GetRun().variants.empty());
+        EXPECT_EQ(session.GetRun().keptVariants, 0);
+        EXPECT_EQ(session.FindSet("drafts")->jobs[0].variants.size(), 2u) << "the row keeps its own";
+    }
+
     TEST_F(ArtGenSetSessionTest, ASoundAndAnImageOfTheSameNameDoNotReplaceEachOther) {
         Poll();
         ASSERT_TRUE(Enqueue("pictures", "knock").has_value());
@@ -1744,6 +2017,398 @@ namespace BECore::Tests {
         EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "");
         ASSERT_EQ(gAccepted.size(), 1u);
         EXPECT_FALSE(gAccepted[0].image);
+    }
+
+    // ---- an atlas group of the set (Sets/CLAUDE.md, "Accept all") ----
+
+    namespace {
+
+        /// A poll whose catalog gives the saved preset `wood` the content @p woodAtlas for its `atlas` key (null: no key)
+        Json PollWithWoodAtlas(const Json& woodAtlas) {
+            Json params = ReadyPoll();
+            Json wood = params["presets"][0];
+            wood["preset"] = Json{{"preset", 1}, {"workflow", "txt2img"}, {"prompt", "{subject}"}};
+            if (!woodAtlas.is_null()) {
+                wood["preset"]["atlas"] = woodAtlas;
+            }
+            Json knock = params["presets"][1];
+            knock["preset"] = Json{{"preset", 1}, {"workflow", "sound"}, {"prompt", "{subject}"}, {"atlas", "pieces"}};
+            params["presets"] = Json::array({wood, knock});
+            return params;
+        }
+
+        Json EnqueueParams(StringView set) {
+            Json params = Json::object();
+            params["preset"] = "wood";
+            params["subjects"] = "a\nb";
+            params["set"] = ToStdString(set);
+            params["seed"] = kSetSeed;
+            return params;
+        }
+
+    }  // namespace
+
+    TEST_F(ArtGenSetSessionTest, EnqueueRecordsTheAtlasGroupInTheSetItsManifestAndTheState) {
+        Json params = EnqueueParams("grouped");
+        params["atlas"] = "pieces";
+        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", params)), "");
+        EXPECT_EQ(session.FindSet("grouped")->atlas, "pieces");
+        EXPECT_EQ(OnDisk("grouped").atlas, "pieces");
+
+        Json setParams = Json::object();
+        setParams["set"] = "grouped";
+        EXPECT_EQ(*FindJsonMember(Result(Call("artgen_set", setParams)), "atlas"), Json("pieces"));
+        const Json state = Result(Call("artgen_state"));
+        EXPECT_EQ(*FindJsonMember((*FindJsonMember(state, "sets"))[0], "atlas"), Json("pieces"));
+
+        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", EnqueueParams("plain"))), "");
+        EXPECT_TRUE(session.FindSet("plain")->atlas.empty());
+        EXPECT_TRUE(FindJsonMember((*FindJsonMember(Result(Call("artgen_state")), "sets"))[1], "atlas")->is_null());
+        ReloadFromDisk();
+        EXPECT_EQ(session.FindSet("grouped")->atlas, "pieces") << "a reload of the sets keeps it";
+    }
+
+    TEST_F(ArtGenSetSessionTest, EnqueueTakesTheGroupOfTheSavedPresetAndAnEmptyStringClearsIt) {
+        Call("artgen_poll", PollWithWoodAtlas("icons"));
+        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", EnqueueParams("by_preset"))), "");
+        EXPECT_EQ(session.FindSet("by_preset")->atlas, "icons");
+
+        Json cleared = EnqueueParams("cleared");
+        cleared["atlas"] = "";
+        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", cleared)), "");
+        EXPECT_TRUE(session.FindSet("cleared")->atlas.empty());
+
+        Json other = EnqueueParams("other");
+        other["atlas"] = "tiles";
+        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", other)), "");
+        EXPECT_EQ(session.FindSet("other")->atlas, "tiles");
+
+        Call("artgen_poll", PollWithWoodAtlas("changed"));
+        EXPECT_EQ(session.FindSet("by_preset")->atlas, "icons") << "editing the preset later does not reach the set";
+        Call("artgen_poll", PollWithWoodAtlas(Json()));
+        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", EnqueueParams("none"))), "");
+        EXPECT_TRUE(session.FindSet("none")->atlas.empty());
+    }
+
+    TEST_F(ArtGenSetSessionTest, ADraftSetTakesItsOwnGroupNeverTheSavedPresets) {
+        Call("artgen_poll", PollWithWoodAtlas("saved"));
+        ArtGenSetRequest request;
+        request.preset = "form";
+        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","atlas":"drafted"})").value();
+        request.subjects = ParseArtGenSubjects("a").value();
+        request.name = "with_group";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        EXPECT_EQ(session.FindSet("with_group")->atlas, "drafted");
+
+        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}"})").value();
+        request.preset = "wood";
+        request.name = "without_group";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        EXPECT_TRUE(session.FindSet("without_group")->atlas.empty());
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASoundSetTakesNoGroup) {
+        Call("artgen_poll", PollWithWoodAtlas(Json()));
+        Json params = Json::object();
+        params["preset"] = "knock";
+        params["subjects"] = "click";
+        params["set"] = "heard";
+        EXPECT_EQ(ErrorCode(Call("artgen_enqueue", params)), "") << "a group the sound preset names is ignored";
+        EXPECT_TRUE(session.FindSet("heard")->atlas.empty());
+
+        params["set"] = "refused";
+        params["atlas"] = "pieces";
+        const Json refused = Call("artgen_enqueue", params);
+        EXPECT_EQ(ErrorCode(refused), "invalid_params");
+        EXPECT_NE(ErrorMessage(refused).find("only an image set can have an atlas"), String::npos) << ErrorMessage(refused).c_str();
+        EXPECT_EQ(session.FindSet("refused"), nullptr);
+    }
+
+    TEST_F(ArtGenSetSessionTest, EnqueueRefusesABadAtlasAndKeepsNothing) {
+        for (const Json& bad : {Json("a b"), Json("../x"), Json(5), Json::array(), Json(true), Json(ToStdString(String(65, 'a')))}) {
+            Json params = EnqueueParams("bad");
+            params["atlas"] = bad;
+            EXPECT_EQ(ErrorCode(Call("artgen_enqueue", params)), "invalid_params") << DumpJson(bad).c_str();
+        }
+        EXPECT_TRUE(session.GetSets().empty());
+
+        ArtGenSetRequest request;
+        request.preset = "wood";
+        request.subjects = ParseArtGenSubjects("a").value();
+        request.atlas = "bad name";
+        EXPECT_FALSE(session.EnqueueSet(request).has_value()) << "the model checks it too";
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASwitchOfALiveRowOfAGroupSetPassesTheGroupAndPacksAtOnce) {
+        ArtGenSetRequest request;
+        request.preset = "wood";
+        request.subjects = ParseArtGenSubjects("a\nb").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "grouped";
+        request.atlas = "pieces";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("grouped")), "");
+        gPlans.clear();
+
+        ASSERT_EQ(session.PickVariant("grouped", "a", kSetSeed), ArtGenSetEdit::Ok);
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_EQ(gPlans[0].atlas, "pieces");
+        EXPECT_FALSE(gPlans[0].deferPack) << "a switch repacks at once";
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASwitchOfALiveRowOfASetWithoutAGroupPassesNone) {
+        ASSERT_NO_FATAL_FAILURE(FinishAndAccept("loose", "a\nb"));
+        ASSERT_EQ(session.PickVariant("loose", "a", kSetSeed), ArtGenSetEdit::Ok);
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_TRUE(gPlans[0].atlas.empty());
+        EXPECT_FALSE(gPlans[0].deferPack);
+    }
+
+    // ---- Accept all packs the group once (Sets/CLAUDE.md, "Accept all") ----
+
+    namespace {
+
+        std::expected<String, String> EnqueueInGroup(ArtGenSession& session, StringView name, StringView lines, StringView group) {
+            ArtGenSetRequest request;
+            request.preset = "wood";
+            request.subjects = ParseArtGenSubjects(lines).value();
+            request.count = 2;
+            request.seed = kSetSeed;
+            request.name = String(name);
+            request.atlas = String(group);
+            return session.EnqueueSet(std::move(request));
+        }
+
+    }  // namespace
+
+    TEST_F(ArtGenSetSessionTest, AcceptAllOfAGroupSetDefersEveryRowAndPacksOnceAfterTheLastOne) {
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb\nc", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+
+        const Json answer = Result(AcceptAllCall("grouped"));
+        ASSERT_EQ(gPlans.size(), 3u);
+        for (const ArtGenImagePlan& plan : gPlans) {
+            EXPECT_EQ(plan.atlas, "pieces");
+            EXPECT_TRUE(plan.deferPack);
+        }
+        ASSERT_EQ(gPacks.size(), 1u);
+        EXPECT_EQ(gPacks[0].group, "pieces");
+        EXPECT_EQ(gPacks[0].acceptedBefore, 3u) << "after the last row";
+        const Json* atlas = FindJsonMember(answer, "atlas");
+        ASSERT_NE(atlas, nullptr);
+        EXPECT_EQ(GetJsonString(*atlas, "name"), Optional<String>("pieces"));
+        EXPECT_EQ(FindJsonMember(answer, "accepted")->size(), 3u);
+        for (const ArtGenSetJob& job : OnDisk("grouped").jobs) {
+            EXPECT_TRUE(job.accepted.has_value());
+        }
+    }
+
+    TEST_F(ArtGenSetSessionTest, AcceptAllOfASetWithoutAGroupNeverCallsThePacker) {
+        ASSERT_NO_FATAL_FAILURE(FinishAndAccept("loose", "a\nb"));
+        const Json answer = Result(AcceptAllCall("loose"));
+        EXPECT_TRUE(gPacks.empty());
+        ASSERT_EQ(gPlans.size(), 2u);
+        for (const ArtGenImagePlan& plan : gPlans) {
+            EXPECT_TRUE(plan.atlas.empty());
+            EXPECT_FALSE(plan.deferPack);
+        }
+        const Json* atlas = FindJsonMember(answer, "atlas");
+        ASSERT_NE(atlas, nullptr);
+        EXPECT_TRUE(atlas->is_null());
+    }
+
+    TEST_F(ArtGenSetSessionTest, AcceptAllOfAGroupSetWithNoPackerLetsEveryRowPackByItself) {
+        session.SetAtlasPacker(nullptr);
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+        const Json answer = Result(AcceptAllCall("grouped"));
+        ASSERT_EQ(gPlans.size(), 2u);
+        for (const ArtGenImagePlan& plan : gPlans) {
+            EXPECT_EQ(plan.atlas, "pieces");
+            EXPECT_FALSE(plan.deferPack);
+        }
+        EXPECT_TRUE(gPacks.empty());
+        EXPECT_TRUE(FindJsonMember(answer, "atlas")->is_null());
+    }
+
+    TEST_F(ArtGenSetSessionTest, AcceptAllOfAGroupSetPacksNothingWhenEveryRowIsKeptOrReplaced) {
+        ASSERT_TRUE(EnqueueInGroup(session, "first", "a\nb", "pieces").has_value());
+        ASSERT_TRUE(EnqueueInGroup(session, "second", "a", "pieces").has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAndPickAll("first"));
+        ASSERT_EQ(session.PickVariant("second", "a", kSetSeed + 1), ArtGenSetEdit::Ok);
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("first"));
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("second"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("first")), "");
+        ASSERT_EQ(ErrorCode(AcceptAllCall("second")), "");
+        ASSERT_NO_FATAL_FAILURE(KeepOnDisk("first", "b"));
+        gAccepted.clear();
+        gPacks.clear();
+
+        // Row a of the first set is held by the second, row b is kept: nothing is written, so nothing is packed
+        const Json answer = Result(AcceptAllCall("first"));
+        EXPECT_TRUE(gAccepted.empty());
+        EXPECT_TRUE(gPacks.empty());
+        EXPECT_TRUE(FindJsonMember(answer, "atlas")->is_null());
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailedRowOfAGroupSetPacksNothingAndTheNextCallFinishesAndPacksOnce) {
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb\nc", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+
+        gFailOn = "c";
+        const Json refused = AcceptAllCall("grouped");
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        const String message = ErrorMessage(refused);
+        EXPECT_NE(message.find("accepted before it: a, b"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("atlas 'pieces' is not packed"), String::npos) << message.c_str();
+        EXPECT_TRUE(gPacks.empty());
+        const ArtGenSet disk = OnDisk("grouped");
+        EXPECT_TRUE(disk.jobs[0].accepted.has_value());
+        EXPECT_TRUE(disk.jobs[1].accepted.has_value());
+        EXPECT_FALSE(disk.jobs[2].accepted.has_value());
+
+        gFailOn.clear();
+        const Json again = Result(AcceptAllCall("grouped"));
+        ASSERT_EQ(gPacks.size(), 1u);
+        EXPECT_EQ(gPacks[0].acceptedBefore, 5u) << "the first two rows replace themselves";
+        EXPECT_FALSE(FindJsonMember(again, "atlas")->is_null());
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailedFirstRowOfAGroupSetSaysNothingAboutTheAtlas) {
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+        gFailOn = "a";
+        const Json refused = AcceptAllCall("grouped");
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        EXPECT_EQ(ErrorMessage(refused).find("atlas"), String::npos) << ErrorMessage(refused).c_str();
+        EXPECT_TRUE(gPacks.empty());
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailedPackKeepsTheRowsAcceptedAndNamesTheRepair) {
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+
+        gPackFail = "the atlas file is locked";
+        const Json refused = AcceptAllCall("grouped");
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        const String message = ErrorMessage(refused);
+        EXPECT_NE(message.find("the atlas file is locked"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("'pieces' is not packed"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("call artgen_accept_set again"), String::npos) << message.c_str();
+        EXPECT_NE(message.find("Pack in the Sprite Library"), String::npos) << message.c_str();
+        ASSERT_EQ(gPacks.size(), 1u);
+        EXPECT_EQ(gAccepted.size(), 2u) << "the rows are in the game";
+        for (const ArtGenSetJob& job : OnDisk("grouped").jobs) {
+            EXPECT_TRUE(job.accepted.has_value()) << "the manifest on disk has them accepted";
+        }
+
+        gPackFail.clear();
+        const Json again = Result(AcceptAllCall("grouped"));
+        EXPECT_EQ(gPacks.size(), 2u);
+        EXPECT_FALSE(FindJsonMember(again, "atlas")->is_null());
+    }
+
+    TEST_F(ArtGenSetSessionTest, AcceptAllOfAGroupSetPacksInsideTheBatchAndMarksTheRowsAfterItsSave) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb\nc", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+        size_t markedWhileEnding = 99;
+        gDuringEnd = [this, &markedWhileEnding] {
+            markedWhileEnding = 0;
+            for (const ArtGenSetJob& job : OnDisk("grouped").jobs) {
+                markedWhileEnding += job.accepted.has_value() ? 1 : 0;
+            }
+        };
+
+        const Json answer = Result(AcceptAllCall("grouped"));
+
+        const Vector<String> expected{"begin", "accept a", "accept b", "accept c", "pack pieces", "end"};
+        EXPECT_EQ(gEvents, expected) << "the pack is a step of the batch, so the library is written once, by its end";
+        EXPECT_EQ(markedWhileEnding, 0u);
+        EXPECT_FALSE(FindJsonMember(answer, "atlas")->is_null());
+        for (const ArtGenSetJob& job : OnDisk("grouped").jobs) {
+            EXPECT_TRUE(job.accepted.has_value());
+        }
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailedSaveAfterThePackMarksNoRowOfAGroupSet) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+        gEndFails = true;
+
+        const Json refused = AcceptAllCall("grouped");
+
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        const String message = ErrorMessage(refused);
+        EXPECT_NE(message.find("the library was not saved"), String::npos) << message.c_str();
+        const Vector<String> expected{"begin", "accept a", "accept b", "pack pieces", "end"};
+        EXPECT_EQ(gEvents, expected);
+        for (const ArtGenSetJob& job : OnDisk("grouped").jobs) {
+            EXPECT_FALSE(job.accepted.has_value()) << "a row is marked only after the save went through";
+        }
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailedPackInsideTheBatchStillSavesAndMarksTheRowsDone) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+        gPackFail = "the atlas file is locked";
+
+        const Json refused = AcceptAllCall("grouped");
+
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        EXPECT_NE(ErrorMessage(refused).find("'pieces' is not packed"), String::npos) << ErrorMessage(refused).c_str();
+        const Vector<String> expected{"begin", "accept a", "accept b", "pack pieces", "end"};
+        EXPECT_EQ(gEvents, expected) << "the loose members are saved by the batch's end";
+        for (const ArtGenSetJob& job : OnDisk("grouped").jobs) {
+            EXPECT_TRUE(job.accepted.has_value());
+        }
+    }
+
+    TEST_F(ArtGenSetSessionTest, AFailedRowOfAGroupSetInsideTheBatchPacksNothingAndEndsTheBatch) {
+        session.SetAcceptBatch(&FakeBegin, &FakeEnd);
+        ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb\nc", "pieces").has_value());
+        RunAndPickAll("grouped");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
+        gFailOn = "c";
+
+        const Json refused = AcceptAllCall("grouped");
+
+        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        const Vector<String> expected{"begin", "accept a", "accept b", "end"};
+        EXPECT_EQ(gEvents, expected);
+        const ArtGenSet disk = OnDisk("grouped");
+        EXPECT_TRUE(disk.jobs[0].accepted.has_value());
+        EXPECT_TRUE(disk.jobs[1].accepted.has_value());
+        EXPECT_FALSE(disk.jobs[2].accepted.has_value());
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASoundSetNeverCallsThePacker) {
+        Poll();  // the catalog tells the kind of the preset
+        ArtGenSetRequest request;
+        request.preset = "knock";
+        request.subjects = ParseArtGenSubjects("a\nb").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "heard";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        RunAndPickAll("heard", "audio");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("heard"));
+        const Json answer = Result(AcceptAllCall("heard"));
+        EXPECT_TRUE(gPacks.empty());
+        EXPECT_TRUE(FindJsonMember(answer, "atlas")->is_null());
     }
 
     // ---- one frame for the whole set (Sets/CLAUDE.md, "Accept all") ----
@@ -2069,6 +2734,112 @@ namespace BECore::Tests {
         EXPECT_EQ(ErrorCode(AcceptAllCall("sounds")), "");
         EXPECT_TRUE(gMeasures.empty());
         EXPECT_FALSE(Require(session.FindSet("sounds")).processing.has_value());
+    }
+
+    namespace {
+
+        constexpr StringView kStyleSource = "assets/artgen/white_knight.png";
+
+        Json StyleReferenceJson() {
+            return Json{{"mode", "style"}, {"image", ToStdString(kStyleSource)}, {"weight", 0.7}};
+        }
+
+    }  // namespace
+
+    TEST_F(ArtGenSetSessionTest, AReferenceOfAnEnqueuedSetGoesOutWithEveryJobAndIsKeptInTheSet) {
+        Json params = Json::object();
+        params["preset"] = "wood";
+        params["subjects"] = "a\nb";
+        params["set"] = "styled";
+        params["seed"] = kSetSeed;
+        params["reference"] = StyleReferenceJson();
+        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", params)), "");
+
+        const Json first = Poll();
+        const Json* sent = RequestOf(first);
+        ASSERT_NE(sent, nullptr);
+        EXPECT_EQ(*FindJsonMember(*sent, "reference"), StyleReferenceJson());
+        EXPECT_EQ(*FindJsonMember(*FindJsonMember(Result(Call("artgen_state")), "run"), "reference"), StyleReferenceJson()) << "the run in work shows it";
+        Finish(*sent, "ok");
+        const Json second = Poll();
+        ASSERT_NE(RequestOf(second), nullptr);
+        EXPECT_EQ(*FindJsonMember(*RequestOf(second), "reference"), StyleReferenceJson()) << "every job, not only the first";
+        Finish(*RequestOf(second), "ok");
+
+        const Json state = Result(Call("artgen_state"));
+        EXPECT_EQ(*FindJsonMember((*FindJsonMember(state, "sets"))[0], "reference"), StyleReferenceJson());
+        Json setParams = Json::object();
+        setParams["set"] = "styled";
+        EXPECT_EQ(*FindJsonMember(Result(Call("artgen_set", setParams)), "reference"), StyleReferenceJson());
+        ASSERT_TRUE(OnDisk("styled").reference.has_value());
+        EXPECT_EQ(OnDisk("styled").reference->image, String(kStyleSource));
+
+        ReloadFromDisk();
+        ASSERT_TRUE(session.FindSet("styled")->reference.has_value()) << "a reload of the sets keeps it";
+        EXPECT_EQ(session.FindSet("styled")->reference->mode, "style");
+        EXPECT_EQ(session.FindSet("styled")->reference->weight, Optional<double>(0.7));
+    }
+
+    TEST_F(ArtGenSetSessionTest, RetryAndMoreVariantsRunWithTheReferenceOfTheSet) {
+        ArtGenSetRequest request;
+        request.preset = "wood";
+        request.subjects = ParseArtGenSubjects("a\nb").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "styled";
+        request.reference = ArtGenReference{"style", String(kStyleSource), {}};
+        ASSERT_TRUE(session.EnqueueSet(std::move(request)).has_value());
+
+        const Json first = Poll();
+        Finish(*RequestOf(first), "failed", "the generator fell over");
+        const Json second = Poll();
+        Finish(*RequestOf(second), "ok");
+        ASSERT_EQ(session.RetryJobs("styled", {}), ArtGenSetEdit::Ok);
+        const Json retried = Poll();
+        const Json* retriedRequest = RequestOf(retried);
+        ASSERT_NE(retriedRequest, nullptr);
+        EXPECT_EQ(GetJsonString(*retriedRequest, "name"), Optional<String>("a"));
+        const Json* retriedReference = FindJsonMember(*retriedRequest, "reference");
+        ASSERT_NE(retriedReference, nullptr) << "a Retry runs with the set's reference";
+        EXPECT_EQ(GetJsonString(*retriedReference, "image"), Optional<String>(String(kStyleSource)));
+        EXPECT_EQ(FindJsonMember(*retriedReference, "weight"), nullptr) << "no weight: the mode's default, as the set was made";
+        Finish(*retriedRequest, "ok");
+
+        ASSERT_EQ(ErrorCode(MoreCall("styled")), "");
+        const Json more = Poll();
+        const Json* moreRequest = RequestOf(more);
+        ASSERT_NE(moreRequest, nullptr);
+        EXPECT_NE(GetJsonInt(*moreRequest, "seed"), Optional<int64_t>(kSetSeed)) << "this is the more-run";
+        EXPECT_EQ(GetJsonString(*FindJsonMember(*moreRequest, "reference"), "mode"), Optional<String>("style"));
+    }
+
+    TEST_F(ArtGenSetSessionTest, ASetWithNoReferenceSendsNoneAndTheSlotIsNotTakenForOne) {
+        session.SetReferenceSlot(ArtGenReference{"init", String(kStyleSource), {}});
+        ASSERT_TRUE(Enqueue("plain", "a").has_value());
+        EXPECT_FALSE(session.FindSet("plain")->reference.has_value()) << "only the panel passes the slot";
+        const Json first = Poll();
+        ASSERT_NE(RequestOf(first), nullptr);
+        EXPECT_EQ(FindJsonMember(*RequestOf(first), "reference"), nullptr);
+        EXPECT_TRUE(FindJsonMember((*FindJsonMember(Result(Call("artgen_state")), "sets"))[0], "reference")->is_null());
+        const Json manifest = ParseJson(ReadTextFile(ManifestPath(_root, "plain")).value()).value();
+        EXPECT_TRUE(FindJsonMember(manifest, "reference")->is_null());
+    }
+
+    TEST_F(ArtGenSetSessionTest, ABadReferenceOfEnqueueIsInvalidParamsThatNamesTheKey) {
+        Json good = Json::object();
+        good["preset"] = "wood";
+        good["subjects"] = "a";
+        const Json bad = Json::array({Json("yes"), Json{{"image", "a.png"}}, Json{{"mode", "style"}}, Json{{"mode", "style"}, {"image", "a.png"}, {"weight", "x"}}});
+        for (const Json& reference : bad) {
+            Json params = good;
+            params["reference"] = reference;
+            const Json response = Call("artgen_enqueue", params);
+            EXPECT_EQ(ErrorCode(response), "invalid_params") << DumpJson(reference).c_str();
+            EXPECT_TRUE(ErrorMessage(response).find("'reference") != String::npos) << ErrorMessage(response);
+        }
+        EXPECT_TRUE(session.GetSets().empty()) << "a refusal keeps nothing";
+        good["reference"] = nullptr;
+        EXPECT_EQ(ErrorCode(Call("artgen_enqueue", good)), "") << "a null reference is none";
     }
 
     TEST_F(ArtGenSetSessionTest, MoreQueuesEveryDoneRowOnTheGivenSeedAndTheRunAppendsToTheVariants) {
@@ -2470,6 +3241,70 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString(skipped[0], "reason"), Optional<String>("full"));
     }
 
+    // The service regenerates what failed its checks: a job asked for `count` images may come back with more, on the seeds after its own
+
+    TEST_F(ArtGenSetSessionTest, AJobThatGetsMoreImagesThanItsCountEndsDoneWithAllOfThem) {
+        ASSERT_TRUE(Enqueue("m", "a", 2).has_value());
+        const Json* request = RequestOf(pollReply = Poll());
+        ASSERT_NE(request, nullptr);
+        ASSERT_EQ(GetJsonInt(*request, "count"), Optional<int64_t>(2));
+        FinishWithImages(*request, 4);
+
+        EXPECT_FALSE(session.IsBusy());
+        for (const ArtGenSet& set : {*session.FindSet("m"), OnDisk("m")}) {
+            const ArtGenSetJob& job = set.jobs[0];
+            EXPECT_EQ(job.state, ArtGenSetJobState::Done);
+            EXPECT_TRUE(job.error.empty());
+            ASSERT_EQ(job.variants.size(), 4u);
+            for (size_t i = 0; i < job.variants.size(); ++i) {
+                EXPECT_EQ(job.variants[i].seed, kSetSeed + static_cast<int64_t>(i));
+                EXPECT_EQ(job.variants[i].file, Format("a/a_{}.png", kSetSeed + static_cast<int64_t>(i)));
+            }
+        }
+    }
+
+    TEST_F(ArtGenSetSessionTest, MoreAfterExtraImagesKeepsOffTheirSeeds) {
+        ASSERT_TRUE(Enqueue("m", "a", 2).has_value());
+        FinishWithImages(*RequestOf(pollReply = Poll()), 4);  // seeds 40..43, the last two are extras
+        const ArtGenSetJob& job = session.FindSet("m")->jobs[0];
+        ASSERT_EQ(job.variants.size(), 4u);
+
+        // An explicit seed whose range meets an extra is refused and changes nothing
+        const Pair<int64_t, int64_t> meeting[] = {{42, 1}, {43, 2}, {41, 3}, {39, 5}};
+        for (const auto& [seed, count] : meeting) {
+            Json extra = Json::object();
+            extra["seed"] = seed;
+            extra["count"] = count;
+            EXPECT_EQ(ErrorCode(MoreCall("m", extra)), "invalid_params") << seed << " x " << count;
+            EXPECT_FALSE(session.IsBusy());
+            EXPECT_FALSE(job.more.has_value());
+            EXPECT_EQ(job.variants.size(), 4u);
+        }
+
+        // One that does not is queued
+        Json clear = Json::object();
+        clear["seed"] = 44;
+        clear["count"] = 2;
+        ASSERT_EQ(ErrorCode(MoreCall("m", clear)), "");
+        EXPECT_TRUE(job.more.has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAll());
+        ASSERT_EQ(job.variants.size(), 6u);
+        EXPECT_EQ(job.variants[4].seed, 44);
+        EXPECT_EQ(job.variants[5].seed, 45);
+
+        // A drawn seed meets no variant the row holds, the extras among them
+        for (int round = 0; round < 5; ++round) {
+            Json two = Json::object();
+            two["count"] = 2;
+            const Json answer = Result(MoreCall("m", two));
+            const Optional<int64_t> seed = GetJsonInt(answer, "seed");
+            ASSERT_TRUE(seed.has_value()) << round;
+            EXPECT_TRUE(ArtGenSeedRangeFree(job, *seed, 2)) << "round " << round << " drew " << *seed;
+            ASSERT_NO_FATAL_FAILURE(RunAll());
+        }
+        EXPECT_EQ(job.variants.size(), 16u);
+    }
+
     TEST_F(ArtGenSetSessionTest, ASoundSetGetsMoreVariantsToo) {
         Poll();  // the catalog tells the kind of the preset
         ArtGenSetRequest request;
@@ -2487,6 +3322,144 @@ namespace BECore::Tests {
         EXPECT_EQ(job.variants[2].kind, "audio");
         EXPECT_NE(job.variants[2].file.find(".flac"), String::npos);
         EXPECT_EQ(job.pick, Optional<int64_t>(kSetSeed + 1));
+    }
+
+    TEST_F(ArtGenSetSessionTest, ADroppedVariantOfAFramedSetIsWrittenThroughTheSetsFrameAndAtlas) {
+        ArtGenSetRequest request;
+        request.preset = "wood";
+        request.subjects = ParseArtGenSubjects("a\nb").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "framed";
+        request.atlas = String("pieces");
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAndPickAll("framed"));
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
+        ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
+        gAccepted.clear();
+        gPlans.clear();
+        const ArtGenSet before = OnDisk("framed");
+        ASSERT_TRUE(before.processing.has_value());
+
+        const auto answer = session.AcceptSetVariant("framed", "a", kSetSeed, "queen");
+        ASSERT_TRUE(answer.has_value()) << answer.error().message.c_str();
+        EXPECT_EQ(GetJsonString(*answer, "sprite"), Optional<String>("queen"));
+        ASSERT_EQ(gAccepted.size(), 1u);
+        EXPECT_EQ(gAccepted[0].name, "queen");
+        EXPECT_EQ(gAccepted[0].seed, kSetSeed) << "the variant dropped, not the row's pick";
+        EXPECT_EQ(gAccepted[0].path, Format("{}/artgen/out/framed/a/a_{}.png", PathText(_root), kSetSeed));
+        EXPECT_FALSE(gAccepted[0].withNode);
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_EQ(gPlans[0].frame, Optional<ArtGenImageFrame>(kFakeFrame)) << "a pawn stays smaller than a king";
+        EXPECT_EQ(gPlans[0].settings, before.processing->settings);
+        EXPECT_EQ(gPlans[0].atlas, "pieces");
+        EXPECT_FALSE(gPlans[0].deferPack);
+
+        EXPECT_EQ(ArtGenSetToJson(OnDisk("framed")), ArtGenSetToJson(before)) << "no pick, no accepted, nothing in the manifest";
+        EXPECT_EQ(session.FindSet("framed")->jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
+        EXPECT_EQ(session.FindSet("framed")->jobs[0].accepted->as, "a");
+    }
+
+    TEST_F(ArtGenSetSessionTest, ADroppedVariantOfASetNotAcceptedYetUsesThePresetsSettingsAndAFrameOfItsOwn) {
+        ArtGenSetRequest request;
+        request.preset = "form";
+        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","accept":{"trim":true,"padding":7,"maxSize":128}})").value();
+        request.subjects = ParseArtGenSubjects("a").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "fresh";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAll());
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("fresh"));
+
+        const auto answer = session.AcceptSetVariant("fresh", "a", kSetSeed + 1, "rook");
+        ASSERT_TRUE(answer.has_value()) << answer.error().message.c_str();
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_EQ(gPlans[0].settings, (ArtGenImageSettings{true, 7, 128}));
+        EXPECT_FALSE(gPlans[0].frame.has_value());
+        EXPECT_TRUE(gPlans[0].atlas.empty());
+        EXPECT_TRUE(gMeasures.empty()) << "a frame is measured by the first Accept all only";
+        EXPECT_FALSE(session.FindSet("fresh")->processing.has_value());
+        EXPECT_FALSE(session.FindSet("fresh")->jobs[0].accepted.has_value());
+        EXPECT_FALSE(session.FindSet("fresh")->jobs[0].pick.has_value());
+    }
+
+    TEST_F(ArtGenSetSessionTest, ADroppedVariantOfALegacySetKeepsTheIdentityPlanEvenWhenThePresetTrims) {
+        ArtGenSetRequest request;
+        request.preset = "form";
+        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","accept":{"trim":true,"padding":7,"maxSize":128}})").value();
+        request.subjects = ParseArtGenSubjects("a\nb").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "old";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        RunAndPickAll("old");
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("old"));
+        ArtGenSet disk = OnDisk("old");
+        disk.jobs[0].accepted = ArtGenSetAccepted{"a", "2026-11-17T00:00:00Z", false};
+        ASSERT_TRUE(WriteManifest(_root, disk).has_value());
+        ReloadFromDisk();
+        ASSERT_TRUE(IsLegacyAccepted(*session.FindSet("old")));
+        gPlans.clear();
+
+        const auto answer = session.AcceptSetVariant("old", "b", kSetSeed + 1, "rook");
+
+        ASSERT_TRUE(answer.has_value()) << answer.error().message.c_str();
+        ASSERT_EQ(gPlans.size(), 1u);
+        EXPECT_TRUE(gPlans[0].settings.IsIdentity()) << "the rows of a legacy set are full frames: a trimmed one would differ in scale";
+        EXPECT_FALSE(gPlans[0].frame.has_value());
+        EXPECT_TRUE(gMeasures.empty());
+    }
+
+    TEST_F(ArtGenSetSessionTest, ADroppedVariantNamesWhatIsWrongAndWritesNothing) {
+        ASSERT_TRUE(Enqueue("bad", "a").has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAll());
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("bad"));
+
+        const auto code = [&](StringView set, StringView job, int64_t seed, StringView sprite) {
+            const auto answer = session.AcceptSetVariant(set, job, seed, sprite);
+            return answer ? String() : answer.error().code;
+        };
+        EXPECT_EQ(code("nope", "a", kSetSeed, "x"), "artgen_no_set");
+        EXPECT_EQ(code("bad", "nope", kSetSeed, "x"), "artgen_no_set");
+        EXPECT_EQ(code("bad", "a", 999, "x"), "artgen_no_variant");
+        EXPECT_EQ(code("bad", "a", kSetSeed, "not a name"), "artgen_accept_failed");
+        EXPECT_EQ(code("bad", "a", kSetSeed, ""), "artgen_accept_failed");
+        EXPECT_TRUE(gAccepted.empty());
+
+        std::filesystem::remove(AbsoluteInSet(_root, "bad", "a/a_40.png"));
+        const auto gone = session.AcceptSetVariant("bad", "a", kSetSeed, "x");
+        ASSERT_FALSE(gone.has_value());
+        EXPECT_EQ(gone.error().code, "artgen_accept_failed");
+        EXPECT_NE(gone.error().message.find("is gone"), String::npos) << gone.error().message.c_str();
+        EXPECT_TRUE(gAccepted.empty()) << "the files are checked before the acceptor is asked";
+
+        gFailOn = "x";
+        EXPECT_EQ(code("bad", "a", kSetSeed + 1, "x"), "artgen_accept_failed") << "the acceptor's refusal is passed on";
+        gFailOn.clear();
+
+        session.SetAcceptor(nullptr);
+        EXPECT_EQ(code("bad", "a", kSetSeed + 1, "x"), "artgen_accept_failed");
+        EXPECT_TRUE(gAccepted.empty());
+    }
+
+    TEST_F(ArtGenSetSessionTest, ADroppedVariantOfASoundSetIsRefused) {
+        Poll();  // the catalog tells the kind of the preset
+        ArtGenSetRequest request;
+        request.preset = "knock";
+        request.subjects = ParseArtGenSubjects("knock: a wooden knock").value();
+        request.count = 2;
+        request.seed = kSetSeed;
+        request.name = "sounds";
+        ASSERT_TRUE(session.EnqueueSet(request).has_value());
+        ASSERT_NO_FATAL_FAILURE(RunAll("audio"));
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("sounds"));
+
+        const auto answer = session.AcceptSetVariant("sounds", "knock", kSetSeed, "x");
+        ASSERT_FALSE(answer.has_value());
+        EXPECT_EQ(answer.error().code, "artgen_accept_failed");
+        EXPECT_NE(answer.error().message.find("not a sprite"), String::npos) << answer.error().message.c_str();
+        EXPECT_TRUE(gAccepted.empty());
     }
 
 }  // namespace BECore::Tests

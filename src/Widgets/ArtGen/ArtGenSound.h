@@ -35,8 +35,9 @@ namespace BECore {
     /// Reads what ArtGenSoundSettingsToJson writes; a missing key keeps the default, a wrong type or a value out of range is the error
     [[nodiscard]] std::expected<ArtGenSoundSettings, String> ArtGenSoundSettingsFromJson(const Json& json);
 
-    /// Trims, cuts, resamples, fades and normalises @p audio (ArtGenSoundSettings, in that order); refused when nothing is left (all of it
-    /// under the trim threshold) or a setting is out of range. Pure
+    /// Averages the channels (`mono`), trims the silence at both ends, cuts at `maxSeconds`, resamples linearly, fades in and out (the last
+    /// frame is silent) and brings the peak to `peakDb`, in that order; refused when nothing is left (all of it under the trim threshold)
+    /// or a setting is out of range. Pure
     [[nodiscard]] AudioDecodeResult ProcessArtGenSound(const DecodedAudio& audio, const ArtGenSoundSettings& settings);
 
     /// The length and the loudest sample of a sound, for the panel's row

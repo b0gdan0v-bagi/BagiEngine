@@ -67,7 +67,21 @@ namespace BECore {
         return ImageSettingsOf(_run.presetData, StringView(_run.preset));
     }
 
-    std::expected<Json, ControlError> ArtGenSession::Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings) {
+    String ArtGenSession::AtlasOf(const Json& presetData, StringView preset) const {
+        const Json* data = &presetData;
+        if (presetData.is_null()) {
+            const ArtGenPreset* saved = FindPreset(preset);
+            data = saved != nullptr ? &saved->data : nullptr;
+        }
+        const Optional<String> group = data != nullptr ? GetJsonString(*data, "atlas") : Optional<String>();
+        return group && IsValidSpriteName(StringView(*group)) ? *group : String();
+    }
+
+    String ArtGenSession::AtlasOfRun() const {
+        return AtlasOf(_run.presetData, StringView(_run.preset));
+    }
+
+    std::expected<Json, ControlError> ArtGenSession::Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings, const String* atlas) {
         const ArtGenVariant* variant = FindVariant(seed);
         if (variant == nullptr) {
             return std::unexpected(ControlError{String(kNoVariantCode), Format("the current run has no image of seed {}", seed)});
@@ -85,7 +99,9 @@ namespace BECore {
                 return std::unexpected(ControlError{String(kAcceptFailedCode), String("no node is selected in the scene editor")});
             }
         }
-        return _acceptor(*variant, sprite, ArtGenImagePlan{settings != nullptr ? *settings : ImageSettingsOfRun(), {}}, node);
+        ArtGenImagePlan plan{settings != nullptr ? *settings : ImageSettingsOfRun(), {}};
+        plan.atlas = atlas != nullptr ? *atlas : AtlasOfRun();
+        return _acceptor(*variant, sprite, plan, node);
     }
 
     std::expected<Json, ControlError> ArtGenSession::AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected) {
@@ -132,20 +148,25 @@ namespace BECore {
                                                   ControlParamInfo{"presetName", "string", false, "with a draft: the name it is shown under"},
                                                   ControlParamInfo{"subject", "string", true, "what to draw; replaces {subject} in the preset's prompt"},
                                                   ControlParamInfo{"count", "integer", false, "images, 1 to 16 (default 4)"},
-                                                  ControlParamInfo{"seed", "integer", false, "the first seed; image i takes seed + i (default random)"}}});
+                                                  ControlParamInfo{"seed", "integer", false, "the first seed; image i takes seed + i (default random)"},
+                                                  ControlParamInfo{"reference", "object", false,
+                                                                   "a picture the images start from: {mode (init), image (a path relative to the game root, or absolute), weight (0 to 1, how "
+                                                                   "strongly the picture holds; the mode's default when missing)}; replaces the preset's own reference"}}});
         service.DescribeMethod(
             "artgen_accept",
-            ControlMethodInfo{"Makes an image of the current run a sprite of the game (trimmed to what is drawn and downscaled, a PNG into assets/artgen, "
-                              "TextureLibrary entry, reload), or a sound a clip (processed, a WAV into assets/artgen or over a clip path of the game, reload)",
-                              {ControlParamInfo{"seed", "integer", true, "the seed of the image or sound (artgen_state.run.variants)"},
-                               ControlParamInfo{"sprite", "string", false, "an image: the sprite name, 1 to 64 of A-Z a-z 0-9 _ -"},
-                               ControlParamInfo{"image", "object", false,
-                                                "an image: trim, padding (percent, 0 to 25), maxSize (pixels, 0 or 16 to 4096); a missing key keeps the preset's value (its accept key, else the "
-                                                "defaults)"},
-                               ControlParamInfo{"name", "string", false, "a sound: the clip assets/artgen/<name>.wav"},
-                               ControlParamInfo{"clip", "string", false, "a sound: instead of name, the game's clip to replace (assets/.../x.wav)"},
-                               ControlParamInfo{"sound", "object", false, "a sound: mono, trimDb, maxSeconds, sampleRate, fadeInMs, fadeOutMs, peakDb (null: off)"},
-                               ControlParamInfo{"useOnSelected", "boolean", false, "also put it on the node selected in the scene editor"}}});
+            ControlMethodInfo{
+                "Makes an image of the current run a sprite of the game (trimmed to what is drawn and downscaled, a PNG into assets/artgen, "
+                "TextureLibrary entry, reload), or a sound a clip (processed, a WAV into assets/artgen or over a clip path of the game, reload)",
+                {ControlParamInfo{"seed", "integer", true, "the seed of the image or sound (artgen_state.run.variants)"},
+                 ControlParamInfo{"sprite", "string", false, "an image: the sprite name, 1 to 64 of A-Z a-z 0-9 _ -"},
+                 ControlParamInfo{"image", "object", false,
+                                  "an image: trim, padding (percent, 0 to 25), maxSize (pixels, 0 or 16 to 4096); a missing key keeps the preset's value (its accept key, else the "
+                                  "defaults)"},
+                 ControlParamInfo{"atlas", "string", false, "an image: the atlas group the sprite joins and packs into; \"\" for none; missing keeps the preset's atlas key (none when it has none)"},
+                 ControlParamInfo{"name", "string", false, "a sound: the clip assets/artgen/<name>.wav"},
+                 ControlParamInfo{"clip", "string", false, "a sound: instead of name, the game's clip to replace (assets/.../x.wav)"},
+                 ControlParamInfo{"sound", "object", false, "a sound: mono, trimDb, maxSeconds, sampleRate, fadeInMs, fadeOutMs, peakDb (null: off)"},
+                 ControlParamInfo{"useOnSelected", "boolean", false, "also put it on the node selected in the scene editor"}}});
         service.DescribeMethod(
             "artgen_cancel",
             ControlMethodInfo{"Stops the run of the art generation service (a set's running job; the set goes on); the images made stay. With job or set, cancels that job, or every job of the set",
@@ -163,23 +184,40 @@ namespace BECore {
                                ControlMethodInfo{"Called by the art generation service: its status in, the game root and a new request (with outDir and name for a job of a set) or a cancel out", {}});
     }
 
-    std::expected<uint32_t, String> ArtGenSession::Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants) {
+    std::expected<uint32_t, String> ArtGenSession::Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants, Optional<ArtGenReference> reference) {
         for (const auto& known : _status.presets) {
             if (StringView(known.name) == preset && !known.error.empty()) {
                 return std::unexpected(Format("the preset '{}' is broken: {}", preset, known.error));
             }
         }
-        return Queue(preset, Json(), subject, count, seed, keepVariants);
+        return Queue(preset, Json(), subject, count, seed, keepVariants, std::move(reference));
     }
 
-    std::expected<uint32_t, String> ArtGenSession::RequestDraft(StringView name, const Json& preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants) {
+    std::expected<uint32_t, String> ArtGenSession::RequestDraft(StringView name, const Json& preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants,
+                                                                Optional<ArtGenReference> reference) {
         if (auto shape = CheckArtGenPresetShape(preset); !shape) {
             return std::unexpected(Format("the draft is not a preset: {}", shape.error()));
         }
-        return Queue(name.empty() ? StringView("draft") : name, preset, subject, count, seed, keepVariants);
+        return Queue(name.empty() ? StringView("draft") : name, preset, subject, count, seed, keepVariants, std::move(reference));
     }
 
-    std::expected<uint32_t, String> ArtGenSession::Queue(StringView preset, Json presetData, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants) {
+    void ArtGenSession::SetReferenceSlot(ArtGenReference reference) {
+        if (_referenceSlot && *_referenceSlot == reference) {
+            return;
+        }
+        _referenceSlot = std::move(reference);
+        ++_version;
+    }
+
+    void ArtGenSession::ClearReferenceSlot() {
+        if (_referenceSlot) {
+            _referenceSlot.reset();
+            ++_version;
+        }
+    }
+
+    std::expected<uint32_t, String> ArtGenSession::Queue(StringView preset, Json presetData, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants,
+                                                         Optional<ArtGenReference> reference) {
         if (IsBusy()) {
             return std::unexpected(String("a run is in work; cancel it or wait"));
         }
@@ -195,8 +233,9 @@ namespace BECore {
         if (seed && *seed < 0) {
             return std::unexpected(String("seed must not be negative"));
         }
+        // The variants of a set's job belong to its row in the manifest, so the next single run does not carry them
         Vector<ArtGenVariant> kept;
-        if (keepVariants) {
+        if (keepVariants && _run.setName.empty()) {
             kept = std::move(_run.variants);
         }
         _run = ArtGenRun{};
@@ -209,6 +248,7 @@ namespace BECore {
         _run.subject = String(subject);
         _run.count = count;
         _run.seed = seed;
+        _run.reference = std::move(reference);
         ++_version;
         return _run.id;
     }
@@ -400,6 +440,9 @@ namespace BECore {
             request["subject"] = ToJsonString(_run.subject);
             request["count"] = _run.count;
             request["seed"] = _run.seed ? Json(*_run.seed) : Json();
+            if (_run.reference) {
+                request["reference"] = ArtGenReferenceToJson(*_run.reference);
+            }
             if (!_run.outDir.empty()) {
                 request["outDir"] = ToJsonString(_run.outDir);
                 request["name"] = ToJsonString(_run.name);
@@ -573,8 +616,17 @@ namespace BECore {
                 return std::unexpected(InvalidParams("'seed' must be an integer"));
             }
         }
+        Optional<ArtGenReference> reference;
+        if (IsGiven(params, "reference")) {
+            auto read = ReadArtGenReference(*FindJsonMember(params, "reference"));
+            if (!read) {
+                return std::unexpected(InvalidParams(read.error()));
+            }
+            reference = std::move(*read);
+        }
         const int32_t clamped = *count > kMaxCount || *count < 0 ? 0 : static_cast<int32_t>(*count);
-        auto id = draft ? RequestDraft(GetJsonString(params, "presetName").value_or(String()), *presetJson, *subject, clamped, seed) : Request(*preset, *subject, clamped, seed);
+        auto id = draft ? RequestDraft(GetJsonString(params, "presetName").value_or(String()), *presetJson, *subject, clamped, seed, false, std::move(reference))
+                        : Request(*preset, *subject, clamped, seed, false, std::move(reference));
         if (!id) {
             const StringView code = IsBusy() ? kBusyCode : ControlErrors::kInvalidParams;
             return std::unexpected(ControlError{String(code), id.error()});
@@ -626,7 +678,15 @@ namespace BECore {
             }
             settings = *parsed;
         }
-        return Accept(*seed, *sprite, useOnSelected, &settings);
+        String atlas = AtlasOfRun();
+        if (const Json* group = FindJsonMember(params, "atlas"); group != nullptr && !group->is_null()) {
+            const auto name = GetJsonString(params, "atlas");
+            if (!name || (!name->empty() && !IsValidSpriteName(StringView(*name)))) {
+                return std::unexpected(InvalidParams("'atlas' must be an atlas group name (1 to 64 of A-Z a-z 0-9 _ -) or \"\" for none"));
+            }
+            atlas = *name;
+        }
+        return Accept(*seed, *sprite, useOnSelected, &settings, &atlas);
     }
 
     std::expected<Json, ControlError> ArtGenSession::HandleSetupReport(const Json& params) {
@@ -777,6 +837,7 @@ namespace BECore {
         run["subject"] = ToJsonString(_run.subject);
         run["count"] = _run.count;
         run["seed"] = _run.seed ? Json(*_run.seed) : Json();
+        run["reference"] = _run.reference ? ArtGenReferenceToJson(*_run.reference) : Json();
         run["image"] = _run.image;
         run["step"] = _run.step;
         run["steps"] = _run.steps;

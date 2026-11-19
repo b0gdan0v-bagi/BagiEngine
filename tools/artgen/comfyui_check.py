@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-The health check of the ComfyUI that art generation uses (tools/artgen/CLAUDE.md). Standard library only.
+The health check of the ComfyUI that art generation uses (tools/artgen/comfyui/CLAUDE.md, "The health check"). Standard library only.
 
     python3 tools/artgen/comfyui_check.py [--url http://127.0.0.1:8188] [--json] [--generate [image|audio]] [--timeout 300]
 
 It asks ComfyUI for its version and devices (`/system_stats`) and for the files of every model folder the manifest names
-(`/models/<folder>`), and compares both with `comfyui/manifest.json`: the image models make it ready, the audio models (installed
-with `artgen_setup.py install --audio`) are reported in `kinds`. `--generate` also queues `workflows/sdxl_basic.json` (`--generate
+(`/models/<folder>`) and for the classes of the manifest's custom nodes (`/object_info/<class>`), and compares both with
+`comfyui/manifest.json`: the image models make it ready, the audio, style and structure parts (installed with `artgen_setup.py install
+--audio` / `--style` / `--structure`) are reported in `kinds`, and a missing one is a warning. `--generate` also queues `workflows/sdxl_basic.json` (`--generate
 audio`: `workflows/sao_sfx.json`) (`POST /prompt`) and waits for its output (`/history/<id>`), so the GPU path is proven, not only the
 server.
 
@@ -76,8 +77,22 @@ def _request(url, data=None):
         raise Unreachable(f"{url}: {getattr(error, 'reason', error)}") from error
 
 
+def model_kind(entry):
+    """What a model or custom node of the manifest is for: `image` (the default), `audio`, `style` or `structure`."""
+    return entry.get("kind", "image")
+
+
+def _node_class_present(url, node_class):
+    """ComfyUI answers `{}` for a class it does not know (a custom node that is not installed or did not load)."""
+    try:
+        return bool(_request(f"{url}/object_info/{node_class}"))
+    except RuntimeError:
+        return False
+
+
 def check(url, manifest):
-    """The report as a dict; `ready` is true when the server runs and every model of the manifest is there."""
+    """The report as a dict; `ready` is true when the server runs and every image model of the manifest is there. `kinds` names what it
+    can make: `image`, and `audio` / `style` / `structure` when every model (and every custom node class) of that kind is there."""
     report = {"url": url, "reachable": False, "ready": False, "problems": [], "warnings": []}
     try:
         stats = _request(f"{url}/system_stats")
@@ -102,12 +117,15 @@ def check(url, manifest):
         try:
             present[folder] = set(_request(f"{url}/models/{folder}"))
         except RuntimeError as error:
-            report["problems"].append(str(error))
+            # An HTTP error of a folder only means its models are missing, except for the image kind: a folder that exists in ComfyUI
+            # only once a custom node is loaded (`ipadapter`) answers 404 without it
             present[folder] = set()
+            if any(m["folder"] == folder and model_kind(m) == "image" for m in manifest["models"]):
+                report["problems"].append(str(error))
     report["models"] = []
     kinds = {}
     for model in manifest["models"]:
-        kind = model.get("kind", "image")
+        kind = model_kind(model)
         found = model["name"] in present[model["folder"]]
         report["models"].append({"name": model["name"], "folder": model["folder"], "kind": kind, "present": found})
         kinds[kind] = kinds.get(kind, True) and found
@@ -117,6 +135,18 @@ def check(url, manifest):
             report["problems"].append(f"model {model['folder']}/{model['name']} is missing: run artgen_setup.py install")
         else:
             report["warnings"].append(f"{kind} model {model['folder']}/{model['name']} is missing: no {kind} until artgen_setup.py install --{kind}")
+    report["customNodes"] = []
+    for node in manifest.get("customNodes", []):
+        kind = model_kind(node)
+        found = all(_node_class_present(url, name) for name in node["nodes"])
+        report["customNodes"].append({"name": node["name"], "kind": kind, "present": found})
+        kinds[kind] = kinds.get(kind, True) and found
+        if found:
+            continue
+        if kind == "image":
+            report["problems"].append(f"custom node {node['name']} is missing: run artgen_setup.py install")
+        else:
+            report["warnings"].append(f"{kind} custom node {node['name']} is missing: no {kind} until artgen_setup.py install --{kind}")
     # What it can make: the image models are the generator; the others add a kind
     report["kinds"] = sorted(kind for kind, ok in kinds.items() if ok and not report["problems"])
     report["ready"] = not report["problems"]
@@ -161,6 +191,8 @@ def print_report(report):
             print(f"  device {device['name']} ({device['type']}), VRAM {free:.1f} of {total:.1f} GiB free")
         for model in report.get("models", []):
             print(f"  {'ok     ' if model['present'] else 'MISSING'} {model['folder']}/{model['name']} ({model['kind']})")
+        for node in report.get("customNodes", []):
+            print(f"  {'ok     ' if node['present'] else 'MISSING'} custom node {node['name']} ({node['kind']})")
         print(f"  makes: {', '.join(report.get('kinds', [])) or 'nothing'}")
     for warning in report["warnings"]:
         print(f"  warning: {warning}")

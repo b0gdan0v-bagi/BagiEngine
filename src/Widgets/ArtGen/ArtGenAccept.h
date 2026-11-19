@@ -51,9 +51,19 @@ namespace BECore {
      * With an identity plan both files are copied byte for byte. Otherwise the PNG is cut and scaled by the plan's frame (or, with none, by
      * the frame over this image's own drawn box), and the provenance is the generation's record plus `accepted`. A picture with nothing drawn,
      * or one the plan's frame would cut, is an error and nothing is written.
+     *
+     * A variant with no provenance file (@p provenance empty or missing) leaves none of an earlier accept of the name: the identity plan
+     * removes it (a missing file is fine, a failed removal is an error), the other plans write a record with `accepted` only.
      */
     std::expected<ArtGenCopied, String> CopyVariantIntoAssets(const std::filesystem::path& png, const std::filesystem::path& provenance, const std::filesystem::path& assetsDir, StringView sprite,
                                                               const ArtGenImagePlan& plan);
+
+    /**
+     * @brief The cache step of an accept: calls @p evict with the picture's path and, for a repacked sprite, the atlas's path. @p evict is
+     * `ResourceManager::Evict` in the editor; a holder of a texture (the Sprite Library, a canvas image) finds the evict with
+     * `IsEvictedHandle`, and the test that ties the two is this function's.
+     */
+    void EvictAcceptedTextures(const ArtGenCopied& copied, const Optional<AtlasWritten>& repacked, FunctionRef<bool(StringView)> evict);
 
     /// Calls ReloadTexture on every SpriteRendererComponent under @p root that names @p sprite or @p texturePath; returns how many
     uint32_t ReloadSpritesUsing(SceneNode& root, PoolString sprite, PoolString texturePath);
@@ -81,16 +91,68 @@ namespace BECore {
         Optional<AtlasWritten> repacked;  // engaged when the sprite was packed and its group was repacked
     };
 
+    /// Whether two entries are the same sprite in the same place (name, picture, rect and atlas link with its source and pack record)
+    [[nodiscard]] bool IsSameSpriteEntry(const SpriteEntry& a, const SpriteEntry& b);
+
+    /// Why RepackGroupAndSave failed: the atlas could not be written (@p reason says why; the library and the old atlas file are as they were),
+    /// or it was written and the save failed (no reason; the members are back to what the library held, the atlas file is replaced)
+    struct RepackError {
+        bool atlasWritten = false;
+        String reason;
+    };
+
+    /**
+     * @brief The repack both ways into an atlas share: `WriteAtlas` of @p group with the settings it was last packed with (`PackSettingsOf`),
+     * then @p save once when the repack moved a member. On a failed save the members go back to what the library held before the call.
+     * The returned `AcceptStored` has `saved` set when this call saved and `repacked` set to the atlas written. The callers word the errors.
+     */
+    std::expected<AcceptStored, RepackError> RepackGroupAndSave(TextureLibrary& library, StringView group, const AtlasIo& io, FunctionRef<bool()> save);
+
     /**
      * @brief The library side of Accept of the PNG @p copied as @p sprite: stores `AcceptedSpriteEntry` and, for a packed sprite, repacks its
      * group with the settings the group was packed with (`PackSettingsOf`) and saves again when the repack moved a member. No services.
      *
      * A sprite with no atlas link is only stored, as StoreSpriteEntry does. A repack that fails leaves the new `atlas.source` in the saved
-     * library and the old atlas file as it was (the error says the PNG is in place and Pack in the Sprite Library finishes it). When the
+     * library and the old atlas file as it was (the error says the PNG was already written over the game's file and Pack in the Sprite Library finishes it). When the
      * second save fails the members go back to what the library held before the repack; the atlas file is already replaced then, and the
      * error says so.
      */
     std::expected<AcceptStored, String> AcceptIntoLibrary(TextureLibrary& library, const ArtGenCopied& copied, StringView sprite, const AtlasIo& io, FunctionRef<bool()> save);
+
+    /**
+     * @brief Several accepts that owe the library one save, not one each (Accept all of a set of images).
+     *
+     * The constructor copies the library's entries. `Defer` is the `save` of AcceptIntoLibrary and StoreSpriteEntry: it notes that a save is
+     * owed and says it went through, so the library is only changed in memory. `Commit` then saves once. When that save fails the library
+     * goes back to the copy (entries the batch added are removed, entries it replaced or repacked come back): a snapshot, because a repack
+     * changes several members and per-row undo would have to know all of them. No services: the caller gives the save.
+     *
+     * The library must outlive the batch and not be changed by anything but the accepts between the constructor and Commit.
+     */
+    class ArtGenLibraryBatch {
+    public:
+        explicit ArtGenLibraryBatch(TextureLibrary& library);
+
+        /// @return true: the save is only owed
+        bool Defer() {
+            _owed = true;
+            return true;
+        }
+
+        /// A row rewrote an atlas file on disk; a failed Commit then says the old member rects no longer match it (Pack in the Sprite Library repairs that)
+        void NoteRepacked() {
+            _repacked = true;
+        }
+
+        /// @return false and nothing saved when no accept changed the library; true after one successful @p save; else the reason, with the library as it was at construction
+        std::expected<bool, String> Commit(FunctionRef<bool()> save);
+
+    private:
+        TextureLibrary& _library;
+        Vector<SpriteEntry> _snapshot;
+        bool _owed = false;
+        bool _repacked = false;
+    };
 
     /// What `artgen_accept` answers as `atlas`: `null` when no atlas was written, else `{name, texturePath, width, height, members}`
     [[nodiscard]] Json AtlasReplyToJson(const Optional<AtlasWritten>& repacked);
@@ -100,6 +162,7 @@ namespace BECore {
         ArtGenCopied copied;
         uint32_t reloadedSprites = 0;
         Optional<AtlasWritten> repacked;  // the atlas of a packed sprite, written again
+        String atlasGroup;                // the group the plan named (`ArtGenImagePlan::atlas`); empty: none
     };
 
     /**
@@ -108,9 +171,39 @@ namespace BECore {
      * Copies it into the game's assets (CopyVariantIntoAssets with @p plan), adds or replaces the TextureLibrary entry (the whole written image; a
      * sprite of an atlas group keeps its link, and a packed one has its atlas repacked, see AcceptIntoLibrary) and saves the library, drops the old
      * textures of the paths from the resource cache and reloads every sprite of the active scene that uses them, so the new picture shows at once. Fails without changing the library when the game has
-     * no assets folder or no TextureLibrary.xml.
+     * no assets folder or no TextureLibrary.xml. While an accept batch is open (BeginAcceptBatch) the library is changed in memory only and
+     * EndAcceptBatch saves it.
+     *
+     * With `plan.atlas` the sprite joins that group and the group is packed (`AcceptIntoGroup`; not packed with `plan.deferPack`, the caller
+     * packs once later, inside the same batch). A packed member of another group is refused before anything is written.
      */
     std::expected<ArtGenAccepted, String> AcceptVariant(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan);
+
+    /**
+     * @brief Opens the editor's accept batch: the AcceptVariant calls until EndAcceptBatch save the game's TextureLibrary.xml once, at the end.
+     * A Begin while one is open is a bug (it asserts and changes nothing).
+     *
+     * The batch is one file-local object, not a parameter, because the session's acceptors are plain function pointers that carry no state;
+     * the editor is single-threaded, so there is never more than one.
+     */
+    void BeginAcceptBatch();
+
+    /**
+     * @brief Closes the batch BeginAcceptBatch opened, saving the game's library once when an accept changed it; ok when none is open.
+     *
+     * A failed save puts the library back to what it was at Begin and is `artgen_accept_failed`: the PNGs of the batch are already in the
+     * game's assets, the library keeps its old entries.
+     */
+    std::expected<void, ControlError> EndAcceptBatch();
+
+    /// The save of the game's library that every step of an accept calls (`AcceptIntoLibrary`, `AcceptIntoGroup`, `PackAtlasForControl`): with
+    /// an accept batch open it only owes the save to the batch (true), else it writes TextureLibrary.xml now. So nothing writes the file
+    /// before EndAcceptBatch
+    bool SaveGameLibraryForAccept();
+
+    /// A step wrote an atlas file: with a batch open, a failed EndAcceptBatch then says the old member rects no longer match it. Nothing
+    /// without a batch
+    void NoteAtlasRewrittenForAccept();
 
     /// Puts the sprite on @p node's SpriteRendererComponent and reloads it; fails when the node has none
     std::expected<void, String> UseSpriteOn(SceneNode& node, PoolString sprite);
@@ -159,8 +252,9 @@ namespace BECore {
     /**
      * @brief The editor's ArtGenSession::Acceptor: AcceptVariant, then UseSpriteOn @p node when one is given (the scene editor is told the scene changed).
      *
-     * Answers `{sprite, texturePath, png, width, height, processing, reloadedSprites, atlas, usedOn}` (the size is the written file's; `processing` is
-     * `{trim, padding, maxSize, crop, scale, size, frame}`); a failure is `artgen_accept_failed` with the reason.
+     * Answers `{sprite, texturePath, png, width, height, processing, reloadedSprites, atlasGroup, atlas, usedOn}` (the size is the written file's;
+     * `processing` is `{trim, padding, maxSize, crop, scale, size, frame}`; `atlasGroup` the group the sprite joined or null, `atlas` the packed
+     * file or null, also while a pack is deferred); a failure is `artgen_accept_failed` with the reason.
      */
     std::expected<Json, ControlError> AcceptForControl(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node);
 

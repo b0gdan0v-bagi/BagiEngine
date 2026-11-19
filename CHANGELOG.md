@@ -53,6 +53,30 @@ Entry: `tests-run-cost`. Bump: minor.
 
 - `SubscriptionHolder` can no longer be moved: a moved holder kept connections bound to the moved-from address and called into a destroyed object. Adapt: a game type that derives from it and is moved (into a container or a member) is kept in place instead (held by `UniquePtr`, or built where it lives).
 
+## 0.4.9 - 2026-11-19 - Editor: a generated variant cannot be dragged from the Generate panel into the Texture library or other panels
+
+Entry: `artgen-drag-to-library`. Bump: patch.
+
+### Added
+
+- A variant of the Generate tab or a cell of the Set tab can be dragged into the Sprite Library: a drop on a row replaces that sprite, a drop on empty space opens **Add sprite** with a name. The payload and the rules a panel follows to take a drop are `ArtGenDrag.h`.
+
+## 0.4.8 - 2026-11-19 - Art generation: the cut-out checks pass several objects that lean together (no neck between them)
+
+Entry: `artgen-checks-leaning-objects`. Bump: patch.
+
+### Added
+
+- The `bodies` check has a second signal, `floor` (how deep the valley between two bodies of the silhouette goes; threshold `minFloor` in the `checks` of a preset): objects that lean together with a shallow neck fail. A group with no valley at all (an object lying across the bottom of the others) still passes.
+
+## 0.4.7 - 2026-11-19 - Art generation: the cut-out checks pass several touching objects as one piece
+
+Entry: `artgen-checks-touching-objects`. Bump: patch.
+
+### Added
+
+- The cut-out check `bodies`: the `valley` metric of the silhouette fails a cut-out of several objects joined by a thin neck (thresholds `maxValley` and `minBodyWidth` in the `checks` of a preset), and the Generate and Set tabs name it in the verdict. Objects that lean together with no neck still pass (entry `artgen-checks-leaning-objects`).
+
 ## 0.4.7 - 2026-11-18 - Network: a client cannot hold the WebSocket server by not reading or by saying nothing; room names refuse invisible characters
 
 Entry: `websocket-dos`. Bump: patch.
@@ -70,6 +94,17 @@ Entry: `websocket-dos`. Bump: patch.
 - `RoomClient` keeps a retired transport until its `Closed`, so a stuck name lookup of an old connection no longer freezes the frame.
 - `RoomHub` builds the lobby message only for a connection that is behind, and an idle tick allocates nothing.
 
+## 0.4.6 - 2026-11-19 - Art generation: an accepted set lands as loose PNGs, never in an atlas (no atlas group for a set or a preset)
+
+Entry: `artgen-set-atlas`. Bump: patch.
+
+### Added
+
+- A set and a preset can name an atlas group (`atlas`): every sprite accepted from it joins the group, and Accept all packs the group once inside the accept batch, before the one library save; rows are marked after the save. The loose PNGs and their `.artgen.json` stay the `atlas.source` of the packed entries, so a later Accept of one member repacks the group.
+- `ArtGenSession::Accept` takes an optional atlas group (`atlas`, null: the run's, empty: none); old calls compile unchanged.
+- The control API's accept answer names the atlas when one was packed.
+- The `artgen` skill makes a set of sprites of one kind with an atlas group.
+
 ## 0.4.6 - 2026-11-18 - TaskSystem: an idle ThreadPool worker never steals; Cancel races, GetResult moves, DelaySec overflows
 
 Entry: `threadpool-idle-steal`. Bump: patch.
@@ -81,6 +116,15 @@ Entry: `threadpool-idle-steal`. Bump: patch.
 - `TaskHandle<T>::GetResult` can be called again for a copyable `T`, also from several threads; a move-only result is handed out by the first call.
 - `DelaySec` takes any number: NaN and a non-positive delay do not suspend, a huge one is clamped. A huge wall-clock delay of `TaskScheduler::ScheduleDelayed` saturates instead of overflowing.
 
+## 0.4.5 - 2026-11-19 - Art generation: a shape from a sketch as the reference (slice 3 of artgen-reference)
+
+Entry: `artgen-reference-3`. Bump: patch.
+
+### Added
+
+- The reference mode `structure` ("this shape"): a SDXL ControlNet canny model (xinsir, Apache 2.0, pinned by sha256) of `kind` `structure` in the model manifest, installed by `artgen_setup.py install --structure`, the workflows `sdxl_controlnet` and `sdxl_controlnet_cutout` on the `reference` maps (ComfyUI's own ControlNet and Canny nodes), and the health check knows the part.
+- The Generate panel takes a sketch file for the reference slot and offers **Use as shape** on a variant; the `artgen` skill and the docs describe the mode.
+
 ## 0.4.5 - 2026-11-18 - RecordingRenderer allocates on every DrawGeometry and drops its storage each frame: a game's alloc test counts the recorder
 
 Entry: `recording-renderer-keep-storage`. Bump: patch.
@@ -88,6 +132,21 @@ Entry: `recording-renderer-keep-storage`. Bump: patch.
 ### Changed
 
 - `RecordingRenderer::ClearCalls()` keeps the storage of the geometry calls, so from the second equal frame on the recorder allocates nothing. An allocation test of a game calls `ClearCalls()` between frames; `calls.clear()` still gives the storage up.
+
+## 0.4.4 - 2026-11-19 - Art generation: small leftovers of the set reviews (one save per Accept all, untested evict, tie of FindNewerOwner, docs thinned for budget)
+
+Entry: `artgen-review-leftovers`. Bump: patch.
+
+### Added
+
+- `ArtGenLibraryBatch` and the editor's accept batch (`BeginAcceptBatch` / `EndAcceptBatch`): Accept all of a set saves the game's `TextureLibrary.xml` once, and a failed save puts the library back as it was.
+- `EvictAcceptedTextures`, the cache step of an accept, tied to a test with `IsEvictedHandle`.
+
+### Changed
+
+- `UISprite` and `ParticleEmitterComponent` load their texture again when the resource cache evicted its path (an Accept or a switch of the Generate panel rewrote the file); a texture given with `SetTexture` is never checked.
+- The owner of a sprite name is the accept with a strictly later date; an accept without a provenance file removes the stale `.artgen.json` of an earlier one.
+- The docs of the Generate panel and the sets that the budget had cut are restored.
 
 ## 0.4.4 - 2026-11-18 - Tests: three failures on main (ASan EditorBars, Release control smoke, flaky WebSocket close)
 
@@ -97,6 +156,21 @@ Entry: `engine-test-failures`. Bump: patch.
 
 - `WebSocketClient::Close` keeps its code and reason in the `Closed` event when the server answers the close frame at once; before, the server's answer could replace them.
 - The control smoke of a build without the editor leaves `config/WidgetsConfig.xml` out of its schema check, because only the Editor run mode reads that file.
+
+## 0.4.3 - 2026-11-19 - Art generation: a sprite's style as the reference (slice 2 of artgen-reference)
+
+Entry: `artgen-reference-2`. Bump: patch.
+
+### Added
+
+- The reference mode `style` ("in the style of this sprite"): IP-Adapter for SDXL and its CLIP vision model in the model manifest, the custom node installed by `artgen_setup.py install --style`, the workflows `sdxl_ipadapter` and `sdxl_ipadapter_cutout` on the `reference` maps; the health check knows the style parts and the service refuses a style run when they are missing.
+- A set can carry a reference: the set manifest key, `artgen_enqueue` and the sets state hold it, the Set tab sends the slot with Queue and shows the set's reference, and the `artgen` skill styles a set by its first accepted sprite.
+- The preset form edits a preset's own `reference` (a Reference subsection).
+- A style run gets the cut-out checks, `minPass` and `extra` like any other run, and its thumbnails show the verdict mark.
+
+### Changed
+
+- The setup, the models, the health check and the setup actions of the art tools are documented in `tools/artgen/comfyui/CLAUDE.md`.
 
 ## 0.4.3 - 2026-11-18 - TaskSystem: WaitForEventWithTimeout never times out
 
@@ -114,6 +188,31 @@ Entry: `ui-control-click-answers`. Bump: patch.
 
 - `ui_click` answers an empty `action` and `value` for a disabled toggle and for a toggle without an action, and a slider answers its `action` only when the click emitted a value. A client can trust a non-empty answer as an action that happened.
 
+## 0.4.2 - 2026-11-18 - Todo workers stand idle until the owner acts: no self-picking of the next entry, a blocked entry pauses the queue
+
+Entry: `workers-self-pick`. Bump: patch.
+
+### Added
+
+- `todo-loop` can pick the next entry at the end of a run (`/todo-loop 1 auto`), only from an allowlist of areas and id prefixes the owner sets. It is off without that setting, and it holds to at most 3 branches in review, a daily cost cap and a stop after two parked entries in a row.
+
+### Changed
+
+- A blocked entry is parked and the worker goes on, a question for the owner goes to one list with a recommendation, and a worker makes small reversible decisions itself and lists them in its review report.
+- A branch goes to review only when it holds the commits of the slice.
+- An entry whose files meet one branch in review stacks on it or waits, and `todo-merge` sends a merge conflict back to the worker as a conflict round.
+
+## 0.4.1 - 2026-11-18 - Art generation: broken cut-outs are found only by looking (no automatic checks, no unattended set)
+
+Entry: `artgen-autocheck`. Bump: patch.
+
+### Added
+
+- The art service checks each cut-out from its alpha channel: it touches the frame edge, falls into several pieces, keeps a halo or background, is too small, off centre or empty. Thresholds are the `checks` of a preset, the verdict is in the provenance and the `image` event, and `artgen.py check <png>` runs the checks on a file. A PNG without alpha is not applicable, never a failure.
+- A run and a set job take extra images with the next seeds until enough variants pass, up to a limit (the request keys `minPass` and `extra`, carried by the bridge).
+- `ArtGenVerdict` reads the verdict from a provenance file, and the Generate and Set tabs mark each thumbnail with it.
+- The `artgen` skill has an autonomous mode for a set: the checks come first, the agent judges by eye only what passed, in a limited number of rounds.
+
 ## 0.4.1 - 2026-11-18 - UISliderComponent with partShape=Round allocates in a steady frame
 
 Entry: `ui-slider-round-allocates`. Bump: patch.
@@ -121,6 +220,26 @@ Entry: `ui-slider-round-allocates`. Bump: patch.
 ### Changed
 
 - Tests in the profile build hold a slider, a switch and a progress bar with `partShape=Round` to zero allocations in a steady frame. The engine code did not change: the allocations came from the storage of the test renderer `RecordingRenderer`.
+
+## 0.4.0 - 2026-11-18 - Config save from the editor drops the comments and reformats the file (TextureLibrary.xml rewritten by one Accept)
+
+Entry: `config-save-keeps-layout`. Bump: minor.
+
+### Added
+
+- `MergeXmlLayout` (`BECore/Config/XmlLayoutMerge.h`) lays the text of an edited XML document out like the file it was read from.
+
+### Changed
+
+- `XmlDocument::SaveToFile` keeps the layout of the file on disk: the lines an edit did not touch keep their bytes, and a file whose text would not change is not written. A file that cannot carry the layout (quote style, `<a/>` forms, wrapped attributes, a carriage return) is rewritten once in the canonical form, which later saves keep.
+- `XmlDocument` writes the attributes of an element on one line, and keeps the comments and the XML declaration of the file.
+- `TextureLibrary::Save` replaces `<sprites>` in place, so an Accept in the Generate panel changes only the lines of the sprites.
+- `XmlSerializer` writes a float as its shortest text that reads back equal (`116.67`, not `116.669998`).
+- `XmlNode::Children()` walks the element children only.
+
+### Breaking
+
+- A config DOM now holds comment and declaration nodes, and `XmlDocument::GetRoot()` returns the root element. Code that walks `pugi` nodes of a config with `first_child()`, `next_sibling()` or `children()` can meet a comment. Adapt: skip the nodes that are not elements, or walk with `XmlNode::Children()`.
 
 ## 0.4.0 - 2026-11-18 - Resources: IResource has a non-atomic reference count but is shared across threads; async loads keep a StringView
 
@@ -136,6 +255,30 @@ Entry: `resource-refcount-atomic`. Bump: minor.
 
 - `ResourceHandle::GetLastAccessTime` is removed. Adapt: a game that needs the time of the last use keeps it next to the handle.
 - `SerializedResource<T>` and its header `BECore/Resource/SerializedResource.h` are removed. Adapt: load the object with `ResourceManager::LoadSerialized<T>` and keep the value it returns.
+
+## 0.3.5 - 2026-11-18 - Art generation: no reference image (no variations of a picture, no style of an accepted sprite, no shape from a sketch)
+
+Entry: `artgen-reference`. Bump: patch.
+
+### Added
+
+- Art generation takes a reference picture in the `init` mode (image to image): `reference: {mode, image, weight}` in a preset, a request, the control API's `artgen_generate` and the command line of `tools/artgen/artgen.py`. The picture is uploaded to ComfyUI and recorded in the provenance of each result.
+- The workflows `sdxl_img2img` and `sdxl_img2img_cutout` in `tools/artgen/workflows/`; a workflow's `.inputs.json` names where the reference goes through its `reference` map.
+- The editor's Generate panel has a reference slot, and a variant of a set can be sent to it with **Use as reference**.
+- The `artgen` skill describes how to make variations of a picture.
+
+## 0.3.4 - 2026-11-18 - Windows: BagiRoomServerSmoke and BagiRoomServerHostile always fail, so every ctest (and the panel's Verify) is red
+
+Entry: `room-server-smokes-windows`. Bump: patch.
+
+### Added
+
+- `Socket::FinishSending(limit)`: ends the sending direction, then reads and drops what the peer still sends until it closes, `ShutdownBoth()` is called or the limit runs out.
+
+### Changed
+
+- The room server flushes stdout on every round of its loop, so on Windows, where the CRT treats `_IOLBF` as full buffering, the log reaches a pipe while the server runs.
+- A WebSocket connection that sends a close frame finishes sending before it closes (for at most 1 s), so a client that is still sending receives the frame instead of a connection reset. Data that arrives after the close frame is no longer parsed.
 
 ## 0.3.3 - 2026-11-18 - Editor: sprites cannot be packed into an atlas or cut from a sheet; atlas rects are written by hand
 

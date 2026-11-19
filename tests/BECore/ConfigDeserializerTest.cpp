@@ -5,6 +5,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/OpenDeserializer.h>
+#include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <Common/MountedFolderTest.h>
@@ -30,6 +31,24 @@ namespace BECore::Tests {
             EXPECT_EQ(probe.width, kProbeWidth);
             EXPECT_EQ(probe.title.ToStringView(), kProbeTitle);
         }
+
+        /// The DOM of a config file as the editor keeps it: comments and the declaration stay in it
+        bool ParseWithComments(pugi::xml_document& document, const char* xml) {
+            return document.load_string(xml, pugi::parse_full);
+        }
+
+        constexpr const char* kCommentedItems = R"(<?xml version="1.0"?>
+<list>
+  <!-- first -->
+  <items>
+    <!-- before the first element -->
+    <item width="1" title="a" />
+    <!-- between the elements -->
+    <item width="2" title="b" />
+    <item width="3" title="c" />
+    <!-- after the last element -->
+  </items>
+</list>)";
 
     }  // namespace
 
@@ -147,6 +166,70 @@ namespace BECore::Tests {
 
         EXPECT_EQ(probe.width, DeserializerProbe{}.width);
         EXPECT_TRUE(probe.title.ToStringView().empty());
+    }
+
+    TEST_F(ConfigDeserializerTest, CommentsInAnArrayAreNoElements) {
+        pugi::xml_document document;
+        ASSERT_TRUE(ParseWithComments(document, kCommentedItems));
+
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromXmlNode(XmlNode(document.document_element())));
+        deserializer.SetDiagnostics(DiagnosticsMode::Error);
+        DeserializerProbeList list;
+        list.Deserialize(deserializer);
+        deserializer.FinishLoad();
+
+        EXPECT_FALSE(deserializer.HasErrors());
+        ASSERT_EQ(list.items.size(), 3u);
+        EXPECT_EQ(list.items[0].width, 1);
+        EXPECT_EQ(list.items[1].title.ToStringView(), "b");
+        EXPECT_EQ(list.items[2].width, 3);
+    }
+
+    TEST_F(ConfigDeserializerTest, TheIndexOfAnErrorCountsElementsOnly) {
+        pugi::xml_document document;
+        ASSERT_TRUE(ParseWithComments(document, R"(<list><items>
+            <!-- one --><item width="1"/><!-- two --><item width="2"/><!-- three --><item width="x"/></items></list>)"));
+
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromXmlNode(XmlNode(document.document_element())));
+        deserializer.SetStrictValues(true);
+        DeserializerProbeList list;
+        list.Deserialize(deserializer);
+
+        ASSERT_EQ(deserializer.GetErrors().size(), 1u);
+        EXPECT_EQ(deserializer.GetErrors()[0].path, "items[2].width");
+    }
+
+    TEST_F(ConfigDeserializerTest, ACommentIsNoUnknownKey) {
+        pugi::xml_document document;
+        ASSERT_TRUE(ParseWithComments(document, R"(<DeserializerProbe width="5" title="t">
+            <!-- a note --><!-- another --></DeserializerProbe>)"));
+
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromXmlNode(XmlNode(document.document_element())));
+        deserializer.SetDiagnostics(DiagnosticsMode::Error);
+        DeserializerProbe probe;
+        probe.Deserialize(deserializer);
+        deserializer.FinishLoad();
+
+        EXPECT_FALSE(deserializer.HasErrors());
+        EXPECT_EQ(probe.width, 5);
+        EXPECT_EQ(probe.title.ToStringView(), "t");
+    }
+
+    TEST_F(ConfigDeserializerTest, ChildrenOfAnXmlNodeAreElementsOnly) {
+        pugi::xml_document document;
+        ASSERT_TRUE(ParseWithComments(document, R"(<a><!-- x --><b/><!-- y --><?pi z?><c/><!-- w --></a>)"));
+
+        Vector<String> names;
+        for (const XmlNode child : XmlNode(document.document_element()).Children()) {
+            names.push_back(String(child.Name()));
+        }
+
+        ASSERT_EQ(names.size(), 2u);
+        EXPECT_EQ(names[0], "b");
+        EXPECT_EQ(names[1], "c");
     }
 
 }  // namespace BECore::Tests

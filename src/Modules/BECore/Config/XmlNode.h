@@ -39,6 +39,7 @@ namespace BECore {
             return _node.empty();
         }
 
+        /// Walks the element children only: comments, processing instructions and text are skipped
         class Iterator {
         public:
             using iterator_category = std::forward_iterator_tag;
@@ -47,37 +48,45 @@ namespace BECore {
             using pointer = XmlNode*;
             using reference = XmlNode;
 
-            Iterator(pugi::xml_node_iterator it) : _it(it) {}
+            explicit Iterator(pugi::xml_node node) : _node(SkipToElement(node)) {}
 
             XmlNode operator*() const {
-                return XmlNode(*_it);
+                return XmlNode(_node);
             }
 
             Iterator& operator++() {
-                ++_it;
+                _node = SkipToElement(_node.next_sibling());
                 return *this;
             }
 
             bool operator!=(const Iterator& other) const {
-                return _it != other._it;
+                return _node != other._node;
             }
 
         private:
-            pugi::xml_node_iterator _it;
+            static pugi::xml_node SkipToElement(pugi::xml_node node) {
+                while (node && node.type() != pugi::node_element) {
+                    node = node.next_sibling();
+                }
+                return node;
+            }
+
+            pugi::xml_node _node;
         };
 
         struct ChildrenRange {
             pugi::xml_node parentNode;
 
             Iterator begin() const {
-                return Iterator(parentNode.begin());
+                return Iterator(parentNode.first_child());
             }
 
             Iterator end() const {
-                return Iterator(parentNode.end());
+                return Iterator(pugi::xml_node());
             }
         };
 
+        /// The child elements in document order; a config DOM may hold comments, readers never see them
         ChildrenRange Children() const {
             return ChildrenRange{_node};
         }

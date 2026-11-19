@@ -5,6 +5,10 @@
 
 namespace BECore {
 
+    bool IsEvictedHandle(const ResourceCache& cache, PoolString path, const IResource* handle) {
+        return handle != nullptr && !cache.Holds(path, handle);
+    }
+
     const ITexture* SpriteTextureCache::Get(PoolString path) {
         if (path.Empty()) {
             return nullptr;
@@ -13,7 +17,7 @@ namespace BECore {
         if (slot.failed) {
             return nullptr;
         }
-        if (!slot.handle || !CoreManager::GetResourceManager().GetCache().Holds(path, slot.handle.Get())) {
+        if (!slot.handle || IsEvictedHandle(CoreManager::GetResourceManager().GetCache(), path, slot.handle.Get())) {
             Load(path, slot);
         }
         return slot.handle.Get();

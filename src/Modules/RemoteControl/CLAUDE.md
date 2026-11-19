@@ -44,7 +44,7 @@ The control API can play, reset and quit the game, so the default `HandshakePoli
 One text message is one request, one response is one text message, JSON (`Control/CLAUDE.md`, "Protocol"); pushed events are text messages too.
 
 - Client frames must be masked, RSV zero, control frames at most 125 bytes and unfragmented. A text message may be fragmented; a ping between fragments is answered at once. Violation: close 1002; over the limit: 1009; binary message: 1003.
-- A close frame is answered with the same code and the connection ends. Neither the listener nor the control server pings; `RoomWebSocketServer` pings silent connections and drops those that do not answer (`RoomServer/CLAUDE.md`, "Threads"), which is why `WebSocketClient` answers a ping at once.
+- A close frame is answered with the same code and the connection ends. After its close frame the server ends the sending direction and discards what the client still sends until the client closes, for at most a second (`Socket::FinishSending`): closing over unread data is a reset, which destroys the close frame on the client's side. Neither the listener nor the control server pings; `RoomWebSocketServer` pings silent connections and drops those that do not answer (`RoomServer/CLAUDE.md`, "Threads"), which is why `WebSocketClient` answers a ping at once.
 - Responses of one connection keep request order (`ControlService` runs them in order, one writer sends them in order); events go to every open connection between them.
 - **Deviation from RFC 6455 5.6:** text is not checked for UTF-8; text that is not valid JSON gets `parse_error` from the control service and the connection stays open.
 - The handshake's request target is ignored: any path opens the same endpoint.

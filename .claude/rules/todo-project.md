@@ -29,6 +29,24 @@ Parallel loops run in worker folders (`.claude/skills/todo-loop/SKILL.md`, "Para
 - **Shared files**, which do not count alone when the loop compares busy files: `CLAUDE.md`, `README.md` (every entry touches them a little; the developer keeps its edits to its own lines).
 - Everything else counts as it is: two entries that change the same source, config or test file wait for each other.
 
+## Automatic picking
+
+**Off in this file.** `/todo-loop 1 auto` (`.claude/skills/todo-loop/SKILL.md`, "Automatic picking") lets a worker whose queue is empty choose its next entry by the classifier, only from the owner's allowlist. It is on only when the rules file of the repository the loops run in (in a game: the game's own `.claude/rules/todo-project.md`) has this section with at least one allowlist line **and** a `Daily cap` line; no section, no cap or an empty allowlist means off. This file holds the format as an example, no live line:
+
+```
+## Automatic picking
+- engine: *
+- chess: chess-, qa-
+- Daily cap: $20
+- Review limit: 2
+```
+
+- An allowlist line is `- <area>: <id prefix>, <id prefix>` (`*` = every id of the area); an entry is allowed when its area has a line and its id starts with one of the prefixes.
+- `Daily cap` (dollars) is mandatory. `Review limit` is optional and only lowers the number of branches waiting in `review` over every area (at most 3, the default).
+- Two entries in a row parked by the loop stop the picking until the owner clears the ledger (`~/.claude/todo/auto-pick.json`).
+
+**Stays the owner's, never automatic:** the merge into the base branch, `git push`, licences, product decisions, a change of a public format or protocol the entry does not ask for, anything that goes against the text of an entry.
+
 ## Zones nobody edits
 
 The vendored code: `src/Modules/EABase/`, `EnTT/`, `fmt/`, `imgui/`, `nlohmann/`, `pugixml/`, `RmlUi/`, `stb/`, `tracy/`, and `external/`.

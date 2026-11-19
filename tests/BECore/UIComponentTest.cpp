@@ -18,6 +18,7 @@
 #include <BECore/UI/UIToggleComponent.h>
 #include <BECore/UI/UITransitionComponent.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/EvictProbe.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
@@ -646,6 +647,47 @@ namespace BECore::Tests {
         _image->tint = UIColor{0, 0, 0, 0};
         Draw();
         EXPECT_FALSE(Picture().has_value());
+    }
+
+    TEST_F(UIImageComponentTest, ASpriteLoadsItsTextureAgainWhenTheCacheEvictedTheFile) {
+        const EvictProbeSprite probe;
+        auto& image = Get("Host").AddComponent<UIImageComponent>();
+        image.sprite = probe.Name();
+        _image->tint = UIColor{0, 0, 0, 0};  // only the picture of Host is drawn
+
+        Draw();
+        ASSERT_TRUE(Picture().has_value());
+        const ITexture* first = Picture()->texture;
+        ASSERT_TRUE(Picture()->source.has_value());
+        const float firstWidth = Picture()->source->w;
+        const IntrusivePtr<IResource> keepFirst = probe.Cached();
+        EXPECT_EQ(keepFirst.Get(), first);
+        Draw();
+        EXPECT_EQ(Picture()->texture, first) << "an untouched cache keeps the loaded texture";
+
+        probe.SetSource({0.0f, 0.0f, 4.0f, 4.0f});
+        probe.Evict();
+        Draw();
+        ASSERT_TRUE(Picture().has_value());
+        EXPECT_NE(Picture()->texture, first) << "the evicted path is loaded again";
+        ASSERT_TRUE(Picture()->source.has_value());
+        EXPECT_NE(Picture()->source->w, firstWidth) << "the library entry is read again with it";
+        const ITexture* second = Picture()->texture;
+        Draw();
+        EXPECT_EQ(Picture()->texture, second) << "and the new texture is held";
+    }
+
+    TEST_F(UIImageComponentTest, ATextureGivenDirectlyIsNotReplacedByAnEvict) {
+        const EvictProbeSprite probe;
+        _image->sprite = probe.Name();  // the name loses to the texture of SetTexture
+        Draw();
+        ASSERT_TRUE(Picture().has_value());
+        EXPECT_EQ(Picture()->texture, _texture.Get());
+
+        probe.Evict();
+        Draw();
+        ASSERT_TRUE(Picture().has_value());
+        EXPECT_EQ(Picture()->texture, _texture.Get());
     }
 
     TEST_F(UIImageComponentTest, TheTintFollowsTheStateOfTheOwner) {

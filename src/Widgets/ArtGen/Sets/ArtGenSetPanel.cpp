@@ -3,8 +3,11 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/ArtGen/ArtGenDrag.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
+#include <Widgets/ArtGen/Reference/ArtGenReference.h>
+#include <Widgets/ArtGen/Reference/ArtGenReferencePanel.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetStore.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
@@ -51,6 +54,10 @@ namespace BECore {
         constexpr size_t kTipSize = 256;
         // A row's thumbnail is smaller than the Generate grid's, so a row of four fits the panel
         constexpr float kThumbnailSize = 112.0f;
+        // The verdict's mark: a square of this many ems in the thumbnail's top-right corner, over a backing of the window colour
+        constexpr float kVerdictMarkEm = 1.5f;
+        constexpr float kVerdictMarkBackingAlpha = 0.7f;
+        constexpr float kVerdictMarkRounding = 3.0f;
 
         const char* IconOfState(ArtGenSetJobState state) {
             switch (state) {
@@ -164,6 +171,38 @@ namespace BECore {
         }
     }
 
+    const char* ArtGenVerdictIcon(ArtGenVerdictKind kind) {
+        switch (kind) {
+            case ArtGenVerdictKind::Passed:
+                return ICON_LC_CIRCLE_CHECK;
+            case ArtGenVerdictKind::Failed:
+                return ICON_LC_TRIANGLE_ALERT;
+            case ArtGenVerdictKind::Unreadable:
+                return ICON_LC_CIRCLE_HELP;
+            default:
+                return nullptr;
+        }
+    }
+
+    void DrawArtGenVerdictMark(ImDrawList* drawList, ImVec2 origin, float size, const ArtGenVerdict& verdict) {
+        const char* icon = ArtGenVerdictIcon(verdict.kind);
+        if (icon == nullptr) {
+            return;
+        }
+        const auto& palette = GetImGuiPalette();
+        const ImVec4& color = verdict.kind == ArtGenVerdictKind::Passed ? palette.success : (verdict.kind == ArtGenVerdictKind::Failed ? palette.error : palette.textDisabled);
+        const float side = ImGui::GetFontSize() * kVerdictMarkEm;
+        const ImVec2 min(origin.x + size - side, origin.y);
+        const ImVec2 max(origin.x + size, origin.y + side);
+        const ImVec4 backing(palette.windowBg.x, palette.windowBg.y, palette.windowBg.z, kVerdictMarkBackingAlpha);
+        drawList->AddRectFilled(min, max, ImGui::ColorConvertFloat4ToU32(backing), kVerdictMarkRounding);
+        const ImVec2 iconSize = ImGui::CalcTextSize(icon);
+        drawList->AddText(ImVec2(min.x + (side - iconSize.x) * 0.5f, min.y + (side - iconSize.y) * 0.5f), ImGui::GetColorU32(color), icon);
+        if (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(min, max)) {
+            ImGui::SetTooltip("%s", verdict.tip.c_str());
+        }
+    }
+
     float ArtGenFieldWidth(float widthInEm, float fontSize, float available) {
         return std::max(std::min(widthInEm * fontSize, available), kMinFieldWidth);
     }
@@ -173,6 +212,28 @@ namespace BECore {
         const float name = kNameWidthInEm * fontSize;
         const float shrink = std::min(1.0f, std::max(available, kMinFieldWidth) / (subject + name));
         return ArtGenRowWidths{std::max(subject * shrink, kMinFieldWidth), std::max(name * shrink, kMinFieldWidth)};
+    }
+
+    Optional<ArtGenReference> ArtGenQueueReference(const Optional<ArtGenReference>& slot, bool makesImages) {
+        return makesImages ? slot : Optional<ArtGenReference>();
+    }
+
+    void FormatArtGenReferenceSummary(const ArtGenReference& reference, char* out, size_t size) {
+        const StringView file = ArtGenReferenceFileName(StringView(reference.image.data(), reference.image.size()));
+        const double weight = reference.weight ? *reference.weight : ArtGenReferenceDefaultWeight(StringView(reference.mode.data(), reference.mode.size()));
+        std::snprintf(out, size, "%.*s (%s, weight %.2f)", static_cast<int>(file.size()), file.data(), reference.mode.c_str(), weight);
+    }
+
+    void FormatArtGenQueueReference(const Optional<ArtGenReference>& slot, bool makesImages, char* out, size_t size) {
+        if (!makesImages) {
+            std::snprintf(out, size, "No reference: a sound takes none.");
+        } else if (!slot) {
+            std::snprintf(out, size, "No reference: the preset's own reference applies, if it has one. Use as reference fills the slot.");
+        } else {
+            char summary[kLabelSize];
+            FormatArtGenReferenceSummary(*slot, summary, sizeof(summary));
+            std::snprintf(out, size, "Reference of every job: %s", summary);
+        }
     }
 
     void ArtGenSetPanel::DrawSubjectRows() {
@@ -222,6 +283,11 @@ namespace BECore {
     void ArtGenSetPanel::DrawQueueForm(ArtGenSession& session, const ArtGenSetPanelForm& form) {
         const auto& palette = GetImGuiPalette();
         DrawSubjectRows();
+        char referenceLine[kLabelSize];
+        FormatArtGenQueueReference(session.GetReferenceSlot(), form.makesImages, referenceLine, sizeof(referenceLine));
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", referenceLine);
+        ImGui::PopTextWrapPos();
         ImGui::SetNextItemWidth(LabelledFieldWidth(kSetNameWidthInEm, "Set name"));
         ImGui::InputTextWithHint("Set name", "<preset>-<date> when empty", _setName, sizeof(_setName));
         ItemTooltip("The folder under artgen/out/ that keeps the set; 1 to 64 of A-Z a-z 0-9 _ -");
@@ -259,6 +325,7 @@ namespace BECore {
                 request.count = _count;
                 request.seed = _randomSeed ? Optional<int64_t>() : Optional<int64_t>(_seed);
                 request.name = String(_setName);
+                request.reference = ArtGenQueueReference(session.GetReferenceSlot(), form.makesImages);
                 // A saved preset goes by name, so its provenance names the file; anything else goes inline as a draft
                 if (form.preset.IsDirty()) {
                     request.preset = String(form.preset.name);
@@ -352,6 +419,14 @@ namespace BECore {
         ImGui::Text("%s %s", set.kind == kKindAudio ? ICON_LC_AUDIO_LINES : ICON_LC_IMAGE, set.name.c_str());
         ImGui::SameLine();
         ImGui::TextDisabled("%s", set.preset.c_str());
+        if (set.reference) {
+            // The file name is the label, the mode and weight the tooltip: a set is judged by what it was made from
+            char summary[kLabelSize];
+            FormatArtGenReferenceSummary(*set.reference, summary, sizeof(summary));
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s %s", ICON_LC_IMAGE_PLUS, summary);
+            ItemTooltip(set.reference->image.c_str());
+        }
 
         const ArtGenRun& run = session.GetRun();
         if (StringView(run.setName) == StringView(set.name) && (run.state == ArtGenRunState::Queued || run.state == ArtGenRunState::Running)) {
@@ -426,6 +501,14 @@ namespace BECore {
         _loadedSet.clear();
     }
 
+    const ArtGenVerdict* ArtGenSetPanel::VerdictOf(size_t jobIndex, int64_t seed) const {
+        if (jobIndex >= _rows.size()) {
+            return nullptr;
+        }
+        const Thumb* thumb = FindThumb(_rows[jobIndex], seed);
+        return thumb != nullptr ? &thumb->verdict : nullptr;
+    }
+
     void ArtGenSetPanel::SyncRow(const ArtGenSession& session, const ArtGenSet& set, size_t index) {
         RowThumbs& row = _rows[index];
         const ArtGenSetJob& job = set.jobs[index];
@@ -456,6 +539,10 @@ namespace BECore {
                     thumb.clip = resources.Load<AudioClip>(StringView(thumb.path));
                 } else {
                     thumb.texture = resources.Load<ITexture>(StringView(thumb.path));
+                    // A name AbsoluteInSet refuses (`..`) gives an empty path, which reads as no verdict
+                    if (!variant.provenance.empty()) {
+                        thumb.verdict = ReadArtGenVerdict(AbsoluteInSet(root, StringView(set.name), StringView(variant.provenance)));
+                    }
                 }
             }
             row.thumbs.push_back(std::move(thumb));
@@ -494,6 +581,20 @@ namespace BECore {
         }
         _rows.resize(set.jobs.size());
         ++_frame;
+        // The one place a frame asks who owns each row's name: the rows, their cells and the footer use these answers
+        _newerOwners.resize(set.jobs.size());
+        _liveRows = 0;
+        _keptRows = 0;
+        _replacedRows = 0;
+        for (size_t i = 0; i < set.jobs.size(); ++i) {
+            const ArtGenSetJob& job = set.jobs[i];
+            _newerOwners[i] = session.FindNewerOwner(set, job);
+            // A row a newer set replaced is neither live nor kept: the game holds the other set's picture under its name
+            const ArtGenRowStatus status = StatusOf(job, _newerOwners[i] != nullptr);
+            _liveRows += status == ArtGenRowStatus::Live ? 1 : 0;
+            _keptRows += status == ArtGenRowStatus::Kept ? 1 : 0;
+            _replacedRows += status == ArtGenRowStatus::Replaced ? 1 : 0;
+        }
 
         const ImGuiStyle& style = ImGui::GetStyle();
         const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
@@ -589,7 +690,7 @@ namespace BECore {
         ImGui::TextUnformatted(job.name.c_str());
         ImGui::SameLine();
         ImGui::TextDisabled("%s", job.subject.c_str());
-        const ArtGenSet* newer = session.FindNewerOwner(set, job);
+        const ArtGenSet* newer = _newerOwners[index];
         const ArtGenRowStatus status = StatusOf(job, newer != nullptr);
         // A replaced row's variants are alternatives to nothing: the game holds another set's picture under its name
         const bool live = status == ArtGenRowStatus::Live;
@@ -649,6 +750,13 @@ namespace BECore {
                     }
                     ImGui::EndDisabled();
                 }
+                // The sprite in the game under the row's name, not the draft: a replaced row's name belongs to another set
+                if (set.kind != kKindAudio && job.accepted && status != ArtGenRowStatus::Replaced) {
+                    ImGui::SameLine();
+                    if (IconButton(ICON_LC_IMAGE_PLUS, kArtGenUseAsReferenceTip, "##referenceSprite")) {
+                        session.SetReferenceSlot(ArtGenReferenceOfSprite(StringView(job.accepted->as)));
+                    }
+                }
                 // The note of a more-run that did not finish: the row stays Done with the variants it had
                 if (!job.error.empty()) {
                     ImGui::TextDisabled("%s", job.error.c_str());
@@ -660,11 +768,11 @@ namespace BECore {
             if (v % static_cast<size_t>(columns) != 0) {
                 ImGui::SameLine();
             }
-            DrawVariantCell(session, set, index, v, sound);
+            DrawVariantCell(session, set, index, v, newer != nullptr, sound);
         }
     }
 
-    void ArtGenSetPanel::DrawVariantCell(ArtGenSession& session, const ArtGenSet& set, size_t jobIndex, size_t variantIndex, const ArtGenSetPanelSound& sound) {
+    void ArtGenSetPanel::DrawVariantCell(ArtGenSession& session, const ArtGenSet& set, size_t jobIndex, size_t variantIndex, bool replaced, const ArtGenSetPanelSound& sound) {
         const auto& palette = GetImGuiPalette();
         const ArtGenSetJob& job = set.jobs[jobIndex];
         const ArtGenSetVariant& variant = job.variants[variantIndex];
@@ -675,15 +783,21 @@ namespace BECore {
         ImGui::PushID(static_cast<int>(variantIndex));
         ImGui::BeginGroup();
         const ImVec2 origin = ImGui::GetCursorScreenPos();
-        if (audio) {
-            // The play button sits over the tile
+        // A picture that is on disk can be a reference; its button sits over the tile, like the sound's play button
+        const bool offerReference = !audio && thumb != nullptr && !thumb->missing && !thumb->path.empty();
+        if (audio || offerReference) {
             ImGui::SetNextItemAllowOverlap();
         }
-        // A kept row is final and a replaced one has nothing to switch: its cells only show the variants
+        // A kept row is final and a replaced one has nothing to switch: its cells only show the variants. The button stays enabled all the same,
+        // because a disabled item cannot be dragged and every image cell is a drag source
         const bool kept = job.accepted && job.accepted->kept;
-        const bool replaced = session.FindNewerOwner(set, job) != nullptr;
-        ImGui::BeginDisabled(kept || replaced);
-        if (ImGui::InvisibleButton("##pick", ImVec2(kThumbnailSize, kThumbnailSize))) {
+        const bool clicked = ImGui::InvisibleButton("##pick", ImVec2(kThumbnailSize, kThumbnailSize));
+        const ITexture* texture = thumb != nullptr ? thumb->texture.Get() : nullptr;
+        const bool pictureLoaded = texture != nullptr && texture->GetState() == ResourceState::Loaded;
+        if (!audio && !missing && pictureLoaded) {
+            DrawArtGenVariantDragSource([&] { return MakeArtGenDragPayload(ArtGenDragKind::Image, variant.seed, StringView(set.name), StringView(job.name), StringView(job.name)); }, texture);
+        }
+        if (clicked && !kept && !replaced) {
             ArtGenSwitch write;
             if (session.PickVariant(StringView(set.name), StringView(job.name), variant.seed, &write) == ArtGenSetEdit::WriteFailed) {
                 _acceptFailed = true;
@@ -693,7 +807,6 @@ namespace BECore {
                 _acceptMessage.clear();
             }
         }
-        ImGui::EndDisabled();
         const char* tip = IsLive(job) ? "Show this variant in the game" : "Pick this variant";
         if (replaced) {
             tip = "A newer set holds this name in the game";
@@ -704,8 +817,7 @@ namespace BECore {
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         const ImVec2 corner(origin.x + kThumbnailSize, origin.y + kThumbnailSize);
-        const ITexture* texture = thumb != nullptr ? thumb->texture.Get() : nullptr;
-        if (texture != nullptr && texture->GetState() == ResourceState::Loaded) {
+        if (pictureLoaded) {
             const auto id = static_cast<ImTextureID>(reinterpret_cast<std::uintptr_t>(texture->GetNativeHandle()));
             DrawArtGenChecker(drawList, origin, kThumbnailSize, ImGui::GetColorU32(palette.panelBg), ImGui::GetColorU32(palette.frameBg));
             drawList->AddImage(id, origin, corner);
@@ -720,6 +832,19 @@ namespace BECore {
             drawList->AddRect(origin, corner, ImGui::GetColorU32(palette.accent), 0.0f, 0, kSelectedBorder);
         }
 
+        if (offerReference && ImGui::IsMouseHoveringRect(origin, corner)) {
+            const float inset = ImGui::GetStyle().ItemInnerSpacing.x;
+            ImGui::SetCursorScreenPos(ImVec2(origin.x + inset, origin.y + inset));
+            if (IconButton(ICON_LC_IMAGE_PLUS, kArtGenUseAsReferenceTip, "##reference")) {
+                if (auto reference = ArtGenReferenceOfVariant(StringView(session.GetGameRoot()), StringView(variant.kind), StringView(thumb->path))) {
+                    session.SetReferenceSlot(std::move(*reference));
+                }
+            }
+            ImGui::SetCursorScreenPos(ImVec2(origin.x, corner.y + ImGui::GetStyle().ItemSpacing.y));
+        }
+        if (!audio && thumb != nullptr) {
+            DrawArtGenVerdictMark(drawList, origin, kThumbnailSize, thumb->verdict);
+        }
         if (audio) {
             const bool loaded = thumb != nullptr && thumb->clip && thumb->clip->GetState() == ResourceState::Loaded;
             const bool playing = sound.playing && _playingJob == static_cast<int32_t>(jobIndex) && _playingSeed == variant.seed;
@@ -750,16 +875,10 @@ namespace BECore {
         const auto& palette = GetImGuiPalette();
         const int32_t total = static_cast<int32_t>(set.jobs.size());
         const int32_t picked = PickedCount(set);
-        // A row a newer set replaced is neither live nor kept here: the game holds the other set's picture under its name
-        int32_t live = 0;
-        int32_t kept = 0;
-        int32_t replacedRows = 0;
-        for (const ArtGenSetJob& job : set.jobs) {
-            const ArtGenRowStatus status = StatusOf(job, session.FindNewerOwner(set, job) != nullptr);
-            live += status == ArtGenRowStatus::Live ? 1 : 0;
-            kept += status == ArtGenRowStatus::Kept ? 1 : 0;
-            replacedRows += status == ArtGenRowStatus::Replaced ? 1 : 0;
-        }
+        // The counts DrawSetRows made this frame, which runs before the footer
+        const int32_t live = _liveRows;
+        const int32_t kept = _keptRows;
+        const int32_t replacedRows = _replacedRows;
         // What Keep all can still keep
         const int32_t keepable = live;
         // What Accept all needs (ArtGenSession::AcceptSet checks it again): the set finished, every job done, and for sounds a pick on every row

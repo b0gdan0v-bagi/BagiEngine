@@ -34,9 +34,9 @@ IResource (RefCountedAtomic, BE_CLASS(IResource, FACTORY_BASE))
 
 - **Pure halves:** `Load(IDeserializer&)` and `Write(ISerializer&) const` need no engine services and no file (tests: `tests/BECore/TextureLibraryTest.cpp`, on `XmlDeserializer::LoadFromString` and `XmlSerializer`). `Load` clears the library, skips an entry without a `name` (silently), lets a repeated name overwrite in place and reads numbers leniently (the default `IDeserializer`, a malformed number is 0; not strict values). `Write` always writes `sprites`, also when empty, in insertion order.
 - **Editing:** `Rename(from, to)` keeps the entry's position and data and refuses (false, nothing changed) a missing `from`, an empty `to` or a `to` that names another entry (`AddOrUpdate` would overwrite it); `MakeUniqueName(base)` is `base`, else `base_2`, `base_3`, ... for an Add.
-- **Glue:** `Initialize()` = `ConfigManager::CreateDeserializer("TextureLibrary")` (null: the library stays empty, no message) + `Load` + `LogDeserializeErrors`. `Save()` = `Write` into an `XmlSerializer`, then it replaces the `sprites` child of the cached document root with a copy (`remove_child` + `append_copy`, so the other children and the comments of the file stay) and calls `SaveConfig`. That replace is the only `pugi` left; a `ConfigManager` helper for "replace a section of a config" is for the editors' slice.
+- **Glue:** `Initialize()` = `ConfigManager::CreateDeserializer("TextureLibrary")` (null: the library stays empty, no message) + `Load` + `LogDeserializeErrors`. `Save()` = `WriteInto(root)` over the cached document root, then `SaveConfig`. `WriteInto(pugi::xml_node)` is the pure half: it writes into an `XmlSerializer` and replaces the `sprites` child **where it stands** (`insert_copy_before` + `remove_child`; `append_copy` when the file has none), so the other children and the comments of the file keep their place, and `XmlDocument::SaveToFile` keeps the layout of the lines it did not touch: an Accept changes only the sprite lines. That replace is the only `pugi` left; a `ConfigManager` helper for "replace a section of a config" is for the editors' slice.
 - **Hand-written array:** `Write` and `Load` call `BeginArray("sprites", "sprite", count)` themselves, because a reflected `Vector<SpriteEntry>` is written with `<item>` elements and the file has `<sprite>`.
-- **Accepted differences from the old `XmlNode` loop:** `XmlDeserializer::BeginArray` hands out every child node of `<sprites>`, so an element not named `sprite` is read as a sprite (it was skipped), and a comment inside `<sprites>` is one element without a `name` (skipped like any entry without a name); the index in the path of a bad sprite counts such nodes.
+- **Accepted differences from the old `XmlNode` loop:** `XmlDeserializer::BeginArray` hands out every child **element** of `<sprites>`, so an element not named `sprite` is read as a sprite (it was skipped); a comment is skipped and does not count, so the index in the path of a bad sprite is its position among the elements.
 
 ## Asset parts
 
@@ -76,7 +76,7 @@ Derive from `IResourceLoader` with `BE_CLASS(MyLoader)`, implement `CanLoad` / `
 
 ## Thread Safety
 
-- `ResourceCache` takes shared locks for reads and an exclusive lock for `Put()` / `Clear()`.
+- `ResourceCache` takes shared locks for reads and an exclusive lock for `Put()` / `Clear()`. A holder that keeps a texture for a path (`UISprite`, `ParticleEmitterComponent`, the Sprite Library) notices an `Evict` by asking `Holds(path, handle)` and loads the path again; a handle given out stays valid but is the old picture.
 - Resources are immutable after loading, so concurrent reads are safe. The reference count is atomic (`IResource` derives from `RefCountedAtomic`): readers copy the same pointer out of the cache under a shared lock. `New<T>` of a resource gives an `IntrusivePtrAtomic<T>`, which converts to the `IntrusivePtr<T>` that holders use.
 - The `*Async` calls copy the path before they return, so a temporary string is safe as the argument.
 - Async loading runs on the TaskSystem thread pool.

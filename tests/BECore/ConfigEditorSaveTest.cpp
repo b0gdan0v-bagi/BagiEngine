@@ -100,10 +100,10 @@ namespace BECore::Tests {
         /// opens its `filename` relative to the working directory, which is inside the repository. The values differ from the
         /// defaults, so a save that loses an attribute shows. The first sink carries a `filename` that OutputSink ignores:
         /// the editor changes its type to FileSink as well, and it must not fall back to ./engine.log.
-        bool LoadTemplate(XmlDocument& document) const {
+        String TemplateText() const {
             const String firstLog = FromStdString(FirstLogPath().generic_string());
             const String engineLog = FromStdString(EngineLogPath().generic_string());
-            const String xml = Format(R"(<?xml version="1.0" encoding="UTF-8"?>
+            return Format(R"(<?xml version="1.0" encoding="UTF-8"?>
 <root>
     <!-- Logger Sinks Configuration -->
     <sinks>
@@ -118,7 +118,11 @@ namespace BECore::Tests {
     </sinks>
 </root>
 )",
-                                      kOutputPriority, firstLog, kFilePriority, engineLog);
+                          kOutputPriority, firstLog, kFilePriority, engineLog);
+        }
+
+        bool LoadTemplate(XmlDocument& document) const {
+            const String xml = TemplateText();
             return document.LoadFromString(StringView{xml.c_str(), xml.size()});
         }
 
@@ -241,6 +245,75 @@ namespace BECore::Tests {
             EXPECT_TRUE(fileSink->IsOpen());
             EXPECT_TRUE(std::filesystem::exists(EngineLogPath(), error));
         }
+    }
+
+    /// The shape of LoadTemplate in a DOM that keeps its comments, as a config document does once it is loaded with them
+    TEST_F(ConfigEditorSaveTest, AStagedEditOfACommentedDocumentKeepsEveryComment) {
+        pugi::xml_document document;
+        ASSERT_TRUE(document.load_string(R"(<root>
+    <!-- Logger Sinks Configuration -->
+    <sinks>
+        <!-- Output sink runs first -->
+        <sink type="OutputSink" priority="7" />
+        <!-- Console sink disabled -->
+        <sink type="ConsoleSink" enabled="false" />
+        <!-- File sink runs after Output -->
+        <sink type="FileSink" priority="100" />
+    </sinks>
+</root>)",
+                                         pugi::parse_full));
+
+        // The keys the editor gives the sinks count the elements only: a comment is no sink[0]
+        const XmlNode sinks = XmlNode(document.document_element()).GetChild("sinks");
+        Vector<String> keys;
+        Vector<pugi::xml_node> elements;
+        for (const XmlNode sink : sinks.Children()) {
+            keys.push_back(Format("root/sinks/sink[{}]@type", keys.size()));
+            elements.push_back(sink.GetPugiNode());
+        }
+        ASSERT_EQ(keys.size(), 3u);
+        EXPECT_EQ(keys[0], kFirstSinkTypeKey);
+
+        StagedChanges staged;
+        staged.Set(keys[0], elements[0].attribute("type"), "FileSink");
+        staged.ApplyTo(document.document_element());
+
+        EXPECT_STREQ(elements[0].attribute("type").value(), "FileSink");
+        size_t comments = 0;
+        for (const pugi::xml_node node : document.document_element().child("sinks").children()) {
+            comments += node.type() == pugi::node_comment ? 1u : 0u;
+        }
+        EXPECT_EQ(comments, 3u);
+        EXPECT_EQ(document.document_element().first_child().type(), pugi::node_comment);
+    }
+
+    TEST_F(ConfigEditorSaveTest, SavingOverTheFileOfAPersonChangesTheEditedLineOnly) {
+        const String original = TemplateText();
+        {
+            std::ofstream out(SavedPath(), std::ios::out | std::ios::binary);  //-NoStd: the test writes its own temporary file byte for byte
+            out.write(original.data(), static_cast<std::streamsize>(original.size()));
+        }
+
+        XmlDocument document;
+        ASSERT_TRUE(document.LoadFromFile(SavedPath()));
+        const Vector<pugi::xml_node> sinks = SinkElements(document);
+        ASSERT_FALSE(sinks.empty());
+        StagedChanges staged;
+        staged.Set(String{kFirstSinkTypeKey.data(), kFirstSinkTypeKey.size()}, sinks.front().attribute("type"), "FileSink");
+        staged.ApplyTo(document.GetRoot().GetPugiNode());
+        ASSERT_TRUE(document.SaveToFile(SavedPath()));
+
+        std::ifstream in(SavedPath(), std::ios::in | std::ios::binary);  //-NoStd: the test reads its own temporary file byte for byte
+        String saved;
+        saved.resize(static_cast<size_t>(std::filesystem::file_size(SavedPath())));
+        in.read(saved.data(), static_cast<std::streamsize>(saved.size()));
+
+        // The comments, the four-space indent and the blank lines of the file are the ones it had: one line differs
+        String expected = original;
+        const size_t at = expected.find("type=\"OutputSink\"");
+        ASSERT_NE(at, String::npos);
+        expected.replace(at, StringView("type=\"OutputSink\"").size(), "type=\"FileSink\"");
+        EXPECT_EQ(saved, expected);
     }
 
     TEST_F(ConfigEditorSaveTest, AValueOutsideTheDropdownIsReportedOnReload) {

@@ -3,6 +3,8 @@ touching what is not ours), the source install with a fake runner, start and sto
 
 import hashlib
 import json
+import shutil
+import subprocess
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -478,3 +480,192 @@ def test_the_hash_of_a_gated_file_is_read_at_the_pinned_commit():
 
     with pytest.raises(SetupError, match="accept its licence"):
         artgen_setup.gated_sha256(model, "tok", masked)
+
+
+# --- the style parts: two models and a custom node fetched by git at a pinned commit ------------------------------------------
+
+needs_git = pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+GIT_IDENTITY = ["-c", "user.name=test", "-c", "user.email=test@invalid"]
+
+
+def make_node_repo(path, text="the node"):
+    """A local git repository with one commit (the custom node's origin); returns its commit."""
+    path.mkdir()
+    (path / "__init__.py").write_text(text, encoding="utf-8")
+    git = lambda *args: subprocess.run(["git", "-C", str(path), *GIT_IDENTITY, *args], check=True, capture_output=True, text=True)  # noqa: E731
+    git("init", "--quiet")
+    git("config", "uploadpack.allowAnySHA1InWant", "true")
+    git("add", ".")
+    git("commit", "--quiet", "-m", "node")
+    return git("rev-parse", "HEAD").stdout.strip()
+
+
+def with_style(manifest, server, repo=None, commit=COMMIT):
+    data = b"style model" * 3000
+    manifest["models"].append({"name": "ip.safetensors", "folder": "ipadapter", "kind": "style", "url": f"{server.url}/ip", "size": len(data),
+                               "sha256": server.add("/ip", data), "licence": "Apache 2.0", "source": "x"})
+    manifest["customNodes"] = [{"name": "Node_plus", "kind": "style", "repo": str(repo or "https://example.invalid/Node_plus.git"),
+                                "commit": commit, "licence": "GPL-3.0 (loaded by ComfyUI)", "source": "x", "nodes": ["NodeA"]}]
+    return manifest["customNodes"][0]
+
+
+def test_the_style_parts_are_planned_only_with_style_after_comfyui_and_before_the_models(manifest, server, tmp_path):
+    with_style(manifest, server)
+    root = tmp_path / "root"
+    assert not [s for s in artgen_setup.make_plan(manifest, "windows-nvidia", root) if s.kind == "customnode" or "ipadapter" in s.what]
+    steps = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "style"))
+    assert [s.kind for s in steps] == ["comfyui", "customnode", "model", "model", "model"]
+    node = steps[1]
+    assert node.state == "install" and node.size == 0 and node.licence.startswith("GPL-3.0") and node.url == "https://example.invalid/Node_plus.git"
+    assert Path(node.dest) == root / "ComfyUI" / "custom_nodes" / "Node_plus"
+    assert "ipadapter/ip.safetensors" in [s.what for s in steps]
+    both = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "audio", "style"))
+    assert len(both) == len(steps)  # the fixture has no audio model
+    text = artgen_setup.describe(steps)
+    assert "GPL-3.0" in text and text.count("restart ComfyUI") == 1
+
+
+@needs_git
+def test_the_installer_checks_out_the_pinned_commit_and_a_second_plan_says_present(manifest, server, tmp_path):
+    commit = make_node_repo(tmp_path / "origin")
+    with_style(manifest, server, tmp_path / "origin", commit)
+    root = tmp_path / "root"
+    events = []
+    steps = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "style"))
+    Installer(manifest, "windows-nvidia", root, emit=events.append, unpack=fake_unpack()).install(steps)
+    node = root / "ComfyUI" / "custom_nodes" / "Node_plus"
+    assert (node / "__init__.py").read_text(encoding="utf-8") == "the node"
+    assert artgen_setup.read_git_head(node) == commit
+    assert not (tmp_path / "root.unpack").exists()
+    assert sum("restart ComfyUI" in e.get("text", "") for e in events) == 1
+
+    again = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "style"))
+    assert [s.state for s in again if s.kind == "customnode"] == ["present"]
+    assert "restart ComfyUI" not in artgen_setup.describe(again)
+    events.clear()
+    Installer(manifest, "windows-nvidia", root, emit=events.append, unpack=fake_unpack()).install(again)
+    assert not any("restart ComfyUI" in e.get("text", "") for e in events)
+
+
+@needs_git
+def test_a_wrong_head_after_the_fetch_stops_the_install_and_leaves_nothing(manifest, server, tmp_path):
+    commit = make_node_repo(tmp_path / "origin")
+    with_style(manifest, server, tmp_path / "origin", commit)
+    root = tmp_path / "root"
+    steps = artgen_setup.make_plan(manifest, "windows-nvidia", root, skip_models=True, kinds=("image", "style"))
+    with pytest.raises(SetupError, match="commit moved"):
+        Installer(manifest, "windows-nvidia", root, unpack=fake_unpack(), git_head=lambda folder: "b" * 40).install(steps)
+    assert not (root / "ComfyUI" / "custom_nodes" / "Node_plus").exists()
+
+
+@needs_git
+def test_a_folder_that_is_not_this_tools_stops_the_plan_untouched(manifest, server, tmp_path):
+    commit = make_node_repo(tmp_path / "origin")
+    with_style(manifest, server, tmp_path / "origin", commit)
+    root = tmp_path / "root"
+    Installer(manifest, "windows-nvidia", root, unpack=fake_unpack()).install(artgen_setup.make_plan(manifest, "windows-nvidia", root, skip_models=True))
+    node = root / "ComfyUI" / "custom_nodes" / "Node_plus"
+    node.mkdir(parents=True)
+    (node / "mine.py").write_text("a file of the owner", encoding="utf-8")
+    with pytest.raises(SetupError, match="not a git checkout"):
+        artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "style"))
+    assert (node / "mine.py").is_file()
+    shutil.rmtree(node)
+    make_node_repo(node, "a checkout of the owner")
+    with pytest.raises(SetupError, match="manifest pins"):
+        artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "style"))
+    assert (node / "__init__.py").read_text(encoding="utf-8") == "a checkout of the owner"
+
+
+def test_a_folder_without_a_git_of_its_own_has_no_head(tmp_path):
+    # inside another work tree, `git rev-parse` would answer with that tree's HEAD
+    assert artgen_setup.read_git_head(tmp_path) is None
+
+
+def test_a_missing_git_stops_the_install_before_the_first_download(manifest, server, tmp_path, monkeypatch):
+    with_style(manifest, server)
+    root = tmp_path / "root"
+    steps = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "style"))
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    with pytest.raises(SetupError, match="git is not installed"):
+        Installer(manifest, "windows-nvidia", root, unpack=fake_unpack()).install(steps)
+    assert not root.exists() and not server.requests
+
+
+def test_the_style_flag_adds_the_parts_to_the_plan_and_dry_run_prints_it(manifest, server, tmp_path, monkeypatch, capsys):
+    with_style(manifest, server)
+    monkeypatch.setattr(comfyui_check, "load_manifest", lambda path=None: manifest)
+    root = tmp_path / "root"
+    probe = lambda: Probe("win32", "AMD64", ["NVIDIA GeForce RTX 3070"])  # noqa: E731
+    assert artgen_setup.main(["install", "--root", str(root), "--dry-run"], probe=probe) == artgen_setup.EXIT_OK
+    assert "Node_plus" not in capsys.readouterr().out
+    assert artgen_setup.main(["install", "--root", str(root), "--dry-run", "--style"], probe=probe) == artgen_setup.EXIT_OK
+    out = capsys.readouterr().out
+    assert "Node_plus" in out and "ipadapter/ip.safetensors" in out and "restart ComfyUI" in out
+    assert not root.exists() and not server.requests
+    assert artgen_setup.main(["install", "--root", str(root), "--dry-run", "--audio", "--style"], probe=probe) == artgen_setup.EXIT_OK
+
+
+# --- the structure model: a ControlNet file, no custom node ---------------------------------------------------------------------
+
+
+def with_structure(manifest, server):
+    data = b"controlnet model" * 3000
+    model = {"name": "canny.safetensors", "folder": "controlnet", "kind": "structure", "url": f"{server.url}/canny", "size": len(data),
+             "sha256": server.add("/canny", data), "licence": "Apache 2.0", "source": "x"}
+    manifest["models"].append(model)
+    return model, data
+
+
+def test_the_structure_model_is_planned_only_with_structure_and_needs_no_custom_node(manifest, server, tmp_path):
+    model, _ = with_structure(manifest, server)
+    root = tmp_path / "root"
+    assert "controlnet/canny.safetensors" not in [s.what for s in artgen_setup.make_plan(manifest, "windows-nvidia", root)]
+    steps = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "structure"))
+    assert [s.kind for s in steps] == ["comfyui", "model", "model", "model"]
+    step = next(s for s in steps if s.what == "controlnet/canny.safetensors")
+    assert step.state == "download" and step.size == model["size"] and step.licence == "Apache 2.0"
+    assert Path(step.dest) == root / "ComfyUI" / "models" / "controlnet" / "canny.safetensors"
+    assert artgen_setup.RESTART_NOTE not in artgen_setup.describe(steps)
+
+
+def test_the_structure_and_style_kinds_are_planned_together(manifest, server, tmp_path):
+    with_structure(manifest, server)
+    with_style(manifest, server)
+    root = tmp_path / "root"
+    both = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "style", "structure"))
+    assert sorted(s.what for s in both if s.kind == "model") == ["checkpoints/a.safetensors", "controlnet/canny.safetensors",
+                                                                 "ipadapter/ip.safetensors", "vae/b.safetensors"]
+    assert [s.kind for s in both].count("customnode") == 1
+    only_style = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "style"))
+    assert "controlnet/canny.safetensors" not in [s.what for s in only_style]
+
+
+def test_the_structure_model_is_downloaded_and_hash_checked_like_the_style_models(manifest, server, tmp_path):
+    model, data = with_structure(manifest, server)
+    root = tmp_path / "root"
+    steps = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "structure"))
+    Installer(manifest, "windows-nvidia", root, unpack=fake_unpack()).install(steps)
+    assert artgen_setup.model_path(root, model).read_bytes() == data
+    again = artgen_setup.make_plan(manifest, "windows-nvidia", root, kinds=("image", "structure"))
+    assert [s.state for s in again if s.what == "controlnet/canny.safetensors"] == ["verify"]
+    artgen_setup.model_path(root, model).write_bytes(b"x" * len(data))
+    with pytest.raises(SetupError):
+        Installer(manifest, "windows-nvidia", root, unpack=fake_unpack()).install(again)
+
+
+def test_the_structure_flag_adds_the_model_to_the_plan_and_dry_run_prints_it(manifest, server, tmp_path, monkeypatch, capsys):
+    with_structure(manifest, server)
+    with_style(manifest, server)
+    monkeypatch.setattr(comfyui_check, "load_manifest", lambda path=None: manifest)
+    root = tmp_path / "root"
+    probe = lambda: Probe("win32", "AMD64", ["NVIDIA GeForce RTX 3070"])  # noqa: E731
+    assert artgen_setup.main(["install", "--root", str(root), "--dry-run"], probe=probe) == artgen_setup.EXIT_OK
+    assert "controlnet/canny" not in capsys.readouterr().out
+    assert artgen_setup.main(["install", "--root", str(root), "--dry-run", "--structure"], probe=probe) == artgen_setup.EXIT_OK
+    out = capsys.readouterr().out
+    assert "controlnet/canny.safetensors" in out and "Node_plus" not in out and "restart ComfyUI" not in out
+    assert artgen_setup.main(["install", "--root", str(root), "--dry-run", "--style", "--structure"], probe=probe) == artgen_setup.EXIT_OK
+    out = capsys.readouterr().out
+    assert "controlnet/canny.safetensors" in out and "ipadapter/ip.safetensors" in out and "restart ComfyUI" in out
+    assert not root.exists() and not server.requests

@@ -7,6 +7,10 @@
 #include <BECore/Types/Types.h>
 #include <cstddef>
 
+namespace pugi {
+    class xml_node;
+}
+
 namespace BECore {
 
     class IDeserializer;
@@ -95,6 +99,13 @@ namespace BECore {
 
         /** @return @p base when no entry has that name, else `base_2`, `base_3`, ... the first free one. */
         [[nodiscard]] PoolString MakeUniqueName(StringView base) const;
+
+        /**
+         * @brief Puts the library into @p root, the root element of a config document: `sprites` is replaced where it stands (the
+         * other children and the comments are not touched), or appended when the document has none. The pure half of Save.
+         * @return false when @p root is not a valid node.
+         */
+        bool WriteInto(pugi::xml_node root) const;
 
         /**
          * @brief Writes the library back into the config file, leaving the rest of the file as it is.

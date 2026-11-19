@@ -1,15 +1,15 @@
 #include "ArtGenPresetForm.h"
 
-#include <algorithm>
-#include <cstring>
+#include <Widgets/ArtGen/ArtGenAccept.h>
 
 namespace BECore {
 
     namespace {
 
-        constexpr StringView kServiceInputs[] = {"prompt", "negative", "seed", "width", "height", "output"};
-        // The keys the form shows, in the order of a written file; any other key of the file follows them
-        constexpr StringView kFileOrder[] = {"preset", "title", "workflow", "prompt", "negative", "size", "params", "accept"};
+        constexpr StringView kReferenceImageInput = "reference_image";
+        constexpr StringView kServiceInputs[] = {"prompt", "negative", "seed", "width", "height", "output", kReferenceImageInput};
+        // The keys of a written file in order, `reference` last of the form's own; any other key follows them
+        constexpr StringView kFileOrder[] = {"preset", "title", "workflow", "prompt", "negative", "size", "params", "accept", "atlas", "reference"};
         constexpr StringView kCopySuffix = "_copy";
 
         void CopyText(char* out, size_t size, StringView text) {
@@ -43,6 +43,10 @@ namespace BECore {
 
     bool ArtGenWorkflow::HasSize() const {
         return FindInput("width") != nullptr && FindInput("height") != nullptr;
+    }
+
+    bool ArtGenWorkflow::IsReferenceVariant() const {
+        return FindInput(kReferenceImageInput) != nullptr;
     }
 
     bool IsArtGenServiceInput(StringView input) {
@@ -102,6 +106,17 @@ namespace BECore {
                 return std::unexpected(Format("\"accept\": {}", settings.error()));
             }
         }
+        if (FindJsonMember(preset, "atlas") != nullptr) {
+            const auto group = GetJsonString(preset, "atlas");
+            if (!group || !IsValidSpriteName(StringView(*group))) {
+                return std::unexpected(String("\"atlas\" must be an atlas group name: 1 to 64 of A-Z a-z 0-9 _ -"));
+            }
+        }
+        if (const Json* reference = FindJsonMember(preset, "reference"); reference != nullptr) {
+            if (const auto read = ReadArtGenReference(*reference); !read) {
+                return std::unexpected(read.error());
+            }
+        }
         return {};
     }
 
@@ -116,6 +131,16 @@ namespace BECore {
         return true;
     }
 
+    bool ArtGenPresetForm::ReadReference(const Json& value) {
+        auto reference = ReadArtGenReference(value);
+        if (!reference) {
+            return false;
+        }
+        _reference = _referenceLoaded = std::move(*reference);
+        _referenceAsLoaded = value;
+        return true;
+    }
+
     void ArtGenPresetForm::FromJson(const Json& data) {
         name[0] = title[0] = prompt[0] = negative[0] = '\0';
         width = height = 0;
@@ -126,6 +151,9 @@ namespace BECore {
         _acceptInFile = false;
         _acceptAsLoaded = Json();
         _acceptLoaded = {};
+        _reference.reset();
+        _referenceAsLoaded = Json();
+        _referenceLoaded.reset();
         if (!data.is_object()) {
             return;
         }
@@ -147,6 +175,8 @@ namespace BECore {
                     SetParam(StringView(param.data(), param.size()), paramValue);
                 }
             } else if (field == "accept" && value.is_object() && ReadAccept(value)) {
+                continue;
+            } else if (field == "reference" && ReadReference(value)) {
                 continue;
             } else if (field != "preset") {
                 _extra[key] = value;
@@ -177,6 +207,9 @@ namespace BECore {
         }
         if (HasImageAccept()) {
             data["accept"] = (_acceptInFile && _accept == _acceptLoaded) ? _acceptAsLoaded : ArtGenImageSettingsToJson(_accept);
+        }
+        if (_reference) {
+            data["reference"] = (_referenceLoaded && *_reference == *_referenceLoaded) ? _referenceAsLoaded : ArtGenReferenceToJson(*_reference);
         }
         return data;
     }
@@ -227,6 +260,10 @@ namespace BECore {
         if (const Json* accept = FindJsonMember(_base, "accept"); accept != nullptr) {
             ReadAccept(*accept);
         }
+        _referenceLoaded.reset();
+        if (const Json* reference = FindJsonMember(_base, "reference"); reference != nullptr) {
+            ReadReference(*reference);
+        }
         _baseName = String(name);
         _baseSource = "game";
         Touch();
@@ -264,6 +301,22 @@ namespace BECore {
             _accept = {};
             _acceptInFile = false;
             _acceptAsLoaded = Json();
+            Touch();
+        }
+    }
+
+    void ArtGenPresetForm::SetReference(const ArtGenReference& reference) {
+        if (_reference != reference || HasUnreadableReference()) {
+            _reference = reference;
+            _extra.erase("reference");
+            Touch();
+        }
+    }
+
+    void ArtGenPresetForm::ClearReference() {
+        if (_reference || HasUnreadableReference()) {
+            _reference.reset();
+            _extra.erase("reference");
             Touch();
         }
     }

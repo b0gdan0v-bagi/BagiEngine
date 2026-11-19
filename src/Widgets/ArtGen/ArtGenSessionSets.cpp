@@ -109,9 +109,12 @@ namespace BECore {
             return variant;
         }
 
-        /// How a row of an image set is written: through the set's frame, or (a legacy set, or settings that change nothing) as the PNG is
-        ArtGenImagePlan PlanOf(const Optional<ArtGenSetProcessing>& processing) {
+        /// How a row of an image set is written: through the set's frame, or (a legacy set, or settings that change nothing) as the PNG is;
+        /// it joins the atlas @p atlas of the set (empty: none), which is packed after the row unless @p deferPack
+        ArtGenImagePlan PlanOf(const Optional<ArtGenSetProcessing>& processing, const String& atlas, bool deferPack) {
             ArtGenImagePlan plan;
+            plan.atlas = atlas;
+            plan.deferPack = deferPack;
             if (processing) {
                 plan.settings = processing->settings;
                 plan.frame = processing->frame;
@@ -244,12 +247,30 @@ namespace BECore {
                 if (!row.accepted || row.accepted->as != job.accepted->as) {
                     continue;
                 }
+                // Equal dates are the legacy case: an accept now takes a date strictly after the others' (NewAcceptDate), but a manifest written
+                // before that rule can hold two within one second, and then the set later in the list is the newer
                 if (row.accepted->date > job.accepted->date || (row.accepted->date == job.accepted->date && laterInList)) {
                     return &other;
                 }
             }
         }
         return nullptr;
+    }
+
+    String ArtGenSession::NewAcceptDate(const ArtGenSet& set, StringView name) const {
+        // The dates are one format, so the text compares as the time does; a date of a hand-edited manifest that is not that format is not one
+        StringView latest;
+        for (const ArtGenSet& other : _sets) {
+            if (&other == &set || other.kind != set.kind) {
+                continue;
+            }
+            for (const ArtGenSetJob& row : other.jobs) {
+                if (row.accepted && StringView(row.accepted->as) == name && StringView(row.accepted->date) > latest && ParseArtGenTimestamp(row.accepted->date)) {
+                    latest = row.accepted->date;
+                }
+            }
+        }
+        return ArtGenAcceptDate(std::chrono::system_clock::now(), latest);
     }
 
     ArtGenSetJob* ArtGenSession::RunningJobOfRun(ArtGenSet*& set) {
@@ -342,9 +363,24 @@ namespace BECore {
         set.presetData = std::move(request.presetData);
         set.count = request.count;
         set.seed = request.seed ? *request.seed : DrawSeed();
+        set.reference = std::move(request.reference);
         // The catalog is empty until the service has polled, so this is a guess; StartJob and the first reported variant settle it
         set.kind = String(kKindImage);
         set.kind = KindOfSet(set);
+        // Like the frame and the reference, the group is taken now: editing the preset later does not move the set's sprites
+        const String group = request.atlas ? *request.atlas : AtlasOf(set.presetData, StringView(set.preset));
+        if (!group.empty()) {
+            if (!IsValidSpriteName(group)) {
+                return std::unexpected(String("'atlas' is an atlas group name of 1 to 64 of A-Z a-z 0-9 _ -, or \"\" for none"));
+            }
+            if (set.kind != kKindImage) {
+                if (request.atlas) {
+                    return std::unexpected(Format("'atlas': the preset '{}' makes {}s, only an image set can have an atlas", request.preset, set.kind));
+                }
+            } else {
+                set.atlas = group;
+            }
+        }
         if (inherited) {
             if (set.kind != kKindImage) {
                 return std::unexpected(Format("'frameOf': the preset '{}' makes {}s, only an image set takes a frame", request.preset, set.kind));
@@ -410,6 +446,7 @@ namespace BECore {
         _run.name = job.name;
         _run.setName = set.name;
         _run.jobName = job.name;
+        _run.reference = set.reference;
         SaveSet(set);
         ++_version;
     }
@@ -661,18 +698,49 @@ namespace BECore {
         if (!variant) {
             return fail(Format("the job '{}': {}", job->name, variant.error()));
         }
-        auto answer = sound ? _soundAcceptor(*variant, ArtGenSoundTarget{name, String()}, ArtGenSoundSettings{}, nullptr) : _acceptor(*variant, name, PlanOf(set->processing), nullptr);
+        auto answer =
+            sound ? _soundAcceptor(*variant, ArtGenSoundTarget{name, String()}, ArtGenSoundSettings{}, nullptr) : _acceptor(*variant, name, PlanOf(set->processing, set->atlas, false), nullptr);
         if (!answer) {
-            return fail(Format("the job '{}': {}", job->name, answer.error().message));
+            return fail(Format("the job '{}': {}; the row still names seed {}", job->name, answer.error().message, job->pick ? *job->pick : 0));
         }
         job->pick = seed;
-        job->accepted->date = ArtGenTimestamp(std::chrono::system_clock::now());
+        job->accepted->date = NewAcceptDate(*set, name);
         SaveSet(*set);
         ++_version;
         if (write != nullptr) {
             write->answer = std::move(*answer);
         }
         return ArtGenSetEdit::Ok;
+    }
+
+    std::expected<Json, ControlError> ArtGenSession::AcceptSetVariant(StringView setName, StringView jobName, int64_t seed, StringView sprite) {
+        const ArtGenSet* set = FindSet(setName);
+        const ArtGenSetJob* job = set != nullptr ? FindJob(*set, jobName) : nullptr;
+        if (job == nullptr) {
+            return std::unexpected(MakeError(kNoSetCode, Format("no job '{}' in a set named '{}'", jobName, setName)));
+        }
+        if (BECore::FindVariant(*job, seed) == nullptr) {
+            return std::unexpected(MakeError(kNoVariantCode, Format("the job '{}' has no variant of seed {}", jobName, seed)));
+        }
+        if (StringView(set->kind) == kKindAudio) {
+            return std::unexpected(MakeError(kAcceptFailedCode, Format("the job '{}' makes sounds, and a sound is not a sprite", jobName)));
+        }
+        if (_acceptor == nullptr) {
+            return std::unexpected(MakeError(kAcceptFailedCode, String("accepting is not available here")));
+        }
+        if (!IsValidSpriteName(sprite)) {
+            return std::unexpected(MakeError(kAcceptFailedCode, Format("'{}' is not a sprite name", sprite)));
+        }
+        const auto variant = VariantToWrite(RootPath(_gameRoot), *set, *job, seed);
+        if (!variant) {
+            return std::unexpected(MakeError(kAcceptFailedCode, Format("the job '{}': {}", jobName, variant.error())));
+        }
+        ArtGenImagePlan plan = PlanOf(set->processing, set->atlas, false);
+        if (!set->processing && !IsLegacyAccepted(*set)) {
+            // Not accepted as a whole yet: the preset's settings, a frame of this image's own. A legacy set keeps the identity plan
+            plan.settings = ImageSettingsOf(set->presetData, StringView(set->preset));
+        }
+        return _acceptor(*variant, sprite, plan, nullptr);
     }
 
     void ArtGenSession::RegisterSetControl(ControlService& service) {
@@ -697,7 +765,13 @@ namespace BECore {
                  ControlParamInfo{"set", "string", false, "the set's name and folder under artgen/out, 1 to 64 of A-Z a-z 0-9 _ - (default <preset>-<date>-<time>)"},
                  ControlParamInfo{"frameOf", "string", false,
                                   "an image set that already has a frame (it is fixed at its first Accept all): this set is cut and scaled by the same frame, so a replacement of one row "
-                                  "comes out the size of the others; refused when the set is unknown, a sound set or has no frame"}}});
+                                  "comes out the size of the others; refused when the set is unknown, a sound set or has no frame"},
+                 ControlParamInfo{"reference", "object", false,
+                                  "{mode, image, weight?}: the picture every job's images start from or are drawn in the style of (as artgen_generate's), kept in the set so Retry and more "
+                                  "variants use it; a sound has none, so a sound set's jobs fail"},
+                 ControlParamInfo{"atlas", "string", false,
+                                  "an image set: the atlas group its sprites join, packed into assets/atlases/<group>.png (Accept all packs once); \"\" for none; missing takes the preset's "
+                                  "atlas key at this call, and the set keeps it; refused for a sound set"}}});
         service.DescribeMethod("artgen_set", ControlMethodInfo{"One set as its manifest.json, plus state (Active while a job is pending or running, else Complete)",
                                                                {ControlParamInfo{"set", "string", true, "the set's name"}}});
         service.DescribeMethod("artgen_pick",
@@ -773,6 +847,20 @@ namespace BECore {
                 return std::unexpected(InvalidParams("'frameOf' must be the name of a set"));
             }
             request.frameOf = *frameOf;
+        }
+        if (IsGiven(params, "reference")) {
+            auto reference = ReadArtGenReference(*FindJsonMember(params, "reference"));
+            if (!reference) {
+                return std::unexpected(InvalidParams(reference.error()));
+            }
+            request.reference = std::move(*reference);
+        }
+        if (IsGiven(params, "atlas")) {
+            const auto atlas = GetJsonString(params, "atlas");
+            if (!atlas || (!atlas->empty() && !IsValidSpriteName(StringView(*atlas)))) {
+                return std::unexpected(InvalidParams("'atlas' must be an atlas group name (1 to 64 of A-Z a-z 0-9 _ -) or \"\" for none"));
+            }
+            request.atlas = *atlas;
         }
         auto name = EnqueueSet(std::move(request));
         if (!name) {
@@ -990,12 +1078,33 @@ namespace BECore {
             }
             processing = std::move(*measured);
         }
-        const ArtGenImagePlan imagePlan = PlanOf(processing);
+        // The rows join the group loose and the group is packed once after the last one; with no packer each row packs by itself
+        const bool deferPack = !sound && !set->atlas.empty() && _atlasPacker != nullptr;
+        const ArtGenImagePlan imagePlan = PlanOf(processing, sound ? String() : set->atlas, deferPack);
 
-        // A failure halfway leaves the rows done marked in the manifest; the call can be made again, an accept replaces the same name
+        // A failure halfway leaves the rows done accepted; the call can be made again, an accept replaces the same name. With the batch hooks
+        // the library is saved once after the last file and the rows are marked only then, so a rolled-back library entry is never marked
+        const bool batched = !sound && !planned.empty() && _batchBegin != nullptr && _batchEnd != nullptr;
+        struct Written {
+            ArtGenSetJob* job = nullptr;
+            int64_t seed = 0;
+        };
+        Vector<Written> written;
+        auto markRow = [&](ArtGenSetJob& job, int64_t seed) {
+            job.pick = seed;
+            job.accepted = ArtGenSetAccepted{job.name, NewAcceptDate(*set, job.name), false};
+            // The frame is kept with the first row written, so a refusal or a failed first row leaves the set as it was
+            if (!sound && !set->processing) {
+                set->processing = processing;
+            }
+        };
         Json accepted = Json::array();
         Vector<String> done;
+        Optional<String> rowFailure;
         size_t next = 0;
+        if (batched) {
+            _batchBegin();
+        }
         for (size_t row = 0; row < set->jobs.size(); ++row) {
             ArtGenSetJob& job = set->jobs[row];
             Json item = Json::object();
@@ -1014,18 +1123,20 @@ namespace BECore {
             if (!answer) {
                 String doneNames;
                 AppendNames(doneNames, "accepted before it", done);
-                return std::unexpected(MakeError(kAcceptFailedCode, Format("the job '{}' (row {} of {}): {}; {}", job.name, row + 1, set->jobs.size(), answer.error().message,
-                                                                           done.empty() ? String("accepted before it: none") : doneNames)));
-            }
-            job.pick = plan.seed;
-            job.accepted = ArtGenSetAccepted{job.name, ArtGenTimestamp(std::chrono::system_clock::now()), false};
-            // The frame is kept with the first row written, so a refusal or a failed first row leaves the set as it was
-            if (!sound && !set->processing) {
-                set->processing = processing;
+                rowFailure = Format("the job '{}' (row {} of {}): {}; {}", job.name, row + 1, set->jobs.size(), answer.error().message, done.empty() ? String("accepted before it: none") : doneNames);
+                if (deferPack && !done.empty()) {
+                    *rowFailure += Format("; the atlas '{}' is not packed, call artgen_accept_set again to finish it", set->atlas);
+                }
+                break;
             }
             done.push_back(job.name);
-            SaveSet(*set);
-            ++_version;
+            if (batched) {
+                written.push_back(Written{&job, plan.seed});
+            } else {
+                markRow(job, plan.seed);
+                SaveSet(*set);
+                ++_version;
+            }
             item["as"] = ToJsonString(job.name);
             if (answer->is_object()) {
                 for (const auto& [key, value] : answer->items()) {
@@ -1033,12 +1144,61 @@ namespace BECore {
                 }
             }
             item["seed"] = plan.seed;
-            item["alternatives"] = AlternativesOf(job);
+            item["alternatives"] = AlternativesBesides(job, plan.seed);
             accepted.push_back(std::move(item));
+        }
+        // The group is packed once, after the last row and inside the batch: the pack goes through the batch's save too, so the one write
+        // of TextureLibrary.xml is EndAcceptBatch's. A failed row packs nothing (the rows done are in the group, loose)
+        Json atlasReply;
+        Optional<String> packFailure;
+        if (!rowFailure && deferPack && !done.empty()) {
+            auto packed = _atlasPacker(set->atlas);
+            if (packed) {
+                atlasReply = std::move(*packed);
+            } else {
+                packFailure = packed.error().message;
+            }
+        }
+        Optional<String> saveFailure;
+        if (batched) {
+            auto ended = _batchEnd();
+            if (ended) {
+                for (const Written& row : written) {
+                    markRow(*row.job, row.seed);
+                }
+                if (!written.empty()) {
+                    SaveSet(*set);
+                    ++_version;
+                }
+            } else {
+                saveFailure = ended.error().message;
+            }
+        }
+        if (saveFailure) {
+            String doneNames;
+            AppendNames(doneNames, "files written", done);
+            String notMarked = Format("the library was not saved ({}), so no row of the set is marked; call again to finish: an accept replaces the same name", *saveFailure);
+            if (packFailure) {
+                notMarked += Format("; the atlas '{}' could not be packed either: {}", set->atlas, *packFailure);
+            }
+            if (rowFailure) {
+                return std::unexpected(MakeError(kAcceptFailedCode, Format("{}; {}", *rowFailure, notMarked)));
+            }
+            return std::unexpected(MakeError(kAcceptFailedCode, Format("the set '{}': {}; {}", setName, doneNames, notMarked)));
+        }
+        if (rowFailure) {
+            return std::unexpected(MakeError(kAcceptFailedCode, *rowFailure));
+        }
+        if (packFailure) {
+            return std::unexpected(MakeError(
+                kAcceptFailedCode,
+                Format("the set '{}': its {} rows are accepted and in the game, but the atlas '{}' is not packed: {}; call artgen_accept_set again or press Pack in the Sprite Library to finish it",
+                       setName, done.size(), set->atlas, *packFailure)));
         }
         Json reply = Json::object();
         reply["set"] = ToJsonString(set->name);
         reply["accepted"] = std::move(accepted);
+        reply["atlas"] = std::move(atlasReply);
         return reply;
     }
 
@@ -1198,6 +1358,8 @@ namespace BECore {
             item["accepted"] = AcceptedCount(set);
             item["live"] = CountLive(set);
             item["kept"] = CountKept(set);
+            item["reference"] = set.reference ? ArtGenReferenceToJson(*set.reference) : Json();
+            item["atlas"] = set.atlas.empty() ? Json() : ToJsonString(set.atlas);
             sets.push_back(std::move(item));
         }
         return sets;

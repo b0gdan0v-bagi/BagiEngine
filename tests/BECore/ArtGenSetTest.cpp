@@ -153,6 +153,98 @@ namespace BECore::Tests {
         }
     }
 
+    TEST(ArtGenSetTest, AReferenceRoundTripsWithAndWithoutAWeight) {
+        ArtGenSet set = MakeSet();
+        EXPECT_TRUE(FindJsonMember(ArtGenSetToJson(set), "reference")->is_null()) << "no reference: the key is there, null";
+
+        for (const Optional<double> weight : {Optional<double>(), Optional<double>(0.6)}) {
+            set.reference = ArtGenReference{"style", "assets/artgen/white_knight.png", weight};
+            const Json json = ArtGenSetToJson(set);
+            EXPECT_EQ(GetJsonString(*FindJsonMember(json, "reference"), "mode"), Optional<String>("style"));
+            EXPECT_EQ(FindJsonMember(*FindJsonMember(json, "reference"), "weight") != nullptr, weight.has_value());
+            const auto back = ArtGenSetFromJson(json);
+            ASSERT_TRUE(back.has_value()) << back.error();
+            EXPECT_EQ(back->reference, set.reference);
+            EXPECT_EQ(ArtGenSetToJson(*back), json);
+        }
+    }
+
+    TEST(ArtGenSetTest, AManifestWithoutAReferenceOrWithANullOneReadsAsNone) {
+        Json json = ArtGenSetToJson(MakeSet());
+        json.erase("reference");
+        const auto without = ArtGenSetFromJson(json);
+        ASSERT_TRUE(without.has_value()) << without.error();
+        EXPECT_FALSE(without->reference.has_value());
+        EXPECT_EQ(kArtGenManifestFormat, 1) << "an additive key: the format number stays";
+
+        const auto minimal = ArtGenSetFromJson(Manifest(kMinimalManifest));
+        ASSERT_TRUE(minimal.has_value()) << minimal.error();
+        EXPECT_FALSE(minimal->reference.has_value());
+        EXPECT_TRUE(FindJsonMember(ArtGenSetToJson(*minimal), "reference")->is_null()) << "rewritten as none, nothing invented";
+
+        json["reference"] = Json(nullptr);
+        const auto nulled = ArtGenSetFromJson(json);
+        ASSERT_TRUE(nulled.has_value()) << nulled.error();
+        EXPECT_FALSE(nulled->reference.has_value());
+    }
+
+    TEST(ArtGenSetTest, AReferenceOfTheWrongShapeIsAnErrorThatNamesItsKey) {
+        struct Case {
+            const char* reference;
+            const char* where;
+        };
+        const Array<Case, 5> cases{Case{R"("yes")", "'reference'"}, Case{R"({"image":"a.png"})", "'reference.mode'"}, Case{R"({"mode":"init"})", "'reference.image'"},
+                                   Case{R"({"mode":"style","image":""})", "'reference.image'"}, Case{R"({"mode":"style","image":"a.png","weight":"x"})", "'reference.weight'"}};
+        for (const Case& item : cases) {
+            Json json = ArtGenSetToJson(MakeSet());
+            json["reference"] = Manifest(item.reference);
+            const String error = ErrorOf(ArtGenSetFromJson(json));
+            EXPECT_TRUE(Contains(error, "manifest: ")) << error;
+            EXPECT_TRUE(Contains(error, item.where)) << item.reference << " -> " << error;
+        }
+    }
+
+    TEST(ArtGenSetTest, AnAtlasGroupRoundTripsAndNoGroupIsWrittenAsNull) {
+        ArtGenSet set = MakeSet();
+        EXPECT_TRUE(FindJsonMember(ArtGenSetToJson(set), "atlas")->is_null()) << "no group: the key is there, null";
+
+        set.atlas = "pieces";
+        const Json json = ArtGenSetToJson(set);
+        EXPECT_EQ(*FindJsonMember(json, "atlas"), Json("pieces"));
+        const auto back = ArtGenSetFromJson(json);
+        ASSERT_TRUE(back.has_value()) << back.error();
+        EXPECT_EQ(back->atlas, "pieces");
+        EXPECT_EQ(ArtGenSetToJson(*back), json);
+    }
+
+    TEST(ArtGenSetTest, AManifestFromBeforeAtlasesOrWithANullOneReadsAsNoGroup) {
+        Json json = ArtGenSetToJson(MakeSet());
+        json.erase("atlas");
+        const auto without = ArtGenSetFromJson(json);
+        ASSERT_TRUE(without.has_value()) << without.error();
+        EXPECT_TRUE(without->atlas.empty());
+
+        const auto minimal = ArtGenSetFromJson(Manifest(kMinimalManifest));
+        ASSERT_TRUE(minimal.has_value()) << minimal.error();
+        EXPECT_TRUE(minimal->atlas.empty());
+        EXPECT_TRUE(FindJsonMember(ArtGenSetToJson(*minimal), "atlas")->is_null()) << "rewritten as none, nothing invented";
+
+        json["atlas"] = Json(nullptr);
+        const auto nulled = ArtGenSetFromJson(json);
+        ASSERT_TRUE(nulled.has_value()) << nulled.error();
+        EXPECT_TRUE(nulled->atlas.empty());
+    }
+
+    TEST(ArtGenSetTest, AnAtlasGroupThatIsNotAGroupNameIsAnErrorThatNamesTheKey) {
+        for (const char* bad : {"5", R"("")", R"("a b")", R"("../x")", "[]", "true"}) {
+            Json json = ArtGenSetToJson(MakeSet());
+            json["atlas"] = Manifest(bad);
+            const String error = ErrorOf(ArtGenSetFromJson(json));
+            EXPECT_TRUE(Contains(error, "manifest: ")) << error;
+            EXPECT_TRUE(Contains(error, "'atlas'")) << bad << " -> " << error;
+        }
+    }
+
     TEST(ArtGenSetTest, PathsInTheManifestUseForwardSlashes) {
         const Json json = ArtGenSetToJson(MakeSet());
         const Json& variant = (Require(FindJsonMember(json, "jobs")))[0]["variants"][0];
@@ -437,6 +529,34 @@ namespace BECore::Tests {
 
         const sys_days epoch = sys_days{year{1970} / January / 1};
         EXPECT_EQ(ArtGenTimestamp(epoch), "1970-01-01T00:00:00Z");
+    }
+
+    TEST(ArtGenSetTest, ATimestampParsesBackToTheSameSecond) {
+        using namespace std::chrono;
+        const system_clock::time_point time = sys_days{year{2026} / November / 17} + hours{12} + minutes{34} + seconds{56};
+        const auto parsed = ParseArtGenTimestamp("2026-11-17T12:34:56Z");
+        ASSERT_TRUE(parsed.has_value());
+        EXPECT_EQ(*parsed, time);
+        EXPECT_EQ(ArtGenTimestamp(*parsed), "2026-11-17T12:34:56Z");
+        EXPECT_EQ(ArtGenTimestamp(*ParseArtGenTimestamp("1970-01-01T00:00:00Z")), "1970-01-01T00:00:00Z");
+    }
+
+    TEST(ArtGenSetTest, ATextThatIsNotTheTimestampFormatDoesNotParse) {
+        for (const StringView text : {"", "2026-11-17", "2026-11-17 12:34:56Z", "2026-11-17T12:34:56", "2026-11-17T12:34:56+01:00", "2026-11-17T12:34:5xZ", "2026-13-17T12:34:56Z",
+                                      "2026-02-30T12:34:56Z", "2026-11-17T24:00:00Z", "2026-11-17T12:60:00Z", "2026-11-17T12:34:60Z", "20261117T123456Z"}) {
+            EXPECT_FALSE(ParseArtGenTimestamp(text).has_value()) << String(text).c_str();
+        }
+    }
+
+    TEST(ArtGenSetTest, AnAcceptDateSortsAfterTheLatestOtherDate) {
+        using namespace std::chrono;
+        const system_clock::time_point now = sys_days{year{2026} / November / 17} + hours{12} + minutes{34} + seconds{56} + milliseconds{700};
+        EXPECT_EQ(ArtGenAcceptDate(now, ""), "2026-11-17T12:34:56Z") << "no other date: the stamp of now";
+        EXPECT_EQ(ArtGenAcceptDate(now, "2026-11-17T12:34:55Z"), "2026-11-17T12:34:56Z") << "an earlier one changes nothing";
+        EXPECT_EQ(ArtGenAcceptDate(now, "2026-11-17T12:34:56Z"), "2026-11-17T12:34:57Z") << "the same second is a tie: the next second";
+        EXPECT_EQ(ArtGenAcceptDate(now, "2026-11-17T12:59:59Z"), "2026-11-17T13:00:00Z") << "later: one second after it, across the minute and the hour";
+        EXPECT_EQ(ArtGenAcceptDate(now, "2999-01-01T00:00:00Z"), "2999-01-01T00:00:01Z");
+        EXPECT_EQ(ArtGenAcceptDate(now, "not a date"), "2026-11-17T12:34:56Z") << "an unparsable one is ignored";
     }
 
     TEST(ArtGenSetTest, DefaultNameStaysAValidName) {

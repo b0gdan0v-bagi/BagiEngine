@@ -4,6 +4,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <Widgets/ArtGen/ArtGenImage.h>
+#include <Widgets/ArtGen/Reference/ArtGenReference.h>
 #include <chrono>
 #include <cstdint>
 #include <expected>
@@ -85,6 +86,8 @@ namespace BECore {
         int64_t seed = 0;  // the first seed of every job
         Vector<ArtGenSetJob> jobs;
         Optional<ArtGenSetProcessing> processing;  // an image set: none until the first Accept all (or for good, see IsLegacyAccepted)
+        Optional<ArtGenReference> reference;       // the picture every job's run is given (a style source); none: the preset's own `reference` applies
+        String atlas;                              // an image set: the atlas group its sprites join and are packed into; empty: loose PNGs
     };
 
     /// The set name or job name from a subject: "White Knight!" -> "white_knight". Lowercase letters and digits, one `_` between words,
@@ -131,6 +134,14 @@ namespace BECore {
     /// `2026-11-17T12:34:56Z`
     [[nodiscard]] String ArtGenTimestamp(std::chrono::system_clock::time_point time);
 
+    /// The time of a text `ArtGenTimestamp` wrote (that one format, UTC, a real calendar date); anything else is empty
+    [[nodiscard]] Optional<std::chrono::system_clock::time_point> ParseArtGenTimestamp(StringView text);
+
+    /// The `accepted.date` of an accept at @p now, which must sort after @p latestOther, the greatest date another set holds under the same
+    /// name: the stamp of @p now, or the second after @p latestOther when that is not earlier (the stamps have a resolution of a second, so
+    /// two accepts of one name within it would tie). An empty or unparsable @p latestOther changes nothing
+    [[nodiscard]] String ArtGenAcceptDate(std::chrono::system_clock::time_point now, StringView latestOther);
+
     /// The manifest of @p set (Sets/CLAUDE.md, "The manifest")
     [[nodiscard]] Json ArtGenSetToJson(const ArtGenSet& set);
 
@@ -156,6 +167,8 @@ namespace BECore {
     [[nodiscard]] ArtGenRowStatus StatusOf(const ArtGenSetJob& job, bool replacedByNewer);
     /// The variants of @p job other than its pick (all of them when it has none)
     [[nodiscard]] int32_t AlternativesOf(const ArtGenSetJob& job);
+    /// The variants of @p job other than @p seed: the answer of a pick that is not written to the row yet (a batched Accept all marks the rows last)
+    [[nodiscard]] int32_t AlternativesBesides(const ArtGenSetJob& job, int64_t seed);
 
     /// Why "more variants" is off for @p set at @p count, or null: the set is active, or no row passes `ArtGenMoreSkipReason`
     [[nodiscard]] const char* ArtGenMoreBlocker(const ArtGenSet& set, int32_t count);

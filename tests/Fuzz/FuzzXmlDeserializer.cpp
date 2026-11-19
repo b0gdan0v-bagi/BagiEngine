@@ -235,14 +235,20 @@ namespace BECore::Fuzz {
 
         private:
             void WalkArray(pugi::xml_node arrayNode, StringView name, size_t depth) {
-                const auto children = arrayNode.children();
-                const size_t expectedCount = static_cast<size_t>(std::distance(children.begin(), children.end()));
+                // The elements of an array are its child elements: a comment or a text node between them is none
+                size_t expectedCount = 0;
+                for (const pugi::xml_node element : arrayNode.children()) {
+                    expectedCount += element.type() == pugi::node_element ? 1u : 0u;
+                }
                 size_t count = 0;
                 FUZZ_CHECK(_reader.BeginArray(name, "item", count));
                 FUZZ_CHECK(count == expectedCount);
 
                 size_t entered = 0;
                 for (const pugi::xml_node element : arrayNode.children()) {
+                    if (element.type() != pugi::node_element) {
+                        continue;
+                    }
                     if (entered == kWalkArrayElementLimit) {
                         break;
                     }

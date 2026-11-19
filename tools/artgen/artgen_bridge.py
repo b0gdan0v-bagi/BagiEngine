@@ -65,6 +65,15 @@ def check_name(value, what):
     return value
 
 
+def optional_int(request, key):
+    """The integer a request's `key` holds, or None when it has none; a bool, a float or text is refused naming the key (the
+    service checks the range)."""
+    value = request.get(key)
+    if value is not None and type(value) is not int:
+        raise artgen_service.RequestError(f"{key} {value!r} is not an integer")
+    return value
+
+
 def resolve_out_dir(game_root, out_dir):
     """The folder of a request's `outDir`: a relative, `/`-separated path of names under `<game root>/artgen/out`. Anything else (an
     absolute path, a drive, `..`, a backslash, an empty segment) is refused, so a request can never write outside the game's out folder."""
@@ -192,7 +201,8 @@ class Bridge:
             name = "" if name is None else check_name(name, "name")
             preset = load_request_preset(request, self.game_root)
             service_request = artgen_service.Request(
-                preset, request.get("subject", ""), int(request.get("count") or 1), request.get("seed"), out_dir, name
+                preset, request.get("subject", ""), int(request.get("count") or 1), request.get("seed"), out_dir, name,
+                request.get("reference"), Path(self.game_root), min_pass=optional_int(request, "minPass"), extra=optional_int(request, "extra"),
             )
             artgen_service.generate(service_request, self.generator, progress, cancel)
         except Cancelled:
