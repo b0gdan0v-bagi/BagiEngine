@@ -26,6 +26,7 @@
 #include <BECore/UI/UIVars.h>
 #include <BECore/UI/UIWebCompiler.h>
 #include <BECore/UI/UIWebText.h>
+#include <BECore/UIScreenFixtures.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -317,210 +318,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 #Seed    { left: 96px; bottom: 26px; width: 300px; height: 24px; font-size: 16px; color: rgb(190, 190, 190); }
 )";
 
-        // The plate of the choice panel of UISelectorScreenTest (the panel shape of the Chess opponent panel), without the dim behind it, and the same plate in HTML + CSS.
-        // The XML is that test's, with `selectedColor` on every segment and `blocksInput` on the filled groups (a background takes clicks in the HTML front-end)
-        constexpr const char* kPanelXml = R"(<ui><elements>
-  <element type="UIStack" name="Plate" anchor="Center" width="94%" maxWidth="640" height="416" direction="Vertical" spacing="12" padding="16" crossAlign="Stretch" color="36,40,52,255" blocksInput="true">
-    <children>
-      <element type="UIElement" name="Title" height="44" fontSize="30">
-        <components>
-          <component type="UITextComponent" text="Opponent" align="Center"/>
-        </components>
-      </element>
-      <element type="UIStack" name="ModeRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
-        <children>
-          <element type="UIElement" name="ModeCaption" width="150" height="56" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="Opponent" verticalAlign="Center"/>
-            </components>
-          </element>
-          <element type="UISegmented" name="Mode" bind="opponentMode" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
-            <children>
-              <element type="UIElement" name="ModeTwo" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Two players" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorMode" value="two"/>
-                </components>
-              </element>
-              <element type="UIElement" name="ModeComputer" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Computer" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorMode" value="computer"/>
-                </components>
-              </element>
-            </children>
-          </element>
-        </children>
-      </element>
-      <element type="UIStack" name="ColorRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
-        <children>
-          <element type="UIElement" name="ColorCaption" width="150" height="56" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="Play as" verticalAlign="Center"/>
-            </components>
-          </element>
-          <element type="UISegmented" name="Color" bind="opponentColor" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
-            <children>
-              <element type="UIElement" name="ColorWhite" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="White" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorColor" value="white"/>
-                </components>
-              </element>
-              <element type="UIElement" name="ColorBlack" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Black" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorColor" value="black"/>
-                </components>
-              </element>
-            </children>
-          </element>
-        </children>
-      </element>
-      <element type="UIStack" name="EngineRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
-        <children>
-          <element type="UIElement" name="EngineCaption" width="150" height="56" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="Engine" verticalAlign="Center"/>
-            </components>
-          </element>
-          <element type="UISegmented" name="Engine" bind="opponentEngine" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
-            <children>
-              <element type="UIElement" name="EngineStockfish" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Stockfish" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorEngine" value="stockfish"/>
-                </components>
-              </element>
-              <element type="UIElement" name="EngineOwn" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Own engine" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorEngine" value="own"/>
-                </components>
-              </element>
-            </children>
-          </element>
-        </children>
-      </element>
-      <element type="UIStack" name="LevelRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
-        <children>
-          <element type="UIElement" name="LevelCaption" width="150" height="56" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="Level" verticalAlign="Center"/>
-            </components>
-          </element>
-          <element type="UISegmented" name="Level" bind="opponentLevel" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
-            <children>
-              <element type="UIElement" name="LevelEasy" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Easy" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorLevel" value="easy"/>
-                </components>
-              </element>
-              <element type="UIElement" name="LevelMedium" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Medium" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorLevel" value="medium"/>
-                </components>
-              </element>
-              <element type="UIElement" name="LevelHard" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Hard" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorLevel" value="hard"/>
-                </components>
-              </element>
-              <element type="UIElement" name="LevelMax" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
-                <components>
-                  <component type="UITextComponent" text="Max" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorLevel" value="max"/>
-                </components>
-              </element>
-            </children>
-          </element>
-        </children>
-      </element>
-      <element type="UIElement" name="Ok" height="56" fontSize="26" color="40,90,60,255">
-        <components>
-          <component type="UITextComponent" text="OK" align="Center" verticalAlign="Center" wrap="false"/>
-          <component type="UIInputClicker" action="SelectorClose"/>
-        </components>
-      </element>
-    </children>
-  </element>
-</elements>
-<variants>
-  <variant when="orientation:portrait">
-    <overrides>
-      <set element="Plate" height="576" />
-      <set element="ModeRow" direction="Vertical" height="96" />
-      <set element="ModeCaption" height="32" />
-      <set element="ColorRow" direction="Vertical" height="96" />
-      <set element="ColorCaption" height="32" />
-      <set element="EngineRow" direction="Vertical" height="96" />
-      <set element="EngineCaption" height="32" />
-      <set element="LevelRow" direction="Vertical" height="96" />
-      <set element="LevelCaption" height="32" />
-      <set element="LevelEasy" fontSize="22" />
-      <set element="LevelMedium" fontSize="22" />
-      <set element="LevelHard" fontSize="22" />
-      <set element="LevelMax" fontSize="22" />
-    </overrides>
-  </variant>
-</variants></ui>)";
-
-        constexpr const char* kPanelHtml = R"(
-<div id="Plate">
-  <span id="Title">Opponent</span>
-  <div id="ModeRow" class="row">
-    <span id="ModeCaption" class="caption">Opponent</span>
-    <div id="Mode" class="group" data-widget="segmented" data-bind="opponentMode">
-      <button id="ModeTwo" data-action="SelectorMode" data-value="two">Two players</button>
-      <button id="ModeComputer" data-action="SelectorMode" data-value="computer">Computer</button>
-    </div>
-  </div>
-  <div id="ColorRow" class="row">
-    <span id="ColorCaption" class="caption">Play as</span>
-    <div id="Color" class="group" data-widget="segmented" data-bind="opponentColor">
-      <button id="ColorWhite" data-action="SelectorColor" data-value="white">White</button>
-      <button id="ColorBlack" data-action="SelectorColor" data-value="black">Black</button>
-    </div>
-  </div>
-  <div id="EngineRow" class="row">
-    <span id="EngineCaption" class="caption">Engine</span>
-    <div id="Engine" class="group" data-widget="segmented" data-bind="opponentEngine">
-      <button id="EngineStockfish" data-action="SelectorEngine" data-value="stockfish">Stockfish</button>
-      <button id="EngineOwn" data-action="SelectorEngine" data-value="own">Own engine</button>
-    </div>
-  </div>
-  <div id="LevelRow" class="row">
-    <span id="LevelCaption" class="caption">Level</span>
-    <div id="Level" class="group" data-widget="segmented" data-bind="opponentLevel">
-      <button id="LevelEasy" data-action="SelectorLevel" data-value="easy">Easy</button>
-      <button id="LevelMedium" data-action="SelectorLevel" data-value="medium">Medium</button>
-      <button id="LevelHard" data-action="SelectorLevel" data-value="hard">Hard</button>
-      <button id="LevelMax" data-action="SelectorLevel" data-value="max">Max</button>
-    </div>
-  </div>
-  <button id="Ok" data-action="SelectorClose">OK</button>
-</div>)";
-
-        constexpr const char* kPanelCss = R"(
-#Plate    { anchor: center; display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 16px; width: 94%; max-width: 640px; height: 416px; background: rgb(36, 40, 52); }
-#Title    { height: 44px; font-size: 30px; text-align: center; }
-.row      { display: flex; flex-direction: row; align-items: stretch; gap: 8px; height: 56px; }
-.caption  { width: 150px; height: 56px; font-size: 24px; vertical-align: middle; }
-.group    { display: flex; flex-direction: row; gap: 4px; flex: 1; height: 56px; background: rgb(30, 30, 30); }
-.group button { flex: 1; height: 56px; font-size: 24px; background: rgb(70, 70, 100); }
-.group button:checked { background: rgb(110, 130, 200); }
-#Ok       { height: 56px; font-size: 26px; background: rgb(40, 90, 60); }
-@media (orientation: portrait) {
-  #Plate    { height: 576px; }
-  .row      { flex-direction: column; height: 96px; }
-  .caption  { height: 32px; }
-  #Level button { font-size: 22px; }
-}
-)";
-
         /// Every attribute of every `element` of @p expected is on the same element of @p actual with the same text, and the other way round: the two XML texts say the same.
         /// Three spellings are the same thing and are not compared: a `UIStack` is a `UIElement` with `layout="Stack"` (the compile writes the second), and a `Vertical`
         /// direction is the default and is not written
@@ -565,167 +362,16 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             EXPECT_FALSE(a) << name << " has more children than expected";
         }
 
-        const char* const kPanelNames[] = {"Plate",      "Title",       "ModeRow",   "ModeCaption",   "Mode",   "ModeTwo",         "ModeComputer", "ColorRow", "ColorCaption", "Color",
-                                           "ColorWhite", "ColorBlack",  "EngineRow", "EngineCaption", "Engine", "EngineStockfish", "EngineOwn",    "LevelRow", "LevelCaption", "Level",
-                                           "LevelEasy",  "LevelMedium", "LevelHard", "LevelMax",      "Ok"};
+        /// The choice panel of UISelectorScreenTest and the settings panel of UISettingsScreenTest as the documents their HTML + CSS compile to (UIScreenFixtures.h)
+        const String& SelectorPanelXml() {
+            static const String xml = UIWebPanelXml(kSelectorPlate, kSelectorVariants);
+            return xml;
+        }
 
-        // The plate of the settings panel of UISettingsScreenTest (kSettingsXml: the `Plate` element of its `Settings` canvas, with its portrait variant), without the dim behind
-        // it and without the `Hud` canvas that opens it. **This mirrors that constant** (it is in an anonymous namespace of that file, so it is copied, as kPanelXml copies the
-        // selector panel): when the settings screen changes, change this too. The one difference is `blocksInput="true"` on the Language group, because a background takes clicks
-        // in the HTML front-end (the same as kPanelXml).
-        constexpr const char* kSettingsPanelXml = R"(<ui><elements>
-  <element type="UIStack" name="Plate" anchor="Center" width="94%" maxWidth="640" height="416" direction="Vertical" spacing="12" padding="16" crossAlign="Stretch" color="36,40,52,255" blocksInput="true">
-    <children>
-      <element type="UIElement" name="Title" height="44" fontSize="30">
-        <components>
-          <component type="UITextComponent" text="{#settings.title}" align="Center"/>
-        </components>
-      </element>
-      <element type="UIElement" name="Sound" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
-        <components>
-          <component type="UIInputClicker"/>
-          <component type="UIToggleComponent" bind="soundOn" action="SettingsSound"/>
-        </components>
-        <children>
-          <element type="UIElement" name="SoundCaption" flex="1" height="100%" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="{#settings.sound}" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
-            </components>
-          </element>
-          <element type="UIElement" name="SoundSwitch" height="100%" aspectRatio="1.25">
-            <components>
-              <component type="UISwitchComponent"/>
-            </components>
-          </element>
-        </children>
-      </element>
-      <element type="UIStack" name="MusicRow" height="56" direction="Horizontal" spacing="8" crossAlign="Center">
-        <children>
-          <element type="UIElement" name="MusicCaption" width="220" height="56" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="{#settings.music}" verticalAlign="Center"/>
-            </components>
-          </element>
-          <element type="UIElement" name="Volume" flex="1" height="56">
-            <components>
-              <component type="UIInputClicker" stateLook="false"/>
-              <component type="UISliderComponent" bind="volume" action="SettingsVolume" minValue="0" maxValue="1" step="0.1"/>
-            </components>
-          </element>
-        </children>
-      </element>
-      <element type="UIStack" name="DownloadRow" height="56" direction="Horizontal" spacing="8" crossAlign="Center">
-        <children>
-          <element type="UIElement" name="DownloadCaption" width="220" height="56" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="{#settings.download}" verticalAlign="Center"/>
-            </components>
-          </element>
-          <element type="UIProgressBar" name="Progress" bind="progress" minValue="0" maxValue="100" flex="1" height="24"/>
-          <element type="UIElement" name="Percent" width="64" height="56" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="{progress}%" align="Right" verticalAlign="Center"/>
-            </components>
-          </element>
-        </children>
-      </element>
-      <element type="UIStack" name="LanguageRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
-        <children>
-          <element type="UIElement" name="LanguageCaption" width="220" height="56" fontSize="24">
-            <components>
-              <component type="UITextComponent" text="{#settings.language}" verticalAlign="Center"/>
-            </components>
-          </element>
-          <element type="UISegmented" name="Language" bind="language" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
-            <children>
-              <element type="UIElement" name="LanguageEn" flex="1" height="56" fontSize="24" color="70,70,100,255">
-                <components>
-                  <component type="UITextComponent" text="{#lang.en}" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SettingsLanguage" value="en"/>
-                </components>
-              </element>
-              <element type="UIElement" name="LanguageRu" flex="1" height="56" fontSize="24" color="70,70,100,255">
-                <components>
-                  <component type="UITextComponent" text="{#lang.ru}" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SettingsLanguage" value="ru"/>
-                </components>
-              </element>
-              <element type="UIElement" name="LanguageDe" flex="1" height="56" fontSize="24" color="70,70,100,255">
-                <components>
-                  <component type="UITextComponent" text="{#lang.de}" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SettingsLanguage" value="de"/>
-                </components>
-              </element>
-            </children>
-          </element>
-        </children>
-      </element>
-      <element type="UIElement" name="Ok" height="56" fontSize="26" color="40,90,60,255">
-        <components>
-          <component type="UITextComponent" text="{#settings.ok}" align="Center" verticalAlign="Center" wrap="false"/>
-          <component type="UIInputClicker" action="SettingsClose"/>
-        </components>
-      </element>
-    </children>
-  </element>
-</elements>
-<variants>
-  <variant when="orientation:portrait">
-    <overrides>
-      <set element="Plate" height="456"/>
-      <set element="LanguageRow" direction="Vertical" height="96"/>
-      <set element="LanguageCaption" height="32"/>
-    </overrides>
-  </variant>
-</variants></ui>)";
-
-        constexpr const char* kSettingsPanelHtml = R"(
-<div id="Plate">
-  <span id="Title">{#settings.title}</span>
-  <div id="Sound" data-widget="toggle" data-bind="soundOn" data-action="SettingsSound">{#settings.sound}</div>
-  <div id="MusicRow" class="row centered">
-    <span id="MusicCaption" class="caption">{#settings.music}</span>
-    <div id="Volume" data-widget="slider" data-bind="volume" data-action="SettingsVolume" data-min="0" data-max="1" data-step="0.1"></div>
-  </div>
-  <div id="DownloadRow" class="row centered">
-    <span id="DownloadCaption" class="caption">{#settings.download}</span>
-    <div id="Progress" data-widget="progress" data-bind="progress" data-min="0" data-max="100"></div>
-    <span id="Percent">{progress}%</span>
-  </div>
-  <div id="LanguageRow" class="row">
-    <span id="LanguageCaption" class="caption">{#settings.language}</span>
-    <div id="Language" class="group" data-widget="segmented" data-bind="language">
-      <button id="LanguageEn" data-action="SettingsLanguage" data-value="en">{#lang.en}</button>
-      <button id="LanguageRu" data-action="SettingsLanguage" data-value="ru">{#lang.ru}</button>
-      <button id="LanguageDe" data-action="SettingsLanguage" data-value="de">{#lang.de}</button>
-    </div>
-  </div>
-  <button id="Ok" data-action="SettingsClose">{#settings.ok}</button>
-</div>)";
-
-        constexpr const char* kSettingsPanelCss = R"(
-#Plate    { anchor: center; display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 16px; width: 94%; max-width: 640px; height: 416px; background: rgb(36, 40, 52); }
-#Title    { height: 44px; font-size: 30px; text-align: center; }
-#Sound    { height: 56px; font-size: 24px; vertical-align: middle; }
-.row      { display: flex; flex-direction: row; align-items: stretch; gap: 8px; height: 56px; }
-.centered { align-items: center; }
-.caption  { width: 220px; height: 56px; font-size: 24px; vertical-align: middle; }
-#Volume   { flex: 1; height: 56px; }
-#Progress { flex: 1; height: 24px; }
-#Percent  { width: 64px; height: 56px; font-size: 24px; text-align: right; vertical-align: middle; }
-.group    { display: flex; flex-direction: row; gap: 4px; flex: 1; height: 56px; background: rgb(30, 30, 30); }
-.group button { flex: 1; height: 56px; font-size: 24px; background: rgb(70, 70, 100); }
-#Ok       { height: 56px; font-size: 26px; background: rgb(40, 90, 60); }
-@media (orientation: portrait) {
-  #Plate          { height: 456px; }
-  #LanguageRow    { flex-direction: column; height: 96px; }
-  #LanguageCaption { height: 32px; }
-}
-)";
-
-        const char* const kSettingsPanelNames[] = {"Plate",       "Title",           "Sound",    "MusicRow",   "MusicCaption", "Volume",     "DownloadRow", "DownloadCaption", "Progress", "Percent",
-                                                   "LanguageRow", "LanguageCaption", "Language", "LanguageEn", "LanguageRu",   "LanguageDe", "Ok"};
-
+        const String& SettingsPanelXml() {
+            static const String xml = UIWebPanelXml(kSettingsPlate, kSettingsVariants);
+            return xml;
+        }
     }  // namespace
 
     class UIWebTest : public ::testing::Test {
@@ -1211,15 +857,15 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     // ---- choice groups -------------------------------------------------------------------------------------------------------
 
     TEST_F(UIWebTest, ThePanelInHtmlAndCssBuildsTheElementsOfTheXml) {
-        const auto compiled = Compile(kPanelHtml, kPanelCss);
+        const auto compiled = Compile(kSelectorHtml, kSelectorCss);
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
         EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str() << " / " << compiled->xml.c_str();
 
         pugi::xml_document reference;
-        ASSERT_TRUE(reference.load_string(kPanelXml));
+        ASSERT_TRUE(reference.load_string(SelectorPanelXml().c_str()));
         ExpectSameAttributes(reference.child("ui").child("elements").child("element"), compiled->document.child("ui").child("elements").child("element"));
 
-        const UIScreenContent expected = ReadXml(kPanelXml);
+        const UIScreenContent expected = ReadXml(SelectorPanelXml());
         ExpectSameElements(expected.elements, compiled->content.elements);
         EXPECT_TRUE(expected.variants == compiled->content.variants) << compiled->xml.c_str();
         EXPECT_EQ(compiled->report.variants, 1u);
@@ -1242,9 +888,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     }
 
     TEST_F(UIWebTest, ThePanelInHtmlLaysOutLikeTheXmlInLandscapeAndPortrait) {
-        const auto compiled = Compile(kPanelHtml, kPanelCss);
+        const auto compiled = Compile(kSelectorHtml, kSelectorCss);
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        const UIScreenContent expectedContent = ReadXml(kPanelXml);
+        const UIScreenContent expectedContent = ReadXml(SelectorPanelXml());
         // The view of the Chess board (landscape: the portrait variant is off) and a portrait view (the variant is on)
         for (const auto& [viewWidth, viewHeight] : {Pair<float, float>{840.0f, 800.0f}, {560.0f, 840.0f}}) {
             LaidOut web(compiled->content);
@@ -1254,7 +900,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             for (const auto& [width, height] : {Pair<float, float>{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
                 web.At(width, height);
                 xml.At(width, height);
-                for (const char* name : kPanelNames) {
+                for (const char* name : kSelectorPlateNames) {
                     SCOPED_TRACE(Format("{} in a {}x{} view at {}x{}", name, viewWidth, viewHeight, width, height).c_str());
                     ExpectSameRect(xml.Find(name), web.Find(name), name);
                 }
@@ -1275,7 +921,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     }
 
     TEST_F(UIWebTest, ThePanelInHtmlFollowsTheVariablesAndPassesItsClicksOn) {
-        const auto compiled = Compile(kPanelHtml, kPanelCss);
+        const auto compiled = Compile(kSelectorHtml, kSelectorCss);
         auto* color = dynamic_cast<UISegmented*>(compiled->Element("Color"));
         UIElement* white = compiled->Element("ColorWhite");
         UIElement* black = compiled->Element("ColorBlack");
@@ -1370,15 +1016,15 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     // ---- toggle, slider and progress bar ------------------------------------------------------------------------------------------
 
     TEST_F(UIWebTest, TheSettingsPanelInHtmlAndCssBuildsTheElementsOfTheXml) {
-        const auto compiled = Compile(kSettingsPanelHtml, kSettingsPanelCss);
+        const auto compiled = Compile(kSettingsHtml, kSettingsCss);
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
         EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str() << " / " << compiled->xml.c_str();
 
         pugi::xml_document reference;
-        ASSERT_TRUE(reference.load_string(kSettingsPanelXml));
+        ASSERT_TRUE(reference.load_string(SettingsPanelXml().c_str()));
         ExpectSameAttributes(reference.child("ui").child("elements").child("element"), compiled->document.child("ui").child("elements").child("element"));
 
-        const UIScreenContent expected = ReadXml(kSettingsPanelXml);
+        const UIScreenContent expected = ReadXml(SettingsPanelXml());
         ExpectSameElements(expected.elements, compiled->content.elements);
         EXPECT_TRUE(expected.variants == compiled->content.variants) << compiled->xml.c_str();
         EXPECT_EQ(compiled->report.variants, 1u);
@@ -1410,9 +1056,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     }
 
     TEST_F(UIWebTest, TheSettingsPanelInHtmlLaysOutLikeTheXmlInLandscapeAndPortrait) {
-        const auto compiled = Compile(kSettingsPanelHtml, kSettingsPanelCss);
+        const auto compiled = Compile(kSettingsHtml, kSettingsCss);
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        const UIScreenContent expectedContent = ReadXml(kSettingsPanelXml);
+        const UIScreenContent expectedContent = ReadXml(SettingsPanelXml());
         // The view of the Chess board (landscape: the portrait variant is off) and a portrait view (the variant is on)
         for (const auto& [viewWidth, viewHeight] : {Pair<float, float>{840.0f, 800.0f}, {560.0f, 840.0f}}) {
             LaidOut web(compiled->content);
@@ -1422,7 +1068,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             for (const auto& [width, height] : {Pair<float, float>{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
                 web.At(width, height);
                 xml.At(width, height);
-                for (const char* name : kSettingsPanelNames) {
+                for (const char* name : kSettingsPlateNames) {
                     SCOPED_TRACE(Format("{} in a {}x{} view at {}x{}", name, viewWidth, viewHeight, width, height).c_str());
                     ExpectSameRect(xml.Find(name), web.Find(name), name);
                 }
@@ -1447,7 +1093,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     }
 
     TEST_F(UIWebTest, TheSettingsPanelInHtmlFollowsTheVariablesAndTheStrings) {
-        const auto compiled = Compile(kSettingsPanelHtml, kSettingsPanelCss);
+        const auto compiled = Compile(kSettingsHtml, kSettingsCss);
         UIStrings& strings = CoreManager::GetUIStrings();
         strings.Set("en"_intern, "settings.sound", "Sound");
         strings.Set("de"_intern, "settings.sound", "Geraeuscheffekte");

@@ -182,4 +182,16 @@ namespace BECore::Tests {
         return text;
     }
 
+    /// Some case of @p failures has an issue of @p kind: what a deliberately broken copy of a screen expects
+    [[nodiscard]] inline bool HasIssue(const Vector<UIMatrixFailure>& failures, UILayoutIssueKind kind) {
+        for (const auto& failure : failures) {
+            for (const UILayoutIssue& issue : failure.issues) {
+                if (issue.kind == kind) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
 }  // namespace BECore::Tests

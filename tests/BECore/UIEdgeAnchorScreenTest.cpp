@@ -119,13 +119,6 @@ namespace BECore::Tests {
             layout.Invalidate();
         }
 
-        /// Replaces the first @p what in @p text, and fails the test when it is not there (a broken copy that changed nothing would prove nothing)
-        void Replace(String& text, const String& what, const String& with) {
-            const size_t at = text.find(what);
-            ASSERT_NE(at, String::npos) << what;
-            text.replace(at, what.size(), with);
-        }
-
         void LayOutAt(UICanvasLayout& layout, float width, float height) {
             UILayoutContext context;
             context.outputWidth = width;
@@ -143,37 +136,6 @@ namespace BECore::Tests {
                 return none;
             }
             return element->rect;
-        }
-
-        bool HasIssue(const Vector<UIMatrixFailure>& failures, UILayoutIssueKind kind) {
-            for (const auto& failure : failures) {
-                for (const UILayoutIssue& issue : failure.issues) {
-                    if (issue.kind == kind) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        constexpr float kButtonAir = 8.0f;  // the text of a button keeps this much from each edge of its fill
-
-        /// The names of the labels and buttons of the laid-out screen whose control cuts its text in the language that is set now (an ellipsis label "can shrink", so the
-        /// validator does not see it)
-        String CutTexts(const UIElement& element, float scale) {
-            String cut;
-            const bool text = element.GetComponent<UITextComponent>() != nullptr;
-            if (text && !element.rect.IsEmpty()) {
-                const float air = element.GetComponent<UIInputClicker>() ? kButtonAir : 0.0f;  // a button is a text with a clicker
-                const UIContentFit fit = element.CheckContent(element.rect.w - 2.0f * air, element.rect.h, scale);
-                if (fit.hasContent && !fit.fits) {
-                    cut += Format("{} ", element.name.ToStringView());
-                }
-            }
-            for (const auto& child : element.children) {
-                cut += CutTexts(*child, scale);
-            }
-            return cut;
         }
 
     }  // namespace

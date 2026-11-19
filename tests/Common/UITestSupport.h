@@ -4,7 +4,10 @@
 #include <BECore/Math/Rect.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Types/Types.h>
+#include <BECore/UI/UIElement.h>
+#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UIStrings.h>
+#include <BECore/UI/UITextComponent.h>
 #include <cmath>
 #include <gtest/gtest.h>
 
@@ -48,6 +51,71 @@ namespace BECore::Tests {
             check(language);
         }
         strings.SetLanguage(saved);
+    }
+
+    /// Replaces every @p what in @p text (a placeholder of a template)
+    inline void ReplaceAll(String& text, StringView what, StringView with) {
+        for (size_t at = text.find(what.data(), 0, what.size()); at != String::npos; at = text.find(what.data(), at + with.size(), what.size())) {
+            text.replace(at, what.size(), with.data(), with.size());
+        }
+    }
+
+    /// Replaces the first @p what in @p text and fails the test when it is not there: a broken copy that changed nothing would prove nothing. Call it through
+    /// `ASSERT_NO_FATAL_FAILURE` where the edit must have happened
+    inline void Replace(String& text, StringView what, StringView with) {
+        const size_t at = text.find(what.data(), 0, what.size());
+        ASSERT_NE(at, String::npos) << String(what.data(), what.size()).c_str();
+        text.replace(at, what.size(), with.data(), with.size());
+    }
+
+    /// The text of a button keeps this much from each edge of its fill
+    inline constexpr float kButtonAir = 8.0f;
+
+    /// A button is a text and a clicker on one element (`ui-controls.md`, "Components"): its text is centred on its own fill, so it keeps kButtonAir. A slider, a toggle row, a
+    /// segmented group or a dropdown header is interactive too, but its text is a child caption or sits in an area the control leaves it, so it gets no air
+    [[nodiscard]] inline bool IsButton(const UIElement& element) {
+        return element.GetComponent<UIInputClicker>() != nullptr && element.GetComponent<UITextComponent>() != nullptr;
+    }
+
+    /// The text @p element shows (a dropdown header: the chosen caption), empty when it has no text component
+    [[nodiscard]] inline String ShownText(const UIElement& element) {
+        const UITextComponent* text = element.GetComponent<UITextComponent>();
+        return text ? String(text->GetDisplayText(element)) : String();
+    }
+
+    /// Every control of the tree that shows text or takes a press, depth first (the root itself is the canvas and has none). The options of a closed popup have no rect and
+    /// are not looked at
+    inline void CollectControls(const UIElement& element, Vector<const UIElement*>& found) {
+        if (element.GetComponent<UITextComponent>() || element.IsInteractive()) {
+            found.push_back(&element);
+        }
+        if (element.HasPopupChildren() && !element.IsPopupOpen()) {
+            return;
+        }
+        for (const auto& child : element.children) {
+            CollectControls(*child, found);
+        }
+    }
+
+    /// The laid-out @p control does not fit what it shows at @p scale, a button with kButtonAir on each side. The validator does not see this for an ellipsis text, which
+    /// "can shrink"
+    [[nodiscard]] inline bool CutsItsText(const UIElement& control, float scale) {
+        const float air = IsButton(control) ? kButtonAir : 0.0f;
+        const UIContentFit fit = control.CheckContent(control.rect.w - 2.0f * air, control.rect.h, scale);
+        return fit.hasContent && !fit.fits;
+    }
+
+    /// The names of the shown controls under @p root that cut their text in the language that is set now, each followed by a space; empty when every word fits
+    [[nodiscard]] inline String CutTexts(const UIElement& root, float scale) {
+        Vector<const UIElement*> controls;
+        CollectControls(root, controls);
+        String cut;
+        for (const UIElement* control : controls) {
+            if (!control->rect.IsEmpty() && CutsItsText(*control, scale)) {
+                cut += Format("{} ", control->name.ToStringView());
+            }
+        }
+        return cut;
     }
 
 }  // namespace BECore::Tests

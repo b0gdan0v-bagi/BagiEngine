@@ -88,4 +88,4 @@ A file can be made as large, as deep and as odd as one likes, so the readers kee
 
 ## Checking
 
-The compile is pure, so a test gives it strings. `tests/BECore/UIWebTest.cpp` compares the game menu, the choice panel (`kPanelHtml` / `kPanelCss`) and the settings panel (`kSettingsPanelHtml` / `kSettingsPanelCss`) with their XML at five sizes and runs `ValidateOnMatrix`. When a screen does not look as written, read the report.
+The compile is pure, so a test gives it strings. `tests/BECore/UIWebTest.cpp` compares the game menu, the choice panel and the settings panel (`tests/BECore/UIScreenFixtures.h`, one source with their screen tests) with their XML at five sizes and runs `ValidateOnMatrix`. When a screen does not look as written, read the report.

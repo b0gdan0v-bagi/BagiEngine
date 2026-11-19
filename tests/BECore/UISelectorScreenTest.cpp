@@ -1,23 +1,13 @@
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/Input/UIInput.h>
-#include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
-#include <BECore/Scene/SceneManager.h>
-#include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIEnvironment.h>
-#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UIStack.h>
-#include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIVars.h>
-#include <Common/EngineEnvironment.h>
+#include <BECore/UIScreenFixtures.h>
 #include <Common/Printers.h>
-#include <Common/RecordingRenderer.h>
-#include <Common/UIInputEvents.h>
-#include <Common/UILayoutMatrix.h>
-#include <CoreSDL/SDLEvents.h>
+#include <Common/UIScreenTestSupport.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
 
@@ -47,227 +37,6 @@ namespace BECore::Tests {
         constexpr float kViewHeight = 800.0f;
         constexpr float kPortraitWidth = 560.0f;  // a portrait view: its longer side stays at most 840 units, so 56 units are still 32 px in a 480 px square window
         constexpr float kPortraitHeight = 840.0f;
-        constexpr float kSegmentHeight = 56.0f;     // a touch target at the smallest fit scale of the matrix (0.571)
-        constexpr float kButtonAir = 8.0f;          // the text of a button keeps this much from each edge of its fill
-        constexpr float kNarrowestWidth = 480.0f;   // the narrowest window of the matrix, in pixels
-        constexpr float kNarrowestHeight = 853.0f;  // 9:16 at that width
-
-        // Two canvases. Hud: one button that opens the panel.
-        // Selector: a modal canvas, hidden. Landscape rows are 56 high with the caption on the left; the portrait variant (a view taller than wide) turns every row
-        // into 32 + 8 + 56 = 96 units, caption above group, and the plate grows with it: 32 padding + 44 title + 4 x 96 + 56 OK + 5 x 12 spacing = 576 (416 in landscape).
-        // The same variant sets the font of the Level segments to 22: a quarter of a narrow plate on a window with side insets is too little for "Medium" at 24 with its air.
-        constexpr const char* kSelectorXml = R"(
-<SceneManager><scenes>
-  <scene type="Scene" name="Main" viewWidth="@VIEW_W@" viewHeight="@VIEW_H@"><nodes>
-    <node name="Hud" layer="10"><components>
-      <component type="UICanvasComponent" space="SceneView" useSafeArea="true">
-        <elements>
-          <element type="UIElement" name="NewGame" anchor="TopRight" x="-12" y="12" width="190" height="56" fontSize="24" color="45,75,120,255">
-            <components>
-              <component type="UITextComponent" text="Opponent" align="Center" verticalAlign="Center" wrap="false"/>
-              <component type="UIInputClicker" action="SelectorOpen"/>
-            </components>
-          </element>
-        </elements>
-      </component>
-    </components></node>
-    <node name="Selector" layer="20"><components>
-      <component type="UICanvasComponent" space="SceneView" useSafeArea="true" modal="true" visible="false">
-        <elements>
-          <element type="UIElement" name="Dim" anchor="Stretch" ignoreSafeArea="true" color="0,0,0,150" blocksInput="true"/>
-          <element type="UIStack" name="Plate" anchor="Center" width="94%" maxWidth="640" height="416" direction="Vertical" spacing="12" padding="16" crossAlign="Stretch" color="36,40,52,255" blocksInput="true">
-            <children>
-              <element type="UIElement" name="Title" height="44" fontSize="30">
-                <components><component type="UITextComponent" text="Opponent" align="Center"/></components>
-              </element>
-              <element type="UIStack" name="ModeRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
-                <children>
-                  <element type="UIElement" name="ModeCaption" width="150" height="56" fontSize="24">
-                    <components><component type="UITextComponent" text="Opponent" verticalAlign="Center"/></components>
-                  </element>
-                  <element type="UISegmented" name="Mode" bind="opponentMode" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255">
-                    <children>
-                      <element type="UIElement" name="ModeTwo" flex="1" height="56" fontSize="24" color="70,70,100,255">
-                        <components>
-                          <component type="UITextComponent" text="Two players" align="Center" verticalAlign="Center" wrap="false"/>
-                          <component type="UIInputClicker" action="SelectorMode" value="two"/>
-                        </components>
-                      </element>
-                      <element type="UIElement" name="ModeComputer" flex="1" height="56" fontSize="24" color="70,70,100,255">
-                        <components>
-                          <component type="UITextComponent" text="Computer" align="Center" verticalAlign="Center" wrap="false"/>
-                          <component type="UIInputClicker" action="SelectorMode" value="computer"/>
-                        </components>
-                      </element>
-                    </children>
-                  </element>
-                </children>
-              </element>
-              <element type="UIStack" name="ColorRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
-                <children>
-                  <element type="UIElement" name="ColorCaption" width="150" height="56" fontSize="24">
-                    <components><component type="UITextComponent" text="Play as" verticalAlign="Center"/></components>
-                  </element>
-                  <element type="UISegmented" name="Color" bind="opponentColor" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255">
-                    <children>
-                      <element type="UIElement" name="ColorWhite" flex="1" height="56" fontSize="24" color="70,70,100,255">
-                        <components>
-                          <component type="UITextComponent" text="White" align="Center" verticalAlign="Center" wrap="false"/>
-                          <component type="UIInputClicker" action="SelectorColor" value="white"/>
-                        </components>
-                      </element>
-                      <element type="UIElement" name="ColorBlack" flex="1" height="56" fontSize="24" color="70,70,100,255">
-                        <components>
-                          <component type="UITextComponent" text="Black" align="Center" verticalAlign="Center" wrap="false"/>
-                          <component type="UIInputClicker" action="SelectorColor" value="black"/>
-                        </components>
-                      </element>
-                    </children>
-                  </element>
-                </children>
-              </element>
-              <element type="UIStack" name="EngineRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
-                <children>
-                  <element type="UIElement" name="EngineCaption" width="150" height="56" fontSize="24">
-                    <components><component type="UITextComponent" text="Engine" verticalAlign="Center"/></components>
-                  </element>
-                  <element type="UISegmented" name="Engine" bind="opponentEngine" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255">
-                    <children>
-                      <element type="UIElement" name="EngineStockfish" flex="1" height="56" fontSize="24" color="70,70,100,255">
-                        <components>
-                          <component type="UITextComponent" text="Stockfish" align="Center" verticalAlign="Center" wrap="false"/>
-                          <component type="UIInputClicker" action="SelectorEngine" value="stockfish"/>
-                        </components>
-                      </element>
-                      <element type="UIElement" name="EngineOwn" flex="1" height="56" fontSize="24" color="70,70,100,255">
-                        <components>
-                          <component type="UITextComponent" text="Own engine" align="Center" verticalAlign="Center" wrap="false"/>
-                          <component type="UIInputClicker" action="SelectorEngine" value="own"/>
-                        </components>
-                      </element>
-                    </children>
-                  </element>
-                </children>
-              </element>
-              <element type="UIStack" name="LevelRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
-                <children>
-                  <element type="UIElement" name="LevelCaption" width="150" height="56" fontSize="24">
-                    <components><component type="UITextComponent" text="Level" verticalAlign="Center"/></components>
-                  </element>
-                  <element type="UISegmented" name="Level" bind="opponentLevel" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255">
-                    <children>
-                      <element type="UIElement" name="LevelEasy" flex="1" height="56" fontSize="24" color="70,70,100,255">
-                        <components>
-                          <component type="UITextComponent" text="Easy" align="Center" verticalAlign="Center" wrap="false"/>
-                          <component type="UIInputClicker" action="SelectorLevel" value="easy"/>
-                        </components>
-                      </element>
-                      <element type="UIElement" name="LevelMedium" flex="1" height="56" fontSize="24" color="70,70,100,255">
-                        <components>
-                          <component type="UITextComponent" text="Medium" align="Center" verticalAlign="Center" wrap="false"/>
-                          <component type="UIInputClicker" action="SelectorLevel" value="medium"/>
-                        </components>
-                      </element>
-                      <element type="UIElement" name="LevelHard" flex="1" height="56" fontSize="24" color="70,70,100,255">
-                        <components>
-                          <component type="UITextComponent" text="Hard" align="Center" verticalAlign="Center" wrap="false"/>
-                          <component type="UIInputClicker" action="SelectorLevel" value="hard"/>
-                        </components>
-                      </element>
-                      <element type="UIElement" name="LevelMax" flex="1" height="56" fontSize="24" color="70,70,100,255">
-                        <components>
-                          <component type="UITextComponent" text="Max" align="Center" verticalAlign="Center" wrap="false"/>
-                          <component type="UIInputClicker" action="SelectorLevel" value="max"/>
-                        </components>
-                      </element>
-                    </children>
-                  </element>
-                </children>
-              </element>
-              <element type="UIElement" name="Ok" height="56" fontSize="26" color="40,90,60,255">
-                <components>
-                  <component type="UITextComponent" text="OK" align="Center" verticalAlign="Center" wrap="false"/>
-                  <component type="UIInputClicker" action="SelectorClose"/>
-                </components>
-              </element>
-            </children>
-          </element>
-        </elements>
-        <variants>
-          <variant when="orientation:portrait">
-            <overrides>
-              <set element="Plate" height="576"/>
-              <set element="ModeRow" direction="Vertical" height="96"/>
-              <set element="ModeCaption" height="32"/>
-              <set element="ColorRow" direction="Vertical" height="96"/>
-              <set element="ColorCaption" height="32"/>
-              <set element="EngineRow" direction="Vertical" height="96"/>
-              <set element="EngineCaption" height="32"/>
-              <set element="LevelRow" direction="Vertical" height="96"/>
-              <set element="LevelCaption" height="32"/>
-              <set element="LevelEasy" fontSize="22"/>
-              <set element="LevelMedium" fontSize="22"/>
-              <set element="LevelHard" fontSize="22"/>
-              <set element="LevelMax" fontSize="22"/>
-            </overrides>
-          </variant>
-        </variants>
-      </component>
-    </components></node>
-  </nodes></scene>
-</scenes></SceneManager>)";
-
-        struct Group {
-            const char* name;
-            const char* variable;
-            Vector<Pair<const char*, const char*>> segments;  // the name of the button, its value
-        };
-
-        /// The four groups of the panel with the words they show (the text is in the XML above; the values are what the game publishes)
-        const Vector<Group>& Groups() {
-            static const Vector<Group> groups = {
-                {"Mode", "opponentMode", {{"ModeTwo", "two"}, {"ModeComputer", "computer"}}},
-                {"Color", "opponentColor", {{"ColorWhite", "white"}, {"ColorBlack", "black"}}},
-                {"Engine", "opponentEngine", {{"EngineStockfish", "stockfish"}, {"EngineOwn", "own"}}},
-                {"Level", "opponentLevel", {{"LevelEasy", "easy"}, {"LevelMedium", "medium"}, {"LevelHard", "hard"}, {"LevelMax", "max"}}},
-            };
-            return groups;
-        }
-
-        String SceneXml(float viewWidth, float viewHeight, FunctionRef<void(String&)> edit = NoTextEdit) {
-            String xml = kSelectorXml;
-            const auto replace = [&xml](const String& what, const String& with) {
-                for (size_t at = xml.find(what); at != String::npos; at = xml.find(what, at + with.size())) {
-                    xml.replace(at, what.size(), with);
-                }
-            };
-            replace("@VIEW_W@", ToString(static_cast<int>(viewWidth)));
-            replace("@VIEW_H@", ToString(static_cast<int>(viewHeight)));
-            edit(xml);
-            return xml;
-        }
-
-        /// Replaces the first @p what in @p xml, and fails the test when it is not there (a broken copy that changed nothing would prove nothing)
-        void Replace(String& xml, const String& what, const String& with) {
-            const size_t at = xml.find(what);
-            ASSERT_NE(at, String::npos) << what;
-            xml.replace(at, what.size(), with);
-        }
-
-        /// What reaches game code instead of a canvas: the board under the panel
-        class BoardClicks : public SubscriptionHolder {
-        public:
-            BoardClicks() {
-                Subscribe<SDLEvents::MouseButtonDownEvent, &BoardClicks::OnDown>(this);
-            }
-
-            int downs = 0;
-
-        private:
-            void OnDown(const SDLEvents::MouseButtonDownEvent&) {
-                ++downs;
-            }
-        };
 
         /// The part of the game: it shows and hides the panel and answers a click on a segment by setting the variable the group is bound to. It also records every action
         class SelectorGame : public SubscriptionHolder {
@@ -314,83 +83,20 @@ namespace BECore::Tests {
             Vector<PoolString> _values;
         };
 
-        /// Every control with text in the tree, depth first (the root itself is the canvas and has none)
-        void CollectControls(const UIElement& element, Vector<const UIElement*>& found) {
-            if (element.GetComponent<UITextComponent>()) {
-                found.push_back(&element);
-            }
-            for (const auto& child : element.children) {
-                CollectControls(*child, found);
-            }
-        }
-
-        String ShownText(const UIElement& element) {
-            const UITextComponent* text = element.GetComponent<UITextComponent>();
-            return text ? String(text->GetDisplayText()) : String();
-        }
-
-        /// What is wrong with a laid-out panel, one problem to a line, nothing when it is right: a control that is not shown at all (an empty rect: a segment without a
-        /// `height`), text that its control cuts (the validator does not see it for an ellipsis label), and a segment under kSegmentHeight
-        String Problems(const UICanvasLayout& layout) {
-            String problems;
-            const float scale = layout.GetResolved().scale;
-            Vector<const UIElement*> controls;
-            CollectControls(*layout.root, controls);
-            for (const UIElement* control : controls) {
-                if (control->rect.IsEmpty()) {
-                    if (control->active.visible) {
-                        problems += Format("{} '{}' has an empty rect (a missing height?)\n", control->name.ToStringView(), ShownText(*control).c_str());
-                    }
-                    continue;
-                }
-                const float air = control->IsInteractive() ? kButtonAir : 0.0f;
-                const UIContentFit fit = control->CheckContent(control->rect.w - 2.0f * air, control->rect.h, scale);
-                if (fit.hasContent && !fit.fits) {
-                    problems += Format("{} cuts '{}': {:.1f} units wide with {:.1f} of air each side, at scale {:.3f}\n", control->name.ToStringView(), ShownText(*control).c_str(), control->rect.w,
-                                       air, scale);
-                }
-                if (control->IsInteractive() && control->rect.h < kSegmentHeight - 0.01f) {
-                    problems += Format("{} is {:.1f} units high, under {:.0f}\n", control->name.ToStringView(), control->rect.h, kSegmentHeight);
-                }
-            }
-            return problems;
-        }
-
-        bool HasIssue(const Vector<UIMatrixFailure>& failures, UILayoutIssueKind kind) {
-            for (const auto& failure : failures) {
-                for (const UILayoutIssue& issue : failure.issues) {
-                    if (issue.kind == kind) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
     }  // namespace
 
-    class UISelectorScreenTest : public ::testing::Test {
+    class UISelectorScreenTest : public UIPanelScreenTest {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
+        UISelectorScreenTest() : UIPanelScreenTest("Selector"_intern) {}
 
         void SetUp() override {
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
+            UIPanelScreenTest::SetUp();
             SetVars("two", "white", "stockfish", "medium");
         }
 
         void TearDown() override {
             _game.reset();
-            _hud.Reset();
-            _selector.Reset();
-            _manager.Reset();
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
+            UIPanelScreenTest::TearDown();
         }
 
         static void SetVars(const char* mode, const char* color, const char* engine, const char* level) {
@@ -403,126 +109,11 @@ namespace BECore::Tests {
         /// The scene of the panel with a view of this size; the output has the same size, so a point of the view is a pixel
         void LoadScene(float viewWidth = kViewWidth, float viewHeight = kViewHeight, FunctionRef<void(String&)> edit = NoTextEdit) {
             _game.reset();
-            _hud.Reset();
-            _selector.Reset();
-            XmlDeserializer deserializer;
-            const String xml = SceneXml(viewWidth, viewHeight, edit);
-            ASSERT_TRUE(deserializer.LoadFromString(xml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-            _renderer->width = viewWidth;
-            _renderer->height = viewHeight;
-
-            for (const auto& node : GetScene().GetRootNode().GetChildren()) {
-                if (node->GetName() == "Hud"_intern) {
-                    _hud = node->GetComponent<UICanvasComponent>();
-                } else if (node->GetName() == "Selector"_intern) {
-                    _selector = node->GetComponent<UICanvasComponent>();
-                }
-            }
-            ASSERT_TRUE(_hud);
-            ASSERT_TRUE(_selector);
-            _hud->UpdateLayout(1280.0f, 720.0f);  // the reflected fields of the component reach the layout on its first update
-            _selector->UpdateLayout(1280.0f, 720.0f);
+            const String scene = PanelSceneXml(kSelectorHudButton, "Selector", kSelectorPlate, kSelectorVariants);
+            ASSERT_NO_FATAL_FAILURE(LoadPanelScene(SceneXml(scene, viewWidth, viewHeight, edit), viewWidth, viewHeight));
             _game.emplace(GetScene());
         }
 
-        Scene& GetScene() const {
-            return *_manager->GetSceneByName("Main"_intern);
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
-        }
-
-        UILayoutContext ViewContext() const {
-            UILayoutContext context;
-            context.sceneViewWidth = GetScene().GetViewWidth();
-            context.sceneViewHeight = GetScene().GetViewHeight();
-            return context;
-        }
-
-        UIElement& El(const char* name) const {
-            UIElement* element = _selector->GetRoot().FindByName(PoolString::Intern(name));
-            if (element == nullptr) {
-                ADD_FAILURE() << name << " is not in the panel";
-                std::abort();  // a reference to nothing cannot be returned; the failure above is printed first
-            }
-            return *element;
-        }
-
-        template <typename T>
-        T& Get(const char* name) const {
-            UIElement* element = _selector->GetRoot().FindByName(PoolString::Intern(name));
-            T* typed = element ? element->Cast<T>() : nullptr;
-            if (typed == nullptr) {
-                ADD_FAILURE() << name << (element ? " is not the expected control" : " is not in the panel");
-                std::abort();  // a reference to nothing cannot be returned; the failure above is printed first
-            }
-            return *typed;
-        }
-
-        static Pair<float, float> CenterOf(const UIElement& element) {
-            return {element.rect.x + element.rect.w * 0.5f, element.rect.y + element.rect.h * 0.5f};
-        }
-
-        /// A press and its release at the center of @p element as it was laid out in the last draw; returns what the two events were taken for
-        Pair<bool, bool> ClickAt(float x, float y) {
-            const bool pressed = CoreManager::GetUIInput().DispatchMouseButtonDown(Button(x, y, true));
-            const bool released = CoreManager::GetUIInput().DispatchMouseButtonUp(Button(x, y, false));
-            return {pressed, released};
-        }
-
-        Pair<bool, bool> Click(const UIElement& element) {
-            const auto [x, y] = CenterOf(element);
-            return ClickAt(x, y);
-        }
-
-        /// The panel on the whole matrix with the options of the game: the findings of the validator
-        Vector<UIMatrixFailure> ValidatePanel(UICanvasComponent& canvas) const {
-            UILayoutValidatorOptions options;
-            options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
-            return ValidateOnMatrix(canvas.GetLayout(), options, ViewContext());
-        }
-
-        /// Problems() on every case of the matrix: the first lines of the first cases that have any
-        String ProblemsOnMatrix(UICanvasComponent& canvas) const {
-            constexpr size_t kReported = 4;
-            String report;
-            size_t reported = 0;
-            UICanvasLayout& layout = canvas.GetLayout();
-            for (const UIMatrixCase& matrixCase : UILayoutMatrix()) {
-                UILayoutContext context = ViewContext();
-                context.outputWidth = matrixCase.context.outputWidth;
-                context.outputHeight = matrixCase.context.outputHeight;
-                context.safeArea = matrixCase.context.safeArea;
-                layout.Update(context);
-                const String problems = Problems(layout);
-                if (!problems.empty() && reported++ < kReported) {
-                    report += Format("{}:\n{}", matrixCase.label.c_str(), problems.c_str());
-                }
-            }
-            layout.Invalidate();
-            return report;
-        }
-
-        /// The panel in the narrowest window of the matrix, alone: 480 px wide with the side insets of a phone held sideways
-        void LayOutInTheNarrowestWindow(UICanvasLayout& layout) const {
-            UILayoutContext context = ViewContext();
-            context.outputWidth = kNarrowestWidth;
-            context.outputHeight = kNarrowestHeight;
-            context.safeArea = UIPreview::SimulatedSafeArea(SafeAreaSimulation::SideInsets, kNarrowestWidth, kNarrowestHeight);
-            layout.Update(context);
-        }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _hud;
-        IntrusivePtr<UICanvasComponent> _selector;
         Optional<SelectorGame> _game;
     };
 
@@ -530,7 +121,7 @@ namespace BECore::Tests {
 
     TEST_F(UISelectorScreenTest, ThePanelPassesTheSizeMatrixInALandscapeView) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
-        const auto failures = ValidatePanel(*_selector);
+        const auto failures = ValidatePanel(*_panel);
         EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
         const auto hudFailures = ValidatePanel(*_hud);
         EXPECT_TRUE(hudFailures.empty()) << DescribeMatrixFailures(hudFailures).c_str();
@@ -538,24 +129,24 @@ namespace BECore::Tests {
 
     TEST_F(UISelectorScreenTest, ThePanelPassesTheSizeMatrixInAPortraitView) {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kPortraitWidth, kPortraitHeight));
-        const auto failures = ValidatePanel(*_selector);
+        const auto failures = ValidatePanel(*_panel);
         EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
     }
 
     TEST_F(UISelectorScreenTest, NoWordOfAnyGroupIsCutOnAnyCaseOfTheMatrix) {
         // The validator does not see an ellipsis, so every control is asked for the text it shows, and a segment must keep 8 units of air each side
         ASSERT_NO_FATAL_FAILURE(LoadScene());
-        const String landscape = ProblemsOnMatrix(*_selector);
+        const String landscape = ProblemsOnMatrix(*_panel);
         EXPECT_TRUE(landscape.empty()) << landscape.c_str();
 
         ASSERT_NO_FATAL_FAILURE(LoadScene(kPortraitWidth, kPortraitHeight));
-        const String portrait = ProblemsOnMatrix(*_selector);
+        const String portrait = ProblemsOnMatrix(*_panel);
         EXPECT_TRUE(portrait.empty()) << portrait.c_str();
     }
 
     TEST_F(UISelectorScreenTest, NoWordIsCutInTheNarrowestWindowAndEverySegmentIsATouchTarget) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
-        UICanvasLayout& layout = _selector->GetLayout();
+        UICanvasLayout& layout = _panel->GetLayout();
         LayOutInTheNarrowestWindow(layout);
 
         const float scale = kNarrowestWidth / kViewWidth;
@@ -565,11 +156,11 @@ namespace BECore::Tests {
         EXPECT_TRUE(Problems(layout).empty()) << Problems(layout).c_str();
         const float minTouch = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
         size_t segments = 0;
-        for (const Group& group : Groups()) {
+        for (const UISelectorGroup& group : SelectorGroups()) {
             for (const auto& [name, value] : group.segments) {
                 const UIElement& segment = El(name);
                 ++segments;
-                EXPECT_GE(segment.rect.h, kSegmentHeight - 0.01f) << name;
+                EXPECT_GE(segment.rect.h, kScreenControlHeight - 0.01f) << name;
                 EXPECT_GE(std::min(segment.rect.w, segment.rect.h) * layout.GetResolved().scale, minTouch - 0.01f) << name << " is a touch target on the smallest window";
             }
         }
@@ -580,10 +171,10 @@ namespace BECore::Tests {
     TEST_F(UISelectorScreenTest, EveryWordIsAskedNotOnlyTheLongestString) {
         // The same walk as Problems(), written out: each segment of each group, with the width it got on the narrowest window
         ASSERT_NO_FATAL_FAILURE(LoadScene());
-        UICanvasLayout& layout = _selector->GetLayout();
+        UICanvasLayout& layout = _panel->GetLayout();
         LayOutInTheNarrowestWindow(layout);
         const float scale = layout.GetResolved().scale;
-        for (const Group& group : Groups()) {
+        for (const UISelectorGroup& group : SelectorGroups()) {
             for (const auto& [name, value] : group.segments) {
                 const UIElement& segment = El(name);
                 const UIContentFit fit = segment.CheckContent(segment.rect.w - 2.0f * kButtonAir, segment.rect.h, scale);
@@ -604,7 +195,7 @@ namespace BECore::Tests {
             const UIElement& group = Get<UISegmented>(row);
             EXPECT_LT(caption.rect.x + caption.rect.w, group.rect.x + 0.01f) << row;
             EXPECT_NEAR(caption.rect.y, group.rect.y, 0.01f) << row;
-            EXPECT_NEAR(group.rect.h, kSegmentHeight, 0.01f) << row;
+            EXPECT_NEAR(group.rect.h, kScreenControlHeight, 0.01f) << row;
         }
         const UIElement& plate = Get<UIStack>("Plate");
         EXPECT_LE(plate.rect.w, 640.01f);
@@ -620,7 +211,7 @@ namespace BECore::Tests {
             EXPECT_LT(caption.rect.y + caption.rect.h, group.rect.y + 0.01f) << row;
             EXPECT_NEAR(caption.rect.x, group.rect.x, 0.01f) << row;
             EXPECT_NEAR(caption.rect.w, group.rect.w, 0.01f) << row << ": the caption takes the width of the row";
-            EXPECT_NEAR(group.rect.h, kSegmentHeight, 0.01f) << row << ": the segments stay touch targets";
+            EXPECT_NEAR(group.rect.h, kScreenControlHeight, 0.01f) << row << ": the segments stay touch targets";
         }
         const UIElement& plate = Get<UIStack>("Plate");
         EXPECT_NEAR(plate.rect.h, 576.0f, 0.01f);
@@ -634,7 +225,7 @@ namespace BECore::Tests {
         const UIElement& level = Get<UISegmented>("Level");
         float left = level.rect.x;
         float width = -1.0f;
-        for (const auto& [name, value] : Groups().back().segments) {
+        for (const auto& [name, value] : SelectorGroups().back().segments) {
             const UIElement& segment = El(name);
             EXPECT_NEAR(segment.rect.x, left, 0.01f) << name;
             if (width < 0.0f) {
@@ -655,7 +246,7 @@ namespace BECore::Tests {
         Draw();
         const char* const chosen[] = {"ModeComputer", "ColorBlack", "EngineOwn", "LevelHard"};
         size_t selected = 0;
-        for (const Group& group : Groups()) {
+        for (const UISelectorGroup& group : SelectorGroups()) {
             for (const auto& [name, value] : group.segments) {
                 const bool expected = std::any_of(std::begin(chosen), std::end(chosen), [&](const char* c) { return String(c) == name; });
                 EXPECT_EQ(El(name).selected, expected) << name;
@@ -668,8 +259,8 @@ namespace BECore::Tests {
 
     TEST_F(UISelectorScreenTest, ThePanelHasAHiddenCanvasAtFirstAndDrawsNothingUntilShown) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
-        EXPECT_FALSE(_selector->_visible);
-        EXPECT_TRUE(_selector->_modal);
+        EXPECT_FALSE(_panel->_visible);
+        EXPECT_TRUE(_panel->_modal);
         EXPECT_FALSE(_hud->_modal);
         Draw();
         const auto plateDrawn = [this] {
@@ -733,7 +324,7 @@ namespace BECore::Tests {
 
         ClickAt(CenterOf(*newGame).first, CenterOf(*newGame).second);
         EXPECT_EQ(_game->LastAction(), "SelectorOpen"_intern);
-        EXPECT_TRUE(_selector->_visible);
+        EXPECT_TRUE(_panel->_visible);
         Draw();
 
         const size_t actions = _game->Total();
@@ -743,7 +334,7 @@ namespace BECore::Tests {
 
         Click(El("Ok"));
         EXPECT_EQ(_game->LastAction(), "SelectorClose"_intern);
-        EXPECT_FALSE(_selector->_visible);
+        EXPECT_FALSE(_panel->_visible);
         Draw();
 
         const auto [pressed, released] = ClickAt(kViewWidth * 0.5f, kViewHeight * 0.5f);
@@ -762,8 +353,8 @@ namespace BECore::Tests {
             const char* action;
             size_t group;
         } actions[] = {{"SelectorMode", 0}, {"SelectorColor", 1}, {"SelectorEngine", 2}, {"SelectorLevel", 3}};
-        for (const Group& group : Groups()) {
-            const size_t index = static_cast<size_t>(&group - Groups().data());
+        for (const UISelectorGroup& group : SelectorGroups()) {
+            const size_t index = static_cast<size_t>(&group - SelectorGroups().data());
             for (const auto& [name, value] : group.segments) {
                 const size_t before = _game->Total();
                 const auto [pressed, released] = Click(El(name));
@@ -807,22 +398,22 @@ namespace BECore::Tests {
             Replace(xml, R"(name="EngineOwn" flex="1" height="56" fontSize="24")", R"(name="EngineOwn" flex="1" height="56" fontSize="44")");
             Replace(xml, R"(text="Own engine")", R"(text="Own engine" overflow="Clip")");
         }));
-        const auto failures = ValidatePanel(*_selector);
+        const auto failures = ValidatePanel(*_panel);
         EXPECT_FALSE(failures.empty());
         EXPECT_TRUE(HasIssue(failures, UILayoutIssueKind::TextDoesNotFit)) << DescribeMatrixFailures(failures).c_str();
 
         // With the default ellipsis the validator is silent ("can shrink"), and the fit check of this file is what catches it
         ASSERT_NO_FATAL_FAILURE(
             LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, R"(name="EngineOwn" flex="1" height="56" fontSize="24")", R"(name="EngineOwn" flex="1" height="56" fontSize="44")"); }));
-        EXPECT_FALSE(HasIssue(ValidatePanel(*_selector), UILayoutIssueKind::TextDoesNotFit)) << "an ellipsis label can shrink: the validator does not report it";
-        const String problems = ProblemsOnMatrix(*_selector);
+        EXPECT_FALSE(HasIssue(ValidatePanel(*_panel), UILayoutIssueKind::TextDoesNotFit)) << "an ellipsis label can shrink: the validator does not report it";
+        const String problems = ProblemsOnMatrix(*_panel);
         EXPECT_NE(problems.find("EngineOwn cuts 'Own engine'"), String::npos) << problems.c_str();
     }
 
     TEST_F(UISelectorScreenTest, ALongerWordInTheNarrowestWindowIsCaught) {
         // A word that fits at 689 units wide but not in a quarter of the Level row: the narrowest window alone shows it
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, R"(text="Medium")", R"(text="Intermediate")"); }));
-        UICanvasLayout& layout = _selector->GetLayout();
+        UICanvasLayout& layout = _panel->GetLayout();
         LayOutInTheNarrowestWindow(layout);
         const String problems = Problems(layout);
         EXPECT_NE(problems.find("LevelMedium cuts 'Intermediate'"), String::npos) << problems.c_str();
@@ -831,9 +422,9 @@ namespace BECore::Tests {
 
     TEST_F(UISelectorScreenTest, ASegmentUnderTheTouchSizeIsCaughtByTheValidator) {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](String& xml) { Replace(xml, R"(name="LevelMax" flex="1" height="56")", R"(name="LevelMax" flex="1" height="40")"); }));
-        const auto failures = ValidatePanel(*_selector);
+        const auto failures = ValidatePanel(*_panel);
         EXPECT_TRUE(HasIssue(failures, UILayoutIssueKind::TouchTargetTooSmall)) << DescribeMatrixFailures(failures).c_str();
-        EXPECT_NE(ProblemsOnMatrix(*_selector).find("LevelMax is 40.0 units high"), String::npos);
+        EXPECT_NE(ProblemsOnMatrix(*_panel).find("LevelMax is 40.0 units high"), String::npos);
     }
 
     TEST_F(UISelectorScreenTest, ASegmentWithoutAnExplicitHeightHasNoRectAndIsCaughtHere) {
@@ -843,7 +434,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(UICanvasComponent::SetVisibleByName(GetScene(), "Selector"_intern, true));
         Draw();
         EXPECT_NEAR(El("LevelHard").rect.h, 0.0f, 0.01f);
-        UICanvasLayout& layout = _selector->GetLayout();
+        UICanvasLayout& layout = _panel->GetLayout();
         const String problems = Problems(layout);
         EXPECT_NE(problems.find("LevelHard 'Hard' has an empty rect"), String::npos) << problems.c_str();
     }

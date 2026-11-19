@@ -11,6 +11,7 @@
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/UILayoutMatrix.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -131,12 +132,6 @@ namespace BECore::Tests {
             const size_t begin = xml.find("<elements>") + String("<elements>").size();
             const size_t end = xml.find("</elements>");
             return kSceneHead + xml.substr(begin, end - begin) + kSceneTail;
-        }
-
-        void ReplaceAll(String& text, const String& what, const String& with) {
-            for (size_t at = text.find(what); at != String::npos; at = text.find(what, at + with.size())) {
-                text.replace(at, what.size(), with);
-            }
         }
 
         String BarXml(float side, bool narrow) {
