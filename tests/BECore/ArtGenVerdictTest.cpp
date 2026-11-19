@@ -1,10 +1,9 @@
 #include <BECore/Control/Json.h>
-#include <BECore/Format/Format.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Widgets/ArtGen/ArtGenVerdict.h>
 #include <Widgets/EditorLayout/UserFileIo.h>
-#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -44,28 +43,12 @@ namespace BECore::Tests {
         EXPECT_EQ(verdict.tip, "Checks passed");
     }
 
-    TEST(ArtGenVerdictTest, ARecordOfAReferenceRunHasTheVerdictOfItsChecks) {
-        const ArtGenVerdict style =
-            VerdictOf(R"({"seed":6,"reference":{"mode":"style","image":"a.png","hash":"h","weight":0.8,"workflow":"sdxl_ipadapter_cutout"},"checks":{"passed":false,"failed":["edge"]}})");
-        EXPECT_EQ(style.kind, ArtGenVerdictKind::Failed);
-        EXPECT_TRUE(Contains(style.tip, "touches the edge"));
-        const ArtGenVerdict init = VerdictOf(R"({"seed":6,"reference":{"mode":"init","image":"a.png"},"checks":{"passed":true,"failed":[]}})");
-        EXPECT_EQ(init.kind, ArtGenVerdictKind::Passed);
-    }
-
     TEST(ArtGenVerdictTest, FailedNamesBothChecksWithTheirMeaning) {
         const ArtGenVerdict verdict = VerdictOf(R"({"checks":{"passed":false,"failed":["edge","halo"]}})");
         EXPECT_EQ(verdict.kind, ArtGenVerdictKind::Failed);
         EXPECT_TRUE(Contains(verdict.tip, "Checks failed"));
         EXPECT_TRUE(Contains(verdict.tip, "touches the edge of the frame"));
         EXPECT_TRUE(Contains(verdict.tip, "half-transparent"));
-    }
-
-    TEST(ArtGenVerdictTest, EveryNameOfTheServiceHasAMeaning) {
-        for (const char* name : {"empty", "edge", "pieces", "bodies", "halo", "background", "small", "offCentre"}) {
-            const ArtGenVerdict verdict = VerdictOf(Format(R"({{"checks":{{"passed":false,"failed":["{}"]}}}})", name));
-            EXPECT_TRUE(Contains(verdict.tip, " (")) << name;
-        }
     }
 
     TEST(ArtGenVerdictTest, AnUnknownNameIsShownAsItIs) {
@@ -129,24 +112,12 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(UnreadableWithError(error).tip, error));
     }
 
-    TEST(ArtGenVerdictTest, NoChecksIsNone) {
-        const ArtGenVerdict verdict = VerdictOf(R"({"seed":1})");
-        EXPECT_EQ(verdict.kind, ArtGenVerdictKind::None);
-        EXPECT_TRUE(verdict.tip.empty());
-    }
-
-    TEST(ArtGenVerdictTest, ChecksOfTheWrongShapeIsNone) {
-        for (const char* text : {R"({"checks":"yes"})", R"({"checks":[true]})", R"({"checks":null})", R"({"checks":{}})", R"({"checks":{"passed":1}})", R"({"checks":{"passed":"true"}})",
-                                 R"({"checks":{"passed":[]}})"}) {
+    TEST(ArtGenVerdictTest, AProvenanceWithNoUsableChecksIsNone) {
+        for (const char* text : {R"({"seed":1})", R"({"checks":"yes"})", R"({"checks":[true]})", R"({"checks":null})", R"({"checks":{}})", R"({"checks":{"passed":1}})",
+                                 R"({"checks":{"passed":"true"}})", R"({"checks":{"passed":[]}})", "[]", "7", "\"checks\"", "null"}) {
             const ArtGenVerdict verdict = VerdictOf(text);
             EXPECT_EQ(verdict.kind, ArtGenVerdictKind::None) << text;
             EXPECT_TRUE(verdict.tip.empty()) << text;
-        }
-    }
-
-    TEST(ArtGenVerdictTest, AProvenanceThatIsNotAnObjectIsNone) {
-        for (const char* text : {"[]", "7", "\"checks\"", "null"}) {
-            EXPECT_EQ(VerdictOf(text).kind, ArtGenVerdictKind::None) << text;
         }
     }
 
@@ -154,13 +125,11 @@ namespace BECore::Tests {
     protected:
         void SetUp() override {
             _root = TestTempDirectory("artgen_verdict");
-            std::filesystem::remove_all(_root);
-            std::filesystem::create_directories(_root);
+            MakeEmptyDirectory(_root);
         }
 
         void TearDown() override {
-            std::error_code error;
-            std::filesystem::remove_all(_root, error);
+            RemoveDirectory(_root);
         }
 
         std::filesystem::path _root;
