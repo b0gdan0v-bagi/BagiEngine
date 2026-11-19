@@ -24,4 +24,4 @@ Each tool has its own `CLAUDE.md`; Python tools have pytest suites outside ctest
 | `web` | the browser build |
 | `fuzz` | `run_fuzzers.py`, the long libFuzzer runs (`tests/Fuzz/CLAUDE.md`) |
 | `natvis` | debugger views of EASTL |
-| `vscode` | the `todo-workers` and `bagi-dev` panels |
+| `vscode` | the `bagi-dev` panel (the Todo Workers panel comes from the BagiTodo service: `todo/CLAUDE.md`) |

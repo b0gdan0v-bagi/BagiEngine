@@ -9,7 +9,7 @@ worker.py         three lines: bagitodo_cli.run("worker.py")  -- the worker fold
 buildslots.py     three lines: bagitodo_cli.run("buildslots.py")  -- the machine-wide allocator of C++ build jobs
 ```
 
-The files are copied as they are from the loader of BagiTodo (`loader/` there) and are public code: no address, no token, no private name. Skills, rules, agents and `tools/vscode/todo-workers` call `tools/todo/todo.py` and `tools/todo/worker.py` as scripts only; never import or read anything else of this folder.
+The files are copied as they are from the loader of BagiTodo (`loader/` there) and are public code: no address, no token, no private name. Skills, rules, agents and the Todo Workers panel call `tools/todo/todo.py` and `tools/todo/worker.py` as scripts only; never import or read anything else of this folder.
 
 ## The loader
 
@@ -20,7 +20,7 @@ Each run asks the service `GET /api/v1/cli?layout=tree` for the version it hands
 - `TODO_API_URL` (the service, no `/api/v1`) and `TODO_API_TOKEN`: from the environment, then `--env-file`, then the first `.env` from the current folder upwards that has `TODO_API_URL` (git-ignored; `.env.example`). The token is the checkout's own, limited to its areas, and issued by the owner; it is never printed or committed.
 - `BAGITODO_CACHE`: the cache of the downloaded versions (default `~/.cache/bagitodo`, readable by its owner only: it holds code that runs).
 - `TODO_ACTOR` (or `--actor`) names the writer in the history (`todo-loop`, `owner`, ...; default `cli`).
-- Every accepted write also rewrites the signal file `TODO_CHANGED_FILE` (default `~/.claude/todo/changed.json`), so a viewer (`tools/vscode/todo-workers`) reads the store again at once.
+- Every accepted write also rewrites the signal file `TODO_CHANGED_FILE` (default `~/.claude/todo/changed.json`), so a viewer (the Todo Workers panel) reads the store again at once.
 
 ## The data
 
@@ -98,3 +98,14 @@ python3 tools/todo/worker.py doctor [k] [--fix K] | merge-train [--dry-run] | bu
 - **Branches of another checkout:** branches are never pushed, so an entry is reviewed and merged only where it was taken. `claim --base` stores `base` and `origin`; `list --store` marks entries whose branch is not here or was cut from another base, and the panel and `merge` refuse them.
 - **The panel's files** (outside every repository, in `~/.claude/todo/`): `worker-queues.json`, `dispatch-prefs.json`, `dispatch-verdicts.json`, `usage-ledger.json`, `stopped-sessions.json`, `auto-pick.json` (the ledger of automatic picking, written by the loop's conductor: today's picks and their dollars, the parked entries; deleting it clears the stop after two parks).
 - **`/todo-loop 1 auto`** is the run that a worker with an empty queue starts at the end of a run: it chooses the next entry by the classifier only from the allowlist of the rules file (`## Automatic picking`, off by default) and ends with `NOT TAKEN` when a limit (review count, daily cap, two parks in a row) holds.
+
+## The Todo Workers panel (VS Code)
+
+The panel of the workers, the queues and the store is the extension `bagiengine.todo-workers`. Its source is in BagiTodo, not here: the service builds the `.vsix` and hands it out as it hands out the CLI, so no private code enters this repository and nothing is packed from it.
+
+```bash
+python3 tools/todo/worker.py ext status    # installed and offered versions
+python3 tools/todo/worker.py ext install   # downloads the offered .vsix and installs it; then Developer: Reload Window
+```
+
+In a game the same commands go through `engine/tools/todo/worker.py`. Once installed, the extension looks for a newer version itself and offers to install it. A change of the panel is an entry of the area `bagitodo`, never a file here. The panel reads this folder's scripts (`worker.py list --json`, `buildslots.py status --json`): renaming or removing one empties the rows it feeds.
