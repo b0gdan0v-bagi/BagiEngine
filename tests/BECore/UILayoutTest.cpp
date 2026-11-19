@@ -1,4 +1,5 @@
 #include <BECore/UI/UILayout.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -6,13 +7,6 @@ namespace BECore::Tests {
     namespace {
 
         constexpr float kTolerance = 1e-3f;
-
-        void ExpectRect(const Rect& rect, float x, float y, float w, float h) {
-            EXPECT_NEAR(rect.x, x, kTolerance);
-            EXPECT_NEAR(rect.y, y, kTolerance);
-            EXPECT_NEAR(rect.w, w, kTolerance);
-            EXPECT_NEAR(rect.h, h, kTolerance);
-        }
 
         UIRectSpec Sized(float width, float height) {
             UIRectSpec spec;

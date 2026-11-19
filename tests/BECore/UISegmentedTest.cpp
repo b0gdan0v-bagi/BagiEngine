@@ -20,6 +20,7 @@
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/UIInputEvents.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -201,10 +202,6 @@ namespace BECore::Tests {
   </nodes></scene>
 </scenes></SceneManager>)";
 
-        bool Near(const Rect& a, const Rect& b, float tolerance = 1e-2f) {
-            return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
-        }
-
         String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;
             EXPECT_TRUE(serializer.BeginObject("element"));
@@ -275,7 +272,7 @@ namespace BECore::Tests {
         bool BarDrawn(const char* name) const {
             const UIElement& button = Element(name);
             const Rect bar{button.rect.x, button.rect.y + button.rect.h - UIStateLook::kSelectedBarHeight, button.rect.w, UIStateLook::kSelectedBarHeight};
-            return std::any_of(_renderer->calls.begin(), _renderer->calls.end(), [&](const DrawCall& call) { return call.kind == DrawKind::Rect && Near(call.rect, bar); });
+            return std::any_of(_renderer->calls.begin(), _renderer->calls.end(), [&](const DrawCall& call) { return call.kind == DrawKind::Rect && NearRect(call.rect, bar); });
         }
 
         /// Any element by name, whatever its class (`Get<T>` wants the exact type)
@@ -294,7 +291,7 @@ namespace BECore::Tests {
             const UIElement& element = Element(name);
             const Rect bar{element.rect.x, element.rect.y + element.rect.h - UIStateLook::kSelectedBarHeight, element.rect.w, UIStateLook::kSelectedBarHeight};
             for (const DrawCall& call : _renderer->calls) {
-                if (call.kind == DrawKind::Rect && Near(call.rect, bar)) {
+                if (call.kind == DrawKind::Rect && NearRect(call.rect, bar)) {
                     return call.color;
                 }
             }
@@ -465,12 +462,12 @@ namespace BECore::Tests {
         Draw();
         const Rect two = Element("ModeTwo").rect;
         const Rect computer = Element("ModeComputer").rect;
-        EXPECT_TRUE(Near(two, {10.0f, 10.0f, 150.0f, 48.0f})) << two.x << " " << two.y << " " << two.w << " " << two.h;
-        EXPECT_TRUE(Near(computer, {164.0f, 10.0f, 150.0f, 48.0f})) << computer.x << " " << computer.w;
+        EXPECT_TRUE(NearRect(two, {10.0f, 10.0f, 150.0f, 48.0f})) << two.x << " " << two.y << " " << two.w << " " << two.h;
+        EXPECT_TRUE(NearRect(computer, {164.0f, 10.0f, 150.0f, 48.0f})) << computer.x << " " << computer.w;
 
         const char* const levels[] = {"Easy", "Medium", "Hard", "Max"};
         for (size_t i = 0; i < 4; ++i) {
-            EXPECT_TRUE(Near(Element(levels[i]).rect, {10.0f + 104.0f * static_cast<float>(i), 100.0f, 100.0f, 48.0f})) << levels[i];
+            EXPECT_TRUE(NearRect(Element(levels[i]).rect, {10.0f + 104.0f * static_cast<float>(i), 100.0f, 100.0f, 48.0f})) << levels[i];
         }
     }
 
@@ -656,9 +653,9 @@ namespace BECore::Tests {
 
     TEST_F(UISegmentedTest, TheComposedSegmentsShareTheWidthByFlexLikeButtons) {
         Draw();
-        EXPECT_TRUE(Near(Element("CompPlain").rect, {10.0f, 470.0f, 134.667f, 48.0f}, 0.1f));
-        EXPECT_TRUE(Near(Element("CompIcon").rect, {148.667f, 470.0f, 134.667f, 48.0f}, 0.1f));
-        EXPECT_TRUE(Near(Element("CompOff").rect, {287.333f, 470.0f, 134.667f, 48.0f}, 0.1f));
+        EXPECT_TRUE(NearRect(Element("CompPlain").rect, {10.0f, 470.0f, 134.667f, 48.0f}, 0.1f));
+        EXPECT_TRUE(NearRect(Element("CompIcon").rect, {148.667f, 470.0f, 134.667f, 48.0f}, 0.1f));
+        EXPECT_TRUE(NearRect(Element("CompOff").rect, {287.333f, 470.0f, 134.667f, 48.0f}, 0.1f));
     }
 
     TEST_F(UISegmentedTest, TheSelectedBarOfAComposedSegmentTakesTheColourOfItsCaption) {

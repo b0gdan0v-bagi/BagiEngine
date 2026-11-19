@@ -2,6 +2,7 @@
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UITooltip.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -11,14 +12,6 @@ namespace BECore::Tests {
         constexpr float kEpsilon = 1e-3f;
         constexpr Rect kBounds{0.0f, 0.0f, 800.0f, 600.0f};
         constexpr Vec2 kPlate{120.0f, 40.0f};
-
-        bool Near(const Rect& a, const Rect& b) {
-            return std::abs(a.x - b.x) <= kEpsilon && std::abs(a.y - b.y) <= kEpsilon && std::abs(a.w - b.w) <= kEpsilon && std::abs(a.h - b.h) <= kEpsilon;
-        }
-
-        bool Inside(const Rect& inner, const Rect& outer) {
-            return inner.x >= outer.x - kEpsilon && inner.y >= outer.y - kEpsilon && inner.x + inner.w <= outer.x + outer.w + kEpsilon && inner.y + inner.h <= outer.y + outer.h + kEpsilon;
-        }
 
         bool Disjoint(const Rect& a, const Rect& b) {
             return a.x + a.w <= b.x + kEpsilon || b.x + b.w <= a.x + kEpsilon || a.y + a.h <= b.y + kEpsilon || b.y + b.h <= a.y + kEpsilon;
@@ -32,7 +25,7 @@ namespace BECore::Tests {
         const Rect target{300.0f, 100.0f, 48.0f, 48.0f};
         const Rect plate = UITooltip::Place(target, kPlate, kBounds);
 
-        EXPECT_TRUE(Near(plate, {300.0f + 24.0f - 60.0f, 100.0f + 48.0f + UITooltip::kGap, kPlate.x, kPlate.y}));
+        EXPECT_TRUE(NearRect(plate, {300.0f + 24.0f - 60.0f, 100.0f + 48.0f + UITooltip::kGap, kPlate.x, kPlate.y}));
     }
 
     TEST(UITooltipPlaceTest, WithNoRoomBelowAndRoomAboveItGoesAboveTheButton) {
@@ -49,7 +42,7 @@ namespace BECore::Tests {
         const Rect target{300.0f, 30.0f, 48.0f, 48.0f};  // 30 above, 22 below: a 40 high plate fits neither side
         const Rect plate = UITooltip::Place(target, kPlate, shortBounds);
 
-        EXPECT_TRUE(Inside(plate, shortBounds));
+        EXPECT_TRUE(RectInside(plate, shortBounds));
         EXPECT_NEAR(plate.w, kPlate.x, kEpsilon);
         EXPECT_NEAR(plate.h, kPlate.y, kEpsilon);
     }
@@ -58,14 +51,14 @@ namespace BECore::Tests {
         const Rect plate = UITooltip::Place({0.0f, 100.0f, 48.0f, 48.0f}, kPlate, kBounds);
 
         EXPECT_NEAR(plate.x, kBounds.x, kEpsilon);
-        EXPECT_TRUE(Inside(plate, kBounds));
+        EXPECT_TRUE(RectInside(plate, kBounds));
     }
 
     TEST(UITooltipPlaceTest, AButtonAtTheRightEdgeKeepsThePlateInside) {
         const Rect plate = UITooltip::Place({752.0f, 100.0f, 48.0f, 48.0f}, kPlate, kBounds);
 
         EXPECT_NEAR(plate.x + plate.w, kBounds.x + kBounds.w, kEpsilon);
-        EXPECT_TRUE(Inside(plate, kBounds));
+        EXPECT_TRUE(RectInside(plate, kBounds));
     }
 
     TEST(UITooltipPlaceTest, TheSafeAreaIsTheLimitNotTheCanvas) {
@@ -73,7 +66,7 @@ namespace BECore::Tests {
         const Rect plate = UITooltip::Place({20.0f, 40.0f, 48.0f, 48.0f}, kPlate, safe);
 
         EXPECT_NEAR(plate.x, 20.0f, kEpsilon);
-        EXPECT_TRUE(Inside(plate, safe));
+        EXPECT_TRUE(RectInside(plate, safe));
     }
 
     TEST(UITooltipPlaceTest, APlateLargerThanTheBoundsStartsAtTheirTopLeftEdge) {

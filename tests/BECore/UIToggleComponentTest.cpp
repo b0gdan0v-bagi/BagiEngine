@@ -20,6 +20,7 @@
 #include <Common/RecordingRenderer.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UIPartShapeChecks.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -159,14 +160,6 @@ namespace BECore::Tests {
             float y = 0.0f;
         };
 
-        bool Near(const Rect& a, const Rect& b, float tolerance = kEpsilon) {
-            return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
-        }
-
-        bool Inside(const Rect& inner, const Rect& outer, float tolerance = 1e-3f) {
-            return inner.x >= outer.x - tolerance && inner.y >= outer.y - tolerance && inner.x + inner.w <= outer.x + outer.w + tolerance && inner.y + inner.h <= outer.y + outer.h + tolerance;
-        }
-
         void SetVar(const char* name, const char* value) {
             CoreManager::GetUIVars().Set(PoolString::Intern(name), value);
         }
@@ -252,7 +245,7 @@ namespace BECore::Tests {
         /// The rect call of the last draw that has exactly this destination, or null
         const DrawCall* FindRect(const Rect& wanted) const {
             for (const DrawCall& call : _renderer->calls) {
-                if (call.kind == DrawKind::Rect && Near(call.rect, wanted)) {
+                if (call.kind == DrawKind::Rect && NearRect(call.rect, wanted, kEpsilon)) {
                     return &call;
                 }
             }
@@ -535,9 +528,9 @@ namespace BECore::Tests {
         // The specification of the geometry: a 28 high, 56 wide track with 14 of air to the right
         const auto parts = PartsOf("Sound");
         const Rect& row = Get("Sound").rect;
-        EXPECT_TRUE(Near(parts.track, Rect{row.x + 230.0f, row.y + 14.0f, 56.0f, 28.0f}));
-        EXPECT_TRUE(Near(parts.thumbOff, Rect{row.x + 233.0f, row.y + 17.0f, 22.0f, 22.0f}));
-        EXPECT_TRUE(Near(parts.thumbOn, Rect{row.x + 261.0f, row.y + 17.0f, 22.0f, 22.0f}));
+        EXPECT_TRUE(NearRect(parts.track, Rect{row.x + 230.0f, row.y + 14.0f, 56.0f, 28.0f}, kEpsilon));
+        EXPECT_TRUE(NearRect(parts.thumbOff, Rect{row.x + 233.0f, row.y + 17.0f, 22.0f, 22.0f}, kEpsilon));
+        EXPECT_TRUE(NearRect(parts.thumbOn, Rect{row.x + 261.0f, row.y + 17.0f, 22.0f, 22.0f}, kEpsilon));
         EXPECT_NEAR(Get("SoundCaption").rect.w, 222.0f, kEpsilon);
     }
 
@@ -570,9 +563,9 @@ namespace BECore::Tests {
                 const Rect area{7.0f, 9.0f, width, height};
                 const auto parts = UISwitchComponent::GetParts(area);
                 const String where = ToString(width) + " x " + ToString(height);
-                EXPECT_TRUE(Inside(parts.track, area)) << where;
-                EXPECT_TRUE(Inside(parts.thumbOn, parts.track) || parts.thumbOn.IsEmpty()) << where;
-                EXPECT_TRUE(Inside(parts.thumbOff, parts.track) || parts.thumbOff.IsEmpty()) << where;
+                EXPECT_TRUE(RectInside(parts.track, area)) << where;
+                EXPECT_TRUE(RectInside(parts.thumbOn, parts.track) || parts.thumbOn.IsEmpty()) << where;
+                EXPECT_TRUE(RectInside(parts.thumbOff, parts.track) || parts.thumbOff.IsEmpty()) << where;
             }
         }
     }
@@ -582,7 +575,7 @@ namespace BECore::Tests {
         const auto parts = UISwitchComponent::GetParts(narrow);
         EXPECT_NEAR(parts.track.w, 20.0f, 1e-3f) << "the track is no wider than the rect";
         EXPECT_NEAR(parts.track.x, 5.0f, 1e-3f);
-        EXPECT_TRUE(Inside(parts.track, narrow));
+        EXPECT_TRUE(RectInside(parts.track, narrow));
     }
 
     TEST_F(UIToggleComponentTest, TheDrawnSwitchAndThumbAreInsideTheLaidOutRect) {
@@ -591,7 +584,7 @@ namespace BECore::Tests {
         for (const char* name : {"Sound", "Custom", "Off"}) {
             const DrawCall* track = FindRect(PartsOf(name).track);
             ASSERT_NE(track, nullptr) << name;
-            EXPECT_TRUE(Inside(track->rect, Get(name).rect)) << name;
+            EXPECT_TRUE(RectInside(track->rect, Get(name).rect)) << name;
         }
     }
 

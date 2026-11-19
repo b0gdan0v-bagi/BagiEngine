@@ -28,6 +28,7 @@
 #include <Common/RecordingRenderer.h>
 #include <Common/TextTestSupport.h>
 #include <Common/UIInputEvents.h>
+#include <Common/UITestSupport.h>
 #include <Common/UITreeCompare.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
@@ -118,10 +119,6 @@ namespace BECore::Tests {
             return serializer.SaveToString();
         }
 
-        bool Near(const Rect& a, const Rect& b, float tolerance = 1e-2f) {
-            return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
-        }
-
         Vector<uint8_t> GreyPixels(uint32_t width, uint32_t height) {
             return Vector<uint8_t>(static_cast<size_t>(width) * height * 4, 128);
         }
@@ -198,7 +195,7 @@ namespace BECore::Tests {
         /// The color of the filled rect that was drawn exactly on the element's rect, in the last draw
         Optional<Color> FillOf(const UIElement& element) const {
             for (const DrawCall& call : _renderer->calls) {
-                if (call.kind == DrawKind::Rect && Near(call.rect, element.rect)) {
+                if (call.kind == DrawKind::Rect && NearRect(call.rect, element.rect)) {
                     return call.color;
                 }
             }
@@ -1122,7 +1119,7 @@ namespace BECore::Tests {
         ASSERT_FALSE(_renderer->calls.empty());
         EXPECT_EQ(_renderer->calls[0].kind, DrawKind::Rect);  // the plate is the first thing drawn
         EXPECT_EQ(_renderer->calls[0].color.a, 200);
-        EXPECT_TRUE(Near(_renderer->calls[0].rect, Get<UIPanel>("Plate").rect));
+        EXPECT_TRUE(NearRect(_renderer->calls[0].rect, Get<UIPanel>("Plate").rect));
 
         const auto glyphs = GlyphsIn(El("Title"));
         EXPECT_EQ(glyphs.size(), 5u) << "one quad per glyph of 'Score'";
@@ -1222,7 +1219,7 @@ namespace BECore::Tests {
         ASSERT_FALSE(GlyphsIn(title).empty());
         bool clipped = false;
         for (const DrawCall& call : _renderer->calls) {
-            if (call.kind == DrawKind::Texture && call.clip && Near(*call.clip, title.rect)) {
+            if (call.kind == DrawKind::Texture && call.clip && NearRect(*call.clip, title.rect)) {
                 clipped = true;
             }
         }
@@ -1268,11 +1265,11 @@ namespace BECore::Tests {
             }
         }
         ASSERT_EQ(pieces.size(), 9u);
-        EXPECT_TRUE(Near(pieces[0].rect, {300, 100, 4, 4}));
-        EXPECT_TRUE(Near(pieces[4].rect, {304, 104, 92, 52}));
-        EXPECT_TRUE(Near(pieces[8].rect, {396, 156, 4, 4}));
+        EXPECT_TRUE(NearRect(pieces[0].rect, {300, 100, 4, 4}));
+        EXPECT_TRUE(NearRect(pieces[4].rect, {304, 104, 92, 52}));
+        EXPECT_TRUE(NearRect(pieces[8].rect, {396, 156, 4, 4}));
         ASSERT_TRUE(pieces[4].source.has_value());
-        EXPECT_TRUE(Near(*pieces[4].source, {4, 4, 8, 8}));
+        EXPECT_TRUE(NearRect(*pieces[4].source, {4, 4, 8, 8}));
     }
 
     TEST_F(UIControlsTest, APanelWithoutABorderStretchesTheWholeSprite) {
@@ -1284,11 +1281,11 @@ namespace BECore::Tests {
 
         size_t drawn = 0;
         for (const DrawCall& call : _renderer->calls) {
-            if (call.kind == DrawKind::Texture && Near(call.rect, frame.rect)) {
+            if (call.kind == DrawKind::Texture && NearRect(call.rect, frame.rect)) {
                 ++drawn;
                 EXPECT_EQ(call.color.g, 20);
                 ASSERT_TRUE(call.source.has_value());
-                EXPECT_TRUE(Near(*call.source, {0, 0, 16, 16}));
+                EXPECT_TRUE(NearRect(*call.source, {0, 0, 16, 16}));
             }
         }
         EXPECT_EQ(drawn, 1u);
@@ -1308,16 +1305,16 @@ namespace BECore::Tests {
             }
         }
         ASSERT_NE(fitted, nullptr);
-        EXPECT_TRUE(Near(fitted->rect, {300, 26, 64, 32})) << "as wide as the rect, half as tall, centered";
+        EXPECT_TRUE(NearRect(fitted->rect, {300, 26, 64, 32})) << "as wide as the rect, half as tall, centered";
         EXPECT_EQ(fitted->color.a, 40);
         ASSERT_TRUE(fitted->source.has_value());
-        EXPECT_TRUE(Near(*fitted->source, {0, 0, 32, 16})) << "the whole texture when no rect is known";
+        EXPECT_TRUE(NearRect(*fitted->source, {0, 0, 32, 16})) << "the whole texture when no rect is known";
 
         icon.stretch = true;
         Draw();
         for (const DrawCall& call : _renderer->calls) {
             if (call.kind == DrawKind::Texture && call.rect.x >= 299.0f && call.rect.x <= 365.0f && call.rect.y < 80.0f) {
-                EXPECT_TRUE(Near(call.rect, {300, 10, 64, 64}));
+                EXPECT_TRUE(NearRect(call.rect, {300, 10, 64, 64}));
             }
         }
     }
@@ -1329,7 +1326,7 @@ namespace BECore::Tests {
 
         EXPECT_EQ(FillOf(icon).value_or(Color{}).b, 3);
         for (const DrawCall& call : _renderer->calls) {
-            EXPECT_FALSE(call.kind == DrawKind::Texture && Near(call.rect, icon.rect));
+            EXPECT_FALSE(call.kind == DrawKind::Texture && NearRect(call.rect, icon.rect));
         }
     }
 
@@ -1503,7 +1500,7 @@ namespace BECore::Tests {
         const auto barDrawn = [&] {
             const Rect bar{ok.rect.x, ok.rect.y + ok.rect.h - UIStateLook::kSelectedBarHeight, ok.rect.w, UIStateLook::kSelectedBarHeight};  // the rect is laid out by the first draw
             for (const DrawCall& call : _renderer->calls) {
-                if (call.kind == DrawKind::Rect && Near(call.rect, bar)) {
+                if (call.kind == DrawKind::Rect && NearRect(call.rect, bar)) {
                     return Optional<Color>(call.color);
                 }
             }

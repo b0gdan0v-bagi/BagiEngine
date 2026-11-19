@@ -12,6 +12,7 @@
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/UIInputEvents.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <gtest/gtest.h>
 
@@ -135,13 +136,6 @@ namespace BECore::Tests {
                 ++motions;
             }
         };
-
-        void ExpectRect(const Rect& rect, float x, float y, float w, float h) {
-            EXPECT_NEAR(rect.x, x, kTolerance);
-            EXPECT_NEAR(rect.y, y, kTolerance);
-            EXPECT_NEAR(rect.w, w, kTolerance);
-            EXPECT_NEAR(rect.h, h, kTolerance);
-        }
 
         /// An interactive element that records what the canvas tells it
         class PointerProbe : public UIElement {

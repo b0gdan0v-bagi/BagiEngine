@@ -10,6 +10,7 @@
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -22,7 +23,6 @@ namespace BECore::Tests {
 
     namespace {
 
-        constexpr float kEpsilon = 1e-3f;
         constexpr float kTolerance = 1e-2f;
         constexpr uint32_t kIconPixels = 32;
         constexpr float kIconOnlyShare = UIImageComponent::kIconOnlyShare;          // width and height of the icon of a button with no caption, of the shorter side
@@ -89,14 +89,6 @@ namespace BECore::Tests {
     </components></node>
   </nodes></scene>
 </scenes></SceneManager>)";
-
-        bool Near(const Rect& a, const Rect& b, float tolerance = kTolerance) {
-            return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
-        }
-
-        bool Inside(const Rect& inner, const Rect& outer, float tolerance = kEpsilon) {
-            return inner.x >= outer.x - tolerance && inner.y >= outer.y - tolerance && inner.x + inner.w <= outer.x + outer.w + tolerance && inner.y + inner.h <= outer.y + outer.h + tolerance;
-        }
 
     }  // namespace
 
@@ -165,7 +157,7 @@ namespace BECore::Tests {
         Optional<Rect> GlyphBounds(const Rect& within) const {
             Optional<Rect> bounds;
             for (const DrawCall& call : _renderer->calls) {
-                if (call.kind != DrawKind::Texture || call.texture == _icon.Get() || !Inside({call.rect.x, call.rect.y, 0.0f, 0.0f}, within)) {
+                if (call.kind != DrawKind::Texture || call.texture == _icon.Get() || !RectInside({call.rect.x, call.rect.y, 0.0f, 0.0f}, within)) {
                     continue;
                 }
                 if (!bounds) {
@@ -184,7 +176,7 @@ namespace BECore::Tests {
 
         bool IconDrawnAt(const Rect& expected) const {
             for (const DrawCall& call : IconCalls()) {
-                if (Near(call.rect, expected)) {
+                if (NearRect(call.rect, expected, kTolerance)) {
                     return true;
                 }
             }
@@ -206,10 +198,10 @@ namespace BECore::Tests {
         const Rect expected{only.rect.x + (only.rect.w - side) * 0.5f, only.rect.y + (only.rect.h - side) * 0.5f, side, side};
         bool found = false;
         for (const DrawCall& call : IconCalls()) {
-            if (Near(call.rect, expected)) {
+            if (NearRect(call.rect, expected, kTolerance)) {
                 found = true;
                 ASSERT_TRUE(call.source.has_value());
-                EXPECT_TRUE(Near(*call.source, {0.0f, 0.0f, static_cast<float>(kIconPixels), static_cast<float>(kIconPixels)}));
+                EXPECT_TRUE(NearRect(*call.source, {0.0f, 0.0f, static_cast<float>(kIconPixels), static_cast<float>(kIconPixels)}, kTolerance));
             }
         }
         EXPECT_TRUE(found) << "the icon of the Only button is the square share of its rect, in the middle";
@@ -224,10 +216,10 @@ namespace BECore::Tests {
         EXPECT_TRUE(IconDrawnAt(icon));
 
         const Rect captionArea{icon.x + side + kIconGap, left.rect.y, left.rect.x + left.rect.w - (icon.x + side + kIconGap), left.rect.h};
-        EXPECT_TRUE(Near(Get("LeftCaption").rect, captionArea));
+        EXPECT_TRUE(NearRect(Get("LeftCaption").rect, captionArea, kTolerance));
         const auto glyphs = GlyphBounds(left.rect);
         ASSERT_TRUE(glyphs.has_value()) << "the caption is drawn";
-        EXPECT_TRUE(Inside(*glyphs, captionArea, 1.0f)) << "in the area the icon leaves";
+        EXPECT_TRUE(RectInside(*glyphs, captionArea, 1.0f)) << "in the area the icon leaves";
     }
 
     TEST_F(UIButtonIconDrawTest, ASpriteThatIsNotInTheLibraryDrawsNoIconButStillTheCaption) {
@@ -246,13 +238,13 @@ namespace BECore::Tests {
 
         size_t rects = 0;
         for (const DrawCall& call : _renderer->calls) {
-            if (call.kind == DrawKind::Rect && Near(call.rect, plain.rect)) {
+            if (call.kind == DrawKind::Rect && NearRect(call.rect, plain.rect, kTolerance)) {
                 ++rects;
             }
         }
         EXPECT_EQ(rects, 1u) << "the plate and nothing else";
         for (const DrawCall& call : _renderer->calls) {
-            if (call.kind == DrawKind::Texture && Inside({call.rect.x, call.rect.y, 0.0f, 0.0f}, plain.rect)) {
+            if (call.kind == DrawKind::Texture && RectInside({call.rect.x, call.rect.y, 0.0f, 0.0f}, plain.rect)) {
                 EXPECT_NE(call.texture, _icon.Get());
             }
         }

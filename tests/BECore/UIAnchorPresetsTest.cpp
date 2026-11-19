@@ -1,6 +1,7 @@
 #include <BECore/UI/UIAnchorPresets.h>
 #include <BECore/UI/UILayout.h>
 #include <Common/Printers.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -8,13 +9,6 @@ namespace BECore::Tests {
     namespace {
 
         constexpr float kTolerance = 1e-2f;
-
-        void ExpectRect(const Rect& rect, const Rect& expected) {
-            EXPECT_NEAR(rect.x, expected.x, kTolerance);
-            EXPECT_NEAR(rect.y, expected.y, kTolerance);
-            EXPECT_NEAR(rect.w, expected.w, kTolerance);
-            EXPECT_NEAR(rect.h, expected.h, kTolerance);
-        }
 
         const Rect kParents[] = {{100.0f, 50.0f, 400.0f, 200.0f}, {0.0f, 0.0f, 1280.0f, 720.0f}, {37.5f, 12.25f, 333.0f, 111.0f}};
 
@@ -130,7 +124,7 @@ namespace BECore::Tests {
                     for (const bool setPivot : {false, true}) {
                         const UIRectEditResult result = UIAnchorPresets::Apply(parent, spec, preset, {setPivot, false});
                         EXPECT_TRUE(result.exact) << UIAnchorPresets::Name(preset);
-                        ExpectRect(UILayout::ResolveRect(parent, result.spec), before);
+                        ExpectRect(UILayout::ResolveRect(parent, result.spec), before, kTolerance);
                         const UIEffectiveAnchors anchors = UILayout::EffectiveAnchors(result.spec);
                         EXPECT_EQ(anchors.min, preset.anchorMin);
                         EXPECT_EQ(anchors.max, preset.anchorMax);
@@ -158,7 +152,7 @@ namespace BECore::Tests {
         EXPECT_EQ(bottomRight.anchor, UIAnchor::BottomRight);
         EXPECT_FALSE(bottomRight.anchorMin.has_value() || bottomRight.anchorMax.has_value() || bottomRight.pivot.has_value());
         EXPECT_NEAR(bottomRight.x.value, 10.0f - 350.0f, 1e-3f);  // the left edge 10 is 350 left of where the pivot 1 sits (400 minus the width 50)
-        ExpectRect(UILayout::ResolveRect(parent, bottomRight), {10.0f, 0.0f, 50.0f, 20.0f});
+        ExpectRect(UILayout::ResolveRect(parent, bottomRight), {10.0f, 0.0f, 50.0f, 20.0f}, kTolerance);
     }
 
     TEST(UIAnchorPresetsTest, ApplyingKeepsTheUnitsAndTheSizeOfAnAxisThatStaysAPoint) {
@@ -208,17 +202,17 @@ namespace BECore::Tests {
         const Rect parent{0.0f, 0.0f, 400.0f, 200.0f};
 
         const UIRectSpec center = UIAnchorPresets::Apply(parent, spec, UIAnchorPresets::At(1, 1), {true, true}).spec;
-        ExpectRect(UILayout::ResolveRect(parent, center), {150.0f, 75.0f, 100.0f, 50.0f});  // centered, the size stays
+        ExpectRect(UILayout::ResolveRect(parent, center), {150.0f, 75.0f, 100.0f, 50.0f}, kTolerance);  // centered, the size stays
         EXPECT_EQ(center.x.value, 0.0f);
         EXPECT_EQ(center.y.value, 0.0f);
 
         const UIRectSpec fill = UIAnchorPresets::Apply(parent, spec, UIAnchorPresets::At(UIAnchorPresets::kStretch, UIAnchorPresets::kStretch), {true, true}).spec;
-        ExpectRect(UILayout::ResolveRect(parent, fill), parent);  // the margins are zero: it fills the parent
+        ExpectRect(UILayout::ResolveRect(parent, fill), parent, kTolerance);  // the margins are zero: it fills the parent
         EXPECT_EQ(fill.margin, UIEdges{});
 
         // Alt without Shift keeps the pivot: the old pivot (top left of the element) lands on the new anchor point
         const UIRectSpec keepPivot = UIAnchorPresets::Apply(parent, spec, UIAnchorPresets::At(2, 2), {false, true}).spec;
-        ExpectRect(UILayout::ResolveRect(parent, keepPivot), {400.0f, 200.0f, 100.0f, 50.0f});
+        ExpectRect(UILayout::ResolveRect(parent, keepPivot), {400.0f, 200.0f, 100.0f, 50.0f}, kTolerance);
     }
 
     TEST(UIAnchorPresetsTest, AParentOfZeroDividesNothing) {
@@ -251,7 +245,7 @@ namespace BECore::Tests {
                 for (const auto& anchors : anchorSets) {
                     const UIRectEditResult result = UIAnchorPresets::SetAnchors(parent, spec, anchors[0], anchors[1]);
                     EXPECT_TRUE(result.exact);
-                    ExpectRect(UILayout::ResolveRect(parent, result.spec), before);
+                    ExpectRect(UILayout::ResolveRect(parent, result.spec), before, kTolerance);
                     const UIEffectiveAnchors effective = UILayout::EffectiveAnchors(result.spec);
                     EXPECT_EQ(effective.min, anchors[0]);
                     EXPECT_EQ(effective.max, anchors[1]);
@@ -294,13 +288,13 @@ namespace BECore::Tests {
         const UIRectSpec stretched = UIAnchorPresets::SetAnchors(parent, spec, {0.0f, 0.0f}, {1.0f, 0.0f}).spec;
         EXPECT_NEAR(stretched.margin.left, 20.0f, 1e-3f);
         EXPECT_NEAR(stretched.margin.right, 280.0f, 1e-3f);
-        ExpectRect(UILayout::ResolveRect(parent, stretched), {20.0f, 10.0f, 100.0f, 50.0f});
+        ExpectRect(UILayout::ResolveRect(parent, stretched), {20.0f, 10.0f, 100.0f, 50.0f}, kTolerance);
 
         const UIRectSpec back = UIAnchorPresets::SetAnchors(parent, stretched, {0.0f, 0.0f}, {0.0f, 0.0f}).spec;
         EXPECT_EQ(back.anchor, UIAnchor::TopLeft);
         EXPECT_NEAR(back.x.value, 20.0f, 1e-3f);
         EXPECT_NEAR(back.width.value, 100.0f, 1e-3f);
-        ExpectRect(UILayout::ResolveRect(parent, back), {20.0f, 10.0f, 100.0f, 50.0f});
+        ExpectRect(UILayout::ResolveRect(parent, back), {20.0f, 10.0f, 100.0f, 50.0f}, kTolerance);
     }
 
     TEST(UIAnchorPresetsTest, SetAnchorsKeepsAPercentLengthAPercent) {
@@ -316,7 +310,7 @@ namespace BECore::Tests {
         EXPECT_EQ(result.width, spec.width);
         EXPECT_EQ(result.x.unit, UIUnit::Percent);
         EXPECT_NEAR(result.x.value, (40.0f - 200.0f) / 400.0f * 100.0f, 1e-3f);  // the left edge at 40, the anchor at 200
-        ExpectRect(UILayout::ResolveRect(parent, result), UILayout::ResolveRect(parent, spec));
+        ExpectRect(UILayout::ResolveRect(parent, result), UILayout::ResolveRect(parent, spec), kTolerance);
     }
 
 }  // namespace BECore::Tests

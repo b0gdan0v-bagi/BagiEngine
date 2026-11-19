@@ -1,6 +1,7 @@
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIPreviewOverlay.h>
 #include <Common/UILayoutMatrix.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -8,13 +9,6 @@ namespace BECore::Tests {
     namespace {
 
         constexpr float kTolerance = 1e-3f;
-
-        void ExpectRect(const Rect& actual, const Rect& expected) {
-            EXPECT_NEAR(actual.x, expected.x, kTolerance);
-            EXPECT_NEAR(actual.y, expected.y, kTolerance);
-            EXPECT_NEAR(actual.w, expected.w, kTolerance);
-            EXPECT_NEAR(actual.h, expected.h, kTolerance);
-        }
 
         /// An element whose children are a popup, closed or open by the flag
         class PopupElement : public UIElement {

@@ -16,6 +16,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/UIInputEvents.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <gtest/gtest.h>
 
@@ -162,10 +163,6 @@ namespace BECore::Tests {
             Draw();
         }
 
-        static bool Inside(const Rect& outer, const Rect& inner) {
-            return inner.x >= outer.x - kEpsilon && inner.y >= outer.y - kEpsilon && inner.x + inner.w <= outer.x + outer.w + kEpsilon && inner.y + inner.h <= outer.y + outer.h + kEpsilon;
-        }
-
         /// The red channel of the fill of @p element in the last frame (the plain rect of its box); -1 when there is none
         int Fill(const UIElement& element) const {
             for (const DrawCall& call : _renderer->calls) {
@@ -180,7 +177,7 @@ namespace BECore::Tests {
         /// The red channel of the picture drawn inside @p element; -1 when there is none
         int PictureTint(const UIElement& element) const {
             for (const DrawCall& call : _renderer->calls) {
-                if (call.kind == DrawKind::Texture && call.texture == _texture.Get() && Inside(element.rect, call.rect)) {
+                if (call.kind == DrawKind::Texture && call.texture == _texture.Get() && RectInside(call.rect, element.rect)) {
                     return call.color.r;
                 }
             }
@@ -191,7 +188,7 @@ namespace BECore::Tests {
         int TextColor(const UIElement& element) const {
             int found = -1;
             for (const DrawCall& call : _renderer->calls) {
-                if (call.kind == DrawKind::Texture && call.texture != _texture.Get() && Inside(element.rect, call.rect)) {
+                if (call.kind == DrawKind::Texture && call.texture != _texture.Get() && RectInside(call.rect, element.rect)) {
                     found = call.color.r;
                 }
             }

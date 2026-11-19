@@ -19,6 +19,7 @@
 #include <Common/RecordingRenderer.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UIPartShapeChecks.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -743,10 +744,6 @@ namespace BECore::Tests {
     // ---- the header is a box --------------------------------------------------------------------------------------------------
 
     namespace {
-
-        bool NearRect(const Rect& a, const Rect& b) {
-            return std::abs(a.x - b.x) < 1e-2f && std::abs(a.y - b.y) < 1e-2f && std::abs(a.w - b.w) < 1e-2f && std::abs(a.h - b.h) < 1e-2f;
-        }
 
         enum class HeaderState { Idle, Hover, Press, Disabled };
 

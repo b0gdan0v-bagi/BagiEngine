@@ -15,6 +15,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/UIInputEvents.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -130,10 +131,6 @@ namespace BECore::Tests {
             return event;
         }
 
-        bool Inside(const Rect& inner, const Rect& outer) {
-            return inner.x >= outer.x - kEpsilon && inner.y >= outer.y - kEpsilon && inner.x + inner.w <= outer.x + outer.w + kEpsilon && inner.y + inner.h <= outer.y + outer.h + kEpsilon;
-        }
-
     }  // namespace
 
     class UICanvasTooltipTest : public ::testing::Test {
@@ -232,7 +229,7 @@ namespace BECore::Tests {
         size_t GlyphsIn(const Rect& plate) const {
             size_t count = 0;
             for (const DrawCall& call : _renderer->calls) {
-                if (call.kind == DrawKind::Texture && Inside(call.rect, plate)) {
+                if (call.kind == DrawKind::Texture && RectInside(call.rect, plate)) {
                     ++count;
                 }
             }
@@ -265,7 +262,7 @@ namespace BECore::Tests {
         const auto plate = Plate();
         ASSERT_TRUE(plate.has_value());
         EXPECT_GE(plate->y, icon.y + icon.h) << "under the button";
-        EXPECT_TRUE(Inside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
+        EXPECT_TRUE(RectInside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
         EXPECT_GE(GlyphsIn(*plate), 8u) << "the text of the tooltip is drawn on the plate";
     }
 
@@ -347,7 +344,7 @@ namespace BECore::Tests {
 
         const auto plate = Plate();
         ASSERT_TRUE(plate.has_value());
-        EXPECT_TRUE(Inside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
+        EXPECT_TRUE(RectInside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
         const Rect edge = Get("Edge").rect;
         EXPECT_LE(plate->y + plate->h, edge.y - UITooltip::kGap + kEpsilon) << "no room below: above the button";
     }
@@ -362,7 +359,7 @@ namespace BECore::Tests {
 
         EXPECT_EQ(_hud->GetRoot().children.size(), elements);
         const DrawCall& last = _renderer->calls.back();
-        EXPECT_TRUE(Inside(last.rect, *plate)) << "the last call of the frame is the text of the plate";
+        EXPECT_TRUE(RectInside(last.rect, *plate)) << "the last call of the frame is the text of the plate";
         // The top strip of the plate is above Under and below Icon: no element there, plate or not
         EXPECT_EQ(_hud->GetLayout().HitTest(plate->x + plate->w * 0.5f, plate->y + 2.0f), nullptr) << "not hit-tested";
     }
@@ -580,7 +577,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(plate.has_value());
         EXPECT_LE(plate->w, UITooltip::kMaxWidth + 2.0f * UITooltip::kPadding + kEpsilon);
         EXPECT_GT(plate->h, UITooltip::kFontSize * 2.0f + 2.0f * UITooltip::kPadding) << "several lines";
-        EXPECT_TRUE(Inside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
+        EXPECT_TRUE(RectInside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
     }
 
     TEST_F(UICanvasTooltipTest, ATooltipThatIsEmptiedWhileShownGoes) {
@@ -604,7 +601,7 @@ namespace BECore::Tests {
         Wait(kStep);
         const auto plate = Plate();
         ASSERT_TRUE(plate.has_value());
-        EXPECT_TRUE(Inside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
+        EXPECT_TRUE(RectInside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
         EXPECT_EQ(GlyphsIn(*plate), 11u) << "Composed tip";
     }
 

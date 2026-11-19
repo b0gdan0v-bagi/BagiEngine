@@ -18,6 +18,7 @@
 #include <Common/RecordingRenderer.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UIPartShapeChecks.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -134,14 +135,6 @@ namespace BECore::Tests {
 
         constexpr float kEpsilon = 1e-2f;
 
-        bool Near(const Rect& a, const Rect& b, float tolerance = kEpsilon) {
-            return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
-        }
-
-        bool Inside(const Rect& inner, const Rect& outer, float tolerance = 1e-3f) {
-            return inner.x >= outer.x - tolerance && inner.y >= outer.y - tolerance && inner.x + inner.w <= outer.x + outer.w + tolerance && inner.y + inner.h <= outer.y + outer.h + tolerance;
-        }
-
         String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;
             EXPECT_TRUE(serializer.BeginObject("element"));
@@ -215,7 +208,7 @@ namespace BECore::Tests {
         /// The rect call of the last draw that has exactly this destination, or null
         const DrawCall* FindRect(const Rect& wanted) const {
             for (const DrawCall& call : _renderer->calls) {
-                if (call.kind == DrawKind::Rect && Near(call.rect, wanted)) {
+                if (call.kind == DrawKind::Rect && NearRect(call.rect, wanted, kEpsilon)) {
                     return &call;
                 }
             }
@@ -339,8 +332,8 @@ namespace BECore::Tests {
                 const auto parts = UISliderComponent::GetParts(rect, fraction);
                 EXPECT_NEAR(parts.thumb.w, parts.thumb.h, 1e-4f) << name;
                 EXPECT_NEAR(parts.thumb.h, std::min(rect.h, rect.w), 1e-4f) << name;
-                EXPECT_TRUE(Inside(parts.thumb, rect)) << name << " at " << fraction;
-                EXPECT_TRUE(Inside(parts.track, rect)) << name;
+                EXPECT_TRUE(RectInside(parts.thumb, rect)) << name << " at " << fraction;
+                EXPECT_TRUE(RectInside(parts.track, rect)) << name;
                 EXPECT_LE(parts.track.h, UISliderComponent::kTrackHeight + 1e-4f) << name;
             }
         }
@@ -621,13 +614,13 @@ namespace BECore::Tests {
         SetVar("reversed", "0.5");
         EXPECT_FLOAT_EQ(Slider("Reversed").GetFraction(), 0.0f);
         const auto parts = UISliderComponent::GetParts(RectOf("Reversed"), Slider("Reversed").GetFraction());
-        EXPECT_TRUE(Inside(parts.thumb, RectOf("Reversed")));
+        EXPECT_TRUE(RectInside(parts.thumb, RectOf("Reversed")));
     }
 
     TEST_F(UISliderComponentTest, ASliderNarrowerThanItsThumbStillWorks) {
         ActionLog actions;
         const Rect& narrow = RectOf("Narrow");
-        EXPECT_TRUE(Inside(UISliderComponent::GetParts(narrow, 1.0f).thumb, narrow));
+        EXPECT_TRUE(RectInside(UISliderComponent::GetParts(narrow, 1.0f).thumb, narrow));
         ASSERT_NO_FATAL_FAILURE(Tap("Narrow", 1.0f));
         EXPECT_EQ(actions.LastValue().ToStringView(), "0");
         const float x = narrow.x + narrow.w - 1.0f;

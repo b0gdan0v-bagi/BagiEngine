@@ -12,6 +12,7 @@
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/UILayoutMatrix.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -144,13 +145,6 @@ namespace BECore::Tests {
             return element->rect;
         }
 
-        void ExpectRect(const Rect& rect, float x, float y, float w, float h) {
-            EXPECT_NEAR(rect.x, x, kTolerance);
-            EXPECT_NEAR(rect.y, y, kTolerance);
-            EXPECT_NEAR(rect.w, w, kTolerance);
-            EXPECT_NEAR(rect.h, h, kTolerance);
-        }
-
         bool HasIssue(const Vector<UIMatrixFailure>& failures, UILayoutIssueKind kind) {
             for (const auto& failure : failures) {
                 for (const UILayoutIssue& issue : failure.issues) {
@@ -180,19 +174,6 @@ namespace BECore::Tests {
                 cut += CutTexts(*child, scale);
             }
             return cut;
-        }
-
-        /// Runs @p check once for every language of the table and puts the language that was current back
-        template <typename Check>
-        void ForEachLanguage(Check&& check) {
-            UIStrings& strings = CoreManager::GetUIStrings();
-            const PoolString saved = strings.GetLanguage();
-            const Vector<PoolString> languages = strings.GetLanguages();
-            for (const PoolString language : languages) {
-                ASSERT_TRUE(strings.SetLanguage(language)) << language.ToStringView().data();
-                check(language);
-            }
-            strings.SetLanguage(saved);
         }
 
     }  // namespace
@@ -311,13 +292,13 @@ namespace BECore::Tests {
         LayOutAt(layout, kReferenceWidth, kReferenceHeight);
 
         // 65% of 1280 is 832; the margin of 8 is taken from the span between the anchors
-        ExpectRect(RectOf(layout, "Side"), 840.0f, 8.0f, 432.0f, 704.0f);
+        ExpectRect(RectOf(layout, "Side"), 840.0f, 8.0f, 432.0f, 704.0f, kTolerance);
         // The title spans the panel minus 12 each side, 12 below its top; the button hangs on the bottom edge of the panel, 12 above it
-        ExpectRect(RectOf(layout, "Title"), 852.0f, 20.0f, 408.0f, 48.0f);
-        ExpectRect(RectOf(layout, "Ok"), 852.0f, 644.0f, 408.0f, 56.0f);
+        ExpectRect(RectOf(layout, "Title"), 852.0f, 20.0f, 408.0f, 48.0f, kTolerance);
+        ExpectRect(RectOf(layout, "Ok"), 852.0f, 644.0f, 408.0f, 56.0f, kTolerance);
         // The region is (0, 0, 832, 720): 10% to 90% of it, the bottom edge 16 above its bottom
-        ExpectRect(RectOf(layout, "Bar"), 83.2f, 648.0f, 665.6f, 56.0f);
-        ExpectRect(RectOf(layout, "Status"), 91.2f, 656.0f, 649.6f, 40.0f);
+        ExpectRect(RectOf(layout, "Bar"), 83.2f, 648.0f, 665.6f, 56.0f, kTolerance);
+        ExpectRect(RectOf(layout, "Status"), 91.2f, 656.0f, 649.6f, 40.0f, kTolerance);
     }
 
     TEST_F(UIEdgeAnchorScreenTest, InPortraitTheVariantMovesThePanelDownAndWidensTheBar) {
@@ -327,9 +308,9 @@ namespace BECore::Tests {
         LayOutAt(layout, kReferenceHeight, kReferenceWidth);
 
         // anchorMin (0, 0.6) and the max of the file (1, 1): the lower 40% of 1280, inset by 8
-        ExpectRect(RectOf(layout, "Side"), 8.0f, 776.0f, 704.0f, 496.0f);
+        ExpectRect(RectOf(layout, "Side"), 8.0f, 776.0f, 704.0f, 496.0f, kTolerance);
         // The region is (0, 0, 720, 768); the variant sets 5%..95% of it
-        ExpectRect(RectOf(layout, "Bar"), 36.0f, 696.0f, 648.0f, 56.0f);
+        ExpectRect(RectOf(layout, "Bar"), 36.0f, 696.0f, 648.0f, 56.0f, kTolerance);
     }
 
     TEST_F(UIEdgeAnchorScreenTest, AWindowTwiceAsLargeGivesTheSameScreenTwiceAsLarge) {
@@ -342,8 +323,8 @@ namespace BECore::Tests {
         // The canvas is in units: the same units on a window twice as large (scale 2), so the rects keep their values
         LayOutAt(layout, 2.0f * kReferenceWidth, 2.0f * kReferenceHeight);
 
-        ExpectRect(RectOf(layout, "Bar"), small.x, small.y, small.w, small.h);
-        ExpectRect(RectOf(layout, "Side"), side.x, side.y, side.w, side.h);
+        ExpectRect(RectOf(layout, "Bar"), small.x, small.y, small.w, small.h, kTolerance);
+        ExpectRect(RectOf(layout, "Side"), side.x, side.y, side.w, side.h, kTolerance);
         EXPECT_NEAR(layout.GetResolved().scale, 2.0f, 0.001f);
     }
 

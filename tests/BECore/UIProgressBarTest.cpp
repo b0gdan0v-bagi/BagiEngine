@@ -17,6 +17,7 @@
 #include <Common/RecordingRenderer.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UIPartShapeChecks.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <gtest/gtest.h>
 
@@ -51,10 +52,6 @@ namespace BECore::Tests {
     </components></node>
   </nodes></scene>
 </scenes></SceneManager>)";
-
-        bool Near(const Rect& a, const Rect& b, float tolerance = 1e-2f) {
-            return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
-        }
 
         String ElementToXml(const UIElement& element) {
             XmlSerializer serializer;
@@ -184,7 +181,7 @@ namespace BECore::Tests {
             if (rects.size() < 2) {
                 return 0.0f;
             }
-            EXPECT_TRUE(Near(rects[0].rect, area)) << name << ": the track is the whole rect";
+            EXPECT_TRUE(NearRect(rects[0].rect, area)) << name << ": the track is the whole rect";
             EXPECT_NEAR(rects[1].rect.x, area.x, 1e-2f) << name << ": the fill starts at the left edge";
             EXPECT_NEAR(rects[1].rect.y, area.y, 1e-2f) << name;
             EXPECT_NEAR(rects[1].rect.h, area.h, 1e-2f) << name;

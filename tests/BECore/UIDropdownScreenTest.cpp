@@ -18,6 +18,7 @@
 #include <Common/RecordingRenderer.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UILayoutMatrix.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -294,19 +295,6 @@ namespace BECore::Tests {
                 }
             }
             return problems;
-        }
-
-        /// Runs @p check once for every language of the table and puts the language that was current back
-        template <typename Check>
-        void ForEachLanguage(Check&& check) {
-            UIStrings& strings = CoreManager::GetUIStrings();
-            const PoolString saved = strings.GetLanguage();
-            const Vector<PoolString> languages = strings.GetLanguages();
-            for (const PoolString language : languages) {
-                ASSERT_TRUE(strings.SetLanguage(language)) << language.ToStringView().data();
-                check(language);
-            }
-            strings.SetLanguage(saved);
         }
 
     }  // namespace
