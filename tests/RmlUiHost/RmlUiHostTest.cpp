@@ -16,6 +16,7 @@
 #include <Events/InputEvents.h>
 #include <RmlUi/Core.h>
 #include <RmlUiHost/RmlUiDocumentComponent.h>
+#include <RmlUiHost/RmlUiRenderInterface.h>
 #include <RmlUiHost/RmlUiRuntime.h>
 #include <RmlUiHost/RmlUiScreens.h>
 #include <gtest/gtest.h>
@@ -139,6 +140,41 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         constexpr const char* kStackedStyle = "#play { position: absolute; left: 100dp; top: 100dp; width: 120dp; height: 40dp; background-color: #112233; pointer-events: auto; }\n"
                                               "#play:hover { background-color: #aabbcc; }\n"
                                               "#far { position: absolute; left: 550dp; top: 350dp; width: 100dp; height: 40dp; background-color: #285a3c; pointer-events: auto; }";
+
+        class WaitProbeRenderer;
+
+        /// A texture that tells its renderer how many times the GPU had been waited for when it was freed
+        class WatchedTexture : public RecordedTexture {
+        public:
+            WatchedTexture(WaitProbeRenderer& owner, Vector<uint8_t> rgba, uint32_t width, uint32_t height) : RecordedTexture(std::move(rgba), width, height), _owner(&owner) {}
+            ~WatchedTexture() override;
+
+        private:
+            WaitProbeRenderer* _owner;
+        };
+
+        /// Records the order of WaitIdle() and the end of the textures it made, and keeps the last texture it made (a second holder) until the test lets it go
+        class WaitProbeRenderer : public RecordingRenderer {
+        public:
+            IntrusivePtr<ITexture> CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) override {
+                if (!rgba || width == 0 || height == 0) {
+                    return {};
+                }
+                lastMade = New<WatchedTexture>(*this, Vector<uint8_t>(rgba, rgba + static_cast<size_t>(width) * height * 4), width, height);
+                return lastMade;
+            }
+
+            Vector<uint32_t> waitsWhenFreed;  ///< the WaitIdle() count at the moment each texture was destroyed, in order (declared first: it outlives lastMade)
+            IntrusivePtr<ITexture> lastMade;
+        };
+
+        WatchedTexture::~WatchedTexture() {
+            _owner->waitsWhenFreed.push_back(_owner->waitIdleCalls);
+        }
+
+        const Rml::Vector2i kOnePixel{1, 1};
+        constexpr Rml::byte kWhitePixel[] = {255, 255, 255, 255};
+        const Rml::Span<const Rml::byte> kOnePixelRgba(kWhitePixel, sizeof(kWhitePixel));
 
     }  // namespace
 
@@ -961,6 +997,73 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         EXPECT_FALSE(RmlUiRuntime::GetInstance().IsUp());
         EXPECT_EQ(RmlUiRuntime::GetInstance().GetRenderInterface().GetTextureCount(), 0u);
         EXPECT_EQ(RmlUiRuntime::GetInstance().GetRenderInterface().GetGeometryCount(), 0u);
+    }
+
+    // ---- the GPU before a texture is freed -------------------------------------------------------------------------------------
+
+    TEST_F(RmlUiHostTest, NoTextureOfADocumentIsFreedBeforeTheGpuIsIdle) {
+        auto probe = New<WaitProbeRenderer>();
+        CoreManager::GetRendererManager().SetRenderer(probe);
+        {
+            auto doc = Doc("Main");
+            ASSERT_TRUE(doc->SetMarkup(Document("<p>Hello</p>")));
+            _manager->SetActiveScene("Main"_intern);
+            _manager->DrawAll();
+            ASSERT_GT(RmlUiRuntime::GetInstance().GetRenderInterface().GetTextureCount(), 0u) << "the glyph page is a texture";
+        }
+        probe->lastMade.Reset();
+        probe->waitsWhenFreed.clear();
+
+        _manager.Reset();
+
+        ASSERT_FALSE(probe->waitsWhenFreed.empty()) << "the textures were freed with the runtime";
+        for (const uint32_t waits : probe->waitsWhenFreed) {
+            EXPECT_GT(waits, 0u);
+        }
+    }
+
+    TEST_F(RmlUiHostTest, ReleasingTheLastHolderOfATextureWaitsForTheGpuOnce) {
+        auto probe = New<WaitProbeRenderer>();
+        CoreManager::GetRendererManager().SetRenderer(probe);
+        RmlUiRenderInterface render;
+        const Rml::TextureHandle handle = render.GenerateTexture(kOnePixelRgba, kOnePixel);
+        ASSERT_NE(handle, 0u);
+        probe->lastMade.Reset();
+
+        render.ReleaseTexture(handle);
+
+        EXPECT_EQ(probe->waitIdleCalls, 1u);
+        EXPECT_EQ(render.GetTextureCount(), 0u);
+    }
+
+    TEST_F(RmlUiHostTest, ATextureSomeoneElseHoldsIsReleasedWithoutAWait) {
+        auto probe = New<WaitProbeRenderer>();
+        CoreManager::GetRendererManager().SetRenderer(probe);
+        RmlUiRenderInterface render;
+        const Rml::TextureHandle handle = render.GenerateTexture(kOnePixelRgba, kOnePixel);
+        ASSERT_NE(handle, 0u);
+        ASSERT_TRUE(probe->lastMade) << "the probe keeps the texture, as the resource cache keeps a loaded one";
+
+        render.ReleaseTexture(handle);
+
+        EXPECT_EQ(probe->waitIdleCalls, 0u);
+        EXPECT_EQ(render.GetTextureCount(), 0u);
+        EXPECT_EQ(probe->lastMade.GetRefCount(), 1);
+    }
+
+    TEST_F(RmlUiHostTest, ClearWaitsOnceForTheTexturesItFrees) {
+        auto probe = New<WaitProbeRenderer>();
+        CoreManager::GetRendererManager().SetRenderer(probe);
+        RmlUiRenderInterface render;
+        ASSERT_NE(render.GenerateTexture(kOnePixelRgba, kOnePixel), 0u);
+        ASSERT_NE(render.GenerateTexture(kOnePixelRgba, kOnePixel), 0u);
+        probe->lastMade.Reset();
+
+        render.Clear();
+        render.Clear();
+
+        EXPECT_EQ(probe->waitIdleCalls, 1u) << "two textures, one wait; nothing left, no wait";
+        EXPECT_EQ(render.GetTextureCount(), 0u);
     }
 
 }  // namespace BECore::Tests

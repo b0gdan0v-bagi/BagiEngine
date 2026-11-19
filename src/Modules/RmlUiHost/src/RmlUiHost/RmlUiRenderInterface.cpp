@@ -21,6 +21,13 @@ namespace BECore {
             return Color{Straight(colour.red, colour.alpha), Straight(colour.green, colour.alpha), Straight(colour.blue, colour.alpha), colour.alpha};
         }
 
+        /// A frame in flight may still sample a texture that is about to be freed. There is no renderer at a cleanup that runs after it is gone: then nothing is in flight
+        void WaitForGpu() {
+            if (const auto& renderer = CoreManager::GetRenderer()) {
+                renderer->WaitIdle();
+            }
+        }
+
     }  // namespace
 
     Rml::CompiledGeometryHandle RmlUiRenderInterface::CompileGeometry(Rml::Span<const Rml::Vertex> vertices, Rml::Span<const int> indices) {
@@ -99,7 +106,15 @@ namespace BECore {
     }
 
     void RmlUiRenderInterface::ReleaseTexture(Rml::TextureHandle texture) {
-        _textures.erase(texture);
+        const auto found = _textures.find(texture);
+        if (found == _textures.end()) {
+            return;
+        }
+        // A texture that the resource cache or a sprite also holds stays alive here, so it needs no wait
+        if (found->second->GetRefCount() == 1) {
+            WaitForGpu();
+        }
+        _textures.erase(found);
     }
 
     void RmlUiRenderInterface::ApplyScissor() {
@@ -139,6 +154,9 @@ namespace BECore {
 
     void RmlUiRenderInterface::Clear() {
         _geometries.clear();
+        if (!_textures.empty()) {
+            WaitForGpu();
+        }
         _textures.clear();
         _clipPushed = false;
         _scissorEnabled = false;

@@ -92,6 +92,9 @@ namespace BECore::Tests {
         void EndFrame() override {}
         void Clear(const Color&) override {}
         void Present() override {}
+        void WaitIdle() override {
+            ++waitIdleCalls;
+        }
 
         void DrawFilledRect(float x, float y, float w, float h, const Color& color) override {
             if (IsClipEmpty()) {
@@ -213,6 +216,7 @@ namespace BECore::Tests {
         float height = 600.0f;
         Vector<DrawCall> calls;
         uint32_t texturesCreated = 0;
+        uint32_t waitIdleCalls = 0;
 
     private:
         struct GeometryStorage {

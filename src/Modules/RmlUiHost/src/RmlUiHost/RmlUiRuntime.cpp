@@ -3,6 +3,7 @@
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/Config/ConfigNames.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Renderer/IRenderer.h>
 #include <BECore/Text/TextSettings.h>
 #include <Events/ApplicationEvents.h>
 #include <RmlUi/Core.h>
@@ -67,6 +68,10 @@ namespace BECore {
             return;
         }
         _isUp = false;
+        // Rml::Shutdown() releases the font pages, which a frame in flight may still sample
+        if (const auto& renderer = CoreManager::GetRenderer()) {
+            renderer->WaitIdle();
+        }
         Rml::Shutdown();
         _render.Clear();
     }
