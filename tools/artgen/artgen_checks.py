@@ -1,7 +1,7 @@
 """
 The checks of a cut-out sprite (tools/artgen/CLAUDE.md, "The service"): from the alpha channel of a variant they find what a
 person sees at a glance: nothing drawn, an object cut by the frame, several pieces, a wide soft halo, a background that was
-not removed, a dot, an object far from the centre. A verdict is plain data for the provenance file and the progress event.
+not removed, a dot, an object far from the centre, several objects that touch. A verdict is plain data for the provenance file and the progress event.
 
 The object is every pixel with alpha at or above `cut`. The shape checks run on a mask reduced to at most `MAX_SIDE` pixels on
 its longer side (a reduced pixel is set when any pixel of its cell is), so a 1024 picture costs well under a second. Standard
@@ -16,8 +16,10 @@ import artgen_alpha
 DEFAULTS = {
     "cut": 128,  # the alpha (1 to 255) from which a pixel belongs to the object
     "maxEdgeRun": 0.01,  # the longest stretch of one frame edge the object may run along, a fraction of that side
-    "maxPieces": 1,  # the number of separate pieces allowed
+    "maxPieces": 1,  # the number of separate pieces allowed (their gap is a full valley: with more than one, raise maxValley too)
     "minPieceArea": 0.01,  # a piece counts when it holds at least this fraction of the object's area (specks do not)
+    "maxValley": 0.7,  # how deep a valley between two bodies may go, as a fraction of the lower one's height (1: no limit)
+    "minBodyWidth": 0.04,  # a part narrower than this fraction of the object's width is no body (a crown's tip, an antenna)
     "maxHalo": 0.10,  # the share of semi-transparent pixels among the non-transparent ones
     "maxFill": 0.85,  # the share of the frame the object may cover before the background counts as not removed
     "minCover": 0.10,  # the share of the frame's area the object's bounding box must cover
@@ -30,12 +32,14 @@ RANGES = {
     "maxEdgeRun": FRACTION,
     "maxPieces": (int, 1, None),
     "minPieceArea": FRACTION,
+    "maxValley": FRACTION,
+    "minBodyWidth": FRACTION,
     "maxHalo": FRACTION,
     "maxFill": FRACTION,
     "minCover": FRACTION,
     "maxOffset": FRACTION,
 }
-CHECK_NAMES = ("empty", "edge", "pieces", "halo", "background", "small", "offCentre")
+CHECK_NAMES = ("empty", "edge", "pieces", "bodies", "halo", "background", "small", "offCentre")
 
 MAX_SIDE = 256
 TRANSPARENT_BELOW = 8  # alpha under this is transparent for the halo's count
@@ -107,6 +111,58 @@ def _pieces(mask, width, height, min_area):
     return count
 
 
+def _column_heights(mask, width, height):
+    """Per column of the mask's bounding box, from its first set pixel down to the box's bottom (a hole inside counts as
+    filled: a handle's opening is closed, a valley between two bodies is open to the top; an empty column is 0)."""
+    tops = [None] * width
+    unresolved = width
+    bottom = 0
+    for y in range(height):
+        row = mask[y * width:(y + 1) * width]
+        if not any(row):
+            continue
+        bottom = y + 1
+        if unresolved:
+            for x in range(width):
+                if row[x] and tops[x] is None:
+                    tops[x] = y
+                    unresolved -= 1
+    columns = [x for x, top in enumerate(tops) if top is not None]
+    return [0 if top is None else bottom - top for top in tops[columns[0]:columns[-1] + 1]]
+
+
+def _opened(profile, window):
+    """The profile after a min filter and a max filter of `window` columns: thin parts and spikes are gone, wide ones stay."""
+    count = len(profile)
+    window = min(window, count)
+    eroded = [min(profile[i:i + window]) for i in range(count - window + 1)]
+    return [max(eroded[max(0, j - window + 1):j + 1]) for j in range(count)]
+
+
+def _valley(mask, width, height, min_body_width):
+    """How deep the deepest valley between two bodies of the silhouette goes: its depth over the lower of the two peaks
+    around it (water-fill over the opened column heights), 0 for one body, 1 when it reaches the floor."""
+    heights = _column_heights(mask, width, height)
+    profile = _opened(heights, max(1, round(min_body_width * len(heights))))
+    count = len(profile)
+    left_peak = []
+    peak = 0
+    for value in profile:
+        peak = max(peak, value)
+        left_peak.append(peak)
+    right_peak = [0] * count
+    peak = 0
+    for i in range(count - 1, -1, -1):
+        peak = max(peak, profile[i])
+        right_peak[i] = peak
+    valley = 0.0
+    for i in range(count):
+        lower = min(left_peak[i], right_peak[i])
+        if lower > 0:
+            valley = max(valley, (lower - profile[i]) / lower)
+    return valley
+
+
 def _bounding_box(mask, width, height):
     """(left, top, right, bottom) of the set pixels as fractions of the frame, right and bottom exclusive."""
     rows = [mask[y * width:(y + 1) * width] for y in range(height)]
@@ -159,6 +215,7 @@ def check_alpha(alpha, thresholds=None):
             "fill": area / len(pixels),
             "edgeRun": _edge_run(mask, width, height),
             "pieces": pieces,
+            "valley": _valley(reduced, reduced_width, reduced_height, used["minBodyWidth"]),
             "halo": semi / non_transparent if non_transparent else 0.0,
             "cover": (right - left) * (bottom - top),
             "offset": math.hypot((left + right) / 2 - 0.5, (top + bottom) / 2 - 0.5),
@@ -167,6 +224,8 @@ def check_alpha(alpha, thresholds=None):
             failed.append("edge")
         if pieces > used["maxPieces"]:
             failed.append("pieces")
+        elif metrics["valley"] > used["maxValley"]:
+            failed.append("bodies")
         if metrics["halo"] > used["maxHalo"]:
             failed.append("halo")
         if metrics["fill"] > used["maxFill"] or all(corner > SEMI_ABOVE for corner in corners):
