@@ -87,6 +87,9 @@ namespace BECore::Tests {
 
     static_assert(std::is_default_constructible_v<PingEvent>);
     static_assert(!std::is_default_constructible_v<SumEvent>);
+    // A connection is bound to the address that subscribed: a holder that could move would call into the object it left once that one died
+    static_assert(!std::is_move_constructible_v<SubscriptionHolder> && !std::is_move_assignable_v<SubscriptionHolder>);
+    static_assert(!std::is_move_constructible_v<Listener>);
 
     TEST(EventDispatchSemanticsTest, CompileTimeChecks) {
         SUCCEED() << "The static_asserts above are the check";
@@ -416,6 +419,12 @@ namespace BECore::Tests {
     };
 
     TEST(EventDispatchSemanticsTest, ATypeEnqueuedForTheFirstTimeByAHandlerDuringUpdateAllIsUpdatedByTheNextUpdateAll) {
+        // A type registers in EventsQueueRegistry at its first Enqueue and stays for the life of the process, so only the first run of the case in a
+        // process sees the registration (`--gtest_repeat` runs it again)
+        static bool ranBefore = false;
+        if (std::exchange(ranBefore, true)) {
+            GTEST_SKIP() << "the burst types registered in an earlier run of this case in this process";
+        }
         BurstListener burst;
         burst.Subscribe<TriggerEvent, &BurstListener::OnTrigger>(&burst);
         burst.Subscribe<TailEvent, &BurstListener::OnTail>(&burst);
@@ -468,24 +477,6 @@ namespace BECore::Tests {
         a.Subscribe<PingEvent, &Listener::OnPing>(&a);
         PingEvent::Emit();
         EXPECT_EQ(log, (Vector<int>{1}));
-    }
-
-    // The defaulted move of SubscriptionHolder moves the connections and leaves them bound to the address that
-    // subscribed, so the moved-to object receives nothing.
-    TEST(EventDispatchSemanticsTest, AMovedHolderKeepsTheConnectionsBoundToTheOriginalInstance) {
-        Vector<int> log;
-        Listener moved(1, log);
-        moved.Subscribe<PingEvent, &Listener::OnPing>(&moved);
-        {
-            Listener target(std::move(moved));
-            PingEvent::Emit();
-            EXPECT_EQ(moved.pings, 1) << "the connection still calls the instance that subscribed";
-            EXPECT_EQ(target.pings, 0);
-        }
-
-        // `target` held the connection and has gone out of scope.
-        PingEvent::Emit();
-        EXPECT_EQ(moved.pings, 1);
     }
 
 }  // namespace BECore::Tests

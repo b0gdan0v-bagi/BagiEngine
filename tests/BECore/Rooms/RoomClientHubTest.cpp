@@ -95,7 +95,7 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST_F(RoomClientHubTest, TwoHumansAndTwoComputersPlayAHandAndNobodyPeeks) {
-        MakeLobby("cards", 2);
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 2));
         ASSERT_TRUE(_players[0]->client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));
         for (const auto& player : _players) {
@@ -110,7 +110,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientHubTest, FourHumansPlayAHand) {
-        MakeLobby("cards", 4);
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 4));
         ASSERT_TRUE(_players[0]->client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));
         for (const auto& player : _players) {
@@ -122,7 +122,7 @@ namespace BECore::Tests {
 
     TEST_F(RoomClientHubTest, TheJudgeCatchesAGameThatLeaks) {
         // The negative control: the same hand on a game that sends every hand. If the judge could not fail, the tests above would prove nothing
-        MakeLobby("cards-leaky", 2);
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards-leaky", 2));
         ASSERT_TRUE(_players[0]->client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));
         size_t leaks = 0;
@@ -133,7 +133,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientHubTest, AClientDroppedMidHandReconnectsInsideTheGraceAndPlaysOn) {
-        MakeLobby("cards", 2);
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 2));
         Player& dropped = *_players[1];
         const String token = dropped.client->GetSession().token;
         ASSERT_TRUE(_players[0]->client->Start().has_value());
@@ -222,7 +222,7 @@ namespace BECore::Tests {
     TEST_F(RoomClientHubTest, AClientThatReturnsAfterTheGraceFindsAComputerHasPlayedItsSeat) {
         ResetWorld(HubWorld::MakeSettings(seconds(1)));
         // Seat 0 moves first, so the hand stalls at seat 1 as soon as the client of seat 1 is gone
-        MakeLobby("cards", 2, Json::object({{"firstSeat", 0}}));
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 2, Json::object({{"firstSeat", 0}})));
         Player& away = *_players[1];
         Player& other = *_players[0];
         const String token = away.client->GetSession().token;
@@ -261,7 +261,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientHubTest, ASilentConnectionIsDroppedAndBroughtBack) {
-        MakeLobby("cards", 2);
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 2));
         Player& quiet = *_players[1];
         ASSERT_TRUE(_players[0]->client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return quiet.client->HasView(); }));
@@ -276,7 +276,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientHubTest, AnotherDeviceWithTheSessionTakesTheSeatAndTheFirstOneStaysOut) {
-        MakeLobby("cards", 2);
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 2));
         Player& first = *_players[1];
         ASSERT_TRUE(_players[0]->client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return first.client->HasView(); }));
@@ -307,7 +307,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientHubTest, ASessionOfARoomThatNoLongerExistsEndsWithRoomGone) {
-        MakeLobby("cards", 2);
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 2));
         const RoomSession session = _players[1]->client->GetSession();
         // The only members leave the lobby: the room is closed
         ASSERT_TRUE(_players[1]->client->Leave().has_value());

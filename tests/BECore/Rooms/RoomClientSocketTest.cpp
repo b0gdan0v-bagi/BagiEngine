@@ -238,7 +238,7 @@ namespace BECore::Tests {
     // ---- Whole hands over real sockets ---------------------------------------------------------------------------------------------
 
     TEST_F(RoomClientSocketTest, TwoHumansAndTwoComputersPlayAHandAndNobodyPeeks) {
-        StartServer();
+        ASSERT_NO_FATAL_FAILURE(StartServer());
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2));
         ASSERT_TRUE(players[0]->client->Start().has_value());
         ASSERT_TRUE(WaitFor([&] { return EveryoneSeesTheEnd(); })) << "the hand did not reach its end";
@@ -252,7 +252,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientSocketTest, FourHumansPlayAWholeHand) {
-        StartServer();
+        ASSERT_NO_FATAL_FAILURE(StartServer());
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 4));
         ASSERT_TRUE(players[0]->client->Start().has_value());
         ASSERT_TRUE(WaitFor([&] { return EveryoneSeesTheEnd(); }));
@@ -264,7 +264,7 @@ namespace BECore::Tests {
 
     TEST_F(RoomClientSocketTest, TheWireJudgeCatchesAGameThatLeaks) {
         // The negative control: the same hand on a game whose view carries every hand. If the judge could not fail, the tests above would prove nothing
-        StartServer();
+        ASSERT_NO_FATAL_FAILURE(StartServer());
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards-leaky", 2));
         ASSERT_TRUE(players[0]->client->Start().has_value());
         ASSERT_TRUE(WaitFor([&] { return EveryoneSeesTheEnd(); }));
@@ -279,7 +279,7 @@ namespace BECore::Tests {
         // Slow computers keep the hand going long enough to cut it in the middle; the clock is the real one and the grace (30 s) is far away
         RoomServerSettings settings = MakeServerSettings();
         settings.hub.timings.computerDelay = 100ms;
-        StartServer(std::move(settings));
+        ASSERT_NO_FATAL_FAILURE(StartServer(std::move(settings)));
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2));
         Player& cut = *players[1];
         const String token = cut.client->GetSession().token;
@@ -304,7 +304,7 @@ namespace BECore::Tests {
         ManualClock clock;
         RoomServerSettings settings = MakeServerSettings();
         settings.clock = clock.AsFunction();
-        StartServer(std::move(settings));
+        ASSERT_NO_FATAL_FAILURE(StartServer(std::move(settings)));
 
         // Seat 0 moves first, and seat 1 does not play until the test lets it: the hand stalls at seat 1 when the client is cut
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2, Json::object({{"firstSeat", 0}})));
@@ -345,7 +345,7 @@ namespace BECore::Tests {
     TEST_F(RoomClientSocketTest, ANewClientObjectResumesTheSavedSessionAfterTheAppRestarted) {
         RoomServerSettings settings = MakeServerSettings();
         settings.hub.timings.computerDelay = 100ms;
-        StartServer(std::move(settings));
+        ASSERT_NO_FATAL_FAILURE(StartServer(std::move(settings)));
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2));
         const RoomSession saved = players[1]->client->GetSession();
         const int seat = players[1]->client->GetSeat();
@@ -367,7 +367,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientSocketTest, AServerThatStopsIsRetriedUntilTheGiveUpTime) {
-        StartServer();
+        ASSERT_NO_FATAL_FAILURE(StartServer());
         RoomClientSettings impatient = MakeClientSettings();
         impatient.reconnectGiveUp = 700ms;
         impatient.backoffStart = 50ms;
@@ -407,7 +407,7 @@ namespace BECore::Tests {
         if (!IsTlsSupported()) {
             GTEST_SKIP() << "no TLS backend in this build: WssIsRefusedAtOnceWithoutATlsBackendAndTheMessageNamesTheBrowserBuild covers wss://";
         }
-        StartServer();
+        ASSERT_NO_FATAL_FAILURE(StartServer());
         Player& player = AddPlayer();
         // The address is accepted (there is a backend); the plain server does not speak TLS, so the handshake fails
         ASSERT_TRUE(player.client->Host(Format("wss://127.0.0.1:{}", port), "cards", "P0").has_value());
@@ -419,7 +419,7 @@ namespace BECore::Tests {
 
     TEST_F(RoomClientSocketTest, AWrongPortGivesAClosedEventAndNoHang) {
         // A port that was in use a moment ago and now has nobody on it
-        StartServer();
+        ASSERT_NO_FATAL_FAILURE(StartServer());
         const String deadUrl = url;
         server->Stop();
         server.reset();
@@ -441,14 +441,14 @@ namespace BECore::Tests {
         RoomServerSettings settings = MakeServerSettings();
         settings.policy.loopbackOnly = false;
         settings.policy.allowedOrigins = {"https://page.example"};
-        StartServer(std::move(settings));
+        ASSERT_NO_FATAL_FAILURE(StartServer(std::move(settings)));
         ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2));
         EXPECT_TRUE(players[0]->client->IsInRoom());
         EXPECT_TRUE(players[1]->client->IsInRoom());
     }
 
     TEST_F(RoomClientSocketTest, TheServerAnswersTheHeartbeatPingWithPong) {
-        StartServer();
+        ASSERT_NO_FATAL_FAILURE(StartServer());
         RoomClientSettings quick = MakeClientSettings();
         quick.pingInterval = 40ms;
         Player& player = AddPlayer(std::move(quick));

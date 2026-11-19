@@ -30,8 +30,13 @@ namespace BECore::Tests {
         const Color kBackground{10, 20, 30, 255};
         const Color kRed{255, 0, 0, 255};
 
+        /// The pixel at (@p x, @p y); a failure of the case and a blank pixel when the image does not hold it (a capture that failed is empty)
         Pixel PixelAt(const PixelBuffer& image, uint32_t x, uint32_t y) {
             const size_t offset = (static_cast<size_t>(y) * image.width + x) * 4;
+            if (x >= image.width || y >= image.height || offset + 4 > image.rgba.size()) {
+                ADD_FAILURE() << "no pixel (" << x << ", " << y << ") in an image of " << image.width << " x " << image.height << " with " << image.rgba.size() << " bytes";
+                return {};
+            }
             return {image.rgba[offset], image.rgba[offset + 1], image.rgba[offset + 2], image.rgba[offset + 3]};
         }
 
@@ -1078,11 +1083,11 @@ namespace BECore::Tests {
 
         ASSERT_EQ(responses.size(), 1u);
         ASSERT_NE(Result(0), nullptr);
-        const auto base64 = GetJsonString(*Result(0), "png_base64");
+        const auto base64 = GetJsonString(Require(Result(0)), "png_base64");
         ASSERT_TRUE(base64.has_value());
         EXPECT_TRUE(StringView(base64->data(), base64->size()).starts_with(kPngBase64Prefix));
-        const int64_t width = GetJsonInt(*Result(0), "width").value_or(0);
-        const int64_t height = GetJsonInt(*Result(0), "height").value_or(0);
+        const int64_t width = GetJsonInt(Require(Result(0)), "width").value_or(0);
+        const int64_t height = GetJsonInt(Require(Result(0)), "height").value_or(0);
         EXPECT_EQ(width, 1024);  // the window of the engine config is 1920 by 1080, cut to the default 1024
         EXPECT_EQ(height, 576);
     }
@@ -1098,8 +1103,8 @@ namespace BECore::Tests {
 
         ASSERT_EQ(responses.size(), 1u);
         ASSERT_NE(Result(0), nullptr);
-        EXPECT_EQ(GetJsonInt(*Result(0), "width").value_or(0), 200);
-        EXPECT_EQ(GetJsonInt(*Result(0), "height").value_or(0), 113);
+        EXPECT_EQ(GetJsonInt(Require(Result(0)), "width").value_or(0), 200);
+        EXPECT_EQ(GetJsonInt(Require(Result(0)), "height").value_or(0), 113);
     }
 
     TEST_F(ScreenshotControlTest, AScreenshotIsOfTheSimulatedOutputSize) {
@@ -1115,8 +1120,8 @@ namespace BECore::Tests {
 
             ASSERT_EQ(responses.size(), 1u);
             ASSERT_NE(Result(0), nullptr);
-            EXPECT_EQ(GetJsonInt(*Result(0), "width").value_or(0), expectedWidth);
-            EXPECT_EQ(GetJsonInt(*Result(0), "height").value_or(0), expectedHeight);
+            EXPECT_EQ(GetJsonInt(Require(Result(0)), "width").value_or(0), expectedWidth);
+            EXPECT_EQ(GetJsonInt(Require(Result(0)), "height").value_or(0), expectedHeight);
         }
     }
 
@@ -1157,7 +1162,7 @@ namespace BECore::Tests {
         }
 
         ASSERT_EQ(responses.size(), 2u);
-        EXPECT_EQ(GetJsonInt(*Result(0), "width").value_or(0), static_cast<int64_t>(kMinScreenshotSize));
+        EXPECT_EQ(GetJsonInt(Require(Result(0)), "width").value_or(0), static_cast<int64_t>(kMinScreenshotSize));
         EXPECT_NE(Result(1), nullptr);
     }
 

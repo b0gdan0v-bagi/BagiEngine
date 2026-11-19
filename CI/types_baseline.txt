@@ -45,4 +45,4 @@ tests/Common/ContentFilesCheck.h directory-iterator 1
 tests/Common/MigrationTwin.h directory-iterator 1
 tests/Common/MigrationTwin.h fstream 1
 tests/Fuzz/FuzzSeeds.cpp fstream 1
-tests/RmlUiHost/RmlUiHostTest.cpp fstream 3
+tests/RmlUiHost/RmlUiHostTest.cpp fstream 1

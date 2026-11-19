@@ -110,6 +110,7 @@ namespace BECore::Tests {
         ring.EndZone(outer, kOuterSite, {});
 
         const RingSnapshot snapshot = ring.Snapshot();
+        ASSERT_EQ(snapshot.threads.size(), 1u);
         const auto& zones = snapshot.threads[0].zones;
         ASSERT_EQ(zones.size(), 3u);
         EXPECT_EQ(zones[0].site, &kOuterSite);
@@ -219,7 +220,9 @@ namespace BECore::Tests {
 
         const RingSnapshot snapshot = ring.Snapshot();
         ASSERT_EQ(snapshot.frames.size(), 2u);
-        const ZoneRecord& zone = snapshot.threads[0].zones.at(0);
+        ASSERT_EQ(snapshot.threads.size(), 1u);
+        ASSERT_FALSE(snapshot.threads[0].zones.empty());
+        const ZoneRecord& zone = snapshot.threads[0].zones[0];
         const RingFrame& first = snapshot.frames[0];
         const RingFrame& second = snapshot.frames[1];
         EXPECT_TRUE(zone.beginTicks >= first.beginTicks && zone.beginTicks < first.endTicks);
@@ -235,10 +238,14 @@ namespace BECore::Tests {
         ring.BeginZone(kOuterSite);
         EXPECT_TRUE(ring.Start());
         ring.EndZone(0, kOuterSite, {});
-        EXPECT_TRUE(ring.Snapshot().threads[0].zones.empty());
+        const RingSnapshot started = ring.Snapshot();
+        ASSERT_EQ(started.threads.size(), 1u);
+        EXPECT_TRUE(started.threads[0].zones.empty());
         RecordZone(ring, kInnerSite, 3, 4);
-        ASSERT_EQ(ring.Snapshot().threads[0].zones.size(), 1u);
-        EXPECT_EQ(ring.Snapshot().threads[0].zones[0].site, &kInnerSite);
+        const RingSnapshot recorded = ring.Snapshot();
+        ASSERT_EQ(recorded.threads.size(), 1u);
+        ASSERT_EQ(recorded.threads[0].zones.size(), 1u);
+        EXPECT_EQ(recorded.threads[0].zones[0].site, &kInnerSite);
     }
 
     TEST(FrameRingTest, ADeeperZoneThanTheStackIsCountedAndNotRecorded) {
@@ -253,7 +260,8 @@ namespace BECore::Tests {
             ring.EndZone(0, kOuterSite, {});
         }
         const RingSnapshot snapshot = ring.Snapshot();
-        EXPECT_EQ(snapshot.threads[0].zones.size(), size_t{FrameRingBackend::kMaxZoneDepth});
+        ASSERT_EQ(snapshot.threads.size(), 1u);
+        ASSERT_EQ(snapshot.threads[0].zones.size(), size_t{FrameRingBackend::kMaxZoneDepth});
         EXPECT_EQ(snapshot.dropped, 3u);
         EXPECT_EQ(ring.GetDroppedCount(), 3u);
         // The recorded ones are the outer ones, with their own begin and end
@@ -279,6 +287,9 @@ namespace BECore::Tests {
         std::thread b(work, "Ring lane B", 9u, std::ref(idB), std::cref(kInnerSite));
         a.join();
         b.join();
+        if (idA >= Profiler::kMaxThreads || idB >= Profiler::kMaxThreads) {
+            GTEST_SKIP() << "the profiler names the first kMaxThreads threads of a process only, and this one has used them up";
+        }
 
         const RingSnapshot snapshot = ring.Snapshot();
         ASSERT_EQ(snapshot.threads.size(), 2u);
@@ -311,19 +322,23 @@ namespace BECore::Tests {
         for (uint32_t i = 0; i < FrameRingBackend::kEventsPerThread + kExtra; ++i) {
             RecordZone(ring, kOuterSite, uint64_t{i} * 10, uint64_t{i} * 10 + 5);
         }
-        EXPECT_EQ(ring.Snapshot().threads[0].zones.size(), FrameRingBackend::kEventsPerThread);
+        const RingSnapshot full = ring.Snapshot();
+        ASSERT_EQ(full.threads.size(), 1u);
+        EXPECT_EQ(full.threads[0].zones.size(), FrameRingBackend::kEventsPerThread);
 
         // The next zone claims the slot of the oldest one; a snapshot taken at that moment must not trust it
         g_manualTick = 1;
         const uint64_t token = ring.BeginZone(kInnerSite);
         g_ringToSnapshot = &ring;
         ring.EndZone(token, kInnerSite, {});
+        ASSERT_EQ(g_snapshotInsideEnd.threads.size(), 1u);
         const auto& inside = g_snapshotInsideEnd.threads[0].zones;
         ASSERT_EQ(inside.size(), size_t{FrameRingBackend::kEventsPerThread - 1});
         EXPECT_EQ(inside.front().beginTicks, uint64_t{kExtra + 1} * 10);
 
         // Once the zone is written the window is whole again, with the new zone in it
         const RingSnapshot after = ring.Snapshot();
+        ASSERT_EQ(after.threads.size(), 1u);
         EXPECT_EQ(after.threads[0].zones.size(), size_t{FrameRingBackend::kEventsPerThread});
     }
 
@@ -337,11 +352,12 @@ namespace BECore::Tests {
         FrameRingBackend ring({.now = &CountingNow, .nanosecondsPerTick = kNanosecondsPerTestTick});
         std::atomic<bool> started{false};
         std::atomic<bool> done{false};
+        std::atomic<bool> stop{false};
         std::atomic<size_t> snapshots{0};
         std::thread writer([&] {
             started = true;
             const auto deadline = std::chrono::steady_clock::now() + kTimeLimit;
-            for (uint32_t i = 0; i < kPairs || (snapshots.load() < kMinSnapshots && std::chrono::steady_clock::now() < deadline); ++i) {
+            for (uint32_t i = 0; !stop && (i < kPairs || (snapshots.load() < kMinSnapshots && std::chrono::steady_clock::now() < deadline)); ++i) {
                 const uint64_t outer = ring.BeginZone(kOuterSite);
                 const uint64_t inner = ring.BeginZone(kInnerSite);
                 ring.EndZone(inner, kInnerSite, {.count = 1, .bytes = 8});
@@ -385,15 +401,19 @@ namespace BECore::Tests {
                 ASSERT_EQ(snapshot.frames[k].beginTicks, snapshot.frames[k - 1].endTicks);
             }
         };
-        while (!done) {
-            ASSERT_NO_FATAL_FAILURE(check(ring.Snapshot()));
+        // No assertion returns before the join: the writer uses the ring on this stack, and a joinable thread that goes out of scope ends the process
+        while (!done && !HasFatalFailure()) {
+            check(ring.Snapshot());
             ++snapshots;
         }
+        stop = true;
         writer.join();
+        ASSERT_FALSE(HasFatalFailure()) << "a snapshot taken while the writer ran held a zone it did not write";
         ASSERT_NO_FATAL_FAILURE(check(ring.Snapshot()));
         EXPECT_GE(snapshots.load(), kMinSnapshots);
         EXPECT_GT(zonesChecked, 0u);
         const RingSnapshot last = ring.Snapshot();
+        ASSERT_EQ(last.threads.size(), 1u);
         EXPECT_EQ(last.threads[0].zones.size(), FrameRingBackend::kEventsPerThread);
     }
 

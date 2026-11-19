@@ -29,6 +29,17 @@ namespace BECore::Tests {
             return value ? *value : String();
         }
 
+        /// The object @p key of @p event; a failure of the case and an empty object when it has none
+        const Json& Object(const Json& event, const char* key) {
+            static const Json kNone = Json::object();
+            const Json* found = FindJsonMember(event, key);
+            if (found == nullptr) {
+                ADD_FAILURE() << "the event has no " << key;
+                return kNone;
+            }
+            return *found;
+        }
+
         /// The events of a trace, parsed back (fails the test when the JSON is not valid)
         Json ParseEvents(const String& trace) {
             auto parsed = ParseJson(trace);
@@ -106,10 +117,15 @@ namespace BECore::Tests {
     }
 
     TEST(ProfilerSettingsTest, ProfilerFlagPicksTheBackend) {
-        EXPECT_EQ(ResolveProfilerSettings(Args{"--profiler=chrome"}, kChromeOnlyBuild)->backend, ProfilerBackendKind::ChromeTrace);
-        EXPECT_EQ(ResolveProfilerSettings(Args{"--profiler=none"}, kFullBuild)->backend, ProfilerBackendKind::None);
-        EXPECT_EQ(ResolveProfilerSettings(Args{"--profiler=tracy"}, kFullBuild)->backend, ProfilerBackendKind::Tracy);
-        EXPECT_EQ(ResolveProfilerSettings(Args{"--profiler=chrome", "--trace=t.json"}, kChromeOnlyBuild)->backend, ProfilerBackendKind::ChromeTrace);
+        const auto backendOf = [](const Args& args, ProfilerBuild build) {
+            const auto settings = ResolveProfilerSettings(args, build);
+            EXPECT_TRUE(settings.has_value()) << args.front();
+            return settings ? Optional<ProfilerBackendKind>(settings->backend) : std::nullopt;
+        };
+        EXPECT_EQ(backendOf(Args{"--profiler=chrome"}, kChromeOnlyBuild), ProfilerBackendKind::ChromeTrace);
+        EXPECT_EQ(backendOf(Args{"--profiler=none"}, kFullBuild), ProfilerBackendKind::None);
+        EXPECT_EQ(backendOf(Args{"--profiler=tracy"}, kFullBuild), ProfilerBackendKind::Tracy);
+        EXPECT_EQ(backendOf(Args{"--profiler=chrome", "--trace=t.json"}, kChromeOnlyBuild), ProfilerBackendKind::ChromeTrace);
     }
 
     TEST(ProfilerSettingsTest, BareEmptyUnknownAndConflictingFlagsAreErrors) {
@@ -164,9 +180,9 @@ namespace BECore::Tests {
                 begun.push_back(Member(event, "name"));
             } else if (phase == "C") {
                 EXPECT_EQ(Member(event, "name"), "Score");
-                EXPECT_EQ(GetJsonNumber(*FindJsonMember(event, "args"), "value"), 2.5);
+                EXPECT_EQ(GetJsonNumber(Object(event, "args"), "value"), 2.5);
             } else if (phase == "M") {
-                EXPECT_EQ(Member(*FindJsonMember(event, "args"), "name"), "Test main");
+                EXPECT_EQ(Member(Object(event, "args"), "name"), "Test main");
             }
         }
         EXPECT_EQ(begun, (Vector<String>{"Outer", "Inner \"quoted\"\\"}));
@@ -299,11 +315,21 @@ namespace BECore::Tests {
     }
 
     TEST(ProfileMacrosTest, NothingIsRecordedWithoutABackend) {
+        // The recorder was installed and taken away: a macro that still reached it would add to what it holds
         ChromeTraceBackend recorder;
-        Profiler::SetBackend(nullptr);
+        {
+            ScopedBackend installed(&recorder);
+            EXPECT_EQ(EarlyReturn(false), 2);
+        }
+        const size_t recorded = CountPhase(ParseEvents(recorder.WriteJson()), "B");
+        ASSERT_EQ(recorded, 2u);
+
         EXPECT_EQ(EarlyReturn(false), 2);
         BE_PROFILE_FRAME();
-        EXPECT_EQ(CountPhase(ParseEvents(recorder.WriteJson()), "B"), 0u);
+
+        const Json events = ParseEvents(recorder.WriteJson());
+        EXPECT_EQ(CountPhase(events, "B"), recorded);
+        EXPECT_EQ(CountPhase(events, "i"), 0u);
     }
 
     TEST(ProfileMacrosTest, AZoneEndsOnTheBackendItBeganOn) {
@@ -336,7 +362,8 @@ namespace BECore::Tests {
         const Json events = ParseEvents(text);
         EXPECT_EQ(CountPhase(events, "B"), 2u);
         ExpectBalanced(events);
-        std::filesystem::remove_all(folder);
+        std::error_code error;
+        std::filesystem::remove_all(folder, error);
     }
 
 #else

@@ -172,23 +172,20 @@ namespace BECore::Tests {
         EXPECT_GT(bright, 100u) << "full coverage of a glyph comes out white, so the premultiplied glyph texture was undone right";
     }
 
-    TEST_F(RmlUiSdlTest, TheHudsAreDrawn) {
-        for (size_t i = 1; i < std::size(RmlUiScreens::kScreens); ++i) {
-            const RmlUiScreens::Screen& screen = RmlUiScreens::kScreens[i];
-            auto doc = Load(screen);
-            CoreManager::GetUIVars().Set("score"_intern, 1280);
-            CoreManager::GetUIVars().Set("seed"_intern, 1337);
+    TEST_F(RmlUiSdlTest, TheHudIsDrawn) {
+        const RmlUiScreens::Screen& screen = RmlUiScreens::kScreens[1];
+        auto doc = Load(screen);
+        CoreManager::GetUIVars().Set("score"_intern, 1280);
+        CoreManager::GetUIVars().Set("seed"_intern, 1337);
 
-            const PixelBuffer image = DrawFrame();
-            MaybeSavePng(image, "rmlui-game-hud");
+        const PixelBuffer image = DrawFrame();
+        MaybeSavePng(image, "rmlui-game-hud");
 
-            ASSERT_FALSE(image.rgba.empty());
-            const Rect reset = BoxOf(*doc, "Reset");
-            EXPECT_TRUE(IsNear(PixelAt(image, static_cast<int>(reset.x) + 5, static_cast<int>(reset.y + reset.h * 0.5f)), {40, 90, 60, 255}, kBlendTolerance)) << screen.name;
-            const Rect first = BoxOf(*doc, screen.ids[0]);
-            EXPECT_GT(CountInk(image, first), 50u) << screen.name << " " << screen.ids[0] << ": the text is drawn from the variables";
-            _manager.Reset();
-        }
+        ASSERT_FALSE(image.rgba.empty());
+        const Rect reset = BoxOf(*doc, "Reset");
+        EXPECT_TRUE(IsNear(PixelAt(image, static_cast<int>(reset.x) + 5, static_cast<int>(reset.y + reset.h * 0.5f)), {40, 90, 60, 255}, kBlendTolerance));
+        const Rect first = BoxOf(*doc, screen.ids[0]);
+        EXPECT_GT(CountInk(image, first), 50u) << screen.ids[0] << ": the text is drawn from the variables";
     }
 
     TEST_F(RmlUiSdlTest, ATranslucentBoxBlendsLikeAnEngineRect) {

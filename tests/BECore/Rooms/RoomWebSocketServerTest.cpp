@@ -22,6 +22,7 @@ namespace BECore::Tests {
             RoomServerSettings settings;
             settings.tickInterval = 10ms;
             settings.hub.timings = RoomTimings{30s, 10min, 0ms};
+            settings.pingInterval = 0ms;  // on the real clock a loaded machine would see pings; the liveness cases set their own
             settings.random = MakeSequence(7);
             return settings;
         }
@@ -693,6 +694,7 @@ namespace BECore::Tests {
         }
         LetTicksPass(clock);
         EXPECT_FALSE(client->GetCloseFrame().has_value());
+        EXPECT_EQ(client->GetPingCount(), 0u);
         for (const ReceivedMessage& message : client->Received()) {
             EXPECT_EQ(message.type, RoomMessageTypes::kPong);
         }
@@ -876,7 +878,6 @@ namespace BECore::Tests {
         ManualClock clock;
         RoomServerSettings settings = MakeSettings();
         settings.clock = clock.AsFunction();
-        settings.pingInterval = 0ms;
         settings.hub.lobbyTimeout = 1min;
         const uint16_t port = StartServer(std::move(settings));
         auto host = MakeHost(port);

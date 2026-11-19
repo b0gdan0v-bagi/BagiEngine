@@ -15,8 +15,8 @@ namespace BECore::Tests {
 
     /// The reflected type of one config file: @p read fills it from the deserializer (`Type().Deserialize(d)`)
     struct ConfigReader {
-        StringView stem;                             // the file `<stem>.xml`
-        eastl::function<void(IDeserializer&)> read;  //-NoStd: no alias for a callable yet (entry `callables-move-only`)
+        StringView stem;                         // the file `<stem>.xml`
+        void (*read)(IDeserializer&) = nullptr;  // a plain function, so a reader list stays copyable for an initializer list
     };
 
     /// A config file that no reflected type reads (a hand-written reader, another format in an XML file), and why

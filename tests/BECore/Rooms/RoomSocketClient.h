@@ -3,6 +3,7 @@
 #include <BECore/Rooms/TestClient.h>
 #include <BECore/Types/Types.h>
 #include <BECore/WebSocketTestClient.h>
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -72,20 +73,33 @@ namespace BECore::Tests {
         }
 
         /// The next message the server sent that this client has not looked at yet; nullopt when none came in @p limit, or when the
-        /// server sent something that is not a text frame (a close frame is then in GetCloseFrame())
+        /// server sent a close frame (then in GetCloseFrame()). A ping on the way is answered with a pong, as a browser does; pongs and
+        /// binary frames are counted and skipped
         Optional<ReceivedMessage> Next(std::chrono::milliseconds limit = kClientWaitLimit) {
             if (_cursor < _received.size()) {
                 return _received[_cursor++];
             }
-            const auto frame = _raw.WaitForFrame(limit);
-            if (!frame) {
-                return std::nullopt;
-            }
-            _maskedFrames += frame->masked ? 1 : 0;
-            _binaryFrames += frame->opcode == WebSocketOpcode::kBinary ? 1 : 0;
-            if (frame->opcode != WebSocketOpcode::kText) {
-                _closeFrame = *frame;
-                return std::nullopt;
+            const auto deadline = std::chrono::steady_clock::now() + limit;
+            Optional<RawFrame> frame;
+            for (;;) {
+                const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
+                frame = _raw.WaitForFrame(std::max(left, std::chrono::milliseconds{0}));
+                if (!frame) {
+                    return std::nullopt;
+                }
+                _maskedFrames += frame->masked ? 1 : 0;
+                if (frame->opcode == WebSocketOpcode::kText) {
+                    break;
+                }
+                if (frame->opcode == WebSocketOpcode::kClose) {
+                    _closeFrame = *frame;
+                    return std::nullopt;
+                }
+                if (frame->opcode == WebSocketOpcode::kPing) {
+                    ++_pings;
+                    _raw.Send(AsBytes(EncodeFrame(WebSocketOpcode::kPong, AsBytes(frame->payload), kClientMask)));
+                }
+                _binaryFrames += frame->opcode == WebSocketOpcode::kBinary ? 1 : 0;
             }
             ReceivedMessage message;
             message.text = String(frame->payload.data(), frame->payload.size());
@@ -150,6 +164,11 @@ namespace BECore::Tests {
             return _binaryFrames;
         }
 
+        /// The pings of the server that Next() answered
+        [[nodiscard]] size_t GetPingCount() const {
+            return _pings;
+        }
+
         /// Types of the messages received so far, in order ("joined,lobby")
         [[nodiscard]] String Types() const {
             return TypesOf(_received);
@@ -169,6 +188,7 @@ namespace BECore::Tests {
         Optional<RawFrame> _closeFrame;
         size_t _maskedFrames = 0;
         size_t _binaryFrames = 0;
+        size_t _pings = 0;
     };
 
 }  // namespace BECore::Tests

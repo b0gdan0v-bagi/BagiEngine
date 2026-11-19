@@ -16,11 +16,12 @@ namespace BECore {
 
         virtual ~SubscriptionHolder() = default;
 
-        // A moved holder takes the connections, but they stay bound to the address that subscribed.
+        // Not movable: a connection is bound to the address that subscribed, so a moved holder would keep calling the object it left, after
+        // that object died too
         SubscriptionHolder(const SubscriptionHolder&) = delete;
         SubscriptionHolder& operator=(const SubscriptionHolder&) = delete;
-        SubscriptionHolder(SubscriptionHolder&&) = default;
-        SubscriptionHolder& operator=(SubscriptionHolder&&) = default;
+        SubscriptionHolder(SubscriptionHolder&&) = delete;
+        SubscriptionHolder& operator=(SubscriptionHolder&&) = delete;
 
     protected:
         /// Subscribes `instance` and keeps the connection until the destructor or UnsubscribeAll().
