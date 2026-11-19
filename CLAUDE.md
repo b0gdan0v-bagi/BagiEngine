@@ -9,7 +9,7 @@ Presets of `CMakePresets.json` build into `build/<preset>/` (`bin`, `lib`); the 
 ```bash
 cmake --preset macos-debug           # configure, regenerates reflection code
 cmake --build --preset macos-debug   # BagiStress and the test executables
-ctest --preset macos-debug           # each test in its own process, 8 at a time, without label extended
+ctest --preset macos-debug           # each gtest executable in shards, 8 at a time, without label extended
 ctest --preset macos-debug-all       # every test (build-project.md, "Tests")
 ```
 
