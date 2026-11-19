@@ -445,19 +445,18 @@ namespace BECore::Tests {
     }
 
     TEST_F(UITransitionComponentTest, ASteadyCanvasWithAnIdleComponentAllocatesNothing) {
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << "the allocation counters are off in this preset (ENGINE_PROFILER_ALLOC)";
+        }
         Wait(0.5);
         Wait(0.5);
-#if BE_PROFILER_ALLOC
+        ASSERT_EQ(AlphaAt(Get("Fader").rect), kAuthoredAlpha) << "the component is idle, so the frames below change nothing";
         const uint64_t before = AllocTracker::GetThreadCounters().count;
-#endif
         for (int frame = 0; frame < kSteadyFrames; ++frame) {
             CoreManager::GetTime().Advance(kStep);
             Draw();
         }
-#if BE_PROFILER_ALLOC
         EXPECT_EQ(AllocTracker::GetThreadCounters().count, before);
-#endif
-        EXPECT_EQ(AlphaAt(Get("Fader").rect), kAuthoredAlpha);
     }
 
     // ---- the canvas ----------------------------------------------------------------------------------------------------------

@@ -31,9 +31,10 @@ namespace BECore::Tests {
 
     namespace {
 
-        // Output 800 x 600, scale 1. Every button is a clicker with a fill, a picture child Icon... and a caption child Cap..., each with a rest and a hover colour that are a multiple of 4 apart:
-        //   Btn   (10, 10, 200 x 60)   stateDuration 1; fill 40 -> hover 80 (pressed 20); picture 100 -> 200; caption 100 -> 200
-        //   Plain (10, 100, 200 x 60)  no stateDuration: it follows the setting
+        // Output 800 x 600, scale 1. Each colour pair is a multiple of 4 apart.
+        //   Btn   (10, 10, 200 x 60)   a clicker with a picture child BtnIcon and a caption child BtnCap; stateDuration 1; fill 40 -> hover 80 (pressed 20); picture 100 -> 200;
+        //                              caption 100 -> 200
+        //   Plain (10, 100, 200 x 60)  a clicker with a picture child PlainIcon, no stateDuration: it follows the setting
         //   Pick  (300, 10, 180 x 56)  a dropdown, stateDuration 1: its header box eases through `GetCurrentBox`
         //   Off   (10, 200, 200 x 60)  stateDuration 0: never eases, whatever the setting
         constexpr const char* kTransitionXml = R"(
@@ -306,21 +307,19 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIStateTransitionTest, AFrameInWhichNothingChangedAllocatesNothing) {
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << "the allocation counters are off in this preset (ENGINE_PROFILER_ALLOC)";
+        }
         Draw();
         Hover(El("Btn"));
-        Wait(0.5);  // the blend is on its way, the glyphs are laid out, the calls vector has its capacity
-        Wait(0.25);
-#if BE_PROFILER_ALLOC
+        Wait(1.25);  // past the end of the blend: the glyphs are laid out and the calls vector has its capacity
+        ASSERT_EQ(Fill(El("Btn")), 80) << "the blend has ended, so the frames below change nothing";
         const uint64_t before = AllocTracker::GetThreadCounters().count;
-#endif
         for (int frame = 0; frame < kFrames; ++frame) {
             CoreManager::GetTime().Advance(kStep);
             Draw();
         }
-#if BE_PROFILER_ALLOC
         EXPECT_EQ(AllocTracker::GetThreadCounters().count, before);
-#endif
-        EXPECT_EQ(Fill(El("Btn")), 80);
     }
 
 }  // namespace BECore::Tests

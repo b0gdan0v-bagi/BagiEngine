@@ -142,22 +142,28 @@ namespace BECore::Tests {
             return (std::max(first, second) + 0.05f) / (std::min(first, second) + 0.05f);
         }
 
+        /// kThemeSceneXml with @p note in place of its marker
         String Spliced(const String& note) {
+            constexpr StringView kMarker = "@NOTE@";
             String xml = kThemeSceneXml;
-            const String marker = "@NOTE@";
-            xml.replace(xml.find(marker), marker.size(), note);
+            const size_t at = xml.find(kMarker.data(), 0, kMarker.size());
+            EXPECT_NE(at, String::npos) << "kThemeSceneXml has no " << kMarker.data();
+            if (at != String::npos) {
+                xml.replace(at, kMarker.size(), note);
+            }
             return xml;
         }
 
         /// The elements of a compiled `<ui><elements>...</elements></ui>`, as text to put into another file
-        String CompiledElements(const String& xml) {
-            const String text(xml.c_str(), xml.size());
-            const size_t begin = text.find("<elements>");
-            const size_t end = text.rfind("</elements>");
-            if (begin == String::npos || end == String::npos) {
+        String CompiledElements(StringView xml) {
+            constexpr StringView kOpen = "<elements>";
+            constexpr StringView kClose = "</elements>";
+            const size_t begin = xml.find(kOpen);
+            const size_t end = xml.rfind(kClose);
+            if (begin == StringView::npos || end == StringView::npos || end < begin + kOpen.size()) {
                 return {};
             }
-            return text.substr(begin + String("<elements>").size(), end - begin - String("<elements>").size());
+            return String(xml.substr(begin + kOpen.size(), end - begin - kOpen.size()));
         }
 
     }  // namespace

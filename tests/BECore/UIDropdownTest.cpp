@@ -280,7 +280,6 @@ namespace BECore::Tests {
 
     TEST_F(UIDropdownTest, ADropdownFromAFileIsAnInteractiveElementWithItsOptionsAsChildren) {
         const auto& level = Get<UIDropdown>("Level");
-        static_assert(std::is_base_of_v<UIElement, UIDropdown>);
         ASSERT_NE(level.GetComponent<UITextComponent>(), nullptr) << "the header text is a component";
         EXPECT_TRUE(level.interactive);
         EXPECT_EQ(level.bind, "level"_intern);
@@ -1072,5 +1071,9 @@ namespace BECore::Tests {
         }
         EXPECT_GE(small, 3u) << "the three composed options are under a touch target";
     }
+
+    static_assert(std::is_base_of_v<UIElement, UIDropdown>);
+
+    TEST_F(UIDropdownTest, CompileTimeChecks) {}
 
 }  // namespace BECore::Tests

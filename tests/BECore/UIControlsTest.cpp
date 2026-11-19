@@ -163,6 +163,16 @@ namespace BECore::Tests {
             return glyphs;
         }
 
+        /// Draws the canvas and counts the validator's issues of @p kind; a text is measured by the draw, so the text checks need it
+        size_t CountIssues(UILayoutIssueKind kind) {
+            Draw();
+            size_t count = 0;
+            for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
+                count += issue.kind == kind ? 1u : 0u;
+            }
+            return count;
+        }
+
         Rect Center(const UIElement& element) const {
             return {element.rect.x + element.rect.w * 0.5f, element.rect.y + element.rect.h * 0.5f, 0.0f, 0.0f};
         }
@@ -726,14 +736,8 @@ namespace BECore::Tests {
         text.overflow = TextOverflow::Clip;
         title.style.rect.height = UILength::Px(40.0f);
         _canvas->Invalidate();
-        Draw();
 
-        size_t count = 0;
-        for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
-            count += issue.kind == UILayoutIssueKind::TextDoesNotFit ? 1u : 0u;
-        }
-
-        EXPECT_EQ(count, 1u);
+        EXPECT_EQ(CountIssues(UILayoutIssueKind::TextDoesNotFit), 1u);
         EXPECT_FALSE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
         EXPECT_EQ(text.GetResolvedFontPath(), PoolString::Intern(kTestBoldPath));  // the face the check measured with
         text.text = "Short";
@@ -762,12 +766,7 @@ namespace BECore::Tests {
         title.style.rect.width = UILength::Px(box);
         const auto textIssues = [this]() {
             _canvas->Invalidate();
-            Draw();
-            size_t count = 0;
-            for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
-                count += issue.kind == UILayoutIssueKind::TextDoesNotFit ? 1u : 0u;
-            }
-            return count;
+            return CountIssues(UILayoutIssueKind::TextDoesNotFit);
         };
 
         text.fontWeight = 400;
@@ -968,14 +967,7 @@ namespace BECore::Tests {
         text.overflow = TextOverflow::Clip;
         title.style.rect.height = UILength::Px(40.0f);  // a line of 24 units is a little over 30 high, so the fixture's 30 would not hold even "Short"
         _canvas->Invalidate();
-        const auto textIssues = [this]() {
-            Draw();
-            size_t count = 0;
-            for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
-                count += issue.kind == UILayoutIssueKind::TextDoesNotFit ? 1u : 0u;
-            }
-            return count;
-        };
+        const auto textIssues = [this]() { return CountIssues(UILayoutIssueKind::TextDoesNotFit); };
 
         CoreManager::GetUIVars().Set("line"_intern, "Short");
         EXPECT_EQ(textIssues(), 0u);
@@ -1159,21 +1151,14 @@ namespace BECore::Tests {
         auto& text = Text("Title");
         text.text = "A text that is much too long for a label of this width";
         text.wrap = false;
-        const auto countTextIssues = [this]() {
-            Draw();
-            size_t count = 0;
-            for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
-                count += issue.kind == UILayoutIssueKind::TextDoesNotFit ? 1u : 0u;
-            }
-            return count;
-        };
+        constexpr UILayoutIssueKind kTextIssue = UILayoutIssueKind::TextDoesNotFit;
 
         text.overflow = TextOverflow::Clip;
-        EXPECT_EQ(countTextIssues(), 1u);
+        EXPECT_EQ(CountIssues(kTextIssue), 1u);
         text.overflow = TextOverflow::Ellipsis;
-        EXPECT_EQ(countTextIssues(), 0u) << "a text that ends with an ellipsis is a decision, not a defect";
+        EXPECT_EQ(CountIssues(kTextIssue), 0u) << "a text that ends with an ellipsis is a decision, not a defect";
         text.overflow = TextOverflow::AutoFit;
-        EXPECT_EQ(countTextIssues(), 0u);
+        EXPECT_EQ(CountIssues(kTextIssue), 0u);
     }
 
     TEST_F(UIControlsTest, ANineSlicePanelDrawsNinePieces) {

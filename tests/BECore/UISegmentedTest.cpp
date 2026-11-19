@@ -222,22 +222,11 @@ namespace BECore::Tests {
             return Element(name).selected;
         }
 
-        /// True when the bar of a selected button was drawn at the foot of the rect of @p name in the last draw
-        bool BarDrawn(const char* name) const {
-            const UIElement& button = Element(name);
-            const Rect bar{button.rect.x, button.rect.y + button.rect.h - UIStateLook::kSelectedBarHeight, button.rect.w, UIStateLook::kSelectedBarHeight};
-            return std::any_of(_renderer->calls.begin(), _renderer->calls.end(), [&](const DrawCall& call) { return call.kind == DrawKind::Rect && NearRect(call.rect, bar); });
-        }
-
         /// Any element by name, whatever its class (`Get<T>` wants the exact type)
         UIElement& Element(const char* name) const {
             UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
             return Require(element);
-        }
-
-        bool SelectedElement(const char* name) const {
-            return Element(name).selected;
         }
 
         /// The colour of the bar of the selected-state look drawn at the foot of the rect of @p name in the last draw, none when there was no bar
@@ -267,7 +256,6 @@ namespace BECore::Tests {
 
     TEST_F(UISegmentedTest, AGroupBuiltFromAFileIsAStackWithTheButtonsAsSegments) {
         const auto& mode = Get<UISegmented>("Mode");
-        static_assert(std::is_base_of_v<UIStack, UISegmented>);
         EXPECT_EQ(mode.layout, UILayoutKind::Stack);
         EXPECT_EQ(mode.bind, "mode"_intern);
         EXPECT_FALSE(mode.disabled);
@@ -391,20 +379,20 @@ namespace BECore::Tests {
     TEST_F(UISegmentedTest, OnlyTheSelectedSegmentDrawsItsBar) {
         SetVar("level", "medium");
         Draw();
-        EXPECT_TRUE(BarDrawn("Medium"));
-        EXPECT_FALSE(BarDrawn("Easy"));
-        EXPECT_FALSE(BarDrawn("Hard"));
-        EXPECT_FALSE(BarDrawn("Max"));
+        EXPECT_TRUE(BarColorOf("Medium").has_value());
+        EXPECT_FALSE(BarColorOf("Easy").has_value());
+        EXPECT_FALSE(BarColorOf("Hard").has_value());
+        EXPECT_FALSE(BarColorOf("Max").has_value());
 
         SetVar("level", "max");
         Draw();
-        EXPECT_FALSE(BarDrawn("Medium"));
-        EXPECT_TRUE(BarDrawn("Max"));
+        EXPECT_FALSE(BarColorOf("Medium").has_value());
+        EXPECT_TRUE(BarColorOf("Max").has_value());
 
         SetVar("level", "");
         Draw();
         for (const char* name : {"Easy", "Medium", "Hard", "Max"}) {
-            EXPECT_FALSE(BarDrawn(name)) << name;
+            EXPECT_FALSE(BarColorOf(name).has_value()) << name;
         }
     }
 
@@ -507,14 +495,14 @@ namespace BECore::Tests {
         SetVar("level", "hard");
         Draw();
         EXPECT_TRUE(Element("Hard").rect.IsEmpty());
-        EXPECT_FALSE(BarDrawn("Hard"));
-        EXPECT_FALSE(BarDrawn("Easy"));
+        EXPECT_FALSE(BarColorOf("Hard").has_value());
+        EXPECT_FALSE(BarColorOf("Easy").has_value());
 
         ASSERT_TRUE(_canvas->SetElementVisible("Level"_intern, true));
         Draw();
         EXPECT_FALSE(Selected("Easy"));
         EXPECT_TRUE(Selected("Hard"));
-        EXPECT_TRUE(BarDrawn("Hard"));
+        EXPECT_TRUE(BarColorOf("Hard").has_value());
         EXPECT_FALSE(Element("Hard").rect.IsEmpty());
     }
 
@@ -559,20 +547,20 @@ namespace BECore::Tests {
     TEST_F(UISegmentedTest, ComposedSegmentsAreSelectedByTheVariableThroughTheValueOfTheirClicker) {
         SetVar("comp", "icon");
         Draw();
-        EXPECT_FALSE(SelectedElement("CompPlain"));
-        EXPECT_TRUE(SelectedElement("CompIcon"));
-        EXPECT_FALSE(SelectedElement("CompOff"));
+        EXPECT_FALSE(Selected("CompPlain"));
+        EXPECT_TRUE(Selected("CompIcon"));
+        EXPECT_FALSE(Selected("CompOff"));
         EXPECT_FALSE(Element("CompIconCaption").selected) << "only the direct children of the group are segments";
 
         SetVar("comp", "plain");
         Draw();
-        EXPECT_TRUE(SelectedElement("CompPlain"));
-        EXPECT_FALSE(SelectedElement("CompIcon"));
+        EXPECT_TRUE(Selected("CompPlain"));
+        EXPECT_FALSE(Selected("CompIcon"));
 
         SetVar("comp", "nothing");
         Draw();
-        EXPECT_FALSE(SelectedElement("CompPlain"));
-        EXPECT_FALSE(SelectedElement("CompIcon"));
+        EXPECT_FALSE(Selected("CompPlain"));
+        EXPECT_FALSE(Selected("CompIcon"));
     }
 
     TEST_F(UISegmentedTest, TheComposedSegmentsShareTheWidthByFlexLikeButtons) {
@@ -603,7 +591,7 @@ namespace BECore::Tests {
         Draw();
         EXPECT_TRUE(Element("CompPlain").groupDisabled);
         EXPECT_TRUE(Element("CompIcon").IsDisabled());
-        EXPECT_TRUE(SelectedElement("CompPlain")) << "a disabled group still shows what is chosen";
+        EXPECT_TRUE(Selected("CompPlain")) << "a disabled group still shows what is chosen";
 
         ActionLog actions;
         ASSERT_NO_FATAL_FAILURE(Click("CompIcon"));
@@ -626,7 +614,7 @@ namespace BECore::Tests {
         EXPECT_EQ(actions.LastValue(), "icon"_intern);
 
         Draw();
-        EXPECT_FALSE(SelectedElement("CompIcon")) << "the group owns no choice: the click changed nothing";
+        EXPECT_FALSE(Selected("CompIcon")) << "the group owns no choice: the click changed nothing";
     }
 
     TEST_F(UISegmentedTest, ADisabledComposedSegmentTakesTheClickAndEmitsNothing) {
@@ -644,13 +632,13 @@ namespace BECore::Tests {
         SetVar("inner", "plain");
         Draw();
         EXPECT_TRUE(Selected("FormsButton"));
-        EXPECT_FALSE(SelectedElement("FormsComposed"));
+        EXPECT_FALSE(Selected("FormsComposed"));
         EXPECT_EQ(Require(Element("FormsCaption").GetComponent<UITextComponent>()).text, "Form") << "the label is no segment";
 
         SetVar("comp", "icon");
         Draw();
         EXPECT_FALSE(Selected("FormsButton"));
-        EXPECT_TRUE(SelectedElement("FormsComposed"));
+        EXPECT_TRUE(Selected("FormsComposed"));
 
         ActionLog actions;
         ASSERT_NO_FATAL_FAILURE(Click("FormsComposed"));
@@ -666,16 +654,20 @@ namespace BECore::Tests {
         SetVar("comp", "plain");
         SetVar("inner", "plain");
         Draw();
-        EXPECT_TRUE(SelectedElement("FormsInnerOne")) << "its variable is `inner`";
-        EXPECT_FALSE(SelectedElement("FormsInner")) << "a group is no segment of the outer one";
+        EXPECT_TRUE(Selected("FormsInnerOne")) << "its variable is `inner`";
+        EXPECT_FALSE(Selected("FormsInner")) << "a group is no segment of the outer one";
 
         SetVar("inner", "other");
         Get<UISegmented>("Forms").disabled = true;
         Draw();
-        EXPECT_FALSE(SelectedElement("FormsInnerOne"));
+        EXPECT_FALSE(Selected("FormsInnerOne"));
         EXPECT_FALSE(Element("FormsInnerOne").groupDisabled) << "the outer flag reaches its own segments only";
         EXPECT_TRUE(Element("FormsButton").groupDisabled);
         EXPECT_TRUE(Element("FormsComposed").groupDisabled);
     }
+
+    static_assert(std::is_base_of_v<UIStack, UISegmented>);
+
+    TEST_F(UISegmentedTest, CompileTimeChecks) {}
 
 }  // namespace BECore::Tests

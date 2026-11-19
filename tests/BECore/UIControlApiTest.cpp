@@ -38,9 +38,9 @@ namespace BECore::Tests {
         //   Debug (layer 5): Tiny (400, 10, 20 x 20) is a button below the touch size, and a second Ok (500, 100, 80 x 40) with another action.
         //   Menu (layer 20): a modal canvas, hidden at first.
         // "Fit": 400 x 300 units, shown in a 1000 x 600 output: scale 2, offset (100, 0). View is a SceneView canvas with the button Go (10, 10, 50 x 40) and the slider Slide (10, 100, 200 x 40,
-        // range 0..100). "Choice": 800 x 600 in window pixels. Panel holds Side, a UISegmented bound to `uiApiSide` with the buttons Left and Right (the same action, values "left" and "right"; 150 x
-        // 56
-        //   and 150 x 56 at x = 100, 252, y = 100), and Plain (100, 300, 80 x 40) is a button without a value.
+        //   range 0..100).
+        // "Choice": 800 x 600 in window pixels. Panel holds Side, a UISegmented bound to `uiApiSide` with the buttons Left and Right (the same action, values "left" and "right";
+        //   150 x 56 each at x = 100, 252, y = 100), and Plain (100, 300, 80 x 40) is a button without a value.
         // "Values": 800 x 600 in window pixels. Loading is a UIProgressBar (100, 300, 400 x 24, `uiApiLoad`, range 0..100); CSound a
         //   toggle row (100, 500, 300 x 56; `uiApiCSound`, values "on" / "off", the caption child CSoundCaption and the switch child CSoundSwitch), CLocked a disabled one (520, 300, 240 x 56),
         //   CSilent one without an action (520, 400, 240 x 56), CVolume a slider (450, 100, 340 x 56; `uiApiCVolume`, range 0..1, steps of 0.1) and CQuiet a disabled one (450, 500, 300 x 56).

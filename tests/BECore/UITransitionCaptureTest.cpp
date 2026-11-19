@@ -57,8 +57,13 @@ namespace BECore::Tests {
   </nodes></scene>
 </scenes></SceneManager>)";
 
+        /// The pixel at (@p x, @p y) of the output; a point outside the image, or a frame that was not rendered, fails the case and is black
         Pixel PixelAtOutput(const PixelBuffer& image, uint32_t x, uint32_t y) {
             const size_t offset = (static_cast<size_t>(y) * image.width + x) * 4;
+            if (x >= image.width || y >= image.height || offset + 3 > image.rgba.size()) {
+                ADD_FAILURE() << "no pixel (" << x << ", " << y << ") in a frame of " << image.width << " x " << image.height << " with " << image.rgba.size() << " bytes";
+                return {};
+            }
             return {image.rgba[offset], image.rgba[offset + 1], image.rgba[offset + 2]};
         }
 
@@ -150,7 +155,7 @@ namespace BECore::Tests {
         /// The pixel at the centre of the laid-out rect of an element
         Pixel CentreOf(const PixelBuffer& image, const char* name) const {
             const UIElement* element = canvas->GetRoot().FindByName(PoolString::Intern(name));
-            if (element == nullptr || image.rgba.empty()) {
+            if (element == nullptr) {
                 ADD_FAILURE() << name;
                 return {};
             }

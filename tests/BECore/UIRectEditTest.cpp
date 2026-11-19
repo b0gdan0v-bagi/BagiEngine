@@ -67,18 +67,26 @@ namespace BECore::Tests {
 
     // ---- the inverse -----------------------------------------------------------------------------------------------------
 
-    /// Over specs (point and stretched axes, units and percent, a margin) and parents (a region is one): the result lays out at the wanted rect
+    /// Over specs (point and stretched axes, units and percent, a margin) and parents (a region is one): the result lays out at the wanted rect.
+    /// The grid stops at the first case that fails, which it names: one regression would fail thousands of cases alike.
     TEST(UIRectEditTest, TheResultLaysOutAtTheWantedRect) {
+        const Vector<AnchorCase> anchorCases = AnchorCases();
         size_t checked = 0;
-        for (const AnchorCase& anchors : AnchorCases()) {
+        for (size_t anchorIndex = 0; anchorIndex < anchorCases.size(); ++anchorIndex) {
             for (const UIUnit sizeUnit : {UIUnit::Pixels, UIUnit::Percent}) {
                 for (const UIUnit offsetUnit : {UIUnit::Pixels, UIUnit::Percent}) {
-                    const UIRectSpec spec = MakeSpec(anchors, sizeUnit, offsetUnit);
+                    const UIRectSpec spec = MakeSpec(anchorCases[anchorIndex], sizeUnit, offsetUnit);
                     for (const Rect& parent : kParents) {
                         for (const Rect& wanted : WantedRects(parent)) {
                             const UIRectEditResult result = UIRectEdit::SpecForRect(parent, spec, wanted);
-                            EXPECT_TRUE(result.exact);
-                            ExpectRect(UILayout::ResolveRect(parent, result.spec), wanted, kTolerance);
+                            const Rect resolved = UILayout::ResolveRect(parent, result.spec);
+                            if (!result.exact || !NearRect(resolved, wanted, kTolerance)) {
+                                const auto describe = [](const Rect& r) { return Format("({}, {}, {} x {})", r.x, r.y, r.w, r.h); };
+                                ADD_FAILURE() << Format("anchor case {}, size in {}, offset in {}, parent {}, wanted {}: exact {}, laid out at {}", anchorIndex, EnumUtils<UIUnit>::ToString(sizeUnit),
+                                                        EnumUtils<UIUnit>::ToString(offsetUnit), describe(parent), describe(wanted), result.exact, describe(resolved))
+                                                     .c_str();
+                                return;
+                            }
                             ++checked;
                         }
                     }

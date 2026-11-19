@@ -36,13 +36,23 @@
 #include <Common/UITreeCompare.h>
 #include <chrono>
 #include <gtest/gtest.h>
-#include <set>
 
 namespace BECore::Tests {
 
     namespace {
 
         constexpr float kTolerance = 0.01f;
+
+        /// The number of issues of @p report whose message contains @p text
+        size_t CountIssuesMentioning(const UIWebReport& report, const char* text) {
+            size_t count = 0;
+            for (const UIWebIssue& issue : report.issues) {
+                if (issue.message.find(text) != String::npos) {
+                    ++count;
+                }
+            }
+            return count;
+        }
 
         /// What a compile gives: the XML, the report, the XML read back into the reflected content, and a handle on the XML nodes by element name
         struct Compiled {
@@ -86,13 +96,7 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] size_t IssuesMentioning(const char* text) const {
-                size_t count = 0;
-                for (const UIWebIssue& issue : report.issues) {
-                    if (issue.message.find(text) != String::npos) {
-                        ++count;
-                    }
-                }
-                return count;
+                return CountIssuesMentioning(report, text);
             }
 
             [[nodiscard]] UIElement* Element(const char* name) const {
@@ -872,7 +876,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->report.variants, 1u);
 
         // The fields the tree comparison does not look at
-        const auto* level = dynamic_cast<UISegmented*>(compiled->Element("Level"));
+        const auto* level = Require(compiled->Element("Level")).Cast<UISegmented>();
         ASSERT_NE(level, nullptr) << "a data-widget=\"segmented\" div is a UISegmented";
         EXPECT_EQ(level->bind.ToStringView(), "opponentLevel");
         EXPECT_EQ(level->layout, UILayoutKind::Stack);
@@ -892,7 +896,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         const auto compiled = Compile(kSelectorHtml, kSelectorCss);
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
         const UIScreenContent expectedContent = ReadXml(SelectorPanelXml());
-        // The view of the Chess board (landscape: the portrait variant is off) and a portrait view (the variant is on)
+        // A landscape view of a square play area (the portrait variant is off) and a portrait view (the variant is on)
         for (const auto& [viewWidth, viewHeight] : {Pair<float, float>{840.0f, 800.0f}, {560.0f, 840.0f}}) {
             LaidOut web(compiled->content);
             LaidOut xml(expectedContent);
@@ -923,7 +927,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
     TEST_F(UIWebTest, ThePanelInHtmlFollowsTheVariablesAndPassesItsClicksOn) {
         const auto compiled = Compile(kSelectorHtml, kSelectorCss);
-        auto* color = dynamic_cast<UISegmented*>(compiled->Element("Color"));
+        auto* color = Require(compiled->Element("Color")).Cast<UISegmented>();
         UIElement* white = compiled->Element("ColorWhite");
         UIElement* black = compiled->Element("ColorBlack");
         ASSERT_TRUE(color != nullptr && white != nullptr && black != nullptr);
@@ -943,7 +947,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->ComponentAttr("a", "UIInputClicker", "disabled"), "") << "the group greys its buttons at run time, the button is not disabled itself";
         EXPECT_EQ(compiled->ComponentAttr("a", "UIInputClicker", "value"), "x");
         EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str();
-        auto* group = dynamic_cast<UISegmented*>(compiled->Element("g"));
+        auto* group = Require(compiled->Element("g")).Cast<UISegmented>();
         ASSERT_NE(group, nullptr);
         EXPECT_TRUE(group->disabled);
         group->SyncChildren();
@@ -1060,7 +1064,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         const auto compiled = Compile(kSettingsHtml, kSettingsCss);
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
         const UIScreenContent expectedContent = ReadXml(SettingsPanelXml());
-        // The view of the Chess board (landscape: the portrait variant is off) and a portrait view (the variant is on)
+        // A landscape view of a square play area (the portrait variant is off) and a portrait view (the variant is on)
         for (const auto& [viewWidth, viewHeight] : {Pair<float, float>{840.0f, 800.0f}, {560.0f, 840.0f}}) {
             LaidOut web(compiled->content);
             LaidOut xml(expectedContent);
@@ -1615,7 +1619,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->ComponentAttr("a", "UIInputClicker", "action"), "Pick");
         EXPECT_EQ(compiled->ComponentAttr("a", "UIInputClicker", "value"), "x");
         EXPECT_EQ(compiled->Attr("b", "type"), "UIElement");
-        EXPECT_NE(dynamic_cast<UISegmented*>(compiled->Element("g")), nullptr);
+        EXPECT_NE(Require(compiled->Element("g")).Cast<UISegmented>(), nullptr);
         EXPECT_NE(Require(compiled->Element("a")).GetComponent<UIInputClicker>(), nullptr) << "the group finds its segments by the clicker";
         EXPECT_NE(Require(compiled->Element("b")).GetComponent<UIInputClicker>(), nullptr);
         EXPECT_TRUE(compiled->report.issues.empty());
@@ -1818,7 +1822,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Attr("tCaption", "fontSize"), "20");
         EXPECT_FALSE(compiled->Has("t", "fontSize"));
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        const String xml = compiled->xml.c_str();
+        const String& xml = compiled->xml;
         EXPECT_NE(xml.find(R"(<set element="tCaption" fontSize="14")"), String::npos) << xml;
         EXPECT_EQ(xml.find(R"(<set element="t" fontSize)"), String::npos) << xml;
     }
@@ -1857,22 +1861,22 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             EXPECT_FALSE(compiled->Has("Only", key)) << key;
         }
         EXPECT_EQ(compiled->Attr("OnlyIcon", "anchor"), "Center");
-        EXPECT_EQ(compiled->Attr("OnlyIcon", "width"), "60%");
-        EXPECT_EQ(compiled->Attr("OnlyIcon", "height"), "60%");
+        const String onlyShare = Format("{}%", std::lround(UIImageComponent::kIconOnlyShare * 100.0f));
+        EXPECT_EQ(compiled->Attr("OnlyIcon", "width"), onlyShare);
+        EXPECT_EQ(compiled->Attr("OnlyIcon", "height"), onlyShare);
         EXPECT_EQ(compiled->Attr("OnlyIcon", "aspectRatio"), "1");
         EXPECT_EQ(compiled->ComponentAttr("OnlyIcon", "UIImageComponent", "sprite"), "Settings");
         EXPECT_EQ(compiled->ComponentAttr("OnlyIcon", "UIImageComponent", "tint"), "255,204,0,255");
         EXPECT_EQ(compiled->ComponentAttr("Only", "UIInputClicker", "action"), "Opt");
         EXPECT_EQ(compiled->ComponentAttr("Only", "UITooltipComponent", "text"), "Options");
         EXPECT_TRUE(compiled->Component("Only", "UITextComponent").empty()) << "no caption, no text component";
-        EXPECT_EQ(static_cast<float>(UIImageComponent::kIconOnlyShare), 0.6f) << "the 60% above is the share of UIImageComponent";
 
         EXPECT_EQ(compiled->Attr("Left", "layout"), "Stack");
         EXPECT_EQ(compiled->Attr("Left", "direction"), "Horizontal");
-        EXPECT_EQ(compiled->Attr("Left", "padding"), "8,0,0,0");
-        EXPECT_EQ(compiled->Attr("Left", "spacing"), "6");
+        EXPECT_EQ(compiled->Attr("Left", "padding"), Format("{},0,0,0", UIImageComponent::kIconPadding));
+        EXPECT_EQ(compiled->Attr("Left", "spacing"), Format("{}", UIImageComponent::kIconGap));
         EXPECT_EQ(compiled->Attr("Left", "crossAlign"), "Center");
-        EXPECT_EQ(compiled->Attr("LeftIcon", "height"), "50%");
+        EXPECT_EQ(compiled->Attr("LeftIcon", "height"), Format("{}%", std::lround(UIImageComponent::kIconWithTextShare * 100.0f)));
         EXPECT_EQ(compiled->Attr("LeftIcon", "aspectRatio"), "1");
         EXPECT_FALSE(compiled->Has("LeftIcon", "width"));
         EXPECT_FALSE(compiled->Has("LeftIcon", "anchor"));
@@ -1884,9 +1888,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_TRUE(compiled->Component("Left", "UITextComponent").empty()) << "the text is the caption's";
         EXPECT_TRUE(compiled->Component("Left", "UITooltipComponent").empty());
         EXPECT_FALSE(compiled->Component("LeftIcon", "UIImageComponent").attribute("tint")) << "no tint: the icon follows the text colour";
-        EXPECT_EQ(static_cast<float>(UIImageComponent::kIconWithTextShare), 0.5f);
-        EXPECT_EQ(static_cast<float>(UIImageComponent::kIconPadding), 8.0f);
-        EXPECT_EQ(static_cast<float>(UIImageComponent::kIconGap), 6.0f);
 
         EXPECT_EQ(compiled->Attr("Above", "layout"), "Stack");
         EXPECT_EQ(compiled->ComponentAttr("Above", "UITooltipComponent", "text"), "{#opt.tip}");
@@ -1956,7 +1957,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->ComponentAttr("a", "UITooltipComponent", "text"), "T");
         EXPECT_EQ(compiled->ComponentAttr("b", "UITextComponent", "textColor"), "17,34,51,255") << "an icon-only segment keeps the colour for its bar";
 
-        auto* group = dynamic_cast<UISegmented*>(compiled->Element("g"));
+        auto* group = Require(compiled->Element("g")).Cast<UISegmented>();
         UIElement* a = compiled->Element("a");
         UIElement* b = compiled->Element("b");
         ASSERT_TRUE(group != nullptr && a != nullptr && b != nullptr);
@@ -2290,34 +2291,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
     // ---- as a resource -------------------------------------------------------------------------------------------------------
 
-    namespace {
-
-        class TempDirectory {
-        public:
-            // One directory per test: ctest runs them in parallel processes, and the constructor clears the directory
-            TempDirectory() : _path(TestTempDirectory("BagiEngineUIWebTest")) {
-                std::filesystem::remove_all(_path);
-                std::filesystem::create_directories(_path);
-            }
-            ~TempDirectory() {
-                std::error_code ignored;
-                std::filesystem::remove_all(_path, ignored);
-            }
-
-            String Write(const char* name, const String& content) const {
-                const auto file = _path / name;
-                std::ofstream(file) << content;
-                return FromStdString(file.generic_string());
-            }
-
-        private:
-            std::filesystem::path _path;
-        };
-
-    }  // namespace
-
     TEST_F(UIWebTest, ADocumentInHtmlLoadsThroughTheResourceManagerAndBuildsTheSameElements) {
-        TempDirectory temp;
+        const TestTempFolder temp("BagiEngineUIWebTest");
         temp.Write("hud.css", kHudCss);
         const String path = temp.Write("hud.ui.html", Format("<link rel=\"stylesheet\" href=\"hud.css\">{}", kHudHtml));
 
@@ -2617,7 +2592,7 @@ button:checked { background: var(--panel); }
         }
 
         bool Mentions(const UIWebReport& report, const char* text) {
-            return std::any_of(report.issues.begin(), report.issues.end(), [&](const UIWebIssue& issue) { return issue.message.find(text) != String::npos; });
+            return CountIssuesMentioning(report, text) > 0;
         }
 
     }  // namespace
@@ -2747,7 +2722,7 @@ button:checked { background: var(--panel); }
         // A cut never leaves half of a UTF-8 character: the text is Cyrillic, two bytes a letter, and the cut falls between the two bytes of one
         const auto cyrillic = Compile("<div id=\"a\"></div>", Format("#a {{ {}: 1; }}", Repeat("\xD0\xB1", 400)));
         ASSERT_TRUE(cyrillic->report.HasIssues());
-        const String message = cyrillic->report.issues[0].message.c_str();
+        const String& message = cyrillic->report.issues[0].message;
         const size_t dots = message.find("...");
         ASSERT_NE(dots, String::npos);
         EXPECT_EQ(static_cast<uint8_t>(message[dots - 1]) & 0xC0, 0x80) << "the character before the dots is whole: it ends in a continuation byte";

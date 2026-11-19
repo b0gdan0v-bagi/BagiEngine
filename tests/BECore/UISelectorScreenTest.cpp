@@ -14,7 +14,7 @@
 namespace BECore::Tests {
 
     /*
-     * The screen test of a choice panel, the template for a game that has one (the Chess opponent panel is the first: mode, color, engine and level as four groups).
+     * The screen test of a choice panel, the template for a game that has one: four groups of choices (a mode, a side, an engine and a level).
      * It is the shape that .claude/rules/ui-controls.md ("A choice panel") points to:
      *
      *  - a small canvas `Hud` with one button, `NewGame`, whose action opens the panel;
@@ -33,7 +33,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        constexpr float kViewWidth = 840.0f;  // the Chess view: the board 640 wide and 100 units on each side
+        constexpr float kViewWidth = 840.0f;  // a square play area 640 wide and 100 units on each side
         constexpr float kViewHeight = 800.0f;
         constexpr float kPortraitWidth = 560.0f;  // a portrait view: its longer side stays at most 840 units, so 56 units are still 32 px in a 480 px square window
         constexpr float kPortraitHeight = 840.0f;
@@ -349,18 +349,13 @@ namespace BECore::Tests {
         ASSERT_TRUE(UICanvasComponent::SetVisibleByName(GetScene(), "Selector"_intern, true));
         Draw();
 
-        const struct {
-            const char* action;
-            size_t group;
-        } actions[] = {{"SelectorMode", 0}, {"SelectorColor", 1}, {"SelectorEngine", 2}, {"SelectorLevel", 3}};
         for (const UISelectorGroup& group : SelectorGroups()) {
-            const size_t index = static_cast<size_t>(&group - SelectorGroups().data());
             for (const auto& [name, value] : group.segments) {
                 const size_t before = _game->Total();
                 const auto [pressed, released] = Click(El(name));
                 EXPECT_TRUE(pressed && released) << name;
                 ASSERT_EQ(_game->Total(), before + 1) << name;
-                EXPECT_EQ(_game->LastAction(), PoolString::Intern(actions[index].action)) << name;
+                EXPECT_EQ(_game->LastAction(), PoolString::Intern(group.action)) << name;
                 EXPECT_EQ(_game->LastValue(), PoolString::Intern(value)) << name;
 
                 Draw();  // the game answered with the variable; the next draw moves the selection

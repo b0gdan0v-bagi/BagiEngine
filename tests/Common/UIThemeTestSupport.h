@@ -12,7 +12,10 @@ namespace BECore::Tests {
         const PoolString saved = themes.GetTheme();
         const Vector<PoolString> ids = themes.GetThemes();  // a copy: a check may set more
         for (const PoolString theme : ids) {
-            ASSERT_TRUE(themes.SetTheme(theme)) << theme.ToStringView().data();
+            if (!themes.SetTheme(theme)) {
+                ADD_FAILURE() << "cannot set the theme " << theme.ToStringView().data();  // no return: the saved theme is put back below
+                continue;
+            }
             check(theme);
         }
         themes.SetTheme(saved);
