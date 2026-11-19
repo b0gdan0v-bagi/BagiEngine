@@ -49,6 +49,7 @@ namespace BECore::Tests {
             bool withNode = false;
             ArtGenImageSettings settings;
             bool hasFrame = false;
+            String atlas;
             int calls = 0;
         };
         AcceptCall gAccepted;
@@ -76,6 +77,8 @@ namespace BECore::Tests {
             gAccepted.seed = variant.seed;
             gAccepted.settings = plan.settings;
             gAccepted.hasFrame = plan.frame.has_value();
+            gAccepted.atlas = plan.atlas;
+            EXPECT_FALSE(plan.deferPack) << "a single Accept packs at once";
             gAccepted.sprite = String(sprite);
             gAccepted.withNode = node != nullptr;
             ++gAccepted.calls;
@@ -744,6 +747,104 @@ namespace BECore::Tests {
             EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "invalid_params") << DumpJson(bad).c_str();
         }
         EXPECT_EQ(gAccepted.calls, 2) << "a bad image changes nothing";
+    }
+
+    namespace {
+
+        Json AtlasPoll(const Json& woodAtlas) {
+            Json params = CatalogPoll();
+            Json wood = params["presets"][0];
+            wood["preset"]["atlas"] = woodAtlas;
+            params["presets"][0] = wood;
+            return params;
+        }
+
+    }  // namespace
+
+    TEST_F(ArtGenSessionTest, ASingleAcceptCarriesTheAtlasGroupOfTheSavedPreset) {
+        session.SetAcceptor(&FakeAcceptor);
+        RunWithImages({1});
+        Call("artgen_poll", CatalogPoll());
+        ASSERT_TRUE(Call("artgen_accept", AcceptParams(1)).contains("result"));
+        EXPECT_TRUE(gAccepted.atlas.empty()) << "a preset without the key joins no group";
+
+        Call("artgen_poll", AtlasPoll("pieces"));
+        EXPECT_EQ(session.AtlasOfRun(), "pieces");
+        ASSERT_TRUE(Call("artgen_accept", AcceptParams(1)).contains("result"));
+        EXPECT_EQ(gAccepted.atlas, "pieces");
+
+        Call("artgen_poll", AtlasPoll("not a name"));
+        ASSERT_TRUE(Call("artgen_accept", AcceptParams(1)).contains("result"));
+        EXPECT_TRUE(gAccepted.atlas.empty()) << "a malformed key is no group";
+        Call("artgen_poll", AtlasPoll(5));
+        EXPECT_TRUE(session.AtlasOfRun().empty());
+    }
+
+    TEST_F(ArtGenSessionTest, ADraftAcceptsIntoItsOwnAtlasGroupAndNeverTheSavedOne) {
+        session.SetAcceptor(&FakeAcceptor);
+        Call("artgen_poll", AtlasPoll("saved"));
+        Json draft = DraftPreset();
+        draft["atlas"] = "icons";
+        ASSERT_TRUE(session.RequestDraft("wood", draft, "knight", 1, Optional<int64_t>(3)).has_value());
+        Call("artgen_poll", AtlasPoll("saved"));
+        Json image = Report(session.GetRun().id);
+        image["seed"] = 3;
+        image["path"] = "D:/out/knight_3.png";
+        Call("artgen_image", image);
+        ASSERT_TRUE(Call("artgen_accept", AcceptParams(3)).contains("result"));
+        EXPECT_EQ(gAccepted.atlas, "icons");
+
+        Json done = Report(session.GetRun().id);
+        done["status"] = "ok";
+        Call("artgen_done", done);
+        draft.erase("atlas");
+        ASSERT_TRUE(session.RequestDraft("wood", draft, "knight", 1, Optional<int64_t>(3)).has_value());
+        image = Report(session.GetRun().id);
+        image["seed"] = 3;
+        image["path"] = "D:/out/knight_3.png";
+        Call("artgen_poll", AtlasPoll("saved"));
+        Call("artgen_image", image);
+        ASSERT_TRUE(Call("artgen_accept", AcceptParams(3)).contains("result"));
+        EXPECT_TRUE(gAccepted.atlas.empty()) << "a draft without the key has no group, whatever the saved preset says";
+    }
+
+    TEST_F(ArtGenSessionTest, TheAtlasParameterOverridesThePresetsGroup) {
+        session.SetAcceptor(&FakeAcceptor);
+        RunWithImages({1});
+        Call("artgen_poll", AtlasPoll("pieces"));
+        Json params = AcceptParams(1);
+        params["atlas"] = "icons";
+        ASSERT_TRUE(Call("artgen_accept", params).contains("result"));
+        EXPECT_EQ(gAccepted.atlas, "icons");
+
+        params["atlas"] = "";
+        ASSERT_TRUE(Call("artgen_accept", params).contains("result"));
+        EXPECT_TRUE(gAccepted.atlas.empty()) << "an empty string clears the preset's group";
+
+        params["atlas"] = nullptr;
+        ASSERT_TRUE(Call("artgen_accept", params).contains("result"));
+        EXPECT_EQ(gAccepted.atlas, "pieces") << "null is the preset's";
+        EXPECT_EQ(gAccepted.calls, 3);
+
+        for (const Json& bad : {Json("a b"), Json(7), Json::array(), Json("../x")}) {
+            params["atlas"] = bad;
+            EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "invalid_params") << DumpJson(bad).c_str();
+        }
+        EXPECT_EQ(gAccepted.calls, 3) << "a bad group changes nothing";
+    }
+
+    TEST_F(ArtGenSessionTest, ASoundAcceptIgnoresTheAtlasGroup) {
+        const uint32_t id = session.Request("wood", "knock", 1, Optional<int64_t>(7)).value();
+        Call("artgen_poll", AtlasPoll("pieces"));
+        Json sound = Report(id);
+        sound["seed"] = 7;
+        sound["path"] = "D:/out/knock_7.flac";
+        sound["kind"] = "audio";
+        Call("artgen_image", sound);
+        session.SetSoundAcceptor(&FakeSoundAcceptor);
+        Json params = Json{{"seed", 7}, {"name", "knock"}, {"atlas", "not a name"}};
+        EXPECT_TRUE(Call("artgen_accept", params).contains("result"));
+        EXPECT_EQ(gSoundAccepted.calls, 1);
     }
 
     TEST_F(ArtGenSessionTest, ASoundIgnoresTheImageParameter) {

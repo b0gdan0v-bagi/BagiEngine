@@ -236,9 +236,12 @@ namespace BECore {
         /// The image settings of the current run's preset: a draft's own `accept` (none: the defaults), else the saved preset's by name;
         /// a malformed key is the defaults
         [[nodiscard]] ArtGenImageSettings ImageSettingsOfRun() const;
+        /// The atlas group of the current run's preset (the same preset lookup as ImageSettingsOfRun()); empty when it names none
+        [[nodiscard]] String AtlasOfRun() const;
         /// Accepts the variant @p seed as @p sprite, and puts it on the selected node when @p useOnSelected. The image is processed by
-        /// @p settings (the panel's form), or by ImageSettingsOfRun() when null; a single image has no frame of a set, so it is trimmed on its own
-        std::expected<Json, ControlError> Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings = nullptr);
+        /// @p settings (the panel's form), or by ImageSettingsOfRun() when null; a single image has no frame of a set, so it is trimmed on its own.
+        /// The sprite joins the atlas group @p atlas and the group is packed (`ArtGenImagePlan::atlas`); null is AtlasOfRun(), "" no group
+        std::expected<Json, ControlError> Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings = nullptr, const String* atlas = nullptr);
         /// Accepts the sound variant @p seed as a clip at @p target, processed by @p settings; on the selected node's AudioSourceComponent
         /// when @p useOnSelected
         std::expected<Json, ControlError> AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected);
@@ -342,6 +345,8 @@ namespace BECore {
         void SaveSet(const ArtGenSet& set);
         /// The image settings a preset (a draft's @p presetData, else the saved one by @p preset) asks for; a malformed `accept` is the defaults
         [[nodiscard]] ArtGenImageSettings ImageSettingsOf(const Json& presetData, StringView preset) const;
+        /// The `atlas` group a preset (a draft's @p presetData, else the saved one by @p preset) names; empty when none, or when the value is not a valid name
+        [[nodiscard]] String AtlasOf(const Json& presetData, StringView preset) const;
         /// What the rows of an image set are written with: the set's own processing, else (the first Accept all) one measured now over every
         /// variant of every Done job; none (the identity plan) for a legacy set or settings that change nothing. Nothing is stored here
         [[nodiscard]] std::expected<Optional<ArtGenSetProcessing>, String> ProcessingOfSet(const ArtGenSet& set, const std::filesystem::path& root) const;

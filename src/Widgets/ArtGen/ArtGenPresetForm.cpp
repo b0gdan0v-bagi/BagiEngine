@@ -1,5 +1,7 @@
 #include "ArtGenPresetForm.h"
 
+#include <Widgets/ArtGen/ArtGenAccept.h>
+
 namespace BECore {
 
     namespace {
@@ -7,7 +9,7 @@ namespace BECore {
         constexpr StringView kReferenceImageInput = "reference_image";
         constexpr StringView kServiceInputs[] = {"prompt", "negative", "seed", "width", "height", "output", kReferenceImageInput};
         // The keys of a written file in order, `reference` last of the form's own; any other key follows them
-        constexpr StringView kFileOrder[] = {"preset", "title", "workflow", "prompt", "negative", "size", "params", "accept", "reference"};
+        constexpr StringView kFileOrder[] = {"preset", "title", "workflow", "prompt", "negative", "size", "params", "accept", "atlas", "reference"};
         constexpr StringView kCopySuffix = "_copy";
 
         void CopyText(char* out, size_t size, StringView text) {
@@ -102,6 +104,12 @@ namespace BECore {
         if (const Json* accept = FindJsonMember(preset, "accept"); accept != nullptr) {
             if (const auto settings = ArtGenImageSettingsFromJson(*accept); !settings) {
                 return std::unexpected(Format("\"accept\": {}", settings.error()));
+            }
+        }
+        if (FindJsonMember(preset, "atlas") != nullptr) {
+            const auto group = GetJsonString(preset, "atlas");
+            if (!group || !IsValidSpriteName(StringView(*group))) {
+                return std::unexpected(String("\"atlas\" must be an atlas group name: 1 to 64 of A-Z a-z 0-9 _ -"));
             }
         }
         if (const Json* reference = FindJsonMember(preset, "reference"); reference != nullptr) {

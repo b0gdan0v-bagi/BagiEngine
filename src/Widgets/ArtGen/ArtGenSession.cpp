@@ -67,7 +67,21 @@ namespace BECore {
         return ImageSettingsOf(_run.presetData, StringView(_run.preset));
     }
 
-    std::expected<Json, ControlError> ArtGenSession::Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings) {
+    String ArtGenSession::AtlasOf(const Json& presetData, StringView preset) const {
+        const Json* data = &presetData;
+        if (presetData.is_null()) {
+            const ArtGenPreset* saved = FindPreset(preset);
+            data = saved != nullptr ? &saved->data : nullptr;
+        }
+        const Optional<String> group = data != nullptr ? GetJsonString(*data, "atlas") : Optional<String>();
+        return group && IsValidSpriteName(StringView(*group)) ? *group : String();
+    }
+
+    String ArtGenSession::AtlasOfRun() const {
+        return AtlasOf(_run.presetData, StringView(_run.preset));
+    }
+
+    std::expected<Json, ControlError> ArtGenSession::Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings, const String* atlas) {
         const ArtGenVariant* variant = FindVariant(seed);
         if (variant == nullptr) {
             return std::unexpected(ControlError{String(kNoVariantCode), Format("the current run has no image of seed {}", seed)});
@@ -85,7 +99,9 @@ namespace BECore {
                 return std::unexpected(ControlError{String(kAcceptFailedCode), String("no node is selected in the scene editor")});
             }
         }
-        return _acceptor(*variant, sprite, ArtGenImagePlan{settings != nullptr ? *settings : ImageSettingsOfRun(), {}}, node);
+        ArtGenImagePlan plan{settings != nullptr ? *settings : ImageSettingsOfRun(), {}};
+        plan.atlas = atlas != nullptr ? *atlas : AtlasOfRun();
+        return _acceptor(*variant, sprite, plan, node);
     }
 
     std::expected<Json, ControlError> ArtGenSession::AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected) {
@@ -138,17 +154,19 @@ namespace BECore {
                                                                    "strongly the picture holds; the mode's default when missing)}; replaces the preset's own reference"}}});
         service.DescribeMethod(
             "artgen_accept",
-            ControlMethodInfo{"Makes an image of the current run a sprite of the game (trimmed to what is drawn and downscaled, a PNG into assets/artgen, "
-                              "TextureLibrary entry, reload), or a sound a clip (processed, a WAV into assets/artgen or over a clip path of the game, reload)",
-                              {ControlParamInfo{"seed", "integer", true, "the seed of the image or sound (artgen_state.run.variants)"},
-                               ControlParamInfo{"sprite", "string", false, "an image: the sprite name, 1 to 64 of A-Z a-z 0-9 _ -"},
-                               ControlParamInfo{"image", "object", false,
-                                                "an image: trim, padding (percent, 0 to 25), maxSize (pixels, 0 or 16 to 4096); a missing key keeps the preset's value (its accept key, else the "
-                                                "defaults)"},
-                               ControlParamInfo{"name", "string", false, "a sound: the clip assets/artgen/<name>.wav"},
-                               ControlParamInfo{"clip", "string", false, "a sound: instead of name, the game's clip to replace (assets/.../x.wav)"},
-                               ControlParamInfo{"sound", "object", false, "a sound: mono, trimDb, maxSeconds, sampleRate, fadeInMs, fadeOutMs, peakDb (null: off)"},
-                               ControlParamInfo{"useOnSelected", "boolean", false, "also put it on the node selected in the scene editor"}}});
+            ControlMethodInfo{
+                "Makes an image of the current run a sprite of the game (trimmed to what is drawn and downscaled, a PNG into assets/artgen, "
+                "TextureLibrary entry, reload), or a sound a clip (processed, a WAV into assets/artgen or over a clip path of the game, reload)",
+                {ControlParamInfo{"seed", "integer", true, "the seed of the image or sound (artgen_state.run.variants)"},
+                 ControlParamInfo{"sprite", "string", false, "an image: the sprite name, 1 to 64 of A-Z a-z 0-9 _ -"},
+                 ControlParamInfo{"image", "object", false,
+                                  "an image: trim, padding (percent, 0 to 25), maxSize (pixels, 0 or 16 to 4096); a missing key keeps the preset's value (its accept key, else the "
+                                  "defaults)"},
+                 ControlParamInfo{"atlas", "string", false, "an image: the atlas group the sprite joins and packs into; \"\" for none; missing keeps the preset's atlas key (none when it has none)"},
+                 ControlParamInfo{"name", "string", false, "a sound: the clip assets/artgen/<name>.wav"},
+                 ControlParamInfo{"clip", "string", false, "a sound: instead of name, the game's clip to replace (assets/.../x.wav)"},
+                 ControlParamInfo{"sound", "object", false, "a sound: mono, trimDb, maxSeconds, sampleRate, fadeInMs, fadeOutMs, peakDb (null: off)"},
+                 ControlParamInfo{"useOnSelected", "boolean", false, "also put it on the node selected in the scene editor"}}});
         service.DescribeMethod(
             "artgen_cancel",
             ControlMethodInfo{"Stops the run of the art generation service (a set's running job; the set goes on); the images made stay. With job or set, cancels that job, or every job of the set",
@@ -659,7 +677,15 @@ namespace BECore {
             }
             settings = *parsed;
         }
-        return Accept(*seed, *sprite, useOnSelected, &settings);
+        String atlas = AtlasOfRun();
+        if (const Json* group = FindJsonMember(params, "atlas"); group != nullptr && !group->is_null()) {
+            const auto name = GetJsonString(params, "atlas");
+            if (!name || (!name->empty() && !IsValidSpriteName(StringView(*name)))) {
+                return std::unexpected(InvalidParams("'atlas' must be an atlas group name (1 to 64 of A-Z a-z 0-9 _ -) or \"\" for none"));
+            }
+            atlas = *name;
+        }
+        return Accept(*seed, *sprite, useOnSelected, &settings, &atlas);
     }
 
     std::expected<Json, ControlError> ArtGenSession::HandleSetupReport(const Json& params) {
