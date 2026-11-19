@@ -10,13 +10,6 @@ namespace BECore::Tests {
 
     namespace {
 
-        Json PlayAction(const String& card) {
-            Json action = Json::object();
-            action["type"] = "play";
-            action["card"] = card.c_str();
-            return action;
-        }
-
         String Dump(const std::expected<Json, ControlError>& value) {
             return value ? DumpJson(*value) : String("<error>");
         }
@@ -127,7 +120,7 @@ namespace BECore::Tests {
 
     TEST(SeatedGameTest, PlayOffTurnIsNotYourTurn) {
         FakeSeatedGame game = MakeStartedGame();
-        const auto result = game.PerformSeatAction(2, PlayAction(game.GetHand(2).front()));
+        const auto result = game.PerformSeatAction(2, CardAction(game.GetHand(2).front()));
         EXPECT_EQ(ErrorCode(result), SeatedGameErrors::kNotYourTurn.data());
         EXPECT_EQ(game.GetStateVersion(), 1u);
         EXPECT_EQ(game.GetHand(2).size(), 3u);
@@ -135,7 +128,7 @@ namespace BECore::Tests {
 
     TEST(SeatedGameTest, ACardOfAnotherSeatIsIllegal) {
         FakeSeatedGame game = MakeStartedGame();
-        const auto result = game.PerformSeatAction(0, PlayAction(game.GetHand(1).front()));
+        const auto result = game.PerformSeatAction(0, CardAction(game.GetHand(1).front()));
         EXPECT_EQ(ErrorCode(result), GameControlErrors::kIllegalAction.data());
         EXPECT_EQ(game.GetHand(1).size(), 3u);
         EXPECT_EQ(game.GetHand(0).size(), 3u);
@@ -144,8 +137,8 @@ namespace BECore::Tests {
 
     TEST(SeatedGameTest, UnknownCardAndUnknownTypeAreIllegal) {
         FakeSeatedGame game = MakeStartedGame();
-        EXPECT_EQ(ErrorCode(game.PerformSeatAction(0, PlayAction("c9_9"))), "illegal_action");
-        Json discard = PlayAction(game.GetHand(0).front());
+        EXPECT_EQ(ErrorCode(game.PerformSeatAction(0, CardAction("c9_9"))), "illegal_action");
+        Json discard = CardAction(game.GetHand(0).front());
         discard["type"] = "discard";
         EXPECT_EQ(ErrorCode(game.PerformSeatAction(0, discard)), "illegal_action");
         EXPECT_EQ(game.GetPlayCount(), 0);
@@ -166,7 +159,7 @@ namespace BECore::Tests {
         for (const int seat : {-1, 4, 100, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()}) {
             EXPECT_EQ(ErrorCode(game.GetSeatView(seat)), "invalid_seat") << seat;
             EXPECT_EQ(ErrorCode(game.GetSeatActions(seat)), "invalid_seat") << seat;
-            EXPECT_EQ(ErrorCode(game.PerformSeatAction(seat, PlayAction("c0_0"))), "invalid_seat") << seat;
+            EXPECT_EQ(ErrorCode(game.PerformSeatAction(seat, CardAction("c0_0"))), "invalid_seat") << seat;
             EXPECT_FALSE(game.ChooseComputerAction(seat).has_value()) << seat;
         }
         EXPECT_EQ(game.GetStateVersion(), 1u);
@@ -180,7 +173,7 @@ namespace BECore::Tests {
         EXPECT_EQ(previous, 1u);
         while (!game.IsFinished()) {
             const int seat = game.GetTurn();
-            EXPECT_FALSE(game.PerformSeatAction((seat + 1) % 4, PlayAction("c0_0")).has_value());
+            EXPECT_FALSE(game.PerformSeatAction((seat + 1) % 4, CardAction("c0_0")).has_value());
             EXPECT_EQ(game.GetStateVersion(), previous);
             ASSERT_TRUE(game.PerformSeatAction(seat, *game.ChooseComputerAction(seat)).has_value());
             EXPECT_EQ(game.GetStateVersion(), previous + 1);
@@ -226,7 +219,7 @@ namespace BECore::Tests {
             ASSERT_TRUE(actions.has_value());
             EXPECT_TRUE(actions->empty());
             EXPECT_FALSE(game.ChooseComputerAction(seat).has_value());
-            EXPECT_EQ(ErrorCode(game.PerformSeatAction(seat, PlayAction("c0_0"))), "not_your_turn");
+            EXPECT_EQ(ErrorCode(game.PerformSeatAction(seat, CardAction("c0_0"))), "not_your_turn");
             const auto view = game.GetSeatView(seat);
             ASSERT_TRUE(view.has_value());
             EXPECT_EQ(GetJsonBool(*view, "finished"), true);

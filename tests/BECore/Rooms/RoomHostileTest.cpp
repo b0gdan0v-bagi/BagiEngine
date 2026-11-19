@@ -12,70 +12,7 @@ namespace BECore::Tests {
         using std::chrono::minutes;
         using std::chrono::seconds;
 
-        constexpr int kMaxSteps = 400;
         constexpr int kReplays = 100;
-
-        Json CardAction(const String& card) {
-            Json action = Json::object();
-            action["type"] = "play";
-            action["card"] = card.c_str();
-            return action;
-        }
-
-        bool IsFinishedFor(HubHarness& harness, ConnectionId id) {
-            const ReceivedMessage* view = harness.Client(id).Last(RoomMessageTypes::kView);
-            return view && GetJsonBool(view->json, "finished").value_or(false);
-        }
-
-        /// Ticks the clock and lets the humans play their first action until every one has seen the end
-        bool PlayToTheEnd(HubHarness& harness, const Vector<ConnectionId>& humans) {
-            for (int step = 0; step < kMaxSteps; ++step) {
-                harness.Tick(milliseconds(10));
-                bool allDone = true;
-                for (const ConnectionId id : humans) {
-                    harness.PlayFirstAction(id);
-                    allDone = allDone && IsFinishedFor(harness, id);
-                }
-                if (allDone) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        /// Ticks until one of the humans has an action; the connection, or 0
-        ConnectionId WaitForAHumanTurn(HubHarness& harness, const Vector<ConnectionId>& humans) {
-            for (int step = 0; step < kMaxSteps; ++step) {
-                for (const ConnectionId id : humans) {
-                    const ReceivedMessage* view = harness.Client(id).Last(RoomMessageTypes::kView);
-                    const Json* actions = view ? FindJsonMember(view->json, "actions") : nullptr;
-                    if (actions && actions->is_array() && !actions->empty()) {
-                        return id;
-                    }
-                }
-                harness.Tick(milliseconds(10));
-            }
-            return 0;
-        }
-
-        size_t CountTextsContaining(const TestClient& client, const String& needle) {
-            size_t count = 0;
-            for (const ReceivedMessage& message : client.received) {
-                count += message.text.find(needle) != String::npos ? 1 : 0;
-            }
-            return count;
-        }
-
-        /// The cards a client was sent that the wire judge finds hidden from its seat
-        Vector<String> LeaksSeenBy(const TestClient& client) {
-            Vector<String> leaks;
-            for (const ReceivedMessage& message : client.received) {
-                for (String& id : FindLeakedCardIds(StringView(message.text.c_str(), message.text.size()), client.seat)) {
-                    leaks.push_back(std::move(id));
-                }
-            }
-            return leaks;
-        }
 
         /// A rate limit is not what these cases test: the clock moves a second between two raw messages
         void SendRaw(HubHarness& harness, ConnectionId id, StringView text) {
@@ -358,7 +295,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(PlayToTheEnd(harness, {ids[0], back}));
 
         for (const ConnectionId id : {ids[0], ids[1], back}) {
-            const auto leaks = LeaksSeenBy(harness.Client(id));
+            const auto leaks = LeaksOf(harness.Client(id));
             EXPECT_TRUE(leaks.empty()) << "connection " << id << " was sent the hidden card " << (leaks.empty() ? "" : leaks.front().c_str());
         }
         EXPECT_EQ(harness.GetLeakCount(), 0u);

@@ -1,7 +1,7 @@
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/Rooms/FakeSeatedGame.h>
 #include <BECore/Rooms/ManualClock.h>
-#include <BECore/Rooms/RoomSocketClient.h>
+#include <BECore/Rooms/RoomTableDriver.h>
 #include <BECore/Rooms/TestRandom.h>
 #include <Common/LogRecorder.h>
 #include <Common/Wait.h>
@@ -36,17 +36,6 @@ namespace BECore::Tests {
                 }
             }
             return humans;
-        }
-
-        /// Frames of @p count identical text messages in one buffer
-        Vector<uint8_t> RepeatText(const String& text, int count) {
-            const auto frame = EncodeTextFrame(text, kClientMask);
-            Vector<uint8_t> batch;
-            batch.reserve(frame.size() * static_cast<size_t>(count));
-            for (int i = 0; i < count; ++i) {
-                batch.insert(batch.end(), frame.data(), frame.data() + frame.size());
-            }
-            return batch;
         }
 
         /// Sleeps a few ticks of the hub thread (MakeSettings() ticks every 10 ms) so that it has looked at the clock and the sockets
@@ -565,21 +554,6 @@ namespace BECore::Tests {
         void RoundTrip(RoomSocketClient& client) {
             client.Send(PingMessage{});
             ASSERT_TRUE(client.WaitFor(RoomMessageTypes::kPong).has_value());
-        }
-
-        /// True when @p lobby shows a human seat that is not connected
-        bool HasAwayHuman(const ReceivedMessage& lobby) {
-            const Json* seats = FindJsonMember(lobby.json, "seats");
-            if (!seats || !seats->is_array()) {
-                return false;
-            }
-            for (const Json& seat : *seats) {
-                const Json* connected = FindJsonMember(seat, "connected");
-                if (GetJsonString(seat, "kind").value_or("") == "human" && connected && connected->is_boolean() && !connected->get<bool>()) {
-                    return true;
-                }
-            }
-            return false;
         }
 
         /// Reads frames until a ping arrives (text frames before it are skipped); false when none does or the connection ends first

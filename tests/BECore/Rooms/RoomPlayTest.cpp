@@ -58,13 +58,6 @@ namespace BECore::Tests {
             return result ? String("<ok>") : result.error().code;
         }
 
-        Json PlayAction(const String& card) {
-            Json action = Json::object();
-            action["type"] = "play";
-            action["card"] = card.c_str();
-            return action;
-        }
-
         /// Every member's view and actions, judged against the game as it is now
         void ExpectViewsDoNotLeak(const TestRoom& test) {
             for (const RoomMemberJoined& member : test.members) {
@@ -122,7 +115,7 @@ namespace BECore::Tests {
     TEST(RoomPlayTest, NothingToDoBeforeTheStart) {
         TestRoom test = MakeTestRoom(1);
         const PlayerId player = test.members[0].player;
-        EXPECT_EQ(CodeOf(test.room.PerformAction(player, 0, PlayAction("c0_0"))), RoomErrors::kNotStarted);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(player, 0, CardAction("c0_0"))), RoomErrors::kNotStarted);
         EXPECT_EQ(CodeOf(test.room.GetSeatView(player)), RoomErrors::kNotStarted);
         EXPECT_EQ(CodeOf(test.room.GetSeatActions(player)), RoomErrors::kNotStarted);
         EXPECT_EQ(CodeOf(test.room.GetSeatView(77)), RoomErrors::kNotInRoom);
@@ -177,21 +170,21 @@ namespace BECore::Tests {
         EXPECT_TRUE(test.room.GetSeatActions(b)->empty());
 
         // Off turn, a card of another seat, a malformed action, a stale version: nothing changes
-        EXPECT_EQ(CodeOf(test.room.PerformAction(b, version, PlayAction("c1_0"))), RoomErrors::kNotYourTurn);
-        EXPECT_EQ(CodeOf(test.room.PerformAction(a, version, PlayAction("c1_0"))), RoomErrors::kIllegalAction);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(b, version, CardAction("c1_0"))), RoomErrors::kNotYourTurn);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(a, version, CardAction("c1_0"))), RoomErrors::kIllegalAction);
         EXPECT_EQ(CodeOf(test.room.PerformAction(a, version, Json::object())), ControlErrors::kInvalidParams);
-        EXPECT_EQ(CodeOf(test.room.PerformAction(a, version + 1, PlayAction("c0_0"))), RoomErrors::kStaleAction);
-        EXPECT_EQ(CodeOf(test.room.PerformAction(a, 0, PlayAction("c0_0"))), RoomErrors::kStaleAction);
-        EXPECT_EQ(CodeOf(test.room.PerformAction(88, version, PlayAction("c0_0"))), RoomErrors::kNotInRoom);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(a, version + 1, CardAction("c0_0"))), RoomErrors::kStaleAction);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(a, 0, CardAction("c0_0"))), RoomErrors::kStaleAction);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(88, version, CardAction("c0_0"))), RoomErrors::kNotInRoom);
         EXPECT_EQ(test.room.GetGameVersion(), version);
         EXPECT_EQ(test.Game().GetPlayCount(), 0);
 
-        const auto outcome = test.room.PerformAction(a, version, PlayAction("c0_1"));
+        const auto outcome = test.room.PerformAction(a, version, CardAction("c0_1"));
         ASSERT_TRUE(outcome.has_value());
         EXPECT_GT(test.room.GetGameVersion(), version);
         EXPECT_EQ(test.Game().GetPlayCount(), 1);
         // The old version is stale now
-        EXPECT_EQ(CodeOf(test.room.PerformAction(b, version, PlayAction("c1_0"))), RoomErrors::kStaleAction);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(b, version, CardAction("c1_0"))), RoomErrors::kStaleAction);
         ExpectViewsDoNotLeak(test);
     }
 
@@ -208,7 +201,7 @@ namespace BECore::Tests {
         const auto inside = After(std::chrono::seconds(29));
         EXPECT_FALSE(test.room.IsSeatComputerControlled(0, inside));
         EXPECT_FALSE(test.room.StepComputers(inside));
-        EXPECT_EQ(CodeOf(test.room.PerformAction(a, test.room.GetGameVersion(), PlayAction("c0_0"))), RoomErrors::kNotYourTurn);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(a, test.room.GetGameVersion(), CardAction("c0_0"))), RoomErrors::kNotYourTurn);
         EXPECT_EQ(test.Game().GetPlayCount(), 0);
 
         // After the grace a computer plays the lowest card of the seat
@@ -241,7 +234,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(test.room.IsSeatComputerControlled(0, late));
         EXPECT_FALSE(test.room.StepComputers(late));
         EXPECT_TRUE(test.room.GetLobbySnapshot().seats[0].connected);
-        EXPECT_EQ(CodeOf(test.room.PerformAction(a, test.room.GetGameVersion(), PlayAction("c0_0"))), "<ok>");
+        EXPECT_EQ(CodeOf(test.room.PerformAction(a, test.room.GetGameVersion(), CardAction("c0_0"))), "<ok>");
         EXPECT_EQ(test.Game().GetPlayCount(), 1);
         // A return that changes nothing does not move the revision
         const uint64_t after = test.room.GetLobbyRevision();
@@ -304,7 +297,7 @@ namespace BECore::Tests {
         EXPECT_EQ(test.room.GetLobbySnapshot().phase, RoomPhase::Finished);
         EXPECT_TRUE(test.room.GetSeatActions(a)->empty());
         EXPECT_FALSE(test.room.StepComputers(now + std::chrono::seconds(5)));
-        EXPECT_EQ(CodeOf(test.room.PerformAction(a, test.room.GetGameVersion(), PlayAction("c0_0"))), RoomErrors::kNotYourTurn);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(a, test.room.GetGameVersion(), CardAction("c0_0"))), RoomErrors::kNotYourTurn);
     }
 
     TEST(RoomPlayTest, ComputersWaitForTheDelay) {
@@ -382,7 +375,7 @@ namespace BECore::Tests {
         public:
             Optional<Json> ChooseComputerAction(int seat) const override {
                 ++proposals;
-                return PlayAction(Format("c{}_0", (seat + 1) % kSeatCount));
+                return CardAction(Format("c{}_0", (seat + 1) % kSeatCount));
             }
 
             mutable int proposals = 0;

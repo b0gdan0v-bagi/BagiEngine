@@ -1,5 +1,6 @@
-#include <BECore/Rooms/JudgedTransport.h>
 #include <BECore/Rooms/ManualClock.h>
+#include <BECore/Rooms/RoomClientPlayer.h>
+#include <BECore/Rooms/RoomTableDriver.h>
 #include <BECore/Rooms/TestRandom.h>
 #include <BECore/WebSocketTestClient.h>
 #include <Common/Printers.h>
@@ -21,7 +22,6 @@ namespace BECore::Tests {
         using namespace std::chrono_literals;
         using Kind = RoomClientEventKind;
 
-        constexpr std::chrono::milliseconds kPlayLimit{30'000};
         constexpr std::chrono::milliseconds kShortLimit{30'000};
         constexpr int kCardsInAHand = DemoCardGame::kTotalPlays;
 
@@ -109,9 +109,9 @@ namespace BECore::Tests {
             }
         }
 
-        /// A human at the table: a RoomClient on the native transport, judged on the wire, that plays the first action it is offered
-        struct Player {
-            explicit Player(RoomClientSettings settings = {}) : judge(MakeShared<WireJudgeLog>()) {
+        /// A RoomClientPlayer on the native transport, tapped; it takes its events and plays on every Pump() unless autoplay is off
+        struct Player : RoomClientPlayer {
+            explicit Player(RoomClientSettings settings = {}) {
                 settings.transportFactory = [this]() -> UniquePtr<IRoomTransport> {
                     auto native = MakeDefaultRoomTransport();
                     if (!native) {
@@ -122,61 +122,22 @@ namespace BECore::Tests {
                 client = MakeUnique<RoomClient>(std::move(settings));
             }
 
-            [[nodiscard]] size_t Count(Kind kind) const {
-                return static_cast<size_t>(std::count_if(events.begin(), events.end(), [kind](const RoomClientEvent& event) { return event.kind == kind; }));
+            ~Player() {
+                // The transports of the client use the tap
+                client.reset();
             }
 
-            [[nodiscard]] const RoomClientEvent* Find(Kind kind) const {
-                const auto found = std::find_if(events.begin(), events.end(), [kind](const RoomClientEvent& event) { return event.kind == kind; });
-                return found == events.end() ? nullptr : &*found;
-            }
-
-            [[nodiscard]] int TableSize() const {
-                const Json* table = FindJsonMember(client->GetView(), "table");
-                return table && table->is_array() ? static_cast<int>(table->size()) : -1;
-            }
-
-            /// How many plays of @p seat the last view shows
-            [[nodiscard]] int PlaysOf(int seat) const {
-                int plays = 0;
-                const Json* table = FindJsonMember(client->GetView(), "table");
-                for (size_t i = 0; table && table->is_array() && i < table->size(); ++i) {
-                    plays += GetJsonInt((*table)[i], "seat").value_or(-1) == seat ? 1 : 0;
-                }
-                return plays;
-            }
-
-            /// Polls, takes the events and plays the first action of the last view, once per version of it
             void Pump() {
                 client->Poll();
-                const size_t before = events.size();
-                client->DrainEvents(events);
-                for (size_t i = before; i < events.size(); ++i) {
-                    if (events[i].kind == Kind::Resumed) {
-                        // What was sent on the old connection may never have arrived
-                        acted = false;
-                    }
-                }
-                if (!autoplay || !client->IsInRoom() || !client->HasView() || client->IsFinished() || !client->GetActions().is_array() || client->GetActions().empty()) {
-                    return;
-                }
-                if (acted && actedVersion == client->GetViewVersion()) {
-                    return;
-                }
-                if (client->SendAction(client->GetActions()[0]).has_value()) {
-                    acted = true;
-                    actedVersion = client->GetViewVersion();
+                TakeEvents();
+                if (autoplay) {
+                    // A refused send (the connection just dropped) is tried again on the next pump
+                    ActIfItsTurn();
                 }
             }
 
-            // The tap and the judge are used by the transports the client makes: they outlive the client (declared first)
             Tap tap;
-            SharedPtr<WireJudgeLog> judge;
-            UniquePtr<RoomClient> client;
-            Vector<RoomClientEvent> events;
             bool autoplay = true;
-            bool acted = false;
-            uint64_t actedVersion = 0;
         };
 
         /// A client that reconnects quickly: real time passes in these tests

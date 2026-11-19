@@ -9,33 +9,6 @@ namespace BECore::Tests {
         using std::chrono::milliseconds;
         using std::chrono::seconds;
 
-        /// The first human whose last view offers an action (the one whose turn it is), or 0
-        ConnectionId FindPlayerOnTurn(HubHarness& harness, const Vector<ConnectionId>& ids) {
-            for (const ConnectionId id : ids) {
-                const ReceivedMessage* view = harness.Client(id).Last(RoomMessageTypes::kView);
-                const Json* actions = view ? FindJsonMember(view->json, "actions") : nullptr;
-                if (actions && actions->is_array() && !actions->empty()) {
-                    return id;
-                }
-            }
-            return 0;
-        }
-
-        size_t CountTextsContaining(const TestClient& client, const String& needle) {
-            size_t count = 0;
-            for (const ReceivedMessage& message : client.received) {
-                count += message.text.find(needle) != String::npos ? 1 : 0;
-            }
-            return count;
-        }
-
-        Json CardAction(const String& card) {
-            Json action = Json::object();
-            action["type"] = "play";
-            action["card"] = card.c_str();
-            return action;
-        }
-
     }  // namespace
 
     TEST(RoomHubTest, ATickOfARoomInWhichNothingChangedSendsAndAllocatesNothing) {
@@ -230,7 +203,7 @@ namespace BECore::Tests {
         harness.JoinByName(stranger, code, "Late");
         EXPECT_EQ(harness.Client(stranger).LastErrorCode(), RoomErrors::kGameStarted);
 
-        const ConnectionId onTurn = FindPlayerOnTurn(harness, ids);
+        const ConnectionId onTurn = FindHumanOnTurn(harness, ids);
         ASSERT_NE(onTurn, 0u);
         ConnectionId other = 0;
         for (const ConnectionId id : ids) {

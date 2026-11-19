@@ -37,20 +37,6 @@ namespace BECore::Tests {
             }
         }
 
-        bool HasAwayHuman(const ReceivedMessage& lobby) {
-            const Json* seats = FindJsonMember(lobby.json, "seats");
-            if (!seats || !seats->is_array()) {
-                return false;
-            }
-            for (const Json& seat : *seats) {
-                const Json* connected = FindJsonMember(seat, "connected");
-                if (GetJsonString(seat, "kind").value_or("") == "human" && connected && connected->is_boolean() && !connected->get<bool>()) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         class RoomServerScenarioTest : public ::testing::Test {
         protected:
             void SetUp() override {

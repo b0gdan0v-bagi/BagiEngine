@@ -7,57 +7,12 @@ namespace BECore::Tests {
         using std::chrono::milliseconds;
         using std::chrono::seconds;
 
-        constexpr int kMaxSteps = 400;
-
-        Json CardAction(const String& card) {
-            Json action = Json::object();
-            action["type"] = "play";
-            action["card"] = card.c_str();
-            return action;
-        }
-
-        bool IsFinishedFor(HubHarness& harness, ConnectionId id) {
-            const ReceivedMessage* view = harness.Client(id).Last(RoomMessageTypes::kView);
-            return view && GetJsonBool(view->json, "finished").value_or(false);
-        }
-
         /// The number of cards on the table in the last view the client got (-1 when it has no view)
         int TableSize(HubHarness& harness, ConnectionId id) {
             const ReceivedMessage* view = harness.Client(id).Last(RoomMessageTypes::kView);
             const Json* inner = view ? FindJsonMember(view->json, "view") : nullptr;
             const Json* table = inner ? FindJsonMember(*inner, "table") : nullptr;
             return table && table->is_array() ? static_cast<int>(table->size()) : -1;
-        }
-
-        /// Ticks the clock and lets the humans play their first action until every human has seen the end
-        bool PlayToTheEnd(HubHarness& harness, const Vector<ConnectionId>& humans) {
-            for (int step = 0; step < kMaxSteps; ++step) {
-                harness.Tick(milliseconds(10));
-                bool allDone = true;
-                for (const ConnectionId id : humans) {
-                    harness.PlayFirstAction(id);
-                    allDone = allDone && IsFinishedFor(harness, id);
-                }
-                if (allDone) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        /// Ticks until one of the humans has an action; the connection, or 0
-        ConnectionId WaitForAHumanTurn(HubHarness& harness, const Vector<ConnectionId>& humans) {
-            for (int step = 0; step < kMaxSteps; ++step) {
-                for (const ConnectionId id : humans) {
-                    const ReceivedMessage* view = harness.Client(id).Last(RoomMessageTypes::kView);
-                    const Json* actions = view ? FindJsonMember(view->json, "actions") : nullptr;
-                    if (actions && actions->is_array() && !actions->empty()) {
-                        return id;
-                    }
-                }
-                harness.Tick(milliseconds(10));
-            }
-            return 0;
         }
 
         void RunFourSeatHand(bool leaky) {
@@ -111,7 +66,7 @@ namespace BECore::Tests {
         EXPECT_EQ(game->GetPlayCount(), stalledAt);
 
         harness.Tick(seconds(30));
-        for (int step = 0; step < kMaxSteps && game->GetHand(1).size() == FakeSeatedGame::kCardsPerSeat; ++step) {
+        for (int step = 0; step < kHubPlaySteps && game->GetHand(1).size() == FakeSeatedGame::kCardsPerSeat; ++step) {
             harness.Tick(milliseconds(10));
             harness.PlayFirstAction(ids[0]);
         }

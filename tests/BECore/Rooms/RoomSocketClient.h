@@ -152,11 +152,7 @@ namespace BECore::Tests {
 
         /// Types of the messages received so far, in order ("joined,lobby")
         [[nodiscard]] String Types() const {
-            String result;
-            for (const ReceivedMessage& message : _received) {
-                result += (result.empty() ? "" : ",") + message.type;
-            }
-            return result;
+            return TypesOf(_received);
         }
 
         /// What the client learned from `joined`
