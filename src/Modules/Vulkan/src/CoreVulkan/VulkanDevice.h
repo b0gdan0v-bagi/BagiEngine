@@ -53,8 +53,10 @@ namespace BECore {
         // required property flags. Returns UINT32_MAX if not found.
         uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
 
+        // A recording command buffer of the pool, or VK_NULL_HANDLE (logged) when it could not be made or begun
         VkCommandBuffer BeginSingleTimeCommands(VkCommandPool pool) const;
-        void EndSingleTimeCommands(VkCommandPool pool, VkCommandBuffer cmd) const;
+        // Ends, submits and waits for `cmd`, then frees it. False (logged) when it was not recorded or submitted.
+        [[nodiscard]] bool EndSingleTimeCommands(VkCommandPool pool, VkCommandBuffer cmd) const;
 
     private:
         bool CreateInstance(SDL_Window* window);

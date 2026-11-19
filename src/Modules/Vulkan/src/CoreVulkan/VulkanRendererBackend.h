@@ -115,6 +115,16 @@ namespace BECore {
         bool CreateCommandPool();
         bool CreateCommandBuffers();
         bool CreateSyncObjects();
+        // A fresh image-available semaphore and a signaled fence for one frame slot (see AbandonFrame())
+        bool RemakeSlotSyncObjects(uint32_t frameIdx);
+
+        // False when `result` of a call the frame makes itself (`what`, for the log) means the frame must not go on.
+        // A failure is logged once per cause and streak; a lost device is terminal (_deviceLost).
+        bool FrameCallSucceeded(VkResult result, StringView what);
+
+        // The frame failed after an image was acquired or while it was recorded: closes the frame without a submit
+        // (the slot does not advance), marks the swapchain dirty and makes the slot's sync objects again
+        void AbandonFrame(uint32_t frameIdx);
 
         // Acquires the next swapchain image and opens the command buffer. Rebuilds the swapchain first when the
         // window's pixel size is not the one it was made for; a minimized window skips the frame (and sleeps a
@@ -187,6 +197,11 @@ namespace BECore {
         bool _frameSubmitted = false;
         // true when inside the swapchain render pass (between OnRenderClear and OnRenderPresent)
         bool _inSwapchainPass = false;
+        // The device is lost, or the sync objects of a slot could not be made again: AcquireFrame() skips every frame
+        // (sleeping, so the loop does not spin) and only Destroy() is left to do
+        bool _deviceLost = false;
+        // The VkResult that was logged last in the going failure streak, VK_SUCCESS when there is none
+        VkResult _lastLoggedFailure = VK_SUCCESS;
         // true when inside an offscreen render pass (between SetRenderTarget/UnsetRenderTarget)
         bool _inOffscreenPass = false;
 

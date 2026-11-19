@@ -8,6 +8,7 @@
 #include <BECore/Renderer/ITexture.h>
 #include <CoreSDL/SDLEvents.h>
 #include <CoreSDL/SDLMainWindow.h>
+#include <CoreVulkan/VulkanFramePolicy.h>
 #include <CoreVulkan/VulkanRenderTarget.h>
 #include <CoreVulkan/VulkanTexture.h>
 #include <CoreVulkan/VulkanTextureUpload.h>
@@ -24,6 +25,20 @@ namespace BECore {
     namespace {
 
         constexpr size_t kIndicesPerTriangle = 3;
+
+        bool MakeSemaphore(VkDevice device, VkSemaphore& semaphore) {
+            VkSemaphoreCreateInfo semInfo{};
+            semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+            return vkCreateSemaphore(device, &semInfo, nullptr, &semaphore) == VK_SUCCESS;
+        }
+
+        // Signaled, so that the first wait on the slot does not wait for a submit that never happened
+        bool MakeSignaledFence(VkDevice device, VkFence& fence) {
+            VkFenceCreateInfo fenceInfo{};
+            fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+            fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+            return vkCreateFence(device, &fenceInfo, nullptr, &fence) == VK_SUCCESS;
+        }
 
         // A minimized window skips its frames; this sleep keeps the loop from spinning at full speed meanwhile
         constexpr uint32_t kMinimizedSleepMs = 16;
@@ -220,6 +235,10 @@ namespace BECore {
         if (_frameAcquired) {
             return;
         }
+        if (_deviceLost) {
+            SDL_Delay(kMinimizedSleepMs);
+            return;
+        }
 
         // Follow the window: SDL_GetWindowSizeInPixels is the size of the surface, whatever the driver reports
         int pixelWidth = 0;
@@ -236,10 +255,14 @@ namespace BECore {
         VkDevice vkDevice = _device.GetDevice();
         const uint32_t frameIdx = _currentFrame;
 
-        // Wait until the GPU finishes the previous use of this frame slot
+        // Wait until the GPU finishes the previous use of this frame slot. The fence is reset only in EndFrame(),
+        // right before the submit that signals it again, so a frame that fails before the submit leaves it signaled
+        // and the next wait on the slot cannot hang
         {
             BE_PROFILE_SCOPE("Vulkan::WaitFence");
-            vkWaitForFences(vkDevice, 1, &_inFlightFences[frameIdx], VK_TRUE, UINT64_MAX);
+            if (!FrameCallSucceeded(vkWaitForFences(vkDevice, 1, &_inFlightFences[frameIdx], VK_TRUE, VulkanFramePolicy::kFenceTimeoutNs), "waiting for the GPU")) {
+                return;
+            }
         }
 
         BE_PROFILE_SCOPE("Vulkan::AcquireImage");
@@ -256,17 +279,20 @@ namespace BECore {
             return;
         }
 
-        vkResetFences(vkDevice, 1, &_inFlightFences[frameIdx]);
-
         // The fence of this slot was waited on above, so the GPU is done with the geometry of its last use
         _geometryBuffer.BeginFrame(frameIdx);
 
         VkCommandBuffer cmd = _commandBuffers[frameIdx];
-        vkResetCommandBuffer(cmd, 0);
-
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        vkBeginCommandBuffer(cmd, &beginInfo);
+        VkResult result = vkResetCommandBuffer(cmd, 0);
+        if (result == VK_SUCCESS) {
+            VkCommandBufferBeginInfo beginInfo{};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            result = vkBeginCommandBuffer(cmd, &beginInfo);
+        }
+        if (!FrameCallSucceeded(result, "beginning the command buffer")) {
+            AbandonFrame(frameIdx);
+            return;
+        }
 
         _frameAcquired = true;
     }
@@ -305,7 +331,10 @@ namespace BECore {
         VkCommandBuffer cmd = _commandBuffers[frameIdx];
 
         vkCmdEndRenderPass(cmd);
-        vkEndCommandBuffer(cmd);
+        if (!FrameCallSucceeded(vkEndCommandBuffer(cmd), "ending the command buffer")) {
+            AbandonFrame(frameIdx);
+            return;
+        }
 
         const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         VkSubmitInfo submitInfo{};
@@ -318,14 +347,78 @@ namespace BECore {
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores    = &_renderFinishedSemaphores[frameIdx];
 
-        {
-            BE_PROFILE_SCOPE("Vulkan::QueueSubmit");
-            vkQueueSubmit(_device.GetGraphicsQueue(), 1, &submitInfo, _inFlightFences[frameIdx]);
+        // Reset just before the submit that signals it, never earlier: see AcquireFrame()
+        if (!FrameCallSucceeded(vkResetFences(_device.GetDevice(), 1, &_inFlightFences[frameIdx]), "resetting the fence")) {
+            AbandonFrame(frameIdx);
+            return;
         }
 
+        VkResult submitResult = VK_SUCCESS;
+        {
+            BE_PROFILE_SCOPE("Vulkan::QueueSubmit");
+            submitResult = vkQueueSubmit(_device.GetGraphicsQueue(), 1, &submitInfo, _inFlightFences[frameIdx]);
+        }
+        if (!FrameCallSucceeded(submitResult, "submitting the frame")) {
+            AbandonFrame(frameIdx);
+            return;
+        }
+
+        _lastLoggedFailure = VK_SUCCESS;
         _inSwapchainPass = false;
         _frameAcquired   = false;
         _frameSubmitted  = true;
+    }
+
+    bool VulkanRendererBackend::FrameCallSucceeded(VkResult result, StringView what) {
+        const VulkanFramePolicy::FrameStep step = VulkanFramePolicy::StepAfter(result);
+        if (step == VulkanFramePolicy::FrameStep::Proceed) {
+            return true;
+        }
+        if (step == VulkanFramePolicy::FrameStep::DeviceLost) {
+            if (!_deviceLost) {
+                LOG_ERROR("VulkanRendererBackend: the device is lost ({} failed), no frame is drawn from now on"_format(what));
+            }
+            _deviceLost = true;
+        } else if (VulkanFramePolicy::IsNewFailure(_lastLoggedFailure, result)) {
+            LOG_ERROR("VulkanRendererBackend: {} failed with VkResult {}, the frame is skipped"_format(what, static_cast<int>(result)));
+        }
+        _lastLoggedFailure = result;
+        return false;
+    }
+
+    void VulkanRendererBackend::AbandonFrame(uint32_t frameIdx) {
+        _inSwapchainPass = false;
+        _frameAcquired   = false;
+        // The acquired image is still held, so the swapchain is rebuilt to release it
+        _swapchainDirty = true;
+        if (_deviceLost) {
+            return;
+        }
+
+        // The image-available semaphore of the slot is still signaled and no submit will wait on it, so the next
+        // acquire on it would be invalid; a failed submit may also have left the fence unsignaled. Nothing may be
+        // pending on either when they are replaced.
+        vkDeviceWaitIdle(_device.GetDevice());
+        if (!RemakeSlotSyncObjects(frameIdx)) {
+            LOG_ERROR("VulkanRendererBackend: the sync objects of a frame slot could not be made again, no frame is drawn from now on");
+            _deviceLost = true;
+        }
+    }
+
+    bool VulkanRendererBackend::RemakeSlotSyncObjects(uint32_t frameIdx) {
+        VkDevice vkDevice = _device.GetDevice();
+        VkSemaphore semaphore = VK_NULL_HANDLE;
+        VkFence fence = VK_NULL_HANDLE;
+        if (!MakeSemaphore(vkDevice, semaphore) || !MakeSignaledFence(vkDevice, fence)) {
+            vkDestroySemaphore(vkDevice, semaphore, nullptr);
+            vkDestroyFence(vkDevice, fence, nullptr);
+            return false;
+        }
+        vkDestroySemaphore(vkDevice, _imageAvailableSemaphores[frameIdx], nullptr);
+        vkDestroyFence(vkDevice, _inFlightFences[frameIdx], nullptr);
+        _imageAvailableSemaphores[frameIdx] = semaphore;
+        _inFlightFences[frameIdx] = fence;
+        return true;
     }
 
     void VulkanRendererBackend::Clear(const Color& color) {
@@ -392,18 +485,10 @@ namespace BECore {
         _renderFinishedSemaphores.resize(kMaxFramesInFlight);
         _inFlightFences.resize(kMaxFramesInFlight);
 
-        VkSemaphoreCreateInfo semInfo{};
-        semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-        // Create the fence in signaled state so the first frame doesn't wait forever
-        VkFenceCreateInfo fenceInfo{};
-        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
         for (int i = 0; i < kMaxFramesInFlight; ++i) {
-            if (vkCreateSemaphore(_device.GetDevice(), &semInfo, nullptr, &_imageAvailableSemaphores[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(_device.GetDevice(), &semInfo, nullptr, &_renderFinishedSemaphores[i]) != VK_SUCCESS ||
-                vkCreateFence(_device.GetDevice(), &fenceInfo, nullptr, &_inFlightFences[i]) != VK_SUCCESS) {
+            if (!MakeSemaphore(_device.GetDevice(), _imageAvailableSemaphores[i]) ||
+                !MakeSemaphore(_device.GetDevice(), _renderFinishedSemaphores[i]) ||
+                !MakeSignaledFence(_device.GetDevice(), _inFlightFences[i])) {
                 return false;
             }
         }

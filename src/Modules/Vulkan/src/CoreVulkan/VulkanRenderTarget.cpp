@@ -75,7 +75,11 @@ namespace BECore {
             LOG_ERROR("VulkanRenderTarget: vkAllocateMemory failed");
             return false;
         }
-        vkBindImageMemory(device, _image, _memory, 0);
+        // The destructor frees the image and the memory of a target that fails here
+        if (vkBindImageMemory(device, _image, _memory, 0) != VK_SUCCESS) {
+            LOG_ERROR("VulkanRenderTarget: vkBindImageMemory failed");
+            return false;
+        }
 
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;

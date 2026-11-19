@@ -230,28 +230,44 @@ namespace BECore {
         allocInfo.commandBufferCount = 1;
 
         VkCommandBuffer cmd = VK_NULL_HANDLE;
-        vkAllocateCommandBuffers(_device, &allocInfo, &cmd);
+        if (const VkResult result = vkAllocateCommandBuffers(_device, &allocInfo, &cmd); result != VK_SUCCESS) {
+            LOG_ERROR("VulkanDevice: vkAllocateCommandBuffers failed with VkResult {}"_format(static_cast<int>(result)));
+            return VK_NULL_HANDLE;
+        }
 
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        vkBeginCommandBuffer(cmd, &beginInfo);
+        if (const VkResult result = vkBeginCommandBuffer(cmd, &beginInfo); result != VK_SUCCESS) {
+            LOG_ERROR("VulkanDevice: vkBeginCommandBuffer failed with VkResult {}"_format(static_cast<int>(result)));
+            vkFreeCommandBuffers(_device, pool, 1, &cmd);
+            return VK_NULL_HANDLE;
+        }
 
         return cmd;
     }
 
-    void VulkanDevice::EndSingleTimeCommands(VkCommandPool pool, VkCommandBuffer cmd) const {
-        vkEndCommandBuffer(cmd);
-
+    bool VulkanDevice::EndSingleTimeCommands(VkCommandPool pool, VkCommandBuffer cmd) const {
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &cmd;
 
-        vkQueueSubmit(_graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(_graphicsQueue);
+        VkResult result = vkEndCommandBuffer(cmd);
+        if (result != VK_SUCCESS) {
+            LOG_ERROR("VulkanDevice: vkEndCommandBuffer failed with VkResult {}"_format(static_cast<int>(result)));
+        } else {
+            result = vkQueueSubmit(_graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+            if (result != VK_SUCCESS) {
+                LOG_ERROR("VulkanDevice: vkQueueSubmit failed with VkResult {}"_format(static_cast<int>(result)));
+            } else {
+                // Only a submit that was accepted can be waited for
+                vkQueueWaitIdle(_graphicsQueue);
+            }
+        }
 
         vkFreeCommandBuffers(_device, pool, 1, &cmd);
+        return result == VK_SUCCESS;
     }
 
 }  // namespace BECore
