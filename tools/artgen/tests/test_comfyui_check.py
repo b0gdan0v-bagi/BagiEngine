@@ -285,6 +285,38 @@ def test_a_folder_that_answers_404_is_a_problem_for_an_image_model_only(fake):
     assert not broken["ready"] and any("/models/vae" in p for p in broken["problems"]) and broken["kinds"] == []
 
 
+def structure_models():
+    return [m for m in MANIFEST["models"] if m.get("kind") == "structure"]
+
+
+def test_a_missing_structure_model_only_warns_and_leaves_the_other_kinds(fake):
+    model = structure_models()[0]
+    fake.models[model["folder"]].remove(model["name"])
+    report = comfyui_check.check(fake.url, MANIFEST)
+    assert report["ready"] and report["problems"] == [] and report["kinds"] == ["audio", "image", "style"]
+    assert f"structure model {model['folder']}/{model['name']} is missing: no structure until artgen_setup.py install --structure" in report["warnings"]
+    assert not any("install --style" in w or "install --audio" in w for w in report["warnings"])
+    assert [m["present"] for m in report["models"] if m["kind"] == "structure"] == [False]
+
+
+def test_a_controlnet_folder_that_answers_404_is_a_warning_not_a_problem(fake):
+    fake.missing_folders.add(structure_models()[0]["folder"])
+    report = comfyui_check.check(fake.url, MANIFEST)
+    assert report["ready"] and report["problems"] == [] and "structure" not in report["kinds"]
+    assert any("install --structure" in w for w in report["warnings"])
+    assert {"audio", "image", "style"} <= set(report["kinds"])
+
+
+def test_the_report_prints_the_structure_model(fake, capsys):
+    model = structure_models()[0]
+    comfyui_check.print_report(comfyui_check.check(fake.url, MANIFEST))
+    assert f"ok      {model['folder']}/{model['name']} (structure)" in capsys.readouterr().out
+    fake.models[model["folder"]].remove(model["name"])
+    comfyui_check.print_report(comfyui_check.check(fake.url, MANIFEST))
+    out = capsys.readouterr().out
+    assert f"MISSING {model['folder']}/{model['name']} (structure)" in out and "makes: audio, image, style" in out
+
+
 def test_the_report_lists_the_custom_nodes_and_prints_them(fake, capsys):
     report = comfyui_check.check(fake.url, MANIFEST)
     assert [(n["name"], n["kind"], n["present"]) for n in report["customNodes"]] == [(n["name"], "style", True) for n in MANIFEST["customNodes"]]
