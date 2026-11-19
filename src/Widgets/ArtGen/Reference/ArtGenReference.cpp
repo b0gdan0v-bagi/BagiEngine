@@ -9,7 +9,6 @@ namespace BECore {
         constexpr StringView kModeKey = "mode";
         constexpr StringView kImageKey = "image";
         constexpr StringView kWeightKey = "weight";
-        constexpr StringView kInitMode = "init";
         constexpr StringView kImageKind = "image";
 
         String Slashed(StringView path) {
@@ -29,6 +28,33 @@ namespace BECore {
                 result.pop_back();
             }
             return result;
+        }
+
+        /// A `/` first or a drive letter (`C:`); @p path has `/` steps only
+        bool IsAbsolute(StringView path) {
+            return !path.empty() && (path[0] == '/' || (path.size() > 1 && path[1] == ':'));
+        }
+
+        bool IsSpace(char letter) {
+            return letter == ' ' || letter == '\t' || letter == '\r' || letter == '\n';
+        }
+
+        bool IsQuote(char letter) {
+            return letter == '"' || letter == '\'';
+        }
+
+        /// @p text without the spaces around it, then without the quotes around that, then without the spaces inside them
+        StringView Unwrapped(StringView text) {
+            const auto trim = [](StringView view, auto drops) {
+                while (!view.empty() && drops(view.front())) {
+                    view.remove_prefix(1);
+                }
+                while (!view.empty() && drops(view.back())) {
+                    view.remove_suffix(1);
+                }
+                return view;
+            };
+            return trim(trim(trim(text, IsSpace), IsQuote), IsSpace);
         }
 
         /// True when a `..` step is in @p path: it would leave the folder the path was made relative to
@@ -83,9 +109,9 @@ namespace BECore {
         return reference;
     }
 
-    ArtGenReference ArtGenReferenceOfFile(StringView gameRoot, StringView realPath) {
+    ArtGenReference ArtGenReferenceOfFile(StringView gameRoot, StringView realPath, StringView mode) {
         ArtGenReference reference;
-        reference.mode = String(kInitMode);
+        reference.mode = String(mode);
         const String file = Slashed(realPath);
         const String root = SlashedRoot(gameRoot);
         const StringView fileView(file.data(), file.size());
@@ -107,10 +133,25 @@ namespace BECore {
         return ArtGenReferenceOfFile(gameRoot, realPath);
     }
 
-    ArtGenReference ArtGenReferenceOfSprite(StringView name) {
+    ArtGenReference ArtGenReferenceOfSprite(StringView name, StringView mode) {
         ArtGenReference reference;
-        reference.mode = String(kInitMode);
+        reference.mode = String(mode);
         reference.image = ArtGenGameFile(name, kImageKind);
+        return reference;
+    }
+
+    Optional<ArtGenReference> ArtGenReferenceOfTypedPath(StringView gameRoot, StringView text, StringView mode) {
+        const StringView path = Unwrapped(text);
+        if (path.empty()) {
+            return std::nullopt;
+        }
+        const String slashed = Slashed(path);
+        if (IsAbsolute(StringView(slashed.data(), slashed.size()))) {
+            return ArtGenReferenceOfFile(gameRoot, slashed, mode);
+        }
+        ArtGenReference reference;
+        reference.mode = String(mode);
+        reference.image = slashed;
         return reference;
     }
 
@@ -129,8 +170,7 @@ namespace BECore {
 
     String ArtGenReferenceFilePath(StringView gameRoot, StringView image) {
         const String file = Slashed(image);
-        const bool absolute = !file.empty() && (file[0] == '/' || (file.size() > 1 && file[1] == ':'));
-        if (absolute || gameRoot.empty()) {
+        if (IsAbsolute(StringView(file.data(), file.size())) || gameRoot.empty()) {
             return file;
         }
         const String root = SlashedRoot(gameRoot);

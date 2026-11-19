@@ -789,6 +789,17 @@ namespace BECore::Tests {
         EXPECT_EQ(*reference, params["reference"]);
     }
 
+    TEST_F(ArtGenSessionTest, AStructureReferenceGoesOutInThePollAndIsInTheState) {
+        Call("artgen_poll", ReadyPoll());
+        Json params = Json{{"preset", "wood"}, {"subject", "rook"}, {"count", 1}, {"reference", Json{{"mode", "structure"}, {"image", "sketches/rook.png"}, {"weight", 0.8}}}};
+        ASSERT_TRUE(GetJsonInt(Result(Call("artgen_generate", params)), "id").has_value());
+        EXPECT_EQ(*FindJsonMember(*FindJsonMember(Result(Call("artgen_state")), "run"), "reference"), params["reference"]);
+        const Json poll = Call("artgen_poll", ReadyPoll());
+        const Json* reference = FindJsonMember(*FindJsonMember(Result(poll), "request"), "reference");
+        ASSERT_NE(reference, nullptr);
+        EXPECT_EQ(*reference, params["reference"]);
+    }
+
     TEST_F(ArtGenSessionTest, ARequestWithoutAReferenceLeavesTheKeyOut) {
         Call("artgen_poll", ReadyPoll());
         ASSERT_TRUE(session.Request("wood", "rook", 1, Optional<int64_t>(1)).has_value());
