@@ -38,9 +38,11 @@ namespace BECore::Tests {
             return humans;
         }
 
-        /// Sleeps a few ticks of the hub thread (MakeSettings() ticks every 10 ms) so that it has looked at the clock and the sockets
-        void LetTicksPass() {
-            std::this_thread::sleep_for(60ms);
+        /// Waits until the hub thread has read @p clock twice more. An event of a connection reads it once and a tick once, so at least
+        /// one of the two is a tick that saw the time as it is now, however long the machine kept the hub thread waiting
+        void LetTicksPass(const ManualClock& clock) {
+            const uint64_t before = clock.Reads();
+            EXPECT_TRUE(WaitUntil([&] { return clock.Reads() >= before + 2; })) << "the hub thread did not tick";
         }
 
         class RoomWebSocketServerTest : public ::testing::Test {
@@ -660,7 +662,7 @@ namespace BECore::Tests {
         for (int step = 0; step < 12 && !SawAwayHuman(*host); ++step) {
             clock.Advance(kClockStep);
             RoundTrip(*host);
-            LetTicksPass();  // pacing: the hub thread has to look at every clock value, or the guest would be dropped without the ping before it
+            LetTicksPass(clock);  // the hub thread has to look at every clock value, or the guest would be dropped without the ping before it
         }
         // Three intervals have passed by now, so the lobby of the drop is only a matter of delivery
         EXPECT_TRUE(ReadUntil(*host, [&] { return SawAwayHuman(*host); })) << "the host never saw the silent guest go away";
@@ -677,13 +679,13 @@ namespace BECore::Tests {
         auto client = RoomSocketClient::Connect(port);
         ASSERT_TRUE(client.has_value());
         RoundTrip(*client);
-        LetTicksPass();
+        LetTicksPass(clock);
 
         for (int step = 0; step < 16; ++step) {
             clock.Advance(kClockStep);  // four intervals in all
             RoundTrip(*client);
         }
-        LetTicksPass();
+        LetTicksPass(clock);
         EXPECT_FALSE(client->GetCloseFrame().has_value());
         for (const ReceivedMessage& message : client->Received()) {
             EXPECT_EQ(message.type, RoomMessageTypes::kPong);
@@ -699,7 +701,7 @@ namespace BECore::Tests {
         RoundTrip(*client);
 
         clock.Advance(25s);  // far over any interval, under the 30 s the hub lets a connection that is in no room stay silent
-        LetTicksPass();
+        LetTicksPass(clock);
         EXPECT_FALSE(client->Raw().WaitForFrame(200ms).has_value());
         RoundTrip(*client);
     }
@@ -779,7 +781,7 @@ namespace BECore::Tests {
         auto host = MakeHost(port);
         ASSERT_TRUE(host.has_value());
         RoundTrip(*host);
-        LetTicksPass();
+        LetTicksPass(clock);
         EXPECT_TRUE(lines.Lines().empty()) << "the interval has not passed";
 
         clock.Advance(kStatsInterval + 100ms);
@@ -787,7 +789,7 @@ namespace BECore::Tests {
         EXPECT_NE(lines.Lines()[0].find("1 connections, 1 rooms"), String::npos) << lines.Lines()[0];
 
         clock.Advance(5 * kStatsInterval);
-        LetTicksPass();
+        LetTicksPass(clock);
         EXPECT_EQ(lines.Lines().size(), 1u) << "nothing changed: no second line";
 
         auto second = RoomSocketClient::Connect(port);
@@ -799,7 +801,7 @@ namespace BECore::Tests {
         auto third = RoomSocketClient::Connect(port);
         ASSERT_TRUE(third.has_value());
         RoundTrip(*third);
-        LetTicksPass();
+        LetTicksPass(clock);
         EXPECT_EQ(lines.Lines().size(), 2u) << "a change inside the interval waits for it";
         clock.Advance(kStatsInterval + 100ms);
         ASSERT_TRUE(lines.WaitForCount(3));
@@ -818,7 +820,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(host.has_value());
         RoundTrip(*host);
         clock.Advance(1h);
-        LetTicksPass();
+        LetTicksPass(clock);
         EXPECT_TRUE(lines.Lines().empty());
     }
 
