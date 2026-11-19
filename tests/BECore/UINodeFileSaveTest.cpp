@@ -69,13 +69,6 @@ namespace BECore::Tests {
 </components></node>
 )";
 
-        String ReadFile(const std::filesystem::path& path) {
-            std::ifstream stream(path, std::ios::binary);  //-NoStd: the test reads back its own temporary node files
-            std::ostringstream text;
-            text << stream.rdbuf();
-            return String(text.str().c_str());
-        }
-
         Vector<String> Lines(const String& text) {
             Vector<String> lines;
             size_t begin = 0;

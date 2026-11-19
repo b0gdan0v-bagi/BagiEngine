@@ -1,114 +1,19 @@
+#include <Common/ArtGenTestSupport.h>
 #include <Common/Printers.h>
-#include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Widgets/ArtGen/ArtGenAtlasAccept.h>
-#include <fstream>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
 
     namespace {
 
-        constexpr uint8_t kOpaque = 255;
-        constexpr uint8_t kLow = 40;
-        constexpr uint8_t kHigh = 200;
+        constexpr const char* kTempPrefix = "artgen_atlas_accept";
 
         constexpr StringView kQueenPng = "assets/artgen/queen.png";
         constexpr StringView kRookPng = "assets/artgen/rook.png";
         constexpr StringView kPiecesAtlas = "assets/atlases/pieces.png";
         constexpr StringView kUiAtlas = "assets/atlases/ui.png";
-
-        RgbaImage MakeSolid(uint32_t width, uint32_t height, uint8_t red, uint8_t green, uint8_t blue) {
-            RgbaImage image;
-            image.width = width;
-            image.height = height;
-            image.pixels.resize(static_cast<size_t>(width) * height * kBytesPerPixel);
-            for (size_t i = 0; i < static_cast<size_t>(width) * height; ++i) {
-                image.pixels[i * kBytesPerPixel + 0] = red;
-                image.pixels[i * kBytesPerPixel + 1] = green;
-                image.pixels[i * kBytesPerPixel + 2] = blue;
-                image.pixels[i * kBytesPerPixel + 3] = kOpaque;
-            }
-            return image;
-        }
-
-        Vector<uint8_t> ReadAllBytes(const std::filesystem::path& file) {
-            std::ifstream stream(file, std::ios::binary | std::ios::ate);  //-NoStd: a test reads the file back
-            Vector<uint8_t> bytes(static_cast<size_t>(std::max<std::streamoff>(stream.tellg(), 0)));
-            stream.seekg(0);
-            stream.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-            return bytes;
-        }
-
-        /// True when every pixel of the rect @p at of @p atlas has the colour of a MakeSolid image
-        bool RectIsSolid(const RgbaImage& atlas, const Rect& at, uint8_t red, uint8_t green, uint8_t blue) {
-            for (uint32_t y = static_cast<uint32_t>(at.y); y < static_cast<uint32_t>(at.y + at.h); ++y) {
-                for (uint32_t x = static_cast<uint32_t>(at.x); x < static_cast<uint32_t>(at.x + at.w); ++x) {
-                    const uint8_t* pixel = atlas.pixels.data() + (static_cast<size_t>(y) * atlas.width + x) * kBytesPerPixel;
-                    if (pixel[0] != red || pixel[1] != green || pixel[2] != blue || pixel[3] != kOpaque) {
-                        return false;
-                    }
-                }
-            }
-            return true;
-        }
-
-        /// A game folder with `assets/` in it, removed with the object; virtual paths resolve into it
-        class AtlasGame {
-        public:
-            AtlasGame() : _root(TestTempDirectory("artgen_atlas_accept")), _resolver{_root} {
-                std::error_code ignored;
-                std::filesystem::remove_all(_root, ignored);
-                std::filesystem::create_directories(_root / "assets" / "artgen", ignored);
-            }
-            ~AtlasGame() {
-                std::error_code ignored;
-                std::filesystem::remove_all(_root, ignored);
-            }
-            AtlasGame(const AtlasGame&) = delete;
-            AtlasGame& operator=(const AtlasGame&) = delete;
-
-            [[nodiscard]] std::filesystem::path Resolve(StringView virtualPath) const {
-                return _resolver(virtualPath);
-            }
-
-            /// The `resolve` of the result is a view of this object, which must outlive the call it is given to
-            [[nodiscard]] AtlasIo Io() const {
-                return AtlasIo{_root / "assets", _resolver};
-            }
-
-            /// What CopyVariantIntoAssets would have returned for the picture just saved at @p virtualPath
-            [[nodiscard]] ArtGenCopied Copied(StringView virtualPath, const RgbaImage& image) const {
-                EXPECT_TRUE(SaveRgbaPng(Resolve(virtualPath), image).has_value());
-                ArtGenCopied copied;
-                copied.texturePath = String(virtualPath);
-                copied.pngFile = Resolve(virtualPath);
-                copied.width = image.width;
-                copied.height = image.height;
-                return copied;
-            }
-
-            [[nodiscard]] bool Exists(StringView virtualPath) const {
-                return std::filesystem::exists(Resolve(virtualPath));
-            }
-
-            [[nodiscard]] RgbaImage Atlas(StringView virtualPath) const {
-                auto loaded = LoadRgbaImage(Resolve(virtualPath));
-                EXPECT_TRUE(loaded.has_value());
-                return loaded ? std::move(*loaded) : RgbaImage{};
-            }
-
-        private:
-            struct Resolver {
-                std::filesystem::path root;
-
-                std::filesystem::path operator()(StringView virtualPath) const {
-                    return root / ToStd(virtualPath);
-                }
-            };
-
-            std::filesystem::path _root;
-            Resolver _resolver;
-        };
 
         /// Counts the saves and can be told to fail from the @p failFrom-th on (0: never)
         struct CountingSave {
@@ -146,7 +51,7 @@ namespace BECore::Tests {
         }
 
         /// Both sprites accepted into "pieces", packed
-        void FillPackedPieces(TextureLibrary& library, const AtlasGame& game) {
+        void FillPackedPieces(TextureLibrary& library, const ArtGenGameFolder& game) {
             CountingSave save;
             ASSERT_TRUE(AcceptIntoGroup(library, game.Copied(kQueenPng, MakeSolid(4, 4, 0, 0, kHigh)), "queen", "pieces", false, game.Io(), save).has_value());
             ASSERT_TRUE(AcceptIntoGroup(library, game.Copied(kRookPng, MakeSolid(2, 2, kHigh, 0, 0)), "rook", "pieces", false, game.Io(), save).has_value());
@@ -155,7 +60,7 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST(ArtGenAtlasAcceptTest, ASpriteWithNoEntryJoinsANewGroupAndTheGroupIsPacked) {
-        const AtlasGame game;
+        const ArtGenGameFolder game(kTempPrefix);
         TextureLibrary library;
         CountingSave save;
 
@@ -178,7 +83,7 @@ namespace BECore::Tests {
     }
 
     TEST(ArtGenAtlasAcceptTest, ASecondSpriteIntoTheGroupPacksBothTogether) {
-        const AtlasGame game;
+        const ArtGenGameFolder game(kTempPrefix);
         TextureLibrary library;
         ASSERT_NO_FATAL_FAILURE(FillPackedPieces(library, game));
 
@@ -191,7 +96,7 @@ namespace BECore::Tests {
     }
 
     TEST(ArtGenAtlasAcceptTest, AnUnpackedMemberOfAnotherGroupMovesToTheNewGroup) {
-        const AtlasGame game;
+        const ArtGenGameFolder game(kTempPrefix);
         TextureLibrary library;
         const ArtGenCopied copied = game.Copied(kQueenPng, MakeSolid(4, 4, 0, 0, kHigh));
         SpriteEntry old = EntryInGroup("queen", kQueenPng, Rect(0, 0, 8, 8), "ui");
@@ -209,7 +114,7 @@ namespace BECore::Tests {
     }
 
     TEST(ArtGenAtlasAcceptTest, APackedMemberOfAnotherGroupIsRefusedAndNothingChanges) {
-        const AtlasGame game;
+        const ArtGenGameFolder game(kTempPrefix);
         TextureLibrary library;
         library.AddOrUpdate(EntryInGroup("queen", kQueenPng, Rect(0, 0, 4, 4), "ui"));
         library.AddOrUpdate(EntryInGroup("rook", kRookPng, Rect(0, 0, 2, 2), "ui"));
@@ -217,7 +122,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(SaveRgbaPng(game.Resolve(kRookPng), MakeSolid(2, 2, kHigh, 0, 0)).has_value());
         ASSERT_TRUE(WriteAtlas(library, "ui", PackSettings{}, game.Io()).has_value());
         const SpriteEntry queenBefore = Queen(library);
-        const Vector<uint8_t> atlasBefore = ReadAllBytes(game.Resolve(kUiAtlas));
+        const Vector<uint8_t> atlasBefore = ReadFileBytes(game.Resolve(kUiAtlas));
         const ArtGenCopied copied = game.Copied(kQueenPng, MakeSolid(6, 2, 0, kHigh, 0));
         CountingSave save;
 
@@ -236,7 +141,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Queen(library).srcRect.x, queenBefore.srcRect.x);
         EXPECT_EQ(Queen(library).atlas->source->texturePath, queenBefore.atlas->source->texturePath);
         EXPECT_FALSE(game.Exists(kPiecesAtlas));
-        EXPECT_EQ(ReadAllBytes(game.Resolve(kUiAtlas)), atlasBefore);
+        EXPECT_EQ(ReadFileBytes(game.Resolve(kUiAtlas)), atlasBefore);
     }
 
     TEST(ArtGenAtlasAcceptTest, AMemberOfTheSameGroupKeepsItsPackRecordWhileUnpacked) {
@@ -258,7 +163,7 @@ namespace BECore::Tests {
     }
 
     TEST(ArtGenAtlasAcceptTest, ADeferredPackLeavesLooseMembersUntilTheGroupIsPackedOnce) {
-        const AtlasGame game;
+        const ArtGenGameFolder game(kTempPrefix);
         TextureLibrary library;
         CountingSave save;
 
@@ -293,10 +198,10 @@ namespace BECore::Tests {
     }
 
     TEST(ArtGenAtlasAcceptTest, ARowsAndThePackInsideABatchOweOneSaveAndAFailedCommitGivesTheLibraryBack) {
-        const AtlasGame game;
+        const ArtGenGameFolder game(kTempPrefix);
         TextureLibrary library;
         ASSERT_NO_FATAL_FAILURE(FillPackedPieces(library, game));
-        const Vector<uint8_t> atlasBefore = ReadAllBytes(game.Resolve(kPiecesAtlas));
+        const Vector<uint8_t> atlasBefore = ReadFileBytes(game.Resolve(kPiecesAtlas));
         const SpriteEntry queenBefore = Queen(library);
         const SpriteEntry rookBefore = Rook(library);
         const size_t entriesBefore = library.GetAll().size();
@@ -313,7 +218,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(packed.has_value());
         ASSERT_TRUE(packed->repacked.has_value());
         batch.NoteRepacked();
-        EXPECT_NE(ReadAllBytes(game.Resolve(kPiecesAtlas)), atlasBefore) << "the pack rewrote the atlas file";
+        EXPECT_NE(ReadFileBytes(game.Resolve(kPiecesAtlas)), atlasBefore) << "the pack rewrote the atlas file";
 
         int committedSaves = 0;
         const auto committed = batch.Commit([&committedSaves] {
@@ -331,7 +236,7 @@ namespace BECore::Tests {
     }
 
     TEST(ArtGenAtlasAcceptTest, ANewPictureOfAPackedMemberPacksTheGroupAgain) {
-        const AtlasGame game;
+        const ArtGenGameFolder game(kTempPrefix);
         TextureLibrary library;
         ASSERT_NO_FATAL_FAILURE(FillPackedPieces(library, game));
         CountingSave save;
@@ -351,10 +256,10 @@ namespace BECore::Tests {
     }
 
     TEST(ArtGenAtlasAcceptTest, ThePictureOfAPackedMemberAcceptedAgainChangesNothingAndSavesNothingMore) {
-        const AtlasGame game;
+        const ArtGenGameFolder game(kTempPrefix);
         TextureLibrary library;
         ASSERT_NO_FATAL_FAILURE(FillPackedPieces(library, game));
-        const Vector<uint8_t> atlasBefore = ReadAllBytes(game.Resolve(kPiecesAtlas));
+        const Vector<uint8_t> atlasBefore = ReadFileBytes(game.Resolve(kPiecesAtlas));
         CountingSave save;
 
         const auto stored = AcceptIntoGroup(library, game.Copied(kQueenPng, MakeSolid(4, 4, 0, 0, kHigh)), "queen", "pieces", false, game.Io(), save);
@@ -363,14 +268,14 @@ namespace BECore::Tests {
         EXPECT_FALSE(stored->saved);
         EXPECT_EQ(save.saves, 0);
         EXPECT_TRUE(stored->repacked.has_value());
-        EXPECT_EQ(ReadAllBytes(game.Resolve(kPiecesAtlas)), atlasBefore);
+        EXPECT_EQ(ReadFileBytes(game.Resolve(kPiecesAtlas)), atlasBefore);
     }
 
     TEST(ArtGenAtlasAcceptTest, AFailedPackKeepsTheNewEntryAndTheOldAtlasFile) {
-        const AtlasGame game;
+        const ArtGenGameFolder game(kTempPrefix);
         TextureLibrary library;
         ASSERT_NO_FATAL_FAILURE(FillPackedPieces(library, game));
-        const Vector<uint8_t> atlasBefore = ReadAllBytes(game.Resolve(kPiecesAtlas));
+        const Vector<uint8_t> atlasBefore = ReadFileBytes(game.Resolve(kPiecesAtlas));
         const Rect rookPlace = Rook(library).srcRect;
         std::error_code ignored;
         std::filesystem::remove(game.Resolve(kRookPng), ignored);
@@ -386,11 +291,11 @@ namespace BECore::Tests {
         ASSERT_TRUE(IsPackedSprite(Queen(library)));
         EXPECT_EQ(Queen(library).atlas->source->rect.w, 6.0f);
         EXPECT_EQ(Rook(library).srcRect.x, rookPlace.x);
-        EXPECT_EQ(ReadAllBytes(game.Resolve(kPiecesAtlas)), atlasBefore);
+        EXPECT_EQ(ReadFileBytes(game.Resolve(kPiecesAtlas)), atlasBefore);
     }
 
     TEST(ArtGenAtlasAcceptTest, AFailedSecondSaveGivesTheMembersBack) {
-        const AtlasGame game;
+        const ArtGenGameFolder game(kTempPrefix);
         TextureLibrary library;
         CountingSave save;
         save.failFrom = 2;
@@ -408,7 +313,7 @@ namespace BECore::Tests {
     }
 
     TEST(ArtGenAtlasAcceptTest, AFailedFirstSaveStoresNothingAndPacksNothing) {
-        const AtlasGame game;
+        const ArtGenGameFolder game(kTempPrefix);
         TextureLibrary library;
         CountingSave save;
         save.failFrom = 1;
@@ -422,7 +327,7 @@ namespace BECore::Tests {
     }
 
     TEST(ArtGenAtlasAcceptTest, AGroupWithNoMemberIsAnError) {
-        const AtlasGame game;
+        const ArtGenGameFolder game(kTempPrefix);
         TextureLibrary library;
         CountingSave save;
 
@@ -435,7 +340,7 @@ namespace BECore::Tests {
     }
 
     TEST(ArtGenAtlasAcceptTest, ABadGroupNameIsRefusedAndNothingIsStored) {
-        const AtlasGame game;
+        const ArtGenGameFolder game(kTempPrefix);
         TextureLibrary library;
         CountingSave save;
 

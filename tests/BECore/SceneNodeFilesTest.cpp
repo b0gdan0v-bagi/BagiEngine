@@ -44,14 +44,6 @@ namespace BECore::Tests {
             return Format("<node name=\"{}\" contentVersion=\"{}\"/>", name, kContentVersion);
         }
 
-        /// The text of a file, to see that a node file is not changed by the instances made of it
-        String ReadFile(const std::filesystem::path& path) {
-            std::ifstream in(path);
-            std::ostringstream content;
-            content << in.rdbuf();
-            return FromStdString(content.str());
-        }
-
         /// The first `<node>` of the first scene
         pugi::xml_node FirstNode(const pugi::xml_document& doc) {
             return doc.document_element().child("scenes").child("scene").child("nodes").child("node");
