@@ -2,6 +2,7 @@
 
 #include <BECore/Control/Json.h>
 #include <BECore/Types/Types.h>
+#include <Common/Require.h>
 
 namespace BECore::Tests {
 

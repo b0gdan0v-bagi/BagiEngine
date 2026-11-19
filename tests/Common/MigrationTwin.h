@@ -19,6 +19,7 @@
 #include <BECore/UI/UIControl.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIStrings.h>
+#include <BECore/UI/UIThemes.h>
 #include <BECore/UI/UIVars.h>
 #include <BECore/Utils/FunctionRef.h>
 #include <Common/EngineEnvironment.h>
@@ -188,6 +189,7 @@ namespace BECore::Tests::MigrationTwin {
         void TearDown() override {
             CoreManager::GetUIVars().Clear();
             CoreManager::GetUIStrings().Clear();
+            CoreManager::GetUIThemes().Clear();  // a draw of a screen with no theme records its tokens as missing: the next case would see them
             EngineEnvironment::UseSceneManager({});
             _manager.Reset();
             _icon.Reset();

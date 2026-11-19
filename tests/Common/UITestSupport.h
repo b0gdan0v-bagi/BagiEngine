@@ -14,6 +14,7 @@
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UITextComponent.h>
+#include <BECore/UI/UIThemes.h>
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
@@ -134,7 +135,7 @@ namespace BECore::Tests {
      * The output is kSceneOutputWidth x kSceneOutputHeight until a case sets `_renderer->width` / `height`. LoadScene() picks the canvas of the first node of `Main` as `_canvas`
      * (UseCanvas() picks another), and El() / Get() / ComponentOf() look in it. They never end the process: a missing name or type is a fatal failure of the case and the answer
      * is a blank stand-in kept until TearDown, so a case that reads further through it is `ASSERT_NO_FATAL_FAILURE`; FindElement() gives the pointer. The UI variables, the
-     * strings and the font atlases are cleared around every case: they are global.
+     * strings, the themes and the font atlases are cleared around every case: they are global.
      */
     class UISceneFixture : public ::testing::Test {
     protected:
@@ -161,6 +162,7 @@ namespace BECore::Tests {
             _standInComponents.clear();
             CoreManager::GetUIVars().Clear();
             CoreManager::GetUIStrings().Clear();
+            CoreManager::GetUIThemes().Clear();
             CoreManager::GetRendererManager().SetRenderer({});
             CoreManager::GetFontAtlasLibrary().Clear();
         }
