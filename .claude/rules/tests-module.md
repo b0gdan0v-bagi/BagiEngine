@@ -46,6 +46,7 @@ ctest --preset macos-debug -j1                                   # one at a time
 
 ### Rules
 
+- **A test pins a contract or reproduces a bug.** It does not retell the implementation (the same steps in the same order, so it breaks on every refactor and on no bug), repeat a neighbouring case with other numbers, or check the value of a constant. A new test that does is a review finding.
 - **A failing case fails, it never crashes.** A lookup the case reads through goes through `Require(pointer | IntrusivePtr | Optional | expected)`, `At(container, i)` or `Back(container)` (`tests/Common/Require.h`), or is `ASSERT_NE`d first; a helper that `EXPECT_NE`s and then dereferences is the bug. No `ASSERT_*` returns while a thread or a queued task still uses the case's locals: stop and join first, then assert.
 - Use gtest macros (`EXPECT_*`, `ASSERT_*`), **not** the engine `ASSERT` / `EXPECT`: the engine ones are compiled out in Release presets, which would make a test pass without checking anything. `ASSERT_*` where the next line depends on the check, `EXPECT_*` otherwise. In a helper that must stop the test, use `ASSERT_*` and call it through `ASSERT_NO_FATAL_FAILURE(...)`.
 - A failed engine `ASSERT` / `EXPECT` / `FATALERROR` inside the tested code is reported as a gtest failure by `AssertBridge` (Debug presets only, because the engine macros are off in Release).
