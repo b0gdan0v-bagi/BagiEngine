@@ -22,6 +22,7 @@
 #include <Common/RecordingRenderer.h>
 #include <Common/UICanvasRoundTrip.h>
 #include <Common/UIInputEvents.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Generated/UIComponentTest.gen.hpp>
 #include <gtest/gtest.h>
@@ -134,46 +135,19 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class UIComponentTest : public ::testing::Test {
+    class UIComponentTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
+            UISceneFixture::SetUp();
             UIComponentLog().clear();
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
 
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kComponentsXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kComponentsXml));
             ASSERT_TRUE(_canvas);
         }
 
         void TearDown() override {
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
             UIComponentLog().clear();
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
-        }
-
-        UIElement& Get(const char* name) const {
-            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
-            return *element;
+            UISceneFixture::TearDown();
         }
 
         /// The position of the first rect drawn in @p color in the last draw, -1 when there is none
@@ -198,27 +172,23 @@ namespace BECore::Tests {
         bool ReleaseOn(const UIElement& element) {
             return CoreManager::GetUIInput().DispatchMouseButtonUp(Button(element.rect.x + element.rect.w * 0.5f, element.rect.y + element.rect.h * 0.5f, false));
         }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
     };
 
     // ---- the list in a file -----------------------------------------------------------------------------------------------
 
     TEST_F(UIComponentTest, TheComponentsComeFromTheFileInListOrder) {
-        const UIElement& host = Get("Host");
+        const UIElement& host = El("Host");
         ASSERT_EQ(host.components.size(), 2u);
         EXPECT_TRUE(host.components[0]->Is<UITestProbe>());
         EXPECT_TRUE(host.components[1]->Is<UITestOther>());
         EXPECT_EQ(host.components[0]->Cast<UITestProbe>()->tag, "first"_intern);
         EXPECT_TRUE(host.components[0]->Cast<UITestProbe>()->takesClicks);
         EXPECT_EQ(host.components[1]->Cast<UITestOther>()->tag, "second"_intern);
-        EXPECT_TRUE(Get("Plain").components.empty());
+        EXPECT_TRUE(El("Plain").components.empty());
     }
 
     TEST_F(UIComponentTest, TheComponentsSaveAndLoadBackInTheSameOrder) {
-        const String xml = ElementToXml(Get("Host"));
+        const String xml = ElementToXml(El("Host"));
         EXPECT_NE(xml.find("<components>"), String::npos) << xml.c_str();
 
         XmlDeserializer deserializer;
@@ -229,7 +199,7 @@ namespace BECore::Tests {
         deserializer.EndObject();
         EXPECT_FALSE(deserializer.HasErrors());
 
-        EXPECT_EQ(TypeNames(*loaded), TypeNames(Get("Host")));
+        EXPECT_EQ(TypeNames(*loaded), TypeNames(El("Host")));
         EXPECT_STREQ(ElementToXml(*loaded).c_str(), xml.c_str());
         EXPECT_EQ(loaded->components[0]->Cast<UITestProbe>()->mark.g, 0);
         EXPECT_EQ(loaded->components[0]->Cast<UITestProbe>()->mark.r, 1);
@@ -272,7 +242,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIComponentTest, AnElementWithNoComponentsSavesNoneAndLoadsNone) {
-        const String xml = ElementToXml(Get("Plain"));
+        const String xml = ElementToXml(El("Plain"));
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
         auto loaded = New<UIElement>();
@@ -298,7 +268,7 @@ namespace BECore::Tests {
     // ---- one of each type -------------------------------------------------------------------------------------------------
 
     TEST_F(UIComponentTest, ASecondComponentOfATypeInAFileIsDroppedAndTheFirstKept) {
-        const UIElement& twice = Get("Twice");
+        const UIElement& twice = El("Twice");
         ASSERT_EQ(twice.components.size(), 2u);
         EXPECT_EQ(twice.components[0]->Cast<UITestProbe>()->tag, "one"_intern);
         EXPECT_EQ(twice.components[1]->Cast<UITestOther>()->tag, "between"_intern);
@@ -306,14 +276,14 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIComponentTest, GetComponentFindsATypeAndAddComponentReturnsTheExistingOne) {
-        UIElement& host = Get("Host");
+        UIElement& host = El("Host");
         EXPECT_EQ(host.GetComponent<UITestProbe>(), host.components[0]->Cast<UITestProbe>());
         EXPECT_EQ(&host.AddComponent<UITestOther>(), host.components[1]->Cast<UITestOther>());
         EXPECT_EQ(host.components.size(), 2u);
     }
 
     TEST_F(UIComponentTest, AddComponentMakesTheMissingOneAtTheEndOfTheList) {
-        UIElement& passive = Get("Passive");
+        UIElement& passive = El("Passive");
         EXPECT_EQ(passive.GetComponent<UITestProbe>(), nullptr);
         UITestProbe& added = passive.AddComponent<UITestProbe>();
         ASSERT_EQ(passive.components.size(), 2u);
@@ -340,7 +310,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIComponentTest, AHiddenElementDrawsNoComponents) {
-        Get("Host").style.visible = false;
+        El("Host").style.visible = false;
         _canvas->Invalidate();
         Draw();
         EXPECT_EQ(IndexOf(kFirstMark), -1);
@@ -359,7 +329,7 @@ namespace BECore::Tests {
     TEST_F(UIComponentTest, PressDragAndClickReachTheComponentsInListOrderWithTheirOwner) {
         Draw();
         UIComponentLog().clear();
-        const UIElement& host = Get("Host");
+        const UIElement& host = El("Host");
 
         EXPECT_TRUE(PressOn(host));
         CoreManager::GetUIInput().DispatchMouseMotion(Motion(host.rect.x + 70.0f, host.rect.y + 40.0f, SDL_BUTTON_LMASK));
@@ -372,7 +342,7 @@ namespace BECore::Tests {
     TEST_F(UIComponentTest, LettingGoElsewhereCancelsTheClick) {
         Draw();
         UIComponentLog().clear();
-        EXPECT_TRUE(PressOn(Get("Host")));
+        EXPECT_TRUE(PressOn(El("Host")));
         CoreManager::GetUIInput().DispatchMouseButtonUp(Button(700.0f, 500.0f, false));
 
         EXPECT_FALSE(Contains(UIComponentLog(), "first click Host"));
@@ -381,10 +351,10 @@ namespace BECore::Tests {
 
     TEST_F(UIComponentTest, AnElementWhoseComponentsTakeNoClicksIsNotInteractiveAndNotAHitTarget) {
         Draw();
-        const UIElement& passive = Get("Passive");
+        const UIElement& passive = El("Passive");
         EXPECT_FALSE(passive.IsInteractive());
         EXPECT_FALSE(passive.IsHitTestable());
-        EXPECT_FALSE(Get("Plain").IsInteractive());
+        EXPECT_FALSE(El("Plain").IsInteractive());
 
         UIComponentLog().clear();
         EXPECT_FALSE(PressOn(passive));
@@ -393,14 +363,14 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIComponentTest, AComponentThatTakesClicksMakesTheElementInteractiveAndAHitTarget) {
-        const UIElement& host = Get("Host");
+        const UIElement& host = El("Host");
         EXPECT_FALSE(host.interactive);  // the field stays what the file says
         EXPECT_TRUE(host.IsInteractive());
         EXPECT_TRUE(host.IsHitTestable());
     }
 
     TEST_F(UIComponentTest, TheFieldInteractiveStillMakesAnElementInteractive) {
-        UIElement& plain = Get("Plain");
+        UIElement& plain = El("Plain");
         plain.interactive = true;
         EXPECT_TRUE(plain.IsInteractive());
     }
@@ -408,8 +378,8 @@ namespace BECore::Tests {
     // ---- the state look of the box ----------------------------------------------------------------------------------------
 
     TEST_F(UIComponentTest, AComponentIsNotCheckedUnlessItSaysSo) {
-        UIElement& host = Get("Host");
-        const UIElement& passive = Get("Passive");
+        UIElement& host = El("Host");
+        const UIElement& passive = El("Passive");
         EXPECT_FALSE(host.components[0]->IsChecked(host));
         EXPECT_FALSE(host.GetVisualState().checked);
         EXPECT_FALSE(passive.GetVisualState().checked);
@@ -422,8 +392,8 @@ namespace BECore::Tests {
 
     TEST_F(UIComponentTest, TheBoxTakesTheStateLookOnlyWhenAComponentGivesIt) {
         Draw();
-        UIElement& host = Get("Host");        // a component that takes clicks gives the state look
-        UIElement& passive = Get("Passive");  // one that takes none does not: a hovered panel that merely blocks input must not light up
+        UIElement& host = El("Host");        // a component that takes clicks gives the state look
+        UIElement& passive = El("Passive");  // one that takes none does not: a hovered panel that merely blocks input must not light up
         EXPECT_TRUE(host.GivesStateLook());
         EXPECT_FALSE(passive.GivesStateLook());
 
@@ -440,7 +410,7 @@ namespace BECore::Tests {
 
     TEST_F(UIComponentTest, TheStateColorsOfTheElementAreTheFillsOfItsStates) {
         Draw();
-        UIElement& host = Get("Host");
+        UIElement& host = El("Host");
         host.pressedColor = Color{90, 91, 92, 255};
         host.disabledColor = Color{80, 81, 82, 255};
         host.hovered = true;
@@ -457,7 +427,7 @@ namespace BECore::Tests {
 
     TEST_F(UIComponentTest, ASelectedElementThatShowsItsStateDrawsTheBarAtItsFoot) {
         Draw();
-        UIElement& host = Get("Host");
+        UIElement& host = El("Host");
         host.selected = true;
         _renderer->ClearCalls();
         host.DrawSelf(*_renderer);
@@ -524,7 +494,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIComponentTest, TheValidatorReportsTextThatDoesNotFitFromAComponent) {
-        auto& probe = Get("Twice").AddComponent<UITestProbe>();
+        auto& probe = El("Twice").AddComponent<UITestProbe>();
         probe.hasContent = true;
         probe.fits = false;
         Draw();
@@ -562,7 +532,7 @@ namespace BECore::Tests {
             UIComponentTest::SetUp();
             const Vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
             _texture = _renderer->CreateTexture(pixels.data(), kPictureSide, kPictureSide);
-            _image = &Get("Plain").AddComponent<UIImageComponent>();
+            _image = &El("Plain").AddComponent<UIImageComponent>();
             _image->GetSprite().SetTexture(_texture);
         }
 
@@ -623,7 +593,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIImageComponentTest, ASquarePictureInAWideRectKeepsItsShape) {
-        UIElement& host = Get("Host");
+        UIElement& host = El("Host");
         auto& image = host.AddComponent<UIImageComponent>();
         image.GetSprite().SetTexture(_texture);
         _image->tint = UIColor{0, 0, 0, 0};  // the picture of Plain is not drawn: only Host's is left
@@ -670,7 +640,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIImageComponentTest, AnUnknownSpriteDrawsNothing) {
-        auto& other = Get("Passive").AddComponent<UIImageComponent>();
+        auto& other = El("Passive").AddComponent<UIImageComponent>();
         other.sprite = "NoSuchSprite"_intern;
         _image->tint = UIColor{0, 0, 0, 0};
         Draw();
@@ -678,7 +648,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIImageComponentTest, TheTintFollowsTheStateOfTheOwner) {
-        UIElement& plain = Get("Plain");
+        UIElement& plain = El("Plain");
         _image->hoverTint = kHoverTint;
         _image->pressedTint = kPressedTint;
         _image->disabledTint = kDisabledTint;
@@ -702,7 +672,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIImageComponentTest, ATintThatIsNotGivenForAStateIsDerivedFromTheTint) {
-        UIElement& plain = Get("Plain");
+        UIElement& plain = El("Plain");
         _image->tint = UIColor{100, 120, 140, 200};
         const Color base = _image->tint;
         const UIStateLook::State hovered{true, false, false, false};
@@ -719,7 +689,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIImageComponentTest, APressThatLeftTheOwnerIsNotShownAsPressed) {
-        UIElement& plain = Get("Plain");
+        UIElement& plain = El("Plain");
         _image->pressedTint = kPressedTint;
         plain.pressed = true;
         plain.hovered = false;

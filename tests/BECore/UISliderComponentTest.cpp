@@ -142,44 +142,13 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class UISliderComponentTest : public ::testing::Test {
+    class UISliderComponentTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kSliderXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-
-            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            UISceneFixture::SetUp();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kSliderXml));
             ASSERT_TRUE(_canvas);
             Draw();
-        }
-
-        void TearDown() override {
-            CoreManager::GetUIVars().Clear();
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
         }
 
         UIElement& Element(const char* name) const {
@@ -235,10 +204,6 @@ namespace BECore::Tests {
             ASSERT_TRUE(Down(name, x));
             ASSERT_TRUE(Up(x, MiddleY(name)));
         }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
     };
 
     // ---- the thumb follows the variable --------------------------------------------------------------------------------------

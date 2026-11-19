@@ -15,6 +15,7 @@
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/TextTestSupport.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -67,52 +68,16 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class UITextComponentTest : public ::testing::Test {
+    class UITextComponentTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kTextXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            UISceneFixture::SetUp();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kTextXml));
             ASSERT_TRUE(_canvas);
         }
 
-        void TearDown() override {
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetUIStrings().Clear();
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
-        }
-
-        UIElement& Get(const char* name) const {
-            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
-            return *element;
-        }
-
         UITextComponent& CaptionOf(const char* name) const {
-            UITextComponent* caption = Get(name).GetComponent<UITextComponent>();
+            UITextComponent* caption = El(name).GetComponent<UITextComponent>();
             EXPECT_NE(caption, nullptr) << name;
             return *caption;
         }
@@ -134,10 +99,6 @@ namespace BECore::Tests {
             const auto glyphs = Glyphs();
             return glyphs.empty() ? Color{} : glyphs.back().color;
         }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
     };
 
     TEST_F(UITextComponentTest, TheFieldsComeFromTheFileUnderTheNamesOfALabel) {
@@ -161,7 +122,7 @@ namespace BECore::Tests {
             serializer.EndObject();
             return serializer.SaveToString();
         };
-        const String xml = toXml(Get("Cap"));
+        const String xml = toXml(El("Cap"));
         EXPECT_NE(xml.find("hoverTextColor"), String::npos) << xml.c_str();
         EXPECT_NE(xml.find("textOutline"), String::npos) << xml.c_str();
 
@@ -177,7 +138,7 @@ namespace BECore::Tests {
 
     TEST_F(UITextComponentTest, TheTextIsDrawnInTheRectOfTheOwner) {
         Draw();
-        const UIElement& cap = Get("Cap");
+        const UIElement& cap = El("Cap");
         const auto glyphs = Glyphs();
         ASSERT_FALSE(glyphs.empty());
         for (const DrawCall& glyph : glyphs) {
@@ -191,8 +152,8 @@ namespace BECore::Tests {
     TEST_F(UITextComponentTest, TheSizeIsTheFontSizeOfTheOwner) {
         Draw();
         const float small = Glyphs().back().rect.h;
-        Get("Cap").style.fontSize = 48.0f;
-        Get("Cap").style.rect.height = UILength::Px(80.0f);
+        El("Cap").style.fontSize = 48.0f;
+        El("Cap").style.rect.height = UILength::Px(80.0f);
         _canvas->Invalidate();
         Draw();
         EXPECT_GT(Glyphs().back().rect.h, small * 1.5f);
@@ -283,7 +244,7 @@ namespace BECore::Tests {
         EXPECT_EQ(CountTextIssues(*_canvas, "Cap"), 0u);
         EXPECT_EQ(CountTextIssues(*_canvas, "Shrinking"), 0u) << "a text that shrinks is no defect";
 
-        const UIElement& narrow = Get("Narrow");
+        const UIElement& narrow = El("Narrow");
         EXPECT_FALSE(narrow.CheckContent(40.0f, 40.0f, 1.0f).fits);
         EXPECT_TRUE(narrow.CheckContent(800.0f, 40.0f, 1.0f).fits);
     }
@@ -295,7 +256,7 @@ namespace BECore::Tests {
         strings.SetDefaultLanguage("en"_intern);
         UITextComponent& caption = CaptionOf("Narrow");
         caption.text = "{#line}";
-        Get("Narrow").style.rect.width = UILength::Px(120.0f);
+        El("Narrow").style.rect.width = UILength::Px(120.0f);
         _canvas->Invalidate();
 
         Draw();
@@ -307,7 +268,7 @@ namespace BECore::Tests {
 
     TEST_F(UITextComponentTest, MeasureGivesTheSizeOfTheShownText) {
         Draw();
-        const UIElement& cap = Get("Cap");
+        const UIElement& cap = El("Cap");
         const Vec2 size = CaptionOf("Cap").MeasureText(cap, 200.0f, 1.0f);
         EXPECT_GT(size.x, 0.0f);
         EXPECT_LT(size.x, 200.0f);
@@ -319,7 +280,7 @@ namespace BECore::Tests {
     // ---- the state -------------------------------------------------------------------------------------------------------------
 
     TEST_F(UITextComponentTest, TheTextTakesTheColourOfTheStateOfItsOwner) {
-        UIElement& cap = Get("Cap");
+        UIElement& cap = El("Cap");
         const UITextComponent& caption = CaptionOf("Cap");
         Draw();
         EXPECT_PRED2(ColorsEqual, TextColorDrawn(), kTextColor);
@@ -344,7 +305,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UITextComponentTest, APressThatLeftTheOwnerIsNotShownAsPressed) {
-        UIElement& cap = Get("Cap");
+        UIElement& cap = El("Cap");
         cap.pressed = true;
         cap.hovered = false;
         Draw();
@@ -355,7 +316,7 @@ namespace BECore::Tests {
         UITextComponent& caption = CaptionOf("Cap");
         caption.hoverTextColor = UIColor{};
         caption.disabledTextColor = UIColor{};
-        UIElement& cap = Get("Cap");
+        UIElement& cap = El("Cap");
         cap.hovered = true;
         cap.groupDisabled = true;
         Draw();
@@ -365,7 +326,7 @@ namespace BECore::Tests {
     TEST_F(UITextComponentTest, FadeWhenDisabledDrawsTheTextAtHalfAlphaUnlessTheStateHasAColourOfItsOwn) {
         UITextComponent& caption = CaptionOf("Cap");
         caption.disabledTextColor = UIColor{};
-        UIElement& cap = Get("Cap");
+        UIElement& cap = El("Cap");
         cap.groupDisabled = true;
         Draw();
         EXPECT_PRED2(ColorsEqual, TextColorDrawn(), kTextColor) << "off by default: a button does not fade its caption";
@@ -393,14 +354,14 @@ namespace BECore::Tests {
         const int plain = outlineAlpha();
         EXPECT_EQ(plain, 255);
 
-        Get("Cap").groupDisabled = true;
+        El("Cap").groupDisabled = true;
         Draw();
         EXPECT_LT(outlineAlpha(), plain) << "the outline fades with the text";
     }
 
     TEST_F(UITextComponentTest, TheHooksOfAPlainOwnerLeaveItsTextAndItsAreaAlone) {
         Draw();
-        UIElement& cap = Get("Cap");
+        UIElement& cap = El("Cap");
         EXPECT_TRUE(SameRect(cap.GetComponentArea(), cap.rect)) << "the area is the rect";
         EXPECT_EQ(cap.GetTextOverride(), nullptr);
         EXPECT_EQ(CaptionOf("Cap").GetDisplayText(cap), CaptionOf("Cap").GetDisplayText());
@@ -412,8 +373,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(UITextComponentTest, TheStateAccentOfAnElementWithATextComponentIsItsTextColour) {
-        EXPECT_PRED2(ColorsEqual, Get("Cap").GetStateAccent(), kTextColor);
-        EXPECT_PRED2(ColorsEqual, Get("Narrow").GetStateAccent(), (Color{255, 255, 255, 255})) << "the text component of Narrow keeps the default white";
+        EXPECT_PRED2(ColorsEqual, El("Cap").GetStateAccent(), kTextColor);
+        EXPECT_PRED2(ColorsEqual, El("Narrow").GetStateAccent(), (Color{255, 255, 255, 255})) << "the text component of Narrow keeps the default white";
     }
 
 }  // namespace BECore::Tests

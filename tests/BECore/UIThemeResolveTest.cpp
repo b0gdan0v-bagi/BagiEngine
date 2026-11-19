@@ -19,6 +19,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -133,13 +134,10 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class UIThemeResolveTest : public ::testing::Test {
+    class UIThemeResolveTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
+            UISceneFixture::SetUp();
             UIThemes& themes = CoreManager::GetUIThemes();
             themes.Set("light"_intern, "panel", kLightPanel);
             themes.Set("light"_intern, "hover", kLightHover);
@@ -153,34 +151,13 @@ namespace BECore::Tests {
             CoreManager::GetUIVars().Set("barValue"_intern, 0.5f);
             CoreManager::GetUIVars().Set("switchOn"_intern, 0);
 
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kThemeScreenXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kThemeScreenXml));
             ASSERT_TRUE(_canvas);
         }
 
         void TearDown() override {
             CoreManager::GetUIThemes().Clear();
-            CoreManager::GetUIVars().Clear();
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
+            UISceneFixture::TearDown();
         }
 
         template <typename T = UIElement>
@@ -210,10 +187,6 @@ namespace BECore::Tests {
         static void ExpectColor(const Color& actual, const Color& expected) {
             EXPECT_TRUE(ColorsEqual(actual, expected)) << "got " << int(actual.r) << "," << int(actual.g) << "," << int(actual.b) << "," << int(actual.a);
         }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
     };
 
     TEST_F(UIThemeResolveTest, ATokenFillIsDrawnInTheCurrentThemeAndFollowsASwitch) {

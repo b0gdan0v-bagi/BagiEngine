@@ -79,27 +79,14 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class UIStateTransitionTest : public ::testing::Test {
+    class UIStateTransitionTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
+            UISceneFixture::SetUp();
             _savedSettings = CoreManager::GetUIEnvironment().GetSettings();
             CoreManager::GetTime().Reset();
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
 
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kTransitionXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kTransitionXml));
             _manager->SetActiveScene("Main"_intern);
             _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
             ASSERT_TRUE(_canvas);
@@ -107,7 +94,7 @@ namespace BECore::Tests {
             const Vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
             _texture = _renderer->CreateTexture(pixels.data(), kPictureSide, kPictureSide);
             for (const char* icon : {"BtnIcon", "PlainIcon"}) {
-                Get(icon).GetComponent<UIImageComponent>()->GetSprite().SetTexture(_texture);
+                El(icon).GetComponent<UIImageComponent>()->GetSprite().SetTexture(_texture);
             }
         }
 
@@ -115,10 +102,7 @@ namespace BECore::Tests {
             CoreManager::GetUIEnvironment().SetSettings(_savedSettings);
             CoreManager::GetTime().Reset();
             _texture.Reset();
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
+            UISceneFixture::TearDown();
         }
 
         void Draw() {
@@ -138,12 +122,6 @@ namespace BECore::Tests {
             UISettings settings = _savedSettings;
             settings.stateTransition = seconds;
             CoreManager::GetUIEnvironment().SetSettings(settings);
-        }
-
-        UIElement& Get(const char* name) const {
-            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
-            return *element;
         }
 
         static Vec2 CenterOf(const UIElement& element) {
@@ -196,142 +174,139 @@ namespace BECore::Tests {
         }
 
         UISettings _savedSettings;
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
         IntrusivePtr<ITexture> _texture;
     };
 
     TEST_F(UIStateTransitionTest, AHoveredFillEasesFromTheRestToTheHoverOverItsDuration) {
         Draw();
-        ASSERT_EQ(Fill(Get("Btn")), 40);
-        Hover(Get("Btn"));
-        EXPECT_EQ(Fill(Get("Btn")), 40) << "the change starts from what was shown";
+        ASSERT_EQ(Fill(El("Btn")), 40);
+        Hover(El("Btn"));
+        EXPECT_EQ(Fill(El("Btn")), 40) << "the change starts from what was shown";
         Wait(0.5);
-        EXPECT_EQ(Fill(Get("Btn")), 70) << "QuadOut: three quarters of the way at half the time";
+        EXPECT_EQ(Fill(El("Btn")), 70) << "QuadOut: three quarters of the way at half the time";
         Wait(0.5);
-        EXPECT_EQ(Fill(Get("Btn")), 80);
+        EXPECT_EQ(Fill(El("Btn")), 80);
         Wait(0.5);
-        EXPECT_EQ(Fill(Get("Btn")), 80) << "and stays";
+        EXPECT_EQ(Fill(El("Btn")), 80) << "and stays";
     }
 
     TEST_F(UIStateTransitionTest, TheAnimationIsOnGameTimeNotOnFrames) {
         Draw();
-        Hover(Get("Btn"));
+        Hover(El("Btn"));
         CoreManager::GetTime().Advance(kStep);
         CoreManager::GetTime().Advance(kStep);
         Draw();  // two clock steps and one frame: the same half second
-        EXPECT_EQ(Fill(Get("Btn")), 70);
+        EXPECT_EQ(Fill(El("Btn")), 70);
         Draw();
         Draw();  // frames at the same game time change nothing
-        EXPECT_EQ(Fill(Get("Btn")), 70);
+        EXPECT_EQ(Fill(El("Btn")), 70);
     }
 
     TEST_F(UIStateTransitionTest, APressDuringAHoverBlendContinuesFromWhatIsShown) {
         Draw();
-        Hover(Get("Btn"));
+        Hover(El("Btn"));
         Wait(0.5);
-        ASSERT_EQ(Fill(Get("Btn")), 70);
-        Press(Get("Btn"));
-        EXPECT_EQ(Fill(Get("Btn")), 70) << "no jump to the pressed fill";
+        ASSERT_EQ(Fill(El("Btn")), 70);
+        Press(El("Btn"));
+        EXPECT_EQ(Fill(El("Btn")), 70) << "no jump to the pressed fill";
         Wait(1.0);
-        EXPECT_EQ(Fill(Get("Btn")), 20);
+        EXPECT_EQ(Fill(El("Btn")), 20);
     }
 
     TEST_F(UIStateTransitionTest, ThePictureAndTheCaptionOfAButtonFollowItsOwnerTransition) {
         Draw();
-        ASSERT_EQ(PictureTint(Get("BtnIcon")), 100);
-        ASSERT_EQ(TextColor(Get("BtnCap")), 100);
-        Hover(Get("Btn"));
-        EXPECT_EQ(PictureTint(Get("BtnIcon")), 100);
-        EXPECT_EQ(TextColor(Get("BtnCap")), 100);
+        ASSERT_EQ(PictureTint(El("BtnIcon")), 100);
+        ASSERT_EQ(TextColor(El("BtnCap")), 100);
+        Hover(El("Btn"));
+        EXPECT_EQ(PictureTint(El("BtnIcon")), 100);
+        EXPECT_EQ(TextColor(El("BtnCap")), 100);
         Wait(0.5);
-        EXPECT_EQ(PictureTint(Get("BtnIcon")), 175) << "100 + 0.75 * (200 - 100)";
-        EXPECT_EQ(TextColor(Get("BtnCap")), 175);
+        EXPECT_EQ(PictureTint(El("BtnIcon")), 175) << "100 + 0.75 * (200 - 100)";
+        EXPECT_EQ(TextColor(El("BtnCap")), 175);
         Wait(0.5);
-        EXPECT_EQ(PictureTint(Get("BtnIcon")), 200);
-        EXPECT_EQ(TextColor(Get("BtnCap")), 200);
+        EXPECT_EQ(PictureTint(El("BtnIcon")), 200);
+        EXPECT_EQ(TextColor(El("BtnCap")), 200);
     }
 
     TEST_F(UIStateTransitionTest, WithNoDurationTheDiscreteLookIsDrawnInTheSameFrame) {
         Draw();
-        Hover(Get("Plain"));
-        EXPECT_EQ(Fill(Get("Plain")), 80) << "the default setting is 0: the one-frame change";
-        EXPECT_EQ(PictureTint(Get("PlainIcon")), 200);
+        Hover(El("Plain"));
+        EXPECT_EQ(Fill(El("Plain")), 80) << "the default setting is 0: the one-frame change";
+        EXPECT_EQ(PictureTint(El("PlainIcon")), 200);
     }
 
     TEST_F(UIStateTransitionTest, TheSettingIsTheDefaultOfAnElementThatHasNoDurationOfItsOwn) {
         SetStateTransition(1.0f);
         Draw();
-        Hover(Get("Plain"));
+        Hover(El("Plain"));
         Wait(0.5);
-        EXPECT_EQ(Fill(Get("Plain")), 70);
-        EXPECT_EQ(PictureTint(Get("PlainIcon")), 175) << "the child follows its owner's duration, which is the setting here";
+        EXPECT_EQ(Fill(El("Plain")), 70);
+        EXPECT_EQ(PictureTint(El("PlainIcon")), 175) << "the child follows its owner's duration, which is the setting here";
     }
 
     TEST_F(UIStateTransitionTest, ADurationOfZeroTurnsTheElementOffWhateverTheSetting) {
         SetStateTransition(1.0f);
         Draw();
-        Hover(Get("Off"));
-        EXPECT_EQ(Fill(Get("Off")), 80);
+        Hover(El("Off"));
+        EXPECT_EQ(Fill(El("Off")), 80);
     }
 
     TEST_F(UIStateTransitionTest, TheFirstDrawSnapsToTheStateTheElementIsIn) {
         SetStateTransition(1.0f);
-        Get("Plain").hovered = true;  // the screen opens under the pointer
+        El("Plain").hovered = true;  // the screen opens under the pointer
         Draw();
-        EXPECT_EQ(Fill(Get("Plain")), 80);
-        EXPECT_EQ(PictureTint(Get("PlainIcon")), 200);
+        EXPECT_EQ(Fill(El("Plain")), 80);
+        EXPECT_EQ(PictureTint(El("PlainIcon")), 200);
         Wait(0.5);
-        EXPECT_EQ(Fill(Get("Plain")), 80);
+        EXPECT_EQ(Fill(El("Plain")), 80);
     }
 
     TEST_F(UIStateTransitionTest, AnElementTurnedOffForgetsItsBlend) {
         Draw();
-        Hover(Get("Btn"));
+        Hover(El("Btn"));
         Wait(0.5);
-        ASSERT_EQ(Fill(Get("Btn")), 70);
-        Get("Btn").stateDuration = 0.0f;
+        ASSERT_EQ(Fill(El("Btn")), 70);
+        El("Btn").stateDuration = 0.0f;
         Draw();
-        EXPECT_EQ(Fill(Get("Btn")), 80) << "off means the discrete look at once";
-        Get("Btn").stateDuration = 1.0f;
+        EXPECT_EQ(Fill(El("Btn")), 80) << "off means the discrete look at once";
+        El("Btn").stateDuration = 1.0f;
         Draw();
-        EXPECT_EQ(Fill(Get("Btn")), 80) << "turned on again, it starts from where it is and does not replay the old blend";
+        EXPECT_EQ(Fill(El("Btn")), 80) << "turned on again, it starts from where it is and does not replay the old blend";
     }
 
     TEST_F(UIStateTransitionTest, TheHeaderBoxOfADropdownEasesToo) {
         Draw();
-        ASSERT_EQ(Fill(Get("Pick")), 40);
-        Hover(Get("Pick"));
-        const int hovered = Get("Pick").Cast<UIDropdown>()->GetCurrentFill().r;
+        ASSERT_EQ(Fill(El("Pick")), 40);
+        Hover(El("Pick"));
+        const int hovered = El("Pick").Cast<UIDropdown>()->GetCurrentFill().r;
         ASSERT_GT(hovered, 40);
-        EXPECT_EQ(Fill(Get("Pick")), 40);
+        EXPECT_EQ(Fill(El("Pick")), 40);
         Wait(0.5);
-        EXPECT_NEAR(Fill(Get("Pick")), 40.0f + 0.75f * static_cast<float>(hovered - 40), 1.0f);
+        EXPECT_NEAR(Fill(El("Pick")), 40.0f + 0.75f * static_cast<float>(hovered - 40), 1.0f);
         Wait(0.5);
-        EXPECT_EQ(Fill(Get("Pick")), hovered);
+        EXPECT_EQ(Fill(El("Pick")), hovered);
     }
 
     TEST_F(UIStateTransitionTest, GetStateLookStaysThePureLookOfTheStateNow) {
         Draw();
-        Hover(Get("Btn"));
+        Hover(El("Btn"));
         Wait(0.25);
-        EXPECT_EQ(Get("Btn").GetStateLook().fill.r, 80) << "a caller that does not draw gets the look of the state, not the blend";
+        EXPECT_EQ(El("Btn").GetStateLook().fill.r, 80) << "a caller that does not draw gets the look of the state, not the blend";
     }
 
     TEST_F(UIStateTransitionTest, AnOutOfRangeDurationIsKeptInsideTheSetting) {
         EXPECT_FLOAT_EQ(UISettings::ClampStateTransition(-1.0f), 0.0f);
         EXPECT_FLOAT_EQ(UISettings::ClampStateTransition(std::numeric_limits<float>::quiet_NaN()), 0.0f);
         EXPECT_FLOAT_EQ(UISettings::ClampStateTransition(1000.0f), UISettings::kMaxStateTransition);
-        Get("Btn").stateDuration = 1000.0f;
-        EXPECT_FLOAT_EQ(Get("Btn").GetStateDuration(), UISettings::kMaxStateTransition);
-        Get("Btn").stateDuration = std::numeric_limits<float>::quiet_NaN();
-        EXPECT_FLOAT_EQ(Get("Btn").GetStateDuration(), 0.0f) << "a NaN is the setting";
+        El("Btn").stateDuration = 1000.0f;
+        EXPECT_FLOAT_EQ(El("Btn").GetStateDuration(), UISettings::kMaxStateTransition);
+        El("Btn").stateDuration = std::numeric_limits<float>::quiet_NaN();
+        EXPECT_FLOAT_EQ(El("Btn").GetStateDuration(), 0.0f) << "a NaN is the setting";
     }
 
     TEST_F(UIStateTransitionTest, AFrameInWhichNothingChangedAllocatesNothing) {
         Draw();
-        Hover(Get("Btn"));
+        Hover(El("Btn"));
         Wait(0.5);  // the blend is on its way, the glyphs are laid out, the calls vector has its capacity
         Wait(0.25);
 #if BE_PROFILER_ALLOC
@@ -344,7 +319,7 @@ namespace BECore::Tests {
 #if BE_PROFILER_ALLOC
         EXPECT_EQ(AllocTracker::GetThreadCounters().count, before);
 #endif
-        EXPECT_EQ(Fill(Get("Btn")), 80);
+        EXPECT_EQ(Fill(El("Btn")), 80);
     }
 
 }  // namespace BECore::Tests

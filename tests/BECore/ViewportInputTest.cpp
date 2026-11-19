@@ -10,6 +10,7 @@
 #include <BECore/UI/UIInputClicker.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UITestSupport.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <Widgets/SceneEditor/SceneSelection.h>
@@ -90,37 +91,17 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class ViewportInputTest : public ::testing::Test {
+    class ViewportInputTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kSceneXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
+            UISceneFixture::SetUp();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kSceneXml));
             _manager->SetActiveScene("Main"_intern);
-            ASSERT_TRUE(_manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>());
+            ASSERT_TRUE(_canvas);
             _renderer->ClearCalls();
             _manager->DrawAll();  // the layout exists after one draw
 
             _sink = [this](const ViewportEditClickEvent& click) { _editClicks.push_back(click); };
-        }
-
-        void TearDown() override {
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
         }
 
         // The pointer arrived at (x, y), over the image
@@ -164,8 +145,6 @@ namespace BECore::Tests {
         static constexpr float kDialX = 450.0f;  // the middle of Dial
         static constexpr float kDialY = 350.0f;
 
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
         ViewportPointer _pointer;
         ViewportPointer::EditClickSink _sink;
         Vector<ViewportEditClickEvent> _editClicks;

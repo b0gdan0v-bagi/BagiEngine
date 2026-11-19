@@ -209,52 +209,12 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class UISegmentedTest : public ::testing::Test {
+    class UISegmentedTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kSegmentedXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-
-            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            UISceneFixture::SetUp();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kSegmentedXml));
             ASSERT_TRUE(_canvas);
-        }
-
-        void TearDown() override {
-            CoreManager::GetUIVars().Clear();
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
-        }
-
-        template <typename T>
-        T& Get(const char* name) const {
-            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
-            T* typed = element ? element->Cast<T>() : nullptr;
-            EXPECT_NE(typed, nullptr) << name << " is not the expected control";
-            return *typed;
         }
 
         bool Selected(const char* name) const {
@@ -300,10 +260,6 @@ namespace BECore::Tests {
             ASSERT_TRUE(CoreManager::GetUIInput().DispatchMouseButtonDown(Button(x, y, true)));
             ASSERT_TRUE(CoreManager::GetUIInput().DispatchMouseButtonUp(Button(x, y, false)));
         }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
     };
 
     // ---- the selection follows the variable -------------------------------------------------------------------------------

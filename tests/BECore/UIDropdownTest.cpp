@@ -221,60 +221,19 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class UIDropdownTest : public ::testing::Test {
+    class UIDropdownTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetFontAtlasLibrary().Clear();
+            UISceneFixture::SetUp();
             UIStrings& strings = CoreManager::GetUIStrings();
             strings.Clear();
             auto config = XmlConfig::Create();
             ASSERT_TRUE(config.LoadFromString(kStringsXml));
             ASSERT_TRUE(strings.LoadFromXml(config.GetRoot()).empty());
 
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kDropdownXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-
-            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kDropdownXml));
             ASSERT_TRUE(_canvas);
             Draw();
-        }
-
-        void TearDown() override {
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetUIStrings().Clear();
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
-        }
-
-        template <typename T>
-        T& Get(const char* name) const {
-            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
-            T* typed = element ? element->Cast<T>() : nullptr;
-            EXPECT_NE(typed, nullptr) << name << " is not the expected control";
-            return *typed;
         }
 
         /// Any element by name, whatever its class (`Get<T>` wants the exact type)
@@ -314,10 +273,6 @@ namespace BECore::Tests {
             const bool up = CoreManager::GetUIInput().DispatchMouseButtonUp(Button(x, y, false));
             return down && up;
         }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
     };
 
     // ---- the header -------------------------------------------------------------------------------------------------------

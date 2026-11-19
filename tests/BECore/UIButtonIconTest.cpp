@@ -92,54 +92,23 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class UIButtonIconDrawTest : public ::testing::Test {
+    class UIButtonIconDrawTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kIconXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            UISceneFixture::SetUp();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kIconXml));
             ASSERT_TRUE(_canvas);
 
             const Vector<uint8_t> pixels(static_cast<size_t>(kIconPixels) * kIconPixels * 4, 200);
             _icon = _renderer->CreateTexture(pixels.data(), kIconPixels, kIconPixels);
             for (const char* name : {"OnlyIcon", "LeftIcon", "LongIcon"}) {
-                Get(name).GetComponent<UIImageComponent>()->GetSprite().SetTexture(_icon);
+                El(name).GetComponent<UIImageComponent>()->GetSprite().SetTexture(_icon);
             }
         }
 
         void TearDown() override {
             _icon.Reset();
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
-        }
-
-        UIElement& Get(const char* name) const {
-            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
-            return *element;
+            UISceneFixture::TearDown();
         }
 
         /// The draws of the icon texture (there is one icon texture for all the buttons)
@@ -183,15 +152,12 @@ namespace BECore::Tests {
             return false;
         }
 
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
         IntrusivePtr<ITexture> _icon;
     };
 
     TEST_F(UIButtonIconDrawTest, AnIconOnlyButtonDrawsTheSpriteAloneInTheMiddleOfItsRect) {
         Draw();
-        const UIElement& only = Get("Only");
+        const UIElement& only = El("Only");
         ASSERT_EQ(IconCalls().size(), 3u) << "one icon per icon button, the plain one has none";
 
         const float side = only.rect.h * kIconOnlyShare;
@@ -210,28 +176,28 @@ namespace BECore::Tests {
 
     TEST_F(UIButtonIconDrawTest, TheIconAndTheCaptionOfALeftButtonShareTheRect) {
         Draw();
-        const UIElement& left = Get("Left");
+        const UIElement& left = El("Left");
         const float side = left.rect.h * kIconWithTextShare;
         const Rect icon{left.rect.x + kIconPadding, left.rect.y + (left.rect.h - side) * 0.5f, side, side};
         EXPECT_TRUE(IconDrawnAt(icon));
 
         const Rect captionArea{icon.x + side + kIconGap, left.rect.y, left.rect.x + left.rect.w - (icon.x + side + kIconGap), left.rect.h};
-        EXPECT_TRUE(NearRect(Get("LeftCaption").rect, captionArea, kTolerance));
+        EXPECT_TRUE(NearRect(El("LeftCaption").rect, captionArea, kTolerance));
         const auto glyphs = GlyphBounds(left.rect);
         ASSERT_TRUE(glyphs.has_value()) << "the caption is drawn";
         EXPECT_TRUE(RectInside(*glyphs, captionArea, 1.0f)) << "in the area the icon leaves";
     }
 
     TEST_F(UIButtonIconDrawTest, ASpriteThatIsNotInTheLibraryDrawsNoIconButStillTheCaption) {
-        Get("LeftIcon").GetComponent<UIImageComponent>()->GetSprite() = UISprite{};  // no direct texture, and the name "TestIcon" is not in the TextureLibrary
+        El("LeftIcon").GetComponent<UIImageComponent>()->GetSprite() = UISprite{};  // no direct texture, and the name "TestIcon" is not in the TextureLibrary
         Draw();
         EXPECT_EQ(IconCalls().size(), 2u);
-        EXPECT_TRUE(GlyphBounds(Get("Left").rect).has_value());
+        EXPECT_TRUE(GlyphBounds(El("Left").rect).has_value());
     }
 
     TEST_F(UIButtonIconDrawTest, AButtonWithoutAnIconCentresItsCaptionInTheWholeRect) {
         Draw();
-        const UIElement& plain = Get("Plain");
+        const UIElement& plain = El("Plain");
         const auto glyphs = GlyphBounds(plain.rect);
         ASSERT_TRUE(glyphs.has_value());
         EXPECT_NEAR(glyphs->x + glyphs->w * 0.5f, plain.rect.x + plain.rect.w * 0.5f, 3.0f);
@@ -254,12 +220,12 @@ namespace BECore::Tests {
 
     TEST_F(UIButtonIconDrawTest, ACaptionThatFitsTheRectButNotTheRoomTheIconLeavesIsCaught) {
         Draw();
-        const UIElement& caption = Get("LongCaption");
+        const UIElement& caption = El("LongCaption");
         const UIContentFit withIcon = caption.CheckContent(caption.rect.w, caption.rect.h, 1.0f);
         EXPECT_TRUE(withIcon.hasContent);
         EXPECT_FALSE(withIcon.fits) << "the icon takes room the caption needs";
 
-        const UIElement& whole = Get("LongPlain");
+        const UIElement& whole = El("LongPlain");
         const UIContentFit without = whole.CheckContent(whole.rect.w, whole.rect.h, 1.0f);
         EXPECT_TRUE(without.hasContent);
         EXPECT_TRUE(without.fits) << "the same caption fits the whole rect";
@@ -267,7 +233,7 @@ namespace BECore::Tests {
 
     TEST_F(UIButtonIconDrawTest, ACaptionNextToAnIconThatFitsIsNotReported) {
         Draw();
-        const UIElement& caption = Get("LeftCaption");
+        const UIElement& caption = El("LeftCaption");
         const UIContentFit fit = caption.CheckContent(caption.rect.w, caption.rect.h, 1.0f);
         EXPECT_TRUE(fit.hasContent);
         EXPECT_TRUE(fit.fits);
@@ -275,9 +241,9 @@ namespace BECore::Tests {
 
     TEST_F(UIButtonIconDrawTest, AnIconOnlyButtonHasNoTextToCheck) {
         Draw();
-        const UIElement& only = Get("Only");
+        const UIElement& only = El("Only");
         EXPECT_FALSE(only.CheckContent(only.rect.w, only.rect.h, 1.0f).hasContent);
-        const UIElement& icon = Get("OnlyIcon");
+        const UIElement& icon = El("OnlyIcon");
         EXPECT_FALSE(icon.CheckContent(icon.rect.w, icon.rect.h, 1.0f).hasContent);
     }
 

@@ -167,26 +167,11 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class UIToggleComponentTest : public ::testing::Test {
+    class UIToggleComponentTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kToggleXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
+            UISceneFixture::SetUp();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kToggleXml));
             _manager->SetActiveScene("Main"_intern);
 
             _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
@@ -194,41 +179,27 @@ namespace BECore::Tests {
             Draw();
         }
 
-        void TearDown() override {
-            CoreManager::GetUIVars().Clear();
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
-        }
-
         void Draw() {
             _renderer->ClearCalls();
             _manager->DrawAll();
         }
 
-        UIElement& Get(const char* name) const {
-            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
-            return *element;
-        }
-
         /// The row called @p name; its toggle component
         UIToggleComponent& Toggle(const char* name) const {
-            UIToggleComponent* toggle = Get(name).GetComponent<UIToggleComponent>();
+            UIToggleComponent* toggle = El(name).GetComponent<UIToggleComponent>();
             EXPECT_NE(toggle, nullptr) << name;
             return *toggle;
         }
 
         UISwitchComponent& Switch(const char* name) const {
-            UISwitchComponent* component = Get((String(name) + "Switch").c_str()).GetComponent<UISwitchComponent>();
+            UISwitchComponent* component = El((String(name) + "Switch").c_str()).GetComponent<UISwitchComponent>();
             EXPECT_NE(component, nullptr) << name;
             return *component;
         }
 
         /// The rect of the switch child of row @p name
         const Rect& SwitchRect(const char* name) const {
-            return Get((String(name) + "Switch").c_str()).rect;
+            return El((String(name) + "Switch").c_str()).rect;
         }
 
         UISwitchComponent::Parts PartsOf(const char* name) const {
@@ -267,12 +238,8 @@ namespace BECore::Tests {
         }
 
         void Click(const char* name) const {
-            ClickAt(Middle(Get(name).rect));
+            ClickAt(Middle(El(name).rect));
         }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
     };
 
     // ---- on and off follow the variable -----------------------------------------------------------------------------------
@@ -296,14 +263,14 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIToggleComponentTest, TheRowIsInteractiveAndTheTouchTargetIsTheWholeRow) {
-        EXPECT_TRUE(Get("Sound").IsInteractive());
+        EXPECT_TRUE(El("Sound").IsInteractive());
         EXPECT_TRUE(Toggle("Sound").MakesInteractive());
-        EXPECT_FALSE(Get("SoundCaption").IsInteractive());
-        EXPECT_FALSE(Get("SoundSwitch").IsInteractive());
-        const Point caption = Middle(Get("SoundCaption").rect);
+        EXPECT_FALSE(El("SoundCaption").IsInteractive());
+        EXPECT_FALSE(El("SoundSwitch").IsInteractive());
+        const Point caption = Middle(El("SoundCaption").rect);
         const Point toggle = Middle(SwitchRect("Sound"));
-        EXPECT_EQ(_canvas->GetLayout().HitTest(caption.x, caption.y), &Get("Sound"));
-        EXPECT_EQ(_canvas->GetLayout().HitTest(toggle.x, toggle.y), &Get("Sound"));
+        EXPECT_EQ(_canvas->GetLayout().HitTest(caption.x, caption.y), &El("Sound"));
+        EXPECT_EQ(_canvas->GetLayout().HitTest(toggle.x, toggle.y), &El("Sound"));
     }
 
     TEST_F(UIToggleComponentTest, AnUnsetVariableAnEmptyBindAndAnEmptyOnValueAreOff) {
@@ -336,14 +303,14 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIToggleComponentTest, TheStateCheckedOfTheRowAndItsChildrenIsWhetherTheToggleIsOn) {
-        EXPECT_FALSE(Get("Sound").GetVisualState().checked);
+        EXPECT_FALSE(El("Sound").GetVisualState().checked);
         SetVar("soundOn", "true");
-        EXPECT_TRUE(Toggle("Sound").IsChecked(Get("Sound")));
+        EXPECT_TRUE(Toggle("Sound").IsChecked(El("Sound")));
         Draw();
-        EXPECT_TRUE(Get("Sound").GetVisualState().checked);
-        EXPECT_TRUE(Get("SoundSwitch").GetVisualState().checked);
-        EXPECT_TRUE(Get("SoundCaption").GetVisualState().checked);
-        EXPECT_FALSE(Get("Custom").GetVisualState().checked);
+        EXPECT_TRUE(El("Sound").GetVisualState().checked);
+        EXPECT_TRUE(El("SoundSwitch").GetVisualState().checked);
+        EXPECT_TRUE(El("SoundCaption").GetVisualState().checked);
+        EXPECT_FALSE(El("Custom").GetVisualState().checked);
     }
 
     TEST_F(UIToggleComponentTest, ThePositionOfTheThumbFollowsTheVariableAtTheNextDraw) {
@@ -413,15 +380,15 @@ namespace BECore::Tests {
 
     TEST_F(UIToggleComponentTest, TheClickerOfTheRowEmitsNothingOfItsOwn) {
         ActionLog actions;
-        EXPECT_TRUE(Get("Sound").GetComponent<UIInputClicker>()->action.Empty());
+        EXPECT_TRUE(El("Sound").GetComponent<UIInputClicker>()->action.Empty());
         Click("Sound");
         EXPECT_EQ(actions.Total(), 1u) << "one click, one action";
     }
 
     TEST_F(UIToggleComponentTest, TheCaptionAndTheSwitchAndTheGapAreOneTouchTarget) {
         ActionLog actions;
-        const auto& row = Get("Sound").rect;
-        const Rect& caption = Get("SoundCaption").rect;
+        const auto& row = El("Sound").rect;
+        const Rect& caption = El("SoundCaption").rect;
         const Rect& sw = SwitchRect("Sound");
         const float y = row.y + row.h * 0.5f;
         for (const float x : {row.x + 2.0f, caption.x + caption.w * 0.5f, caption.x + caption.w + kCaptionGap * 0.5f, sw.x + sw.w * 0.5f, row.x + row.w - 1.0f}) {
@@ -457,13 +424,13 @@ namespace BECore::Tests {
 
     TEST_F(UIToggleComponentTest, APressThatMovedOffTheRowDoesNotClick) {
         ActionLog actions;
-        const Point at = Middle(Get("Sound").rect);
+        const Point at = Middle(El("Sound").rect);
         ASSERT_TRUE(CoreManager::GetUIInput().DispatchMouseButtonDown(Button(at.x, at.y, true)));
         CoreManager::GetUIInput().DispatchMouseMotion(Motion(700.0f, 550.0f, SDL_BUTTON_LMASK));
         CoreManager::GetUIInput().DispatchMouseButtonUp(Button(700.0f, 550.0f, false));
         EXPECT_EQ(actions.Total(), 0u);
 
-        const Point other = Middle(Get("Custom").rect);
+        const Point other = Middle(El("Custom").rect);
         ASSERT_TRUE(CoreManager::GetUIInput().DispatchMouseButtonDown(Button(at.x, at.y, true)));
         CoreManager::GetUIInput().DispatchMouseMotion(Motion(other.x, other.y, SDL_BUTTON_LMASK));
         CoreManager::GetUIInput().DispatchMouseButtonUp(Button(other.x, other.y, false));
@@ -474,9 +441,9 @@ namespace BECore::Tests {
 
     TEST_F(UIToggleComponentTest, ADisabledRowSwallowsTheClickAndKeepsTheThumbWhereItWas) {
         ActionLog actions;
-        EXPECT_TRUE(Get("Off").IsDisabled());
+        EXPECT_TRUE(El("Off").IsDisabled());
         EXPECT_TRUE(ThumbDrawnAtLeft("Off"));
-        const Point at = Middle(Get("Off").rect);
+        const Point at = Middle(El("Off").rect);
         ASSERT_TRUE(CoreManager::GetUIInput().DispatchMouseButtonDown(Button(at.x, at.y, true))) << "it still takes the press, so what is below does not get it";
         ASSERT_TRUE(CoreManager::GetUIInput().DispatchMouseButtonUp(Button(at.x, at.y, false)));
         EXPECT_EQ(actions.Total(), 0u);
@@ -499,15 +466,15 @@ namespace BECore::Tests {
         ASSERT_TRUE(enabledTrack && disabledTrack && disabledThumb);
         EXPECT_NEAR(disabledTrack->color.a, enabledTrack->color.a / 2.0f, 1.0f);
         EXPECT_NEAR(disabledThumb->color.a, 127.0f, 1.0f);
-        EXPECT_TRUE(Get("OffSwitch").GetVisualState().disabled) << "the switch follows the row";
+        EXPECT_TRUE(El("OffSwitch").GetVisualState().disabled) << "the switch follows the row";
     }
 
     // ---- the geometry ------------------------------------------------------------------------------------------------------
 
     TEST_F(UIToggleComponentTest, TheSwitchIsAtTheRightEndAndTheCaptionTakesTheRoomItLeaves) {
         for (const char* name : {"Sound", "Custom", "Off", "Round"}) {
-            const Rect& row = Get(name).rect;
-            const Rect& caption = Get((String(name) + "Caption").c_str()).rect;
+            const Rect& row = El(name).rect;
+            const Rect& caption = El((String(name) + "Caption").c_str()).rect;
             const Rect& sw = SwitchRect(name);
             EXPECT_NEAR(sw.h, row.h, kEpsilon) << name;
             EXPECT_NEAR(sw.w, row.h * UISwitchComponent::kAreaAspect, kEpsilon) << name;
@@ -520,11 +487,11 @@ namespace BECore::Tests {
     TEST_F(UIToggleComponentTest, TheTrackAndThumbOfA300By56RowAreAtTheirNumbers) {
         // The specification of the geometry: a 28 high, 56 wide track with 14 of air to the right
         const auto parts = PartsOf("Sound");
-        const Rect& row = Get("Sound").rect;
+        const Rect& row = El("Sound").rect;
         EXPECT_TRUE(NearRect(parts.track, Rect{row.x + 230.0f, row.y + 14.0f, 56.0f, 28.0f}, kEpsilon));
         EXPECT_TRUE(NearRect(parts.thumbOff, Rect{row.x + 233.0f, row.y + 17.0f, 22.0f, 22.0f}, kEpsilon));
         EXPECT_TRUE(NearRect(parts.thumbOn, Rect{row.x + 261.0f, row.y + 17.0f, 22.0f, 22.0f}, kEpsilon));
-        EXPECT_NEAR(Get("SoundCaption").rect.w, 222.0f, kEpsilon);
+        EXPECT_NEAR(El("SoundCaption").rect.w, 222.0f, kEpsilon);
     }
 
     TEST_F(UIToggleComponentTest, TheConstantsOfTheSwitch) {
@@ -577,27 +544,27 @@ namespace BECore::Tests {
         for (const char* name : {"Sound", "Custom", "Off"}) {
             const DrawCall* track = FindRect(PartsOf(name).track);
             ASSERT_NE(track, nullptr) << name;
-            EXPECT_TRUE(RectInside(track->rect, Get(name).rect)) << name;
+            EXPECT_TRUE(RectInside(track->rect, El(name).rect)) << name;
         }
     }
 
     // ---- the caption never runs under the switch ---------------------------------------------------------------------------
 
     TEST_F(UIToggleComponentTest, ACaptionTooLongForTheRoomTheSwitchLeavesIsCaught) {
-        const UIElement& caption = Get("LongCaption");
+        const UIElement& caption = El("LongCaption");
         const UIContentFit longFit = caption.CheckContent(caption.rect.w, caption.rect.h, 1.0f);
         EXPECT_TRUE(longFit.hasContent);
         EXPECT_FALSE(longFit.fits) << "the caption is too long for the room the switch leaves";
         EXPECT_TRUE(longFit.canShrink) << "an ellipsis text can shrink: the check needs `fits`, not the validator alone";
 
-        const UIElement& shortCaption = Get("SoundCaption");
+        const UIElement& shortCaption = El("SoundCaption");
         const UIContentFit shortFit = shortCaption.CheckContent(shortCaption.rect.w, shortCaption.rect.h, 1.0f);
         EXPECT_TRUE(shortFit.hasContent);
         EXPECT_TRUE(shortFit.fits);
     }
 
     TEST_F(UIToggleComponentTest, AClippedCaptionThatDoesNotFitCannotShrink) {
-        UIElement& caption = Get("LongCaption");
+        UIElement& caption = El("LongCaption");
         caption.GetComponent<UITextComponent>()->overflow = TextOverflow::Clip;
         const UIContentFit fit = caption.CheckContent(caption.rect.w, caption.rect.h, 1.0f);
         EXPECT_FALSE(fit.fits);
@@ -605,7 +572,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIToggleComponentTest, TheDrawnCaptionDoesNotReachTheSwitch) {
-        const Rect& row = Get("Long").rect;
+        const Rect& row = El("Long").rect;
         const Rect& sw = SwitchRect("Long");
         bool anyGlyph = false;
         for (const DrawCall& call : _renderer->calls) {
@@ -651,7 +618,7 @@ namespace BECore::Tests {
 
     TEST_F(UIToggleComponentTest, ThePointerOverTheRowShiftsTheTrackOfItsSwitch) {
         const auto parts = PartsOf("Custom");
-        const Point at = Middle(Get("Custom").rect);
+        const Point at = Middle(El("Custom").rect);
         CoreManager::GetUIInput().DispatchMouseMotion(Motion(at.x, at.y));
         Draw();
         const DrawCall* hovered = FindRect(parts.track);
@@ -725,7 +692,7 @@ namespace BECore::Tests {
         themes.Clear();
         themes.Set("light"_intern, "thumb", Color{9, 8, 7, 255});
         Switch("Sound").thumbColor = UIColor::FromToken("thumb"_intern);
-        Get("SoundSwitch").ResetTheme();
+        El("SoundSwitch").ResetTheme();
         Draw();
         const DrawCall* thumb = FindRect(PartsOf("Sound").thumbOff);
         ASSERT_NE(thumb, nullptr);
@@ -782,8 +749,8 @@ namespace BECore::Tests {
             serializer.EndObject();
             return serializer.SaveToString();
         };
-        EXPECT_EQ(xmlOf(Get("SoundSwitch")).find("partShape"), String::npos);
-        EXPECT_NE(xmlOf(Get("RoundSwitch")).find("partShape=\"Round\""), String::npos);
+        EXPECT_EQ(xmlOf(El("SoundSwitch")).find("partShape"), String::npos);
+        EXPECT_NE(xmlOf(El("RoundSwitch")).find("partShape=\"Round\""), String::npos);
     }
 
 }  // namespace BECore::Tests

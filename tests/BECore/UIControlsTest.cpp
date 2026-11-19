@@ -118,49 +118,12 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    class UIControlsTest : public ::testing::Test {
+    class UIControlsTest : public UISceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
         void SetUp() override {
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = 800.0f;
-            _renderer->height = 600.0f;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kControlsXml));
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-
-            _canvas = _manager->GetSceneByName("Main"_intern)->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>();
+            UISceneFixture::SetUp();
+            ASSERT_NO_FATAL_FAILURE(LoadScene(kControlsXml));
             ASSERT_TRUE(_canvas);
-        }
-
-        void TearDown() override {
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetUIStrings().Clear();
-            _canvas.Reset();
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
-        }
-
-        void Draw() {
-            _manager->SetActiveScene("Main"_intern);
-            _renderer->ClearCalls();
-            _manager->DrawAll();
-        }
-
-        UIElement& El(const char* name) const {
-            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
-            return *element;
         }
 
         /// The text component of the element called @p name
@@ -174,15 +137,6 @@ namespace BECore::Tests {
             UIInputClicker* clicker = El(name).GetComponent<UIInputClicker>();
             EXPECT_NE(clicker, nullptr) << name << " has no clicker";
             return *clicker;
-        }
-
-        template <typename T>
-        T& Get(const char* name) const {
-            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
-            T* typed = element ? element->Cast<T>() : nullptr;
-            EXPECT_NE(typed, nullptr) << name << " is not the expected control";
-            return *typed;
         }
 
         /// The color of the filled rect that was drawn exactly on the element's rect, in the last draw
@@ -222,10 +176,6 @@ namespace BECore::Tests {
         void MoveTo(float x, float y, SDL_MouseButtonFlags held = 0) {
             CoreManager::GetUIInput().DispatchMouseMotion(Motion(x, y, held));
         }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtr<UICanvasComponent> _canvas;
     };
 
     // ---- from a file ------------------------------------------------------------------------------------------------------
