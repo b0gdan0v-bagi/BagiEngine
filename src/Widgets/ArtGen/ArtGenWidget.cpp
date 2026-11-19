@@ -12,6 +12,7 @@
 #include <Generated/ArtGenWidget.gen.hpp>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenAtlasAccept.h>
+#include <Widgets/ArtGen/ArtGenDrag.h>
 #include <Widgets/ArtGen/ArtGenLaunch.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/ArtGenVerdict.h>
@@ -135,6 +136,7 @@ namespace BECore {
     bool ArtGenWidget::Initialize(IDeserializer& /*deserializer*/) {
         Subscribe<EditorCommandEvent, &ArtGenWidget::OnCommand>(this);
         Subscribe<SceneSelectionChangedEvent, &ArtGenWidget::OnSelectionChanged>(this);
+        Subscribe<ArtGenVariantDropEvent, &ArtGenWidget::OnVariantDropped>(this);
         auto& session = ArtGenSession::GetInstance();
         const std::string root = CoreManager::GetFileSystem().GetRootPath().generic_string();  //-NoStd: std::filesystem gives a std::string
         session.SetGameRoot(StringView(root.data(), root.size()));
@@ -157,6 +159,45 @@ namespace BECore {
     void ArtGenWidget::OnSelectionChanged(const SceneSelectionChangedEvent& event) {
         // The pointers are valid for this event only: the session holds the node and checks it alive before use
         ArtGenSession::GetInstance().SetSelectedNode(event.nodes.empty() ? IntrusivePtr<SceneNode>() : IntrusivePtr<SceneNode>(event.nodes.back()));
+    }
+
+    void ArtGenWidget::OnVariantDropped(const ArtGenVariantDropEvent& event) {
+        if (event.result == nullptr) {
+            return;
+        }
+        auto& session = ArtGenSession::GetInstance();
+        const ArtGenDragPayload& payload = event.payload;
+        if (payload.kind == ArtGenDragKind::Audio) {
+            *event.result = ArtGenDropResult{false, String(kArtGenSoundIsNotASprite)};
+            return;
+        }
+        std::expected<Json, ControlError> result;
+        if (payload.set[0] == '\0') {
+            // Exactly the Accept button: the form's settings, the preset's atlas group, no node
+            const ArtGenImageSettings settings = _form.GetImageAccept();
+            result = session.Accept(payload.seed, event.sprite, false, &settings);
+        } else {
+            result = session.AcceptSetVariant(StringView(payload.set), StringView(payload.job), payload.seed, event.sprite);
+        }
+        NoteImageAccepted(event.sprite, result);
+        *event.result = ArtGenDropResult{result.has_value(), _acceptMessage};
+    }
+
+    void ArtGenWidget::NoteImageAccepted(StringView sprite, const std::expected<Json, ControlError>& result) {
+        _acceptFailed = !result.has_value();
+        _acceptedSprite.clear();
+        if (!result) {
+            _acceptMessage = result.error().message;
+            return;
+        }
+        _acceptedSprite = String(sprite);
+        const auto reloaded = GetJsonInt(*result, "reloadedSprites").value_or(0);
+        const auto texture = GetJsonString(*result, "texturePath").value_or(String());
+        _acceptMessage = Format("Accepted as '{}' ({}); {} sprite(s) reloaded", sprite, texture, reloaded);
+        if (const Json* atlas = FindJsonMember(*result, "atlas"); atlas != nullptr && atlas->is_object()) {
+            _acceptMessage +=
+                Format("; atlas '{}' repacked ({}x{})", GetJsonString(*atlas, "name").value_or(String()), GetJsonInt(*atlas, "width").value_or(0), GetJsonInt(*atlas, "height").value_or(0));
+        }
     }
 
     void ArtGenWidget::Draw() {}
@@ -1168,21 +1209,7 @@ namespace BECore {
         ImGui::BeginDisabled(!validName);
         if (IconTextButton(ICON_LC_CHECK, "Accept", AcceptImageNote())) {
             const ArtGenImageSettings settings = _form.GetImageAccept();
-            auto result = session.Accept(*_selectedSeed, StringView(_spriteName), _useOnSelected, &settings);
-            _acceptFailed = !result.has_value();
-            _acceptedSprite.clear();
-            if (result) {
-                _acceptedSprite = String(StringView(_spriteName));
-                const auto reloaded = GetJsonInt(*result, "reloadedSprites").value_or(0);
-                const auto texture = GetJsonString(*result, "texturePath").value_or(String());
-                _acceptMessage = Format("Accepted as '{}' ({}); {} sprite(s) reloaded", StringView(_spriteName), texture, reloaded);
-                if (const Json* atlas = FindJsonMember(*result, "atlas"); atlas != nullptr && atlas->is_object()) {
-                    _acceptMessage +=
-                        Format("; atlas '{}' repacked ({}x{})", GetJsonString(*atlas, "name").value_or(String()), GetJsonInt(*atlas, "width").value_or(0), GetJsonInt(*atlas, "height").value_or(0));
-                }
-            } else {
-                _acceptMessage = result.error().message;
-            }
+            NoteImageAccepted(StringView(_spriteName), session.Accept(*_selectedSeed, StringView(_spriteName), _useOnSelected, &settings));
         }
         ImGui::EndDisabled();
         if (!validName && _spriteName[0] != '\0') {
@@ -1232,9 +1259,12 @@ namespace BECore {
                     FillNameFromSubject(run.subject, _spriteName, sizeof(_spriteName));
                 }
             }
+            const ITexture* texture = i < _thumbnails.size() ? _thumbnails[i].Get() : nullptr;
+            if (!variant.IsAudio() && texture != nullptr && texture->GetState() == ResourceState::Loaded) {
+                DrawArtGenVariantDragSource([&] { return MakeArtGenDragPayload(ArtGenDragKind::Image, variant.seed, {}, {}, SuggestedArtGenSpriteName({}, StringView(run.subject))); }, texture);
+            }
             ImDrawList* drawList = ImGui::GetWindowDrawList();
             const ImVec2 corner(origin.x + kThumbnailSize, origin.y + kThumbnailSize);
-            const ITexture* texture = i < _thumbnails.size() ? _thumbnails[i].Get() : nullptr;
             if (variant.IsAudio()) {
                 drawList->AddRectFilled(origin, corner, ImGui::GetColorU32(palette.frameBg));
                 const ImVec2 iconSize = ImGui::CalcTextSize(ICON_LC_AUDIO_LINES);

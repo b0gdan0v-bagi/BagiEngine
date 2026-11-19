@@ -6,6 +6,8 @@
 #include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Widgets/IWidget.h>
+#include <Widgets/ArtGen/ArtGenDrag.h>
+#include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/TextureEditor/SpriteAtlasPanel.h>
 #include <Widgets/TextureEditor/SpriteAtlasPreviewPanel.h>
@@ -46,6 +48,13 @@ namespace BECore {
         void Select(int index);
         void SelectByName(PoolString name);
 
+        // A generated variant released on the library list (ArtGenDrag.h): a sprite row replaces that sprite at once, the free area asks for a name first
+        void OnLibraryDrop(const SpriteLibraryDrop& drop);
+        void DrawDropPopup();
+        // The Generate panel does the accept (it owns the form's settings): this asks through the event and shows what it answers
+        void AcceptDrop(const ArtGenDragPayload& payload, StringView sprite);
+        void PlanPopupName();
+
         void RenderLeftPanel();
         void RenderRightPanel();
         void RefreshAssetList();
@@ -70,6 +79,15 @@ namespace BECore {
         ImVec2 _imageOrigin{};
         float _imageScaleX = 1.0f;
         float _imageScaleY = 1.0f;
+
+        // The last drop's answer, made at the drop and drawn under the Save row
+        String _dropMessage;
+        bool _dropFailed = false;
+        // A drop on the free area waits for its name in the popup
+        ArtGenDragPayload _pendingDrop;
+        ArtGenDropPlan _popupPlan;
+        char _popupName[kArtGenRowNameSize] = {};
+        bool _openDropPopup = false;
 
         SpriteTextureCache _textures;
         SpriteLibraryPanel _libraryPanel;

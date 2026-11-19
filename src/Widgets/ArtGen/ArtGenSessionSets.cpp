@@ -713,6 +713,36 @@ namespace BECore {
         return ArtGenSetEdit::Ok;
     }
 
+    std::expected<Json, ControlError> ArtGenSession::AcceptSetVariant(StringView setName, StringView jobName, int64_t seed, StringView sprite) {
+        const ArtGenSet* set = FindSet(setName);
+        const ArtGenSetJob* job = set != nullptr ? FindJob(*set, jobName) : nullptr;
+        if (job == nullptr) {
+            return std::unexpected(MakeError(kNoSetCode, Format("no job '{}' in a set named '{}'", jobName, setName)));
+        }
+        if (BECore::FindVariant(*job, seed) == nullptr) {
+            return std::unexpected(MakeError(kNoVariantCode, Format("the job '{}' has no variant of seed {}", jobName, seed)));
+        }
+        if (StringView(set->kind) == kKindAudio) {
+            return std::unexpected(MakeError(kAcceptFailedCode, Format("the job '{}' makes sounds, and a sound is not a sprite", jobName)));
+        }
+        if (_acceptor == nullptr) {
+            return std::unexpected(MakeError(kAcceptFailedCode, String("accepting is not available here")));
+        }
+        if (!IsValidSpriteName(sprite)) {
+            return std::unexpected(MakeError(kAcceptFailedCode, Format("'{}' is not a sprite name", sprite)));
+        }
+        const auto variant = VariantToWrite(RootPath(_gameRoot), *set, *job, seed);
+        if (!variant) {
+            return std::unexpected(MakeError(kAcceptFailedCode, Format("the job '{}': {}", jobName, variant.error())));
+        }
+        ArtGenImagePlan plan = PlanOf(set->processing, set->atlas, false);
+        if (!set->processing && !IsLegacyAccepted(*set)) {
+            // Not accepted as a whole yet: the preset's settings, a frame of this image's own. A legacy set keeps the identity plan
+            plan.settings = ImageSettingsOf(set->presetData, StringView(set->preset));
+        }
+        return _acceptor(*variant, sprite, plan, nullptr);
+    }
+
     void ArtGenSession::RegisterSetControl(ControlService& service) {
         Register<&ArtGenSession::HandleEnqueue>(service, *this, "artgen_enqueue");
         Register<&ArtGenSession::HandleSet>(service, *this, "artgen_set");

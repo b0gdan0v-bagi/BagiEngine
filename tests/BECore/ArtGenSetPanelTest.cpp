@@ -518,7 +518,7 @@ namespace BECore::Tests {
         EXPECT_EQ(JobOf("king").more->count, 2);
     }
 
-    TEST_F(ArtGenSetPanelTest, TheCellsOfARowANewerSetReplacedDoNotReact) {
+    TEST_F(ArtGenSetPanelTest, TheCellsOfARowANewerSetReplacedDoNotPick) {
         ArtGenSet older = MakeSet("older", "2026-11-17T10:00:00Z", ArtGenSetJobState::Done);
         older.jobs[0].accepted = ArtGenSetAccepted{"king", "2026-11-17T12:30:00Z", false};
         ArtGenSet newer = MakeSet("newer", "2026-11-17T11:00:00Z", ArtGenSetJobState::Done);
@@ -536,7 +536,27 @@ namespace BECore::Tests {
         Frame();
 
         EXPECT_EQ(context.HoveredId, PickId(0, 1)) << "the same cell, drawn for the other set";
-        EXPECT_TRUE(context.HoveredIdIsDisabled) << "the older set's row is replaced: its cell is disabled";
+        EXPECT_FALSE(context.HoveredIdIsDisabled) << "a replaced row's cell stays enabled, because a disabled item cannot be dragged";
+        const uint64_t version = session.Version();
+        ClickAt(cell);
+        EXPECT_EQ(session.FindSet("older")->jobs[0].pick, Optional<int64_t>(5)) << "the older set's row is replaced: a click changes nothing";
+        EXPECT_EQ(session.Version(), version);
+    }
+
+    TEST_F(ArtGenSetPanelTest, TheCellsOfAKeptRowDoNotPick) {
+        ArtGenSet set = MakeSet("final", "2026-11-17T10:00:00Z", ArtGenSetJobState::Done);
+        set.jobs[0].accepted = ArtGenSetAccepted{"king", "2026-11-17T12:30:00Z", true};
+        ASSERT_NO_FATAL_FAILURE(LoadSets({set}));
+        Frame();
+        ImGuiContext& context = *ImGui::GetCurrentContext();
+
+        const ImVec2 cell = Locate(PickId(0, 1));
+        EXPECT_FALSE(context.HoveredIdIsDisabled) << "a kept row's cell stays enabled, because a disabled item cannot be dragged";
+        const uint64_t version = session.Version();
+        ClickAt(cell);
+
+        EXPECT_EQ(session.FindSet("final")->jobs[0].pick, Optional<int64_t>(5)) << "a kept row is final: a click changes nothing";
+        EXPECT_EQ(session.Version(), version);
     }
 
     TEST_F(ArtGenSetPanelTest, UseAsReferenceOnAVariantFillsTheSlotWithItsFile) {

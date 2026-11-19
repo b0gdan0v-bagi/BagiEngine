@@ -36,6 +36,14 @@ The section "Atlas" (`SpriteAtlasPanel`) packs the sprites of one **atlas group*
 - **The list is made again on a key** of names, texture paths, group names and packed flags, never of rects, so a dragged rect rebuilds nothing; a filter whose group vanished falls back to All. The panel owns the filter; the selection stays on the widget, and a selected sprite the filter hides is still the selected one.
 - **Only visible rows load a texture** (a clipper over fixed-height rows). `SpriteTextureCache` loads a path once, loads it again when the resource cache no longer holds the handle (Pack, Unpack and Accept evict), and **remembers a failed load** so a missing file logs once, until `ForgetFailed` (Rescan, Pack, Unpack).
 
+## Drop of a generated variant
+
+The list takes a variant dragged out of the Generate panel (`ArtGen/ArtGenDrag.h`, the contract; `ArtGen/CLAUDE.md`, "The panel"). `SpriteLibraryPanel` stays a drawer: it reports where the payload was released (`TakeDrop`), `TextureEditorWidget` decides and asks.
+
+- **Two targets.** A sprite row replaces that sprite's picture at once (`PlanArtGenDrop` Replace); the free area (the list below the filter, also an empty library) opens the "Add sprite" popup with the suggested name, checked live by the same plan (a taken name shows the `_2` it would get, a refused one the reason and a disabled Accept). An audio payload is accepted nowhere: the tooltip says why.
+- **The free area is the whole list rect, a row is smaller.** ImGui accepts the smallest target rect under the pointer (`AcceptDragDropPayload`), whatever the order of submission, so a row beats the area and the area gets only what no row covers; the hint (the row outlined, or the area tinted with "Drop for a new sprite") is drawn from a peek at the payload, and the area's tint only when no row is hot. Rows are clipped, so only visible rows are targets.
+- **The accept goes through `ArtGenVariantDropEvent`, not a direct call**: the Generate panel owns the form's accept settings and the message line, and the session is not the place for the Accept button's rules. The answer is a line under the Save row (kept in a member, made at the drop), and the accepted sprite is selected; `_isDirty` stays as it is, because an accept saves the library file itself. The list, the preview and the Atlas section follow by their own keys and the evict checks.
+
 ## Atlas preview
 
 - **Two modes.** `Current` draws the packed members on the atlas file as the library has them; `Plan` is what Pack would make with the Atlas section's settings, from the sources, and writes nothing. `Current` is off while nothing is packed.
