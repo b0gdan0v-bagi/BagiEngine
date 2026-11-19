@@ -62,7 +62,7 @@ namespace BECore::Tests {
     }
 
     TEST(ArtGenVerdictTest, EveryNameOfTheServiceHasAMeaning) {
-        for (const char* name : {"empty", "edge", "pieces", "halo", "background", "small", "offCentre"}) {
+        for (const char* name : {"empty", "edge", "pieces", "bodies", "halo", "background", "small", "offCentre"}) {
             const ArtGenVerdict verdict = VerdictOf(Format(R"({{"checks":{{"passed":false,"failed":["{}"]}}}})", name));
             EXPECT_TRUE(Contains(verdict.tip, " (")) << name;
         }
