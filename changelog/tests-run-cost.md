@@ -1,6 +1,6 @@
 # Tests: a full ctest costs about 1700 s of CPU and runs at every step; process start, hygiene checks, timing, crash and copied-helper debt
 
-- Version: 0.5.0
+- Version: 0.6.0
 - Entry: tests-run-cost
 - Date: 2026-11-19
 - Bump: minor

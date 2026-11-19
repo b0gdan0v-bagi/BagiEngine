@@ -1,6 +1,6 @@
 # Config save from the editor drops the comments and reformats the file (TextureLibrary.xml rewritten by one Accept)
 
-- Version: 0.4.0
+- Version: 0.5.0
 - Entry: config-save-keeps-layout
 - Date: 2026-11-18
 - Bump: minor

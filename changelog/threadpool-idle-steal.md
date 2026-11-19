@@ -1,6 +1,6 @@
 # TaskSystem: an idle ThreadPool worker never steals; Cancel races, GetResult moves, DelaySec overflows
 
-- Version: 0.4.6
+- Version: 0.5.1
 - Entry: threadpool-idle-steal
 - Date: 2026-11-18
 - Bump: patch

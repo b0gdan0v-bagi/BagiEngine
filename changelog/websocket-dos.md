@@ -1,6 +1,6 @@
 # Network: a client cannot hold the WebSocket server by not reading or by saying nothing; room names refuse invisible characters
 
-- Version: 0.4.7
+- Version: 0.5.4
 - Entry: websocket-dos
 - Date: 2026-11-18
 - Bump: patch

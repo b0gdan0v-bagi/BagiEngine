@@ -1,6 +1,6 @@
 # Art generation: a sprite's style as the reference (slice 2 of artgen-reference)
 
-- Version: 0.4.3
+- Version: 0.5.5
 - Entry: artgen-reference-2
 - Date: 2026-11-19
 - Bump: patch

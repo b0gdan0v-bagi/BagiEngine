@@ -1,6 +1,6 @@
 # TaskSystem: WaitForEventWithTimeout never times out
 
-- Version: 0.4.3
+- Version: 0.4.4
 - Entry: event-awaiter-timeout
 - Date: 2026-11-18
 - Bump: patch

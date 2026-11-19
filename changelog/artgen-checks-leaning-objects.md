@@ -1,6 +1,6 @@
 # Art generation: the cut-out checks pass several objects that lean together (no neck between them)
 
-- Version: 0.4.8
+- Version: 0.6.1
 - Entry: artgen-checks-leaning-objects
 - Date: 2026-11-19
 - Bump: patch

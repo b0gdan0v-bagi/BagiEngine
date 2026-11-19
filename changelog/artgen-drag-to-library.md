@@ -1,6 +1,6 @@
 # Editor: a generated variant cannot be dragged from the Generate panel into the Texture library or other panels
 
-- Version: 0.4.9
+- Version: 0.6.2
 - Entry: artgen-drag-to-library
 - Date: 2026-11-19
 - Bump: patch

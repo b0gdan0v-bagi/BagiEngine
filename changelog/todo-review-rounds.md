@@ -1,6 +1,6 @@
 # todo-loop: a second review round and a remarks round re-read and re-test everything even when the fix is docs or comments only
 
-- Version: 0.5.2
+- Version: 0.6.4
 - Entry: todo-review-rounds
 - Date: 2026-11-19
 - Bump: patch

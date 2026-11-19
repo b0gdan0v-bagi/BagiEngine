@@ -1,6 +1,6 @@
 # Tests: three failures on main (ASan EditorBars, Release control smoke, flaky WebSocket close)
 
-- Version: 0.4.4
+- Version: 0.4.3
 - Entry: engine-test-failures
 - Date: 2026-11-18
 - Bump: patch

@@ -1,6 +1,6 @@
 # Art generation: the cut-out checks pass several touching objects as one piece
 
-- Version: 0.4.7
+- Version: 0.5.9
 - Entry: artgen-checks-touching-objects
 - Date: 2026-11-19
 - Bump: patch

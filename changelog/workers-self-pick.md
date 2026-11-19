@@ -1,6 +1,6 @@
 # Todo workers stand idle until the owner acts: no self-picking of the next entry, a blocked entry pauses the queue
 
-- Version: 0.4.2
+- Version: 0.5.3
 - Entry: workers-self-pick
 - Date: 2026-11-18
 - Bump: patch

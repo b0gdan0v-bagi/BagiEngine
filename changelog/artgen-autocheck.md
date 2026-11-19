@@ -1,6 +1,6 @@
 # Art generation: broken cut-outs are found only by looking (no automatic checks, no unattended set)
 
-- Version: 0.4.1
+- Version: 0.5.2
 - Entry: artgen-autocheck
 - Date: 2026-11-18
 - Bump: patch

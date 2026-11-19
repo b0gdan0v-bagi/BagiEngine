@@ -1,6 +1,6 @@
 # Art generation: small leftovers of the set reviews (one save per Accept all, untested evict, tie of FindNewerOwner, docs thinned for budget)
 
-- Version: 0.4.4
+- Version: 0.5.6
 - Entry: artgen-review-leftovers
 - Date: 2026-11-19
 - Bump: patch

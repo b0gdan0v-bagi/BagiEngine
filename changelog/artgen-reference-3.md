@@ -1,6 +1,6 @@
 # Art generation: a shape from a sketch as the reference (slice 3 of artgen-reference)
 
-- Version: 0.4.5
+- Version: 0.5.7
 - Entry: artgen-reference-3
 - Date: 2026-11-19
 - Bump: patch

@@ -1,6 +1,6 @@
 # Art generation: an accepted set lands as loose PNGs, never in an atlas (no atlas group for a set or a preset)
 
-- Version: 0.4.6
+- Version: 0.5.8
 - Entry: artgen-set-atlas
 - Date: 2026-11-19
 - Bump: patch

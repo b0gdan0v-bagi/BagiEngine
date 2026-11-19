@@ -1,6 +1,6 @@
 # Rendering: RmlUi textures are destroyed while the GPU may still use them; Vulkan results are ignored; one descriptor pool of 512 sets
 
-- Version: 0.5.1
+- Version: 0.6.3
 - Entry: rmlui-vulkan-gpu-lifetime
 - Date: 2026-11-19
 - Bump: patch

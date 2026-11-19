@@ -1,6 +1,6 @@
 # Todo: the token cost of an entry is not recorded; only transcripts that get cleaned show it, and the conductor's share is not tied to an entry
 
-- Version: 0.5.3
+- Version: 0.6.5
 - Entry: todo-token-stats
 - Date: 2026-11-19
 - Bump: patch
