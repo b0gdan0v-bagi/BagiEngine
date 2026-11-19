@@ -543,6 +543,8 @@ namespace BECore::Tests {
 
         constexpr std::chrono::milliseconds kPingInterval{1000};
         constexpr std::chrono::milliseconds kClockStep{250};
+        /// How long a step waits for the ping of its tick before the clock moves on; a ping that comes later counts for a later step
+        constexpr std::chrono::milliseconds kStepPingWait{200};
 
         /// Settings with a short liveness interval on a manual clock
         RoomServerSettings MakeLivenessSettings(ManualClock& clock, std::chrono::milliseconds pingInterval = kPingInterval) {
@@ -559,7 +561,7 @@ namespace BECore::Tests {
         }
 
         /// Reads frames until a ping arrives (text frames before it are skipped); false when none does or the connection ends first
-        bool WaitForPing(RoomSocketClient& client, std::chrono::milliseconds limit = 5s) {
+        bool WaitForPing(RoomSocketClient& client, std::chrono::milliseconds limit = kWaitLimit) {
             const auto deadline = std::chrono::steady_clock::now() + limit;
             while (std::chrono::steady_clock::now() < deadline) {
                 const auto frame = client.Raw().WaitForFrame(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()));
@@ -577,17 +579,21 @@ namespace BECore::Tests {
             client.Raw().Send(AsBytes(EncodeFrame(WebSocketOpcode::kPong, {}, kClientMask)));
         }
 
-        /// Moves the clock on by kClockStep at a time until a ping reaches @p client, and tells how far it moved; nullopt when no ping came
-        /// within @p limit of clock time. The hub thread looks at the clock on its own schedule, so a test cannot know which step it
-        /// notices a silence at: it asks how long the silence had to be
+        /// Moves the clock on by kClockStep at a time, each step seen by a tick of the hub, until a ping reaches @p client, and tells how far
+        /// it moved; nullopt when no ping came for @p limit of clock time and kWaitLimit after it. A ping that is slow to arrive is counted
+        /// at a later step, so the answer is never shorter than the silence the hub waited for
         Optional<std::chrono::milliseconds> AdvanceUntilPing(ManualClock& clock, RoomSocketClient& client, std::chrono::milliseconds limit = 3 * kPingInterval) {
             std::chrono::milliseconds advanced{0};
             while (advanced < limit) {
                 clock.Advance(kClockStep);
                 advanced += kClockStep;
-                if (WaitForPing(client, 200ms)) {
+                LetTicksPass(clock);
+                if (WaitForPing(client, kStepPingWait)) {
                     return advanced;
                 }
+            }
+            if (WaitForPing(client)) {
+                return advanced;
             }
             return std::nullopt;
         }
@@ -604,7 +610,7 @@ namespace BECore::Tests {
 
         /// Reads what the server sends until @p done holds for @p client (it looks at Received(), so the cursor does not matter) or @p limit has passed
         template <typename Predicate>
-        bool ReadUntil(RoomSocketClient& client, Predicate done, std::chrono::milliseconds limit = 10s) {
+        bool ReadUntil(RoomSocketClient& client, Predicate done, std::chrono::milliseconds limit = kWaitLimit) {
             const auto deadline = std::chrono::steady_clock::now() + limit;
             while (!done()) {
                 const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
