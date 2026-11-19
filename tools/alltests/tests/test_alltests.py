@@ -211,6 +211,35 @@ def test_a_submodule_is_cloned_from_the_local_checkout(rig, tmp_path):
     assert (copy / "lib.txt").read_text(encoding="utf-8") == "lib"
 
 
+def test_the_venv_of_the_repository_and_of_its_engine_is_linked_so_the_configure_finds_its_python(rig, tmp_path):
+    engine = tmp_path / "engine-origin"
+    engine.mkdir()
+    git(engine, "init", "-q", "-b", "main")
+    commit(engine, "engine")
+    git(rig.repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(engine), "engine")
+    git(rig.repo, "commit", "-q", "-m", "engine")
+    for folder in (rig.repo / ".venv", rig.repo / "engine" / ".venv"):
+        (folder / "bin").mkdir(parents=True)
+    assert rig.run() == alltests.EXIT_GREEN
+    for folder in alltests.VENV_FOLDERS:
+        link = rig.work / "worktree" / folder
+        assert link.is_symlink() and link.resolve() == (rig.repo / folder).resolve()
+
+
+def test_a_venv_the_worktree_has_is_kept_and_a_dangling_link_is_made_again(rig):
+    (rig.repo / ".venv").mkdir()
+    rig.run()
+    worktree_venv = rig.work / "worktree" / ".venv"
+    worktree_venv.unlink()
+    worktree_venv.symlink_to(rig.tmp / "gone", target_is_directory=True)
+    rig.run()
+    assert worktree_venv.resolve() == (rig.repo / ".venv").resolve()
+    worktree_venv.unlink()
+    (worktree_venv / "bin").mkdir(parents=True)
+    rig.run()
+    assert not worktree_venv.is_symlink() and (worktree_venv / "bin").is_dir()
+
+
 def test_a_missing_base_branch_is_an_error_and_records_nothing(rig, capsys):
     assert rig.run("--base", "nope") == alltests.EXIT_ERROR
     assert "has no commit branch nope" in capsys.readouterr().err

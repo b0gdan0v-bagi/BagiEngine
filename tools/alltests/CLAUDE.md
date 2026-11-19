@@ -18,6 +18,7 @@ Exit code 0 green, 3 red, 1 an error (nothing recorded). `--preset` is the confi
 
 - **The worktree is detached** at the commit: it holds no branch, so the owner's checkout, `todo-merge` and `sync-engine` can still switch to `main`. It is updated with `checkout --force`; nothing else in it is anyone's work.
 - **Nothing reads a remote.** The base is the local branch (pushes and pulls are the owner's). Each submodule that is initialised in the repository is cloned from that local copy (hard links) and checked out at the commit the tested commit records; one that is not initialised there is left out, and a recorded commit missing from the local copy is an error that says to update it there.
+- **The venv is linked** from the repository (`.venv`, and `engine/.venv` of a game), as the loop's workers share theirs: without it the configure takes a system Python that may lack the reflection generator's packages.
 - The build is `cmake --preset <p>` and `cmake --build --preset <p>` (every target, so the smoke tests that need the product run), then `ctest --preset <p>-all --output-junit`. The failed names are run once more with `--rerun-failed`: one that passes alone is reported as flaky and is not a failure, as a name that fails under load is not a finding until it fails alone.
 - The JUnit file is read with patterns, not `xml.etree`: a Homebrew Python can lack a working `pyexpat`.
 

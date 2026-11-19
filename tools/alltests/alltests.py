@@ -8,7 +8,8 @@ base branch, in a worktree and a build folder of its own, with the result kept p
 
 The steps, in order (each command is printed before it runs; its output goes to <work>/logs/):
   1. the worktree <work>/worktree of the repository, detached at the commit (made on the first run); every submodule that is
-     initialised in the repository is cloned from that local copy, so nothing is fetched from a remote;
+     initialised in the repository is cloned from that local copy, so nothing is fetched from a remote; the repository's .venv
+     (and engine/.venv of a game) is linked into it, so the configure finds the Python of the reflection generator;
   2. cmake --preset <p>, cmake --build --preset <p> (every target), ctest --preset <p>-all, and once more with --rerun-failed:
      a test that passes the second time is reported as flaky and is not a failure;
   3. the result of the commit goes to <work>/results.json (alltests_results.py), which the deploy scripts read;
@@ -59,6 +60,9 @@ ID_HASH_LENGTH = 8
 FAILURE_TEXT_LINES = 60
 RANGE_LOG_LINES = 30
 MANY_NAMES_LISTED = 50
+# Where cmake/BagiEngine.cmake looks for the venv Python of the reflection generator (`<engine>/.venv`): the root of the engine, and
+# engine/ of a game. A worktree has none of them, and the Python cmake falls back to can lack the generator's packages.
+VENV_FOLDERS = (Path(".venv"), Path("engine") / ".venv")
 JUNIT_CASE = re.compile(r"<testcase\b(?P<attributes>[^>]*?)(?:/>|>(?P<content>.*?)</testcase>)", re.S)
 JUNIT_ATTRIBUTE = re.compile(r'(\w+)="([^"]*)"')
 JUNIT_OUTPUT = re.compile(r"<system-out>(.*?)</system-out>", re.S)
@@ -137,6 +141,22 @@ def update_worktree(repo: Path, worktree: Path, commit: str) -> None:
         # -f: a worktree folder deleted by hand is still registered until `git worktree prune`
         git_step(repo, "worktree", "add", "--quiet", "-f", "--detach", str(worktree), commit)
     sync_submodules(repo, worktree)
+    link_venvs(repo, worktree)
+
+
+def link_venvs(repo: Path, worktree: Path) -> None:
+    """Each venv of `repo` that the build looks for is linked into the worktree, as the loop's workers share theirs.
+
+    A venv the worktree already has, or a link that leads to one, is kept; a link that leads nowhere is made again; a folder whose
+    parent is not in the worktree (a game whose engine/ is not initialised) is left out."""
+    for folder in VENV_FOLDERS:
+        origin, target = repo / folder, worktree / folder
+        if not origin.is_dir() or target.exists() or not target.parent.is_dir():
+            continue
+        if target.is_symlink():
+            target.unlink()
+        print(f"+ ln -s {origin} {target}", flush=True)
+        target.symlink_to(origin, target_is_directory=True)
 
 
 def submodule_paths(root: Path) -> list[str]:
