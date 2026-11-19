@@ -4,6 +4,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
+#include <Common/UITableTestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -23,31 +24,9 @@ namespace BECore::Tests {
             return themes;
         }
 
-        Vector<String> Load(UIThemes& themes, const char* xml) {
-            auto config = XmlConfig::Create();
-            EXPECT_TRUE(config.LoadFromString(xml));
-            return themes.LoadFromXml(config.GetRoot());
-        }
-
-        bool Mentions(const Vector<String>& problems, const char* word) {
-            for (const String& problem : problems) {
-                if (problem.find(word) != String::npos) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        class UIThemesTest : public ::testing::Test {
-        protected:
-            void TearDown() override {
-                CoreManager::GetUIThemes().Clear();  // the table is global: the next test starts with none, and with no current theme
-            }
-        };
-
     }  // namespace
 
-    TEST_F(UIThemesTest, ASetColorCanBeFound) {
+    TEST(UIThemesTest, ASetColorCanBeFound) {
         UIThemes themes;
         EXPECT_FALSE(themes.Find("primary").has_value());
 
@@ -58,7 +37,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(themes.Find("text").has_value());
     }
 
-    TEST_F(UIThemesTest, TheFirstThemeSetIsTheDefaultAndTheCurrentOne) {
+    TEST(UIThemesTest, TheFirstThemeSetIsTheDefaultAndTheCurrentOne) {
         UIThemes themes = MakeTable();
 
         EXPECT_EQ(themes.GetDefaultTheme(), "light"_intern);
@@ -68,7 +47,7 @@ namespace BECore::Tests {
         EXPECT_EQ(themes.GetThemes()[1], "dark"_intern);
     }
 
-    TEST_F(UIThemesTest, TheCurrentThemeWinsOverTheDefaultOne) {
+    TEST(UIThemesTest, TheCurrentThemeWinsOverTheDefaultOne) {
         UIThemes themes = MakeTable();
 
         EXPECT_TRUE(themes.SetTheme("dark"_intern));
@@ -77,7 +56,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(ColorsEqual(Require(themes.Find("primary")), DarkPrimary));
     }
 
-    TEST_F(UIThemesTest, ATokenMissingInTheCurrentThemeFallsBackToTheDefaultOne) {
+    TEST(UIThemesTest, ATokenMissingInTheCurrentThemeFallsBackToTheDefaultOne) {
         UIThemes themes = MakeTable();
         themes.SetTheme("dark"_intern);
 
@@ -86,7 +65,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(themes.HasToken("dark"_intern, "text"));
     }
 
-    TEST_F(UIThemesTest, ATokenOfNoThemeIsNotFoundAndFindingNeverAddsToThePoolOfNames) {
+    TEST(UIThemesTest, ATokenOfNoThemeIsNotFoundAndFindingNeverAddsToThePoolOfNames) {
         UIThemes themes = MakeTable();
 
         EXPECT_FALSE(themes.Find("never-interned-token-of-uithemestest").has_value());
@@ -94,7 +73,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(PoolString::Find(StringView{"never-interned-token-of-uithemestest"}).has_value());
     }
 
-    TEST_F(UIThemesTest, AThemeWithoutColorsIsRefusedAndTheOldOneKept) {
+    TEST(UIThemesTest, AThemeWithoutColorsIsRefusedAndTheOldOneKept) {
         UIThemes themes = MakeTable();
         themes.SetTheme("dark"_intern);
         const uint64_t version = themes.GetVersion();
@@ -108,7 +87,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(themes.HasTheme("dark"_intern));
     }
 
-    TEST_F(UIThemesTest, ABadTokenNameOrAnEmptyThemeIsRefused) {
+    TEST(UIThemesTest, ABadTokenNameOrAnEmptyThemeIsRefused) {
         UIThemes themes;
 
         EXPECT_FALSE(themes.Set("light"_intern, "", LightPrimary));
@@ -125,7 +104,7 @@ namespace BECore::Tests {
         EXPECT_EQ(themes.GetVersion(), 1u);
     }
 
-    TEST_F(UIThemesTest, ATokenNameIsALetterThenLettersDigitsUnderscoresAndHyphens) {
+    TEST(UIThemesTest, ATokenNameIsALetterThenLettersDigitsUnderscoresAndHyphens) {
         EXPECT_TRUE(UIThemes::IsValidToken("primary"));
         EXPECT_TRUE(UIThemes::IsValidToken("Panel2"));
         EXPECT_TRUE(UIThemes::IsValidToken("text-muted_2"));
@@ -135,7 +114,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(UIThemes::IsValidToken("panel)"));
     }
 
-    TEST_F(UIThemesTest, TheVersionStartsAtOneAndGrowsOnAChangeOnly) {
+    TEST(UIThemesTest, TheVersionStartsAtOneAndGrowsOnAChangeOnly) {
         UIThemes themes;
         EXPECT_EQ(themes.GetVersion(), 1u);
 
@@ -170,7 +149,7 @@ namespace BECore::Tests {
         EXPECT_GT(themes.GetVersion(), afterDefault);
     }
 
-    TEST_F(UIThemesTest, ChoosingTheCurrentThemeAsTheEffectiveOneKeepsTheVersion) {
+    TEST(UIThemesTest, ChoosingTheCurrentThemeAsTheEffectiveOneKeepsTheVersion) {
         UIThemes themes = MakeTable();
         const uint64_t version = themes.GetVersion();
 
@@ -179,7 +158,7 @@ namespace BECore::Tests {
         EXPECT_EQ(themes.GetVersion(), version);
     }
 
-    TEST_F(UIThemesTest, ClearDropsEverythingAndTheVersionNeverGoesBack) {
+    TEST(UIThemesTest, ClearDropsEverythingAndTheVersionNeverGoesBack) {
         UIThemes themes = MakeTable();
         themes.SetTheme("dark"_intern);
         const uint64_t before = themes.GetVersion();
@@ -197,7 +176,7 @@ namespace BECore::Tests {
         EXPECT_GT(themes.GetVersion(), before + 1);
     }
 
-    TEST_F(UIThemesTest, TheTokensAreTheUnionOfTheThemesAndHasTokenLooksAtOneTheme) {
+    TEST(UIThemesTest, TheTokensAreTheUnionOfTheThemesAndHasTokenLooksAtOneTheme) {
         UIThemes themes = MakeTable();
         themes.Set("dark"_intern, "accent", DarkPrimary);
 
@@ -212,7 +191,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(themes.HasToken("sepia"_intern, "primary"));
     }
 
-    TEST_F(UIThemesTest, ADefaultThemeWithNoColorsIsATableWithNoFallback) {
+    TEST(UIThemesTest, ADefaultThemeWithNoColorsIsATableWithNoFallback) {
         UIThemes themes = MakeTable();
         themes.SetDefaultTheme("sepia"_intern);
         themes.SetTheme("dark"_intern);
@@ -221,10 +200,10 @@ namespace BECore::Tests {
         EXPECT_FALSE(themes.Find("text").has_value());
     }
 
-    TEST_F(UIThemesTest, LoadFromXmlReadsThemesColorsAndTheDefault) {
+    TEST(UIThemesTest, LoadFromXmlReadsThemesColorsAndTheDefault) {
         UIThemes themes;
 
-        const auto problems = Load(themes, R"(<UIThemes default="dark">
+        const auto problems = LoadTableXml(themes, R"(<UIThemes default="dark">
             <theme id="light"><color name="primary" value="#33aa66"/><color name="text" value="20,20,20,255"/></theme>
             <theme id="dark"><color name="primary" value="#005A28FF"/></theme>
         </UIThemes>)");
@@ -238,10 +217,10 @@ namespace BECore::Tests {
         EXPECT_TRUE(ColorsEqual(Require(themes.Find("text")), LightText));
     }
 
-    TEST_F(UIThemesTest, LoadFromXmlReportsWhatItSkipsAndLoadsTheRest) {
+    TEST(UIThemesTest, LoadFromXmlReportsWhatItSkipsAndLoadsTheRest) {
         UIThemes themes;
 
-        const auto problems = Load(themes, R"(<UIThemes default="sepia">
+        const auto problems = LoadTableXml(themes, R"(<UIThemes default="sepia">
             <theme><color name="a" value="#000000"/></theme>
             <theme id="light">
                 <color value="#000000"/>
@@ -276,17 +255,24 @@ namespace BECore::Tests {
         EXPECT_EQ(themes.GetTokens().size(), 2u);
     }
 
-    TEST_F(UIThemesTest, LoadFromXmlOfAnEmptyNodeAddsNothing) {
+    TEST(UIThemesTest, LoadFromXmlOfAnEmptyNodeAddsNothing) {
         UIThemes themes;
 
         EXPECT_TRUE(themes.LoadFromXml(XmlNode{}).empty());
-        EXPECT_TRUE(Load(themes, "<UIThemes/>").empty());
+        EXPECT_TRUE(LoadTableXml(themes, "<UIThemes/>").empty());
 
         EXPECT_TRUE(themes.GetThemes().empty());
         EXPECT_EQ(themes.GetVersion(), 1u);
     }
 
-    TEST_F(UIThemesTest, TheEngineHoldsATableAndShipsNoThemes) {
+    class UIThemesServiceTest : public ::testing::Test {
+    protected:
+        void TearDown() override {
+            CoreManager::GetUIThemes().Clear();  // the table is global: the next test starts with none, and with no current theme
+        }
+    };
+
+    TEST_F(UIThemesServiceTest, TheEngineHoldsATableAndShipsNoThemes) {
         UIThemes& themes = CoreManager::GetUIThemes();
 
         EXPECT_TRUE(themes.GetThemes().empty());

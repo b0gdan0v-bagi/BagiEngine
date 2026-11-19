@@ -13,7 +13,7 @@ namespace BECore::Fuzz {
     /**
      * @brief A state with every field of the probe set to a value that is not its default
      *
-     * The generated reflection code (tests/BECore/FuzzProbe.h) is included in FuzzProbeAccess.cpp only, because the generated
+     * The generated reflection code of the probe (Generated/FuzzProbe.gen.hpp, made from tests/BECore/FuzzProbe.h) is included in FuzzProbeAccess.cpp only, because the generated
      * file holds non-inline definitions: every other file of the library uses the probe through this header.
      */
     ProbeState MakeFilledProbe();

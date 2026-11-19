@@ -1,13 +1,14 @@
 #include <BECore/UI/UICanvasLayout.h>
 #include <Common/Printers.h>
 #include <Common/UILayoutMatrix.h>
+#include <Common/UITestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
 
     namespace {
 
-        /// An element that reports what its content needs, the way a label will once it measures its text
+        /// An element that reports a fixed content fit
         class ContentElement : public UIElement {
         public:
             UIContentFit CheckContent(float /*width*/, float /*height*/, float /*scale*/) const override {
@@ -164,12 +165,14 @@ namespace BECore::Tests {
         content->style.rect.anchor = UIAnchor::Stretch;
         canvas.Update(context);
 
+        ExpectRect(background->rect, 0.0f, 0.0f, 1000.0f, 500.0f);  // the whole canvas, notch and sides included
+        ExpectRect(content->rect, context.safeArea);
         EXPECT_TRUE(canvas.Validate({}).empty());
 
-        background->ignoreSafeArea = false;  // without the flag the same rect leaves the safe area
+        background->ignoreSafeArea = false;  // without the flag a Stretch element is laid out in the content bounds
         canvas.Invalidate();
         canvas.Update(context);
-        // ...but a Stretch element is laid out in the content bounds, so it is inside them again
+        ExpectRect(background->rect, context.safeArea);
         EXPECT_TRUE(canvas.Validate({}).empty());
     }
 
@@ -664,7 +667,5 @@ namespace BECore::Tests {
             EXPECT_TRUE(seen[kind]) << "no issue of kind " << String(EnumUtils<UILayoutIssueKind>::ToString(static_cast<UILayoutIssueKind>(kind))).c_str();
         }
     }
-
-    TEST(UILayoutValidatorTest, CompileTimeChecks) {}
 
 }  // namespace BECore::Tests

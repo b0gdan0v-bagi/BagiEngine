@@ -123,10 +123,8 @@ namespace BECore::Tests {
             return Require(node);
         }
 
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
         TransformComponent& TransformOf(const char* name) const {
-            return *Node("Main", name).GetComponent<TransformComponent>();
+            return Require(Node("Main", name).GetComponent<TransformComponent>());
         }
 
         /// A free move of A and B (World axes, no snap) that starts at the origin, so the point of an Update is the offset
@@ -141,6 +139,8 @@ namespace BECore::Tests {
                                  snap);
         }
 
+        IntrusivePtr<RecordingRenderer> _renderer;
+        IntrusivePtrAtomic<SceneManager> _manager;
         Vector<SceneNode*> _nodes;
         Vector<Gizmo::Item> _items;
         EditRecorder _recorder;

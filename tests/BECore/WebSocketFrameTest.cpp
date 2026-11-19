@@ -42,13 +42,19 @@ namespace BECore::Tests {
 
         void ExpectNothingReady(WebSocketFrameParser& parser) {
             const PopResult result = parser.Pop();
-            ASSERT_TRUE(result.has_value()) << result.error().reason.c_str();
+            if (!result.has_value()) {
+                ADD_FAILURE() << result.error().reason.c_str();
+                return;
+            }
             EXPECT_FALSE(result->has_value());
         }
 
         void ExpectViolation(WebSocketFrameParser& parser, uint16_t closeCode) {
             const PopResult result = parser.Pop();
-            ASSERT_FALSE(result.has_value()) << "the frame was accepted";
+            if (result.has_value()) {
+                ADD_FAILURE() << "the frame was accepted";
+                return;
+            }
             EXPECT_EQ(result.error().closeCode, closeCode) << result.error().reason.c_str();
             EXPECT_FALSE(result.error().reason.empty());
         }

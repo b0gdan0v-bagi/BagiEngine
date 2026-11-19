@@ -1,4 +1,3 @@
-#include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/UI/UIBoxStyle.h>
@@ -31,16 +30,9 @@ namespace BECore::Tests {
             return element;
         }
 
-        class UIThemeColorTest : public ::testing::Test {
-        protected:
-            void TearDown() override {
-                CoreManager::GetUIThemes().Clear();
-            }
-        };
-
     }  // namespace
 
-    TEST_F(UIThemeColorTest, AColorTextIsALiteralOrAToken) {
+    TEST(UIThemeColorTest, AColorTextIsALiteralOrAToken) {
         const auto literal = UIText::ParseColorRef(" #33AA66 ");
         ASSERT_TRUE(literal.has_value());
         EXPECT_TRUE(literal->token.Empty());
@@ -56,13 +48,13 @@ namespace BECore::Tests {
         }
     }
 
-    TEST_F(UIThemeColorTest, ATokenIsWrittenBackAsItsName) {
+    TEST(UIThemeColorTest, ATokenIsWrittenBackAsItsName) {
         EXPECT_EQ(UIText::FormatColorRef(Green, PoolString{}), "51,170,102,255");
         EXPECT_EQ(UIText::FormatColorRef(Green, "primary"_intern), "@primary") << "the channels of a token are not written";
         EXPECT_EQ(UIText::FormatColor(Green), "51,170,102,255") << "the literal-only form stays as it was";
     }
 
-    TEST_F(UIThemeColorTest, AColorFieldReadsAndWritesAToken) {
+    TEST(UIThemeColorTest, AColorFieldReadsAndWritesAToken) {
         bool errors = false;
         auto element = Load("UIPanel", "color=\"@panel\" borderColor=\"@line\" spriteTint=\"1,2,3,4\"", errors);
         EXPECT_FALSE(errors);
@@ -80,7 +72,7 @@ namespace BECore::Tests {
         EXPECT_NE(xml.find("spriteTint=\"1,2,3,4\""), String::npos) << xml.c_str();
     }
 
-    TEST_F(UIThemeColorTest, ABadTokenIsReportedLikeABadColorAndTheOldValueKept) {
+    TEST(UIThemeColorTest, ABadTokenIsReportedLikeABadColorAndTheOldValueKept) {
         for (const char* bad : {"color=\"@\"", "color=\"@1x\"", "color=\"@a b\"", "color=\"@x.y\""}) {
             bool errors = false;
             auto element = Load("UIPanel", bad, errors);
@@ -89,7 +81,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST_F(UIThemeColorTest, ALiteralReadAfterATokenDropsTheToken) {
+    TEST(UIThemeColorTest, ALiteralReadAfterATokenDropsTheToken) {
         UIColor color = UIColor::FromToken("primary"_intern);
         ASSERT_TRUE(color.HasToken());
 
@@ -99,7 +91,7 @@ namespace BECore::Tests {
         EXPECT_EQ(color.b, 3);
     }
 
-    TEST_F(UIThemeColorTest, TheColorOfAShadowAGlowAndTheTextEffectsMayBeATokenToo) {
+    TEST(UIThemeColorTest, TheColorOfAShadowAGlowAndTheTextEffectsMayBeATokenToo) {
         bool errors = false;
         auto element = Load("UIElement", "shadow=\"0,2,4,0,@shade\" glow=\"0,0,6,1,10,20,30,40\"", errors,
                             "<components><component type=\"UITextComponent\" textOutline=\"2,@edge\" textShadow=\"1,3,@drop\"/></components>");
@@ -124,7 +116,7 @@ namespace BECore::Tests {
         EXPECT_NE(xml.find("textShadow=\"1,3,@drop\""), String::npos) << xml.c_str();
     }
 
-    TEST_F(UIThemeColorTest, ALiteralOverAShadowTokenDropsIt) {
+    TEST(UIThemeColorTest, ALiteralOverAShadowTokenDropsIt) {
         bool errors = false;
         auto element = Load("UIPanel", "shadow=\"0,2,4,0,@shade\"", errors);
         auto* panel = element->Cast<UIPanel>();
@@ -141,7 +133,7 @@ namespace BECore::Tests {
         EXPECT_EQ(panel->box.shadow.color.a, 0xA0);
     }
 
-    TEST_F(UIThemeColorTest, AShadowOrATextEffectTokenIsRefusedByTheLiteralOnlyForms) {
+    TEST(UIThemeColorTest, AShadowOrATextEffectTokenIsRefusedByTheLiteralOnlyForms) {
         EXPECT_FALSE(UIText::ParseShadow("0,2,4,0,@shade").has_value());
         float width = 0.0f;
         float x = 0.0f;
@@ -157,7 +149,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(token.Empty()) << "a literal clears the token it is given";
     }
 
-    TEST_F(UIThemeColorTest, TheBoxAndTheEffectsDifferByTheirTokens) {
+    TEST(UIThemeColorTest, TheBoxAndTheEffectsDifferByTheirTokens) {
         UIBoxStyle a;
         UIBoxStyle b;
         EXPECT_TRUE(a == b);
@@ -178,7 +170,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(x == y);
     }
 
-    TEST_F(UIThemeColorTest, ResolveWritesTheChannelsOfTheCurrentThemeAndKeepsTheToken) {
+    TEST(UIThemeColorTest, ResolveWritesTheChannelsOfTheCurrentThemeAndKeepsTheToken) {
         UIThemes themes;
         themes.Set("light"_intern, "primary", Green);
         themes.Set("dark"_intern, "primary", DarkGreen);
@@ -194,7 +186,7 @@ namespace BECore::Tests {
         EXPECT_EQ(color.token, "primary"_intern);
     }
 
-    TEST_F(UIThemeColorTest, ALiteralAndAnEmptyTokenAreLeftAlone) {
+    TEST(UIThemeColorTest, ALiteralAndAnEmptyTokenAreLeftAlone) {
         UIThemes themes;
         themes.Set("light"_intern, "primary", Green);
         UIColor literal(1, 2, 3, 4);
@@ -208,7 +200,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(themes.GetMissing().empty());
     }
 
-    TEST_F(UIThemeColorTest, ATokenThatNoThemeDefinesIsMagentaAndRecordedOnce) {
+    TEST(UIThemeColorTest, ATokenThatNoThemeDefinesIsMagentaAndRecordedOnce) {
         UIThemes themes;
         themes.Set("light"_intern, "primary", Green);
         UIColor first = UIColor::FromToken("typo"_intern);
@@ -231,7 +223,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(themes.GetMissing().empty());
     }
 
-    TEST_F(UIThemeColorTest, ATokenOfTheDefaultThemeResolvesInAThemeThatLeavesItOut) {
+    TEST(UIThemeColorTest, ATokenOfTheDefaultThemeResolvesInAThemeThatLeavesItOut) {
         UIThemes themes;
         themes.Set("light"_intern, "primary", Green);
         themes.Set("light"_intern, "text", Color{9, 9, 9, 255});
@@ -245,7 +237,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(themes.GetMissing().empty());
     }
 
-    TEST_F(UIThemeColorTest, ATokenWhoseThemeColorIsInvisibleIsStillSavedAndCompared) {
+    TEST(UIThemeColorTest, ATokenWhoseThemeColorIsInvisibleIsStillSavedAndCompared) {
         UIThemes themes;
         themes.Set("light"_intern, "none", Color{0, 0, 0, 0});
         UIBoxStyle box;

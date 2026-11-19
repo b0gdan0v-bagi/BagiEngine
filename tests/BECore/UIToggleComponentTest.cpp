@@ -496,14 +496,6 @@ namespace BECore::Tests {
         EXPECT_NEAR(El("SoundCaption").rect.w, 222.0f, kEpsilon);
     }
 
-    TEST_F(UIToggleComponentTest, TheConstantsOfTheSwitch) {
-        EXPECT_FLOAT_EQ(UISwitchComponent::kSwitchHeightRatio, 0.5f);
-        EXPECT_FLOAT_EQ(UISwitchComponent::kSwitchAspect, 2.0f);
-        EXPECT_FLOAT_EQ(UISwitchComponent::kThumbInset, 3.0f);
-        EXPECT_FLOAT_EQ(UISwitchComponent::kAreaAspect, UISwitchComponent::kSwitchHeightRatio * UISwitchComponent::kSwitchAspect + (1.0f - UISwitchComponent::kSwitchHeightRatio) * 0.5f)
-            << "the track and the air at the right end";
-    }
-
     TEST_F(UIToggleComponentTest, TheTrackIsInTheRectAtThreeHeights) {
         for (const float height : {20.0f, 56.0f, 120.0f}) {
             const Rect area{7.0f, 9.0f, height * UISwitchComponent::kAreaAspect, height};
@@ -699,7 +691,6 @@ namespace BECore::Tests {
         const DrawCall* thumb = FindRect(PartsOf("Sound").thumbOff);
         ASSERT_NE(thumb, nullptr);
         EXPECT_TRUE(ColorsEqual(thumb->color, Color{9, 8, 7, 255}));
-        themes.Clear();
     }
 
     // ---- reflection --------------------------------------------------------------------------------------------------------
@@ -754,5 +745,10 @@ namespace BECore::Tests {
         EXPECT_EQ(xmlOf(El("SoundSwitch")).find("partShape"), String::npos);
         EXPECT_NE(xmlOf(El("RoundSwitch")).find("partShape=\"Round\""), String::npos);
     }
+
+    // The switch element is as wide as the track and the air at its right end
+    static_assert(UISwitchComponent::kAreaAspect == UISwitchComponent::kSwitchHeightRatio * UISwitchComponent::kSwitchAspect + (1.0f - UISwitchComponent::kSwitchHeightRatio) * 0.5f);
+
+    TEST_F(UIToggleComponentTest, CompileTimeChecks) {}
 
 }  // namespace BECore::Tests

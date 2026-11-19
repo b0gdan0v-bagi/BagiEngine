@@ -6,6 +6,7 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Text/TextComponent.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/LogRecorder.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
@@ -158,19 +159,21 @@ namespace BECore::Tests {
 
     TEST_F(TextComponentTest, APathInFontPathWinsOverFamilyAndAnUnknownFamilyIsLoggedOnce) {
         const ScopedTextSettings settings(MakeTestFamilySettings());
-        const WarningCounter warnings("font family");
+        const LogRecorder warnings;
         auto label = Label("Plain");
         label->_fontFamily = "Nope"_intern;
         for (int frame = 0; frame < 3; ++frame) {
             Draw("Plain");
         }
-        EXPECT_EQ(warnings.Count(), 1u);
+        LogEvent::Flush();
+        EXPECT_EQ(warnings.Count(LogLevel::Warning, {"font family"}), 1u);
         EXPECT_EQ(_renderer->calls.size(), kInkedGlyphsInHello);  // drawn with the default font
 
         label->_fontPath = PoolString::Intern(kTestBoldPath);
         label->_fontFamily = "Other"_intern;
         Draw("Plain");
-        EXPECT_EQ(warnings.Count(), 1u);
+        LogEvent::Flush();
+        EXPECT_EQ(warnings.Count(LogLevel::Warning, {"font family"}), 1u);
         EXPECT_EQ(CoreManager::GetFontAtlasLibrary().GetAtlasCount(), 2u);
     }
 

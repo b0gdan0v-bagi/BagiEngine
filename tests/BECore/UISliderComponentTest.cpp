@@ -745,7 +745,6 @@ namespace BECore::Tests {
         const DrawCall* thumb = FindRect(UISliderComponent::GetParts(RectOf("Volume"), 0.0f).thumb);
         ASSERT_NE(thumb, nullptr);
         EXPECT_TRUE(ColorsEqual(thumb->color, Color{9, 8, 7, 255}));
-        themes.Clear();
     }
 
 }  // namespace BECore::Tests

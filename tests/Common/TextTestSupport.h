@@ -1,7 +1,6 @@
 #pragma once
 
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/Logger/LogEvent.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 
 namespace BECore::Tests {
@@ -38,31 +37,6 @@ namespace BECore::Tests {
 
     private:
         TextSettings _saved;
-    };
-
-    /// Counts the warnings with @p part in the text that LogEvent::Flush() delivers while it lives
-    class WarningCounter : public SubscriptionHolder {
-    public:
-        explicit WarningCounter(String part) : _part(eastl::move(part)) {
-            Subscribe<LogEvent, &WarningCounter::OnLog>(this);
-        }
-
-        /// Delivers the pending log entries, then returns how many matched so far
-        [[nodiscard]] size_t Count() const {
-            LogEvent::Flush();
-            return _count;
-        }
-
-    private:
-        void OnLog(const LogEvent& event) {
-            const StringView message = event.message;
-            if (event.level == LogLevel::Warning && message.find(StringView(_part)) != StringView::npos) {
-                ++_count;
-            }
-        }
-
-        String _part;
-        size_t _count = 0;
     };
 
 }  // namespace BECore::Tests

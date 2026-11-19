@@ -151,7 +151,6 @@ namespace BECore::Tests {
             themes.Set("dark"_intern, "shadow", kDarkShadow);
 
             CoreManager::GetUIVars().Set("barValue"_intern, 0.5f);
-            CoreManager::GetUIVars().Set("switchOn"_intern, 0);
 
             ASSERT_NO_FATAL_FAILURE(LoadScene(kThemeScreenXml));
             ASSERT_TRUE(_canvas);
@@ -386,10 +385,10 @@ namespace BECore::Tests {
         EXPECT_EQ(element.color.g, GreenEditor::kEditedGreen) << "the edit survives the resolve";
     }
 
-    TEST_F(UIThemeResolveTest, ThePartsOfAProgressBarAndAToggleFollowASwitch) {
+    TEST_F(UIThemeResolveTest, ThePartsOfAProgressBarAndASwitchFollowTheTheme) {
         Draw();
         EXPECT_TRUE(HasFill(kLightHover)) << "the filled part of the bar";
-        EXPECT_TRUE(HasFill(kLightLine)) << "the thumb of the toggle";
+        EXPECT_TRUE(HasFill(kLightLine)) << "the thumb of the switch";
         EXPECT_FALSE(HasFill(kDarkHover));
         EXPECT_FALSE(HasFill(kDarkLine));
 

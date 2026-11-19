@@ -39,7 +39,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        enum class Kind { Button, Toggle, Slider };
+        CORE_ENUM(Kind, uint8_t, Button, Toggle, Slider)
 
         /// A named control of a fixture and what the test expects of it; a button's click emits `action=value`, a toggle's `action=on` (variable unset) or `action=off` (variable on)
         struct Control {

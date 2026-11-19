@@ -10,8 +10,10 @@
 #include <BECore/UI/UILayoutValidator.h>
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UITextComponent.h>
+#include <BECore/UI/UITooltip.h>
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/LogRecorder.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
@@ -102,7 +104,7 @@ namespace BECore::Tests {
         }
     };
 
-    TEST_F(UITextComponentTest, TheFieldsComeFromTheFileUnderTheNamesOfALabel) {
+    TEST_F(UITextComponentTest, TheFieldsComeFromTheFile) {
         const UITextComponent& caption = CaptionOf("Cap");
         EXPECT_EQ(caption.text, "Score");
         EXPECT_PRED2(ColorsEqual, caption.textColor, kTextColor);
@@ -152,12 +154,12 @@ namespace BECore::Tests {
 
     TEST_F(UITextComponentTest, TheSizeIsTheFontSizeOfTheOwner) {
         Draw();
-        const float small = Glyphs().back().rect.h;
+        const float small = Back(Glyphs()).rect.h;
         El("Cap").style.fontSize = 48.0f;
         El("Cap").style.rect.height = UILength::Px(80.0f);
         _canvas->Invalidate();
         Draw();
-        EXPECT_GT(Glyphs().back().rect.h, small * 1.5f);
+        EXPECT_GT(Back(Glyphs()).rect.h, small * 1.5f);
     }
 
     // ---- the strings and the variables ------------------------------------------------------------------------------------
@@ -181,12 +183,13 @@ namespace BECore::Tests {
     TEST_F(UITextComponentTest, AKeyMissingEverywhereShowsTheKeyAndIsLoggedOnce) {
         UITextComponent& caption = CaptionOf("Cap");
         caption.text = "{#menu.nowhere}";
-        const WarningCounter warnings("menu.nowhere");
+        const LogRecorder warnings;
 
         for (int i = 0; i < 3; ++i) {
             EXPECT_EQ(caption.GetDisplayText(), "menu.nowhere");
         }
-        EXPECT_EQ(warnings.Count(), 1u);
+        LogEvent::Flush();
+        EXPECT_EQ(warnings.Count(LogLevel::Warning, {"menu.nowhere"}), 1u);
     }
 
     TEST_F(UITextComponentTest, ItFollowsAVariable) {
@@ -229,11 +232,12 @@ namespace BECore::Tests {
         EXPECT_EQ(caption.GetResolvedFontPath(), PoolString::Intern(kTestBoldPath));
 
         caption.fontFamily = "Nope"_intern;
-        const WarningCounter warnings("font family 'Nope'");
+        const LogRecorder warnings;
         for (int frame = 0; frame < 3; ++frame) {
             Draw();
         }
-        EXPECT_EQ(warnings.Count(), 1u);
+        LogEvent::Flush();
+        EXPECT_EQ(warnings.Count(LogLevel::Warning, {"font family 'Nope'"}), 1u);
         EXPECT_FALSE(Glyphs().empty());
     }
 
@@ -376,6 +380,81 @@ namespace BECore::Tests {
     TEST_F(UITextComponentTest, TheStateAccentOfAnElementWithATextComponentIsItsTextColour) {
         EXPECT_PRED2(ColorsEqual, El("Cap").GetStateAccent(), kTextColor);
         EXPECT_PRED2(ColorsEqual, El("Narrow").GetStateAccent(), (Color{255, 255, 255, 255})) << "the text component of Narrow keeps the default white";
+    }
+
+    // ---- MeasureText ---------------------------------------------------------------------------------------------------------
+
+    constexpr float kMeasureEpsilon = 1e-3f;
+
+    class UITextMeasureTest : public ::testing::Test {
+    protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
+
+        /// A text element at the tooltip's font size
+        struct Text {
+            IntrusivePtr<UIElement> element;
+
+            [[nodiscard]] Vec2 MeasureText(float maxWidth, float scale) const {
+                return Require(element->GetComponent<UITextComponent>()).MeasureText(*element, maxWidth, scale);
+            }
+        };
+
+        static Text MakeLabel(const char* text) {
+            auto element = New<UIElement>();
+            element->AddComponent<UITextComponent>().text = text;
+            element->active.fontSize = UITooltip::kFontSize;
+            return {element};
+        }
+    };
+
+    TEST_F(UITextMeasureTest, AShortTextIsOneLineNarrowerThanTheLimit) {
+        const auto label = MakeLabel("Settings");
+        const Vec2 size = label.MeasureText(UITooltip::kMaxWidth, 1.0f);
+
+        EXPECT_GT(size.x, 0.0f);
+        EXPECT_LT(size.x, UITooltip::kMaxWidth);
+        EXPECT_GE(size.y, UITooltip::kFontSize) << "a line is at least as high as the font is";
+        EXPECT_LT(size.y, UITooltip::kFontSize * 2.0f) << "one line";
+    }
+
+    TEST_F(UITextMeasureTest, ALongTextWrapsAtTheLimitAndGrowsTaller) {
+        const auto shortLabel = MakeLabel("Settings");
+        const auto longLabel = MakeLabel("Settings of the game: the sound, the language and the size of everything on the screen");
+        const Vec2 shortSize = shortLabel.MeasureText(UITooltip::kMaxWidth, 1.0f);
+        const Vec2 longSize = longLabel.MeasureText(UITooltip::kMaxWidth, 1.0f);
+
+        EXPECT_LE(longSize.x, UITooltip::kMaxWidth + kMeasureEpsilon);
+        EXPECT_GT(longSize.x, shortSize.x);
+        EXPECT_GT(longSize.y, shortSize.y * 1.5f) << "several lines";
+    }
+
+    TEST_F(UITextMeasureTest, ANarrowerLimitMakesItTaller) {
+        const auto label = MakeLabel("Settings of the game and the sound");
+        const Vec2 wide = label.MeasureText(400.0f, 1.0f);
+        const Vec2 narrow = label.MeasureText(100.0f, 1.0f);
+
+        EXPECT_LE(narrow.x, 100.0f + kMeasureEpsilon);
+        EXPECT_GT(narrow.y, wide.y);
+    }
+
+    TEST_F(UITextMeasureTest, TheSizeIsInCanvasUnitsWhateverTheScale) {
+        const auto label = MakeLabel("Settings");
+        const Vec2 one = label.MeasureText(UITooltip::kMaxWidth, 1.0f);
+        const Vec2 two = label.MeasureText(UITooltip::kMaxWidth, 2.0f);
+
+        EXPECT_NEAR(two.x, one.x, one.x * 0.1f) << "twice the pixels, twice the divisor";
+        EXPECT_NEAR(two.y, one.y, one.y * 0.1f);
+    }
+
+    TEST_F(UITextMeasureTest, AnEmptyTextOrNoRoomIsZero) {
+        const auto empty = MakeLabel("");
+        EXPECT_EQ(empty.MeasureText(UITooltip::kMaxWidth, 1.0f), Vec2{});
+
+        const auto label = MakeLabel("Settings");
+        EXPECT_EQ(label.MeasureText(0.0f, 1.0f), Vec2{});
+        EXPECT_EQ(label.MeasureText(UITooltip::kMaxWidth, 0.0f), Vec2{});
     }
 
 }  // namespace BECore::Tests

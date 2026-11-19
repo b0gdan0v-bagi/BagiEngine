@@ -3,6 +3,7 @@
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/UITableTestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -20,21 +21,6 @@ namespace BECore::Tests {
             strings.Set("en"_intern, "menu.quit", "Quit");
             strings.Set("ru"_intern, "menu.start", "Начать");
             return strings;
-        }
-
-        Vector<String> Load(UIStrings& strings, const char* xml) {
-            auto config = XmlConfig::Create();
-            EXPECT_TRUE(config.LoadFromString(xml));
-            return strings.LoadFromXml(config.GetRoot());
-        }
-
-        bool Mentions(const Vector<String>& problems, const char* word) {
-            for (const String& problem : problems) {
-                if (problem.find(word) != String::npos) {
-                    return true;
-                }
-            }
-            return false;
         }
 
     }  // namespace
@@ -310,7 +296,7 @@ namespace BECore::Tests {
     TEST(UIStringsTest, LoadFromXmlReadsLanguagesAndTheDefault) {
         UIStrings strings;
 
-        const auto problems = Load(strings, R"(
+        const auto problems = LoadTableXml(strings, R"(
             <UIStrings default="ru">
                 <language id="en"><string key="menu.start" text="Start"/><string key="menu.quit" text="Quit"/></language>
                 <language id="ru"><string key="menu.start" text="Начать"/></language>
@@ -329,7 +315,7 @@ namespace BECore::Tests {
     TEST(UIStringsTest, LoadFromXmlWithoutADefaultTakesTheFirstLanguage) {
         UIStrings strings;
 
-        const auto problems = Load(strings, R"(<UIStrings><language id="de"><string key="k" text="Ja"/></language><language id="en"><string key="k" text="Yes"/></language></UIStrings>)");
+        const auto problems = LoadTableXml(strings, R"(<UIStrings><language id="de"><string key="k" text="Ja"/></language><language id="en"><string key="k" text="Yes"/></language></UIStrings>)");
 
         EXPECT_TRUE(problems.empty());
         EXPECT_EQ(strings.GetDefaultLanguage(), "de"_intern);
@@ -339,7 +325,7 @@ namespace BECore::Tests {
     TEST(UIStringsTest, LoadFromXmlReportsEveryKindOfProblemAndKeepsTheRest) {
         UIStrings strings;
 
-        const auto problems = Load(strings, R"(
+        const auto problems = LoadTableXml(strings, R"(
             <UIStrings default="fr">
                 <language id="en">
                     <string key="ok" text="fine"/>
@@ -379,7 +365,7 @@ namespace BECore::Tests {
         UIStrings strings;
 
         EXPECT_TRUE(strings.LoadFromXml(XmlNode{}).empty());
-        EXPECT_TRUE(Load(strings, "<UIStrings/>").empty());
+        EXPECT_TRUE(LoadTableXml(strings, "<UIStrings/>").empty());
         EXPECT_TRUE(strings.GetLanguages().empty());
         EXPECT_EQ(strings.GetVersion(), 0u);
     }
@@ -387,7 +373,7 @@ namespace BECore::Tests {
     TEST(UIStringsTest, LoadFromXmlAddsToWhatTheTableHolds) {
         UIStrings strings = MakeTable();
 
-        const auto problems = Load(strings, R"(<UIStrings><language id="en"><string key="menu.start" text="Go"/><string key="extra" text="More"/></language></UIStrings>)");
+        const auto problems = LoadTableXml(strings, R"(<UIStrings><language id="en"><string key="menu.start" text="Go"/><string key="extra" text="More"/></language></UIStrings>)");
 
         EXPECT_EQ(problems.size(), 1u);  // "menu.start" is set twice: the table's value stays
         EXPECT_EQ(*strings.Find("menu.start"), "Start");
@@ -396,13 +382,25 @@ namespace BECore::Tests {
 
     TEST(UIStringsTest, TheXmlTextMayHoldVariablesEscapesAndLineBreaks) {
         UIStrings strings;
-        Load(strings, R"(<UIStrings><language id="en"><string key="k" text="{score} &amp; {{x}}&#10;next"/></language></UIStrings>)");
+        LoadTableXml(strings, R"(<UIStrings><language id="en"><string key="k" text="{score} &amp; {{x}}&#10;next"/></language></UIStrings>)");
 
         EXPECT_EQ(*strings.Find("k"), "{score} & {{x}}\nnext");
     }
 
-    TEST(UIStringsTest, TheCoreManagerHoldsAnEmptyTableWhenNoGameShipsOne) {
-        EngineEnvironment::EnsureCoreServices();
+    // ---- the table of the core services ----------------------------------------------------------------------------------
+
+    class UIStringsServiceTest : public ::testing::Test {
+    protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
+
+        void TearDown() override {
+            CoreManager::GetUIStrings().Clear();  // the table is global
+        }
+    };
+
+    TEST_F(UIStringsServiceTest, TheCoreManagerHoldsAnEmptyTableWhenNoGameShipsOne) {
         UIStrings& strings = CoreManager::GetUIStrings();
         strings.Clear();
 
@@ -416,8 +414,6 @@ namespace BECore::Tests {
 
         strings.Set("en"_intern, "k", "v");
         EXPECT_EQ(*CoreManager::GetUIStrings().Find("k"), "v");
-
-        strings.Clear();  // the table is global: leave it empty for the next test
     }
 
 }  // namespace BECore::Tests

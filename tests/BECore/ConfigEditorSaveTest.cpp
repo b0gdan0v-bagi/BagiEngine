@@ -70,8 +70,10 @@ namespace BECore::Tests {
         void SetUp() override {
             // One directory per test: ctest runs the tests in parallel processes, and SetUp clears the directory
             _dir = TestTempDirectory("BagiEngineConfigEditorSaveTest");
-            std::filesystem::remove_all(_dir);
-            std::filesystem::create_directories(_dir);
+            std::error_code error;
+            std::filesystem::remove_all(_dir, error);
+            std::filesystem::create_directories(_dir, error);
+            ASSERT_FALSE(error) << _dir.generic_string() << ": " << error.message();
         }
 
         void TearDown() override {
@@ -219,7 +221,9 @@ namespace BECore::Tests {
                 EXPECT_EQ(reloadedAttributeCount, attributeCount) << "sink " << i;
             }
 
-            std::filesystem::remove(EngineLogPath());
+            std::error_code error;
+            std::filesystem::remove(EngineLogPath(), error);
+            ASSERT_FALSE(error) << error.message();
             const auto manager = New<LoggerManager>();
             manager->Deserialize(saved);
 
@@ -235,7 +239,7 @@ namespace BECore::Tests {
             const auto* fileSink = dynamic_cast<const FileSink*>(&second);
             ASSERT_NE(fileSink, nullptr);
             EXPECT_TRUE(fileSink->IsOpen());
-            EXPECT_TRUE(std::filesystem::exists(EngineLogPath()));
+            EXPECT_TRUE(std::filesystem::exists(EngineLogPath(), error));
         }
     }
 

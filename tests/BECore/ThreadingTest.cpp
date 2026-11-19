@@ -8,7 +8,6 @@
 #include <gtest/gtest-spi.h>
 #include <gtest/gtest.h>
 #include <thread>
-#include <vector>
 
 namespace BECore::Tests {
 

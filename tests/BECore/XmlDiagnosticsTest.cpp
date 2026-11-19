@@ -145,7 +145,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(d.HasKey("anything"));
     }
 
-    TEST(XmlDiagnosticsTest, HasKeyOfTheBinaryReaderSeesEntriesOfTheCurrentObject) {
+    TEST(BinaryDiagnosticsTest, HasKeyOfTheBinaryReaderSeesEntriesOfTheCurrentObject) {
         BinarySerializer s;
         ASSERT_TRUE(s.BeginObject("root"));
         s.WriteAttribute("size", int32_t{3});
@@ -170,7 +170,7 @@ namespace BECore::Tests {
         d.EndObject();
     }
 
-    TEST(XmlDiagnosticsTest, BinaryFindingsCarryThePath) {
+    TEST(BinaryDiagnosticsTest, BinaryFindingsCarryThePath) {
         BinarySerializer s;
         ASSERT_TRUE(s.BeginObject("root"));
         s.WriteAttribute("size", int32_t{3});

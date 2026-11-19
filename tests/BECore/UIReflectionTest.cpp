@@ -117,14 +117,17 @@ namespace BECore::Tests {
             return serializer.SaveToString();
         }
 
-        IntrusivePtr<UICanvasComponent> FromXml(const String& xml, bool expectClean = true) {
+        /// The canvas read from @p xml; without @p hadErrors the read must be clean, with it the flag of the deserializer is handed back
+        IntrusivePtr<UICanvasComponent> FromXml(const String& xml, bool* hadErrors = nullptr) {
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(StringView(xml)));
             auto canvas = New<UICanvasComponent>();
             EXPECT_TRUE(deserializer.BeginObject("component"));
             canvas->Deserialize(deserializer);
             deserializer.EndObject();
-            if (expectClean) {
+            if (hadErrors) {
+                *hadErrors = deserializer.HasErrors();
+            } else {
                 EXPECT_FALSE(deserializer.HasErrors());
             }
             canvas->Initialize();
@@ -338,22 +341,16 @@ namespace BECore::Tests {
     TEST(UIReflectionTest, AMalformedValueIsReportedAndLeavesTheDefault) {
         const String xml = "<root><component><elements><element type=\"UIElement\" name=\"A\" width=\"wide\" color=\"1,2\" margin=\"1,2\" x=\"5\"/></elements>"
                            "<variants><variant when=\"orientation:sideways\"/></variants></component></root>";
-        const auto canvas = FromXml(xml, false);
+        bool hadErrors = false;
+        const auto canvas = FromXml(xml, &hadErrors);
 
+        EXPECT_TRUE(hadErrors);
         ASSERT_EQ(canvas->_elements.size(), 1u);
         const UIElement& element = *canvas->_elements[0];
         EXPECT_EQ(element.style.rect.width, UILength{});
         EXPECT_EQ(element.color.a, 0);
         EXPECT_EQ(element.style.rect.margin, UIEdges{});
         EXPECT_FLOAT_EQ(element.style.rect.x.value, 5.0f);  // the well-formed attributes still load
-
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(StringView(xml)));
-        auto again = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        again->Deserialize(deserializer);
-        deserializer.EndObject();
-        EXPECT_TRUE(deserializer.HasErrors());
     }
 
     TEST(UIReflectionTest, AnUnknownElementTypeIsReported) {
@@ -484,10 +481,10 @@ namespace BECore::Tests {
         EXPECT_FALSE(FromXml(ToXml(*canvas, false))->_extendToOutput);
     }
 
-    TEST(UIReflectionTest, CompileTimeChecks) {
-        static_assert(std::is_base_of_v<Color, UIColor>);
-        static_assert(std::is_convertible_v<Color, UIColor>);
-        static_assert(std::is_same_v<decltype(UIElement::children)::value_type, IntrusivePtr<UIElement>>);
-    }
+    static_assert(std::is_base_of_v<Color, UIColor>);
+    static_assert(std::is_convertible_v<Color, UIColor>);
+    static_assert(std::is_same_v<decltype(UIElement::children)::value_type, IntrusivePtr<UIElement>>);
+
+    TEST(UIReflectionTest, CompileTimeChecks) {}
 
 }  // namespace BECore::Tests

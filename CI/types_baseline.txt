@@ -39,8 +39,6 @@ tests/BECore/Save/SaveStorageTest.cpp fstream 1
 tests/BECore/SceneNodeFilesTest.cpp fstream 1
 tests/BECore/SpikeCaptureTest.cpp fstream 1
 tests/BECore/Tls/TlsLocalEndpointTest.cpp fstream 1
-tests/BECore/UIDocumentTest.cpp fstream 1
-tests/BECore/UIWebTest.cpp fstream 1
 tests/Common/ContentFilesCheck.h directory-iterator 1
 tests/Common/MigrationTwin.h directory-iterator 1
 tests/Common/MigrationTwin.h fstream 1

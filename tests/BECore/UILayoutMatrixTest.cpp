@@ -205,8 +205,6 @@ namespace BECore::Tests {
             return canvas;
         }
 
-        constexpr size_t kScreenRunsPerCase = 6;  // three scale modes, two user scales
-
     }  // namespace
 
     TEST(UILayoutMatrixTest, AnElementAnchoredByPercentInARegionTheGamePublishesIsCleanOnTheWholeMatrix) {
@@ -226,7 +224,7 @@ namespace BECore::Tests {
 
         const auto failures = ValidateOnMatrix(canvas, {}, {}, {}, LeftThirdAs("other"));
 
-        EXPECT_EQ(failures.size(), UILayoutMatrix().size() * kScreenRunsPerCase);
+        EXPECT_EQ(failures.size(), UILayoutMatrix().size() * kMatrixRunsPerScreenCase);
         for (const UIMatrixFailure& failure : failures) {
             ASSERT_EQ(failure.issues.size(), 1u) << failure.label.c_str();
             EXPECT_EQ(failure.issues[0].kind, UILayoutIssueKind::MissingRegion);
@@ -240,7 +238,7 @@ namespace BECore::Tests {
         const auto failures = ValidateOnMatrix(canvas, {}, {}, {}, LeftThirdAs("side"));
 
         ASSERT_FALSE(failures.empty());
-        EXPECT_LT(failures.size(), UILayoutMatrix().size() * kScreenRunsPerCase);  // the wide cases have room for it
+        EXPECT_LT(failures.size(), UILayoutMatrix().size() * kMatrixRunsPerScreenCase);  // the wide cases have room for it
         for (const UIMatrixFailure& failure : failures) {
             // A canvas narrower than the element also gets OutsideCanvas; the region is what every failing case has in common
             const bool outsideRegion = eastl::any_of(failure.issues.begin(), failure.issues.end(), [](const UILayoutIssue& issue) { return issue.kind == UILayoutIssueKind::OutsideRegion; });

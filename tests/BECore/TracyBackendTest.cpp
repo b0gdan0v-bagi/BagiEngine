@@ -6,7 +6,6 @@
 #if BE_PROFILER_TRACY
 #include <BECore/Profiler/Backends/TracyProfilerBackend.h>
 #include <thread>
-#include <vector>
 #endif
 
 namespace BECore::Tests {

@@ -67,6 +67,11 @@ namespace BECore::Tests {
 
     }  // namespace UIMatrixDetail
 
+    /// A Screen canvas is laid out in every case once per scale mode and per user scale; any other canvas only with the first of each
+    inline constexpr CanvasScaleMode kMatrixScaleModes[] = {CanvasScaleMode::ConstantPixelSize, CanvasScaleMode::ScaleWithScreen, CanvasScaleMode::ConstantPhysicalSize};
+    inline constexpr float kMatrixUserScales[] = {1.0f, 1.5f};
+    inline constexpr size_t kMatrixRunsPerScreenCase = std::size(kMatrixScaleModes) * std::size(kMatrixUserScales);
+
     /// The output sizes and safe areas that every shipped screen is checked on: each aspect ratio at each size that fits 4K, with no insets, a top notch and side insets.
     /// The user scale and the scale mode are not part of it: ValidateOnMatrix() runs every case with each of them.
     inline const Vector<UIMatrixCase>& UILayoutMatrix() {
@@ -115,14 +120,12 @@ namespace BECore::Tests {
         const UICanvasScaleParams saved = canvas.params;
         const UIRegionSet savedRegions = canvas.regions;
         const bool screen = saved.space == CanvasSpace::Screen;
-        const CanvasScaleMode modes[] = {CanvasScaleMode::ConstantPixelSize, CanvasScaleMode::ScaleWithScreen, CanvasScaleMode::ConstantPhysicalSize};
-        const float userScales[] = {1.0f, 1.5f};
 
         Vector<UIMatrixFailure> failures;
         for (const UIMatrixCase& matrixCase : UILayoutMatrix()) {
-            for (CanvasScaleMode mode : modes) {
-                for (float userScale : userScales) {
-                    if (!screen && (mode != modes[0] || userScale != userScales[0])) {
+            for (CanvasScaleMode mode : kMatrixScaleModes) {
+                for (float userScale : kMatrixUserScales) {
+                    if (!screen && (mode != kMatrixScaleModes[0] || userScale != kMatrixUserScales[0])) {
                         continue;
                     }
                     canvas.params = saved;

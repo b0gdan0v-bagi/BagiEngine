@@ -119,7 +119,6 @@ namespace BECore::Fuzz {
         void RunNineSlice(const NineSliceCase& slice) {
             const auto pieces = UINineSlice::Compute(slice.source, slice.border, slice.destination);
             for (const UINineSlicePiece& piece : pieces) {
-                // A piece reaches as far as its rect starts plus its size, so twice the bound at most
                 for (const Rect& rect : {piece.source, piece.destination}) {
                     FUZZ_CHECK(std::isfinite(rect.x) && std::isfinite(rect.y) && std::isfinite(rect.w) && std::isfinite(rect.h));
                     FUZZ_CHECK(rect.w >= 0.0f && rect.h >= 0.0f);

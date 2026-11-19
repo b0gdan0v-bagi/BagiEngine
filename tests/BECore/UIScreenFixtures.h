@@ -219,20 +219,21 @@ namespace BECore::Tests {
                                                           "ColorWhite", "ColorBlack",  "EngineRow", "EngineCaption", "Engine", "EngineStockfish", "EngineOwn",    "LevelRow", "LevelCaption", "Level",
                                                           "LevelEasy",  "LevelMedium", "LevelHard", "LevelMax",      "Ok"};
 
-    /// A choice group of the selector: its `UISegmented`, the variable it is bound to and its segments
+    /// A choice group of the selector: its `UISegmented`, the variable it is bound to, the action its segments emit and its segments
     struct UISelectorGroup {
         const char* name;
         const char* variable;
+        const char* action;
         Vector<Pair<const char*, const char*>> segments;  // the name of the button, its value
     };
 
     /// The four groups of the panel (the words are in kSelectorPlate; the values are what the game publishes)
     inline const Vector<UISelectorGroup>& SelectorGroups() {
         static const Vector<UISelectorGroup> groups = {
-            {"Mode", "opponentMode", {{"ModeTwo", "two"}, {"ModeComputer", "computer"}}},
-            {"Color", "opponentColor", {{"ColorWhite", "white"}, {"ColorBlack", "black"}}},
-            {"Engine", "opponentEngine", {{"EngineStockfish", "stockfish"}, {"EngineOwn", "own"}}},
-            {"Level", "opponentLevel", {{"LevelEasy", "easy"}, {"LevelMedium", "medium"}, {"LevelHard", "hard"}, {"LevelMax", "max"}}},
+            {"Mode", "opponentMode", "SelectorMode", {{"ModeTwo", "two"}, {"ModeComputer", "computer"}}},
+            {"Color", "opponentColor", "SelectorColor", {{"ColorWhite", "white"}, {"ColorBlack", "black"}}},
+            {"Engine", "opponentEngine", "SelectorEngine", {{"EngineStockfish", "stockfish"}, {"EngineOwn", "own"}}},
+            {"Level", "opponentLevel", "SelectorLevel", {{"LevelEasy", "easy"}, {"LevelMedium", "medium"}, {"LevelHard", "hard"}, {"LevelMax", "max"}}},
         };
         return groups;
     }

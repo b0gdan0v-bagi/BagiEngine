@@ -58,7 +58,10 @@ namespace BECore::Tests {
         const PoolString saved = strings.GetLanguage();
         const Vector<PoolString> languages = strings.GetLanguages();  // a copy: a check may set more
         for (const PoolString language : languages) {
-            ASSERT_TRUE(strings.SetLanguage(language)) << language.ToStringView().data();
+            if (!strings.SetLanguage(language)) {
+                ADD_FAILURE() << "cannot set the language " << language.ToStringView().data();  // no return: the saved language is put back below
+                continue;
+            }
             check(language);
         }
         strings.SetLanguage(saved);
