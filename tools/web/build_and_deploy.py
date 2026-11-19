@@ -11,7 +11,8 @@ The steps, in order:
   2. cmake --build --preset <preset> --target <game>
   3. package.py build/<preset>/bin <dist> --game <game> (with --single-thread when the page is the single-thread one, and with
      --app <source>/web/app.json when the game has that file: its web app manifest and icons; --app FILE names another)
-  4. with --deploy: stage Dockerfile, serve.py and dist/ in one folder and run
+  4. with --deploy: the deploy gate first (a green full test run of HEAD of the source, tools/alltests; --skip-alltests passes it,
+     --dry-run only reports it), then stage Dockerfile, serve.py and dist/ in one folder and run
      `railway up <folder> --path-as-root --service <name> --detach` in it (the Railway CLI, logged in and the project linked with
      `railway link`, or RAILWAY_TOKEN of the project; the service must exist and its settings (builder Dockerfile, health check
      /healthz) come from the game's Railway IaC file, not from the upload: tools/web/CLAUDE.md).
@@ -28,6 +29,10 @@ from pathlib import Path
 from typing import NamedTuple
 
 TOOLS_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(TOOLS_DIR.parent / "alltests"))
+
+import alltests_results  # noqa: E402
+
 PACKAGE_SCRIPT = TOOLS_DIR / "package.py"
 STAGED_FILES = ("Dockerfile", "serve.py")
 DEFAULT_GAME = "BagiStress"
@@ -133,7 +138,7 @@ def stage(dist: Path, stage_dir: Path, source_dir: Path) -> None:
     shutil.copytree(dist, stage_dir / "dist")
 
 
-def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil.which, runner=subprocess.run) -> int:
+def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil.which, runner=subprocess.run, gate=alltests_results.check) -> int:
     parser = argparse.ArgumentParser(description="Build the game for the web, package it and deploy it to Railway.")
     parser.add_argument("--game", default=DEFAULT_GAME, help=f"the game target (default: {DEFAULT_GAME})")
     parser.add_argument("--preset", default=DEFAULT_PRESET, help=f"the web preset (default: {DEFAULT_PRESET})")
@@ -146,6 +151,8 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
     parser.add_argument("--deploy", action="store_true", help="after packaging, run `railway up`")
     parser.add_argument("--service", default=DEFAULT_SERVICE, help=f"the Railway service for --deploy (default: {DEFAULT_SERVICE})")
     parser.add_argument("--dry-run", action="store_true", help="print the commands and run nothing")
+    parser.add_argument("--skip-alltests", action="store_true", help="deploy even when HEAD of the source has no green full test run (tools/alltests)")
+    parser.add_argument("--alltests-results", type=Path, help="the results file of tools/alltests (default: the one of the source's repository)")
     args = parser.parse_args(argv)
     source_dir = (args.source_dir or Path.cwd()).resolve()
 
@@ -153,6 +160,8 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
         check_environment(args, emsdk_dir, which)
     except DeployError as error:
         print(f"build_and_deploy.py: {error}", file=sys.stderr)
+        return 2
+    if args.deploy and not alltests_results.allows_deploy(gate(source_dir, args.alltests_results), args.skip_alltests, args.dry_run):
         return 2
 
     dist = args.dist or source_dir / DIST_FOLDER
