@@ -36,8 +36,8 @@ namespace BECore {
         }
     }
 
-    bool VulkanRenderTarget::Initialize(VkDevice device, VkPhysicalDevice physDevice,
-                                         VkFormat format, uint32_t width, uint32_t height) {
+    bool VulkanRenderTarget::Initialize(const VulkanDevice& vulkanDevice, VkFormat format, uint32_t width, uint32_t height) {
+        VkDevice device = vulkanDevice.GetDevice();
         _device = device;
         _width  = width;
         _height = height;
@@ -65,8 +65,7 @@ namespace BECore {
         VkMemoryAllocateInfo allocInfo{};
         allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         allocInfo.allocationSize  = memReqs.size;
-        allocInfo.memoryTypeIndex = FindMemoryType(physDevice, memReqs.memoryTypeBits,
-                                                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        allocInfo.memoryTypeIndex = vulkanDevice.FindMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         if (allocInfo.memoryTypeIndex == UINT32_MAX) {
             LOG_ERROR("VulkanRenderTarget: no suitable memory type");
             return false;
@@ -75,7 +74,11 @@ namespace BECore {
             LOG_ERROR("VulkanRenderTarget: vkAllocateMemory failed");
             return false;
         }
-        vkBindImageMemory(device, _image, _memory, 0);
+        // The destructor frees the image and the memory of a target that fails here
+        if (vkBindImageMemory(device, _image, _memory, 0) != VK_SUCCESS) {
+            LOG_ERROR("VulkanRenderTarget: vkBindImageMemory failed");
+            return false;
+        }
 
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -166,20 +169,6 @@ namespace BECore {
         }
 
         return true;
-    }
-
-    uint32_t VulkanRenderTarget::FindMemoryType(VkPhysicalDevice physDevice,
-                                                  uint32_t typeFilter,
-                                                  VkMemoryPropertyFlags properties) {
-        VkPhysicalDeviceMemoryProperties memProps{};
-        vkGetPhysicalDeviceMemoryProperties(physDevice, &memProps);
-        for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
-            if ((typeFilter & (1u << i)) &&
-                (memProps.memoryTypes[i].propertyFlags & properties) == properties) {
-                return i;
-            }
-        }
-        return UINT32_MAX;
     }
 
 }  // namespace BECore

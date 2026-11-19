@@ -32,29 +32,40 @@ namespace BECore {
         VulkanTexturePipeline(const VulkanTexturePipeline&) = delete;
         VulkanTexturePipeline& operator=(const VulkanTexturePipeline&) = delete;
 
+        /// A set and the pool it came from: a pool cannot be found from the set, and the set is freed to its own pool.
+        struct DescriptorAllocation {
+            VkDescriptorSet set = VK_NULL_HANDLE;
+            VkDescriptorPool pool = VK_NULL_HANDLE;
+        };
+
+        /// How many sets one pool holds; a full pool is followed by another one (AllocateDescriptorSet).
+        static constexpr uint32_t kSetsPerPool = 512;
+
         bool Initialize(VkDevice device, VkRenderPass renderPass, bool linearizeColors);
+
+        /// Destroys the pools and the sampler: every set and every texture that samples with the shared sampler must be gone first.
         void Destroy(VkDevice device);
 
-        // Allocates and writes a descriptor set for the given image view + sampler.
-        // The pool uses VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT so the
-        // returned set can be freed individually (see VulkanTexture destructor).
-        VkDescriptorSet AllocateDescriptorSet(VkDevice device, VkImageView imageView, VkSampler sampler);
+        /// Allocates and writes a set that samples @p imageView with the shared sampler. The pools have
+        /// VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT so the owner frees the set alone (VulkanTexture destructor).
+        /// A full pool makes a new one; an empty result (set is null) means the allocation failed and is logged.
+        DescriptorAllocation AllocateDescriptorSet(VkDevice device, VkImageView imageView);
 
         VkDescriptorSetLayout GetDescriptorSetLayout() const {
             return _descriptorSetLayout;
-        }
-        VkDescriptorPool GetDescriptorPool() const {
-            return _descriptorPool;
         }
 
         // @p scissor is the clip in framebuffer pixels (the whole extent when nothing is clipped)
         void Draw(VkCommandBuffer cmd, VkDescriptorSet descriptorSet, const PushConstants& pc, const VkRect2D& scissor) const;
 
     private:
-        VkShaderModule CreateShaderModule(VkDevice device, const uint32_t* code, uint32_t sizeInBytes) const;
+        VkDescriptorPool CreateDescriptorPool(VkDevice device);
 
         VkDescriptorSetLayout _descriptorSetLayout = VK_NULL_HANDLE;
-        VkDescriptorPool _descriptorPool = VK_NULL_HANDLE;
+        // The last one is the pool that is allocated from; earlier ones are full but still hold the sets they gave out
+        Vector<VkDescriptorPool> _descriptorPools;
+        // Linear, clamp to edge: the only mode of the textures, so one sampler serves every set
+        VkSampler _sampler = VK_NULL_HANDLE;
         VkPipelineLayout _pipelineLayout = VK_NULL_HANDLE;
         VkPipeline _pipeline = VK_NULL_HANDLE;
     };

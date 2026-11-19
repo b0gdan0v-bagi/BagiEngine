@@ -16,6 +16,7 @@
 #include <Events/InputEvents.h>
 #include <RmlUi/Core.h>
 #include <RmlUiHost/RmlUiDocumentComponent.h>
+#include <RmlUiHost/RmlUiRenderInterface.h>
 #include <RmlUiHost/RmlUiRuntime.h>
 #include <RmlUiHost/RmlUiScreens.h>
 #include <gtest/gtest.h>
@@ -106,6 +107,25 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
             return event;
         }
 
+        SDL_MouseWheelEvent Wheel(float x, float y, float mouseX, float mouseY, SDL_MouseWheelDirection direction = SDL_MOUSEWHEEL_NORMAL) {
+            SDL_MouseWheelEvent event{};
+            event.type = SDL_EVENT_MOUSE_WHEEL;
+            event.x = x;
+            event.y = y;
+            event.direction = direction;
+            event.mouse_x = mouseX;
+            event.mouse_y = mouseY;
+            return event;
+        }
+
+        // A box of 200 x 100 dp at (100, 100) whose content is larger in both directions
+        constexpr const char* kScrollMarkup = R"(<div id="box"><div id="content"></div></div>)";
+        constexpr const char* kScrollStyle = "div { display: block; }\n#box { position: absolute; left: 100dp; top: 100dp; width: 200dp; height: 100dp; overflow: scroll; pointer-events: auto; }\n"
+                                             "#content { width: 600dp; height: 600dp; }";
+        constexpr float kInsideTheBoxX = 150.0f;
+        constexpr float kInsideTheBoxY = 150.0f;
+        constexpr int kScrollFrames = 8;  // RmlUi scrolls a wheel step smoothly over the frames that follow
+
         SDL_MouseMotionEvent Motion(float x, float y, SDL_MouseButtonFlags buttonsHeld = 0) {
             SDL_MouseMotionEvent event{};
             event.type = SDL_EVENT_MOUSE_MOTION;
@@ -139,6 +159,41 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         constexpr const char* kStackedStyle = "#play { position: absolute; left: 100dp; top: 100dp; width: 120dp; height: 40dp; background-color: #112233; pointer-events: auto; }\n"
                                               "#play:hover { background-color: #aabbcc; }\n"
                                               "#far { position: absolute; left: 550dp; top: 350dp; width: 100dp; height: 40dp; background-color: #285a3c; pointer-events: auto; }";
+
+        class WaitProbeRenderer;
+
+        /// A texture that tells its renderer how many times the GPU had been waited for when it was freed
+        class WatchedTexture : public RecordedTexture {
+        public:
+            WatchedTexture(WaitProbeRenderer& owner, Vector<uint8_t> rgba, uint32_t width, uint32_t height) : RecordedTexture(std::move(rgba), width, height), _owner(&owner) {}
+            ~WatchedTexture() override;
+
+        private:
+            WaitProbeRenderer* _owner;
+        };
+
+        /// Records the order of WaitIdle() and the end of the textures it made, and keeps the last texture it made (a second holder) until the test lets it go
+        class WaitProbeRenderer : public RecordingRenderer {
+        public:
+            IntrusivePtr<ITexture> CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) override {
+                if (!rgba || width == 0 || height == 0) {
+                    return {};
+                }
+                lastMade = New<WatchedTexture>(*this, Vector<uint8_t>(rgba, rgba + static_cast<size_t>(width) * height * 4), width, height);
+                return lastMade;
+            }
+
+            Vector<uint32_t> waitsWhenFreed;  ///< the WaitIdle() count at the moment each texture was destroyed, in order (declared first: it outlives lastMade)
+            IntrusivePtr<ITexture> lastMade;
+        };
+
+        WatchedTexture::~WatchedTexture() {
+            _owner->waitsWhenFreed.push_back(_owner->waitIdleCalls);
+        }
+
+        const Rml::Vector2i kOnePixel{1, 1};
+        constexpr Rml::byte kWhitePixel[] = {255, 255, 255, 255};
+        const Rml::Span<const Rml::byte> kOnePixelRgba(kWhitePixel, sizeof(kWhitePixel));
 
     }  // namespace
 
@@ -236,6 +291,14 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         void DrawFile() {
             _renderer->ClearCalls();
             _fileManager->DrawAll();
+        }
+
+        /// Lets the frames of the smooth scroll of a wheel step pass (the game clock moves, the document updates)
+        void SettleScroll(const char* sceneName) {
+            for (int frame = 0; frame < kScrollFrames; ++frame) {
+                CoreManager::GetTime().Advance(Time::kMaxFrameTime);
+                Draw(sceneName);
+            }
         }
 
         IntrusivePtr<RecordingRenderer> _renderer;
@@ -547,6 +610,60 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         ASSERT_EQ(recorder.actions.size(), 1u);
         EXPECT_EQ(recorder.actions[0], "GamePlay"_intern);
         EXPECT_EQ(recorder.gameDowns, 0) << "the click did not reach the game";
+    }
+
+    TEST_F(RmlUiHostTest, TheWheelScrollsTheContentTheWayRmlUiReadsIt) {
+        auto doc = Doc("Main");
+        ASSERT_TRUE(doc->SetMarkup(Document(kScrollMarkup, kScrollStyle)));
+        Draw("Main");
+        Rml::Element* box = doc->GetDocument()->GetElementById("box");
+        ASSERT_NE(box, nullptr);
+        ASSERT_GT(box->GetScrollWidth(), box->GetClientWidth());
+        ASSERT_GT(box->GetScrollHeight(), box->GetClientHeight());
+        UIInput& input = CoreManager::GetUIInput();
+
+        // SDL: positive x is to the right, negative y is toward the user (down); RmlUi: positive is right and down
+        EXPECT_TRUE(input.DispatchMouseWheel(Wheel(1.0f, 0.0f, kInsideTheBoxX, kInsideTheBoxY)));
+        SettleScroll("Main");
+        EXPECT_GT(box->GetScrollLeft(), 0.0f) << "a wheel to the right moves the view to the right";
+        EXPECT_EQ(box->GetScrollTop(), 0.0f);
+
+        EXPECT_TRUE(input.DispatchMouseWheel(Wheel(0.0f, -1.0f, kInsideTheBoxX, kInsideTheBoxY)));
+        SettleScroll("Main");
+        const float scrolledDown = box->GetScrollTop();
+        EXPECT_GT(scrolledDown, 0.0f) << "a wheel toward the user scrolls down";
+
+        EXPECT_TRUE(input.DispatchMouseWheel(Wheel(0.0f, 1.0f, kInsideTheBoxX, kInsideTheBoxY)));
+        SettleScroll("Main");
+        EXPECT_LT(box->GetScrollTop(), scrolledDown) << "a wheel away from the user scrolls up";
+    }
+
+    TEST_F(RmlUiHostTest, AFlippedWheelEventScrollsTheOtherWay) {
+        auto doc = Doc("Main");
+        ASSERT_TRUE(doc->SetMarkup(Document(kScrollMarkup, kScrollStyle)));
+        Draw("Main");
+        Rml::Element* box = doc->GetDocument()->GetElementById("box");
+        ASSERT_NE(box, nullptr);
+
+        // SDL reports the values opposite when `direction` is FLIPPED: this is a step to the right and down
+        EXPECT_TRUE(CoreManager::GetUIInput().DispatchMouseWheel(Wheel(-1.0f, 1.0f, kInsideTheBoxX, kInsideTheBoxY, SDL_MOUSEWHEEL_FLIPPED)));
+        SettleScroll("Main");
+
+        EXPECT_GT(box->GetScrollLeft(), 0.0f);
+        EXPECT_GT(box->GetScrollTop(), 0.0f);
+    }
+
+    TEST_F(RmlUiHostTest, AWheelAwayFromTheDocumentGoesToTheGame) {
+        auto doc = Doc("Main");
+        ASSERT_TRUE(doc->SetMarkup(Document(kScrollMarkup, kScrollStyle)));
+        Draw("Main");
+        Rml::Element* box = doc->GetDocument()->GetElementById("box");
+        ASSERT_NE(box, nullptr);
+
+        EXPECT_FALSE(CoreManager::GetUIInput().DispatchMouseWheel(Wheel(0.0f, -1.0f, 600.0f, 500.0f)));
+        SettleScroll("Main");
+
+        EXPECT_EQ(box->GetScrollTop(), 0.0f);
     }
 
     TEST_F(RmlUiHostTest, AReleaseElsewhereCancelsTheClick) {
@@ -961,6 +1078,73 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         EXPECT_FALSE(RmlUiRuntime::GetInstance().IsUp());
         EXPECT_EQ(RmlUiRuntime::GetInstance().GetRenderInterface().GetTextureCount(), 0u);
         EXPECT_EQ(RmlUiRuntime::GetInstance().GetRenderInterface().GetGeometryCount(), 0u);
+    }
+
+    // ---- the GPU before a texture is freed -------------------------------------------------------------------------------------
+
+    TEST_F(RmlUiHostTest, NoTextureOfADocumentIsFreedBeforeTheGpuIsIdle) {
+        auto probe = New<WaitProbeRenderer>();
+        CoreManager::GetRendererManager().SetRenderer(probe);
+        {
+            auto doc = Doc("Main");
+            ASSERT_TRUE(doc->SetMarkup(Document("<p>Hello</p>")));
+            _manager->SetActiveScene("Main"_intern);
+            _manager->DrawAll();
+            ASSERT_GT(RmlUiRuntime::GetInstance().GetRenderInterface().GetTextureCount(), 0u) << "the glyph page is a texture";
+        }
+        probe->lastMade.Reset();
+        probe->waitsWhenFreed.clear();
+
+        _manager.Reset();
+
+        ASSERT_FALSE(probe->waitsWhenFreed.empty()) << "the textures were freed with the runtime";
+        for (const uint32_t waits : probe->waitsWhenFreed) {
+            EXPECT_GT(waits, 0u);
+        }
+    }
+
+    TEST_F(RmlUiHostTest, ReleasingTheLastHolderOfATextureWaitsForTheGpuOnce) {
+        auto probe = New<WaitProbeRenderer>();
+        CoreManager::GetRendererManager().SetRenderer(probe);
+        RmlUiRenderInterface render;
+        const Rml::TextureHandle handle = render.GenerateTexture(kOnePixelRgba, kOnePixel);
+        ASSERT_NE(handle, 0u);
+        probe->lastMade.Reset();
+
+        render.ReleaseTexture(handle);
+
+        EXPECT_EQ(probe->waitIdleCalls, 1u);
+        EXPECT_EQ(render.GetTextureCount(), 0u);
+    }
+
+    TEST_F(RmlUiHostTest, ATextureSomeoneElseHoldsIsReleasedWithoutAWait) {
+        auto probe = New<WaitProbeRenderer>();
+        CoreManager::GetRendererManager().SetRenderer(probe);
+        RmlUiRenderInterface render;
+        const Rml::TextureHandle handle = render.GenerateTexture(kOnePixelRgba, kOnePixel);
+        ASSERT_NE(handle, 0u);
+        ASSERT_TRUE(probe->lastMade) << "the probe keeps the texture, as the resource cache keeps a loaded one";
+
+        render.ReleaseTexture(handle);
+
+        EXPECT_EQ(probe->waitIdleCalls, 0u);
+        EXPECT_EQ(render.GetTextureCount(), 0u);
+        EXPECT_EQ(probe->lastMade.GetRefCount(), 1);
+    }
+
+    TEST_F(RmlUiHostTest, ClearWaitsOnceForTheTexturesItFrees) {
+        auto probe = New<WaitProbeRenderer>();
+        CoreManager::GetRendererManager().SetRenderer(probe);
+        RmlUiRenderInterface render;
+        ASSERT_NE(render.GenerateTexture(kOnePixelRgba, kOnePixel), 0u);
+        ASSERT_NE(render.GenerateTexture(kOnePixelRgba, kOnePixel), 0u);
+        probe->lastMade.Reset();
+
+        render.Clear();
+        render.Clear();
+
+        EXPECT_EQ(probe->waitIdleCalls, 1u) << "two textures, one wait; nothing left, no wait";
+        EXPECT_EQ(render.GetTextureCount(), 0u);
     }
 
 }  // namespace BECore::Tests

@@ -49,10 +49,12 @@ namespace BECore {
                 return staging;
             }
 
-            vkBindBufferMemory(device, staging.buffer, staging.memory, 0);
-
             void* mapped = nullptr;
-            vkMapMemory(device, staging.memory, 0, size, 0, &mapped);
+            if (vkBindBufferMemory(device, staging.buffer, staging.memory, 0) != VK_SUCCESS || vkMapMemory(device, staging.memory, 0, size, 0, &mapped) != VK_SUCCESS) {
+                vkDestroyBuffer(device, staging.buffer, nullptr);
+                vkFreeMemory(device, staging.memory, nullptr);
+                return StagingBuffer{};
+            }
             memcpy(mapped, data, static_cast<size_t>(size));
             vkUnmapMemory(device, staging.memory);
 
@@ -163,10 +165,27 @@ namespace BECore {
             texture->SetFailed(path);
             return texture;
         }
-        vkBindImageMemory(vkDevice, image, imageMemory, 0);
+        if (vkBindImageMemory(vkDevice, image, imageMemory, 0) != VK_SUCCESS) {
+            vkDestroyImage(vkDevice, image, nullptr);
+            vkFreeMemory(vkDevice, imageMemory, nullptr);
+            vkDestroyBuffer(vkDevice, staging.buffer, nullptr);
+            vkFreeMemory(vkDevice, staging.memory, nullptr);
+            LOG_ERROR(Format("VulkanTextureUpload: failed to bind image memory for '{}'", path.ToStringView()).c_str());
+            texture->SetFailed(path);
+            return texture;
+        }
 
+        bool copied = false;
         {
             VkCommandBuffer cmd = deviceObj.BeginSingleTimeCommands(commandPool);
+            if (cmd == VK_NULL_HANDLE) {
+                vkDestroyImage(vkDevice, image, nullptr);
+                vkFreeMemory(vkDevice, imageMemory, nullptr);
+                vkDestroyBuffer(vkDevice, staging.buffer, nullptr);
+                vkFreeMemory(vkDevice, staging.memory, nullptr);
+                texture->SetFailed(path);
+                return texture;
+            }
 
             TransitionImageLayout(cmd, image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
@@ -185,11 +204,18 @@ namespace BECore {
 
             TransitionImageLayout(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-            deviceObj.EndSingleTimeCommands(commandPool, cmd);
+            copied = deviceObj.EndSingleTimeCommands(commandPool, cmd);
         }
 
         vkDestroyBuffer(vkDevice, staging.buffer, nullptr);
         vkFreeMemory(vkDevice, staging.memory, nullptr);
+        if (!copied) {
+            vkDestroyImage(vkDevice, image, nullptr);
+            vkFreeMemory(vkDevice, imageMemory, nullptr);
+            LOG_ERROR(Format("VulkanTextureUpload: failed to copy the pixels of '{}' to the GPU", path.ToStringView()).c_str());
+            texture->SetFailed(path);
+            return texture;
+        }
 
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -211,33 +237,8 @@ namespace BECore {
             return texture;
         }
 
-        VkSamplerCreateInfo samplerInfo{};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_LINEAR;
-        samplerInfo.minFilter = VK_FILTER_LINEAR;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.anisotropyEnable = VK_FALSE;
-        samplerInfo.maxAnisotropy = 1.0f;
-        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        samplerInfo.compareEnable = VK_FALSE;
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-
-        VkSampler sampler = VK_NULL_HANDLE;
-        if (vkCreateSampler(vkDevice, &samplerInfo, nullptr, &sampler) != VK_SUCCESS) {
-            vkDestroyImageView(vkDevice, imageView, nullptr);
-            vkDestroyImage(vkDevice, image, nullptr);
-            vkFreeMemory(vkDevice, imageMemory, nullptr);
-            LOG_ERROR(Format("VulkanTextureUpload: failed to create sampler for '{}'", path.ToStringView()).c_str());
-            texture->SetFailed(path);
-            return texture;
-        }
-
-        VkDescriptorSet descriptorSet = pipeline.AllocateDescriptorSet(vkDevice, imageView, sampler);
-        if (descriptorSet == VK_NULL_HANDLE) {
-            vkDestroySampler(vkDevice, sampler, nullptr);
+        const VulkanTexturePipeline::DescriptorAllocation allocation = pipeline.AllocateDescriptorSet(vkDevice, imageView);
+        if (allocation.set == VK_NULL_HANDLE) {
             vkDestroyImageView(vkDevice, imageView, nullptr);
             vkDestroyImage(vkDevice, image, nullptr);
             vkFreeMemory(vkDevice, imageMemory, nullptr);
@@ -245,7 +246,7 @@ namespace BECore {
             return texture;
         }
 
-        texture->SetLoaded(path, vkDevice, pipeline.GetDescriptorPool(), image, imageMemory, imageView, sampler, descriptorSet, static_cast<float>(texWidth), static_cast<float>(texHeight));
+        texture->SetLoaded(path, vkDevice, allocation.pool, image, imageMemory, imageView, allocation.set, static_cast<float>(texWidth), static_cast<float>(texHeight));
 
         LOG_INFO(Format("VulkanTextureUpload: uploaded texture '{}' ({}x{})", path.ToStringView(), texWidth, texHeight).c_str());
         return texture;

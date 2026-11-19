@@ -7,8 +7,8 @@ namespace BECore {
 
     /**
      * Vulkan implementation of ITexture.
-     * Image, view, sampler and descriptor set (set 0) of one texture, all destroyed in the destructor: the GPU must be
-     * idle before the last reference is released.
+     * Image, view and descriptor set (set 0) of one texture, all destroyed in the destructor: the GPU must be
+     * idle before the last reference is released. The sampler is the texture pipeline's one and outlives the texture.
      */
     class VulkanTexture : public ITexture {
         BE_CLASS(VulkanTexture)
@@ -31,9 +31,6 @@ namespace BECore {
         VkImageView GetImageView() const {
             return _imageView;
         }
-        VkSampler GetSampler() const {
-            return _sampler;
-        }
         VkDescriptorSet GetDescriptorSet() const {
             return _descriptorSet;
         }
@@ -42,8 +39,8 @@ namespace BECore {
         friend class VulkanTextureLoader;
         friend class VulkanTextureUpload;
 
-        void SetLoaded(PoolString path, VkDevice device, VkDescriptorPool descriptorPool, VkImage image, VkDeviceMemory memory, VkImageView imageView, VkSampler sampler, VkDescriptorSet descriptorSet,
-                       float width, float height);
+        void SetLoaded(PoolString path, VkDevice device, VkDescriptorPool descriptorPool, VkImage image, VkDeviceMemory memory, VkImageView imageView, VkDescriptorSet descriptorSet, float width,
+                       float height);
         void SetFailed(PoolString path);
 
         VkDevice _device = VK_NULL_HANDLE;
@@ -52,7 +49,6 @@ namespace BECore {
         VkImage _image = VK_NULL_HANDLE;
         VkDeviceMemory _memory = VK_NULL_HANDLE;
         VkImageView _imageView = VK_NULL_HANDLE;
-        VkSampler _sampler = VK_NULL_HANDLE;
         VkDescriptorSet _descriptorSet = VK_NULL_HANDLE;
 
         PoolString _path;

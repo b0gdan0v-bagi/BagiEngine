@@ -13,10 +13,6 @@ namespace BECore {
             vkFreeDescriptorSets(_device, _descriptorPool, 1, &_descriptorSet);
             _descriptorSet = VK_NULL_HANDLE;
         }
-        if (_sampler != VK_NULL_HANDLE) {
-            vkDestroySampler(_device, _sampler, nullptr);
-            _sampler = VK_NULL_HANDLE;
-        }
         if (_imageView != VK_NULL_HANDLE) {
             vkDestroyImageView(_device, _imageView, nullptr);
             _imageView = VK_NULL_HANDLE;
@@ -55,15 +51,14 @@ namespace BECore {
         return _height;
     }
 
-    void VulkanTexture::SetLoaded(PoolString path, VkDevice device, VkDescriptorPool descriptorPool, VkImage image, VkDeviceMemory memory, VkImageView imageView, VkSampler sampler,
-                                  VkDescriptorSet descriptorSet, float width, float height) {
+    void VulkanTexture::SetLoaded(PoolString path, VkDevice device, VkDescriptorPool descriptorPool, VkImage image, VkDeviceMemory memory, VkImageView imageView, VkDescriptorSet descriptorSet,
+                                  float width, float height) {
         _path = path;
         _device = device;
         _descriptorPool = descriptorPool;
         _image = image;
         _memory = memory;
         _imageView = imageView;
-        _sampler = sampler;
         _descriptorSet = descriptorSet;
         _width = width;
         _height = height;

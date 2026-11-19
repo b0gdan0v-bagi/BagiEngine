@@ -5,6 +5,7 @@
 #include <geometry_vert_spv.h>
 
 #include <BECore/Logger/LogEvent.h>
+#include <CoreVulkan/VulkanPipelineState.h>
 
 namespace BECore {
 
@@ -34,35 +35,10 @@ namespace BECore {
             return false;
         }
 
-        VkShaderModule vertModule = CreateShaderModule(device, kGeometryVertSpv, kGeometryVertSpvSize);
-        VkShaderModule fragModule = CreateShaderModule(device, kGeometryFragSpv, kGeometryFragSpvSize);
-
-        if (vertModule == VK_NULL_HANDLE || fragModule == VK_NULL_HANDLE) {
-            if (vertModule != VK_NULL_HANDLE) {
-                vkDestroyShaderModule(device, vertModule, nullptr);
-            }
-            if (fragModule != VK_NULL_HANDLE) {
-                vkDestroyShaderModule(device, fragModule, nullptr);
-            }
-            LOG_ERROR("VulkanGeometryPipeline: failed to create shader modules");
-            return false;
-        }
-
         // The colour space of the target: kLinearize (constant 0) of the shader that takes the colour
         const VkBool32 linearizeValue = linearizeColors ? VK_TRUE : VK_FALSE;
         const VkSpecializationMapEntry linearizeEntry{0, 0, sizeof(VkBool32)};
         const VkSpecializationInfo linearizeInfo{1, &linearizeEntry, sizeof(VkBool32), &linearizeValue};
-        VkPipelineShaderStageCreateInfo stages[2]{};
-        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-        stages[0].module = vertModule;
-        stages[0].pName = "main";
-        stages[0].pSpecializationInfo = &linearizeInfo;
-
-        stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        stages[1].module = fragModule;
-        stages[1].pName = "main";
 
         VkVertexInputBindingDescription binding{};
         binding.binding = 0;
@@ -90,77 +66,8 @@ namespace BECore {
         vertexInput.vertexAttributeDescriptionCount = 3;
         vertexInput.pVertexAttributeDescriptions = attributes;
 
-        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-        VkPipelineViewportStateCreateInfo viewportState{};
-        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewportState.viewportCount = 1;
-        viewportState.scissorCount = 1;
-
-        // A library that brings its own layout may wind its triangles either way: draw both
-        VkPipelineRasterizationStateCreateInfo rasterizer{};
-        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterizer.cullMode = VK_CULL_MODE_NONE;
-        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        rasterizer.lineWidth = 1.0f;
-
-        VkPipelineMultisampleStateCreateInfo multisample{};
-        multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-        VkPipelineDepthStencilStateCreateInfo depthStencil{};
-        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-
-        VkPipelineColorBlendAttachmentState blendAttachment{};
-        blendAttachment.blendEnable = VK_TRUE;
-        blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-        blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-        blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-        blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-
-        VkPipelineColorBlendStateCreateInfo colorBlend{};
-        colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        colorBlend.attachmentCount = 1;
-        colorBlend.pAttachments = &blendAttachment;
-
-        constexpr VkDynamicState kDynamicStates[] = {
-            VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR,
-        };
-
-        VkPipelineDynamicStateCreateInfo dynamicState{};
-        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicState.dynamicStateCount = 2;
-        dynamicState.pDynamicStates = kDynamicStates;
-
-        VkGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.stageCount = 2;
-        pipelineInfo.pStages = stages;
-        pipelineInfo.pVertexInputState = &vertexInput;
-        pipelineInfo.pInputAssemblyState = &inputAssembly;
-        pipelineInfo.pViewportState = &viewportState;
-        pipelineInfo.pRasterizationState = &rasterizer;
-        pipelineInfo.pMultisampleState = &multisample;
-        pipelineInfo.pDepthStencilState = &depthStencil;
-        pipelineInfo.pColorBlendState = &colorBlend;
-        pipelineInfo.pDynamicState = &dynamicState;
-        pipelineInfo.layout = _pipelineLayout;
-        pipelineInfo.renderPass = renderPass;
-        pipelineInfo.subpass = 0;
-
-        const VkResult result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_pipeline);
-
-        vkDestroyShaderModule(device, vertModule, nullptr);
-        vkDestroyShaderModule(device, fragModule, nullptr);
-
-        if (result != VK_SUCCESS) {
+        _pipeline = CreatePipeline2D(device, renderPass, _pipelineLayout, {kGeometryVertSpv, kGeometryVertSpvSize, &linearizeInfo}, {kGeometryFragSpv, kGeometryFragSpvSize}, vertexInput);
+        if (_pipeline == VK_NULL_HANDLE) {
             LOG_ERROR("VulkanGeometryPipeline: failed to create graphics pipeline");
             return false;
         }
@@ -204,19 +111,6 @@ namespace BECore {
         vkCmdBindIndexBuffer(cmd, buffer, indexOffset, VK_INDEX_TYPE_UINT32);
 
         vkCmdDrawIndexed(cmd, indexCount, 1, 0, 0, 0);
-    }
-
-    VkShaderModule VulkanGeometryPipeline::CreateShaderModule(VkDevice device, const uint32_t* code, uint32_t sizeInBytes) const {
-        VkShaderModuleCreateInfo createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        createInfo.codeSize = sizeInBytes;
-        createInfo.pCode = code;
-
-        VkShaderModule shaderModule = VK_NULL_HANDLE;
-        if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-            return VK_NULL_HANDLE;
-        }
-        return shaderModule;
     }
 
 }  // namespace BECore

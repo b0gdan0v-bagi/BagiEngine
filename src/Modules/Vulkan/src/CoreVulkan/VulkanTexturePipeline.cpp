@@ -5,6 +5,7 @@
 #include <texture_vert_spv.h>
 
 #include <BECore/Logger/LogEvent.h>
+#include <CoreVulkan/VulkanPipelineState.h>
 
 namespace BECore {
 
@@ -26,19 +27,26 @@ namespace BECore {
             return false;
         }
 
-        VkDescriptorPoolSize poolSize{};
-        poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSize.descriptorCount = 512;
+        if (CreateDescriptorPool(device) == VK_NULL_HANDLE) {
+            return false;
+        }
 
-        VkDescriptorPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-        poolInfo.maxSets = 512;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
+        VkSamplerCreateInfo samplerInfo{};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.maxAnisotropy = 1.0f;
+        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
-        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &_descriptorPool) != VK_SUCCESS) {
-            LOG_ERROR("VulkanTexturePipeline: failed to create descriptor pool");
+        if (vkCreateSampler(device, &samplerInfo, nullptr, &_sampler) != VK_SUCCESS) {
+            LOG_ERROR("VulkanTexturePipeline: failed to create sampler");
             return false;
         }
 
@@ -59,109 +67,16 @@ namespace BECore {
             return false;
         }
 
-        VkShaderModule vertModule = CreateShaderModule(device, kTextureVertSpv, kTextureVertSpvSize);
-        VkShaderModule fragModule = CreateShaderModule(device, kTextureFragSpv, kTextureFragSpvSize);
-
-        if (vertModule == VK_NULL_HANDLE || fragModule == VK_NULL_HANDLE) {
-            if (vertModule != VK_NULL_HANDLE) {
-                vkDestroyShaderModule(device, vertModule, nullptr);
-            }
-            if (fragModule != VK_NULL_HANDLE) {
-                vkDestroyShaderModule(device, fragModule, nullptr);
-            }
-            LOG_ERROR("VulkanTexturePipeline: failed to create shader modules");
-            return false;
-        }
-
         // The colour space of the target: kLinearize (constant 0) of the shader that takes the colour
         const VkBool32 linearizeValue = linearizeColors ? VK_TRUE : VK_FALSE;
         const VkSpecializationMapEntry linearizeEntry{0, 0, sizeof(VkBool32)};
         const VkSpecializationInfo linearizeInfo{1, &linearizeEntry, sizeof(VkBool32), &linearizeValue};
-        VkPipelineShaderStageCreateInfo stages[2]{};
-        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-        stages[0].module = vertModule;
-        stages[0].pName = "main";
-
-        stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        stages[1].module = fragModule;
-        stages[1].pName = "main";
-        stages[1].pSpecializationInfo = &linearizeInfo;
 
         VkPipelineVertexInputStateCreateInfo vertexInput{};
         vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-        VkPipelineViewportStateCreateInfo viewportState{};
-        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewportState.viewportCount = 1;
-        viewportState.scissorCount = 1;
-
-        VkPipelineRasterizationStateCreateInfo rasterizer{};
-        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterizer.cullMode = VK_CULL_MODE_NONE;
-        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        rasterizer.lineWidth = 1.0f;
-
-        VkPipelineMultisampleStateCreateInfo multisample{};
-        multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-        VkPipelineDepthStencilStateCreateInfo depthStencil{};
-        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-
-        VkPipelineColorBlendAttachmentState blendAttachment{};
-        blendAttachment.blendEnable = VK_TRUE;
-        blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-        blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-        blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-        blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-
-        VkPipelineColorBlendStateCreateInfo colorBlend{};
-        colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        colorBlend.attachmentCount = 1;
-        colorBlend.pAttachments = &blendAttachment;
-
-        constexpr VkDynamicState kDynamicStates[] = {
-            VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR,
-        };
-
-        VkPipelineDynamicStateCreateInfo dynamicState{};
-        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicState.dynamicStateCount = 2;
-        dynamicState.pDynamicStates = kDynamicStates;
-
-        VkGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.stageCount = 2;
-        pipelineInfo.pStages = stages;
-        pipelineInfo.pVertexInputState = &vertexInput;
-        pipelineInfo.pInputAssemblyState = &inputAssembly;
-        pipelineInfo.pViewportState = &viewportState;
-        pipelineInfo.pRasterizationState = &rasterizer;
-        pipelineInfo.pMultisampleState = &multisample;
-        pipelineInfo.pDepthStencilState = &depthStencil;
-        pipelineInfo.pColorBlendState = &colorBlend;
-        pipelineInfo.pDynamicState = &dynamicState;
-        pipelineInfo.layout = _pipelineLayout;
-        pipelineInfo.renderPass = renderPass;
-        pipelineInfo.subpass = 0;
-
-        const VkResult result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_pipeline);
-
-        vkDestroyShaderModule(device, vertModule, nullptr);
-        vkDestroyShaderModule(device, fragModule, nullptr);
-
-        if (result != VK_SUCCESS) {
+        _pipeline = CreatePipeline2D(device, renderPass, _pipelineLayout, {kTextureVertSpv, kTextureVertSpvSize}, {kTextureFragSpv, kTextureFragSpvSize, &linearizeInfo}, vertexInput);
+        if (_pipeline == VK_NULL_HANDLE) {
             LOG_ERROR("VulkanTexturePipeline: failed to create graphics pipeline");
             return false;
         }
@@ -178,9 +93,13 @@ namespace BECore {
             vkDestroyPipelineLayout(device, _pipelineLayout, nullptr);
             _pipelineLayout = VK_NULL_HANDLE;
         }
-        if (_descriptorPool != VK_NULL_HANDLE) {
-            vkDestroyDescriptorPool(device, _descriptorPool, nullptr);
-            _descriptorPool = VK_NULL_HANDLE;
+        for (VkDescriptorPool pool : _descriptorPools) {
+            vkDestroyDescriptorPool(device, pool, nullptr);
+        }
+        _descriptorPools.clear();
+        if (_sampler != VK_NULL_HANDLE) {
+            vkDestroySampler(device, _sampler, nullptr);
+            _sampler = VK_NULL_HANDLE;
         }
         if (_descriptorSetLayout != VK_NULL_HANDLE) {
             vkDestroyDescriptorSetLayout(device, _descriptorSetLayout, nullptr);
@@ -188,21 +107,58 @@ namespace BECore {
         }
     }
 
-    VkDescriptorSet VulkanTexturePipeline::AllocateDescriptorSet(VkDevice device, VkImageView imageView, VkSampler sampler) {
+    VkDescriptorPool VulkanTexturePipeline::CreateDescriptorPool(VkDevice device) {
+        VkDescriptorPoolSize poolSize{};
+        poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        poolSize.descriptorCount = kSetsPerPool;
+
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+        poolInfo.maxSets = kSetsPerPool;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+
+        VkDescriptorPool pool = VK_NULL_HANDLE;
+        if (const VkResult result = vkCreateDescriptorPool(device, &poolInfo, nullptr, &pool); result != VK_SUCCESS) {
+            LOG_ERROR("VulkanTexturePipeline: vkCreateDescriptorPool failed with VkResult {}"_format(static_cast<int>(result)));
+            return VK_NULL_HANDLE;
+        }
+        _descriptorPools.push_back(pool);
+        return pool;
+    }
+
+    VulkanTexturePipeline::DescriptorAllocation VulkanTexturePipeline::AllocateDescriptorSet(VkDevice device, VkImageView imageView) {
+        if (_descriptorPools.empty()) {
+            LOG_ERROR("VulkanTexturePipeline: AllocateDescriptorSet before Initialize");
+            return {};
+        }
+
         VkDescriptorSetAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = _descriptorPool;
         allocInfo.descriptorSetCount = 1;
         allocInfo.pSetLayouts = &_descriptorSetLayout;
 
+        VkDescriptorPool pool = _descriptorPools.back();
+        allocInfo.descriptorPool = pool;
         VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
-        if (vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet) != VK_SUCCESS) {
-            LOG_ERROR("VulkanTexturePipeline: failed to allocate descriptor set");
-            return VK_NULL_HANDLE;
+        VkResult result = vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet);
+        // The two results a full pool gives; a fresh pool always has room for one set, so one retry is enough
+        if (result == VK_ERROR_OUT_OF_POOL_MEMORY || result == VK_ERROR_FRAGMENTED_POOL) {
+            pool = CreateDescriptorPool(device);
+            if (pool == VK_NULL_HANDLE) {
+                return {};
+            }
+            allocInfo.descriptorPool = pool;
+            result = vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet);
+        }
+        if (result != VK_SUCCESS) {
+            LOG_ERROR("VulkanTexturePipeline: vkAllocateDescriptorSets failed with VkResult {}"_format(static_cast<int>(result)));
+            return {};
         }
 
         VkDescriptorImageInfo imageInfo{};
-        imageInfo.sampler = sampler;
+        imageInfo.sampler = _sampler;
         imageInfo.imageView = imageView;
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
@@ -217,7 +173,7 @@ namespace BECore {
 
         vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 
-        return descriptorSet;
+        return {descriptorSet, pool};
     }
 
     void VulkanTexturePipeline::Draw(VkCommandBuffer cmd, VkDescriptorSet descriptorSet, const PushConstants& pc, const VkRect2D& scissor) const {
@@ -237,19 +193,6 @@ namespace BECore {
         vkCmdPushConstants(cmd, _pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &pc);
 
         vkCmdDraw(cmd, 6, 1, 0, 0);
-    }
-
-    VkShaderModule VulkanTexturePipeline::CreateShaderModule(VkDevice device, const uint32_t* code, uint32_t sizeInBytes) const {
-        VkShaderModuleCreateInfo createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        createInfo.codeSize = sizeInBytes;
-        createInfo.pCode = code;
-
-        VkShaderModule shaderModule = VK_NULL_HANDLE;
-        if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-            return VK_NULL_HANDLE;
-        }
-        return shaderModule;
     }
 
 }  // namespace BECore
