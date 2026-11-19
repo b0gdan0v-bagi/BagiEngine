@@ -881,7 +881,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneNodeFilesTest, CommentsBetweenAndAroundTheNodesAreNoNodes) {
-        pugi::xml_document doc = ParseWithComments(SceneConfigWith(R"(<!-- first --><node name="A"/><!-- between --><node ref="nodes/Hud"/><!-- between --><node name="C"/><!-- last -->)"));
+        pugi::xml_document doc = ParseWithComments(SceneConfigText(R"(<!-- first --><node name="A"/><!-- between --><node ref="nodes/Hud"/><!-- between --><node name="C"/><!-- last -->)"));
 
         const auto result = ExpandNodeReferences(doc.document_element(), MakeDirectoryNodeLoader(_dir));
 
@@ -891,10 +891,10 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneNodeFilesTest, CommentsInAReferenceAndItsComponentsChangeNothing) {
-        const String commented = SceneConfigWith(
+        const String commented = SceneConfigText(
             R"(<node ref="nodes/Hud" name="X"><!-- why --><components><!-- first --><component type="TransformComponent" x="40"><!-- inside --></component>)"
             R"(<!-- between --><component type="QuadRendererComponent"><!-- field --><color r="1" g="2" b="3" a="4"/><!-- after --></component><!-- last --></components><!-- end --></node>)");
-        const String plain = SceneConfigWith(R"(<node ref="nodes/Hud" name="X"><components><component type="TransformComponent" x="40"></component>)"
+        const String plain = SceneConfigText(R"(<node ref="nodes/Hud" name="X"><components><component type="TransformComponent" x="40"></component>)"
                                              R"(<component type="QuadRendererComponent"><color r="1" g="2" b="3" a="4"/></component></components></node>)");
         pugi::xml_document withComments = ParseWithComments(commented);
         pugi::xml_document without = ParseWithComments(plain);
@@ -905,7 +905,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(commentedResult.Ok()) << (commentedResult.errors.empty() ? "" : commentedResult.errors[0].c_str());
         EXPECT_TRUE(plainResult.Ok());
         RemoveComments(withComments);
-        EXPECT_EQ(Saved(withComments), Saved(without));
+        EXPECT_EQ(XmlTextIndented(withComments), XmlTextIndented(without));
     }
 
     TEST_F(SceneNodeFilesTest, ACommentInANodeFileIsNoComponentToOverride) {
@@ -913,7 +913,7 @@ namespace BECore::Tests {
             return static_cast<bool>(
                 out.load_string(R"(<node name="Hud"><!-- file --><components><!-- c --><component type="TransformComponent" x="1"><!-- f --></component></components></node>)", pugi::parse_full));
         };
-        pugi::xml_document doc = ParseWithComments(SceneConfigWith(R"(<node ref="nodes/Hud"><components><component type="TransformComponent" x="9"/></components></node>)"));
+        pugi::xml_document doc = ParseWithComments(SceneConfigText(R"(<node ref="nodes/Hud"><components><component type="TransformComponent" x="9"/></components></node>)"));
 
         const auto result = ExpandNodeReferences(doc.document_element(), loader);
 

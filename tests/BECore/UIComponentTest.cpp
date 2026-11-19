@@ -651,7 +651,7 @@ namespace BECore::Tests {
 
     TEST_F(UIImageComponentTest, ASpriteLoadsItsTextureAgainWhenTheCacheEvictedTheFile) {
         const EvictProbeSprite probe;
-        auto& image = Get("Host").AddComponent<UIImageComponent>();
+        auto& image = El("Host").AddComponent<UIImageComponent>();
         image.sprite = probe.Name();
         _image->tint = UIColor{0, 0, 0, 0};  // only the picture of Host is drawn
 
