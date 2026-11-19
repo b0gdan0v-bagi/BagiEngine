@@ -42,4 +42,28 @@ namespace BECore::VulkanFramePolicy {
         return failure != lastLogged;
     }
 
+    /// The colour `IRenderer::Clear()` named for the next pass. `Take()` gives it to the pass that opens and goes back
+    /// to opaque black, so a clear made for an offscreen target does not tint a later pass of the swapchain
+    class ClearColorSlot {
+    public:
+        void Set(const VkClearColorValue& color) {
+            _color = color;
+            _isSet = true;
+        }
+
+        [[nodiscard]] VkClearColorValue Take() {
+            const VkClearColorValue taken = _isSet ? _color : OpaqueBlack();
+            _isSet = false;
+            return taken;
+        }
+
+    private:
+        static VkClearColorValue OpaqueBlack() {
+            return {{0.0f, 0.0f, 0.0f, 1.0f}};
+        }
+
+        VkClearColorValue _color = OpaqueBlack();
+        bool _isSet = false;
+    };
+
 }  // namespace BECore::VulkanFramePolicy

@@ -305,7 +305,7 @@ namespace BECore {
         VkCommandBuffer cmd = _commandBuffers[_currentFrame];
 
         VkClearValue clearValue{};
-        clearValue.color = _clearColor;
+        clearValue.color = _clearColor.Take();
 
         VkRenderPassBeginInfo rpBegin{};
         rpBegin.sType       = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -427,10 +427,7 @@ namespace BECore {
             const float srgb = static_cast<float>(value) * kChannelScale;
             return _linearColors ? SrgbToLinear(srgb) : srgb;
         };
-        _clearColor.float32[0] = channel(color.r);
-        _clearColor.float32[1] = channel(color.g);
-        _clearColor.float32[2] = channel(color.b);
-        _clearColor.float32[3] = static_cast<float>(color.a) * kChannelScale;
+        _clearColor.Set({{channel(color.r), channel(color.g), channel(color.b), static_cast<float>(color.a) * kChannelScale}});
     }
 
     void VulkanRendererBackend::Present() {
@@ -684,6 +681,8 @@ namespace BECore {
 
     void VulkanRendererBackend::SetRenderTarget(IRenderTarget* target) {
         BE_PROFILE_SCOPE("Vulkan::SetRenderTarget");
+        // The colour of a Clear() is for this pass even when it is skipped: it must not wait for a later pass of another target
+        const VkClearColorValue clearColor = _clearColor.Take();
         // No open frame (minimized, swapchain out of date): the offscreen draws are skipped like everything else
         if (!_frameAcquired) {
             return;
@@ -694,7 +693,7 @@ namespace BECore {
         VkCommandBuffer cmd = _commandBuffers[_currentFrame];
 
         VkClearValue clearValue{};
-        clearValue.color = _clearColor;
+        clearValue.color = clearColor;
 
         VkRenderPassBeginInfo rpInfo{};
         rpInfo.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;

@@ -78,6 +78,10 @@ namespace BECore {
         BE_FUNCTION virtual void Destroy() = 0;
         BE_FUNCTION virtual void BeginFrame() = 0;
         BE_FUNCTION virtual void EndFrame() = 0;
+        // Names the colour the next pass starts with, so call it before the pass opens. SDL has no passes: it fills the
+        // back buffer at once. Vulkan keeps the colour for the pass that opens next (SetRenderTarget() for an offscreen
+        // target, else the swapchain pass of BeginFrame()) and then goes back to opaque black, so a clear made for an
+        // offscreen target does not tint the back buffer.
         BE_FUNCTION virtual void Clear(const Color& color) = 0;
         BE_FUNCTION virtual void Present() = 0;
         BE_FUNCTION virtual void DrawFilledRect(float x, float y, float w, float h, const Color& color) = 0;

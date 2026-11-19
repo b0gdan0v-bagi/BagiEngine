@@ -3,6 +3,7 @@
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/IRenderTarget.h>
 #include <CoreVulkan/VulkanDevice.h>
+#include <CoreVulkan/VulkanFramePolicy.h>
 #include <CoreVulkan/VulkanGeometryBuffer.h>
 #include <CoreVulkan/VulkanGeometryPipeline.h>
 #include <CoreVulkan/VulkanRectPipeline.h>
@@ -211,8 +212,8 @@ namespace BECore {
         // Image handle of the current offscreen target (needed for the barrier in UnsetRenderTarget)
         VkImage _lastOffscreenImage = VK_NULL_HANDLE;
 
-        // Clear color set by SetRenderDrawColorEvent (used for the swapchain pass)
-        VkClearColorValue _clearColor = {{0.0f, 0.0f, 0.0f, 1.0f}};  // in the colour space of the attachment (_linearColors)
+        // The colour of Clear() for the pass that opens next (BeginFrame or SetRenderTarget), in the colour space of the attachment (_linearColors)
+        VulkanFramePolicy::ClearColorSlot _clearColor;
         bool _linearColors = false;  // the swapchain is sRGB: every colour of the engine (an sRGB value) is made linear before it is written
     };
 
