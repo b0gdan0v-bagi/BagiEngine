@@ -2,6 +2,7 @@
 
 #include <BECore/Math/Rect.h>
 #include <BECore/Types/Types.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
@@ -44,6 +45,20 @@ namespace BECore::Tests {
             }
         }
         return true;
+    }
+
+    /// The sprite "queen" / "rook" of @p library; a blank one and a failure of the case when the library has none
+    inline const SpriteEntry& Queen(const TextureLibrary& library) {
+        return Require(library.GetSprite("queen"_intern));
+    }
+
+    inline const SpriteEntry& Rook(const TextureLibrary& library) {
+        return Require(library.GetSprite("rook"_intern));
+    }
+
+    /// The picture a packed @p entry is cut from; a blank one and a failure of the case for an entry that has no source
+    inline const SpriteSource& SourceOf(const SpriteEntry& entry) {
+        return Require(Require(entry.atlas).source);
     }
 
     /// A game folder with `assets/` in it, removed with the object; virtual paths resolve into it

@@ -1,5 +1,6 @@
 #include <Common/ArtGenTestSupport.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TestFiles.h>
 #include <Widgets/ArtGen/ArtGenAtlasAccept.h>
 #include <gtest/gtest.h>
@@ -42,14 +43,6 @@ namespace BECore::Tests {
             return entry;
         }
 
-        const SpriteEntry& Queen(const TextureLibrary& library) {
-            return *library.GetSprite("queen"_intern);
-        }
-
-        const SpriteEntry& Rook(const TextureLibrary& library) {
-            return *library.GetSprite("rook"_intern);
-        }
-
         /// Both sprites accepted into "pieces", packed
         void FillPackedPieces(TextureLibrary& library, const ArtGenGameFolder& game) {
             CountingSave save;
@@ -73,11 +66,11 @@ namespace BECore::Tests {
         EXPECT_EQ(stored->repacked->name.ToStringView(), "pieces");
         EXPECT_EQ(stored->repacked->texturePath.ToStringView(), kPiecesAtlas);
         ASSERT_TRUE(IsPackedSprite(Queen(library)));
-        EXPECT_EQ(Queen(library).atlas->name.ToStringView(), "pieces");
+        EXPECT_EQ(Require(Queen(library).atlas).name.ToStringView(), "pieces");
         EXPECT_EQ(Queen(library).texturePath.ToStringView(), kPiecesAtlas);
-        EXPECT_EQ(Queen(library).atlas->source->texturePath.ToStringView(), kQueenPng);
-        EXPECT_EQ(Queen(library).atlas->source->rect.w, 4.0f);
-        EXPECT_EQ(Queen(library).atlas->source->rect.h, 4.0f);
+        EXPECT_EQ(SourceOf(Queen(library)).texturePath.ToStringView(), kQueenPng);
+        EXPECT_EQ(SourceOf(Queen(library)).rect.w, 4.0f);
+        EXPECT_EQ(SourceOf(Queen(library)).rect.h, 4.0f);
         ASSERT_TRUE(game.Exists(kPiecesAtlas));
         EXPECT_TRUE(RectIsSolid(game.Atlas(kPiecesAtlas), Queen(library).srcRect, 0, 0, kHigh));
     }
@@ -89,7 +82,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(IsPackedSprite(Queen(library)));
         ASSERT_TRUE(IsPackedSprite(Rook(library)));
-        EXPECT_EQ(Rook(library).atlas->source->texturePath.ToStringView(), kRookPng);
+        EXPECT_EQ(SourceOf(Rook(library)).texturePath.ToStringView(), kRookPng);
         const RgbaImage atlas = game.Atlas(kPiecesAtlas);
         EXPECT_TRUE(RectIsSolid(atlas, Queen(library).srcRect, 0, 0, kHigh));
         EXPECT_TRUE(RectIsSolid(atlas, Rook(library).srcRect, kHigh, 0, 0));
@@ -107,7 +100,7 @@ namespace BECore::Tests {
         const auto stored = AcceptIntoGroup(library, copied, "queen", "pieces", false, game.Io(), save);
 
         ASSERT_TRUE(stored.has_value());
-        EXPECT_EQ(Queen(library).atlas->name.ToStringView(), "pieces");
+        EXPECT_EQ(Require(Queen(library).atlas).name.ToStringView(), "pieces");
         EXPECT_TRUE(IsPackedSprite(Queen(library)));
         EXPECT_TRUE(game.Exists(kPiecesAtlas));
         EXPECT_FALSE(game.Exists(kUiAtlas));
@@ -136,10 +129,10 @@ namespace BECore::Tests {
         ASSERT_FALSE(stored.has_value());
         EXPECT_NE(stored.error().find("packed in atlas 'ui'"), String::npos);
         EXPECT_EQ(save.saves, 0);
-        EXPECT_EQ(Queen(library).atlas->name.ToStringView(), "ui");
+        EXPECT_EQ(Require(Queen(library).atlas).name.ToStringView(), "ui");
         EXPECT_EQ(Queen(library).texturePath, queenBefore.texturePath);
         EXPECT_EQ(Queen(library).srcRect.x, queenBefore.srcRect.x);
-        EXPECT_EQ(Queen(library).atlas->source->texturePath, queenBefore.atlas->source->texturePath);
+        EXPECT_EQ(SourceOf(Queen(library)).texturePath, SourceOf(queenBefore).texturePath);
         EXPECT_FALSE(game.Exists(kPiecesAtlas));
         EXPECT_EQ(ReadFileBytes(game.Resolve(kUiAtlas)), atlasBefore);
     }
@@ -178,8 +171,8 @@ namespace BECore::Tests {
         EXPECT_EQ(save.saves, 2);
         EXPECT_FALSE(IsPackedSprite(Queen(library)));
         EXPECT_FALSE(IsPackedSprite(Rook(library)));
-        EXPECT_EQ(Queen(library).atlas->name.ToStringView(), "pieces");
-        EXPECT_EQ(Rook(library).atlas->name.ToStringView(), "pieces");
+        EXPECT_EQ(Require(Queen(library).atlas).name.ToStringView(), "pieces");
+        EXPECT_EQ(Require(Rook(library).atlas).name.ToStringView(), "pieces");
         EXPECT_EQ(Queen(library).texturePath.ToStringView(), kQueenPng);
         EXPECT_FALSE(game.Exists(kPiecesAtlas));
 
@@ -249,7 +242,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(stored->repacked.has_value());
         EXPECT_EQ(Queen(library).srcRect.w, 6.0f);
         EXPECT_EQ(Queen(library).srcRect.h, 2.0f);
-        EXPECT_EQ(Queen(library).atlas->source->rect.w, 6.0f);
+        EXPECT_EQ(SourceOf(Queen(library)).rect.w, 6.0f);
         const RgbaImage atlas = game.Atlas(kPiecesAtlas);
         EXPECT_TRUE(RectIsSolid(atlas, Queen(library).srcRect, 0, kHigh, 0));
         EXPECT_TRUE(RectIsSolid(atlas, Rook(library).srcRect, kHigh, 0, 0));
@@ -289,7 +282,7 @@ namespace BECore::Tests {
         EXPECT_NE(stored.error().find("rook"), String::npos);
         EXPECT_EQ(save.saves, 1);
         ASSERT_TRUE(IsPackedSprite(Queen(library)));
-        EXPECT_EQ(Queen(library).atlas->source->rect.w, 6.0f);
+        EXPECT_EQ(SourceOf(Queen(library)).rect.w, 6.0f);
         EXPECT_EQ(Rook(library).srcRect.x, rookPlace.x);
         EXPECT_EQ(ReadFileBytes(game.Resolve(kPiecesAtlas)), atlasBefore);
     }
@@ -372,26 +365,21 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonInt(*atlas, "members").value_or(0), 2);
     }
 
-    TEST(ArtGenAtlasAcceptTest, TheRowAnswerOfADeferredPackNamesTheGroupAndHasNoAtlas) {
-        Json reply = Json::object();
+    TEST(ArtGenAtlasAcceptTest, TheRowAnswerKeepsBothKeysAsNullWhereNothingWasPacked) {
+        Json deferred = Json::object();
+        AddAtlasKeysToReply(deferred, "pieces", Optional<AtlasWritten>{});
 
-        AddAtlasKeysToReply(reply, "pieces", Optional<AtlasWritten>{});
+        EXPECT_EQ(GetJsonString(deferred, "atlasGroup").value_or(String()), "pieces");
+        ASSERT_NE(FindJsonMember(deferred, "atlas"), nullptr);
+        EXPECT_TRUE(FindJsonMember(deferred, "atlas")->is_null());
 
-        EXPECT_EQ(GetJsonString(reply, "atlasGroup").value_or(String()), "pieces");
-        ASSERT_NE(FindJsonMember(reply, "atlas"), nullptr);
-        EXPECT_TRUE(FindJsonMember(reply, "atlas")->is_null());
-    }
+        Json ungrouped = Json::object();
+        AddAtlasKeysToReply(ungrouped, "", Optional<AtlasWritten>{});
 
-    TEST(ArtGenAtlasAcceptTest, TheRowAnswerWithNoGroupHasBothKeysNull) {
-        Json reply = Json::object();
-
-        AddAtlasKeysToReply(reply, "", Optional<AtlasWritten>{});
-
-        ASSERT_NE(FindJsonMember(reply, "atlasGroup"), nullptr);
-        EXPECT_TRUE(FindJsonMember(reply, "atlasGroup")->is_null());
-
-        ASSERT_NE(FindJsonMember(reply, "atlas"), nullptr);
-        EXPECT_TRUE(FindJsonMember(reply, "atlas")->is_null());
+        ASSERT_NE(FindJsonMember(ungrouped, "atlasGroup"), nullptr);
+        EXPECT_TRUE(FindJsonMember(ungrouped, "atlasGroup")->is_null());
+        ASSERT_NE(FindJsonMember(ungrouped, "atlas"), nullptr);
+        EXPECT_TRUE(FindJsonMember(ungrouped, "atlas")->is_null());
     }
 
 }  // namespace BECore::Tests

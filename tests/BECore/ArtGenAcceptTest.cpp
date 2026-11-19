@@ -276,14 +276,6 @@ namespace BECore::Tests {
             }
         }
 
-        const SpriteEntry& Queen(const TextureLibrary& library) {
-            return *library.GetSprite("queen"_intern);
-        }
-
-        const SpriteEntry& Rook(const TextureLibrary& library) {
-            return *library.GetSprite("rook"_intern);
-        }
-
     }  // namespace
 
     TEST(ArtGenAcceptIntoLibraryTest, APackedSpriteIsRepackedWithTheNewPicture) {
@@ -308,8 +300,8 @@ namespace BECore::Tests {
         EXPECT_EQ(Queen(library).srcRect.w, 6.0f);
         EXPECT_EQ(Queen(library).srcRect.h, 2.0f);
         ASSERT_TRUE(IsPackedSprite(Queen(library)));
-        EXPECT_EQ(Queen(library).atlas->source->texturePath.ToStringView(), kQueenPng);
-        EXPECT_EQ(Queen(library).atlas->source->rect.w, 6.0f);
+        EXPECT_EQ(SourceOf(Queen(library)).texturePath.ToStringView(), kQueenPng);
+        EXPECT_EQ(SourceOf(Queen(library)).rect.w, 6.0f);
 
         const RgbaImage atlas = game.Atlas(kAtlasPng);
         EXPECT_TRUE(RectIsSolid(atlas, Queen(library).srcRect, 0, kHigh, 0));
@@ -352,7 +344,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(AcceptIntoLibrary(library, copied, "queen", game.Io(), save).has_value());
 
-        EXPECT_EQ(Rook(library).atlas->source->texturePath.ToStringView(), kRookPng);
+        EXPECT_EQ(SourceOf(Rook(library)).texturePath.ToStringView(), kRookPng);
         const RgbaImage atlas = game.Atlas(kAtlasPng);
         EXPECT_TRUE(RectIsSolid(atlas, Rook(library).srcRect, kHigh, 0, 0));
         EXPECT_TRUE(RectIsSolid(atlas, Queen(library).srcRect, kLow, kLow, kLow));
@@ -382,11 +374,11 @@ namespace BECore::Tests {
         EXPECT_NE(stored.error().find("rook"), String::npos);
         EXPECT_EQ(saves, 1);
         ASSERT_TRUE(IsPackedSprite(Queen(library)));
-        EXPECT_EQ(Queen(library).atlas->source->texturePath.ToStringView(), kQueenPng);
-        EXPECT_EQ(Queen(library).atlas->source->rect.w, 6.0f);
+        EXPECT_EQ(SourceOf(Queen(library)).texturePath.ToStringView(), kQueenPng);
+        EXPECT_EQ(SourceOf(Queen(library)).rect.w, 6.0f);
         EXPECT_EQ(Queen(library).texturePath.ToStringView(), kAtlasPng);
         EXPECT_EQ(Rook(library).srcRect.x, rookBefore.srcRect.x);
-        EXPECT_EQ(Rook(library).atlas->source->texturePath.ToStringView(), kRookPng);
+        EXPECT_EQ(SourceOf(Rook(library)).texturePath.ToStringView(), kRookPng);
         EXPECT_EQ(ReadFileBytes(game.Resolve(kAtlasPng)), atlasBefore);
     }
 
@@ -409,8 +401,8 @@ namespace BECore::Tests {
         EXPECT_EQ(Queen(library).srcRect.w, queenPlace.w);
         EXPECT_EQ(Rook(library).srcRect.x, rookPlace.x);
         EXPECT_EQ(Rook(library).srcRect.y, rookPlace.y);
-        EXPECT_EQ(Queen(library).atlas->source->texturePath.ToStringView(), kQueenPng);
-        EXPECT_EQ(Queen(library).atlas->source->rect.w, 6.0f);
+        EXPECT_EQ(SourceOf(Queen(library)).texturePath.ToStringView(), kQueenPng);
+        EXPECT_EQ(SourceOf(Queen(library)).rect.w, 6.0f);
     }
 
     TEST(ArtGenAcceptIntoLibraryTest, AnUnpackedMemberKeepsItsGroupAndNoAtlasIsMade) {
@@ -433,8 +425,8 @@ namespace BECore::Tests {
         EXPECT_EQ(Queen(library).texturePath.ToStringView(), kQueenPng);
         EXPECT_EQ(Queen(library).srcRect.w, 6.0f);
         ASSERT_TRUE(Queen(library).atlas.has_value());
-        EXPECT_EQ(Queen(library).atlas->name.ToStringView(), "ui");
-        EXPECT_FALSE(Queen(library).atlas->source.has_value());
+        EXPECT_EQ(Require(Queen(library).atlas).name.ToStringView(), "ui");
+        EXPECT_FALSE(Require(Queen(library).atlas).source.has_value());
         EXPECT_FALSE(game.Exists(kAtlasPng));
     }
 
@@ -490,8 +482,8 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(AcceptIntoLibrary(library, copied, "queen", game.Io(), save).has_value());
 
-        ASSERT_TRUE(Queen(library).atlas->pack.has_value());
-        EXPECT_EQ(Queen(library).atlas->pack->padding, 3);
+        ASSERT_TRUE(Require(Queen(library).atlas).pack.has_value());
+        EXPECT_EQ(Require(Require(Queen(library).atlas).pack).padding, 3);
         const PackSettings remembered = PackSettingsOf(library, "ui");
         EXPECT_EQ(remembered.padding, 3);
         EXPECT_EQ(remembered.sizeMode, AtlasSizeMode::Tight);
@@ -607,7 +599,7 @@ namespace BECore::Tests {
         auto defer = [&batch] { return batch.Defer(); };
         ASSERT_TRUE(AcceptIntoLibrary(library, CopiedOf("queen", 128, 64), "queen", game.Io(), defer).has_value());
         ASSERT_TRUE(AcceptIntoLibrary(library, CopiedOf("king", 8, 8), "king", game.Io(), defer).has_value());
-        ASSERT_EQ(library.GetSprite("queen"_intern)->srcRect.w, 128.0f);
+        ASSERT_EQ(Queen(library).srcRect.w, 128.0f);
         ASSERT_NE(library.GetSprite("king"_intern), nullptr);
 
         const auto committed = batch.Commit([] { return false; });
@@ -616,9 +608,9 @@ namespace BECore::Tests {
         EXPECT_NE(committed.error().find("TextureLibrary.xml could not be saved"), String::npos);
         EXPECT_EQ(library.GetAll().size(), 2u);
         EXPECT_EQ(library.GetSprite("king"_intern), nullptr);
-        EXPECT_EQ(library.GetSprite("queen"_intern)->srcRect.w, 64.0f);
-        EXPECT_EQ(library.GetSprite("rook"_intern)->srcRect.w, 32.0f);
-        EXPECT_EQ(library.GetAll()[0].name.ToStringView(), "queen");
+        EXPECT_EQ(Queen(library).srcRect.w, 64.0f);
+        EXPECT_EQ(Rook(library).srcRect.w, 32.0f);
+        EXPECT_EQ(At(library.GetAll(), 0).name.ToStringView(), "queen");
     }
 
     TEST(ArtGenLibraryBatchTest, AFailedCommitAfterARepackTellsThePersonToPack) {
@@ -650,7 +642,7 @@ namespace BECore::Tests {
         const auto stored = AcceptIntoLibrary(library, copied, "queen", game.Io(), [&batch] { return batch.Defer(); });
         ASSERT_TRUE(stored.has_value());
         ASSERT_TRUE(stored->repacked.has_value());
-        ASSERT_EQ(Queen(library).atlas->source->rect.w, 6.0f);
+        ASSERT_EQ(SourceOf(Queen(library)).rect.w, 6.0f);
 
         int saves = 0;
         const auto committed = batch.Commit([&saves] {
@@ -666,11 +658,11 @@ namespace BECore::Tests {
         const SpriteEntry queenSaved = Queen(library);
         const SpriteEntry rookSaved = Rook(library);
         ASSERT_TRUE(AcceptIntoLibrary(library, again, "queen", game.Io(), [&failing] { return failing.Defer(); }).has_value());
-        ASSERT_NE(Queen(library).atlas->source->rect.w, queenSaved.atlas->source->rect.w);
+        ASSERT_NE(SourceOf(Queen(library)).rect.w, SourceOf(queenSaved).rect.w);
 
         EXPECT_FALSE(failing.Commit([] { return false; }).has_value());
 
-        EXPECT_EQ(Queen(library).atlas->source->rect.w, queenSaved.atlas->source->rect.w);
+        EXPECT_EQ(SourceOf(Queen(library)).rect.w, SourceOf(queenSaved).rect.w);
         EXPECT_EQ(Queen(library).srcRect.x, queenSaved.srcRect.x);
         EXPECT_EQ(Queen(library).srcRect.w, queenSaved.srcRect.w);
         EXPECT_EQ(Rook(library).srcRect.x, rookSaved.srcRect.x);
@@ -1119,20 +1111,16 @@ namespace BECore::Tests {
         EXPECT_FALSE(MeasureFrameForControl(Vector<String>{text(folder / "out" / "gone.png")}, noPadding).has_value());
     }
 
-    TEST(ArtGenDragTest, ThePayloadIsPlainBytesAndKeepsItsFieldsThroughACopy) {
+    TEST(ArtGenDragTest, ThePayloadIsPlainBytesThatKeepWhatItWasMadeWith) {
+        // ImGui copies the payload as bytes and hands the copy to the target
         static_assert(std::is_trivially_copyable_v<ArtGenDragPayload>);
         const ArtGenDragPayload payload = MakeArtGenDragPayload(ArtGenDragKind::Audio, -7, "pieces", "rook", "white_rook");
 
-        char bytes[sizeof(ArtGenDragPayload)];
-        std::memcpy(bytes, &payload, sizeof(bytes));
-        ArtGenDragPayload copy;
-        std::memcpy(&copy, bytes, sizeof(bytes));
-
-        EXPECT_EQ(copy.kind, ArtGenDragKind::Audio);
-        EXPECT_EQ(copy.seed, -7);
-        EXPECT_EQ(StringView(copy.set), "pieces");
-        EXPECT_EQ(StringView(copy.job), "rook");
-        EXPECT_EQ(StringView(copy.suggestedName), "white_rook");
+        EXPECT_EQ(payload.kind, ArtGenDragKind::Audio);
+        EXPECT_EQ(payload.seed, -7);
+        EXPECT_EQ(StringView(payload.set), "pieces");
+        EXPECT_EQ(StringView(payload.job), "rook");
+        EXPECT_EQ(StringView(payload.suggestedName), "white_rook");
     }
 
     TEST(ArtGenDragTest, ATextLongerThanItsBufferIsCutAndStaysTerminated) {
@@ -1163,18 +1151,16 @@ namespace BECore::Tests {
         TextureLibrary library;
     };
 
-    TEST_F(ArtGenDropPlanTest, ADropForANewSpriteTakesTheSuggestedNameWhenItIsFree) {
-        const ArtGenDropPlan plan = PlanArtGenDrop(Image("king"), "", library);
-        EXPECT_EQ(plan.mode, ArtGenDropMode::New);
-        EXPECT_EQ(plan.sprite, "king");
-        EXPECT_TRUE(plan.reason.empty());
-    }
+    TEST_F(ArtGenDropPlanTest, ADropForANewSpriteTakesTheSuggestedNameAndATakenOneGetsASuffix) {
+        const ArtGenDropPlan fresh = PlanArtGenDrop(Image("king"), "", library);
+        EXPECT_EQ(fresh.mode, ArtGenDropMode::New);
+        EXPECT_EQ(fresh.sprite, "king");
+        EXPECT_TRUE(fresh.reason.empty());
 
-    TEST_F(ArtGenDropPlanTest, ATakenSuggestedNameGetsASuffix) {
         library.AddOrUpdate(LibraryEntry("queen_2", "assets/pieces/queen2.png", Rect(0, 0, 64, 64)));
-        const ArtGenDropPlan plan = PlanArtGenDrop(Image("queen"), "", library);
-        EXPECT_EQ(plan.mode, ArtGenDropMode::New);
-        EXPECT_EQ(plan.sprite, "queen_3");
+        const ArtGenDropPlan taken = PlanArtGenDrop(Image("queen"), "", library);
+        EXPECT_EQ(taken.mode, ArtGenDropMode::New);
+        EXPECT_EQ(taken.sprite, "queen_3");
     }
 
     TEST_F(ArtGenDropPlanTest, ATakenNameOfTheLongestLengthStaysAValidName) {
