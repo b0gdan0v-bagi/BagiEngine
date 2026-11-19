@@ -518,6 +518,27 @@ namespace BECore::Tests {
         EXPECT_EQ(JobOf("king").more->count, 2);
     }
 
+    TEST_F(ArtGenSetPanelTest, TheCellsOfARowANewerSetReplacedDoNotReact) {
+        ArtGenSet older = MakeSet("older", "2026-11-17T10:00:00Z", ArtGenSetJobState::Done);
+        older.jobs[0].accepted = ArtGenSetAccepted{"king", "2026-11-17T12:30:00Z", false};
+        ArtGenSet newer = MakeSet("newer", "2026-11-17T11:00:00Z", ArtGenSetJobState::Done);
+        newer.jobs[0].accepted = ArtGenSetAccepted{"king", "2026-11-17T13:00:00Z", false};
+        ASSERT_NO_FATAL_FAILURE(LoadSets({older, newer}));
+        Frame();
+        ImGuiContext& context = *ImGui::GetCurrentContext();
+
+        const ImVec2 cell = Locate(PickId(0, 1));
+        EXPECT_FALSE(context.HoveredIdIsDisabled) << "the newer set owns the name: its cell reacts";
+        ClickAt(Locate(SetEntryId("older")));
+        Frame();
+        ImGui::GetIO().AddMousePosEvent(cell.x, cell.y);
+        Frame();
+        Frame();
+
+        EXPECT_EQ(context.HoveredId, PickId(0, 1)) << "the same cell, drawn for the other set";
+        EXPECT_TRUE(context.HoveredIdIsDisabled) << "the older set's row is replaced: its cell is disabled";
+    }
+
     TEST_F(ArtGenSetPanelTest, UseAsReferenceOnAVariantFillsTheSlotWithItsFile) {
         const std::filesystem::path folder = Root() / "second" / "artgen" / "out" / "chess" / "king";
         std::filesystem::create_directories(folder);

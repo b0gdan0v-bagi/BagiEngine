@@ -77,7 +77,7 @@ Derive from `IResourceLoader` with `BE_CLASS(MyLoader)`, implement `CanLoad` / `
 
 ## Thread Safety
 
-- `ResourceCache` takes shared locks for reads and an exclusive lock for `Put()` / `Clear()`.
+- `ResourceCache` takes shared locks for reads and an exclusive lock for `Put()` / `Clear()`. A holder that keeps a texture for a path (`UISprite`, `ParticleEmitterComponent`, the Sprite Library) notices an `Evict` by asking `Holds(path, handle)` and loads the path again; a handle given out stays valid but is the old picture.
 - Resources are immutable after loading, so concurrent reads are safe.
 - Async loading runs on the TaskSystem thread pool.
 - Tests that call `LoadAsync` must run it through `CoreManager::GetTaskManager().Run(...)` and wait on the handle (`.claude/rules/tests-module.md`).

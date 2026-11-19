@@ -1,7 +1,10 @@
+#include <BECore/Resource/IResource.h>
+#include <BECore/Resource/ResourceCache.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/TextureEditor/SpriteAtlas.h>
+#include <Widgets/TextureEditor/SpriteTextureCache.h>
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
@@ -596,7 +599,7 @@ namespace BECore::Tests {
         const auto stored = AcceptIntoLibrary(library, copied, "queen", game.Io(), save);
 
         ASSERT_FALSE(stored.has_value());
-        EXPECT_NE(stored.error().find("the PNG is in"), String::npos);
+        EXPECT_NE(stored.error().find("already written over the game's file"), String::npos);
         EXPECT_EQ(library.GetSprite("queen"_intern), nullptr);
     }
 
@@ -656,6 +659,147 @@ namespace BECore::Tests {
         ASSERT_TRUE(stored.has_value() && stored->repacked.has_value());
         EXPECT_EQ(stored->repacked->name.ToStringView(), "ui");
         EXPECT_EQ(stored->repacked->changed.size(), 2u);
+    }
+
+    namespace {
+
+        /// What CopyVariantIntoAssets would have returned for a sprite of the unpacked kind (no file is read for it)
+        ArtGenCopied CopiedOf(StringView sprite, uint32_t width, uint32_t height) {
+            ArtGenCopied copied;
+            copied.texturePath = Format("assets/artgen/{}.png", sprite);
+            copied.width = width;
+            copied.height = height;
+            return copied;
+        }
+
+        /// The library as the batch tests start it: a queen and a rook, no atlas
+        void FillPlain(TextureLibrary& library) {
+            library.AddOrUpdate(LibraryEntry("queen", "assets/artgen/queen.png", Rect(0, 0, 64, 64)));
+            library.AddOrUpdate(LibraryEntry("rook", "assets/artgen/rook.png", Rect(0, 0, 32, 32)));
+        }
+
+    }  // namespace
+
+    TEST(ArtGenLibraryBatchTest, NewRowsAreOnlyOwedUntilTheCommitSavesOnce) {
+        const AcceptGame game;
+        TextureLibrary library;
+        ArtGenLibraryBatch batch(library);
+        int saves = 0;
+        auto save = [&saves] {
+            ++saves;
+            return true;
+        };
+
+        for (const char* name : {"knight", "bishop", "pawn"}) {
+            const auto stored = AcceptIntoLibrary(library, CopiedOf(name, 16, 16), name, game.Io(), [&batch] { return batch.Defer(); });
+            ASSERT_TRUE(stored.has_value());
+            EXPECT_TRUE(stored->saved);
+        }
+        EXPECT_EQ(saves, 0);
+        EXPECT_EQ(library.GetAll().size(), 3u);
+
+        const auto committed = batch.Commit(save);
+
+        ASSERT_TRUE(committed.has_value());
+        EXPECT_TRUE(*committed);
+        EXPECT_EQ(saves, 1);
+        EXPECT_EQ(library.GetAll().size(), 3u);
+    }
+
+    TEST(ArtGenLibraryBatchTest, RowsThatChangeNothingOweNoSave) {
+        const AcceptGame game;
+        TextureLibrary library;
+        FillPlain(library);
+        ArtGenLibraryBatch batch(library);
+        ASSERT_TRUE(AcceptIntoLibrary(library, CopiedOf("queen", 64, 64), "queen", game.Io(), [&batch] { return batch.Defer(); }).has_value());
+        int saves = 0;
+
+        const auto committed = batch.Commit([&saves] {
+            ++saves;
+            return true;
+        });
+
+        ASSERT_TRUE(committed.has_value());
+        EXPECT_FALSE(*committed);
+        EXPECT_EQ(saves, 0);
+    }
+
+    TEST(ArtGenLibraryBatchTest, AFailedCommitGivesTheLibraryBack) {
+        const AcceptGame game;
+        TextureLibrary library;
+        FillPlain(library);
+        ArtGenLibraryBatch batch(library);
+        auto defer = [&batch] { return batch.Defer(); };
+        ASSERT_TRUE(AcceptIntoLibrary(library, CopiedOf("queen", 128, 64), "queen", game.Io(), defer).has_value());
+        ASSERT_TRUE(AcceptIntoLibrary(library, CopiedOf("king", 8, 8), "king", game.Io(), defer).has_value());
+        ASSERT_EQ(library.GetSprite("queen"_intern)->srcRect.w, 128.0f);
+        ASSERT_NE(library.GetSprite("king"_intern), nullptr);
+
+        const auto committed = batch.Commit([] { return false; });
+
+        ASSERT_FALSE(committed.has_value());
+        EXPECT_NE(committed.error().find("TextureLibrary.xml could not be saved"), String::npos);
+        EXPECT_EQ(library.GetAll().size(), 2u);
+        EXPECT_EQ(library.GetSprite("king"_intern), nullptr);
+        EXPECT_EQ(library.GetSprite("queen"_intern)->srcRect.w, 64.0f);
+        EXPECT_EQ(library.GetSprite("rook"_intern)->srcRect.w, 32.0f);
+        EXPECT_EQ(library.GetAll()[0].name.ToStringView(), "queen");
+    }
+
+    TEST(ArtGenLibraryBatchTest, AFailedCommitAfterARepackTellsThePersonToPack) {
+        TextureLibrary library;
+        FillPlain(library);
+        ArtGenLibraryBatch plain(library);
+        library.AddOrUpdate(LibraryEntry("queen", "assets/artgen/queen.png", Rect(0, 0, 128, 64)));
+        ASSERT_TRUE(plain.Defer());
+        const auto plainFailure = plain.Commit([] { return false; });
+        ASSERT_FALSE(plainFailure.has_value());
+        EXPECT_EQ(plainFailure.error().find("Pack"), String::npos) << "no atlas was touched";
+
+        ArtGenLibraryBatch repacked(library);
+        library.AddOrUpdate(LibraryEntry("queen", "assets/artgen/queen.png", Rect(0, 0, 128, 64)));
+        ASSERT_TRUE(repacked.Defer());
+        repacked.NoteRepacked();
+        const auto repackedFailure = repacked.Commit([] { return false; });
+        ASSERT_FALSE(repackedFailure.has_value());
+        EXPECT_NE(repackedFailure.error().find("press Pack in the Sprite Library"), String::npos) << repackedFailure.error().c_str();
+    }
+
+    TEST(ArtGenLibraryBatchTest, APackedRowIsSavedOnceAndItsMembersComeBackWhenTheSaveFails) {
+        const AcceptGame game;
+        TextureLibrary library;
+        FillGroup(library, game, true);
+        ArtGenLibraryBatch batch(library);
+        const ArtGenCopied copied = game.Copied(MakeSolid(6, 2, 0, kHigh, 0));
+
+        const auto stored = AcceptIntoLibrary(library, copied, "queen", game.Io(), [&batch] { return batch.Defer(); });
+        ASSERT_TRUE(stored.has_value());
+        ASSERT_TRUE(stored->repacked.has_value());
+        ASSERT_EQ(Queen(library).atlas->source->rect.w, 6.0f);
+
+        int saves = 0;
+        const auto committed = batch.Commit([&saves] {
+            ++saves;
+            return true;
+        });
+        ASSERT_TRUE(committed.has_value());
+        EXPECT_TRUE(*committed);
+        EXPECT_EQ(saves, 1);
+
+        ArtGenLibraryBatch failing(library);
+        const ArtGenCopied again = game.Copied(MakeSolid(3, 3, kLow, kLow, kLow));
+        const SpriteEntry queenSaved = Queen(library);
+        const SpriteEntry rookSaved = Rook(library);
+        ASSERT_TRUE(AcceptIntoLibrary(library, again, "queen", game.Io(), [&failing] { return failing.Defer(); }).has_value());
+        ASSERT_NE(Queen(library).atlas->source->rect.w, queenSaved.atlas->source->rect.w);
+
+        EXPECT_FALSE(failing.Commit([] { return false; }).has_value());
+
+        EXPECT_EQ(Queen(library).atlas->source->rect.w, queenSaved.atlas->source->rect.w);
+        EXPECT_EQ(Queen(library).srcRect.x, queenSaved.srcRect.x);
+        EXPECT_EQ(Queen(library).srcRect.w, queenSaved.srcRect.w);
+        EXPECT_EQ(Rook(library).srcRect.x, rookSaved.srcRect.x);
+        EXPECT_EQ(Rook(library).srcRect.y, rookSaved.srcRect.y);
     }
 
     TEST(ArtGenSpriteNameTest, OnlyPlainNamesAreSpriteNames) {
@@ -778,6 +922,141 @@ namespace BECore::Tests {
         WriteText(provenance, "{\"seed\": 8}");
         ASSERT_TRUE(CopyVariantIntoAssets(png, provenance, folder / "assets", "queen", kIdentity).has_value());
         EXPECT_EQ(ReadText(copied->provenanceFile).find("kept"), String::npos);
+    }
+
+    TEST_F(ArtGenAcceptTest, AnIdentityAcceptOfAVariantWithNoProvenanceRemovesTheOldRecord) {
+        const auto first = CopyVariantIntoAssets(png, provenance, folder / "assets", "queen", kIdentity);
+        ASSERT_TRUE(first.has_value());
+        ASSERT_TRUE(MarkProvenanceKept(first->provenanceFile, 7, "2026-11-17T10:00:00Z").has_value());
+
+        std::filesystem::remove(provenance);
+        const auto second = CopyVariantIntoAssets(png, provenance, folder / "assets", "queen", kIdentity);
+        ASSERT_TRUE(second.has_value()) << second.error().c_str();
+        EXPECT_FALSE(std::filesystem::exists(second->provenanceFile)) << "a record with the earlier seed and its `kept` is not this variant's";
+
+        const auto withEmptyPath = CopyVariantIntoAssets(png, std::filesystem::path(), folder / "assets", "queen", kIdentity);
+        ASSERT_TRUE(withEmptyPath.has_value());
+        EXPECT_FALSE(std::filesystem::exists(withEmptyPath->provenanceFile));
+    }
+
+    TEST_F(ArtGenAcceptTest, ADefaultAcceptOfAVariantWithNoProvenanceReplacesTheOldRecordWithAnAcceptedOnlyOne) {
+        const auto source = folder / "out" / "real.png";
+        ASSERT_NO_FATAL_FAILURE(WriteRealPng(source, 256, 256, {40, 40, 100, 100}));
+        const auto first = CopyVariantIntoAssets(source, provenance, folder / "assets", "queen", ArtGenImagePlan{});
+        ASSERT_TRUE(first.has_value());
+        ASSERT_TRUE(MarkProvenanceKept(first->provenanceFile, 7, "2026-11-17T10:00:00Z").has_value());
+
+        std::filesystem::remove(provenance);
+        const auto second = CopyVariantIntoAssets(source, provenance, folder / "assets", "queen", ArtGenImagePlan{});
+        ASSERT_TRUE(second.has_value()) << second.error().c_str();
+        const auto record = ParseJson(StringView(ReadText(second->provenanceFile)));
+        ASSERT_TRUE(record.has_value());
+        EXPECT_NE(FindJsonMember(*record, "accepted"), nullptr);
+        EXPECT_EQ(FindJsonMember(*record, "kept"), nullptr);
+        EXPECT_EQ(FindJsonMember(*record, "seed"), nullptr) << "the earlier variant's seed is not carried over";
+    }
+
+    namespace {
+
+        class FakeTexture : public IResource {
+        public:
+            explicit FakeTexture(PoolString path) : _path(path) {}
+
+            ResourceState GetState() const override {
+                return ResourceState::Loaded;
+            }
+            PoolString GetPath() const override {
+                return _path;
+            }
+            uint64_t GetMemoryUsage() const override {
+                return 1;
+            }
+            PoolString GetTypeName() const override {
+                return "FakeTexture"_intern;
+            }
+
+        private:
+            PoolString _path;
+        };
+
+        /// What a holder that keeps a texture of the cache sees of an accept: the handle it kept and the cache after the accept's evict
+        struct EvictScene {
+            ResourceCache cache;
+            Vector<String> evicted;
+
+            IntrusivePtr<IResource> Put(PoolString path) {
+                cache.Put(path, New<FakeTexture>(path));
+                return cache.Get(path);
+            }
+
+            void Evict(const ArtGenCopied& copied, const Optional<AtlasWritten>& repacked) {
+                EvictAcceptedTextures(copied, repacked, [this](StringView path) {
+                    evicted.push_back(String(path));
+                    return cache.Remove(PoolString::Intern(path));
+                });
+            }
+        };
+
+        ArtGenCopied CopiedAt(const char* texturePath) {
+            ArtGenCopied copied;
+            copied.texturePath = texturePath;
+            return copied;
+        }
+
+    }  // namespace
+
+    TEST(ArtGenEvictTest, AReAcceptAndASwitchOfTheSameNameFlipTheHoldersPredicate) {
+        EvictScene scene;
+        const auto queen = "assets/artgen/queen.png"_intern;
+        const auto rook = "assets/artgen/rook.png"_intern;
+        const IntrusivePtr<IResource> queenHandle = scene.Put(queen);
+        const IntrusivePtr<IResource> rookHandle = scene.Put(rook);
+        EXPECT_FALSE(IsEvictedHandle(scene.cache, queen, queenHandle.Get()));
+
+        // A re-accept of the name writes the same path
+        scene.Evict(CopiedAt("assets/artgen/queen.png"), {});
+        EXPECT_TRUE(IsEvictedHandle(scene.cache, queen, queenHandle.Get()));
+        EXPECT_FALSE(IsEvictedHandle(scene.cache, rook, rookHandle.Get())) << "a path that was not accepted stays held";
+
+        // The holder loads the path again; a switch to another variant of the same name is the same path again
+        const IntrusivePtr<IResource> reloaded = scene.Put(queen);
+        EXPECT_FALSE(IsEvictedHandle(scene.cache, queen, reloaded.Get())) << "the fresh resource is the held one";
+        EXPECT_TRUE(IsEvictedHandle(scene.cache, queen, queenHandle.Get())) << "the old handle stays evicted";
+        scene.Evict(CopiedAt("assets/artgen/queen.png"), {});
+        EXPECT_TRUE(IsEvictedHandle(scene.cache, queen, reloaded.Get()));
+        EXPECT_FALSE(IsEvictedHandle(scene.cache, rook, rookHandle.Get()));
+    }
+
+    TEST(ArtGenEvictTest, ARepackEvictsTheAtlasPathToo) {
+        EvictScene scene;
+        const auto sprite = "assets/artgen/queen.png"_intern;
+        const auto atlas = "assets/atlases/pieces.png"_intern;
+        const IntrusivePtr<IResource> spriteHandle = scene.Put(sprite);
+        const IntrusivePtr<IResource> atlasHandle = scene.Put(atlas);
+        const IntrusivePtr<IResource> otherHandle = scene.Put("assets/atlases/other.png"_intern);
+
+        AtlasWritten repacked;
+        repacked.texturePath = atlas;
+        scene.Evict(CopiedAt("assets/artgen/queen.png"), repacked);
+
+        EXPECT_TRUE(IsEvictedHandle(scene.cache, sprite, spriteHandle.Get()));
+        EXPECT_TRUE(IsEvictedHandle(scene.cache, atlas, atlasHandle.Get()));
+        EXPECT_FALSE(IsEvictedHandle(scene.cache, "assets/atlases/other.png"_intern, otherHandle.Get()));
+        ASSERT_EQ(scene.evicted.size(), 2u);
+        EXPECT_EQ(scene.evicted[0], "assets/artgen/queen.png");
+        EXPECT_EQ(scene.evicted[1], "assets/atlases/pieces.png");
+    }
+
+    TEST(ArtGenEvictTest, AnAcceptWithNoRepackEvictsOnlyThePicture) {
+        EvictScene scene;
+        scene.Evict(CopiedAt("assets/artgen/queen.png"), {});
+        ASSERT_EQ(scene.evicted.size(), 1u);
+        EXPECT_EQ(scene.evicted[0], "assets/artgen/queen.png");
+    }
+
+    TEST(ArtGenEvictTest, ANullHandleIsNeverEvicted) {
+        ResourceCache cache;
+        EXPECT_FALSE(IsEvictedHandle(cache, "assets/artgen/queen.png"_intern, nullptr));
     }
 
     TEST_F(ArtGenAcceptTest, AnIdentityPlanCopiesBothFilesByteForByte) {

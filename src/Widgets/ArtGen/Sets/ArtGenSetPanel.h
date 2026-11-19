@@ -129,7 +129,8 @@ namespace BECore {
         /// Makes the row's "in the game or not, and which file" line again when its status, names or kind changed
         static void RefreshStatusLine(RowThumbs& row, const ArtGenSet& set, const ArtGenSetJob& job, ArtGenRowStatus status, const ArtGenSet* newer);
         void DrawJobRow(ArtGenSession& session, const ArtGenSet& set, size_t index, int32_t columns, const ArtGenSetPanelSound& sound);
-        void DrawVariantCell(ArtGenSession& session, const ArtGenSet& set, size_t jobIndex, size_t variantIndex, const ArtGenSetPanelSound& sound);
+        /// @p replaced: a newer set owns the row's name (`_newerOwners`), so a click switches nothing
+        void DrawVariantCell(ArtGenSession& session, const ArtGenSet& set, size_t jobIndex, size_t variantIndex, bool replaced, const ArtGenSetPanelSound& sound);
         void DrawSetFooter(ArtGenSession& session, const ArtGenSet& set);
         /// Loads what the row's variants need and evicts what a Retry took away
         void SyncRow(const ArtGenSession& session, const ArtGenSet& set, size_t index);
@@ -151,6 +152,11 @@ namespace BECore {
         String _acceptMessage;   // the last Accept all, switch or Keep: its answer or its error, shown under the rows
         bool _acceptFailed = false;
         Vector<RowThumbs> _rows;  // by job index
+        // Made by DrawSetRows once per frame (`FindNewerOwner` scans every set), read by the rows, their cells and the footer
+        Vector<const ArtGenSet*> _newerOwners;  // by job index; null: the row owns its name
+        int32_t _liveRows = 0;
+        int32_t _keptRows = 0;
+        int32_t _replacedRows = 0;
         uint64_t _frame = 0;
         int64_t _playingSeed = 0;
         int32_t _playingJob = -1;

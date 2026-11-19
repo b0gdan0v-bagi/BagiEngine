@@ -215,8 +215,9 @@ namespace BECore {
         if (seed && *seed < 0) {
             return std::unexpected(String("seed must not be negative"));
         }
+        // The variants of a set's job belong to its row in the manifest, so the next single run does not carry them
         Vector<ArtGenVariant> kept;
-        if (keepVariants) {
+        if (keepVariants && _run.setName.empty()) {
             kept = std::move(_run.variants);
         }
         _run = ArtGenRun{};

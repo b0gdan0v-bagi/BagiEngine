@@ -580,6 +580,20 @@ namespace BECore {
         }
         _rows.resize(set.jobs.size());
         ++_frame;
+        // The one place a frame asks who owns each row's name: the rows, their cells and the footer use these answers
+        _newerOwners.resize(set.jobs.size());
+        _liveRows = 0;
+        _keptRows = 0;
+        _replacedRows = 0;
+        for (size_t i = 0; i < set.jobs.size(); ++i) {
+            const ArtGenSetJob& job = set.jobs[i];
+            _newerOwners[i] = session.FindNewerOwner(set, job);
+            // A row a newer set replaced is neither live nor kept: the game holds the other set's picture under its name
+            const ArtGenRowStatus status = StatusOf(job, _newerOwners[i] != nullptr);
+            _liveRows += status == ArtGenRowStatus::Live ? 1 : 0;
+            _keptRows += status == ArtGenRowStatus::Kept ? 1 : 0;
+            _replacedRows += status == ArtGenRowStatus::Replaced ? 1 : 0;
+        }
 
         const ImGuiStyle& style = ImGui::GetStyle();
         const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
@@ -675,7 +689,7 @@ namespace BECore {
         ImGui::TextUnformatted(job.name.c_str());
         ImGui::SameLine();
         ImGui::TextDisabled("%s", job.subject.c_str());
-        const ArtGenSet* newer = session.FindNewerOwner(set, job);
+        const ArtGenSet* newer = _newerOwners[index];
         const ArtGenRowStatus status = StatusOf(job, newer != nullptr);
         // A replaced row's variants are alternatives to nothing: the game holds another set's picture under its name
         const bool live = status == ArtGenRowStatus::Live;
@@ -753,11 +767,11 @@ namespace BECore {
             if (v % static_cast<size_t>(columns) != 0) {
                 ImGui::SameLine();
             }
-            DrawVariantCell(session, set, index, v, sound);
+            DrawVariantCell(session, set, index, v, newer != nullptr, sound);
         }
     }
 
-    void ArtGenSetPanel::DrawVariantCell(ArtGenSession& session, const ArtGenSet& set, size_t jobIndex, size_t variantIndex, const ArtGenSetPanelSound& sound) {
+    void ArtGenSetPanel::DrawVariantCell(ArtGenSession& session, const ArtGenSet& set, size_t jobIndex, size_t variantIndex, bool replaced, const ArtGenSetPanelSound& sound) {
         const auto& palette = GetImGuiPalette();
         const ArtGenSetJob& job = set.jobs[jobIndex];
         const ArtGenSetVariant& variant = job.variants[variantIndex];
@@ -775,7 +789,6 @@ namespace BECore {
         }
         // A kept row is final and a replaced one has nothing to switch: its cells only show the variants
         const bool kept = job.accepted && job.accepted->kept;
-        const bool replaced = session.FindNewerOwner(set, job) != nullptr;
         ImGui::BeginDisabled(kept || replaced);
         if (ImGui::InvisibleButton("##pick", ImVec2(kThumbnailSize, kThumbnailSize))) {
             ArtGenSwitch write;
@@ -857,16 +870,10 @@ namespace BECore {
         const auto& palette = GetImGuiPalette();
         const int32_t total = static_cast<int32_t>(set.jobs.size());
         const int32_t picked = PickedCount(set);
-        // A row a newer set replaced is neither live nor kept here: the game holds the other set's picture under its name
-        int32_t live = 0;
-        int32_t kept = 0;
-        int32_t replacedRows = 0;
-        for (const ArtGenSetJob& job : set.jobs) {
-            const ArtGenRowStatus status = StatusOf(job, session.FindNewerOwner(set, job) != nullptr);
-            live += status == ArtGenRowStatus::Live ? 1 : 0;
-            kept += status == ArtGenRowStatus::Kept ? 1 : 0;
-            replacedRows += status == ArtGenRowStatus::Replaced ? 1 : 0;
-        }
+        // The counts DrawSetRows made this frame, which runs before the footer
+        const int32_t live = _liveRows;
+        const int32_t kept = _keptRows;
+        const int32_t replacedRows = _replacedRows;
         // What Keep all can still keep
         const int32_t keepable = live;
         // What Accept all needs (ArtGenSession::AcceptSet checks it again): the set finished, every job done, and for sounds a pick on every row
