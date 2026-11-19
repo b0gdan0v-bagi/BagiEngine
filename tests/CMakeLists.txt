@@ -27,6 +27,14 @@ add_subdirectory(Fuzz)
 
 be_add_game_tests(BagiEngineTests SOURCES ${TESTS_SOURCES} LINK RemoteControlModule RoomsModule RoomClientModule RoomServerModule RuntimeModule BagiFuzzTargets)
 
+# The discovered FuzzCorpus cases only replay the corpus; this entry runs them again with the mutations (tests/Fuzz/CLAUDE.md). 50000 per target
+# of cost weight 1 is about 2 s in Debug; the targets run one after the other in this one process.
+add_test(NAME BagiFuzzMutations COMMAND BagiEngineTests --gtest_filter=FuzzCorpus/* --gtest_brief=1)
+set_tests_properties(BagiFuzzMutations PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    ENVIRONMENT "BAGI_FUZZ_ITERATIONS=50000"
+    LABELS extended)
+
 # VulkanSwapchainPolicy.h is header only (<vulkan/vulkan.h>, BECore's EnumUtils.h for SwapchainStatus and
 # SwapchainRecreateResult, and the standard library), so the test needs the headers and the include path but not
 # VulkanModule: its loader library is not deployed next to the test executable (BagiEngineTests links BECore).
@@ -69,6 +77,8 @@ if(Python3_FOUND)
     set_tests_properties(BagiHeadersStandalone PROPERTIES
         SKIP_RETURN_CODE 77
         TIMEOUT 1800)  # it compiles every header beside the other tests: only a hang may end it
+    # The hygiene checks read the whole tree and none of them tests behaviour: the full run (<preset>-all) has them, the everyday one does not
+    set_tests_properties(BagiThirdPartyNotices BagiIncludeStyle BagiPoolStrings BagiTypesCheck BagiHeadersStandalone PROPERTIES LABELS extended)
 endif()
 
 # A real TLS handshake of the platform's backend against local servers: tls_local_check.py starts a Python `ssl` WebSocket echo server
@@ -79,5 +89,6 @@ if(Python3_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/BECore/Tls/tls_local_check.py --exe $<TARGET_FILE:BagiEngineTests>)
     set_tests_properties(BagiTlsLocalEndpoint PROPERTIES
         SKIP_RETURN_CODE 77
-        TIMEOUT 120)
+        TIMEOUT 120
+        LABELS extended)
 endif()

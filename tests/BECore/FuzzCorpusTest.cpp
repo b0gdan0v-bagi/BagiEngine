@@ -1,5 +1,6 @@
 // The corpus of every fuzz target replayed, then mutated by the deterministic mutator: the part of fuzzing that runs in every build and on
-// every platform. The long runs are libFuzzer (tests/Fuzz/CLAUDE.md).
+// every platform. The everyday run only replays; the mutations need BAGI_FUZZ_ITERATIONS, which the ctest entry BagiFuzzMutations (label
+// extended) sets. The long runs are libFuzzer (tests/Fuzz/CLAUDE.md).
 
 #include <Common/Printers.h>
 #include <Fuzz/FuzzMutator.h>
@@ -18,9 +19,6 @@ namespace BECore::Tests {
     using Fuzz::FuzzTarget;
 
     namespace {
-
-        /// Mutations per target in an ordinary run: about two seconds in a Debug build for a target of cost weight 1 (BAGI_FUZZ_ITERATIONS=<n> replaces it)
-        constexpr uint64_t kDefaultIterations = 50000;
 
         /// The seed of the generator; mixed with the name of the target so the targets do not mutate the same way
         constexpr uint64_t kReplaySeed = 0x42414749465A5A31ull;
@@ -41,17 +39,20 @@ namespace BECore::Tests {
             FuzzBytes bytes;
         };
 
-        /// BAGI_FUZZ_ITERATIONS as it is for every target; without it the default count, shorter for a target whose input costs more
+        /// BAGI_FUZZ_ITERATIONS divided by the cost weight, so a target whose input costs more takes about the same time; none without it
+        /// (or when it is not a number): the mutations belong to the extended run, the replay of the corpus to every run
         uint64_t IterationCount(const FuzzTarget& target) {
-            const uint64_t byDefault = kDefaultIterations / std::max<uint32_t>(target.costWeight, 1);
             const char* text = std::getenv("BAGI_FUZZ_ITERATIONS");
             if (text == nullptr || *text == '\0') {
-                return byDefault;
+                return 0;
             }
             uint64_t value = 0;
             const char* end = text + std::strlen(text);
             const auto result = std::from_chars(text, end, value);
-            return (result.ec == std::errc() && result.ptr == end) ? value : byDefault;
+            if (result.ec != std::errc() || result.ptr != end) {
+                return 0;
+            }
+            return value / std::max<uint32_t>(target.costWeight, 1);
         }
 
         uint64_t HashName(StringView name) {

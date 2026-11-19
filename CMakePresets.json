@@ -586,6 +586,57 @@
             "execution": {
                 "noTestsAction": "error",
                 "jobs": 8
+            },
+            "filter": {
+                "exclude": {
+                    "label": "^extended$"
+                }
+            }
+        },
+        {
+            "name": "test-all",
+            "hidden": true,
+            "description": "Every test, extended included. An inherited filter field can be replaced but not removed, and ^$ matches no label",
+            "filter": {
+                "exclude": {
+                    "label": "^$"
+                }
+            }
+        },
+        {
+            "name": "test-fast",
+            "hidden": true,
+            "description": "The default set without the tests that start a game",
+            "filter": {
+                "exclude": {
+                    "label": "^(smoke|scenario|extended)$"
+                }
+            }
+        },
+        {
+            "name": "test-smoke",
+            "hidden": true,
+            "description": "The smoke tests only, extended ones included",
+            "filter": {
+                "include": {
+                    "label": "^smoke$"
+                },
+                "exclude": {
+                    "label": "^$"
+                }
+            }
+        },
+        {
+            "name": "test-scenarios",
+            "hidden": true,
+            "description": "The scenario files and their QA replays only",
+            "filter": {
+                "include": {
+                    "label": "^scenario$"
+                },
+                "exclude": {
+                    "label": "^$"
+                }
             }
         },
         {
@@ -614,18 +665,30 @@
             "inherits": "test-macos",
             "configurePreset": "macos-debug"
         },
+        { "name": "macos-debug-all", "inherits": ["test-all", "macos-debug"] },
+        { "name": "macos-debug-fast", "inherits": ["test-fast", "macos-debug"] },
+        { "name": "macos-debug-smoke", "inherits": ["test-smoke", "macos-debug"] },
+        { "name": "macos-debug-scenarios", "inherits": ["test-scenarios", "macos-debug"] },
         {
             "name": "macos-release",
             "displayName": "macOS Clang Release",
             "inherits": "test-macos",
             "configurePreset": "macos-release"
         },
+        { "name": "macos-release-all", "inherits": ["test-all", "macos-release"] },
+        { "name": "macos-release-fast", "inherits": ["test-fast", "macos-release"] },
+        { "name": "macos-release-smoke", "inherits": ["test-smoke", "macos-release"] },
+        { "name": "macos-release-scenarios", "inherits": ["test-scenarios", "macos-release"] },
         {
             "name": "macos-release-editor",
             "displayName": "macOS Clang Release with the editor",
             "inherits": "test-macos",
             "configurePreset": "macos-release-editor"
         },
+        { "name": "macos-release-editor-all", "inherits": ["test-all", "macos-release-editor"] },
+        { "name": "macos-release-editor-fast", "inherits": ["test-fast", "macos-release-editor"] },
+        { "name": "macos-release-editor-smoke", "inherits": ["test-smoke", "macos-release-editor"] },
+        { "name": "macos-release-editor-scenarios", "inherits": ["test-scenarios", "macos-release-editor"] },
         {
             "name": "macos-asan",
             "displayName": "macOS Clang Debug with AddressSanitizer + UBSan",
@@ -636,84 +699,140 @@
                 "UBSAN_OPTIONS": "print_stacktrace=1"
             }
         },
+        { "name": "macos-asan-all", "inherits": ["test-all", "macos-asan"] },
+        { "name": "macos-asan-fast", "inherits": ["test-fast", "macos-asan"] },
+        { "name": "macos-asan-smoke", "inherits": ["test-smoke", "macos-asan"] },
+        { "name": "macos-asan-scenarios", "inherits": ["test-scenarios", "macos-asan"] },
         {
             "name": "macos-time-trace",
             "displayName": "macOS Clang Debug with -ftime-trace",
             "inherits": "test-macos",
             "configurePreset": "macos-time-trace"
         },
+        { "name": "macos-time-trace-all", "inherits": ["test-all", "macos-time-trace"] },
+        { "name": "macos-time-trace-fast", "inherits": ["test-fast", "macos-time-trace"] },
+        { "name": "macos-time-trace-smoke", "inherits": ["test-smoke", "macos-time-trace"] },
+        { "name": "macos-time-trace-scenarios", "inherits": ["test-scenarios", "macos-time-trace"] },
         {
             "name": "macos-fuzz",
             "displayName": "macOS Homebrew LLVM fuzzing (ASan + UBSan, libFuzzer executables)",
             "inherits": "test-macos",
             "configurePreset": "macos-fuzz"
         },
+        { "name": "macos-fuzz-all", "inherits": ["test-all", "macos-fuzz"] },
+        { "name": "macos-fuzz-fast", "inherits": ["test-fast", "macos-fuzz"] },
+        { "name": "macos-fuzz-smoke", "inherits": ["test-smoke", "macos-fuzz"] },
+        { "name": "macos-fuzz-scenarios", "inherits": ["test-scenarios", "macos-fuzz"] },
         {
             "name": "macos-fuzz-shipped",
             "displayName": "macOS Homebrew LLVM fuzzing with the flags of a shipped build (Release, asserts and expects OFF)",
             "inherits": "test-macos",
             "configurePreset": "macos-fuzz-shipped"
         },
+        { "name": "macos-fuzz-shipped-all", "inherits": ["test-all", "macos-fuzz-shipped"] },
+        { "name": "macos-fuzz-shipped-fast", "inherits": ["test-fast", "macos-fuzz-shipped"] },
+        { "name": "macos-fuzz-shipped-smoke", "inherits": ["test-smoke", "macos-fuzz-shipped"] },
+        { "name": "macos-fuzz-shipped-scenarios", "inherits": ["test-scenarios", "macos-fuzz-shipped"] },
         {
             "name": "macos-profile",
             "displayName": "macOS Clang Profile (RelWithDebInfo, profiler and allocations)",
             "inherits": "test-macos",
             "configurePreset": "macos-profile"
         },
+        { "name": "macos-profile-all", "inherits": ["test-all", "macos-profile"] },
+        { "name": "macos-profile-fast", "inherits": ["test-fast", "macos-profile"] },
+        { "name": "macos-profile-smoke", "inherits": ["test-smoke", "macos-profile"] },
+        { "name": "macos-profile-scenarios", "inherits": ["test-scenarios", "macos-profile"] },
         {
             "name": "macos-profile-tracy",
             "displayName": "macOS Clang Profile with Tracy",
             "inherits": "test-macos",
             "configurePreset": "macos-profile-tracy"
         },
+        { "name": "macos-profile-tracy-all", "inherits": ["test-all", "macos-profile-tracy"] },
+        { "name": "macos-profile-tracy-fast", "inherits": ["test-fast", "macos-profile-tracy"] },
+        { "name": "macos-profile-tracy-smoke", "inherits": ["test-smoke", "macos-profile-tracy"] },
+        { "name": "macos-profile-tracy-scenarios", "inherits": ["test-scenarios", "macos-profile-tracy"] },
         {
             "name": "macos-profile-editor",
             "displayName": "macOS Clang Profile with the editor (the ImGui Profiler panel)",
             "inherits": "test-macos",
             "configurePreset": "macos-profile-editor"
         },
+        { "name": "macos-profile-editor-all", "inherits": ["test-all", "macos-profile-editor"] },
+        { "name": "macos-profile-editor-fast", "inherits": ["test-fast", "macos-profile-editor"] },
+        { "name": "macos-profile-editor-smoke", "inherits": ["test-smoke", "macos-profile-editor"] },
+        { "name": "macos-profile-editor-scenarios", "inherits": ["test-scenarios", "macos-profile-editor"] },
         {
             "name": "macos-rmlui-debug",
             "displayName": "macOS Clang Debug with RmlUi",
             "inherits": "test-macos",
             "configurePreset": "macos-rmlui-debug"
         },
+        { "name": "macos-rmlui-debug-all", "inherits": ["test-all", "macos-rmlui-debug"] },
+        { "name": "macos-rmlui-debug-fast", "inherits": ["test-fast", "macos-rmlui-debug"] },
+        { "name": "macos-rmlui-debug-smoke", "inherits": ["test-smoke", "macos-rmlui-debug"] },
+        { "name": "macos-rmlui-debug-scenarios", "inherits": ["test-scenarios", "macos-rmlui-debug"] },
         {
             "name": "macos-rmlui-release",
             "displayName": "macOS Clang Release with RmlUi",
             "inherits": "test-macos",
             "configurePreset": "macos-rmlui-release"
         },
+        { "name": "macos-rmlui-release-all", "inherits": ["test-all", "macos-rmlui-release"] },
+        { "name": "macos-rmlui-release-fast", "inherits": ["test-fast", "macos-rmlui-release"] },
+        { "name": "macos-rmlui-release-smoke", "inherits": ["test-smoke", "macos-rmlui-release"] },
+        { "name": "macos-rmlui-release-scenarios", "inherits": ["test-scenarios", "macos-rmlui-release"] },
         {
             "name": "windows-msvc-debug",
             "displayName": "Windows MSVC Ninja Debug",
             "inherits": "test-windows",
             "configurePreset": "windows-msvc-debug"
         },
+        { "name": "windows-msvc-debug-all", "inherits": ["test-all", "windows-msvc-debug"] },
+        { "name": "windows-msvc-debug-fast", "inherits": ["test-fast", "windows-msvc-debug"] },
+        { "name": "windows-msvc-debug-smoke", "inherits": ["test-smoke", "windows-msvc-debug"] },
+        { "name": "windows-msvc-debug-scenarios", "inherits": ["test-scenarios", "windows-msvc-debug"] },
         {
             "name": "windows-msvc-release",
             "displayName": "Windows MSVC Ninja Release",
             "inherits": "test-windows",
             "configurePreset": "windows-msvc-release"
         },
+        { "name": "windows-msvc-release-all", "inherits": ["test-all", "windows-msvc-release"] },
+        { "name": "windows-msvc-release-fast", "inherits": ["test-fast", "windows-msvc-release"] },
+        { "name": "windows-msvc-release-smoke", "inherits": ["test-smoke", "windows-msvc-release"] },
+        { "name": "windows-msvc-release-scenarios", "inherits": ["test-scenarios", "windows-msvc-release"] },
         {
             "name": "windows-msvc-release-editor",
             "displayName": "Windows MSVC Ninja Release with the editor",
             "inherits": "test-windows",
             "configurePreset": "windows-msvc-release-editor"
         },
+        { "name": "windows-msvc-release-editor-all", "inherits": ["test-all", "windows-msvc-release-editor"] },
+        { "name": "windows-msvc-release-editor-fast", "inherits": ["test-fast", "windows-msvc-release-editor"] },
+        { "name": "windows-msvc-release-editor-smoke", "inherits": ["test-smoke", "windows-msvc-release-editor"] },
+        { "name": "windows-msvc-release-editor-scenarios", "inherits": ["test-scenarios", "windows-msvc-release-editor"] },
         {
             "name": "windows-clang-debug",
             "displayName": "Windows Clang Ninja Debug",
             "inherits": "test-windows",
             "configurePreset": "windows-clang-debug"
         },
+        { "name": "windows-clang-debug-all", "inherits": ["test-all", "windows-clang-debug"] },
+        { "name": "windows-clang-debug-fast", "inherits": ["test-fast", "windows-clang-debug"] },
+        { "name": "windows-clang-debug-smoke", "inherits": ["test-smoke", "windows-clang-debug"] },
+        { "name": "windows-clang-debug-scenarios", "inherits": ["test-scenarios", "windows-clang-debug"] },
         {
             "name": "windows-clang-release",
             "displayName": "Windows Clang Ninja Release",
             "inherits": "test-windows",
             "configurePreset": "windows-clang-release"
         },
+        { "name": "windows-clang-release-all", "inherits": ["test-all", "windows-clang-release"] },
+        { "name": "windows-clang-release-fast", "inherits": ["test-fast", "windows-clang-release"] },
+        { "name": "windows-clang-release-smoke", "inherits": ["test-smoke", "windows-clang-release"] },
+        { "name": "windows-clang-release-scenarios", "inherits": ["test-scenarios", "windows-clang-release"] },
         {
             "name": "windows-clang-asan",
             "displayName": "Windows Clang Ninja Debug with AddressSanitizer + UBSan",
@@ -725,12 +844,20 @@
                 "UBSAN_OPTIONS": "print_stacktrace=1"
             }
         },
+        { "name": "windows-clang-asan-all", "inherits": ["test-all", "windows-clang-asan"] },
+        { "name": "windows-clang-asan-fast", "inherits": ["test-fast", "windows-clang-asan"] },
+        { "name": "windows-clang-asan-smoke", "inherits": ["test-smoke", "windows-clang-asan"] },
+        { "name": "windows-clang-asan-scenarios", "inherits": ["test-scenarios", "windows-clang-asan"] },
         {
             "name": "windows-clang-profile-editor",
             "displayName": "Windows Clang Ninja Profile with the editor (the ImGui Profiler panel)",
             "inherits": "test-windows",
             "configurePreset": "windows-clang-profile-editor"
         },
+        { "name": "windows-clang-profile-editor-all", "inherits": ["test-all", "windows-clang-profile-editor"] },
+        { "name": "windows-clang-profile-editor-fast", "inherits": ["test-fast", "windows-clang-profile-editor"] },
+        { "name": "windows-clang-profile-editor-smoke", "inherits": ["test-smoke", "windows-clang-profile-editor"] },
+        { "name": "windows-clang-profile-editor-scenarios", "inherits": ["test-scenarios", "windows-clang-profile-editor"] },
         {
             "name": "windows-vs2022-debug",
             "displayName": "Windows Visual Studio 2022 (MSVC) Debug",
@@ -738,6 +865,10 @@
             "configurePreset": "windows-vs2022",
             "configuration": "Debug"
         },
+        { "name": "windows-vs2022-debug-all", "inherits": ["test-all", "windows-vs2022-debug"] },
+        { "name": "windows-vs2022-debug-fast", "inherits": ["test-fast", "windows-vs2022-debug"] },
+        { "name": "windows-vs2022-debug-smoke", "inherits": ["test-smoke", "windows-vs2022-debug"] },
+        { "name": "windows-vs2022-debug-scenarios", "inherits": ["test-scenarios", "windows-vs2022-debug"] },
         {
             "name": "windows-vs2022-release",
             "displayName": "Windows Visual Studio 2022 (MSVC) Release",
@@ -745,6 +876,10 @@
             "configurePreset": "windows-vs2022",
             "configuration": "Release"
         },
+        { "name": "windows-vs2022-release-all", "inherits": ["test-all", "windows-vs2022-release"] },
+        { "name": "windows-vs2022-release-fast", "inherits": ["test-fast", "windows-vs2022-release"] },
+        { "name": "windows-vs2022-release-smoke", "inherits": ["test-smoke", "windows-vs2022-release"] },
+        { "name": "windows-vs2022-release-scenarios", "inherits": ["test-scenarios", "windows-vs2022-release"] },
         {
             "name": "windows-vs2022-clangcl-debug",
             "displayName": "Windows Visual Studio 2022 (ClangCL) Debug",
@@ -752,12 +887,20 @@
             "configurePreset": "windows-vs2022-clangcl",
             "configuration": "Debug"
         },
+        { "name": "windows-vs2022-clangcl-debug-all", "inherits": ["test-all", "windows-vs2022-clangcl-debug"] },
+        { "name": "windows-vs2022-clangcl-debug-fast", "inherits": ["test-fast", "windows-vs2022-clangcl-debug"] },
+        { "name": "windows-vs2022-clangcl-debug-smoke", "inherits": ["test-smoke", "windows-vs2022-clangcl-debug"] },
+        { "name": "windows-vs2022-clangcl-debug-scenarios", "inherits": ["test-scenarios", "windows-vs2022-clangcl-debug"] },
         {
             "name": "windows-vs2022-clangcl-release",
             "displayName": "Windows Visual Studio 2022 (ClangCL) Release",
             "inherits": "test-windows",
             "configurePreset": "windows-vs2022-clangcl",
             "configuration": "Release"
-        }
+        },
+        { "name": "windows-vs2022-clangcl-release-all", "inherits": ["test-all", "windows-vs2022-clangcl-release"] },
+        { "name": "windows-vs2022-clangcl-release-fast", "inherits": ["test-fast", "windows-vs2022-clangcl-release"] },
+        { "name": "windows-vs2022-clangcl-release-smoke", "inherits": ["test-smoke", "windows-vs2022-clangcl-release"] },
+        { "name": "windows-vs2022-clangcl-release-scenarios", "inherits": ["test-scenarios", "windows-vs2022-clangcl-release"] }
     ]
 }
