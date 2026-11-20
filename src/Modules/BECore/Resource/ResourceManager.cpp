@@ -1,3 +1,4 @@
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Resource/IResourceLoader.h>
 #include <BECore/Resource/ResourceManager.h>
@@ -6,6 +7,7 @@ namespace BECore {
 
     void ResourceManager::Initialize() {
         BE_PROFILE_SCOPE("ResourceManager::Initialize");
+        BE_MEM_TAG(Resource);
         LOG_INFO("Initializing ResourceManager...");
 
         // A loader registers itself in the factory when its .gen.hpp is included in its own .cpp.

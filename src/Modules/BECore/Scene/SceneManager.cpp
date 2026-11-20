@@ -1,11 +1,13 @@
 #include "SceneManager.h"
 
+#include <BECore/Memory/MemTag.h>
 #include <Generated/SceneManager.gen.hpp>
 
 namespace BECore {
 
     void SceneManager::Initialize() {
         BE_PROFILE_SCOPE("SceneManager::Initialize");
+        BE_MEM_TAG(Scene);
         Activate(_scenes.empty() ? nullptr : _scenes[0].Get());
     }
 
@@ -27,6 +29,7 @@ namespace BECore {
 
     void SceneManager::SetActiveScene(PoolString name) {
         BE_PROFILE_SCOPE("SceneManager::SetActiveScene");
+        BE_MEM_TAG(Scene);
         if (name.Empty()) {
             return;
         }

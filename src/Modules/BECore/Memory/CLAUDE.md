@@ -55,3 +55,19 @@ For small objects made and freed one at a time (a refcounted state, a node): a f
 ## Counters
 
 `ArenaStats` is the only source. `AllocTracker::GetArenaStats()` forwards its snapshot (a thin forwarder, so tools that already read the allocation counters find the arenas there). `FrameStats` takes `arenaUsedBytes`, `arenaPeakBytes` and `arenaOverflows` at `EndFrame`, summed over the arenas alive at that moment (`GetArenaTotals`, no allocation); the overflows are the running total, not per frame. The control method `frame_stats` answers them per frame and adds a top-level `arenas` array (`name, capacity, used, peak, overflows, chunks`). The method `memory_stats` and the editor panel are the entry `editor-memory-panel`.
+
+## Memory tags (`MemTag.h`)
+
+`BE_MEM_TAG(UI)` counts every allocation the thread makes until the end of the scope under that `MemTag`, whoever makes it (global `operator new`, pugixml, ImGui, SDL, stb): `AllocTracker` reads the tag where it records the block (`Profiler/Alloc/CLAUDE.md`). Scopes nest, the innermost wins; a thread starts `Untagged`.
+
+- **The tag is the thread's.** A task that runs on another thread runs under that thread's tag, not its submitter's; nothing carries a tag across threads.
+- Only with `ENGINE_PROFILER_ALLOC`: otherwise `MemTagScope` is an empty object, the macro costs nothing and `GetCurrentTag()` is always `Untagged`.
+- A scope allocates nothing; put it at a subsystem's coarse entry points, not in a per-element loop.
+- The engine sets the tags itself at the coarse entries of `Scene` (`SceneManager`, `Scene::Update`), `UI` (the canvas layout and draw), `Text` (`TextRenderer::Draw`, `FontAtlas`), `Resource` (the initialisers and the blocking `ResourceManager::Load`) and `Game` (the callbacks of `IGame`, the scene-update step). Never in a coroutine: it resumes on another thread, whose tag it would restore wrongly. A new subsystem entry takes its tag the same way.
+
+## EngineAllocator and ArenaAllocator: which one (`EngineAllocator.h`)
+
+`EngineAllocator` is the allocator of the containers of `Types/` that live as long as their owner: it forwards to the global `operator new[]` / `delete[]`, so the tracker counts every block under the tag in force. It is exactly as large as `eastl::allocator` in every build (a `static_assert`): the debug name is kept only where `EASTL_NAME_ENABLED`, so the shipped build holds an empty object. Where that name exists and `ENGINE_PROFILER_ALLOC` is on, `allocate` also reports it (`AllocTracker::OnNamedAlloc`, `GetNameTotals`). All instances are equal.
+
+- **`ArenaAllocator` is for scratch data freed at once** (a frame's or a task's working set). An arena container never crosses its scope or its thread; anything that must outlive the scope is copied into an engine container.
+- Both are EASTL allocators of different types, so a `String` and an `ArenaString` (or the two vectors) do not assign or move into each other: copy by range or `append`.

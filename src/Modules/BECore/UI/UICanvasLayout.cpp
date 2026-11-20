@@ -1,5 +1,6 @@
 #include "UICanvasLayout.h"
 
+#include <BECore/Memory/MemTag.h>
 #include <BECore/UI/UITreeLayout.h>
 
 namespace BECore {
@@ -72,6 +73,7 @@ namespace BECore {
 
     bool UICanvasLayout::Update(const UILayoutContext& context) {
         BE_PROFILE_SCOPE("UICanvasLayout::Update");
+        BE_MEM_TAG(UI);
         if (_valid && _hasContext && context == _context && params == _params && regions == _regions) {
             return false;
         }

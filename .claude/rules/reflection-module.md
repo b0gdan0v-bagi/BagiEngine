@@ -60,7 +60,7 @@ The generated `Serialize` calls `Ser::Save(s, field, "name")` for every field, `
 |------|-----------|
 | arithmetic, `String` (a string of any allocator), `FixedString`, `PoolString`, reflected enum (`CORE_ENUM`) | attribute (`WriteAttribute` / `ReadAttribute`); a `FixedString` that cannot overflow keeps the part of a longer text that fits and reports the rest |
 | type with `Serialize` / `Deserialize` | child object: `BeginObject(key)` + `Serialize` |
-| `Vector<T>`, `SmallVector`, `FixedVector`, `Array` (the `eastl::` forms too) | array; elements are objects or a `value` attribute (a `FixedVector` keeps the items that fit and reports the rest) |
+| `Vector<T>`, `SmallVector`, `FixedVector`, `Array` (the `eastl::` forms of any allocator too) | array; elements are objects or a `value` attribute (a `FixedVector` keeps the items that fit and reports the rest) |
 | `HashMap`, `FixedHashMap`, `Map` | array of `entry` with a `key` attribute, in key order for the hash maps (a `FixedHashMap` that cannot overflow keeps the entries that fit and reports the rest) |
 | `Optional<T>` (`std::optional`) | the value; nothing when empty |
 | `Variant<Ts...>` (`std::variant`) | child object with an `index` attribute and the active alternative under `value` (an attribute for a scalar, a child for an object); `std::monostate` writes the index alone. As an element of an array or the value of a map the two names sit in the element itself. A missing index (`Variant index is missing`) or an out-of-range one (`Invalid variant index <n>`) is an error and keeps the variant; a valid index emplaces a default alternative before reading it. The alternatives must be default constructible and have an accessor (`static_assert`). `eastl::variant` has none |
