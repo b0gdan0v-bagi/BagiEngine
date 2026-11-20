@@ -1,3 +1,4 @@
+#include <BECore/PoolString/PoolStringEntry.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
@@ -122,6 +123,24 @@ namespace BECore::Tests {
             }
         }
 
+        /// What a loader that knew the totals would hand to `PoolString::Reserve`: the distinct new texts of the file and their
+        /// aligned entry bytes
+        struct PoolReservation {
+            size_t strings = 0;
+            size_t bytes = 0;
+        };
+
+        PoolReservation ReservationFor(uint32_t salt, size_t count) {
+            PoolReservation reservation;
+            for (size_t i = 0; i < count; ++i) {
+                reservation.strings += 2;
+                reservation.bytes += Details::PoolEntryBytes(SpriteName(salt, i).size()) + Details::PoolEntryBytes(SpritePath(salt, i).size());
+            }
+            return reservation;
+        }
+
+        CORE_ENUM(PoolHint, uint8_t, None, Reserved)
+
         struct LoadMeasure {
             uint64_t allocs = 0;
             uint64_t bytes = 0;
@@ -136,8 +155,12 @@ namespace BECore::Tests {
 
         /// Loads a file of fresh names into an empty library and measures the whole load: the parse of the text or the validation
         /// of the stream, then `Load`
-        LoadMeasure MeasureLoad(FileFormat format) {
-            const AssetFile file = MakeFile(format, NextSalt(), kSpriteCount);
+        /// With `PoolHint::Reserved` one `PoolString::Reserve` of the exact totals comes first and is part of the measure: the most a
+        /// hint in the file could save for the pool.
+        LoadMeasure MeasureLoad(FileFormat format, PoolHint hint) {
+            const uint32_t salt = NextSalt();
+            const AssetFile file = MakeFile(format, salt, kSpriteCount);
+            const PoolReservation reservation = ReservationFor(salt, kSpriteCount);
             TextureLibrary library;
 
             const PoolStringStats poolBefore = PoolString::GetStats();
@@ -145,7 +168,12 @@ namespace BECore::Tests {
             const AllocSourceTotals globalBefore = AllocTracker::GetSourceTotals(AllocSource::GlobalNew);
             const auto start = std::chrono::steady_clock::now();
             bool loaded = false;
-            const AllocCount allocs = CountAllocations([&] { loaded = LoadFile(file, library); });
+            const AllocCount allocs = CountAllocations([&] {
+                if (hint == PoolHint::Reserved) {
+                    PoolString::Reserve(reservation.strings, reservation.bytes);
+                }
+                loaded = LoadFile(file, library);
+            });
             const auto stop = std::chrono::steady_clock::now();
             const PoolStringStats poolAfter = PoolString::GetStats();
             const AllocSourceTotals pugixmlAfter = AllocTracker::GetSourceTotals(AllocSource::Pugixml);
@@ -237,17 +265,20 @@ namespace BECore::Tests {
     /// preset, `kNoAllocTracker`)
     TEST(AssetLoadAllocBenchTest, DISABLED_LoadOfFreshNames) {
         for (const FileFormat format : {FileFormat::Xml, FileFormat::Binary}) {
-            Vector<LoadMeasure> runs;
-            for (int i = 0; i < kRepetitions; ++i) {
-                runs.push_back(MeasureLoad(format));
-            }
-            std::sort(runs.begin(), runs.end(), [](const LoadMeasure& a, const LoadMeasure& b) { return a.loadMs < b.loadMs; });
-            const LoadMeasure& median = runs[runs.size() / 2];
-            std::cout << "AssetLoad format=" << FormatName(format) << " sprites=" << kSpriteCount << " allocs=" << median.allocs << " bytes=" << median.bytes << " newStrings=" << median.newStrings
-                      << " writeLocks=" << median.writeLocks << " loadMs=" << median.loadMs << "\n";
-            if (format == FileFormat::Xml) {
-                std::cout << "AssetLoadSources format=xml pugixmlAllocs=" << median.pugixmlAllocs << " pugixmlBytes=" << median.pugixmlBytes << " globalNewAllocs=" << median.globalNewAllocs
-                          << " globalNewBytes=" << median.globalNewBytes << "\n";
+            for (const PoolHint hint : {PoolHint::None, PoolHint::Reserved}) {
+                Vector<LoadMeasure> runs;
+                for (int i = 0; i < kRepetitions; ++i) {
+                    runs.push_back(MeasureLoad(format, hint));
+                }
+                std::sort(runs.begin(), runs.end(), [](const LoadMeasure& a, const LoadMeasure& b) { return a.loadMs < b.loadMs; });
+                const LoadMeasure& median = runs[runs.size() / 2];
+                // The first line keeps its name: the metrics of the perf set read it
+                std::cout << (hint == PoolHint::None ? "AssetLoad" : "AssetLoadReserved") << " format=" << FormatName(format) << " sprites=" << kSpriteCount << " allocs=" << median.allocs
+                          << " bytes=" << median.bytes << " newStrings=" << median.newStrings << " writeLocks=" << median.writeLocks << " loadMs=" << median.loadMs << "\n";
+                if (format == FileFormat::Xml && hint == PoolHint::None) {
+                    std::cout << "AssetLoadSources format=xml pugixmlAllocs=" << median.pugixmlAllocs << " pugixmlBytes=" << median.pugixmlBytes << " globalNewAllocs=" << median.globalNewAllocs
+                              << " globalNewBytes=" << median.globalNewBytes << "\n";
+                }
             }
         }
     }
