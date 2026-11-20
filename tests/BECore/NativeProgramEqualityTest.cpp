@@ -9,16 +9,17 @@
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Programs/Interpreter.h>
 #include <BECore/Values/Programs/Native/NativePrograms.h>
+#include <BECore/Values/Programs/Native/ProgramCodegen.h>
 #include <BECore/Values/Programs/Program.h>
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <BECore/Values/Value.h>
+#include <Common/LogRecorder.h>
 #include <Common/Require.h>
 #include <Generated/ProgramRowTypes.gen.hpp>
+#include <NativePrograms/NativeProgramFormulas.h>
 #include <NativePrograms/NativeProgramSet.h>
 #include <bit>
-#include <cstring>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -211,6 +212,64 @@ namespace BECore::Tests {
             return true;
         }
 
+        /// The file the build wrote for this executable: the build folder is the working directory of ctest, and the folder above `bin` is it when the executable is started by hand
+        Optional<String> ReadGeneratedFile() {
+            constexpr char kRelative[] = "Generated/BagiEngineTests.native.cpp";
+            Vector<std::filesystem::path> candidates{std::filesystem::path(kRelative)};
+            const auto& arguments = testing::internal::GetArgvs();
+            if (!arguments.empty()) {
+                std::error_code error;
+                const std::filesystem::path executable = std::filesystem::weakly_canonical(arguments.front(), error);
+                candidates.push_back(executable.parent_path().parent_path() / kRelative);
+            }
+            for (const std::filesystem::path& path : candidates) {
+                std::ifstream file(path, std::ios::binary | std::ios::ate);  //-NoStd: the file layer is not for a file outside the content roots (entry `engine-file-layer`)
+                if (!file) {
+                    continue;
+                }
+                String text(static_cast<size_t>(file.tellg()), '\0');
+                file.seekg(0);
+                file.read(text.data(), static_cast<std::streamsize>(text.size()));
+                return text;
+            }
+            return std::nullopt;
+        }
+
+        /// The text of a generated file without the source text of each program: an equal program that another test of the process compiled first carries that formula
+        String WithoutSources(const String& text) {
+            constexpr StringView kEntry = "    {0x";
+            constexpr StringView kSourceEnd = "\", &Program_";
+            String out;
+            size_t begin = 0;
+            while (begin < text.size()) {
+                size_t end = text.find('\n', begin);
+                end = end == String::npos ? text.size() : end + 1;
+                const StringView line(text.data() + begin, end - begin);
+                const size_t quote = line.find('"');
+                const size_t close = line.rfind(kSourceEnd);
+                if (line.starts_with(kEntry) && quote != StringView::npos && close != StringView::npos && close > quote) {
+                    out.append(line.data(), quote + 1);
+                    out.append(line.data() + close, line.size() - close);
+                } else {
+                    out.append(line.data(), line.size());
+                }
+                begin = end;
+            }
+            return out;
+        }
+
+        /// Puts the miss warning back to its default (off) when a test that turned it on ends
+        struct WarnOnMissGuard {
+            WarnOnMissGuard() {
+                NativePrograms::SetWarnOnMiss(true);
+            }
+            WarnOnMissGuard(const WarnOnMissGuard&) = delete;
+            WarnOnMissGuard& operator=(const WarnOnMissGuard&) = delete;
+            ~WarnOnMissGuard() {
+                NativePrograms::SetWarnOnMiss(false);
+            }
+        };
+
         struct Image {
             alignas(kImageBytes) std::byte bytes[kImageBytes]{};
         };
@@ -268,6 +327,76 @@ namespace BECore::Tests {
                 EXPECT_TRUE(used[static_cast<size_t>(op)]) << "no program of the set runs " << EnumUtils<Opcode>::ToString(op).data() << ": add it to NativeProgramSetRows.cpp";
             }
         }
+    }
+
+    TEST(NativeProgramEqualityTest, TheGeneratedFileIsWhatTheSetGeneratesNow) {
+        const auto compiled = CompileNativeProgramSet();
+        ASSERT_TRUE(compiled.has_value()) << compiled.error().c_str();
+        const Optional<String> built = ReadGeneratedFile();
+        ASSERT_TRUE(built.has_value()) << "the file the build generated is not found: run the executable from the build folder";
+
+        const String now = GenerateNativeSource(Span<const ProgramId>(compiled->data(), compiled->size()), NativeCodegenOptions{kNativeProgramSetName});
+        const String expected = WithoutSources(now);
+        const String actual = WithoutSources(*built);
+        if (expected != actual) {
+            size_t at = 0;
+            while (at < expected.size() && at < actual.size() && expected[at] == actual[at]) {
+                ++at;
+            }
+            ADD_FAILURE() << "the generated file of the build differs from the one the set generates now, first at byte " << at << ": the build did not regenerate it\n"
+                          << "build:  " << String(actual.substr(at, 160)).c_str() << "\nnow:    " << String(expected.substr(at, 160)).c_str();
+        }
+    }
+
+    TEST(NativeProgramEqualityTest, AFormulaWithAnotherConstantThanTheSetIsNotBoundAndRunsTheInterpreter) {
+        constexpr StringView kSetFormula = kNativeIntFormulas[1];
+        ASSERT_TRUE(kSetFormula.ends_with("+ 7"));
+        constexpr int32_t kStaleAddend = 70913;
+        const String stale = Format("{}{}", kSetFormula.substr(0, kSetFormula.size() - 1), kStaleAddend);
+
+        const WarnOnMissGuard warn;
+        LogRecorder recorder;
+        const auto value = CompileValue<int32_t>(stale, NativeProgramSetDeclaration());
+        LogEvent::Flush();
+
+        ASSERT_TRUE(value.has_value());
+        ASSERT_EQ(value->Kind(), ValueKind::Program);
+        EXPECT_EQ(ProgramPool::Native(value->Id()), nullptr);
+        EXPECT_EQ(recorder.Count(LogLevel::Warning, {StringView(stale), "stale or missing"}), 1U);
+        Rng rng(kSeed);
+        InputCase input;
+        Fill(input, 3, rng);
+        const Context context = MakeContext(input);
+        EXPECT_EQ(value->Evaluate(context), static_cast<int32_t>(static_cast<uint32_t>(input.caster.attack) * 3U + static_cast<uint32_t>(kStaleAddend)));
+    }
+
+    TEST(NativeProgramEqualityTest, AFieldAtAnotherOffsetIsAnotherProgramThatIsNotBound) {
+        constexpr StringView kSetFormula = kNativeIntFormulas[5];
+        ASSERT_EQ(kSetFormula, "a.i32 * 3 + 7");
+        ContextDecl moved;
+        static_cast<void>(moved.Add<ValueUnitStats>("caster"));
+        static_cast<void>(moved.Add<ValueCastInfo>("cast"));
+        static_cast<void>(moved.Add<ProgramRowData::ProgramRowShifted>("a"));
+
+        const auto inSet = CompileValue<int32_t>(kSetFormula, NativeProgramSetDeclaration());
+        const auto shifted = CompileValue<int32_t>(kSetFormula, moved);
+
+        ASSERT_TRUE(inSet.has_value() && shifted.has_value());
+        ASSERT_EQ(inSet->Kind(), ValueKind::Program);
+        ASSERT_EQ(shifted->Kind(), ValueKind::Program);
+        EXPECT_NE(ProgramPool::Get(inSet->Id()).CodeHash(), ProgramPool::Get(shifted->Id()).CodeHash());
+        EXPECT_NE(ProgramPool::Native(inSet->Id()), nullptr);
+        EXPECT_EQ(ProgramPool::Native(shifted->Id()), nullptr);
+
+        const ValueUnitStats caster;
+        const ValueCastInfo cast;
+        ProgramRowData::ProgramRowShifted object;
+        object.i32 = 5;
+        Context context(moved);
+        context.Set(kCasterLevel, caster);
+        context.Set(kCastLevel, cast);
+        context.Set(kOperandsLevelA, object);
+        EXPECT_EQ(shifted->Evaluate(context), 22);
     }
 
     TEST(NativeProgramEqualityTest, EvaluateRunsTheGeneratedFunctionAndGivesTheInterpretersValue) {

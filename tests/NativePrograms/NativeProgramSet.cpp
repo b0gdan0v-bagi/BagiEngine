@@ -4,6 +4,7 @@
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Programs/CompileOptions.h>
 #include <BECore/Values/Programs/ProgramCompiler.h>
+#include <NativePrograms/NativeProgramFormulas.h>
 #include <NativePrograms/NativeProgramSetRows.h>
 
 namespace BECore::Tests {
@@ -12,22 +13,11 @@ namespace BECore::Tests {
 
     namespace {
 
-        // The formulas of ValueBenchTest, then a few of each type a program computes over these two objects
-        constexpr StringView kIntFormulas[] = {
-            "caster.attack * (100 + cast.level * 10) / 100", "caster.attack * 3 + 7", "clamp(caster.attack, 0, cast.level * 5)", "select(caster.alive, caster.attack, -caster.attack)",
-            "abs(caster.attack) % (cast.level + 1) - 3",
-        };
-        constexpr StringView kInt64Formulas[] = {"caster.score / 3 + 1", "caster.score + int64(cast.level) * 4000000000"};
-        constexpr StringView kFloatFormulas[] = {"lerp(caster.speed, cast.power, 0.25)", "clamp(caster.speed * cast.power, -1.5, 6)", "float(caster.attack) / 4 + floor(cast.power)"};
-        constexpr StringView kDoubleFormulas[] = {"caster.precise * 2 + sqrt(2.0)", "round(caster.precise) + ceil(double(cast.power))"};
-        constexpr StringView kBoolFormulas[] = {"caster.alive && cast.level > 2", "!caster.alive || caster.attack >= 12 && cast.power != 2.5"};
-        constexpr StringView kVec3Formulas[] = {"(caster.velocity + cast.target) * cast.power - caster.velocity * 0.5", "caster.velocity * 2 + vec3(1, 2, 3)"};
-
         /// Compiles @p text fused and unfused; a program is appended to @p programs unless it is there already, a constant or a slot adds nothing
         template <typename T>
         std::expected<void, String> CompileFormula(StringView text, Vector<ProgramId>& programs) {
             for (const bool fuse : {true, false}) {
-                const auto compiled = CompileExpression(text, NativeProgramSetDeclaration(), DescribeType<T>(), CompileOptions{.fuse = fuse});
+                const auto compiled = CompileExpression(text, NativeProgramSetDeclaration(), DescribeType<T>(), CompileOptions{.tables = &NativeProgramSetTables(), .fuse = fuse});
                 if (!compiled.has_value()) {
                     return std::unexpected(Format("{}: {}", text, FormatProgramError(text, compiled.error())));
                 }
@@ -65,11 +55,34 @@ namespace BECore::Tests {
         return declaration;
     }
 
+    const ValueTableSet& NativeProgramSetTables() {
+        static const ValueTableSet tables = [] {
+            ValueTableSet result;
+            result.Add("NativeDamage", {10.0, 20.0, 30.0, 45.0, 60.0});
+            return result;
+        }();
+        return tables;
+    }
+
     std::expected<Vector<ProgramId>, String> CompileNativeProgramSet() {
         Vector<ProgramId> programs;
         const std::expected<void, String> results[] = {
-            CompileFormulas<int32_t>(kIntFormulas, programs),   CompileFormulas<int64_t>(kInt64Formulas, programs), CompileFormulas<float>(kFloatFormulas, programs),
-            CompileFormulas<double>(kDoubleFormulas, programs), CompileFormulas<bool>(kBoolFormulas, programs),     CompileFormulas<Vec3>(kVec3Formulas, programs),
+            CompileFormulas<int32_t>(kNativeIntFormulas, programs),
+            CompileFormulas<int64_t>(kNativeInt64Formulas, programs),
+            CompileFormulas<float>(kNativeFloatFormulas, programs),
+            CompileFormulas<double>(kNativeDoubleFormulas, programs),
+            CompileFormulas<bool>(kNativeBoolFormulas, programs),
+            CompileFormulas<Vec2>(kNativeVec2Formulas, programs),
+            CompileFormulas<Vec3>(kNativeVec3Formulas, programs),
+            CompileFormulas<Vec4>(kNativeVec4Formulas, programs),
+            CompileFormulas<IVec2>(kNativeIVec2Formulas, programs),
+            CompileFormulas<Quat>(kNativeQuatFormulas, programs),
+            CompileFormulas<Color>(kNativeColorFormulas, programs),
+            CompileFormulas<ValueNarrowEnum>(kNativeNarrowEnumFormulas, programs),
+            CompileFormulas<ValueShortEnum>(kNativeShortEnumFormulas, programs),
+            CompileFormulas<ValueWideEnum>(kNativeWideEnumFormulas, programs),
+            CompileFormulas<PoolString>(kNativeTextFormulas, programs),
+            CompileFormula<int32_t>(NativeDeepFormula(), programs),
         };
         for (const auto& result : results) {
             if (!result.has_value()) {

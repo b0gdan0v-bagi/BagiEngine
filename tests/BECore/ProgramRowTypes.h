@@ -42,4 +42,12 @@ namespace BECore::ProgramRowData {
         BE_REFLECT_FIELD uint64_t enum64 = 0;
     };
 
+    /// A level whose `i32` is somewhere else than in `ProgramRowOperands`: a formula compiled over it reads another offset, so it is another program
+    struct ProgramRowShifted {
+        BE_CLASS(ProgramRowShifted)
+
+        BE_REFLECT_FIELD double padding = 0.0;
+        BE_REFLECT_FIELD int32_t i32 = 0;
+    };
+
 }  // namespace BECore::ProgramRowData

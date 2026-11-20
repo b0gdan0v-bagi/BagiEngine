@@ -3,6 +3,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Values/Context.h>
 #include <BECore/Values/Programs/Program.h>
+#include <BECore/Values/ValueTables.h>
 #include <expected>
 
 namespace BECore::Tests {
@@ -25,8 +26,12 @@ namespace BECore::Tests {
      */
     [[nodiscard]] const ContextDecl& NativeProgramSetDeclaration();
 
+    /// The tables `ByLevel` reads in the set's formulas (`NativeDamage`): the tool and the tests compile with the same ones, as a table is copied into the code
+    [[nodiscard]] const ValueTableSet& NativeProgramSetTables();
+
     /**
-     * @brief Compiles the formulas of the set, each fused and with `fuse = false`, assembles the programs of every row (`NativeProgramSetRows.h`) and returns the programs (each once)
+     * @brief Compiles the formulas of the set (`NativeProgramFormulas.h`), each fused and with `fuse = false`, assembles the programs of every row (`NativeProgramSetRows.h`) and returns the programs
+     * (each once)
      *
      * The tool that writes the generated file calls it and generates the whole pool; a test calls it so that the same programs are in its pool and bind to the
      * generated functions. A formula that does not compile is the error text: a set with a hole would generate a file that quietly lacks it.
