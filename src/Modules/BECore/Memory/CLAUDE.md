@@ -48,6 +48,7 @@ The EASTL allocator over a `LinearArena&`, behind `ArenaVector<T>` and `ArenaStr
 - **The tag is the thread's.** A task that runs on another thread runs under that thread's tag, not its submitter's; nothing carries a tag across threads.
 - Only with `ENGINE_PROFILER_ALLOC`: otherwise `MemTagScope` is an empty object, the macro costs nothing and `GetCurrentTag()` is always `Untagged`.
 - A scope allocates nothing; put it at a subsystem's coarse entry points, not in a per-element loop.
+- The engine sets the tags itself at the coarse entries of `Scene` (`SceneManager`, `Scene::Update`), `UI` (the canvas layout and draw), `Text` (`TextRenderer::Draw`, `FontAtlas`), `Resource` (the initialisers and the blocking `ResourceManager::Load`) and `Game` (the callbacks of `IGame`, the scene-update step). Never in a coroutine: it resumes on another thread, whose tag it would restore wrongly. A new subsystem entry takes its tag the same way.
 
 ## EngineAllocator and ArenaAllocator: which one (`EngineAllocator.h`)
 

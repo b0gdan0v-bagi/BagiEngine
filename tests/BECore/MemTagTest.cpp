@@ -1,5 +1,7 @@
 #include <BECore/Memory/MemTag.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/UI/UICanvasLayout.h>
+#include <BECore/UILayoutHud.h>
 #include <gtest/gtest.h>
 #include <thread>
 #include <type_traits>
@@ -50,6 +52,22 @@ namespace BECore::Tests {
         const MemTag before = AllocTracker::SwapTag(MemTag::Network);
         EXPECT_EQ(before, MemTag::Untagged);
         EXPECT_EQ(AllocTracker::SwapTag(before), MemTag::Network);
+    }
+
+    // The entry point sets its tag itself: the layout allocates under no scope of the test and still counts in `UI`
+    TEST(MemTagTest, ALayoutIsCountedUnderTheUITag) {
+        UICanvasLayout canvas;
+        BuildHud(canvas);
+        const AllocTagTotals uiBefore = AllocTracker::GetTagTotals(MemTag::UI);
+
+        UILayoutContext context;
+        context.outputWidth = 1280.0f;
+        context.outputHeight = 720.0f;
+        ASSERT_TRUE(canvas.Update(context));
+
+        const AllocTagTotals uiAfter = AllocTracker::GetTagTotals(MemTag::UI);
+        EXPECT_GT(uiAfter.count, uiBefore.count);
+        EXPECT_EQ(AllocTracker::GetCurrentTag(), MemTag::Untagged);
     }
 
 #else

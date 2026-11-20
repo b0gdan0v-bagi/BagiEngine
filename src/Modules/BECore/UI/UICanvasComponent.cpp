@@ -4,6 +4,7 @@
 #include <BECore/Input/PointerId.h>
 #include <BECore/Input/UIInput.h>
 #include <BECore/MainWindow/IMainWindow.h>
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Scene/Components/TransformComponent.h>
@@ -184,6 +185,7 @@ namespace BECore {
 
     void UICanvasComponent::UpdateLayout(float outputWidth, float outputHeight) {
         BE_PROFILE_SCOPE("UICanvas::UpdateLayout");
+        BE_MEM_TAG(UI);
         if (outputWidth <= 0.0f || outputHeight <= 0.0f) {
             return;
         }
@@ -362,6 +364,7 @@ namespace BECore {
 
     void UICanvasComponent::OnDraw() {
         BE_PROFILE_SCOPE("UICanvas::OnDraw");
+        BE_MEM_TAG(UI);
         // Also while hidden, so a canvas that is shown later (a modal dialog) already has its place in the input order
         RefreshInputOrder();
 

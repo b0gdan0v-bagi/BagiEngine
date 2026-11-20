@@ -1,5 +1,6 @@
 #include "TextRenderer.h"
 
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Text/FontAtlas.h>
@@ -56,6 +57,7 @@ namespace BECore {
     size_t TextRenderer::Draw(IRenderer& renderer, FontAtlas& fillAtlas, FontAtlas* outlineAtlas, const TextLayoutResult& layout, float originX, float originY, const Color& tint,
                               const TextEffects& effects) {
         BE_PROFILE_SCOPE("TextRenderer::Draw");
+        BE_MEM_TAG(Text);
         if (layout.glyphs.empty()) {
             return 0;
         }
