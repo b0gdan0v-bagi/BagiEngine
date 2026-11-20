@@ -4,6 +4,9 @@
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
+#include <BECore/UI/UIElement.h>
+#include <BECore/UI/UIPanel.h>
+#include <BECore/UI/UITextComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <gtest/gtest.h>
 
@@ -84,6 +87,36 @@ namespace BECore::Tests {
 
         auto next = tweens.Start<float>(0.0f, kTweenTo, TweenSettings{kTweenSeconds, 0.0f, EaseType::Linear}, [](const float&) {});
         EXPECT_EQ(next.Get(), address);
+    }
+
+    TEST_F(PooledOptInTest, AUITreeGivesItsElementAndTextBlocksBackWhenItIsReleased) {
+        const PoolWatch<UIElement> elements;
+        const PoolWatch<UITextComponent> texts;
+        {
+            auto root = New<UIElement>();
+            for (int i = 0; i < kChildCount; ++i) {
+                auto child = root->AddChild("Label"_intern);
+                child->components.push_back(New<UITextComponent>());
+            }
+            EXPECT_EQ(elements.Added(), static_cast<size_t>(kChildCount + 1));
+            EXPECT_EQ(texts.Added(), static_cast<size_t>(kChildCount));
+        }
+        EXPECT_EQ(elements.Added(), 0u);
+        EXPECT_EQ(texts.Added(), 0u);
+    }
+
+    TEST_F(PooledOptInTest, ADerivedUIElementOfAnotherSizeLeavesTheElementPoolAlone) {
+        static_assert(sizeof(UIPanel) != sizeof(UIElement), "the test needs a derived class of another size");
+        const PoolWatch<UIElement> elements;
+        {
+            auto panel = New<UIPanel>();
+            auto child = panel->AddChild("InPanel"_intern);
+            EXPECT_EQ(elements.Added(), 1u) << "the plain child is pooled, the panel is not";
+            IntrusivePtrNonAtomic<UIElement> asBase = panel;
+            panel = nullptr;
+            EXPECT_EQ(asBase->children.size(), 1u);
+        }
+        EXPECT_EQ(elements.Added(), 0u);
     }
 
 }  // namespace BECore::Tests

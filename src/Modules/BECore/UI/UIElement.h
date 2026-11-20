@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/Pooled.h>
 #include <BECore/UI/UIBoxStyle.h>
 #include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIComponent.h>
@@ -56,6 +57,8 @@ namespace BECore {
     class UIElement : public RefCounted {
         BE_CLASS(UIElement, FACTORY_BASE, ELEMENT = element, REGISTER_SELF)
     public:
+        BE_POOLED_SINGLE_THREAD(UIElement)
+
         UIElement() = default;
         ~UIElement() override = default;
 
