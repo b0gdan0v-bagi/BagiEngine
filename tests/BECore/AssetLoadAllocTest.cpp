@@ -155,8 +155,8 @@ namespace BECore::Tests {
 
         /// Loads a file of fresh names into an empty library and measures the whole load: the parse of the text or the validation
         /// of the stream, then `Load`
-        /// With `PoolHint::Reserved` one `PoolString::Reserve` of the exact totals comes first and is part of the measure: the most a
-        /// hint in the file could save for the pool.
+        /// With `PoolHint::Reserved` one `PoolString::Reserve` of the exact totals comes first and is part of the measure: the most one
+        /// `PoolString::Reserve` could save for the pool.
         LoadMeasure MeasureLoad(FileFormat format, PoolHint hint) {
             const uint32_t salt = NextSalt();
             const AssetFile file = MakeFile(format, salt, kSpriteCount);

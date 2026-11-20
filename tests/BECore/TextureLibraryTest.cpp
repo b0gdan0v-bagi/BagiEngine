@@ -308,6 +308,33 @@ namespace BECore::Tests {
         EXPECT_EQ(library.GetAll()[0].name.ToStringView(), "A");
     }
 
+    /// The name index grows past its first size while entries are added one by one, and a Remove shifts the positions it points at
+    TEST(TextureLibraryTest, EveryNameIsFoundAfterTheIndexGrowsAndAfterARemove) {
+        constexpr size_t kCount = 40;
+        constexpr size_t kRemoved = 17;
+        TextureLibrary library;
+        for (size_t i = 0; i < kCount; ++i) {
+            library.AddOrUpdate(MakeEntry(Format("Grow{}", i).c_str(), "g.png", Rect(1, 2, 3, 4)));
+        }
+        ASSERT_EQ(library.GetAll().size(), kCount);
+        for (size_t i = 0; i < kCount; ++i) {
+            EXPECT_EQ(library.GetSprite(PoolString::Intern(Format("Grow{}", i))), &library.GetAll()[i]) << i;
+        }
+        EXPECT_EQ(library.GetSprite("GrowMissing"_intern), nullptr);
+
+        library.Remove(PoolString::Intern(Format("Grow{}", kRemoved)));
+        ASSERT_EQ(library.GetAll().size(), kCount - 1);
+        EXPECT_EQ(library.GetSprite(PoolString::Intern(Format("Grow{}", kRemoved))), nullptr);
+        for (size_t i = 0; i < kCount - 1; ++i) {
+            const size_t original = i < kRemoved ? i : i + 1;
+            EXPECT_EQ(library.GetSprite(PoolString::Intern(Format("Grow{}", original))), &library.GetAll()[i]) << original;
+        }
+
+        EXPECT_TRUE(library.Rename("Grow3"_intern, "GrowRenamed"_intern));
+        EXPECT_EQ(library.GetSprite("Grow3"_intern), nullptr);
+        EXPECT_EQ(library.GetSprite("GrowRenamed"_intern), &library.GetAll()[3]);
+    }
+
     TEST(TextureLibraryTest, RenameOntoAnExistingNameChangesNothing) {
         TextureLibrary library;
         library.AddOrUpdate(MakeEntry("A", "a.png", Rect(1, 2, 3, 4)));

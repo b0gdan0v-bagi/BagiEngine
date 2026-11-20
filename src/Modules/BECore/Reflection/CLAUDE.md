@@ -49,7 +49,7 @@ The surface of the control API over this module (`Control/ReflectionControl`, re
 
 - An array loader reserves from the `count` that `BeginArray` gives (`DataAccessor.h`): an upper bound for a factory array (disabled and null elements count), never past the capacity of a fixed container. A hand-written loop reserves too after `BeginArray` (`TextureLibrary::Load` is the example).
 - `XmlDeserializer` allocates nothing per element in the default diagnostics mode: per array it takes the element list (counted first, reserved once) and its own stacks. The `Warn` mode keeps a scope per opened node and was not measured. The DOM of pugixml is the text's own cost.
-- A reader does not know the totals (new `PoolString`s, string bytes), and `PoolString::Reserve` alone removes only table growth, not the unique lock each new string takes. A hint in the file is a later slice of the entry `asset-load-alloc-hints`.
+- A reader does not know the totals (new `PoolString`s, string bytes), and `PoolString::Reserve` alone removes only table growth, not the unique lock each new string takes. So no reader carries a size hint: one `PoolString::Reserve` of the exact totals saves no allocations (the `AssetLoadReserved` line of `AssetLoadAllocBenchTest`).
 - Figures: `AssetLoadAllocBenchTest` (the perf benchmark `asset-load`; counts need the profile preset). None are kept in the docs.
 
 ## Schema export

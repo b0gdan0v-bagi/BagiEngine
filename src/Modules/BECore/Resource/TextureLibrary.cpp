@@ -177,14 +177,14 @@ namespace BECore {
     }
 
     void TextureLibrary::ReserveIndex(size_t count) {
-        if (_slots.size() < kMinSlots || _slots.size() < count * 2) {
+        if (_slots.size() < kMinSlots || _slots.size() < count * kSlotsPerEntry) {
             RebuildIndex(count);
         }
     }
 
     void TextureLibrary::RebuildIndex(size_t count) {
         size_t size = eastl::max(kMinSlots, _slots.size());
-        while (size < count * 2) {
+        while (size < count * kSlotsPerEntry) {
             size *= 2;
         }
         // The size is a power of two, so FindSlot masks instead of dividing; assign keeps the block when the size fits

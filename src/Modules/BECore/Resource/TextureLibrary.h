@@ -116,6 +116,8 @@ namespace BECore {
     private:
         static constexpr uint32_t kFreeSlot = 0;
         static constexpr size_t kMinSlots = 16;
+        /// The index is never more than half full, so a probe always ends at a free slot
+        static constexpr size_t kSlotsPerEntry = 2;
 
         void Clear();
         /// The slot that holds @p name, or the free slot where it would go. `_slots` is not empty and at most half full.
