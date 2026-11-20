@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Memory/ArenaStats.h>
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Profiler/ProfileSite.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
@@ -86,6 +87,11 @@ namespace BECore {
         /// BE_PROFILE_NO_ALLOC: allocations of the calling thread count as violations until the matching Leave. Returns the violations of this thread so far
         static uint64_t EnterNoAlloc(const ProfileSite& site);
         static uint64_t LeaveNoAlloc();
+
+        /// The calling thread's memory tag (MemTagScope); Untagged when no scope is open
+        [[nodiscard]] static MemTag GetCurrentTag();
+        /// Sets the calling thread's memory tag and returns the previous one
+        static MemTag SwapTag(MemTag tag);
 
         /// The counters of every arena alive (Memory/CLAUDE.md, "Counters"); allocates
         [[nodiscard]] static Vector<ArenaStatsEntry> GetArenaStats();

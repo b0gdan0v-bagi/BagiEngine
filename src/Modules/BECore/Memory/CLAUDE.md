@@ -40,3 +40,11 @@ The EASTL allocator over a `LinearArena&`, behind `ArenaVector<T>` and `ArenaStr
 ## Counters
 
 `ArenaStats` is the only source. `AllocTracker::GetArenaStats()` forwards its snapshot (a thin forwarder, so tools that already read the allocation counters find the arenas there). `FrameStats` takes `arenaUsedBytes`, `arenaPeakBytes` and `arenaOverflows` at `EndFrame`, summed over the arenas alive at that moment (`GetArenaTotals`, no allocation); the overflows are the running total, not per frame. The control method `frame_stats` answers them per frame and adds a top-level `arenas` array (`name, capacity, used, peak, overflows, chunks`). The method `memory_stats` and the editor panel are the entry `editor-memory-panel`.
+
+## Memory tags (`MemTag.h`)
+
+`BE_MEM_TAG(UI)` counts every allocation the thread makes until the end of the scope under that `MemTag`, whoever makes it (global `operator new`, pugixml, ImGui, SDL, stb): `AllocTracker` reads the tag where it records the block (`Profiler/Alloc/CLAUDE.md`). Scopes nest, the innermost wins; a thread starts `Untagged`.
+
+- **The tag is the thread's.** A task that runs on another thread runs under that thread's tag, not its submitter's; nothing carries a tag across threads.
+- Only with `ENGINE_PROFILER_ALLOC`: otherwise `MemTagScope` is an empty object, the macro costs nothing and `GetCurrentTag()` is always `Untagged`.
+- A scope allocates nothing; put it at a subsystem's coarse entry points, not in a per-element loop.

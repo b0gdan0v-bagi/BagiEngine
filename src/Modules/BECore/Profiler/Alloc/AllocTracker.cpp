@@ -28,6 +28,7 @@ namespace BECore {
             uint64_t bytes = 0;
             uint32_t noAllocDepth = 0;
             uint64_t noAllocViolations = 0;
+            MemTag tag = MemTag::Untagged;
             bool inTracker = false;  // the backend's OnAlloc may allocate: that allocation is not reported again
         };
         constinit thread_local ThreadState t_state;
@@ -205,6 +206,17 @@ namespace BECore {
             --state.noAllocDepth;
         }
         return state.noAllocViolations;
+    }
+
+    MemTag AllocTracker::GetCurrentTag() {
+        return t_state.tag;
+    }
+
+    MemTag AllocTracker::SwapTag(MemTag tag) {
+        ThreadState& state = t_state;
+        const MemTag previous = state.tag;
+        state.tag = tag;
+        return previous;
     }
 
     Vector<ArenaStatsEntry> AllocTracker::GetArenaStats() {
