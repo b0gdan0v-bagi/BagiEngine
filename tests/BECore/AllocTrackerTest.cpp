@@ -1,4 +1,5 @@
 #include <BECore/Control/Json.h>
+#include <BECore/Profiler/Alloc/AllocRouting.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
 #include <Common/Require.h>
@@ -143,6 +144,110 @@ namespace BECore::Tests {
         }
         EXPECT_EQ(sum, 45);
         EXPECT_EQ(AllocTracker::GetTotals().noAllocViolations, before);
+    }
+
+    TEST(AllocTrackerTest, ARoutedAllocationMovesTheTotalsTheSourceTheThreadAndTheZone) {
+        AllocTracker::ResetZoneStats();
+        const AllocTotals totalsBefore = AllocTracker::GetTotals();
+        const AllocSourceTotals sourceBefore = AllocTracker::GetSourceTotals(AllocSource::Stb);
+        const uint64_t threadBefore = AllocTracker::GetThreadCounters().count;
+        AllocSourceTotals sourceDuring;
+        {
+            BE_PROFILE_SCOPE("AllocRouted");
+            void* ptr = AllocRouting::Malloc(AllocSource::Stb, kBlock);
+            ASSERT_NE(ptr, nullptr);
+            sourceDuring = AllocTracker::GetSourceTotals(AllocSource::Stb);
+            AllocRouting::Free(AllocSource::Stb, ptr);
+        }
+        const AllocTotals totalsAfter = AllocTracker::GetTotals();
+        const AllocSourceTotals sourceAfter = AllocTracker::GetSourceTotals(AllocSource::Stb);
+
+        EXPECT_EQ(sourceDuring.count, sourceBefore.count + 1);
+        EXPECT_EQ(sourceDuring.bytes, sourceBefore.bytes + kBlock);
+        EXPECT_GE(sourceDuring.liveBytes, sourceBefore.liveBytes + kBlock);
+        EXPECT_EQ(sourceAfter.frees, sourceBefore.frees + 1);
+        EXPECT_EQ(sourceAfter.liveBytes, sourceBefore.liveBytes);
+        EXPECT_EQ(totalsAfter.count, totalsBefore.count + 1);
+        EXPECT_EQ(totalsAfter.frees, totalsBefore.frees + 1);
+        EXPECT_EQ(AllocTracker::GetThreadCounters().count, threadBefore + 1);
+        EXPECT_EQ(StatsOf("AllocRouted").count, 1u);
+        EXPECT_EQ(StatsOf("AllocRouted").bytes, kBlock);
+    }
+
+    TEST(AllocTrackerTest, ASourceDoesNotCountTheAllocationsOfAnother) {
+        const AllocSourceTotals stbBefore = AllocTracker::GetSourceTotals(AllocSource::Stb);
+        const AllocSourceTotals globalBefore = AllocTracker::GetSourceTotals(AllocSource::GlobalNew);
+        void* ptr = ::operator new(kBlock);
+        Use(ptr);
+        ::operator delete(ptr);
+        EXPECT_EQ(AllocTracker::GetSourceTotals(AllocSource::GlobalNew).count, globalBefore.count + 1);
+        EXPECT_EQ(AllocTracker::GetSourceTotals(AllocSource::Stb).count, stbBefore.count);
+
+        void* routed = AllocRouting::Malloc(AllocSource::Stb, kBlock);
+        AllocRouting::Free(AllocSource::Stb, routed);
+        EXPECT_EQ(AllocTracker::GetSourceTotals(AllocSource::GlobalNew).count, globalBefore.count + 1);
+        EXPECT_EQ(AllocTracker::GetSourceTotals(AllocSource::Stb).count, stbBefore.count + 1);
+    }
+
+    TEST(AllocTrackerTest, ACallocCountsTheBytesOfAllItsObjects) {
+        const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::DrLibs);
+        void* ptr = AllocRouting::Calloc(AllocSource::DrLibs, 10, kBlock);
+        ASSERT_NE(ptr, nullptr);
+        AllocRouting::Free(AllocSource::DrLibs, ptr);
+        const AllocSourceTotals after = AllocTracker::GetSourceTotals(AllocSource::DrLibs);
+        EXPECT_EQ(after.count, before.count + 1);
+        EXPECT_EQ(after.bytes, before.bytes + kBlock * 10);
+    }
+
+    TEST(AllocTrackerTest, AReallocIsOneFreeAndOneAlloc) {
+        void* ptr = AllocRouting::Malloc(AllocSource::Stb, kBlock);
+        ASSERT_NE(ptr, nullptr);
+        const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::Stb);
+        ptr = AllocRouting::Realloc(AllocSource::Stb, ptr, kBlock * 50);
+        ASSERT_NE(ptr, nullptr);
+        const AllocSourceTotals during = AllocTracker::GetSourceTotals(AllocSource::Stb);
+        EXPECT_EQ(during.count, before.count + 1);
+        EXPECT_EQ(during.bytes, before.bytes + kBlock * 50);
+        EXPECT_EQ(during.frees, before.frees + 1);
+        EXPECT_GE(during.liveBytes, before.liveBytes + kBlock * 40);
+
+        AllocRouting::Free(AllocSource::Stb, ptr);
+        const AllocSourceTotals after = AllocTracker::GetSourceTotals(AllocSource::Stb);
+        EXPECT_EQ(after.frees, before.frees + 2);
+        EXPECT_LE(after.liveBytes + kBlock, before.liveBytes);
+    }
+
+    TEST(AllocTrackerTest, AReallocOfNothingIsAMalloc) {
+        const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::Stb);
+        void* ptr = AllocRouting::Realloc(AllocSource::Stb, nullptr, kBlock);
+        ASSERT_NE(ptr, nullptr);
+        const AllocSourceTotals during = AllocTracker::GetSourceTotals(AllocSource::Stb);
+        AllocRouting::Free(AllocSource::Stb, ptr);
+        EXPECT_EQ(during.count, before.count + 1);
+        EXPECT_EQ(during.frees, before.frees);
+    }
+
+    TEST(AllocTrackerTest, AFreeOfABlockMadeBeforeTheRoutingDoesNotWrapTheLiveBytes) {
+        constexpr size_t kBig = size_t{1} << 20;
+        void* foreign = std::malloc(kBig);
+        ASSERT_NE(foreign, nullptr);
+        const AllocTotals totalsBefore = AllocTracker::GetTotals();
+        const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::DrLibs);
+        AllocRouting::Free(AllocSource::DrLibs, foreign);
+        const AllocSourceTotals after = AllocTracker::GetSourceTotals(AllocSource::DrLibs);
+        EXPECT_EQ(after.frees, before.frees + 1);
+        EXPECT_LE(after.liveBytes, before.liveBytes);
+        EXPECT_LE(AllocTracker::GetTotals().liveBytes, totalsBefore.liveBytes + kBig);
+        EXPECT_EQ(after.liveBytes, before.liveBytes > kBig ? before.liveBytes - kBig : 0u);
+    }
+
+    TEST(AllocTrackerTest, ARoutedAllocationInANoAllocScopeIsReported) {
+        const uint64_t before = AllocTracker::GetTotals().noAllocViolations;
+        {
+            BE_PROFILE_NO_ALLOC("RoutedAllocates");
+            AllocRouting::Free(AllocSource::Pugixml, AllocRouting::Malloc(AllocSource::Pugixml, kBlock));
+        }
+        EXPECT_EQ(AllocTracker::GetTotals().noAllocViolations, before + 1);
     }
 
     TEST(AllocTrackerTest, TheChromeTraceCarriesTheAllocationsOfAZone) {
