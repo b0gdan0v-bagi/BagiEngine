@@ -1,12 +1,15 @@
 #include "Font.h"
 
+#include <BECore/Profiler/Alloc/AllocRouting.h>
 #include <BECore/Text/Utf8.h>
 #include <Generated/Font.gen.hpp>
 
 // The one translation unit that holds the stb_truetype implementation (src/Modules/stb/README.md). The functions stay
-// internal to it, so they cannot clash with the copy inside ImGui.
+// internal to it, so they cannot clash with the copy inside ImGui. Its allocations go through AllocRouting (the allocation tracker sees them).
 #define STB_TRUETYPE_IMPLEMENTATION
 #define STBTT_STATIC
+#define STBTT_malloc(size, userData) ((void)(userData), ::BECore::AllocRouting::Malloc(::BECore::AllocSource::Stb, (size)))
+#define STBTT_free(ptr, userData) ((void)(userData), ::BECore::AllocRouting::Free(::BECore::AllocSource::Stb, (ptr)))
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-function"

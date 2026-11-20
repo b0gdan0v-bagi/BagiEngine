@@ -2,10 +2,14 @@
 
 #include <BECore/Profiler/ProfileSite.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <cstddef>
 #include <cstdint>
 
 namespace BECore {
+
+    /// Who made an allocation: the global operator new or one of the libraries routed through AllocRouting (Alloc/CLAUDE.md)
+    CORE_ENUM(AllocSource, uint8_t, GlobalNew, Pugixml, ImGui, SDL, Stb, DrLibs)
 
     /// The heap since the start of the process (ENGINE_PROFILER_ALLOC; all zero without it)
     struct AllocTotals {
@@ -18,6 +22,14 @@ namespace BECore {
         uint64_t noAllocViolations = 0;  // allocations inside a BE_PROFILE_NO_ALLOC scope
     };
 
+    /// What one AllocSource allocated; the AllocTotals fields of the same name, summed over every source
+    struct AllocSourceTotals {
+        uint64_t count = 0;
+        uint64_t bytes = 0;
+        uint64_t frees = 0;
+        uint64_t liveBytes = 0;
+    };
+
     /// The allocations made inside the zones of one ProfileSite, inclusive of the zones inside them, since the last reset
     struct ZoneAllocStats {
         const ProfileSite* site = nullptr;
@@ -27,7 +39,11 @@ namespace BECore {
     };
 
     /**
-     * @brief Counts the allocations of the global operator new / delete (Alloc/GlobalOperatorNew.cpp, ENGINE_PROFILER_ALLOC).
+     * @brief Counts the allocations of the global operator new / delete (Alloc/GlobalOperatorNew.cpp, ENGINE_PROFILER_ALLOC) and of the
+     * libraries routed through AllocRouting.
+     *
+     * Every counted block passes one place (RecordAlloc / RecordFree in the .cpp), whatever its AllocSource: the totals, the thread
+     * counters, the zone statistics, the no-alloc violations and the backend see them alike.
      *
      * Static and `constinit`, like Profiler: it runs before main and on every thread. Nothing it does on the allocation path
      * allocates, locks or logs. Without ENGINE_PROFILER_ALLOC the operators are not replaced and every number stays zero.
@@ -49,8 +65,14 @@ namespace BECore {
         static void OnAlloc(void* ptr, size_t size);
         /// From the operator delete: @p ptr is about to be freed
         static void OnFree(void* ptr);
+        /// From AllocRouting: @p ptr of @p size bytes asked for, @p usable bytes in all, was just allocated by @p source
+        static void OnRoutedAlloc(AllocSource source, void* ptr, size_t size, size_t usable);
+        /// From AllocRouting: the block @p ptr of @p usable bytes is about to be freed. A block that was made before the routing
+        /// started has no matching alloc: the live bytes subtract down to zero and no further
+        static void OnRoutedFree(AllocSource source, void* ptr, size_t usable);
 
         [[nodiscard]] static AllocTotals GetTotals();
+        [[nodiscard]] static AllocSourceTotals GetSourceTotals(AllocSource source);
         [[nodiscard]] static ThreadCounters GetThreadCounters();
 
         /// Adds one zone of @p site that made @p count allocations of @p bytes (ProfileZone)

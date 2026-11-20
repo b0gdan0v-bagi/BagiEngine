@@ -15,6 +15,14 @@ namespace BECore {
         constinit std::atomic<uint64_t> g_largest{0};
         constinit std::atomic<uint64_t> g_noAllocViolations{0};
 
+        struct SourceSlot {
+            std::atomic<uint64_t> count{0};
+            std::atomic<uint64_t> bytes{0};
+            std::atomic<uint64_t> frees{0};
+            std::atomic<uint64_t> liveBytes{0};
+        };
+        constinit SourceSlot g_sources[EnumUtils<AllocSource>::Count()];
+
         struct ThreadState {
             uint64_t count = 0;
             uint64_t bytes = 0;
@@ -56,47 +64,80 @@ namespace BECore {
             return nullptr;
         }
 
+        /// Takes @p amount off @p value, stopping at zero: a block made before the routing started is freed without an alloc
+        void SubtractSaturating(std::atomic<uint64_t>& value, uint64_t amount) {
+            uint64_t current = value.load(std::memory_order_relaxed);
+            while (!value.compare_exchange_weak(current, current > amount ? current - amount : 0, std::memory_order_relaxed)) {
+            }
+        }
+
+        /// The one place every counted allocation passes, whatever its source. The scope tag of engine-allocator-tags is read here
+        /// (a thread-local, like t_state) and kept next to the source; it must not allocate or lock.
+        void RecordAlloc(AllocSource source, void* ptr, size_t size, size_t usable) {
+            ThreadState& state = t_state;
+            if (state.inTracker) {
+                return;
+            }
+            state.inTracker = true;
+            SourceSlot& slot = g_sources[static_cast<size_t>(source)];
+            ++state.count;
+            state.bytes += size;
+            g_count.fetch_add(1, std::memory_order_relaxed);
+            g_bytes.fetch_add(size, std::memory_order_relaxed);
+            slot.count.fetch_add(1, std::memory_order_relaxed);
+            slot.bytes.fetch_add(size, std::memory_order_relaxed);
+            slot.liveBytes.fetch_add(usable, std::memory_order_relaxed);
+            RaiseTo(g_largest, size);
+            const uint64_t live = g_liveBytes.fetch_add(usable, std::memory_order_relaxed) + usable;
+            RaiseTo(g_peakLiveBytes, live);
+            if (state.noAllocDepth > 0) {
+                ++state.noAllocViolations;
+                g_noAllocViolations.fetch_add(1, std::memory_order_relaxed);
+            }
+            if (IProfilerBackend* backend = Profiler::GetBackend()) {
+                backend->OnAlloc(ptr, size);
+            }
+            state.inTracker = false;
+        }
+
+        /// The counterpart of RecordAlloc; @p usable is read from the block before it is freed
+        void RecordFree(AllocSource source, void* ptr, size_t usable) {
+            ThreadState& state = t_state;
+            if (state.inTracker) {
+                return;
+            }
+            state.inTracker = true;
+            SourceSlot& slot = g_sources[static_cast<size_t>(source)];
+            g_frees.fetch_add(1, std::memory_order_relaxed);
+            slot.frees.fetch_add(1, std::memory_order_relaxed);
+            SubtractSaturating(g_liveBytes, usable);
+            SubtractSaturating(slot.liveBytes, usable);
+            if (IProfilerBackend* backend = Profiler::GetBackend()) {
+                backend->OnFree(ptr);
+            }
+            state.inTracker = false;
+        }
+
     }  // namespace
 
     void AllocTracker::OnAlloc(void* ptr, size_t size) {
-        ThreadState& state = t_state;
-        if (state.inTracker) {
-            return;
-        }
-        state.inTracker = true;
-        ++state.count;
-        state.bytes += size;
-        g_count.fetch_add(1, std::memory_order_relaxed);
-        g_bytes.fetch_add(size, std::memory_order_relaxed);
-        RaiseTo(g_largest, size);
-        const size_t usable = AllocPlatform::UsableSize(ptr);
-        const uint64_t live = g_liveBytes.fetch_add(usable, std::memory_order_relaxed) + usable;
-        RaiseTo(g_peakLiveBytes, live);
-        if (state.noAllocDepth > 0) {
-            ++state.noAllocViolations;
-            g_noAllocViolations.fetch_add(1, std::memory_order_relaxed);
-        }
-        if (IProfilerBackend* backend = Profiler::GetBackend()) {
-            backend->OnAlloc(ptr, size);
-        }
-        state.inTracker = false;
+        RecordAlloc(AllocSource::GlobalNew, ptr, size, AllocPlatform::UsableSize(ptr));
     }
 
     void AllocTracker::OnFree(void* ptr) {
-        if (ptr == nullptr) {
-            return;
+        if (ptr != nullptr) {
+            RecordFree(AllocSource::GlobalNew, ptr, AllocPlatform::UsableSize(ptr));
         }
-        ThreadState& state = t_state;
-        if (state.inTracker) {
-            return;
+    }
+
+    void AllocTracker::OnRoutedAlloc(AllocSource source, void* ptr, size_t size, size_t usable) {
+        RecordAlloc(source, ptr, size, usable);
+    }
+
+    void AllocTracker::OnRoutedFree(AllocSource source, void* ptr, size_t usable) {
+        if (ptr != nullptr) {
+            RecordFree(source, ptr, usable);
         }
-        state.inTracker = true;
-        g_frees.fetch_add(1, std::memory_order_relaxed);
-        g_liveBytes.fetch_sub(AllocPlatform::UsableSize(ptr), std::memory_order_relaxed);
-        if (IProfilerBackend* backend = Profiler::GetBackend()) {
-            backend->OnFree(ptr);
-        }
-        state.inTracker = false;
     }
 
     AllocTotals AllocTracker::GetTotals() {
@@ -109,6 +150,11 @@ namespace BECore {
         totals.largest = g_largest.load(std::memory_order_relaxed);
         totals.noAllocViolations = g_noAllocViolations.load(std::memory_order_relaxed);
         return totals;
+    }
+
+    AllocSourceTotals AllocTracker::GetSourceTotals(AllocSource source) {
+        const SourceSlot& slot = g_sources[static_cast<size_t>(source)];
+        return {slot.count.load(std::memory_order_relaxed), slot.bytes.load(std::memory_order_relaxed), slot.frees.load(std::memory_order_relaxed), slot.liveBytes.load(std::memory_order_relaxed)};
     }
 
     AllocTracker::ThreadCounters AllocTracker::GetThreadCounters() {

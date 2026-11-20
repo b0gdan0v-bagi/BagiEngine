@@ -55,13 +55,19 @@ namespace BECore {
     }
 
     size_t AllocPlatform::UsableSize(void* ptr) {
-#if defined(__APPLE__)
+        return LibcUsableSize(ptr);
+    }
+
+#endif
+
+    size_t AllocPlatform::LibcUsableSize(void* ptr) {
+#if defined(_WIN32)
+        return _msize(ptr);
+#elif defined(__APPLE__)
         return malloc_size(ptr);
 #else
         return malloc_usable_size(ptr);
 #endif
     }
-
-#endif
 
 }  // namespace BECore

@@ -92,7 +92,7 @@ Measured on an Apple M-series machine with `macos-profile` (`BagiEngineTests --g
 | a zone recorded into the Chrome trace | 25 (the recorder called directly) | 26 |
 | `new` + `delete` of 64 bytes, one thread | 33 (the C++ runtime's) | 28 (counted) |
 
-Counting allocations costs nothing measurable on one thread (the replacement calls `malloc` directly, the runtime's `operator new` adds its own layer); many threads allocating at once share the atomic totals and pay more.
+Counting allocations costs nothing measurable on one thread (the replacement calls `malloc` directly, the runtime's `operator new` adds its own layer); many threads allocating at once share the atomic totals and pay more. The libraries that allocate with their own malloc (pugixml, ImGui, SDL, stb, dr_flac) are routed through the same counters in this build and keep malloc in a shipped one (`Alloc/CLAUDE.md`).
 
 ## Sampling profilers
 
