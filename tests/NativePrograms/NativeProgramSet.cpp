@@ -1,5 +1,6 @@
 #include "NativeProgramSet.h"
 
+#include <BECore/ProgramDomainTypes.h>
 #include <BECore/ProgramRowTypes.h>
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Programs/CompileOptions.h>
@@ -65,6 +66,8 @@ namespace BECore::Tests {
     }
 
     std::expected<Vector<ProgramId>, String> CompileNativeProgramSet() {
+        // The programs call operations by id: the registry is the tool's and the tests' to share, filled in the same order before the first formula
+        static_cast<void>(ProgramDomainData::RegisterDomainToys());
         Vector<ProgramId> programs;
         const std::expected<void, String> results[] = {
             CompileFormulas<int32_t>(kNativeIntFormulas, programs),
@@ -82,6 +85,10 @@ namespace BECore::Tests {
             CompileFormulas<ValueShortEnum>(kNativeShortEnumFormulas, programs),
             CompileFormulas<ValueWideEnum>(kNativeWideEnumFormulas, programs),
             CompileFormulas<PoolString>(kNativeTextFormulas, programs),
+            CompileFormulas<bool>(kNativeDomainBoolFormulas, programs),
+            CompileFormulas<int32_t>(kNativeDomainIntFormulas, programs),
+            CompileFormulas<ProgramDomainData::DomainBits256>(kNativeDomainMaskFormulas, programs),
+            CompileFormulas<ProgramDomainData::DomainPair>(kNativeDomainPairFormulas, programs),
             CompileFormula<int32_t>(NativeDeepFormula(), programs),
         };
         for (const auto& result : results) {

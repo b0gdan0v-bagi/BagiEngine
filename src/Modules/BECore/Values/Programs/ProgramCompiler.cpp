@@ -18,6 +18,22 @@ namespace BECore {
         constexpr StringView kExcerptIndent = "  ";
         constexpr char kUnprintable = '?';
 
+        /// The size of the field a `LoadSlot` of @p type reads: an enum's width and a registered type's size are not in the opcode, the other types' are
+        uint8_t SlotBytes(const ExprType& type) {
+            if (type.program == ProgramType::Enum) {
+                return static_cast<uint8_t>(type.enumeration->enumBytes);
+            }
+            if (type.program == ProgramType::Domain) {
+                return static_cast<uint8_t>(ProgramDomain::Type(type.domain).size);
+            }
+            return 0;
+        }
+
+        /// A call that reads the context is not a constant when its arguments are: folding runs it over an empty context, and the board it reads is not there until the formula runs
+        bool ReadsTheContext(const TypedNode& node) {
+            return node.opcode == Opcode::CallDomain && ProgramDomain::Operation(node.immediate).takesContext;
+        }
+
         /// The images of the entries of a table node, which the lowering has checked are constants
         Vector<RegisterImage> EntryImages(const TypedNode& node, const Vector<RegisterImage>& images) {
             Vector<RegisterImage> run;
@@ -75,6 +91,7 @@ namespace BECore {
                 const TypedNode& root = _expr[_expr.root];
                 CompiledExpression result;
                 result.type = root.type.program;
+                result.domain = root.type.domain;
                 if (_isConstant[_expr.root]) {
                     result.kind = CompiledKind::Constant;
                     result.constant = _images[_expr.root];
@@ -124,6 +141,9 @@ namespace BECore {
                         if (const auto entries = RequireConstantEntries(node); !entries.has_value()) {
                             return entries;
                         }
+                        if (ReadsTheContext(node)) {
+                            continue;
+                        }
                         const bool allConstant = std::all_of(node.operands.begin(), node.operands.begin() + node.operandCount, [this](TypedNodeId operand) { return _isConstant[operand]; });
                         if (!allConstant) {
                             continue;
@@ -157,7 +177,7 @@ namespace BECore {
                     return {};
                 }
                 if (node.kind == TypedNodeKind::Slot) {
-                    _builder.EmitLoadSlot(dst, node.type.program, node.slot, node.type.program == ProgramType::Enum ? static_cast<uint8_t>(node.type.enumeration->enumBytes) : uint8_t{0});
+                    _builder.EmitLoadSlot(dst, node.type.program, node.slot, SlotBytes(node.type));
                     return {};
                 }
                 Array<uint8_t, kMaxTypedOperands> regs{};

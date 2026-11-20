@@ -2,6 +2,7 @@
 
 #include <BECore/Format/Format.h>
 #include <BECore/Logger/Logger.h>
+#include <BECore/Memory/MemTag.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Reflection/ClassMeta.h>
@@ -163,6 +164,7 @@ namespace BECore {
 
     template <typename T>
     requires std::derived_from<T, IResource> ResourceHandle<T> ResourceManager::Load(StringView path) {
+        BE_MEM_TAG(Resource);  // not in the coroutine forms: a tag belongs to the thread and a coroutine resumes on another
         PoolString pathKey = PoolString::Intern(path);
 
         if (auto cached = _cache.Get(pathKey)) {

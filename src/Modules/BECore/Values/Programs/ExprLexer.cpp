@@ -98,11 +98,11 @@ namespace BECore {
 
         class Lexer {
         public:
-            explicit Lexer(StringView text) : _text(text) {}
+            Lexer(StringView text, const LexOptions& options) : _text(text), _options(options) {}
 
             std::expected<Vector<ExprToken>, ProgramError> Run() {
-                if (_text.size() > ExprLimits::kMaxTextBytes) {
-                    return Fail(ExprLimits::kMaxTextBytes, Format("the formula is longer than {} bytes", ExprLimits::kMaxTextBytes));
+                if (_text.size() > _options.maxBytes) {
+                    return Fail(_options.maxBytes, Format("the {} is longer than {} bytes", _options.statements ? "script" : "formula", _options.maxBytes));
                 }
                 while (true) {
                     while (_position < _text.size() && IsSpace(_text[_position])) {
@@ -162,6 +162,32 @@ namespace BECore {
                 return true;
             }
 
+            /// `+` and `-` in a script: the sign or the operator, `+=` / `-=`, or the doubled `++` / `--`
+            bool SignOrAssignment(char c, ExprTokenKind plain, ExprTokenKind withEqual, ExprTokenKind doubled) {
+                if (!_options.statements) {
+                    return Single(plain);
+                }
+                if (At(1) == '=') {
+                    Push(withEqual, _position, 2);
+                    _position += 2;
+                    return true;
+                }
+                if (At(1) == c) {
+                    Push(doubled, _position, 2);
+                    _position += 2;
+                    return true;
+                }
+                return Single(plain);
+            }
+
+            /// A byte a script reads as one token and a formula refuses like any byte outside its language
+            bool ScriptOnly(ExprTokenKind kind) {
+                if (_options.statements) {
+                    return Single(kind);
+                }
+                return FailHere(_position, Format("unexpected {}", DescribeByteAt(_text, _position)));
+            }
+
             bool Doubled(char c, ExprTokenKind kind) {
                 if (At(1) != c) {
                     return FailHere(_position, Format("unexpected '{}': the operator is '{}{}'", c, c, c));
@@ -196,9 +222,15 @@ namespace BECore {
                     case '.':
                         return Single(ExprTokenKind::Dot);
                     case '+':
-                        return Single(ExprTokenKind::Plus);
+                        return SignOrAssignment('+', ExprTokenKind::Plus, ExprTokenKind::PlusEqual, ExprTokenKind::PlusPlus);
                     case '-':
-                        return Single(ExprTokenKind::Minus);
+                        return SignOrAssignment('-', ExprTokenKind::Minus, ExprTokenKind::MinusEqual, ExprTokenKind::MinusMinus);
+                    case '{':
+                        return ScriptOnly(ExprTokenKind::LeftBrace);
+                    case '}':
+                        return ScriptOnly(ExprTokenKind::RightBrace);
+                    case ';':
+                        return ScriptOnly(ExprTokenKind::Semicolon);
                     case '*':
                         return Single(ExprTokenKind::Star);
                     case '/':
@@ -213,6 +245,9 @@ namespace BECore {
                         return Operator(ExprTokenKind::Greater, ExprTokenKind::GreaterEqual);
                     case '=':
                         if (At(1) != '=') {
+                            if (_options.statements) {
+                                return Single(ExprTokenKind::Equal);
+                            }
                             return FailHere(_position, "unexpected '=': the comparison is '==' (a formula assigns nothing)");
                         }
                         Push(ExprTokenKind::EqualEqual, _position, 2);
@@ -290,6 +325,7 @@ namespace BECore {
             }
 
             StringView _text;
+            LexOptions _options;
             size_t _position = 0;
             Vector<ExprToken> _tokens;
             ProgramError _error;
@@ -297,8 +333,8 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<Vector<ExprToken>, ProgramError> LexExpression(StringView text) {
-        Lexer lexer(text);
+    std::expected<Vector<ExprToken>, ProgramError> LexExpression(StringView text, const LexOptions& options) {
+        Lexer lexer(text, options);
         return lexer.Run();
     }
 

@@ -4,6 +4,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Memory/BlockPool.h>
 #include <BECore/Memory/LinearArena.h>
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -198,6 +199,37 @@ namespace BECore::Tests {
         EXPECT_EQ(collector.GetLast()->allocCount, 3u);
         EXPECT_EQ(collector.GetLast()->allocBytes, 300u);
         EXPECT_EQ(collector.GetLast()->liveBytes, 1234u);
+    }
+
+    TEST(FrameStatsCollectorTest, AFrameCountsItsAllocationsPerTagAndKeepsTheLiveBytesOfTheTagAtItsEnd) {
+        constexpr size_t kBlockBytes = 4096;
+        FrameStatsCollector collector;
+        collector.SetClock(FakeNow);
+        collector.BeginFrame();
+        void* block = nullptr;
+        {
+            BE_MEM_TAG(UI);
+            block = ::operator new(kBlockBytes);
+        }
+        collector.EndFrame({}, AllocTracker::GetTotals());
+        const FrameStats& frame = *collector.GetLast();
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_GE(frame.tagAllocCount[+MemTag::UI], 1u);
+            EXPECT_GE(frame.tagLiveBytes[+MemTag::UI], kBlockBytes);
+        } else {
+            for (size_t i = 0; i < kMemTagCount; ++i) {
+                EXPECT_EQ(frame.tagAllocCount[i], 0u);
+                EXPECT_EQ(frame.tagLiveBytes[i], 0u);
+            }
+        }
+
+        // the next frame allocates nothing under UI, yet the block is still alive at its end
+        collector.BeginFrame();
+        collector.EndFrame({}, AllocTracker::GetTotals());
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_GE(collector.GetLast()->tagLiveBytes[+MemTag::UI], kBlockBytes);
+        }
+        ::operator delete(block);
     }
 
     TEST(FrameStatsCollectorTest, AFrameSeesTheTotalsOfTheArenasAliveAtItsEnd) {

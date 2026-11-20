@@ -46,6 +46,14 @@ namespace BECore {
                     return 0;
                 case Opcode::LoadTableSlot:
                     return 0;
+                case Opcode::CallDomain: {
+                    // As many registers as the operation has parameters; an operation that is not registered leaves the pass blind, as an opcode it does not know
+                    if (ins.imm >= ProgramDomain::OperationCount()) {
+                        return ~RegisterMask{0};
+                    }
+                    const uint32_t count = ProgramDomain::Operation(ins.imm).parameterCount;
+                    return (count > 0 ? RegisterBit(ins.a) : 0) | (count > 1 ? RegisterBit(ins.b) : 0) | (count > 2 ? RegisterBit(ins.c) : 0);
+                }
                 case Opcode::Copy:
                 case Opcode::LoadTable:
                     return RegisterBit(ins.a);

@@ -2,6 +2,7 @@
 
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/ISerializer.h>
 #include <BECore/Reflection/OpenDeserializer.h>
@@ -59,6 +60,7 @@ namespace BECore {
 
     void TextureLibrary::Initialize() {
         BE_PROFILE_SCOPE("TextureLibrary::Initialize");
+        BE_MEM_TAG(Resource);
         Clear();
 
         auto deserializer = CoreManager::GetConfigManager().CreateDeserializer(Ids::config);

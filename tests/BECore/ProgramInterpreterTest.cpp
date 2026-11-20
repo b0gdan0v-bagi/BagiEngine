@@ -593,12 +593,12 @@ namespace BECore::Tests {
 #define BE_CHECK_CONVERSION(Src, SrcCpp, Dst, DstCpp) CheckConversion<SrcCpp, DstCpp>(Opcode::Src##To##Dst);
         BE_PROGRAM_CONVERSIONS(BE_CHECK_CONVERSION)
 #undef BE_CHECK_CONVERSION
-        // Every opcode but the five untyped ones (`Invalid`, `LoadConst`, `Copy`, `LoadTable`, `LoadTableSlot`) and the typed fused ones (`ProgramFusionTest` compares them with the code they replace)
-        // is a row or a conversion: a row that the matrix skipped would leave the count short
+        // Every opcode but the six untyped ones (`Invalid`, `LoadConst`, `Copy`, `LoadTable`, `LoadTableSlot`, `CallDomain`) and the typed fused ones (`ProgramFusionTest` compares them with the code
+        // they replace) is a row or a conversion: a row that the matrix skipped would leave the count short
 #define BE_COUNT_FUSED(Op, Type, Cpp) +1
         constexpr size_t kFusedRows = 0 BE_PROGRAM_FUSED_ROWS(BE_COUNT_FUSED);
 #undef BE_COUNT_FUSED
-        EXPECT_EQ(static_cast<size_t>(g_rowsChecked) + 5 + kFusedRows, EnumUtils<Opcode>::Count());
+        EXPECT_EQ(static_cast<size_t>(g_rowsChecked) + 6 + kFusedRows, EnumUtils<Opcode>::Count());
     }
 
     TEST(ProgramInterpreterTest, TheVectorsOfIntegersWrapLikeIntegers) {
@@ -1112,9 +1112,9 @@ namespace BECore::Tests {
         static_assert(ResultTypeOf(Opcode::AddInt32) == ProgramType::Int32);
         static_assert(ResultTypeOf(Opcode::FloatToInt32) == ProgramType::Int32);
         static_assert(!ResultTypeOf(Opcode::LoadConst).has_value() && !ResultTypeOf(Opcode::Copy).has_value() && !ResultTypeOf(Opcode::LoadTable).has_value() &&
-                      !ResultTypeOf(Opcode::LoadTableSlot).has_value() && !ResultTypeOf(Opcode::Invalid).has_value());
+                      !ResultTypeOf(Opcode::LoadTableSlot).has_value() && !ResultTypeOf(Opcode::CallDomain).has_value() && !ResultTypeOf(Opcode::Invalid).has_value());
         for (const Opcode op : EnumUtils<Opcode>::Values()) {
-            if (op != Opcode::Invalid && op != Opcode::LoadConst && op != Opcode::Copy && op != Opcode::LoadTable && op != Opcode::LoadTableSlot) {
+            if (op != Opcode::Invalid && op != Opcode::LoadConst && op != Opcode::Copy && op != Opcode::LoadTable && op != Opcode::LoadTableSlot && op != Opcode::CallDomain) {
                 EXPECT_TRUE(ResultTypeOf(op).has_value()) << String(EnumUtils<Opcode>::ToString(op)).c_str();
             }
         }
@@ -1334,8 +1334,27 @@ namespace BECore::Tests {
 
     TEST(ProgramInterpreterTest, TheInstructionIsTwelveBytes) {
         EXPECT_EQ(sizeof(Instruction), 12U);
-        EXPECT_EQ(sizeof(RegisterImage), 16U);
-        EXPECT_EQ(alignof(RegisterImage), 16U);
+        EXPECT_EQ(sizeof(RegisterImage), 32U);
+        EXPECT_EQ(alignof(RegisterImage), 32U);
+    }
+
+    TEST(ProgramInterpreterTest, TheUpperHalfOfARegisterImageIsPartOfAConstant) {
+        const auto program = [](uint8_t lastByte) {
+            RegisterImage image{};
+            image.bytes[0] = 1;
+            image.bytes[kProgramRegisterBytes - 1] = lastByte;
+            ProgramBuilder builder;
+            const uint8_t reg = Require(builder.AcquireRegister());
+            builder.Emit(Opcode::LoadConst, reg, 0, 0, 0, builder.AddConstant(image));
+            return Require(builder.Finish(ProgramType::Vec4, reg));
+        };
+        const Program low = program(0);
+        const Program high = program(7);
+        ASSERT_EQ(high.Constants().size(), 1U);
+        EXPECT_EQ(high.Constants()[0].bytes[kProgramRegisterBytes - 1], 7);
+        EXPECT_FALSE(low.SameCode(high));
+        EXPECT_NE(low.CodeHash(), high.CodeHash());
+        EXPECT_TRUE(low.SameCode(program(0)));
     }
 
     TEST(ProgramInterpreterTest, DisassemblyNamesTheInstructions) {

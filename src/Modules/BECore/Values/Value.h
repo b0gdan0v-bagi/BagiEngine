@@ -141,13 +141,15 @@ namespace BECore {
         /**
          * @brief The value now, by value, for every kind: `Get` for a `Const` and a `Slot`, a run of the program for a `Program`
          *
-         * Only a type a program can compute (`ProgramValue`) has programs; asking another `T` for a `Program` is a bug of the loader (`ASSERT`).
+         * Only a type a program can compute (`ProgramValue`) or a game registered (`ProgramDomain`) has programs; asking another `T` for a `Program` is a bug of the loader (`ASSERT`).
          * A run allocates nothing (`Programs/Interpreter.h`).
          */
         [[nodiscard]] T Evaluate(const Context& context) const {
             if (_kind == ValueKind::Program) {
                 if constexpr (ProgramValue<T>) {
                     return Run<T>(_offset, context);
+                } else if constexpr (DomainValueClass<T>) {
+                    return RunDomain<T>(_offset, context);
                 } else {
                     ASSERT(false, "Value::Evaluate: no program computes this type");
                     return _constant;

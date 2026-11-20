@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/EngineAllocator.h>
 #include <EASTL/fixed_string.h>
 #include <EASTL/functional.h>
 #include <EASTL/iterator.h>
@@ -16,8 +17,8 @@
 // The string types of the engine (Types/CLAUDE.md).
 namespace BECore {
 
-    /// The owning string.
-    using String = eastl::string;
+    /// The owning string. Its allocator is EngineAllocator (Memory/CLAUDE.md), so it is not `eastl::string`: the type only converts by copy.
+    using String = eastl::basic_string<char, EngineAllocator>;
 
     /// The EASTL allocator of the arenas (Memory/ArenaAllocator.h); only declared here, so these headers stay light.
     class ArenaAllocator;
@@ -30,7 +31,7 @@ namespace BECore {
 
     /// A string with N characters inside the object; with Overflow it moves to the heap when longer, without it the length is capped at N.
     template <size_t N, bool Overflow = true>
-    using FixedString = eastl::fixed_string<char, N, Overflow>;
+    using FixedString = eastl::fixed_string<char, N, Overflow, EngineAllocator>;
 
     /// Hash of a string key that takes a String, a StringView or a const char* without making a String (`map.find("name")`). The value is
     /// the one eastl::hash<eastl::string> gives for a string without a NUL character, so the iteration order of a map does not depend on

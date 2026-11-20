@@ -87,6 +87,8 @@ namespace BECore {
                 return "enum";
             case ProgramType::String:
                 return "string";
+            case ProgramType::Domain:
+                return "domain";
         }
         return "?";
     }

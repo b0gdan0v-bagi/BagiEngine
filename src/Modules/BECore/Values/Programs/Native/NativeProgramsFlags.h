@@ -41,10 +41,11 @@ namespace BECore {
     [[nodiscard]] Optional<NativeProgramsEmitResult> EmitNativeProgramsIfAsked(const NativeCodegenOptions& options, Span<const ProgramId> programs = {});
 
     /**
-     * @brief `--interpreted` turns the generated functions off; the miss warning turns on when generated code is linked
+     * @brief `--interpreted` turns the generated functions off; the miss warning turns on when generated code is linked; the generated functions of programs that call
+     * the game's operations are bound (`NativePrograms::BindPending`)
      *
-     * Call it before the content loads: the warning is given when a program is interned and finds no function (`NativePrograms::SetWarnOnMiss`), so a program
-     * loaded earlier is counted by `NativePrograms::LogSummary` but not warned about.
+     * Call it after the game registered its types and operations (`Domain/CLAUDE.md`) and before the content loads: the warning is given when a program is interned and finds no function
+     * (`NativePrograms::SetWarnOnMiss`), so a program loaded earlier is counted by `NativePrograms::LogSummary` but not warned about.
      */
     void ApplyNativeProgramsFlags(const CommandLine& line);
 

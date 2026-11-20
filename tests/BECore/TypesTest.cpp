@@ -22,39 +22,42 @@ namespace BECore::Tests {
         set.erase(key);
     };
 
-    // The aliases that are a plain `using`: the same type as the eastl:: / std:: name.
-    static_assert(std::is_same_v<String, eastl::string>);
+    // The aliases that are a plain `using`: the same type as the eastl:: / std:: name. The owning ones take EngineAllocator, so none is the
+    // eastl:: type of the same name with EASTL's default allocator.
+    static_assert(std::is_same_v<String, eastl::basic_string<char, EngineAllocator>>);
+    static_assert(!std::is_same_v<String, eastl::string>);
+    static_assert(!std::is_same_v<Vector<int>, eastl::vector<int>>);
     static_assert(std::is_same_v<StringView, eastl::string_view>);
-    static_assert(std::is_same_v<FixedString<32>, eastl::fixed_string<char, 32, true>>);
-    static_assert(std::is_same_v<FixedString<32, false>, eastl::fixed_string<char, 32, false>>);
-    static_assert(std::is_same_v<Vector<int>, eastl::vector<int>>);
-    static_assert(std::is_same_v<SmallVector<int, 4>, eastl::fixed_vector<int, 4, true>>);
-    static_assert(std::is_same_v<FixedVector<int, 4>, eastl::fixed_vector<int, 4, false>>);
+    static_assert(std::is_same_v<FixedString<32>, eastl::fixed_string<char, 32, true, EngineAllocator>>);
+    static_assert(std::is_same_v<FixedString<32, false>, eastl::fixed_string<char, 32, false, EngineAllocator>>);
+    static_assert(std::is_same_v<Vector<int>, eastl::vector<int, EngineAllocator>>);
+    static_assert(std::is_same_v<SmallVector<int, 4>, eastl::fixed_vector<int, 4, true, EngineAllocator>>);
+    static_assert(std::is_same_v<FixedVector<int, 4>, eastl::fixed_vector<int, 4, false, EngineAllocator>>);
     static_assert(std::is_same_v<Array<int, 3>, eastl::array<int, 3>>);
     static_assert(std::is_same_v<Span<int>, eastl::span<int>>);
     static_assert(std::is_same_v<Span<int, 3>, eastl::span<int, 3>>);
     static_assert(std::is_same_v<Optional<int>, std::optional<int>>);
     static_assert(std::is_same_v<UniquePtr<int>, eastl::unique_ptr<int>>);
     static_assert(std::is_same_v<UniquePtr<int[]>, eastl::unique_ptr<int[]>>);
-    static_assert(std::is_same_v<HashMap<int, int>, eastl::hash_map<int, int, eastl::hash<int>, eastl::equal_to<int>>>);
-    static_assert(std::is_same_v<Map<int, int>, eastl::map<int, int, eastl::less<int>>>);
-    static_assert(std::is_same_v<FlatMap<int, int>, eastl::vector_map<int, int, eastl::less<int>>>);
-    static_assert(std::is_same_v<FlatSet<int>, eastl::vector_set<int, eastl::less<int>>>);
-    static_assert(std::is_same_v<HashSet<int>, eastl::hash_set<int, eastl::hash<int>, eastl::equal_to<int>>>);
-    static_assert(std::is_same_v<Set<int>, eastl::set<int, eastl::less<int>>>);
+    static_assert(std::is_same_v<HashMap<int, int>, eastl::hash_map<int, int, eastl::hash<int>, eastl::equal_to<int>, EngineAllocator>>);
+    static_assert(std::is_same_v<Map<int, int>, eastl::map<int, int, eastl::less<int>, EngineAllocator>>);
+    static_assert(std::is_same_v<FlatMap<int, int>, eastl::vector_map<int, int, eastl::less<int>, EngineAllocator>>);
+    static_assert(std::is_same_v<FlatSet<int>, eastl::vector_set<int, eastl::less<int>, EngineAllocator>>);
+    static_assert(std::is_same_v<HashSet<int>, eastl::hash_set<int, eastl::hash<int>, eastl::equal_to<int>, EngineAllocator>>);
+    static_assert(std::is_same_v<Set<int>, eastl::set<int, eastl::less<int>, EngineAllocator>>);
     static_assert(std::is_same_v<Pair<int, float>, eastl::pair<int, float>>);
     static_assert(std::is_same_v<Variant<int, String>, std::variant<int, String>>);
     static_assert(std::is_same_v<Tuple<int, float, char>, std::tuple<int, float, char>>);
     static_assert(std::is_same_v<SharedPtr<int>, eastl::shared_ptr<int>>);
 
     // A String key gets the transparent hash, equality and order; any other key keeps the EASTL ones.
-    static_assert(std::is_same_v<HashMap<String, int>, eastl::hash_map<String, int, StringHash, StringEqual>>);
-    static_assert(std::is_same_v<Map<String, int>, eastl::map<String, int, StringLess>>);
-    static_assert(std::is_same_v<FixedHashMap<String, int, 8>, eastl::fixed_hash_map<String, int, 8, 9, true, StringHash, StringEqual>>);
-    static_assert(std::is_same_v<FixedHashMap<int, int, 8>, eastl::fixed_hash_map<int, int, 8, 9, true, eastl::hash<int>, eastl::equal_to<int>>>);
-    static_assert(std::is_same_v<FlatMap<String, int>, eastl::vector_map<String, int, StringLess>>);
-    static_assert(std::is_same_v<HashSet<String>, eastl::hash_set<String, StringHash, StringEqual>>);
-    static_assert(std::is_same_v<Set<String>, eastl::set<String, StringLess>>);
+    static_assert(std::is_same_v<HashMap<String, int>, eastl::hash_map<String, int, StringHash, StringEqual, EngineAllocator>>);
+    static_assert(std::is_same_v<Map<String, int>, eastl::map<String, int, StringLess, EngineAllocator>>);
+    static_assert(std::is_same_v<FixedHashMap<String, int, 8>, eastl::fixed_hash_map<String, int, 8, 9, true, StringHash, StringEqual, false, EngineAllocator>>);
+    static_assert(std::is_same_v<FixedHashMap<int, int, 8>, eastl::fixed_hash_map<int, int, 8, 9, true, eastl::hash<int>, eastl::equal_to<int>, false, EngineAllocator>>);
+    static_assert(std::is_same_v<FlatMap<String, int>, eastl::vector_map<String, int, StringLess, EngineAllocator>>);
+    static_assert(std::is_same_v<HashSet<String>, eastl::hash_set<String, StringHash, StringEqual, EngineAllocator>>);
+    static_assert(std::is_same_v<Set<String>, eastl::set<String, StringLess, EngineAllocator>>);
 
     // A map of String keys finds by a view and a literal without making a String; the map of eastl::string keys does not.
     static_assert(LooksUpBy<HashMap<String, int>, StringView>);
@@ -71,6 +74,12 @@ namespace BECore::Tests {
     static_assert(!SetLooksUpBy<eastl::set<eastl::string>, StringView>);
     static_assert(!LooksUpBy<eastl::hash_map<eastl::string, int>, StringView>);
     static_assert(!LooksUpBy<eastl::map<eastl::string, int>, StringView>);
+
+    // The shipped build has no EASTL names, so the allocator is empty there and a String costs what an eastl::string does; where the
+    // names are kept (EASTL_NAME_ENABLED) both carry the name pointer and stay equal as well.
+    static_assert(sizeof(String) == sizeof(eastl::string));
+    static_assert(sizeof(Vector<int>) == sizeof(eastl::vector<int>));
+    static_assert(sizeof(HashMap<int, int>) == sizeof(eastl::hash_map<int, int>));
 
     TEST(TypesTest, CompileTimeChecks) {
         SUCCEED() << "The static_asserts at the top of this file are the check";
@@ -112,7 +121,7 @@ namespace BECore::Tests {
         ASSERT_EQ(map.size(), reference.size());
         auto itMap = map.begin();
         for (auto itReference = reference.begin(); itReference != reference.end(); ++itReference, ++itMap) {
-            EXPECT_EQ(itMap->first, itReference->first);
+            EXPECT_EQ(StringView{itMap->first}, StringView{itReference->first});
             EXPECT_EQ(itMap->second, itReference->second);
         }
     }
@@ -148,7 +157,7 @@ namespace BECore::Tests {
         }
         auto itMap = map.begin();
         for (auto itReference = reference.begin(); itReference != reference.end(); ++itReference, ++itMap) {
-            EXPECT_EQ(itMap->first, itReference->first);
+            EXPECT_EQ(StringView{itMap->first}, StringView{itReference->first});
             EXPECT_EQ(itMap->second, itReference->second);
         }
         const auto& constMap = map;
@@ -170,7 +179,7 @@ namespace BECore::Tests {
         ASSERT_EQ(set.size(), reference.size());
         auto itSet = set.begin();
         for (auto itReference = reference.begin(); itReference != reference.end(); ++itReference, ++itSet) {
-            EXPECT_EQ(*itSet, *itReference);
+            EXPECT_EQ(StringView{*itSet}, StringView{*itReference});
         }
     }
 
@@ -203,7 +212,7 @@ namespace BECore::Tests {
         ASSERT_EQ(set.size(), reference.size());
         auto itSet = set.begin();
         for (auto itReference = reference.begin(); itReference != reference.end(); ++itReference, ++itSet) {
-            EXPECT_EQ(*itSet, *itReference);
+            EXPECT_EQ(StringView{*itSet}, StringView{*itReference});
         }
         const auto& constSet = set;
         EXPECT_NE(constSet.find(StringView{"fig"}), constSet.end());

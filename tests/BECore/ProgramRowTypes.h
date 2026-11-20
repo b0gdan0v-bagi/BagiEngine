@@ -7,6 +7,7 @@
 #include <BECore/Math/Vec3.h>
 #include <BECore/Math/Vec4.h>
 #include <BECore/PoolString/PoolString.h>
+#include <BECore/ProgramDomainData.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/ValueTestTypes.h>
@@ -35,6 +36,10 @@ namespace BECore::ProgramRowData {
         BE_REFLECT_FIELD Quat quat;
         BE_REFLECT_FIELD Color color;
         BE_REFLECT_FIELD PoolString text;
+        /// A registered type of a game: 32 bytes, one register
+        BE_REFLECT_FIELD ProgramDomainData::DomainBits256 mask;
+        /// A registered type smaller than a register, whose upper register bytes `LoadSlotDomain` must zero
+        BE_REFLECT_FIELD ProgramDomainData::DomainPair pair;
         BE_REFLECT_FIELD ValueTestData::ValueNarrowEnum narrow = ValueTestData::ValueNarrowEnum::Low;
         BE_REFLECT_FIELD ValueTestData::ValueShortEnum wide16 = ValueTestData::ValueShortEnum::Low;
         BE_REFLECT_FIELD ValueTestData::ValueWideEnum wide32 = ValueTestData::ValueWideEnum::Low;

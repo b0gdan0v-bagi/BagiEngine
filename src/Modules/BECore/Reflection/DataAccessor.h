@@ -217,7 +217,7 @@ namespace BECore {
                 } else if constexpr (::BECore::Detail::IsIntrusivePtr<T>) {
                     using Pointee = typename ::BECore::Detail::IntrusivePtrPointeeType<T>::type;
                     if (!item) {
-                        eastl::string typeStr;
+                        String typeStr;
                         if (d.ReadAttribute("type", typeStr)) {
                             if (!FactoryTypeAllowed<Pointee>(d, StringView(typeStr))) {
                                 return;
@@ -548,7 +548,7 @@ namespace BECore {
             }
 
             static bool Load(IDeserializer& d, T& value, eastl::string_view key) {
-                eastl::string str;
+                String str;
                 if (d.ReadAttribute(key, str)) {
                     auto result = EnumUtils<T>::Cast(StringView(str));
                     if (result) {
@@ -641,7 +641,7 @@ namespace BECore {
             static bool Load(IDeserializer& d, Ptr& ptr, eastl::string_view key) {
                 if (d.BeginObject(key)) {
                     if (!ptr) {
-                        eastl::string typeStr;
+                        String typeStr;
                         if (d.ReadAttribute("type", typeStr)) {
                             if (!Detail::FactoryTypeAllowed<T>(d, StringView(typeStr))) {
                                 d.EndObject();
@@ -861,7 +861,7 @@ namespace BECore {
                 size_t count = map.size();
                 if (s.BeginArray(key, "entry", count)) {
                     if constexpr (requires(const K& a, const K& b) { {a < b}->std::convertible_to<bool>; }) {
-                        eastl::vector<SortedEntry<K, V>> sorted;
+                        Vector<SortedEntry<K, V>> sorted;
                         sorted.reserve(map.size());
                         for (const auto& [k, v] : map) {
                             sorted.push_back({&k, &v});

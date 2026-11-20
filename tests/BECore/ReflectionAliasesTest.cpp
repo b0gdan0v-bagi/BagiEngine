@@ -233,7 +233,7 @@ namespace BECore::Tests {
 
     TEST(ReflectionAliasesTest, ThePairIsSavedAsTheEastlPairIs) {
         const Pair<int32_t, String> aliased{4, "four"};
-        const eastl::pair<int32_t, eastl::string> reference{4, "four"};
+        const eastl::pair<int32_t, String> reference{4, "four"};
         const auto save = [](const auto& pair) {
             XmlSerializer serializer;
             if (serializer.BeginObject("State")) {

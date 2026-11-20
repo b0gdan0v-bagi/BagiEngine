@@ -7,10 +7,12 @@
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Values/Context.h>
 #include <BECore/Values/Programs/CompileOptions.h>
+#include <BECore/Values/Programs/Domain/ProgramDomain.h>
 #include <BECore/Values/Programs/Instruction.h>
 #include <BECore/Values/Programs/Opcode.h>
 #include <BECore/Values/Programs/Program.h>
 #include <BECore/Values/ValueType.h>
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <expected>
@@ -28,11 +30,12 @@ namespace BECore {
      * @brief The result of `CompileExpression`
      *
      * `Constant` carries the register image of the result (the bytes of a value of `type`, zero-padded), `Slot` the field and the path as written, `Program` the id in
-     * the `ProgramPool`. The other members of the other kinds are empty.
+     * the `ProgramPool`. The other members of the other kinds are empty. `domain` names the registered type of a result of type `Domain` and is `kNoDomainType` otherwise.
      */
     struct CompiledExpression {
         CompiledKind kind = CompiledKind::Constant;
         ProgramType type = ProgramType::Int32;
+        DomainTypeId domain = kNoDomainType;
         RegisterImage constant{};
         SlotRef slot{};
         String path;
@@ -67,8 +70,8 @@ namespace BECore {
      * are copied, nothing is kept of the provider.
      *
      * It allocates (parse, check, lower) and may add one program to the pool: call it when content loads, never per frame. Thread-safe: the pool is, and nothing else is shared.
-     * A refused text adds nothing and gives a `ProgramError` whose column is a byte of @p text (`FormatProgramError` shows it); a type no program computes (`Rect`, a game's
-     * struct) is the error that lists the types that can be.
+     * A refused text adds nothing and gives a `ProgramError` whose column is a byte of @p text (`FormatProgramError` shows it). @p T is a type a program computes or a type a
+     * game registered (`ProgramDomain`); any other (`Rect`, an unregistered struct) is the error that lists the types that can be.
      */
     template <ValueType T>
     [[nodiscard]] std::expected<Value<T>, ProgramError> CompileValue(StringView text, const ContextDecl& declaration, const CompileOptions& options = {}) {
@@ -76,27 +79,26 @@ namespace BECore {
         if (!compiled.has_value()) {
             return std::unexpected(compiled.error());
         }
-        if constexpr (ProgramValue<T>) {
-            switch (compiled->kind) {
-                case CompiledKind::Constant: {
-                    if constexpr (IsReflectedEnum<T>) {
-                        ProgramEnum index;
-                        std::memcpy(&index, compiled->constant.bytes.data(), sizeof(index));
-                        return Value<T>::Const(static_cast<T>(index.index));
-                    } else {
-                        T literal{};
-                        std::memcpy(&literal, compiled->constant.bytes.data(), sizeof(T));
-                        return Value<T>::Const(literal);
-                    }
+        // A type the checker accepted is a program type or a registered one (`CheckExpectedType`), so the same three outcomes hold for both
+        switch (compiled->kind) {
+            case CompiledKind::Constant: {
+                if constexpr (IsReflectedEnum<T>) {
+                    ProgramEnum index;
+                    std::memcpy(&index, compiled->constant.bytes.data(), sizeof(index));
+                    return Value<T>::Const(static_cast<T>(index.index));
+                } else {
+                    T literal{};
+                    std::memcpy(&literal, compiled->constant.bytes.data(), std::min(sizeof(T), compiled->constant.bytes.size()));
+                    return Value<T>::Const(literal);
                 }
-                case CompiledKind::Slot:
-                    return Value<T>::FromSlot(compiled->slot, PoolString::Intern(compiled->path));
-                case CompiledKind::Program:
-                    return Value<T>::FromProgram(compiled->program, PoolString::Intern(text));
             }
+            case CompiledKind::Slot:
+                return Value<T>::FromSlot(compiled->slot, PoolString::Intern(compiled->path));
+            case CompiledKind::Program:
+                return Value<T>::FromProgram(compiled->program, PoolString::Intern(text));
         }
-        ASSERT(false, "CompileValue: a program was made for a type no program computes");
-        return std::unexpected(ProgramError{"no program computes this type", 0});
+        ASSERT(false, "CompileValue: the compiler made a kind that does not exist");
+        return std::unexpected(ProgramError{"the compiler made a kind that does not exist", 0});
     }
 
 }  // namespace BECore
