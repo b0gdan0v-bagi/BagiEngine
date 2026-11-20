@@ -82,7 +82,7 @@ namespace BECore {
         }
         void* block = nullptr;
         if (_freeHead != nullptr) {
-            block = TakeFree();
+            block = PopFrom(_freeHead);
         } else {
             if (_bumpNext == _bumpEnd) {
                 AddPage();
@@ -106,13 +106,10 @@ namespace BECore {
         if (!ours) {
             return;
         }
-        const bool freed = ReadHeader(ptr).mark == kFreeMark;
-        ASSERT(!freed, "a block given back twice");
-        if (freed) {
+#endif
+        if (!PushTo(_freeHead, ptr)) {
             return;
         }
-#endif
-        PushFree(ptr);
         --_live;
         _stats.OnFree();
     }
@@ -121,7 +118,7 @@ namespace BECore {
         return reinterpret_cast<std::byte*>(page) + _pageHeaderBytes;
     }
 
-    size_t BlockPool::PageBytes() const {
+    size_t BlockPool::GetPageBytes() const {
         return _pageHeaderBytes + _blocksPerPage * _stride;
     }
 
@@ -135,26 +132,26 @@ namespace BECore {
     void BlockPool::AddPage() {
         ASSERT((_alignment & (_alignment - 1)) == 0, "the alignment of a pool is a power of two");
         const size_t alignment = std::max(_alignment, size_t{__STDCPP_DEFAULT_NEW_ALIGNMENT__});
-        auto* memory = static_cast<std::byte*>(::operator new(PageBytes(), std::align_val_t{alignment}));
+        auto* memory = static_cast<std::byte*>(::operator new(GetPageBytes(), std::align_val_t{alignment}));
         Page* page = std::construct_at(reinterpret_cast<Page*>(memory), Page{_pages});
         _pages = page;
         ++_pageCount;
         _bumpNext = DataOf(page);
         _bumpEnd = _bumpNext + _blocksPerPage * _stride;
         ArenaPoison::Poison(_bumpNext, _blocksPerPage * _stride);
-        _stats.OnPage(PageBytes());
+        _stats.OnPage(GetPageBytes());
     }
 
-    void* BlockPool::TakeFree() {
-        void* block = _freeHead;
+    void* BlockPool::PopFrom(void*& head) const {
+        void* block = head;
         const FreeHeader header = ReadHeader(block);
 #if ENGINE_ENABLE_ASSERTS
         const bool marked = header.mark == kFreeMark;
         ASSERT(marked, "a free block lost its mark: it was written after it was given back");
         // A link that was overwritten is not followed: the rest of the list is dropped (its blocks stay in their pages)
-        _freeHead = marked ? header.next : nullptr;
+        head = marked ? header.next : nullptr;
 #else
-        _freeHead = header.next;
+        head = header.next;
 #endif
         ArenaPoison::Unpoison(block, _stride);
 #if ENGINE_ENABLE_ASSERTS
@@ -165,9 +162,21 @@ namespace BECore {
         return block;
     }
 
-    void BlockPool::PushFree(void* block) {
-        MarkFreed(block, _stride, _freeHead);
-        _freeHead = block;
+    bool BlockPool::PushTo(void*& head, void* block) const {
+#if ENGINE_ENABLE_ASSERTS
+        const bool freed = ReadHeader(block).mark == kFreeMark;
+        ASSERT(!freed, "a block given back twice");
+        if (freed) {
+            return false;
+        }
+#endif
+        MarkFreed(block, _stride, head);
+        head = block;
+        return true;
+    }
+
+    void BlockPool::DiscardLive() {
+        _live = 0;
     }
 
 #if ENGINE_ENABLE_ASSERTS

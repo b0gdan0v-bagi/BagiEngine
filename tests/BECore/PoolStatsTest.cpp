@@ -78,6 +78,21 @@ namespace BECore::Tests {
         EXPECT_EQ(found.entry.allocations, 2u);
     }
 
+    TEST(PoolStatsTest, SetCountsPublishesTheTotalsAndKeepsTheLargestLiveAsThePeak) {
+        PoolStatsSlot slot = PoolStatsSlot::Claim("SetCountsPool", 32, true);
+        ASSERT_TRUE(slot.IsValid());
+        slot.SetCounts(7, 10);
+        slot.SetCounts(3, 14);
+        const Found found = Find("SetCountsPool");
+        ASSERT_TRUE(found.found);
+        EXPECT_EQ(found.entry.live, 3u);
+        EXPECT_EQ(found.entry.allocations, 14u);
+        EXPECT_EQ(found.entry.peak, 7u);
+        slot.Release();
+        PoolStatsSlot none;
+        none.SetCounts(1, 1);
+    }
+
     TEST(PoolStatsTest, AReleasedSlotLeavesTheSnapshotAndIsReusedClean) {
         const uint32_t before = PoolStats::GetLiveCount();
         PoolStatsSlot first = PoolStatsSlot::Claim("FirstUse", 32, false);

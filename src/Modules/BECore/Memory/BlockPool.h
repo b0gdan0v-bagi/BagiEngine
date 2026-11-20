@@ -56,6 +56,27 @@ namespace BECore {
         [[nodiscard]] size_t GetBlockSize() const {
             return _stride;
         }
+        /// Bytes of one page, as taken from the heap
+        [[nodiscard]] size_t GetPageBytes() const;
+
+        /**
+         * @name Free lists kept outside the pool
+         * A ConcurrentBlockPool keeps a thread's free blocks in a list of its own and needs the pool's marking and Debug checks on it. Both read the stride only,
+         * so they need no lock and touch no state of the pool; @p head is the caller's list.
+         */
+        ///@{
+        /// Puts a block, handed out by this pool, on @p head. False only in Debug, for a block that is on a list already (asserted, nothing changed)
+        [[nodiscard]] bool PushTo(void*& head, void* block) const;
+        /// Takes the first block of @p head, which must not be empty. The block is as Allocate() hands it out
+        [[nodiscard]] void* PopFrom(void*& head) const;
+        ///@}
+
+        /// Counts every block handed out as given back, for a wrapper whose other holders keep blocks it cannot reach before it dies. The pages go with the pool
+        void DiscardLive();
+#if ENGINE_ENABLE_ASSERTS
+        /// True for the start of a block of this pool that was handed out at least once, free or not
+        [[nodiscard]] bool IsBlock(const void* ptr) const;
+#endif
 
     private:
         static constexpr size_t kMinBlockSize = 2 * sizeof(void*);
@@ -69,14 +90,8 @@ namespace BECore {
         }
 
         [[nodiscard]] std::byte* DataOf(Page* page) const;
-        [[nodiscard]] size_t PageBytes() const;
         void AddPage();
         void ClaimStats();
-        [[nodiscard]] void* TakeFree();
-        void PushFree(void* block);
-#if ENGINE_ENABLE_ASSERTS
-        [[nodiscard]] bool IsBlock(const void* ptr) const;
-#endif
 
         const char* _name;
         size_t _alignment;

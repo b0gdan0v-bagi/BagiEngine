@@ -50,6 +50,8 @@ namespace BECore {
         void OnAllocate();
         /// A block came back
         void OnFree();
+        /// Sets the totals of a pool that counts elsewhere and publishes now and then (a ConcurrentBlockPool): @p live blocks out, @p allocations ever; raises the peak
+        void SetCounts(uint64_t live, uint64_t allocations);
         /// A page of @p pageBytes was taken from the heap
         void OnPage(uint64_t pageBytes);
 

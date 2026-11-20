@@ -120,6 +120,16 @@ namespace BECore {
         }
     }
 
+    void PoolStatsSlot::SetCounts(uint64_t live, uint64_t allocations) {
+        if (_index == kNone) {
+            return;
+        }
+        Slot& slot = g_slots[_index];
+        slot.live.store(live, std::memory_order_relaxed);
+        slot.allocations.store(allocations, std::memory_order_relaxed);
+        RaiseTo(slot.peak, live);
+    }
+
     void PoolStatsSlot::OnPage(uint64_t pageBytes) {
         if (_index == kNone) {
             return;
