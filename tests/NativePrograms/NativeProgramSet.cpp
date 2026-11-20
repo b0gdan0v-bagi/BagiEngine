@@ -1,8 +1,10 @@
 #include "NativeProgramSet.h"
 
+#include <BECore/ProgramRowTypes.h>
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Programs/CompileOptions.h>
 #include <BECore/Values/Programs/ProgramCompiler.h>
+#include <NativePrograms/NativeProgramSetRows.h>
 
 namespace BECore::Tests {
 
@@ -55,6 +57,9 @@ namespace BECore::Tests {
             // The order is the level numbers the header names
             static_cast<void>(result.Add<ValueUnitStats>("caster"));
             static_cast<void>(result.Add<ValueCastInfo>("cast"));
+            for (const StringView name : {"a", "b", "c"}) {
+                static_cast<void>(result.Add<ProgramRowData::ProgramRowOperands>(name));
+            }
             return result;
         }();
         return declaration;
@@ -70,6 +75,9 @@ namespace BECore::Tests {
             if (!result.has_value()) {
                 return std::unexpected(result.error());
             }
+        }
+        if (auto rows = AssembleRowPrograms(programs); !rows.has_value()) {
+            return std::unexpected(rows.error());
         }
         return programs;
     }

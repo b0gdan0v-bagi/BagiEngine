@@ -3,7 +3,7 @@
 # functions, and (tests/CMakeLists.txt) the generated file BagiEngineTests links. The sources are outside the glob of tests/BECore, so the set is no test case.
 
 file(GLOB NATIVE_SET_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/NativeProgramSet.*"
+    "${CMAKE_CURRENT_SOURCE_DIR}/NativeProgramSet*"
 )
 
 add_library(BagiNativeProgramSet STATIC ${NATIVE_SET_SOURCES})
