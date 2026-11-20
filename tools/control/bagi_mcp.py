@@ -364,12 +364,14 @@ def click_at(
 @server.tool()
 @reports_errors
 def frame_stats(frames: int = 1) -> dict[str, Any]:
-    """What the last frames cost, oldest first: {frames: [...], allocTracking}.
+    """What the last frames cost, oldest first: {frames: [...], allocTracking, arenas, pools}.
 
     frames: how many (1 to 240). Each has frame, frameMs (end to end), cpuMs, stagesMs (Update, SceneUpdate, Render, SceneDraw, Present;
     the scene stages are inside the other two), drawCalls, triangles, textureSwitches (the engine's draws; ImGui's are the counters
     "ImGui draw calls" / "ImGui triangles"), allocCount, allocBytes, liveBytes (0 unless the game was built with ENGINE_PROFILER_ALLOC,
-    allocTracking says) and counters (named values set during the frame). Times are only meaningful in an optimized build (macos-profile).
+    allocTracking says), arenaUsedBytes, arenaPeakBytes, arenaOverflows (the memory arenas, summed), poolLiveBlocks, poolPageBytes (the block
+    pools, summed; a pool shared by threads lags by a few calls) and counters (named values set during the frame). arenas and pools list each arena (name, capacity, used, peak, overflows, chunks) and each block
+    pool (name, blockSize, live, peak, pages, allocations). Times are only meaningful in an optimized build (macos-profile).
     """
     return session.call("frame_stats", {"frames": frames})
 

@@ -1,4 +1,5 @@
 #include <BECore/Memory/PoolStats.h>
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <Common/Wait.h>
 #include <atomic>
 #include <cstring>
@@ -226,6 +227,29 @@ namespace BECore::Tests {
         a.join();
         b.join();
         EXPECT_EQ(torn, 0u);
+    }
+
+    TEST(PoolStatsTest, TheAllocTrackerForwardsTheRegistry) {
+        constexpr uint64_t kSize = 72;
+        constexpr uint64_t kBlocks = 5;
+        PoolStatsSlot slot = PoolStatsSlot::Claim("ForwardedPool", kSize, false);
+        for (uint64_t i = 0; i < kBlocks; ++i) {
+            slot.OnAllocate();
+        }
+
+        const Vector<PoolStatsEntry> viaTracker = AllocTracker::GetPoolStats();
+        const Vector<PoolStatsEntry> direct = GetPoolStats();
+        ASSERT_EQ(viaTracker.size(), direct.size());
+        bool seen = false;
+        for (const PoolStatsEntry& entry : viaTracker) {
+            if (std::strcmp(entry.name, "ForwardedPool") == 0) {
+                seen = true;
+                EXPECT_EQ(entry.blockSize, kSize);
+                EXPECT_EQ(entry.live, kBlocks);
+            }
+        }
+        EXPECT_TRUE(seen);
+        slot.Release();
     }
 
 }  // namespace BECore::Tests

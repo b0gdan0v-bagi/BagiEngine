@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Memory/ArenaStats.h>
+#include <BECore/Memory/PoolStats.h>
 #include <BECore/Profiler/ProfileSite.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
@@ -89,6 +90,9 @@ namespace BECore {
 
         /// The counters of every arena alive (Memory/CLAUDE.md, "Counters"); allocates
         [[nodiscard]] static Vector<ArenaStatsEntry> GetArenaStats();
+
+        /// The counters of every block pool alive (Memory/CLAUDE.md, "Pools"); allocates
+        [[nodiscard]] static Vector<PoolStatsEntry> GetPoolStats();
     };
 
 }  // namespace BECore
