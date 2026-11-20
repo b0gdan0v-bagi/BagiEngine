@@ -2,6 +2,7 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Memory/BlockPool.h>
 #include <BECore/Memory/LinearArena.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Profiler.h>
@@ -234,6 +235,50 @@ namespace BECore::Tests {
         EXPECT_EQ(collector.GetLast()->arenaUsedBytes, outside.arenaUsedBytes);
         EXPECT_EQ(collector.GetLast()->arenaPeakBytes, outside.arenaPeakBytes);
         EXPECT_EQ(collector.GetLast()->arenaOverflows, outside.arenaOverflows);
+    }
+
+    TEST(FrameStatsCollectorTest, AFrameSeesTheLiveBlocksOfThePoolsAliveAtItsEnd) {
+        constexpr size_t kBlockSize = 24;
+        constexpr size_t kFirstBlocks = 3;
+        constexpr size_t kSecondBlocks = 2;
+        FrameStatsCollector collector;
+        collector.SetClock(FakeNow);
+        collector.BeginFrame();
+        collector.EndFrame({}, AllocTotals{});
+        const FrameStats outside = *collector.GetLast();
+
+        {
+            BlockPool first("FrameStatsPoolFirst", kBlockSize, alignof(void*));
+            BlockPool second("FrameStatsPoolSecond", kBlockSize, alignof(void*));
+            void* blocks[kFirstBlocks + kSecondBlocks];
+            for (size_t i = 0; i < kFirstBlocks; ++i) {
+                blocks[i] = first.Allocate();
+            }
+            for (size_t i = 0; i < kSecondBlocks; ++i) {
+                blocks[kFirstBlocks + i] = second.Allocate();
+            }
+
+            collector.BeginFrame();
+            collector.EndFrame({}, AllocTotals{});
+            const FrameStats& inside = *collector.GetLast();
+            const PoolTotals totals = GetPoolTotals();
+            EXPECT_EQ(inside.poolLiveBlocks, totals.liveBlocks);
+            EXPECT_EQ(inside.poolPageBytes, totals.pageBytes);
+            EXPECT_EQ(inside.poolLiveBlocks - outside.poolLiveBlocks, kFirstBlocks + kSecondBlocks);
+            EXPECT_EQ(inside.poolPageBytes - outside.poolPageBytes, first.GetPageBytes() + second.GetPageBytes());
+
+            for (size_t i = 0; i < kFirstBlocks; ++i) {
+                first.Deallocate(blocks[i]);
+            }
+            for (size_t i = 0; i < kSecondBlocks; ++i) {
+                second.Deallocate(blocks[kFirstBlocks + i]);
+            }
+        }
+
+        collector.BeginFrame();
+        collector.EndFrame({}, AllocTotals{});
+        EXPECT_EQ(collector.GetLast()->poolLiveBlocks, outside.poolLiveBlocks);
+        EXPECT_EQ(collector.GetLast()->poolPageBytes, outside.poolPageBytes);
     }
 
     TEST(FrameStatsCollectorTest, TheHistoryKeepsTheLastFramesOldestFirst) {

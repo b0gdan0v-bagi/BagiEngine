@@ -36,6 +36,8 @@ namespace BECore {
         uint64_t arenaUsedBytes = 0;  // the arenas, summed, at the end of the frame (Memory/CLAUDE.md, "Counters")
         uint64_t arenaPeakBytes = 0;
         uint64_t arenaOverflows = 0;  // the overflows so far, not per frame
+        uint64_t poolLiveBlocks = 0;  // the block pools, summed, at the end of the frame; a concurrent pool's count lags (Memory/CLAUDE.md, "Pools")
+        uint64_t poolPageBytes = 0;
         FixedVector<FrameCounter, kMaxFrameCounters> counters;
 
         [[nodiscard]] double GetStageMs(FrameStage stage) const {

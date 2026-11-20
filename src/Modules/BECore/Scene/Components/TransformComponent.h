@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/Pooled.h>
 #include <BECore/Scene/IComponent.h>
 
 namespace BECore {
@@ -11,6 +12,8 @@ namespace BECore {
     class TransformComponent : public IComponent {
         BE_CLASS(TransformComponent, ICON = move)
     public:
+        BE_POOLED_SINGLE_THREAD(TransformComponent)
+
         TransformComponent() = default;
         ~TransformComponent() override = default;
 

@@ -211,4 +211,8 @@ namespace BECore {
         return BECore::GetArenaStats();
     }
 
+    Vector<PoolStatsEntry> AllocTracker::GetPoolStats() {
+        return BECore::GetPoolStats();
+    }
+
 }  // namespace BECore
