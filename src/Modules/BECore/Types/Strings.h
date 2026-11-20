@@ -19,6 +19,12 @@ namespace BECore {
     /// The owning string.
     using String = eastl::string;
 
+    /// The EASTL allocator of the arenas (Memory/ArenaAllocator.h); only declared here, so these headers stay light.
+    class ArenaAllocator;
+
+    /// A string whose memory comes from an arena (Memory/CLAUDE.md, "ArenaAllocator"); include <BECore/Memory/ArenaAllocator.h> to use it.
+    using ArenaString = eastl::basic_string<char, ArenaAllocator>;
+
     /// The non-owning view of characters.
     using StringView = eastl::string_view;
 

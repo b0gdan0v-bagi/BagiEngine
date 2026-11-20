@@ -28,3 +28,11 @@ Memory an arena took back (`Reset`, `Rewind`) and fresh chunks are marked in one
 `ScratchArena::Get()` is the calling thread's arena, a `constinit thread_local LinearArena` and not a `CoreManager` service: it works on any thread, in a static initialiser or before the engine starts, and allocates nothing until its first `Allocate`. The thread's end frees its chunks and releases its stats slot (all scratch arenas are named `Scratch`, one entry per live thread that used it).
 
 `ScratchScope` takes a mark and rewinds in its destructor; scopes nest like locals. **Rules:** memory of a scope must not outlive it (not returned, not stored in a longer-lived container) and must not cross to another thread; a scope ends on the thread that made it (Debug asserts). Nothing from the arena is destroyed on rewind (`LinearArena`, "No destructors").
+
+## ArenaAllocator (`ArenaAllocator.h`)
+
+The EASTL allocator over a `LinearArena&`, behind `ArenaVector<T>` and `ArenaString` (declared in `Types/`, which keeps `eastl::` and the arena headers out of the PCH). Another container takes it as its allocator parameter (`eastl::hash_map<K, V, Hash, Equal, ArenaAllocator>`).
+
+- **`deallocate` does nothing,** so a vector that grows by doubling leaves every old block in the arena until `Reset()` or the scope's rewind: `reserve` first when the size is known. The container's destructor frees nothing, but a container of non-trivial elements still runs their destructors.
+- **A default-constructed allocator binds to the thread's `ScratchArena`** (EASTL needs a default constructor, and builds one from a name string, which is not kept). Such a container belongs to the scope that is alive when it is made and must not cross threads; a container of a longer life takes its arena explicitly.
+- **Equality is by arena.** `offset` of the aligned `allocate` is ignored (EASTL passes 0).
