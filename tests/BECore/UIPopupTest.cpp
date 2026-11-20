@@ -363,6 +363,20 @@ namespace BECore::Tests {
         EXPECT_FALSE(child->rect.IsEmpty());
     }
 
+    TEST_F(UIPopupTest, OfTwoOpenListsOnTheSamePlaceTheLaterInTheTreeIsHitFirst) {
+        auto other = AddTo<TestPopup>(_canvas->GetRoot(), "Other", 100.0f, 100.0f, kOptionWidth, kOptionHeight, kHeaderRed);
+        other->interactive = true;
+        auto entry = AddTo<ClickCounter>(*other, "Entry", 0.0f, 0.0f, 10.0f, 10.0f, kFirstOptionRed);
+        entry->interactive = true;
+        _pop->open = true;
+        other->open = true;
+        _canvas->Invalidate();
+        _canvas->UpdateLayout(800.0f, 600.0f);  // no draw, so SyncPopups() has not closed the earlier one
+
+        ASSERT_EQ(_canvas->GetLayout().OpenPopups().size(), 2u);
+        EXPECT_EQ(_canvas->GetLayout().HitTest(150.0f, 180.0f), entry.Get());
+    }
+
     // ---- the validator ----------------------------------------------------------------------------------------------------
 
     TEST_F(UIPopupTest, TheValidatorSkipsTheChildrenOfAClosedPopupAndChecksAnOpenOne) {

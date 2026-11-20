@@ -29,19 +29,59 @@ namespace BECore {
             return inside && accept(element) ? &element : nullptr;
         }
 
-        void CollectOpenPopups(UIElement& element, Vector<UIElement*>& popups) {
+        void VisitOpenPopups(UIElement& element, FunctionRef<void(UIElement&)> visit) {
             if (!element.active.visible) {
                 return;
             }
             if (element.HasPopupChildren()) {
                 if (element.IsPopupOpen()) {
-                    popups.push_back(&element);
+                    visit(element);
                 }
                 return;
             }
             for (const auto& child : element.children) {
-                CollectOpenPopups(*child, popups);
+                VisitOpenPopups(*child, visit);
             }
+        }
+
+        bool AnyOpenPopup(const UIElement& element) {
+            if (!element.active.visible) {
+                return false;
+            }
+            if (element.HasPopupChildren()) {
+                return element.IsPopupOpen();
+            }
+            for (const auto& child : element.children) {
+                if (AnyOpenPopup(*child)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// The children of the open popups, the topmost first: the reverse of the tree order, so a later popup comes before an earlier one and a later child before an earlier one
+        template <typename TAccept>
+        UIElement* FindInPopups(UIElement& element, float x, float y, const TAccept& accept) {
+            if (!element.active.visible) {
+                return nullptr;
+            }
+            if (element.HasPopupChildren()) {
+                if (!element.IsPopupOpen()) {
+                    return nullptr;
+                }
+                for (auto child = element.children.rbegin(); child != element.children.rend(); ++child) {
+                    if (UIElement* hit = FindIn(**child, x, y, accept)) {
+                        return hit;
+                    }
+                }
+                return nullptr;
+            }
+            for (auto child = element.children.rbegin(); child != element.children.rend(); ++child) {
+                if (UIElement* hit = FindInPopups(**child, x, y, accept)) {
+                    return hit;
+                }
+            }
+            return nullptr;
         }
 
         /// The pass of the transitions over the whole tree (a hidden element too: its children have their own flags). @p variantsChosen: `active` was just reset from `style`, so a `held` element
@@ -116,11 +156,19 @@ namespace BECore {
         return {_resolved.transform.ToViewX(outputX), _resolved.transform.ToViewY(outputY)};
     }
 
+    void UICanvasLayout::ForEachOpenPopup(FunctionRef<void(UIElement&)> visit) const {
+        if (root) {
+            VisitOpenPopups(*root, visit);
+        }
+    }
+
+    bool UICanvasLayout::HasOpenPopup() const {
+        return root && AnyOpenPopup(*root);
+    }
+
     Vector<UIElement*> UICanvasLayout::OpenPopups() const {
         Vector<UIElement*> popups;
-        if (root) {
-            CollectOpenPopups(*root, popups);
-        }
+        ForEachOpenPopup([&popups](UIElement& popup) { popups.push_back(&popup); });
         return popups;
     }
 
@@ -132,14 +180,9 @@ namespace BECore {
             if (!layout.HasLayout() || !layout.root) {
                 return nullptr;
             }
-            // The open popups are drawn above the whole tree, so they are tested first: the later one, then the later child
-            const Vector<UIElement*> popups = layout.OpenPopups();
-            for (auto popup = popups.rbegin(); popup != popups.rend(); ++popup) {
-                for (auto child = (*popup)->children.rbegin(); child != (*popup)->children.rend(); ++child) {
-                    if (UIElement* hit = FindIn(**child, x, y, accept)) {
-                        return hit;
-                    }
-                }
+            // The open popups are drawn above the whole tree, so they are tested first (FindInPopups)
+            if (UIElement* hit = FindInPopups(*layout.root, x, y, accept)) {
+                return hit;
             }
             return FindIn(*layout.root, x, y, accept);
         }
