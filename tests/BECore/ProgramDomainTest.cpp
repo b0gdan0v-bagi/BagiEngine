@@ -178,6 +178,8 @@ namespace BECore::Tests {
         EXPECT_NE(refusal(ProgramDomain::AddOperation<&FourOf>("four_of")).find("takes 4 parameters"), String::npos) << "more than an instruction has registers for";
         EXPECT_NE(refusal(ProgramDomain::AddOperation<&UnregisteredParameter>("unregistered_parameter")).find("parameter 1"), String::npos);
         EXPECT_NE(refusal(ProgramDomain::AddOperation<&UnregisteredResult>("unregistered_result")).find("result type"), String::npos);
+        EXPECT_NE(refusal(ProgramDomain::AddOperation<&BitsPopcount>("popcount_reading", DomainOperationOptions{LevelBit(0)})).find("takes no context"), String::npos)
+            << "levels declared by a function that reads none";
         EXPECT_NE(refusal(ProgramDomain::AddOperation<&BitsAnd>("and_mask")).find("registered already"), String::npos) << "the same name and parameters";
         EXPECT_NE(refusal(ProgramDomain::AddOperation<&BitsOr>("and_mask")).find("registered already"), String::npos) << "another function with the same parameters";
 

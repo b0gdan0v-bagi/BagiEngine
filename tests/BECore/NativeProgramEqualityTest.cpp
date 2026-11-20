@@ -20,6 +20,7 @@
 #include <NativePrograms/NativeProgramFormulas.h>
 #include <NativePrograms/NativeProgramSet.h>
 #include <bit>
+#include <cstring>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -29,7 +30,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        constexpr size_t kImageBytes = 16;
+        constexpr size_t kImageBytes = kProgramRegisterBytes;
         constexpr size_t kCaseCount = 2048;
         constexpr uint64_t kSeed = 20260101;
 
@@ -112,6 +113,10 @@ namespace BECore::Tests {
             operands.quat = Choose<Quat>(pick, index, rng);
             operands.color = Choose<Color>(pick, index, rng);
             operands.text = Choose<PoolString>(pick, index, rng);
+            const ProgramDomainValue image = Choose<ProgramDomainValue>(pick, index, rng);
+            static_assert(sizeof(operands.mask) == sizeof(image) && sizeof(operands.pair) <= sizeof(image));
+            std::memcpy(&operands.mask, image.bytes.data(), sizeof(operands.mask));
+            std::memcpy(&operands.pair, image.bytes.data(), sizeof(operands.pair));
             const uint32_t element = Choose<ProgramEnum>(pick, index, rng).index;
             operands.narrow = static_cast<ValueNarrowEnum>(static_cast<uint8_t>(element));
             operands.wide16 = static_cast<ValueShortEnum>(static_cast<uint16_t>(element));
@@ -319,7 +324,8 @@ namespace BECore::Tests {
             }
         }
         for (const Opcode op : EnumUtils<Opcode>::Values()) {
-            if (op != Opcode::Invalid) {
+            // `CallDomain` names an operation of a game's registry, which the tool that writes the set does not register
+            if (op != Opcode::Invalid && op != Opcode::CallDomain) {
                 EXPECT_TRUE(used[static_cast<size_t>(op)]) << "no program of the set runs " << EnumUtils<Opcode>::ToString(op).data() << ": add it to NativeProgramSetRows.cpp";
             }
         }

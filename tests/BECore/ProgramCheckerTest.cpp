@@ -71,6 +71,7 @@ namespace BECore::Tests {
                 case ProgramType::String:
                     return DescribeType<PoolString>();
                 case ProgramType::Enum:
+                case ProgramType::Domain:  // a registered type has the descriptor of its C++ type, which the test names itself
                     break;
             }
             return DescribeType<ValueElement>();

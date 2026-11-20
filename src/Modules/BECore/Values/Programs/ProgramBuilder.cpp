@@ -61,15 +61,31 @@ namespace BECore {
             if (ins.dst >= _highWater) {
                 return refuse(i, ins, Format("writes r{}, which was never acquired", ins.dst));
             }
+            const bool loadSlot = IsLoadSlot(ins.op);
+            const bool callDomain = ins.op == Opcode::CallDomain;
             const bool tableLoad = ins.op == Opcode::LoadTable;
             const bool slotOnly = IsMulAddSlot(ins.op) || ins.op == Opcode::LoadTableSlot;
             const bool lerpSlots = IsLerpSlots(ins.op);
             // The fused and table instructions keep counts, constant indexes and levels in a, b and c: only a field the opcode reads as a register is one
-            const bool aIsRegister = !slotOnly && !lerpSlots;
-            const bool bIsRegister = !slotOnly && !lerpSlots && !tableLoad;
-            const bool cIsRegister = !slotOnly && !tableLoad;
+            // (a load of a slot has a level in a and a size in b; a call has as many registers as the operation has parameters, checked below)
+            const bool aIsRegister = !slotOnly && !lerpSlots && !loadSlot && !callDomain;
+            const bool bIsRegister = !slotOnly && !lerpSlots && !tableLoad && !loadSlot && !callDomain;
+            const bool cIsRegister = !slotOnly && !tableLoad && !loadSlot && !callDomain;
             if ((aIsRegister && ins.a >= kMaxProgramRegisters) || (bIsRegister && ins.b >= kMaxProgramRegisters) || (cIsRegister && ins.c >= kMaxProgramRegisters)) {
                 return refuse(i, ins, "an operand names a register beyond the last");
+            }
+            if (callDomain) {
+                if (ins.imm >= ProgramDomain::OperationCount()) {
+                    return refuse(i, ins, Format("calls operation {}, but {} are registered", ins.imm, ProgramDomain::OperationCount()));
+                }
+                const DomainOperation& operation = ProgramDomain::Operation(ins.imm);
+                const Array<uint8_t, kMaxDomainArguments> arguments{ins.a, ins.b, ins.c};
+                for (size_t argument = 0; argument < operation.parameterCount; ++argument) {
+                    if (arguments[argument] >= _highWater) {
+                        return refuse(i, ins, Format("'{}' reads r{}, which was never acquired", operation.name.ToStringView(), arguments[argument]));
+                    }
+                }
+                reads |= operation.reads;
             }
             if (ins.op == Opcode::LoadConst && ins.imm >= _constants.size()) {
                 return refuse(i, ins, Format("reads constant {}, but there are {}", ins.imm, _constants.size()));
@@ -111,6 +127,9 @@ namespace BECore {
             if (IsLoadSlot(ins.op)) {
                 if (ins.a >= kMaxContextLevels) {
                     return refuse(i, ins, Format("reads level {}, but a context has {}", ins.a, kMaxContextLevels));
+                }
+                if (ins.op == Opcode::LoadSlotDomain && (ins.b == 0 || ins.b > kProgramRegisterBytes)) {
+                    return refuse(i, ins, Format("loads a registered type of {} bytes, but a register holds 1 to {}", ins.b, kProgramRegisterBytes));
                 }
                 if (ins.op == Opcode::LoadSlotEnum && !IsEnumFieldBytes(ins.b)) {
                     return refuse(i, ins, Format("loads an enum of {} bytes, but an enum field is 1, 2, 4 or 8", ins.b));

@@ -26,6 +26,9 @@ namespace BECore {
                 case Opcode::LoadTableSlot:
                     Kernel::ExecuteLoadTableSlot(regs, ins, constants, context);
                     break;
+                case Opcode::CallDomain:
+                    Kernel::ExecuteCallDomain(regs, ins, context);
+                    break;
 #define BE_PROGRAM_CASE_ROW(Op, Type, Cpp)                                                                                                                                                             \
     case Opcode::Op##Type:                                                                                                                                                                             \
         Kernel::Execute<Kernel::Op, Cpp>(regs, ins, context);                                                                                                                                          \

@@ -61,7 +61,10 @@ namespace BECore {
         Vector<ProgramType> AllTypes() {
             Vector<ProgramType> types;
             for (const ProgramType type : EnumUtils<ProgramType>::Values()) {
-                types.push_back(type);
+                // The registered types of a game are no type the messages can name as a group; the checker names each by its own name
+                if (type != ProgramType::Domain) {
+                    types.push_back(type);
+                }
             }
             return types;
         }

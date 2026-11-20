@@ -7,6 +7,7 @@
 #include <BECore/Math/Vec3.h>
 #include <BECore/Math/Vec4.h>
 #include <BECore/PoolString/PoolString.h>
+#include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <cstddef>
 #include <cstdint>
@@ -15,7 +16,7 @@
 // of `ProgramInterpreterTest` are all expanded from the lists below, so none of them can name an operation another lacks.
 
 /// The types a program computes with: `X(name, C++ type)`, in the order of `ProgramType`. A new type is a row here, a value of `ProgramType` and rows in `BE_PROGRAM_ROWS`.
-/// `ProgramEnum` stands for every reflected enum and `PoolString` is the text.
+/// `ProgramEnum` stands for every reflected enum, `PoolString` is the text and `ProgramDomainValue` stands for every type a game registers (`Domain/CLAUDE.md`).
 #define BE_PROGRAM_TYPES(X)                                                                                                                                                                            \
     X(Bool, bool)                                                                                                                                                                                      \
     X(Int32, int32_t)                                                                                                                                                                                  \
@@ -29,7 +30,8 @@
     X(Quat, Quat)                                                                                                                                                                                      \
     X(Color, Color)                                                                                                                                                                                    \
     X(Enum, ProgramEnum)                                                                                                                                                                               \
-    X(String, PoolString)
+    X(String, PoolString)                                                                                                                                                                              \
+    X(Domain, ProgramDomainValue)
 
 // The types an operation is listed for: `X(operation, type name, C++ type)` per type. The kernels say whether the operation exists for a type
 // (`Kernels.h`, by concepts); `kHasRow` and a `static_assert` there hold the list and the concepts together.
@@ -42,7 +44,8 @@
 #define BE_PROGRAM_TYPES_MATH(X, Op) X(Op, Vec2, Vec2) X(Op, Vec3, Vec3) X(Op, Vec4, Vec4) X(Op, IVec2, IVec2) X(Op, Quat, Quat) X(Op, Color, Color)
 #define BE_PROGRAM_TYPES_ENUM(X, Op) X(Op, Enum, ProgramEnum)
 #define BE_PROGRAM_TYPES_STRING(X, Op) X(Op, String, PoolString)
-#define BE_PROGRAM_TYPES_ALL(X, Op) BE_PROGRAM_TYPES_SCALARS(X, Op) BE_PROGRAM_TYPES_MATH(X, Op) BE_PROGRAM_TYPES_ENUM(X, Op) BE_PROGRAM_TYPES_STRING(X, Op)
+#define BE_PROGRAM_TYPES_DOMAIN(X, Op) X(Op, Domain, ProgramDomainValue)
+#define BE_PROGRAM_TYPES_ALL(X, Op) BE_PROGRAM_TYPES_SCALARS(X, Op) BE_PROGRAM_TYPES_MATH(X, Op) BE_PROGRAM_TYPES_ENUM(X, Op) BE_PROGRAM_TYPES_STRING(X, Op) BE_PROGRAM_TYPES_DOMAIN(X, Op)
 
 /// Every typed instruction: `X(operation, type name, C++ type)`; the opcode is the two names written together (`AddInt32`)
 #define BE_PROGRAM_ROWS(X)                                                                                                                                                                             \
@@ -134,6 +137,10 @@
 
 namespace BECore {
 
+    /// The most registers a program uses, and the size of one: a register holds a game's value type of up to 32 bytes (a 256-bit mask); the engine's types (`Vec4`, `Quat`: 16) leave the rest zero
+    inline constexpr size_t kMaxProgramRegisters = 32;
+    inline constexpr size_t kProgramRegisterBytes = 32;
+
     /**
      * @brief The register image of an enum: the index of the enumerator
      *
@@ -146,18 +153,31 @@ namespace BECore {
         [[nodiscard]] constexpr bool operator==(const ProgramEnum&) const = default;
     };
 
+    /**
+     * @brief The register image of a game's registered value type: its bytes, zero-padded to the register
+     *
+     * Which type it is lives in the checker and in the operations (`ProgramDomain`), as for an enum. Equal values are equal images, so `==` is a byte compare;
+     * a type whose bytes cannot say that (a float member) has no `==` (`DomainEquality::None`, the checker refuses it).
+     */
+    struct ProgramDomainValue {
+        Array<uint8_t, kProgramRegisterBytes> bytes{};
+
+        [[nodiscard]] constexpr bool operator==(const ProgramDomainValue&) const = default;
+    };
+
     /// What a program register holds; the order is the order of the `LoadSlot` rows (`LoadSlotOpcode`)
-    CORE_ENUM(ProgramType, uint8_t, Bool, Int32, Int64, Float, Double, Vec2, Vec3, Vec4, IVec2, Quat, Color, Enum, String)
+    CORE_ENUM(ProgramType, uint8_t, Bool, Int32, Int64, Float, Double, Vec2, Vec3, Vec4, IVec2, Quat, Color, Enum, String, Domain)
 
     /**
      * @brief One instruction of a program
      *
      * `LoadConst`, `Copy`, `LoadTable` and `LoadTableSlot` move a whole register whatever it holds (a table picks it from a run of constants by an index);
+     * `CallDomain` calls an operation a game registered (`ProgramDomain`; `Instruction.h` has its encoding);
      * `LoadSlot<type>` reads a field of a context object; every other opcode is an operation applied to one type (`AddInt32`), a conversion
      * (`Int32ToFloat`) or a fused instruction (`BE_PROGRAM_FUSED_ROWS`; `Instruction.h` says how each is encoded). `Invalid` is never emitted: a zeroed instruction is caught.
      */
-    CORE_ENUM(Opcode, uint16_t, Invalid, LoadConst, Copy, LoadTable,
-              LoadTableSlot BE_PROGRAM_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_FUSED_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_MIXED_ROWS(BE_PROGRAM_OPCODE_MIXED)
+    CORE_ENUM(Opcode, uint16_t, Invalid, LoadConst, Copy, LoadTable, LoadTableSlot,
+              CallDomain BE_PROGRAM_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_FUSED_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_MIXED_ROWS(BE_PROGRAM_OPCODE_MIXED)
                   BE_PROGRAM_CONVERSIONS(BE_PROGRAM_OPCODE_CONVERSION))
 
     /// The operations of `BE_PROGRAM_ROWS` by name, apart from the type: what the text of a formula says (`+`, `min`) before a type is known
@@ -252,7 +272,7 @@ namespace BECore {
         return Opcode::Invalid;
     }
 
-    static_assert(static_cast<size_t>(Opcode::LoadSlotString) - static_cast<size_t>(Opcode::LoadSlotBool) + 1 == EnumUtils<ProgramType>::Count(),
+    static_assert(static_cast<size_t>(Opcode::LoadSlotDomain) - static_cast<size_t>(Opcode::LoadSlotBool) + 1 == EnumUtils<ProgramType>::Count(),
                   "the LoadSlot rows are one run, in the order of ProgramType");
 
     [[nodiscard]] constexpr bool LoadSlotRowsFollowTheTypes() {
@@ -267,7 +287,7 @@ namespace BECore {
     static_assert(LoadSlotRowsFollowTheTypes(), "LoadSlotOpcode(type) is the row at the position of the type");
 
     [[nodiscard]] constexpr bool IsLoadSlot(Opcode op) {
-        return op >= Opcode::LoadSlotBool && op <= Opcode::LoadSlotString;
+        return op >= Opcode::LoadSlotBool && op <= Opcode::LoadSlotDomain;
     }
 
     /// `slot * k + b` over a number, or over a `Vec3` with a `float` factor: one load, one multiplication and one addition in one instruction

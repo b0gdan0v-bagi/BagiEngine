@@ -49,8 +49,8 @@ namespace BECore {
     /**
      * @brief The type of one argument or result of an operation: a program type, an enum or a registered type
      *
-     * `domain` names the registered type (`kNoDomainType` for the others); `enumType` is the descriptor of the enum when the program type is `Enum`, since the register holds only
-     * the index. `type` says nothing for a registered type (`IsDomain()`: the program type of those comes with the instruction set, `ProgramType::Domain`). Two values are the same type when these agree.
+     * `type` is `ProgramType::Domain` for a registered type, and `domain` names it (`kNoDomainType` for the others); `enumType` is the descriptor of the enum when the program type
+     * is `Enum`, since the register holds only the index. Two values are the same type when these agree.
      */
     struct DomainValueType {
         ProgramType type = ProgramType::Int32;
@@ -78,7 +78,14 @@ namespace BECore {
         DomainValueType result;
         /// The function takes `const Context&` first: it reads the objects of the context
         bool takesContext = false;
+        /// The levels of the context the function reads: a program that calls it reads them too (`Program::Reads`), whatever the program's own `LoadSlot`s say
+        LevelMask reads = 0;
         DomainOperationFn function = nullptr;
+    };
+
+    struct DomainOperationOptions {
+        /// For a function that takes `const Context&`: the levels it reads, so `CachedValue` knows when a result is stale. Empty is a function that reads no level
+        LevelMask reads = 0;
     };
 
     namespace Detail {
@@ -223,14 +230,14 @@ namespace BECore {
          *
          * Its parameters (at most three) and its result are program types, reflected enums or registered types, and it may take `const Context&` first. Refused: a name that is no
          * identifier, an engine function (`FindExprFunction`, `at`, `ByLevel`), more than three parameters, a parameter or result type that is not registered, and a second function
-         * of the same name with the same parameters (overloads differ in their parameters, not in the result).
+         * of the same name with the same parameters (overloads differ in their parameters, not in the result), and @p options.reads for a function that takes no context.
          */
         template <auto Function>
-        requires DomainFunction<Function> static std::expected<DomainOperationId, String> AddOperation(StringView name) {
+        requires DomainFunction<Function> static std::expected<DomainOperationId, String> AddOperation(StringView name, DomainOperationOptions options = {}) {
             using Traits = Detail::DomainFunctionTraits<decltype(Function)>;
             using Split = Detail::StripContext<typename Traits::Arguments>;
             constexpr bool kTakesContext = Split::kTakesContext;
-            return AddOperationOf<Function, kTakesContext, typename Traits::Result>(name, typename Split::Parameters{});
+            return AddOperationOf<Function, kTakesContext, typename Traits::Result>(name, options, typename Split::Parameters{});
         }
 
         [[nodiscard]] static Optional<DomainTypeId> FindType(StringView name);
@@ -266,6 +273,7 @@ namespace BECore {
                 if (!domain) {
                     return std::nullopt;
                 }
+                type.type = ProgramType::Domain;
                 type.domain = *domain;
             }
             return type;
@@ -274,11 +282,11 @@ namespace BECore {
     private:
         static std::expected<DomainTypeId, String> RegisterTypeImpl(StringView name, const TypeDesc& descriptor, size_t size, DomainEquality equality, bool uniqueRepresentation);
 
-        static std::expected<DomainOperationId, String> AddOperationImpl(StringView name, Span<const DomainValueType> parameters, const DomainValueType& result, bool takesContext,
+        static std::expected<DomainOperationId, String> AddOperationImpl(StringView name, Span<const DomainValueType> parameters, const DomainValueType& result, bool takesContext, LevelMask reads,
                                                                          DomainOperationFn function);
 
         template <auto Function, bool TakesContext, typename Result, typename... Parameters>
-        static std::expected<DomainOperationId, String> AddOperationOf(StringView name, Detail::DomainTypeList<Parameters...>) {
+        static std::expected<DomainOperationId, String> AddOperationOf(StringView name, DomainOperationOptions options, Detail::DomainTypeList<Parameters...>) {
             if constexpr (sizeof...(Parameters) > kMaxDomainArguments) {
                 return std::unexpected(Format("operation '{}' takes {} parameters, the most is {}", name, sizeof...(Parameters), kMaxDomainArguments));
             } else {
@@ -300,7 +308,7 @@ namespace BECore {
                 if (!(take(ValueTypeOf<std::remove_cvref_t<Parameters>>()) && ...)) {
                     return std::unexpected(std::move(refusal));
                 }
-                return AddOperationImpl(name, Span<const DomainValueType>(parameters.data(), sizeof...(Parameters)), *result, TakesContext,
+                return AddOperationImpl(name, Span<const DomainValueType>(parameters.data(), sizeof...(Parameters)), *result, TakesContext, options.reads,
                                         Detail::RawOperationOf<Function, TakesContext>(Detail::DomainTypeList<Parameters...>{}));
             }
         }

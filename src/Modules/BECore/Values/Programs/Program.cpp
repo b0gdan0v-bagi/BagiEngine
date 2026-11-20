@@ -1,5 +1,6 @@
 #include "Program.h"
 
+#include <BECore/Values/Programs/Domain/ProgramDomain.h>
 #include <BECore/Values/Programs/Native/NativePrograms.h>
 
 namespace BECore {
@@ -172,6 +173,11 @@ namespace BECore {
             }
             if (ins.op == Opcode::LoadTableSlot) {
                 text += Format("{}: LoadTableSlot r{} <- level {} offset {} [{} entries from constant {}]\n", i, ins.dst, ins.a, LowHalf(ins.imm), TableEntryCount(ins), HighHalf(ins.imm));
+                continue;
+            }
+            if (ins.op == Opcode::CallDomain && ins.imm < ProgramDomain::OperationCount()) {
+                const DomainOperation& operation = ProgramDomain::Operation(ins.imm);
+                text += Format("{}: CallDomain r{} <- {}(r{} r{} r{}) [operation {}]\n", i, ins.dst, operation.name.ToStringView(), ins.a, ins.b, ins.c, ins.imm);
                 continue;
             }
             text += Format("{}: {} r{} <- r{} r{} r{} imm {}\n", i, EnumUtils<Opcode>::ToString(ins.op), ins.dst, ins.a, ins.b, ins.c, ins.imm);

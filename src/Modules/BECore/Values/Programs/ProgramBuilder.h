@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Assert/AssertMacros.h>
+#include <BECore/Values/Programs/Domain/ProgramDomain.h>
 #include <BECore/Values/Programs/Program.h>
 #include <cstdint>
 #include <cstring>
@@ -54,10 +55,12 @@ namespace BECore {
             Emit(Opcode::LoadConst, dst, 0, 0, 0, AddConstant(value));
         }
 
-        /// @p enumBytes is the size of the field (`TypeDesc::enumBytes`) and is for a `ProgramType::Enum` only: the load needs the width of the underlying type
-        void EmitLoadSlot(uint8_t dst, ProgramType type, SlotRef slot, uint8_t enumBytes = 0) {
-            ASSERT((type == ProgramType::Enum) == IsEnumFieldBytes(enumBytes), "EmitLoadSlot: an enum load names the size of its field, no other load does");
-            Emit(LoadSlotOpcode(type), dst, slot.level, enumBytes, 0, slot.offset);
+        /// @p bytes is the size of the field for a `ProgramType::Enum` (`TypeDesc::enumBytes`: the load needs the width of the underlying type) and for a `ProgramType::Domain` (the size of
+        /// the registered type); no other load has one
+        void EmitLoadSlot(uint8_t dst, ProgramType type, SlotRef slot, uint8_t bytes = 0) {
+            ASSERT(type == ProgramType::Domain || (type == ProgramType::Enum) == IsEnumFieldBytes(bytes), "EmitLoadSlot: an enum load names the size of its field, no other load does");
+            ASSERT(type != ProgramType::Domain || (bytes >= 1 && bytes <= kProgramRegisterBytes), "EmitLoadSlot: a registered type is 1 to one register of bytes");
+            Emit(LoadSlotOpcode(type), dst, slot.level, bytes, 0, slot.offset);
         }
 
         /// @p dst takes entry `index` of the @p count constants from @p first, the `int32_t` index being in register @p indexReg; `Finish` refuses an empty table, a run that is not in the pool and a
@@ -66,6 +69,12 @@ namespace BECore {
             Instruction ins{Opcode::LoadTable, dst, indexReg, 0, 0, first};
             SetTableEntryCount(ins, count);
             Emit(ins);
+        }
+
+        /// @p dst takes the result of the operation @p operation of the game (`ProgramDomain`) over the registers @p a, @p b, @p c, as many as the operation has parameters; `Finish` refuses an
+        /// operation that is not registered and adds the levels it declares to `Reads`
+        void EmitCallDomain(uint8_t dst, DomainOperationId operation, uint8_t a = 0, uint8_t b = 0, uint8_t c = 0) {
+            Emit(Opcode::CallDomain, dst, a, b, c, operation);
         }
 
         /// Runs the peephole pass (`Peephole.h`) over the code so far; @p resultRegister is the register the program will give back, which no fusion may stop writing. Call it after the

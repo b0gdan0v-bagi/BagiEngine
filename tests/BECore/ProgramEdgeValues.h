@@ -110,6 +110,25 @@ namespace BECore::Tests {
         return {ProgramEnum{0}, ProgramEnum{1}, ProgramEnum{2}, ProgramEnum{3}, ProgramEnum{std::numeric_limits<uint32_t>::max()}};
     }
 
+    /// Images that differ in one byte of either half, and the full ones: a compare of fewer than 32 bytes would miss one
+    template <>
+    inline Vector<ProgramDomainValue> Edges<ProgramDomainValue>() {
+        ProgramDomainValue zero;
+        ProgramDomainValue lowByte;
+        lowByte.bytes.front() = 1;
+        ProgramDomainValue highByte;
+        highByte.bytes.back() = 1;
+        ProgramDomainValue lowHalf;
+        ProgramDomainValue highHalf;
+        ProgramDomainValue full;
+        for (size_t i = 0; i < kProgramRegisterBytes; ++i) {
+            const auto byte = static_cast<uint8_t>(0xA0 + i);
+            (i < kProgramRegisterBytes / 2 ? lowHalf : highHalf).bytes[i] = byte;
+            full.bytes[i] = byte;
+        }
+        return {zero, lowByte, highByte, lowHalf, highHalf, full};
+    }
+
     template <>
     inline Vector<PoolString> Edges<PoolString>() {
         return {PoolString{}, ""_intern, "Fire"_intern, "fire"_intern, "Fire "_intern, "Water"_intern, "a longer text that is not a name of anything"_intern};

@@ -156,10 +156,13 @@ namespace BECore {
         return registry.types.Append(DomainType{PoolString::Intern(name), &descriptor, static_cast<uint32_t>(size), equality});
     }
 
-    std::expected<DomainOperationId, String> ProgramDomain::AddOperationImpl(StringView name, Span<const DomainValueType> parameters, const DomainValueType& result, bool takesContext,
+    std::expected<DomainOperationId, String> ProgramDomain::AddOperationImpl(StringView name, Span<const DomainValueType> parameters, const DomainValueType& result, bool takesContext, LevelMask reads,
                                                                              DomainOperationFn function) {
         if (!IsIdentifier(name)) {
             return std::unexpected(Format("operation name '{}' is not an identifier (letters, digits and '_', no digit first)", name));
+        }
+        if (reads != 0 && !takesContext) {
+            return std::unexpected(Format("operation '{}' declares the levels it reads, but takes no context", name));
         }
         if (FindExprFunction(name) != nullptr || name == kTableFunction || name == kNamedTableFunction) {
             return std::unexpected(Format("operation name '{}' is a function of the formula language", name));
@@ -172,6 +175,7 @@ namespace BECore {
         }
         operation.result = result;
         operation.takesContext = takesContext;
+        operation.reads = reads;
         operation.function = function;
 
         Registry& registry = Registry::Instance();
@@ -261,6 +265,7 @@ namespace BECore {
             }
             hash = FoldValueType(hash, operation.result);
             hash = Fold(hash, operation.takesContext ? 1 : 0);
+            hash = Fold(hash, operation.reads);
         }
         return hash;
     }

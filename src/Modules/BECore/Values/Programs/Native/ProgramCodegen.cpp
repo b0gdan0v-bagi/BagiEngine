@@ -171,6 +171,8 @@ namespace BECore {
                 return Format("Kernel::ExecuteLoadTable(regs, {}, {});", literal, constants);
             case Opcode::LoadTableSlot:
                 return Format("Kernel::ExecuteLoadTableSlot(regs, {}, {}, context);", literal, constants);
+            case Opcode::CallDomain:
+                return Format("Kernel::ExecuteCallDomain(regs, {}, context);", literal);
 #define BE_PROGRAM_EMIT_ROW(Op, Type, Cpp)                                                                                                                                                             \
     case Opcode::Op##Type:                                                                                                                                                                             \
         return Format("Kernel::Execute<Kernel::" #Op ", " #Cpp ">(regs, {}, context);", literal);
