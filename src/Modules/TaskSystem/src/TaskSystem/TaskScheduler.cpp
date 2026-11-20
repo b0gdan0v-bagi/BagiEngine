@@ -130,7 +130,7 @@ namespace BECore {
     void TaskScheduler::ScheduleYielded(TaskQueue::TaskFunc task, ThreadType threadType) {
         if (!_stopped.load(std::memory_order_relaxed) && _threadPool && _threadPool->IsInline() && _inBackgroundJob) {
             LockGuard lock(_backgroundMutex);
-            _backgroundSlices.push_back(std::move(task));
+            _backgroundSlices.PushBack(std::move(task));
             return;
         }
 
@@ -156,11 +156,10 @@ namespace BECore {
             TaskQueue::TaskFunc slice;
             {
                 LockGuard lock(_backgroundMutex);
-                if (_backgroundSlices.empty()) {
+                if (_backgroundSlices.Empty()) {
                     break;
                 }
-                slice = std::move(_backgroundSlices.front());
-                _backgroundSlices.pop_front();
+                slice = _backgroundSlices.PopFront();
             }
 
             SubmitInlineBackgroundJob(std::move(slice));
@@ -188,7 +187,7 @@ namespace BECore {
 
     size_t TaskScheduler::GetBackgroundSliceCount() const {
         LockGuard lock(_backgroundMutex);
-        return _backgroundSlices.size();
+        return _backgroundSlices.Size();
     }
 
     void TaskScheduler::Shutdown() {
@@ -202,7 +201,7 @@ namespace BECore {
 
         {
             LockGuard lock(_backgroundMutex);
-            _backgroundSlices.clear();
+            _backgroundSlices.Clear();
         }
 
         {

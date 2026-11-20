@@ -4,6 +4,7 @@
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/Thread.h>
 #include <BECore/Types/Types.h>
+#include <TaskSystem/MoveRing.h>
 #include <TaskSystem/TaskQueue.h>
 #include <atomic>
 #include <cstddef>
@@ -110,7 +111,7 @@ namespace BECore {
         bool _isInline = false;
         bool _drainingInline = false;
         Thread::Id _inlineThread;
-        eastl::deque<TaskQueue::TaskFunc> _inlineQueue;
+        Detail::MoveRing<TaskQueue::TaskFunc> _inlineQueue;
     };
 
 }  // namespace BECore

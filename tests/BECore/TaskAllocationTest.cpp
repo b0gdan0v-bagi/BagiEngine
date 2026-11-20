@@ -3,7 +3,6 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Wait.h>
 #include <TaskSystem/Task.h>
-#include <TaskSystem/TaskHandle.h>
 #include <TaskSystem/TaskManager.h>
 #include <TaskSystem/TaskScheduler.h>
 #include <TaskSystem/ThreadPool.h>
@@ -33,12 +32,12 @@ namespace BECore::Tests {
 
         // Allocations per task of each route: the measured baseline rounded up; every work package that removes a source lowers them, the last makes them 0.
         constexpr double kInlineSubmitAllocBudget = 1;
-        constexpr double kPoolSubmitAllocBudget = 0.3;
+        constexpr double kPoolSubmitAllocBudget = 0;
         constexpr double kMainQueueAllocBudget = 0.35;
         constexpr double kDelayedAllocBudget = 1.35;
-        constexpr double kRunCoroutineAllocBudget = 3.3;
-        constexpr double kRunNestedAllocBudget = 4.3;
-        constexpr double kYieldInlineAllocBudget = 2.3;
+        constexpr double kRunCoroutineAllocBudget = 3;
+        constexpr double kRunNestedAllocBudget = 4;
+        constexpr double kYieldInlineAllocBudget = 2;
 
         struct RouteCost {
             uint64_t ran = 0;

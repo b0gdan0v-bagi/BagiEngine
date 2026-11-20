@@ -2,6 +2,7 @@
 
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Types/Types.h>
+#include <TaskSystem/MoveRing.h>
 #include <TaskSystem/TaskPriority.h>
 #include <TaskSystem/TaskQueue.h>
 #include <TaskSystem/ThreadPool.h>
@@ -205,7 +206,7 @@ namespace BECore {
         mutable Mutex _delayedMutex{BE_LOCK_SITE("Delayed tasks")};
 
         // Cooperative queue (inline pool only): continuations of background jobs that yielded
-        eastl::deque<TaskQueue::TaskFunc> _backgroundSlices;
+        Detail::MoveRing<TaskQueue::TaskFunc> _backgroundSlices;
         mutable Mutex _backgroundMutex{BE_LOCK_SITE("Cooperative queue")};
 
         // Inline pool only, one thread: true while a background job runs on the stack
