@@ -5,7 +5,7 @@
 namespace BECore {
 
     void Run(const Program& program, const Context& context, void* result) {
-        // Uninitialized on purpose: every instruction writes a register before another reads it, and zeroing 512 bytes would cost more than a small formula
+        // Uninitialized on purpose: every instruction writes a register before another reads it, and zeroing a kilobyte would cost more than a small formula
         Array<RegisterImage, kMaxProgramRegisters> registers;  // NOLINT(cppcoreguidelines-pro-type-member-init)
         RegisterImage* regs = registers.data();
         const Span<const RegisterImage> constants = program.Constants();
@@ -25,6 +25,9 @@ namespace BECore {
                     break;
                 case Opcode::LoadTableSlot:
                     Kernel::ExecuteLoadTableSlot(regs, ins, constants, context);
+                    break;
+                case Opcode::CallDomain:
+                    Kernel::ExecuteCallDomain(regs, ins, context);
                     break;
 #define BE_PROGRAM_CASE_ROW(Op, Type, Cpp)                                                                                                                                                             \
     case Opcode::Op##Type:                                                                                                                                                                             \

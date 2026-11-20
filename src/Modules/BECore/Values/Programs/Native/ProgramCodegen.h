@@ -9,6 +9,9 @@ namespace BECore {
     struct NativeCodegenOptions {
         /// Named in the header comment of the file, so a reader knows which content the functions were generated for
         StringView contentSet;
+        /// The `ProgramDomain::Fingerprint()` written into the file for the programs that call a game's operation; the registry's current one when empty. A test that
+        /// compares the file with what the set generates now names the fingerprint the tool had (other tests of its process registered more since)
+        Optional<uint64_t> domainFingerprint;
     };
 
     /**
@@ -24,7 +27,8 @@ namespace BECore {
      * @brief One C++ translation unit with a function for each of @p programs, a table of `NativeProgramEntry` and a `NativeProgramRegistrar` of it
      *
      * Deterministic: the programs are ordered by `CodeHash` (a tie by the code), equal programs are written once, and nothing of the process (an address, an id, the
-     * time, a path) enters the text, so two calls give equal bytes and a file under version control changes only when a program does. Each function does what `Run`
+     * time, a path) enters the text, so two calls give equal bytes and a file under version control changes only when a program does (the registry's fingerprint
+     * is in it when a program calls a game's operation: `NativeProgramEntry::domainFingerprint`; a set with none has no trace of it). Each function does what `Run`
      * does with the same kernels, with the instructions written out. The text is only the generator's: compiling it is the build's (`be_add_native_programs`).
      */
     [[nodiscard]] String GenerateNativeSource(Span<const ProgramId> programs, const NativeCodegenOptions& options);

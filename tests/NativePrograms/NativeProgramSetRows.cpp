@@ -56,14 +56,19 @@ namespace BECore::Tests {
                 return Offset(Probe().color);
             } else if constexpr (std::is_same_v<T, PoolString>) {
                 return Offset(Probe().text);
-            } else {
-                static_assert(std::is_same_v<T, ProgramEnum>, "a field for every program type");
+            } else if constexpr (std::is_same_v<T, ProgramEnum>) {
                 return Offset(Probe().wide32);
+            } else {
+                static_assert(std::is_same_v<T, ProgramDomainValue>, "a field for every program type");
+                return Offset(Probe().mask);
             }
         }
 
         /// The size of the enum field `FieldOffset<ProgramEnum>` names
         constexpr uint8_t kEnumFieldBytes = sizeof(ValueTestData::ValueWideEnum);
+
+        /// The size of the registered type `FieldOffset<ProgramDomainValue>` names
+        constexpr uint8_t kDomainFieldBytes = sizeof(ProgramDomainData::DomainBits256);
 
         /// Assembles one program: registers are taken in order and never given back, so the numbers in the code are the order of the calls
         class RowAssembler {
@@ -80,6 +85,8 @@ namespace BECore::Tests {
                 const uint8_t reg = Acquire();
                 if constexpr (std::is_same_v<T, ProgramEnum>) {
                     _builder.EmitLoadSlot(reg, ProgramType::Enum, SlotRef{level, FieldOffset<T>()}, kEnumFieldBytes);
+                } else if constexpr (std::is_same_v<T, ProgramDomainValue>) {
+                    _builder.EmitLoadSlot(reg, ProgramType::Domain, SlotRef{level, FieldOffset<T>()}, kDomainFieldBytes);
                 } else {
                     _builder.EmitLoadSlot(reg, kProgramTypeOf<T>, SlotRef{level, FieldOffset<T>(second)});
                 }

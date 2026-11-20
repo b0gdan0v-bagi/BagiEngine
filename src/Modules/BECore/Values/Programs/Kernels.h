@@ -5,6 +5,7 @@
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Values/Context.h>
 #include <BECore/Values/Programs/Components.h>
+#include <BECore/Values/Programs/Domain/ProgramDomain.h>
 #include <BECore/Values/Programs/Instruction.h>
 #include <BECore/Values/Programs/Opcode.h>
 #include <algorithm>
@@ -722,6 +723,15 @@ namespace BECore::Kernel {
         return value;
     }
 
+    /// `LoadSlotDomain`: the @p bytes of the registered type at @p offset of the object of @p level, the rest of the register zero (equal values are equal images)
+    inline void LoadDomainField(RegisterImage& dst, const Context& context, uint8_t level, uint32_t offset, uint8_t bytes) {
+        const void* object = context.Object(level);
+        ASSERT(object != nullptr, "Program: the context has no object at the level the program reads from");
+        ASSERT(bytes >= 1 && bytes <= kProgramRegisterBytes, "Program: a registered type is 1 to one register of bytes");
+        dst = RegisterImage{};
+        std::memcpy(dst.bytes.data(), static_cast<const uint8_t*>(object) + offset, std::min<size_t>(bytes, kProgramRegisterBytes));
+    }
+
     /// Runs one typed row of the instruction set: the shape of the operation says which registers it reads and writes
     template <typename Op, typename T>
     inline void Execute(RegisterImage* regs, const Instruction& ins, const Context& context) {
@@ -730,6 +740,8 @@ namespace BECore::Kernel {
                 const void* object = context.Object(ins.a);
                 ASSERT(object != nullptr, "Program: the context has no object at the level the program reads from");
                 Store<ProgramEnum>(regs[ins.dst], ProgramEnum{LoadEnumIndex(static_cast<const uint8_t*>(object) + ins.imm, ins.b)});
+            } else if constexpr (std::is_same_v<T, ProgramDomainValue>) {
+                LoadDomainField(regs[ins.dst], context, ins.a, ins.imm, ins.b);
             } else {
                 Store<T>(regs[ins.dst], LoadField<T>(context, ins.a, ins.imm));
             }
@@ -805,6 +817,11 @@ namespace BECore::Kernel {
         const uint32_t first = HighHalf(ins.imm);
         ASSERT(count > 0 && first + count <= constants.size());
         regs[ins.dst] = constants[first + TableIndex(LoadField<int32_t>(context, ins.a, LowHalf(ins.imm)), count)];
+    }
+
+    /// Runs `CallDomain`: the operation of the game that `imm` names, through the plain function pointer of the registry
+    inline void ExecuteCallDomain(RegisterImage* regs, const Instruction& ins, const Context& context) {
+        ProgramDomain::Operation(ins.imm).function(regs, ins, context);
     }
 
     /// Writes the result of a program, `ProgramTypeSize(type)` bytes of register @p resultRegister, to @p result
@@ -884,6 +901,7 @@ namespace BECore {
             case Opcode::Copy:
             case Opcode::LoadTable:
             case Opcode::LoadTableSlot:
+            case Opcode::CallDomain:
                 break;
         }
         return std::nullopt;

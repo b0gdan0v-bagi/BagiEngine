@@ -3,6 +3,7 @@
 // Every bit of a result is compared except the payload and the sign of a NaN: the compiler folds an operation with a constant NaN into some NaN (LLVM keeps no payload),
 // so which one a lane holds is not part of the meaning of a program, and `Same` of ProgramInterpreterTest makes the same exception.
 
+#include <BECore/ProgramDomainTypes.h>
 #include <BECore/ProgramEdgeValues.h>
 #include <BECore/ProgramRowTypes.h>
 #include <BECore/Random/Rng.h>
@@ -20,16 +21,18 @@
 #include <NativePrograms/NativeProgramFormulas.h>
 #include <NativePrograms/NativeProgramSet.h>
 #include <bit>
+#include <cstring>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
 
     using namespace ValueTestData;
+    using ProgramDomainData::DomainBits256;
     using ProgramRowData::ProgramRowOperands;
 
     namespace {
 
-        constexpr size_t kImageBytes = 16;
+        constexpr size_t kImageBytes = kProgramRegisterBytes;
         constexpr size_t kCaseCount = 2048;
         constexpr uint64_t kSeed = 20260101;
 
@@ -58,6 +61,27 @@ namespace BECore::Tests {
             } else if constexpr (std::is_same_v<T, int64_t>) {
                 for (const int64_t value : {int64_t{4294967295}, -int64_t{4294967296}, int64_t{1} << 53, (int64_t{1} << 53) + 1}) {
                     values.push_back(value);
+                }
+            } else if constexpr (std::is_same_v<T, ProgramDomainValue>) {
+                // Masks as a board has them: every bit, a bit on each side of a word, and a pattern that the shifts carry across the words
+                constexpr uint8_t kAllBits = 0xFF;
+                constexpr size_t kBitsPerByte = 8;
+                constexpr uint64_t kPatternStep = 0x9E3779B97F4A7C15ULL;
+                ProgramDomainValue all;
+                all.bytes.fill(kAllBits);
+                values.push_back(all);
+                for (const size_t bit : {size_t{0}, size_t{63}, size_t{64}, size_t{127}, size_t{128}, size_t{255}}) {
+                    ProgramDomainValue single;
+                    single.bytes[bit / kBitsPerByte] = static_cast<uint8_t>(1U << (bit % kBitsPerByte));
+                    values.push_back(single);
+                }
+                for (uint64_t seed = 1; seed <= 3; ++seed) {
+                    ProgramDomainValue pattern;
+                    for (size_t word = 0; word < pattern.bytes.size() / sizeof(uint64_t); ++word) {
+                        const uint64_t bits = (seed + word) * kPatternStep;
+                        std::memcpy(pattern.bytes.data() + word * sizeof(uint64_t), &bits, sizeof(bits));
+                    }
+                    values.push_back(pattern);
                 }
             } else if constexpr (std::is_same_v<T, Vec2>) {
                 values.push_back(Vec2{kPayloadNan, -0.0f});
@@ -112,6 +136,10 @@ namespace BECore::Tests {
             operands.quat = Choose<Quat>(pick, index, rng);
             operands.color = Choose<Color>(pick, index, rng);
             operands.text = Choose<PoolString>(pick, index, rng);
+            const ProgramDomainValue image = Choose<ProgramDomainValue>(pick, index, rng);
+            static_assert(sizeof(operands.mask) == sizeof(image) && sizeof(operands.pair) <= sizeof(image));
+            std::memcpy(&operands.mask, image.bytes.data(), sizeof(operands.mask));
+            std::memcpy(&operands.pair, image.bytes.data(), sizeof(operands.pair));
             const uint32_t element = Choose<ProgramEnum>(pick, index, rng).index;
             operands.narrow = static_cast<ValueNarrowEnum>(static_cast<uint8_t>(element));
             operands.wide16 = static_cast<ValueShortEnum>(static_cast<uint16_t>(element));
@@ -331,7 +359,9 @@ namespace BECore::Tests {
         const Optional<String> built = ReadGeneratedFile();
         ASSERT_TRUE(built.has_value()) << "the file the build generated is not found: run the executable from the build folder";
 
-        const String now = GenerateNativeSource(Span<const ProgramId>(compiled->data(), compiled->size()), NativeCodegenOptions{kNativeProgramSetName});
+        // The registry has grown since the toys went in (other cases register operations of their own): the file is for the registry the tool had
+        const uint64_t toolFingerprint = ProgramDomainData::RegisterDomainToys().fingerprint;
+        const String now = GenerateNativeSource(Span<const ProgramId>(compiled->data(), compiled->size()), NativeCodegenOptions{kNativeProgramSetName, toolFingerprint});
         const String expected = WithoutSources(now);
         const String actual = WithoutSources(*built);
         if (expected != actual) {

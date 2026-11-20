@@ -1,6 +1,7 @@
 // The type checker of formulas (Values/Programs/ExprChecker, ExprFunctions): the type rules of the language, the literals, the paths and the errors with
 // their columns. The text is parsed with the real parser; the typed tree is read back node by node.
 
+#include <BECore/ProgramDomainData.h>
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Programs/CompileOptions.h>
 #include <BECore/Values/Programs/ExprAst.h>
@@ -70,6 +71,8 @@ namespace BECore::Tests {
                     return DescribeType<Color>();
                 case ProgramType::String:
                     return DescribeType<PoolString>();
+                case ProgramType::Domain:
+                    return DescribeType<ProgramDomainData::DomainBits256>();
                 case ProgramType::Enum:
                     break;
             }
@@ -473,7 +476,7 @@ namespace BECore::Tests {
         const auto rect = CheckExpression(*parsed, context.declaration, DescribeType<Rect>());
         ASSERT_FALSE(rect.has_value());
         EXPECT_EQ(rect.error().column, 0U);
-        EXPECT_TRUE(Contains(rect.error().message, "bool, int, int64, float, double, vec2, vec3, vec4, ivec2, quat, color, enum or string")) << rect.error().message.c_str();
+        EXPECT_TRUE(Contains(rect.error().message, "bool, int, int64, float, double, vec2, vec3, vec4, ivec2, quat, color, enum")) << rect.error().message.c_str();
         EXPECT_TRUE(Contains(rect.error().message, "Rect")) << rect.error().message.c_str();
         const auto unsignedType = CheckExpression(*parsed, context.declaration, DescribeType<uint32_t>());
         ASSERT_FALSE(unsignedType.has_value());
@@ -558,7 +561,7 @@ namespace BECore::Tests {
 
     TEST(ProgramCheckerTest, AFieldOfAnotherTypeIsNamedWithItsTypeAndWhatAFormulaReads) {
         const CheckerContext context;
-        Refused(context.declaration, "caster.count", ProgramType::Int32, 1, {"caster.count", "uint32", "int, int64, float, double, vec2, vec3, vec4, ivec2, quat, color, enum or string"});
+        Refused(context.declaration, "caster.count", ProgramType::Int32, 1, {"caster.count", "uint32", "int, int64, float, double, vec2, vec3, vec4, ivec2, quat, color, enum"});
         Refused(context.declaration, "caster.spawn.x + 1", ProgramType::Float, 1, {"caster.spawn.x"});
         Refused(context.declaration, "caster.span", ProgramType::Int32, 1, {"ValueSpan", "reads only fields of the types"});
         Refused(context.declaration, "caster.bounds", ProgramType::Int32, 1, {"Rect", "reads only fields of the types"});

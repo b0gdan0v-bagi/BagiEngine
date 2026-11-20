@@ -1,5 +1,7 @@
 #include "ValueLinkScope.h"
 
+#include <BECore/Reflection/ReaderLimits.h>
+
 namespace BECore {
 
     namespace {
@@ -61,6 +63,20 @@ namespace BECore {
     String ValueLinkScope::AtDocument(StringView message) {
         const StringView name = DocumentName();
         return name.empty() ? String(message) : Format("{} (document '{}')", message, name);
+    }
+
+    String ValueLinkScope::AtDocumentWithin(StringView message) {
+        const StringView name = DocumentName();
+        if (name.empty()) {
+            return String(message);
+        }
+        const String suffix = Format(" (document '{}')", name);
+        constexpr StringView kCut = "...";
+        if (message.size() + suffix.size() <= ReaderLimits::kMaxErrorTextBytes || suffix.size() + kCut.size() >= ReaderLimits::kMaxErrorTextBytes) {
+            return Format("{}{}", message, suffix);
+        }
+        const size_t room = ReaderLimits::kMaxErrorTextBytes - suffix.size() - kCut.size();
+        return Format("{}{}{}", message.substr(0, room), kCut, suffix);
     }
 
 }  // namespace BECore

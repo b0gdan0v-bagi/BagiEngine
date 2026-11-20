@@ -15,7 +15,8 @@ namespace BECore {
      *
      * The generated file holds a table of these. The function is bound to a program only when every field below equals the program's (`ProgramCodeView`), so
      * a program that changed after the file was generated runs in the interpreter, never in stale code. `codeHash` is `Program::CodeHash()` of the program: it
-     * only finds the candidate. `source` is the text of the formula, for the warning of a miss.
+     * only finds the candidate. `source` is the text of the formula, for the warning of a miss. `domainFingerprint` is `ProgramDomain::Fingerprint()` of the process
+     * that generated the file when the program calls an operation of a game (`CallDomain`: its id is the order of registration, `Domain/CLAUDE.md`), 0 otherwise.
      */
     struct NativeProgramEntry {
         uint64_t codeHash = 0;
@@ -27,6 +28,7 @@ namespace BECore {
         Span<const RegisterImage> constants;
         StringView source;
         NativeProgramFn fn = nullptr;
+        uint64_t domainFingerprint = 0;
 
         [[nodiscard]] ProgramCodeView CodeView() const {
             return ProgramCodeView{resultType, resultRegister, registerCount, reads, code, constants};
@@ -54,9 +56,20 @@ namespace BECore {
         /**
          * @brief Adds @p entries and binds the programs already in the pool that match one
          *
-         * May be called more than once (the engine's set and a game's). The entries must outlive the process: the registry keeps pointers into them.
+         * May be called more than once (the engine's set and a game's). The entries must outlive the process: the registry keeps pointers into them. An entry with a
+         * `domainFingerprint` is bound only while `ProgramDomain::Fingerprint()` equals it: a generated file installs itself while the process starts, before the game
+         * registered its types, so such an entry waits for `BindPending`.
          */
         static void Install(Span<const NativeProgramEntry> entries);
+
+        /**
+         * @brief Binds the waiting entries whose `domainFingerprint` equals the process's now
+         *
+         * `ApplyNativeProgramsFlags` calls it, so a game registers its types and operations before that call. The entries that still wait are one `LOG_WARNING` when
+         * `SetWarnOnMiss` asked for it: the process registered another set, or the same set in another order, and those programs run in the interpreter. A bound entry
+         * stays bound (the registry only appends).
+         */
+        static void BindPending();
 
         /// Off: every program runs in the interpreter (for a run that compares the two and the `--interpreted` flag); on: the bound functions come back. On at start
         static void SetEnabled(bool enabled);
