@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/Pooled.h>
 #include <BECore/RefCounted/New.h>
 #include <BECore/Types/Types.h>
 #include <TaskSystem/TaskPriority.h>
@@ -69,8 +70,9 @@ namespace BECore {
         }
 
     private:
-        // Atomic: copies of a token (and the children's parent links) are dropped by whichever thread ends last.
+        // Atomic: copies of a token (and the children's parent links) are dropped by whichever thread ends last; for the same reason the pool is the concurrent one.
         struct State : RefCountedAtomic {
+            BE_POOLED(CancellationToken::State)
             std::atomic<bool> cancelled{false};
             IntrusivePtrAtomic<State> parent;
         };
