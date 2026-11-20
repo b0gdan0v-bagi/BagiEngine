@@ -298,6 +298,34 @@ namespace BECore::Tests {
         }
     }
 
+    TEST(TypeDescTest, ListsSayTheSizeOfTheirElement) {
+        EXPECT_EQ((DescribeType<Array<Vec3, 4>>().elementSize), sizeof(Vec3));
+        EXPECT_EQ((DescribeType<Vector<Vec3>>().elementSize), sizeof(Vec3));
+        EXPECT_EQ((DescribeType<SmallVector<int32_t, 4>>().elementSize), sizeof(int32_t));
+        EXPECT_EQ((DescribeType<FixedVector<float, 8>>().elementSize), sizeof(float));
+        EXPECT_EQ((DescribeType<Array<bool, 3>>().elementSize), sizeof(bool));
+        EXPECT_EQ((DescribeType<Vector<RegMode>>().elementSize), sizeof(RegMode));
+        EXPECT_EQ((DescribeType<Array<DescWideElement, 2>>().elementSize), sizeof(DescWideElement));
+        EXPECT_EQ((DescribeType<Vector<RegInner>>().elementSize), sizeof(RegInner));
+        EXPECT_EQ((DescribeType<Vector<Vector<int32_t>>>().elementSize), sizeof(Vector<int32_t>));
+    }
+
+    TEST(TypeDescTest, OnlyListsHaveAnElementSize) {
+        EXPECT_EQ(DescribeType<int32_t>().elementSize, 0U);
+        EXPECT_EQ(DescribeType<RegMode>().elementSize, 0U);
+        EXPECT_EQ(DescribeType<RegInner>().elementSize, 0U);
+        EXPECT_EQ(DescribeType<String>().elementSize, 0U);
+        EXPECT_EQ(DescribeType<Vec3>().elementSize, 0U);
+        EXPECT_EQ((DescribeType<Map<String, int32_t>>().elementSize), 0U);
+        EXPECT_EQ((DescribeType<Optional<int32_t>>().elementSize), 0U);
+    }
+
+    TEST(TypeDescTest, SameTypeDoesNotCompareTheElementSize) {
+        TypeDesc other = DescribeType<Vector<int32_t>>();
+        other.elementSize += 8;
+        EXPECT_TRUE(SameType(DescribeType<Vector<int32_t>>(), other));
+    }
+
     TEST(TypeDescTest, NestedContainersAreDescribedToTheLeaf) {
         using Nested = HashMap<String, Vector<Optional<RegMode>>>;
         const TypeDesc& desc = DescribeType<Nested>();
