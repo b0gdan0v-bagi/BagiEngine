@@ -59,6 +59,7 @@ A coroutine cannot be preempted, so a long background task shares the only threa
 - **Single-thread build:** a background task's first slice (to its first suspension) runs inline in `Run()`; the rest run in `Update`, within the budget, **at least one slice per frame** even at budget 0 (nothing starves), FIFO and round robin while time remains.
 - **Only background jobs, only where the coroutine suspends.** A task that never yields runs to its end in one go. A main-thread job is never budgeted.
 - The logic lives in `TaskScheduler`, chosen by `ThreadPool::IsInline()` at run time, not by `#if`, so it is testable in every build. The window is open before the first frame (the start-up `WaitAll` is safe) and spent between drains (a task started then yields at its first check): `TaskScheduler.h`.
+- "A background job is on this stack" is `ThreadPool::IsRunningInlineJob()` (the outermost inline `Submit`, the jobs it queued included); `ScheduleYielded` and `ShouldYield` read it, so a main-thread job outside an inline `Submit` is never budgeted.
 - `Yield()` routing: `TaskScheduler::ScheduleYielded`. `GetPendingTaskCount()` counts parked continuations. `SetBudgetClock` is for tests and not synchronized.
 - **Cancellation** stays cooperative: check the token before `YieldIfNeeded()`. A drain never drops a parked slice (the frame must run to its end to free itself); `Shutdown` clears the queue and abandons the handles.
 - **Limits:** `Wait()` / `WaitAll()` on the main thread for a task that yielded deadlocks. Before the first frame an explicit `Yield()` parks until frames start; `YieldIfNeeded()` never parks at start-up. The budget state needs no lock only because an inline pool has one thread.
@@ -95,7 +96,6 @@ On Emscripten the default is the **threaded** build: `-pthread` everywhere, work
 
 - A job is a `MoveOnlyFunction<void()>` (`TaskQueue::TaskFunc`), moved scheduler -> queue -> worker, never copied; clearing a queue destroys each job once. A worker keeps the job it ran until it takes another.
 - Priority queues are `Detail::MovableHeap` (`eastl::priority_queue` copies on push); equal keys are not FIFO.
-- The inline pool wraps each background job (`SubmitInlineBackgroundJob`): one heap allocation per background job in a single-thread build.
 
 ## Thread Safety
 

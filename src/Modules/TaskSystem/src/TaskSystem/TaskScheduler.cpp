@@ -92,6 +92,7 @@ namespace BECore {
 
         {
             LockGuard lock(_mainThreadMutex);
+            tasksToProcess.swap(_mainThreadBatch);
             while (!_mainThreadQueue.Empty()) {
                 tasksToProcess.push_back(_mainThreadQueue.Pop());
             }
@@ -104,6 +105,13 @@ namespace BECore {
                 pt.task();
             }
         }
+
+        // Cleared before it is given back, outside the mutex: the destructor of a job may run any code
+        tasksToProcess.clear();
+        LockGuard lock(_mainThreadMutex);
+        if (_mainThreadBatch.capacity() < tasksToProcess.capacity()) {
+            _mainThreadBatch.swap(tasksToProcess);
+        }
     }
 
     void TaskScheduler::ProcessDelayedTasks() {
@@ -112,6 +120,7 @@ namespace BECore {
 
         {
             LockGuard lock(_delayedMutex);
+            readyTasks.swap(_delayedBatch);
             while (!_delayedTasks.Empty() && _delayedTasks.Top().executeTime <= now) {
                 readyTasks.push_back(_delayedTasks.Pop());
             }
@@ -125,10 +134,16 @@ namespace BECore {
         for (auto& dt : readyTasks) {
             Schedule(std::move(dt.task), dt.priority, dt.threadType);
         }
+
+        readyTasks.clear();
+        LockGuard lock(_delayedMutex);
+        if (_delayedBatch.capacity() < readyTasks.capacity()) {
+            _delayedBatch.swap(readyTasks);
+        }
     }
 
     void TaskScheduler::ScheduleYielded(TaskQueue::TaskFunc task, ThreadType threadType) {
-        if (!_stopped.load(std::memory_order_relaxed) && _threadPool && _threadPool->IsInline() && _inBackgroundJob) {
+        if (!_stopped.load(std::memory_order_relaxed) && _threadPool && _threadPool->IsInline() && _threadPool->IsRunningInlineJob()) {
             LockGuard lock(_backgroundMutex);
             _backgroundSlices.PushBack(std::move(task));
             return;
@@ -162,7 +177,7 @@ namespace BECore {
                 slice = _backgroundSlices.PopFront();
             }
 
-            SubmitInlineBackgroundJob(std::move(slice));
+            _threadPool->Submit(std::move(slice));
             ++sliceCount;
         }
 
@@ -171,7 +186,7 @@ namespace BECore {
     }
 
     bool TaskScheduler::ShouldYield() const {
-        if (_stopped.load(std::memory_order_relaxed) || !_threadPool || !_threadPool->IsInline() || !_inBackgroundJob) {
+        if (_stopped.load(std::memory_order_relaxed) || !_threadPool || !_threadPool->IsInline() || !_threadPool->IsRunningInlineJob()) {
             return false;
         }
         return BudgetNow() >= _sliceDeadline;
@@ -224,25 +239,12 @@ namespace BECore {
     }
 
     void TaskScheduler::DispatchToThreadPool(TaskQueue::TaskFunc task, TaskPriority priority) {
-        if (_threadPool && _threadPool->IsInline()) {
-            SubmitInlineBackgroundJob(std::move(task));
-        } else if (_threadPool) {
+        if (_threadPool) {
             // TODO: учитывать приоритет при выборе очереди
             _threadPool->Submit(std::move(task));
         } else {
             LOG_ERROR("[TaskScheduler] No thread pool available");
         }
-    }
-
-    void TaskScheduler::SubmitInlineBackgroundJob(TaskQueue::TaskFunc task) {
-        // The wrapper holds a whole TaskFunc, so it is above the inline buffer and takes the heap path (inline pool only).
-        _threadPool->Submit([this, task = std::move(task)]() {
-            // Restores the previous value: a drain can run a job while another one is on the stack
-            const bool wasInBackgroundJob = _inBackgroundJob;
-            _inBackgroundJob = true;
-            task();
-            _inBackgroundJob = wasInBackgroundJob;
-        });
     }
 
 }  // namespace BECore

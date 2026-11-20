@@ -128,6 +128,59 @@ namespace BECore::Tests {
         EXPECT_EQ(_pool->GetPendingTaskCount(), 0u) << "The outer call must drain the queue before it returns";
     }
 
+    TEST_F(TaskSystemInlineTest, TheInlineJobFlagStaysUpUntilTheOutermostJobAndItsQueuedJobsEnd) {
+        Vector<bool> seen;
+        EXPECT_FALSE(_pool->IsRunningInlineJob());
+
+        _pool->Submit([&] {
+            seen.push_back(_pool->IsRunningInlineJob());
+            _pool->Submit([&] { seen.push_back(_pool->IsRunningInlineJob()); });  // queued: runs after this job, still inside the outer call
+            seen.push_back(_pool->IsRunningInlineJob());
+        });
+
+        ASSERT_EQ(seen.size(), 3u);
+        EXPECT_TRUE(seen[0]);
+        EXPECT_TRUE(seen[1]);
+        EXPECT_TRUE(seen[2]);
+        EXPECT_FALSE(_pool->IsRunningInlineJob());
+    }
+
+    TEST_F(TaskSystemInlineTest, ADrainThatTasksDrainAgainRunsEveryTaskOnce) {
+        constexpr int kTasks = 6;
+        int mainRuns[kTasks] = {};
+        int delayedRuns[kTasks] = {};
+
+        // A task that drains the queue it came from: the nested call finds the member batch of the outer one taken and must neither run nor lose a task
+        _scheduler.Schedule(
+            [&] {
+                for (int i = 1; i < kTasks; ++i) {
+                    _scheduler.Schedule([&mainRuns, i] { ++mainRuns[i]; }, TaskPriority::Normal, ThreadType::MainThread);
+                }
+                _scheduler.ProcessMainThreadTasks();
+                ++mainRuns[0];
+            },
+            TaskPriority::Normal, ThreadType::MainThread);
+        _scheduler.ProcessMainThreadTasks();
+
+        _scheduler.ScheduleDelayed(
+            [&] {
+                for (int i = 1; i < kTasks; ++i) {
+                    _scheduler.ScheduleDelayed([&delayedRuns, i] { ++delayedRuns[i]; }, TaskScheduler::Duration::zero());
+                }
+                _scheduler.ProcessDelayedTasks();
+                ++delayedRuns[0];
+            },
+            TaskScheduler::Duration::zero());
+        _scheduler.ProcessDelayedTasks();
+
+        for (int i = 0; i < kTasks; ++i) {
+            EXPECT_EQ(mainRuns[i], 1) << "main-thread task " << i;
+            EXPECT_EQ(delayedRuns[i], 1) << "delayed task " << i;
+        }
+        EXPECT_EQ(_scheduler.GetMainThreadQueueSize(), 0u);
+        EXPECT_EQ(_scheduler.GetDelayedTaskCount(), 0u);
+    }
+
     TEST_F(TaskSystemInlineTest, PoolRunsJobsAgainAfterADrain) {
         int ran = 0;
         _pool->Submit([&] { _pool->Submit([&] { ++ran; }); });

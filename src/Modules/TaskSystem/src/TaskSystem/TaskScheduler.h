@@ -188,14 +188,14 @@ namespace BECore {
         /// The clock of the budget: the one set by SetBudgetClock, else steady_clock::now.
         [[nodiscard]] TimePoint BudgetNow() const;
 
-        /// Submits @p task to the inline pool wrapped so that it counts as a background job while it runs.
-        void SubmitInlineBackgroundJob(TaskQueue::TaskFunc task);
-
         ThreadPool* _threadPool = nullptr;
 
         // The three mutexes below have level 0: no path holds two of them (every guard is scoped and ProcessDelayedTasks schedules after it
         // released its lock), and Shutdown destroys queued handles under one of them, which takes the lock of LiveTasks
         Detail::MovableHeap<PrioritizedTask> _mainThreadQueue;
+        // The storage of the batch a drain runs: taken out by ProcessMainThreadTasks under the mutex and given back, so a frame with tasks does not allocate a vector. A call
+        // made while another one runs (a task that drains again) finds it empty and allocates its own
+        Vector<PrioritizedTask> _mainThreadBatch;
         mutable Mutex _mainThreadMutex{BE_LOCK_SITE("Main thread queue")};
 
         // Delayed tasks by real time
@@ -203,14 +203,14 @@ namespace BECore {
         // Delayed tasks by game time (_gameTime), under the same mutex
         Detail::MovableHeap<DelayedTask> _gameDelayedTasks;
         Duration _gameTime{};
+        // The same for ProcessDelayedTasks, under the same mutex
+        Vector<DelayedTask> _delayedBatch;
         mutable Mutex _delayedMutex{BE_LOCK_SITE("Delayed tasks")};
 
         // Cooperative queue (inline pool only): continuations of background jobs that yielded
         Detail::MoveRing<TaskQueue::TaskFunc> _backgroundSlices;
         mutable Mutex _backgroundMutex{BE_LOCK_SITE("Cooperative queue")};
 
-        // Inline pool only, one thread: true while a background job runs on the stack
-        bool _inBackgroundJob = false;
         // TimePoint max: no frame yet (never yield); now + budget: a drain runs; TimePoint min: spent
         TimePoint _sliceDeadline = (TimePoint::max)();
         TimePoint (*_budgetNow)() = nullptr;  // nullptr: steady_clock::now

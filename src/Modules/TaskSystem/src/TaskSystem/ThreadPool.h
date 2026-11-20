@@ -69,6 +69,12 @@ namespace BECore {
             return _isInline;
         }
 
+        /// Inline pool: true while a job runs on this stack (from the start of the outermost Submit until it returns, the jobs queued by it included). Always false on a
+        /// worker pool. Read from the one thread of an inline pool only.
+        [[nodiscard]] bool IsRunningInlineJob() const {
+            return _drainingInline;
+        }
+
         [[nodiscard]] size_t GetThreadCount() const {
             return _threads.size();
         }
