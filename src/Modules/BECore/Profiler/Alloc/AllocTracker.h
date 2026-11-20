@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Memory/ArenaStats.h>
+#include <BECore/Profiler/Alloc/AllocSiteTable.h>
 #include <BECore/Profiler/ProfileSite.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
@@ -80,8 +81,19 @@ namespace BECore {
         static void AddZone(const ProfileSite& site, uint64_t count, uint64_t bytes);
         /// The zones with statistics, the most bytes first
         [[nodiscard]] static Vector<ZoneAllocStats> GetZoneStats();
-        /// Zeroes the zone statistics (the totals stay)
+        /// Zeroes the zone statistics and the name table (the totals stay)
         static void ResetZoneStats();
+
+        /// The next allocation of the calling thread carries @p name (EASTL's allocation name, from Utils/EASTLOperators.cpp). The pointer is
+        /// kept, not copied: it must be a literal or live as long as the program (AllocSiteTable.h)
+        static void SetNextName(const char* name);
+        /// Makes @p zone the innermost open zone of the calling thread, the one allocations are charged to by name; returns the previous one
+        /// (ProfileZone nests strictly, so it restores it at its end)
+        static const ProfileSite* ExchangeCurrentZone(const ProfileSite* zone);
+        /// The allocations per innermost zone x name, the most bytes first; empty without ENGINE_PROFILER_ALLOC. Allocates
+        [[nodiscard]] static Vector<AllocSiteStats> GetNameStats();
+        /// Allocations the name table dropped because it was full, since the last ResetZoneStats
+        [[nodiscard]] static uint64_t GetNameOverflow();
 
         /// BE_PROFILE_NO_ALLOC: allocations of the calling thread count as violations until the matching Leave. Returns the violations of this thread so far
         static uint64_t EnterNoAlloc(const ProfileSite& site);

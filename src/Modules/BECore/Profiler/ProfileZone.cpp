@@ -9,6 +9,7 @@ namespace BECore {
         const AllocTracker::ThreadCounters counters = AllocTracker::GetThreadCounters();
         _allocCountAtBegin = counters.count;
         _allocBytesAtBegin = counters.bytes;
+        _parentZone = AllocTracker::ExchangeCurrentZone(&site);
 #endif
         if (_backend != nullptr) {
             _token = _backend->BeginZone(site);
@@ -22,6 +23,7 @@ namespace BECore {
         allocs.count = counters.count - _allocCountAtBegin;
         allocs.bytes = counters.bytes - _allocBytesAtBegin;
         AllocTracker::AddZone(_site, allocs.count, allocs.bytes);
+        AllocTracker::ExchangeCurrentZone(_parentZone);
 #endif
         if (_backend != nullptr) {
             _backend->EndZone(_token, _site, allocs);

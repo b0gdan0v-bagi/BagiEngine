@@ -113,6 +113,13 @@ else()
 endif()
 if(ENGINE_PROFILER_ALLOC)
     add_compile_definitions(BE_PROFILER_ALLOC=1)
+    # EASTL passes the name of every allocation (a container's allocator name, or the one set by set_name) to its operator new only
+    # when EASTL_NAME_ENABLED, which follows EASTL_DEBUG, which follows _DEBUG: no macOS or Linux build defines that. Level 1 passes
+    # the name alone; level 2 would add file and line, but eastl::allocator::allocate is an inline function of allocator.h that
+    # passes its own __FILE__ / __LINE__, so it never names the caller. Names add a member to eastl::allocator (a container gets
+    # larger), so the definitions are global, set before EABase is added: EASTL's sources, the engine, the tests and every game must
+    # agree, and only with this option so the shipped layout does not change.
+    add_compile_definitions(EASTL_NAME_ENABLED=1 EASTL_DEBUGPARAMS_LEVEL=1)
 else()
     add_compile_definitions(BE_PROFILER_ALLOC=0)
 endif()

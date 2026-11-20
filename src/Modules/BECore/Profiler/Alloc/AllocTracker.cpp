@@ -28,7 +28,9 @@ namespace BECore {
             uint64_t bytes = 0;
             uint32_t noAllocDepth = 0;
             uint64_t noAllocViolations = 0;
-            bool inTracker = false;  // the backend's OnAlloc may allocate: that allocation is not reported again
+            bool inTracker = false;             // the backend's OnAlloc may allocate: that allocation is not reported again
+            const char* nextName = nullptr;     // set by SetNextName, taken by the very next allocation of this thread
+            const ProfileSite* zone = nullptr;  // the innermost open zone (ProfileZone)
         };
         constinit thread_local ThreadState t_state;
 
@@ -39,6 +41,10 @@ namespace BECore {
             std::atomic<uint64_t> bytes{0};
         };
         constinit ZoneSlot g_zoneSlots[AllocTracker::kZoneSlots];
+
+#if BE_PROFILER_ALLOC
+        constinit AllocSiteTable g_nameTable;
+#endif
 
         void RaiseTo(std::atomic<uint64_t>& value, uint64_t candidate) {
             uint64_t current = value.load(std::memory_order_relaxed);
@@ -75,6 +81,9 @@ namespace BECore {
         /// (a thread-local, like t_state) and kept next to the source; it must not allocate or lock.
         void RecordAlloc(AllocSource source, void* ptr, size_t size, size_t usable) {
             ThreadState& state = t_state;
+            // Taken before the re-entrancy check: a name belongs to this one allocation and never sticks to a later one
+            const char* const name = state.nextName;
+            state.nextName = nullptr;
             if (state.inTracker) {
                 return;
             }
@@ -94,6 +103,11 @@ namespace BECore {
                 ++state.noAllocViolations;
                 g_noAllocViolations.fetch_add(1, std::memory_order_relaxed);
             }
+#if BE_PROFILER_ALLOC
+            g_nameTable.Add(state.zone, name, size);
+#else
+            static_cast<void>(name);
+#endif
             if (IProfilerBackend* backend = Profiler::GetBackend()) {
                 backend->OnAlloc(ptr, size);
             }
@@ -191,6 +205,36 @@ namespace BECore {
             slot.count.store(0, std::memory_order_relaxed);
             slot.bytes.store(0, std::memory_order_relaxed);
         }
+#if BE_PROFILER_ALLOC
+        g_nameTable.Reset();
+#endif
+    }
+
+    void AllocTracker::SetNextName(const char* name) {
+        t_state.nextName = name;
+    }
+
+    const ProfileSite* AllocTracker::ExchangeCurrentZone(const ProfileSite* zone) {
+        ThreadState& state = t_state;
+        const ProfileSite* previous = state.zone;
+        state.zone = zone;
+        return previous;
+    }
+
+    Vector<AllocSiteStats> AllocTracker::GetNameStats() {
+#if BE_PROFILER_ALLOC
+        return g_nameTable.GetStats();
+#else
+        return {};
+#endif
+    }
+
+    uint64_t AllocTracker::GetNameOverflow() {
+#if BE_PROFILER_ALLOC
+        return g_nameTable.GetOverflow();
+#else
+        return 0;
+#endif
     }
 
     uint64_t AllocTracker::EnterNoAlloc(const ProfileSite& /*site*/) {

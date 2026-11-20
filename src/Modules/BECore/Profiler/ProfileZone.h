@@ -10,7 +10,8 @@ namespace BECore {
      *
      * It keeps the backend it began on (a backend is never destroyed), so a zone that spans a change of the backend stays balanced.
      * With ENGINE_PROFILER_ALLOC it also counts the allocations of its thread between the two (inclusive of inner zones) into the
-     * statistics of its site, with or without a backend.
+     * statistics of its site, with or without a backend, and is the thread's innermost zone while it lives (the zone that allocations are
+     * charged to by name, AllocTracker::GetNameStats).
      */
     class ProfileZone {
     public:
@@ -27,6 +28,7 @@ namespace BECore {
 #if BE_PROFILER_ALLOC
         uint64_t _allocCountAtBegin = 0;
         uint64_t _allocBytesAtBegin = 0;
+        const ProfileSite* _parentZone = nullptr;  // the zone of this thread that was innermost before this one
 #endif
     };
 
