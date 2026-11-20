@@ -59,6 +59,22 @@ namespace BECore::ProgramListData {
         BE_REFLECT_FIELD ProgramListSet set;
     };
 
+    /// An element with a field a formula cannot read (`uint8_t`) and one it reaches through an object it holds by value
+    struct ProgramListCrate {
+        BE_CLASS(ProgramListCrate)
+
+        BE_REFLECT_FIELD ProgramListTile tile;
+        BE_REFLECT_FIELD uint8_t small = 0;
+    };
+
+    /// Lists whose elements a formula reads only in part: of an object with an embedded object, and of a scalar it has no type for
+    struct ProgramListStock {
+        BE_CLASS(ProgramListStock)
+
+        BE_REFLECT_FIELD Vector<ProgramListCrate> crates;
+        BE_REFLECT_FIELD Vector<uint8_t> bytes;
+    };
+
     /// Sixteen bytes that a test fills with the bytes of a value of any program type and reads back through `LoadElem`: a one-element list of this object, so an element of every type is one
     /// reflected type
     struct ProgramListScratch {

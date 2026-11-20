@@ -6,7 +6,9 @@
 #include <BECore/Values/Context.h>
 #include <BECore/Values/Programs/CompileOptions.h>
 #include <BECore/Values/Programs/ExprAst.h>
+#include <BECore/Values/Programs/ExprFunctions.h>
 #include <BECore/Values/Programs/Instruction.h>
+#include <BECore/Values/Programs/Lists/ListImage.h>
 #include <BECore/Values/Programs/Opcode.h>
 #include <BECore/Values/Programs/Program.h>
 #include <cstdint>
@@ -17,7 +19,7 @@ namespace BECore {
     /// The place of a node in `TypedExpr::nodes`; an operand is always an earlier node
     using TypedNodeId = uint32_t;
 
-    CORE_ENUM(TypedNodeKind, uint8_t, Constant, Slot, Operation)
+    CORE_ENUM(TypedNodeKind, uint8_t, Constant, Slot, Operation, List, Element, Fold)
 
     /// The most operands a node has: `vec4(a, b, c, d)`, `quat` and `color`
     inline constexpr size_t kMaxTypedOperands = 4;
@@ -60,6 +62,13 @@ namespace BECore {
      * applied to `operandCount` earlier nodes, a conversion included; `Select` has its condition first, a mixed operation (`vec3 * float`) its left operand first. An inline
      * table (`at`) is an `Operation` of `LoadTable` with the index as its one operand and its entries in `entries`: whether they are constants is the lowering's to say. Nothing
      * is left untyped: a literal took the type of its place.
+     *
+     * `List`, `Element` and `Fold` are **not values** (a list and an element have no program type, `type` holds nothing for them; only a `Fold` has a type, its result's): they are what
+     * the operations over lists take. `List`: the list field of a level (`slot.level`, `list` its layout, no operand) or of an element (operand 0 the `Element` node); `path` is the path as
+     * written. `Element`: the variable of a loop (`loop` its number, no operand) or `list[i]` (operands: the `List` node and the index). A field of an element is an `Operation` of the
+     * `LoadElem` row of its type (operand 0 the `Element` node, `immediate` its offset), `size` one of `ListSize` (operand 0 a `List` node, an `int`). `Fold`: operand 0 the `List` node, `fold`
+     * its kind, `loop` the number of its variable and `body` the node it computes per element; the body's nodes come before the `Fold` in the array like any operand, but only a walk from
+     * the root reaches them, since they are computed inside the loop.
      */
     struct TypedNode {
         TypedNodeKind kind = TypedNodeKind::Constant;
@@ -74,6 +83,13 @@ namespace BECore {
         uint32_t immediate = 0;
         /// `LoadTable`: the nodes of the entries, in order
         Vector<TypedNodeId> entries;
+        /// `List`: where the list sits in its object and how it is walked
+        ListDescriptor list;
+        /// `Element` of a variable and `Fold`: the number of the loop, given by the checker in the order it meets the folds
+        uint32_t loop = 0;
+        FoldKind fold = FoldKind::Count;
+        /// `Fold`: the node computed for each element
+        TypedNodeId body = 0;
         uint32_t column = 0;
     };
 

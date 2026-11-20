@@ -117,6 +117,9 @@ namespace BECore {
                 _images.assign(count, RegisterImage{});
                 for (size_t i = 0; i < count; ++i) {
                     const TypedNode& node = _expr.nodes[i];
+                    if (node.kind == TypedNodeKind::List || node.kind == TypedNodeKind::Element || node.kind == TypedNodeKind::Fold) {
+                        return Failure(ProgramError{"a formula over a list is checked, but not compiled yet", node.column});
+                    }
                     if (node.kind == TypedNodeKind::Constant) {
                         _isConstant[i] = true;
                         _images[i] = node.constant;

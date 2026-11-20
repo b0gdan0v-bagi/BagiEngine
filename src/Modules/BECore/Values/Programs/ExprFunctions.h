@@ -42,6 +42,40 @@ namespace BECore {
         {"color", ExprFunctionShape::Pack, 4, ProgramOperation::Pack, ProgramType::Color},
     }};
 
+    /// What a fold of a list computes, `count(list, v, body)` and the others (`Lists/CLAUDE.md`)
+    CORE_ENUM(FoldKind, uint8_t, Count, Any, All, Sum, Min, Max)
+
+    /// A function of a list: `size(list)` and the folds. They take a list as the first argument, so they have no row in `kExprFunctions`; `min` and `max` are in both tables and **the arity
+    /// decides**: two arguments are the row of the numbers, three a fold
+    struct ExprListFunction {
+        StringView name;
+        uint8_t arity = 0;
+        bool isFold = false;
+        FoldKind fold = FoldKind::Count;
+    };
+
+    inline constexpr size_t kListFunctionCount = 7;
+
+    inline constexpr Array<ExprListFunction, kListFunctionCount> kListFunctions{{
+        {"size", 1, false, FoldKind::Count},
+        {"count", 3, true, FoldKind::Count},
+        {"any", 3, true, FoldKind::Any},
+        {"all", 3, true, FoldKind::All},
+        {"sum", 3, true, FoldKind::Sum},
+        {"min", 3, true, FoldKind::Min},
+        {"max", 3, true, FoldKind::Max},
+    }};
+
+    /// The list function of this name, null when there is none
+    [[nodiscard]] constexpr const ExprListFunction* FindListFunction(StringView name) {
+        for (const ExprListFunction& function : kListFunctions) {
+            if (function.name == name) {
+                return &function;
+            }
+        }
+        return nullptr;
+    }
+
     /// `at(i, e0, e1, ...)`, an inline table: it takes any number of arguments, so it has no row in `kExprFunctions` and the checker reads it on its own
     inline constexpr StringView kTableFunction = "at";
 
