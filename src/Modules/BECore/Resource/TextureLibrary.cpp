@@ -26,6 +26,9 @@ namespace BECore {
         if (!deserializer.BeginArray("sprites", "sprite", count)) {
             return;
         }
+        // `count` is an upper bound (a nameless entry is skipped, a repeated name overwrites): the capacity is never short
+        _entries.reserve(_entries.size() + count);
+        _index.reserve(_entries.size() + count);
         for (size_t i = 0; i < count; ++i) {
             if (!deserializer.BeginArrayElement()) {
                 break;

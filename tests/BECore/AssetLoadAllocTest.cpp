@@ -205,6 +205,34 @@ namespace BECore::Tests {
         }
     }
 
+    /// `_index` is a node-based map: one node per sprite whatever its bucket count, so a reserve cannot go below
+    /// `kSpriteCount`. What it removes is the growth of `_entries` and the rehashes of `_index` (about 20 allocations before it).
+    /// The slack is the blocks of the entries and the buckets, the reader's own lists and a pool block, 9 allocations when
+    /// measured.
+    TEST(AssetLoadAllocTest, LoadOfAParsedFileAllocatesOneNodePerSpriteAndAFewBlocks) {
+        constexpr uint64_t kLoadSlack = 16;
+        for (const FileFormat format : {FileFormat::Xml, FileFormat::Binary}) {
+            const AssetFile file = MakeFile(format, NextSalt(), kSpriteCount);
+            TextureLibrary library;
+            AllocCount allocs;
+            if (format == FileFormat::Xml) {
+                XmlDeserializer deserializer;
+                ASSERT_TRUE(deserializer.LoadFromString(file.xml));
+                allocs = CountAllocations([&] { library.Load(deserializer); });
+            } else {
+                BinaryDeserializer deserializer;
+                ASSERT_TRUE(deserializer.LoadFromBuffer(file.binary));
+                allocs = CountAllocations([&] { library.Load(deserializer); });
+            }
+            ASSERT_EQ(library.GetAll().size(), kSpriteCount) << FormatName(format);
+            if constexpr (AllocTracker::kEnabled) {
+                EXPECT_LE(allocs.count, kSpriteCount + kLoadSlack) << FormatName(format);
+            } else {
+                GTEST_SKIP() << kNoAllocTracker;
+            }
+        }
+    }
+
     /// A benchmark, not a check: the set of .claude/rules/perf-project.md runs it (the counts are zero without the profile
     /// preset, `kNoAllocTracker`)
     TEST(AssetLoadAllocBenchTest, DISABLED_LoadOfFreshNames) {
