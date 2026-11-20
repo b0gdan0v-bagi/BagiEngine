@@ -1311,8 +1311,19 @@ namespace BECore {
 
             // ---- the cascade ----
 
-            [[nodiscard]] bool MatchesCompound(int node, const UICssCompound& compound) const {
+            /// One step, and for a compound with classes the scan of the element's `class` attribute once per class (the scan is as long as the attribute and a miss reads all of it).
+            /// False without looking once the work is spent
+            [[nodiscard]] bool MatchesCompound(int node, const UICssCompound& compound) {
                 const UIHtmlNode& element = _document.nodes[node];
+                size_t cost = 1;
+                if (!compound.classes.empty()) {
+                    const String* classAttribute = element.FindAttribute("class");
+                    const size_t scanBytes = classAttribute != nullptr ? classAttribute->size() : 0;
+                    cost += compound.classes.size() * (1 + scanBytes / UIWebCompiler::kClassScanUnit);
+                }
+                if (!SpendCascadeWork(cost)) {
+                    return false;
+                }
                 if (!compound.tag.empty() && element.tag != compound.tag) {
                     return false;
                 }
@@ -1332,13 +1343,13 @@ namespace BECore {
             };
             static_assert(UIHtmlParser::kMaxDepth <= 64, "a level above the element is a bit of a 64-bit mask");
 
-            [[nodiscard]] bool MatchesSelector(int node, const UICssSelector& selector) const {
+            [[nodiscard]] bool MatchesSelector(int node, const UICssSelector& selector) {
                 SelectorMemory memory;
                 return MatchesPart(node, 0, selector, selector.compounds.size() - 1, memory);
             }
 
             /// Whether @p node, @p level steps above the element, matches part @p index of @p selector and the parts to the left of it match above it
-            [[nodiscard]] bool MatchesPart(int node, size_t level, const UICssSelector& selector, size_t index, SelectorMemory& memory) const {
+            [[nodiscard]] bool MatchesPart(int node, size_t level, const UICssSelector& selector, size_t index, SelectorMemory& memory) {
                 if (!MatchesCompound(node, selector.compounds[index])) {
                     return false;
                 }
@@ -1361,7 +1372,7 @@ namespace BECore {
                     return parent != UIHtmlDocument::RootIndex && matchesAbove(parent, level + 1);
                 }
                 size_t ancestorLevel = level + 1;
-                for (int ancestor = parent; ancestor != UIHtmlDocument::RootIndex; ancestor = _document.nodes[ancestor].parent, ++ancestorLevel) {
+                for (int ancestor = parent; ancestor != UIHtmlDocument::RootIndex && !CascadeSpent(); ancestor = _document.nodes[ancestor].parent, ++ancestorLevel) {
                     if (matchesAbove(ancestor, ancestorLevel)) {
                         return true;
                     }
@@ -1369,8 +1380,16 @@ namespace BECore {
                 return false;
             }
 
-            /// Takes @p steps from the work the cascades of this compile may do (UIWebCompiler::kMaxCascadeWork). False, with one entry in the report, once it is spent
+            [[nodiscard]] bool CascadeSpent() const {
+                return _cascadeWork > UIWebCompiler::kMaxCascadeWork;
+            }
+
+            /// Takes @p steps from the work the cascades of this compile may do (UIWebCompiler::kMaxCascadeWork). False, with one entry in the report, once it is spent; after that
+            /// it takes nothing and says nothing, so the matcher that is still unwinding costs no more
             [[nodiscard]] bool SpendCascadeWork(size_t steps) {
+                if (CascadeSpent()) {
+                    return false;
+                }
                 _cascadeWork += steps;
                 if (_cascadeWork <= UIWebCompiler::kMaxCascadeWork) {
                     return true;
@@ -1414,13 +1433,16 @@ namespace BECore {
 
                     Vector<Match> matches;
                     const size_t ruleCount = SpendCascadeWork(_sheet.rules.size() + list.size()) ? _sheet.rules.size() : 0;
-                    for (size_t r = 0; r < ruleCount; ++r) {
+                    for (size_t r = 0; r < ruleCount && !CascadeSpent(); ++r) {
                         const UICssRule& rule = _sheet.rules[r];
                         if (rule.media != -1 && rule.media != media) {
                             continue;
                         }
                         Optional<uint32_t> specificity;
                         for (const UICssSelector& selector : rule.selectors) {
+                            if (!SpendCascadeWork(1)) {
+                                break;
+                            }
                             const UICssPseudo pseudo = selector.compounds.back().pseudo;
                             if (pseudo != UICssPseudo::None && pseudo != ToPseudo(state)) {
                                 continue;
