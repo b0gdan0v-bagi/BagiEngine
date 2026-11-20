@@ -143,6 +143,18 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
       }
     },
     {
+      "name": "block-pool-cost",
+      "about": "An allocate and free of one block of a ConcurrentBlockPool against new and delete, on one and on four threads (ConcurrentBlockPoolCostTest): the pool has to stay cheaper than the heap and the per-thread shards keep four threads from slowing down",
+      "fast": true,
+      "command": ["{bin}/BagiEngineTests", "--gtest_also_run_disabled_tests", "--gtest_filter=ConcurrentBlockPoolCostTest.DISABLED_*"],
+      "metrics": {
+        "pooled_1t_ns": {"source": "regex", "pattern": "^ConcurrentBlockPoolCost threads=1 pooled_ns=([0-9.]+)", "unit": "ns/pair", "better": "lower", "gate": false},
+        "heap_1t_ns": {"source": "regex", "pattern": "^ConcurrentBlockPoolCost threads=1 pooled_ns=[0-9.]+ heap_ns=([0-9.]+)", "unit": "ns/pair", "better": "lower", "gate": false},
+        "pooled_4t_ns": {"source": "regex", "pattern": "^ConcurrentBlockPoolCost threads=4 pooled_ns=([0-9.]+)", "unit": "ns/pair", "better": "lower", "gate": false},
+        "heap_4t_ns": {"source": "regex", "pattern": "^ConcurrentBlockPoolCost threads=4 pooled_ns=[0-9.]+ heap_ns=([0-9.]+)", "unit": "ns/pair", "better": "lower", "gate": false}
+      }
+    },
+    {
       "name": "ui-web-limits",
       "about": "The web-style UI compiler on documents far over its limits (depth, nodes, a 10 MiB sheet, the cascade work, a descendant selector over a deep chain): the limits have to keep hostile files cheap",
       "fast": false,

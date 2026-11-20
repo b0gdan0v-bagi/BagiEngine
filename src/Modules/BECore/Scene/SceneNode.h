@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/Pooled.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/RefCounted.h>
@@ -35,6 +36,8 @@ namespace BECore {
     class SceneNode : public RefCounted {
         BE_CLASS(SceneNode, FACTORY_BASE, ELEMENT = node)
     public:
+        BE_POOLED_SINGLE_THREAD(SceneNode)
+
         SceneNode();
         ~SceneNode() override = default;
 

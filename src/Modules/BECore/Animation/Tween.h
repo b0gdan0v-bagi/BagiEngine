@@ -2,6 +2,7 @@
 
 #include <BECore/Animation/Easing.h>
 #include <BECore/Animation/Lerp.h>
+#include <BECore/Memory/Pooled.h>
 #include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
@@ -81,6 +82,8 @@ namespace BECore {
      */
     class TweenHandle : public RefCountedNonAtomic {
     public:
+        BE_POOLED_SINGLE_THREAD(TweenHandle)
+
         [[nodiscard]] TweenState GetState() const {
             return _state;
         }

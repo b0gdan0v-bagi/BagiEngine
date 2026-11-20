@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/Pooled.h>
 #include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIComponent.h>
 #include <BECore/UI/UIStateBlend.h>
@@ -28,6 +29,8 @@ namespace BECore {
     class UITextComponent : public UIComponent {
         BE_CLASS(UITextComponent)
     public:
+        BE_POOLED_SINGLE_THREAD(UITextComponent)
+
         UITextComponent() = default;
         ~UITextComponent() override = default;
 

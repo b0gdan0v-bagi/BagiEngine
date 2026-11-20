@@ -95,6 +95,9 @@ namespace BECore {
         _current.arenaUsedBytes = arenas.used;
         _current.arenaPeakBytes = arenas.peak;
         _current.arenaOverflows = arenas.overflows;
+        const PoolTotals pools = GetPoolTotals();
+        _current.poolLiveBlocks = pools.liveBlocks;
+        _current.poolPageBytes = pools.pageBytes;
         _ring[(_frames - 1) % kFrameHistory] = _current;
 
         BE_PROFILE_COUNTER("Draw calls", draws.drawCalls);
