@@ -1,3 +1,4 @@
+#include <BECore/Memory/ArenaStats.h>
 #include <BECore/Memory/FrameArena.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/UI/UICanvasLayout.h>
@@ -142,8 +143,8 @@ namespace BECore::Tests {
             EXPECT_EQ(allocations, 0u) << "the box meshes are on the frame arena, whose chunk is kept from frame to frame";
         }
         Report("BoxEffectDraw", allocations);
-        GTEST_LOG_(INFO) << "BoxEffectDraw: the box meshes of a frame are " << meshBytes << " bytes, the frame arena holds " << arenaBytes << " bytes at the end of the frame; sizeof(UIElement) is "
-                         << sizeof(UIElement);
+        GTEST_LOG_(INFO) << "BoxEffectDraw: the box meshes of a frame are " << meshBytes << " bytes, the frame arena holds " << arenaBytes << " bytes at the end of the frame (chunk "
+                         << FrameArena::kChunkSize << ", arena overflows so far " << GetArenaTotals().overflows << "); sizeof(UIElement) is " << sizeof(UIElement);
     }
 
     TEST_F(FrameArenaMotionTest, ATextInMotionAllocationsPerFrame) {

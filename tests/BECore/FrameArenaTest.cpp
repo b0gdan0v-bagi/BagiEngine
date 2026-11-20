@@ -128,6 +128,24 @@ namespace BECore::Tests {
 
             EXPECT_EQ(FrameTotals().overflows, before + 1);
             EXPECT_EQ(arena.GetChunkCount(), 2u);
+
+            // The chunk of the overflow is kept: the next frame with the same use finds it and counts nothing
+            FrameArena::Advance();
+            ASSERT_NE(FrameArena::Get().Allocate(FrameArena::kChunkSize), nullptr);
+            EXPECT_EQ(FrameTotals().overflows, before + 1);
+            EXPECT_EQ(arena.GetChunkCount(), 2u);
+        });
+        thread.join();
+    }
+
+    TEST(FrameArenaTest, AThreadThatOnlyAsksForTheArenaHoldsNoChunk) {
+        if (!Thread::kAvailable) {
+            GTEST_SKIP() << "a single-thread build has no second thread";
+        }
+        const ArenaStatsEntry before = FrameTotals();
+        Thread thread("Test frame arena", [&] {
+            EXPECT_EQ(FrameArena::Get().GetChunkCount(), 0u);
+            EXPECT_EQ(FrameTotals().chunks, before.chunks);
         });
         thread.join();
     }

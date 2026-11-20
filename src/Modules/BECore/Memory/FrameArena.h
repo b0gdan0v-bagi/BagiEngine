@@ -23,8 +23,11 @@ namespace BECore {
      */
     class FrameArena {
     public:
-        /// The size of a chunk; the first one is made by the thread's first Allocate, so a thread that never uses the arena pays nothing
-        static constexpr size_t kChunkSize = 256 * 1024;
+        /// The size of a chunk; the first one is made by the thread's first Allocate, so a thread that never uses the arena pays nothing.
+        /// It is not a limit: a frame that needs more takes further chunks, counts one overflow each the first time and keeps them. It is
+        /// sized so that a screen of about ten boxes with a blurred shadow (the biggest user, about 100 KB each with the growth of its lists)
+        /// fits in one chunk
+        static constexpr size_t kChunkSize = 1024 * 1024;
 
         FrameArena() = delete;
 
