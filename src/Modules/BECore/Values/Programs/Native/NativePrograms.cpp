@@ -1,6 +1,5 @@
 #include "NativePrograms.h"
 
-
 namespace BECore {
 
     namespace {
@@ -21,6 +20,11 @@ namespace BECore {
                         _byHash[entry.codeHash].push_back(&entry);
                     }
                 }
+            }
+
+            bool Empty() const {
+                LockGuard lock(_mutex);
+                return _byHash.empty();
             }
 
             NativeProgramFn Find(const Program& program) const {
@@ -84,6 +88,15 @@ namespace BECore {
         counts.bound = ProgramPool::NativeCount();
         counts.missed = IsEnabled() ? ProgramPool::Count() - counts.bound : 0;
         return counts;
+    }
+
+    bool NativePrograms::HasGeneratedCode() {
+        return !Registry::Instance().Empty();
+    }
+
+    void NativePrograms::LogSummary() {
+        const NativeProgramCounts counts = Counts();
+        LOG_INFO(Format("Native programs: {} bound, {} missed", counts.bound, counts.missed));
     }
 
     NativeProgramFn NativePrograms::Find(const Program& program) {

@@ -72,6 +72,12 @@ namespace BECore {
 
         [[nodiscard]] static NativeProgramCounts Counts();
 
+        /// Whether a generated set is installed at all: a program with no function is a stale file when it is, and the normal case when it is not
+        [[nodiscard]] static bool HasGeneratedCode();
+
+        /// One `LOG_INFO` line, `Native programs: N bound, M missed` (`Counts`)
+        static void LogSummary();
+
     private:
         friend class ProgramPool;
 
