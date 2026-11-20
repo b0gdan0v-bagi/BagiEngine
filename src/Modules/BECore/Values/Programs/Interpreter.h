@@ -11,8 +11,8 @@ namespace BECore {
      * @brief Runs @p program over the objects of @p context and writes its result, `ProgramTypeSize(program.ResultType())` bytes, to @p result
      *
      * The registers are 16-byte aligned objects on the stack of this call, the dispatch is one `switch`: nothing is allocated, no container or
-     * `String` is made and no virtual function is called. The program must come from `ProgramBuilder::Finish`; every level it reads must have an
-     * object in the context (`ASSERT`, as `Value::Get`).
+     * `String` is made and no virtual function is called. The program must come from `ProgramBuilder::Finish`, which proves that every jump stays inside the code and that a program with loops ends;
+     * every level it reads must have an object in the context (`ASSERT`, as `Value::Get`).
      */
     void Run(const Program& program, const Context& context, void* result);
 

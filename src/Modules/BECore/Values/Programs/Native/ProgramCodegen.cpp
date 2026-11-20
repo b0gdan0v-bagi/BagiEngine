@@ -129,16 +129,34 @@ namespace BECore {
             out += "};\n";
         }
 
-        /// The function of a program, or false when an instruction has no statement (the program is then left to the interpreter)
+        String JumpLabel(size_t index) {
+            return Format("L{}:", index);
+        }
+
+        /// The function of a program, or false when an instruction has no statement (the program is then left to the interpreter). A label `L<i>:` stands before exactly the instructions a jump
+        /// goes to (an unused label is a warning), and `L<n>` before the result is stored when a jump leaves the code
         bool AppendFunction(String& out, const Program& program, StringView name, StringView constants) {
+            const Span<const Instruction> code = program.Code();
+            Vector<bool> isTarget(code.size() + 1, false);
+            for (const Instruction& ins : code) {
+                if (IsJump(ins.op) && ins.imm < isTarget.size()) {
+                    isTarget[ins.imm] = true;
+                }
+            }
             String body;
-            for (const Instruction& ins : program.Code()) {
-                const String statement = EmitNativeInstruction(ins, constants);
+            for (size_t i = 0; i < code.size(); ++i) {
+                const String statement = EmitNativeInstruction(code[i], constants);
                 if (statement.empty()) {
                     ASSERT(false, "GenerateNativeSource: an instruction of a program has no C++ statement");
                     return false;
                 }
+                if (isTarget[i]) {
+                    AppendFormat(body, "{}\n", JumpLabel(i));
+                }
                 AppendFormat(body, "    {}\n", statement);
+            }
+            if (isTarget[code.size()]) {
+                AppendFormat(body, "{}\n", JumpLabel(code.size()));
             }
             // A zero-length array is not C++; no program has no registers, but the text must not depend on that
             const size_t registers = program.RegisterCount() > 0 ? program.RegisterCount() : 1;

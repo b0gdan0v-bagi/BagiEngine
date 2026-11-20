@@ -234,6 +234,10 @@ namespace BECore {
     }  // namespace
 
     void Fuse(Vector<Instruction>& code, uint8_t resultRegister) {
+        // The liveness below reads the code as straight-line: a register the body writes is read again by the next round, which it does not see
+        if (std::any_of(code.begin(), code.end(), [](const Instruction& ins) { return IsListInstruction(ins.op); })) {
+            return;
+        }
         size_t at = 0;
         while (at < code.size()) {
             // A `Lerp` leaves the code of its weight where it was, so what starts at @p at now is looked at again; a fused instruction starts no sequence

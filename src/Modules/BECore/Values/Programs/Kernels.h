@@ -519,7 +519,7 @@ namespace BECore::Kernel {
         template <typename T>
         static constexpr bool kSupports = true;
 
-        /// Both branches were computed already: a program has no control flow
+        /// Both branches were computed already: `select` does not branch (only the loops of `Lists/` do)
         template <typename T>
         [[nodiscard]] static T Apply(bool condition, T a, T b) {
             return condition ? a : b;

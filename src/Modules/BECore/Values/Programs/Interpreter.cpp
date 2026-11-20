@@ -9,7 +9,11 @@ namespace BECore {
         Array<RegisterImage, kMaxProgramRegisters> registers;  // NOLINT(cppcoreguidelines-pro-type-member-init)
         RegisterImage* regs = registers.data();
         const Span<const RegisterImage> constants = program.Constants();
-        for (const Instruction& ins : program.Code()) {
+        // A jump only sets `pc`: the kernels decide it, the generated code branches on the same answers. `Finish` keeps every target inside the code and the loops finite
+        const Instruction* const code = program.Code().data();
+        const Instruction* const end = code + program.Code().size();
+        for (const Instruction* pc = code; pc != end;) {
+            const Instruction& ins = *pc++;
             switch (ins.op) {
                 case Opcode::Invalid:
                     ASSERT(false, "Run: an invalid instruction");
@@ -39,9 +43,13 @@ namespace BECore {
                     Kernel::ExecuteListAt(regs, ins);
                     break;
                 case Opcode::LoopBegin:
+                    pc = Kernel::ExecuteLoopBegin(regs, ins) ? code + ins.imm : pc;
+                    break;
                 case Opcode::LoopEnd:
+                    pc = Kernel::ExecuteLoopEnd(regs, ins) ? code + ins.imm : pc;
+                    break;
                 case Opcode::BreakIf:
-                    ASSERT(false, "Run: a jump is not run yet");
+                    pc = Kernel::ExecuteBreakIf(regs, ins) ? code + ins.imm : pc;
                     break;
 #define BE_PROGRAM_CASE_ROW(Op, Type, Cpp)                                                                                                                                                             \
     case Opcode::Op##Type:                                                                                                                                                                             \
