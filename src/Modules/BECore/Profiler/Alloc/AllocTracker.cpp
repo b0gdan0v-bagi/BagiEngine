@@ -27,6 +27,7 @@ namespace BECore {
             uint64_t count = 0;
             uint64_t bytes = 0;
             uint32_t noAllocDepth = 0;
+            uint32_t pauseDepth = 0;  // ScopedAllocCountersPause: nothing of this thread is counted while it is above zero
             uint64_t noAllocViolations = 0;
             bool inTracker = false;  // the backend's OnAlloc may allocate: that allocation is not reported again
         };
@@ -79,6 +80,14 @@ namespace BECore {
                 return;
             }
             state.inTracker = true;
+            if (state.pauseDepth > 0) {
+                // The backend still sees the block: its memory events must stay balanced with the real memory
+                if (IProfilerBackend* backend = Profiler::GetBackend()) {
+                    backend->OnAlloc(ptr, size);
+                }
+                state.inTracker = false;
+                return;
+            }
             SourceSlot& slot = g_sources[static_cast<size_t>(source)];
             ++state.count;
             state.bytes += size;
@@ -107,6 +116,13 @@ namespace BECore {
                 return;
             }
             state.inTracker = true;
+            if (state.pauseDepth > 0) {
+                if (IProfilerBackend* backend = Profiler::GetBackend()) {
+                    backend->OnFree(ptr);
+                }
+                state.inTracker = false;
+                return;
+            }
             SourceSlot& slot = g_sources[static_cast<size_t>(source)];
             g_frees.fetch_add(1, std::memory_order_relaxed);
             slot.frees.fetch_add(1, std::memory_order_relaxed);
@@ -205,6 +221,17 @@ namespace BECore {
             --state.noAllocDepth;
         }
         return state.noAllocViolations;
+    }
+
+    void AllocTracker::PauseCounting() {
+        ++t_state.pauseDepth;
+    }
+
+    void AllocTracker::ResumeCounting() {
+        ThreadState& state = t_state;
+        if (state.pauseDepth > 0) {
+            --state.pauseDepth;
+        }
     }
 
     Vector<ArenaStatsEntry> AllocTracker::GetArenaStats() {

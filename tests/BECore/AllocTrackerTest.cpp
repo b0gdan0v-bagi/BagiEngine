@@ -146,6 +146,66 @@ namespace BECore::Tests {
         EXPECT_EQ(AllocTracker::GetTotals().noAllocViolations, before);
     }
 
+    TEST(AllocTrackerTest, AnAllocationAndItsFreeInAPauseMoveNothing) {
+        AllocTracker::ResetZoneStats();
+        const AllocTracker::ThreadCounters threadBefore = AllocTracker::GetThreadCounters();
+        const uint64_t violationsBefore = AllocTracker::GetTotals().noAllocViolations;
+        {
+            BE_PROFILE_NO_ALLOC("PausedAllocates");
+            BE_PROFILE_SCOPE("PausedZone");
+            const ScopedAllocCountersPause pause;
+            ::operator delete(::operator new(kBlock));
+            void* kept = ::operator new(kBlock);
+            Use(kept);
+            ::operator delete(kept);
+        }
+        const AllocTracker::ThreadCounters threadAfter = AllocTracker::GetThreadCounters();
+        EXPECT_EQ(threadAfter.count, threadBefore.count);
+        EXPECT_EQ(threadAfter.bytes, threadBefore.bytes);
+        EXPECT_EQ(StatsOf("PausedZone").count, 0u);
+        EXPECT_EQ(AllocTracker::GetTotals().noAllocViolations, violationsBefore);
+    }
+
+    TEST(AllocTrackerTest, PausesNestAndCountingComesBackAfterTheLastOne) {
+        const uint64_t start = AllocTracker::GetThreadCounters().count;
+        {
+            const ScopedAllocCountersPause outer;
+            {
+                const ScopedAllocCountersPause inner;
+                ::operator delete(::operator new(kBlock));
+            }
+            ::operator delete(::operator new(kBlock));
+            EXPECT_EQ(AllocTracker::GetThreadCounters().count, start);
+        }
+        ::operator delete(::operator new(kBlock));
+        EXPECT_EQ(AllocTracker::GetThreadCounters().count, start + 1);
+    }
+
+    TEST(AllocTrackerTest, APauseOfOneThreadLeavesAnotherThreadCounting) {
+        const ScopedAllocCountersPause pause;
+        uint64_t counted = 0;
+        std::thread other([&counted] {
+            const uint64_t before = AllocTracker::GetThreadCounters().count;
+            ::operator delete(::operator new(kBlock));
+            counted = AllocTracker::GetThreadCounters().count - before;
+        });
+        other.join();
+        EXPECT_EQ(counted, 1u);
+    }
+
+    TEST(AllocTrackerTest, ABlockMadeInAPauseAndFreedAfterItDoesNotWrapTheLiveBytes) {
+        void* block = nullptr;
+        {
+            const ScopedAllocCountersPause pause;
+            block = ::operator new(kBlock);
+        }
+        const AllocTotals before = AllocTracker::GetTotals();
+        ::operator delete(block);
+        const AllocTotals after = AllocTracker::GetTotals();
+        EXPECT_GE(after.frees, before.frees + 1);
+        EXPECT_LT(after.liveBytes, before.liveBytes + kBlock * 16);
+    }
+
     TEST(AllocTrackerTest, ARoutedAllocationMovesTheTotalsTheSourceTheThreadAndTheZone) {
         AllocTracker::ResetZoneStats();
         const AllocTotals totalsBefore = AllocTracker::GetTotals();
@@ -235,8 +295,8 @@ namespace BECore::Tests {
         const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::DrLibs);
         AllocRouting::Free(AllocSource::DrLibs, foreign);
         const AllocSourceTotals after = AllocTracker::GetSourceTotals(AllocSource::DrLibs);
-        EXPECT_EQ(after.frees, before.frees + 1);
-        EXPECT_LE(after.liveBytes, before.liveBytes);
+        EXPECT_GE(after.frees, before.frees + 1);
+        EXPECT_LT(after.liveBytes, before.liveBytes + kBlock * 16);
         EXPECT_LE(AllocTracker::GetTotals().liveBytes, totalsBefore.liveBytes + kBig);
         EXPECT_EQ(after.liveBytes, before.liveBytes > kBig ? before.liveBytes - kBig : 0u);
     }

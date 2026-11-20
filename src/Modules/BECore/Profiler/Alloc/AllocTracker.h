@@ -88,11 +88,34 @@ namespace BECore {
         static uint64_t EnterNoAlloc(const ProfileSite& site);
         static uint64_t LeaveNoAlloc();
 
+        /// While a pause of the calling thread is open its allocations and frees are not counted (ScopedAllocCountersPause); pauses nest
+        static void PauseCounting();
+        static void ResumeCounting();
+
         /// The counters of every arena alive (Memory/CLAUDE.md, "Counters"); allocates
         [[nodiscard]] static Vector<ArenaStatsEntry> GetArenaStats();
 
         /// The counters of every block pool alive (Memory/CLAUDE.md, "Pools"); allocates
         [[nodiscard]] static Vector<PoolStatsEntry> GetPoolStats();
+    };
+
+    /// Keeps the allocations and frees of the calling thread out of every count for the length of a scope: the profiler's own views
+    /// (Alloc/CLAUDE.md, "Pause"). The memory backend is still told, so its events stay balanced. A no-op without ENGINE_PROFILER_ALLOC
+    class ScopedAllocCountersPause {
+    public:
+        ScopedAllocCountersPause() {
+            if constexpr (AllocTracker::kEnabled) {
+                AllocTracker::PauseCounting();
+            }
+        }
+        ~ScopedAllocCountersPause() {
+            if constexpr (AllocTracker::kEnabled) {
+                AllocTracker::ResumeCounting();
+            }
+        }
+
+        ScopedAllocCountersPause(const ScopedAllocCountersPause&) = delete;
+        ScopedAllocCountersPause& operator=(const ScopedAllocCountersPause&) = delete;
     };
 
 }  // namespace BECore
