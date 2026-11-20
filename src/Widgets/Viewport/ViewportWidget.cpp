@@ -300,6 +300,13 @@ namespace BECore {
             ImGui::InvisibleButton(kImageHitArea, shown, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
             const bool imageHovered = ImGui::IsItemHovered();
 
+            // One walk of the tree confirms the whole selection; the outlines, the framing and the node gizmo take this list and never look a node up themselves
+            if (activeScene && activeScene == _selectedScene) {
+                HierarchyModel::ResolveLive(activeScene->GetRootNode(), {_selectedNodes.data(), _selectedNodes.size()}, _liveSelection, _liveScratch);
+            } else {
+                _liveSelection.clear();
+            }
+
             // Where the pointer goes: the camera, the gizmo and the rubber band belong to the Edit input mode, and work while the Edit target owns the pointer (Alt flips it for one click)
             const ImGuiIO& io = ImGui::GetIO();
             const bool editing = _inputMode == ViewportInputMode::Edit;
@@ -330,11 +337,10 @@ namespace BECore {
             // The gizmos go before the mouse is forwarded, so a press on a handle is consumed first. The UI element's handles come before the node gizmo, which stays out of a drag of
             // theirs and of a pointer over one of them
             const bool pointerFree = editing && editorTarget && !_cameraInput.IsPanning();
-            const Span<SceneNode* const> selection = activeScene && activeScene == _selectedScene ? Span<SceneNode* const>(_selectedNodes.data(), _selectedNodes.size()) : Span<SceneNode* const>();
-            const SceneNode* const primary = selection.empty() ? nullptr : selection.back();
+            const SceneNode* const primary = activeScene && activeScene == _selectedScene && !_selectedNodes.empty() ? _selectedNodes.back() : nullptr;
             const bool uiTookPress = _uiGizmos.Update({activeScene, primary, &frame, editing, pointerFree && !_gizmos.IsDragging(), imageHovered});
             const bool nodeGizmoFree = pointerFree && !_uiGizmos.IsDragging() && !_uiGizmos.IsOverHandle();
-            const bool gizmoTookPress = _gizmos.Update({activeScene, selection, &frame, editing, nodeGizmoFree, imageHovered}) || uiTookPress;
+            const bool gizmoTookPress = _gizmos.Update({activeScene, {_liveSelection.data(), _liveSelection.size()}, &frame, editing, nodeGizmoFree, imageHovered}) || uiTookPress;
             _boxSelect.Update(frame, activeScene, pointerFree, imageHovered, gizmoTookPress);
 
             // Hand the mouse to the scene with target-pixel coordinates, so it can map them to scene units (Scene::ScreenToSceneX/Y) with the fit of its last draw
@@ -709,8 +715,8 @@ namespace BECore {
     }
 
     void ViewportWidget::DrawSelectionOutlines(Scene* scene, const ViewportFrame& frame) const {
-        // The pointers are only compared: a deleted node or a replaced scene is never dereferenced
-        if (!scene || scene != _selectedScene || _selectedNodes.empty()) {
+        // _liveSelection is this frame's confirmation of the selection: a deleted node or a replaced scene is never dereferenced
+        if (!scene || scene != _selectedScene || _liveSelection.empty()) {
             return;
         }
         const ImGuiPalette& palette = GetImGuiPalette();
@@ -718,12 +724,9 @@ namespace BECore {
         const ImU32 otherColor = ImGui::ColorConvertFloat4ToU32(palette.accentMuted);
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->PushClipRect(frame.imageMin, frame.imageMax, true);
-        for (size_t index = 0; index < _selectedNodes.size(); ++index) {
-            const SceneNode* const node = HierarchyModel::FindNode(scene->GetRootNode(), _selectedNodes[index]);
-            if (!node) {
-                continue;
-            }
-            const ImU32 color = index + 1 == _selectedNodes.size() ? primaryColor : otherColor;
+        const SceneNode* const primary = _selectedNodes.back();
+        for (const SceneNode* const node : _liveSelection) {
+            const ImU32 color = node == primary ? primaryColor : otherColor;
             const ScenePick::Outlines outlines = ScenePick::SelectionOutlines(*scene, *node);
             for (size_t i = 0; i < outlines.count; ++i) {
                 Array<ImVec2, 4> corners;
@@ -752,7 +755,7 @@ namespace BECore {
 
     void ViewportWidget::FrameSelection(Scene* scene, const ImVec2& panelSize, float baseZoom) {
         Rect bounds;
-        if (scene && scene == _selectedScene && SelectionBounds(*scene, {_selectedNodes.data(), _selectedNodes.size()}, bounds)) {
+        if (scene && scene == _selectedScene && SelectionBounds(*scene, {_liveSelection.data(), _liveSelection.size()}, bounds)) {
             _camera.FrameRect(bounds, {panelSize.x, panelSize.y}, baseZoom, kFrameMargin);
         } else {
             _camera.Reset();

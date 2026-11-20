@@ -167,7 +167,9 @@ namespace BECore {
         int32_t _gridStep = 0;
         const Scene* _selectedScene = nullptr;  // the selection last told by SceneSelectionChangedEvent: a node is never dereferenced before it is found in the active scene
         Vector<SceneNode*> _selectedNodes;      // in selection order, the primary last
-        ViewportCamera _camera;                 // the editor camera; the image is drawn with it while the input mode is Edit
+        Vector<SceneNode*> _liveSelection;      // the part of _selectedNodes found in the active scene this frame (ResolveLive), the nodes the frame may dereference
+        HashSet<const SceneNode*> _liveScratch;
+        ViewportCamera _camera;  // the editor camera; the image is drawn with it while the input mode is Edit
         ViewportCameraInput _cameraInput;
         ViewportGizmos _gizmos;
         ViewportUIShapes _uiShapes;    // the selected element in other devices' shapes (session state)
