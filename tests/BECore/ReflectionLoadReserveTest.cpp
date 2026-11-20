@@ -19,9 +19,12 @@ namespace BECore::Tests {
         constexpr size_t kElementCount = 100;
         constexpr size_t kFixedCapacity = 3;
         constexpr size_t kOverCapacity = 5;
-        // Measured with the tracker: 16 allocations for the load of 1000 numbers (the reader's own bookkeeping and the vector's one
-        // block); without the reserve the vector alone doubled about eleven times (26 in all). Headroom for a platform's allocator.
-        constexpr uint64_t kMaxLoadAllocs = 20;
+        // Measured with the tracker: 6 allocations for the load of 1000 numbers (the vector's one block and the reader's bookkeeping);
+        // without the reserves the vector and the element list doubled about eleven times each (26 in all).
+        constexpr uint64_t kMaxLoadAllocs = 10;
+        // Measured: the walk over 1000 elements allocates 5 times (the element list, the array and node stacks, the path), none per
+        // element; before the element list was counted first it doubled about eleven times as well.
+        constexpr uint64_t kMaxWalkAllocs = 8;
 
         ReserveHolder MakeHolder() {
             ReserveHolder holder;
@@ -166,6 +169,33 @@ namespace BECore::Tests {
             GTEST_SKIP() << kNoAllocTracker;
         }
         EXPECT_LE(allocs.count, kMaxLoadAllocs);
+    }
+
+    TEST(ReflectionLoadReserveTest, TheXmlReaderAllocatesNothingPerElementOfAnArray) {
+        const String xml = WriteXml(MakeHolder());
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(xml));
+        ASSERT_TRUE(deserializer.BeginObject("Holder"));
+        size_t count = 0;
+        size_t visited = 0;
+        const AllocCount allocs = CountAllocations([&] {
+            if (deserializer.BeginArray("numbers", "item", count)) {
+                for (size_t i = 0; i < count; ++i) {
+                    if (deserializer.BeginArrayElement()) {
+                        ++visited;
+                        deserializer.EndArrayElement();
+                    }
+                }
+                deserializer.EndArray();
+            }
+        });
+        deserializer.EndObject();
+
+        ASSERT_EQ(visited, kNumberCount);
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+        EXPECT_LE(allocs.count, kMaxWalkAllocs);
     }
 
 }  // namespace BECore::Tests
