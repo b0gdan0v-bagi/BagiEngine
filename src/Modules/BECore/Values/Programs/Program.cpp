@@ -1,5 +1,7 @@
 #include "Program.h"
 
+#include <BECore/Values/Programs/Native/NativePrograms.h>
+
 namespace BECore {
 
     namespace {
@@ -18,6 +20,18 @@ namespace BECore {
 
         struct Chunk {
             Array<Program, kChunkSize> programs;
+            /// Beside the programs, so a `Program` stays immutable and movable; null until `NativePrograms` binds a function
+            Array<std::atomic<NativeProgramFn>, kChunkSize> natives{};
+        };
+
+        /// What `NativePrograms` says is bound to a program now, asked under the pool's lock (the registry's lock is taken inside it, never the other way round)
+        using NativeLookup = FunctionRef<NativeProgramFn(const Program&)>;
+
+        /// What `Intern` leaves for the caller to do once the pool's lock is free
+        struct InternOutcome {
+            Optional<ProgramId> id;
+            bool nativeMissed = false;
+            PoolString source;
         };
 
         /// Programs sit in chunks that are never moved or freed, and a chunk is published before any id in it is given out, so `Get` takes no lock
@@ -28,20 +42,20 @@ namespace BECore {
                 return storage;
             }
 
-            Optional<ProgramId> Intern(Program program) {
+            InternOutcome Intern(Program program, NativeLookup lookup) {
                 const uint64_t hash = program.CodeHash();
                 LockGuard lock(_mutex);
                 auto bucket = _byHash.find(hash);
                 if (bucket != _byHash.end()) {
                     for (const ProgramId id : bucket->second) {
                         if (Slot(id).SameCode(program)) {
-                            return id;
+                            return InternOutcome{id, false, {}};
                         }
                     }
                 }
                 const size_t count = _count.load(std::memory_order_relaxed);
                 if (count >= ProgramPool::kMaxPrograms) {
-                    return std::nullopt;
+                    return InternOutcome{};
                 }
                 const auto id = static_cast<ProgramId>(count);
                 const size_t chunkIndex = count / kChunkSize;
@@ -49,10 +63,38 @@ namespace BECore {
                     _owned.push_back(MakeUnique<Chunk>());
                     _chunks[chunkIndex].store(_owned.back().get(), std::memory_order_release);
                 }
+                // The lookup is under this lock, so an `Install` that adds its entries first and rebinds after finds this program when it rebinds, and one that comes later is seen here
+                const NativeProgramFn native = lookup(program);
+                InternOutcome outcome{id, native == nullptr, program.Source()};
                 Slot(id) = std::move(program);
+                _chunks[chunkIndex].load(std::memory_order_relaxed)->natives[id % kChunkSize].store(native, std::memory_order_release);
                 _byHash[hash].push_back(id);
                 _count.store(count + 1, std::memory_order_release);
-                return id;
+                return outcome;
+            }
+
+            NativeProgramFn Native(ProgramId id) const {
+                ASSERT(id < Count(), "ProgramPool::Native: no program has this id");
+                const Chunk* chunk = _chunks[id / kChunkSize].load(std::memory_order_acquire);
+                return chunk != nullptr ? chunk->natives[id % kChunkSize].load(std::memory_order_acquire) : nullptr;
+            }
+
+            size_t NativeCount() const {
+                const size_t count = Count();
+                size_t bound = 0;
+                for (size_t id = 0; id < count; ++id) {
+                    bound += Native(static_cast<ProgramId>(id)) != nullptr ? 1 : 0;
+                }
+                return bound;
+            }
+
+            void RebindNative(NativeLookup lookup) {
+                LockGuard lock(_mutex);
+                const size_t count = _count.load(std::memory_order_relaxed);
+                for (size_t id = 0; id < count; ++id) {
+                    const NativeProgramFn native = lookup(Slot(static_cast<ProgramId>(id)));
+                    _chunks[id / kChunkSize].load(std::memory_order_relaxed)->natives[id % kChunkSize].store(native, std::memory_order_release);
+                }
             }
 
             const Program& Get(ProgramId id) const {
@@ -84,9 +126,13 @@ namespace BECore {
 
     }  // namespace
 
+    bool ProgramCodeView::operator==(const ProgramCodeView& other) const {
+        return resultType == other.resultType && resultRegister == other.resultRegister && registerCount == other.registerCount && reads == other.reads &&
+               std::equal(code.begin(), code.end(), other.code.begin(), other.code.end()) && std::equal(constants.begin(), constants.end(), other.constants.begin(), other.constants.end());
+    }
+
     bool Program::SameCode(const Program& other) const {
-        return _resultType == other._resultType && _resultRegister == other._resultRegister && _registerCount == other._registerCount && _reads == other._reads && _code == other._code &&
-               _constants == other._constants;
+        return CodeView() == other.CodeView();
     }
 
     uint64_t Program::CodeHash() const {
@@ -135,7 +181,11 @@ namespace BECore {
     }
 
     Optional<ProgramId> ProgramPool::Intern(Program program) {
-        return Storage::Instance().Intern(std::move(program));
+        const InternOutcome outcome = Storage::Instance().Intern(std::move(program), [](const Program& candidate) { return NativePrograms::Find(candidate); });
+        if (outcome.nativeMissed) {
+            NativePrograms::ReportMiss(outcome.source);
+        }
+        return outcome.id;
     }
 
     const Program& ProgramPool::Get(ProgramId id) {
@@ -144,6 +194,18 @@ namespace BECore {
 
     size_t ProgramPool::Count() {
         return Storage::Instance().Count();
+    }
+
+    NativeProgramFn ProgramPool::Native(ProgramId id) {
+        return Storage::Instance().Native(id);
+    }
+
+    size_t ProgramPool::NativeCount() {
+        return Storage::Instance().NativeCount();
+    }
+
+    void ProgramPool::RebindNative() {
+        Storage::Instance().RebindNative([](const Program& candidate) { return NativePrograms::Find(candidate); });
     }
 
 }  // namespace BECore

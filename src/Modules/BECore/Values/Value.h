@@ -147,7 +147,7 @@ namespace BECore {
         [[nodiscard]] T Evaluate(const Context& context) const {
             if (_kind == ValueKind::Program) {
                 if constexpr (ProgramValue<T>) {
-                    return Run<T>(ProgramPool::Get(_offset), context);
+                    return Run<T>(_offset, context);
                 } else {
                     ASSERT(false, "Value::Evaluate: no program computes this type");
                     return _constant;

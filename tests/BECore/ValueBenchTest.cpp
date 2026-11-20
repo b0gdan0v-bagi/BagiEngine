@@ -2,14 +2,18 @@
 // benchmark set reads (`ValueBench <type> <case> ns_per_get=<x>`); without it a case is a smoke run that checks the results and asserts
 // nothing about time: tests run side by side and a machine drifts, so the time belongs to the perf set (`.claude/rules/perf-project.md`).
 // A formula of about five operations over two objects is timed as `formula_plain` (C++), `formula_tree` (a virtual node per operation, a heap object each),
-// `formula_program` (the compiled `expr`, fused), `formula_unfused` (the same with `CompileOptions::fuse = false`) and `formula_cached` (a `CachedValue` read with nothing
-// changed). `madd_plain`, `madd_program` and `madd_unfused` time `slot * k + b` alone, so what the peephole gains is one number. Every case must sum to what the plain one does.
+// `formula_program` (the compiled `expr`, fused, in the interpreter), `formula_native` (the same program through the generated function of the engine's set,
+// `Programs/Native/CLAUDE.md`), `formula_run` (`Run` called directly: the interpreter with no look for a bound function in `Evaluate`; against `formula_program` it is what that look
+// costs), `formula_unfused` (the same with `CompileOptions::fuse = false`, in the interpreter) and `formula_cached` (a `CachedValue` read with nothing changed). `madd_plain`, `madd_program`,
+// `madd_native` and `madd_unfused` time `slot * k + b` alone, so what the peephole and the generated code gain is one number each. Every case must sum to what the plain one does.
 // The same lines are printed for `int32_t` (`caster.attack * (100 + cast.level * 10) / 100`, `caster.attack * 3 + 7`) and for `Vec3`
 // (`(caster.velocity + cast.target) * cast.power - caster.velocity * 0.5`, `caster.velocity * 2 + vec3(1, 2, 3)`: every step is one `Vec3` instruction and no conversion).
 
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/CachedValue.h>
 #include <BECore/Values/Context.h>
+#include <BECore/Values/Programs/Interpreter.h>
+#include <BECore/Values/Programs/Native/NativePrograms.h>
 #include <BECore/Values/Programs/Opcode.h>
 #include <BECore/Values/Programs/Program.h>
 #include <BECore/Values/Programs/ProgramCompiler.h>
@@ -371,19 +375,38 @@ namespace BECore::Tests {
             const char* plain;
             const char* tree;
             const char* program;
+            const char* native;
+            const char* run;
             const char* unfused;
             const char* cached;
         };
 
-        constexpr FormulaNames kFormulaNames{"formula_plain", "formula_tree", "formula_program", "formula_unfused", "formula_cached"};
-        constexpr FormulaNames kMaddNames{"madd_plain", nullptr, "madd_program", "madd_unfused", nullptr};
+        constexpr FormulaNames kFormulaNames{"formula_plain", "formula_tree", "formula_program", "formula_native", "formula_run", "formula_unfused", "formula_cached"};
+        constexpr FormulaNames kMaddNames{"madd_plain", nullptr, "madd_program", "madd_native", nullptr, "madd_unfused", nullptr};
+
+        /// Sets the generated code on or off for the length of a case and puts the state back: the interpreter and the generated function are timed through the same `Evaluate`
+        class NativeSwitch {
+        public:
+            explicit NativeSwitch(bool enabled) : _was(NativePrograms::IsEnabled()) {
+                NativePrograms::SetEnabled(enabled);
+            }
+            ~NativeSwitch() {
+                NativePrograms::SetEnabled(_was);
+            }
+            NativeSwitch(const NativeSwitch&) = delete;
+            NativeSwitch& operator=(const NativeSwitch&) = delete;
+
+        private:
+            bool _was = false;
+        };
 
         size_t CountMulAddSlot(const Program& program) {
             return static_cast<size_t>(std::count_if(program.Code().begin(), program.Code().end(), [](const Instruction& instruction) { return IsMulAddSlot(instruction.op); }));
         }
 
-        /// Times @p text as plain C++, as a tree (when @p tree is given), as the fused program, as the program with `fuse = false` and as a cached read (with the tree), and checks that
-        /// every case gives the sum of the plain one. @p expectFused says whether the default compile has a `MulAddSlot` and the unfused one never has: a benchmark of two
+        /// Times @p text as plain C++, as a tree (when @p tree is given), as the fused program in the interpreter and through its generated function, as the program with
+        /// `fuse = false` and as a cached read (with the tree), and checks that every case gives the sum of the plain one; the generated function must be bound, or the case would time the
+        /// interpreter twice. @p expectFused says whether the default compile has a `MulAddSlot` and the unfused one never has: a benchmark of two
         /// equal programs would say nothing; with no value the formula is not asked
         template <typename T, typename TPlain>
         void BenchFormulaCases(const FormulaWorld& world, StringView text, const FormulaNames& names, TPlain&& plainRead, const TreeNode<T>* tree, Optional<bool> expectFused) {
@@ -407,8 +430,20 @@ namespace BECore::Tests {
 
             const uint64_t plain = TimeCase(type, names.plain, iterations, printing, plainRead);
             EXPECT_NE(plain, 0U) << names.plain;
-            EXPECT_EQ(TimeCase(type, names.program, iterations, printing, [&](size_t index) { return fused.Evaluate(world.contexts[index]); }), plain) << names.program;
-            EXPECT_EQ(TimeCase(type, names.unfused, iterations, printing, [&](size_t index) { return unfused.Evaluate(world.contexts[index]); }), plain) << names.unfused;
+            {
+                const NativeSwitch interpreted(false);
+                EXPECT_EQ(TimeCase(type, names.program, iterations, printing, [&](size_t index) { return fused.Evaluate(world.contexts[index]); }), plain) << names.program;
+                if (names.run != nullptr) {
+                    const ProgramId id = fused.Id();
+                    EXPECT_EQ(TimeCase(type, names.run, iterations, printing, [&](size_t index) { return Run<T>(ProgramPool::Get(id), world.contexts[index]); }), plain) << names.run;
+                }
+                EXPECT_EQ(TimeCase(type, names.unfused, iterations, printing, [&](size_t index) { return unfused.Evaluate(world.contexts[index]); }), plain) << names.unfused;
+            }
+            {
+                const NativeSwitch generated(true);
+                ASSERT_NE(ProgramPool::Native(fused.Id()), nullptr) << names.native << ": no generated function is bound to " << String(text).c_str() << ", the set in tests/NativePrograms lacks it";
+                EXPECT_EQ(TimeCase(type, names.native, iterations, printing, [&](size_t index) { return fused.Evaluate(world.contexts[index]); }), plain) << names.native;
+            }
             if (tree == nullptr) {
                 return;
             }

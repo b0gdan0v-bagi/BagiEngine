@@ -10,10 +10,32 @@
 
 namespace BECore {
 
+    class NativePrograms;
+
+    /// A function generated from a program (`Native/NativePrograms.h`): it reads the context like `Run` and writes the result, `ProgramTypeSize(ResultType())` bytes, to the second argument
+    using NativeProgramFn = void (*)(const Context&, void* result);
+
     /// A refused program or formula: what was expected and found, and where in the text (1-based byte; 0 when no text is involved)
     struct ProgramError {
         String message;
         uint32_t column = 0;
+    };
+
+    /**
+     * @brief What makes two programs "the same code": the result, the registers, the levels read, the instructions and the constants (never the source text)
+     *
+     * The one definition of the comparison, used by the pool to intern and by `NativePrograms` to bind a generated function, so the two cannot disagree. A view
+     * borrows: it is valid while the program or the table it came from is.
+     */
+    struct ProgramCodeView {
+        ProgramType resultType = ProgramType::Int32;
+        uint8_t resultRegister = 0;
+        uint8_t registerCount = 0;
+        LevelMask reads = 0;
+        Span<const Instruction> code;
+        Span<const RegisterImage> constants;
+
+        [[nodiscard]] bool operator==(const ProgramCodeView& other) const;
     };
 
     /**
@@ -54,6 +76,11 @@ namespace BECore {
         /// The text the program came from, of the first formula the pool saw with this code; empty for a program assembled by hand
         [[nodiscard]] PoolString Source() const {
             return _source;
+        }
+
+        /// The fields `SameCode` compares
+        [[nodiscard]] ProgramCodeView CodeView() const {
+            return ProgramCodeView{_resultType, _resultRegister, _registerCount, _reads, Code(), Constants()};
         }
 
         /// Whether the code, the constants and the result are the same: the source text is not part of it
@@ -98,6 +125,22 @@ namespace BECore {
         [[nodiscard]] static const Program& Get(ProgramId id);
 
         [[nodiscard]] static size_t Count();
+
+        /**
+         * @brief The generated function bound to the program of @p id, or null (`Native/NativePrograms.h`)
+         *
+         * One atomic load, no lock. Null while no generated set holds the program and after `NativePrograms::SetEnabled(false)`; @p id must be one `Intern` gave out.
+         */
+        [[nodiscard]] static NativeProgramFn Native(ProgramId id);
+
+        /// How many programs have a bound function
+        [[nodiscard]] static size_t NativeCount();
+
+    private:
+        friend class NativePrograms;
+
+        /// Binds every program to what `NativePrograms::Find` says now (null for all of them while disabled); the one place a binding changes after `Intern`
+        static void RebindNative();
     };
 
 }  // namespace BECore

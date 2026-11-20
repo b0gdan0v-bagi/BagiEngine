@@ -31,4 +31,27 @@ namespace BECore {
         }
     }
 
+    /**
+     * @brief `Run<T>` of the program of @p id: the generated function when one is bound to it (`Native/NativePrograms.h`), else the interpreter
+     *
+     * What `Value::Evaluate` calls. The two give the same bits (the tests of the generated set prove it), so the caller cannot tell which ran.
+     */
+    template <ProgramValue T>
+    [[nodiscard]] T Run(ProgramId id, const Context& context) {
+        const NativeProgramFn native = ProgramPool::Native(id);
+        if (native == nullptr) {
+            return Run<T>(ProgramPool::Get(id), context);
+        }
+        ASSERT(ProgramPool::Get(id).ResultType() == kProgramTypeOf<T>, "Run: the program does not compute this type");
+        if constexpr (IsReflectedEnum<T>) {
+            ProgramEnum result;
+            native(context, &result);
+            return static_cast<T>(result.index);
+        } else {
+            T result{};
+            native(context, &result);
+            return result;
+        }
+    }
+
 }  // namespace BECore
