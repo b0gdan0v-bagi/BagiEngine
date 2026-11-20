@@ -1,5 +1,6 @@
 #include "ImageFile.h"
 
+#include <BECore/Profiler/Alloc/AllocRouting.h>
 #include <BECore/Utils/ScopeGuard.h>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
@@ -13,6 +14,9 @@
 #define STBI_NO_LINEAR
 #define STBI_NO_HDR
 #define STBI_FAILURE_USERMSG
+#define STBI_MALLOC(size) ::BECore::AllocRouting::Malloc(::BECore::AllocSource::Stb, (size))
+#define STBI_REALLOC(ptr, size) ::BECore::AllocRouting::Realloc(::BECore::AllocSource::Stb, (ptr), (size))
+#define STBI_FREE(ptr) ::BECore::AllocRouting::Free(::BECore::AllocSource::Stb, (ptr))
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Weverything"
