@@ -75,15 +75,15 @@ namespace BECore {
             bool addClicked = false;
         };
 
-        /// Lists nest this deep with no allocation (the visitor is made again every frame)
+        /// Lists and compounds nest this deep with no allocation (the visitor is made again every frame)
         static constexpr size_t kInlineListDepth = 8;
 
         /// The attributes of the field being visited: those of the innermost open BeginField, `FieldAttributes{}` outside one
         const FieldAttributes& CurrentField() const;
 
         int _idCounter = 0;
-        /// The fields between BeginField and EndField, outermost first (a compound's children are visited inside its bracket)
-        Vector<FieldAttributes> _fields;
+        /// The fields between BeginField and EndField, outermost first (a compound's children are visited inside its bracket). Inline, since the visitor is made again every frame
+        SmallVector<FieldAttributes, kInlineListDepth> _fields;
         /// The open lists, innermost last
         SmallVector<OpenList, kInlineListDepth> _lists;
     };
