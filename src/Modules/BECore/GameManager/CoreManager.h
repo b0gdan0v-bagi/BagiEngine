@@ -7,6 +7,7 @@
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/FileSystem/FileWatcher.h>
 #include <BECore/Input/UIInput.h>
 #include <BECore/MainWindow/MainWindowManager.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
@@ -144,6 +145,11 @@ namespace BECore {
             return GetInstance()._clipboard;
         }
 
+        /// Tells the game that a file or a folder changed on disk (`FileSystem/CLAUDE.md`, "FileWatcher"); idle until StartFileWatching(true). Main thread only
+        static FileWatcher& GetFileWatcher() {
+            return GetInstance()._fileWatcher;
+        }
+
         /// The sound: clips on the voices of the backend the application fabric sets (`Audio/CLAUDE.md`); no backend in the gtest executable
         static AudioManager& GetAudio() {
             return GetInstance()._audioManager;
@@ -190,6 +196,9 @@ namespace BECore {
         // Application initialization function
         void OnApplicationInit(PassKey<Application>);
 
+        // Starts the platform backend of the FileWatcher when @p enabled (ShouldWatchFiles decides), else leaves it idle. Before OnApplicationInit, so what it creates can watch
+        void StartFileWatching(PassKey<Application>, bool enabled);
+
         // The game cycle of one frame; @p kind is what GamePause decided. A Held frame still polls input, answers the control API, updates the widgets and draws,
         // but advances neither game time, tasks, tweens nor the scene
         void OnGameCycle(PassKey<Application>, FrameKind kind);
@@ -210,6 +219,7 @@ namespace BECore {
 
         CommandLine _commandLine;
         FileSystem _fileSystem;
+        FileWatcher _fileWatcher;  // after _fileSystem, which it resolves paths with; the handles of the services below must not outlive it
         ConfigManager _configManager;
         IntrusivePtrAtomic<LoggerManager> _loggerManager;
         IntrusivePtrAtomic<AssertHandlerManager> _assertHandlerManager;
