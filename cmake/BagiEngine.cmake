@@ -514,6 +514,42 @@ function(be_add_headless_executable NAME)
     be_deploy_runtime_libs(${NAME})
 endfunction()
 
+# be_add_native_programs(<target> GENERATOR <tool target> [ARGS <args>...] [DEPENDS <files>...])
+# Adds the generated C++ of the target's computed values to the target: a custom command runs the tool
+# `<tool> --emit-native-programs=<build dir>/Generated/<target>.native.cpp <args>` (the tool compiles the content's formulas and writes one
+# function per program: src/Modules/BECore/Values/Programs/Native/CLAUDE.md), and the output is a source of <target>. The command depends on the
+# tool, which links the engine, so a change of the engine (a kernel, the generator) regenerates the file. At run time a program binds to its function only
+# when the code is equal, so a stale file costs speed, never a wrong answer.
+# The file is compiled without floating-point contraction (-ffp-contract=off, /fp:precise for plain MSVC): the functions inline the kernels of the
+# interpreter, and a fused multiply-add across two of them would give another last bit than the interpreter does. It reuses the PCH of the target
+# like its other sources. Nothing is added on the web and when cross-compiling (the tool could not run): the target keeps the interpreter, one status line says so.
+function(be_add_native_programs TARGET_NAME)
+    cmake_parse_arguments(ARG "" "GENERATOR" "ARGS;DEPENDS" ${ARGN})
+    if(NOT ARG_GENERATOR)
+        message(FATAL_ERROR "be_add_native_programs(${TARGET_NAME}): GENERATOR is required")
+    endif()
+    if(ENGINE_TARGET_WEB OR CMAKE_CROSSCOMPILING)
+        message(STATUS "Native programs: ${TARGET_NAME} runs the interpreter (the generator cannot run in this build)")
+        return()
+    endif()
+
+    set(NATIVE_SOURCE "${CMAKE_BINARY_DIR}/Generated/${TARGET_NAME}.native.cpp")
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/Generated")
+    add_custom_command(
+        OUTPUT ${NATIVE_SOURCE}
+        COMMAND $<TARGET_FILE:${ARG_GENERATOR}> --emit-native-programs=${NATIVE_SOURCE} ${ARG_ARGS}
+        DEPENDS ${ARG_GENERATOR} ${ARG_DEPENDS}
+        COMMENT "Generating the native programs of ${TARGET_NAME}"
+        VERBATIM
+    )
+    target_sources(${TARGET_NAME} PRIVATE ${NATIVE_SOURCE})
+    # A source file's properties belong to the directory that sets them: the target's, not the caller's
+    set_source_files_properties(${NATIVE_SOURCE} TARGET_DIRECTORY ${TARGET_NAME} PROPERTIES
+        GENERATED TRUE
+        COMPILE_OPTIONS "$<IF:$<CXX_COMPILER_ID:MSVC>,/fp:precise,-ffp-contract=off>"
+    )
+endfunction()
+
 # =============================================================================
 # Reflection System
 # =============================================================================

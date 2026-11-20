@@ -247,7 +247,8 @@ const NativeProgramRegistrar kRegistrar{Span<const NativeProgramEntry>{}};
         ProgramBuilder builder;
         const uint8_t reg = Require(builder.AcquireRegister());
         builder.EmitLoadConst(reg, 9302);
-        const ProgramId withSource = InternProgram(builder, ProgramType::Int32, reg, PoolString::Intern(StringView("a\"b\\c\n\xC3\xA9")));
+        constexpr StringView kAwkwardSource = "a\"b\\c\n\xC3\xA9";
+        const ProgramId withSource = InternProgram(builder, ProgramType::Int32, reg, PoolString::Intern(kAwkwardSource));
 
         const String text = GenerateNativeSource(Span<const ProgramId>(&withSource, 1), NativeCodegenOptions{"line one\nline two"});
 
