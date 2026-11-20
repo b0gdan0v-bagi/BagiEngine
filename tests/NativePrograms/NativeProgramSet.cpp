@@ -2,6 +2,7 @@
 
 #include <BECore/ProgramListTypes.h>
 #include <BECore/ProgramRowTypes.h>
+#include <BECore/ValueListMahjongTypes.h>
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Programs/CompileOptions.h>
 #include <BECore/Values/Programs/ProgramCompiler.h>
@@ -53,6 +54,7 @@ namespace BECore::Tests {
                 static_cast<void>(result.Add<ProgramRowData::ProgramRowOperands>(name));
             }
             static_cast<void>(result.Add<ProgramListData::ProgramListHand>("hand"));
+            static_cast<void>(result.Add<ValueListMahjongData::ValueListHand>("mahjong"));
             return result;
         }();
         return declaration;
@@ -75,6 +77,13 @@ namespace BECore::Tests {
             CompileFormulas<float>(kNativeFloatFormulas, programs),
             CompileFormulas<double>(kNativeDoubleFormulas, programs),
             CompileFormulas<bool>(kNativeBoolFormulas, programs),
+            CompileFormulas<int32_t>(kNativeListIntFormulas, programs),
+            CompileFormulas<int64_t>(kNativeListInt64Formulas, programs),
+            CompileFormulas<float>(kNativeListFloatFormulas, programs),
+            CompileFormulas<double>(kNativeListDoubleFormulas, programs),
+            CompileFormulas<bool>(kNativeListBoolFormulas, programs),
+            CompileFormulas<bool>(kNativeMahjongBoolFormulas, programs),
+            CompileFormulas<int32_t>(kNativeMahjongIntFormulas, programs),
             CompileFormulas<Vec2>(kNativeVec2Formulas, programs),
             CompileFormulas<Vec3>(kNativeVec3Formulas, programs),
             CompileFormulas<Vec4>(kNativeVec4Formulas, programs),

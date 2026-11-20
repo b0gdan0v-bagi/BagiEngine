@@ -19,9 +19,12 @@ namespace BECore::Tests {
     inline constexpr LevelIndex kOperandsLevelC = 4;
     /// A `ProgramListHand`: the loop programs of `NativeProgramSetLists.h` read its lists
     inline constexpr LevelIndex kListsLevel = 5;
+    /// A `ValueListHand` (`ValueListMahjongTypes.h`): the patterns of the Mahjong proof read it
+    inline constexpr LevelIndex kMahjongLevel = 6;
 
     /**
-     * @brief The context the set's programs are compiled under: `caster` is a `ValueUnitStats`, `cast` a `ValueCastInfo`, `a`, `b` and `c` a `ProgramRowOperands` each, `hand` a `ProgramListHand`
+     * @brief The context the set's programs are compiled under: `caster` is a `ValueUnitStats`, `cast` a `ValueCastInfo`, `a`, `b` and `c` a `ProgramRowOperands` each, `hand` a `ProgramListHand`,
+     * `mahjong` a `ValueListHand`
      *
      * One declaration for the tool and for the tests: the offsets of the fields are part of a program's code, so a program compiled under another declaration
      * is another program and the generated function would not bind to it.
