@@ -37,6 +37,10 @@ namespace BECore {
     template <typename T>
     using Vector = eastl::vector<T>;
 
+    /// A vector whose memory comes from an arena (Memory/CLAUDE.md, "ArenaAllocator"); include <BECore/Memory/ArenaAllocator.h> to use it.
+    template <typename T>
+    using ArenaVector = eastl::vector<T, ArenaAllocator>;
+
     /// A vector with N elements inside the object that moves to the heap when it grows past N.
     template <typename T, size_t N>
     using SmallVector = eastl::fixed_vector<T, N, true>;

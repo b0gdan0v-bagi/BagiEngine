@@ -38,7 +38,7 @@ config/, assets/  engine content; a game's file of the same name wins (FileSyste
 tools/            Python and helper tools (tools/CLAUDE.md)
 ```
 
-**BECore subsystems** (each has a `CLAUDE.md`): `GameManager/CoreManager` (service locator), `Scene/`, `UI/`, `Text/`, `Animation/`, `Particles/`, `Control/`, `Save/`, `Config/`, `FileSystem/`, `Resource/`, `Renderer/`, `Audio/`, `Reflection/`, `Logger/`, `Profiler/`.
+**BECore subsystems** (each has a `CLAUDE.md`): `GameManager/CoreManager` (service locator), `Scene/`, `UI/`, `Text/`, `Animation/`, `Particles/`, `Control/`, `Save/`, `Config/`, `FileSystem/`, `Resource/`, `Renderer/`, `Audio/`, `Reflection/`, `Logger/`, `Profiler/`, `Memory/` (arenas).
 
 **Serialization:** split `ISerializer` / `IDeserializer`, never archive-style. Reflection code is generated from `BE_CLASS` / `BE_REFLECT_FIELD` (`.claude/rules/reflection-module.md`).
 

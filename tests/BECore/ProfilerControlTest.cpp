@@ -1,6 +1,7 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Memory/LinearArena.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Profiler.h>
@@ -41,11 +42,38 @@ namespace BECore::Tests {
         const Json& last = (*frames)[1];
         EXPECT_EQ(GetJsonInt(last, "drawCalls"), 4);
         EXPECT_EQ(GetJsonInt(last, "triangles"), 8);
-        for (const char* key : {"frame", "paused", "frameMs", "cpuMs", "stagesMs", "textureSwitches", "allocCount", "allocBytes", "liveBytes", "counters"}) {
+        for (const char* key :
+             {"frame", "paused", "frameMs", "cpuMs", "stagesMs", "textureSwitches", "allocCount", "allocBytes", "liveBytes", "arenaUsedBytes", "arenaPeakBytes", "arenaOverflows", "counters"}) {
             EXPECT_NE(FindJsonMember(last, key), nullptr) << key;
         }
         EXPECT_NE(FindJsonMember(Require(FindJsonMember(last, "stagesMs")), "SceneDraw"), nullptr);
         EXPECT_EQ(GetJsonBool(*result, "allocTracking"), AllocTracker::kEnabled);
+    }
+
+    TEST_F(ProfilerControlTest, FrameStatsListTheArenasWithTheirCounters) {
+        constexpr size_t kBytes = 48;
+        constexpr const char* kName = "ProfilerControlArena";
+        LinearArena arena(kName);
+        ASSERT_NE(arena.Allocate(kBytes, 1), nullptr);
+        FrameStatsCollector& collector = CoreManager::GetFrameStats();
+        collector.BeginFrame();
+        collector.EndFrame({}, AllocTracker::GetTotals());
+
+        const Json response = Call("frame_stats");
+        const Json* arenas = FindJsonMember(Require(FindJsonMember(response, "result")), "arenas");
+        ASSERT_NE(arenas, nullptr);
+        const Json* mine = nullptr;
+        for (const Json& described : *arenas) {
+            if (GetJsonString(described, "name").value_or(String()) == kName) {
+                mine = &described;
+            }
+        }
+        ASSERT_NE(mine, nullptr);
+        EXPECT_EQ(GetJsonInt(*mine, "used"), static_cast<int64_t>(kBytes));
+        EXPECT_EQ(GetJsonInt(*mine, "peak"), static_cast<int64_t>(kBytes));
+        EXPECT_EQ(GetJsonInt(*mine, "chunks"), 1);
+        EXPECT_EQ(GetJsonInt(*mine, "overflows"), 0);
+        EXPECT_GE(GetJsonInt(*mine, "capacity"), static_cast<int64_t>(kBytes));
     }
 
     TEST_F(ProfilerControlTest, FrameStatsCarryThePausedFlagOfEveryFrame) {

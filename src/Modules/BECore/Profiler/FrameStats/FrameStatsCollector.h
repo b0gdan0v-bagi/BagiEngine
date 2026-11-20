@@ -32,7 +32,10 @@ namespace BECore {
         RenderCounters draws;
         uint64_t allocCount = 0;  // the allocations of the frame (ENGINE_PROFILER_ALLOC; 0 without it)
         uint64_t allocBytes = 0;
-        uint64_t liveBytes = 0;  // at the end of the frame
+        uint64_t liveBytes = 0;       // at the end of the frame
+        uint64_t arenaUsedBytes = 0;  // the arenas, summed, at the end of the frame (Memory/CLAUDE.md, "Counters")
+        uint64_t arenaPeakBytes = 0;
+        uint64_t arenaOverflows = 0;  // the overflows so far, not per frame
         FixedVector<FrameCounter, kMaxFrameCounters> counters;
 
         [[nodiscard]] double GetStageMs(FrameStage stage) const {
