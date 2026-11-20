@@ -25,4 +25,19 @@ namespace BECore::Tests {
         }
     }
 
+    /// What @p body allocated on the calling thread
+    using AllocCount = AllocTracker::ThreadCounters;
+
+    /**
+     * Runs @p body and returns the allocations it made on the calling thread: the count and the bytes asked for. Zeros without
+     * the tracker (kNoAllocTracker), so a caller that asserts on the numbers skips first when AllocTracker::kEnabled is false.
+     */
+    template <typename TBody>
+    AllocCount CountAllocations(TBody&& body) {
+        const AllocCount before = AllocTracker::GetThreadCounters();
+        body();
+        const AllocCount after = AllocTracker::GetThreadCounters();
+        return {after.count - before.count, after.bytes - before.bytes};
+    }
+
 }  // namespace BECore::Tests

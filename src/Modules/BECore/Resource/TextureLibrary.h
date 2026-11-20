@@ -2,10 +2,10 @@
 
 #include <BECore/Math/Rect.h>
 #include <BECore/PoolString/PoolString.h>
-#include <BECore/PoolString/PoolStringMap.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
 #include <cstddef>
+#include <cstdint>
 
 namespace pugi {
     class xml_node;
@@ -114,11 +114,23 @@ namespace BECore {
         bool Save();
 
     private:
+        static constexpr uint32_t kFreeSlot = 0;
+        static constexpr size_t kMinSlots = 16;
+        /// The index is never more than half full, so a probe always ends at a free slot
+        static constexpr size_t kSlotsPerEntry = 2;
+
         void Clear();
-        void RebuildIndex();
+        /// The slot that holds @p name, or the free slot where it would go. `_slots` is not empty and at most half full.
+        [[nodiscard]] size_t FindSlot(PoolString name) const;
+        /// Makes room for @p count entries, rebuilding the index only when it would pass half full
+        void ReserveIndex(size_t count);
+        /// Fills the index anew from `_entries`, with room for @p count
+        void RebuildIndex(size_t count);
 
         Vector<SpriteEntry> _entries;
-        UnorderedPoolMap<size_t> _index;
+        /// Open addressing over `_entries`: a slot holds an entry's position + 1, `kFreeSlot` is free. One block for the whole
+        /// library, so a load does not allocate per sprite.
+        Vector<uint32_t> _slots;
     };
 
 }  // namespace BECore

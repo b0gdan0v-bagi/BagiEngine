@@ -184,6 +184,16 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
       }
     },
     {
+      "name": "asset-load",
+      "about": "A TextureLibrary of 2000 sprites with names new to the pool, loaded from XML (parse and Load) and from binary (AssetLoadAllocBenchTest). Only the times of the `AssetLoad` lines are metrics; the lines also print allocs, bytes, newStrings and writeLocks (`AssetLoadReserved`: the same load after one `PoolString::Reserve` of the exact totals, the most one `PoolString::Reserve` could save), and the allocation counts need the profile preset (zero in Release)",
+      "fast": true,
+      "command": ["{bin}/BagiEngineTests", "--gtest_also_run_disabled_tests", "--gtest_filter=AssetLoadAllocBenchTest.DISABLED_*"],
+      "metrics": {
+        "load_xml_ms": {"source": "regex", "pattern": "^AssetLoad format=xml .* loadMs=([0-9.]+)", "unit": "ms", "better": "lower", "gate": false},
+        "load_bin_ms": {"source": "regex", "pattern": "^AssetLoad format=bin .* loadMs=([0-9.]+)", "unit": "ms", "better": "lower", "gate": false}
+      }
+    },
+    {
       "name": "engine-tests",
       "about": "BagiEngineTests in one process (it waits on threads and sockets, so wall time, not CPU)",
       "command": ["{bin}/BagiEngineTests", "--gtest_brief=1"],
