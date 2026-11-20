@@ -9,6 +9,30 @@
 - **Before the content loads**, in the executable and the tool alike, in the same order (the order is the id, and ids are in pooled programs and generated code). Nothing checks "before"; a program already in the pool is never affected by a later registration.
 - A refused registration is a `std::expected` error with the reason and changes nothing. A parameter that no program computes (`String`, a vector) is a compile error; a type nobody registered is the error `parameter N has a type that is not registered`.
 
+## Example
+
+A game with a 256-bit mask of cells registers the type and two operations in one function that its executable **and** the tool of its native set call, and calls it before `ApplyNativeProgramsFlags()` and before any content loads (a game's `main` or start-up code; the engine's `Application` registers nothing). The working copy is `tests/BECore/ProgramDomainTypes.h` (`RegisterDomainToys`).
+
+```cpp
+struct CellMask {  // trivially copyable; the three templates make it self-serializing and reflected as an opaque value
+    Array<uint64_t, 4> words{};
+    template <typename S> void Serialize(S& s) const { /* WriteAttribute("w0", ...) */ }
+    template <typename D> void Deserialize(D& d) { /* ReadAttribute */ }
+    template <typename V> bool VisitProperties(V& v) { /* Visit */ }
+};
+CellMask AndMask(const CellMask& a, const CellMask& b);
+int32_t Popcount(const CellMask& m);
+
+std::expected<void, String> RegisterFormulaTypes() {
+    if (auto type = ProgramDomain::RegisterType<CellMask>("mask"); !type) { return std::unexpected(type.error()); }
+    if (auto op = ProgramDomain::AddOperation<&AndMask>("and_mask"); !op) { return std::unexpected(op.error()); }
+    if (auto op = ProgramDomain::AddOperation<&Popcount>("popcount"); !op) { return std::unexpected(op.error()); }
+    return {};
+}
+```
+
+Content then says `expr="popcount(and_mask(board.walls, board.moving)) == 0"` for a `Value<bool>` over a context whose level `board` has two `CellMask` fields, and a `Value<CellMask>` takes `expr` too. Adding an operation later only appends an id; **reordering or removing a line changes every id**, so a generated file made by the old order is not bound (`Fingerprint()`) and a pooled program of another process means another operation.
+
 ## Contract of the registry
 
 Append-only: an id never moves or goes away and an entry's address is stable, so `Type(id)` and `Operation(id)` take no lock (chunked storage published with a release before the id is out, the model of `ProgramPool`). Registering and the lookups by name take the registry's lock (`FindTypeByDescriptor` and `FindOperations` read without it). `Fingerprint()` hashes the names (by text, not by pointer), sizes, signatures and ids in order: equal in two processes exactly when they registered the same set in the same order.
@@ -38,3 +62,11 @@ The lowering loads a field of a registered type with `LoadSlot` of the type's si
 ## Generated code
 
 `CallDomain` and `LoadSlotDomain` are emitted like any row, through the same kernels (`ExecuteCallDomain`, `LoadDomainField`). The operation id is the order of registration, so the tool that writes the file and the executable register the same set in the same order, and a generated function is used only while `Fingerprint()` equals the one in the file (`Native/CLAUDE.md`).
+
+## Limits and what is not here
+
+- At most `kMaxDomainArguments` (3) parameters and a type of at most `kProgramRegisterBytes` (32): the instruction has three register fields and the register is 32 bytes. A bigger type stays in the game's C++, behind an operation that reads the context (`const Context&` first).
+- Operations are functions in the text (`and_mask(a, b)`); there are no operators for a registered type, `==` and `!=` only when its equality is bitwise, and no literal syntax (`cell(3, 4)` is a call that folds to a constant).
+- A formula over a registered type is **not as fast as hand-written C++**: each operation is an indirect call over 32-byte images (`Values/CLAUDE.md`, "Benchmark": the toy mask formula is 22 times plain C++ in the interpreter and 10 times in generated code). A rule applied to every cell is an operation written in C++ and called once.
+- The registry is process-wide, append-only and not frozen: nothing refuses a registration after the content loaded or after `ApplyNativeProgramsFlags()`, but a generated set does not bind to a registry that grew after it (`Native/CLAUDE.md`) and a pooled program never changes meaning.
+- `tree` (node classes, `Nodes/CLAUDE.md`) has no node for a game's operation: a condition over a registered type is `expr`. No fuzz target and no content-format change: a document is an `expr` string like any other.

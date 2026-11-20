@@ -8,7 +8,13 @@
 // `madd_native` and `madd_unfused` time `slot * k + b` alone, so what the peephole and the generated code gain is one number each. Every case must sum to what the plain one does.
 // The same lines are printed for `int32_t` (`caster.attack * (100 + cast.level * 10) / 100`, `caster.attack * 3 + 7`) and for `Vec3`
 // (`(caster.velocity + cast.target) * cast.power - caster.velocity * 0.5`, `caster.velocity * 2 + vec3(1, 2, 3)`: every step is one `Vec3` instruction and no conversion).
+// A formula over a game's registered type is timed as `mask_plain` (C++ over the toy 256-bit mask: `popcount((a & shift(b, East)) | c) > 3` over three context objects),
+// `mask_program` (the interpreter: five `CallDomain` instructions, each an indirect call of a registered function), `mask_run` (`Run` called directly) and `mask_native` (the
+// generated function of the engine's set); the lines are `ValueBench mask_<case> ns_per_get=<x>`.
 
+#include <BECore/ProgramDomainTypes.h>
+#include <BECore/ProgramRowTypes.h>
+#include <BECore/Random/Rng.h>
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/CachedValue.h>
 #include <BECore/Values/Context.h>
@@ -18,6 +24,8 @@
 #include <BECore/Values/Programs/Program.h>
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <BECore/Values/Value.h>
+#include <NativePrograms/NativeProgramFormulas.h>
+#include <NativePrograms/NativeProgramSet.h>
 #include <bit>
 #include <chrono>
 #include <cstdio>
@@ -27,6 +35,12 @@
 namespace BECore::Tests {
 
     using namespace ValueTestData;
+    using ProgramDomainData::BitsAnd;
+    using ProgramDomainData::BitsOr;
+    using ProgramDomainData::BitsPopcount;
+    using ProgramDomainData::BitsShift;
+    using ProgramDomainData::DomainBits256;
+    using ProgramDomainData::DomainDirection;
 
     namespace {
 
@@ -209,7 +223,12 @@ namespace BECore::Tests {
             }
         };
 
-        /// Runs @p read for @p iterations and returns the sum of the folded results; the time per read is printed when @p printing
+        uint64_t Fold(bool value) {
+            return value ? 1U : 0U;
+        }
+
+        /// Runs @p read for @p iterations and returns the sum of the folded results; the time per read is printed when @p printing, as `ValueBench <type> <name>` or, with no @p type, `ValueBench
+        /// <name>`
         template <typename TRead>
         uint64_t TimeCase(const char* type, const char* name, uint64_t iterations, bool printing, TRead&& read) {
             uint64_t sum = 0;
@@ -221,7 +240,11 @@ namespace BECore::Tests {
             Escape(sum);
             if (printing) {
                 const double nanos = std::chrono::duration<double>(elapsed).count() * kNanosPerSecond / static_cast<double>(iterations);
-                std::printf("ValueBench %s %s ns_per_get=%.3f\n", type, name, nanos);
+                if (type != nullptr) {
+                    std::printf("ValueBench %s %s ns_per_get=%.3f\n", type, name, nanos);
+                } else {
+                    std::printf("ValueBench %s ns_per_get=%.3f\n", name, nanos);
+                }
             }
             return sum;
         }
@@ -517,6 +540,76 @@ namespace BECore::Tests {
             BenchFormulaCases<Vec3>(world, kVec3Madd, kMaddNames, [&](size_t index) { return PlainVec3Madd(world.casters[index]); }, nullptr, true);
         }
 
+        constexpr StringView kMaskFormula = kNativeDomainBoolFormulas[0];
+        constexpr int32_t kMaskPopcountLimit = 3;
+        constexpr uint64_t kMaskSeed = 0x6d61736b;
+        constexpr size_t kMaskWords = 4;
+
+        /// `kMaskFormula` as C++ over the toy mask, calling the same functions the registered operations are
+        bool PlainMask(const DomainBits256& a, const DomainBits256& b, const DomainBits256& c) {
+            return BitsPopcount(BitsOr(BitsAnd(a, BitsShift(b, DomainDirection::East)), c)) > kMaskPopcountLimit;
+        }
+
+        /// Three levels of masks, an object of each per iteration; the masks are sparse so that the answer changes from one object to the next
+        struct MaskWorld {
+            Vector<ProgramRowData::ProgramRowOperands> a;
+            Vector<ProgramRowData::ProgramRowOperands> b;
+            Vector<ProgramRowData::ProgramRowOperands> c;
+            Vector<Context> contexts;
+
+            MaskWorld() : a(kObjects), b(kObjects), c(kObjects) {
+                Rng rng(kMaskSeed);
+                contexts.reserve(kObjects);
+                for (size_t index = 0; index < kObjects; ++index) {
+                    for (size_t word = 0; word < kMaskWords; ++word) {
+                        a[index].mask.words[word] = rng.Next64() & rng.Next64() & rng.Next64();
+                        b[index].mask.words[word] = rng.Next64() & rng.Next64() & rng.Next64();
+                        c[index].mask.words[word] = ((index >> word) & 1) != 0 ? uint64_t{1} << (rng.Next64() % 64) : 0;
+                    }
+                    Context& context = contexts.emplace_back(NativeProgramSetDeclaration());
+                    context.Set(kOperandsLevelA, a[index]);
+                    context.Set(kOperandsLevelB, b[index]);
+                    context.Set(kOperandsLevelC, c[index]);
+                }
+            }
+
+            MaskWorld(const MaskWorld&) = delete;
+            MaskWorld& operator=(const MaskWorld&) = delete;
+        };
+
+        size_t CountCallDomain(const Program& program) {
+            return static_cast<size_t>(std::count_if(program.Code().begin(), program.Code().end(), [](const Instruction& instruction) { return instruction.op == Opcode::CallDomain; }));
+        }
+
+        void BenchMask() {
+            bool printing = false;
+            const uint64_t iterations = Iterations(printing);
+            // The toys first: the generated function of the set binds while the registry is what the tool had
+            static_cast<void>(ProgramDomainData::RegisterDomainToys());
+            const MaskWorld world;
+            const auto compiled = CompileValue<bool>(kMaskFormula, NativeProgramSetDeclaration());
+            ASSERT_TRUE(compiled.has_value()) << String(kMaskFormula).c_str();
+            const Value<bool>& value = *compiled;
+            ASSERT_EQ(value.Kind(), ValueKind::Program);
+            // A case that ran no `CallDomain` would time the interpreter's other instructions and say nothing about a registered operation
+            EXPECT_GE(CountCallDomain(ProgramPool::Get(value.Id())), 1U);
+
+            const uint64_t plain = TimeCase(nullptr, "mask_plain", iterations, printing, [&](size_t index) { return PlainMask(world.a[index].mask, world.b[index].mask, world.c[index].mask); });
+            EXPECT_GT(plain, 0U) << "the masks never pass the test";
+            EXPECT_LT(plain, iterations) << "the masks always pass the test";
+            {
+                const NativeSwitch interpreted(false);
+                EXPECT_EQ(TimeCase(nullptr, "mask_program", iterations, printing, [&](size_t index) { return value.Evaluate(world.contexts[index]); }), plain);
+                const ProgramId id = value.Id();
+                EXPECT_EQ(TimeCase(nullptr, "mask_run", iterations, printing, [&](size_t index) { return Run<bool>(ProgramPool::Get(id), world.contexts[index]); }), plain);
+            }
+            {
+                const NativeSwitch generated(true);
+                ASSERT_NE(ProgramPool::Native(value.Id()), nullptr) << "mask_native: no generated function is bound to " << String(kMaskFormula).c_str();
+                EXPECT_EQ(TimeCase(nullptr, "mask_native", iterations, printing, [&](size_t index) { return value.Evaluate(world.contexts[index]); }), plain);
+            }
+        }
+
     }  // namespace
 
     TEST(ValueBenchTest, Int32) {
@@ -541,6 +634,10 @@ namespace BECore::Tests {
 
     TEST(ValueBenchTest, Vec3Madd) {
         BenchVec3Madd();
+    }
+
+    TEST(ValueBenchTest, Mask) {
+        BenchMask();
     }
 
 }  // namespace BECore::Tests
