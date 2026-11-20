@@ -1,17 +1,10 @@
 #include "WriteTargets.h"
 
+#include <BECore/Values/Effects/ScriptIdentifier.h>
 
 namespace BECore {
 
     namespace {
-
-        [[nodiscard]] bool IsIdentifierStart(char c) {
-            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
-        }
-
-        [[nodiscard]] bool IsIdentifierPart(char c) {
-            return IsIdentifierStart(c) || (c >= '0' && c <= '9');
-        }
 
         [[nodiscard]] bool IsDottedPath(StringView path) {
             bool segmentStart = true;
@@ -21,7 +14,7 @@ namespace BECore {
                         return false;
                     }
                     segmentStart = true;
-                } else if (segmentStart ? IsIdentifierStart(c) : IsIdentifierPart(c)) {
+                } else if (segmentStart ? IsScriptIdentifierStart(c) : IsScriptIdentifierPart(c)) {
                     segmentStart = false;
                 } else {
                     return false;
