@@ -73,6 +73,8 @@ namespace BECore {
         if (last == nullptr) {
             return;
         }
+        // The overlay's own draws and allocations (text, layout, lines) are not what the frame statistics should show
+        const ScopedAllocCountersPause allocPause;
         const ScopedRenderCountersPause pause(renderer);
         // Output pixels: the scene leaves its own view transform behind
         const ViewTransform sceneView = renderer.GetViewTransform();
