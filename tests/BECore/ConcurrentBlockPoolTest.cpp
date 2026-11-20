@@ -458,13 +458,13 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    /// A benchmark, not a check: run by hand in macos-release with --gtest_also_run_disabled_tests (Memory/CLAUDE.md, "Pools")
+    /// A benchmark, not a check: the set of .claude/rules/perf-project.md runs it in macos-release (Memory/CLAUDE.md, "Pools")
     TEST(ConcurrentBlockPoolCostTest, DISABLED_PooledAgainstNewAndDelete) {
         for (const int threads : {1, 4}) {
             ConcurrentBlockPool pool("ConcurrentCost", kBlockBytes, 8);
             const double pooled = NanosPerPair(threads, [&] { return pool.Allocate(); }, [&](void* block) { pool.Deallocate(block); });
             const double heap = NanosPerPair(threads, [] { return ::operator new(kBlockBytes); }, [](void* block) { ::operator delete(block); });
-            std::cout << threads << " thread(s): pooled " << pooled << " ns, new/delete " << heap << " ns per allocate and free\n";
+            std::cout << "ConcurrentBlockPoolCost threads=" << threads << " pooled_ns=" << pooled << " heap_ns=" << heap << "\n";
         }
     }
 

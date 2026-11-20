@@ -186,6 +186,12 @@ namespace BECore::Tests {
     }
 
     TEST(BlockPoolTest, AConstinitPoolWorksFromAStaticInitialiser) {
+        // The block was made before main and is freed here once: a repeated run has nothing left to check
+        static bool ran = false;
+        if (ran) {
+            GTEST_SKIP() << "the block of the static initialiser is already freed";
+        }
+        ran = true;
         ASSERT_NE(g_earlyBlock, nullptr);
         EXPECT_EQ(g_staticPool.GetLiveCount(), 1u);
         std::memset(g_earlyBlock, 0x77, 24);

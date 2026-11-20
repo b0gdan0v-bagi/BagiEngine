@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Assert/AssertMacros.h>
 #include <BECore/Memory/BlockPool.h>
 #include <BECore/Memory/ConcurrentBlockPool.h>
 #include <atomic>

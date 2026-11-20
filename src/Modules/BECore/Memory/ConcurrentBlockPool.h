@@ -20,7 +20,7 @@ namespace BECore {
      *   without touching the pool or the blocks (their pages went with the pool). A new pool at the same address is not mistaken for the dead one.
      *   Only the pool's destructor and a spill at thread end or on eviction take the global lifetime lock, never the hot path.
      * - **Counters.** GetLiveCount() is exact: every thread counts on a shard of its own (one atomic add on a line nobody else writes; a counter all threads
-     *   add to made four threads twelve times slower than `new`). The PoolStats slot, claimed on the first Allocate so the pool can be `constinit`, is
+     *   add to made four threads much slower than `new`). The PoolStats slot, claimed on the first Allocate so the pool can be `constinit`, is
      *   **published** from the shards at every refill and spill, every `kPublishEvery` calls that hit the list, and by DrainThreadCache() and a thread's
      *   end: what a reader of the registry sees lags by up to that many calls per thread, and the peak is the largest published `live`. A block in a thread's
      *   list is not live.

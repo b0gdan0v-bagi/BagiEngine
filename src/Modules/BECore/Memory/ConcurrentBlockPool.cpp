@@ -193,7 +193,7 @@ namespace BECore {
     }
 
     void ConcurrentBlockPool::SumShards(uint64_t& allocations, uint64_t& frees) const {
-        // Frees first: a free is counted after its allocation, so the allocations read next cover every free read
+        // A snapshot without ordering: the loads are relaxed, so a free can be summed before the allocation it undoes and `frees` can exceed `allocations`
         frees = 0;
         for (const Shard& shard : _shards) {
             frees += shard.frees.load(std::memory_order_relaxed);
@@ -208,7 +208,7 @@ namespace BECore {
         uint64_t allocations = 0;
         uint64_t frees = 0;
         SumShards(allocations, frees);
-        return static_cast<size_t>(allocations - frees);
+        return frees > allocations ? 0 : static_cast<size_t>(allocations - frees);
     }
 
     void ConcurrentBlockPool::OnAllocated(uint32_t shard) {
@@ -223,6 +223,9 @@ namespace BECore {
         uint64_t allocations = 0;
         uint64_t frees = 0;
         SumShards(allocations, frees);
+        if (frees > allocations) {
+            return;  // a torn snapshot (see SumShards): the next publish has a consistent one, and a wrapped count would stay in the peak for good
+        }
         _stats.SetCounts(allocations - frees, allocations);
     }
 
