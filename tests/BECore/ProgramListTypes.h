@@ -48,6 +48,17 @@ namespace BECore::ProgramListData {
         BE_REFLECT_FIELD int32_t after = 0;
     };
 
+    /// A list a formula may not read (of strings that own their text), two it may, and a set held by value (the path of a list that crosses an embedded object). A list of lists, optionals,
+    /// maps or enums is no reflected field (the serializers have no element form), so those are tested as types
+    struct ProgramListRefused {
+        BE_CLASS(ProgramListRefused)
+
+        BE_REFLECT_FIELD Vector<String> texts;
+        BE_REFLECT_FIELD Vector<PoolString> names;
+        BE_REFLECT_FIELD Vector<Vec3> points;
+        BE_REFLECT_FIELD ProgramListSet set;
+    };
+
     /// Sixteen bytes that a test fills with the bytes of a value of any program type and reads back through `LoadElem`: a one-element list of this object, so an element of every type is one
     /// reflected type
     struct ProgramListScratch {

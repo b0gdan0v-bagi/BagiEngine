@@ -81,11 +81,20 @@ namespace BECore {
             return names.empty() ? String("none") : JoinNames(names);
         }
 
+        /// Where a path starts, for the messages: a level of the declaration (`caster`) or the element of a list, which has no name of its own
+        struct PathOrigin {
+            const TypeInfo* type = nullptr;
+            /// `level 'caster'`; empty for an element
+            String label;
+            /// What a nested owner is called after the start: `caster` for a level, empty for an element
+            String start;
+        };
+
         /// The message of a path that CompilePath found no field for: which type was asked, what it has, the nearest name
-        LinkError UnknownFieldError(const ContextLevel& level, StringView path, const PropertyPath& rest, const TypeRegistry& registry, const PropertyError& original) {
+        LinkError UnknownFieldError(const PathOrigin& origin, StringView path, const PropertyPath& rest, const TypeRegistry& registry, const PropertyError& original) {
             // The longest prefix that compiles is the owner of the segment that failed
-            const TypeInfo* owner = level.type;
-            String ownerPath(level.name);
+            const TypeInfo* owner = origin.type;
+            String ownerPath = origin.start;
             for (size_t i = 0; i < rest.segments.size(); ++i) {
                 const PathSegment& segment = rest.segments[i];
                 if (segment.kind != PathSegmentKind::Field || owner == nullptr) {
@@ -94,17 +103,85 @@ namespace BECore {
                 const Vector<String> names = FieldNames(*owner, registry);
                 if (std::find(names.begin(), names.end(), segment.text) == names.end()) {
                     const String hint = IDeserializer::MakeDidYouMeanHint(segment.text, {&names});
-                    return LinkError{LinkErrorCode::unknown_field, Format("path '{}': the type '{}' ({}) has no field '{}'{}; its fields are: {}", path, owner->Name(),
-                                                                          i == 0 ? Format("level '{}'", level.name) : Format("'{}'", ownerPath), segment.text, hint, JoinNames(names))};
+                    const String where = i == 0 ? origin.label : Format("'{}'", ownerPath);
+                    return LinkError{LinkErrorCode::unknown_field, Format("path '{}': the type '{}'{} has no field '{}'{}; its fields are: {}", path, owner->Name(),
+                                                                          where.empty() ? String() : Format(" ({})", where), segment.text, hint, JoinNames(names))};
                 }
-                const auto prefix = CompilePath(*level.type, FormatPropertyPath(rest.segments, i + 1), registry);
+                const auto prefix = CompilePath(*origin.type, FormatPropertyPath(rest.segments, i + 1), registry);
                 if (!prefix.has_value() || prefix->type == nullptr) {
                     break;
                 }
-                ownerPath = Format("{}.{}", ownerPath, segment.text);
+                ownerPath = ownerPath.empty() ? segment.text : Format("{}.{}", ownerPath, segment.text);
                 owner = prefix->type->kind == TypeKind::Object ? registry.Find(prefix->type->ObjectHash()) : nullptr;
             }
             return LinkError{LinkErrorCode::unknown_field, Format("path '{}': {}", path, original.message)};
+        }
+
+        /// The fields of @p rest compiled against the origin's type, which must name one fixed place: the unknown field and the not fixed refusals of every link function
+        std::expected<CompiledPath, LinkError> CompileFixed(const PathOrigin& origin, StringView path, const PropertyPath& rest, const TypeRegistry& registry) {
+            const auto compiled = CompilePath(*origin.type, FormatPropertyPath(rest.segments, rest.segments.size()), registry);
+            if (!compiled.has_value()) {
+                if (compiled.error().code == PropertyErrorCode::not_found) {
+                    return std::unexpected(UnknownFieldError(origin, path, rest, registry, compiled.error()));
+                }
+                return Refuse(LinkErrorCode::invalid_path, Format("path '{}': {}", path, compiled.error().message));
+            }
+            if (!compiled->IsFixed()) {
+                return Refuse(
+                    LinkErrorCode::not_fixed,
+                    Format("path '{}': the part '{}' needs the live object (a list element, a map value, an optional or a pointee), so a value cannot read it from the context", path, compiled->rest));
+            }
+            return *compiled;
+        }
+
+        /// A path split at its level: the level of the declaration and the fields after it
+        struct LevelPath {
+            LevelIndex index = 0;
+            const ContextLevel* level = nullptr;
+            PropertyPath rest;
+        };
+
+        std::expected<LevelPath, LinkError> SplitLevel(const ContextDecl& declaration, StringView path) {
+            const auto parsed = ParsePropertyPath(path);
+            if (!parsed.has_value()) {
+                return Refuse(LinkErrorCode::invalid_path, Format("path '{}': {} (at byte {})", path, parsed.error().message, parsed.error().position));
+            }
+            const Vector<PathSegment>& segments = parsed->segments;
+            const String levelName = segments.front().text;
+
+            const Optional<LevelIndex> index = declaration.IndexOf(levelName);
+            if (!index.has_value()) {
+                Vector<String> names;
+                for (const ContextLevel& level : declaration.Levels()) {
+                    names.push_back(level.name);
+                }
+                const String hint = IDeserializer::MakeDidYouMeanHint(levelName, {&names});
+                return Refuse(LinkErrorCode::unknown_level, Format("path '{}': unknown level '{}'{}; the declared levels are: {}", path, levelName, hint, LevelNames(declaration)));
+            }
+            if (segments.size() == 1) {
+                return Refuse(LinkErrorCode::invalid_path, Format("path '{}': '{}' is a level, a path names a field of it (level.field)", path, levelName));
+            }
+            if (segments[1].kind != PathSegmentKind::Field) {
+                return Refuse(LinkErrorCode::invalid_path, Format("path '{}': the level '{}' is an object, it has no elements", path, levelName));
+            }
+            LevelPath split;
+            split.index = *index;
+            split.level = &declaration.Levels()[*index];
+            for (size_t i = 1; i < segments.size(); ++i) {
+                split.rest.segments.push_back(segments[i]);
+            }
+            return split;
+        }
+
+        PathOrigin OriginOf(const ContextLevel& level) {
+            return PathOrigin{level.type, Format("level '{}'", level.name), level.name};
+        }
+
+        std::expected<uint32_t, LinkError> OffsetOf(const CompiledPath& compiled, StringView path, const TypeInfo& owner) {
+            if (compiled.offset > std::numeric_limits<uint32_t>::max()) {
+                return Refuse(LinkErrorCode::too_far, Format("path '{}': the field is {} bytes into '{}', more than a slot can address", path, compiled.offset, owner.Name()));
+            }
+            return static_cast<uint32_t>(compiled.offset);
         }
 
     }  // namespace
@@ -200,55 +277,108 @@ namespace BECore {
     }
 
     std::expected<SlotRef, LinkError> LinkSlot(const ContextDecl& declaration, StringView path, const TypeDesc& expected, const TypeRegistry& registry) {
+        const auto split = SplitLevel(declaration, path);
+        if (!split.has_value()) {
+            return std::unexpected(split.error());
+        }
+        const ContextLevel& level = *split->level;
+        const auto compiled = CompileFixed(OriginOf(level), path, split->rest, registry);
+        if (!compiled.has_value()) {
+            return std::unexpected(compiled.error());
+        }
+        if (!SameType(expected, *compiled->type)) {
+            return Refuse(LinkErrorCode::type_mismatch, Format("path '{}': the field '{}' of '{}' is a {}, but a value of {} is asked for", path, split->rest.segments.back().text, level.type->Name(),
+                                                               DescribeForMessage(*compiled->type), DescribeForMessage(expected)));
+        }
+        const auto offset = OffsetOf(*compiled, path, *level.type);
+        if (!offset.has_value()) {
+            return std::unexpected(offset.error());
+        }
+        return SlotRef{split->index, *offset};
+    }
+
+    std::expected<ListLink, LinkError> LinkList(const ContextDecl& declaration, StringView path, const TypeRegistry& registry) {
+        const auto split = SplitLevel(declaration, path);
+        if (!split.has_value()) {
+            return std::unexpected(split.error());
+        }
+        const ContextLevel& level = *split->level;
+        const auto compiled = CompileFixed(OriginOf(level), path, split->rest, registry);
+        if (!compiled.has_value()) {
+            return std::unexpected(compiled.error());
+        }
+        if (compiled->type->kind != TypeKind::List) {
+            return Refuse(LinkErrorCode::not_a_list, Format("path '{}': the field '{}' of '{}' is a {}, but a list field (an Array, Vector, SmallVector or FixedVector) is wanted", path,
+                                                            split->rest.segments.back().text, level.type->Name(), DescribeForMessage(*compiled->type)));
+        }
+        const auto element = DescribeListElement(*compiled->type, registry);
+        if (!element.has_value()) {
+            return Refuse(element.error().code, Format("path '{}': {}", path, element.error().message));
+        }
+        const auto offset = OffsetOf(*compiled, path, *level.type);
+        if (!offset.has_value()) {
+            return std::unexpected(offset.error());
+        }
+        return ListLink{split->index, *offset, compiled->type};
+    }
+
+    std::expected<ElementLink, LinkError> LinkElementField(const TypeInfo& element, StringView path, const TypeRegistry& registry) {
         const auto parsed = ParsePropertyPath(path);
         if (!parsed.has_value()) {
             return Refuse(LinkErrorCode::invalid_path, Format("path '{}': {} (at byte {})", path, parsed.error().message, parsed.error().position));
         }
-        const Vector<PathSegment>& segments = parsed->segments;
-        const String levelName = segments.front().text;
-
-        const Optional<LevelIndex> index = declaration.IndexOf(levelName);
-        if (!index.has_value()) {
-            Vector<String> names;
-            for (const ContextLevel& level : declaration.Levels()) {
-                names.push_back(level.name);
-            }
-            const String hint = IDeserializer::MakeDidYouMeanHint(levelName, {&names});
-            return Refuse(LinkErrorCode::unknown_level, Format("path '{}': unknown level '{}'{}; the declared levels are: {}", path, levelName, hint, LevelNames(declaration)));
+        if (parsed->segments.front().kind != PathSegmentKind::Field) {
+            return Refuse(LinkErrorCode::invalid_path, Format("path '{}': an element is an object, it has no elements of its own; a path starts with a field", path));
         }
-        const ContextLevel& level = declaration.Levels()[*index];
-
-        if (segments.size() == 1) {
-            return Refuse(LinkErrorCode::invalid_path, Format("path '{}': '{}' is a level, a path names a field of it (level.field)", path, levelName));
-        }
-        if (segments[1].kind != PathSegmentKind::Field) {
-            return Refuse(LinkErrorCode::invalid_path, Format("path '{}': the level '{}' is an object, it has no elements", path, levelName));
-        }
-
-        PropertyPath rest;
-        for (size_t i = 1; i < segments.size(); ++i) {
-            rest.segments.push_back(segments[i]);
-        }
-        const auto compiled = CompilePath(*level.type, FormatPropertyPath(rest.segments, rest.segments.size()), registry);
+        const auto compiled = CompileFixed(PathOrigin{&element, {}, {}}, path, *parsed, registry);
         if (!compiled.has_value()) {
-            if (compiled.error().code == PropertyErrorCode::not_found) {
-                return std::unexpected(UnknownFieldError(level, path, rest, registry, compiled.error()));
+            return std::unexpected(compiled.error());
+        }
+        const auto offset = OffsetOf(*compiled, path, element);
+        if (!offset.has_value()) {
+            return std::unexpected(offset.error());
+        }
+        return ElementLink{*offset, compiled->type};
+    }
+
+    std::expected<const TypeInfo*, LinkError> DescribeListElement(const TypeDesc& list, const TypeRegistry& registry) {
+        constexpr StringView kAllowed = "a list of scalars, enums, math types, PoolStrings or reflected objects";
+        if (list.kind != TypeKind::List || list.element == nullptr) {
+            return Refuse(LinkErrorCode::not_a_list, Format("the type is a {}, not a list", DescribeForMessage(list)));
+        }
+        const TypeDesc& element = *list.element;
+        switch (element.kind) {
+            case TypeKind::Bool:
+            case TypeKind::Int8:
+            case TypeKind::Int16:
+            case TypeKind::Int32:
+            case TypeKind::Int64:
+            case TypeKind::UInt8:
+            case TypeKind::UInt16:
+            case TypeKind::UInt32:
+            case TypeKind::UInt64:
+            case TypeKind::Float:
+            case TypeKind::Double:
+            case TypeKind::Enum:
+            case TypeKind::Opaque:
+                return nullptr;
+            case TypeKind::String:
+                if (element.interns) {
+                    return nullptr;
+                }
+                return Refuse(LinkErrorCode::bad_element,
+                              Format("a list of strings that own their text cannot be read by a formula: {} is the most it may hold (a PoolString, not a String)", kAllowed));
+            case TypeKind::Object: {
+                const TypeInfo* type = registry.Find(element.ObjectHash());
+                if (type == nullptr) {
+                    return Refuse(LinkErrorCode::bad_element, Format("the element type '{}' is not registered with the reflection, so its fields are not known", element.ObjectName()));
+                }
+                return type;
             }
-            return Refuse(LinkErrorCode::invalid_path, Format("path '{}': {}", path, compiled.error().message));
+            default:
+                return Refuse(LinkErrorCode::bad_element, Format("a list of {} cannot be read by a formula: it may be {}; not a list of pointers, maps, optionals, variants, pairs or lists",
+                                                                 DescribeForMessage(element), kAllowed));
         }
-        if (!compiled->IsFixed()) {
-            return Refuse(
-                LinkErrorCode::not_fixed,
-                Format("path '{}': the part '{}' needs the live object (a list element, a map value, an optional or a pointee), so a value cannot read it from the context", path, compiled->rest));
-        }
-        if (!SameType(expected, *compiled->type)) {
-            return Refuse(LinkErrorCode::type_mismatch, Format("path '{}': the field '{}' of '{}' is a {}, but a value of {} is asked for", path, rest.segments.back().text, level.type->Name(),
-                                                               DescribeForMessage(*compiled->type), DescribeForMessage(expected)));
-        }
-        if (compiled->offset > std::numeric_limits<uint32_t>::max()) {
-            return Refuse(LinkErrorCode::too_far, Format("path '{}': the field is {} bytes into '{}', more than a slot can address", path, compiled->offset, level.type->Name()));
-        }
-        return SlotRef{*index, static_cast<uint32_t>(compiled->offset)};
     }
 
 }  // namespace BECore

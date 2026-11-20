@@ -27,7 +27,7 @@ namespace BECore {
         return static_cast<LevelMask>(LevelMask{1} << level);
     }
 
-    CORE_ENUM(LinkErrorCode, uint8_t, invalid_path, unknown_type, duplicate_level, too_many_levels, unknown_level, unknown_field, not_fixed, type_mismatch, too_far)
+    CORE_ENUM(LinkErrorCode, uint8_t, invalid_path, unknown_type, duplicate_level, too_many_levels, unknown_level, unknown_field, not_fixed, type_mismatch, too_far, not_a_list, bad_element)
 
     /// A refused declaration or link: the code and a message that names the path, the field and what is wrong
     struct LinkError {
@@ -159,6 +159,41 @@ namespace BECore {
      * Allocates; it runs when content is loaded, never in a frame.
      */
     [[nodiscard]] std::expected<SlotRef, LinkError> LinkSlot(const ContextDecl& declaration, StringView path, const TypeDesc& expected, const TypeRegistry& registry = TypeRegistry::GetInstance());
+
+    /// Where a list sits: the level, the distance from that level's object to the list field and the field's type (static storage), from which `MakeListDescriptor` takes the layout
+    struct ListLink {
+        LevelIndex level = 0;
+        uint32_t offset = 0;
+        const TypeDesc* list = nullptr;
+    };
+
+    /// Where a field sits in the element of a list: the distance from the element and the field's own type, a value or a list (the caller looks at `type->kind`)
+    struct ElementLink {
+        uint32_t offset = 0;
+        const TypeDesc* type = nullptr;
+    };
+
+    /**
+     * @brief Turns `level.field.path` into the list it names, as `LinkSlot` does for a value
+     *
+     * The path must end at a list field and be fully fixed; the list's element must be one a formula can read (`DescribeListElement`). `not_a_list` says what the field is instead, `bad_element`
+     * what a list may hold. Allocates; it runs when content is loaded.
+     */
+    [[nodiscard]] std::expected<ListLink, LinkError> LinkList(const ContextDecl& declaration, StringView path, const TypeRegistry& registry = TypeRegistry::GetInstance());
+
+    /**
+     * @brief The field `a.b.c` of an element of type @p element, fully fixed (embedded objects are crossed, an element of a list inside is not)
+     *
+     * The messages name @p path as given (the fields after the element's name) and the element's type. No type is asked for: the caller reads `type->kind` and compares as it needs.
+     */
+    [[nodiscard]] std::expected<ElementLink, LinkError> LinkElementField(const TypeInfo& element, StringView path, const TypeRegistry& registry = TypeRegistry::GetInstance());
+
+    /**
+     * @brief The type of the elements of the list type @p list: null for a scalar, an enum, a math type or a `PoolString`, the registered class for an object
+     *
+     * Refuses (`bad_element`) what a formula cannot read: a list of pointers, maps, optionals, variants, pairs, lists or strings that own their text; the message says what a list may hold.
+     */
+    [[nodiscard]] std::expected<const TypeInfo*, LinkError> DescribeListElement(const TypeDesc& list, const TypeRegistry& registry = TypeRegistry::GetInstance());
 
 }  // namespace BECore
 
