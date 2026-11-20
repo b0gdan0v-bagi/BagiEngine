@@ -6,7 +6,7 @@
 
 namespace BECore {
 
-    /// The subsystem an allocation is counted under (Profiler/Alloc/CLAUDE.md, "Memory tags"). `Untagged` is what no scope claimed
+    /// The subsystem an allocation is counted under (Profiler/Alloc/CLAUDE.md, "Tags"). `Untagged` is what no scope claimed
     CORE_ENUM(MemTag, uint8_t, Untagged, Core, UI, Text, Scene, Resource, Audio, Network, Game)
 
     inline constexpr size_t kMemTagCount = EnumUtils<MemTag>::Count();

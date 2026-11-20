@@ -52,7 +52,7 @@ The EASTL allocator over a `LinearArena&`, behind `ArenaVector<T>` and `ArenaStr
 
 ## EngineAllocator and ArenaAllocator: which one (`EngineAllocator.h`)
 
-`EngineAllocator` is the allocator of the containers of `Types/` that live as long as their owner: it forwards to the global `operator new[]` / `delete[]`, so the tracker counts every block under the tag in force. It is exactly as large as `eastl::allocator` in every build (a `static_assert`): the debug name is kept only where `EASTL_NAME_ENABLED`, so the shipped build holds an empty object. All instances are equal.
+`EngineAllocator` is the allocator of the containers of `Types/` that live as long as their owner: it forwards to the global `operator new[]` / `delete[]`, so the tracker counts every block under the tag in force. It is exactly as large as `eastl::allocator` in every build (a `static_assert`): the debug name is kept only where `EASTL_NAME_ENABLED`, so the shipped build holds an empty object. Where that name exists and `ENGINE_PROFILER_ALLOC` is on, `allocate` also reports it (`AllocTracker::OnNamedAlloc`, `GetNameTotals`). All instances are equal.
 
 - **`ArenaAllocator` is for scratch data freed at once** (a frame's or a task's working set). An arena container never crosses its scope or its thread; anything that must outlive the scope is copied into an engine container.
 - Both are EASTL allocators of different types, so a `String` and an `ArenaString` (or the two vectors) do not assign or move into each other: copy by range or `append`.

@@ -2,6 +2,7 @@
 
 #include <BECore/Profiler/Alloc/AllocPlatform.h>
 #include <BECore/Profiler/Profiler.h>
+#include <cstring>
 
 namespace BECore {
 
@@ -51,6 +52,13 @@ namespace BECore {
         };
         constinit ZoneSlot g_zoneSlots[AllocTracker::kZoneSlots];
 
+        struct NameSlot {
+            std::atomic<const char*> name{nullptr};
+            std::atomic<uint64_t> count{0};
+            std::atomic<uint64_t> bytes{0};
+        };
+        constinit NameSlot g_nameSlots[AllocTracker::kNameSlots];
+
         void RaiseTo(std::atomic<uint64_t>& value, uint64_t candidate) {
             uint64_t current = value.load(std::memory_order_relaxed);
             while (candidate > current && !value.compare_exchange_weak(current, candidate, std::memory_order_relaxed)) {
@@ -68,6 +76,24 @@ namespace BECore {
                 }
                 if (key == nullptr) {
                     if (slot.site.compare_exchange_strong(key, &site, std::memory_order_acq_rel) || key == &site) {
+                        return &slot;
+                    }
+                }
+            }
+            return nullptr;
+        }
+
+        /// The slot of the literal @p name, claimed on first use (open addressing keyed by the pointer, never removed); nullptr when full
+        NameSlot* FindNameSlot(const char* name) {
+            const auto hash = reinterpret_cast<uintptr_t>(name) >> 2;
+            for (uint32_t probe = 0; probe < AllocTracker::kNameSlots; ++probe) {
+                NameSlot& slot = g_nameSlots[(hash + probe) % AllocTracker::kNameSlots];
+                const char* key = slot.name.load(std::memory_order_acquire);
+                if (key == name) {
+                    return &slot;
+                }
+                if (key == nullptr) {
+                    if (slot.name.compare_exchange_strong(key, name, std::memory_order_acq_rel) || key == name) {
                         return &slot;
                     }
                 }
@@ -168,8 +194,8 @@ namespace BECore {
             }
         }
 
-        /// The one place every counted allocation passes, whatever its source. The thread's MemTag is read here (a thread-local, like
-        /// t_state) and kept next to the source; it must not allocate or lock.
+        /// The one place every counted allocation passes, whatever its source. The thread's MemTag is read here (a field of t_state)
+        /// and kept next to the source; it must not allocate or lock.
         void RecordAlloc(AllocSource source, void* ptr, size_t size, size_t usable) {
             ThreadState& state = t_state;
             if (state.inTracker) {
@@ -247,6 +273,16 @@ namespace BECore {
         }
     }
 
+    void AllocTracker::OnNamedAlloc(const char* name, size_t size) {
+        if (name == nullptr) {
+            return;
+        }
+        if (NameSlot* slot = FindNameSlot(name)) {
+            slot->count.fetch_add(1, std::memory_order_relaxed);
+            slot->bytes.fetch_add(size, std::memory_order_relaxed);
+        }
+    }
+
     void AllocTracker::OnRoutedAlloc(AllocSource source, void* ptr, size_t size, size_t usable) {
         RecordAlloc(source, ptr, size, usable);
     }
@@ -285,6 +321,18 @@ namespace BECore {
         Array<AllocTagTotals, kMemTagCount> totals;
         for (size_t i = 0; i < kMemTagCount; ++i) {
             totals[i] = GetTagTotals(static_cast<MemTag>(i));
+        }
+        return totals;
+    }
+
+    AllocNameTotals AllocTracker::GetNameTotals(const char* name) {
+        AllocNameTotals totals;
+        for (const NameSlot& slot : g_nameSlots) {
+            const char* key = slot.name.load(std::memory_order_acquire);
+            if (key != nullptr && std::strcmp(key, name) == 0) {
+                totals.count += slot.count.load(std::memory_order_relaxed);
+                totals.bytes += slot.bytes.load(std::memory_order_relaxed);
+            }
         }
         return totals;
     }

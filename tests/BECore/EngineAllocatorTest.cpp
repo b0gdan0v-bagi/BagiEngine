@@ -30,13 +30,6 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(EngineAllocatorTest, ItIsExactlyAsLargeAsTheEastlAllocator) {
-        EXPECT_EQ(sizeof(EngineAllocator), sizeof(eastl::allocator));
-        EXPECT_EQ(alignof(EngineAllocator), alignof(eastl::allocator));
-        EXPECT_EQ(sizeof(String), sizeof(eastl::string));            //-NoStd: the size of the type the alias replaced is the case
-        EXPECT_EQ(sizeof(Vector<int>), sizeof(eastl::vector<int>));  //-NoStd: the size of the type the alias replaced is the case
-    }
-
     TEST(EngineAllocatorTest, AllInstancesAreEqual) {
         EXPECT_TRUE(EngineAllocator{} == EngineAllocator{"named"});
         EXPECT_FALSE(EngineAllocator{} != EngineAllocator{"named"});
@@ -168,6 +161,30 @@ namespace BECore::Tests {
         EXPECT_GE(after.count, before.count + 1);
         EXPECT_EQ(after.liveBytes, before.liveBytes);
         EXPECT_GE(after.frees, before.frees + 1);
+    }
+
+#endif
+
+#if BE_PROFILER_ALLOC && EASTL_NAME_ENABLED
+
+    TEST(EngineAllocatorTest, ABlockIsReportedUnderTheNameOfItsAllocator) {
+        constexpr const char* kName = "EngineAllocatorTest.Named";
+        constexpr size_t kBytes = 96;
+        const AllocNameTotals before = AllocTracker::GetNameTotals(kName);
+        EngineAllocator allocator{kName};
+        void* block = allocator.allocate(kBytes);
+        allocator.deallocate(block, kBytes);
+        const AllocNameTotals after = AllocTracker::GetNameTotals(kName);
+        EXPECT_EQ(after.count, before.count + 1);
+        EXPECT_EQ(after.bytes, before.bytes + kBytes);
+    }
+
+    TEST(EngineAllocatorTest, TheContainerNameReachesTheTracker) {
+        constexpr const char* kName = "EngineAllocatorTest.Vector";
+        const AllocNameTotals before = AllocTracker::GetNameTotals(kName);
+        Vector<int> values{EngineAllocator{kName}};
+        values.reserve(kCount);
+        EXPECT_GE(AllocTracker::GetNameTotals(kName).bytes, before.bytes + kCount * sizeof(int));
     }
 
 #endif
