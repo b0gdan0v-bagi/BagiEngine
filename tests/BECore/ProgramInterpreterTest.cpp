@@ -2,6 +2,7 @@
 // C++ reference over edge inputs, the rules of the operations by number, the program pool and the builder. The programs are assembled by hand.
 
 #include <BECore/ProgramEdgeValues.h>
+#include <BECore/ProgramListTypes.h>
 #include <BECore/Reflection/TypeDesc.h>
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Programs/Components.h>
@@ -409,6 +410,35 @@ namespace BECore::Tests {
             }
         }
 
+        /// `LoadElem` of @p value through a one-element list of `ProgramListScratch`, at list index @p index: the element of the list when 0 and a missing one otherwise
+        template <typename T>
+        T RunLoadElem(Opcode load, const T& value, int32_t index, uint8_t enumBytes) {
+            ContextDecl declaration;
+            static_cast<void>(declaration.Add<ProgramListData::ProgramListScratch>("scratch"));
+            ProgramListData::ProgramListScratch scratch;
+            static_assert(sizeof(T) <= sizeof(scratch.bytes));
+            std::memcpy(scratch.bytes.data(), &value, sizeof(T));
+            Context context(declaration);
+            context.Set(0, scratch);
+
+            ProgramBuilder builder;
+            const uint8_t list = Require(builder.AcquireRegister());
+            const uint8_t where = Require(builder.AcquireRegister());
+            const uint8_t element = Require(builder.AcquireRegister());
+            const uint8_t dst = Require(builder.AcquireRegister());
+            ListDescriptor descriptor;
+            descriptor.offset = static_cast<uint32_t>(reinterpret_cast<const std::byte*>(scratch.bytes.data()) - reinterpret_cast<const std::byte*>(&scratch));
+            descriptor.stride = sizeof(scratch.bytes);
+            descriptor.count = 1;
+            builder.EmitListSlot(list, 0, descriptor);
+            builder.EmitLoadConst(where, index);
+            builder.EmitListAt(element, list, where);
+            builder.Emit(load, dst, element, enumBytes, 0, 0);
+            const auto program = builder.Finish(kProgramTypeOf<T>, dst);
+            EXPECT_TRUE(program.has_value());
+            return program.has_value() ? Run<T>(*program, context) : T{};
+        }
+
         int g_rowsChecked = 0;
 
         template <typename Op, typename T>
@@ -416,7 +446,18 @@ namespace BECore::Tests {
             ++g_rowsChecked;
             using Result = K::ResultOf<Op, T>;
             const String name(EnumUtils<Opcode>::ToString(op));
-            if constexpr (Op::kShape == K::OpShape::Slot) {
+            if constexpr (Op::kShape == K::OpShape::Element) {
+                // An enum is read by the size of its field (the scratch holds the index in four bytes), a registered type by its size (a whole register here)
+                constexpr uint8_t kBytes = std::is_same_v<T, ProgramEnum> ? sizeof(uint32_t) : (std::is_same_v<T, ProgramDomainValue> ? sizeof(ProgramDomainValue) : 0);
+                for (const T value : Edges<T>()) {
+                    const T got = RunLoadElem<T>(op, value, 0, kBytes);
+                    EXPECT_TRUE(Same<T>(got, value)) << name << "(" << Show(value) << ") gave " << Show(got);
+                    for (const int32_t outside : {1, -1}) {
+                        const T missing = RunLoadElem<T>(op, value, outside, kBytes);
+                        EXPECT_TRUE(Same<T>(missing, T{})) << name << " of a missing element gave " << Show(missing);
+                    }
+                }
+            } else if constexpr (Op::kShape == K::OpShape::Slot) {
                 return;  // SlotLoadsReadEveryType
             } else if constexpr (Op::kShape == K::OpShape::Unary) {
                 for (const T a : Edges<T>()) {
@@ -593,12 +634,15 @@ namespace BECore::Tests {
 #define BE_CHECK_CONVERSION(Src, SrcCpp, Dst, DstCpp) CheckConversion<SrcCpp, DstCpp>(Opcode::Src##To##Dst);
         BE_PROGRAM_CONVERSIONS(BE_CHECK_CONVERSION)
 #undef BE_CHECK_CONVERSION
-        // Every opcode but the six untyped ones (`Invalid`, `LoadConst`, `Copy`, `LoadTable`, `LoadTableSlot`, `CallDomain`) and the typed fused ones (`ProgramFusionTest` compares them with the code
-        // they replace) is a row or a conversion: a row that the matrix skipped would leave the count short
+        // Every opcode but the six untyped ones (`Invalid`, `LoadConst`, `Copy`, `LoadTable`, `LoadTableSlot`, `CallDomain`), the seven list and loop instructions (`ProgramListTest`) and the typed
+        // fused ones
+        // (`ProgramFusionTest` compares them with the code they replace) is a row or a conversion: a row that the matrix skipped would leave the count short
 #define BE_COUNT_FUSED(Op, Type, Cpp) +1
         constexpr size_t kFusedRows = 0 BE_PROGRAM_FUSED_ROWS(BE_COUNT_FUSED);
 #undef BE_COUNT_FUSED
-        EXPECT_EQ(static_cast<size_t>(g_rowsChecked) + 6 + kFusedRows, EnumUtils<Opcode>::Count());
+        constexpr size_t kUntypedOpcodes = 6;
+        constexpr size_t kListOpcodes = static_cast<size_t>(Opcode::BreakIf) - static_cast<size_t>(Opcode::ListSlot) + 1;
+        EXPECT_EQ(static_cast<size_t>(g_rowsChecked) + kUntypedOpcodes + kListOpcodes + kFusedRows, EnumUtils<Opcode>::Count());
     }
 
     TEST(ProgramInterpreterTest, TheVectorsOfIntegersWrapLikeIntegers) {
@@ -1113,8 +1157,11 @@ namespace BECore::Tests {
         static_assert(ResultTypeOf(Opcode::FloatToInt32) == ProgramType::Int32);
         static_assert(!ResultTypeOf(Opcode::LoadConst).has_value() && !ResultTypeOf(Opcode::Copy).has_value() && !ResultTypeOf(Opcode::LoadTable).has_value() &&
                       !ResultTypeOf(Opcode::LoadTableSlot).has_value() && !ResultTypeOf(Opcode::CallDomain).has_value() && !ResultTypeOf(Opcode::Invalid).has_value());
+        static_assert(ResultTypeOf(Opcode::ListSize) == ProgramType::Int32 && !ResultTypeOf(Opcode::ListAt).has_value() && !ResultTypeOf(Opcode::LoopEnd).has_value(),
+                      "a list or an element is no program type");
         for (const Opcode op : EnumUtils<Opcode>::Values()) {
-            if (op != Opcode::Invalid && op != Opcode::LoadConst && op != Opcode::Copy && op != Opcode::LoadTable && op != Opcode::LoadTableSlot && op != Opcode::CallDomain) {
+            const bool untyped = op == Opcode::Invalid || op == Opcode::LoadConst || op == Opcode::Copy || op == Opcode::LoadTable || op == Opcode::LoadTableSlot || op == Opcode::CallDomain;
+            if (!untyped && (!IsListInstruction(op) || op == Opcode::ListSize)) {
                 EXPECT_TRUE(ResultTypeOf(op).has_value()) << String(EnumUtils<Opcode>::ToString(op)).c_str();
             }
         }

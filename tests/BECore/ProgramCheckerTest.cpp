@@ -745,8 +745,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ConstantOf<double>(Accepted(context.declaration, "caster.precise + 1.00000005960464477539062501", ProgramType::Double)[1]), 1.00000005960464477539062501);
     }
 
-    TEST(ProgramCheckerTest, ListElementsAndMembersNeverReachTheChecker) {
-        EXPECT_FALSE(ParseExpression("caster.buffs[0]").has_value()) << "an index is refused by the lexer";
+    TEST(ProgramCheckerTest, MembersOfNonVectorsAreRefused) {
         const CheckerContext context;
         Refused(context.declaration, "(caster.attack).x", ProgramType::Int32, 16, {"'.x'", "an int has no components"});
         Refused(context.declaration, "min(caster.attack, 1).y + 1", ProgramType::Int32, 22, {"'.y'"});

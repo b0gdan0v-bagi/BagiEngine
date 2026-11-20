@@ -1,8 +1,10 @@
 // The context of values (Values/Context.h): the declaration of its levels, the objects behind them and the linking of a path to a slot.
 // The generated code of the value test types is included here only; the other value tests find the types by name.
 
+#include <BECore/ProgramListTypes.h>
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Context.h>
+#include <BECore/Values/Programs/Lists/ListImage.h>
 #include <Common/Printers.h>
 #include <Common/TestText.h>
 #include <Generated/ValueTestTypes.gen.hpp>
@@ -11,6 +13,7 @@
 namespace BECore::Tests {
 
     using namespace ValueTestData;
+    using namespace ProgramListData;
 
     namespace {
 
@@ -44,6 +47,31 @@ namespace BECore::Tests {
             }
             EXPECT_EQ(slot.error().code, code) << String(path).c_str() << ": " << slot.error().message.c_str();
             return slot.error();
+        }
+
+        /// A context with the list types of the loop programs: `hand` and `refused`
+        struct ListLevels {
+            ContextDecl declaration;
+
+            ListLevels() {
+                EXPECT_TRUE(declaration.Add("hand", "ProgramListHand").has_value());
+                EXPECT_TRUE(declaration.Add("refused", "ProgramListRefused").has_value());
+            }
+        };
+
+        template <typename T, typename Member>
+        uint32_t OffsetIn(const T& object, const Member& member) {
+            return static_cast<uint32_t>(reinterpret_cast<const char*>(&member) - reinterpret_cast<const char*>(&object));
+        }
+
+        LinkError ExpectListRefused(const ContextDecl& declaration, StringView path, LinkErrorCode code) {
+            const auto link = LinkList(declaration, path);
+            EXPECT_FALSE(link.has_value()) << String(path).c_str();
+            if (link.has_value()) {
+                return {};
+            }
+            EXPECT_EQ(link.error().code, code) << String(path).c_str() << ": " << link.error().message.c_str();
+            return link.error();
         }
 
     }  // namespace
@@ -282,6 +310,175 @@ namespace BECore::Tests {
         ExpectRefused(levels.declaration, "caster.attak", DescribeType<int32_t>(), LinkErrorCode::unknown_field);
         EXPECT_EQ(levels.declaration.Size(), 2U);
         EXPECT_TRUE(LinkSlot(levels.declaration, "caster.attack", DescribeType<int32_t>()).has_value());
+    }
+
+    TEST(ValueContextTest, AListFieldOfEveryContainerIsLinkedAtTheOffsetTheDescriptorTakes) {
+        const ListLevels levels;
+        const ProgramListHand hand{};
+        const struct {
+            StringView path;
+            uint32_t offset;
+            size_t stride;
+            ListLayout layout;
+            uint32_t count;
+        } rows[] = {
+            {"hand.tiles", OffsetIn(hand, hand.tiles), sizeof(ProgramListTile), ListLayout::Inline, 14},
+            {"hand.sets", OffsetIn(hand, hand.sets), sizeof(ProgramListSet), ListLayout::Pointers, 0},
+            {"hand.counts", OffsetIn(hand, hand.counts), sizeof(int32_t), ListLayout::Pointers, 0},
+            {"hand.weights", OffsetIn(hand, hand.weights), sizeof(float), ListLayout::Pointers, 0},
+        };
+        for (const auto& row : rows) {
+            const auto link = LinkList(levels.declaration, row.path);
+            ASSERT_TRUE(link.has_value()) << String(row.path).c_str() << ": " << (link.has_value() ? String{} : link.error().message).c_str();
+            EXPECT_EQ(link->level, LevelIndex{0}) << String(row.path).c_str();
+            EXPECT_EQ(link->offset, row.offset) << String(row.path).c_str();
+            const auto descriptor = MakeListDescriptor(link->offset, *link->list);
+            ASSERT_TRUE(descriptor.has_value()) << String(row.path).c_str();
+            EXPECT_EQ(descriptor->stride, row.stride) << String(row.path).c_str();
+            EXPECT_EQ(descriptor->layout, row.layout) << String(row.path).c_str();
+            EXPECT_EQ(descriptor->count, row.count) << String(row.path).c_str();
+        }
+        const auto sets = LinkList(levels.declaration, "hand.sets");
+        ASSERT_TRUE(sets.has_value());
+        const auto element = DescribeListElement(*sets->list);
+        ASSERT_TRUE(element.has_value());
+        ASSERT_NE(*element, nullptr);
+        EXPECT_EQ((*element)->Name(), "ProgramListSet");
+    }
+
+    TEST(ValueContextTest, AListThatCrossesAnEmbeddedObjectIsLinkedAtTheSumOfTheOffsets) {
+        const ListLevels levels;
+        const ProgramListRefused refused{};
+        const auto link = LinkList(levels.declaration, "refused.set.tiles");
+        ASSERT_TRUE(link.has_value()) << (link.has_value() ? String{} : link.error().message).c_str();
+        EXPECT_EQ(link->level, LevelIndex{1});
+        EXPECT_EQ(link->offset, OffsetIn(refused, refused.set.tiles));
+    }
+
+    TEST(ValueContextTest, ElementsOfEveryAllowedKindAreDescribed) {
+        const ListLevels levels;
+        for (const StringView path : {"hand.counts", "hand.weights", "hand.flags", "refused.names", "refused.points"}) {
+            const auto link = LinkList(levels.declaration, path);
+            ASSERT_TRUE(link.has_value()) << String(path).c_str() << ": " << (link.has_value() ? String{} : link.error().message).c_str();
+            const auto element = DescribeListElement(*link->list);
+            ASSERT_TRUE(element.has_value()) << String(path).c_str();
+            EXPECT_EQ(*element, nullptr) << String(path).c_str() << ": a scalar has no type info";
+        }
+        const auto tiles = LinkList(levels.declaration, "hand.tiles");
+        ASSERT_TRUE(tiles.has_value());
+        const auto tile = DescribeListElement(*tiles->list);
+        ASSERT_TRUE(tile.has_value());
+        ASSERT_NE(*tile, nullptr);
+        EXPECT_EQ((*tile)->Name(), "ProgramListTile");
+    }
+
+    TEST(ValueContextTest, AFieldOfAnElementIsLinkedAtItsOffset) {
+        const ListLevels levels;
+        const auto tiles = LinkList(levels.declaration, "hand.tiles");
+        ASSERT_TRUE(tiles.has_value());
+        const TypeInfo& tile = **DescribeListElement(*tiles->list);
+        const ProgramListTile sample{};
+        const struct {
+            StringView path;
+            uint32_t offset;
+            TypeKind kind;
+        } rows[] = {
+            {"suit", OffsetIn(sample, sample.suit), TypeKind::Enum},      {"terminal", OffsetIn(sample, sample.terminal), TypeKind::Bool},   {"rank", OffsetIn(sample, sample.rank), TypeKind::Int32},
+            {"weight", OffsetIn(sample, sample.weight), TypeKind::Float}, {"position", OffsetIn(sample, sample.position), TypeKind::Opaque}, {"name", OffsetIn(sample, sample.name), TypeKind::String},
+        };
+        for (const auto& row : rows) {
+            const auto link = LinkElementField(tile, row.path);
+            ASSERT_TRUE(link.has_value()) << String(row.path).c_str() << ": " << (link.has_value() ? String{} : link.error().message).c_str();
+            EXPECT_EQ(link->offset, row.offset) << String(row.path).c_str();
+            EXPECT_EQ(link->type->kind, row.kind) << String(row.path).c_str();
+        }
+
+        const auto sets = LinkList(levels.declaration, "hand.sets");
+        ASSERT_TRUE(sets.has_value());
+        const TypeInfo& set = **DescribeListElement(*sets->list);
+        const ProgramListSet setSample{};
+        const auto nested = LinkElementField(set, "tiles");
+        ASSERT_TRUE(nested.has_value()) << (nested.has_value() ? String{} : nested.error().message).c_str();
+        EXPECT_EQ(nested->offset, OffsetIn(setSample, setSample.tiles));
+        ASSERT_EQ(nested->type->kind, TypeKind::List) << "a list field of an element is linked as it is";
+        const auto elementDescriptor = MakeListDescriptor(nested->offset, *nested->type);
+        ASSERT_TRUE(elementDescriptor.has_value());
+        EXPECT_EQ(elementDescriptor->count, 4U);
+    }
+
+    TEST(ValueContextTest, AListRefusalNamesThePathAndWhatIsWrong) {
+        const ListLevels levels;
+        const LinkError scalar = ExpectListRefused(levels.declaration, "hand.before", LinkErrorCode::not_a_list);
+        EXPECT_TRUE(Contains(scalar.message, "hand.before")) << scalar.message.c_str();
+        EXPECT_TRUE(Contains(scalar.message, "int32")) << scalar.message.c_str();
+        EXPECT_TRUE(Contains(scalar.message, "list field")) << scalar.message.c_str();
+        ExpectListRefused(levels.declaration, "hand.tiles[1]", LinkErrorCode::not_fixed);
+        const LinkError behind = ExpectListRefused(levels.declaration, "hand.sets[1].tiles", LinkErrorCode::not_fixed);
+        EXPECT_TRUE(Contains(behind.message, "[1].tiles")) << behind.message.c_str();
+
+        const LinkError level = ExpectListRefused(levels.declaration, "hand", LinkErrorCode::invalid_path);
+        EXPECT_TRUE(Contains(level.message, "is a level")) << level.message.c_str();
+        const LinkError unknownLevel = ExpectListRefused(levels.declaration, "hnd.tiles", LinkErrorCode::unknown_level);
+        EXPECT_TRUE(Contains(unknownLevel.message, "did you mean 'hand'")) << unknownLevel.message.c_str();
+        EXPECT_TRUE(Contains(unknownLevel.message, "hand, refused")) << unknownLevel.message.c_str();
+        const LinkError unknownField = ExpectListRefused(levels.declaration, "hand.tilez", LinkErrorCode::unknown_field);
+        EXPECT_TRUE(Contains(unknownField.message, "did you mean 'tiles'")) << unknownField.message.c_str();
+        EXPECT_TRUE(Contains(unknownField.message, "ProgramListHand")) << unknownField.message.c_str();
+        EXPECT_TRUE(Contains(unknownField.message, "level 'hand'")) << unknownField.message.c_str();
+        ExpectListRefused(levels.declaration, "hand..tiles", LinkErrorCode::invalid_path);
+    }
+
+    TEST(ValueContextTest, AListOfWhatAFormulaCannotReadIsRefusedWithWhatIsAllowed) {
+        const ListLevels levels;
+        for (const StringView path : {"refused.texts"}) {
+            const LinkError error = ExpectListRefused(levels.declaration, path, LinkErrorCode::bad_element);
+            EXPECT_TRUE(Contains(error.message, path)) << error.message.c_str();
+            EXPECT_TRUE(Contains(error.message, "PoolStrings")) << error.message.c_str();
+            EXPECT_TRUE(Contains(error.message, "reflected objects")) << error.message.c_str();
+        }
+    }
+
+    TEST(ValueContextTest, ADescribedListTypeIsRefusedWithoutAPathToo) {
+        const auto lists = DescribeListElement(DescribeType<Vector<Vector<int32_t>>>());
+        ASSERT_FALSE(lists.has_value());
+        EXPECT_EQ(lists.error().code, LinkErrorCode::bad_element);
+        EXPECT_TRUE(Contains(lists.error().message, "list of int32")) << lists.error().message.c_str();
+        EXPECT_EQ(DescribeListElement(DescribeType<Vector<Optional<int32_t>>>()).error().code, LinkErrorCode::bad_element);
+        EXPECT_EQ(DescribeListElement(DescribeType<Vector<HashMap<String, int32_t>>>()).error().code, LinkErrorCode::bad_element);
+        EXPECT_TRUE(DescribeListElement(DescribeType<Vector<ProgramListSuit>>()).has_value());
+        EXPECT_TRUE(DescribeListElement(DescribeType<Vector<PoolString>>()).has_value());
+        EXPECT_TRUE(DescribeListElement(DescribeType<Vector<Vec3>>()).has_value());
+
+        const auto notList = DescribeListElement(DescribeType<int32_t>());
+        ASSERT_FALSE(notList.has_value());
+        EXPECT_EQ(notList.error().code, LinkErrorCode::not_a_list);
+    }
+
+    TEST(ValueContextTest, AnElementFieldRefusalNamesTheTypeAndItsFields) {
+        const ListLevels levels;
+        const TypeInfo& tile = **DescribeListElement(*LinkList(levels.declaration, "hand.tiles")->list);
+        const auto misspelt = LinkElementField(tile, "ranc");
+        ASSERT_FALSE(misspelt.has_value());
+        EXPECT_EQ(misspelt.error().code, LinkErrorCode::unknown_field);
+        EXPECT_TRUE(Contains(misspelt.error().message, "did you mean 'rank'")) << misspelt.error().message.c_str();
+        EXPECT_TRUE(Contains(misspelt.error().message, "'ProgramListTile'")) << misspelt.error().message.c_str();
+        EXPECT_TRUE(Contains(misspelt.error().message, "terminal")) << misspelt.error().message.c_str();
+
+        const auto member = LinkElementField(tile, "position.x");
+        ASSERT_FALSE(member.has_value());
+        EXPECT_EQ(member.error().code, LinkErrorCode::unknown_field);
+
+        const auto indexed = LinkElementField(tile, "[0]");
+        ASSERT_FALSE(indexed.has_value());
+        EXPECT_EQ(indexed.error().code, LinkErrorCode::invalid_path);
+        const auto empty = LinkElementField(tile, "");
+        ASSERT_FALSE(empty.has_value());
+        EXPECT_EQ(empty.error().code, LinkErrorCode::invalid_path);
+
+        const TypeInfo& hand = *levels.declaration.Levels()[0].type;
+        const auto behind = LinkElementField(hand, "sets[0].pung");
+        ASSERT_FALSE(behind.has_value());
+        EXPECT_EQ(behind.error().code, LinkErrorCode::not_fixed);
     }
 
 }  // namespace BECore::Tests

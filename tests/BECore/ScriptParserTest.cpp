@@ -241,7 +241,6 @@ namespace BECore::Tests {
         ExpectError("emit A(1", 9, "expected ')' to close the arguments");
         ExpectError("x = 1 # 2;", 7, "unexpected '#'");
         ExpectError("x = 'abc;", 5, "unterminated string");
-        ExpectError("x = [1];", 5, "'[' is not allowed");
     }
 
     TEST(ScriptParserTest, TheTextLimitIsExactAndTheMessageSaysScript) {

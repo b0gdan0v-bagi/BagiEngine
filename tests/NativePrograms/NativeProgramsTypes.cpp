@@ -3,5 +3,7 @@
 // is one of them).
 
 #include <Generated/ProgramDomainTypes.gen.hpp>
+#include <Generated/ProgramListTypes.gen.hpp>
 #include <Generated/ProgramRowTypes.gen.hpp>
+#include <Generated/ValueListMahjongTypes.gen.hpp>
 #include <Generated/ValueTestTypes.gen.hpp>

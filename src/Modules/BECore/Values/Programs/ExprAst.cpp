@@ -14,7 +14,12 @@ namespace BECore {
 
         /// A base of `.member` that would read as a longer name, a sign or a number when printed bare
         bool NeedsParenthesesAsBase(const ExprNode& node) {
-            return node.kind != ExprNodeKind::Call && node.kind != ExprNodeKind::Member;
+            return node.kind != ExprNodeKind::Call && node.kind != ExprNodeKind::Member && node.kind != ExprNodeKind::Index;
+        }
+
+        /// A base of `[index]`: a name or another postfix node reads back as itself, anything else would bind the bracket to its last part
+        bool NeedsParenthesesAsIndexBase(const ExprNode& node) {
+            return node.kind != ExprNodeKind::Name && node.kind != ExprNodeKind::Call && node.kind != ExprNodeKind::Member && node.kind != ExprNodeKind::Index;
         }
 
         class Printer {
@@ -49,6 +54,12 @@ namespace BECore {
                         Wrapped(node.first, NeedsParenthesesAsBase(_ast[node.first]), out);
                         out += '.';
                         out += node.text;
+                        return;
+                    case ExprNodeKind::Index:
+                        Wrapped(node.first, NeedsParenthesesAsIndexBase(_ast[node.first]), out);
+                        out += '[';
+                        Print(node.second, out);
+                        out += ']';
                         return;
                     case ExprNodeKind::Unary: {
                         AppendView(out, OperatorSymbol(node.operation));

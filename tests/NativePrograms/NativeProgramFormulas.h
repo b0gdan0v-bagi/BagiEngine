@@ -161,6 +161,96 @@ namespace BECore::Tests {
 
     inline constexpr StringView kNativeDomainPairFormulas[] = {"pair_of(a.i64, a.i64 * 2)", "select(a.flag, a.pair, pair_of(1, 2))"};
 
+    // The formulas with loops (`Values/Programs/Lists/`). They read `hand`, a `ProgramListHand` (`kListsLevel`): `tiles` is a full array of objects, `sets` a vector of objects that hold
+    // an array, `counts`, `weights` and `flags` are lists of scalars, `none` is always empty, `before` and `a.i32` give an index. Every fold and every result type is here, and an index that
+    // may be outside its list.
+
+    inline constexpr StringView kNativeListIntFormulas[] = {
+        "count(hand.tiles, t, t.terminal)",
+        "count(hand.tiles, t, t.suit == Dragons || t.rank > a.i32)",
+        "count(hand.sets, s, s.pung)",
+        "count(hand.counts, n, n > hand.before)",
+        "count(hand.flags, f, f)",
+        "sum(hand.tiles, t, t.rank)",
+        "sum(hand.counts, n, n * 2 + 1)",
+        "sum(hand.flags, f, select(f, 1, 0))",
+        "sum(hand.none, t, t.rank)",
+        "min(hand.tiles, t, t.rank)",
+        "max(hand.tiles, t, t.rank)",
+        "min(hand.counts, n, n)",
+        "max(hand.counts, n, n)",
+        "size(hand.sets)",
+        "size(hand.counts) + size(hand.weights) * 100 + size(hand.none)",
+        "hand.counts[hand.before]",
+        "hand.counts[a.i32] + hand.counts[b.i32 - 1]",
+        "hand.tiles[hand.before].rank",
+        "hand.sets[hand.before].tiles[a.i32].rank",
+        "sum(hand.sets, s, count(s.tiles, t, t.terminal))",
+        "sum(hand.sets, s, sum(s.tiles, t, t.rank + hand.before))",
+        "max(hand.sets, s, min(s.tiles, t, t.rank))",
+        "count(hand.sets, s, any(s.tiles, t, t.rank > a.i32))",
+    };
+
+    inline constexpr StringView kNativeListInt64Formulas[] = {
+        "sum(hand.counts, n, int64(n) * 4000000000)",
+        "max(hand.tiles, t, int64(t.rank) * 3)",
+        "sum(hand.sets, s, sum(s.tiles, t, int64(t.rank)))",
+    };
+
+    inline constexpr StringView kNativeListFloatFormulas[] = {
+        "sum(hand.weights, w, w)",
+        "min(hand.weights, w, w)",
+        "max(hand.weights, w, w)",
+        "sum(hand.tiles, t, t.weight * 0.5)",
+        "min(hand.tiles, t, t.weight)",
+        "max(hand.tiles, t, t.weight)",
+        "sum(hand.counts, n, float(n))",
+        "hand.weights[hand.before]",
+        "hand.tiles[a.i32].weight",
+        "hand.tiles[hand.before].position.x",
+        "sum(hand.sets, s, max(s.tiles, t, t.weight))",
+    };
+
+    inline constexpr StringView kNativeListDoubleFormulas[] = {
+        "sum(hand.weights, w, double(w))",
+        "min(hand.tiles, t, double(t.weight) * 2)",
+        "max(hand.counts, n, double(n) / 3)",
+    };
+
+    inline constexpr StringView kNativeListBoolFormulas[] = {
+        "any(hand.tiles, t, t.rank > 8)",
+        "any(hand.tiles, t, t.terminal)",
+        "all(hand.tiles, t, t.terminal)",
+        "all(hand.tiles, t, t.suit == hand.tiles[0].suit)",
+        "any(hand.sets, s, s.pung)",
+        "all(hand.sets, s, s.pung)",
+        "all(hand.counts, n, n > 0)",
+        "any(hand.weights, w, w > 1.5)",
+        "any(hand.flags, f, f)",
+        "all(hand.flags, f, f)",
+        "any(hand.none, t, t.terminal)",
+        "all(hand.none, t, t.terminal)",
+        "hand.flags[hand.before]",
+        "hand.tiles[a.i32].terminal",
+        "hand.sets[hand.before].pung && size(hand.sets) > 1",
+        "any(hand.sets, s, all(s.tiles, t, t.terminal))",
+        "all(hand.sets, s, any(s.tiles, t, t.suit == s.tiles[0].suit && t.rank > 3))",
+    };
+
+    // The patterns of the Mahjong proof (tests/BECore/ValueListMahjongTest.cpp) over `mahjong`, a `ValueListHand` (`kMahjongLevel`): the set compiles them so the proof also runs in generated code.
+
+    inline constexpr StringView kNativeMahjongBoolFormulas[] = {
+        "count(mahjong.sets, s, s.pung && s.dragon) == 3",
+        "all(mahjong.tiles, t, t.suit == mahjong.tiles[0].suit)",
+        "any(mahjong.yaku, y, y.on)",
+        "mahjong.sets[0].suit == mahjong.sets[1].suit",
+    };
+
+    inline constexpr StringView kNativeMahjongIntFormulas[] = {
+        "count(mahjong.tiles, t, t.terminal)",          "count(mahjong.tiles, t, t.honor)", "count(mahjong.tiles, t, t.terminal || t.honor)", "sum(mahjong.sets, s, s.fu)",
+        "sum(mahjong.yaku, y, select(y.on, y.han, 0))",
+    };
+
     /**
      * @brief A right-nested sum of `kMaxProgramRegisters - 1` additions: every level keeps one more register alive, so the program uses all of them
      *

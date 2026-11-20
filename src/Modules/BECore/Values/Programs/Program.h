@@ -39,7 +39,7 @@ namespace BECore {
     };
 
     /**
-     * @brief A compiled formula: straight-line typed code over registers
+     * @brief A compiled formula: typed code over registers, straight-line except for the loops over lists (`Lists/`)
      *
      * Built by `ProgramBuilder` and kept in the `ProgramPool`; immutable after that. A program is pure and total: it reads the context and writes
      * nothing, and `Run` allocates nothing (`Interpreter.h`). Two programs with equal code are one program to the pool whatever text they came from.

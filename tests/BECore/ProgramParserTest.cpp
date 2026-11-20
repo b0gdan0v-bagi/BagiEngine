@@ -280,10 +280,58 @@ namespace BECore::Tests {
         ExpectError("   \t ", 1, "empty");
     }
 
-    TEST(ProgramParserTest, AnIndexIsRefusedAndTheMessageSaysAPathMustBeFixed) {
-        const ProgramError error = ExpectError("caster.buffs[0]", 13, "'[' is not allowed");
-        EXPECT_TRUE(Contains(error.message, "fixed field")) << error.message.c_str();
-        ExpectError("a[\"k\"]", 2, "'['");
+    TEST(ProgramParserTest, AnIndexIsAPostfixNodeThatPrintsAndParsesBack) {
+        const ExprAst simple = Parse("hand.tiles[0]");
+        ASSERT_EQ(simple[simple.root].kind, ExprNodeKind::Index);
+        EXPECT_EQ(simple[simple.root].column, 11U) << "the node is at the '['";
+        EXPECT_EQ(simple[simple[simple.root].first].kind, ExprNodeKind::Name);
+        EXPECT_EQ(simple[simple[simple.root].first].text, "hand.tiles");
+        EXPECT_EQ(simple[simple[simple.root].second].kind, ExprNodeKind::Number);
+
+        const ExprAst chain = Parse("a.b[i].c.d[j].e");
+        ASSERT_EQ(chain[chain.root].kind, ExprNodeKind::Member);
+        EXPECT_EQ(chain[chain.root].text, "e");
+        EXPECT_EQ(PrintExpression(chain), "a.b[i].c.d[j].e");
+
+        for (const char* text :
+             {"a[i]", "a.b[i + 1].c", "f(x)[0].y", "(a + b)[0]", "(-a)[0]", "a[b[c]]", "a[i][j]", "a[0] + b[1] * c[2]", "min(a[0], b[1])", "a[f(x)[0]]", "(a).b[0]", "a[i].b.c[j]"}) {
+            const ExprAst first = Parse(text);
+            const String printed = PrintExpression(first);
+            EXPECT_TRUE(SameTree(first, Parse(printed))) << text << " printed as " << printed.c_str();
+        }
+        EXPECT_EQ(Printed("a [ 0 ] . x"), "a[0].x");
+        EXPECT_EQ(Printed("(a + b)[0]"), "(a + b)[0]");
+    }
+
+    TEST(ProgramParserTest, AnUnclosedOrEmptyIndexIsAnErrorAtTheBadToken) {
+        ExpectError("a[0", 4, "to close the '[' at column 2");
+        ExpectError("a[0 b]", 5, "to close the '[' at column 2, found 'b'");
+        ExpectError("a[]", 3, "expected a value, found ']'");
+        ExpectError("a[", 3, "expected a value, found the end of the text");
+        ExpectError("a + 0]", 6, "there is no '[' to close");
+        ExpectError("f(a[0)", 6, "to close the '[' at column 4, found ')'");
+        ExpectError("a[(0]", 5, "to close the '(' at column 3");
+    }
+
+    TEST(ProgramParserTest, AnIndexCountsAgainstTheLimits) {
+        constexpr size_t kDeep = ExprLimits::kMaxTreeHeight;
+        EXPECT_TRUE(ParseExpression(Format("{}a{}", Repeated("a[", kDeep), Repeated("]", kDeep))).has_value());
+        const auto tooHigh = ParseExpression(Format("{}a{}", Repeated("a[", kDeep + 1), Repeated("]", kDeep + 1)));
+        ASSERT_FALSE(tooHigh.has_value());
+        EXPECT_TRUE(Contains(tooHigh.error().message, "more than 32 levels high")) << tooHigh.error().message.c_str();
+
+        const size_t tooDeep = ExprLimits::kMaxNesting + 1;
+        ExpectError(Format("{}a{}", Repeated("a[", tooDeep), Repeated("]", tooDeep)), 2 * tooDeep + 1, "nested deeper than 64 levels");
+
+        // A chain of indexes `a[0][0]...` is as high as it is long, as a chain of members is
+        const auto chain = [](size_t count) { return Format("a{}", Repeated("[0]", count)); };
+        EXPECT_TRUE(ParseExpression(chain(kDeep)).has_value());
+        EXPECT_FALSE(ParseExpression(chain(kDeep + 1)).has_value());
+
+        const auto many = [](size_t count) { return Format("f({}a[0])", Repeated("a[0], ", count - 1)); };
+        const auto parsed = ParseExpression(many(ExprLimits::kMaxNodes / 3 + 1));
+        ASSERT_FALSE(parsed.has_value());
+        EXPECT_TRUE(Contains(parsed.error().message, "more than 512 parts")) << parsed.error().message.c_str();
     }
 
     TEST(ProgramParserTest, TheLimitsAreErrorsThatNameThem) {

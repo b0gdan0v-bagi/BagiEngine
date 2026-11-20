@@ -71,6 +71,9 @@ namespace BECore {
                     if (rest.kind == ExprTokenKind::RightParen) {
                         return std::unexpected(ProgramError{"unexpected ')': there is no '(' to close", rest.column});
                     }
+                    if (rest.kind == ExprTokenKind::RightBracket) {
+                        return std::unexpected(ProgramError{"unexpected ']': there is no '[' to close", rest.column});
+                    }
                     return std::unexpected(ProgramError{Format("expected an operator or the end of the formula, found {}", DescribeToken(rest)), rest.column});
                 }
                 _ast.root = *root;
@@ -102,6 +105,7 @@ namespace BECore {
                     case ExprNodeKind::Member:
                         return _heights[node.first] + 1;
                     case ExprNodeKind::Binary:
+                    case ExprNodeKind::Index:
                         return std::max(_heights[node.first], _heights[node.second]) + 1;
                     case ExprNodeKind::Call: {
                         uint32_t below = 0;
@@ -183,21 +187,44 @@ namespace BECore {
                     return Add(std::move(node));
                 }
                 NodeResult node = ParsePrimary();
-                while (node.has_value() && Peek().kind == ExprTokenKind::Dot) {
-                    const ExprToken& dot = Take();
-                    const ExprToken& name = Peek();
-                    if (name.kind != ExprTokenKind::Name) {
-                        return Fail(name, Format("expected a member name after '.', found {}", DescribeToken(name)));
-                    }
-                    Take();
-                    ExprNode member;
-                    member.kind = ExprNodeKind::Member;
-                    member.column = dot.column;
-                    member.first = *node;
-                    member.text = String(name.text);
-                    node = Add(std::move(member));
+                while (node.has_value() && (Peek().kind == ExprTokenKind::Dot || Peek().kind == ExprTokenKind::LeftBracket)) {
+                    node = Peek().kind == ExprTokenKind::Dot ? ParseMember(*node) : ParseIndex(*node);
                 }
                 return node;
+            }
+
+            NodeResult ParseMember(ExprNodeId base) {
+                const ExprToken& dot = Take();
+                const ExprToken& name = Peek();
+                if (name.kind != ExprTokenKind::Name) {
+                    return Fail(name, Format("expected a member name after '.', found {}", DescribeToken(name)));
+                }
+                Take();
+                ExprNode member;
+                member.kind = ExprNodeKind::Member;
+                member.column = dot.column;
+                member.first = base;
+                member.text = String(name.text);
+                return Add(std::move(member));
+            }
+
+            NodeResult ParseIndex(ExprNodeId base) {
+                const ExprToken& open = Take();
+                const NodeResult index = ParseBinary(kPrecedenceOr);
+                if (!index.has_value()) {
+                    return index;
+                }
+                const ExprToken& close = Peek();
+                if (close.kind != ExprTokenKind::RightBracket) {
+                    return Fail(close, Format("expected ']' to close the '[' at column {}, found {}", open.column, DescribeToken(close)));
+                }
+                Take();
+                ExprNode node;
+                node.kind = ExprNodeKind::Index;
+                node.column = open.column;
+                node.first = base;
+                node.second = *index;
+                return Add(std::move(node));
             }
 
             NodeResult ParsePrimary() {

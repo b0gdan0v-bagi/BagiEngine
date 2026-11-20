@@ -38,6 +38,12 @@ namespace BECore {
      * `LoadTable` reads the `int32_t` index in `a` and writes to `dst` entry `index` of the run of constants that starts at constant `imm` and has
      * `TableEntryCount` entries (the count is 16 bits, low byte in `b`, high byte in `c`; `SetTableEntryCount` writes it), the index clamped to the ends.
      *
+     * The list instructions (`Lists/CLAUDE.md`) keep list and element images in registers, which are not values of a program type: `ListSlot`: `dst` is the list in the field named by the
+     * descriptor constant `imm`, in the object of level `a`. `ListElem`: the same in the element in register `a`. `ListSize`: the `int32_t` count of the list in `a`. `ListAt`: element `index` of
+     * the list in `a`, the `int32_t` index in `b`. `LoadElem<T>`: the field at offset `imm` of the element in `a`, for an enum `b` the size of the field. `LoopBegin`: `dst` is element 0 of
+     * the list in `a`, and the program jumps to `imm`, the instruction after the matching `LoopEnd`, when there is none. `LoopEnd`: `dst` is the next element of the list in `a`, and the program
+     * jumps to `imm`, the first instruction of the body, while there is one. `BreakIf`: jumps to `imm`, the instruction after the enclosing `LoopEnd`, when the `bool` in `a` equals `b`.
+     *
      * The fused instructions (`BE_PROGRAM_FUSED_ROWS`, written only by `Fuse`) read a field of the context themselves, so a field of theirs that does not fit makes the
      * sequence stay unfused. `MulAddSlot<T>`: the field at offset `imm` of level `a` times the constant `b` plus the constant `c` (both constant indexes are bytes; over `Vec3` `b` is a `float`).
      * `LerpSlots<T>`: `lerp(field, field, t)`, `t` in register `c`, the first field at the low half of `imm` in level `a`, the second at its high half in level `b`.

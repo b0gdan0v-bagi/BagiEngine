@@ -53,6 +53,9 @@ namespace BECore {
         /// List (a FixedVector or an Array), Map (a FixedHashMap), String (a FixedString) that cannot grow: the most it holds;
         /// 0 when there is no limit
         size_t capacity = 0;
+        /// List: `sizeof` of the element, the stride of a loop over the list (0 for every other kind). Not part of `SameType`: the
+        /// element's own descriptor is.
+        size_t elementSize = 0;
         /// String: the value is a `PoolString`, so writing it puts the text into the pool, which never shrinks. Not set on a container of them: look at its element
         bool interns = false;
         /// List: the element. Optional: the value. Map: the value. Pair: the second member.
@@ -354,6 +357,7 @@ namespace BECore {
                 desc.kind = TypeKind::List;
                 desc.resizable = ListTraits<T>::kResizable;
                 desc.capacity = ListTraits<T>::kCapacity;
+                desc.elementSize = sizeof(typename ListTraits<T>::Element);
                 desc.element = &DescHolder<typename ListTraits<T>::Element>::kValue;
             } else if constexpr (IsMapType<T>) {
                 desc.kind = TypeKind::Map;

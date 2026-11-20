@@ -167,6 +167,10 @@ namespace BECore {
         if (FindExprFunction(name) != nullptr || name == kTableFunction || name == kNamedTableFunction) {
             return std::unexpected(Format("operation name '{}' is a function of the formula language", name));
         }
+        // A list function shares its name only by arity: the checker hands a call with the list function's count to the list function
+        if (const ExprListFunction* listFunction = FindListFunction(name); listFunction != nullptr && listFunction->arity == parameters.size()) {
+            return std::unexpected(Format("operation name '{}' with {} parameters is the list function of the formula language; give it another name or count", name, parameters.size()));
+        }
         DomainOperation operation;
         operation.name = PoolString::Intern(name);
         operation.parameterCount = static_cast<uint8_t>(parameters.size());
