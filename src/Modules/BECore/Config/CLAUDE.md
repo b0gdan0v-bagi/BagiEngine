@@ -32,7 +32,15 @@ auto rootNode = CoreManager::GetConfigManager().GetConfig(ConfigNames::logger);
 - `SaveConfig` writes to the file the config was loaded from, i.e. into the layer that won.
 - `GetConfig` takes a `PoolString` or a `StringView` (the latter avoids interning) and returns an invalid `XmlNode` when the name is unknown, so check it.
 - Documents live in `UnorderedPoolMap<ConfigEntry>`; writes are serialized by a mutex.
-- Editor support: `GetAllConfigNames()`, `GetConfigFilePath(name)`, `SaveConfig(name)`, `ReloadConfig(name)` (replaces the cached document). Code that holds an `XmlNode` from before a reload must fetch it again.
+- Editor support: `GetAllConfigNames()`, `GetConfigFilePath(name)`, `SaveConfig(name)`, `ReloadConfig(name)` (replaces the cached document). Code that holds an `XmlNode` from before a reload must fetch it again, whatever caused the reload: `ReloadConfig`, or a file changed on disk (below).
+
+## Hot reload and `ConfigChangedEvent`
+
+`ConfigManager::StartWatching(FileWatcher&)` (called by `CoreManager::StartFileWatching` when the `fileWatch` setting says so; `FileSystem/CLAUDE.md`, "FileWatcher") watches the `config` mount point. A change of the file a loaded config came from reads it again; the manager keeps a **hash of the file text each document reflects** (set at load, at `SaveConfig` after the write, at `ReloadConfig`) and acts only when the text differs. That is what stops the echo of the manager's own `SaveConfig` (its write reaches the watcher as a change) and the duplicate posts of one save, and a rewrite with the same text costs one read. A different text is `ReloadConfig`'s work and ends in `ConfigEvents::ConfigChangedEvent{name}`.
+
+- **Failure is quiet:** a file that does not parse leaves the old document and logs one `LOG_ERROR`, no event; the hash stays the one of the document, so restoring the old text later changes nothing. A new file, a removed file, a file of a lower layer and a file no loaded config owns are ignored with a `LOG_DEBUG` (picking up new files is the `hot-reload` entry).
+- **The event** (`Events/ConfigEvents.h`) is also emitted by `SaveConfig` and `ReloadConfig`, and by `NotifyConfigChanged(name)` for a caller that changed the cached document in place. Always on the main thread, after `_writeMutex` is released, so a subscriber may call the manager. Every `XmlNode` and `CreateDeserializer` result taken before it is stale: a subscriber reads again.
+- `ConfigManager(const FileSystem&)` makes a manager over a file system of its own (tests: a `config` folder in a temp directory, `ConfigHotReloadTest`); the default one uses `CoreManager`'s.
 
 ## Reading values
 

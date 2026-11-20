@@ -59,6 +59,7 @@ namespace BECore {
         _audioManager.Shutdown();
         _tweenManager.Clear();  // no callbacks: what they point at may be gone
         _controlService.Shutdown();
+        _configManager.StopWatching();
         _fileWatcher.Stop();
         TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});
     }
@@ -119,6 +120,7 @@ namespace BECore {
     void CoreManager::StartFileWatching(PassKey<Application>, bool enabled) {
         if (enabled) {
             _fileWatcher.Start(MakePlatformFileWatchBackend());
+            _configManager.StartWatching(_fileWatcher);
         }
     }
 
@@ -198,6 +200,7 @@ namespace BECore {
         _tweenManager.Clear();     // no callbacks: the scenes and what the setters point at may be going away
         _audioManager.Shutdown();  // a backend still open here (none closed it at the clean-up) is closed before the task system goes
         _controlService.Shutdown();
+        _configManager.StopWatching();
         _fileWatcher.Stop();
         TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});
     }

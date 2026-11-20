@@ -55,6 +55,7 @@ class MyWidget : public IWidget {   // IWidget and IRenderer already derive from
 | `RenderEvents.h` | Rendering (`NewFrameEvent`, `RenderClearEvent`, `RenderPresentEvent`, `ImGui*Event`, `SetRenderDrawColorEvent`) |
 | `InputEvents.h` | Input (`ActionEvent`) |
 | `SceneEvents.h` | Scene (`SceneUpdateEvent` and `SceneFixedUpdateEvent` carry `deltaTime`), declared with `BE_EVENT`. Global, not per scene: components subscribe with `IComponent::SubscribeInScene` so only the active scene's react (`BECore/Scene/CLAUDE.md`). Drawing is not an event: `Scene::Draw()` runs the draw system in sorted order: it draws the quad and the sprite itself and calls `IComponent::OnDraw()` of the other components |
+| `ConfigEvents.h` | `ConfigChangedEvent{name}`: a cached config document changed (file edited on disk, `SaveConfig`, `ReloadConfig`); `BECore/Config/CLAUDE.md`, "Hot reload" |
 | `SDL/CoreSDL/SDLEvents.h` | Raw SDL input, defined in the SDL module |
 
 Other modules define their own events next to their code (for example `LogEvent` in `BECore/Logger`, `AssertEvent` in `BECore/Assert`).

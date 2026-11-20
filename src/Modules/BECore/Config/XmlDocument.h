@@ -17,6 +17,9 @@ namespace BECore {
         XmlDocument() = default;
         ~XmlDocument() = default;
 
+        /// The bytes of the file at @p path, or nothing when it is not a regular file, is bigger than the limit of an XML document or cannot be read
+        static Optional<String> ReadFileBytes(const std::filesystem::path& path);
+
         /// @return false when the file is missing, is not a regular file or does not parse
         bool LoadFromFile(const std::filesystem::path& filepath);
 

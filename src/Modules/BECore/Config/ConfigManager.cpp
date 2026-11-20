@@ -5,12 +5,40 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <EASTL/sort.h>
+#include <Events/ConfigEvents.h>
 #include <TaskSystem/Awaitables.h>
 #include <TaskSystem/TaskGroup.h>
 #include <TaskSystem/TaskHandle.h>
 #include <TaskSystem/TaskManager.h>
 
 namespace BECore {
+
+    namespace {
+
+        /// The document of @p text, or nothing when it does not parse
+        IntrusivePtrAtomic<XmlDocument> ParseConfigText(const String& text) {
+            auto doc = BECore::New<XmlDocument>();
+            if (!doc->LoadFromString(text)) {
+                return {};
+            }
+            return doc;
+        }
+
+        uint64_t HashFileText(const String& text) {
+            return StringUtils::GetHash(StringView(text));
+        }
+
+        /// The hash of the file as it is now; 0 when it cannot be read, so the next change of it reloads
+        uint64_t HashFileOnDisk(const std::filesystem::path& path) {
+            const Optional<String> text = XmlDocument::ReadFileBytes(path);
+            return text ? HashFileText(*text) : 0;
+        }
+
+    }  // namespace
+
+    const FileSystem& ConfigManager::GetFileSystem() const {
+        return _fileSystem != nullptr ? *_fileSystem : CoreManager::GetFileSystem();
+    }
 
     void ConfigManager::Initialize() {
         BE_PROFILE_SCOPE("ConfigManager::Initialize");
@@ -21,7 +49,7 @@ namespace BECore {
 
         LOG_INFO("[ConfigManager] Initializing...");
 
-        const auto layers = CoreManager::GetFileSystem().GetMountLayers(MountPoints::config);
+        const auto layers = GetFileSystem().GetMountLayers(MountPoints::config);
         if (layers.empty()) {
             LOG_WARNING("[ConfigManager] Config directory not found, skipping initialization");
             _initialized.store(true, std::memory_order_release);
@@ -150,22 +178,30 @@ namespace BECore {
     bool ConfigManager::SaveConfig(PoolString name) {
         BE_PROFILE_SCOPE("ConfigManager::SaveConfig");
         ASSERT(_initialized.load(std::memory_order_acquire));
-        LockGuard lock(_writeMutex);
-        auto it = _configs.find(name);
-        if (it == _configs.end() || !it->second.doc) {
-            LOG_ERROR(Format("[ConfigManager] SaveConfig: config '{}' not found", name.ToStringView()).c_str());
-            return false;
+        bool ok = false;
+        {
+            LockGuard lock(_writeMutex);
+            auto it = _configs.find(name);
+            if (it == _configs.end() || !it->second.doc) {
+                LOG_ERROR(Format("[ConfigManager] SaveConfig: config '{}' not found", name.ToStringView()).c_str());
+                return false;
+            }
+            auto& entry = it->second;
+            if (entry.filePath.empty()) {
+                LOG_ERROR(Format("[ConfigManager] SaveConfig: no file path for config '{}'", name.ToStringView()).c_str());
+                return false;
+            }
+            ok = entry.doc->SaveToFile(entry.filePath);
+            if (ok) {
+                // The file keeps the layout of what was there, so its text is read back: the hash must be the one the watcher will see
+                entry.fileHash = HashFileOnDisk(entry.filePath);
+                LOG_INFO(Format("[ConfigManager] Saved config '{}' to {}", name.ToStringView(), entry.filePath.string()).c_str());
+            } else {
+                LOG_ERROR(Format("[ConfigManager] Failed to save config '{}' to {}", name.ToStringView(), entry.filePath.string()).c_str());
+            }
         }
-        const auto& entry = it->second;
-        if (entry.filePath.empty()) {
-            LOG_ERROR(Format("[ConfigManager] SaveConfig: no file path for config '{}'", name.ToStringView()).c_str());
-            return false;
-        }
-        const bool ok = entry.doc->SaveToFile(entry.filePath);
         if (ok) {
-            LOG_INFO(Format("[ConfigManager] Saved config '{}' to {}", name.ToStringView(), entry.filePath.string()).c_str());
-        } else {
-            LOG_ERROR(Format("[ConfigManager] Failed to save config '{}' to {}", name.ToStringView(), entry.filePath.string()).c_str());
+            NotifyConfigChanged(name);  // the lock is released: a subscriber may call the manager
         }
         return ok;
     }
@@ -173,7 +209,16 @@ namespace BECore {
     bool ConfigManager::ReloadConfig(PoolString name) {
         BE_PROFILE_SCOPE("ConfigManager::ReloadConfig");
         ASSERT(_initialized.load(std::memory_order_acquire));
+        const bool reloaded = ReloadFromDisk(name, false);
+        if (reloaded) {
+            NotifyConfigChanged(name);
+        }
+        return reloaded;
+    }
+
+    bool ConfigManager::ReloadFromDisk(PoolString name, bool skipIfSame) {
         std::filesystem::path filePath;
+        uint64_t knownHash = 0;
         {
             LockGuard lock(_writeMutex);
             auto it = _configs.find(name);
@@ -182,10 +227,25 @@ namespace BECore {
                 return false;
             }
             filePath = it->second.filePath;
+            knownHash = it->second.fileHash;
         }
 
-        auto newDoc = BECore::New<XmlDocument>();
-        if (!newDoc->LoadFromFile(filePath)) {
+        const Optional<String> text = XmlDocument::ReadFileBytes(filePath);
+        if (!text) {
+            if (skipIfSame) {
+                LOG_DEBUG(Format("[ConfigManager] Config '{}': {} is gone or unreadable, keeping the loaded document", name.ToStringView(), filePath.string()).c_str());
+            } else {
+                LOG_ERROR(Format("[ConfigManager] ReloadConfig: failed to reload '{}' from {}", name.ToStringView(), filePath.string()).c_str());
+            }
+            return false;
+        }
+        const uint64_t hash = HashFileText(*text);
+        if (skipIfSame && hash == knownHash) {
+            return false;
+        }
+
+        IntrusivePtrAtomic<XmlDocument> newDoc = ParseConfigText(*text);
+        if (!newDoc) {
             LOG_ERROR(Format("[ConfigManager] ReloadConfig: failed to reload '{}' from {}", name.ToStringView(), filePath.string()).c_str());
             return false;
         }
@@ -195,11 +255,56 @@ namespace BECore {
             auto it = _configs.find(name);
             if (it != _configs.end()) {
                 it->second.doc = newDoc;
+                it->second.fileHash = hash;
             }
         }
 
         LOG_INFO(Format("[ConfigManager] Reloaded config '{}'", name.ToStringView()).c_str());
         return true;
+    }
+
+    void ConfigManager::NotifyConfigChanged(PoolString name) const {
+        ConfigEvents::ConfigChangedEvent::Emit(name);
+    }
+
+    void ConfigManager::StartWatching(FileWatcher& watcher) {
+        _watch = watcher.WatchFolder(PoolString(MountPoints::config).ToStringView(), [this](const FileChange& change) { OnFileChanged(change); });
+    }
+
+    void ConfigManager::StopWatching() {
+        _watch.Reset();
+    }
+
+    PoolString ConfigManager::FindConfigByVirtualPath(StringView virtualPath) {
+        const PoolString mount = MountPoints::config;
+        const StringView prefix = mount.ToStringView();
+        if (virtualPath.size() <= prefix.size() + 1 || virtualPath.substr(0, prefix.size()) != prefix || virtualPath[prefix.size()] != '/') {
+            return {};
+        }
+        const StringView relativeText = virtualPath.substr(prefix.size() + 1);
+        const std::filesystem::path relative(relativeText.begin(), relativeText.end());
+        LockGuard lock(_writeMutex);
+        for (const std::filesystem::path& layer : GetFileSystem().GetMountLayers(MountPoints::config)) {
+            const std::filesystem::path candidate = (layer / relative).lexically_normal();
+            for (const auto& [name, entry] : _configs) {
+                if (entry.filePath.lexically_normal() == candidate) {
+                    return name;
+                }
+            }
+        }
+        return {};
+    }
+
+    void ConfigManager::OnFileChanged(const FileChange& change) {
+        const PoolString name = FindConfigByVirtualPath(change.virtualPath.ToStringView());
+        if (name.Empty()) {
+            // A new file, a removed one or a file of a layer that does not win: nothing owns it (the `hot-reload` entry builds on this)
+            LOG_DEBUG(Format("[ConfigManager] {} changed, no loaded config owns it", change.virtualPath.ToStringView()).c_str());
+            return;
+        }
+        if (ReloadFromDisk(name, true)) {
+            NotifyConfigChanged(name);
+        }
     }
 
     void ConfigManager::ScanDirectory(const std::filesystem::path& dir, Vector<Pair<std::filesystem::path, PoolString>>& filesToLoad) const {
@@ -241,9 +346,9 @@ namespace BECore {
             }
         }
 
-        auto doc = BECore::New<XmlDocument>();
-
-        if (!doc->LoadFromFile(path)) {
+        const Optional<String> text = XmlDocument::ReadFileBytes(path);
+        IntrusivePtrAtomic<XmlDocument> doc = text ? ParseConfigText(*text) : IntrusivePtrAtomic<XmlDocument>{};
+        if (!doc) {
             LOG_ERROR(Format("[ConfigManager] Failed to load config: {} from {}", name.ToStringView(), path.string()).c_str());
             co_return;
         }
@@ -255,7 +360,7 @@ namespace BECore {
                 LOG_WARNING(Format("[ConfigManager] Config {} was loaded by another thread, discarding duplicate", name.ToStringView()).c_str());
                 co_return;
             }
-            _configs[name] = ConfigEntry{doc, path};
+            _configs[name] = ConfigEntry{doc, path, HashFileText(*text)};
         }
 
         LOG_DEBUG(Format("[ConfigManager] Config loaded: {}", name.ToStringView()).c_str());

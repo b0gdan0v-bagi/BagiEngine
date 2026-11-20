@@ -45,30 +45,6 @@ namespace BECore {
             return text;
         }
 
-        /// The bytes of the file at @p path, or nothing when it is not a regular file, is bigger than the limit of an XML
-        /// document or cannot be read: the layout of such a file is not worth keeping
-        Optional<String> ReadExistingFile(const std::filesystem::path& path) {
-            std::error_code error;
-            if (!std::filesystem::is_regular_file(path, error)) {
-                return std::nullopt;
-            }
-            const uintmax_t size = std::filesystem::file_size(path, error);
-            if (error || size > ReaderLimits::kMaxXmlDocumentBytes) {
-                return std::nullopt;
-            }
-            std::ifstream in(path, std::ios::in | std::ios::binary);  //-NoStd: the document's own file, read byte for byte before it is replaced
-            if (!in.is_open()) {
-                return std::nullopt;
-            }
-            String bytes;
-            bytes.resize(static_cast<size_t>(size));
-            in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-            if (in.gcount() != static_cast<std::streamsize>(bytes.size())) {
-                return std::nullopt;
-            }
-            return bytes;
-        }
-
         /// @p updated laid out like @p onDisk, or nothing when that is not possible or does not give the same document
         ///
         /// The merge only moves lines, so the check is made on the document: the laid-out text must parse to what @p updated
@@ -93,6 +69,28 @@ namespace BECore {
         }
 
     }  // namespace
+
+    Optional<String> XmlDocument::ReadFileBytes(const std::filesystem::path& path) {
+        std::error_code error;
+        if (!std::filesystem::is_regular_file(path, error)) {
+            return std::nullopt;
+        }
+        const uintmax_t size = std::filesystem::file_size(path, error);
+        if (error || size > ReaderLimits::kMaxXmlDocumentBytes) {
+            return std::nullopt;
+        }
+        std::ifstream in(path, std::ios::in | std::ios::binary);  //-NoStd: the document's own file, read byte for byte
+        if (!in.is_open()) {
+            return std::nullopt;
+        }
+        String bytes;
+        bytes.resize(static_cast<size_t>(size));
+        in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        if (in.gcount() != static_cast<std::streamsize>(bytes.size())) {
+            return std::nullopt;
+        }
+        return bytes;
+    }
 
     bool XmlDocument::LoadFromFile(const std::filesystem::path& filepath) {
         if (!std::filesystem::exists(filepath)) {
@@ -147,7 +145,7 @@ namespace BECore {
         String text = Serialize();
 
         // The DOM wins over the file: what is on disk only lends its layout (blank lines, indentation)
-        if (const Optional<String> onDisk = ReadExistingFile(filepath)) {
+        if (const Optional<String> onDisk = ReadFileBytes(filepath)) {
             const StringView updatedBody = WithoutByteOrderMark(text);
             const size_t markSize = text.size() - updatedBody.size();
             if (const Optional<String> laidOut = LayOutLikeFile(WithoutByteOrderMark(*onDisk), updatedBody)) {
