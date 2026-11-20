@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/Pooled.h>
 #include <BECore/Renderer/BlendMode.h>
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Resource/ResourceHandle.h>
@@ -11,6 +12,8 @@ namespace BECore {
     class SpriteRendererComponent : public IComponent {
         BE_CLASS(SpriteRendererComponent, ICON = image)
     public:
+        BE_POOLED_SINGLE_THREAD(SpriteRendererComponent)
+
         SpriteRendererComponent() = default;
         ~SpriteRendererComponent() override = default;
 
