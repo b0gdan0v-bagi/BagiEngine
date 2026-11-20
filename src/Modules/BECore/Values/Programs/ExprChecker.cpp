@@ -43,19 +43,35 @@ namespace BECore {
     }
             BE_CHECKER_DESCRIBABLE_TYPES(BE_PROGRAM_TYPE_FOR, Unused)
 #undef BE_PROGRAM_TYPE_FOR
+            // The types a game registered come after the engine's rows: a descriptor an engine row matches is never a registered type
+            if (const Optional<DomainTypeId> domain = ProgramDomain::FindTypeByDescriptor(type)) {
+                return ExprType::OfDomain(*domain);
+            }
             return std::nullopt;
         }
 
-        String JoinTypes(const Vector<ProgramType>& types) {
+        String DomainTypeName(DomainTypeId id) {
+            return String(ProgramDomain::Type(id).name.ToStringView());
+        }
+
+        /// `a, b or c`
+        String JoinWithOr(const Vector<String>& words) {
             String text;
-            for (size_t i = 0; i < types.size(); ++i) {
+            for (size_t i = 0; i < words.size(); ++i) {
                 if (i > 0) {
-                    text += i + 1 == types.size() ? " or " : ", ";
+                    text += i + 1 == words.size() ? " or " : ", ";
                 }
-                const StringView name = ProgramTypeName(types[i]);
-                text.append(name.data(), name.size());
+                text += words[i];
             }
             return text;
+        }
+
+        String JoinTypes(const Vector<ProgramType>& types) {
+            Vector<String> names;
+            for (const ProgramType type : types) {
+                names.push_back(String(ProgramTypeName(type)));
+            }
+            return JoinWithOr(names);
         }
 
         Vector<ProgramType> AllTypes() {
@@ -67,6 +83,18 @@ namespace BECore {
                 }
             }
             return types;
+        }
+
+        /// The types a formula can have: the program types and the types a game registered
+        String ListFormulaTypes() {
+            Vector<String> names;
+            for (const ProgramType type : AllTypes()) {
+                names.push_back(String(ProgramTypeName(type)));
+            }
+            for (DomainTypeId id = 0; id < ProgramDomain::TypeCount(); ++id) {
+                names.push_back(DomainTypeName(id));
+            }
+            return JoinWithOr(names);
         }
 
         /// The types an operation has a row for, as a message lists them
@@ -155,8 +183,11 @@ namespace BECore {
             return text;
         }
 
-        /// A type as a message names it: `float`, `vec3`, `enum {Fire, Water}`
+        /// A type as a message names it: `float`, `vec3`, `enum {Fire, Water}`, the name a game registered a type under
         String DescribeExprType(const ExprType& type) {
+            if (type.program == ProgramType::Domain && type.domain != kNoDomainType) {
+                return DomainTypeName(type.domain);
+            }
             const StringView name = ProgramTypeName(type.program);
             if (type.program == ProgramType::Enum && type.enumeration != nullptr) {
                 return Format("{} {{{}}}", name, EnumeratorList(*type.enumeration));
@@ -169,6 +200,52 @@ namespace BECore {
             const String name = DescribeExprType(type);
             const bool vowel = StringView("aeiou").find(name.front()) != StringView::npos;
             return Format("{} {}", vowel ? "an" : "a", name);
+        }
+
+        /// `popcount(mask) -> int`
+        String SignatureOf(const DomainOperation& operation) {
+            String parameters;
+            for (size_t i = 0; i < operation.parameterCount; ++i) {
+                parameters += i == 0 ? "" : ", ";
+                parameters += DescribeExprType(ExprType::Of(operation.parameters[i]));
+            }
+            return Format("{}({}) -> {}", operation.name.ToStringView(), parameters, DescribeExprType(ExprType::Of(operation.result)));
+        }
+
+        String SignaturesOf(const Vector<DomainOperationId>& operations) {
+            String text;
+            for (const DomainOperationId id : operations) {
+                text += text.empty() ? "" : "; ";
+                text += SignatureOf(ProgramDomain::Operation(id));
+            }
+            return text;
+        }
+
+        /// What a value of a registered type can be given to, as a message lists it: the operators it has and the operations that take it
+        String DomainTypeHas(DomainTypeId id) {
+            Vector<String> names;
+            if (ProgramDomain::Type(id).equality == DomainEquality::Bitwise) {
+                names = {"==", "!=", "select"};
+            }
+            for (DomainOperationId operationId = 0; operationId < ProgramDomain::OperationCount(); ++operationId) {
+                const DomainOperation& operation = ProgramDomain::Operation(operationId);
+                for (size_t i = 0; i < operation.parameterCount; ++i) {
+                    const String name(operation.name.ToStringView());
+                    if (operation.parameters[i].domain == id && std::find(names.begin(), names.end(), name) == names.end()) {
+                        names.push_back(name);
+                        break;
+                    }
+                }
+            }
+            if (names.empty()) {
+                return "nothing";
+            }
+            String text;
+            for (const String& name : names) {
+                text += text.empty() ? "" : ", ";
+                text += name;
+            }
+            return text;
         }
 
         /// A type of a field or an expected type as a message names it
@@ -200,6 +277,13 @@ namespace BECore {
             }
             names.push_back(String(kTableFunction));
             names.push_back(String(kNamedTableFunction));
+            // An operation has one name for all its overloads
+            for (DomainOperationId id = 0; id < ProgramDomain::OperationCount(); ++id) {
+                const String name(ProgramDomain::Operation(id).name.ToStringView());
+                if (std::find(names.begin(), names.end(), name) == names.end()) {
+                    names.push_back(name);
+                }
+            }
             return names;
         }
 
@@ -597,7 +681,7 @@ namespace BECore {
             /// The field exists and is fixed, but none of the program types is its type: say what it is
             String FieldOfAnotherType(StringView path, const TypeDesc* field) const {
                 const String fieldType = field != nullptr ? Format("of the type {}", DescribeDescriptor(*field)) : String("of another type");
-                return Format("path '{}': the field is {}, and a formula reads only fields of the types {}", path, fieldType, JoinTypes(AllTypes()));
+                return Format("path '{}': the field is {}, and a formula reads only fields of the types {}", path, fieldType, ListFormulaTypes());
             }
 
             TypedResult CheckBareName(const ExprNode& node, Optional<ExprType> hint) {
@@ -607,11 +691,14 @@ namespace BECore {
                     const auto slot = LinkSlot(_declaration, name, DescribeType<int32_t>());
                     return Refuse(node.column, slot.has_value() ? Format("'{}' is a level, a path names a field of it ({}.field)", name, name) : slot.error().message);
                 }
-                if (FindExprFunction(name) != nullptr || name == kTableFunction || name == kNamedTableFunction) {
+                if (FindExprFunction(name) != nullptr || name == kTableFunction || name == kNamedTableFunction || !ProgramDomain::FindOperations(name).empty()) {
                     return Refuse(node.column, Format("'{}' is a function: call it as {}(...)", name, name));
                 }
                 if (hint.has_value() && hint->program == ProgramType::Enum && hint->enumeration != nullptr) {
                     return CheckEnumerator(node, *hint);
+                }
+                if (ProgramDomain::FindType(name).has_value()) {
+                    return Refuse(node.column, Format("'{}' is a type, not a value: a value of it is a field, read by a path (level.field)", name));
                 }
                 Vector<String> known;
                 String levels;
@@ -726,7 +813,19 @@ namespace BECore {
             }
 
             std::unexpected<ProgramError> NotDefined(uint32_t column, const String& subject, ProgramOperation operation, const ExprType& type) const {
+                if (type.program == ProgramType::Domain && type.domain != kNoDomainType) {
+                    return Refuse(column, Format("{} is not defined for {}; a value of {} has: {}", subject, DescribeExprType(type), DescribeExprType(type), DomainTypeHas(type.domain)));
+                }
                 return Refuse(column, Format("{} is not defined for {}; it works on {}{}", subject, DescribeExprType(type), TypesWith(operation), MixedPairsOf(operation)));
+            }
+
+            /// `==`, `!=` and `select` of a registered type read its whole register: a type whose bytes do not say two values are equal has none of them
+            std::expected<void, ProgramError> RequireEquality(uint32_t column, const String& subject, const ExprType& type) const {
+                if (type.program == ProgramType::Domain && type.domain != kNoDomainType && ProgramDomain::Type(type.domain).equality == DomainEquality::None) {
+                    return Refuse(column, Format("{} is not defined for {}: its values are not compared by their bytes (a float member or padding); a value of it has: {}", subject,
+                                                 DescribeExprType(type), DomainTypeHas(type.domain)));
+                }
+                return {};
             }
 
             // Operators
@@ -789,6 +888,11 @@ namespace BECore {
                     return std::unexpected(operands.error());
                 }
                 const ExprType common = TypeOf((*operands)[0]);
+                if (operation == ProgramOperation::Eq || operation == ProgramOperation::Ne) {
+                    if (const auto equality = RequireEquality(node.column, subject, common); !equality.has_value()) {
+                        return std::unexpected(equality.error());
+                    }
+                }
                 const Opcode opcode = OpcodeOf(operation, common.program);
                 if (opcode == Opcode::Invalid) {
                     return NotDefined(node.column, subject, operation, common);
@@ -839,6 +943,12 @@ namespace BECore {
                     if (_declaration.IndexOf(node.text).has_value()) {
                         return Refuse(node.column, Format("'{}' is a level, not a function", node.text));
                     }
+                    if (const Vector<DomainOperationId> operations = ProgramDomain::FindOperations(node.text); !operations.empty()) {
+                        return CheckDomainCall(node, operations);
+                    }
+                    if (ProgramDomain::FindType(node.text).has_value()) {
+                        return Refuse(node.column, Format("'{}' is a type, not a function; a value of it is a field, read by a path (level.field)", node.text));
+                    }
                     return Refuse(node.column, Format("unknown function '{}'; the functions are: {}", node.text, JoinNames(FunctionNames())));
                 }
                 if (node.argumentCount != function->arity) {
@@ -882,6 +992,72 @@ namespace BECore {
                     result.operands[result.operandCount++] = operand;
                 }
                 return Emit(std::move(result));
+            }
+
+            /**
+             * A call of an operation a game registered. The argument count picks the overloads; an argument is checked with the type of its parameter as the hint when the overloads
+             * at that count agree on it (so a literal takes it and a bare name is an enumerator of it), without a hint otherwise; the types of the arguments then pick the overload.
+             */
+            TypedResult CheckDomainCall(const ExprNode& node, const Vector<DomainOperationId>& overloads) {
+                Vector<DomainOperationId> candidates;
+                for (const DomainOperationId id : overloads) {
+                    if (ProgramDomain::Operation(id).parameterCount == node.argumentCount) {
+                        candidates.push_back(id);
+                    }
+                }
+                if (candidates.empty()) {
+                    Vector<uint8_t> counts;
+                    for (const DomainOperationId id : overloads) {
+                        const uint8_t count = ProgramDomain::Operation(id).parameterCount;
+                        if (std::find(counts.begin(), counts.end(), count) == counts.end()) {
+                            counts.push_back(count);
+                        }
+                    }
+                    std::sort(counts.begin(), counts.end());
+                    Vector<String> words;
+                    for (const uint8_t count : counts) {
+                        words.push_back(Format("{}", static_cast<uint32_t>(count)));
+                    }
+                    return Refuse(node.column, Format("'{}' takes {} argument{}, but {} {} given; the signatures are: {}", node.text, JoinWithOr(words),
+                                                      counts.size() == 1 && counts[0] == 1 ? "" : "s", node.argumentCount, node.argumentCount == 1 ? "is" : "are", SignaturesOf(overloads)));
+                }
+                Vector<TypedNodeId> typed;
+                String found;
+                for (uint32_t i = 0; i < node.argumentCount; ++i) {
+                    const ExprType first = ExprType::Of(ProgramDomain::Operation(candidates[0]).parameters[i]);
+                    bool agree = true;
+                    for (const DomainOperationId id : candidates) {
+                        agree = agree && ExprType::Of(ProgramDomain::Operation(id).parameters[i]) == first;
+                    }
+                    const TypedResult argument = Check(_ast.arguments[node.firstArgument + i], agree ? Optional<ExprType>(first) : std::nullopt);
+                    if (!argument.has_value()) {
+                        return argument;
+                    }
+                    typed.push_back(*argument);
+                    found += i == 0 ? "" : ", ";
+                    found += DescribeExprType(TypeOf(*argument));
+                }
+                for (const DomainOperationId id : candidates) {
+                    const DomainOperation& operation = ProgramDomain::Operation(id);
+                    bool matches = true;
+                    for (size_t i = 0; i < typed.size(); ++i) {
+                        matches = matches && ExprType::Of(operation.parameters[i]) == TypeOf(typed[i]);
+                    }
+                    if (!matches) {
+                        continue;
+                    }
+                    TypedNode result;
+                    result.kind = TypedNodeKind::Operation;
+                    result.type = ExprType::Of(operation.result);
+                    result.opcode = Opcode::CallDomain;
+                    result.immediate = id;
+                    result.column = node.column;
+                    for (const TypedNodeId operand : typed) {
+                        result.operands[result.operandCount++] = operand;
+                    }
+                    return Emit(std::move(result));
+                }
+                return Refuse(node.column, Format("no overload of '{}' takes ({}); the signatures are: {}", node.text, found, SignaturesOf(overloads)));
             }
 
             /// The index of `at` or `ByLevel`: an `int`, with a hint to convert a number of another type
@@ -1103,6 +1279,9 @@ namespace BECore {
                     return std::unexpected(values.error());
                 }
                 const ExprType type = TypeOf((*values)[0]);
+                if (const auto equality = RequireEquality(node.column, subject, type); !equality.has_value()) {
+                    return std::unexpected(equality.error());
+                }
                 return EmitOperation(OpcodeOf(ProgramOperation::Select, type.program), type, node.column, {*condition, (*values)[0], (*values)[1]});
             }
 
@@ -1138,7 +1317,7 @@ namespace BECore {
     std::expected<ExprType, ProgramError> CheckExpectedType(const TypeDesc& expected) {
         const Optional<ExprType> want = ProgramTypeFor(expected);
         if (!want.has_value()) {
-            return Refuse(0, Format("a formula can have the type {}, not '{}'", JoinTypes(AllTypes()), DescribeDescriptor(expected)));
+            return Refuse(0, Format("a formula can have the type {}, not '{}'", ListFormulaTypes(), DescribeDescriptor(expected)));
         }
         return *want;
     }

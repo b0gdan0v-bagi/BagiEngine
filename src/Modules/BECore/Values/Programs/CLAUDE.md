@@ -88,5 +88,5 @@ Loosest first: `||`; `&&`; `== !=`; `< <= > >=`; `+ -`; `* / %`; unary `- !`; po
 
 ## Not yet
 
-- `Rect` has no program type (no operators). A game's own value types and operations are `Domain/CLAUDE.md`; the checker and the compiler do not know them yet (slice of `data-values-domain-types`).
+- `Rect` has no program type (no operators). A game's own value types and operations are `Domain/CLAUDE.md`: the checker types them (a field of a registered type, a call of an operation), the compiler does not yet (slice of `data-values-domain-types`).
 - The interpreter's fixed cost: a program of one fused instruction takes about 4.8 ns and the five-operation formula is about twice a virtual tree (`Values/CLAUDE.md`, "Benchmark"). The cost is in `Run`'s entry; generated code (`Native/CLAUDE.md`, also its "Not yet": arrays, string constants, typed locals) is the way out for a tool that can compile, and the result cache does not hide it for short formulas.
