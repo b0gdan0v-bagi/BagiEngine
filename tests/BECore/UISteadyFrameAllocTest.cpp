@@ -2,8 +2,10 @@
 #include <BECore/Input/UIInput.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/Time/Time.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIDropdown.h>
+#include <BECore/UI/UITooltip.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/UIInputEvents.h>
 #include <Common/UITestSupport.h>
@@ -62,6 +64,26 @@ namespace BECore::Tests {
 
         constexpr float kMovingStep = 7.0f;
 
+        constexpr const char* kTooltipSceneXml = R"(
+<SceneManager><scenes>
+  <scene type="Scene" name="Main"><nodes>
+    <node name="Hud" layer="10"><components>
+      <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
+        <elements>
+          <element type="UIElement" name="Icon" x="100" y="100" width="48" height="48" color="30,30,30,255">
+            <components>
+              <component type="UIInputClicker" action="OpenIcon"/>
+              <component type="UITooltipComponent" text="Settings of the game: the sound, the language and the size of everything"/>
+            </components>
+          </element>
+        </elements>
+      </component>
+    </components></node>
+  </nodes></scene>
+</scenes></SceneManager>)";
+
+        constexpr double kFrameStep = 0.125;  // a binary fraction; kHoverDelay passes in a few frames
+
     }  // namespace
 
     class UISteadyFrameAllocTest : public UISceneFixture {};
@@ -90,6 +112,38 @@ namespace BECore::Tests {
         if constexpr (AllocTracker::kEnabled) {
             EXPECT_EQ(allocations, 0u);
         }
+    }
+
+    TEST_F(UISteadyFrameAllocTest, AVisibleTooltipAllocatesNothingInASteadyFrame) {
+        CoreManager::GetTime().Reset();
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kTooltipSceneXml));
+        ASSERT_TRUE(_canvas);
+        Draw();
+        const UIElement& icon = El("Icon");
+        const float x = icon.rect.x + icon.rect.w * 0.5f;
+        const float y = icon.rect.y + icon.rect.h * 0.5f;
+        SDL_MouseMotionEvent motion{};
+        motion.type = SDL_EVENT_MOUSE_MOTION;
+        motion.x = x;
+        motion.y = y;
+        ASSERT_TRUE(CoreManager::GetUIInput().DispatchMouseMotion(motion));
+        for (double passed = 0.0; passed <= UITooltip::kHoverDelay + kFrameStep; passed += kFrameStep) {
+            CoreManager::GetTime().Advance(kFrameStep);
+            Draw();
+        }
+        const size_t shown = _renderer->calls.size();
+
+        const uint64_t allocations = CountSteadyFrameAllocations([&](int) {
+            CoreManager::GetTime().Advance(kFrameStep);
+            Draw();
+        });
+
+        EXPECT_GT(shown, 2u) << "the plate and its glyphs are drawn over the icon";
+        EXPECT_EQ(_renderer->calls.size(), shown);
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_EQ(allocations, 0u);
+        }
+        CoreManager::GetTime().Reset();
     }
 
 }  // namespace BECore::Tests
