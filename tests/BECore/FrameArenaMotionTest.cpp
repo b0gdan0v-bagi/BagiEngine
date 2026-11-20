@@ -18,6 +18,7 @@ namespace BECore::Tests {
         constexpr size_t kBoxElements = 24;
         constexpr float kChildHeight = 20.0f;
         constexpr float kChildBaseWidth = 100.0f;
+        constexpr float kColumnPadding = 40.0f;  ///< the column is wider than its children so the width steps never clip
         constexpr int kChildWidthSteps = 7;
         constexpr uint64_t kTextAllocationsPerFrame = 4;  ///< measured after the temporaries moved; what is left is the heap result a layout hands to its cache
         constexpr float kOutputWidth = 800.0f;
@@ -55,7 +56,7 @@ namespace BECore::Tests {
         }
 
         IntrusivePtr<UIElement> AddColumn(UIElement& parent, const char* name) {
-            auto column = AddBox(parent, name, 0.0f, 0.0f, kChildBaseWidth + 40.0f, kChildHeight * kStackChildren);
+            auto column = AddBox(parent, name, 0.0f, 0.0f, kChildBaseWidth + kColumnPadding, kChildHeight * kStackChildren);
             column->layout = UILayoutKind::Stack;
             return column;
         }

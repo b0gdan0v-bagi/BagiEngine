@@ -1,6 +1,5 @@
 #include "FrameArena.h"
 
-
 namespace BECore {
 
     namespace {

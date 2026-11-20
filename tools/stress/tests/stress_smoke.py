@@ -125,7 +125,7 @@ def scenario_entities(client: BagiControlClient) -> None:
 
 
 def check_frame_memory_is_given_back(client: BagiControlClient) -> None:
-    """The frame arena is reset after every frame: the arena bytes in use at the end of a steady frame are the same in every frame, not a sum of them."""
+    """Steady frames report the same arenaUsedBytes: the arenas of the frame are reset, not summed. It guards the frame arena only once a scene draws a user of it (a box with a shadow or glow); until then the value is constant and the check cannot fail."""
     settle(client)
     client.call("step", {"frames": STEADY_FRAMES})
     used = [frame["arenaUsedBytes"] for frame in client.call("frame_stats", {"frames": STEADY_FRAMES})["frames"]]
