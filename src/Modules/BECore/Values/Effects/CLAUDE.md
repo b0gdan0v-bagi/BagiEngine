@@ -12,6 +12,8 @@ A formula (`Programs/CLAUDE.md`) only reads. A **script** is the short list of s
 | `EffectProgram.h/.cpp` | `EffectOperand`, `EffectStep`, the immutable `EffectProgram` |
 | `EffectProgramBuilder.h/.cpp` | assembles and checks a script (`Finish`) |
 | `EffectRunner.h/.cpp` | `RunEffects`, `EffectResult` |
+| `EffectScript.h` | the handle a content field holds: the shared program, `Run`, `Reads`, `Writes` |
+| `EffectCompiler.h/.cpp` | `CompileEffects`, `EffectOptions`: text to `EffectScript` |
 | `ScriptAst.h`, `ScriptParser.h/.cpp` | the syntax tree of a script, its limits and `ParseScript` |
 
 ## Writable levels
@@ -60,3 +62,15 @@ block     := '{' statement* '}'
 `if`, `else`, `emit` and `toggle` are keywords at the start of a statement only (`a = toggle.on` reads a level named `toggle`; a statement cannot start with one as a target). A statement's `column` is the operator of an assignment and the keyword of the others, the place its errors point at. A missing `;` is reported at the end of the previous token, so the caret is where it belongs. An `else if` is the one statement of an else block, built in a loop: a chain as long as the statement limit does not nest the parser, and its block depth is that of the first `if`.
 
 Limits, each a parse error that names it: `ScriptLimits::kMaxTextBytes`, `kMaxStatements` (every block together) and `kMaxBlockDepth`. An empty script is valid and runs nothing.
+
+## Compiling
+
+`CompileEffects(text, declaration, EffectOptions{targets, tables, fuse})` parses, then lowers each statement to steps with `EffectProgramBuilder`. **Every expression goes through `CompileExpression`** with the type of its place, so a script has no type rules of its own: a field's descriptor for the right side of a store (an integer literal takes the field's type, a bare enumerator works, no conversion), `bool` for a condition, a command parameter's descriptor for an argument. `+=`, `-=`, `++`, `--` and `toggle` are compiled as the assignment of the text `target + (e)`, `target - (e)`, `target + 1`, `target - 1`, `!target`, so they share the wrap and IEEE rules of formulas and `toggle` of a non-`bool` is the checker's `!` error. The user's right side is parsed alone first: wrapped in `target + (` and `)` an unbalanced `1) + (2` would compile. A condition that folds to a constant is kept as a `JumpIfNot` of a constant: no algebra, the script runs what it says. An `else if` chain is compiled in a loop (`else` block that is one `if`), so its length does not nest the compiler.
+
+A target is a **whole field**: `LinkField` finds it and gives the type, a path that ends in a component of a field (`cell.pos.x`) is refused first with the message that says to assign the whole field, then the host's `WriteTargets` must permit the path, then `CheckExpectedType` must accept the field's type (a program type, an enum or a registered type: not `Rect`, a sub-object, a list or `uint32_t`). Only an enum field and a registered type need their width (`FieldBytesOf`), the other types have it.
+
+**The pool.** Every expression is parsed and checked in a first pass over the whole text and compiled only in the second, so a refused text adds no program to `ProgramPool`; the same text compiled again adds none (programs are interned by code) and gives an equal handle (`EffectProgram::Equivalent`: text, steps and operands, not the address). A failure that only lowering finds (running out of registers in a very deep formula) comes after the first pass and may leave the programs of the statements before it, which cost nothing twice.
+
+## Load errors
+
+An error is `{message, column}` in the **whole script's text**, and the message begins with the statement: `assignment to 'cell.timer'`, `'+=' on 'x'`, `'toggle' of 'x'`, `'if' condition`, `'emit Action' argument 2`. A mistake inside the user's expression is at its own byte (the columns of the sub-formula shifted by where it starts, `FormulaText`); a mistake the checker finds in what the compiler wrote around it (`flag += 1`: the `+` of a `bool`) is at the statement's operator, the keyword for `if`, `emit` and `toggle`; a target error is at the target's first byte and an unknown command or a wrong argument count at the command's name. Messages are those of `LinkField` and the checker (`did you mean`, the list of fields); the ones this file adds are: no write targets, a path the host does not allow (it lists what it allows), a component, a field type a script cannot write, an unknown command (it lists the registered ones) and an argument count that is not the command's.

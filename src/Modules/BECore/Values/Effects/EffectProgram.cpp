@@ -17,7 +17,47 @@ namespace BECore {
             return {};
         }
 
+        [[nodiscard]] bool SameOperand(const EffectOperand& a, const EffectOperand& b) {
+            if (a.kind != b.kind || a.type != b.type || a.bytes != b.bytes) {
+                return false;
+            }
+            switch (a.kind) {
+                case CompiledKind::Constant:
+                    return a.constant.bytes == b.constant.bytes;
+                case CompiledKind::Slot:
+                    return a.slot.level == b.slot.level && a.slot.offset == b.slot.offset;
+                case CompiledKind::Program:
+                    return a.program == b.program;
+            }
+            return false;
+        }
+
+        [[nodiscard]] bool SameStep(const EffectStep& a, const EffectStep& b) {
+            if (a.op != b.op || a.type != b.type || a.bytes != b.bytes || a.count != b.count || a.jump != b.jump || a.command != b.command || a.target.level != b.target.level ||
+                a.target.offset != b.target.offset) {
+                return false;
+            }
+            for (size_t i = 0; i < a.operands.size(); ++i) {
+                if (!SameOperand(a.operands[i], b.operands[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
     }  // namespace
+
+    bool EffectProgram::Equivalent(const EffectProgram& other) const {
+        if (_source != other._source || _steps.size() != other._steps.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < _steps.size(); ++i) {
+            if (!SameStep(_steps[i], other._steps[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     String EffectProgram::Disassemble() const {
         String text;

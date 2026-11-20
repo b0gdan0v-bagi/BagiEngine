@@ -131,6 +131,9 @@ namespace BECore {
             return _source;
         }
 
+        /// Whether the two scripts have the same text, the same steps and the same operands (programs by id, which is by code); the reads and writes follow from the steps
+        [[nodiscard]] bool Equivalent(const EffectProgram& other) const;
+
         /// One step per line, for a failing test and a debugger
         [[nodiscard]] String Disassemble() const;
 
