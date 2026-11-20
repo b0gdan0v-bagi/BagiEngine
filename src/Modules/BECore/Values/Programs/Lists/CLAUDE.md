@@ -1,6 +1,22 @@
 # Lists: loops over reflected lists in a program
 
-A program can read a list of a context object (an `Array`, `Vector`, `SmallVector` or `FixedVector` field), loop over it and read a field of each element. This is the machine only: no text of a formula reaches it yet (`Not yet`). A program is assembled with `ProgramBuilder::EmitListSlot`, `EmitLoopBegin` and the other `Emit*` helpers; `ProgramListTest` shows each shape (count, `any`, `all`, `sum`, `min`, `max`, a loop in a loop, `size`, an element by index).
+A program can read a list of a context object (an `Array`, `Vector`, `SmallVector` or `FixedVector` field), loop over it and read a field of each element. The text of a formula reaches it (`## The language`); a program is also assembled by hand with `ProgramBuilder::EmitListSlot`, `EmitLoopBegin` and the other `Emit*` helpers, and `ProgramListTest` shows each shape (count, `any`, `all`, `sum`, `min`, `max`, a loop in a loop, `size`, an element by index).
+
+## The language
+
+```
+count(hand.sets, s, s.pung && s.dragon) == 3      all(hand.tiles, t, t.suit == hand.tiles[0].suit)
+sum(hand.yaku, y, select(y.on, y.han, 0))         sum(hand.sets, s, count(s.tiles, t, t.terminal))
+```
+
+- **Syntax.** `fold(list, v, body)`: the list is a path of a level that ends in a list field (`hand.sets`), or of an element (`s.tiles`); `v` is a bare name, the element, that lives in the body only. `size(list)` is an `int`. `list[i]` is the element `i` (an `int`; a literal takes it, another number type is told to write `int(x)`), `.field` after it reads a field (`hand.sets[1].tiles[2].rank`); a list of scalars gives the value (`hand.counts[1]`). The level is always in the path: there is no default one.
+- **Functions** (`kListFunctions` in `ExprFunctions.h`; the arity decides, so the two-argument `min` / `max` stay): `count(l, v, bool)` and `size(l)` give `int`; `any` and `all` take a `bool` body; `sum`, `min`, `max` take a number body (`int`, `int64`, `float`, `double`) and give its type; a literal body takes the expected type, else `int`. A NaN element is skipped by `min` / `max`.
+- **Names.** A loop variable is never a level, a function, a type name (`int`, `true`) or an outer variable, so a name is one thing and the error says which; sibling loops may reuse a name. A path whose first segment is a variable reads through the element's type (`s.tiles`, `t.suit`; embedded objects and components as for a level); `v` alone is the value of a list of scalars and an error for an object element. A list or an element used as a value (`count(..) + hand.tiles`, `hand.tiles[0] == 1`) is an error that says how to read it.
+- **Missing element.** `hand.sets[9].suit` over three sets is the default (`0`, `false`, the first enumerator), never an error: see "Total by construction".
+- **Where it is checked.** `LinkList`, `LinkElementField` and `DescribeListElement` (`Values/Context.h`) link the paths against the reflected types with the messages of `LinkSlot` (`did you mean`, the fields of the type); a list of pointers, maps, optionals or lists is `bad_element`, a path that is no list `not_a_list`. The checker (`ExprChecker`) keeps the loop scopes, types the body and gives each fold a loop number; a layout error of `MakeListDescriptor` is an error at the column of the node. The text limits of `ExprLimits` apply as everywhere; a nest too deep for 32 registers (a fold keeps its accumulator, list, element and body) is the lowering's register error at the node.
+- **Lowering.** A fold writes the identity into the accumulator (`dst`), `ListSlot` / `ListElem`, `LoopBegin`, the body, the accumulation (`count`: `Select(body, 1, 0)` and `Add`; `sum`: `Add`; `min` / `max`: the rows; `any`: `Or` and `BreakIf` on true; `all`: `And` and `BreakIf` on false), `LoopEnd`. The element of a variable is the loop's own register, so `LoadElem` reads it with no copy. A list or an element is never constant, so `FoldConstants` leaves it alone, and `Fuse` does nothing for a loop program.
+- **Cost** (`Values/CLAUDE.md`, "Benchmark"): the interpreter takes about 3.4 ns per element of a loop (about 40 times a vectorised plain loop), generated code about 0.7 ns (5 to 9 times).
+- **Tests.** `ProgramListCheckerTest` (the checker), `ProgramListCompileTest` (the code against C++ loops), `ValueListLoadTest` (content, errors, the cache), `ValueListMahjongTest` (patterns of a Mahjong hand against C++ predicates, interpreter and generated code; the game's `ScoreSeat` is not here), the native set (`Native/CLAUDE.md`) and `ValueBenchTest` (`list_*`).
 
 ## Instructions and registers
 
@@ -39,5 +55,4 @@ A jump exists only in the three forms above, and `ProgramBuilder::Finish` refuse
 
 ## Not yet
 
-- The language (stage 2 of `data-values-collections`): `count`, `any`, `all`, `sum`, `min`, `max`, `size`, `a[i]` in `expr`, their checks and the lowering to these instructions.
-- Lists in `<tree>` node classes (`Values/Nodes/`) and `Span` fields.
+- Lists in `<tree>` node classes (`Values/Nodes/`), a `Span` field (it has no accessor), a list of lists, `a[i]` of a map, fusing the straight runs inside a loop body.
