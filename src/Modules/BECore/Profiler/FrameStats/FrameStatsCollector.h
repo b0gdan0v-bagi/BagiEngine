@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/MemTag.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Renderer/RenderCounters.h>
@@ -32,8 +33,10 @@ namespace BECore {
         RenderCounters draws;
         uint64_t allocCount = 0;  // the allocations of the frame (ENGINE_PROFILER_ALLOC; 0 without it)
         uint64_t allocBytes = 0;
-        uint64_t liveBytes = 0;       // at the end of the frame
-        uint64_t arenaUsedBytes = 0;  // the arenas, summed, at the end of the frame (Memory/CLAUDE.md, "Counters")
+        uint64_t liveBytes = 0;                         // at the end of the frame
+        Array<uint64_t, kMemTagCount> tagAllocCount{};  // the allocations of the frame per MemTag (Alloc/CLAUDE.md, "Tags"); zeros without ENGINE_PROFILER_ALLOC
+        Array<uint64_t, kMemTagCount> tagLiveBytes{};   // per MemTag at the end of the frame
+        uint64_t arenaUsedBytes = 0;                    // the arenas, summed, at the end of the frame (Memory/CLAUDE.md, "Counters")
         uint64_t arenaPeakBytes = 0;
         uint64_t arenaOverflows = 0;  // the overflows so far, not per frame
         FixedVector<FrameCounter, kMaxFrameCounters> counters;
@@ -110,6 +113,7 @@ namespace BECore {
         uint64_t _lastFrameEnd = 0;
         Array<uint64_t, kFrameStageCount> _stageBegin{};
         AllocTotals _allocsAtBegin;
+        Array<AllocTagTotals, kMemTagCount> _tagsAtBegin{};
     };
 
 }  // namespace BECore

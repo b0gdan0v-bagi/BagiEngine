@@ -35,6 +35,15 @@ namespace BECore {
             frame["allocCount"] = stats.allocCount;
             frame["allocBytes"] = stats.allocBytes;
             frame["liveBytes"] = stats.liveBytes;
+            Json tagAllocCount = Json::object();
+            Json tagLiveBytes = Json::object();
+            for (size_t i = 0; i < kMemTagCount; ++i) {
+                const auto name = ToStdString(EnumUtils<MemTag>::ToString(static_cast<MemTag>(i)));
+                tagAllocCount[name] = stats.tagAllocCount[i];
+                tagLiveBytes[name] = stats.tagLiveBytes[i];
+            }
+            frame["tagAllocCount"] = std::move(tagAllocCount);
+            frame["tagLiveBytes"] = std::move(tagLiveBytes);
             frame["arenaUsedBytes"] = stats.arenaUsedBytes;
             frame["arenaPeakBytes"] = stats.arenaPeakBytes;
             frame["arenaOverflows"] = stats.arenaOverflows;
@@ -74,6 +83,21 @@ namespace BECore {
             return arenas;
         }
 
+        Json DescribeTags() {
+            Json tags = Json::array();
+            const Array<AllocTagTotals, kMemTagCount> totals = AllocTracker::GetTagTotals();
+            for (size_t i = 0; i < kMemTagCount; ++i) {
+                Json described = Json::object();
+                described["tag"] = ToStdString(EnumUtils<MemTag>::ToString(static_cast<MemTag>(i)));
+                described["liveBytes"] = totals[i].liveBytes;
+                described["peakLiveBytes"] = totals[i].peakLiveBytes;
+                described["count"] = totals[i].count;
+                described["frees"] = totals[i].frees;
+                tags.push_back(std::move(described));
+            }
+            return tags;
+        }
+
         void HandleFrameStats(ControlCall& call) {
             const auto frames = ReadCount(call.Params(), "frames", 1, static_cast<int64_t>(FrameStatsCollector::kFrameHistory));
             if (!frames) {
@@ -88,6 +112,7 @@ namespace BECore {
             result["frames"] = std::move(list);
             result["allocTracking"] = AllocTracker::kEnabled;
             result["arenas"] = DescribeArenas();
+            result["tags"] = DescribeTags();
             call.Reply(std::move(result));
         }
 
@@ -192,7 +217,8 @@ namespace BECore {
         service.RegisterHandler("profiler_dump", HandleProfilerDump);
         service.RegisterHandler("zone_allocs", HandleZoneAllocs);
 
-        service.DescribeMethod("frame_stats", {"The last frames with stage times, draws, allocations, arena totals and counters, oldest first; arenas: the counters of every arena",
+        service.DescribeMethod("frame_stats", {"The last frames with stage times, draws, allocations, arena totals and counters, oldest first; arenas: the counters of every arena; tags: the totals "
+                                               "of every memory tag, each frame's tagAllocCount and tagLiveBytes by tag name",
                                                {{"frames", "integer", false, Format("How many frames, 1 to {} (default 1)", FrameStatsCollector::kFrameHistory)}}});
         service.DescribeMethod("profiler_dump", {"Writes the Chrome trace of the run (the game has to record one)",
                                                  {{"path", "string", false, Format("A relative file name without '..' (default {})", kDefaultTracePath)}}});

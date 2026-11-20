@@ -33,6 +33,8 @@ The tracker counts what goes through the global `operator new` and what the vend
 
 `GetTagTotals(tag)` / `GetTagTotals()` give `count`, `bytes`, `frees`, `liveBytes`, `peakLiveBytes` per `MemTag`; over the tags `count`, `bytes` and `frees` add up to `GetTotals()`.
 
+- **In `frame_stats`:** a top-level `tags` array of `{tag, liveBytes, peakLiveBytes, count, frees}` in the order of the enum (the totals since the start, the peak is the running one), and in each frame `tagAllocCount` (the allocations of that frame) and `tagLiveBytes` (at its end) as objects keyed by tag name. Without `ENGINE_PROFILER_ALLOC` every number is 0.
+
 - **Why a table.** A free has no tag of its own and blocks carry no header (above), so `RecordAlloc` registers the block's address and tag in a fixed open-addressing table (`kBlockTableSize` slots of BSS, profile build only) and `RecordFree` finds, erases and subtracts from that tag. A key is published after its tag byte; an erased slot is a tombstone an insert may reuse and a lookup passes. Nothing allocates, locks or logs.
 - **Untagged blocks are not registered:** a free that finds no entry is subtracted from `Untagged`, which is also where a block made before the tracker lands (saturating at zero like every live counter).
 - **A block the table cannot hold** (no slot within `kBlockProbeLimit` probes) is counted once in `untrackedBlocks` and wholly under `Untagged`, so the totals stay right and only that block's split is lost. Tombstones are reclaimed only by reuse.

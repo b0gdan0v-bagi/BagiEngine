@@ -2,6 +2,7 @@
 #include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Memory/LinearArena.h>
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Profiler.h>
@@ -42,9 +43,14 @@ namespace BECore::Tests {
         const Json& last = (*frames)[1];
         EXPECT_EQ(GetJsonInt(last, "drawCalls"), 4);
         EXPECT_EQ(GetJsonInt(last, "triangles"), 8);
-        for (const char* key :
-             {"frame", "paused", "frameMs", "cpuMs", "stagesMs", "textureSwitches", "allocCount", "allocBytes", "liveBytes", "arenaUsedBytes", "arenaPeakBytes", "arenaOverflows", "counters"}) {
+        for (const char* key : {"frame", "paused", "frameMs", "cpuMs", "stagesMs", "textureSwitches", "allocCount", "allocBytes", "liveBytes", "arenaUsedBytes", "arenaPeakBytes", "arenaOverflows",
+                                "counters", "tagAllocCount", "tagLiveBytes"}) {
             EXPECT_NE(FindJsonMember(last, key), nullptr) << key;
+        }
+        for (size_t i = 0; i < kMemTagCount; ++i) {
+            const StringView name = EnumUtils<MemTag>::ToString(static_cast<MemTag>(i));
+            EXPECT_NE(FindJsonMember(Require(FindJsonMember(last, "tagAllocCount")), name), nullptr) << ToStdString(name);
+            EXPECT_NE(FindJsonMember(Require(FindJsonMember(last, "tagLiveBytes")), name), nullptr) << ToStdString(name);
         }
         EXPECT_NE(FindJsonMember(Require(FindJsonMember(last, "stagesMs")), "SceneDraw"), nullptr);
         EXPECT_EQ(GetJsonBool(*result, "allocTracking"), AllocTracker::kEnabled);
@@ -74,6 +80,38 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonInt(*mine, "chunks"), 1);
         EXPECT_EQ(GetJsonInt(*mine, "overflows"), 0);
         EXPECT_GE(GetJsonInt(*mine, "capacity"), static_cast<int64_t>(kBytes));
+    }
+
+    TEST_F(ProfilerControlTest, FrameStatsListEveryTagInTheOrderOfTheEnum) {
+        constexpr size_t kBlockBytes = 4096;
+        void* block = nullptr;
+        {
+            BE_MEM_TAG(Scene);
+            block = ::operator new(kBlockBytes);
+        }
+        FrameStatsCollector& collector = CoreManager::GetFrameStats();
+        collector.BeginFrame();
+        collector.EndFrame({}, AllocTracker::GetTotals());
+
+        const Json response = Call("frame_stats");
+        const Json* tags = FindJsonMember(Require(FindJsonMember(response, "result")), "tags");
+        ASSERT_NE(tags, nullptr);
+        ASSERT_EQ(tags->size(), kMemTagCount);
+        for (size_t i = 0; i < kMemTagCount; ++i) {
+            const Json& described = (*tags)[i];
+            EXPECT_EQ(GetJsonString(described, "tag").value_or(String()), EnumUtils<MemTag>::ToString(static_cast<MemTag>(i)));
+            for (const char* key : {"liveBytes", "peakLiveBytes", "count", "frees"}) {
+                EXPECT_NE(FindJsonMember(described, key), nullptr) << key;
+            }
+        }
+        const Json& scene = (*tags)[+MemTag::Scene];
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_GE(GetJsonInt(scene, "liveBytes").value_or(0), static_cast<int64_t>(kBlockBytes));
+            EXPECT_GE(GetJsonInt(scene, "count").value_or(0), 1);
+        } else {
+            EXPECT_EQ(GetJsonInt(scene, "liveBytes"), 0);
+        }
+        ::operator delete(block);
     }
 
     TEST_F(ProfilerControlTest, FrameStatsCarryThePausedFlagOfEveryFrame) {
