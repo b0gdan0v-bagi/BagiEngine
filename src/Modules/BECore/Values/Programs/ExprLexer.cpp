@@ -138,7 +138,7 @@ namespace BECore {
                     return false;
                 }
                 const ExprTokenKind kind = _tokens.back().kind;
-                return kind == ExprTokenKind::Number || kind == ExprTokenKind::String || kind == ExprTokenKind::Name || kind == ExprTokenKind::RightParen;
+                return kind == ExprTokenKind::Number || kind == ExprTokenKind::String || kind == ExprTokenKind::Name || kind == ExprTokenKind::RightParen || kind == ExprTokenKind::RightBracket;
             }
 
             [[nodiscard]] char At(size_t offset) const {
@@ -223,7 +223,9 @@ namespace BECore {
                     case '|':
                         return Doubled('|', ExprTokenKind::OrOr);
                     case '[':
-                        return FailHere(_position, "'[' is not allowed: a path must name a fixed field, a list element or a map value cannot be read by a formula");
+                        return Single(ExprTokenKind::LeftBracket);
+                    case ']':
+                        return Single(ExprTokenKind::RightBracket);
                     default:
                         return FailHere(_position, Format("unexpected {}", DescribeByteAt(_text, _position)));
                 }

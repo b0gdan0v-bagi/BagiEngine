@@ -328,6 +328,8 @@ namespace BECore {
                         return CheckUnary(id, hint);
                     case ExprNodeKind::Binary:
                         return CheckBinary(id, hint);
+                    case ExprNodeKind::Index:
+                        return Refuse(node.column, "an index is not supported yet: '[' reads an element of a list");
                 }
                 return Refuse(node.column, "unknown node");
             }
