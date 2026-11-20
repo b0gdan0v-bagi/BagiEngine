@@ -1,7 +1,9 @@
+#include <BECore/Memory/FrameAllocator.h>
 #include <BECore/UI/UIBoxMesh.h>
 #include <BECore/UI/UIGeometryBounds.h>
 #include <Common/RecordingRenderer.h>
 #include <EASTL/sort.h>
+#include <cstring>
 #include <gtest/gtest.h>
 #include <numbers>
 
@@ -570,6 +572,29 @@ namespace BECore::Tests {
             EXPECT_LT(static_cast<size_t>(mesh.indices[i]), mesh.vertices.size());
         }
         ASSERT_NO_FATAL_FAILURE(ExpectWellFormed(mesh, "appended"));
+    }
+
+    TEST(UIBoxMeshTest, AFrameVectorMeshIsTheSameAsAVectorMesh) {
+        const Rect rect{3, 5, 60, 40};
+        const UICorners corners = UICorners::Uniform(9);
+        const UIShadowSpec shadow{1, 2, 6, 1, kBlue};
+        Mesh heap;
+        FrameVector<GeometryVertex> frameVertices;
+        FrameVector<int> frameIndices;
+        const auto build = [&](auto& vertices, auto& indices) {
+            UIBoxMesh::AppendShadow(vertices, indices, rect, corners, shadow, 1.5f);
+            UIBoxMesh::AppendFill(vertices, indices, rect, corners, kRed, {UIGradientDirection::Vertical, kBlue}, 1.5f);
+            UIBoxMesh::AppendBorder(vertices, indices, rect, corners, 2.0f, kWhite, 1.5f);
+            UIBoxMesh::AppendHighlight(vertices, indices, rect, corners, kWhite, 1.5f);
+        };
+        build(heap.vertices, heap.indices);
+        build(frameVertices, frameIndices);
+
+        ASSERT_FALSE(heap.vertices.empty());
+        ASSERT_EQ(frameVertices.size(), heap.vertices.size());
+        ASSERT_EQ(frameIndices.size(), heap.indices.size());
+        EXPECT_EQ(std::memcmp(frameVertices.data(), heap.vertices.data(), heap.vertices.size() * sizeof(GeometryVertex)), 0);
+        EXPECT_EQ(std::memcmp(frameIndices.data(), heap.indices.data(), heap.indices.size() * sizeof(int)), 0);
     }
 
     TEST(UIBoxMeshTest, DegenerateInputDrawsNothingOrThePlainRect) {

@@ -1,3 +1,4 @@
+#include <BECore/Memory/FrameArena.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UITextComponent.h>
@@ -121,8 +122,11 @@ namespace BECore::Tests {
         ASSERT_TRUE(_canvas);
 
         size_t meshBytes = 0;
+        size_t arenaBytes = 0;
         const uint64_t allocations = CountMeasuredAllocations([&](int) {
             Draw();
+            arenaBytes = FrameArena::Get().GetBytesUsed();
+            FrameArena::Advance();
             meshBytes = 0;
             size_t geometryCalls = 0;
             for (const DrawCall& call : _renderer->calls) {
@@ -134,9 +138,12 @@ namespace BECore::Tests {
             ASSERT_EQ(geometryCalls, kBoxElements) << "each element draws its box as one geometry call";
         });
 
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_EQ(allocations, 0u) << "the box meshes are on the frame arena, whose chunk is kept from frame to frame";
+        }
         Report("BoxEffectDraw", allocations);
-        GTEST_LOG_(INFO) << "BoxEffectDraw: the box meshes of a frame are " << meshBytes << " bytes; " << kBoxElements << " elements keep two vectors of " << sizeof(Vector<GeometryVertex>)
-                         << " bytes each, sizeof(UIElement) is " << sizeof(UIElement);
+        GTEST_LOG_(INFO) << "BoxEffectDraw: the box meshes of a frame are " << meshBytes << " bytes, the frame arena holds " << arenaBytes << " bytes at the end of the frame; sizeof(UIElement) is "
+                         << sizeof(UIElement);
     }
 
     TEST_F(FrameArenaMotionTest, ATextInMotionAllocationsPerFrame) {
