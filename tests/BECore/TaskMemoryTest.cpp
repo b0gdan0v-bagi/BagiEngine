@@ -1,7 +1,14 @@
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/Memory/ConcurrentBlockPool.h>
+#include <Common/EngineEnvironment.h>
+#include <Common/Wait.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskHandle.h>
+#include <TaskSystem/TaskManager.h>
 #include <TaskSystem/TaskMemory.h>
+#include <TaskSystem/TaskScheduler.h>
+#include <TaskSystem/ThreadPool.h>
+#include <atomic>
 #include <coroutine>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -31,19 +38,19 @@ namespace BECore::Tests {
 
         class CountedGuard {
         public:
-            explicit CountedGuard(int& destroyed) : _destroyed(&destroyed) {}
+            explicit CountedGuard(std::atomic<int>& destroyed) : _destroyed(&destroyed) {}
             CountedGuard(CountedGuard&& other) noexcept : _destroyed(std::exchange(other._destroyed, nullptr)) {}
             CountedGuard(const CountedGuard&) = delete;
             CountedGuard& operator=(const CountedGuard&) = delete;
             CountedGuard& operator=(CountedGuard&&) = delete;
             ~CountedGuard() {
                 if (_destroyed != nullptr) {
-                    ++*_destroyed;
+                    _destroyed->fetch_add(1, std::memory_order_relaxed);
                 }
             }
 
         private:
-            int* _destroyed;
+            std::atomic<int>* _destroyed;
         };
 
         Task<int> Answer() {
@@ -175,13 +182,44 @@ namespace BECore::Tests {
     }
 
     TEST(TaskMemoryTest, AFrameIsDestroyedOnceWhenItsHandleDropsBeforeTheTaskRan) {
-        int destroyed = 0;
+        std::atomic<int> destroyed{0};
         const size_t before = LiveBlocks();
         {
             auto handle = MakeIntrusive<TaskHandle<void>>(GuardedTask(CountedGuard(destroyed)));
-            EXPECT_EQ(destroyed, 0);
+            EXPECT_EQ(destroyed.load(), 0);
         }
-        EXPECT_EQ(destroyed, 1);
+        EXPECT_EQ(destroyed.load(), 1);
+        EXPECT_EQ(LiveBlocks(), before);
+    }
+
+    TEST(TaskMemoryTest, ATaskRunByTheManagerDestroysItsMoveOnlyParameterOnceAndGivesBackItsBlocks) {
+        EngineEnvironment::EnsureCoreServices();
+        std::atomic<int> destroyed{0};
+        const size_t before = LiveBlocks();
+        {
+            auto handle = CoreManager::GetTaskManager().Run(GuardedTask(CountedGuard(destroyed)));
+            handle->Wait();
+            EXPECT_EQ(handle->GetStatus(), TaskStatus::Completed);
+        }
+        EXPECT_TRUE(WaitUntil([&] { return destroyed.load() == 1 && LiveBlocks() == before; })) << "destroyed " << destroyed.load();
+        EXPECT_EQ(destroyed.load(), 1);
+    }
+
+    TEST(TaskMemoryTest, ATaskThatNeverRanIsDroppedByTheSchedulerShutdownWithItsFrameAndHandle) {
+        std::atomic<int> destroyed{0};
+        const size_t before = LiveBlocks();
+        ThreadPool pool(1);
+        TaskScheduler scheduler;
+        scheduler.Initialize(&pool);
+
+        auto handle = MakeIntrusive<TaskHandle<void>>(GuardedTask(CountedGuard(destroyed)));
+        scheduler.ScheduleDelayed([handle = std::move(handle)]() mutable { handle->Start(); }, std::chrono::hours(1), TaskPriority::Normal, ThreadType::Background);
+        EXPECT_GT(LiveBlocks(), before);
+        EXPECT_EQ(destroyed.load(), 0);
+
+        scheduler.Shutdown();
+        EXPECT_EQ(destroyed.load(), 1) << "the job held the last reference: the frame and its parameter go with it";
+        pool.Shutdown();
         EXPECT_EQ(LiveBlocks(), before);
     }
 

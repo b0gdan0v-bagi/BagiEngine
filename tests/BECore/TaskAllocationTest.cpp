@@ -3,6 +3,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Wait.h>
 #include <TaskSystem/Task.h>
+#include <TaskSystem/TaskHandle.h>
 #include <TaskSystem/TaskManager.h>
 #include <TaskSystem/TaskScheduler.h>
 #include <TaskSystem/ThreadPool.h>
@@ -22,22 +23,13 @@ namespace BECore::Tests {
         constexpr uint64_t kFrameTasks = 16;
         constexpr size_t kPoolWorkers = 4;
         constexpr double kNanosPerSecond = 1e9;
-        /// Allocations of the process that no task made (gtest, the logger), tolerated on top of the budget of a route
+        /// Allocations of the process that no task made (gtest, the logger), tolerated on top of the zero a route is held to
         constexpr uint64_t kStrayAllocations = 16;
         /// A budget so large that the slices of a pass are never cut short
         constexpr std::chrono::seconds kUnlimitedSliceBudget{60};
 
         // Allocations of a route are the totals of the process: a route that runs on workers allocates on their threads too, and only the totals
         // see them. The test executable runs no other thread that allocates while a route runs; the tolerance above covers a stray allocation.
-
-        // Allocations per task of each route: the measured baseline rounded up; every work package that removes a source lowers them, the last makes them 0.
-        constexpr double kInlineSubmitAllocBudget = 0;
-        constexpr double kPoolSubmitAllocBudget = 0;
-        constexpr double kMainQueueAllocBudget = 0;
-        constexpr double kDelayedAllocBudget = 0;
-        constexpr double kRunCoroutineAllocBudget = 0;
-        constexpr double kRunNestedAllocBudget = 0;
-        constexpr double kYieldInlineAllocBudget = 0;
 
         struct RouteCost {
             uint64_t ran = 0;
@@ -48,7 +40,6 @@ namespace BECore::Tests {
         struct Route {
             const char* name;
             RouteCost (*measure)(uint64_t tasks);
-            double allocBudget;
         };
 
         /// Runs @p pass (it runs the given number of tasks, waits for all of them and returns how many ran) twice: the first pass gives the pools and the rings their
@@ -190,22 +181,47 @@ namespace BECore::Tests {
             return MeasureRun(tasks, [](std::atomic<uint64_t>& ran) { return ParentTask(ran); });
         }
 
-        constexpr Route kInlineSubmit{"inline-submit", MeasureInlineSubmit, kInlineSubmitAllocBudget};
-        constexpr Route kPoolSubmit{"pool-submit", MeasurePoolSubmit, kPoolSubmitAllocBudget};
-        constexpr Route kMainQueue{"main-queue", MeasureMainQueue, kMainQueueAllocBudget};
-        constexpr Route kDelayed{"delayed", MeasureDelayed, kDelayedAllocBudget};
-        constexpr Route kRunCoroutine{"run-coroutine", MeasureRunCoroutine, kRunCoroutineAllocBudget};
-        constexpr Route kRunNested{"run-nested", MeasureRunNested, kRunNestedAllocBudget};
-        constexpr Route kYieldInline{"yield-inline", MeasureYieldInline, kYieldInlineAllocBudget};
-        constexpr const Route* kRoutes[] = {&kInlineSubmit, &kPoolSubmit, &kMainQueue, &kDelayed, &kRunCoroutine, &kRunNested, &kYieldInline};
+        /// The start job of TaskManager::Run (MakeStartTask is private) on a pool of its own: the handle, the frame and the job are taken and given back by different threads
+        RouteCost MeasureRunCoroutineOnFourWorkers(uint64_t tasks) {
+            EngineEnvironment::EnsureCoreServices();
+            ThreadPool pool(kPoolWorkers);
+            TaskScheduler scheduler;
+            scheduler.Initialize(&pool);
+            const RouteCost cost = MeasureRoute(tasks, [&](uint64_t count) {
+                std::atomic<uint64_t> ran{0};
+                for (uint64_t i = 0; i < count; ++i) {
+                    auto handle = MakeIntrusive<TaskHandle<void>>(CountingTask(ran));
+                    scheduler.Schedule(
+                        [handle = std::move(handle)]() mutable {
+                            auto owned = std::move(handle);
+                            owned->Start();
+                        },
+                        TaskPriority::Normal, ThreadType::Background);
+                }
+                EXPECT_TRUE(WaitUntil([&] { return ran.load(std::memory_order_acquire) == count; }));
+                return ran.load(std::memory_order_acquire);
+            });
+            scheduler.Shutdown();
+            pool.Shutdown();
+            return cost;
+        }
 
-        /// Every task ran; the allocations stay inside the budget of the route. Without the tracker the count check is skipped (the case reports it), the functional one is not.
-        void ExpectRouteWithinBudget(const Route& route) {
+        constexpr Route kInlineSubmit{"inline-submit", MeasureInlineSubmit};
+        constexpr Route kPoolSubmit{"pool-submit", MeasurePoolSubmit};
+        constexpr Route kMainQueue{"main-queue", MeasureMainQueue};
+        constexpr Route kDelayed{"delayed", MeasureDelayed};
+        constexpr Route kRunCoroutine{"run-coroutine", MeasureRunCoroutine};
+        constexpr Route kRunNested{"run-nested", MeasureRunNested};
+        constexpr Route kYieldInline{"yield-inline", MeasureYieldInline};
+        constexpr Route kRunCoroutineOnFourWorkers{"run-coroutine-4-workers", MeasureRunCoroutineOnFourWorkers};
+        constexpr const Route* kRoutes[] = {&kInlineSubmit, &kPoolSubmit, &kMainQueue, &kDelayed, &kRunCoroutine, &kRunNested, &kYieldInline, &kRunCoroutineOnFourWorkers};
+
+        /// Every task ran and a steady route allocates nothing. Without the tracker the count check is skipped (the case reports it), the functional one is not.
+        void ExpectRouteAllocatesNothing(const Route& route) {
             const RouteCost cost = route.measure(kSmokeTasks);
             EXPECT_EQ(cost.ran, kSmokeTasks) << route.name;
             if constexpr (AllocTracker::kEnabled) {
-                EXPECT_LE(static_cast<double>(cost.allocations), route.allocBudget * static_cast<double>(kSmokeTasks) + static_cast<double>(kStrayAllocations))
-                    << route.name << ": " << AllocationsPerTask(cost, kSmokeTasks) << " allocations per task";
+                EXPECT_LE(cost.allocations, kStrayAllocations) << route.name << ": " << AllocationsPerTask(cost, kSmokeTasks) << " allocations per task";
             } else {
                 GTEST_SKIP() << kNoAllocTracker;
             }
@@ -213,32 +229,67 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(TaskAllocationTest, InlineSubmitWithinBudget) {
-        ExpectRouteWithinBudget(kInlineSubmit);
+    TEST(TaskAllocationTest, InlineSubmitAllocatesNothing) {
+        ExpectRouteAllocatesNothing(kInlineSubmit);
     }
 
-    TEST(TaskAllocationTest, PoolSubmitWithinBudget) {
-        ExpectRouteWithinBudget(kPoolSubmit);
+    TEST(TaskAllocationTest, PoolSubmitAllocatesNothing) {
+        ExpectRouteAllocatesNothing(kPoolSubmit);
     }
 
-    TEST(TaskAllocationTest, MainQueueWithinBudget) {
-        ExpectRouteWithinBudget(kMainQueue);
+    TEST(TaskAllocationTest, MainQueueAllocatesNothing) {
+        ExpectRouteAllocatesNothing(kMainQueue);
     }
 
-    TEST(TaskAllocationTest, DelayedWithinBudget) {
-        ExpectRouteWithinBudget(kDelayed);
+    TEST(TaskAllocationTest, DelayedAllocatesNothing) {
+        ExpectRouteAllocatesNothing(kDelayed);
     }
 
-    TEST(TaskAllocationTest, RunCoroutineWithinBudget) {
-        ExpectRouteWithinBudget(kRunCoroutine);
+    TEST(TaskAllocationTest, RunCoroutineAllocatesNothing) {
+        ExpectRouteAllocatesNothing(kRunCoroutine);
     }
 
-    TEST(TaskAllocationTest, RunNestedWithinBudget) {
-        ExpectRouteWithinBudget(kRunNested);
+    TEST(TaskAllocationTest, RunNestedAllocatesNothing) {
+        ExpectRouteAllocatesNothing(kRunNested);
     }
 
-    TEST(TaskAllocationTest, YieldInlineWithinBudget) {
-        ExpectRouteWithinBudget(kYieldInline);
+    TEST(TaskAllocationTest, YieldInlineAllocatesNothing) {
+        ExpectRouteAllocatesNothing(kYieldInline);
+    }
+
+    TEST(TaskAllocationTest, RunCoroutineOnFourWorkersAllocatesNothing) {
+        ExpectRouteAllocatesNothing(kRunCoroutineOnFourWorkers);
+    }
+
+    /// A job above the inline buffer of a TaskFunc costs its one heap block and runs; a job with a small move-only capture costs none
+    TEST(TaskAllocationTest, ACaptureAboveTheInlineBufferCostsOneAllocationAndStillRuns) {
+        InlineSystem system;
+        constexpr size_t kBigCaptureBytes = 100;
+        struct BigCapture {
+            uint8_t bytes[kBigCaptureBytes] = {};
+        };
+        static_assert(!kFunctionFitsInline<BigCapture>);
+
+        uint64_t ran = 0;
+        system.scheduler.Schedule([big = BigCapture{}, &ran] { ran += 1 + big.bytes[0]; }, TaskPriority::Normal, ThreadType::Background);  // warm up the queue
+        ASSERT_EQ(ran, 1u);
+
+        const uint64_t before = AllocTracker::GetThreadCounters().count;
+        system.scheduler.Schedule([big = BigCapture{}, &ran] { ran += 1 + big.bytes[0]; }, TaskPriority::Normal, ThreadType::Background);
+        const uint64_t bigCost = AllocTracker::GetThreadCounters().count - before;
+
+        auto owned = MakeUnique<uint64_t>(1);
+        const uint64_t beforeSmall = AllocTracker::GetThreadCounters().count;
+        system.scheduler.Schedule([owned = std::move(owned), &ran] { ran += *owned; }, TaskPriority::Normal, ThreadType::Background);
+        const uint64_t smallCost = AllocTracker::GetThreadCounters().count - beforeSmall;
+
+        EXPECT_EQ(ran, 3u);
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_EQ(bigCost, 1u);
+            EXPECT_EQ(smallCost, 0u);
+        } else {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
     }
 
     /// The numbers of the perf set (task-submit-cost): one line per route. Run with --gtest_also_run_disabled_tests
