@@ -1,4 +1,5 @@
 #include <BECore/FileSystem/IFileWatchBackend.h>
+#include <BECore/FileSystem/PlatformFileWatchBackend.h>
 #include <BECore/FileSystem/PollingFileWatchBackend.h>
 #include <BECore/RefCounted/New.h>
 #include <Common/AllocCheck.h>
@@ -120,9 +121,17 @@ namespace BECore::Tests {
             }
         };
 
+#if defined(__APPLE__)
+        struct FSEventsMaker {
+            static IntrusivePtrAtomic<IFileWatchBackend> Make() {
+                return MakeFSEventsFileWatchBackend();
+            }
+        };
+#endif
+
     }  // namespace
 
-    /// The contract of IFileWatchBackend, which FileWatcher relies on. WP 4 and 5 add their backend to Backends
+    /// The contract of IFileWatchBackend, which FileWatcher relies on. A native backend is added to Backends under its platform's #if
     template <typename TMaker>
     class FileWatchBackendContractTest : public ::testing::Test {
     protected:
@@ -141,7 +150,11 @@ namespace BECore::Tests {
         Optional<BackendHarness> _harness;
     };
 
+#if defined(__APPLE__)
+    using Backends = ::testing::Types<PollingMaker, FSEventsMaker>;
+#else
     using Backends = ::testing::Types<PollingMaker>;
+#endif
     TYPED_TEST_SUITE(FileWatchBackendContractTest, Backends);
 
     TYPED_TEST(FileWatchBackendContractTest, AFileWrittenAfterTheWatchIsPosted) {
@@ -228,6 +241,61 @@ namespace BECore::Tests {
         this->H().Write(file, "two");
         EXPECT_TRUE(this->H().WaitForPost(file));
     }
+
+#if defined(__APPLE__)
+    /// FSEvents reports the real path (/private/var/... for /var/..., which the temp folder of the contract cases already is); the facade must get the form it added
+    class FileWatchBackendFSEventsTest : public ::testing::Test {
+    protected:
+        void SetUp() override {
+            _harness.emplace(MakeFSEventsFileWatchBackend());
+        }
+
+        void TearDown() override {
+            _harness.reset();
+        }
+
+        BackendHarness& H() {
+            return *_harness;
+        }
+
+        Optional<BackendHarness> _harness;
+    };
+
+    TEST_F(FileWatchBackendFSEventsTest, APathBehindASymlinkIsPostedInTheFormItWasAdded) {
+        const std::filesystem::path link = H().Dir().parent_path() / (H().Dir().filename().string() + "_link");
+        std::error_code error;
+        std::filesystem::create_directory_symlink(H().Dir(), link, error);
+        ASSERT_FALSE(error) << error.message();
+
+        H().Backend().AddDirectory(link, false);
+        H().Write(H().Dir() / "a.xml", "one");
+        const bool posted = H().WaitForPost(link / "a.xml");
+        std::filesystem::remove(link, error);
+        EXPECT_TRUE(posted);
+    }
+
+    TEST_F(FileWatchBackendFSEventsTest, TheDirectoryItselfIsNeverPosted) {
+        H().Backend().AddDirectory(H().Dir(), false);
+        std::error_code error;
+        std::filesystem::last_write_time(H().Dir(), std::filesystem::file_time_type::clock::now() + std::chrono::seconds(30), error);
+        ASSERT_FALSE(error) << error.message();
+        const std::filesystem::path file = H().Dir() / "a.xml";
+        H().Write(file, "one");
+        ASSERT_TRUE(H().WaitForPost(file));
+        EXPECT_FALSE(H().Sink().Has(H().Dir()));
+    }
+
+    TEST_F(FileWatchBackendFSEventsTest, ANonRecursiveDirectoryDoesNotReportItsSubfolders) {
+        MakeDirectory(H().Dir() / "sub");
+        H().Backend().AddDirectory(H().Dir(), false);
+        const std::filesystem::path deep = H().Dir() / "sub" / "x.png";
+        H().Write(deep, "pixels");
+        const std::filesystem::path shallow = H().Dir() / "a.xml";
+        H().Write(shallow, "one");
+        ASSERT_TRUE(H().WaitForPost(shallow));
+        EXPECT_FALSE(H().Sink().Has(deep));
+    }
+#endif
 
     /// The polling backend alone: its clock is a parameter, so these cases never sleep or wait
     class FileWatchBackendPollingTest : public ::testing::Test {
