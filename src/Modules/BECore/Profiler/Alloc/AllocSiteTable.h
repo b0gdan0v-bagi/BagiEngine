@@ -13,6 +13,13 @@ namespace BECore {
         const char* name = nullptr;         // nullptr: made without a name
         uint64_t count = 0;
         uint64_t bytes = 0;
+
+        /// The label of the zone for a report: its name, or kNoZone for an allocation made outside every zone
+        [[nodiscard]] const char* ZoneLabel() const {
+            return zone != nullptr ? zone->name : kNoZone;
+        }
+
+        static constexpr const char* kNoZone = "(no zone)";
     };
 
     /**

@@ -388,10 +388,13 @@ def profiler_dump(path: str = "trace.json") -> dict[str, Any]:
 @server.tool()
 @reports_errors
 def zone_allocs(top: int = 20, reset: bool = False) -> dict[str, Any]:
-    """The heap allocations per profiler zone, the most bytes first, and the totals of the process: {enabled, zones, totals}.
+    """The heap allocations per profiler zone, the most bytes first, and the totals of the process: {enabled, zones, names, totals}.
 
-    A zone counts its own allocations and those of the zones inside it. enabled is false (and everything zero) unless the game was built
-    with ENGINE_PROFILER_ALLOC. top: how many zones (1 to 1000). reset: zero the zone statistics after answering, to measure the next frames.
+    A zone counts its own allocations and those of the zones inside it. names: [{zone, name, allocs, bytes}], the allocations of each
+    innermost zone by EASTL's allocation name ("EASTL vector", or the literal given to set_name; "" for a plain operator new; zone
+    "(no zone)" outside every zone), so it says which container allocates. enabled is false (and everything zero, names empty) unless the
+    game was built with ENGINE_PROFILER_ALLOC. top: how many zones and how many names (1 to 1000). reset: zero the zone and name statistics
+    after answering, to measure the next frames.
     """
     return session.call("zone_allocs", {"top": top, "reset": reset})
 

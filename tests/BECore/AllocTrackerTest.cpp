@@ -384,6 +384,34 @@ namespace BECore::Tests {
         EXPECT_EQ(NameRow("ResetNameZone", nullptr).count, 0u);
     }
 
+    TEST(AllocTrackerTest, TheChromeTraceCarriesTheAllocationNames) {
+        AllocTracker::ResetZoneStats();
+        ChromeTraceBackend recorder;
+        Profiler::SetBackend(&recorder);
+        {
+            BE_PROFILE_SCOPE("TraceNameZone");
+            Vector<int> values;
+            values.get_allocator().set_name("TraceNamed");
+            values.reserve(kInts);
+        }
+        Profiler::SetBackend(nullptr);
+        const auto parsed = ParseJson(recorder.WriteJson());
+        ASSERT_TRUE(parsed.has_value());
+        const Json* other = FindJsonMember(*parsed, "otherData");
+        ASSERT_NE(other, nullptr);
+        const Json* rows = FindJsonMember(*other, "allocNames");
+        ASSERT_NE(rows, nullptr);
+        bool found = false;
+        for (const Json& row : *rows) {
+            if (GetJsonString(row, "zone") == String("TraceNameZone") && GetJsonString(row, "name") == String("TraceNamed")) {
+                EXPECT_EQ(GetJsonInt(row, "allocs"), 1);
+                EXPECT_EQ(GetJsonInt(row, "bytes"), static_cast<int64_t>(kInts * sizeof(int)));
+                found = true;
+            }
+        }
+        EXPECT_TRUE(found);
+    }
+
 #else
 
     TEST(AllocTrackerTest, WithoutTheOptionNothingIsCounted) {

@@ -17,6 +17,23 @@ namespace BECore {
         constexpr int64_t kDefaultTopZones = 20;
         constexpr int64_t kMaxTopZones = 1000;
 
+        /// The zone x name rows of EASTL's allocations (Alloc/CLAUDE.md, "Names"), the most bytes first; empty without ENGINE_PROFILER_ALLOC
+        Json DescribeNames(size_t top) {
+            Json names = Json::array();
+            for (const AllocSiteStats& stats : AllocTracker::GetNameStats()) {
+                if (names.size() >= top) {
+                    break;
+                }
+                Json row = Json::object();
+                row["zone"] = stats.ZoneLabel();
+                row["name"] = stats.name != nullptr ? stats.name : "";
+                row["allocs"] = stats.count;
+                row["bytes"] = stats.bytes;
+                names.push_back(std::move(row));
+            }
+            return names;
+        }
+
         Json DescribeFrame(const FrameStats& stats) {
             Json frame = Json::object();
             frame["frame"] = stats.frame;
@@ -178,6 +195,7 @@ namespace BECore {
             Json result = Json::object();
             result["enabled"] = AllocTracker::kEnabled;
             result["zones"] = std::move(zones);
+            result["names"] = DescribeNames(static_cast<size_t>(*top));
             result["totals"] = std::move(described);
             if (reset) {
                 AllocTracker::ResetZoneStats();
@@ -196,9 +214,9 @@ namespace BECore {
                                                {{"frames", "integer", false, Format("How many frames, 1 to {} (default 1)", FrameStatsCollector::kFrameHistory)}}});
         service.DescribeMethod("profiler_dump", {"Writes the Chrome trace of the run (the game has to record one)",
                                                  {{"path", "string", false, Format("A relative file name without '..' (default {})", kDefaultTracePath)}}});
-        service.DescribeMethod("zone_allocs", {"Allocations per profiler zone and the totals",
-                                               {{"top", "integer", false, Format("How many zones, 1 to {} (default {})", kMaxTopZones, kDefaultTopZones)},
-                                                {"reset", "boolean", false, "Clear the per-zone counts after answering"}}});
+        service.DescribeMethod("zone_allocs", {"Allocations per profiler zone, per zone and allocation name (names) and the totals",
+                                               {{"top", "integer", false, Format("How many zones and how many names, 1 to {} (default {})", kMaxTopZones, kDefaultTopZones)},
+                                                {"reset", "boolean", false, "Clear the per-zone and per-name counts after answering"}}});
     }
 
 }  // namespace BECore
