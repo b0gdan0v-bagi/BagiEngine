@@ -57,6 +57,11 @@ namespace BECore {
         void SetStatus(TaskStatus status) {
             _status.store(status, std::memory_order_release);
         }
+
+    private:
+        // The links of Detail::LiveTasks' list, guarded by its mutex: registering a handle costs no allocation
+        TaskHandleBase* _liveNext = nullptr;
+        TaskHandleBase* _livePrev = nullptr;
     };
 
     /**

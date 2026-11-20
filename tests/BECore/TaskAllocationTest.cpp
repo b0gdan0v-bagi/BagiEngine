@@ -35,8 +35,8 @@ namespace BECore::Tests {
         constexpr double kPoolSubmitAllocBudget = 0;
         constexpr double kMainQueueAllocBudget = 0;
         constexpr double kDelayedAllocBudget = 0;
-        constexpr double kRunCoroutineAllocBudget = 3;
-        constexpr double kRunNestedAllocBudget = 4;
+        constexpr double kRunCoroutineAllocBudget = 2;
+        constexpr double kRunNestedAllocBudget = 3;
         constexpr double kYieldInlineAllocBudget = 0;
 
         struct RouteCost {
