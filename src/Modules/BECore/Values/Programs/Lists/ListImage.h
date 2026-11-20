@@ -33,7 +33,7 @@ namespace BECore {
         uint32_t count = 0;
         ListLayout layout = ListLayout::Inline;
 
-        /// The constant of the program: the fields in 13 bytes of a zeroed register, so equal descriptors are equal bytes
+        /// The constant of the program: the fields at the start of a zeroed register, so equal descriptors are equal bytes
         [[nodiscard]] RegisterImage ToImage() const;
         [[nodiscard]] static ListDescriptor FromImage(const RegisterImage& image);
 

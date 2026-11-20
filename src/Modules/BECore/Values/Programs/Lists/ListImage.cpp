@@ -1,6 +1,5 @@
 #include "ListImage.h"
 
-
 namespace BECore {
 
     namespace {
