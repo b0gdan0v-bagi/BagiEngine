@@ -781,6 +781,37 @@ namespace BECore::Kernel {
         Store<T>(regs[ins.dst], Lerp::Apply(from, to, Load<T>(regs[ins.c])));
     }
 
+    /// Runs `LoadConst`: the constant at `imm`, whatever its type
+    inline void ExecuteLoadConst(RegisterImage* regs, const Instruction& ins, Span<const RegisterImage> constants) {
+        ASSERT(ins.imm < constants.size());
+        regs[ins.dst] = constants[ins.imm];
+    }
+
+    /// Runs `Copy`: register `a` into `dst`
+    inline void ExecuteCopy(RegisterImage* regs, const Instruction& ins) {
+        regs[ins.dst] = regs[ins.a];
+    }
+
+    /// Runs `LoadTable`: the entry of the run of constants that `TableIndex` picks for the `int32_t` in register `a`
+    inline void ExecuteLoadTable(RegisterImage* regs, const Instruction& ins, Span<const RegisterImage> constants) {
+        const uint32_t count = TableEntryCount(ins);
+        ASSERT(count > 0 && ins.imm + count <= constants.size());
+        regs[ins.dst] = constants[ins.imm + TableIndex(Load<int32_t>(regs[ins.a]), count)];
+    }
+
+    /// Runs `LoadTableSlot`: `LoadTable` of an `int32_t` field read where `LoadSlot` reads it (the offset in the low half of `imm`, the first entry in the high half)
+    inline void ExecuteLoadTableSlot(RegisterImage* regs, const Instruction& ins, Span<const RegisterImage> constants, const Context& context) {
+        const uint32_t count = TableEntryCount(ins);
+        const uint32_t first = HighHalf(ins.imm);
+        ASSERT(count > 0 && first + count <= constants.size());
+        regs[ins.dst] = constants[first + TableIndex(LoadField<int32_t>(context, ins.a, LowHalf(ins.imm)), count)];
+    }
+
+    /// Writes the result of a program, `ProgramTypeSize(type)` bytes of register @p resultRegister, to @p result
+    inline void StoreResult(const RegisterImage* regs, uint8_t resultRegister, ProgramType type, void* result) {
+        std::memcpy(result, regs[resultRegister].bytes.data(), ProgramTypeSize(type));
+    }
+
     /// Whether `BE_PROGRAM_ROWS` has a row for the operation and the type
     template <typename Op, typename T>
     inline constexpr bool kHasRow = false;

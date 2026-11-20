@@ -15,25 +15,17 @@ namespace BECore {
                     ASSERT(false, "Run: an invalid instruction");
                     break;
                 case Opcode::LoadConst:
-                    ASSERT(ins.imm < constants.size());
-                    regs[ins.dst] = constants[ins.imm];
+                    Kernel::ExecuteLoadConst(regs, ins, constants);
                     break;
                 case Opcode::Copy:
-                    regs[ins.dst] = regs[ins.a];
+                    Kernel::ExecuteCopy(regs, ins);
                     break;
-                case Opcode::LoadTable: {
-                    const uint32_t count = TableEntryCount(ins);
-                    ASSERT(count > 0 && ins.imm + count <= constants.size());
-                    regs[ins.dst] = constants[ins.imm + Kernel::TableIndex(Kernel::Load<int32_t>(regs[ins.a]), count)];
+                case Opcode::LoadTable:
+                    Kernel::ExecuteLoadTable(regs, ins, constants);
                     break;
-                }
-                case Opcode::LoadTableSlot: {
-                    const uint32_t count = TableEntryCount(ins);
-                    const uint32_t first = HighHalf(ins.imm);
-                    ASSERT(count > 0 && first + count <= constants.size());
-                    regs[ins.dst] = constants[first + Kernel::TableIndex(Kernel::LoadField<int32_t>(context, ins.a, LowHalf(ins.imm)), count)];
+                case Opcode::LoadTableSlot:
+                    Kernel::ExecuteLoadTableSlot(regs, ins, constants, context);
                     break;
-                }
 #define BE_PROGRAM_CASE_ROW(Op, Type, Cpp)                                                                                                                                                             \
     case Opcode::Op##Type:                                                                                                                                                                             \
         Kernel::Execute<Kernel::Op, Cpp>(regs, ins, context);                                                                                                                                          \
@@ -60,7 +52,7 @@ namespace BECore {
 #undef BE_PROGRAM_CASE_CONVERSION
             }
         }
-        std::memcpy(result, regs[program.ResultRegister()].bytes.data(), ProgramTypeSize(program.ResultType()));
+        Kernel::StoreResult(regs, program.ResultRegister(), program.ResultType(), result);
     }
 
 }  // namespace BECore
