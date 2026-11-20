@@ -97,6 +97,16 @@ On Emscripten the default is the **threaded** build: `-pthread` everywhere, work
 - A job is a `MoveOnlyFunction<void()>` (`TaskQueue::TaskFunc`), moved scheduler -> queue -> worker, never copied; clearing a queue destroys each job once. A worker keeps the job it ran until it takes another.
 - Priority queues are `Detail::MovableHeap` (`eastl::priority_queue` copies on push); equal keys are not FIFO.
 
+## Memory of tasks
+
+A submitted task allocates nothing in steady state, on every route (`TaskAllocationTest`, the perf entry `task-submit-cost`; the counts need the `macos-profile` preset).
+
+- **The job** is a `MoveOnlyFunction` with the 48-byte inline buffer: the start job of `Run*` and the awaitables' captures (a handle or a `coroutine_handle` plus a `TaskLabel`, 16 bytes) fit. A capture above the buffer is one heap block per job (`kFunctionFitsInline<T>` says which).
+- **The queues** (`TaskQueue`, the inline pool's queue, the scheduler's cooperative queue) are `Detail::MoveRing`: one array that only grows to the peak and never shrinks, so a steady queue never touches the heap. `ProcessMainThreadTasks` and `ProcessDelayedTasks` take the storage of a member batch out under their mutex, so a frame with tasks builds no vector (a nested call finds the member empty and allocates as before).
+- **`LiveTasks`** is an intrusive list through the handles (`_liveNext` / `_livePrev`, guarded by its mutex), not a hash set.
+- **The handle and the coroutine frame** come from `Detail::TaskMemory`: size-class `ConcurrentBlockPool`s (nine classes up to `kMaxPooledSize`, named `Task memory <size>`), because frames of different coroutines differ in size and the thread that ends a task frees them. The promise and `TaskHandle<T>` have a class `operator new` and a **sized** `operator delete`: the size picks the class, so an allocation and its free must agree on it (a virtual destructor passes the dynamic size). A frame above the last class goes to the heap, so a game's coroutine that keeps more than about 1 KB across a suspension still allocates.
+- **Pooled blocks are invisible to `zone_allocs`** (only their pages come from `operator new`) and are counted in the `pools` of `frame_stats`. Pages stay until exit: the memory follows the peak of tasks alive at once.
+
 ## Thread Safety
 
 `TaskManager`, `ThreadPool`, `TaskScheduler`, `TaskHandle<T>` and `CancellationToken` are thread-safe, except the frame-budget state of `TaskScheduler`, which only the one thread of an inline pool touches (details: `TaskScheduler.h`).
