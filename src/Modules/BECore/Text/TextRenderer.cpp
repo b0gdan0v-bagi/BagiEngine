@@ -1,5 +1,6 @@
 #include "TextRenderer.h"
 
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Text/FontAtlas.h>
@@ -39,7 +40,8 @@ namespace BECore {
             if (complete) {
                 return;
             }
-            Vector<uint32_t> glyphs;
+            const ScratchScope scratch;  // the list is read by Prepare() and not kept
+            ArenaVector<uint32_t> glyphs;
             glyphs.reserve(layout.glyphs.size());
             for (const PositionedGlyph& positioned : layout.glyphs) {
                 glyphs.push_back(positioned.glyph);

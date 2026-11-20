@@ -17,6 +17,7 @@ namespace BECore::Tests {
         constexpr float kChildHeight = 20.0f;
         constexpr float kChildBaseWidth = 100.0f;
         constexpr int kChildWidthSteps = 7;
+        constexpr uint64_t kTextAllocationsPerFrame = 4;  ///< measured after the temporaries moved; what is left is the heap result a layout hands to its cache
         constexpr float kOutputWidth = 800.0f;
         constexpr float kOutputHeight = 1200.0f;
 
@@ -149,6 +150,9 @@ namespace BECore::Tests {
         });
 
         EXPECT_FALSE(_renderer->calls.empty()) << "the counter is drawn";
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_LE(allocations, kTextAllocationsPerFrame * kMeasuredFrames);
+        }
         Report("TextInMotion", allocations);
     }
 
