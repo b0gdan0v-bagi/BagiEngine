@@ -156,26 +156,18 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
     },
     {
       "name": "task-submit-cost",
-      "about": "What one submitted task costs on every route of the task system (inline, pool, main-thread queue, delayed, a started coroutine, a nested one, a yielded one; TaskAllocationTest): allocations per task have to stay at 0 and the time per task must not grow (the allocations read 0 in a Release build: the profile preset counts them)",
+      "about": "What one submitted task costs on every route of the task system (inline, pool, main-thread queue, delayed, a started coroutine, a nested one, a yielded one; TaskAllocationTest): allocations per task have to stay at 0 and the time per task must not grow (the bench line carries the allocations only in a build with the tracker, not in the Release one the perf set runs)",
       "fast": true,
       "command": ["{bin}/BagiEngineTests", "--gtest_also_run_disabled_tests", "--gtest_filter=TaskAllocationTest.DISABLED_*"],
       "metrics": {
-        "inline_submit_allocs": {"source": "regex", "pattern": "^TaskAllocCost route=inline-submit allocs_per_task=([0-9.e+-]+)", "unit": "allocs/task", "better": "lower", "gate": false},
-        "inline_submit_ns": {"source": "regex", "pattern": "^TaskAllocCost route=inline-submit allocs_per_task=[0-9.e+-]+ ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
-        "pool_submit_allocs": {"source": "regex", "pattern": "^TaskAllocCost route=pool-submit allocs_per_task=([0-9.e+-]+)", "unit": "allocs/task", "better": "lower", "gate": false},
-        "pool_submit_ns": {"source": "regex", "pattern": "^TaskAllocCost route=pool-submit allocs_per_task=[0-9.e+-]+ ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
-        "main_queue_allocs": {"source": "regex", "pattern": "^TaskAllocCost route=main-queue allocs_per_task=([0-9.e+-]+)", "unit": "allocs/task", "better": "lower", "gate": false},
-        "main_queue_ns": {"source": "regex", "pattern": "^TaskAllocCost route=main-queue allocs_per_task=[0-9.e+-]+ ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
-        "delayed_allocs": {"source": "regex", "pattern": "^TaskAllocCost route=delayed allocs_per_task=([0-9.e+-]+)", "unit": "allocs/task", "better": "lower", "gate": false},
-        "delayed_ns": {"source": "regex", "pattern": "^TaskAllocCost route=delayed allocs_per_task=[0-9.e+-]+ ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
-        "run_coroutine_allocs": {"source": "regex", "pattern": "^TaskAllocCost route=run-coroutine allocs_per_task=([0-9.e+-]+)", "unit": "allocs/task", "better": "lower", "gate": false},
-        "run_coroutine_ns": {"source": "regex", "pattern": "^TaskAllocCost route=run-coroutine allocs_per_task=[0-9.e+-]+ ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
-        "run_nested_allocs": {"source": "regex", "pattern": "^TaskAllocCost route=run-nested allocs_per_task=([0-9.e+-]+)", "unit": "allocs/task", "better": "lower", "gate": false},
-        "run_nested_ns": {"source": "regex", "pattern": "^TaskAllocCost route=run-nested allocs_per_task=[0-9.e+-]+ ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
-        "yield_inline_allocs": {"source": "regex", "pattern": "^TaskAllocCost route=yield-inline allocs_per_task=([0-9.e+-]+)", "unit": "allocs/task", "better": "lower", "gate": false},
-        "yield_inline_ns": {"source": "regex", "pattern": "^TaskAllocCost route=yield-inline allocs_per_task=[0-9.e+-]+ ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
-        "run_coroutine_4_workers_allocs": {"source": "regex", "pattern": "^TaskAllocCost route=run-coroutine-4-workers allocs_per_task=([0-9.e+-]+)", "unit": "allocs/task", "better": "lower", "gate": false},
-        "run_coroutine_4_workers_ns": {"source": "regex", "pattern": "^TaskAllocCost route=run-coroutine-4-workers allocs_per_task=[0-9.e+-]+ ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false}
+        "inline_submit_ns": {"source": "regex", "pattern": "^TaskAllocCost route=inline-submit ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
+        "pool_submit_ns": {"source": "regex", "pattern": "^TaskAllocCost route=pool-submit ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
+        "main_queue_ns": {"source": "regex", "pattern": "^TaskAllocCost route=main-queue ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
+        "delayed_ns": {"source": "regex", "pattern": "^TaskAllocCost route=delayed ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
+        "run_coroutine_ns": {"source": "regex", "pattern": "^TaskAllocCost route=run-coroutine ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
+        "run_nested_ns": {"source": "regex", "pattern": "^TaskAllocCost route=run-nested ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
+        "yield_inline_ns": {"source": "regex", "pattern": "^TaskAllocCost route=yield-inline ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
+        "run_coroutine_4_workers_ns": {"source": "regex", "pattern": "^TaskAllocCost route=run-coroutine-4-workers ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false}
       }
     },
     {

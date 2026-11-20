@@ -27,7 +27,8 @@ namespace BECore::Tests {
         /// Larger than the last class: the frame of a coroutine that keeps this much across a suspension lives on the heap
         constexpr size_t kHeapFrameBytes = 4 * kBiggestPooled;
 
-        /// Live blocks of every class together; exact while no other thread allocates a task, which is the case in these tests (no pool, no scheduler)
+        /// Live blocks of every class together. Tasks other tests left parked stay in the count and a task made on another thread changes it, so only
+        /// the difference between two readings of one test means something, and only while the test runs no pool or scheduler
         size_t LiveBlocks() {
             size_t total = 0;
             for (size_t i = 0; i < TaskMemory::kClassCount; ++i) {
@@ -70,12 +71,14 @@ namespace BECore::Tests {
             co_return;
         }
 
+        /// Written before and after the suspension: the buffer's address escapes on both sides, so it is part of the frame at any optimisation level
+        char* volatile gEscape = nullptr;
+
         Task<void> BigFrame() {
             char buffer[kHeapFrameBytes];
-            // The address escapes on both sides of the suspension, so the buffer is part of the frame at any optimisation level
-            asm volatile("" : : "r"(buffer) : "memory");
+            gEscape = buffer;
             co_await std::suspend_always{};
-            asm volatile("" : : "r"(buffer) : "memory");
+            gEscape = buffer;
         }
 
     }  // namespace
@@ -88,7 +91,7 @@ namespace BECore::Tests {
             if (index > 0) {
                 EXPECT_LT(TaskMemory::GetClassSize(index - 1), size) << size;
             }
-            EXPECT_GE(TaskMemory::GetPool(index).GetBlockSize(), TaskMemory::GetClassSize(index));
+            EXPECT_EQ(TaskMemory::GetPool(index).GetBlockSize(), TaskMemory::GetClassSize(index));
         }
         EXPECT_EQ(TaskMemory::GetClassIndex(kBiggestPooled + 1), TaskMemory::kClassCount);
     }

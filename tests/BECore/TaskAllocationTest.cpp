@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <iostream>
+#include <thread>
 
 namespace BECore::Tests {
 
@@ -30,6 +31,26 @@ namespace BECore::Tests {
 
         // Allocations of a route are the totals of the process: a route that runs on workers allocates on their threads too, and only the totals
         // see them. The test executable runs no other thread that allocates while a route runs; the tolerance above covers a stray allocation.
+        //
+        // A route that runs on workers holds every job at a gate until the pass has queued all of them. Without it the number of jobs alive at once
+        // (frames, handles, ring length) depends on how fast the workers drain, and a loaded machine makes a measured pass reach a higher peak than
+        // the warm-up and grow the pools. With it both passes peak at the same count.
+
+        /// Opened by the submitting thread after the last job of a pass is queued
+        class Gate {
+        public:
+            void Open() {
+                _open.store(true, std::memory_order_release);
+            }
+            void Wait() const {
+                while (!_open.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+            }
+
+        private:
+            std::atomic<bool> _open{false};
+        };
 
         struct RouteCost {
             uint64_t ran = 0;
@@ -91,9 +112,14 @@ namespace BECore::Tests {
             ThreadPool pool(kPoolWorkers);
             const RouteCost cost = MeasureRoute(tasks, [&](uint64_t count) {
                 std::atomic<uint64_t> ran{0};
+                Gate gate;
                 for (uint64_t i = 0; i < count; ++i) {
-                    pool.Submit([&ran] { ran.fetch_add(1, std::memory_order_relaxed); });
+                    pool.Submit([&ran, &gate] {
+                        gate.Wait();
+                        ran.fetch_add(1, std::memory_order_relaxed);
+                    });
                 }
+                gate.Open();
                 EXPECT_TRUE(WaitUntil([&] { return ran.load(std::memory_order_acquire) == count; }));
                 return ran.load(std::memory_order_acquire);
             });
@@ -144,7 +170,8 @@ namespace BECore::Tests {
             });
         }
 
-        Task<void> CountingTask(std::atomic<uint64_t>& ran) {
+        Task<void> CountingTask(std::atomic<uint64_t>& ran, const Gate& gate) {
+            gate.Wait();
             ran.fetch_add(1, std::memory_order_relaxed);
             co_return;
         }
@@ -153,7 +180,8 @@ namespace BECore::Tests {
             co_return 1;
         }
 
-        Task<void> ParentTask(std::atomic<uint64_t>& ran) {
+        Task<void> ParentTask(std::atomic<uint64_t>& ran, const Gate& gate) {
+            gate.Wait();
             const std::expected<int, TaskError> value = co_await ChildTask();
             ran.fetch_add(static_cast<uint64_t>(value.value_or(0)), std::memory_order_relaxed);
             co_return;
@@ -165,20 +193,22 @@ namespace BECore::Tests {
             EngineEnvironment::EnsureCoreServices();
             return MeasureRoute(tasks, [&](uint64_t count) {
                 std::atomic<uint64_t> ran{0};
+                Gate gate;
                 for (uint64_t i = 0; i < count; ++i) {
-                    TaskManager::GetInstance().Run(makeTask(ran));
+                    TaskManager::GetInstance().Run(makeTask(ran, gate));
                 }
+                gate.Open();
                 EXPECT_TRUE(WaitUntil([&] { return ran.load(std::memory_order_acquire) == count; }));
                 return ran.load(std::memory_order_acquire);
             });
         }
 
         RouteCost MeasureRunCoroutine(uint64_t tasks) {
-            return MeasureRun(tasks, [](std::atomic<uint64_t>& ran) { return CountingTask(ran); });
+            return MeasureRun(tasks, [](std::atomic<uint64_t>& ran, const Gate& gate) { return CountingTask(ran, gate); });
         }
 
         RouteCost MeasureRunNested(uint64_t tasks) {
-            return MeasureRun(tasks, [](std::atomic<uint64_t>& ran) { return ParentTask(ran); });
+            return MeasureRun(tasks, [](std::atomic<uint64_t>& ran, const Gate& gate) { return ParentTask(ran, gate); });
         }
 
         /// The start job of TaskManager::Run (MakeStartTask is private) on a pool of its own: the handle, the frame and the job are taken and given back by different threads
@@ -189,8 +219,9 @@ namespace BECore::Tests {
             scheduler.Initialize(&pool);
             const RouteCost cost = MeasureRoute(tasks, [&](uint64_t count) {
                 std::atomic<uint64_t> ran{0};
+                Gate gate;
                 for (uint64_t i = 0; i < count; ++i) {
-                    auto handle = MakeIntrusive<TaskHandle<void>>(CountingTask(ran));
+                    auto handle = MakeIntrusive<TaskHandle<void>>(CountingTask(ran, gate));
                     scheduler.Schedule(
                         [handle = std::move(handle)]() mutable {
                             auto owned = std::move(handle);
@@ -198,6 +229,7 @@ namespace BECore::Tests {
                         },
                         TaskPriority::Normal, ThreadType::Background);
                 }
+                gate.Open();
                 EXPECT_TRUE(WaitUntil([&] { return ran.load(std::memory_order_acquire) == count; }));
                 return ran.load(std::memory_order_acquire);
             });
@@ -297,7 +329,13 @@ namespace BECore::Tests {
         for (const Route* route : kRoutes) {
             const RouteCost cost = route->measure(kBenchTasks);
             EXPECT_EQ(cost.ran, kBenchTasks) << route->name;
-            std::cout << "TaskAllocCost route=" << route->name << " allocs_per_task=" << AllocationsPerTask(cost, kBenchTasks) << " ns_per_task=" << cost.nsPerTask << "\n";
+            std::cout << "TaskAllocCost route=" << route->name << " ns_per_task=" << cost.nsPerTask;
+            if constexpr (AllocTracker::kEnabled) {
+                std::cout << " allocs_per_task=" << AllocationsPerTask(cost, kBenchTasks);
+            } else {
+                std::cout << " allocs n/a";
+            }
+            std::cout << "\n";
         }
     }
 
