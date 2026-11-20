@@ -6,9 +6,12 @@
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Values/Context.h>
 #include <BECore/Values/Programs/Domain/ProgramDomain.h>
-#include <Common/Require.h>
+#include <BECore/Values/Programs/Native/NativePrograms.h>
 #include <bit>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <expected>
 
 namespace BECore::ProgramDomainData {
 
@@ -163,6 +166,16 @@ namespace BECore::ProgramDomainData {
         return DomainUnregistered{value};
     }
 
+    /// The toys are registered by the tests and by the tool that writes the native set, which has no gtest: a refusal stops the process with its reason
+    template <typename T>
+    [[nodiscard]] T Registered(const std::expected<T, String>& result) {
+        if (!result.has_value()) {
+            std::fprintf(stderr, "the toy domain registration was refused: %s\n", result.error().c_str());
+            std::abort();
+        }
+        return *result;
+    }
+
     /// The ids of the toys, registered once per process: the registry never forgets, and every test of the process sees the same ones
     struct DomainToys {
         DomainTypeId mask = kNoDomainType;
@@ -180,27 +193,31 @@ namespace BECore::ProgramDomainData {
         DomainOperationId wallsOfRow = 0;
         DomainOperationId pairOf = 0;
         DomainOperationId weightCount = 0;
+        /// `ProgramDomain::Fingerprint()` right after the toys, before a test adds an operation of its own: what the tool of the native set had
+        uint64_t fingerprint = 0;
     };
 
     [[nodiscard]] inline const DomainToys& RegisterDomainToys() {
         static const DomainToys toys = [] {
-            using Tests::Require;
             DomainToys made;
-            made.mask = Require(ProgramDomain::RegisterType<DomainBits256>("mask"));
-            made.pair = Require(ProgramDomain::RegisterType<DomainPair>("pair"));
-            made.weighted = Require(ProgramDomain::RegisterType<DomainWeighted>("weighted"));
-            made.bitsAnd = Require(ProgramDomain::AddOperation<&BitsAnd>("and_mask"));
-            made.bitsOr = Require(ProgramDomain::AddOperation<&BitsOr>("or_mask"));
-            made.majority = Require(ProgramDomain::AddOperation<&BitsMajority>("majority"));
-            made.shift = Require(ProgramDomain::AddOperation<&BitsShift>("shift"));
-            made.popcount = Require(ProgramDomain::AddOperation<&BitsPopcount>("popcount"));
-            made.bit = Require(ProgramDomain::AddOperation<&BitsBit>("bit"));
-            made.cell = Require(ProgramDomain::AddOperation<&BitsCell>("cell"));
-            made.any = Require(ProgramDomain::AddOperation<&BitsAny>("any"));
-            made.walls = Require(ProgramDomain::AddOperation<&BoardWalls>("walls"));
-            made.wallsOfRow = Require(ProgramDomain::AddOperation<&BoardWallsOfRow>("walls_of_row"));
-            made.pairOf = Require(ProgramDomain::AddOperation<&PairOf>("pair_of"));
-            made.weightCount = Require(ProgramDomain::AddOperation<&WeightCount>("weight_count"));
+            made.mask = Registered(ProgramDomain::RegisterType<DomainBits256>("mask"));
+            made.pair = Registered(ProgramDomain::RegisterType<DomainPair>("pair"));
+            made.weighted = Registered(ProgramDomain::RegisterType<DomainWeighted>("weighted"));
+            made.bitsAnd = Registered(ProgramDomain::AddOperation<&BitsAnd>("and_mask"));
+            made.bitsOr = Registered(ProgramDomain::AddOperation<&BitsOr>("or_mask"));
+            made.majority = Registered(ProgramDomain::AddOperation<&BitsMajority>("majority"));
+            made.shift = Registered(ProgramDomain::AddOperation<&BitsShift>("shift"));
+            made.popcount = Registered(ProgramDomain::AddOperation<&BitsPopcount>("popcount"));
+            made.bit = Registered(ProgramDomain::AddOperation<&BitsBit>("bit"));
+            made.cell = Registered(ProgramDomain::AddOperation<&BitsCell>("cell"));
+            made.any = Registered(ProgramDomain::AddOperation<&BitsAny>("any"));
+            made.walls = Registered(ProgramDomain::AddOperation<&BoardWalls>("walls"));
+            made.wallsOfRow = Registered(ProgramDomain::AddOperation<&BoardWallsOfRow>("walls_of_row"));
+            made.pairOf = Registered(ProgramDomain::AddOperation<&PairOf>("pair_of"));
+            made.weightCount = Registered(ProgramDomain::AddOperation<&WeightCount>("weight_count"));
+            made.fingerprint = ProgramDomain::Fingerprint();
+            // The generated set of BagiEngineTests binds while the registry equals the tool's, which is now and never again once a test adds an operation
+            NativePrograms::BindPending();
             return made;
         }();
         return toys;

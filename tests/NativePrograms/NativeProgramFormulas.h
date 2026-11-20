@@ -139,6 +139,28 @@ namespace BECore::Tests {
     /// A text is a program only as a choice between fields: the constant of a literal is the address of an entry of this process, which no generated function can hold
     inline constexpr StringView kNativeTextFormulas[] = {"select(a.flag, a.text, b.text)"};
 
+    // The formulas over the toy mask and its operations (`ProgramDomainTypes.h`: the tool registers them before it compiles). Each calls the game's operations, so the
+    // programs carry the fingerprint of the registry (`NativeProgramEntry::domainFingerprint`); `a`, `b` and `c` hold a mask and a pair each.
+
+    inline constexpr StringView kNativeDomainBoolFormulas[] = {
+        "popcount(or_mask(and_mask(a.mask, shift(b.mask, East)), c.mask)) > 3",
+        "a.mask == b.mask",
+        "any(and_mask(a.mask, c.mask)) && a.flag",
+    };
+
+    inline constexpr StringView kNativeDomainIntFormulas[] = {
+        "popcount(shift(a.mask, South)) + a.i32 % 7",
+        "popcount(bit(a.i32)) * 2 + popcount(cell(b.i32, c.i32))",
+    };
+
+    inline constexpr StringView kNativeDomainMaskFormulas[] = {
+        "select(any(and_mask(a.mask, b.mask)), majority(a.mask, b.mask, c.mask), shift(c.mask, West))",
+        "or_mask(a.mask, and_mask(shift(b.mask, North), c.mask))",
+        "cell(a.i32, b.i32)",
+    };
+
+    inline constexpr StringView kNativeDomainPairFormulas[] = {"pair_of(a.i64, a.i64 * 2)", "select(a.flag, a.pair, pair_of(1, 2))"};
+
     /**
      * @brief A right-nested sum of `kMaxProgramRegisters - 1` additions: every level keeps one more register alive, so the program uses all of them
      *

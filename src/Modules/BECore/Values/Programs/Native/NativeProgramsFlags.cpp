@@ -79,6 +79,7 @@ namespace BECore {
             NativePrograms::SetEnabled(false);
         }
         NativePrograms::SetWarnOnMiss(NativePrograms::HasGeneratedCode());
+        NativePrograms::BindPending();
     }
 
     void ApplyNativeProgramsFlags() {
