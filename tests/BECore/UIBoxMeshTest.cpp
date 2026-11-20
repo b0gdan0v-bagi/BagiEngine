@@ -437,6 +437,29 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(ExpectWellFormed(mesh, "shadow"));
     }
 
+    TEST(UIBoxMeshTest, TheOutermostRingOfAShadowIsTheArcPointByPoint) {
+        const Rect rect{20, 20, 100, 60};
+        const float radius = 10.0f;
+        const float blur = 12.0f;
+        const float ppu = 2.0f;
+        const Mesh mesh = Shadow(rect, UICorners::Uniform(radius), {0, 0, blur, 0, {10, 20, 30, 200}}, ppu);
+
+        const float outer = radius + blur;
+        const int segments = UIBoxMesh::CornerSegments(outer * ppu);
+        const float centersX[4] = {rect.x + radius, rect.x + rect.w - radius, rect.x + rect.w - radius, rect.x + radius};
+        const float centersY[4] = {rect.y + radius, rect.y + radius, rect.y + rect.h - radius, rect.y + rect.h - radius};
+        const float startAngles[4] = {kPi, kPi * 1.5f, 0.0f, kPi * 0.5f};
+        ASSERT_GE(mesh.vertices.size(), static_cast<size_t>(4 * (segments + 1)));
+        size_t index = 0;
+        for (int corner = 0; corner < 4; ++corner) {
+            for (int step = 0; step <= segments; ++step, ++index) {
+                const float angle = startAngles[corner] + kPi * 0.5f * static_cast<float>(step) / static_cast<float>(segments);
+                EXPECT_NEAR(mesh.vertices[index].x, centersX[corner] + outer * std::cos(angle), 1e-4f) << "corner " << corner << " step " << step;
+                EXPECT_NEAR(mesh.vertices[index].y, centersY[corner] + outer * std::sin(angle), 1e-4f) << "corner " << corner << " step " << step;
+            }
+        }
+    }
+
     TEST(UIBoxMeshTest, AShadowFollowsTheOffsetAndTheSpread) {
         const Rect rect{50, 50, 60, 40};
         const Mesh plain = Shadow(rect, {}, {0, 0, 8, 0, kBlue}, 1.0f);

@@ -196,6 +196,21 @@ namespace BECore {
                 pointsPerRing += range.last - range.first + 1;
             }
 
+            // The direction of each point of a ring depends on the corner and the step, not on the ring: one cos and sin per point for all the rings
+            struct Direction {
+                float cos;
+                float sin;
+            };
+            Direction directions[UIBoxMesh::kMaxRingPoints];
+            int directionCount = 0;
+            for (int c = firstCorner; c <= lastCorner; ++c) {
+                const StepRange range = VisitedSteps(path, c, segments[c]);
+                for (int step = range.first; step <= range.last; ++step) {
+                    const float angle = kCornerStartAngle[c] + (segments[c] > 0 ? kHalfPi * static_cast<float>(step) / static_cast<float>(segments[c]) : 0.0f);
+                    directions[directionCount++] = {std::cos(angle), std::sin(angle)};
+                }
+            }
+
             const int firstVertex = static_cast<int>(vertices.size());
             Array<Arc, kCornerCount> lastArcs;
             for (int r = 0; r < ringCount; ++r) {
@@ -203,14 +218,15 @@ namespace BECore {
                 const float offset = std::max(rings[r].offset, -halfShortSide);
                 const auto arcs = MakeArcs(rect, baseCorners, offset, roundOutwards);
                 lastArcs = arcs;
+                int direction = 0;
                 for (int c = firstCorner; c <= lastCorner; ++c) {
                     const Arc& arc = arcs[c];
                     const StepRange range = VisitedSteps(path, c, segments[c]);
                     for (int step = range.first; step <= range.last; ++step) {
-                        const float angle = kCornerStartAngle[c] + (segments[c] > 0 ? kHalfPi * static_cast<float>(step) / static_cast<float>(segments[c]) : 0.0f);
+                        const Direction& unit = directions[direction++];
                         PointInfo point;
-                        point.x = arc.centerX + arc.radius * std::cos(angle);
-                        point.y = arc.centerY + arc.radius * std::sin(angle);
+                        point.x = arc.centerX + arc.radius * unit.cos;
+                        point.y = arc.centerY + arc.radius * unit.sin;
                         point.corner = c;
                         point.step = step;
                         point.segments = segments[c];
