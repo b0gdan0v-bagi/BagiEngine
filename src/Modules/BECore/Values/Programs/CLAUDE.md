@@ -13,6 +13,7 @@ A formula of a content file (`expr="caster.attack * 2"`) becomes a `Program`: st
 | `Program.h/.cpp` | `Program` (immutable), `ProgramPool`, `ProgramError` |
 | `ProgramBuilder.h/.cpp` | registers, constants, `Emit`, `Finish`; what the compiler and the tests assemble programs with |
 | `Interpreter.h/.cpp` | `Run`: the only `switch`; `Run<T>(id, ...)` is what `Evaluate` calls |
+| `Domain/` | `ProgramDomain`: a game's own value types and operations, registered at run time: `Domain/CLAUDE.md` |
 | `Native/` | generated C++ for programs, opt-in per executable: `Native/CLAUDE.md` |
 | `ExprAst.h/.cpp` | the untyped tree (`ExprNode` arena), `ExprLimits`, `PrintExpression` |
 | `ExprLexer.h/.cpp`, `ExprParser.h/.cpp` | text to tokens, tokens to the tree |
