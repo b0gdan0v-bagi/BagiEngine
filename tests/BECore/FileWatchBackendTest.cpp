@@ -128,6 +128,20 @@ namespace BECore::Tests {
             }
         };
 #endif
+#if defined(__linux__)
+        struct InotifyMaker {
+            static IntrusivePtrAtomic<IFileWatchBackend> Make() {
+                return MakeInotifyFileWatchBackend();
+            }
+        };
+#endif
+#if defined(_WIN32)
+        struct WindowsMaker {
+            static IntrusivePtrAtomic<IFileWatchBackend> Make() {
+                return MakeWindowsFileWatchBackend();
+            }
+        };
+#endif
 
     }  // namespace
 
@@ -152,6 +166,10 @@ namespace BECore::Tests {
 
 #if defined(__APPLE__)
     using Backends = ::testing::Types<PollingMaker, FSEventsMaker>;
+#elif defined(__linux__)
+    using Backends = ::testing::Types<PollingMaker, InotifyMaker>;
+#elif defined(_WIN32)
+    using Backends = ::testing::Types<PollingMaker, WindowsMaker>;
 #else
     using Backends = ::testing::Types<PollingMaker>;
 #endif
@@ -296,6 +314,36 @@ namespace BECore::Tests {
         EXPECT_FALSE(H().Sink().Has(deep));
     }
 #endif
+
+    /// What a backend does when its queue overflowed
+    class FileWatchPostTreeTest : public ::testing::Test {
+    protected:
+        void SetUp() override {
+            _folder.emplace("fwt");
+            MakeDirectory(Dir() / "sub");
+            WriteFile(Dir() / "a.xml", "one");
+            WriteFile(Dir() / "sub" / "b.xml", "two");
+        }
+
+        std::filesystem::path Dir() const {
+            return TestTempDirectory("fwt");
+        }
+
+        Optional<TestTempFolder> _folder;
+        RecordingSink _sink;
+    };
+
+    TEST_F(FileWatchPostTreeTest, ARecursiveRescanPostsTheFilesOfTheWholeTree) {
+        PostTree(_sink, Dir(), true);
+        EXPECT_TRUE(_sink.Has(Dir() / "a.xml"));
+        EXPECT_TRUE(_sink.Has(Dir() / "sub" / "b.xml"));
+    }
+
+    TEST_F(FileWatchPostTreeTest, ANonRecursiveRescanStaysInTheFolder) {
+        PostTree(_sink, Dir(), false);
+        EXPECT_TRUE(_sink.Has(Dir() / "a.xml"));
+        EXPECT_FALSE(_sink.Has(Dir() / "sub" / "b.xml"));
+    }
 
     /// The polling backend alone: its clock is a parameter, so these cases never sleep or wait
     class FileWatchBackendPollingTest : public ::testing::Test {

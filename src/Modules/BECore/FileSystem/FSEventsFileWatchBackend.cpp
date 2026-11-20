@@ -49,6 +49,22 @@ namespace BECore {
             UniquePtr<Snapshot> snapshot;
         };
 
+        /// Posts every file below @p realDir (a folder of @p watch) in the form the facade added, as many as the watch reaches
+        void PostSubtree(IFileWatchSink& sink, const Watch& watch, const std::filesystem::path& realDir) {
+            if (!watch.recursive && realDir != watch.real) {
+                return;
+            }
+            std::error_code error;
+            std::filesystem::recursive_directory_iterator it(realDir, error);  //-NoStd: the rare rescan after lost events, no engine type walks a folder
+            const std::filesystem::recursive_directory_iterator end;           //-NoStd: same
+            for (; !error && it != end; it.increment(error)) {
+                sink.Post((watch.reported / it->path().lexically_relative(watch.real)).lexically_normal());
+                if (!watch.recursive) {
+                    it.disable_recursion_pending();
+                }
+            }
+        }
+
         /**
          * One FSEventStream for the whole set of watched directories, delivered on a serial dispatch queue of the system: no thread of ours.
          * The stream is rebuilt when the set changes. FSEvents always watches the subtree, so a non-recursive directory filters the deeper paths out.
@@ -179,8 +195,8 @@ namespace BECore {
                             continue;
                         }
                         if (lostEvents) {
-                            // The events of a subtree are gone; the directory itself tells the facade to look at everything it owns
-                            snapshot.sink->Post(watch.reported);
+                            // The events of this subtree are gone: everything in it may have changed
+                            PostSubtree(*snapshot.sink, watch, path);
                             continue;
                         }
                         // The directory itself changes whenever something in it does and says nothing the event of the file did not

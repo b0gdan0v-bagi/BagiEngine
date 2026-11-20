@@ -9,8 +9,16 @@ namespace BECore {
     IntrusivePtrAtomic<IFileWatchBackend> MakePlatformFileWatchBackend();
 
 #if defined(__APPLE__)
-    /// FSEvents (`FSEventsFileWatchBackend.cpp`); the factory above returns it, and the contract tests name it
+    /// FSEvents (`FSEventsFileWatchBackend.cpp`)
     IntrusivePtrAtomic<IFileWatchBackend> MakeFSEventsFileWatchBackend();
+#endif
+#if defined(__linux__)
+    /// inotify (`InotifyFileWatchBackend.cpp`)
+    IntrusivePtrAtomic<IFileWatchBackend> MakeInotifyFileWatchBackend();
+#endif
+#if defined(_WIN32)
+    /// ReadDirectoryChangesW (`WindowsFileWatchBackend.cpp`)
+    IntrusivePtrAtomic<IFileWatchBackend> MakeWindowsFileWatchBackend();
 #endif
 
 }  // namespace BECore

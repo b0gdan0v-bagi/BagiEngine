@@ -2,6 +2,7 @@
 
 #include <BECore/RefCounted/RefCounted.h>
 #include <filesystem>
+#include <system_error>
 
 namespace BECore {
 
@@ -41,5 +42,22 @@ namespace BECore {
         /// Stops every thread and watch of the backend. No Post happens after it returns
         virtual void Shutdown() = 0;
     };
+
+    /**
+     * For a backend whose queue overflowed (events were lost): posts every entry below @p dir, so the facade learns of what may have changed.
+     * The facade routes files, not folders, so posting the folder itself would tell it nothing. Errors end the walk quietly: a folder
+     * that vanished is a change the backend reports anyway.
+     */
+    inline void PostTree(IFileWatchSink& sink, const std::filesystem::path& dir, bool recursive) {
+        std::error_code error;
+        std::filesystem::recursive_directory_iterator it(dir, error);  //-NoStd: the rare rescan after an overflow, no engine type walks a folder
+        const std::filesystem::recursive_directory_iterator end;       //-NoStd: same
+        for (; !error && it != end; it.increment(error)) {
+            sink.Post(it->path());
+            if (!recursive) {
+                it.disable_recursion_pending();
+            }
+        }
+    }
 
 }  // namespace BECore
