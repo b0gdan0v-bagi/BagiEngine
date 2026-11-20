@@ -2,6 +2,7 @@
 
 #include <BECore/FileSystem/IFileWatchBackend.h>
 #include <BECore/FileSystem/PlatformFileWatchBackend.h>
+#include <BECore/FileSystem/PollingFileWatchBackend.h>
 #include <CoreServices/CoreServices.h>
 #include <dispatch/dispatch.h>
 #include <iterator>
@@ -18,7 +19,79 @@ namespace BECore {
 
         constexpr FSEventStreamEventFlags kLostEventsFlags = kFSEventStreamEventFlagMustScanSubDirs | kFSEventStreamEventFlagUserDropped | kFSEventStreamEventFlagKernelDropped;
 
+        /// How often the safety poll looks; the stream is the fast path, the poll only catches what fseventsd never delivers
+        constexpr double kSafetyPollSeconds = 2.0;
+
+        /// How long a failed stream waits before the next try
+        constexpr double kStreamRetrySeconds = 1.0;
+
         void DoNothing(void* /*context*/) {}
+
+        String PathKey(const std::filesystem::path& path) {
+            return String(path.lexically_normal().c_str());
+        }
+
+        /**
+         * Joins the two sources of one directory set: the stream (dispatch queue) and the safety poll (main thread). A path the stream
+         * already reported is dropped when the poll finds the same change, so one save is one post; the set is forgotten after every poll
+         * because the poll that follows a change is the first that can see it.
+         */
+        class SeenFilter {
+        public:
+            void SetTarget(IFileWatchSink* target) {
+                LockGuard lock(_mutex);
+                _target = target;
+            }
+
+            void PostFromStream(const std::filesystem::path& path) {
+                LockGuard lock(_mutex);
+                _seen.insert(PathKey(path));
+                if (_target != nullptr) {
+                    _target->Post(path);
+                }
+            }
+
+            void PostFromPoll(const std::filesystem::path& path) {
+                LockGuard lock(_mutex);
+                if (_seen.erase(PathKey(path)) == 0 && _target != nullptr) {
+                    _target->Post(path);
+                }
+            }
+
+            void Forget() {
+                LockGuard lock(_mutex);
+                _seen.clear();
+            }
+
+        private:
+            Mutex _mutex{BE_LOCK_SITE("FSEvents seen paths")};
+            IFileWatchSink* _target = nullptr;
+            HashSet<String> _seen;
+        };
+
+        class StreamSink final : public IFileWatchSink {
+        public:
+            explicit StreamSink(SeenFilter& filter) : _filter(filter) {}
+
+            void Post(const std::filesystem::path& realPath) override {
+                _filter.PostFromStream(realPath);
+            }
+
+        private:
+            SeenFilter& _filter;
+        };
+
+        class PollSink final : public IFileWatchSink {
+        public:
+            explicit PollSink(SeenFilter& filter) : _filter(filter) {}
+
+            void Post(const std::filesystem::path& realPath) override {
+                _filter.PostFromPoll(realPath);
+            }
+
+        private:
+            SeenFilter& _filter;
+        };
 
         /// Whether @p path is @p root or lies below it
         bool IsUnder(const std::filesystem::path& path, const std::filesystem::path& root) {
@@ -68,9 +141,16 @@ namespace BECore {
         /**
          * One FSEventStream for the whole set of watched directories, delivered on a serial dispatch queue of the system: no thread of ours.
          * The stream is rebuilt when the set changes. FSEvents always watches the subtree, so a non-recursive directory filters the deeper paths out.
+         *
+         * fseventsd drops events without a word when the machine makes many file events (no flag reaches the stream), and a stream can fail to
+         * start, so the same directories are also watched by a slow PollingFileWatchBackend: the stream gives the latency, the poll the guarantee.
          */
         class FSEventsFileWatchBackend final : public IFileWatchBackend {
         public:
+            FSEventsFileWatchBackend() {
+                _poll.SetSink(&_pollSink);
+            }
+
             ~FSEventsFileWatchBackend() override {
                 Shutdown();
             }
@@ -94,6 +174,7 @@ namespace BECore {
                     known->real = realPath.lexically_normal();
                 }
                 known->recursive = recursive;
+                _poll.AddDirectory(realPath, recursive);
                 Rebuild();
             }
 
@@ -101,6 +182,7 @@ namespace BECore {
                 for (size_t i = 0; i < _watches.size(); ++i) {
                     if (_watches[i].reported == realPath) {
                         _watches.erase(_watches.begin() + static_cast<ptrdiff_t>(i));
+                        _poll.RemoveDirectory(realPath);
                         Rebuild();
                         return;
                     }
@@ -108,11 +190,25 @@ namespace BECore {
             }
 
             void SetSink(IFileWatchSink* sink) override {
-                _sink = sink;
+                _filter.SetTarget(sink);
+            }
+
+            void Tick(double nowSeconds) override {
+                if (_streamFailed && nowSeconds >= _nextStreamRetryAt) {
+                    _nextStreamRetryAt = nowSeconds + kStreamRetrySeconds;
+                    Rebuild();
+                }
+                if (nowSeconds < _nextSafetyPollAt) {
+                    return;
+                }
+                _nextSafetyPollAt = nowSeconds + kSafetyPollSeconds;
+                _poll.Tick(nowSeconds);
+                _filter.Forget();
             }
 
             void Shutdown() override {
                 _watches.clear();
+                _poll.Shutdown();
                 Rebuild();
                 if (_queue != nullptr) {
                     dispatch_release(_queue);
@@ -131,12 +227,14 @@ namespace BECore {
                     DestroyStream(_stream);
                 }
                 _stream = eastl::move(next);
+                // A stream that did not start leaves its directories to the poll until a later try succeeds
+                _streamFailed = !_watches.empty() && _stream.ref == nullptr;
             }
 
             Stream CreateStream() {
                 Stream stream;
                 stream.snapshot = MakeUnique<Snapshot>();
-                stream.snapshot->sink = _sink;
+                stream.snapshot->sink = &_streamSink;
                 stream.snapshot->watches = _watches;
 
                 CFMutableArrayRef paths = CFArrayCreateMutable(kCFAllocatorDefault, static_cast<CFIndex>(_watches.size()), &kCFTypeArrayCallBacks);
@@ -215,7 +313,13 @@ namespace BECore {
                 }
             }
 
-            IFileWatchSink* _sink = nullptr;
+            SeenFilter _filter;
+            StreamSink _streamSink{_filter};
+            PollSink _pollSink{_filter};
+            PollingFileWatchBackend _poll;
+            double _nextSafetyPollAt = 0.0;
+            double _nextStreamRetryAt = 0.0;
+            bool _streamFailed = false;
             Vector<Watch> _watches;
             Stream _stream;
             dispatch_queue_t _queue = nullptr;

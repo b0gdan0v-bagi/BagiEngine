@@ -303,6 +303,25 @@ namespace BECore::Tests {
         EXPECT_FALSE(H().Sink().Has(H().Dir()));
     }
 
+    /// The safety poll finds every change the stream finds too; one save must still be one post
+    TEST_F(FileWatchBackendFSEventsTest, AChangeTheStreamReportedIsNotPostedAgainBySafetyPoll) {
+        H().Backend().AddDirectory(H().Dir(), false);
+        const std::filesystem::path file = H().Dir() / "a.xml";
+        H().Write(file, "one");
+        // No Tick until the stream has posted, so the poll cannot be the one that reported it. fseventsd on a machine under a storm
+        // of file events delivers nothing, and then there is no post of the stream to deduplicate
+        if (!WaitUntil([this, &file] { return H().Sink().Has(file); }, std::chrono::seconds(5))) {
+            GTEST_SKIP() << "fseventsd delivered nothing";
+        }
+        // The stream may still deliver a second event of the same write
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        H().Sink().Clear();
+        for (int i = 0; i < 4; ++i) {
+            H().Pump();
+        }
+        EXPECT_FALSE(H().Sink().Has(file));
+    }
+
     TEST_F(FileWatchBackendFSEventsTest, ANonRecursiveDirectoryDoesNotReportItsSubfolders) {
         MakeDirectory(H().Dir() / "sub");
         H().Backend().AddDirectory(H().Dir(), false);

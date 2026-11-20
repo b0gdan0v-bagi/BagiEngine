@@ -188,6 +188,7 @@ namespace BECore {
 
     void CoreManager::OnIdleCycle(PassKey<Application>) {
         _eventsProviderManager.ProcessEvents();  // the window keeps answering and a close still quits
+        _fileWatcher.Update();                   // a native backend posts from its own thread: without a take the queue would grow while the clock stands still
         _controlService.Drain();
         _audioManager.Update(0.0f);  // the manual clock between steps: the music is still fed, its fades wait for game time
         if (!_controlService.IsStepDue()) {
