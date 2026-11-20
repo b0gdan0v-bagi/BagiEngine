@@ -3,6 +3,7 @@
 #include <BECore/Memory/MemTag.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <cstdint>
+#include <cstring>
 #include <gtest/gtest.h>
 #include <utility>
 
@@ -167,24 +168,40 @@ namespace BECore::Tests {
 
 #if BE_PROFILER_ALLOC && EASTL_NAME_ENABLED
 
+    namespace {
+
+        /// The allocations made under the allocation name @p name, summed over the zones (AllocTracker::GetNameStats)
+        AllocSiteStats NameTotals(const char* name) {
+            AllocSiteStats totals;
+            for (const AllocSiteStats& row : AllocTracker::GetNameStats()) {
+                if (row.name != nullptr && std::strcmp(row.name, name) == 0) {
+                    totals.count += row.count;
+                    totals.bytes += row.bytes;
+                }
+            }
+            return totals;
+        }
+
+    }  // namespace
+
     TEST(EngineAllocatorTest, ABlockIsReportedUnderTheNameOfItsAllocator) {
         constexpr const char* kName = "EngineAllocatorTest.Named";
         constexpr size_t kBytes = 96;
-        const AllocNameTotals before = AllocTracker::GetNameTotals(kName);
+        const AllocSiteStats before = NameTotals(kName);
         EngineAllocator allocator{kName};
         void* block = allocator.allocate(kBytes);
         allocator.deallocate(block, kBytes);
-        const AllocNameTotals after = AllocTracker::GetNameTotals(kName);
+        const AllocSiteStats after = NameTotals(kName);
         EXPECT_EQ(after.count, before.count + 1);
         EXPECT_EQ(after.bytes, before.bytes + kBytes);
     }
 
     TEST(EngineAllocatorTest, TheContainerNameReachesTheTracker) {
         constexpr const char* kName = "EngineAllocatorTest.Vector";
-        const AllocNameTotals before = AllocTracker::GetNameTotals(kName);
+        const AllocSiteStats before = NameTotals(kName);
         Vector<int> values{EngineAllocator{kName}};
         values.reserve(kCount);
-        EXPECT_GE(AllocTracker::GetNameTotals(kName).bytes, before.bytes + kCount * sizeof(int));
+        EXPECT_GE(NameTotals(kName).bytes, before.bytes + kCount * sizeof(int));
     }
 
 #endif

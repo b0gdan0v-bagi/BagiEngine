@@ -193,11 +193,100 @@ namespace BECore::Tests {
         ASSERT_NE(result, nullptr);
         EXPECT_EQ(GetJsonBool(*result, "enabled"), AllocTracker::kEnabled);
         ASSERT_NE(FindJsonMember(*result, "zones"), nullptr);
+        const Json* names = FindJsonMember(*result, "names");
+        ASSERT_NE(names, nullptr);
+        EXPECT_TRUE(names->is_array());
         const Json* totals = FindJsonMember(*result, "totals");
         ASSERT_NE(totals, nullptr);
         for (const char* key : {"count", "bytes", "frees", "liveBytes", "peakLiveBytes", "largest", "noAllocViolations"}) {
             EXPECT_NE(FindJsonMember(*totals, key), nullptr) << key;
         }
     }
+
+#if BE_PROFILER_ALLOC
+
+    namespace {
+
+        constexpr size_t kInts = 100;
+
+        /// The `names` row of the zone @p zone and allocation name @p name in the answer of zone_allocs, or nullptr
+        const Json* FindNameRow(const Json& result, const char* zone, const char* name) {
+            const Json* names = FindJsonMember(result, "names");
+            if (names == nullptr) {
+                return nullptr;
+            }
+            for (const Json& row : *names) {
+                if (GetJsonString(row, "zone") == String(zone) && GetJsonString(row, "name") == String(name)) {
+                    return &row;
+                }
+            }
+            return nullptr;
+        }
+
+    }  // namespace
+
+    TEST_F(ProfilerControlTest, ZoneAllocsNamesTheContainerThatAllocated) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("ControlNamesZone");
+            Vector<int> values;
+            values.get_allocator().set_name("ControlNamed");
+            values.reserve(kInts);
+        }
+        const Json response = Call("zone_allocs");
+        const Json* result = FindJsonMember(response, "result");
+        ASSERT_NE(result, nullptr);
+        const Json* row = FindNameRow(*result, "ControlNamesZone", "ControlNamed");
+        ASSERT_NE(row, nullptr);
+        EXPECT_EQ(GetJsonInt(*row, "allocs"), 1);
+        EXPECT_EQ(GetJsonInt(*row, "bytes"), static_cast<int64_t>(kInts * sizeof(int)));
+    }
+
+    TEST_F(ProfilerControlTest, ZoneAllocsTopLimitsTheNamesAndResetEmptiesThem) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("ControlTopZone");
+            Vector<int> big;
+            big.get_allocator().set_name("ControlBig");
+            big.reserve(kInts * 4);
+            Vector<int> small;
+            small.get_allocator().set_name("ControlSmall");
+            small.reserve(kInts);
+        }
+        Json limited = Json::object();
+        limited["top"] = 1;
+        const Json first = Call("zone_allocs", limited);
+        const Json* limitedResult = FindJsonMember(first, "result");
+        ASSERT_NE(limitedResult, nullptr);
+        const Json* limitedNames = FindJsonMember(*limitedResult, "names");
+        ASSERT_NE(limitedNames, nullptr);
+        EXPECT_EQ(limitedNames->size(), 1u);
+
+        Json clearing = Json::object();
+        clearing["reset"] = true;
+        const Json before = Call("zone_allocs", clearing);
+        const Json* beforeResult = FindJsonMember(before, "result");
+        ASSERT_NE(beforeResult, nullptr);
+        EXPECT_NE(FindNameRow(*beforeResult, "ControlTopZone", "ControlBig"), nullptr);
+        EXPECT_NE(FindNameRow(*beforeResult, "ControlTopZone", "ControlSmall"), nullptr);
+
+        const Json after = Call("zone_allocs");
+        const Json* afterResult = FindJsonMember(after, "result");
+        ASSERT_NE(afterResult, nullptr);
+        EXPECT_EQ(FindNameRow(*afterResult, "ControlTopZone", "ControlBig"), nullptr);
+    }
+
+#else
+
+    TEST_F(ProfilerControlTest, ZoneAllocsHasNoNamesWithoutTheOption) {
+        const Json response = Call("zone_allocs");
+        const Json* result = FindJsonMember(response, "result");
+        ASSERT_NE(result, nullptr);
+        const Json* names = FindJsonMember(*result, "names");
+        ASSERT_NE(names, nullptr);
+        EXPECT_TRUE(names->empty());
+    }
+
+#endif
 
 }  // namespace BECore::Tests

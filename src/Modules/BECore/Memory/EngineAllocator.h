@@ -13,7 +13,8 @@ namespace BECore {
      * - **It carries no tag:** the tag is the calling thread's scope, read where the block is recorded.
      * - **As large as `eastl::allocator` in every build:** it keeps the debug name only where `EASTL_NAME_ENABLED` (EASTL's own rule), so the
      *   shipped build holds an empty object and a container costs what it did on the EASTL allocator. Where the name exists and
-     *   `ENGINE_PROFILER_ALLOC` is on, `allocate` reports it to `AllocTracker::OnNamedAlloc`; no other build pays for it.
+     *   `ENGINE_PROFILER_ALLOC` is on, `allocate` names its block for the tracker (`AllocTracker::SetNextName`, as
+     *   `eastl::allocator` does through Utils/EASTLOperators.cpp); no other build pays for it.
      * - **All instances are equal,** so containers swap and move storage freely.
      *
      * `allocate` and `deallocate` are in EngineAllocator.cpp, as `eastl::allocator`'s are out of line, to keep the headers of Types/ light.

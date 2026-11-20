@@ -470,6 +470,145 @@ namespace BECore::Tests {
         EXPECT_TRUE(found);
     }
 
+    namespace {
+
+        /// The name row of the zone called @p zone (nullptr: outside every zone) and the allocation name @p name (nullptr: unnamed)
+        AllocSiteStats NameRow(const char* zone, const char* name) {
+            for (const AllocSiteStats& row : AllocTracker::GetNameStats()) {
+                const bool sameZone = zone == nullptr ? row.zone == nullptr : (row.zone != nullptr && std::strcmp(row.zone->name, zone) == 0);
+                const bool sameName = name == nullptr ? row.name == nullptr : (row.name != nullptr && std::strcmp(row.name, name) == 0);
+                if (sameZone && sameName) {
+                    return row;
+                }
+            }
+            return {};
+        }
+
+        constexpr size_t kInts = 100;
+
+    }  // namespace
+
+    TEST(AllocTrackerTest, ANamedContainerAllocationIsCountedUnderItsZoneAndName) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("NameZone");
+            Vector<int> values;
+            values.get_allocator().set_name("NamedValues");
+            values.reserve(kInts);
+        }
+        const AllocSiteStats row = NameRow("NameZone", "NamedValues");
+        EXPECT_EQ(row.count, 1u);
+        EXPECT_EQ(row.bytes, kInts * sizeof(int));
+    }
+
+    TEST(AllocTrackerTest, ADefaultContainerCarriesEastlsOwnName) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("DefaultNameZone");
+            Vector<int> values;
+            values.reserve(kInts);
+        }
+        EXPECT_EQ(NameRow("DefaultNameZone", "EASTL vector").count, 1u);
+    }
+
+    TEST(AllocTrackerTest, AnAllocationIsChargedToTheInnermostZoneOnly) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("NameOuter");
+            {
+                BE_PROFILE_SCOPE("NameInner");
+                Vector<int> values;
+                values.get_allocator().set_name("InnerValues");
+                values.reserve(kInts);
+            }
+            // the outer zone is innermost again
+            Vector<int> after;
+            after.get_allocator().set_name("OuterValues");
+            after.reserve(kInts);
+        }
+        EXPECT_EQ(NameRow("NameInner", "InnerValues").count, 1u);
+        EXPECT_EQ(NameRow("NameOuter", "InnerValues").count, 0u);
+        EXPECT_EQ(NameRow("NameOuter", "OuterValues").count, 1u);
+    }
+
+    TEST(AllocTrackerTest, UnnamedAndZonelessAllocationsHaveNullKeys) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("UnnamedZone");
+            ::operator delete(::operator new(kBlock));
+        }
+        EXPECT_EQ(NameRow("UnnamedZone", nullptr).count, 1u);
+        EXPECT_EQ(NameRow("UnnamedZone", nullptr).bytes, kBlock);
+        ::operator delete(::operator new(kBlock * 3));
+        EXPECT_GE(NameRow(nullptr, nullptr).count, 1u);
+    }
+
+    TEST(AllocTrackerTest, ANameBelongsToItsOwnAllocationOnly) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("StickyZone");
+            Vector<int> values;
+            values.get_allocator().set_name("StickyValues");
+            values.reserve(kInts);
+            ::operator delete(::operator new(kBlock));
+        }
+        EXPECT_EQ(NameRow("StickyZone", "StickyValues").count, 1u);
+        EXPECT_EQ(NameRow("StickyZone", nullptr).count, 1u);
+    }
+
+    TEST(AllocTrackerTest, AnotherThreadsAllocationIsNotChargedToThisThreadsZone) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("NameThisThread");
+            std::thread other([] {
+                Vector<int> values;
+                values.get_allocator().set_name("OtherThreadValues");
+                values.reserve(kInts);
+            });
+            other.join();
+        }
+        EXPECT_EQ(NameRow("NameThisThread", "OtherThreadValues").count, 0u);
+        EXPECT_EQ(NameRow(nullptr, "OtherThreadValues").count, 1u);
+    }
+
+    TEST(AllocTrackerTest, ResettingTheZoneStatisticsClearsTheNames) {
+        {
+            BE_PROFILE_SCOPE("ResetNameZone");
+            ::operator delete(::operator new(kBlock));
+        }
+        EXPECT_EQ(NameRow("ResetNameZone", nullptr).count, 1u);
+        AllocTracker::ResetZoneStats();
+        EXPECT_EQ(NameRow("ResetNameZone", nullptr).count, 0u);
+    }
+
+    TEST(AllocTrackerTest, TheChromeTraceCarriesTheAllocationNames) {
+        AllocTracker::ResetZoneStats();
+        ChromeTraceBackend recorder;
+        Profiler::SetBackend(&recorder);
+        {
+            BE_PROFILE_SCOPE("TraceNameZone");
+            Vector<int> values;
+            values.get_allocator().set_name("TraceNamed");
+            values.reserve(kInts);
+        }
+        Profiler::SetBackend(nullptr);
+        const auto parsed = ParseJson(recorder.WriteJson());
+        ASSERT_TRUE(parsed.has_value());
+        const Json* other = FindJsonMember(*parsed, "otherData");
+        ASSERT_NE(other, nullptr);
+        const Json* rows = FindJsonMember(*other, "allocNames");
+        ASSERT_NE(rows, nullptr);
+        bool found = false;
+        for (const Json& row : *rows) {
+            if (GetJsonString(row, "zone") == String("TraceNameZone") && GetJsonString(row, "name") == String("TraceNamed")) {
+                EXPECT_EQ(GetJsonInt(row, "allocs"), 1);
+                EXPECT_EQ(GetJsonInt(row, "bytes"), static_cast<int64_t>(kInts * sizeof(int)));
+                found = true;
+            }
+        }
+        EXPECT_TRUE(found);
+    }
+
 #else
 
     TEST(AllocTrackerTest, WithoutTheOptionNothingIsCounted) {
@@ -479,6 +618,7 @@ namespace BECore::Tests {
         EXPECT_EQ(totals.count, 0u);
         EXPECT_EQ(totals.liveBytes, 0u);
         EXPECT_TRUE(AllocTracker::GetZoneStats().empty());
+        EXPECT_TRUE(AllocTracker::GetNameStats().empty());
     }
 
 #endif

@@ -3,6 +3,7 @@
 #include <BECore/Memory/ArenaStats.h>
 #include <BECore/Memory/MemTag.h>
 #include <BECore/Memory/PoolStats.h>
+#include <BECore/Profiler/Alloc/AllocSiteTable.h>
 #include <BECore/Profiler/ProfileSite.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
@@ -43,12 +44,6 @@ namespace BECore {
         uint64_t liveBytes = 0;
     };
 
-    /// What the containers of one debug name allocated (EngineAllocator::get_name): the blocks asked for, not the live ones
-    struct AllocNameTotals {
-        uint64_t count = 0;
-        uint64_t bytes = 0;
-    };
-
     /// The allocations made inside the zones of one ProfileSite, inclusive of the zones inside them, since the last reset
     struct ZoneAllocStats {
         const ProfileSite* site = nullptr;
@@ -76,7 +71,6 @@ namespace BECore {
 
         static constexpr bool kEnabled = BE_PROFILER_ALLOC != 0;
         static constexpr uint32_t kZoneSlots = 1024;  // distinct zone sites with statistics; more are not counted
-        static constexpr uint32_t kNameSlots = 256;   // distinct container names with statistics; more are not counted
 
         /// The calling thread's allocations since it started (monotonic)
         struct ThreadCounters {
@@ -88,9 +82,6 @@ namespace BECore {
         static void OnAlloc(void* ptr, size_t size);
         /// From the operator delete: @p ptr is about to be freed
         static void OnFree(void* ptr);
-        /// From EngineAllocator, after its block was allocated (OnAlloc counted it already): the container that asked for @p size bytes
-        /// is named @p name. @p name is kept by pointer and must be a literal; no allocation. When the name table is full the name is dropped
-        static void OnNamedAlloc(const char* name, size_t size);
         /// From AllocRouting: @p ptr of @p size bytes asked for, @p usable bytes in all, was just allocated by @p source
         static void OnRoutedAlloc(AllocSource source, void* ptr, size_t size, size_t usable);
         /// From AllocRouting: the block @p ptr of @p usable bytes is about to be freed. A block that was made before the routing
@@ -99,9 +90,6 @@ namespace BECore {
 
         [[nodiscard]] static AllocTotals GetTotals();
         [[nodiscard]] static AllocSourceTotals GetSourceTotals(AllocSource source);
-        /// The blocks EngineAllocator allocated under @p name (compared by text); zero unless the build has both ENGINE_PROFILER_ALLOC and
-        /// EASTL_NAME_ENABLED (EASTL keeps names only in a `_DEBUG` build)
-        [[nodiscard]] static AllocNameTotals GetNameTotals(const char* name);
         [[nodiscard]] static ThreadCounters GetThreadCounters();
         [[nodiscard]] static AllocTagTotals GetTagTotals(MemTag tag);
         /// Every tag, in the order of the enum; no allocation
@@ -111,8 +99,19 @@ namespace BECore {
         static void AddZone(const ProfileSite& site, uint64_t count, uint64_t bytes);
         /// The zones with statistics, the most bytes first
         [[nodiscard]] static Vector<ZoneAllocStats> GetZoneStats();
-        /// Zeroes the zone statistics (the totals stay)
+        /// Zeroes the zone statistics and the name table (the totals stay)
         static void ResetZoneStats();
+
+        /// The next allocation of the calling thread carries @p name (EASTL's allocation name, from Utils/EASTLOperators.cpp). The pointer is
+        /// kept, not copied: it must be a literal or live as long as the program (AllocSiteTable.h)
+        static void SetNextName(const char* name);
+        /// Makes @p zone the innermost open zone of the calling thread, the one allocations are charged to by name; returns the previous one
+        /// (ProfileZone nests strictly, so it restores it at its end)
+        static const ProfileSite* ExchangeCurrentZone(const ProfileSite* zone);
+        /// The allocations per innermost zone x name, the most bytes first; empty without ENGINE_PROFILER_ALLOC. Allocates
+        [[nodiscard]] static Vector<AllocSiteStats> GetNameStats();
+        /// Allocations the name table dropped because it was full, since the last ResetZoneStats
+        [[nodiscard]] static uint64_t GetNameOverflow();
 
         /// BE_PROFILE_NO_ALLOC: allocations of the calling thread count as violations until the matching Leave. Returns the violations of this thread so far
         static uint64_t EnterNoAlloc(const ProfileSite& site);
