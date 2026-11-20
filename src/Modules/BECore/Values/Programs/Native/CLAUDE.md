@@ -23,15 +23,15 @@ A pool id is the order of loading in one process and differs between runs, so it
 
 ## Same bits as the interpreter
 
-A generated function calls the **same kernels** the interpreter's `switch` calls (`Kernels.h`, expanded from the same X-macro lists, so a row cannot be missing; a new row without an emitter fails the every-opcode tests), with the instruction written as a literal so the compiler sees the register numbers and offsets. `LoadConst`, `LoadTable`, `LoadTableSlot` and the store of the result were inline in `Run`: they are kernel functions (`ExecuteLoadConst`, ..., `StoreResult`) so that both paths have one meaning. The tests of `NativeProgramEqualityTest` run both paths over generated contexts (NaN, infinities, subnormals, the integer extremes) for every row, mixed row, conversion, table, fused instruction and for the formulas, and compare **bytes**, except the payload and sign of a NaN: LLVM folds an operation on a constant NaN to some NaN, so which one is not defined.
+A generated function calls the **same kernels** the interpreter's `switch` calls (`Kernels.h`, expanded from the same X-macro lists, so a row cannot be missing; a new row without an emitter fails the every-opcode tests), with the instruction written as a literal so the compiler sees the register numbers and offsets. `LoadConst`, `LoadTable`, `LoadTableSlot` and the store of the result are kernel functions too (`ExecuteLoadConst`, ..., `StoreResult`), so both paths have one meaning for them. `NativeProgramEqualityTest` compares **bytes**, except the payload and sign of a NaN: LLVM folds an operation on a constant NaN to some NaN, so which one is not defined.
 
 Equal bits need equal floating-point code, so the generated file **and** the interpreter's sources (`Interpreter.cpp`, `Peephole.cpp`, `ExprChecker.cpp`, listed in `BECore/CMakeLists.txt`) are compiled with `-ffp-contract=off` (`/fp:precise` on plain MSVC; written from the compiler's documentation, not built by the loop). Clang's default contraction made `Dot` and `Lerp` one ulp different between two inlined kernels. Do not drop the flag from one side.
 
-**Drift guards** (`NativeProgramEqualityTest`, `NativeProgramsTest`): the file regenerated from the set equals the one the build made, compared with the source text of each entry cut (a program another test compiled first carries that test's formula as its source, which is no part of the code); a program with one constant changed is not bound, warns once with its formula and still answers right; a program compiled under a declaration whose field moved has another hash and is not bound.
+**Drift guards** (`NativeProgramEqualityTest`): the file regenerated from the set must equal the one the build made, compared without the source text of each entry (a program another test compiled first carries that test's formula as its source, which is no part of the code); a stale constant or a moved field is a miss, never a wrong answer.
 
 ## The generator
 
-`GenerateNativeSource(programs, {contentSet})` is deterministic: programs ordered by `CodeHash` (a tie by the code), equal programs once, nothing of the process (an address, an id, the time, a path) in the text, so a file under version control changes only when a program does. Per program: the code and the constants as `constexpr` arrays (the entry's views), a `static void Program_<hash>_<n>(const Context&, void* result)` with a `RegisterImage regs[N]` and one kernel call per instruction, then a table of entries and a `NativeProgramRegistrar` that installs it while the process starts. `WriteNativePrograms` leaves the file untouched (modification time too) when the text is the same, so a build that regenerates it without a change compiles nothing.
+`GenerateNativeSource(programs, {contentSet})` is deterministic: programs ordered by `CodeHash` (a tie by the code), equal programs once, nothing of the process (an address, an id, the time, a path) in the text, so a file under version control changes only when a program does. Per program: the code and the constants as `constexpr` arrays (the entry's views), a `static void Program_<hash>(const Context&, void* result)` (`_<n>` after the hash only for programs of the same hash) with a `RegisterImage regs[N]` and one kernel call per instruction, then a table of entries and a `NativeProgramRegistrar` that installs it while the process starts. `WriteNativePrograms` leaves the file untouched (modification time too) when the text is the same, so a build that regenerates it without a change compiles nothing.
 
 ## How a game takes it
 
@@ -43,11 +43,11 @@ On the web and when cross-compiling the tool cannot run: `be_add_native_programs
 
 ## Measured
 
-Release, one machine: the formula runs about 6.5 times faster than the interpreter and 2.2 times the plain C++; `slot * k + b` about 3.5 times faster (`Values/CLAUDE.md`, "Benchmark"). The look for a bound function costs about 2 ns on the interpreter's path.
+The ratios against the interpreter and the plain C++, and what the look for a bound function costs on the interpreter's path, are in `Values/CLAUDE.md`, "Benchmark".
 
 ## Not yet
 
 - Operations over arrays (`data-values-collections`, not merged): its rows get emitters when it lands; the every-opcode tests fail until they do.
 - **A program with a `PoolString` constant never binds**: the constant is the address of the entry, another one in the next process, so the equality fails by design and the program runs in the interpreter. The engine's set holds no program that loads a string constant; constants of strings by their text would be a change of the generator and of the registry.
-- Typed locals instead of the `RegisterImage` array (the generated code still loads and stores through the registers): the benchmark shows 2.2 times the plain C++, which is the next step if it is wanted.
+- Typed locals instead of the `RegisterImage` array (the generated code still loads and stores through the registers): the benchmark (`Values/CLAUDE.md`) shows what is left over the plain C++; this is the next step if it is wanted.
 - The proof on a whole game run (generated against `--interpreted`, the report bytes compared) belongs to the game's repository.

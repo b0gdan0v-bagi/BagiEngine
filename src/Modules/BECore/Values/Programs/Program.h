@@ -2,7 +2,6 @@
 
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Types/Types.h>
-#include <BECore/Utils/PassKey.h>
 #include <BECore/Values/Context.h>
 #include <BECore/Values/Programs/Instruction.h>
 #include <BECore/Values/Programs/Opcode.h>
@@ -130,7 +129,7 @@ namespace BECore {
         /**
          * @brief The generated function bound to the program of @p id, or null (`Native/NativePrograms.h`)
          *
-         * One atomic load, no lock. Null while no generated set holds the program, after `NativePrograms::SetEnabled(false)`, and for an id the pool has not given out.
+         * One atomic load, no lock. Null while no generated set holds the program and after `NativePrograms::SetEnabled(false)`; @p id must be one `Intern` gave out.
          */
         [[nodiscard]] static NativeProgramFn Native(ProgramId id);
 

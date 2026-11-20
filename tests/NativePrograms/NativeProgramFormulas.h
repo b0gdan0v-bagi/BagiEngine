@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Format/Format.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Values/Programs/Instruction.h>
 

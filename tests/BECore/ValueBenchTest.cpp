@@ -3,7 +3,7 @@
 // nothing about time: tests run side by side and a machine drifts, so the time belongs to the perf set (`.claude/rules/perf-project.md`).
 // A formula of about five operations over two objects is timed as `formula_plain` (C++), `formula_tree` (a virtual node per operation, a heap object each),
 // `formula_program` (the compiled `expr`, fused, in the interpreter), `formula_native` (the same program through the generated function of the engine's set,
-// `Programs/Native/CLAUDE.md`), `formula_run` (the interpreter called as `Evaluate` did before generated code, with no look for a bound function: against `formula_program` it is what that look
+// `Programs/Native/CLAUDE.md`), `formula_run` (`Run` called directly: the interpreter with no look for a bound function in `Evaluate`; against `formula_program` it is what that look
 // costs), `formula_unfused` (the same with `CompileOptions::fuse = false`, in the interpreter) and `formula_cached` (a `CachedValue` read with nothing changed). `madd_plain`, `madd_program`,
 // `madd_native` and `madd_unfused` time `slot * k + b` alone, so what the peephole and the generated code gain is one number each. Every case must sum to what the plain one does.
 // The same lines are printed for `int32_t` (`caster.attack * (100 + cast.level * 10) / 100`, `caster.attack * 3 + 7`) and for `Vec3`
@@ -397,7 +397,7 @@ namespace BECore::Tests {
             NativeSwitch& operator=(const NativeSwitch&) = delete;
 
         private:
-            bool _was;
+            bool _was = false;
         };
 
         size_t CountMulAddSlot(const Program& program) {

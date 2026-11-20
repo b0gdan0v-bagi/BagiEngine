@@ -15,6 +15,7 @@
 #include <BECore/Values/Value.h>
 #include <Common/LogRecorder.h>
 #include <Common/Require.h>
+#include <Common/TestFiles.h>
 #include <Generated/ProgramRowTypes.gen.hpp>
 #include <NativePrograms/NativeProgramFormulas.h>
 #include <NativePrograms/NativeProgramSet.h>
@@ -223,14 +224,9 @@ namespace BECore::Tests {
                 candidates.push_back(executable.parent_path().parent_path() / kRelative);
             }
             for (const std::filesystem::path& path : candidates) {
-                std::ifstream file(path, std::ios::binary | std::ios::ate);  //-NoStd: the file layer is not for a file outside the content roots (entry `engine-file-layer`)
-                if (!file) {
-                    continue;
+                if (std::filesystem::exists(path)) {
+                    return ReadFile(path);
                 }
-                String text(static_cast<size_t>(file.tellg()), '\0');
-                file.seekg(0);
-                file.read(text.data(), static_cast<std::streamsize>(text.size()));
-                return text;
             }
             return std::nullopt;
         }
@@ -351,8 +347,10 @@ namespace BECore::Tests {
     TEST(NativeProgramEqualityTest, AFormulaWithAnotherConstantThanTheSetIsNotBoundAndRunsTheInterpreter) {
         constexpr StringView kSetFormula = kNativeIntFormulas[1];
         ASSERT_TRUE(kSetFormula.ends_with("+ 7"));
-        constexpr int32_t kStaleAddend = 70913;
-        const String stale = Format("{}{}", kSetFormula.substr(0, kSetFormula.size() - 1), kStaleAddend);
+        // Another addend on every run of the case (`--gtest_repeat`): the pool keeps a program for the life of the process and warns about a miss only when it is interned
+        static int32_t nextAddend = 70913;
+        const int32_t staleAddend = nextAddend++;
+        const String stale = Format("{}{}", kSetFormula.substr(0, kSetFormula.size() - 1), staleAddend);
 
         const WarnOnMissGuard warn;
         LogRecorder recorder;
@@ -367,7 +365,7 @@ namespace BECore::Tests {
         InputCase input;
         Fill(input, 3, rng);
         const Context context = MakeContext(input);
-        EXPECT_EQ(value->Evaluate(context), static_cast<int32_t>(static_cast<uint32_t>(input.caster.attack) * 3U + static_cast<uint32_t>(kStaleAddend)));
+        EXPECT_EQ(value->Evaluate(context), static_cast<int32_t>(static_cast<uint32_t>(input.caster.attack) * 3U + static_cast<uint32_t>(staleAddend)));
     }
 
     TEST(NativeProgramEqualityTest, AFieldAtAnotherOffsetIsAnotherProgramThatIsNotBound) {

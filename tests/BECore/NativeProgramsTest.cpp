@@ -84,6 +84,14 @@ namespace BECore::Tests {
             return *value;
         }
 
+        /// A constant no other case and no other run of the case (`--gtest_repeat`) has used: the pool keeps every program for the life of the process, so a repeated
+        /// case that reused its text would find the program already interned, bound and warned about
+        int32_t FreshConstant() {
+            constexpr int32_t kFirst = 1'000'000;
+            static std::atomic<int32_t> next{kFirst};
+            return next.fetch_add(1);
+        }
+
         /// Every formula of a test has constants no other test uses, so the entries it installs never bind a program of another one
         String Formula(int32_t factor, int32_t addend) {
             return Format("caster.attack * {} + {}", factor, addend);
@@ -122,22 +130,23 @@ namespace BECore::Tests {
     TEST(NativeProgramsTest, ABoundFunctionIsWhatEvaluateRuns) {
         const RegistryGuard guard;
         const ValueWorld world;
-        const auto value = CompileProgram(world, Formula(7919, 1));
+        const int32_t factor = FreshConstant();
+        const auto value = CompileProgram(world, Formula(factor, 1));
         ASSERT_TRUE(value.has_value());
-        EXPECT_EQ(value->Evaluate(world.context), world.caster.attack * 7919 + 1);
+        EXPECT_EQ(value->Evaluate(world.context), world.caster.attack * factor + 1);
         EXPECT_EQ(ProgramPool::Native(value->Id()), nullptr);
 
         Install(MakeEntry(ProgramPool::Get(value->Id())));
 
         EXPECT_EQ(ProgramPool::Native(value->Id()), &MarkerFunction);
         EXPECT_EQ(value->Evaluate(world.context), kMarker);
-        EXPECT_EQ(Reference(world, *value), world.caster.attack * 7919 + 1) << "Run(program) never calls native code";
+        EXPECT_EQ(Reference(world, *value), world.caster.attack * factor + 1) << "Run(program) never calls native code";
     }
 
     TEST(NativeProgramsTest, AProgramInternedAfterTheInstallIsBoundWhenInterned) {
         const RegistryGuard guard;
         const ValueWorld world;
-        constexpr int32_t kConstant = 7927;
+        const int32_t kConstant = FreshConstant();
         ProgramBuilder builder;
         const uint8_t reg = Require(builder.AcquireRegister());
         builder.EmitLoadConst(reg, kConstant);
@@ -156,19 +165,21 @@ namespace BECore::Tests {
     TEST(NativeProgramsTest, AnEntryWhoseCodeDiffersInOneInstructionNeverBinds) {
         const RegistryGuard guard;
         const ValueWorld world;
-        const auto value = CompileProgram(world, Formula(7933, 3));
+        const int32_t factor = FreshConstant();
+        const auto value = CompileProgram(world, Formula(factor, 3));
         ASSERT_TRUE(value.has_value());
 
         Install(MakeEntry(ProgramPool::Get(value->Id()), true));
 
         EXPECT_EQ(ProgramPool::Native(value->Id()), nullptr);
-        EXPECT_EQ(value->Evaluate(world.context), world.caster.attack * 7933 + 3);
+        EXPECT_EQ(value->Evaluate(world.context), world.caster.attack * factor + 3);
     }
 
     TEST(NativeProgramsTest, DisablingRunsTheInterpreterAndEnablingTheFunctionAgain) {
         const RegistryGuard guard;
         const ValueWorld world;
-        const auto value = CompileProgram(world, Formula(7937, 4));
+        const int32_t factor = FreshConstant();
+        const auto value = CompileProgram(world, Formula(factor, 4));
         ASSERT_TRUE(value.has_value());
         Install(MakeEntry(ProgramPool::Get(value->Id())));
         ASSERT_EQ(value->Evaluate(world.context), kMarker);
@@ -176,7 +187,7 @@ namespace BECore::Tests {
 
         NativePrograms::SetEnabled(false);
         EXPECT_FALSE(NativePrograms::IsEnabled());
-        EXPECT_EQ(value->Evaluate(world.context), world.caster.attack * 7937 + 4);
+        EXPECT_EQ(value->Evaluate(world.context), world.caster.attack * factor + 4);
         EXPECT_EQ(NativePrograms::Counts().bound, 0U);
         EXPECT_EQ(NativePrograms::Counts().missed, 0U) << "nothing is missed while generated code is off";
 
@@ -188,8 +199,8 @@ namespace BECore::Tests {
     TEST(NativeProgramsTest, AMissWarnsOnceWithTheFormulaWhenAskedAndNeverWhenNot) {
         const RegistryGuard guard;
         const ValueWorld world;
-        const String asked = Formula(7949, 5);
-        const String notAsked = Formula(7951, 6);
+        const String asked = Formula(FreshConstant(), 5);
+        const String notAsked = Formula(FreshConstant(), 6);
         LogRecorder recorder;
 
         const auto quiet = CompileProgram(world, notAsked);
@@ -206,7 +217,7 @@ namespace BECore::Tests {
 
     TEST(NativeProgramsTest, InterningAndEvaluatingWhileInstallsRunGivesTheInterpretersValueOrTheFunctions) {
         const RegistryGuard guard;
-        constexpr int32_t kFactor = 8009;
+        const int32_t kFactor = FreshConstant();
         constexpr int32_t kRounds = 150;
         constexpr int32_t kWorkers = 2;
         const ValueWorld world;
@@ -231,7 +242,10 @@ namespace BECore::Tests {
         }
         for (int32_t i = 0; i < kRounds; ++i) {
             const auto value = CompileProgram(world, Formula(kFactor, i));
-            ASSERT_TRUE(value.has_value());
+            if (!value.has_value()) {
+                wrong.fetch_add(1);  // no ASSERT here: the workers still use this case's locals until they are joined
+                continue;
+            }
             Install(MakeEntry(ProgramPool::Get(value->Id())));
         }
         for (Thread& worker : workers) {
@@ -246,7 +260,7 @@ namespace BECore::Tests {
 
     TEST(NativeProgramsFlagsTest, EmitWritesTheSourceOfThePoolAndOfChosenProgramsAndLeavesAnUnchangedFileAlone) {
         const ValueWorld world;
-        const auto value = CompileProgram(world, Formula(8101, 17));
+        const auto value = CompileProgram(world, Formula(FreshConstant(), 17));
         ASSERT_TRUE(value.has_value());
         const NativeCodegenOptions options{"flags test"};
         const TempFile file;
@@ -275,7 +289,6 @@ namespace BECore::Tests {
 
     TEST(NativeProgramsFlagsTest, TheEmitFlagWithoutAFileIsAnErrorAndNoFlagMeansTheProgramGoesOn) {
         const NativeCodegenOptions options{"flags test"};
-        const TempFile file;
 
         EXPECT_FALSE(EmitNativeProgramsIfAsked(MakeLine({"--interpreted"}), options).has_value());
         for (const CommandLine& line : {MakeLine({"--emit-native-programs"}), MakeLine({"--emit-native-programs="})}) {
@@ -290,13 +303,13 @@ namespace BECore::Tests {
         ASSERT_TRUE(failed.has_value());
         EXPECT_NE(failed->exitCode, 0);
         EXPECT_NE(failed->message.find("nonexistent-folder-of-native-programs"), String::npos);
-        EXPECT_FALSE(std::filesystem::exists(file.path));
     }
 
     TEST(NativeProgramsFlagsTest, InterpretedRunsTheInterpreterAndAMissWarnsWhenGeneratedCodeIsLinked) {
         const RegistryGuard guard;
         const ValueWorld world;
-        const auto bound = CompileProgram(world, Formula(8111, 3));
+        const int32_t factor = FreshConstant();
+        const auto bound = CompileProgram(world, Formula(factor, 3));
         ASSERT_TRUE(bound.has_value());
         Install(MakeEntry(ProgramPool::Get(bound->Id())));
         ASSERT_EQ(bound->Evaluate(world.context), kMarker);
@@ -304,10 +317,10 @@ namespace BECore::Tests {
 
         ApplyNativeProgramsFlags(MakeLine({"--interpreted"}));
 
-        EXPECT_EQ(bound->Evaluate(world.context), world.caster.attack * 8111 + 3);
+        EXPECT_EQ(bound->Evaluate(world.context), world.caster.attack * factor + 3);
         NativePrograms::SetEnabled(true);
         ApplyNativeProgramsFlags(MakeLine({}));
-        const String missed = Formula(8117, 4);
+        const String missed = Formula(FreshConstant(), 4);
         const auto miss = CompileProgram(world, missed);
         NativePrograms::LogSummary();
         LogEvent::Flush();

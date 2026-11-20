@@ -22,7 +22,7 @@ namespace BECore {
     };
 
     /**
-     * @brief Writes the generated source of @p programs to @p path and returns how many programs it holds
+     * @brief Writes the generated source of @p programs to @p path and returns how many programs were given (equal programs are written once)
      *
      * The file is left alone (not even its modification time changes) when it already holds the text, so a build that regenerates it without a change compiles
      * nothing. An error is the text for the user: the file that could not be written.

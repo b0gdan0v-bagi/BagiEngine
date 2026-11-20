@@ -7,6 +7,7 @@
 #include <BECore/Math/Vec3.h>
 #include <BECore/Math/Vec4.h>
 #include <BECore/PoolString/PoolString.h>
+#include <BECore/PoolString/StaticPoolString.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Values/Programs/Opcode.h>
 #include <cstdint>
