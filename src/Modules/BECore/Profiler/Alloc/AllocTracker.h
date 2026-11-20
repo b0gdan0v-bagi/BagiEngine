@@ -22,6 +22,16 @@ namespace BECore {
         uint64_t peakLiveBytes = 0;      // the most liveBytes ever was
         uint64_t largest = 0;            // the largest single allocation asked for
         uint64_t noAllocViolations = 0;  // allocations inside a BE_PROFILE_NO_ALLOC scope
+        uint64_t untrackedBlocks = 0;    // tagged blocks the block-tag table could not hold: counted under Untagged
+    };
+
+    /// What was allocated under one MemTag (Memory/CLAUDE.md, "Memory tags"); the AllocTotals fields of the same name, summed over every tag
+    struct AllocTagTotals {
+        uint64_t count = 0;
+        uint64_t bytes = 0;
+        uint64_t frees = 0;  // blocks given back that were allocated under this tag
+        uint64_t liveBytes = 0;
+        uint64_t peakLiveBytes = 0;
     };
 
     /// What one AllocSource allocated; the AllocTotals fields of the same name, summed over every source
@@ -43,6 +53,9 @@ namespace BECore {
     /**
      * @brief Counts the allocations of the global operator new / delete (Alloc/GlobalOperatorNew.cpp, ENGINE_PROFILER_ALLOC) and of the
      * libraries routed through AllocRouting.
+     *
+     * Every counted block also lands in the slot of the thread's MemTag (MemTagScope); a free is subtracted from the tag its block was
+     * allocated under, found in a block-tag table (Alloc/CLAUDE.md, "Tags").
      *
      * Every counted block passes one place (RecordAlloc / RecordFree in the .cpp), whatever its AllocSource: the totals, the thread
      * counters, the zone statistics, the no-alloc violations and the backend see them alike.
@@ -76,6 +89,9 @@ namespace BECore {
         [[nodiscard]] static AllocTotals GetTotals();
         [[nodiscard]] static AllocSourceTotals GetSourceTotals(AllocSource source);
         [[nodiscard]] static ThreadCounters GetThreadCounters();
+        [[nodiscard]] static AllocTagTotals GetTagTotals(MemTag tag);
+        /// Every tag, in the order of the enum; no allocation
+        [[nodiscard]] static Array<AllocTagTotals, kMemTagCount> GetTagTotals();
 
         /// Adds one zone of @p site that made @p count allocations of @p bytes (ProfileZone)
         static void AddZone(const ProfileSite& site, uint64_t count, uint64_t bytes);
@@ -87,6 +103,10 @@ namespace BECore {
         /// BE_PROFILE_NO_ALLOC: allocations of the calling thread count as violations until the matching Leave. Returns the violations of this thread so far
         static uint64_t EnterNoAlloc(const ProfileSite& site);
         static uint64_t LeaveNoAlloc();
+
+        /// Test hook: how many slots an insert into the block-tag table may probe (0: every block stays unregistered, as in a full table).
+        /// Returns the previous limit; restore it when done
+        static uint32_t SetBlockProbeLimitForTests(uint32_t limit);
 
         /// The calling thread's memory tag (MemTagScope); Untagged when no scope is open
         [[nodiscard]] static MemTag GetCurrentTag();

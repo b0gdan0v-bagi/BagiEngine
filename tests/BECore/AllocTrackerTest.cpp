@@ -1,4 +1,5 @@
 #include <BECore/Control/Json.h>
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Profiler/Alloc/AllocRouting.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
@@ -248,6 +249,142 @@ namespace BECore::Tests {
             AllocRouting::Free(AllocSource::Pugixml, AllocRouting::Malloc(AllocSource::Pugixml, kBlock));
         }
         EXPECT_EQ(AllocTracker::GetTotals().noAllocViolations, before + 1);
+    }
+
+    TEST(AllocTrackerTest, ABlockFreedOutsideItsScopeIsSubtractedFromItsTag) {
+        const AllocTagTotals before = AllocTracker::GetTagTotals(MemTag::UI);
+        void* block = nullptr;
+        {
+            BE_MEM_TAG(UI);
+            block = ::operator new(kBlock);
+        }
+        const AllocTagTotals during = AllocTracker::GetTagTotals(MemTag::UI);
+        EXPECT_EQ(during.count, before.count + 1);
+        EXPECT_EQ(during.bytes, before.bytes + kBlock);
+        EXPECT_GE(during.liveBytes, before.liveBytes + kBlock);
+        EXPECT_GE(during.peakLiveBytes, during.liveBytes);
+        ::operator delete(block);
+        const AllocTagTotals after = AllocTracker::GetTagTotals(MemTag::UI);
+        EXPECT_EQ(after.frees, before.frees + 1);
+        EXPECT_EQ(after.liveBytes, before.liveBytes);
+    }
+
+    TEST(AllocTrackerTest, ANestedScopeCountsItsAllocationsUnderTheInnerTag) {
+        const AllocTagTotals sceneBefore = AllocTracker::GetTagTotals(MemTag::Scene);
+        const AllocTagTotals textBefore = AllocTracker::GetTagTotals(MemTag::Text);
+        {
+            BE_MEM_TAG(Scene);
+            void* outer = ::operator new(kBlock);
+            {
+                BE_MEM_TAG(Text);
+                void* inner = ::operator new(kBlock * 2);
+                ::operator delete(inner);
+            }
+            void* afterInner = ::operator new(kBlock);
+            ::operator delete(afterInner);
+            ::operator delete(outer);
+        }
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Scene).count, sceneBefore.count + 2);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Text).count, textBefore.count + 1);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Text).bytes, textBefore.bytes + kBlock * 2);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Scene).liveBytes, sceneBefore.liveBytes);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Text).liveBytes, textBefore.liveBytes);
+    }
+
+    TEST(AllocTrackerTest, ARoutedAllocationIsTaggedAndAReallocMovesItToTheTagInForce) {
+        const AllocTagTotals resourceBefore = AllocTracker::GetTagTotals(MemTag::Resource);
+        const AllocTagTotals audioBefore = AllocTracker::GetTagTotals(MemTag::Audio);
+        void* block = nullptr;
+        {
+            BE_MEM_TAG(Resource);
+            block = AllocRouting::Malloc(AllocSource::Stb, kBlock);
+        }
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Resource).count, resourceBefore.count + 1);
+        {
+            BE_MEM_TAG(Audio);
+            block = AllocRouting::Realloc(AllocSource::Stb, block, kBlock * 8);
+        }
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Resource).liveBytes, resourceBefore.liveBytes);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Resource).frees, resourceBefore.frees + 1);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Audio).count, audioBefore.count + 1);
+        AllocRouting::Free(AllocSource::Stb, block);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Audio).liveBytes, audioBefore.liveBytes);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Audio).frees, audioBefore.frees + 1);
+    }
+
+    TEST(AllocTrackerTest, EveryThreadAllocatesUnderItsOwnTag) {
+        const AllocTagTotals networkBefore = AllocTracker::GetTagTotals(MemTag::Network);
+        {
+            // Starting the thread allocates under Game on this thread; its block is the one counted under Network
+            BE_MEM_TAG(Game);
+            std::thread worker([] {
+                BE_MEM_TAG(Network);
+                ::operator delete(::operator new(kBlock));
+            });
+            worker.join();
+        }
+        const AllocTagTotals network = AllocTracker::GetTagTotals(MemTag::Network);
+        EXPECT_EQ(network.count, networkBefore.count + 1);
+        EXPECT_EQ(network.bytes, networkBefore.bytes + kBlock);
+    }
+
+    TEST(AllocTrackerTest, TheTagsSumToTheTotals) {
+        {
+            BE_MEM_TAG(Core);
+            ::operator delete(::operator new(kBlock));
+        }
+        ::operator delete(::operator new(kBlock));
+        // Other threads allocate while the two snapshots are read: take them again until nothing moved in between
+        for (int attempt = 0; attempt < 100; ++attempt) {
+            const AllocTotals first = AllocTracker::GetTotals();
+            AllocTagTotals sum;
+            for (const AllocTagTotals& tag : AllocTracker::GetTagTotals()) {
+                sum.count += tag.count;
+                sum.bytes += tag.bytes;
+                sum.frees += tag.frees;
+            }
+            const AllocTotals second = AllocTracker::GetTotals();
+            if (first.count == second.count && first.frees == second.frees) {
+                EXPECT_EQ(sum.count, first.count);
+                EXPECT_EQ(sum.bytes, first.bytes);
+                EXPECT_EQ(sum.frees, first.frees);
+                return;
+            }
+        }
+        ADD_FAILURE() << "no quiet moment to compare the tags with the totals";
+    }
+
+    TEST(AllocTrackerTest, AFreeOfABlockTheTableDoesNotKnowIsSubtractedFromUntaggedWithoutWrapping) {
+        constexpr size_t kBig = size_t{1} << 20;
+        void* foreign = std::malloc(kBig);
+        ASSERT_NE(foreign, nullptr);
+        const AllocTagTotals before = AllocTracker::GetTagTotals(MemTag::Untagged);
+        const AllocTagTotals uiBefore = AllocTracker::GetTagTotals(MemTag::UI);
+        AllocRouting::Free(AllocSource::DrLibs, foreign);
+        const AllocTagTotals after = AllocTracker::GetTagTotals(MemTag::Untagged);
+        EXPECT_EQ(after.frees, before.frees + 1);
+        EXPECT_LE(after.liveBytes, before.liveBytes);
+        EXPECT_EQ(after.liveBytes, before.liveBytes > kBig ? before.liveBytes - kBig : 0u);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::UI).liveBytes, uiBefore.liveBytes);
+    }
+
+    TEST(AllocTrackerTest, ABlockTheTableCannotHoldIsCountedUnderUntaggedAndFreedThere) {
+        const uint32_t previousLimit = AllocTracker::SetBlockProbeLimitForTests(0);
+        const uint64_t untrackedBefore = AllocTracker::GetTotals().untrackedBlocks;
+        const AllocTagTotals uiBefore = AllocTracker::GetTagTotals(MemTag::UI);
+        const AllocTagTotals untaggedBefore = AllocTracker::GetTagTotals(MemTag::Untagged);
+        void* block = nullptr;
+        {
+            BE_MEM_TAG(UI);
+            block = ::operator new(kBlock);
+        }
+        AllocTracker::SetBlockProbeLimitForTests(previousLimit);
+        EXPECT_EQ(AllocTracker::GetTotals().untrackedBlocks, untrackedBefore + 1);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::UI).count, uiBefore.count);
+        EXPECT_GE(AllocTracker::GetTagTotals(MemTag::Untagged).count, untaggedBefore.count + 1);
+        ::operator delete(block);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::UI).frees, uiBefore.frees);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::UI).liveBytes, uiBefore.liveBytes);
     }
 
     TEST(AllocTrackerTest, TheChromeTraceCarriesTheAllocationsOfAZone) {
