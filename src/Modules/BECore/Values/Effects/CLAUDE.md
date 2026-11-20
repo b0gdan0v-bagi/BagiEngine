@@ -14,6 +14,7 @@ A formula (`Programs/CLAUDE.md`) only reads. A **script** is the short list of s
 | `EffectRunner.h/.cpp` | `RunEffects`, `EffectResult` |
 | `EffectScript.h` | the handle a content field holds: the shared program, `Run`, `Reads`, `Writes` |
 | `EffectCompiler.h/.cpp` | `CompileEffects`, `EffectOptions`: text to `EffectScript` |
+| `EffectScriptAccessor.h/.cpp` | `Ser::DataAccessor<EffectScript>`: the content form of the field |
 | `ScriptAst.h`, `ScriptParser.h/.cpp` | the syntax tree of a script, its limits and `ParseScript` |
 
 ## Writable levels
@@ -74,3 +75,9 @@ A target is a **whole field**: `LinkField` finds it and gives the type, a path t
 ## Load errors
 
 An error is `{message, column}` in the **whole script's text**, and the message begins with the statement: `assignment to 'cell.timer'`, `'+=' on 'x'`, `'toggle' of 'x'`, `'if' condition`, `'emit Action' argument 2`. A mistake inside the user's expression is at its own byte (the columns of the sub-formula shifted by where it starts, `FormulaText`); a mistake the checker finds in what the compiler wrote around it (`flag += 1`: the `+` of a `bool`) is at the statement's operator, the keyword for `if`, `emit` and `toggle`; a target error is at the target's first byte and an unknown command or a wrong argument count at the command's name. Messages are those of `LinkField` and the checker (`did you mean`, the list of fields); the ones this file adds are: no write targets, a path the host does not allow (it lists what it allows), a component, a field type a script cannot write, an unknown command (it lists the registered ones) and an argument count that is not the command's.
+
+## In content
+
+A reflected struct can have a field `EffectScript`; its form is the object `<onTick script="cell.timer -= 1; ..."/>`, the same in XML, binary and JSON (the accessor is included at the bottom of `EffectScript.h`, as `Value.h` does, so a generated file that names the field sees it). It is compiled **while the document loads**, against the declaration of the load's `ValueLinkScope` (the document's `<context>`, which therefore comes before the script fields) and the host's `ValueLinkScope::UseWriteTargets`, found in the innermost scope that has some (`Targets()`), per thread as the declaration is. The tables of `UseTables` reach the script's formulas the same way.
+
+Load errors are reported under the `script` key as `column N: <message>` ending with the document name (`ValueLinkScope::AtDocumentWithin`), and the field stays as it was; a failed load adds no program to the pool. They are: no `script`, a `from`, `expr` or `value` beside it, no declared context, **no write targets in scope** and any compile error. No targets is an error even for a script that stores nothing: a document with scripts is not ready until the host said what they may write, and an empty `WriteTargets` is that decision. `script=""` is a script that runs nothing. `Save` writes the source text as loaded, so a file round-trips to an equal handle; the editor shows no properties of a script.

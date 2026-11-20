@@ -180,7 +180,7 @@ namespace BECore::Tests {
         Fixture f;
         const EffectScript script =
             f.Must("if (caster.attack > 10) { board.turn = 1; } else if (caster.attack > 5) { board.turn = 2; } else if (caster.attack > 0) { board.turn = 3; } else { board.turn = 4; }");
-        for (const auto& [attack, count] : {std::pair{20, 1}, std::pair{8, 2}, std::pair{3, 3}, std::pair{-1, 4}, std::pair{11, 1}, std::pair{10, 2}}) {
+        for (const auto& [attack, count] : {Pair{20, 1}, Pair{8, 2}, Pair{3, 3}, Pair{-1, 4}, Pair{11, 1}, Pair{10, 2}}) {
             f.caster.attack = attack;
             f.board.turn = 0;
             f.Run(script);

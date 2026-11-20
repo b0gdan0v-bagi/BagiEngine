@@ -55,8 +55,17 @@ namespace BECore {
             return _program && other._program && _program->Equivalent(*other._program);
         }
 
+        /// The editor has no property to show in a compiled script: its text is the field's own form, not a property
+        template <typename Visitor>
+        bool VisitProperties(Visitor& /*visitor*/) {
+            return false;
+        }
+
     private:
         IntrusivePtr<const EffectProgram> _program;
     };
 
 }  // namespace BECore
+
+// The accessor is part of the type: a generated .gen.hpp that names an EffectScript field sees it by including this header
+#include <BECore/Values/Effects/EffectScriptAccessor.h>
