@@ -1,10 +1,12 @@
 #include "NativeProgramSet.h"
 
+#include <BECore/ProgramListTypes.h>
 #include <BECore/ProgramRowTypes.h>
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Programs/CompileOptions.h>
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <NativePrograms/NativeProgramFormulas.h>
+#include <NativePrograms/NativeProgramSetLists.h>
 #include <NativePrograms/NativeProgramSetRows.h>
 
 namespace BECore::Tests {
@@ -50,6 +52,7 @@ namespace BECore::Tests {
             for (const StringView name : {"a", "b", "c"}) {
                 static_cast<void>(result.Add<ProgramRowData::ProgramRowOperands>(name));
             }
+            static_cast<void>(result.Add<ProgramListData::ProgramListHand>("hand"));
             return result;
         }();
         return declaration;
@@ -91,6 +94,9 @@ namespace BECore::Tests {
         }
         if (auto rows = AssembleRowPrograms(programs); !rows.has_value()) {
             return std::unexpected(rows.error());
+        }
+        if (auto lists = AssembleListPrograms(programs); !lists.has_value()) {
+            return std::unexpected(lists.error());
         }
         return programs;
     }

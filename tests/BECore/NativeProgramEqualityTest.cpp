@@ -4,6 +4,7 @@
 // so which one a lane holds is not part of the meaning of a program, and `Same` of ProgramInterpreterTest makes the same exception.
 
 #include <BECore/ProgramEdgeValues.h>
+#include <BECore/ProgramListTypes.h>
 #include <BECore/ProgramRowTypes.h>
 #include <BECore/Random/Rng.h>
 #include <BECore/ValueTestTypes.h>
@@ -25,6 +26,10 @@
 namespace BECore::Tests {
 
     using namespace ValueTestData;
+    using ProgramListData::ProgramListHand;
+    using ProgramListData::ProgramListSet;
+    using ProgramListData::ProgramListSuit;
+    using ProgramListData::ProgramListTile;
     using ProgramRowData::ProgramRowOperands;
 
     namespace {
@@ -119,13 +124,61 @@ namespace BECore::Tests {
             operands.enum64 = element;
         }
 
-        /// The objects of every level of `NativeProgramSetDeclaration()`: what a formula reads is a `caster` and a `cast`, what a hand-assembled program reads is `a`, `b` and `c`
+        /// How long the lists of a hand are in case `index`: every length from none to more than a loop of a few turns, and now and then a long one
+        constexpr size_t kLongListEvery = 16;
+        constexpr size_t kLongListBase = 70;
+        constexpr size_t kLongListSpread = 230;
+        constexpr size_t kSetCountModulus = 7;
+        constexpr size_t kListLengthModulus = 9;
+
+        void Fill(ProgramListTile& tile, Rng& rng) {
+            tile.suit = static_cast<ProgramListSuit>(Choose<ProgramEnum>(Pick::Draw, 0, rng).index % EnumUtils<ProgramListSuit>::Count());
+            tile.terminal = Choose<bool>(Pick::Draw, 0, rng);
+            tile.rank = Choose<int32_t>(Pick::Draw, 0, rng);
+            tile.weight = Choose<float>(Pick::Draw, 0, rng);
+            tile.position = Choose<Vec3>(Pick::Draw, 0, rng);
+            tile.name = Choose<PoolString>(Pick::Draw, 0, rng);
+        }
+
+        /// The lists of a hand: the arrays are full of drawn tiles (NaN weights, the extremes of the ranks), the vectors have the length of the case, none is always empty
+        void Fill(ProgramListHand& hand, size_t index, Rng& rng) {
+            hand.before = Choose<int32_t>(Pick::Draw, 0, rng);
+            hand.after = Choose<int32_t>(Pick::Draw, 0, rng);
+            hand.sets.clear();
+            hand.counts.clear();
+            hand.weights.clear();
+            for (ProgramListTile& tile : hand.tiles) {
+                Fill(tile, rng);
+            }
+            for (size_t s = 0; s < index % kSetCountModulus; ++s) {
+                ProgramListSet set;
+                set.pung = Choose<bool>(Pick::Draw, 0, rng);
+                for (ProgramListTile& tile : set.tiles) {
+                    Fill(tile, rng);
+                }
+                hand.sets.push_back(set);
+            }
+            const size_t countLength = index % kLongListEvery == 0 ? kLongListBase + index % kLongListSpread : index % kListLengthModulus;
+            for (size_t k = 0; k < countLength; ++k) {
+                hand.counts.push_back(Choose<int32_t>(Pick::Draw, 0, rng));
+            }
+            for (size_t k = 0; k < index % kListLengthModulus && k < hand.weights.capacity(); ++k) {
+                hand.weights.push_back(Choose<float>(Pick::Draw, 0, rng));
+            }
+            for (bool& flag : hand.flags) {
+                flag = Choose<bool>(Pick::Draw, 0, rng);
+            }
+        }
+
+        /// The objects of every level of `NativeProgramSetDeclaration()`: what a formula reads is a `caster` and a `cast`, what a hand-assembled program reads is `a`, `b` and `c`, and the
+        /// loop programs read `hand`
         struct InputCase {
             ValueUnitStats caster;
             ValueCastInfo cast;
             ProgramRowOperands a;
             ProgramRowOperands b;
             ProgramRowOperands c;
+            ProgramListHand hand;
         };
 
         void Fill(InputCase& input, size_t index, Rng& rng) {
@@ -141,6 +194,7 @@ namespace BECore::Tests {
             Fill(input.a, Pick::Walk, index, rng);
             Fill(input.b, Pick::Step, index, rng);
             Fill(input.c, Pick::Draw, index, rng);
+            Fill(input.hand, index, rng);
         }
 
         Context MakeContext(const InputCase& input) {
@@ -150,6 +204,7 @@ namespace BECore::Tests {
             context.Set(kOperandsLevelA, input.a);
             context.Set(kOperandsLevelB, input.b);
             context.Set(kOperandsLevelC, input.c);
+            context.Set(kListsLevel, input.hand);
             return context;
         }
 
@@ -308,6 +363,62 @@ namespace BECore::Tests {
         }
     }
 
+    TEST(NativeProgramEqualityTest, TheLoopProgramsAgreeOnEmptyShortAndVeryLongListsAndOnEveryIndex) {
+        const auto compiled = CompileNativeProgramSet();
+        ASSERT_TRUE(compiled.has_value()) << compiled.error().c_str();
+
+        constexpr size_t kLongList = 20000;
+        constexpr size_t kManySets = 300;
+        Vector<InputCase> inputs;
+        for (const size_t length : {size_t{0}, size_t{1}, size_t{4}, size_t{5}, kLongList}) {
+            Rng rng(kSeed + length);
+            InputCase input;
+            Fill(input, 1, rng);
+            input.hand.sets.clear();
+            input.hand.counts.clear();
+            input.hand.weights.clear();
+            for (size_t i = 0; i < length; ++i) {
+                input.hand.counts.push_back(static_cast<int32_t>(i * 7919U));
+                if (i < input.hand.weights.capacity()) {
+                    input.hand.weights.push_back(static_cast<float>(i) - 1.5f);
+                }
+                if (i < kManySets) {
+                    input.hand.sets.push_back(ProgramListSet{});
+                }
+            }
+            // An index that is inside the lists, at both ends of them, and outside
+            for (const int32_t where : {-1, 0, 1, 3, 13, 14, 15, 299, 300, 100000}) {
+                input.a.i32 = where;
+                input.b.i32 = where;
+                inputs.push_back(input);
+            }
+        }
+        size_t checked = 0;
+        for (const ProgramId id : *compiled) {
+            const Program& program = ProgramPool::Get(id);
+            if ((program.Reads() & LevelBit(kListsLevel)) == 0) {
+                continue;
+            }
+            ++checked;
+            const NativeProgramFn function = ProgramPool::Native(id);
+            ASSERT_NE(function, nullptr) << Describe(program).c_str() << " is not bound: the generated file is missing or stale";
+            for (size_t i = 0; i < inputs.size(); ++i) {
+                const Context context = MakeContext(inputs[i]);
+                Image generated;
+                Image interpreted;
+                function(context, generated.bytes);
+                BECore::Run(program, context, interpreted.bytes);
+                if (!SameResult(program.ResultType(), generated.bytes, interpreted.bytes)) {
+                    ADD_FAILURE() << Describe(program).c_str() << " case " << i << ": generated " << Hex(generated.bytes, ProgramTypeSize(program.ResultType())).c_str() << ", interpreter "
+                                  << Hex(interpreted.bytes, ProgramTypeSize(program.ResultType())).c_str() << "\n"
+                                  << program.Disassemble().c_str();
+                    break;
+                }
+            }
+        }
+        EXPECT_GT(checked, 0U) << "no program of the set reads the lists";
+    }
+
     TEST(NativeProgramEqualityTest, TheSetRunsEveryOpcode) {
         const auto compiled = CompileNativeProgramSet();
         ASSERT_TRUE(compiled.has_value()) << compiled.error().c_str();
@@ -319,8 +430,7 @@ namespace BECore::Tests {
             }
         }
         for (const Opcode op : EnumUtils<Opcode>::Values()) {
-            // The list and loop programs are not in the set yet: they join it with their tests
-            if (op != Opcode::Invalid && !IsListInstruction(op) && !IsLoadElem(op)) {
+            if (op != Opcode::Invalid) {
                 EXPECT_TRUE(used[static_cast<size_t>(op)]) << "no program of the set runs " << EnumUtils<Opcode>::ToString(op).data() << ": add it to NativeProgramSetRows.cpp";
             }
         }

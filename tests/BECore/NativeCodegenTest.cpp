@@ -1,6 +1,7 @@
 // The generator of native programs (Values/Programs/Native/ProgramCodegen.h): its text is the reference for what a compiled program does, so the cases pin the shape of the
 // text, its determinism and that every opcode of the instruction set has a statement. That the text computes what `Run` computes is the equality test over a generated set.
 
+#include <BECore/Values/Programs/Lists/ListImage.h>
 #include <BECore/Values/Programs/Native/ProgramCodegen.h>
 #include <BECore/Values/Programs/Opcode.h>
 #include <BECore/Values/Programs/Program.h>
@@ -61,6 +62,61 @@ namespace BECore::Tests {
             const uint8_t reg = Require(builder.AcquireRegister());
             builder.EmitLoadConst(reg, value);
             return InternProgram(builder, ProgramType::Int32, reg);
+        }
+
+        /// `any(list, e, e.flag)` with an early exit over a list of one-byte elements at the offset 8 of level 0, and, when @p nested, a loop over the same list inside it
+        ProgramId AnyOfList(bool nested) {
+            ListDescriptor list;
+            list.offset = 8;
+            list.stride = 1;
+            list.count = 4;
+            ProgramBuilder builder;
+            const uint8_t listReg = Require(builder.AcquireRegister());
+            const uint8_t element = Require(builder.AcquireRegister());
+            const uint8_t answer = Require(builder.AcquireRegister());
+            const uint8_t flag = Require(builder.AcquireRegister());
+            builder.EmitListSlot(listReg, 0, list);
+            builder.EmitLoadConst(answer, false);
+            const size_t outer = builder.EmitLoopBegin(element, listReg);
+            if (nested) {
+                const uint8_t innerElement = Require(builder.AcquireRegister());
+                const size_t inner = builder.EmitLoopBegin(innerElement, listReg);
+                builder.EmitLoadElem(flag, ProgramType::Bool, innerElement, 0);
+                builder.EmitLoopEnd(inner);
+                builder.ReleaseRegister(innerElement);
+            }
+            builder.EmitLoadElem(flag, ProgramType::Bool, element, 0);
+            builder.Emit(Opcode::OrBool, answer, answer, flag);
+            builder.EmitBreakIf(answer, true);
+            builder.EmitLoopEnd(outer);
+            return InternProgram(builder, ProgramType::Bool, answer);
+        }
+
+        /// The numbers after `goto L` and the numbers of the labels that start a line, each in the order of the text
+        struct Jumps {
+            Vector<uint32_t> targets;
+            Vector<uint32_t> labels;
+        };
+
+        Jumps JumpsOf(StringView text) {
+            Jumps jumps;
+            const auto number = [](StringView digits) {
+                uint32_t value = 0;
+                for (const char c : digits) {
+                    if (c < '0' || c > '9') {
+                        break;
+                    }
+                    value = value * 10 + static_cast<uint32_t>(c - '0');
+                }
+                return value;
+            };
+            for (size_t at = text.find("goto L"); at != StringView::npos; at = text.find("goto L", at + 1)) {
+                jumps.targets.push_back(number(text.substr(at + 6)));
+            }
+            for (size_t at = text.find("\nL"); at != StringView::npos; at = text.find("\nL", at + 1)) {
+                jumps.labels.push_back(number(text.substr(at + 2)));
+            }
+            return jumps;
         }
 
         String Generate(Span<const ProgramId> programs) {
@@ -226,6 +282,50 @@ const NativeProgramRegistrar kRegistrar{{kEntries}};
 
         EXPECT_NE(text.find("Kernel::ExecuteLoadTable(regs, Instruction{Opcode::LoadTable, 1, 0, 3, 0, 0U}, kConstants_" + Hex(id) + ");"), String::npos) << text;
         EXPECT_EQ(CountOf(text, "    {{{0x"), kEntries + 1) << "the run and the index constant";
+    }
+
+    TEST(NativeCodegenTest, AJumpTargetHasALabelAndNothingElseDoes) {
+        for (const bool nested : {false, true}) {
+            const ProgramId id = AnyOfList(nested);
+            const Program& program = ProgramPool::Get(id);
+
+            const String text = Generate(id);
+
+            const Jumps jumps = JumpsOf(text);
+            Vector<uint32_t> expected;
+            for (const Instruction& ins : program.Code()) {
+                if (IsJump(ins.op)) {
+                    expected.push_back(ins.imm);
+                }
+            }
+            EXPECT_EQ(jumps.targets, expected) << text;
+            Vector<uint32_t> targets = jumps.targets;
+            eastl::sort(targets.begin(), targets.end());
+            targets.erase(eastl::unique(targets.begin(), targets.end()), targets.end());
+            Vector<uint32_t> labels = jumps.labels;
+            eastl::sort(labels.begin(), labels.end());
+            EXPECT_EQ(labels, targets) << "a label for each target, once, and none that nothing jumps to (an unused label is a warning)\n" << text;
+            EXPECT_NE(text.find(Format("\nL{}:\n    Kernel::StoreResult", program.Code().size())), String::npos) << "a jump to the end of the code lands before the result is stored\n" << text;
+        }
+    }
+
+    TEST(NativeCodegenTest, AProgramWithoutAJumpHasNoLabel) {
+        const String text = Generate(UnfusedFormula());
+
+        EXPECT_TRUE(JumpsOf(text).labels.empty()) << text;
+        EXPECT_EQ(CountOf(text, "goto"), 0U);
+    }
+
+    TEST(NativeCodegenTest, ALoopProgramGivesTheSameTextOnEveryCall) {
+        const ProgramId id = AnyOfList(true);
+        const ProgramId plain = AnyOfList(false);
+        const Array<ProgramId, 2> forward{id, plain};
+        const Array<ProgramId, 2> backward{plain, id};
+
+        const String first = Generate(Span<const ProgramId>(forward));
+
+        EXPECT_EQ(Generate(Span<const ProgramId>(forward)), first);
+        EXPECT_EQ(Generate(Span<const ProgramId>(backward)), first);
     }
 
     TEST(NativeCodegenTest, AnEmptySetIsAFileThatInstallsNothing) {

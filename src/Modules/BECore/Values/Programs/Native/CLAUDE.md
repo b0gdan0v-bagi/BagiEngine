@@ -23,7 +23,7 @@ A pool id is the order of loading in one process and differs between runs, so it
 
 ## Same bits as the interpreter
 
-A generated function calls the **same kernels** the interpreter's `switch` calls (`Kernels.h`, expanded from the same X-macro lists, so a row cannot be missing; a new row without an emitter fails the every-opcode tests), with the instruction written as a literal so the compiler sees the register numbers and offsets. `LoadConst`, `LoadTable`, `LoadTableSlot` and the store of the result are kernel functions too (`ExecuteLoadConst`, ..., `StoreResult`), so both paths have one meaning for them. `NativeProgramEqualityTest` compares **bytes**, except the payload and sign of a NaN: LLVM folds an operation on a constant NaN to some NaN, so which one is not defined.
+A generated function calls the **same kernels** the interpreter's `switch` calls (`Kernels.h`, `Lists/ListKernels.h`, expanded from the same X-macro lists, so a row cannot be missing; a new row without an emitter fails the every-opcode tests), with the instruction written as a literal so the compiler sees the register numbers and offsets. `LoadConst`, `LoadTable`, `LoadTableSlot` and the store of the result are kernel functions too (`ExecuteLoadConst`, ..., `StoreResult`), so both paths have one meaning for them. A jump is decided by the kernel too (`ExecuteLoopBegin`, `ExecuteLoopEnd` and `ExecuteBreakIf` return it), so the generated code only branches: `if (Kernel::ExecuteLoopEnd(...)) goto L<i>;`, with a label before exactly the instructions a jump goes to (an unused label is a warning) and one before the store of the result. `NativeProgramEqualityTest` compares **bytes**, except the payload and sign of a NaN: LLVM folds an operation on a constant NaN to some NaN, so which one is not defined.
 
 Equal bits need equal floating-point code, so the generated file **and** the interpreter's sources (`Interpreter.cpp`, `Peephole.cpp`, `ExprChecker.cpp`, listed in `BECore/CMakeLists.txt`) are compiled with `-ffp-contract=off` (`/fp:precise` on plain MSVC; written from the compiler's documentation, not built by the loop). Clang's default contraction made `Dot` and `Lerp` one ulp different between two inlined kernels. Do not drop the flag from one side.
 
@@ -47,7 +47,6 @@ The ratios against the interpreter and the plain C++, and what the look for a bo
 
 ## Not yet
 
-- Operations over arrays (`data-values-collections`, not merged): its rows get emitters when it lands; the every-opcode tests fail until they do.
 - **A program with a `PoolString` constant never binds**: the constant is the address of the entry, another one in the next process, so the equality fails by design and the program runs in the interpreter. The engine's set holds no program that loads a string constant; constants of strings by their text would be a change of the generator and of the registry.
 - Typed locals instead of the `RegisterImage` array (the generated code still loads and stores through the registers): the benchmark (`Values/CLAUDE.md`) shows what is left over the plain C++; this is the next step if it is wanted.
 - The proof on a whole game run (generated against `--interpreted`, the report bytes compared) belongs to the game's repository.
