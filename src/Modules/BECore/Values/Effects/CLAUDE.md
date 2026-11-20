@@ -12,6 +12,7 @@ A formula (`Programs/CLAUDE.md`) only reads. A **script** is the short list of s
 | `EffectProgram.h/.cpp` | `EffectOperand`, `EffectStep`, the immutable `EffectProgram` |
 | `EffectProgramBuilder.h/.cpp` | assembles and checks a script (`Finish`) |
 | `EffectRunner.h/.cpp` | `RunEffects`, `EffectResult` |
+| `ScriptAst.h`, `ScriptParser.h/.cpp` | the syntax tree of a script, its limits and `ParseScript` |
 
 ## Writable levels
 
@@ -44,3 +45,18 @@ A script is a flat `Vector<EffectStep>` of four kinds: `Store` (an operand into 
 ## What a run guarantees
 
 It ends, allocates nothing and writes only through `Context::MutableObject`: a store to a level that is not writable is skipped, counted in `EffectResult::refused` and an `ASSERT`. `stores` counts the stores that reached a writable level, `changed` those that changed a byte, `emitted` and `dropped` the commands that fitted and those a full buffer refused. The buffer is not cleared by the run. A level a script reads must have an object (`ASSERT`, as `Run`); a slot read from a missing object gives zero rather than a crash in a release build.
+
+## The text of a script
+
+```
+script    := statement*
+statement := target '=' e ';' | target '+=' e ';' | target '-=' e ';' | target '++' ';' | target '--' ';'
+           | 'toggle' target ';' | 'if' '(' e ')' block ['else' (block | if)] | 'emit' Name '(' [e {',' e}] ')' ';'
+block     := '{' statement* '}'
+```
+
+`target` is a dotted path, `e` a formula (`Programs/CLAUDE.md`, "The text of a formula"). `ExprLexer` has a statement mode (`LexOptions::statements`) for the extra tokens; a formula still refuses them with its old messages, and `a--b` is a minus and a negation there. `ParseScript` checks the shape only and **does not read an expression**: it takes the tokens up to the `;`, the closing `)` or the `,` that ends it (parentheses counted, so a comma inside a call does not split) and keeps their byte range, which the compiler compiles as a formula and whose columns it shifts by the range's start. So an error inside an expression is the formula's own message, and an unbalanced parenthesis is named by the compiler.
+
+`if`, `else`, `emit` and `toggle` are keywords at the start of a statement only (`a = toggle.on` reads a level named `toggle`; a statement cannot start with one as a target). A statement's `column` is the operator of an assignment and the keyword of the others, the place its errors point at. A missing `;` is reported at the end of the previous token, so the caret is where it belongs. An `else if` is the one statement of an else block, built in a loop: a chain as long as the statement limit does not nest the parser, and its block depth is that of the first `if`.
+
+Limits, each a parse error that names it: `ScriptLimits::kMaxTextBytes`, `kMaxStatements` (every block together) and `kMaxBlockDepth`. An empty script is valid and runs nothing.
