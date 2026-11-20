@@ -473,6 +473,44 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(UISliderComponent::ValueAtX({0.0f, 0.0f, 0.0f, 0.0f}, 0.0f, 1.0f, 0.0f, 5.0f), 0.0f) << "a rect with no travel";
     }
 
+    TEST_F(UISliderComponentTest, AContinuousSliderSnapsToAGridAndReachesItsEnds) {
+        const Rect area{100.0f, 10.0f, 300.0f, 56.0f};
+        const auto parts = UISliderComponent::GetParts(area, 0.0f);
+        EXPECT_EQ(UISliderComponent::ValueAtX(area, 0.0f, 1.0f, 0.0f, parts.travelStart), 0.0f);
+        EXPECT_EQ(UISliderComponent::ValueAtX(area, 0.0f, 1.0f, 0.0f, parts.travelEnd), 1.0f);
+        EXPECT_EQ(UISliderComponent::ValueAtX(area, -5.0f, 15.0f, 0.0f, parts.travelEnd), 15.0f);
+
+        const auto steps = static_cast<int>(UISliderComponent::kContinuousSteps);
+        for (float x = parts.travelStart; x <= parts.travelEnd; x += 0.37f) {
+            const float value = UISliderComponent::ValueAtX(area, 0.0f, 1.0f, 0.0f, x);
+            const double cell = static_cast<double>(value) * steps;
+            EXPECT_NEAR(cell, std::round(cell), 1e-3) << "x " << x << " asks for " << value << ", which is on the grid";
+        }
+        EXPECT_EQ(UISliderComponent::FormatValue(UISliderComponent::ValueAtX(area, 0.0f, 1.0f, 0.0f, parts.travelStart + 0.3f * (parts.travelEnd - parts.travelStart))), "0.3");
+    }
+
+    TEST_F(UISliderComponentTest, ADragOverEveryPixelOfAContinuousSliderEmitsFewDistinctValuesAndNeverTheSameTwice) {
+        ActionLog actions;
+        const float y = MiddleY("Free");
+        ASSERT_TRUE(Down("Free", XAt("Free", 0.0f)));
+        const auto parts = UISliderComponent::GetParts(RectOf("Free"), 0.0f);
+        for (float x = parts.travelStart; x <= parts.travelEnd; x += 0.25f) {
+            Drag(x, y);
+        }
+        ASSERT_TRUE(Up(parts.travelEnd, y));
+
+        HashSet<PoolString> distinct;
+        PoolString previous;
+        for (const auto& entry : actions.All()) {
+            EXPECT_NE(entry.value, previous) << "the same value twice in a row";
+            previous = entry.value;
+            distinct.insert(entry.value);
+        }
+        EXPECT_GT(distinct.size(), 100u) << "a drag over the whole track passes many cells";
+        EXPECT_LE(distinct.size(), static_cast<size_t>(UISliderComponent::kContinuousSteps) + 1);
+        EXPECT_EQ(previous, "1"_intern);
+    }
+
     // ---- a drag keeps asking ------------------------------------------------------------------------------------------------------
 
     TEST_F(UISliderComponentTest, ADragEmitsOncePerChangeOfTheValue) {

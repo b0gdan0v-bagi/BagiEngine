@@ -51,6 +51,9 @@ namespace BECore {
             const double snapped = std::clamp(low + std::round((value - low) / step) * step, low, high);
             // A range that is not a whole number of steps still has its maximum, which the pointer at the end asks for
             value = std::abs(value - high) < std::abs(value - snapped) ? high : snapped;
+        } else {
+            // A continuous slider has a grid of its own: a drag over the track would otherwise ask for a new value at every pixel, and each distinct text is a new entry in the pool for good
+            value = low + std::round(along * kContinuousSteps) / kContinuousSteps * (high - low);
         }
         return static_cast<float>(std::clamp(value, low, high));
     }
@@ -147,16 +150,19 @@ namespace BECore {
         if (owner.IsDisabled() || action.Empty()) {
             return;
         }
-        const PoolString text = PoolString::Intern(FormatValue(ValueAt(owner, x)));
-        if (text == _lastEmitted) {
-            return;
+        const float value = ValueAt(owner, x);
+        if (_hasLastValue && value == _lastValue) {
+            return;  // before the formatting and the interning: a drag inside one grid cell costs a compare
         }
-        _lastEmitted = text;
-        InputEvents::ActionEvent::Emit(action, text);
+        _hasLastValue = true;
+        _lastValue = value;
+        _lastEmitted = PoolString::Intern(FormatValue(value));
+        InputEvents::ActionEvent::Emit(action, _lastEmitted);
     }
 
     void UISliderComponent::OnPress(UIElement& owner, float x, float /*y*/) {
         _lastEmitted = PoolString{};  // a new gesture always emits, whatever the last one ended on
+        _hasLastValue = false;
         Follow(owner, x);
     }
 

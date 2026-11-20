@@ -2591,6 +2591,36 @@ button:checked { background: var(--panel); }
             return text;
         }
 
+        /// The shape the cascade budget is for: elements nested to the depth limit, each with a long `class` attribute, and rules of long descendant selectors whose
+        /// leftmost part never matches, so every selector walks the whole chain of ancestors
+        struct HostileCascade {
+            String html;
+            String css;
+        };
+
+        HostileCascade MakeHostileCascade() {
+            constexpr size_t kElements = 2000;
+            constexpr size_t kClassWords = 100;
+            constexpr size_t kSelectorsPerRule = 8;  // 32 selectors of 16 parts in each of 1024 rules would pass the 1 MiB of a sheet
+            String classes = "w1";
+            for (size_t i = 2; i <= kClassWords; ++i) {
+                AppendFormat(classes, " w{}", i);
+            }
+            const String open = Format("<div class=\"{}\">", classes.c_str());
+            HostileCascade hostile;
+            for (size_t i = 0; i < kElements; i += UIHtmlParser::kMaxDepth) {
+                const size_t depth = std::min(UIHtmlParser::kMaxDepth, kElements - i);
+                hostile.html += Format("{}{}", Repeat(open, depth), Repeat("</div>", depth));
+            }
+            const String selector = Format(".never {}", Repeat(".w100 ", UICssParser::kMaxSelectorParts - 2) + ".w100");
+            String rule = selector;
+            for (size_t i = 1; i < kSelectorsPerRule; ++i) {
+                AppendFormat(rule, ", {}", selector.c_str());
+            }
+            hostile.css = Repeat(Format("{} {{ width: 1px; }}\n", rule.c_str()), UICssParser::kMaxRules);
+            return hostile;
+        }
+
         bool Mentions(const UIWebReport& report, const char* text) {
             return CountIssuesMentioning(report, text) > 0;
         }
@@ -2785,6 +2815,17 @@ button:checked { background: var(--panel); }
         EXPECT_EQ(compiled->IssuesMentioning("too large for this document"), 1u);
     }
 
+    TEST_F(UIWebTest, AHostileCascadeStopsWhenItsWorkIsSpentAndTheReportSaysSo) {
+        const HostileCascade hostile = MakeHostileCascade();
+        ASSERT_LE(hostile.css.size(), UICssParser::kMaxSheetBytes) << "the sheet must be read whole, or the cascade never has the work";
+        const CompiledWithSheet compiled = CompileWithSheet(hostile.html, hostile.css);
+        size_t entries = 0;
+        for (const UIWebIssue& issue : compiled.report.issues) {
+            entries += issue.message.find("too large for this document") != String::npos ? 1 : 0;
+        }
+        EXPECT_EQ(entries, 1u);
+    }
+
     /// The perf set reads the line it prints (`.claude/rules/perf-project.md`, `ui-web-limits`)
     TEST_F(UIWebTest, DISABLED_TheDocumentsAtTheLimitsCost) {
         const Stopwatch watch;
@@ -2793,6 +2834,8 @@ button:checked { background: var(--panel); }
         (void)CompileWithSheet("<div id=\"a\" class=\"a\"></div>", Repeat(".a { width: 1px; }\n", 10 * 1024 * 1024 / 19));
         (void)Compile(Repeat("<div class=\"x\"></div>", 4000), Repeat(".x { width: 1px; }\n", 1000));
         (void)Compile(Format("{}{}", Repeat("<div>", 60), Repeat("</div>", 60)), Format("span {}div {{ width: 1px; }}", Repeat("div ", 14)));
+        const HostileCascade hostile = MakeHostileCascade();
+        (void)CompileWithSheet(hostile.html, hostile.css);
         std::printf("UIWebLimits total_ms=%.1f\n", watch.Seconds() * 1000.0);
     }
 

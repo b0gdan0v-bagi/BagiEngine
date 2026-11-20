@@ -52,6 +52,11 @@ namespace BECore::HierarchyModel {
     /// pointer that is stale or from another scene is safe to ask about
     SceneNode* FindNode(SceneNode& root, const SceneNode* wanted);
 
+    /// Replaces @p live with the pointers of @p wanted that are in the tree under @p root (the root included), in the order of @p wanted: one walk of the tree, where FindNode per pointer is a
+    /// walk each. Compares pointers only and never dereferences one of @p wanted, so stale ones, null ones and ones of another scene are dropped. @p scratch is the caller's, so a steady frame
+    /// allocates nothing: it is cleared first and holds the pointers that were not found when the call returns. @p live keeps its capacity
+    void ResolveLive(SceneNode& root, Span<SceneNode* const> wanted, Vector<SceneNode*>& live, HashSet<const SceneNode*>& scratch);
+
     /// Replaces the contents of @p out with the ancestors of @p node from the root down to its parent: the nodes whose rows must be open for @p node to be seen.
     /// @p out keeps its capacity
     void AncestorsOf(const SceneNode& node, Vector<SceneNode*>& out);

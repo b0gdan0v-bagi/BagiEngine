@@ -81,6 +81,17 @@ namespace BECore::HierarchyModel {
             }
         }
 
+        // Takes every node under @p node out of @p missing; stops the walk when nothing is missing any more
+        void CrossOffFound(SceneNode& node, HashSet<const SceneNode*>& missing) {
+            missing.erase(&node);
+            for (const auto& child : node.GetChildren()) {
+                if (missing.empty()) {
+                    return;
+                }
+                CrossOffFound(*child, missing);
+            }
+        }
+
     }  // namespace
 
     SceneNode* FindNode(SceneNode& root, const SceneNode* wanted) {
@@ -93,6 +104,18 @@ namespace BECore::HierarchyModel {
             }
         }
         return nullptr;
+    }
+
+    void ResolveLive(SceneNode& root, Span<SceneNode* const> wanted, Vector<SceneNode*>& live, HashSet<const SceneNode*>& scratch) {
+        live.clear();
+        scratch.clear();
+        scratch.insert(wanted.begin(), wanted.end());
+        CrossOffFound(root, scratch);
+        for (SceneNode* const node : wanted) {
+            if (scratch.find(node) == scratch.end()) {
+                live.push_back(node);
+            }
+        }
     }
 
     bool ContainsNode(const SceneNode& root, const SceneNode* node) {

@@ -385,6 +385,59 @@ namespace BECore::Tests {
         EXPECT_EQ(FindNode(Root(), removed), nullptr);
     }
 
+    TEST_F(HierarchyModelTest, ResolveLiveKeepsTheLiveNodesInTheirOrderAndDropsDeadForeignAndNullOnes) {
+        SceneNode* const removed = &Node("B2");
+        const Vector<SceneNode*> wanted{&Node("C"), removed, &Root(), nullptr, &Node("Leaf"), &Node("A")};
+        Node("Branch").RemoveChild(removed);
+
+        Vector<SceneNode*> live;
+        HashSet<const SceneNode*> scratch;
+        ResolveLive(Root(), {wanted.data(), wanted.size()}, live, scratch);
+
+        // The root counts as part of its own tree, the removed node (never dereferenced) and the null pointer are dropped
+        ASSERT_EQ(live.size(), 4u);
+        EXPECT_EQ(live[0], &Node("C"));
+        EXPECT_EQ(live[1], &Root());
+        EXPECT_EQ(live[2], &Node("Leaf"));
+        EXPECT_EQ(live[3], &Node("A"));
+    }
+
+    TEST_F(HierarchyModelTest, ResolveLiveReusesItsListAndItsScratch) {
+        Vector<SceneNode*> live;
+        HashSet<const SceneNode*> scratch;
+        const Vector<SceneNode*> first{&Node("A"), &Node("B1"), &Node("C")};
+        ResolveLive(Root(), {first.data(), first.size()}, live, scratch);
+        const size_t capacity = live.capacity();
+        ASSERT_EQ(live.size(), 3u);
+
+        const Vector<SceneNode*> second{&Node("Leaf")};
+        ResolveLive(Root(), {second.data(), second.size()}, live, scratch);
+
+        ASSERT_EQ(live.size(), 1u);
+        EXPECT_EQ(live[0], &Node("Leaf"));
+        EXPECT_EQ(live.capacity(), capacity);
+
+        ResolveLive(Root(), {}, live, scratch);
+        EXPECT_TRUE(live.empty());
+    }
+
+    TEST_F(HierarchyModelTest, ResolveLiveDropsANodeOfAnotherTree) {
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(R"(<SceneManager><scenes><scene type="Scene" name="Second"><nodes><node name="Stranger"/></nodes></scene></scenes></SceneManager>)"));
+        auto other = New<SceneManager>();
+        other->Deserialize(deserializer);
+        other->Initialize();
+        SceneNode* const stranger = FindNodeBelow(other->GetSceneByName("Second"_intern)->GetRootNode(), "Stranger");
+        const Vector<SceneNode*> wanted{stranger, &Node("A")};
+
+        Vector<SceneNode*> live;
+        HashSet<const SceneNode*> scratch;
+        ResolveLive(Root(), {wanted.data(), wanted.size()}, live, scratch);
+
+        ASSERT_EQ(live.size(), 1u);
+        EXPECT_EQ(live[0], &Node("A"));
+    }
+
     TEST_F(HierarchyModelTest, TheSelectionIsAnnouncedOncePerChange) {
         SelectionTracker tracker;
 

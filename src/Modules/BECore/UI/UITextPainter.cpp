@@ -74,6 +74,7 @@ namespace BECore {
         if (path != _fontPath) {
             // First use, or a field was changed. A path that does not load is logged once and tried again only when it changes
             _fontPath = path;
+            ResetLayouts();  // a font loaded again can sit at the address of the old one
             _fontHandle = CoreManager::GetResourceManager().Load<Font>(path.ToStringView());
             if (!_fontHandle || _fontHandle->GetState() != ResourceState::Loaded) {
                 LOG_ERROR("UIText: cannot load the font '{}'"_format(path.ToStringView()));
@@ -81,6 +82,12 @@ namespace BECore {
             }
         }
         return _fontHandle ? _fontHandle.Get() : nullptr;
+    }
+
+    void UITextPainter::ResetLayouts() {
+        _layoutCache.Reset();
+        _measureCache.Reset();
+        _checkCache.Reset();
     }
 
     PoolString UITextPainter::GetResolvedFontPath(const UITextParams& params) {
@@ -142,7 +149,7 @@ namespace BECore {
             return {};
         }
         // No height limit: the text is as tall as its lines
-        const TextLayoutResult layout = TextLayout::Layout(*resolved, shown, MakeOptions(params, maxWidth, 0.0f, scale));
+        const TextLayoutResult& layout = _measureCache.Get(*resolved, shown, MakeOptions(params, maxWidth, 0.0f, scale));
         return {layout.width / scale, layout.height / scale};
     }
 
@@ -153,7 +160,7 @@ namespace BECore {
         if (!resolved || width <= 0.0f || height <= 0.0f || scale <= 0.0f) {
             return fit;
         }
-        const TextLayoutResult layout = TextLayout::Layout(*resolved, shown, MakeOptions(params, width, height, scale));
+        const TextLayoutResult& layout = _checkCache.Get(*resolved, shown, MakeOptions(params, width, height, scale));
         fit.hasContent = true;
         fit.fits = !layout.overflowed && !layout.truncated;
         fit.canShrink = params.overflow != TextOverflow::Clip;

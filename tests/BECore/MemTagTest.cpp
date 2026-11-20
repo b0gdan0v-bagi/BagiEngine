@@ -54,20 +54,28 @@ namespace BECore::Tests {
         EXPECT_EQ(AllocTracker::SwapTag(before), MemTag::Network);
     }
 
-    // The entry point sets its tag itself: the layout allocates under no scope of the test and still counts in `UI`
+    // The entry point sets its tag itself: the layout allocates under no scope of the test and still counts in `UI`. A steady layout
+    // allocates nothing, so it runs on a fresh thread, whose first layout takes the chunk of that thread's scratch arena
     TEST(MemTagTest, ALayoutIsCountedUnderTheUITag) {
         UICanvasLayout canvas;
         BuildHud(canvas);
         const AllocTagTotals uiBefore = AllocTracker::GetTagTotals(MemTag::UI);
 
-        UILayoutContext context;
-        context.outputWidth = 1280.0f;
-        context.outputHeight = 720.0f;
-        ASSERT_TRUE(canvas.Update(context));
+        bool updated = false;
+        MemTag tagAfter = MemTag::Game;
+        std::thread layoutThread([&canvas, &updated, &tagAfter] {
+            UILayoutContext context;
+            context.outputWidth = 1280.0f;
+            context.outputHeight = 720.0f;
+            updated = canvas.Update(context);
+            tagAfter = AllocTracker::GetCurrentTag();
+        });
+        layoutThread.join();
 
+        ASSERT_TRUE(updated);
         const AllocTagTotals uiAfter = AllocTracker::GetTagTotals(MemTag::UI);
         EXPECT_GT(uiAfter.count, uiBefore.count);
-        EXPECT_EQ(AllocTracker::GetCurrentTag(), MemTag::Untagged);
+        EXPECT_EQ(tagAfter, MemTag::Untagged);
     }
 
 #else

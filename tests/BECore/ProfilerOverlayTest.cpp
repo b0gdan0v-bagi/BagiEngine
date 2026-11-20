@@ -1,4 +1,5 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/FrameStats/FrameStatsText.h>
 #include <BECore/Profiler/ProfilerToggle.h>
@@ -107,6 +108,20 @@ namespace BECore::Tests {
         EXPECT_GT(_renderer->calls.size(), 3u);  // the background, the text, the bars, the budget line
         EXPECT_EQ(_renderer->PeekRenderCounters().drawCalls, 0u);
         EXPECT_FLOAT_EQ(_renderer->GetViewTransform().scale, 1.0f);
+    }
+
+    TEST_F(ProfilerOverlayWidgetTest, AVisibleOverlayAllocatesNothingTheTrackerCounts) {
+        if (!AllocTracker::kEnabled || !kProfilerViewsBuilt) {
+            GTEST_SKIP() << "needs ENGINE_PROFILER_ALLOC and the profiler views";
+        }
+        ProfilerOverlayWidget overlay;
+        overlay.SetVisible(true);
+        const uint64_t before = AllocTracker::GetThreadCounters().count;
+        for (int frame = 0; frame < 4; ++frame) {
+            overlay.DrawScreen();
+        }
+        EXPECT_GT(_renderer->calls.size(), 0u);
+        EXPECT_EQ(AllocTracker::GetThreadCounters().count, before);
     }
 
     TEST_F(ProfilerOverlayWidgetTest, AHiddenOverlayDrawsNothing) {

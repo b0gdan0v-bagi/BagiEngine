@@ -33,8 +33,9 @@ namespace BECore {
      * @brief The text machinery of a label and of a text component: the placeholder expansion, the font, the layout cache, the drawing, the measure and the fit check.
      *
      * Not reflected and kept by its owner, one per text, because it caches: the expanded text (made again only when the source, a variable or, for a text with a `{#key}`, the string
-     * table changed), the font handle (loaded again when the path changes; a family nobody knows and a font that does not load are logged once) and the layout (made again only when
-     * the text or what shapes it changed, so a steady screen costs no layout). It knows nothing of the element it serves: every call takes the fields as a `UITextParams`.
+     * table changed), the font handle (loaded again when the path changes; a family nobody knows and a font that does not load are logged once) and the layouts of a draw, a measure and a check (each
+     * made again only when the text or what shapes it changed, so a steady screen and a shown tooltip cost no layout). It knows nothing of the element it serves: every call takes the fields as a
+     * `UITextParams`.
      */
     class UITextPainter {
     public:
@@ -66,18 +67,23 @@ namespace BECore {
             return _layoutCache.GetLast();
         }
 
-        /// How many times the text was laid out
+        /// How many times the text was laid out for a draw
         [[nodiscard]] uint32_t GetLayoutCount() const {
             return _layoutCache.GetLayoutCount();
         }
 
     private:
         [[nodiscard]] Font* ResolveFont(const UITextParams& params);
+        void ResetLayouts();
 
         ResourceHandle<Font> _fontHandle;
         PoolString _fontPath;      // the path _fontHandle was loaded from, to notice a changed font, family or weight
         FontRequest _fontRequest;  // the request of the last resolve: an unknown family is logged when it changes, not on every frame
+        // One cache per kind of call: a draw, a measure and a check ask with different limits, so one cache would lay out again on each switch between them. The key holds the
+        // displayed text and every option, so a changed variable or string measures again
         TextLayoutCache _layoutCache;
+        TextLayoutCache _measureCache;
+        TextLayoutCache _checkCache;
         String _expandedSource;  // the source that _expanded was made from
         String _expanded;
         uint64_t _expandedVersion = 0;         // the version of UIVars it was made at

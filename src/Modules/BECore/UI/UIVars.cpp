@@ -61,8 +61,11 @@ namespace BECore {
                     continue;
                 }
                 const StringView name = text.substr(i + 1, close - i - 1);
-                const StringView value = Get(PoolString::Intern(name));
-                result.append(value.data(), value.size());
+                // Find, never Intern: a name nobody interned was never set, and a text that names a thousand unknown words must not grow the pool
+                if (const Optional<PoolString> known = PoolString::Find(name)) {
+                    const StringView value = Get(*known);
+                    result.append(value.data(), value.size());
+                }
                 i = close;
             } else if (c == '}' && i + 1 < text.size() && text[i + 1] == '}') {
                 result += '}';

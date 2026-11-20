@@ -110,6 +110,8 @@ namespace BECore {
         if (!_open) {
             return;
         }
+        // The panel (history, lanes, zone statistics, ImGui's own memory) is out of the counts; other panels stay counted
+        const ScopedAllocCountersPause allocPause;
         Capture();
         ImGui::SetNextWindowSize(ImVec2(560.0f, 520.0f), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Profiler", &_open)) {

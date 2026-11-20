@@ -161,7 +161,7 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
     },
     {
       "name": "ui-web-limits",
-      "about": "The web-style UI compiler on documents far over its limits (depth, nodes, a 10 MiB sheet, the cascade work, a descendant selector over a deep chain): the limits have to keep hostile files cheap",
+      "about": "The web-style UI compiler on documents far over its limits (depth, nodes, a 10 MiB sheet, the cascade work, a descendant selector over a deep chain, a hostile cascade of long class attributes and selectors): the limits have to keep hostile files cheap",
       "fast": false,
       "command": ["{bin}/BagiEngineTests", "--gtest_also_run_disabled_tests", "--gtest_filter=UIWebTest.DISABLED_TheDocumentsAtTheLimitsCost"],
       "metrics": {

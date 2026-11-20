@@ -47,18 +47,16 @@ namespace BECore {
     /// True when the gizmo may move @p node: it has a TransformComponent and the editor has not locked it. A canvas-only node has no gizmo
     [[nodiscard]] bool IsMovable(const SceneNode& node);
 
-    /// The nodes of @p selected that are alive in @p scene (found in its tree, never dereferenced before) and movable, with their transforms as items, in the order of @p selected. The vectors are
-    /// cleared first and keep their capacity
-    void CollectMovable(Scene& scene, Span<SceneNode* const> selected, Vector<SceneNode*>& nodes, Vector<Gizmo::Item>& items);
+    /// The movable nodes of @p live with their transforms as items, in its order. @p live holds nodes known to be alive in the tree (HierarchyModel::ResolveLive confirms them once per frame): they
+    /// are dereferenced here. The vectors are cleared first and keep their capacity
+    void CollectMovable(Span<SceneNode* const> live, Vector<SceneNode*>& nodes, Vector<Gizmo::Item>& items);
 
-    /// True when every node is found in the tree of @p scene
-    [[nodiscard]] bool AllAlive(Scene& scene, Span<SceneNode* const> nodes);
+    /// Writes @p items into the TransformComponents of @p nodes (the same order), which must be alive in the active scene (GizmoEditSession confirms it). Nothing is written, and false returned,
+    /// when a node has no transform or the sizes differ
+    bool WriteItems(Span<SceneNode* const> nodes, Span<const Gizmo::Item> items);
 
-    /// Writes @p items into the TransformComponents of @p nodes (the same order). Nothing is written, and false returned, when a node is not alive in @p scene or has no transform, or the sizes differ
-    bool WriteItems(Scene& scene, Span<SceneNode* const> nodes, Span<const Gizmo::Item> items);
-
-    /// The bounds, in target pixels, of the outlines (ScenePick::SelectionOutlines) of the nodes of @p selected that are alive in @p scene; false when there is none
-    [[nodiscard]] bool SelectionBounds(Scene& scene, Span<SceneNode* const> selected, Rect& bounds);
+    /// The bounds, in target pixels, of the outlines (ScenePick::SelectionOutlines) of the nodes of @p live, which are alive in @p scene (HierarchyModel::ResolveLive); false when there is none
+    [[nodiscard]] bool SelectionBounds(Scene& scene, Span<SceneNode* const> live, Rect& bounds);
 
     /// True when @p key went down in this frame, the Viewport window is focused or hovered, and no text is being typed or modifier key held (a bare letter is never a hotkey of the command table, so
     /// the viewport reads it itself)
@@ -90,7 +88,7 @@ namespace BECore {
     /// What ViewportGizmos::Update() needs to know about this frame
     struct ViewportGizmoContext {
         Scene* scene = nullptr;            ///< the active scene
-        Span<SceneNode* const> selection;  ///< the selected nodes, the primary last
+        Span<SceneNode* const> selection;  ///< the selected nodes confirmed alive in @c scene this frame (HierarchyModel::ResolveLive), the primary last
         const ViewportFrame* frame = nullptr;
         bool editMode = false;  ///< the input mode is Edit: a drag in progress ends cleanly when it is not
         bool enabled = false;   ///< the Edit target owns the pointer and no pan is going: the gizmo is drawn and a press may grab a handle
@@ -111,8 +109,9 @@ namespace BECore {
         /// Starts the drag and tells @c Begin. False (nothing started) for no nodes, mismatched sizes or Handle::None
         bool Begin(Scene& scene, Span<SceneNode* const> nodes, Span<const Gizmo::Item> items, Gizmo::Tool tool, Gizmo::Space space, Gizmo::Handle handle, Vec2 point, const Gizmo::SnapSettings& snap);
 
-        /// True while the drag can go on in @p activeScene: it is the scene of the drag and every node is still in its tree
-        [[nodiscard]] bool CanContinue(Scene* activeScene) const;
+        /// True while the drag can go on in @p activeScene: it is the scene of the drag and every node is still in its tree and has its transform. One walk of the tree; the Update() that
+        /// follows relies on it instead of walking again
+        [[nodiscard]] bool CanContinue(Scene* activeScene);
 
         /// The pointer is at @p point (scene units); @p snapModifier flips the snap switches, @p keepAspect keeps the aspect of a scale. Writes the nodes and tells @c Change when the result differs
         /// from the last
@@ -140,11 +139,17 @@ namespace BECore {
     private:
         void Emit(NodeTransformEditPhase phase) const;
 
+        // One walk of the tree of @p scene: every node of the drag is in it and still has a transform
+        bool ConfirmNodes(Scene& scene);
+
         Gizmo::GizmoDrag _drag;
         Gizmo::Handle _handle = Gizmo::Handle::None;
         const Scene* _scene = nullptr;  // compared with the active scene, never dereferenced
         Vector<SceneNode*> _nodes;
         Vector<NodeTransformEdit> _edits;  // the nodes with their start and current values
+        Vector<SceneNode*> _alive;         // scratch of ConfirmNodes
+        HashSet<const SceneNode*> _missing;
+        bool _confirmed = false;  // CanContinue() said yes since the last Update(): the next Update() writes without a walk of its own
     };
 
     /**
