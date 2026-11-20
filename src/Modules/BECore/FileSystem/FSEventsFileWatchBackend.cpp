@@ -150,7 +150,8 @@ namespace BECore {
 
                 FSEventStreamContext context{};
                 context.info = stream.snapshot.get();
-                stream.ref = FSEventStreamCreate(kCFAllocatorDefault, &OnEvents, &context, paths, kFSEventStreamEventIdSinceNow, kStreamLatencySeconds, kStreamFlags);
+                // Events since the id of this moment are replayed, so a change between here and the registration with fseventsd is not lost
+                stream.ref = FSEventStreamCreate(kCFAllocatorDefault, &OnEvents, &context, paths, FSEventsGetCurrentEventId(), kStreamLatencySeconds, kStreamFlags);
                 CFRelease(paths);
                 if (stream.ref == nullptr) {
                     LOG_ERROR("File watch: FSEventStreamCreate failed");
@@ -167,6 +168,8 @@ namespace BECore {
                     FSEventStreamRelease(stream.ref);
                     return {};
                 }
+                // Returns once fseventsd has registered the stream: without it a write right after AddDirectory was lost on a loaded machine
+                FSEventStreamFlushSync(stream.ref);
                 return stream;
             }
 
