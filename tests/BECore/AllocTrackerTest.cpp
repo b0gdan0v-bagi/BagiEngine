@@ -295,8 +295,8 @@ namespace BECore::Tests {
         const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::DrLibs);
         AllocRouting::Free(AllocSource::DrLibs, foreign);
         const AllocSourceTotals after = AllocTracker::GetSourceTotals(AllocSource::DrLibs);
-        EXPECT_GE(after.frees, before.frees + 1);
-        EXPECT_LT(after.liveBytes, before.liveBytes + kBlock * 16);
+        EXPECT_EQ(after.frees, before.frees + 1);
+        EXPECT_LE(after.liveBytes, before.liveBytes);
         EXPECT_LE(AllocTracker::GetTotals().liveBytes, totalsBefore.liveBytes + kBig);
         EXPECT_EQ(after.liveBytes, before.liveBytes > kBig ? before.liveBytes - kBig : 0u);
     }
