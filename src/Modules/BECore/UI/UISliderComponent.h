@@ -16,18 +16,18 @@ namespace BECore {
      * `action` stays empty: this component emits on a press and a drag, which the clicker's fixed `(action, value)` on a click cannot. The slider makes the element interactive by itself, so without a
      * clicker it works but cannot be disabled.
      *
-     * `bind` names a `UIVars` variable that holds the number; `minValue` (0) and `maxValue` (1) are the ends of the range and `step` (0 = continuous) the grid a value is snapped to. The thumb stands
-     * at `GetFraction()`, read from the variable
+     * `bind` names a `UIVars` variable that holds the number; `minValue` (0) and `maxValue` (1) are the ends of the range and `step` the grid a value is snapped to (0 = continuous: `kContinuousSteps`
+     * steps of the range). The thumb stands at `GetFraction()`, read from the variable
      * (`UIText::ValueInRange`, `FractionInRange`: an unset or malformed variable is the minimum, a value outside the range is clamped, an empty or reversed range is a fraction of 0). **The slider
      * owns no value**: nothing it does changes the variable (game -> `UIVars` -> widget).
      *
      * **Input.** A press anywhere on the rect emits `ActionEvent(action, valueText)` with the value under the pointer, and the canvas then follows the press to its release (`OnPress` / `OnDrag`),
-     * also outside the rect: every motion emits again, but only when the text of the value changed, so a drag inside one step is silent. The release emits nothing and there is no `OnClick`, so one
+     * also outside the rect: every motion emits again, but only when the value changed, so a drag inside one step is silent. The release emits nothing and there is no `OnClick`, so one
      * gesture never fires a second action. A disabled owner takes the press (it does not fall through to what is below) and does nothing; so does a slider with an empty `action`.
      *
      * **The value under a point.** The thumb is a square of the height of the rect and never leaves it, so the travel of its centre is the rect narrowed by half a thumb on both sides. The value is
-     * the position in the travel, clamped, then snapped to `step` from `minValue`; the maximum is also a place to snap to when the range is not a whole number of steps. `FormatValue` writes it short
-     * and exact: `0.3`, never `0.30000001`.
+     * the position in the travel, clamped, then snapped to `step` from `minValue` (continuous: to a grid of `kContinuousSteps`, so a drag asks for few distinct texts); the maximum is also a place to
+     * snap to when the range is not a whole number of steps. `FormatValue` writes it short and exact: `0.3`, never `0.30000001`.
      *
      * `trackColor`, `fillColor` (the part before the thumb) and `thumbColor` are derived when left transparent. A disabled slider is drawn at half alpha; the thumb is lighter under the pointer and
      * darker while the press is held (wherever the pointer is). `partShape="Round"` makes the track and the filled part pills and the thumb a circle (`UIElement::DrawPart`).
@@ -49,6 +49,7 @@ namespace BECore {
         BE_REFLECT_FIELD UIPartShape partShape = UIPartShape::Square;  ///< `Round`: a pill track and fill and a round thumb; `Square` (the default) the plain rectangles
 
         static constexpr float kTrackHeight = 6.0f;                 ///< the track is this high in canvas units (less for a slider lower than that), centred
+        static constexpr double kContinuousSteps = 1000.0;          ///< a continuous slider (`step` 0) snaps to this many steps of its range, so a drag emits at most one more than this many texts
         static constexpr Color kThumbFallback{240, 240, 240, 255};  ///< the thumb when `thumbColor` is left transparent
 
         /// Where the parts are in a rect for a value at @p fraction (0..1). Pure geometry, so a test and the drawing use the same numbers
@@ -99,6 +100,8 @@ namespace BECore {
         void Follow(const UIElement& owner, float x);
 
         PoolString _lastEmitted;
+        float _lastValue = 0.0f;  ///< the value of the last emit of this gesture; compared before the text is made
+        bool _hasLastValue = false;
     };
 
 }  // namespace BECore

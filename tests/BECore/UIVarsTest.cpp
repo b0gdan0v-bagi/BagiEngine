@@ -1,4 +1,6 @@
+#include <BECore/PoolString/PoolString.h>
 #include <BECore/UI/UIVars.h>
+#include <Common/FreshText.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
 
@@ -120,6 +122,17 @@ namespace BECore::Tests {
         EXPECT_FALSE(UIVars::HasPlaceholders("plain"));
         EXPECT_TRUE(UIVars::HasPlaceholders("Score: {score}"));
         EXPECT_TRUE(UIVars::HasPlaceholders("{{literal}}"));
+    }
+
+    TEST(UIVarsTest, ANameNobodyEverSetIsNotInternedByExpandingIt) {
+        UIVars vars;
+        vars.Set("known_var"_intern, "yes");
+        const String stranger = FreshText("expand_stranger");
+        const size_t before = PoolString::GetStats().stringCount;
+
+        EXPECT_EQ(vars.Expand(Format("<{{{}}}> {{known_var}}", stranger)), "<> yes");
+        EXPECT_EQ(PoolString::GetStats().stringCount, before);
+        EXPECT_FALSE(PoolString::Find(stranger).has_value());
     }
 
 }  // namespace BECore::Tests
