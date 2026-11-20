@@ -1,5 +1,5 @@
 // The type checker over lists (Values/Programs/ExprChecker, Lists/CLAUDE.md): `size(list)`, `list[i]` and the fields of an element, as typed nodes with their offsets and
-// descriptors, and the refusal of a list or an element used as a value. The folds are in the second half of the file.
+// descriptors, and the refusal of a list or an element used as a value; then the folds with their scopes, result types and errors.
 
 #include <BECore/ProgramListTypes.h>
 #include <BECore/Values/Programs/ExprChecker.h>
@@ -288,6 +288,177 @@ namespace BECore::Tests {
     TEST(ProgramListCheckerTest, TheListFunctionsAreInTheMessageOfAnUnknownFunction) {
         const ListChecker context;
         Refused(context.declaration, "frobnicate(1)", DescribeType<int32_t>(), "frobnicate", {"unknown function 'frobnicate'", "size", "count", "any", "all", "sum"});
+    }
+
+    TEST(ProgramListCheckerTest, EachFoldHasItsResultType) {
+        const ListChecker context;
+        const struct {
+            StringView text;
+            const TypeDesc& expected;
+            FoldKind fold;
+            ProgramType type;
+        } rows[] = {{"count(hand.sets, s, s.pung)", DescribeType<int32_t>(), FoldKind::Count, ProgramType::Int32},
+                    {"any(hand.tiles, t, t.terminal)", DescribeType<bool>(), FoldKind::Any, ProgramType::Bool},
+                    {"all(hand.tiles, t, t.rank > 3)", DescribeType<bool>(), FoldKind::All, ProgramType::Bool},
+                    {"sum(hand.tiles, t, t.rank)", DescribeType<int32_t>(), FoldKind::Sum, ProgramType::Int32},
+                    {"sum(hand.counts, c, int64(c))", DescribeType<int64_t>(), FoldKind::Sum, ProgramType::Int64},
+                    {"sum(hand.tiles, t, t.weight)", DescribeType<float>(), FoldKind::Sum, ProgramType::Float},
+                    {"sum(hand.tiles, t, double(t.weight))", DescribeType<double>(), FoldKind::Sum, ProgramType::Double},
+                    {"min(hand.tiles, t, t.rank)", DescribeType<int32_t>(), FoldKind::Min, ProgramType::Int32},
+                    {"max(hand.weights, w, w)", DescribeType<float>(), FoldKind::Max, ProgramType::Float}};
+        for (const auto& row : rows) {
+            const TypedExpr expr = Accepted(context.declaration, row.text, row.expected);
+            ASSERT_EQ(Root(expr).kind, TypedNodeKind::Fold) << String(row.text).c_str();
+            EXPECT_EQ(Root(expr).fold, row.fold) << String(row.text).c_str();
+            EXPECT_EQ(Root(expr).type, ExprType(row.type)) << String(row.text).c_str();
+            ASSERT_EQ(Root(expr).operandCount, 1U);
+            EXPECT_EQ(Operand(expr, Root(expr), 0).kind, TypedNodeKind::List) << String(row.text).c_str();
+            EXPECT_LT(Root(expr).body, expr.root) << "the body comes before the fold, like an operand";
+            EXPECT_EQ(Root(expr).loop, 0U);
+        }
+    }
+
+    TEST(ProgramListCheckerTest, TheBodyReadsTheElementThroughTheVariable) {
+        const ListChecker context;
+        const ProgramListTile tile{};
+        const TypedExpr expr = Accepted(context.declaration, "sum(hand.tiles, t, t.rank)", DescribeType<int32_t>());
+        const TypedNode& body = expr[Root(expr).body];
+        EXPECT_EQ(body.opcode, Opcode::LoadElemInt32);
+        EXPECT_EQ(body.immediate, OffsetIn(tile, tile.rank));
+        const TypedNode& variable = Operand(expr, body, 0);
+        ASSERT_EQ(variable.kind, TypedNodeKind::Element);
+        EXPECT_EQ(variable.operandCount, 0U) << "a variable has no operands: it is the element of its loop";
+        EXPECT_EQ(variable.loop, Root(expr).loop);
+
+        // A list of scalars: the variable alone is the value
+        const TypedExpr scalar = Accepted(context.declaration, "sum(hand.counts, c, c)", DescribeType<int32_t>());
+        EXPECT_EQ(scalar[Root(scalar).body].opcode, Opcode::LoadElemInt32);
+        EXPECT_EQ(scalar[Root(scalar).body].immediate, 0U);
+        const TypedExpr flags = Accepted(context.declaration, "any(hand.flags, f, f)", DescribeType<bool>());
+        EXPECT_EQ(flags[Root(flags).body].opcode, Opcode::LoadElemBool);
+        // A component of a scalar element and a field through an embedded object
+        const TypedExpr points = Accepted(context.declaration, "sum(refused.points, p, p.y)", DescribeType<float>());
+        EXPECT_EQ(points[Root(points).body].opcode, Opcode::LoadElemFloat) << "the component of a variable is read where it is";
+        EXPECT_EQ(points[Root(points).body].immediate, sizeof(float));
+        const ProgramListCrate crate{};
+        const TypedExpr crates = Accepted(context.declaration, "sum(stock.crates, k, k.tile.rank)", DescribeType<int32_t>());
+        EXPECT_EQ(crates[Root(crates).body].immediate, OffsetIn(crate, crate.tile) + OffsetIn(tile, tile.rank));
+        const TypedExpr position = Accepted(context.declaration, "sum(hand.tiles, t, t.position.z)", DescribeType<float>());
+        EXPECT_EQ(position[Root(position).body].opcode, Opcode::LoadElemFloat);
+        EXPECT_EQ(position[Root(position).body].immediate, OffsetIn(tile, tile.position) + 2 * sizeof(float));
+    }
+
+    TEST(ProgramListCheckerTest, ALiteralBodyTakesTheExpectedTypeElseInt) {
+        const ListChecker context;
+        const TypedExpr plain = Accepted(context.declaration, "sum(hand.counts, c, 1)", DescribeType<int32_t>());
+        EXPECT_EQ(ConstantOf<int32_t>(plain[Root(plain).body]), 1);
+        const TypedExpr wide = Accepted(context.declaration, "sum(hand.counts, c, 1)", DescribeType<int64_t>());
+        EXPECT_EQ(Root(wide).type, ExprType(ProgramType::Int64));
+        EXPECT_EQ(ConstantOf<int64_t>(wide[Root(wide).body]), 1);
+        const TypedExpr real = Accepted(context.declaration, "max(hand.counts, c, 2.5)", DescribeType<float>());
+        EXPECT_EQ(ConstantOf<float>(real[Root(real).body]), 2.5f);
+        // Beside the fold the literal is an int, as beside any int
+        const TypedExpr compared = Accepted(context.declaration, "count(hand.sets, s, s.pung) == 3", DescribeType<bool>());
+        EXPECT_EQ(ConstantOf<int32_t>(Operand(compared, Root(compared), 1)), 3);
+    }
+
+    TEST(ProgramListCheckerTest, ALiteralBesideTheVariableTakesItsType) {
+        const ListChecker context;
+        const TypedExpr product = Accepted(context.declaration, "sum(hand.weights, w, w * 2)", DescribeType<float>());
+        EXPECT_EQ(ConstantOf<float>(Operand(product, product[Root(product).body], 1)), 2.0f);
+        const TypedExpr left = Accepted(context.declaration, "any(hand.weights, w, 2 * w > 3)", DescribeType<bool>());
+        EXPECT_EQ(left[Root(left).body].opcode, OpcodeOf(ProgramOperation::Gt, ProgramType::Float));
+        // A table beside the bare variable has no type of its own, so the variable is read first: the entries are floats, not ints
+        const TypedExpr table = Accepted(context.declaration, "any(hand.weights, w, at(0, 1, 2) + w > 1)", DescribeType<bool>());
+        EXPECT_EQ(table[Root(table).body].opcode, OpcodeOf(ProgramOperation::Gt, ProgramType::Float));
+    }
+
+    TEST(ProgramListCheckerTest, LoopsNestAndNumberThemselvesInTheOrderTheyAreMet) {
+        const ListChecker context;
+        const TypedExpr expr = Accepted(context.declaration, "count(hand.sets, s, count(s.tiles, t, t.rank > 3 && s.pung) > 1)", DescribeType<int32_t>());
+        ASSERT_EQ(Root(expr).kind, TypedNodeKind::Fold);
+        EXPECT_EQ(Root(expr).loop, 0U);
+        const TypedNode& outerBody = expr[Root(expr).body];
+        EXPECT_EQ(outerBody.opcode, OpcodeOf(ProgramOperation::Gt, ProgramType::Int32));
+        const TypedNode& inner = Operand(expr, outerBody, 0);
+        ASSERT_EQ(inner.kind, TypedNodeKind::Fold);
+        EXPECT_EQ(inner.loop, 1U);
+        const TypedNode& innerList = Operand(expr, inner, 0);
+        ASSERT_EQ(innerList.kind, TypedNodeKind::List);
+        ASSERT_EQ(innerList.operandCount, 1U);
+        EXPECT_EQ(Operand(expr, innerList, 0).kind, TypedNodeKind::Element);
+        EXPECT_EQ(Operand(expr, innerList, 0).loop, 0U) << "the list of the inner loop is a field of the outer element";
+        // The inner body reads both variables
+        const TypedNode& both = expr[inner.body];
+        EXPECT_EQ(both.opcode, OpcodeOf(ProgramOperation::And, ProgramType::Bool));
+        EXPECT_EQ(Operand(expr, Operand(expr, Operand(expr, both, 0), 0), 0).loop, 1U);
+        EXPECT_EQ(Operand(expr, Operand(expr, both, 1), 0).loop, 0U);
+
+        // Two loops side by side may use one name, and each has a number of its own
+        const TypedExpr siblings = Accepted(context.declaration, "count(hand.sets, s, s.pung) + count(hand.sets, s, !s.pung)", DescribeType<int32_t>());
+        EXPECT_EQ(Operand(siblings, Root(siblings), 0).loop, 0U);
+        EXPECT_EQ(Operand(siblings, Root(siblings), 1).loop, 1U);
+    }
+
+    TEST(ProgramListCheckerTest, AnElementNameIsOneThingAndAFoldTakesAPlainOne) {
+        const ListChecker context;
+        const TypeDesc& integer = DescribeType<int32_t>();
+        Refused(context.declaration, "count(hand.sets, s, count(s.tiles, s, s.terminal) > 1)", integer, "s, s.terminal", {"'s' is already the element of the enclosing loop over 'hand.sets'"});
+        Refused(context.declaration, "count(hand.tiles, hand, true)", integer, "hand, true", {"'hand' is a level of the context", "a name of its own"});
+        Refused(context.declaration, "count(hand.tiles, min, true)", integer, "min, true", {"'min' is a function"});
+        Refused(context.declaration, "count(hand.tiles, size, true)", integer, "size, true", {"'size' is a function"});
+        Refused(context.declaration, "count(hand.tiles, int, true)", integer, "int, true", {"'int' is a function"});
+        Refused(context.declaration, "count(hand.tiles, bool, true)", integer, "bool, true", {"'bool' is the name of a type"});
+        Refused(context.declaration, "count(hand.tiles, string, true)", integer, "string, true", {"the name of a type"});
+        Refused(context.declaration, "count(hand.tiles, true, true)", integer, "true, true", {"a plain name"});
+        Refused(context.declaration, "count(hand.tiles, 5, true)", integer, "5, true", {"a plain name"});
+        Refused(context.declaration, "count(hand.tiles, t.x, true)", integer, "t.x", {"a plain name", "not a value or a path"});
+        // The variable is the loop's alone: after the call it is an unknown name again, and the list cannot use it
+        Refused(context.declaration, "t + count(hand.tiles, t, true)", integer, "t", {"unknown name 't'"});
+        Refused(context.declaration, "count(t.tiles, t, true)", integer, "t.tiles", {"unknown level 't'"});
+    }
+
+    TEST(ProgramListCheckerTest, TheBodyOfAFoldHasTheTypeItNeeds) {
+        const ListChecker context;
+        const TypeDesc& integer = DescribeType<int32_t>();
+        Refused(context.declaration, "any(hand.tiles, t, t.rank)", DescribeType<bool>(), "t.rank", {"the function 'any' needs a bool body", "an int", "compare it"});
+        Refused(context.declaration, "count(hand.tiles, t, t.weight)", integer, "t.weight", {"the function 'count'", "a float"});
+        Refused(context.declaration, "all(hand.tiles, t, 1)", DescribeType<bool>(), "1)", {"the function 'all' needs a bool body", "an int"});
+        Refused(context.declaration, "sum(hand.tiles, t, t.terminal)", integer, "t.terminal", {"the function 'sum' needs a number body", "a bool"});
+        Refused(context.declaration, "max(hand.tiles, t, t.position)", integer, "t.position", {"number body", "a vec3"});
+        Refused(context.declaration, "min(hand.tiles, t, t.suit)", integer, "t.suit", {"number body", "an enum"});
+        Refused(context.declaration, "sum(hand.tiles, t, t.name)", integer, "t.name", {"number body", "a string", "int(x)"});
+        // The result is the body's type, with no conversion
+        Refused(context.declaration, "sum(hand.tiles, t, t.rank)", DescribeType<float>(), "sum", {"the formula is an int", "float"});
+        Refused(context.declaration, "count(hand.tiles, t, t.terminal) + sum(hand.tiles, t, t.weight)", integer, "sum", {"one type", "int and float"});
+    }
+
+    TEST(ProgramListCheckerTest, AListOrAnElementIsNoBodyAndNoOperand) {
+        const ListChecker context;
+        const TypeDesc& integer = DescribeType<int32_t>();
+        Refused(context.declaration, "sum(hand.sets, s, s.tiles)", integer, "s.tiles)", {"'s.tiles' is a list of ProgramListTile"});
+        Refused(context.declaration, "any(hand.tiles, t, t)", DescribeType<bool>(), "t)", {"'t' is ProgramListTile, an element of a list", "t.suit"});
+        Refused(context.declaration, "hand.tiles + count(hand.tiles, t, t.rank > 3)", integer, "hand.tiles", {"a list of ProgramListTile"});
+        Refused(context.declaration, "sum(hand.tiles, t, t.rank) == hand.sets[0]", DescribeType<bool>(), "[0]", {"ProgramListSet", "hand.sets[0].tiles"});
+        Refused(context.declaration, "count(hand.tiles[0], t, true)", integer, "[0]", {"the function 'count' needs a list as its first argument", "ProgramListTile, an element of a list"});
+        Refused(context.declaration, "count(hand.sets, s, s.tiles.suit == 0)", integer, "s.tiles.suit", {"needs the live object"});
+    }
+
+    TEST(ProgramListCheckerTest, TheArityDecidesBetweenTheRowAndTheFold) {
+        const ListChecker context;
+        const TypeDesc& integer = DescribeType<int32_t>();
+        const TypedExpr row = Accepted(context.declaration, "min(hand.before, 2)", integer);
+        EXPECT_EQ(Root(row).kind, TypedNodeKind::Operation);
+        EXPECT_EQ(Root(row).opcode, OpcodeOf(ProgramOperation::Min, ProgramType::Int32));
+        const TypedExpr fold = Accepted(context.declaration, "max(hand.tiles, t, t.rank)", integer);
+        EXPECT_EQ(Root(fold).kind, TypedNodeKind::Fold);
+        Refused(context.declaration, "min(1, 2, 3)", integer, "1,", {"the function 'min' needs a list as its first argument", "'1' is an int"});
+        Refused(context.declaration, "min(hand.before)", integer, "min", {"'min' takes 2 arguments, but 1 is given"});
+        Refused(context.declaration, "max(hand.before, 1, 2, 3)", integer, "max", {"'max' takes 2 arguments, but 4 are given"});
+        Refused(context.declaration, "count(hand.tiles, t)", integer, "count", {"'count' takes 3 arguments, but 2 are given"});
+        Refused(context.declaration, "any(hand.tiles)", DescribeType<bool>(), "any", {"'any' takes 3 arguments, but 1 is given"});
+        Refused(context.declaration, "sum(hand.tiles, t, t.rank, 1)", integer, "sum", {"'sum' takes 3 arguments, but 4 are given"});
+        Refused(context.declaration, "count + 1", integer, "count", {"'count' is a function"});
     }
 
 }  // namespace BECore::Tests

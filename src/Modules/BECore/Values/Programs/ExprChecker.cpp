@@ -244,6 +244,8 @@ namespace BECore {
             uint32_t loop = 0;
             const TypeDesc* list = nullptr;
             const TypeInfo* element = nullptr;
+            /// The list as the source wrote it, for the message of a name that is taken
+            String source;
         };
 
         class Checker {
@@ -1124,7 +1126,7 @@ namespace BECore {
                 const ExprListFunction* listFunction = FindListFunction(node.text);
                 // `min` and `max` are in both tables: three arguments are a fold, any other count is the row of the numbers and its arity error
                 if (listFunction != nullptr && (function == nullptr || node.argumentCount == listFunction->arity)) {
-                    return CheckListFunction(node, *listFunction);
+                    return CheckListFunction(node, *listFunction, hint);
                 }
                 if (function == nullptr) {
                     if (_declaration.IndexOf(node.text).has_value()) {
@@ -1179,19 +1181,95 @@ namespace BECore {
             }
 
             /// `size(list)` and the folds; a fold is told apart from the two-argument `min` and `max` by its arity before it gets here
-            TypedResult CheckListFunction(const ExprNode& node, const ExprListFunction& function) {
+            TypedResult CheckListFunction(const ExprNode& node, const ExprListFunction& function, Optional<ExprType> hint) {
                 if (node.argumentCount != function.arity) {
                     return Refuse(node.column, ArityMessage(node, function.arity));
                 }
                 const String subject = Format("the function '{}'", function.name);
                 if (function.isFold) {
-                    return Refuse(node.column, Format("{} is not checked yet", subject));
+                    return CheckFold(node, function, hint);
                 }
                 const auto list = RequireList(_ast.arguments[node.firstArgument], subject);
                 if (!list.has_value()) {
                     return std::unexpected(list.error());
                 }
                 return EmitOperation(Opcode::ListSize, ProgramType::Int32, node.column, {list->id});
+            }
+
+            /// Why @p name cannot be the element of a loop, empty when it can: one name is one thing, so a loop variable never hides a level, a function, a type or an outer variable
+            String VariableNameProblem(StringView name) const {
+                if (_declaration.IndexOf(name).has_value()) {
+                    return Format("'{}' is a level of the context", name);
+                }
+                if (FindExprFunction(name) != nullptr || FindListFunction(name) != nullptr || name == kTableFunction || name == kNamedTableFunction) {
+                    return Format("'{}' is a function", name);
+                }
+                for (const ProgramType type : AllTypes()) {
+                    if (ProgramTypeName(type) == name) {
+                        return Format("'{}' is the name of a type", name);
+                    }
+                }
+                if (const LoopScope* outer = FindScope(name)) {
+                    return Format("'{}' is already the element of the enclosing loop over '{}'", name, outer->source);
+                }
+                return {};
+            }
+
+            /**
+             * `count(list, v, body)`, `any`, `all`, `sum`, `min`, `max`: @p v is the element of the list inside @p body, and nowhere else. The body of `count`, `any` and `all` is a `bool`; the body
+             * of `sum`, `min` and `max` a number, and so is the result (its type). The loop number is the one of the order the checker meets the folds in, never the node's place, which comes after
+             * the body's nodes.
+             */
+            TypedResult CheckFold(const ExprNode& node, const ExprListFunction& function, Optional<ExprType> hint) {
+                const String subject = Format("the function '{}'", function.name);
+                const ExprNodeId listSource = _ast.arguments[node.firstArgument];
+                const ExprNodeId nameSource = _ast.arguments[node.firstArgument + 1];
+                const ExprNodeId bodySource = _ast.arguments[node.firstArgument + 2];
+                const auto list = RequireList(listSource, subject);
+                if (!list.has_value()) {
+                    return std::unexpected(list.error());
+                }
+                const ExprNode& nameNode = _ast[nameSource];
+                const uint32_t nameColumn = nameNode.column;
+                if (nameNode.kind != ExprNodeKind::Name || nameNode.text.find('.') != String::npos) {
+                    return Refuse(nameColumn, Format("{} names the element in its second argument: a plain name, as {}(list, v, ...), not a value or a path", subject, function.name));
+                }
+                if (const String problem = VariableNameProblem(nameNode.text); !problem.empty()) {
+                    return Refuse(nameColumn, Format("{} names the element in its second argument, but {}: use a name of its own, for example v", subject, problem));
+                }
+                const uint32_t loop = _loopCount++;
+                _scopes.push_back(LoopScope{nameNode.text, loop, list->list, list->element, Describe(listSource)});
+                const bool isNumberFold = function.fold == FoldKind::Sum || function.fold == FoldKind::Min || function.fold == FoldKind::Max;
+                const Optional<ExprType> bodyHint = isNumberFold ? (hint.has_value() && IsNumberType(hint->program) ? hint : std::nullopt) : Optional<ExprType>(ProgramType::Bool);
+                const TypedResult body = Check(bodySource, bodyHint);
+                _scopes.pop_back();
+                if (!body.has_value()) {
+                    return body;
+                }
+                const ExprType bodyType = TypeOf(*body);
+                const uint32_t bodyColumn = _ast[bodySource].column;
+                ExprType resultType = ProgramType::Int32;
+                if (isNumberFold) {
+                    if (!IsNumberType(bodyType.program)) {
+                        return Refuse(bodyColumn, Format("{} needs a number body (an int, int64, float or double), but this one is {}: read a number of the element, or convert it with int(x)",
+                                                         subject, Typed(bodyType)));
+                    }
+                    resultType = bodyType;
+                } else {
+                    if (bodyType != ProgramType::Bool) {
+                        return Refuse(bodyColumn, Format("{} needs a bool body, but this one is {}: compare it, for example with != 0", subject, Typed(bodyType)));
+                    }
+                    resultType = function.fold == FoldKind::Count ? ProgramType::Int32 : ProgramType::Bool;
+                }
+                TypedNode fold;
+                fold.kind = TypedNodeKind::Fold;
+                fold.type = resultType;
+                fold.fold = function.fold;
+                fold.loop = loop;
+                fold.body = *body;
+                fold.column = node.column;
+                fold.operands[fold.operandCount++] = list->id;
+                return Emit(std::move(fold));
             }
 
             /// The first argument of a list function: a list, or the error that says what it is instead
@@ -1455,6 +1533,7 @@ namespace BECore {
             const CompileOptions& _options;
             Vector<bool> _hasName;
             Vector<LoopScope> _scopes;
+            uint32_t _loopCount = 0;
             TypedExpr _out;
         };
 
