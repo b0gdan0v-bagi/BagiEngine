@@ -56,6 +56,8 @@ Shots: <n changed of m, images opened: names | unavailable: reason>     (only wi
 - `followup`: a concrete defect of the code the diff wrote or touched that is not worth a second round (a stale or AI-slop comment, duplication, a misleading name, a missing test of an edge case, a magic number) and that you would still want fixed. It names the fix, small enough for one developer run. `todo-merge` files every `followup` of a merged branch into the area's rolling entry `<area>-review-followups`, so write it for a reader who sees only that line and the code at the merge.
 - `note`: a style preference, an idea, an open question, anything a reasonable developer could leave as it is. Nobody files it.
 
+Every non-blocking finding carries exactly one of the two tags, `[followup]` or `[note]`: the merge files only the `[followup]` lines, so an untagged finding is lost. A finding you leave as a `note` although it names a defect says why (`no follow-up: <reason>`).
+
 On a branch of a rolling entry itself (its id is `<area>-review-followups` or that with a suffix `-<n>`) write `note` instead of `followup`, so the follow-ups do not breed follow-ups. Every finding has a `file:line` and says why it is wrong; a finding without one is dropped.
 
 ## Forbidden
