@@ -106,7 +106,7 @@ namespace BECore::ProgramDomainData {
         return count;
     }
 
-    /// The mask of one cell; an index outside the board is an empty mask
+    /// The mask of one cell; an index outside the board is an empty mask, whatever the integer is
     [[nodiscard]] inline DomainBits256 BitsBit(int32_t index) {
         DomainBits256 result;
         if (index >= 0 && index < kDomainBoardCells) {
@@ -115,8 +115,9 @@ namespace BECore::ProgramDomainData {
         return result;
     }
 
+    /// Total: a cell outside the board is an empty mask, whatever the integers are
     [[nodiscard]] inline DomainBits256 BitsCell(int32_t x, int32_t y) {
-        if (x < 0 || x >= kDomainBoardWidth) {
+        if (x < 0 || x >= kDomainBoardWidth || y < 0 || y >= kDomainBoardWidth) {
             return {};
         }
         return BitsBit(y * kDomainBoardWidth + x);

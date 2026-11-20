@@ -31,6 +31,14 @@ namespace BECore::Tests {
             R"x(<blocked expr="and_mask(caster.walls, shift(cast.walls, East))"/><reach expr="or_mask(shift(caster.walls, South), cast.walls)"/>)x"
             R"x(<crowd expr="popcount(and_mask(caster.walls, cast.walls)) + caster.turn"/><open expr="any(and_mask(caster.walls, cast.walls)) &amp;&amp; cast.turn &gt; 1"/>)x";
 
+        String Repeated(StringView part, size_t count) {
+            String text;
+            for (size_t i = 0; i < count; ++i) {
+                text.append(part.data(), part.size());
+            }
+            return text;
+        }
+
         [[nodiscard]] DomainBits256 PatternMask(uint64_t seed) {
             DomainBits256 mask;
             for (size_t i = 0; i < mask.words.size(); ++i) {
@@ -305,6 +313,34 @@ namespace BECore::Tests {
             ExpectDefaults(document);
             EXPECT_TRUE(document.loose.IsConst());
         }
+    }
+
+    TEST(ProgramDomainLoadTest, HostileTextsOverRegisteredOperationsAreErrorsThatKeepTheFieldAndNeverCrash) {
+        static_cast<void>(RegisterDomainToys());
+        const String tooLong = Format("and_mask(caster.walls, {}cast.walls)", String(5000, ' '));
+        const String tooDeep = Format("{}caster.walls{}", Repeated("and_mask(", 200), Repeated(", cast.walls)", 200));
+        const String manyArguments = Format("majority({}cast.walls)", Repeated("cast.walls, ", 600));
+        const StringView texts[] = {"\x01and_mask(", "and_mask(,", "and_mask(caster.walls)", "shift(caster.walls, 99)", "cell(1.5, 2)",
+                                    "mask",          "popcount",   "caster.walls.w0",        "caster.walls[0]",         tooLong,
+                                    tooDeep,         manyArguments};
+        const size_t pooled = ProgramPool::Count();
+        for (const StringView text : texts) {
+            DomainDocument document;
+            const ValueLinkScope scope(kDocumentName);
+            XmlDeserializer reader;
+            String xml = Format("<root><State>{}<blocked expr=\"", kContext);
+            xml.append(text.data(), text.size());
+            xml += "\"/></State></root>";
+            if (!reader.LoadFromString(xml)) {
+                continue;  // the XML itself is refused: nothing reaches the compiler
+            }
+            ASSERT_TRUE(reader.BeginObject(kState));
+            document.Deserialize(reader);
+            reader.EndObject();
+            EXPECT_TRUE(reader.HasErrors()) << "no error for a hostile text of " << text.size() << " bytes";
+            ExpectDefaults(document);
+        }
+        EXPECT_EQ(ProgramPool::Count(), pooled);
     }
 
     TEST(ProgramDomainLoadTest, AFailedLoadAddsNothingToThePool) {
