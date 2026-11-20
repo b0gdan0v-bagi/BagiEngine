@@ -1,5 +1,6 @@
 #include <BECore/Memory/ArenaPoison.h>
 #include <BECore/Memory/BlockPool.h>
+#include <BECore/Memory/Immortal.h>
 #include <Common/AllocCheck.h>
 #include <algorithm>
 #include <cstring>
@@ -41,8 +42,10 @@ namespace BECore::Tests {
             char bytes[200];
         };
 
-        /// A pool made at static initialisation, and a block taken before main: nothing about it needs the engine
-        constinit BlockPool g_staticPool("StaticBlockPool", 24, 8, kSmallPage);
+        /// A pool made at static initialisation, and a block taken before main: nothing about it needs the engine. Immortal, because a run that filters
+        /// the test out never returns the block, and a pool that dies with a live block asserts
+        constinit Immortal<BlockPool> g_staticPoolStorage("StaticBlockPool", 24, 8, kSmallPage);
+        BlockPool& g_staticPool = g_staticPoolStorage.value;
         void* const g_earlyBlock = g_staticPool.Allocate();
 
     }  // namespace
