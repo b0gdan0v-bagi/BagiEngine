@@ -63,27 +63,37 @@ namespace BECore {
         return ViewTransform::Fit(viewWidth, viewHeight, outputWidth, outputHeight).ToOutput(0.0f, 0.0f, viewWidth, viewHeight);
     }
 
-    Vector<TouchMark> UIPreviewOverlay::TouchTargets(const UICanvasLayout& canvas, float minTouchSize, float pixelDensity) {
-        Vector<TouchMark> marks;
+    void UIPreviewOverlay::TouchTargets(const UICanvasLayout& canvas, float minTouchSize, float pixelDensity, Vector<TouchMark>& marks) {
+        marks.clear();
         if (!canvas.HasLayout() || !canvas.root) {
-            return marks;
+            return;
         }
         for (const auto& child : canvas.root->children) {
             CollectTouchTargets(*child, canvas.GetResolved(), minTouchSize, pixelDensity, marks);
         }
+    }
+
+    Vector<TouchMark> UIPreviewOverlay::TouchTargets(const UICanvasLayout& canvas, float minTouchSize, float pixelDensity) {
+        Vector<TouchMark> marks;
+        TouchTargets(canvas, minTouchSize, pixelDensity, marks);
         return marks;
     }
 
-    Vector<RegionMark> UIPreviewOverlay::RegionMarks(const UICanvasLayout& canvas) {
-        Vector<RegionMark> marks;
+    void UIPreviewOverlay::RegionMarks(const UICanvasLayout& canvas, Vector<RegionMark>& marks) {
+        marks.clear();
         if (!canvas.HasLayout()) {
-            return marks;
+            return;
         }
         const ViewTransform& transform = canvas.GetResolved().transform;
         marks.reserve(canvas.regions.Size());
         for (const auto& region : canvas.regions) {
             marks.push_back({region.name, transform.ToOutput(region.rect.x, region.rect.y, region.rect.w, region.rect.h)});
         }
+    }
+
+    Vector<RegionMark> UIPreviewOverlay::RegionMarks(const UICanvasLayout& canvas) {
+        Vector<RegionMark> marks;
+        RegionMarks(canvas, marks);
         return marks;
     }
 

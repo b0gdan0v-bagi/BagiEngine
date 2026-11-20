@@ -119,12 +119,6 @@ namespace BECore {
             return kAspectLabels[static_cast<size_t>(shape.aspect)];
         }
 
-        // A region drawn this frame, with the rect as the game published it (canvas units) for the tooltip
-        struct HoverRegion {
-            RegionMark mark;
-            Rect canvasRect;
-        };
-
         bool SameRect(const Rect& a, const Rect& b) {
             return std::abs(a.x - b.x) < kSameRectTolerance && std::abs(a.y - b.y) < kSameRectTolerance && std::abs(a.w - b.w) < kSameRectTolerance && std::abs(a.h - b.h) < kSameRectTolerance;
         }
@@ -608,13 +602,14 @@ namespace BECore {
 
         const ImVec2 mouse = ImGui::GetIO().MousePos;
         const TouchMark* hoveredMark = nullptr;
-        Vector<TouchMark> marks;
-        Vector<HoverRegion> regionHits;
+        // The vectors are members and keep their capacity, so a steady frame allocates nothing; the pointer above points into _touchMarks until the next frame clears it
+        _touchMarks.clear();
+        _regionHits.clear();
         if (scene && (_overlays.canvasBounds || _overlays.touchTargets || _overlays.regions)) {
-            Vector<IntrusivePtr<UICanvasComponent>> canvases;
-            ViewportUIDebug::CollectCanvases(scene->GetRootNode(), canvases);
+            _overlayCanvases.clear();
+            ViewportUIDebug::CollectCanvases(scene->GetRootNode(), _overlayCanvases);
             const float minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
-            for (const auto& canvas : canvases) {
+            for (const auto& canvas : _overlayCanvases) {
                 const UICanvasLayout& layout = canvas->GetLayout();
                 if (!canvas->_visible || !layout.HasLayout()) {
                     continue;
@@ -629,7 +624,8 @@ namespace BECore {
                 }
                 // Regions go under the touch targets
                 if (_overlays.regions) {
-                    for (RegionMark& mark : UIPreviewOverlay::RegionMarks(layout)) {
+                    UIPreviewOverlay::RegionMarks(layout, _canvasRegionMarks);
+                    for (const RegionMark& mark : _canvasRegionMarks) {
                         const auto [min, max] = toScreen(mark.rect);
                         fill(mark.rect, kRegionFill);
                         drawList->AddRect(min, max, kRegionColor);
@@ -639,18 +635,19 @@ namespace BECore {
                             drawList->AddText({min.x + kRegionLabelInset, min.y + kRegionLabelInset}, kRegionColor, name.data(), name.data() + name.size());
                         }
                         if (const Rect* canvasRect = layout.regions.Find(mark.name)) {
-                            regionHits.push_back({std::move(mark), *canvasRect});
+                            _regionHits.push_back({mark, *canvasRect});
                         }
                     }
                 }
                 if (_overlays.touchTargets) {
-                    for (TouchMark& mark : UIPreviewOverlay::TouchTargets(layout, minTouchSize, kViewportPixelDensity)) {
-                        marks.push_back(std::move(mark));
-                    }
+                    UIPreviewOverlay::TouchTargets(layout, minTouchSize, kViewportPixelDensity, _canvasTouchMarks);
+                    _touchMarks.insert(_touchMarks.end(), _canvasTouchMarks.begin(), _canvasTouchMarks.end());
                 }
             }
+            // The pointers are not kept past the frame: a canvas must not outlive its scene through the widget
+            _overlayCanvases.clear();
             // The last mark under the pointer is the one drawn on top
-            for (const TouchMark& mark : marks) {
+            for (const TouchMark& mark : _touchMarks) {
                 const auto [min, max] = toScreen(mark.rect);
                 drawList->AddRectFilled(min, max, mark.tooSmall ? kTouchSmallFill : kTouchOkFill);
                 drawList->AddRect(min, max, mark.tooSmall ? kTouchSmallColor : kTouchOkColor);
@@ -693,7 +690,7 @@ namespace BECore {
         if (!tooltipShown && hovered) {
             // The smallest region under the pointer, so a region inside another one stays reachable
             const HoverRegion* smallest = nullptr;
-            for (const HoverRegion& hit : regionHits) {
+            for (const HoverRegion& hit : _regionHits) {
                 const auto [min, max] = toScreen(hit.mark.rect);
                 const bool under = mouse.x >= min.x && mouse.x < max.x && mouse.y >= min.y && mouse.y < max.y;
                 if (under && (!smallest || hit.mark.rect.w * hit.mark.rect.h < smallest->mark.rect.w * smallest->mark.rect.h)) {

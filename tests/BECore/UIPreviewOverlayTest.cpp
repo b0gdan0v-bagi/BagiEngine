@@ -394,6 +394,57 @@ namespace BECore::Tests {
         ExpectRect(marks[0].rect, {0.0f, 0.0f, 100.0f, 50.0f});
     }
 
+    TEST(UIPreviewOverlayTest, TheOutFormOfTouchTargetsEqualsTheReturningFormClearsTheListAndKeepsItsCapacity) {
+        UICanvasLayout canvas = MakeCanvas();
+        AddBox(*canvas.root, "Small", 10.0f, 10.0f, 100.0f, 20.0f, true);
+        AddBox(*canvas.root, "Big", 10.0f, 100.0f, 100.0f, 32.0f, true);
+        canvas.Update(Output(1000.0f, 500.0f));
+
+        Vector<TouchMark> marks;
+        marks.resize(5);  // stale marks the call must drop
+        const size_t capacity = marks.capacity();
+        UIPreviewOverlay::TouchTargets(canvas, 32.0f, 1.0f, marks);
+
+        const auto expected = UIPreviewOverlay::TouchTargets(canvas, 32.0f, 1.0f);
+        ASSERT_EQ(marks.size(), expected.size());
+        ASSERT_EQ(marks.size(), 2u);
+        for (size_t i = 0; i < marks.size(); ++i) {
+            EXPECT_EQ(marks[i].name, expected[i].name);
+            EXPECT_EQ(marks[i].tooSmall, expected[i].tooSmall);
+            ExpectRect(marks[i].rect, expected[i].rect);
+        }
+        EXPECT_EQ(marks.capacity(), capacity);
+
+        UICanvasLayout noLayout = MakeCanvas();
+        UIPreviewOverlay::TouchTargets(noLayout, 32.0f, 1.0f, marks);
+        EXPECT_TRUE(marks.empty());
+    }
+
+    TEST(UIPreviewOverlayTest, TheOutFormOfRegionMarksEqualsTheReturningFormClearsTheListAndKeepsItsCapacity) {
+        UICanvasLayout canvas = MakeCanvas();
+        canvas.regions.Set("Hand"_intern, {10.0f, 20.0f, 300.0f, 80.0f});
+        canvas.regions.Set("Board"_intern, {0.0f, 100.0f, 400.0f, 300.0f});
+        canvas.Update(Output(400.0f, 600.0f));
+
+        Vector<RegionMark> marks;
+        marks.resize(5);
+        const size_t capacity = marks.capacity();
+        UIPreviewOverlay::RegionMarks(canvas, marks);
+
+        const auto expected = UIPreviewOverlay::RegionMarks(canvas);
+        ASSERT_EQ(marks.size(), expected.size());
+        ASSERT_EQ(marks.size(), 2u);
+        for (size_t i = 0; i < marks.size(); ++i) {
+            EXPECT_EQ(marks[i].name, expected[i].name);
+            ExpectRect(marks[i].rect, expected[i].rect);
+        }
+        EXPECT_EQ(marks.capacity(), capacity);
+
+        UICanvasLayout noLayout = MakeCanvas();
+        UIPreviewOverlay::RegionMarks(noLayout, marks);
+        EXPECT_TRUE(marks.empty());
+    }
+
     TEST(UIPreviewOverlayTest, ElementMarksAreTheRectsOfTheVisibleElementsThroughTheTransformOnTheWholeMatrix) {
         MarksFixture fixture;
         for (const Tests::UIMatrixCase& matrixCase : Tests::UILayoutMatrix()) {

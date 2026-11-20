@@ -7,7 +7,9 @@
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Renderer/IRenderTarget.h>
 #include <BECore/Types/Types.h>
+#include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIPreview.h>
+#include <BECore/UI/UIPreviewOverlay.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
@@ -139,6 +141,17 @@ namespace BECore {
         PreviewShape _shape;
         SafeAreaSimulation _safeAreaSimulation = SafeAreaSimulation::None;
         PreviewOverlays _overlays;
+        // A region drawn this frame, with the rect as the game published it (canvas units) for the tooltip
+        struct HoverRegion {
+            RegionMark mark;
+            Rect canvasRect;
+        };
+        // DrawOverlays' lists of one frame, kept for their capacity; _canvasRegionMarks and _canvasTouchMarks hold one canvas at a time
+        Vector<IntrusivePtr<UICanvasComponent>> _overlayCanvases;
+        Vector<TouchMark> _touchMarks;
+        Vector<HoverRegion> _regionHits;
+        Vector<RegionMark> _canvasRegionMarks;
+        Vector<TouchMark> _canvasTouchMarks;
         ViewportUIDebug _uiDebug;        // element rects, anchors, design rectangle and findings (they keep their marks between frames)
         PreviewSettings _storedPreview;  // the choice the editor last stored (applied from a preferences event, or sent by us)
         Optional<int32_t> _forcedView;   // the index of the forced view variant, -1 the default, nullopt Auto
