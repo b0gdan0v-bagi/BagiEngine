@@ -6,6 +6,7 @@
 #include <BECore/Values/Context.h>
 #include <BECore/Values/Programs/Components.h>
 #include <BECore/Values/Programs/Instruction.h>
+#include <BECore/Values/Programs/Lists/ListImage.h>
 #include <BECore/Values/Programs/Opcode.h>
 #include <algorithm>
 #include <cmath>
@@ -25,7 +26,7 @@
 namespace BECore::Kernel {
 
     /// How an operation reads its registers and what it writes
-    CORE_ENUM(OpShape, uint8_t, Slot, Unary, Binary, Compare, Ternary, Blend, Select, Extract, Pack)
+    CORE_ENUM(OpShape, uint8_t, Slot, Unary, Binary, Compare, Ternary, Blend, Select, Extract, Pack, Element)
 
     template <typename T>
     concept Integer = std::is_integral_v<T> && !std::is_same_v<T, bool>;
@@ -183,6 +184,14 @@ namespace BECore::Kernel {
 
     struct LoadSlot {
         static constexpr OpShape kShape = OpShape::Slot;
+        template <typename T>
+        static constexpr bool kSupports = true;
+    };
+
+    /// The field at `imm` of the element in register `a`, as `LoadSlot` reads a field of a context object; a missing element (`ElementImage::ptr` null) gives `T{}`, so a program over a list never
+    /// reads outside it. Over an enum `b` is the size of the field in bytes
+    struct LoadElem {
+        static constexpr OpShape kShape = OpShape::Element;
         template <typename T>
         static constexpr bool kSupports = true;
     };
@@ -733,6 +742,17 @@ namespace BECore::Kernel {
             } else {
                 Store<T>(regs[ins.dst], LoadField<T>(context, ins.a, ins.imm));
             }
+        } else if constexpr (Op::kShape == OpShape::Element) {
+            const auto element = Load<ElementImage>(regs[ins.a]);
+            if constexpr (std::is_same_v<T, ProgramEnum>) {
+                Store<ProgramEnum>(regs[ins.dst], ProgramEnum{element.ptr != nullptr ? LoadEnumIndex(element.ptr + ins.imm, ins.b) : 0U});
+            } else {
+                T value{};
+                if (element.ptr != nullptr) {
+                    std::memcpy(&value, element.ptr + ins.imm, sizeof(T));
+                }
+                Store<T>(regs[ins.dst], value);
+            }
         } else if constexpr (Op::kShape == OpShape::Unary) {
             Store<ResultOf<Op, T>>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a])));
         } else if constexpr (Op::kShape == OpShape::Binary || Op::kShape == OpShape::Compare) {
@@ -856,7 +876,8 @@ namespace BECore::Kernel {
 
 namespace BECore {
 
-    /// The type an instruction writes to its destination register: a row's result (`bool` for a comparison), a conversion's target; `nullopt` for `LoadConst`, `Copy` and `Invalid`
+    /// The type an instruction writes to its destination register: a row's result (`bool` for a comparison), a conversion's target; `nullopt` for `LoadConst`, `Copy`, `Invalid` and the instructions
+    /// that write a list or an element register or none (`ListSize` gives `Int32`)
     [[nodiscard]] constexpr Optional<ProgramType> ResultTypeOf(Opcode op) {
         switch (op) {
 #define BE_PROGRAM_RESULT_ROW(Op, Type, Cpp)                                                                                                                                                           \
@@ -884,9 +905,20 @@ namespace BECore {
             case Opcode::Copy:
             case Opcode::LoadTable:
             case Opcode::LoadTableSlot:
+            case Opcode::ListSlot:
+            case Opcode::ListElem:
+            case Opcode::ListAt:
+            case Opcode::LoopBegin:
+            case Opcode::LoopEnd:
+            case Opcode::BreakIf:
                 break;
+            case Opcode::ListSize:
+                return ProgramType::Int32;
         }
         return std::nullopt;
     }
 
 }  // namespace BECore
+
+// The kernels of the list instructions come last: they use `Load`, `Store` and the registers above, and a generated file includes this header only
+#include <BECore/Values/Programs/Lists/ListKernels.h>

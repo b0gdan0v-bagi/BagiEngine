@@ -165,6 +165,8 @@ namespace BECore::Tests {
                     const uint8_t reg = assembler.Load<T>(kOperandsLevelA);
                     return assembler.Finish(kProgramTypeOf<T>, reg, programs);
                 }
+            } else if constexpr (kShape == Kernel::OpShape::Element) {
+                return {};  // an element exists only inside a loop over a list, which the set does not hold yet
             } else if constexpr (kShape == Kernel::OpShape::Unary) {
                 const uint8_t a = assembler.Load<T>(kLevels[0]);
                 const uint8_t dst = assembler.Acquire();

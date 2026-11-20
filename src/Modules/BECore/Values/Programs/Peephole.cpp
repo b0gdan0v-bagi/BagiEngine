@@ -18,7 +18,7 @@ namespace BECore {
         constexpr RegisterMask RowReads(const Instruction& ins) {
             if constexpr (Op::kShape == Kernel::OpShape::Slot) {
                 return 0;
-            } else if constexpr (Op::kShape == Kernel::OpShape::Unary || Op::kShape == Kernel::OpShape::Extract) {
+            } else if constexpr (Op::kShape == Kernel::OpShape::Unary || Op::kShape == Kernel::OpShape::Element || Op::kShape == Kernel::OpShape::Extract) {
                 return RegisterBit(ins.a);
             } else if constexpr (Op::kShape == Kernel::OpShape::Binary || Op::kShape == Kernel::OpShape::Compare) {
                 return RegisterBit(ins.a) | RegisterBit(ins.b);
@@ -49,6 +49,18 @@ namespace BECore {
                 case Opcode::Copy:
                 case Opcode::LoadTable:
                     return RegisterBit(ins.a);
+                case Opcode::ListSlot:
+                    return 0;
+                case Opcode::ListElem:
+                case Opcode::ListSize:
+                case Opcode::BreakIf:
+                    return RegisterBit(ins.a);
+                case Opcode::ListAt:
+                    return RegisterBit(ins.a) | RegisterBit(ins.b);
+                case Opcode::LoopBegin:
+                    return RegisterBit(ins.a);
+                case Opcode::LoopEnd:
+                    return RegisterBit(ins.a) | RegisterBit(ins.dst);
 #define BE_PEEPHOLE_READS_ROW(Op, Type, Cpp)                                                                                                                                                           \
     case Opcode::Op##Type:                                                                                                                                                                             \
         return RowReads<Kernel::Op, Cpp>(ins);

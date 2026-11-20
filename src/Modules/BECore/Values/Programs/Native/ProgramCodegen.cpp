@@ -171,6 +171,20 @@ namespace BECore {
                 return Format("Kernel::ExecuteLoadTable(regs, {}, {});", literal, constants);
             case Opcode::LoadTableSlot:
                 return Format("Kernel::ExecuteLoadTableSlot(regs, {}, {}, context);", literal, constants);
+            case Opcode::ListSlot:
+                return Format("Kernel::ExecuteListSlot(regs, {}, {}, context);", literal, constants);
+            case Opcode::ListElem:
+                return Format("Kernel::ExecuteListElem(regs, {}, {});", literal, constants);
+            case Opcode::ListSize:
+                return Format("Kernel::ExecuteListSize(regs, {});", literal);
+            case Opcode::ListAt:
+                return Format("Kernel::ExecuteListAt(regs, {});", literal);
+            case Opcode::LoopBegin:
+                return Format("if (Kernel::ExecuteLoopBegin(regs, {})) goto L{};", literal, ins.imm);
+            case Opcode::LoopEnd:
+                return Format("if (Kernel::ExecuteLoopEnd(regs, {})) goto L{};", literal, ins.imm);
+            case Opcode::BreakIf:
+                return Format("if (Kernel::ExecuteBreakIf(regs, {})) goto L{};", literal, ins.imm);
 #define BE_PROGRAM_EMIT_ROW(Op, Type, Cpp)                                                                                                                                                             \
     case Opcode::Op##Type:                                                                                                                                                                             \
         return Format("Kernel::Execute<Kernel::" #Op ", " #Cpp ">(regs, {}, context);", literal);

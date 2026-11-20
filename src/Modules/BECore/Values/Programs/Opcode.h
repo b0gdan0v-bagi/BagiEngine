@@ -47,6 +47,7 @@
 /// Every typed instruction: `X(operation, type name, C++ type)`; the opcode is the two names written together (`AddInt32`)
 #define BE_PROGRAM_ROWS(X)                                                                                                                                                                             \
     BE_PROGRAM_TYPES_ALL(X, LoadSlot)                                                                                                                                                                  \
+    BE_PROGRAM_TYPES_ALL(X, LoadElem)                                                                                                                                                                  \
     BE_PROGRAM_TYPES_NUMBERS(X, Add)                                                                                                                                                                   \
     BE_PROGRAM_TYPES_FLOAT_VECTORS(X, Add)                                                                                                                                                             \
     X(Add, IVec2, IVec2)                                                                                                                                                                               \
@@ -153,16 +154,17 @@ namespace BECore {
      * @brief One instruction of a program
      *
      * `LoadConst`, `Copy`, `LoadTable` and `LoadTableSlot` move a whole register whatever it holds (a table picks it from a run of constants by an index);
-     * `LoadSlot<type>` reads a field of a context object; every other opcode is an operation applied to one type (`AddInt32`), a conversion
+     * `LoadSlot<type>` reads a field of a context object; `ListSlot`, `ListElem`, `ListSize`, `ListAt`, `LoopBegin`, `LoopEnd` and `BreakIf` read lists and loop over them (`Lists/`),
+     * `LoadElem<type>` reads a field of an element; every other opcode is an operation applied to one type (`AddInt32`), a conversion
      * (`Int32ToFloat`) or a fused instruction (`BE_PROGRAM_FUSED_ROWS`; `Instruction.h` says how each is encoded). `Invalid` is never emitted: a zeroed instruction is caught.
      */
-    CORE_ENUM(Opcode, uint16_t, Invalid, LoadConst, Copy, LoadTable,
-              LoadTableSlot BE_PROGRAM_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_FUSED_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_MIXED_ROWS(BE_PROGRAM_OPCODE_MIXED)
+    CORE_ENUM(Opcode, uint16_t, Invalid, LoadConst, Copy, LoadTable, LoadTableSlot, ListSlot, ListElem, ListSize, ListAt, LoopBegin, LoopEnd,
+              BreakIf BE_PROGRAM_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_FUSED_ROWS(BE_PROGRAM_OPCODE_ROW) BE_PROGRAM_MIXED_ROWS(BE_PROGRAM_OPCODE_MIXED)
                   BE_PROGRAM_CONVERSIONS(BE_PROGRAM_OPCODE_CONVERSION))
 
     /// The operations of `BE_PROGRAM_ROWS` by name, apart from the type: what the text of a formula says (`+`, `min`) before a type is known
     CORE_ENUM(ProgramOperation, uint8_t, LoadSlot, Add, Sub, Mul, Div, Mod, Neg, Abs, Eq, Ne, Lt, Le, Gt, Ge, And, Or, Not, Min, Max, Clamp, Select, Lerp, Floor, Ceil, Round, Sqrt, Dot, Length,
-              Normalize, Extract, Pack)
+              Normalize, Extract, Pack, LoadElem)
 
     /// The opcode of an operation on a type, `Invalid` when the type has no row: the checker asks it instead of keeping a table of its own
     [[nodiscard]] constexpr Opcode OpcodeOf(ProgramOperation operation, ProgramType type) {
@@ -268,6 +270,35 @@ namespace BECore {
 
     [[nodiscard]] constexpr bool IsLoadSlot(Opcode op) {
         return op >= Opcode::LoadSlotBool && op <= Opcode::LoadSlotString;
+    }
+
+    static_assert(static_cast<size_t>(Opcode::LoadElemString) - static_cast<size_t>(Opcode::LoadElemBool) + 1 == EnumUtils<ProgramType>::Count(),
+                  "the LoadElem rows are one run, in the order of ProgramType");
+
+    /// The opcode that reads a field of this type from an element of a list
+    [[nodiscard]] constexpr Opcode LoadElemOpcode(ProgramType type) {
+        switch (type) {
+#define BE_PROGRAM_LOAD_ELEM(Name, Cpp)                                                                                                                                                                \
+    case ProgramType::Name:                                                                                                                                                                            \
+        return Opcode::LoadElem##Name;
+            BE_PROGRAM_TYPES(BE_PROGRAM_LOAD_ELEM)
+#undef BE_PROGRAM_LOAD_ELEM
+        }
+        return Opcode::Invalid;
+    }
+
+    [[nodiscard]] constexpr bool IsLoadElem(Opcode op) {
+        return op >= Opcode::LoadElemBool && op <= Opcode::LoadElemString;
+    }
+
+    /// The instructions that leave straight-line order: the interpreter and the generated code branch on what the kernel returns, and `Finish` accepts them only in the shapes of `Lists/`
+    [[nodiscard]] constexpr bool IsJump(Opcode op) {
+        return op >= Opcode::LoopBegin && op <= Opcode::BreakIf;
+    }
+
+    /// A list or loop instruction (the `LoadElem` rows are plain reads and not among them): the code of a program that has one is not straight-line, so the peephole pass leaves it alone
+    [[nodiscard]] constexpr bool IsListInstruction(Opcode op) {
+        return op >= Opcode::ListSlot && op <= Opcode::BreakIf;
     }
 
     /// `slot * k + b` over a number, or over a `Vec3` with a `float` factor: one load, one multiplication and one addition in one instruction

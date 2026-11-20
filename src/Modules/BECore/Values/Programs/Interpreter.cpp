@@ -26,6 +26,23 @@ namespace BECore {
                 case Opcode::LoadTableSlot:
                     Kernel::ExecuteLoadTableSlot(regs, ins, constants, context);
                     break;
+                case Opcode::ListSlot:
+                    Kernel::ExecuteListSlot(regs, ins, constants, context);
+                    break;
+                case Opcode::ListElem:
+                    Kernel::ExecuteListElem(regs, ins, constants);
+                    break;
+                case Opcode::ListSize:
+                    Kernel::ExecuteListSize(regs, ins);
+                    break;
+                case Opcode::ListAt:
+                    Kernel::ExecuteListAt(regs, ins);
+                    break;
+                case Opcode::LoopBegin:
+                case Opcode::LoopEnd:
+                case Opcode::BreakIf:
+                    ASSERT(false, "Run: a jump is not run yet");
+                    break;
 #define BE_PROGRAM_CASE_ROW(Op, Type, Cpp)                                                                                                                                                             \
     case Opcode::Op##Type:                                                                                                                                                                             \
         Kernel::Execute<Kernel::Op, Cpp>(regs, ins, context);                                                                                                                                          \

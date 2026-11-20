@@ -264,7 +264,8 @@ const NativeProgramRegistrar kRegistrar{Span<const NativeProgramEntry>{}};
             }
             const String statement = EmitNativeInstruction(Instruction{op, 1, 2, 3, 4, 5}, "kConstants");
             EXPECT_FALSE(statement.empty()) << "opcode " << Format("{}", op);
-            EXPECT_EQ(statement.find("Kernel::"), 0U) << statement;
+            // A jump is the kernel's answer in an `if`, the target a label of the generated function
+            EXPECT_EQ(statement.find(IsJump(op) ? "if (Kernel::" : "Kernel::"), 0U) << statement;
             EXPECT_EQ(statement.back(), ';') << statement;
         }
     }
