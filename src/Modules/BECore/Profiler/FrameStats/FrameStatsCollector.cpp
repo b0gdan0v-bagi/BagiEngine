@@ -85,6 +85,10 @@ namespace BECore {
         _current.allocCount = allocs.count - _allocsAtBegin.count;
         _current.allocBytes = allocs.bytes - _allocsAtBegin.bytes;
         _current.liveBytes = allocs.liveBytes;
+        const ArenaTotals arenas = GetArenaTotals();
+        _current.arenaUsedBytes = arenas.used;
+        _current.arenaPeakBytes = arenas.peak;
+        _current.arenaOverflows = arenas.overflows;
         _ring[(_frames - 1) % kFrameHistory] = _current;
 
         BE_PROFILE_COUNTER("Draw calls", draws.drawCalls);

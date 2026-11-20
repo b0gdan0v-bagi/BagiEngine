@@ -161,4 +161,8 @@ namespace BECore {
         return state.noAllocViolations;
     }
 
+    Vector<ArenaStatsEntry> AllocTracker::GetArenaStats() {
+        return BECore::GetArenaStats();
+    }
+
 }  // namespace BECore

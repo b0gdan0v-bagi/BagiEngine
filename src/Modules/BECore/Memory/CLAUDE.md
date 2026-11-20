@@ -36,3 +36,7 @@ The EASTL allocator over a `LinearArena&`, behind `ArenaVector<T>` and `ArenaStr
 - **`deallocate` does nothing,** so a vector that grows by doubling leaves every old block in the arena until `Reset()` or the scope's rewind: `reserve` first when the size is known. The container's destructor frees nothing, but a container of non-trivial elements still runs their destructors.
 - **A default-constructed allocator binds to the thread's `ScratchArena`** (EASTL needs a default constructor, and builds one from a name string, which is not kept). Such a container belongs to the scope that is alive when it is made and must not cross threads; a container of a longer life takes its arena explicitly.
 - **Equality is by arena.** `offset` of the aligned `allocate` is ignored (EASTL passes 0).
+
+## Counters
+
+`ArenaStats` is the only source. `AllocTracker::GetArenaStats()` forwards its snapshot (a thin forwarder, so tools that already read the allocation counters find the arenas there). `FrameStats` takes `arenaUsedBytes`, `arenaPeakBytes` and `arenaOverflows` at `EndFrame`, summed over the arenas alive at that moment (`GetArenaTotals`, no allocation); the overflows are the running total, not per frame. The control method `frame_stats` answers them per frame and adds a top-level `arenas` array (`name, capacity, used, peak, overflows, chunks`). The method `memory_stats` and the editor panel are the entry `editor-memory-panel`.

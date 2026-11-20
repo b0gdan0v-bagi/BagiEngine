@@ -35,6 +35,9 @@ namespace BECore {
             frame["allocCount"] = stats.allocCount;
             frame["allocBytes"] = stats.allocBytes;
             frame["liveBytes"] = stats.liveBytes;
+            frame["arenaUsedBytes"] = stats.arenaUsedBytes;
+            frame["arenaPeakBytes"] = stats.arenaPeakBytes;
+            frame["arenaOverflows"] = stats.arenaOverflows;
             Json counters = Json::object();
             for (const FrameCounter& counter : stats.counters) {
                 const StringView name = counter.name.ToStringView();
@@ -56,6 +59,21 @@ namespace BECore {
             return *value;
         }
 
+        Json DescribeArenas() {
+            Json arenas = Json::array();
+            for (const ArenaStatsEntry& entry : AllocTracker::GetArenaStats()) {
+                Json described = Json::object();
+                described["name"] = entry.name;
+                described["capacity"] = entry.capacity;
+                described["used"] = entry.used;
+                described["peak"] = entry.peak;
+                described["overflows"] = entry.overflows;
+                described["chunks"] = entry.chunks;
+                arenas.push_back(std::move(described));
+            }
+            return arenas;
+        }
+
         void HandleFrameStats(ControlCall& call) {
             const auto frames = ReadCount(call.Params(), "frames", 1, static_cast<int64_t>(FrameStatsCollector::kFrameHistory));
             if (!frames) {
@@ -69,6 +87,7 @@ namespace BECore {
             Json result = Json::object();
             result["frames"] = std::move(list);
             result["allocTracking"] = AllocTracker::kEnabled;
+            result["arenas"] = DescribeArenas();
             call.Reply(std::move(result));
         }
 
@@ -173,7 +192,7 @@ namespace BECore {
         service.RegisterHandler("profiler_dump", HandleProfilerDump);
         service.RegisterHandler("zone_allocs", HandleZoneAllocs);
 
-        service.DescribeMethod("frame_stats", {"The last frames with stage times, draws, allocations and counters, oldest first",
+        service.DescribeMethod("frame_stats", {"The last frames with stage times, draws, allocations, arena totals and counters, oldest first; arenas: the counters of every arena",
                                                {{"frames", "integer", false, Format("How many frames, 1 to {} (default 1)", FrameStatsCollector::kFrameHistory)}}});
         service.DescribeMethod("profiler_dump", {"Writes the Chrome trace of the run (the game has to record one)",
                                                  {{"path", "string", false, Format("A relative file name without '..' (default {})", kDefaultTracePath)}}});

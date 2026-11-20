@@ -1,4 +1,5 @@
 #include <BECore/Memory/ArenaStats.h>
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <Common/Wait.h>
 #include <atomic>
 #include <cstring>
@@ -188,6 +189,25 @@ namespace BECore::Tests {
         // Each thread published its own number into its own slot: two threads on one slot would lose one
         EXPECT_EQ(sumOfUsed, kThreads * (kThreads + 1) / 2);
         EXPECT_EQ(ArenaStats::GetLiveCount(), before);
+    }
+
+    TEST(ArenaStatsTest, TheAllocTrackerForwardsTheRegistrysSnapshot) {
+        constexpr uint64_t kUsed = 77;
+        ArenaStatsSlot slot = ArenaStatsSlot::Claim("ForwardedArena");
+        ASSERT_TRUE(slot.IsValid());
+        slot.PublishUsed(kUsed);
+
+        const Vector<ArenaStatsEntry> direct = GetArenaStats();
+        const Vector<ArenaStatsEntry> forwarded = AllocTracker::GetArenaStats();
+        ASSERT_EQ(forwarded.size(), direct.size());
+        for (size_t i = 0; i < direct.size(); ++i) {
+            EXPECT_STREQ(forwarded[i].name, direct[i].name);
+            EXPECT_EQ(forwarded[i].used, direct[i].used);
+        }
+        const Found mine = Find("ForwardedArena");
+        ASSERT_TRUE(mine.found);
+        EXPECT_EQ(mine.entry.used, kUsed);
+        slot.Release();
     }
 
 }  // namespace BECore::Tests
