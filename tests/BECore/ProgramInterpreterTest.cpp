@@ -1334,8 +1334,27 @@ namespace BECore::Tests {
 
     TEST(ProgramInterpreterTest, TheInstructionIsTwelveBytes) {
         EXPECT_EQ(sizeof(Instruction), 12U);
-        EXPECT_EQ(sizeof(RegisterImage), 16U);
-        EXPECT_EQ(alignof(RegisterImage), 16U);
+        EXPECT_EQ(sizeof(RegisterImage), 32U);
+        EXPECT_EQ(alignof(RegisterImage), 32U);
+    }
+
+    TEST(ProgramInterpreterTest, TheUpperHalfOfARegisterImageIsPartOfAConstant) {
+        const auto program = [](uint8_t lastByte) {
+            RegisterImage image{};
+            image.bytes[0] = 1;
+            image.bytes[kProgramRegisterBytes - 1] = lastByte;
+            ProgramBuilder builder;
+            const uint8_t reg = Require(builder.AcquireRegister());
+            builder.Emit(Opcode::LoadConst, reg, 0, 0, 0, builder.AddConstant(image));
+            return Require(builder.Finish(ProgramType::Vec4, reg));
+        };
+        const Program low = program(0);
+        const Program high = program(7);
+        ASSERT_EQ(high.Constants().size(), 1U);
+        EXPECT_EQ(high.Constants()[0].bytes[kProgramRegisterBytes - 1], 7);
+        EXPECT_FALSE(low.SameCode(high));
+        EXPECT_NE(low.CodeHash(), high.CodeHash());
+        EXPECT_TRUE(low.SameCode(program(0)));
     }
 
     TEST(ProgramInterpreterTest, DisassemblyNamesTheInstructions) {

@@ -9,9 +9,9 @@
 
 namespace BECore {
 
-    /// The most registers a program uses, and the size of one: the biggest value a program holds (`Vec4`, `Quat`) is 16 bytes
+    /// The most registers a program uses, and the size of one: a register holds a game's value type of up to 32 bytes (a 256-bit mask); the engine's types (`Vec4`, `Quat`: 16) leave the rest zero
     inline constexpr size_t kMaxProgramRegisters = 32;
-    inline constexpr size_t kProgramRegisterBytes = 16;
+    inline constexpr size_t kProgramRegisterBytes = 32;
 
     /// The sizes of the field of an enum that `LoadSlotEnum` reads (the underlying types of a `CORE_ENUM`)
     [[nodiscard]] constexpr bool IsEnumFieldBytes(uint8_t bytes) {
