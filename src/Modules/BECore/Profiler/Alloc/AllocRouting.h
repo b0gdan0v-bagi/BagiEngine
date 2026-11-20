@@ -10,7 +10,7 @@ namespace BECore {
      * @brief malloc / calloc / realloc / free that report to AllocTracker under an AllocSource (ENGINE_PROFILER_ALLOC).
      *
      * For the libraries that allocate on their own: the include sites of stb and dr_libs and the setters of pugixml, ImGui and SDL
-     * call these. Without ENGINE_PROFILER_ALLOC they are the plain C functions, inline, with no tracker call and no cost.
+     * (Install) call these. Without ENGINE_PROFILER_ALLOC they are the plain C functions, inline, with no tracker call and no cost.
      *
      * A routed block is a plain libc block, never an AllocPlatform one (on Windows those are _aligned_malloc memory): a block made
      * before the routing started and freed after, or the other way round, still goes to the right free. Its free is then reported
@@ -55,6 +55,12 @@ namespace BECore {
                 std::free(ptr);
             }
         }
+
+        /// Points pugixml, ImGui and SDL at these functions with the sources Pugixml, ImGui and SDL. Idempotent and thread-safe. It runs
+        /// from a static initializer of BECore (AllocRouting.cpp), before main and before any SDL or ImGui call: the libraries'
+        /// setters are not safe once they have allocated. Does nothing without ENGINE_PROFILER_ALLOC, so the libraries keep malloc.
+        static void Install();
+        [[nodiscard]] static bool IsInstalled();
 
     private:
         static void* TrackedMalloc(AllocSource source, size_t size);

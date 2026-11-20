@@ -1,6 +1,12 @@
 #include <BECore/Profiler/Alloc/AllocRouting.h>
+#include <Common/AllocCheck.h>
+#include <SDL3/SDL_pixels.h>
+#include <SDL3/SDL_stdinc.h>
+#include <SDL3/SDL_surface.h>
 #include <cstring>
 #include <gtest/gtest.h>
+#include <imgui.h>
+#include <pugixml.hpp>
 
 namespace BECore::Tests {
 
@@ -43,6 +49,74 @@ namespace BECore::Tests {
         ASSERT_NE(bytes, nullptr);
         AllocRouting::Free(AllocSource::Stb, bytes);
         AllocRouting::Free(AllocSource::Stb, nullptr);
+    }
+
+    // ---- The libraries behind AllocRouting::Install (a profile build) ----
+
+    TEST(AllocRoutingTest, TheLibrariesAreRoutedBeforeMain) {
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+        EXPECT_TRUE(AllocRouting::IsInstalled());
+    }
+
+    TEST(AllocRoutingTest, ParsingAnXmlDocumentIsCountedAsPugixmlAndItsDestructionGivesTheBytesBack) {
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+        const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::Pugixml);
+        AllocSourceTotals during;
+        {
+            pugi::xml_document document;
+            ASSERT_TRUE(document.load_string("<root><child a=\"1\"/><child a=\"2\"/></root>"));
+            during = AllocTracker::GetSourceTotals(AllocSource::Pugixml);
+        }
+        const AllocSourceTotals after = AllocTracker::GetSourceTotals(AllocSource::Pugixml);
+        EXPECT_GT(during.count, before.count);
+        EXPECT_GT(during.liveBytes, before.liveBytes);
+        EXPECT_EQ(after.liveBytes, before.liveBytes);
+        EXPECT_EQ(after.frees - before.frees, during.count - before.count);
+    }
+
+    TEST(AllocRoutingTest, AnImGuiFrameIsCountedAsImGui) {
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+        const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::ImGui);
+        ImGuiContext* context = ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.DisplaySize = ImVec2(640.0f, 480.0f);
+        io.Fonts->Build();
+        ImGui::NewFrame();
+        ImGui::Render();
+        const AllocSourceTotals during = AllocTracker::GetSourceTotals(AllocSource::ImGui);
+        ImGui::DestroyContext(context);
+        const AllocSourceTotals after = AllocTracker::GetSourceTotals(AllocSource::ImGui);
+        EXPECT_GT(during.count, before.count);
+        EXPECT_GT(during.bytes, before.bytes);
+        EXPECT_LT(after.liveBytes, during.liveBytes);
+    }
+
+    TEST(AllocRoutingTest, SdlAllocationsAreCountedAsSdlWithoutInit) {
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+        const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::SDL);
+        void* block = SDL_malloc(kSize);
+        char* text = SDL_strdup("routed");
+        const AllocSourceTotals during = AllocTracker::GetSourceTotals(AllocSource::SDL);
+        SDL_free(text);
+        SDL_free(block);
+        const AllocSourceTotals after = AllocTracker::GetSourceTotals(AllocSource::SDL);
+
+        EXPECT_GE(during.count, before.count + 2);
+        EXPECT_GE(during.bytes, before.bytes + kSize);
+        EXPECT_EQ(after.liveBytes, before.liveBytes);
+
+        // SDL keeps some of what a surface needs (pixel format tables) for the process: only the count is checked
+        SDL_Surface* surface = SDL_CreateSurface(4, 4, SDL_PIXELFORMAT_RGBA32);
+        EXPECT_GT(AllocTracker::GetSourceTotals(AllocSource::SDL).count, after.count);
+        SDL_DestroySurface(surface);
     }
 
 }  // namespace BECore::Tests
