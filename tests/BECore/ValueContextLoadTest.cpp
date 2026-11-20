@@ -430,6 +430,29 @@ namespace BECore::Tests {
         EXPECT_EQ(ValueLinkScope::Current(), &outerDecl);
     }
 
+    TEST(ValueContextLoadTest, AnEmptyContextIsADeclarationOfNoLevelsThatShadowsTheOuterOneAndClosesTheScope) {
+        ContextDecl outerDecl;
+        ASSERT_TRUE(outerDecl.Add<ValueHeroStats>("hero").has_value());
+        const ValueLinkScope outer(outerDecl);
+        const ValueLinkScope inner(kDocumentName);
+
+        ValueDocument empty;
+        EXPECT_TRUE(LoadXml("<context/>", empty).empty());
+        ASSERT_NE(ValueLinkScope::Current(), nullptr);
+        EXPECT_NE(ValueLinkScope::Current(), &outerDecl);
+        EXPECT_EQ(ValueLinkScope::Current()->Size(), 0U);
+
+        ValueDocument reads;
+        const String refused = LoadXml(R"(<damage from="hero.renown"/>)", reads);
+        EXPECT_FALSE(refused.empty());
+        EXPECT_TRUE(reads.damage.IsConst());
+
+        ValueDocument later;
+        const String reports = LoadXml(kListContext, later);
+        EXPECT_TRUE(HasText(reports, "already declares a context")) << reports.c_str();
+        EXPECT_EQ(later.context.Size(), 0U);
+    }
+
     TEST(ValueContextLoadTest, TheDocumentNameIsTheInnermostNamedScopes) {
         const ValueLinkScope named("outer.xml");
         ContextDecl declaration;
