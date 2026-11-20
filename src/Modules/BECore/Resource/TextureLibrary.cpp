@@ -28,7 +28,7 @@ namespace BECore {
         }
         // `count` is an upper bound (a nameless entry is skipped, a repeated name overwrites): the capacity is never short
         _entries.reserve(_entries.size() + count);
-        _index.reserve(_entries.size() + count);
+        ReserveIndex(_entries.size() + count);
         for (size_t i = 0; i < count; ++i) {
             if (!deserializer.BeginArrayElement()) {
                 break;
@@ -72,52 +72,52 @@ namespace BECore {
     }
 
     const SpriteEntry* TextureLibrary::GetSprite(PoolString name) const {
-        auto it = _index.find(name);
-        if (it == _index.end()) {
+        if (_slots.empty()) {
             return nullptr;
         }
-        return &_entries[it->second];
+        const uint32_t value = _slots[FindSlot(name)];
+        return value == kFreeSlot ? nullptr : &_entries[value - 1];
     }
 
     void TextureLibrary::AddOrUpdate(SpriteEntry entry) {
-        auto it = _index.find(entry.name);
-        if (it != _index.end()) {
-            _entries[it->second] = eastl::move(entry);
+        ReserveIndex(_entries.size() + 1);
+        const size_t slot = FindSlot(entry.name);
+        if (_slots[slot] != kFreeSlot) {
+            _entries[_slots[slot] - 1] = eastl::move(entry);
         } else {
-            _index[entry.name] = _entries.size();
             _entries.push_back(eastl::move(entry));
+            _slots[slot] = static_cast<uint32_t>(_entries.size());
         }
     }
 
     void TextureLibrary::Remove(PoolString name) {
-        auto it = _index.find(name);
-        if (it == _index.end()) {
+        const SpriteEntry* entry = GetSprite(name);
+        if (entry == nullptr) {
             return;
         }
-        const size_t idx = it->second;
-        _entries.erase(_entries.begin() + static_cast<ptrdiff_t>(idx));
-        RebuildIndex();
+        _entries.erase(_entries.begin() + (entry - _entries.data()));
+        RebuildIndex(_entries.size());
     }
 
     bool TextureLibrary::Rename(PoolString from, PoolString to) {
-        auto it = _index.find(from);
-        if (it == _index.end() || to.Empty()) {
+        const SpriteEntry* entry = GetSprite(from);
+        if (entry == nullptr || to.Empty()) {
             return false;
         }
         if (from == to) {
             return true;
         }
-        if (_index.find(to) != _index.end()) {
+        if (GetSprite(to) != nullptr) {
             return false;
         }
-        _entries[it->second].name = to;
-        RebuildIndex();
+        _entries[static_cast<size_t>(entry - _entries.data())].name = to;
+        RebuildIndex(_entries.size());
         return true;
     }
 
     PoolString TextureLibrary::MakeUniqueName(StringView base) const {
         PoolString candidate = PoolString::Intern(base);
-        for (int suffix = 2; _index.find(candidate) != _index.end(); ++suffix) {
+        for (int suffix = 2; GetSprite(candidate) != nullptr; ++suffix) {
             candidate = PoolString::Intern(Format("{}_{}", base, suffix));
         }
         return candidate;
@@ -160,13 +160,35 @@ namespace BECore {
 
     void TextureLibrary::Clear() {
         _entries.clear();
-        _index.clear();
+        _slots.clear();
     }
 
-    void TextureLibrary::RebuildIndex() {
-        _index.clear();
+    size_t TextureLibrary::FindSlot(PoolString name) const {
+        const size_t mask = _slots.size() - 1;
+        // Linear probing ends: the table is never more than half full, so a free slot is always ahead
+        for (size_t slot = static_cast<size_t>(name.HashValue()) & mask;; slot = (slot + 1) & mask) {
+            const uint32_t value = _slots[slot];
+            if (value == kFreeSlot || _entries[value - 1].name == name) {
+                return slot;
+            }
+        }
+    }
+
+    void TextureLibrary::ReserveIndex(size_t count) {
+        if (_slots.size() < kMinSlots || _slots.size() < count * 2) {
+            RebuildIndex(count);
+        }
+    }
+
+    void TextureLibrary::RebuildIndex(size_t count) {
+        size_t size = eastl::max(kMinSlots, _slots.size());
+        while (size < count * 2) {
+            size *= 2;
+        }
+        // The size is a power of two, so FindSlot masks instead of dividing; assign keeps the block when the size fits
+        _slots.assign(size, kFreeSlot);
         for (size_t i = 0; i < _entries.size(); ++i) {
-            _index[_entries[i].name] = i;
+            _slots[FindSlot(_entries[i].name)] = static_cast<uint32_t>(i + 1);
         }
     }
 

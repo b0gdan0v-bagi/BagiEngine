@@ -233,11 +233,9 @@ namespace BECore::Tests {
         }
     }
 
-    /// `_index` is a node-based map: one node per sprite whatever its bucket count, so a reserve cannot go below
-    /// `kSpriteCount`. What it removes is the growth of `_entries` and the rehashes of `_index` (about 20 allocations before it).
-    /// The slack is the blocks of the entries and the buckets, the reader's own lists and a pool block, 9 allocations when
-    /// measured.
-    TEST(AssetLoadAllocTest, LoadOfAParsedFileAllocatesOneNodePerSpriteAndAFewBlocks) {
+    /// The entries and the index are one block each, reserved for the reader's count, so the load allocates a few blocks
+    /// whatever the number of sprites. The slack is those blocks, the reader's own lists and a pool block.
+    TEST(AssetLoadAllocTest, LoadOfAParsedFileAllocatesAFewBlocks) {
         constexpr uint64_t kLoadSlack = 16;
         for (const FileFormat format : {FileFormat::Xml, FileFormat::Binary}) {
             const AssetFile file = MakeFile(format, NextSalt(), kSpriteCount);
@@ -254,7 +252,7 @@ namespace BECore::Tests {
             }
             ASSERT_EQ(library.GetAll().size(), kSpriteCount) << FormatName(format);
             if constexpr (AllocTracker::kEnabled) {
-                EXPECT_LE(allocs.count, kSpriteCount + kLoadSlack) << FormatName(format);
+                EXPECT_LE(allocs.count, kLoadSlack) << FormatName(format);
             } else {
                 GTEST_SKIP() << kNoAllocTracker;
             }
