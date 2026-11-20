@@ -22,3 +22,9 @@ Every arena publishes its counters (capacity, used, peak, overflows, chunks, res
 ## Poisoning (`ArenaPoison.h`)
 
 Memory an arena took back (`Reset`, `Rewind`) and fresh chunks are marked in one place: Debug (asserts on) fills `kFreedPattern`, an ASan build poisons the range, Release does nothing. Under ASan every byte past the bump pointer stays poisoned and an allocation unpoisons exactly its bytes (alignment gaps stay poisoned), so a pointer used after `Reset` is reported where it is read.
+
+## Scratch arena and scopes (`ScratchArena.h`)
+
+`ScratchArena::Get()` is the calling thread's arena, a `constinit thread_local LinearArena` and not a `CoreManager` service: it works on any thread, in a static initialiser or before the engine starts, and allocates nothing until its first `Allocate`. The thread's end frees its chunks and releases its stats slot (all scratch arenas are named `Scratch`, one entry per live thread that used it).
+
+`ScratchScope` takes a mark and rewinds in its destructor; scopes nest like locals. **Rules:** memory of a scope must not outlive it (not returned, not stored in a longer-lived container) and must not cross to another thread; a scope ends on the thread that made it (Debug asserts). Nothing from the arena is destroyed on rewind (`LinearArena`, "No destructors").
