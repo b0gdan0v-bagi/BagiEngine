@@ -50,6 +50,10 @@ namespace BECore {
         /// @p message, ending with the document's name when a scope has one, so that an error read alone names the file
         [[nodiscard]] static String AtDocument(StringView message);
 
+        /// `AtDocument` for a message that may be long (a list of every function a formula may call): the reader cuts a report at `ReaderLimits::kMaxErrorTextBytes`, so the message
+        /// is cut and ends with `...` before the name, and the name survives
+        [[nodiscard]] static String AtDocumentWithin(StringView message);
+
     private:
         [[nodiscard]] const ContextDecl* Declaration() const {
             return _external != nullptr ? _external : (_owned.has_value() ? &*_owned : nullptr);
