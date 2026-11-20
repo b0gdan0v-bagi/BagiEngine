@@ -182,6 +182,39 @@ namespace BECore::Tests {
         EXPECT_EQ(order, expected);
     }
 
+    TEST(UIBoxStyleTest, ElementsDrawnInOneFrameEachGetTheirOwnMesh) {
+        auto red = MakeElement({10.0f, 20.0f, 100.0f, 50.0f}, Color{200, 0, 0, 255});
+        red->box.cornerRadius = UICorners::Uniform(8.0f);
+        red->box.shadow = {0.0f, 3.0f, 8.0f, 0.0f, Color{0, 0, 0, 160}};
+        auto blue = MakeElement({40.0f, 90.0f, 60.0f, 30.0f}, Color{0, 0, 200, 255});
+        blue->box.cornerRadius = UICorners::Uniform(4.0f);
+        blue->box.borderWidth = 2.0f;
+        blue->box.borderColor = Color{255, 255, 255, 255};
+
+        RecordingRenderer alone;
+        const auto redAlone = Draw(*red, alone);
+        alone.ClearCalls();
+        const auto blueAlone = Draw(*blue, alone);
+        ASSERT_EQ(redAlone.size(), 1u);
+        ASSERT_EQ(blueAlone.size(), 1u);
+
+        RecordingRenderer together;
+        red->DrawSelf(together);
+        blue->DrawSelf(together);
+        ASSERT_EQ(together.calls.size(), 2u);
+        for (size_t call = 0; call < 2; ++call) {
+            const DrawCall& expected = call == 0 ? redAlone[0] : blueAlone[0];
+            const DrawCall& drawn = together.calls[call];
+            EXPECT_EQ(drawn.indices, expected.indices);
+            ASSERT_EQ(drawn.vertices.size(), expected.vertices.size());
+            for (size_t i = 0; i < drawn.vertices.size(); ++i) {
+                EXPECT_EQ(drawn.vertices[i].x, expected.vertices[i].x);
+                EXPECT_EQ(drawn.vertices[i].y, expected.vertices[i].y);
+                EXPECT_EQ(drawn.vertices[i].color.a, expected.vertices[i].color.a);
+            }
+        }
+    }
+
     TEST(UIBoxStyleTest, AGradientWithATransparentColorStillDraws) {
         auto element = MakeElement({10.0f, 20.0f, 100.0f, 50.0f}, Color{});
         element->box.gradientDirection = UIGradientDirection::Vertical;

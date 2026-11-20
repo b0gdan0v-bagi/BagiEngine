@@ -43,6 +43,14 @@ namespace BECore {
     template <typename T>
     using ArenaVector = eastl::vector<T, ArenaAllocator>;
 
+    /// The EASTL allocator of the frame arena (Memory/FrameAllocator.h); only declared here, like ArenaAllocator.
+    class FrameAllocator;
+
+    /// A vector whose memory comes from the calling thread's frame arena and is given back after the present (Memory/CLAUDE.md, "Frame arena");
+    /// include <BECore/Memory/FrameAllocator.h> to use it.
+    template <typename T>
+    using FrameVector = eastl::vector<T, FrameAllocator>;
+
     /// A vector with N elements inside the object that moves to the heap when it grows past N.
     template <typename T, size_t N>
     using SmallVector = eastl::fixed_vector<T, N, true, EngineAllocator>;

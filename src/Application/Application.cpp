@@ -11,6 +11,7 @@
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/MainWindow/WindowTitle.h>
+#include <BECore/Memory/FrameArena.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Profiler.h>
@@ -243,6 +244,8 @@ namespace BECore {
         PublishControlStatus();
         LogEvent::Flush();
         control.EndFrame();
+        // After everything that may still take frame memory: the frame-end hooks, and frameStats.EndFrame, which reads the use of the whole frame
+        FrameArena::Advance();
         BE_PROFILE_FRAME();
         return _isRunning;
     }

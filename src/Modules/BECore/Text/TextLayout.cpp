@@ -1,5 +1,6 @@
 #include "TextLayout.h"
 
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Text/Font.h>
 #include <BECore/Text/Utf8.h>
 
@@ -21,11 +22,11 @@ namespace BECore {
         };
 
         struct Line {
-            Vector<Item> items;  ///< what is drawn: no trailing spaces
+            ArenaVector<Item> items;  ///< what is drawn: no trailing spaces
             float width = 0.0f;
         };
 
-        float SumAdvances(const Vector<Item>& items) {
+        float SumAdvances(const ArenaVector<Item>& items) {
             float width = 0.0f;
             for (const Item& item : items) {
                 width += item.advance;
@@ -33,8 +34,9 @@ namespace BECore {
             return width;
         }
 
-        Vector<Item> BuildItems(const Font& font, StringView text, float fontSize) {
-            Vector<Item> items;
+        ArenaVector<Item> BuildItems(const Font& font, StringView text, float fontSize) {
+            ArenaVector<Item> items;
+            items.reserve(text.size());  // a code point takes at least one byte
             const uint32_t spaceGlyph = font.FindGlyph(U' ');
             const float spaceAdvance = font.GetAdvance(spaceGlyph, fontSize);
             size_t pos = 0;
@@ -68,13 +70,18 @@ namespace BECore {
         }
 
         /// Cuts the items into lines; spaces at a break and at the end of a line are not part of the line
-        Vector<Line> BreakIntoLines(const Vector<Item>& items, float maxWidth, bool wrap) {
-            Vector<Line> lines;
+        ArenaVector<Line> BreakIntoLines(const ArenaVector<Item>& items, float maxWidth, bool wrap) {
+            ArenaVector<Line> lines;
             const size_t count = items.size();
             if (count == 0) {
                 return lines;
             }
             const bool limited = wrap && maxWidth > 0.0f;
+            size_t newlines = 0;
+            for (const Item& item : items) {
+                newlines += item.newline ? 1 : 0;
+            }
+            lines.reserve(newlines + 1);
 
             const auto finishLine = [&](size_t begin, size_t end) {
                 while (end > begin && items[end - 1].space) {
@@ -143,8 +150,9 @@ namespace BECore {
         }
 
         /// The glyphs of an ellipsis: U+2026, or three dots when the font has no such character
-        Vector<Item> BuildEllipsis(const Font& font, float fontSize) {
-            Vector<Item> ellipsis;
+        ArenaVector<Item> BuildEllipsis(const Font& font, float fontSize) {
+            ArenaVector<Item> ellipsis;
+            ellipsis.reserve(static_cast<size_t>(kDotsInAnEllipsis));
             Item item;
             if (const uint32_t glyph = font.FindGlyph(kEllipsis); glyph != 0) {
                 item.codePoint = kEllipsis;
@@ -163,7 +171,7 @@ namespace BECore {
         }
 
         /// Takes characters off the end of the line until the ellipsis fits behind it
-        void EndWithEllipsis(Line& line, const Vector<Item>& ellipsis, float maxWidth) {
+        void EndWithEllipsis(Line& line, const ArenaVector<Item>& ellipsis, float maxWidth) {
             const float ellipsisWidth = SumAdvances(ellipsis);
             while (!line.items.empty() && (line.width + ellipsisWidth > maxWidth + kEpsilon || line.items.back().space)) {
                 line.width -= line.items.back().advance;
@@ -176,7 +184,7 @@ namespace BECore {
         }
 
         struct Laid {
-            Vector<Line> lines;
+            ArenaVector<Line> lines;
             bool truncated = false;
         };
 
@@ -198,7 +206,7 @@ namespace BECore {
                 laid.lines.resize(maxLines);
             }
 
-            const Vector<Item> ellipsis = BuildEllipsis(font, fontSize);
+            const ArenaVector<Item> ellipsis = BuildEllipsis(font, fontSize);
             for (size_t i = 0; i < laid.lines.size(); ++i) {
                 Line& line = laid.lines[i];
                 const bool tooWide = options.maxWidth > 0.0f && line.width > options.maxWidth + kEpsilon;
@@ -271,12 +279,14 @@ namespace BECore {
             return {};
         }
 
+        const ScratchScope scratch;  // the items and lines are temporaries of this call; TextLayoutResult is built on the heap
         float fontSize = options.fontSize;
         bool ellipsize = options.overflow == TextOverflow::Ellipsis;
 
         if (options.overflow == TextOverflow::AutoFit && (options.maxWidth > 0.0f || options.maxHeight > 0.0f)) {
             const auto fitsAt = [&](float size) {
                 const float lineHeight = font.GetVerticalMetrics(size).LineHeight() * options.lineSpacing;
+                const ScratchScope probe;  // each probe of the search gives its lines back
                 return Fits(LayoutLines(font, utf8, size, options, false), lineHeight, options);
             };
             const float smallest = std::min(options.minFontSize, options.fontSize);

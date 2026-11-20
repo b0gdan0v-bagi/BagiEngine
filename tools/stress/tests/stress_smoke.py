@@ -29,6 +29,7 @@ from smoke import EXIT_FAILED, EXIT_PASSED, EXIT_SKIPPED, SmokeFailure, check, c
 
 STATUS_STARTUP_TIMEOUT = 30.0
 SHUTDOWN_TIMEOUT = 15.0
+STEADY_FRAMES = 6  # a window of frames of an unchanged scene
 SETTLE_FRAMES = 3  # a change made through the control API reaches the scene in the next frame; one more for the scene switch
 MIN_SHOT_COLORS = 3  # a picture of a scene is not flat: a background and at least two more colours
 OBJECTS_COUNTER = "Stress objects"
@@ -123,8 +124,17 @@ def scenario_entities(client: BagiControlClient) -> None:
     check_bad_counts(client)
 
 
+def check_frame_memory_is_given_back(client: BagiControlClient) -> None:
+    """Steady frames report the same arenaUsedBytes: the arenas of the frame are reset, not summed. It guards the frame arena only once a scene draws a user of it (a box with a shadow or glow); until then the value is constant and the check cannot fail."""
+    settle(client)
+    client.call("step", {"frames": STEADY_FRAMES})
+    used = [frame["arenaUsedBytes"] for frame in client.call("frame_stats", {"frames": STEADY_FRAMES})["frames"]]
+    check(len(used) == STEADY_FRAMES and max(used) == min(used), f"arenaUsedBytes of {STEADY_FRAMES} steady frames differ: {used}")
+
+
 def scenario_ui(client: BagiControlClient) -> None:
     check_state(client, "ui", UI_COUNT)
+    check_frame_memory_is_given_back(client)
     check(last_frame(client)["drawCalls"] > 0, "the ui scene drew nothing")
     check_ui_tree(client, "StressUi")
     check_window_control(client, headless=True)  # the scene with a Screen canvas: the layout follows the simulated window

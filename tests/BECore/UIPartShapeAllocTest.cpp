@@ -1,4 +1,5 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Memory/FrameArena.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UIProgressBar.h>
@@ -22,6 +23,7 @@ namespace BECore::Tests {
             const auto frame = [&] {
                 renderer.ClearCalls();
                 draw();
+                FrameArena::Advance();  // the box mesh is on the frame arena, which a real frame resets after the present
             };
             for (int warmUp = 0; warmUp < kWarmUpFrames; ++warmUp) {
                 frame();

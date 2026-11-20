@@ -1,6 +1,7 @@
 #include "UIElement.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Memory/FrameAllocator.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Time/Time.h>
 #include <BECore/UI/UIEnvironment.h>
@@ -206,21 +207,21 @@ namespace BECore {
 
         const float pixelsPerUnit = renderer.GetViewTransform().scale;
         const GeometryDetail detail = renderer.GetGeometryDetail();
+        FrameVector<GeometryVertex> vertices;
+        FrameVector<int> indices;
         {
             BE_PROFILE_SCOPE("UIElement::DrawBoxIn");
-            _boxVertices.clear();
-            _boxIndices.clear();
             // Each appender draws nothing for a colour with no alpha, so the order is all that is decided here
-            UIBoxMesh::AppendShadow(_boxVertices, _boxIndices, area, boxStyle.cornerRadius, boxStyle.shadow, pixelsPerUnit, detail);
-            UIBoxMesh::AppendShadow(_boxVertices, _boxIndices, area, boxStyle.cornerRadius, boxStyle.glow, pixelsPerUnit, detail);
-            UIBoxMesh::AppendFill(_boxVertices, _boxIndices, area, boxStyle.cornerRadius, fill, boxStyle.MakeGradient(gradientEnd), pixelsPerUnit);
+            UIBoxMesh::AppendShadow(vertices, indices, area, boxStyle.cornerRadius, boxStyle.shadow, pixelsPerUnit, detail);
+            UIBoxMesh::AppendShadow(vertices, indices, area, boxStyle.cornerRadius, boxStyle.glow, pixelsPerUnit, detail);
+            UIBoxMesh::AppendFill(vertices, indices, area, boxStyle.cornerRadius, fill, boxStyle.MakeGradient(gradientEnd), pixelsPerUnit);
             if (boxStyle.borderWidth > 0.0f) {
-                UIBoxMesh::AppendBorder(_boxVertices, _boxIndices, area, boxStyle.cornerRadius, boxStyle.borderWidth, boxStyle.borderColor, pixelsPerUnit);
+                UIBoxMesh::AppendBorder(vertices, indices, area, boxStyle.cornerRadius, boxStyle.borderWidth, boxStyle.borderColor, pixelsPerUnit);
             }
-            UIBoxMesh::AppendHighlight(_boxVertices, _boxIndices, area, boxStyle.cornerRadius, boxStyle.highlight, pixelsPerUnit);
+            UIBoxMesh::AppendHighlight(vertices, indices, area, boxStyle.cornerRadius, boxStyle.highlight, pixelsPerUnit);
         }
-        if (!_boxVertices.empty()) {
-            renderer.DrawGeometry(nullptr, _boxVertices, _boxIndices, 0.0f, 0.0f);
+        if (!vertices.empty()) {
+            renderer.DrawGeometry(nullptr, vertices, indices, 0.0f, 0.0f);
         }
     }
 
