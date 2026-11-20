@@ -11,13 +11,21 @@
 // A formula over a game's registered type is timed as `mask_plain` (C++ over the toy 256-bit mask: `popcount((a & shift(b, East)) | c) > 3` over three context objects),
 // `mask_program` (the interpreter: five `CallDomain` instructions, each an indirect call of a registered function), `mask_run` (`Run` called directly) and `mask_native` (the
 // generated function of the engine's set); the lines are `ValueBench mask_<case> ns_per_get=<x>`.
+// A trigger of `Values/Effects/CLAUDE.md` (count a timer down, flip a flag and emit a command at zero, or narrow a mask and emit another) is timed as `trigger_plain` (C++ writing the
+// same cell and pushing into the same `EmitBuffer`) and `trigger_script` (`RunEffects`); a case is a copy of a prototype cell, the trigger and a digest of the cell and the commands,
+// `ns_per_get` is the time of one such round.
 
+#include <BECore/EffectsToys.h>
 #include <BECore/ProgramDomainTypes.h>
 #include <BECore/ProgramRowTypes.h>
 #include <BECore/Random/Rng.h>
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/CachedValue.h>
 #include <BECore/Values/Context.h>
+#include <BECore/Values/Effects/EffectCommands.h>
+#include <BECore/Values/Effects/EffectCompiler.h>
+#include <BECore/Values/Effects/EffectRunner.h>
+#include <BECore/Values/Effects/WriteTargets.h>
 #include <BECore/Values/Programs/Interpreter.h>
 #include <BECore/Values/Programs/Native/NativePrograms.h>
 #include <BECore/Values/Programs/Opcode.h>
@@ -225,6 +233,10 @@ namespace BECore::Tests {
 
         uint64_t Fold(bool value) {
             return value ? 1U : 0U;
+        }
+
+        uint64_t Fold(uint64_t value) {
+            return value;
         }
 
         /// Runs @p read for @p iterations and returns the sum of the folded results; the time per read is printed when @p printing, as `ValueBench <type> <name>` or, with no @p type, `ValueBench
@@ -610,6 +622,128 @@ namespace BECore::Tests {
             }
         }
 
+        constexpr StringView kTriggerScript = "if (cell.i32 > 0) { cell.i32 -= 1; if (cell.i32 == 0) { cell.flag = !cell.flag; emit FxCount(cell.i32b); } } "
+                                              "else if (board.mask != cell.mask) { cell.mask = and_mask(cell.mask, board.mask); emit FxMask(cell.mask); }";
+        constexpr uint64_t kTriggerSeed = 0x74726967;
+        constexpr size_t kTriggerBufferCapacity = 4;
+        constexpr uint64_t kDigestMultiplier = 0x100000001b3ULL;
+        constexpr uint32_t kTimerRange = 4;
+        constexpr size_t kEveryNthSharesTheMask = 3;
+        constexpr LevelIndex kCellLevel = 0;
+        constexpr LevelIndex kBoardLevel = 1;
+
+        using TriggerObject = ProgramRowData::ProgramRowOperands;
+
+        /// A digest of the cell and of what the run pushed, so that a case that stored or emitted differently sums differently
+        uint64_t Digest(const TriggerObject& cell, const EmitBuffer& buffer) {
+            uint64_t digest = static_cast<uint64_t>(static_cast<uint32_t>(cell.i32));
+            const auto mix = [&digest](uint64_t value) { digest = (digest ^ value) * kDigestMultiplier; };
+            mix(cell.flag ? 1U : 0U);
+            for (const uint64_t word : cell.mask.words) {
+                mix(word);
+            }
+            mix(buffer.Count());
+            for (const EmittedCommand& command : buffer.Commands()) {
+                mix(command.id);
+                uint64_t first = 0;
+                std::memcpy(&first, command.arguments[0].bytes.data(), sizeof(first));
+                mix(first);
+            }
+            return digest;
+        }
+
+        /// The script as C++: the commands go to the same buffer type
+        void PlainTrigger(TriggerObject& cell, const TriggerObject& board, EmitBuffer& buffer, const EffectsData::EffectToys& toys) {
+            EmittedCommand command;
+            command.count = 1;
+            if (cell.i32 > 0) {
+                cell.i32 -= 1;
+                if (cell.i32 == 0) {
+                    cell.flag = !cell.flag;
+                    command.id = toys.count;
+                    std::memcpy(command.arguments[0].bytes.data(), &cell.i32b, sizeof(cell.i32b));
+                    buffer.Push(command);
+                }
+            } else if (board.mask != cell.mask) {
+                cell.mask = BitsAnd(cell.mask, board.mask);
+                command.id = toys.mask;
+                std::memcpy(command.arguments[0].bytes.data(), &cell.mask, sizeof(cell.mask));
+                buffer.Push(command);
+            }
+        }
+
+        void BenchTrigger() {
+            bool printing = false;
+            const uint64_t iterations = Iterations(printing);
+            const EffectsData::EffectToys& toys = EffectsData::RegisterEffectToys();
+            ContextDecl declaration;
+            ASSERT_TRUE(declaration.Add<TriggerObject>("cell").has_value());
+            ASSERT_TRUE(declaration.Add<TriggerObject>("board").has_value());
+            WriteTargets targets;
+            ASSERT_TRUE(targets.Allow("cell"));
+            EffectOptions options;
+            options.targets = &targets;
+            const auto compiled = CompileEffects(kTriggerScript, declaration, options);
+            ASSERT_TRUE(compiled.has_value());
+            const EffectScript& script = *compiled;
+
+            Rng rng(kTriggerSeed);
+            TriggerObject board;
+            for (uint64_t& word : board.mask.words) {
+                word = rng.Next64();
+            }
+            // Prototypes reach every branch: a timer that ends, a timer still running, a spent timer with another mask and one with the board's
+            Vector<TriggerObject> prototypes(kObjects);
+            for (size_t index = 0; index < kObjects; ++index) {
+                TriggerObject& cell = prototypes[index];
+                cell.i32 = static_cast<int32_t>(rng.Next32() % kTimerRange);
+                cell.i32b = static_cast<int32_t>(index);
+                cell.flag = (rng.Next32() & 1U) != 0;
+                for (size_t word = 0; word < kMaskWords; ++word) {
+                    cell.mask.words[word] = index % kEveryNthSharesTheMask == 0 ? board.mask.words[word] : rng.Next64();
+                }
+            }
+            Vector<TriggerObject> cells = prototypes;
+            Vector<uint64_t> versions(kObjects, 0);
+            Vector<Context> contexts;
+            contexts.reserve(kObjects);
+            for (size_t index = 0; index < kObjects; ++index) {
+                Context& context = contexts.emplace_back(declaration);
+                context.SetMutable(kCellLevel, cells[index], &versions[index]);
+                context.Set(kBoardLevel, board);
+            }
+            EmitBufferStorage<kTriggerBufferCapacity> storage;
+            EmitBuffer& buffer = storage.Buffer();
+
+            // The script must store and emit, or both cases would time a trigger that does nothing
+            uint64_t emittedTotal = 0;
+            uint64_t changedTotal = 0;
+            for (size_t index = 0; index < kObjects; ++index) {
+                buffer.Clear();
+                const EffectResult result = RunEffects(*script.Program(), contexts[index], buffer);
+                emittedTotal += result.emitted;
+                changedTotal += result.changed;
+            }
+            EXPECT_GT(emittedTotal, 0U);
+            EXPECT_GT(changedTotal, 0U);
+            EXPECT_LT(emittedTotal, kObjects);
+
+            const uint64_t plain = TimeCase(nullptr, "trigger_plain", iterations, printing, [&](size_t index) {
+                cells[index] = prototypes[index];
+                buffer.Clear();
+                PlainTrigger(cells[index], board, buffer, toys);
+                return Digest(cells[index], buffer);
+            });
+            EXPECT_EQ(TimeCase(nullptr, "trigger_script", iterations, printing,
+                               [&](size_t index) {
+                                   cells[index] = prototypes[index];
+                                   buffer.Clear();
+                                   RunEffects(*script.Program(), contexts[index], buffer);
+                                   return Digest(cells[index], buffer);
+                               }),
+                      plain);
+        }
+
     }  // namespace
 
     TEST(ValueBenchTest, Int32) {
@@ -638,6 +772,10 @@ namespace BECore::Tests {
 
     TEST(ValueBenchTest, Mask) {
         BenchMask();
+    }
+
+    TEST(ValueBenchTest, Trigger) {
+        BenchTrigger();
     }
 
 }  // namespace BECore::Tests

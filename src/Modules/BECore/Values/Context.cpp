@@ -142,10 +142,11 @@ namespace BECore {
         return std::nullopt;
     }
 
-    void Context::Store(LevelIndex level, const void* object, const uint64_t* version) {
+    void Context::Store(LevelIndex level, const void* object, const uint64_t* version, bool writable) {
         _objects[level] = object;
         _versions[level] = version;
         ++_sets[level];
+        _mutable = writable ? static_cast<LevelMask>(_mutable | LevelBit(level)) : static_cast<LevelMask>(_mutable & ~LevelBit(level));
     }
 
     uint64_t Context::VersionKey(LevelMask levels) const {
@@ -173,13 +174,13 @@ namespace BECore {
         return true;
     }
 
-    void Context::SetObject(LevelIndex level, const void* object, const ClassMeta& type, const uint64_t* version) {
+    void Context::SetObject(LevelIndex level, const void* object, const ClassMeta& type, const uint64_t* version, bool writable) {
         ASSERT(level < kMaxContextLevels);
         if (level >= kMaxContextLevels) {
             return;
         }
         if (_declaration == nullptr) {
-            Store(level, object, version);
+            Store(level, object, version, writable);
             return;
         }
         ASSERT(level < _declaration->Size(), "Context::Set: the level is not declared");
@@ -188,7 +189,7 @@ namespace BECore {
         }
         const TypeInfo& declared = *_declaration->Levels()[level].type;
         if (declared.Hash() == type.typeHash) {
-            Store(level, object, version);
+            Store(level, object, version, writable);
             return;
         }
         // An object of a derived type is stored at the subobject of the declared type, which is where the offsets of the declared type apply
@@ -196,59 +197,76 @@ namespace BECore {
         const TypeInfo* actual = registry.Find(type.typeHash);
         const Optional<size_t> offset = actual != nullptr ? registry.OffsetOfBase(*actual, declared) : std::nullopt;
         ASSERT(offset.has_value(), "Context::Set: the object is not of the type the level declares, nor derived from it");
-        Store(level, offset.has_value() ? static_cast<const char*>(object) + *offset : nullptr, version);
+        Store(level, offset.has_value() ? static_cast<const char*>(object) + *offset : nullptr, version, writable && offset.has_value());
+    }
+
+    namespace {
+
+        /// The one linking both entry points share; @p expected is null for `LinkField`, which takes the field's type as it is
+        std::expected<LinkedField, LinkError> LinkPath(const ContextDecl& declaration, StringView path, const TypeDesc* expected, const TypeRegistry& registry) {
+            const auto parsed = ParsePropertyPath(path);
+            if (!parsed.has_value()) {
+                return Refuse(LinkErrorCode::invalid_path, Format("path '{}': {} (at byte {})", path, parsed.error().message, parsed.error().position));
+            }
+            const Vector<PathSegment>& segments = parsed->segments;
+            const String levelName = segments.front().text;
+
+            const Optional<LevelIndex> index = declaration.IndexOf(levelName);
+            if (!index.has_value()) {
+                Vector<String> names;
+                for (const ContextLevel& level : declaration.Levels()) {
+                    names.push_back(level.name);
+                }
+                const String hint = IDeserializer::MakeDidYouMeanHint(levelName, {&names});
+                return Refuse(LinkErrorCode::unknown_level, Format("path '{}': unknown level '{}'{}; the declared levels are: {}", path, levelName, hint, LevelNames(declaration)));
+            }
+            const ContextLevel& level = declaration.Levels()[*index];
+
+            if (segments.size() == 1) {
+                return Refuse(LinkErrorCode::invalid_path, Format("path '{}': '{}' is a level, a path names a field of it (level.field)", path, levelName));
+            }
+            if (segments[1].kind != PathSegmentKind::Field) {
+                return Refuse(LinkErrorCode::invalid_path, Format("path '{}': the level '{}' is an object, it has no elements", path, levelName));
+            }
+
+            PropertyPath rest;
+            for (size_t i = 1; i < segments.size(); ++i) {
+                rest.segments.push_back(segments[i]);
+            }
+            const auto compiled = CompilePath(*level.type, FormatPropertyPath(rest.segments, rest.segments.size()), registry);
+            if (!compiled.has_value()) {
+                if (compiled.error().code == PropertyErrorCode::not_found) {
+                    return std::unexpected(UnknownFieldError(level, path, rest, registry, compiled.error()));
+                }
+                return Refuse(LinkErrorCode::invalid_path, Format("path '{}': {}", path, compiled.error().message));
+            }
+            if (!compiled->IsFixed()) {
+                return Refuse(
+                    LinkErrorCode::not_fixed,
+                    Format("path '{}': the part '{}' needs the live object (a list element, a map value, an optional or a pointee), so a value cannot read it from the context", path, compiled->rest));
+            }
+            if (expected != nullptr && !SameType(*expected, *compiled->type)) {
+                return Refuse(LinkErrorCode::type_mismatch, Format("path '{}': the field '{}' of '{}' is a {}, but a value of {} is asked for", path, rest.segments.back().text, level.type->Name(),
+                                                                   DescribeForMessage(*compiled->type), DescribeForMessage(*expected)));
+            }
+            if (compiled->offset > std::numeric_limits<uint32_t>::max()) {
+                return Refuse(LinkErrorCode::too_far, Format("path '{}': the field is {} bytes into '{}', more than a slot can address", path, compiled->offset, level.type->Name()));
+            }
+            return LinkedField{SlotRef{*index, static_cast<uint32_t>(compiled->offset)}, compiled->type};
+        }
+
+    }  // namespace
+
+    std::expected<LinkedField, LinkError> LinkField(const ContextDecl& declaration, StringView path, const TypeRegistry& registry) {
+        return LinkPath(declaration, path, nullptr, registry);
     }
 
     std::expected<SlotRef, LinkError> LinkSlot(const ContextDecl& declaration, StringView path, const TypeDesc& expected, const TypeRegistry& registry) {
-        const auto parsed = ParsePropertyPath(path);
-        if (!parsed.has_value()) {
-            return Refuse(LinkErrorCode::invalid_path, Format("path '{}': {} (at byte {})", path, parsed.error().message, parsed.error().position));
+        const auto linked = LinkPath(declaration, path, &expected, registry);
+        if (!linked.has_value()) {
+            return std::unexpected(linked.error());
         }
-        const Vector<PathSegment>& segments = parsed->segments;
-        const String levelName = segments.front().text;
-
-        const Optional<LevelIndex> index = declaration.IndexOf(levelName);
-        if (!index.has_value()) {
-            Vector<String> names;
-            for (const ContextLevel& level : declaration.Levels()) {
-                names.push_back(level.name);
-            }
-            const String hint = IDeserializer::MakeDidYouMeanHint(levelName, {&names});
-            return Refuse(LinkErrorCode::unknown_level, Format("path '{}': unknown level '{}'{}; the declared levels are: {}", path, levelName, hint, LevelNames(declaration)));
-        }
-        const ContextLevel& level = declaration.Levels()[*index];
-
-        if (segments.size() == 1) {
-            return Refuse(LinkErrorCode::invalid_path, Format("path '{}': '{}' is a level, a path names a field of it (level.field)", path, levelName));
-        }
-        if (segments[1].kind != PathSegmentKind::Field) {
-            return Refuse(LinkErrorCode::invalid_path, Format("path '{}': the level '{}' is an object, it has no elements", path, levelName));
-        }
-
-        PropertyPath rest;
-        for (size_t i = 1; i < segments.size(); ++i) {
-            rest.segments.push_back(segments[i]);
-        }
-        const auto compiled = CompilePath(*level.type, FormatPropertyPath(rest.segments, rest.segments.size()), registry);
-        if (!compiled.has_value()) {
-            if (compiled.error().code == PropertyErrorCode::not_found) {
-                return std::unexpected(UnknownFieldError(level, path, rest, registry, compiled.error()));
-            }
-            return Refuse(LinkErrorCode::invalid_path, Format("path '{}': {}", path, compiled.error().message));
-        }
-        if (!compiled->IsFixed()) {
-            return Refuse(
-                LinkErrorCode::not_fixed,
-                Format("path '{}': the part '{}' needs the live object (a list element, a map value, an optional or a pointee), so a value cannot read it from the context", path, compiled->rest));
-        }
-        if (!SameType(expected, *compiled->type)) {
-            return Refuse(LinkErrorCode::type_mismatch, Format("path '{}': the field '{}' of '{}' is a {}, but a value of {} is asked for", path, rest.segments.back().text, level.type->Name(),
-                                                               DescribeForMessage(*compiled->type), DescribeForMessage(expected)));
-        }
-        if (compiled->offset > std::numeric_limits<uint32_t>::max()) {
-            return Refuse(LinkErrorCode::too_far, Format("path '{}': the field is {} bytes into '{}', more than a slot can address", path, compiled->offset, level.type->Name()));
-        }
-        return SlotRef{*index, static_cast<uint32_t>(compiled->offset)};
+        return linked->slot;
     }
 
 }  // namespace BECore
