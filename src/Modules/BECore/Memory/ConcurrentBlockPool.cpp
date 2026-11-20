@@ -1,16 +1,13 @@
 #include "ConcurrentBlockPool.h"
 
+#include <BECore/Memory/Immortal.h>
+
 namespace BECore {
 
     namespace {
 
         /// Never destroyed: a pool is destroyed by a static destructor too (a type pool is immortal, a test's is not), and its destructor takes this lock
-        union ImmortalMutex {
-            Mutex mutex;
-            constexpr ImmortalMutex() : mutex(BE_LOCK_SITE("ConcurrentBlockPool lifetime")) {}
-            ~ImmortalMutex() {}  // NOLINT: the union must not destroy the mutex
-        };
-        constinit ImmortalMutex g_lifetime;
+        constinit Immortal<Mutex> g_lifetime(BE_LOCK_SITE("ConcurrentBlockPool lifetime"));
         // Both under g_lifetime
         constinit ConcurrentBlockPool* g_registryHead = nullptr;
         constinit uint64_t g_lastPoolId = 0;
@@ -98,7 +95,7 @@ namespace BECore {
     /// Gives the blocks of @p entry back to its pool when that pool is still alive, and empties the entry either way
     void ConcurrentBlockPool::SpillEntry(CacheEntry& entry) {
         if (entry.pool != nullptr) {
-            LockGuard lifetime(g_lifetime.mutex);
+            LockGuard lifetime(g_lifetime.value);
             // Only a pool on the list is dereferenced: an address with another id, or none, is a pool that died
             for (ConcurrentBlockPool* pool = g_registryHead; pool != nullptr; pool = pool->_registryNext) {
                 if (pool == entry.pool && pool->_id.load(std::memory_order_relaxed) == entry.poolId) {
@@ -113,7 +110,7 @@ namespace BECore {
 
     ConcurrentBlockPool::~ConcurrentBlockPool() {
         {
-            LockGuard lifetime(g_lifetime.mutex);
+            LockGuard lifetime(g_lifetime.value);
             if (_id.load(std::memory_order_relaxed) != 0) {
                 if (_registryPrev != nullptr) {
                     _registryPrev->_registryNext = _registryNext;
@@ -224,7 +221,7 @@ namespace BECore {
         uint64_t frees = 0;
         SumShards(allocations, frees);
         if (frees > allocations) {
-            return;  // a torn snapshot (see SumShards): the next publish has a consistent one, and a wrapped count would stay in the peak for good
+            return;  // a torn snapshot (see SumShards) is not published: a wrapped count would stay in the peak for good
         }
         _stats.SetCounts(allocations - frees, allocations);
     }
@@ -233,7 +230,7 @@ namespace BECore {
         if (_id.load(std::memory_order_acquire) != 0) {
             return;
         }
-        LockGuard lifetime(g_lifetime.mutex);
+        LockGuard lifetime(g_lifetime.value);
         if (_id.load(std::memory_order_relaxed) != 0) {
             return;
         }

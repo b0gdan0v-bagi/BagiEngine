@@ -19,11 +19,11 @@ namespace BECore {
      * - **Lifetime.** A pool may die while another thread still keeps blocks of it: such a list is recognised by the pool's id (never reused) and dropped
      *   without touching the pool or the blocks (their pages went with the pool). A new pool at the same address is not mistaken for the dead one.
      *   Only the pool's destructor and a spill at thread end or on eviction take the global lifetime lock, never the hot path.
-     * - **Counters.** GetLiveCount() is exact: every thread counts on a shard of its own (one atomic add on a line nobody else writes; a counter all threads
-     *   add to made four threads much slower than `new`). The PoolStats slot, claimed on the first Allocate so the pool can be `constinit`, is
-     *   **published** from the shards at every refill and spill, every `kPublishEvery` calls that hit the list, and by DrainThreadCache() and a thread's
-     *   end: what a reader of the registry sees lags by up to that many calls per thread, and the peak is the largest published `live`. A block in a thread's
-     *   list is not live.
+     * - **Counters.** GetLiveCount() is exact when no other thread allocates or frees during the call: every thread counts on a shard of its own (one
+     *   atomic add on a line nobody else writes; a counter all threads add to made four threads much slower than `new`). The PoolStats slot, claimed on
+     *   the first Allocate so the pool can be `constinit`, is **published** from the shards at every refill and spill, every `kPublishEvery` calls that
+     *   hit the list, and by DrainThreadCache() and a thread's end: what a reader of the registry sees lags by up to that many calls per thread, and
+     *   the peak is the largest published `live`. A block in a thread's list is not live.
      * - Debug asserts a pointer that is no block of this pool, a double free and a write after free, as BlockPool does (the first takes the central lock
      *   in every Deallocate: Debug only). A pool that dies with live blocks is a bug (Debug asserts).
      */
