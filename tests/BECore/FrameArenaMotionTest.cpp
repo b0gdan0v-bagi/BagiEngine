@@ -109,6 +109,9 @@ namespace BECore::Tests {
         });
 
         EXPECT_EQ(canvas.GetLayoutRuns(), 1u + kWarmUpFrames + kMeasuredFrames) << "every frame lays the tree out";
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_EQ(allocations, 0u) << "the layout temporaries are on the scratch arena";
+        }
         Report("RelayoutInMotion", allocations);
     }
 

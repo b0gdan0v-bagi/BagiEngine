@@ -397,6 +397,26 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(At(rects, 1).x, 100.0f);
     }
 
+    TEST(UIStackTest, TheCallerSizedOverloadWritesEverySlotAndAgreesWithTheVectorOne) {
+        UIStackSpec stack;
+        stack.direction = UIStackDirection::Horizontal;
+        stack.wrap = true;
+        stack.spacing = 6.0f;
+        UIRectSpec grow = Sized(100.0f, 20.0f);
+        grow.flex = 2.0f;
+        const UIRectSpec children[] = {Sized(300.0f, 20.0f), grow, Sized(250.0f, 35.0f), grow, Sized(90.0f, 10.0f)};
+        Vector<Rect> expected;
+        UILayout::LayoutStack(kParent, stack, children, expected);
+
+        Vector<Rect> filled(expected.size(), Rect{-1.0f, -2.0f, -3.0f, -4.0f});  // stale values a slot must not keep
+        UILayout::LayoutStack(kParent, stack, children, Span<Rect>(filled.data(), filled.size()));
+
+        ASSERT_EQ(filled.size(), expected.size());
+        for (size_t i = 0; i < expected.size(); ++i) {
+            ExpectRect(At(filled, i), At(expected, i), 0.0f);
+        }
+    }
+
     TEST(UIStackTest, WrappedLinesShareTheirFlexChildrenPerLine) {
         UIStackSpec stack;
         stack.direction = UIStackDirection::Horizontal;
