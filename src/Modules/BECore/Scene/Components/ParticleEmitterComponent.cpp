@@ -20,11 +20,11 @@ namespace BECore {
         constexpr size_t kIndicesPerQuad = 6;
         constexpr float kHalf = 0.5f;
 
-        // A first guess, to be replaced by the benchmark `particles-parallel`. A fork-join costs a few microseconds of waking helpers and
-        // joining, which the maths of fewer particles does not repay, so a small emitter stays on the drawing thread
-        constexpr size_t kDefaultParallelMinParticles = 512;
-        // The smallest range a thread takes: it keeps a chunk long enough that claiming it is cheap next to building it
-        constexpr size_t kMinChunkParticles = 256;
+        // From `ParticleParallelBenchTest` (`particles-parallel`): a fork-join costs about as much as the maths of 512 particles, so it
+        // breaks even there and wins by a third at 1024 and by two thirds at 4096, on four workers
+        constexpr size_t kDefaultParallelMinParticles = 1024;
+        // The smallest range a thread takes: the largest that balances the threshold's 1024 particles as well as smaller ones do
+        constexpr size_t kMinChunkParticles = 128;
 
     }  // namespace
 
