@@ -32,15 +32,15 @@ A program or a model plays a game through `IControllableGame` (`Games/IControlla
 | `set_state` | the game's state (Chess: `{"fen"}`, in BagiEngine-Chess) | `{"game", "version"}` |
 | `run_until` | `{condition, maxFrames?, dt?}`: a state pointer equals a value, the version moved, or an event arrived | `{met, frames, reason?, game?, version?}` and the clock of `step`; the limit is `met: false` (`.claude/rules/control-qa-api.md`) |
 
-`IControllableGame`: `GetState()`, `GetActions()` (a JSON array; every element is accepted by `PerformAction` as is), `PerformAction(action)`, `Reset(options)`, `SetState(state)` (default: `unsupported`), `GetStateVersion()`. Errors are `std::expected<.., ControlError>`; `GameControlErrors` has `no_active_game`, `not_controllable`, `unknown_game`, `no_active_model`, `illegal_action`, `unsupported`, and a bad parameter is `ControlErrors::kInvalidParams`.
+`IControllableGame`: `GetState()`, `GetActions()` (a JSON array; every element is accepted by `PerformAction` as is), `WriteState()` / `WriteActions()` (what `get_state`, `list_actions` and the push call: the default writes `GetState()` / `GetActions()`, an override skips the `Json` and keeps the two equal), `PerformAction(action)`, `Reset(options)`, `SetState(state)` (default: `unsupported`), `GetStateVersion()`. Errors are `std::expected<.., ControlError>`: `GameControlErrors` (codes in `IControllableGame.h`), a bad parameter is `ControlErrors::kInvalidParams`.
 
 Writing the adapter of a game:
 
-- Keep the rules free of JSON: the adapter is a small class next to the game (a control adapter) that the `IGame` owns and returns from `AsControllable()`. It may reach a model that lives in a scene component through a provider function, which is also what lets a test drive it without a scene; a model that the game owns itself is handed over by reference (Chess, BagiEngine-Chess).
-- `GetStateVersion()` must grow on every change a controller has to see (a new game, every committed action) and never go back; it is how a client knows the state moved, and `GameControl` compares it at the end of every frame to publish `state_changed`.
+- Keep the rules free of JSON: the adapter is a small class next to the game that the `IGame` owns and returns from `AsControllable()`. It may reach a model that lives in a scene component through a provider function, which is also what lets a test drive it without a scene; a model that the game owns itself is handed over by reference (Chess, BagiEngine-Chess).
+- `GetStateVersion()` must grow on every change a controller has to see (a new game, every committed action) and never go back; `GameControl` compares it at the end of every frame to publish `state_changed`.
 - The parameters of `PerformAction`, `Reset` and `SetState` come from a client. Read them with the checked helpers of `BECore/Control/Json.h` (nlohmann aborts the process on a bad access in this build) and range-check numbers as `int64_t` before narrowing. A bad value is an error, not an assert. `illegal_action` means the action is well-formed but not legal now.
 - The state and the actions are for a model to read: short, self-explanatory names, a board as strings, no internal ids.
-- `switch_game` looks the name up among the games; do not intern a client's string into `PoolString` (`GameControlTest` checks this with `PoolString::Find`).
+- `switch_game` looks the name up among the games; do not intern a client's string into `PoolString`..
 - Tests: the engine-level methods are covered with fake games in `tests/BECore/GameControlTest.*` (`FakeControllableGame`, `FakePlainGame`); the adapter of a game is tested in the game's own tests.
 
 ## Record and replay

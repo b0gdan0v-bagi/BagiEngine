@@ -26,6 +26,8 @@ namespace BECore::Tests {
 
         std::expected<Json, ControlError> GetState() const override;
         std::expected<Json, ControlError> GetActions() const override;
+        std::expected<void, ControlError> WriteState(JsonWriter& writer) const override;
+        std::expected<void, ControlError> WriteActions(JsonWriter& writer) const override;
         std::expected<Json, ControlError> PerformAction(const Json& action) override;
         std::expected<void, ControlError> Reset(const Json& options) override;
         std::expected<void, ControlError> SetState(const Json& state) override;
@@ -37,6 +39,13 @@ namespace BECore::Tests {
         int counter = 0;
         uint64_t version = 0;
         int plainResetCalls = 0;  // IGame::Reset() calls
+
+        /// The writing forms: by default the ones of IControllableGame (through GetState / GetActions). With `handWritten` they write the same
+        /// documents by hand and count the calls; with `failWrites` they write half an object and fail (GameControlWriterTest.cpp)
+        bool handWritten = false;
+        bool failWrites = false;
+        mutable int writeStateCalls = 0;
+        mutable int writeActionsCalls = 0;
     };
 
     /// A game that cannot be controlled from outside: it counts the IGame::Reset() calls
