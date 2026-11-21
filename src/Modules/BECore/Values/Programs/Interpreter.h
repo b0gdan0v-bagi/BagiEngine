@@ -5,6 +5,7 @@
 #include <BECore/Values/Programs/Domain/ProgramDomain.h>
 #include <BECore/Values/Programs/Opcode.h>
 #include <BECore/Values/Programs/Program.h>
+#include <BECore/Values/Programs/ProgramTraceSink.h>
 #include <cstring>
 
 namespace BECore {
@@ -17,6 +18,14 @@ namespace BECore {
      * every level it reads must have an object in the context (`ASSERT`, as `Value::Get`).
      */
     void Run(const Program& program, const Context& context, void* result);
+
+    /**
+     * @brief `Run` that tells @p sink about every instruction it executes, in execution order (`ProgramTraceSink.h`); the result is bit for bit that of `Run`
+     *
+     * Always the interpreter, even for a program a generated function is bound to (`Native/`): the two give the same bits and the generated code has no hook. `Run` is the same loop
+     * with no observer, so it pays nothing for this. Allocates only what the sink does.
+     */
+    void RunTraced(const Program& program, const Context& context, void* result, ProgramTraceSink& sink);
 
     /// `Run` for a result of the C++ type @p T, which must be the program's result type; for an enum the result is the enumerator of the index (the program does not know which enum it is)
     template <ProgramValue T>
