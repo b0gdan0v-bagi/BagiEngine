@@ -1,6 +1,8 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonSerializer.h>
 #include <BECore/Control/JsonWriter.h>
+#include <BECore/JsonWriteReflectTypes.h>
 #include <BECore/Rooms/RoomMessageReference.h>
 #include <Common/AllocCheck.h>
 #include <Rooms/RoomProtocol.h>
@@ -259,6 +261,116 @@ namespace BECore::Tests {
         Print(kPrefix, "rooms-writer", MeasureRoomWriter([&](String& out) { AppendRoomListMessage(out, list); }));
         Print(kPrefix, "error-dom", MeasureRoomDom([] { return RoomMessageReference::MakeErrorMessage("seat_taken", "that seat is taken", "choose_seat"); }));
         Print(kPrefix, "error-writer", MeasureRoomWriter([](String& out) { AppendErrorMessage(out, "seat_taken", "that seat is taken", "choose_seat"); }));
+    }
+
+    namespace {
+
+        constexpr int64_t kBenchVersion = 42;
+        constexpr StringView kBenchGame = "FakeGame";
+        constexpr int kListedItems = 20;
+        constexpr int kTableEntries = 10;
+
+        /// The envelope of get_state: the result `{game, state, version}` with the state written by @p writeState
+        template <typename TWriteState>
+        void WriteStateResult(JsonWriter& writer, TWriteState&& writeState) {
+            writer.BeginObject();
+            writer.Member("game", kBenchGame);
+            writer.Key("state");
+            writeState(writer);
+            writer.Member("version", kBenchVersion);
+            writer.EndObject();
+        }
+
+        Json MakeStateResult() {
+            Json result = Json::object();
+            result["game"] = "FakeGame";
+            result["state"] = MakeLargeResult(0);
+            result["version"] = kBenchVersion;
+            return result;
+        }
+
+        /// The old push: a `Json` event dumped, then copied into the `String` the sink gets
+        String MakePushDom() {
+            Json event = Json::object();
+            event["data"] = MakeStateResult();
+            event["event"] = "state_changed";
+            return DumpJson(event);
+        }
+
+        /// The new push: the state is written into the watcher's kept scratch, its text enters the event with `Raw`
+        void AppendPushWriter(String& out, String& scratch) {
+            scratch.clear();
+            JsonWriter state(scratch);
+            WriteLargeResult(state, 0);
+
+            JsonWriter writer(out);
+            writer.BeginObject();
+            writer.Key("data");
+            writer.BeginObject();
+            writer.Member("game", kBenchGame);
+            writer.Key("state");
+            writer.Raw(StringView(scratch.data(), scratch.size()));
+            writer.Member("version", kBenchVersion);
+            writer.EndObject();
+            writer.Member("event", StringView("state_changed"));
+            writer.EndObject();
+        }
+
+        template <typename T>
+        String DomText(const T& value) {
+            JsonSerializer serializer;
+            value.Serialize(serializer);
+            return DumpJson(serializer.Take());
+        }
+
+        template <typename T>
+        Measure MeasureGenerated(const T& value) {
+            return MeasureRoomWriter([&](String& out) {
+                JsonWriter writer(out);
+                value.WriteJson(writer);
+            });
+        }
+
+    }  // namespace
+
+    TEST(JsonWriterBenchTest, DISABLED_GameState) {
+        constexpr const char* kPrefix = "GameState";
+        Print(kPrefix, "get-state-dom", MeasureDomPath([] { return MakeStateResult(); }));
+        Print(kPrefix, "get-state-writer", MeasureWriterPath([](JsonWriter& writer) { WriteStateResult(writer, [](JsonWriter& state) { WriteLargeResult(state, 0); }); }));
+        Print(kPrefix, "push-dom", MeasureRoomDom([] { return MakePushDom(); }));
+        String scratch;
+        Print(kPrefix, "push-writer", MeasureRoomWriter([&](String& out) { AppendPushWriter(out, scratch); }));
+    }
+
+    TEST(JsonWriterBenchTest, DISABLED_ReflectedWrite) {
+        constexpr const char* kPrefix = "ReflectedWrite";
+
+        JsonWriteTestData::JsonWriteScalars scalars;
+        scalars.count = 12;
+        scalars.ratio = 0.25f;
+        scalars.scale = 3.14159;
+        scalars.name = "a name of the object";
+        scalars.fixedName = "fixed";
+        scalars.mode = JsonWriteTestData::JsonWriteMode::On;
+        Print(kPrefix, "scalars-dom", MeasureRoomDom([&] { return DomText(scalars); }));
+        Print(kPrefix, "scalars-writer", MeasureGenerated(scalars));
+
+        JsonWriteTestData::JsonWriteInnerList list;
+        for (int i = 0; i < kListedItems; ++i) {
+            JsonWriteTestData::JsonWriteInner item;
+            item.name = Format("item {}", i);
+            item.count = i;
+            list.items.push_back(item);
+        }
+        Print(kPrefix, "list-dom", MeasureRoomDom([&] { return DomText(list); }));
+        Print(kPrefix, "list-writer", MeasureGenerated(list));
+
+        JsonWriteTestData::JsonWriteBridged bridged;
+        for (int i = 0; i < kTableEntries; ++i) {
+            bridged.table[Format("key{}", i)] = i;
+        }
+        Print(kPrefix, "bridged-dom", MeasureRoomDom([&] { return DomText(bridged); }));
+        Print(kPrefix, "bridged-writer", MeasureGenerated(bridged));
     }
 
 }  // namespace BECore::Tests

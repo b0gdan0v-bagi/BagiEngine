@@ -27,6 +27,13 @@ namespace BECore {
             BE_REFLECT_FIELD int32_t count = 0;
         };
 
+        /// A list of two-field objects: the benchmark of the native sequence
+        struct JsonWriteInnerList {
+            BE_CLASS(JsonWriteInnerList)
+
+            BE_REFLECT_FIELD Vector<JsonWriteInner> items;
+        };
+
         struct JsonWriteEmpty {
             BE_CLASS(JsonWriteEmpty)
         };
