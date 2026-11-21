@@ -50,6 +50,8 @@ namespace BECore {
                 return "void";
             case TypeKind::Unknown:
                 return "unknown";
+            case TypeKind::Value:
+                return "value";
         }
         return "unknown";
     }

@@ -253,6 +253,31 @@ namespace BECore::Tests {
         EXPECT_TRUE(DescribeType<int32_t>().opaqueName.empty());
     }
 
+    TEST(TypeDescTest, AValueFieldIsOfKindValueWithItsTypeAsElement) {
+        constexpr const TypeDesc& desc = DescribeType<Value<int32_t>>();
+        EXPECT_EQ(desc.kind, TypeKind::Value);
+        ASSERT_NE(desc.element, nullptr);
+        EXPECT_EQ(desc.element->kind, TypeKind::Int32);
+        EXPECT_EQ(DescribeType<Value<Vec3>>().element->kind, TypeKind::Opaque);
+        EXPECT_EQ(TypeKindName(TypeKind::Value), "value");
+    }
+
+    TEST(TypeDescTest, AValueFieldKeepsTheOpaqueIdentityOfItsClass) {
+        const TypeDesc& desc = DescribeType<Value<float>>();
+        EXPECT_EQ(desc.opaqueSize, sizeof(Value<float>));
+        EXPECT_NE(desc.opaqueHash, 0U);
+        EXPECT_NE(desc.opaqueName.find("Value"), StringView::npos);
+        EXPECT_EQ(desc.opaqueHash, StringUtils::GetHash(desc.opaqueName));
+    }
+
+    TEST(TypeDescTest, TheTypesOfValueFieldsAreToldApart) {
+        EXPECT_TRUE((SameAs<Value<float>, Value<float>>()));
+        EXPECT_FALSE((SameAs<Value<float>, Value<double>>()));
+        EXPECT_FALSE((SameAs<Value<Vec2>, Value<Vec3>>()));
+        EXPECT_FALSE((SameAs<Value<float>, float>()));
+        EXPECT_FALSE((SameAs<Vector<Value<Vec2>>, Vector<Value<Vec3>>>()));
+    }
+
     TEST(TypeDescTest, AnOpaqueIdentityIsTheSameInACopy) {
         const TypeDesc copy = DescribeType<Vec3>();
         EXPECT_NE(&copy, &DescribeType<Vec3>());
