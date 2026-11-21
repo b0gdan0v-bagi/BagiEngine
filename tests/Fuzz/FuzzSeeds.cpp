@@ -124,6 +124,32 @@ namespace BECore::Fuzz {
             return ToBytes(writer);
         }
 
+        /// One name in one scope more than once, and as a value, an object and an array: the lookup has to agree with "the last write wins"
+        FuzzBytes MakeDuplicateNamesStream() {
+            BinarySerializer writer;
+            writer.WriteAttribute("d", static_cast<int32_t>(1));
+            writer.WriteAttribute("d", static_cast<int32_t>(2));
+            for (int32_t round = 0; round < 2; ++round) {
+                if (writer.BeginObject("d")) {
+                    writer.WriteAttribute("x", round);
+                    writer.WriteAttribute("x", round + 10);
+                    writer.EndObject();
+                }
+            }
+            for (int32_t round = 0; round < 2; ++round) {
+                size_t count = 1;
+                if (writer.BeginArray("d", "e", count)) {
+                    if (writer.BeginArrayElement()) {
+                        writer.WriteAttribute("d", round);
+                        writer.WriteAttribute("d", round + 10);
+                        writer.EndArrayElement();
+                    }
+                    writer.EndArray();
+                }
+            }
+            return ToBytes(writer);
+        }
+
         /// Only the string "s" = "abc"
         FuzzBytes MakeStringStream() {
             BinarySerializer writer;
@@ -352,6 +378,8 @@ namespace BECore::Fuzz {
         seeds.push_back({kBinaryFolder, "array-count-ffffffff.bin", hugeCount});
 
         seeds.push_back({kBinaryFolder, "array.bin", MakeArrayStream()});
+
+        seeds.push_back({kBinaryFolder, "duplicate-names.bin", MakeDuplicateNamesStream()});
 
         seeds.push_back({kXmlFolder, "probe-filled.xml", MakeProbeXml()});
 

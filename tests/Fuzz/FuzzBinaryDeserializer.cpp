@@ -220,6 +220,12 @@ namespace BECore::Fuzz {
                 // A refusal is not a state: the same bytes are refused again by a fresh reader
                 BinaryDeserializer again;
                 FUZZ_CHECK(!again.LoadFromBuffer(data, size));
+
+                // The view reads the caller's memory and refuses the same bytes
+                BinaryDeserializer view;
+                FUZZ_CHECK(!view.LoadFromView(data, size));
+                FUZZ_CHECK(view.HasErrors());
+                ExpectNothingReadable(view);
                 return;
             }
 
@@ -231,6 +237,11 @@ namespace BECore::Fuzz {
             FUZZ_CHECK(fresh.LoadFromBuffer(data, size));
             FUZZ_CHECK(WalkDocument(fresh, data, size) == first);
 
+            // The view is the input itself, not a copy: the same document and the same digest
+            BinaryDeserializer view;
+            FUZZ_CHECK(view.LoadFromView(data, size));
+            FUZZ_CHECK(WalkDocument(view, data, size) == first);
+
             reader.ClearErrors();
             FUZZ_CHECK(reader.LoadFromBuffer(data, size));
             FUZZ_CHECK(WalkDocument(reader, data, size) == first);
@@ -238,6 +249,8 @@ namespace BECore::Fuzz {
             // Loading something else on top of a good document drops it
             FUZZ_CHECK(!reader.LoadFromBuffer(nullptr, 0));
             ExpectNothingReadable(reader);
+            FUZZ_CHECK(!view.LoadFromView(nullptr, 0));
+            ExpectNothingReadable(view);
         }
 
     }  // namespace
