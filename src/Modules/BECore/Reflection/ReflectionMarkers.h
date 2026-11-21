@@ -7,7 +7,8 @@
  * @brief The markers meta_generator reads from the source text: BE_CLASS, BE_EVENT, BE_REFLECT_FIELD, BE_FIELD_ATTRS, BE_FUNCTION.
  *
  * The generated `Generated/<Stem>.gen.hpp` is included by the class's own .cpp only: it holds non-template definitions,
- * so other callers of Serialize / Deserialize link against them without including it.
+ * so other callers of Serialize / Deserialize / WriteJson link against them without including it. `WriteJson` writes the object
+ * `Serialize` saves into a JsonSerializer, as the same bytes (Control/JsonWriteReflect.h).
  */
 
 namespace BECore {
@@ -20,6 +21,7 @@ namespace BECore {
 
     class ISerializer;
     class IDeserializer;
+    class JsonWriter;
 
     class IPropertyVisitor;
 
@@ -81,6 +83,8 @@ public:                                                                         
     virtual void Serialize(::BECore::ISerializer& s) const;                                                                                                                                            \
     /** @brief Deserialize all reflected fields from IDeserializer (read/load) */                                                                                                                      \
     virtual void Deserialize(::BECore::IDeserializer& d);                                                                                                                                              \
+    /** @brief Write the reflected fields as one JSON object (keys sorted: the bytes of JsonSerializer) */                                                                                             \
+    virtual void WriteJson(::BECore::JsonWriter& w) const;                                                                                                                                             \
     /** @brief Visit all reflected fields for in-place editing (e.g. ImGui inspector) */                                                                                                               \
     virtual bool AcceptPropertyVisitor(::BECore::IPropertyVisitor& v);                                                                                                                                 \
                                                                                                                                                                                                        \
@@ -112,6 +116,8 @@ public:                                                                         
     void Serialize(::BECore::ISerializer& s) const;                                                                                                                                                    \
     /** @brief Deserialize all reflected fields from IDeserializer (read/load) */                                                                                                                      \
     void Deserialize(::BECore::IDeserializer& d);                                                                                                                                                      \
+    /** @brief Write the reflected fields as one JSON object (keys sorted: the bytes of JsonSerializer) */                                                                                             \
+    void WriteJson(::BECore::JsonWriter& w) const;                                                                                                                                                     \
                                                                                                                                                                                                        \
 private:                                                                                                                                                                                               \
     template <typename, typename>                                                                                                                                                                      \

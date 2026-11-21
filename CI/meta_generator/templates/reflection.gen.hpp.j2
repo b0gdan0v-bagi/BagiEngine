@@ -10,6 +10,7 @@
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/MethodInfo.h>
+#include <BECore/Control/JsonWriteReflect.h>
 #include <BECore/Reflection/DataAccessor.h>
 #include <BECore/Reflection/PropertyVisitorDispatch.h>
 #include <BECore/Reflection/TypeInfo.h>
@@ -37,6 +38,22 @@ struct FactoryTraits<{{ dep.full_qualified_name }}> {
 }  // namespace BECore
 {% endfor %}
 {% endif %}
+
+{% macro write_json(cls) %}
+// {{ cls.full_qualified_name }}::WriteJson() - the object Serialize saves into a JsonSerializer, as the same bytes: keys sorted, one call per field
+void {{ cls.full_qualified_name }}::WriteJson(::BECore::JsonWriter& w) const {
+{% if cls.parent_has_be_class %}
+    // The keys of the parent and of this class interleave in one sorted object, and the parent's private fields are out of reach here: write what Serialize saves
+    ::BECore::JsonWrite::WriteSerializedObject(w, [&](::BECore::ISerializer& s) { Serialize(s); });
+{% else %}
+    w.BeginObject();
+{% for field in cls.json_fields %}
+    ::BECore::JsonWrite::SaveField(w, "\"{{ field.key }}\":", "{{ field.key }}", {{ field.name }});
+{% endfor %}
+    w.EndObject();
+{% endif %}
+}
+{% endmacro %}
 
 {% if enums %}
 // ============================================================================
@@ -191,6 +208,8 @@ void {{ cls.full_qualified_name }}::Deserialize(::BECore::IDeserializer& d) {
 {% endif %}
 {% endfor %}
 }
+
+{{ write_json(cls) }}
 {% endif %}
 
 // ============================================================================
@@ -276,6 +295,8 @@ void {{ cls.full_qualified_name }}::Deserialize(::BECore::IDeserializer& d) {
 {% endif %}
 {% endfor %}
 }
+
+{{ write_json(cls) }}
 
 // {{ cls.full_qualified_name }}::AcceptPropertyVisitor() - auto-generated from BE_REFLECT_FIELD markers
 // Visits all reflected fields for in-place editing (e.g. ImGui inspector)

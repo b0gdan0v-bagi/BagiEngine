@@ -60,6 +60,18 @@ def format_field_attributes(attrs: FieldAttrs) -> str:
     return '::BECore::FieldAttributes{ ' + ', '.join(parts) + ' }'
 
 
+def json_write_fields(fields) -> List[dict]:
+    """The fields the generated WriteJson writes: in the sorted order of their serialized names, one per name.
+
+    The serialized name is the field name without its leading underscore. JsonSerializer keeps its members in a sorted map and assigns
+    by key, so the object it writes has the keys in sorted order and, for two fields of one serialized name, the later declared one.
+    """
+    by_key = {}
+    for f in fields:
+        by_key[f.name[1:] if f.name.startswith('_') else f.name] = f.name
+    return [{'key': key, 'name': by_key[key]} for key in sorted(by_key)]
+
+
 def find_factory_ancestor(parent_class: Optional[str], classes_by_name: dict, factory_base_names: set) -> str:
     """Walk up the chain of parents and return the short name of the first factory base, or ''.
 
@@ -309,6 +321,7 @@ class CodeGenerator:
                     }
                     for f in cls.fields
                 ],
+                'json_fields': json_write_fields(cls.fields),
                 'methods': [
                     {
                         'name': m.name,
