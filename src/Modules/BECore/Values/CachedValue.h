@@ -49,14 +49,16 @@ namespace BECore {
             if (_reads == 0) {
                 return _valid ? _result : Compute(context);
             }
-            // A kept result implies versioned levels: the stamp below is taken only after the check
+            // The stamps describe the kept result, so the unversioned compute below must drop it: a later call
+            // over the old levels would match the old stamps and return the result of the other context
             if (_valid && context.Matches(_reads, _stamps.data())) {
                 return _result;
             }
             if (!context.IsVersioned(_reads)) {
                 WarnUnversioned();
+                const T result = Compute(context);
                 _valid = false;
-                return Compute(context);
+                return result;
             }
             const T result = Compute(context);
             context.Stamp(_reads, _stamps.data());

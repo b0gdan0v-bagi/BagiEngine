@@ -219,6 +219,21 @@ namespace BECore::Tests {
         EXPECT_EQ(cached.Computations(), 2U);
     }
 
+    TEST(ValueCachedTest, AnUnversionedCallBetweenTwoHitsKeepsNothing) {
+        CachedWorld world;
+        CachedValue<int32_t> cached(world.Compile<int32_t>(kIntFormula));
+        EXPECT_EQ(cached.Evaluate(world.context), 12 * (100 + 3 * 10) / 100);
+
+        ValueUnitStats other;
+        other.attack = 20;
+        Context partly(world.declaration);
+        partly.Set(kCasterLevel, other);
+        partly.Set(kCastLevel, world.cast, &world.castVersion);
+        EXPECT_EQ(cached.Evaluate(partly), 20 * (100 + 3 * 10) / 100);
+
+        EXPECT_EQ(cached.Evaluate(world.context), 12 * (100 + 3 * 10) / 100) << "the result of the other context is not kept";
+    }
+
     TEST(ValueCachedTest, ResetTakesAnotherFormulaAndInvalidateKeepsTheSame) {
         CachedWorld world;
         CachedValue<int32_t> cached(world.Compile<int32_t>(kCasterOnlyFormula));
