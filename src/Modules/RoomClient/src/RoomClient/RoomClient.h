@@ -311,6 +311,9 @@ namespace BECore {
         String _url;
         /// Sent when the transport opens
         String _firstMessage;
+        /// The steady messages are written here and keep the capacity. Every transport copies the text inside SendText() and none calls
+        /// back into the client from it, so the next message may overwrite this one
+        String _sendScratch;
         /// Whether the first message is a join (sets _awaitingJoin when it goes out)
         bool _firstMessageAwaitsJoin = true;
         /// A create_room or join_room was sent and has no answer (`joined` or `error`) yet

@@ -632,6 +632,32 @@ namespace BECore::Tests {
         EXPECT_TRUE(again.empty());
     }
 
+    // The steady messages share one write buffer: a long one must leave nothing in the shorter one that follows
+    TEST_F(RoomClientTest, SteadyMessagesGoOutExactlyEvenWhenALongOneCameBefore) {
+        FakeLink& link = EnterAsHost();
+        Receive(link, View(7));
+        const size_t first = link.sent.size();
+
+        const String note(300, 'n');
+        const Json longAction = Json::object({{"type", "play"}, {"note", note.c_str()}});
+        ASSERT_TRUE(_client->SendAction(longAction).has_value());
+        ASSERT_TRUE(_client->ChooseSeat(2).has_value());
+        ASSERT_TRUE(_client->SendAction(OneAction()).has_value());
+        ASSERT_TRUE(_client->Start().has_value());
+        Advance(milliseconds(10000));
+        ASSERT_TRUE(_client->ChooseSeat(2).has_value());
+        ASSERT_TRUE(_client->Leave().has_value());
+
+        ASSERT_EQ(link.sent.size(), first + 7);
+        EXPECT_EQ(link.sent[first], Format("{{\"action\":{{\"note\":\"{}\",\"type\":\"play\"}},\"type\":\"action\",\"v\":1,\"version\":7}}", note));
+        EXPECT_EQ(link.sent[first + 1], "{\"seat\":2,\"type\":\"choose_seat\",\"v\":1}");
+        EXPECT_EQ(link.sent[first + 2], "{\"action\":{\"card\":4,\"type\":\"play\"},\"type\":\"action\",\"v\":1,\"version\":7}");
+        EXPECT_EQ(link.sent[first + 3], "{\"type\":\"start\",\"v\":1}");
+        EXPECT_EQ(link.sent[first + 4], "{\"type\":\"ping\",\"v\":1}");
+        EXPECT_EQ(link.sent[first + 5], link.sent[first + 1]);
+        EXPECT_EQ(link.sent[first + 6], "{\"type\":\"leave\",\"v\":1}");
+    }
+
     // ---- Heartbeat ----------------------------------------------------------------------------------------------------------------
 
     TEST_F(RoomClientTest, APingGoesOutAfterTenSecondsOfSilenceAndNotBefore) {

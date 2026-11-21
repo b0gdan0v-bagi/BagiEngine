@@ -120,7 +120,9 @@ namespace BECore {
     }
 
     std::expected<void, ControlError> RoomClient::SendToServer(const ClientMessage& message) {
-        if (!_transport->SendText(SerializeClientMessage(message))) {
+        _sendScratch.clear();
+        AppendClientMessage(_sendScratch, message);
+        if (!_transport->SendText(_sendScratch)) {
             return Fail(RoomClientErrors::kWrongState, "the connection is closing");
         }
         return {};
@@ -501,7 +503,9 @@ namespace BECore {
         if (_settings.pingInterval.count() > 0 && !_pingOutstanding && silent >= _settings.pingInterval) {
             // One at a time: the next waits for something to arrive. A send that fails means the connection is closing, which is reported
             _pingOutstanding = true;
-            _transport->SendText(SerializeClientMessage(PingMessage{}));
+            _sendScratch.clear();
+            AppendClientMessage(_sendScratch, PingMessage{});
+            _transport->SendText(_sendScratch);
         }
     }
 
