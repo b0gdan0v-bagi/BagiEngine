@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Math/Vec3.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/RefCounted.h>
@@ -7,6 +8,7 @@
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/Values/Value.h>
 #include <cstdint>
 
 namespace BECore {
@@ -110,6 +112,16 @@ namespace BECore::SchemaTestData {
         BE_REFLECT_FIELD BE_FIELD_ATTRS(range(0, 1), step(0.05), tooltip("Share of the screen")) float _opacity = 0.5f;
         BE_REFLECT_FIELD BE_FIELD_ATTRS(readonly, hidden, required) bool _flags = true;
         BE_REFLECT_FIELD int32_t plain = 7;
+    };
+
+    /// The fields whose type is a `Value<T>`: the schema names them as such, with their `T`
+    struct SchemaValueFields {
+        BE_CLASS(SchemaValueFields)
+
+        BE_REFLECT_FIELD Value<int32_t> damage;
+        BE_REFLECT_FIELD Value<bool> alive;
+        BE_REFLECT_FIELD Value<Vec3> position;
+        BE_REFLECT_FIELD BE_FIELD_ATTRS(range(0, 100)) Value<int32_t> percent;
     };
 
     /// A method that can be called by name and some that cannot

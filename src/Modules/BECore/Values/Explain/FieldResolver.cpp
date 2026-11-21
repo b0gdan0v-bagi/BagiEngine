@@ -23,6 +23,7 @@ namespace BECore {
                 case TypeKind::String:
                 case TypeKind::Enum:
                 case TypeKind::Opaque:
+                case TypeKind::Value:
                 case TypeKind::List:
                     return true;
                 default:
