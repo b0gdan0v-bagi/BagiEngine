@@ -62,22 +62,6 @@ namespace BECore {
             return extension == kXmlExtension.data() || extension == kBinaryExtension.data();
         }
 
-        /// The files of @p layer relative to it, sorted; dot files (`.DS_Store`) are not content
-        Vector<std::filesystem::path> ListFiles(const std::filesystem::path& layer, String& error) {
-            Vector<std::filesystem::path> files;
-            std::error_code ec;
-            for (std::filesystem::recursive_directory_iterator it(layer, ec), end; !ec && it != end; it.increment(ec)) {  //-NoStd: an offline tool lists the content folder once
-                if (it->is_regular_file(ec) && !ec && it->path().filename().string().front() != '.') {
-                    files.push_back(it->path().lexically_relative(layer));
-                }
-            }
-            if (ec) {
-                error = Format("the layer '{}' cannot be listed: {}", layer.string(), ec.message());
-            }
-            eastl::sort(files.begin(), files.end(), [](const std::filesystem::path& a, const std::filesystem::path& b) { return a.generic_string() < b.generic_string(); });
-            return files;
-        }
-
         /// Which of `<stem>.xml` and `<stem>.bin` a layer holds, over the whole layer as `ConfigManager` scans it
         struct StemFiles {
             bool xml = false;
@@ -225,7 +209,7 @@ namespace BECore {
 
         void CookLayer(const FileSystem& fs, size_t layerIndex, const std::filesystem::path& layer, const std::filesystem::path& outDir, const ContentCookRegistry& registry, CookReport& report) {
             String listError;
-            const Vector<std::filesystem::path> files = ListFiles(layer, listError);
+            const Vector<std::filesystem::path> files = ListContentFiles(layer, listError);
             if (!listError.empty()) {
                 Fail(report, layerIndex, "", eastl::move(listError));
                 return;
@@ -285,6 +269,21 @@ namespace BECore {
         }
 
     }  // namespace
+
+    Vector<std::filesystem::path> ListContentFiles(const std::filesystem::path& layer, String& error) {
+        Vector<std::filesystem::path> files;
+        std::error_code ec;
+        for (std::filesystem::recursive_directory_iterator it(layer, ec), end; !ec && it != end; it.increment(ec)) {  //-NoStd: an offline tool lists the content folder once
+            if (it->is_regular_file(ec) && !ec && it->path().filename().string().front() != '.') {
+                files.push_back(it->path().lexically_relative(layer));
+            }
+        }
+        if (ec) {
+            error = Format("the layer '{}' cannot be listed: {}", layer.string(), ec.message());
+        }
+        eastl::sort(files.begin(), files.end(), [](const std::filesystem::path& a, const std::filesystem::path& b) { return a.generic_string() < b.generic_string(); });
+        return files;
+    }
 
     bool CookReport::Ok() const {
         return Count(CookOutcome::Failed) == 0;

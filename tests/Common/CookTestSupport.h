@@ -1,11 +1,14 @@
 #pragma once
 
 #include <BECore/Config/ConfigManager.h>
+#include <BECore/Config/ContentVersion.h>
+#include <BECore/Cook/ContentCook.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/Format/Format.h>
 #include <BECore/Types/Types.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <filesystem>
@@ -67,6 +70,30 @@ namespace BECore::Tests {
         std::filesystem::path _root;
         FileSystem _sources;
     };
+
+    /// A scene config of the current format with the one scene Main holding @p nodesXml
+    inline String SceneText(StringView nodesXml, uint32_t version = kContentVersion) {
+        return Format(R"(<SceneManager contentVersion="{}"><scenes><scene type="Scene" name="Main" {}><nodes>{}</nodes></scene></scenes></SceneManager>)", version, kMainSceneView800x600, nodesXml);
+    }
+
+    /// A node file of the given content version: a node named @p name with two components and one child
+    inline String HudNodeText(StringView name, uint32_t version = kContentVersion) {
+        return Format(R"(<node contentVersion="{}" name="{}" layer="10"><components>
+  <component type="TransformComponent" x="1" y="2" width="3" height="4"/>
+  <component type="QuadRendererComponent"><color r="9" g="8" b="7" a="255"/></component>
+</components><children><node name="Child" layer="1"/></children></node>)",
+                      version, name);
+    }
+
+    /// The row of the file @p path (relative to its layer, with `/`) of layer @p layer, or null
+    inline const CookRow* FindRow(const CookReport& report, size_t layer, StringView path) {
+        for (const CookRow& row : report.rows) {
+            if (row.layer == layer && row.path == path) {
+                return &row;
+            }
+        }
+        return nullptr;
+    }
 
     /// A FileSystem and a ConfigManager over the cooked layers of a cook (`<out>/layer<k>/config`, k < @p layers), as the game would load them
     class CookedContent {

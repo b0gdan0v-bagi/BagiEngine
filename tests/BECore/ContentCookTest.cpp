@@ -45,20 +45,6 @@ namespace BECore::Tests {
             return text.find(part.data(), 0, part.size()) != String::npos;
         }
 
-        /// A scene config of the current format with the one scene Main holding @p nodesXml
-        String SceneText(StringView nodesXml, uint32_t version = kContentVersion) {
-            return Format(R"(<SceneManager contentVersion="{}"><scenes><scene type="Scene" name="Main" {}><nodes>{}</nodes></scene></scenes></SceneManager>)", version, kMainSceneView800x600,
-                          nodesXml);
-        }
-
-        String HudNodeText(StringView name, uint32_t version = kContentVersion) {
-            return Format(R"(<node contentVersion="{}" name="{}" layer="10"><components>
-  <component type="TransformComponent" x="1" y="2" width="3" height="4"/>
-  <component type="QuadRendererComponent"><color r="9" g="8" b="7" a="255"/></component>
-</components><children><node name="Child" layer="1"/></children></node>)",
-                          version, name);
-        }
-
         constexpr StringView kHudRef = "nodes/Hud";
 
         /// The SceneManager a game reads from the layers of @p fs and @p configs, as text
@@ -99,15 +85,6 @@ namespace BECore::Tests {
             }
             manager.Reset();
             return text;
-        }
-
-        const CookRow* FindRow(const CookReport& report, size_t layer, StringView path) {
-            for (const CookRow& row : report.rows) {
-                if (row.layer == layer && row.path == path) {
-                    return &row;
-                }
-            }
-            return nullptr;
         }
 
     }  // namespace
