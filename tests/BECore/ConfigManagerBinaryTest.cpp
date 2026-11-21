@@ -26,6 +26,7 @@ namespace BECore::Tests {
 
         constexpr StringView kRootName = "BinaryConfigRoot";
         const PoolString kConfig = "BinaryProbe"_intern;
+        const PoolString kKind = "binary-kind"_intern;
         constexpr StringView kXmlText = "<BinaryProbe id=\"7\" title=\"seven\" kind=\"binary-kind\"/>\n";
         constexpr double kWatchTime = 1.0;
 
@@ -33,7 +34,7 @@ namespace BECore::Tests {
             BinaryConfigRoot root;
             root.id = id;
             root.title = "seven";
-            root.kind = PoolString::Intern(StringView{"binary-kind"});
+            root.kind = kKind;
             root.items = {1, 2, 3};
             root.part.label = "part";
             root.part.weight = 1.5f;

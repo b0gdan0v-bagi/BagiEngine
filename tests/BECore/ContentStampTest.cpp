@@ -16,12 +16,13 @@ namespace BECore::Tests {
 
         constexpr StringView kRootName = "StampRoot";
         constexpr StringView kSource = "config/Stamped.bin";
+        const PoolString kKind = "stamp-test-kind"_intern;
 
         StampRoot MakeRoot() {
             StampRoot root;
             root.id = 7;
             root.label = "text";
-            root.kind = PoolString::Intern(StringView{"stamp-test-kind"});
+            root.kind = kKind;
             root.items = {1, 2, 3};
             return root;
         }

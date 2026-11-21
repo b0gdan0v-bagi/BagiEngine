@@ -439,7 +439,7 @@ namespace BECore {
         Vector<PoolString> names(views.size());
         PoolString::InternBatch(Span<const StringView>(views.data(), views.size()), Span<PoolString>(names.data(), names.size()));
 
-        // The first file of each extension per stem, to tell a stem with both from a stem with two files of one kind
+        // Whether a stem has a file of each extension, to tell a stem with both from a stem with two files of one kind
         struct StemFiles {
             const std::filesystem::path* xml = nullptr;
             const std::filesystem::path* binary = nullptr;
