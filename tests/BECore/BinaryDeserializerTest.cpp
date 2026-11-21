@@ -2,7 +2,11 @@
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Resource/TextureLibrary.h>
 #include <Common/AllocCheck.h>
+#include <Common/BinaryStreams.h>
+#include <Common/FreshText.h>
+#include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <filesystem>
 #include <gtest/gtest.h>
 #include <random>
@@ -249,12 +253,31 @@ namespace BECore::Tests {
             size_t end = 0;
         };
 
-        Vector<BinaryFormat::EntryView> EntriesOf(const Vector<uint8_t>& bytes, Range range) {
+        /// A stream the reference scan reads: its bytes, the string table of version 2 and where the document's entries start
+        struct Doc {
+            const Vector<uint8_t>& bytes;
+            bool tabled = false;
+            BinaryFormat::StringTable table;
+            size_t rootBegin = BinaryFormat::HeaderSize;
+        };
+
+        Doc DocOf(const Vector<uint8_t>& bytes) {
+            Doc doc{bytes};
+            doc.tabled = BinaryFormat::Load<uint16_t>(bytes.data() + sizeof(BinaryFormat::Magic)) == BinaryFormat::TabledVersion;
+            if (doc.tabled && !BinaryFormat::ParseStringTable(bytes.data(), BinaryFormat::HeaderSize, bytes.size(), doc.table, doc.rootBegin)) {
+                ADD_FAILURE() << "the string table is not well formed";
+            }
+            return doc;
+        }
+
+        Vector<BinaryFormat::EntryView> EntriesOf(const Doc& doc, Range range) {
             Vector<BinaryFormat::EntryView> entries;
             size_t position = range.begin;
             while (position < range.end) {
                 BinaryFormat::EntryView entry;
-                if (!BinaryFormat::ParseEntry(bytes.data(), position, range.end, entry)) {
+                const bool parsed =
+                    doc.tabled ? BinaryFormat::ParseEntryV2(doc.bytes.data(), position, range.end, doc.table, entry) : BinaryFormat::ParseEntry(doc.bytes.data(), position, range.end, entry);
+                if (!parsed) {
                     ADD_FAILURE() << "the document is not well formed";
                     break;
                 }
@@ -342,7 +365,8 @@ namespace BECore::Tests {
             }
         }
 
-        void ExpectScalarRead(BinaryDeserializer& reader, const BinaryFormat::EntryView& entry, const uint8_t* data, const String& where) {
+        void ExpectScalarRead(BinaryDeserializer& reader, const BinaryFormat::EntryView& entry, const Doc& doc, const String& where) {
+            const uint8_t* data = doc.bytes.data();
             switch (entry.tag) {
                 case BinaryFormat::Tag::Bool:
                     return ExpectScalarEqual<bool>(reader, entry, data, where);
@@ -370,12 +394,14 @@ namespace BECore::Tests {
                     String text;
                     ASSERT_TRUE(reader.ReadAttribute(entry.name, text)) << where.c_str();
                     const size_t length = BinaryFormat::Load<uint32_t>(data + entry.payloadBegin);
-                    EXPECT_EQ(StringView(text), StringView(reinterpret_cast<const char*>(data + entry.payloadBegin + sizeof(uint32_t)), length)) << where.c_str();
+                    const StringView expected =
+                        entry.tag == BinaryFormat::Tag::PoolString ? doc.table.Get(length) : StringView(reinterpret_cast<const char*>(data + entry.payloadBegin + sizeof(uint32_t)), length);
+                    EXPECT_EQ(StringView(text), expected) << where.c_str();
                 }
             }
         }
 
-        void WalkScope(BinaryDeserializer& reader, const Vector<uint8_t>& bytes, Range range, ReadOrder order, const String& where);
+        void WalkScope(BinaryDeserializer& reader, const Doc& doc, Range range, ReadOrder order, const String& where);
 
         void ExpectNameAbsent(BinaryDeserializer& reader, StringView name, NameKind kind, const String& where) {
             int32_t number = 0;
@@ -394,8 +420,8 @@ namespace BECore::Tests {
         }
 
         /// Reads every entry of the scope of @p range in the order of @p order and compares it with the reference scan of the bytes
-        void WalkScope(BinaryDeserializer& reader, const Vector<uint8_t>& bytes, Range range, ReadOrder order, const String& where) {
-            const Vector<BinaryFormat::EntryView> entries = EntriesOf(bytes, range);
+        void WalkScope(BinaryDeserializer& reader, const Doc& doc, Range range, ReadOrder order, const String& where) {
+            const Vector<BinaryFormat::EntryView> entries = EntriesOf(doc, range);
             const Vector<Item> plan = PlanOf(entries, order, kShuffleSeed);
             for (size_t step = 0; step < plan.size(); ++step) {
                 const Item& item = plan[step];
@@ -418,21 +444,21 @@ namespace BECore::Tests {
                 }
 
                 if (item.kind == NameKind::Scalar) {
-                    ExpectScalarRead(reader, *expected, bytes.data(), here);
+                    ExpectScalarRead(reader, *expected, doc, here);
                 } else if (item.kind == NameKind::Object) {
                     ASSERT_TRUE(reader.BeginObject(item.name)) << here.c_str();
-                    WalkScope(reader, bytes, Range{expected->payloadBegin + sizeof(uint32_t), expected->end}, order, here);
+                    WalkScope(reader, doc, Range{expected->payloadBegin + sizeof(uint32_t), expected->end}, order, here);
                     reader.EndObject();
                 } else {
                     size_t count = 0;
                     ASSERT_TRUE(reader.BeginArray(item.name, "item", count)) << here.c_str();
                     const size_t countOffset = expected->payloadBegin + sizeof(uint32_t);
-                    ASSERT_EQ(count, BinaryFormat::Load<uint32_t>(bytes.data() + countOffset)) << here.c_str();
+                    ASSERT_EQ(count, BinaryFormat::Load<uint32_t>(doc.bytes.data() + countOffset)) << here.c_str();
                     size_t position = countOffset + sizeof(uint32_t);
                     for (size_t i = 0; i < count; ++i) {
-                        const size_t size = BinaryFormat::Load<uint32_t>(bytes.data() + position);
+                        const size_t size = BinaryFormat::Load<uint32_t>(doc.bytes.data() + position);
                         ASSERT_TRUE(reader.BeginArrayElement()) << here.c_str();
-                        WalkScope(reader, bytes, Range{position + sizeof(uint32_t), position + sizeof(uint32_t) + size}, order, Format("{}[{}]", here, i));
+                        WalkScope(reader, doc, Range{position + sizeof(uint32_t), position + sizeof(uint32_t) + size}, order, Format("{}[{}]", here, i));
                         reader.EndArrayElement();
                         position += sizeof(uint32_t) + size;
                     }
@@ -443,13 +469,21 @@ namespace BECore::Tests {
         }
 
         /// Loads @p bytes once per order and walks the whole document against the scan
-        void ExpectLookupMatchesScan(const Vector<uint8_t>& bytes, bool expectDuplicateFlag, const char* what) {
+        void ExpectLookupMatchesStream(const Vector<uint8_t>& bytes, bool expectDuplicateFlag, const char* what) {
+            const Doc doc = DocOf(bytes);
             for (const ReadOrder order : {ReadOrder::Written, ReadOrder::Reversed, ReadOrder::Shuffled, ReadOrder::EachTwice, ReadOrder::EveryOther}) {
                 BinaryDeserializer reader;
                 ASSERT_TRUE(reader.LoadFromView(bytes.data(), bytes.size())) << what;
                 EXPECT_EQ(BinaryDeserializerAccess::HasDuplicateNames(reader), expectDuplicateFlag) << what;
-                WalkScope(reader, bytes, Range{BinaryFormat::HeaderSize, bytes.size()}, order, what);
+                WalkScope(reader, doc, Range{doc.rootBegin, bytes.size()}, order, what);
             }
+        }
+
+        /// The document as it is, and the same entries written again as version 2 (the stream of a writer is version 1 until the writer moves): both must read as the scan says
+        void ExpectLookupMatchesScan(const Vector<uint8_t>& bytes, bool expectDuplicateFlag, const char* what) {
+            ExpectLookupMatchesStream(bytes, expectDuplicateFlag, what);
+            const Vector<uint8_t> tabled = BinaryStreams::Build(BinaryStreams::ReadTree(bytes));
+            ExpectLookupMatchesStream(tabled, expectDuplicateFlag, Format("{} (version 2)", what).c_str());
         }
 
         void WriteElementFields(BinarySerializer& writer, int32_t id) {
@@ -738,6 +772,456 @@ namespace BECore::Tests {
         EXPECT_FALSE(reader.BeginArrayElement());
         reader.EndArray();
         EXPECT_FALSE(reader.BeginArrayElement());
+    }
+
+    // =============================================================================
+    // Version 2: a string table, entries that refer to it by index
+    // =============================================================================
+
+    namespace {
+
+        using BinaryStreams::Element;
+        using BinaryStreams::Number;
+        using BinaryStreams::Pooled;
+        using BinaryStreams::Text;
+
+        template <typename T>
+        void ExpectNumberRead(BinaryDeserializer& reader, const BinaryStreams::Entry& entry, const String& where) {
+            T value{};
+            ASSERT_TRUE(reader.Read(entry.name, value)) << where.c_str();
+            T expected{};
+            std::memcpy(&expected, &entry.bits, sizeof(T));
+            EXPECT_EQ(std::memcmp(&value, &expected, sizeof(T)), 0) << where.c_str();
+        }
+
+        /// Reads every entry of @p entries by name and compares it with the tree the stream was built from (names are distinct in the tree)
+        void ExpectReadsEntries(BinaryDeserializer& reader, const Vector<BinaryStreams::Entry>& entries, const String& where) {
+            for (const BinaryStreams::Entry& entry : entries) {
+                const String here = Format("{}/{}", where, entry.name);
+                switch (entry.tag) {
+                    case BinaryFormat::Tag::Bool:
+                        ExpectNumberRead<bool>(reader, entry, here);
+                        break;
+                    case BinaryFormat::Tag::Int8:
+                        ExpectNumberRead<int8_t>(reader, entry, here);
+                        break;
+                    case BinaryFormat::Tag::UInt8:
+                        ExpectNumberRead<uint8_t>(reader, entry, here);
+                        break;
+                    case BinaryFormat::Tag::Int16:
+                        ExpectNumberRead<int16_t>(reader, entry, here);
+                        break;
+                    case BinaryFormat::Tag::UInt16:
+                        ExpectNumberRead<uint16_t>(reader, entry, here);
+                        break;
+                    case BinaryFormat::Tag::Int32:
+                        ExpectNumberRead<int32_t>(reader, entry, here);
+                        break;
+                    case BinaryFormat::Tag::UInt32:
+                        ExpectNumberRead<uint32_t>(reader, entry, here);
+                        break;
+                    case BinaryFormat::Tag::Int64:
+                        ExpectNumberRead<int64_t>(reader, entry, here);
+                        break;
+                    case BinaryFormat::Tag::UInt64:
+                        ExpectNumberRead<uint64_t>(reader, entry, here);
+                        break;
+                    case BinaryFormat::Tag::Float:
+                        ExpectNumberRead<float>(reader, entry, here);
+                        break;
+                    case BinaryFormat::Tag::Double:
+                        ExpectNumberRead<double>(reader, entry, here);
+                        break;
+                    case BinaryFormat::Tag::String:
+                    case BinaryFormat::Tag::PoolString: {
+                        String asString;
+                        ASSERT_TRUE(reader.Read(entry.name, asString)) << here.c_str();
+                        EXPECT_EQ(asString, entry.text) << here.c_str();
+                        PoolString asPool;
+                        ASSERT_TRUE(reader.Read(entry.name, asPool)) << here.c_str();
+                        EXPECT_EQ(String(asPool.ToStringView()), entry.text) << here.c_str();
+                        break;
+                    }
+                    case BinaryFormat::Tag::Object:
+                        ASSERT_TRUE(reader.BeginObject(entry.name)) << here.c_str();
+                        ExpectReadsEntries(reader, entry.children, here);
+                        reader.EndObject();
+                        break;
+                    default: {
+                        size_t count = 0;
+                        ASSERT_TRUE(reader.BeginArray(entry.name, "item", count)) << here.c_str();
+                        ASSERT_EQ(count, entry.children.size()) << here.c_str();
+                        for (size_t i = 0; i < count; ++i) {
+                            ASSERT_TRUE(reader.BeginArrayElement()) << here.c_str();
+                            ExpectReadsEntries(reader, entry.children[i].children, Format("{}[{}]", here, i));
+                            reader.EndArrayElement();
+                        }
+                        reader.EndArray();
+                        break;
+                    }
+                }
+            }
+        }
+
+        /// A document of every kind of entry, with PoolString values (one repeated) and a name that is also a value
+        Vector<BinaryStreams::Entry> SampleTree() {
+            Vector<BinaryStreams::Entry> items;
+            for (int32_t i = 0; i < 3; ++i) {
+                items.push_back(Element({Number("id", i), Pooled("kind", i == 1 ? "square" : "circle"), Text("label", Format("label_{}", i)),
+                                         BinaryStreams::Object("pos", {Number("x", 0.5f * static_cast<float>(i)), Number("y", 1.5f)})}));
+            }
+            return {Number("flag", true),
+                    Number("small", static_cast<int8_t>(-5)),
+                    Number("ubyte", static_cast<uint8_t>(200)),
+                    Number("short", static_cast<int16_t>(-300)),
+                    Number("ushort", static_cast<uint16_t>(60000)),
+                    Number("int", static_cast<int32_t>(-70000)),
+                    Number("uint", static_cast<uint32_t>(4000000000u)),
+                    Number("long", static_cast<int64_t>(-5000000000)),
+                    Number("ulong", static_cast<uint64_t>(10000000000ull)),
+                    Number("single", 1.25f),
+                    Number("double", 2.5),
+                    Text("text", "plain"),
+                    Pooled("square", "circle"),
+                    BinaryStreams::Object("nested", {Number("x", 1), Pooled("tag", "deep"), BinaryStreams::Object("deep", {Number("v", 7)})}),
+                    BinaryStreams::Array("items", items),
+                    BinaryStreams::Array("none", {})};
+        }
+
+        BinaryStreams::Options Version(uint16_t version) {
+            BinaryStreams::Options options;
+            options.version = version;
+            return options;
+        }
+
+        /// A stream whose payload size is right for its length, so the load reaches the check under test
+        Vector<uint8_t> Resized(Vector<uint8_t> bytes, size_t size) {
+            bytes.resize(size);
+            BinaryFormat::Store<uint32_t>(bytes.data() + BinaryFormat::PayloadSizeOffset, static_cast<uint32_t>(size - BinaryFormat::HeaderSize));
+            return bytes;
+        }
+
+        void ExpectRefused(const Vector<uint8_t>& bytes, const char* what) {
+            BinaryDeserializer fromView;
+            EXPECT_FALSE(fromView.LoadFromView(bytes.data(), bytes.size())) << what;
+            EXPECT_TRUE(fromView.HasErrors()) << what;
+            EXPECT_FALSE(fromView.HasKey("a")) << what;
+            EXPECT_FALSE(fromView.BeginObject("o")) << what;
+            int32_t value = 0;
+            EXPECT_FALSE(fromView.Read("a", value)) << what;
+
+            BinaryDeserializer fromBuffer;
+            EXPECT_FALSE(fromBuffer.LoadFromBuffer(bytes)) << what;
+        }
+
+        String LastError(const BinaryDeserializer& reader) {
+            return reader.GetErrors().empty() ? String() : reader.GetErrors().back().errorMessage;
+        }
+
+    }  // namespace
+
+    TEST(BinaryDeserializerTest, ADocumentReadsEqualInBothVersions) {
+        const Vector<BinaryStreams::Entry> tree = SampleTree();
+        for (const uint16_t version : {BinaryFormat::LegacyVersion, BinaryFormat::TabledVersion}) {
+            const Vector<uint8_t> bytes = BinaryStreams::Build(tree, Version(version));
+            BinaryDeserializer reader;
+            ASSERT_TRUE(reader.LoadFromBuffer(bytes)) << version;
+            ExpectReadsEntries(reader, tree, Format("version {}", version));
+            EXPECT_FALSE(reader.HasErrors()) << version;
+            EXPECT_FALSE(BinaryDeserializerAccess::HasDuplicateNames(reader)) << version;
+        }
+    }
+
+    TEST(BinaryDeserializerTest, AVersion2StreamLoadsFromAViewABufferAndAFile) {
+        const Vector<BinaryStreams::Entry> tree = SampleTree();
+        const Vector<uint8_t> bytes = BinaryStreams::Build(tree);
+
+        BinaryDeserializer fromView;
+        ASSERT_TRUE(fromView.LoadFromView(bytes.data(), bytes.size()));
+        ExpectReadsEntries(fromView, tree, "view");
+
+        BinaryDeserializer fromBuffer;
+        ASSERT_TRUE(fromBuffer.LoadFromBuffer(bytes));
+        ExpectReadsEntries(fromBuffer, tree, "buffer");
+
+        const std::filesystem::path path = TestTempPath("binary_deserializer_v2_file");
+        WriteFile(path, StringView(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+        BinaryDeserializer fromFile;
+        const bool opened = fromFile.LoadFromFile(path);
+        std::error_code ignored;
+        std::filesystem::remove(path, ignored);
+        ASSERT_TRUE(opened);
+        ExpectReadsEntries(fromFile, tree, "file");
+    }
+
+    TEST(BinaryDeserializerTest, AMovedReaderOfVersion2StillReads) {
+        const Vector<BinaryStreams::Entry> tree = SampleTree();
+        const Vector<uint8_t> bytes = BinaryStreams::Build(tree);
+
+        BinaryDeserializer owning;
+        ASSERT_TRUE(owning.LoadFromBuffer(bytes));
+        BinaryDeserializer movedOwning(eastl::move(owning));
+        ExpectReadsEntries(movedOwning, tree, "moved owning reader");
+
+        BinaryDeserializer viewing;
+        ASSERT_TRUE(viewing.LoadFromView(bytes.data(), bytes.size()));
+        BinaryDeserializer movedViewing;
+        movedViewing = eastl::move(viewing);
+        ExpectReadsEntries(movedViewing, tree, "moved view");
+
+        // The moved reader keeps the strings it interned for the first PoolString read
+        BinaryDeserializer first;
+        ASSERT_TRUE(first.LoadFromBuffer(bytes));
+        PoolString kind;
+        ASSERT_TRUE(first.Read("square", kind));
+        BinaryDeserializer movedAfterRead(eastl::move(first));
+        ExpectReadsEntries(movedAfterRead, tree, "moved after a PoolString read");
+    }
+
+    TEST(BinaryDeserializerTest, ANameThatIsNotInTheTableIsNotFound) {
+        const Vector<uint8_t> bytes = BinaryStreams::Build({Number("a", 1), BinaryStreams::Object("o", {Number("b", 2)})});
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromView(bytes.data(), bytes.size()));
+
+        int32_t value = 5;
+        EXPECT_FALSE(reader.HasKey("zzz"));
+        EXPECT_FALSE(reader.ReadAttribute("zzz", value));
+        EXPECT_FALSE(reader.HasErrors());
+        EXPECT_FALSE(reader.Read("zzz", value));
+        EXPECT_EQ(LastError(reader), "Element not found");
+        EXPECT_EQ(value, 5);
+
+        // In the table, but not in this scope
+        reader.ClearErrors();
+        ASSERT_TRUE(reader.BeginObject("o"));
+        EXPECT_FALSE(reader.HasKey("a"));
+        EXPECT_FALSE(reader.ReadAttribute("a", value));
+        EXPECT_FALSE(reader.HasErrors());
+        EXPECT_TRUE(reader.Read("b", value));
+        EXPECT_EQ(value, 2);
+    }
+
+    TEST(BinaryDeserializerTest, ACorruptStringTableIsRefusedAndNothingIsReadable) {
+        const Vector<BinaryStreams::Entry> tree = {Number("a", 1), BinaryStreams::Object("o", {Number("bb", 2)}), Pooled("c", "bb")};
+        const Vector<uint8_t> good = BinaryStreams::Build(tree);
+        const BinaryStreams::Layout layout = BinaryStreams::LayoutOf(good);
+        ASSERT_EQ(BinaryFormat::Load<uint32_t>(good.data() + layout.countOffset), 4u);  // a, bb, c, o
+
+        BinaryStreams::Options unsorted;
+        unsorted.table = {"bb", "a", "c", "o"};
+        ExpectRefused(BinaryStreams::Build(tree, unsorted), "unsorted");
+
+        BinaryStreams::Options repeated;
+        repeated.table = {"a", "bb", "bb", "c", "o"};
+        ExpectRefused(BinaryStreams::Build(tree, repeated), "a text twice");
+
+        Vector<uint8_t> decreasing = good;
+        BinaryFormat::Store<uint32_t>(decreasing.data() + layout.endsOffset + sizeof(uint32_t), 0);  // end[1] below end[0]
+        ExpectRefused(decreasing, "end[] decreasing");
+
+        Vector<uint8_t> lastEnd = good;
+        const size_t lastEndAt = layout.endsOffset + 3 * sizeof(uint32_t);
+        BinaryFormat::Store<uint32_t>(lastEnd.data() + lastEndAt, BinaryFormat::Load<uint32_t>(lastEnd.data() + lastEndAt) - 1);
+        ExpectRefused(lastEnd, "last end is not charBytes");
+
+        Vector<uint8_t> countTooLarge = good;
+        BinaryFormat::Store<uint32_t>(countTooLarge.data() + layout.countOffset, 0xFFFFFFFFu);
+        ExpectRefused(countTooLarge, "count larger than the bytes");
+
+        Vector<uint8_t> charsTooLarge = good;
+        BinaryFormat::Store<uint32_t>(charsTooLarge.data() + layout.charBytesOffset, 0x7FFFFFFFu);
+        ExpectRefused(charsTooLarge, "charBytes over the stream");
+
+        Vector<uint8_t> nameOutOfRange = good;
+        BinaryFormat::Store<uint32_t>(nameOutOfRange.data() + layout.entriesOffset + sizeof(uint8_t), 4);  // the first entry's name index = count
+        ExpectRefused(nameOutOfRange, "name index at count");
+
+        // The third entry of the root is the PoolString: tag, name index, string index
+        BinaryFormat::StringTable table;
+        size_t tableEnd = 0;
+        ASSERT_TRUE(BinaryFormat::ParseStringTable(good.data(), BinaryFormat::HeaderSize, good.size(), table, tableEnd));
+        size_t poolEntry = tableEnd;
+        for (size_t i = 0; i < 2; ++i) {
+            BinaryFormat::EntryView skipped;
+            ASSERT_TRUE(BinaryFormat::ParseEntryV2(good.data(), poolEntry, good.size(), table, skipped));
+            poolEntry = skipped.end;
+        }
+        Vector<uint8_t> stringOutOfRange = good;
+        BinaryFormat::Store<uint32_t>(stringOutOfRange.data() + poolEntry + sizeof(uint8_t) + sizeof(uint32_t), 4);
+        ExpectRefused(stringOutOfRange, "tag 15 index at count");
+
+        ExpectRefused(Resized(good, layout.charsOffset - 1), "truncated inside end[]");
+        ExpectRefused(Resized(good, layout.entriesOffset - 1), "truncated inside the characters");
+        ExpectRefused(Resized(good, BinaryFormat::HeaderSize), "header only: no table");
+        ExpectRefused(Resized(good, BinaryFormat::HeaderSize + sizeof(uint32_t)), "half a table header");
+
+        Vector<uint8_t> version3 = good;
+        BinaryFormat::Store<uint16_t>(version3.data() + sizeof(BinaryFormat::Magic), 3);
+        ExpectRefused(version3, "version 3");
+
+        Vector<uint8_t> tagInVersion1 = BinaryStreams::Build({Text("a", "x")}, Version(BinaryFormat::LegacyVersion));
+        ASSERT_EQ(tagInVersion1[BinaryFormat::HeaderSize], BinaryFormat::Tag::String);
+        tagInVersion1[BinaryFormat::HeaderSize] = BinaryFormat::Tag::PoolString;
+        ExpectRefused(tagInVersion1, "tag 15 in version 1");
+    }
+
+    TEST(BinaryDeserializerTest, AnEmptyTableIsALoadableDocument) {
+        const Vector<uint8_t> bytes = BinaryStreams::Build({});
+        ASSERT_EQ(bytes.size(), BinaryFormat::HeaderSize + 2 * sizeof(uint32_t));
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromView(bytes.data(), bytes.size()));
+        EXPECT_FALSE(reader.HasKey("a"));
+        EXPECT_FALSE(reader.HasErrors());
+    }
+
+    TEST(BinaryDeserializerTest, ATableThatIsNotSortedByBytesIsRefusedWhateverTheCharSignedness) {
+        // 0x80 is below 'a' as a signed char and above it as the unsigned byte the format orders by
+        const String high = "\x80";
+        BinaryStreams::Options options;
+        options.table = {"a", high};
+        EXPECT_TRUE(BinaryFormat::CompareStrings("a", high) < 0);
+        const Vector<BinaryStreams::Entry> tree = {Number("a", 1), Number(high, 2)};
+        BinaryDeserializer reader;
+        const Vector<uint8_t> ordered = BinaryStreams::Build(tree, options);
+        ASSERT_TRUE(reader.LoadFromView(ordered.data(), ordered.size()));
+        int32_t value = 0;
+        ASSERT_TRUE(reader.Read(high, value));
+        EXPECT_EQ(value, 2);
+
+        options.table = {high, "a"};
+        const Vector<uint8_t> reversed = BinaryStreams::Build(tree, options);
+        ExpectRefused(reversed, "high byte first");
+    }
+
+    // =============================================================================
+    // What a load puts into the pool
+    // =============================================================================
+
+    TEST(BinaryDeserializerTest, OnlyAPoolStringValueIsInternedNotANameNorAStringValue) {
+        const String name = FreshText("bin_name");
+        const String stringName = FreshText("bin_string_name");
+        const String stringValue = FreshText("bin_string_value");
+        const String poolName = FreshText("bin_pool_name");
+        const String poolValue = FreshText("bin_pool_value");
+        const Vector<uint8_t> bytes = BinaryStreams::Build({Number(name, 1), Text(stringName, stringValue), Pooled(poolName, poolValue)});
+
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromBuffer(bytes));
+        int32_t number = 0;
+        String text;
+        PoolString pooled;
+        ASSERT_TRUE(reader.Read(name, number));
+        ASSERT_TRUE(reader.Read(stringName, text));
+        EXPECT_EQ(text, stringValue);
+        ASSERT_TRUE(reader.Read(poolName, pooled));
+
+        EXPECT_FALSE(PoolString::Find(StringView(name)).has_value());
+        EXPECT_FALSE(PoolString::Find(StringView(stringName)).has_value());
+        EXPECT_FALSE(PoolString::Find(StringView(stringValue)).has_value());
+        EXPECT_FALSE(PoolString::Find(StringView(poolName)).has_value());
+        ASSERT_TRUE(PoolString::Find(StringView(poolValue)).has_value());
+        EXPECT_EQ(*PoolString::Find(StringView(poolValue)), pooled);
+    }
+
+    TEST(BinaryDeserializerTest, ThePoolStringsOfAFileAreInternedInOneBatchAtTheFirstPoolStringRead) {
+        Vector<BinaryStreams::Entry> tree;
+        Vector<String> values;
+        for (size_t i = 0; i < 20; ++i) {
+            values.push_back(FreshText("bin_batch_value"));
+        }
+        // The first five entries share one text, so the table holds fewer PoolStrings than the file has entries
+        const auto valueOf = [&](size_t i) -> const String& { return i < 5 ? values[0] : values[i]; };
+        for (size_t i = 0; i < values.size(); ++i) {
+            tree.push_back(Pooled(Format("p{}", i), valueOf(i)));
+        }
+        tree.push_back(Number("n", 7));
+        tree.push_back(Text("s", "some text"));
+        const Vector<uint8_t> bytes = BinaryStreams::Build(tree);
+
+        const uint64_t before = PoolString::GetStats().batchCalls;
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromView(bytes.data(), bytes.size()));
+        int32_t number = 0;
+        String text;
+        ASSERT_TRUE(reader.Read("n", number));
+        ASSERT_TRUE(reader.Read("s", text));
+        EXPECT_EQ(PoolString::GetStats().batchCalls, before) << "a load and the other fields intern nothing";
+
+        PoolString first;
+        ASSERT_TRUE(reader.Read("p0", first));
+        EXPECT_EQ(PoolString::GetStats().batchCalls, before + 1);
+        for (size_t i = 0; i < values.size(); ++i) {
+            PoolString value;
+            ASSERT_TRUE(i % 2 == 0 ? reader.Read(Format("p{}", i), value) : reader.ReadAttribute(Format("p{}", i), value));
+            EXPECT_EQ(String(value.ToStringView()), valueOf(i));
+            EXPECT_EQ(value, *PoolString::Find(StringView(valueOf(i))));
+        }
+        EXPECT_EQ(PoolString::GetStats().batchCalls, before + 1) << "later reads take the result of the batch";
+    }
+
+    TEST(BinaryDeserializerTest, AFileOfVersion1InternsEachPoolStringWhenItIsRead) {
+        const String value = FreshText("bin_v1_value");
+        const Vector<uint8_t> bytes = BinaryStreams::Build({Pooled("p", value)}, Version(BinaryFormat::LegacyVersion));
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromView(bytes.data(), bytes.size()));
+        EXPECT_FALSE(PoolString::Find(StringView(value)).has_value());
+
+        const uint64_t before = PoolString::GetStats().batchCalls;
+        PoolString pooled;
+        ASSERT_TRUE(reader.Read("p", pooled));
+        EXPECT_EQ(String(pooled.ToStringView()), value);
+        EXPECT_TRUE(PoolString::Find(StringView(value)).has_value());
+        EXPECT_EQ(PoolString::GetStats().batchCalls, before);
+    }
+
+    TEST(BinaryDeserializerTest, APoolStringOverTheLimitIsAnErrorAndStaysOutOfThePool) {
+        const String tooLong = FreshText("bin_long") + String(ReaderLimits::kMaxPoolStringBytes, 'x');
+        const String fine = FreshText("bin_fine");
+        const Vector<uint8_t> bytes = BinaryStreams::Build({Pooled("long", tooLong), Pooled("fine", fine), Text("inline", tooLong)});
+
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromBuffer(bytes));
+        const String keptText = FreshText("bin_kept");
+        const PoolString before = PoolString::Intern(StringView(keptText));
+        PoolString kept = before;
+        EXPECT_FALSE(reader.Read("long", kept));
+        EXPECT_TRUE(reader.HasErrors());
+        EXPECT_EQ(kept, before);
+
+        PoolString readFine;
+        ASSERT_TRUE(reader.Read("fine", readFine));
+        EXPECT_EQ(String(readFine.ToStringView()), fine);
+        EXPECT_FALSE(reader.Read("inline", kept));
+
+        // A String field has no such limit
+        String asString;
+        ASSERT_TRUE(reader.Read("long", asString));
+        EXPECT_EQ(asString, tooLong);
+        EXPECT_FALSE(PoolString::Find(StringView(tooLong)).has_value());
+    }
+
+    TEST(BinaryDeserializerTest, StringAndPoolStringEntriesReadAsEitherAndOtherTypesMismatch) {
+        const Vector<uint8_t> bytes = BinaryStreams::Build({Pooled("pooled", "from the table"), Text("inline", "from the entry"), Number("number", 3)});
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromView(bytes.data(), bytes.size()));
+
+        String asString;
+        ASSERT_TRUE(reader.Read("pooled", asString));
+        EXPECT_EQ(asString, "from the table");
+        PoolString asPool;
+        ASSERT_TRUE(reader.Read("inline", asPool));
+        EXPECT_EQ(String(asPool.ToStringView()), "from the entry");
+
+        EXPECT_FALSE(reader.Read("number", asString));
+        EXPECT_EQ(LastError(reader), "Type mismatch");
+        reader.ClearErrors();
+        EXPECT_FALSE(reader.ReadAttribute("number", asPool));
+        EXPECT_EQ(LastError(reader), "Type mismatch");
+        reader.ClearErrors();
+        int32_t number = 0;
+        EXPECT_FALSE(reader.Read("pooled", number));
+        EXPECT_EQ(LastError(reader), "Type mismatch");
+        EXPECT_TRUE(reader.Read("number", number));
     }
 
 }  // namespace BECore::Tests
