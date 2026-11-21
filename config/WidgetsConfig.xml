@@ -32,6 +32,8 @@
     <widget
       type="ConsoleWidget" />
     <widget
+      type="FileChangesWidget" />
+    <widget
       type="GamePanelWidget" />
     <widget
       type="ArtGenWidget" />
