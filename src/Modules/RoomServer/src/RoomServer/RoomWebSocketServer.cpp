@@ -191,7 +191,7 @@ namespace BECore {
         RoomHub hub(
             _registry, _settings.hub, [this] { return _random(); },
             HubSink{
-                .send = [this](ConnectionId connection, String text) { SendTo(connection, std::move(text)); },
+                .send = [this](ConnectionId connection, const String& text) { SendTo(connection, text); },
                 .close = [this](ConnectionId connection, String reason) { CloseConnection(connection, reason); },
             });
 
@@ -285,7 +285,7 @@ namespace BECore {
         }
     }
 
-    void RoomWebSocketServer::SendTo(ConnectionId connection, String text) {
+    void RoomWebSocketServer::SendTo(ConnectionId connection, const String& text) {
         if (const auto target = FindConnection(connection)) {
             target->QueueText(text);  // a connection that is closing or dropped takes nothing: the hub learns it from the Closed event
         }
