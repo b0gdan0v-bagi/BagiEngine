@@ -37,13 +37,16 @@ namespace BECore::Tests {
             return value;
         }
 
-        Json MakeHardJson() {
+        /// Invalid UTF-8 in a string does not read back as it was written (the writer replaces it), so a value that is read back leaves it out
+        Json MakeHardJson(bool withInvalidText = true) {
             Json value = Json::object();
             value["nested"] = Json{{"a", Json::array({1, 2, Json::object()})}, {"b", Json::object()}};
             value["big"] = 1e300;
             value["unsigned"] = std::numeric_limits<uint64_t>::max();
             value["negative"] = std::numeric_limits<int64_t>::min();
-            value["badText"] = MakeJsonString(String("bad \xC3( \xFF"));
+            if (withInvalidText) {
+                value["badText"] = MakeJsonString(String("bad \xC3( \xFF"));
+            }
             value["null"] = nullptr;
             value["real"] = 0.1;
             return value;
@@ -347,6 +350,119 @@ namespace BECore::Tests {
         const auto pong = ParseServerMessage(MakePongMessage());
         ASSERT_TRUE(pong.has_value());
         EXPECT_NE(std::get_if<PongMessage>(&*pong), nullptr);
+    }
+
+    namespace {
+
+        /// @p actionVersion: the writer writes any uint64_t, the reader takes up to INT64_MAX
+        Vector<ClientMessage> MakeClientMessages(uint64_t actionVersion) {
+            CreateRoomMessage create;
+            create.game = "cards";
+            create.name = "Ann";
+            ClientMessage createPublic = [&] {
+                CreateRoomMessage message = create;
+                message.isPublic = true;
+                message.options = MakeHardJson(false);
+                return message;
+            }();
+            JoinRoomMessage joinNew;
+            joinNew.code = kRoomCode;
+            joinNew.name = "Bob";
+            JoinRoomMessage joinBack;
+            joinBack.code = kRoomCode;
+            joinBack.token = kToken;
+            ActionMessage action;
+            action.version = actionVersion;
+            action.action = MakeHardJson(false);
+            ActionMessage smallAction;
+            smallAction.version = 3;
+            smallAction.action = Json{{"card", 4}};
+            ListRoomsMessage list;
+            list.game = "cards";
+            return {create,      createPublic,   joinNew,       joinBack, ChooseSeatMessage{std::numeric_limits<int64_t>::min()}, ChooseSeatMessage{2}, StartMessage{}, action,
+                    smallAction, LeaveMessage{}, PingMessage{}, list};
+        }
+
+    }  // namespace
+
+    TEST(RoomProtocolWriterTest, ClientMessagesAreWrittenWithTheirKeysInAlphabeticalOrder) {
+        CreateRoomMessage create;
+        create.game = "cards";
+        create.name = "Ann";
+        EXPECT_EQ(SerializeClientMessage(create), R"({"game":"cards","name":"Ann","options":{},"type":"create_room","v":1})");
+        create.isPublic = true;
+        create.options = Json{{"fast", true}};
+        EXPECT_EQ(SerializeClientMessage(create), R"({"game":"cards","name":"Ann","options":{"fast":true},"public":true,"type":"create_room","v":1})");
+
+        JoinRoomMessage join;
+        join.code = kRoomCode;
+        join.name = "Bob";
+        EXPECT_EQ(SerializeClientMessage(join), R"({"code":"ABCDE","name":"Bob","type":"join_room","v":1})");
+        join.name.clear();
+        join.token = kToken;
+        EXPECT_EQ(SerializeClientMessage(join), R"({"code":"ABCDE","token":"0123456789abcdef0123456789abcdef","type":"join_room","v":1})");
+
+        EXPECT_EQ(SerializeClientMessage(ChooseSeatMessage{2}), R"({"seat":2,"type":"choose_seat","v":1})");
+        EXPECT_EQ(SerializeClientMessage(StartMessage{}), R"({"type":"start","v":1})");
+        ActionMessage action;
+        action.version = 7;
+        action.action = Json{{"card", 4}};
+        EXPECT_EQ(SerializeClientMessage(action), R"({"action":{"card":4},"type":"action","v":1,"version":7})");
+        EXPECT_EQ(SerializeClientMessage(LeaveMessage{}), R"({"type":"leave","v":1})");
+        EXPECT_EQ(SerializeClientMessage(PingMessage{}), R"({"type":"ping","v":1})");
+        ListRoomsMessage list;
+        list.game = "cards";
+        EXPECT_EQ(SerializeClientMessage(list), R"({"game":"cards","type":"list_rooms","v":1})");
+    }
+
+    TEST(RoomProtocolWriterTest, ClientMessagesAreTheSameAsTheDomPath) {
+        for (const ClientMessage& message : MakeClientMessages(std::numeric_limits<uint64_t>::max())) {
+            EXPECT_EQ(SerializeClientMessage(message), RoomMessageReference::MakeClientMessage(message)) << GetClientMessageType(message).data();
+        }
+        for (const String& text : HardTexts()) {
+            CreateRoomMessage create;
+            create.game = text;
+            create.name = text;
+            create.isPublic = true;
+            ClientMessage message = create;
+            EXPECT_EQ(SerializeClientMessage(message), RoomMessageReference::MakeClientMessage(message));
+            JoinRoomMessage join;
+            join.code = text;
+            join.name = text;
+            message = join;
+            EXPECT_EQ(SerializeClientMessage(message), RoomMessageReference::MakeClientMessage(message));
+        }
+        // an options or an action that is not an object is written as it is, and a deep one is cut as on the DOM path
+        CreateRoomMessage create;
+        create.options = Json::array({1});
+        EXPECT_EQ(SerializeClientMessage(create), RoomMessageReference::MakeClientMessage(create));
+        ActionMessage action;
+        action.action = MakeDeepArray(kDeepLevels);
+        EXPECT_EQ(SerializeClientMessage(action), RoomMessageReference::MakeClientMessage(action));
+    }
+
+    TEST(RoomProtocolWriterTest, AClientMessageReadsBackToTheValuesItWasWrittenFrom) {
+        for (const ClientMessage& message : MakeClientMessages(std::numeric_limits<int64_t>::max())) {
+            const auto parsed = ParseClientMessage(SerializeClientMessage(message));
+            ASSERT_TRUE(parsed.has_value()) << GetClientMessageType(message).data() << ": " << parsed.error().code;
+            ASSERT_EQ(parsed->index(), message.index());
+            EXPECT_EQ(SerializeClientMessage(*parsed), SerializeClientMessage(message));
+            if (const auto* action = std::get_if<ActionMessage>(&message)) {
+                EXPECT_EQ(std::get<ActionMessage>(*parsed).version, action->version);
+                EXPECT_EQ(std::get<ActionMessage>(*parsed).action, action->action);
+            }
+            if (const auto* create = std::get_if<CreateRoomMessage>(&message)) {
+                EXPECT_EQ(std::get<CreateRoomMessage>(*parsed).options, create->options);
+                EXPECT_EQ(std::get<CreateRoomMessage>(*parsed).isPublic, create->isPublic);
+            }
+        }
+    }
+
+    TEST(RoomProtocolWriterTest, AppendClientMessageKeepsWhatTheStringHolds) {
+        String out("kept:");
+        AppendClientMessage(out, PingMessage{});
+        AppendClientMessage(out, StartMessage{});
+        EXPECT_EQ(out, R"(kept:{"type":"ping","v":1}{"type":"start","v":1})");
     }
 
 }  // namespace BECore::Tests

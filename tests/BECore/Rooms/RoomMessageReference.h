@@ -102,6 +102,39 @@ namespace BECore::Tests {
             return DumpJson(MakeEnvelope(RoomMessageTypes::kPong));
         }
 
+        inline String MakeClientMessage(const ClientMessage& message) {
+            Json root = MakeEnvelope(GetClientMessageType(message));
+            std::visit(overload{
+                           [&](const CreateRoomMessage& m) {
+                               root["game"] = MakeJsonString(m.game);
+                               root["name"] = MakeJsonString(m.name);
+                               root["options"] = m.options;
+                               if (m.isPublic) {
+                                   root["public"] = true;
+                               }
+                           },
+                           [&](const JoinRoomMessage& m) {
+                               root["code"] = MakeJsonString(m.code);
+                               if (m.IsReconnect()) {
+                                   root["token"] = MakeJsonString(m.token);
+                               } else {
+                                   root["name"] = MakeJsonString(m.name);
+                               }
+                           },
+                           [&](const ChooseSeatMessage& m) { root["seat"] = m.seat; },
+                           [&](const ActionMessage& m) {
+                               root["version"] = m.version;
+                               root["action"] = m.action;
+                           },
+                           [](const StartMessage&) {},
+                           [](const LeaveMessage&) {},
+                           [](const PingMessage&) {},
+                           [&](const ListRoomsMessage& m) { root["game"] = MakeJsonString(m.game); },
+                       },
+                       message);
+            return DumpJson(root);
+        }
+
     }  // namespace RoomMessageReference
 
 }  // namespace BECore::Tests

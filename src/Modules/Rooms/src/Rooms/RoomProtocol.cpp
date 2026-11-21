@@ -220,13 +220,6 @@ namespace BECore {
             return ClientMessage(std::move(message));
         }
 
-        [[nodiscard]] Json MakeEnvelope(StringView type) {
-            Json root = Json::object();
-            root["v"] = kRoomProtocolVersion;
-            root["type"] = MakeJsonString(type);
-            return root;
-        }
-
         /// `type` and `v` are written where alphabetical order puts them, in the middle of each message, so each function writes its members around this
         void WriteTypeAndVersion(JsonWriter& writer, StringView type) {
             writer.Member("type", type);
@@ -610,37 +603,55 @@ namespace BECore {
                           message);
     }
 
-    String SerializeClientMessage(const ClientMessage& message) {
-        Json root = MakeEnvelope(GetClientMessageType(message));
+    void AppendClientMessage(String& out, const ClientMessage& message) {
+        const StringView type = GetClientMessageType(message);
+        JsonWriter writer(out);
+        writer.BeginObject();
         std::visit(overload{
                        [&](const CreateRoomMessage& m) {
-                           root["game"] = MakeJsonString(m.game);
-                           root["name"] = MakeJsonString(m.name);
-                           root["options"] = m.options;
+                           writer.Member("game", m.game);
+                           writer.Member("name", m.name);
+                           writer.Key("options");
+                           WriteJson(writer, m.options);
                            if (m.isPublic) {
-                               root["public"] = true;
+                               writer.Member("public", true);
                            }
+                           WriteTypeAndVersion(writer, type);
                        },
                        [&](const JoinRoomMessage& m) {
-                           root["code"] = MakeJsonString(m.code);
+                           writer.Member("code", m.code);
                            if (m.IsReconnect()) {
-                               root["token"] = MakeJsonString(m.token);
+                               writer.Member("token", m.token);
                            } else {
-                               root["name"] = MakeJsonString(m.name);
+                               writer.Member("name", m.name);
                            }
+                           WriteTypeAndVersion(writer, type);
                        },
-                       [&](const ChooseSeatMessage& m) { root["seat"] = m.seat; },
+                       [&](const ChooseSeatMessage& m) {
+                           writer.Member("seat", m.seat);
+                           WriteTypeAndVersion(writer, type);
+                       },
                        [&](const ActionMessage& m) {
-                           root["version"] = m.version;
-                           root["action"] = m.action;
+                           writer.Key("action");
+                           WriteJson(writer, m.action);
+                           WriteTypeAndVersion(writer, type);
+                           writer.Member("version", m.version);
                        },
-                       [](const StartMessage&) {},
-                       [](const LeaveMessage&) {},
-                       [](const PingMessage&) {},
-                       [&](const ListRoomsMessage& m) { root["game"] = MakeJsonString(m.game); },
+                       [&](const ListRoomsMessage& m) {
+                           writer.Member("game", m.game);
+                           WriteTypeAndVersion(writer, type);
+                       },
+                       [&](const auto&) { WriteTypeAndVersion(writer, type); },
                    },
                    message);
-        return DumpJson(root);
+        writer.EndObject();
+        EXPECT(writer.IsComplete());
+    }
+
+    String SerializeClientMessage(const ClientMessage& message) {
+        String out;
+        AppendClientMessage(out, message);
+        return out;
     }
 
     Optional<String> SanitizePlayerName(StringView text) {

@@ -105,7 +105,11 @@ namespace BECore {
     /// The `type` of a parsed message
     [[nodiscard]] StringView GetClientMessageType(const ClientMessage& message);
 
-    /// The text a client sends for @p message (the inverse of ParseClientMessage; for clients and tests)
+    /// Appends the text a client sends for @p message to @p out, which is never cleared (the inverse of ParseClientMessage; for clients and tests).
+    /// The keys are in alphabetical order on purpose, as in the server messages below. An `options` or `action` is written as it is.
+    void AppendClientMessage(String& out, const ClientMessage& message);
+
+    /// The text of AppendClientMessage in a new String
     [[nodiscard]] String SerializeClientMessage(const ClientMessage& message);
 
     /**
