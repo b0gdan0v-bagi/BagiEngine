@@ -194,6 +194,10 @@ namespace BECore::Tests {
             return MeasureRoute(tasks, [&](uint64_t count) {
                 std::atomic<uint64_t> ran{0};
                 Gate gate;
+#if BE_SINGLE_THREAD
+                // The inline pool runs a job inside Run on this thread: a task waiting on a closed gate would never return
+                gate.Open();
+#endif
                 for (uint64_t i = 0; i < count; ++i) {
                     TaskManager::GetInstance().Run(makeTask(ran, gate));
                 }
@@ -266,6 +270,9 @@ namespace BECore::Tests {
     }
 
     TEST(TaskAllocationTest, PoolSubmitAllocatesNothing) {
+#if BE_SINGLE_THREAD
+        GTEST_SKIP() << "needs worker threads (BE_SINGLE_THREAD)";
+#endif
         ExpectRouteAllocatesNothing(kPoolSubmit);
     }
 
@@ -290,6 +297,9 @@ namespace BECore::Tests {
     }
 
     TEST(TaskAllocationTest, RunCoroutineOnFourWorkersAllocatesNothing) {
+#if BE_SINGLE_THREAD
+        GTEST_SKIP() << "needs worker threads (BE_SINGLE_THREAD)";
+#endif
         ExpectRouteAllocatesNothing(kRunCoroutineOnFourWorkers);
     }
 
