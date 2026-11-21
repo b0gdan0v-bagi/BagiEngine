@@ -99,7 +99,10 @@ namespace BECore {
             entry.gap = ReplayGap{frame - _lastFrame, frame == _lastFrame ? 0.0 : seconds - _lastSeconds};
         }
 
-        _file << ToStd(FormatReplayEntry(entry)) << '\n';
+        _line.clear();
+        AppendReplayEntry(_line, entry);
+        _line.push_back('\n');
+        _file.write(_line.c_str(), static_cast<std::streamsize>(_line.size()));
         _file.flush();
         if (!_file) {
             Fail("an entry");

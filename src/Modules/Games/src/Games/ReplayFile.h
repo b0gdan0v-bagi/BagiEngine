@@ -62,7 +62,11 @@ namespace BECore {
     /// The header as one line of JSON without a newline; members in the order `replay`, `game`, `engine`, `title`
     [[nodiscard]] String FormatReplayHeader(const ReplayHeader& header);
 
-    /// An entry as one line of JSON without a newline; members in the order `op`, `params`, `outcome`, `gap`, so two recordings of one session diff cleanly
+    /// Appends an entry to @p out as one line of JSON without a newline; members in the order `op`, `params`, `outcome`, `gap`, so two recordings of one
+    /// session diff cleanly. A caller that keeps @p out (cleared between entries) allocates nothing once it has grown
+    void AppendReplayEntry(String& out, const ReplayEntry& entry);
+
+    /// AppendReplayEntry() into a new string
     [[nodiscard]] String FormatReplayEntry(const ReplayEntry& entry);
 
     /**

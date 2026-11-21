@@ -1,4 +1,6 @@
 #include <BECore/Control/ControlService.h>
+#include <Common/AllocCheck.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/Printers.h>
 #include <Games/ReplayFile.h>
 #include <gtest/gtest.h>
@@ -73,6 +75,33 @@ namespace BECore::Tests {
         EXPECT_EQ(FormatReplayEntry(entry), R"({"op":"action","params":{"a":1,"type":"roll"},"outcome":{"value":4},"gap":{"frames":3,"seconds":0.5}})");
         EXPECT_EQ(FormatReplayHeader(ReplayHeader{"Dice", "0.1.5", ""}), kHeaderLine);
         EXPECT_EQ(FormatReplayHeader(ReplayHeader{"Dice", "0.1.5", "x"}), R"({"replay":1,"game":"Dice","engine":"0.1.5","title":"x"})");
+    }
+
+    TEST(ReplayFileTest, EveryShapeOfALineIsTheBytesTheFormatHasAlwaysHad) {
+        const ReplayHeader titled{"Di\"ce", "0.1.5", "caf\xC3\xA9 \\ \xFF end\n"};
+        const ReplayEntry nested = MakeEntry(ReplayOp::Action, R"({"z":[1,2.5,{"b":null,"a":"x\ty"}],"type":"roll"})", StringView(R"({"value":-4,"big":9223372036854775808})"), 120, 2.0);
+
+        const Vector<String> lines = {FormatReplayHeader(titled), FormatReplayEntry(MakeEntry(ReplayOp::Reset, R"({"seed":8})", std::nullopt, 0, 0.0)),
+                                      FormatReplayEntry(MakeEntry(ReplayOp::State, R"({})", std::nullopt, 7, 0.1)),
+                                      FormatReplayEntry(MakeEntry(ReplayOp::Action, R"({"type":"roll"})", StringView(R"({})"), 3, 0.30000000000000004)), FormatReplayEntry(nested)};
+
+        ExpectTexts(lines,
+                    {R"json({"replay":1,"game":"Di\"ce","engine":"0.1.5","title":"café \\ � end\n"})json", R"json({"op":"reset","params":{"seed":8},"gap":{"frames":0,"seconds":0.0}})json",
+                     R"json({"op":"state","params":{},"gap":{"frames":7,"seconds":0.1}})json",
+                     R"json({"op":"action","params":{"type":"roll"},"outcome":{},"gap":{"frames":3,"seconds":0.30000000000000004}})json",
+                     R"json({"op":"action","params":{"type":"roll","z":[1,2.5,{"a":"x\ty","b":null}]},"outcome":{"big":9223372036854775808,"value":-4},"gap":{"frames":120,"seconds":2.0}})json"});
+    }
+
+    TEST(ReplayFileTest, ASecondEntryAppendedToAKeptScratchAllocatesNothing) {
+        const ReplayEntry entry = MakeEntry(ReplayOp::Action, R"({"type":"roll","a":[1,2]})", StringView(R"({"value":4})"), 3, 0.5);
+        String scratch;
+        AppendReplayEntry(scratch, entry);  // grows the scratch
+        const String first = scratch;
+        scratch.clear();
+
+        ExpectNoAllocations([&] { AppendReplayEntry(scratch, entry); });
+
+        EXPECT_EQ(scratch, first);
     }
 
     TEST(ReplayFileTest, ATextWithNewlinesAndQuotesStaysOnOneLine) {

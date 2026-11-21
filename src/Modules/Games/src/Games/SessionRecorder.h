@@ -56,6 +56,7 @@ namespace BECore {
         void Fail(StringView what);
 
         std::ofstream _file;  //-NoStd: see the include
+        String _line;         // the entry being written; keeps its capacity
         bool _recording = false;
         bool _started = false;  ///< A reset has been written: the file has a state to act on
         bool _warnedDropped = false;
