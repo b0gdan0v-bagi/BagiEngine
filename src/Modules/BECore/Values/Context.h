@@ -6,6 +6,7 @@
 #include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -77,6 +78,14 @@ namespace BECore {
 
     private:
         FixedVector<ContextLevel, kMaxContextLevels> _levels;
+    };
+
+    /// What one level of a `Context` held when `Context::Stamp` was taken: the four parts `Context::VersionKey` folds, kept raw
+    struct LevelStamp {
+        const void* object = nullptr;
+        const uint64_t* counter = nullptr;
+        uint64_t version = 0;
+        uint32_t sets = 0;
     };
 
     /**
@@ -163,6 +172,36 @@ namespace BECore {
          * owner bumps the counter when it replaces an object.
          */
         [[nodiscard]] uint64_t VersionKey(LevelMask levels) const;
+
+        /**
+         * @brief Writes the stamp of every level of @p levels to @p out, one entry per set bit in level order
+         *
+         * @p out holds `std::popcount(levels)` entries. A stamp means something only to `Matches` with the same mask. Both are inline so
+         * a cache hit is one pass over the read levels with no call and no hashing.
+         */
+        void Stamp(LevelMask levels, LevelStamp* out) const {
+            for (unsigned bits = levels; bits != 0; bits &= bits - 1) {
+                const auto level = static_cast<LevelIndex>(std::countr_zero(bits));
+                *out++ = LevelStamp{_objects[level], _versions[level], Version(level), _sets[level]};
+            }
+        }
+
+        /**
+         * @brief True when every level of @p levels holds what @p stamps (from `Stamp` with the same mask) recorded
+         *
+         * The four parts are those `VersionKey` folds, compared exactly, so it is false when `VersionKey` of the mask would move and a
+         * hash collision cannot make it true. A counter is read only when its address is the stamped one.
+         */
+        [[nodiscard]] bool Matches(LevelMask levels, const LevelStamp* stamps) const {
+            for (unsigned bits = levels; bits != 0; bits &= bits - 1) {
+                const auto level = static_cast<LevelIndex>(std::countr_zero(bits));
+                const LevelStamp& stamp = *stamps++;
+                if (_objects[level] != stamp.object || _versions[level] != stamp.counter || _sets[level] != stamp.sets || Version(level) != stamp.version) {
+                    return false;
+                }
+            }
+            return true;
+        }
 
         /// True when every level of @p levels has an object and a counter (`Set` with a version): the key then tells whether a value that reads them changed. The empty mask is true
         [[nodiscard]] bool IsVersioned(LevelMask levels) const;

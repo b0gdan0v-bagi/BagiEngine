@@ -5,6 +5,7 @@
 #include <BECore/Values/Context.h>
 #include <BECore/Values/Value.h>
 #include <Common/Printers.h>
+#include <bit>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -287,6 +288,145 @@ namespace BECore::Tests {
         context.Set(kCasterLevel, caster);
         EXPECT_FALSE(context.IsVersioned(casterBit | castBit)) << "a Set with no counter drops the counter";
         EXPECT_TRUE(context.IsVersioned(castBit));
+    }
+
+    namespace {
+
+        /// What `Context::Stamp` wrote for @p mask, in the vector a cache keeps
+        [[nodiscard]] Vector<LevelStamp> StampOf(const Context& context, LevelMask mask) {
+            Vector<LevelStamp> stamps(static_cast<size_t>(std::popcount(mask)));
+            context.Stamp(mask, stamps.data());
+            return stamps;
+        }
+
+    }  // namespace
+
+    TEST(ValueVersionTest, AStampMatchesWhileNothingChangesAndOverARebuiltContext) {
+        VersionedWorld world;
+        const LevelMask both = world.ReadsOf(true, true);
+        const Vector<LevelStamp> stamps = StampOf(world.context, both);
+        EXPECT_TRUE(world.context.Matches(both, stamps.data()));
+        world.caster.speed = 99.0f;
+        EXPECT_TRUE(world.context.Matches(both, stamps.data())) << "a plain write is not a version";
+
+        world.context.Set(kCastLevel, world.cast, &world.castVersion);
+        const Vector<LevelStamp> afterSet = StampOf(world.context, both);
+        Context nextFrame(world.declaration);
+        nextFrame.Set(kCasterLevel, world.caster, &world.casterVersion);
+        nextFrame.Set(kCastLevel, world.cast, &world.castVersion);
+        EXPECT_FALSE(nextFrame.Matches(both, afterSet.data())) << "a context whose level was Set twice has a Set count of 2";
+        const Vector<LevelStamp> frame = StampOf(nextFrame, both);
+        Context sameFrameAgain(world.declaration);
+        sameFrameAgain.Set(kCasterLevel, world.caster, &world.casterVersion);
+        sameFrameAgain.Set(kCastLevel, world.cast, &world.castVersion);
+        EXPECT_TRUE(sameFrameAgain.Matches(both, frame.data())) << "a rebuilt context matches: its Set counts restart in each";
+    }
+
+    TEST(ValueVersionTest, AStampFailsAfterAChangeOfALevelItWasTakenOver) {
+        VersionedWorld world;
+        const LevelMask both = world.ReadsOf(true, true);
+        const Vector<LevelStamp> stamps = StampOf(world.context, both);
+        ++world.castVersion;
+        EXPECT_FALSE(world.context.Matches(both, stamps.data())) << "a bump of the second level";
+
+        VersionedWorld bumped;
+        const Vector<LevelStamp> bumpedStamps = StampOf(bumped.context, both);
+        ++bumped.casterVersion;
+        EXPECT_FALSE(bumped.context.Matches(both, bumpedStamps.data())) << "a bump of the first level";
+
+        VersionedWorld setAgain;
+        const Vector<LevelStamp> setStamps = StampOf(setAgain.context, both);
+        setAgain.context.Set(kCastLevel, setAgain.cast, &setAgain.castVersion);
+        EXPECT_FALSE(setAgain.context.Matches(both, setStamps.data())) << "a Set of a read level counts, even over the same object";
+
+        VersionedWorld otherObject;
+        const Vector<LevelStamp> objectStamps = StampOf(otherObject.context, both);
+        ValueUnitStats other;
+        otherObject.context.Set(kCasterLevel, other, &otherObject.casterVersion);
+        EXPECT_FALSE(otherObject.context.Matches(both, objectStamps.data()));
+
+        VersionedWorld otherCounter;
+        const Vector<LevelStamp> counterStamps = StampOf(otherCounter.context, both);
+        uint64_t sameNumber = otherCounter.castVersion;
+        otherCounter.context.Set(kCastLevel, otherCounter.cast, &sameNumber);
+        EXPECT_FALSE(otherCounter.context.Matches(both, counterStamps.data())) << "another counter object with the same value";
+
+        VersionedWorld noCounter;
+        const Vector<LevelStamp> withCounterStamps = StampOf(noCounter.context, both);
+        noCounter.context.Set(kCastLevel, noCounter.cast);
+        EXPECT_FALSE(noCounter.context.Matches(both, withCounterStamps.data())) << "a level that lost its counter";
+    }
+
+    TEST(ValueVersionTest, AStampIgnoresALevelOutsideItsMask) {
+        VersionedWorld world;
+        const LevelMask casterOnly = world.ReadsOf(true, false);
+        const Vector<LevelStamp> stamps = StampOf(world.context, casterOnly);
+        ASSERT_EQ(stamps.size(), 1U);
+        ++world.castVersion;
+        world.context.Set(kCastLevel, world.cast, &world.castVersion);
+        EXPECT_TRUE(world.context.Matches(casterOnly, stamps.data()));
+        EXPECT_TRUE(world.context.Matches(0, nullptr)) << "the empty mask has no level to differ";
+    }
+
+    TEST(ValueVersionTest, AStampMatchesExactlyWhenTheKeyIsTheSameOverRandomChanges) {
+        VersionedWorld world;
+        ValueUnitStats otherCaster;
+        uint64_t otherCasterVersion = 1;
+        const LevelMask masks[] = {world.ReadsOf(true, false), world.ReadsOf(false, true), world.ReadsOf(true, true)};
+        constexpr size_t kMasks = std::size(masks);
+        Vector<LevelStamp> stamps[kMasks];
+        uint64_t keys[kMasks];
+        const auto retake = [&](size_t i) {
+            stamps[i] = StampOf(world.context, masks[i]);
+            keys[i] = world.context.VersionKey(masks[i]);
+        };
+        for (size_t i = 0; i < kMasks; ++i) {
+            retake(i);
+        }
+
+        uint32_t seed = 4242;
+        const auto next = [&seed](uint32_t bound) {
+            seed = seed * 1664525U + 1013904223U;
+            return (seed >> 16) % bound;
+        };
+        constexpr uint32_t kSteps = 3000;
+        constexpr uint32_t kEvents = 7;
+        constexpr uint32_t kRetakeEvery = 5;
+        uint32_t movedChecks = 0;
+        for (uint32_t step = 0; step < kSteps; ++step) {
+            switch (next(kEvents)) {
+                case 0:
+                    ++world.casterVersion;
+                    break;
+                case 1:
+                    ++world.castVersion;
+                    break;
+                case 2:
+                    world.context.Set(kCasterLevel, world.caster, &world.casterVersion);
+                    break;
+                case 3:
+                    world.context.Set(kCastLevel, world.cast, &world.castVersion);
+                    break;
+                case 4:
+                    world.context.Set(kCasterLevel, otherCaster, &otherCasterVersion);
+                    break;
+                case 5:
+                    world.context.Set(kCastLevel, world.cast);
+                    break;
+                default:
+                    world.caster.speed += 1.0f;
+                    break;
+            }
+            for (size_t i = 0; i < kMasks; ++i) {
+                const bool sameKey = world.context.VersionKey(masks[i]) == keys[i];
+                EXPECT_EQ(world.context.Matches(masks[i], stamps[i].data()), sameKey) << "step " << step << " mask " << i;
+                movedChecks += sameKey ? 0U : 1U;
+                if (next(kRetakeEvery) == 0) {
+                    retake(i);
+                }
+            }
+        }
+        EXPECT_GT(movedChecks, 0U);
     }
 
     TEST(ValueVersionTest, ADerivedObjectAtABaseLevelKeysOnTheBaseSubobject) {
