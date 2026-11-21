@@ -5,6 +5,8 @@
 #include <BECore/Reflection/ReaderLimits.h>
 #include <BECore/Save/SaveGame.h>
 #include <BECore/Save/SaveTestSupport.h>
+#include <Common/BinaryStreams.h>
+#include <Common/FreshText.h>
 #include <Common/Printers.h>
 #include <Generated/SaveGameTest.gen.hpp>
 
@@ -118,6 +120,74 @@ namespace BECore::Tests {
             return serializer.GetData();
         }
 
+        /// The state of the small saves below: one of each kind of entry the envelope's `state` holds
+        struct SmallState {
+            int32_t answer = 0;
+            String text;
+            PoolString pooled;
+            int32_t x = 0;
+            int32_t y = 0;
+            Vector<int32_t> ids;
+        };
+
+        void ReadSmallState(IDeserializer& deserializer, SmallState& state) {
+            deserializer.Read("answer", state.answer);
+            deserializer.Read("text", state.text);
+            deserializer.Read("pooled", state.pooled);
+            if (deserializer.BeginObject("point")) {
+                deserializer.Read("x", state.x);
+                deserializer.Read("y", state.y);
+                deserializer.EndObject();
+            }
+            size_t count = 0;
+            if (deserializer.BeginArray("items", "item", count)) {
+                for (size_t i = 0; i < count && deserializer.BeginArrayElement(); ++i) {
+                    int32_t id = 0;
+                    deserializer.Read("id", id);
+                    state.ids.push_back(id);
+                    deserializer.EndArrayElement();
+                }
+                deserializer.EndArray();
+            }
+        }
+
+        constexpr int32_t kSmallAnswer = 7;
+        constexpr StringView kSmallText = "level three";
+        constexpr StringView kSmallPooled = "Hero";
+
+        /// A save of SmallState described as a tree, with the independent builder of BinaryStreams: the bytes depend on no writer of the engine
+        Vector<BinaryStreams::Entry> SmallSaveTree(uint32_t version) {
+            using namespace BinaryStreams;
+            return {Object("save", {Text("game", kGame), Number<uint32_t>("version", version),
+                                    Object("state", {Number<int32_t>("answer", kSmallAnswer), Text("text", kSmallText), Pooled("pooled", kSmallPooled),
+                                                     Object("point", {Number<int32_t>("x", -3), Number<int32_t>("y", 4)}),
+                                                     Array("items", {Element({Number<int32_t>("id", 10)}), Element({Number<int32_t>("id", 11)})})})})};
+        }
+
+        Vector<uint8_t> SmallSaveBytes(uint16_t layout, uint32_t version) {
+            BinaryStreams::Options options;
+            options.version = layout;
+            return BinaryStreams::Build(SmallSaveTree(version), options);
+        }
+
+        void ExpectSmallState(const SmallState& state) {
+            EXPECT_EQ(state.answer, kSmallAnswer);
+            EXPECT_EQ(state.text, kSmallText);
+            EXPECT_EQ(state.pooled, "Hero"_intern);
+            EXPECT_EQ(state.x, -3);
+            EXPECT_EQ(state.y, 4);
+            ASSERT_EQ(state.ids.size(), 2u);
+            EXPECT_EQ(state.ids[0], 10);
+            EXPECT_EQ(state.ids[1], 11);
+        }
+
+        /// The same stream in the layout of version 1: names inline, a PoolString value inline as a String. For a stream the writer made
+        Vector<uint8_t> AsVersion1(const Vector<uint8_t>& stream) {
+            BinaryStreams::Options options;
+            options.version = BinaryFormat::LegacyVersion;
+            return BinaryStreams::Build(BinaryStreams::ReadTree(stream), options);
+        }
+
     }  // namespace
 
     /// A service initialised on the saves folder of the test
@@ -153,6 +223,92 @@ namespace BECore::Tests {
         EXPECT_EQ(info->game, "TestGame");
         EXPECT_EQ(info->version, 2u);
         ExpectSameState(original, loaded);
+    }
+
+    TEST_F(SaveGameTest, ASaveOfEitherLayoutLoadsAndPeeks) {
+        for (const uint16_t layout : {BinaryFormat::LegacyVersion, BinaryFormat::TabledVersion}) {
+            SCOPED_TRACE(layout);
+            ASSERT_TRUE(Service().WriteSlot("slot", SmallSaveBytes(layout, 2)).has_value());
+
+            SmallState state;
+            const auto info = Service().Load("slot", kSchema, [&state](IDeserializer& deserializer) { ReadSmallState(deserializer, state); });
+            ASSERT_TRUE(info.has_value()) << info.error().detail.c_str();
+            EXPECT_EQ(info->game, kGame);
+            EXPECT_EQ(info->version, 2u);
+            ExpectSmallState(state);
+
+            const auto peeked = Service().Peek("slot");
+            ASSERT_TRUE(peeked.has_value());
+            EXPECT_EQ(peeked->game, kGame);
+            EXPECT_EQ(peeked->version, 2u);
+        }
+    }
+
+    TEST_F(SaveGameTest, AVersion1SaveKeptAsBytesStillLoads) {
+        // The save of a small game as the engine of version 1 wrote it, byte by byte: no writer of this engine is in the fixture
+        // clang-format off
+        const Vector<uint8_t> bytes = {
+            'B', 'E', 'B', 'N', 0x01, 0x00,                                                 // magic, version 1
+            0x39, 0x00, 0x00, 0x00,                                                         // payload size: 57
+            0x0D, 0x04, 0x00, 's', 'a', 'v', 'e', 0x2E, 0x00, 0x00, 0x00,                   // Object "save", size 46
+            0x0C, 0x04, 0x00, 'g', 'a', 'm', 'e', 0x01, 0x00, 0x00, 0x00, 'G',              //   String "game" = "G"
+            0x07, 0x07, 0x00, 'v', 'e', 'r', 's', 'i', 'o', 'n', 0x01, 0x00, 0x00, 0x00,    //   UInt32 "version" = 1
+            0x0D, 0x05, 0x00, 's', 't', 'a', 't', 'e', 0x08, 0x00, 0x00, 0x00,              //   Object "state", size 8
+            0x06, 0x01, 0x00, 'n', 0x05, 0x00, 0x00, 0x00,                                  //     Int32 "n" = 5
+        };
+        // clang-format on
+
+        using namespace BinaryStreams;
+        const Vector<Entry> tree = {Object("save", {Text("game", "G"), Number<uint32_t>("version", 1), Object("state", {Number<int32_t>("n", 5)})})};
+        BinaryStreams::Options legacy;
+        legacy.version = BinaryFormat::LegacyVersion;
+        ASSERT_EQ(Build(tree, legacy), bytes) << "the literal and the builder describe the same file";
+
+        ASSERT_TRUE(Service().WriteSlot("old", bytes).has_value());
+        int32_t n = 0;
+        const auto info = Service().Load("old", SaveSchema{"G", 1, 1}, [&n](IDeserializer& deserializer) { deserializer.Read("n", n); });
+        ASSERT_TRUE(info.has_value()) << info.error().detail.c_str();
+        EXPECT_EQ(info->version, 1u);
+        EXPECT_EQ(n, 5);
+
+        const auto peeked = Service().Peek("old");
+        ASSERT_TRUE(peeked.has_value());
+        EXPECT_EQ(peeked->game, "G");
+        EXPECT_EQ(peeked->version, 1u);
+    }
+
+    TEST_F(SaveGameTest, ASaveIsWrittenAsVersion2AndReplacesAVersion1Slot) {
+        ASSERT_TRUE(Service().WriteSlot("slot", SmallSaveBytes(BinaryFormat::LegacyVersion, 1)).has_value());
+        const auto before = Service().ReadSlot("slot");
+        ASSERT_TRUE(before.has_value());
+        EXPECT_EQ(BinaryFormat::Load<uint16_t>(before->data() + sizeof(BinaryFormat::Magic)), BinaryFormat::LegacyVersion);
+
+        const GameState state = MakeState();
+        ASSERT_TRUE(Service().Save("slot", kSchema, state).has_value());
+
+        const auto after = Service().ReadSlot("slot");
+        ASSERT_TRUE(after.has_value());
+        EXPECT_EQ(BinaryFormat::Load<uint16_t>(after->data() + sizeof(BinaryFormat::Magic)), BinaryFormat::TabledVersion);
+        EXPECT_FALSE(std::filesystem::exists(_saves / "slot.save.tmp"));
+
+        GameState loaded;
+        ASSERT_TRUE(Service().Load("slot", kSchema, loaded).has_value());
+        ExpectSameState(state, loaded);
+    }
+
+    TEST_F(SaveGameTest, PeekOfAVersion2SaveInternsNothingAndALoadInternsInOneBatch) {
+        GameState state = MakeState();
+        state.hero = PoolString::Intern(FreshText("save_peek_hero"));
+        ASSERT_TRUE(Service().Save("slot", kSchema, state).has_value());
+
+        const uint64_t batchesBefore = PoolString::GetStats().batchCalls;
+        ASSERT_TRUE(Service().Peek("slot").has_value());
+        EXPECT_EQ(PoolString::GetStats().batchCalls, batchesBefore) << "a Peek reads the game and the version: no PoolString";
+
+        GameState loaded;
+        ASSERT_TRUE(Service().Load("slot", kSchema, loaded).has_value());
+        EXPECT_EQ(PoolString::GetStats().batchCalls, batchesBefore + 1);
+        EXPECT_EQ(loaded.hero, state.hero);
     }
 
     TEST_F(SaveGameTest, SavedStateOverwritesTheSlot) {
@@ -251,9 +407,6 @@ namespace BECore::Tests {
     }
 
     TEST_F(SaveGameTest, DamagedFilesAreCorruptAndNeverCrash) {
-        const Vector<uint8_t> valid = ValidBytes();
-        ASSERT_GT(valid.size(), BinaryFormat::HeaderSize + 16);
-
         // A valid stream that is not a save: another root object
         BinarySerializer otherRoot;
         otherRoot.BeginObject("settings");
@@ -261,41 +414,50 @@ namespace BECore::Tests {
         otherRoot.WriteAttribute("version", uint32_t{2});
         otherRoot.EndObject();
 
-        Vector<uint8_t> brokenMagic = valid;
-        brokenMagic[0] = 'X';
-        const Vector<uint8_t> halfFile(valid.begin(), valid.begin() + static_cast<ptrdiff_t>(valid.size() / 2));
-        const Vector<uint8_t> headerOnly(valid.begin(), valid.begin() + static_cast<ptrdiff_t>(BinaryFormat::HeaderSize));
-        const Vector<uint8_t> oneByteShort(valid.begin(), valid.end() - 1);
         Vector<uint8_t> garbage;
         for (size_t i = 0; i < 64; ++i) {
             garbage.push_back(static_cast<uint8_t>(i * 37 + 11));
         }
 
-        struct Case {
-            const char* name;
-            Vector<uint8_t> bytes;
-        };
-        const Case cases[] = {
-            {"empty file", {}},
-            {"64 bytes of garbage", garbage},
-            {"broken magic", brokenMagic},
-            {"cut in half", halfFile},
-            {"header only", headerOnly},
-            {"one byte short", oneByteShort},
-            {"another root object", otherRoot.GetData()},
-            {"no state", EnvelopeBytes(true, true, false, false)},
-            {"no version", EnvelopeBytes(true, false, false, true)},
-            {"no game", EnvelopeBytes(false, true, false, true)},
-            {"version of the wrong type", EnvelopeBytes(true, true, true, true)},
-        };
+        // The same damage in the layout of the writer (version 2) and in the layout of the saves of the first engine (version 1)
+        for (const uint16_t layout : {BinaryFormat::TabledVersion, BinaryFormat::LegacyVersion}) {
+            const auto inLayout = [layout](const Vector<uint8_t>& stream) { return layout == BinaryFormat::LegacyVersion ? AsVersion1(stream) : stream; };
 
-        for (const Case& testCase : cases) {
-            SCOPED_TRACE(testCase.name);
-            ASSERT_TRUE(Service().WriteSlot("bad", testCase.bytes).has_value());
+            const Vector<uint8_t> valid = inLayout(ValidBytes());
+            ASSERT_GT(valid.size(), BinaryFormat::HeaderSize + 16);
+            Vector<uint8_t> brokenMagic = valid;
+            brokenMagic[0] = 'X';
+            const Vector<uint8_t> halfFile(valid.begin(), valid.begin() + static_cast<ptrdiff_t>(valid.size() / 2));
+            // Version 2: no string table at all; version 1: a header that promises more than the file has
+            const Vector<uint8_t> headerOnly(valid.begin(), valid.begin() + static_cast<ptrdiff_t>(BinaryFormat::HeaderSize));
+            const Vector<uint8_t> oneByteShort(valid.begin(), valid.end() - 1);
 
-            GameState state = MakeUntouchedState();
-            ExpectFailure(Service().Load("bad", kSchema, state), SaveErrorKind::Corrupt);
-            ExpectUntouched(state);
+            struct Case {
+                const char* name;
+                Vector<uint8_t> bytes;
+            };
+            const Case cases[] = {
+                {"empty file", {}},
+                {"64 bytes of garbage", garbage},
+                {"broken magic", brokenMagic},
+                {"cut in half", halfFile},
+                {"header only", headerOnly},
+                {"one byte short", oneByteShort},
+                {"another root object", inLayout(otherRoot.GetData())},
+                {"no state", inLayout(EnvelopeBytes(true, true, false, false))},
+                {"no version", inLayout(EnvelopeBytes(true, false, false, true))},
+                {"no game", inLayout(EnvelopeBytes(false, true, false, true))},
+                {"version of the wrong type", inLayout(EnvelopeBytes(true, true, true, true))},
+            };
+
+            for (const Case& testCase : cases) {
+                SCOPED_TRACE(Format("layout {}: {}", layout, testCase.name));
+                ASSERT_TRUE(Service().WriteSlot("bad", testCase.bytes).has_value());
+
+                GameState state = MakeUntouchedState();
+                ExpectFailure(Service().Load("bad", kSchema, state), SaveErrorKind::Corrupt);
+                ExpectUntouched(state);
+            }
         }
     }
 
