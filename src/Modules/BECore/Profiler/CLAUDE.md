@@ -33,6 +33,7 @@ How to use it (flags, Perfetto, sampling profilers, measured costs): `HowToProfi
 
 - Each thread records into a buffer of its own (chunks of `std::malloc`, never `new`, so recording does not enter the operator new it may count). The number of finished events is published with a release store; a writer reads the published part with an acquire load. A buffer is registered once under a mutex and freed only with its recorder (the process's one is never freed), so a thread may end at any time.
 - Writing (`WriteJson`, `WriteFile`) is safe at any moment from the main thread: zones still open are closed at their thread's last event, so the file always nests. `MarkTraceStart` starts a session: what each buffer held before is left out (by index: the clock ticks coarser than events follow each other) and its time is 0.
+- The recorder and the frozen-frame writer share `Backends/ChromeTraceJson.h` (`WriteTextFile`, the `M` and `B` / `E` event formatters), so the two files keep one format.
 - A full thread buffer (`kMaxEventsPerThread`) or too many threads drop events; the count is `otherData.dropped` of the file.
 - Events: `B` / `E` per zone (`args`: `file`, `line`; with `ENGINE_PROFILER_ALLOC` the `E` carries `allocs` and `bytes`, inclusive of inner zones), `C` counters, `i` frame marks (global scope), `M` thread names. Time in microseconds.
 - With `ENGINE_PROFILER_ALLOC` `otherData.allocNames` holds the allocations per zone x name (`[{zone, name, allocs, bytes}]`, at most 100, most bytes first); `Alloc/CLAUDE.md`, "Names".

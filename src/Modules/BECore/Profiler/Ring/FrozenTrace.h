@@ -17,7 +17,7 @@ namespace BECore {
      */
     [[nodiscard]] String WriteFrozenTraceJson(const Vector<FrozenFrame>& frames);
 
-    /// Writes WriteFrozenTraceJson to @p path; the error names the file and the reason, as ChromeTraceBackend::WriteFile does
+    /// Writes WriteFrozenTraceJson to @p path; the error names the file and the reason, as ChromeTraceBackend::WriteFile does (both call WriteTextFile)
     [[nodiscard]] std::expected<void, String> WriteFrozenTraceFile(StringView path, const Vector<FrozenFrame>& frames);
 
 }  // namespace BECore
