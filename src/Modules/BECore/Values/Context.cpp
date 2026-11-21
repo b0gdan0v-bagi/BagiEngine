@@ -51,6 +51,7 @@ namespace BECore {
                 case TypeKind::Pointer:
                     return String(type.ObjectName());
                 case TypeKind::Opaque:
+                case TypeKind::Value:
                     return String(type.opaqueName);
                 case TypeKind::Enum: {
                     Vector<String> values;
@@ -384,6 +385,7 @@ namespace BECore {
             case TypeKind::Double:
             case TypeKind::Enum:
             case TypeKind::Opaque:
+            case TypeKind::Value:
                 return nullptr;
             case TypeKind::String:
                 if (element.interns) {

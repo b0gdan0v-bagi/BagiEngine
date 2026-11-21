@@ -176,7 +176,7 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    static_assert(DescribeType<Value<float>>().kind == TypeKind::Opaque);
+    static_assert(DescribeType<Value<float>>().kind == TypeKind::Value);
     static_assert(Describable<Value<Vec3>> && Ser::HasDataAccessor<Value<Vec3>>);
 
     TEST(ValueAccessorTest, CompileTimeChecks) {}
@@ -750,8 +750,8 @@ namespace BECore::Tests {
         EXPECT_TRUE(value.IsSlot());
     }
 
-    TEST(ValueAccessorTest, AValueIsOpaqueAndTheTypesAreTold) {
-        EXPECT_EQ(DescribeType<Value<float>>().kind, TypeKind::Opaque);
+    TEST(ValueAccessorTest, AValueIsOfKindValueAndTheTypesAreTold) {
+        EXPECT_EQ(DescribeType<Value<float>>().kind, TypeKind::Value);
         EXPECT_TRUE(SameType(DescribeType<Value<float>>(), DescribeType<Value<float>>()));
         EXPECT_FALSE(SameType(DescribeType<Value<float>>(), DescribeType<Value<double>>()));
         EXPECT_FALSE(SameType(DescribeType<Value<float>>(), DescribeType<Value<Vec3>>()));

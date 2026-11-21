@@ -255,6 +255,7 @@ namespace BECore {
                 case TypeKind::Pointer:
                     return String(type.ObjectName());
                 case TypeKind::Opaque:
+                case TypeKind::Value:
                     return String(type.opaqueName);
                 default:
                     return String(TypeKindName(type.kind));

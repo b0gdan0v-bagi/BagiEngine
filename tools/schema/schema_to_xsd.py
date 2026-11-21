@@ -10,7 +10,10 @@ The type of a file is, in this order: a `--bind` for its stem; the type named li
 The XSD follows the XML the serializers write (schema_common.py). XSD 1.0 cannot say "the attributes of this element depend on its
 `type`", so a factory element is declared once per factory base with the union of the attributes and children of its derived types, all
 optional: it catches an unknown name or value, not an attribute that belongs to another derived type. A field the schema describes as
-`opaque` (a class with a hand-written Serialize) is any content. Standard library only.
+`opaque` (a class with a hand-written Serialize) is any content. A `value` field (`Value<T>`, Values/CLAUDE.md, "Loading") is typed by
+the forms the loader reads: the plain attribute and an element with `value`, `from`, `expr`, `kind`, `tree` for an attribute type `T`;
+the members of `T` plus the same keys for a reflected `T`; any other attribute and child beside `from`, `expr`, `kind` for an opaque
+`T`. `from` and `expr` are text here, and XSD 1.0 cannot say "`value` or `from`". Standard library only.
 """
 
 import argparse
@@ -38,17 +41,23 @@ from schema_common import (  # noqa: E402
     EXIT_FAILED,
     EXIT_PASSED,
     EXIT_SKIPPED,
+    EXPR_ATTRIBUTE,
+    FROM_ATTRIBUTE,
     INDEX_ATTRIBUTE,
     INTEGER_KINDS,
     ITEM_ELEMENT,
     KEY_ATTRIBUTE,
+    KIND_ATTRIBUTE,
     NODE_REFERENCE_ATTRIBUTE,
     NODE_TYPE,
     PAIR_FIRST,
     PAIR_SECOND,
     SCALAR_XSD_TYPES,
     SCHEMA_VERSION,
+    TREE_ELEMENT,
     TYPE_ATTRIBUTE,
+    VALUE_KIND,
+    VALUE_KIND_NAMES,
     VALUE_NAME,
     XS_ANY_TYPE,
     XS_BOOLEAN,
@@ -92,11 +101,16 @@ class Child:
 
 @dataclass(frozen=True)
 class Content:
-    """What an element holds: attributes and child elements. `repeated`: one child element, any number of times, in a sequence."""
+    """What an element holds: attributes and child elements. `repeated`: one child element, any number of times, in a sequence.
+
+    `open`: any other attribute and child element too (`lax`); an open content has no children of its own, since a named child beside
+    `xs:any` would break the unique particle attribution rule of XSD 1.0.
+    """
 
     attributes: tuple[Attribute, ...] = ()
     children: tuple[Child, ...] = ()
     repeated: bool = False
+    open: bool = False
 
 
 @dataclass(frozen=True)
@@ -159,11 +173,12 @@ class XsdBuilder:
         self.simple_types: dict[str, SimpleRestriction] = {}
         self._complex_names: dict[Content, str] = {}
         self._simple_names: dict[SimpleRestriction, str] = {}
+        self._value_objects_in_progress: set[str] = set()  # a reflected `T` of a `Value<T>` that holds a `Value<T>` itself
 
     # ---- naming and sharing
 
     def _intern_complex(self, content: Content) -> str:
-        if not content.attributes and not content.children:
+        if not content.attributes and not content.children and not content.open:
             content = Content()
         name = self._complex_names.get(content)
         if name is None:
@@ -217,24 +232,57 @@ class XsdBuilder:
         children: dict[str, Child] = {}
         for entry in reversed(chain):
             for item in entry.get("fields", []):
-                member = self._member(item["name"], item["type"], item.get("attributes", {}), item.get("attributes", {}).get("required", False))
-                if isinstance(member, Attribute):
-                    attributes[member.name] = member
-                    children.pop(member.name, None)
-                else:
-                    children[member.name] = member
+                attributes.pop(item["name"], None)
+                children.pop(item["name"], None)
+                for member in self._member(item["name"], item["type"], item.get("attributes", {}), item.get("attributes", {}).get("required", False)):
+                    if isinstance(member, Attribute):
+                        attributes[member.name] = member
+                    else:
+                        children[member.name] = member
         if name == NODE_TYPE:
             attributes[NODE_REFERENCE_ATTRIBUTE] = Attribute(NODE_REFERENCE_ATTRIBUTE, XS_STRING)  # `<node ref="..."/>`, expanded by the loader
         return list(attributes.values()), list(children.values())
 
-    def _member(self, name: str, desc: dict[str, Any], attributes: dict[str, Any], required: bool) -> Attribute | Child:
+    def _member(self, name: str, desc: dict[str, Any], attributes: dict[str, Any], required: bool) -> list[Attribute | Child]:
+        """What a field is in its parent: an attribute or a child element, both for a `Value<T>` of an attribute type `T`."""
         doc = attributes.get("tooltip", "")
         if desc.get("kind") == "optional" and "element" in desc:
             return self._member(name, desc["element"], attributes, False)
+        if desc.get("kind") == VALUE_KIND:
+            return self._value_members(name, desc, attributes, doc)
         simple = self._simple_for(desc, attributes)
         if simple is not None:
-            return Attribute(name, simple, required, doc)
-        return Child(name, self._complex_for(desc, attributes), required, doc)
+            return [Attribute(name, simple, required, doc)]
+        return [Child(name, self._complex_for(desc, attributes), required, doc)]
+
+    # ---- a Value<T> field
+
+    def _value_members(self, name: str, desc: dict[str, Any], attributes: dict[str, Any], doc: str) -> list[Attribute | Child]:
+        """The plain attribute (a `T` that is one) and the element of the field; neither is required, as XSD 1.0 cannot say "one of the two"."""
+        element = desc.get("element") or {}
+        members: list[Attribute | Child] = []
+        simple = self._simple_for(element, attributes)
+        if simple is not None:
+            members.append(Attribute(name, simple, False, doc))
+        members.append(Child(name, self._intern_complex(self._value_content(element, attributes)), False, doc))
+        return members
+
+    def _value_content(self, element: dict[str, Any], attributes: dict[str, Any]) -> Content:
+        """The element of a `Value<T>`: the keys the loader reads (`from`, `expr`, `kind`, `tree`) and the literal of `T` in its own form."""
+        keys = (Attribute(FROM_ATTRIBUTE, XS_STRING), Attribute(EXPR_ATTRIBUTE, XS_STRING), Attribute(KIND_ATTRIBUTE, self._intern_simple(SimpleRestriction(XS_STRING, enumeration=VALUE_KIND_NAMES), "enum")))
+        simple = self._simple_for(element, attributes)
+        if simple is not None:
+            return Content((Attribute(VALUE_NAME, simple), *keys), (Child(TREE_ELEMENT, XS_ANY_TYPE),))
+        name = element.get("object")
+        if element.get("kind") == "object" and name in self.types and name not in self._value_objects_in_progress:
+            self._value_objects_in_progress.add(name)
+            members = self._members_of_type(name)
+            self._value_objects_in_progress.discard(name)
+            reserved = {VALUE_NAME, TREE_ELEMENT, *(key.name for key in keys)}
+            literal_attributes = tuple(Attribute(a.name, a.simple, False, a.doc) for a in members[0] if a.name not in reserved)
+            literal_children = tuple(Child(c.name, c.complex, False, c.doc) for c in members[1] if c.name not in reserved)
+            return Content((*literal_attributes, *keys), (*literal_children, Child(TREE_ELEMENT, XS_ANY_TYPE)))
+        return Content(keys, open=True)
 
     # ---- element bodies
 
@@ -319,7 +367,7 @@ class XsdBuilder:
         content = self._body(desc.get("element") or {}, attributes)
         if content is None:
             return XS_ANY_TYPE
-        return self._intern_complex(Content((key_attribute, *content.attributes), content.children, content.repeated))
+        return self._intern_complex(Content((key_attribute, *content.attributes), content.children, content.repeated, content.open))
 
     def _body_type(self, desc: dict[str, Any], attributes: dict[str, Any]) -> str:
         """The type of an element that holds a value as its own body (an item of a list)."""
@@ -337,6 +385,8 @@ class XsdBuilder:
             return Content((Attribute(VALUE_NAME, simple),))
         if kind == "optional":
             return self._body(desc.get("element") or {}, attributes)
+        if kind == VALUE_KIND:
+            return self._value_content(desc.get("element") or {}, attributes)
         if kind in ("object", "pointer"):
             name = self._pointee(desc)
             if name is None:
@@ -346,9 +396,8 @@ class XsdBuilder:
             members = self._members_of_type(name)
             return Content(tuple(members[0]), tuple(members[1]))
         if kind == "pair":
-            first = self._member(PAIR_FIRST, desc.get("key") or {}, attributes, False)
-            second = self._member(PAIR_SECOND, desc.get("element") or {}, attributes, False)
-            return Content(tuple(m for m in (first, second) if isinstance(m, Attribute)), tuple(m for m in (first, second) if isinstance(m, Child)))
+            members = [*self._member(PAIR_FIRST, desc.get("key") or {}, attributes, False), *self._member(PAIR_SECOND, desc.get("element") or {}, attributes, False)]
+            return Content(tuple(m for m in members if isinstance(m, Attribute)), tuple(m for m in members if isinstance(m, Child)))
         if kind == "variant":
             return self._variant_content(desc, attributes)
         return None
@@ -416,7 +465,10 @@ class XsdBuilder:
 
     def _render_complex(self, schema: ET.Element, name: str, content: Content) -> None:
         node = ET.SubElement(schema, f"{{{XS_NAMESPACE}}}complexType", {"name": name})
-        if content.children:
+        if content.open:
+            group = ET.SubElement(node, f"{{{XS_NAMESPACE}}}sequence")
+            ET.SubElement(group, f"{{{XS_NAMESPACE}}}any", {"minOccurs": "0", "maxOccurs": "unbounded", "processContents": "lax"})
+        elif content.children:
             group = ET.SubElement(node, f"{{{XS_NAMESPACE}}}sequence" if content.repeated else f"{{{XS_NAMESPACE}}}all")
             for child in content.children:
                 attrs = {"name": child.name, "type": child.complex}
@@ -430,6 +482,8 @@ class XsdBuilder:
             attrs = {"name": attribute.name, "type": attribute.simple, "use": "required" if attribute.required else "optional"}
             element = ET.SubElement(node, f"{{{XS_NAMESPACE}}}attribute", attrs)
             self._annotate(element, attribute.doc)
+        if content.open:
+            ET.SubElement(node, f"{{{XS_NAMESPACE}}}anyAttribute", {"processContents": "lax"})
 
 
 def build_xsd(schema: dict[str, Any], type_name: str, root_element: str, wrapper: str | None = None) -> str:

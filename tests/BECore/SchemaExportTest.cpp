@@ -45,6 +45,7 @@ namespace BECore::Tests {
                 &Add<SchemaSquare, SchemaShape, SchemaShape>,
                 &Add<SchemaAllShapes>,
                 &Add<SchemaAttributed>,
+                &Add<SchemaValueFields>,
                 &Add<SchemaMethods>,
             };
             const size_t count = sizeof(steps) / sizeof(steps[0]);
@@ -225,6 +226,24 @@ namespace BECore::Tests {
         const Json shapes = TypeOfField(all, "shapes");
         EXPECT_EQ(KindOf(*Member(shapes, "element")), "pointer");
         EXPECT_EQ(GetJsonString(*Member(shapes, "element"), "object"), String("SchemaShape"));
+    }
+
+    TEST_F(SchemaExportTest, AValueFieldIsDescribedAsSuchWithItsType) {
+        const Json& fields = Entry("SchemaValueFields");
+
+        const Json damage = TypeOfField(fields, "damage");
+        EXPECT_EQ(KindOf(damage), "value");
+        EXPECT_EQ(KindOf(*Member(damage, "element")), "int32");
+        EXPECT_EQ(KindOf(*Member(TypeOfField(fields, "alive"), "element")), "bool");
+        const Json position = TypeOfField(fields, "position");
+        EXPECT_EQ(KindOf(position), "value");
+        EXPECT_EQ(KindOf(*Member(position, "element")), "opaque");
+
+        const Json* attributes = FindJsonMember(FieldNamed(fields, "percent"), "attributes");
+        ASSERT_NE(attributes, nullptr);
+        const Json* range = FindJsonMember(*attributes, "range");
+        ASSERT_TRUE(range != nullptr && range->is_array());
+        EXPECT_EQ((*range)[1], 100.0);
     }
 
     TEST_F(SchemaExportTest, MembersThatDoNotApplyAreAbsent) {
