@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/Json.h>
+#include <BECore/Utils/Overload.h>
 #include <Rooms/RoomProtocol.h>
 
 namespace BECore::Tests {
