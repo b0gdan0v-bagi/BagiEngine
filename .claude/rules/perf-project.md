@@ -205,7 +205,7 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
     },
     {
       "name": "asset-load",
-      "about": "A TextureLibrary of 2000 sprites with names new to the pool, loaded from XML (parse and Load) and from binary (AssetLoadAllocBenchTest). Only the times of the `AssetLoad` lines are metrics; the lines also print allocs, bytes, newStrings and writeLocks (`AssetLoadReserved`: the same load after one `PoolString::Reserve` of the exact totals, the most one `PoolString::Reserve` could save), and the allocation counts need the profile preset (zero in Release). `AssetLoadWide`: 500 objects of 24 scalar fields and a nested object in both formats, where a lookup that scans the whole scope per field shows; `AssetLoadBinSource`: the sprite stream in binary copied from the caller's buffer, viewed in it and read from a file",
+      "about": "A TextureLibrary of 2000 sprites with names new to the pool, loaded from XML (parse and Load) and from binary (AssetLoadAllocBenchTest). Only the times of the `AssetLoad` lines are metrics; the lines also print allocs, bytes, newStrings and writeLocks (`AssetLoadReserved`: the same load after one `PoolString::Reserve` of the exact totals, the most one `PoolString::Reserve` could save), and the allocation counts need the profile preset (zero in Release). `AssetLoadWide`: 500 objects of 24 scalar fields and a nested object in both formats, where a lookup that scans the whole scope per field shows; `AssetLoadBinSource`: the sprite stream in binary copied from the caller's buffer, viewed in it and read from a file. `AssetLoadScene`: a synthetic scene of 600 groups (a few thousand nodes with components, node references) loaded from XML (parse, expansion, deserialize) and from its cooked bytes (`LoadSceneManagerFromBinary`)",
       "fast": true,
       "command": ["{bin}/BagiEngineTests", "--gtest_also_run_disabled_tests", "--gtest_filter=AssetLoadAllocBenchTest.DISABLED_*"],
       "metrics": {
@@ -215,7 +215,9 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
         "load_wide_bin_ms": {"source": "regex", "pattern": "^AssetLoadWide format=bin .* loadMs=([0-9.]+)", "unit": "ms", "better": "lower", "gate": false},
         "load_bin_buffer_ms": {"source": "regex", "pattern": "^AssetLoadBinSource source=buffer .* loadMs=([0-9.]+)", "unit": "ms", "better": "lower", "gate": false},
         "load_bin_view_ms": {"source": "regex", "pattern": "^AssetLoadBinSource source=view .* loadMs=([0-9.]+)", "unit": "ms", "better": "lower", "gate": false},
-        "load_bin_file_ms": {"source": "regex", "pattern": "^AssetLoadBinSource source=file .* loadMs=([0-9.]+)", "unit": "ms", "better": "lower", "gate": false}
+        "load_bin_file_ms": {"source": "regex", "pattern": "^AssetLoadBinSource source=file .* loadMs=([0-9.]+)", "unit": "ms", "better": "lower", "gate": false},
+        "load_scene_xml_ms": {"source": "regex", "pattern": "^AssetLoadScene format=xml .* loadMs=([0-9.]+)", "unit": "ms", "better": "lower", "gate": false},
+        "load_scene_bin_ms": {"source": "regex", "pattern": "^AssetLoadScene format=bin .* loadMs=([0-9.]+)", "unit": "ms", "better": "lower", "gate": false}
       }
     },
     {

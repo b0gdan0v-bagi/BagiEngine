@@ -1,12 +1,18 @@
+#include <BECore/Config/ContentVersion.h>
 #include <BECore/PoolString/PoolStringEntry.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
+#include <BECore/Reflection/SchemaHash.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Resource/TextureLibrary.h>
+#include <BECore/Scene/SceneLoader.h>
+#include <BECore/Scene/SceneNodeFiles.h>
 #include <Common/AllocCheck.h>
 #include <Common/BinaryStreams.h>
+#include <Common/EngineEnvironment.h>
+#include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <algorithm>
@@ -493,6 +499,96 @@ namespace BECore::Tests {
             return measure;
         }
 
+        constexpr size_t kSceneGroups = 600;
+        constexpr StringView kSceneHudRef = "nodes/AssetLoadHud";
+
+        /// The node file the scene references: two components and a child, overridden by name at each use
+        String SceneHudFile() {
+            return Format(R"(<node contentVersion="{}" name="Hud" layer="10"><components><component type="TransformComponent" x="1" y="2" width="3" height="4"/>)"
+                          R"(<component type="QuadRendererComponent"><color r="9" g="8" b="7" a="255"/></component></components><children><node name="Child" layer="1"/></children></node>)",
+                          kContentVersion);
+        }
+
+        /// `kSceneGroups` groups, each an inline node with a component and two children plus a reference to the node file: a few
+        /// thousand nodes with components and the references to expand
+        String SceneText() {
+            String nodes;
+            for (size_t i = 0; i < kSceneGroups; ++i) {
+                nodes.append(Format(R"(<node name="Group{0}" layer="3"><components><component type="TransformComponent" x="{0}" y="6"/></components>)"
+                                    R"(<children><node name="Left{0}"><components><component type="TransformComponent" x="1" y="2"/></components></node><node name="Right{0}"/></children></node>)"
+                                    R"(<node ref="{1}" name="Hud{0}"/>)",
+                                    i, kSceneHudRef));
+            }
+            return SceneConfigText(nodes, kMainSceneView800x600);
+        }
+
+        String PrintedScenes(SceneManager& manager) {
+            XmlSerializer serializer;
+            manager.Serialize(serializer);
+            return serializer.SaveToString();
+        }
+
+        /// The scene's XML text, its node file in a temp folder and the bytes the cook writes for it
+        class SceneFixture {
+        public:
+            SceneFixture() : _dir(TestTempDirectory("BagiAssetLoadScene")), _text(SceneText()) {
+                std::filesystem::remove_all(_dir);
+                WriteFile(_dir / "nodes" / "AssetLoadHud.xml", SceneHudFile());
+                const auto manager = LoadFromXml();
+                BinarySerializer writer;
+                if (manager != nullptr && WriteContentStamp(writer, kSceneManagerRootType)) {
+                    manager->Serialize(writer);
+                }
+                _binary = writer.GetData();
+            }
+
+            ~SceneFixture() {
+                std::error_code ignored;
+                std::filesystem::remove_all(_dir, ignored);
+            }
+
+            SceneFixture(const SceneFixture&) = delete;
+            SceneFixture& operator=(const SceneFixture&) = delete;
+
+            /// Parse, expansion of the references and deserialize
+            IntrusivePtrAtomic<SceneManager> LoadFromXml() const {
+                pugi::xml_document document;
+                if (!document.load_buffer(_text.data(), _text.size())) {
+                    return {};
+                }
+                return LoadSceneManager(XmlNode{document.document_element()}, MakeDirectoryNodeLoader(_dir));
+            }
+
+            IntrusivePtrAtomic<SceneManager> LoadFromBinary() const {
+                BinaryDeserializer reader;
+                if (!reader.LoadFromView(_binary.data(), _binary.size())) {
+                    return {};
+                }
+                return LoadSceneManagerFromBinary(reader);
+            }
+
+        private:
+            std::filesystem::path _dir;
+            String _text;
+            Vector<uint8_t> _binary;
+        };
+
+        LoadMeasure MeasureSceneLoad(const SceneFixture& fixture, FileFormat format) {
+            IntrusivePtrAtomic<SceneManager> manager;
+            bool loaded = false;
+            const LoadMeasure measure = MeasureCall(
+                [&] {
+                    manager = format == FileFormat::Xml ? fixture.LoadFromXml() : fixture.LoadFromBinary();
+                    return manager != nullptr;
+                },
+                loaded);
+            if (!loaded) {
+                ADD_FAILURE() << "the scene did not load";
+                return LoadMeasure{};
+            }
+            return measure;
+        }
+
         /// The median by `loadMs` of `kRepetitions` runs of @p measure
         template <typename TMeasure>
         LoadMeasure MedianOf(TMeasure&& measure) {
@@ -601,6 +697,18 @@ namespace BECore::Tests {
         ExpectLoaded(fromBuffer, salt, kSpriteCount);
     }
 
+    TEST(AssetLoadAllocTest, TheSceneLoadsTheSameFromXmlAndFromItsCookedBytes) {
+        EngineEnvironment::EnsureCoreServices();
+        const SceneFixture fixture;
+        const auto fromXml = fixture.LoadFromXml();
+        const auto fromBinary = fixture.LoadFromBinary();
+        ASSERT_NE(fromXml, nullptr);
+        ASSERT_NE(fromBinary, nullptr);
+        const String expected = PrintedScenes(*fromXml);
+        EXPECT_NE(expected.find("Hud599"), String::npos);
+        EXPECT_EQ(PrintedScenes(*fromBinary), expected);
+    }
+
     /// A benchmark, not a check: the set of .claude/rules/perf-project.md runs it (the counts are zero without the profile
     /// preset, `kNoAllocTracker`)
     TEST(AssetLoadAllocBenchTest, DISABLED_LoadOfFreshNames) {
@@ -624,6 +732,15 @@ namespace BECore::Tests {
         for (const BinSource source : {BinSource::Buffer, BinSource::View, BinSource::File}) {
             const LoadMeasure median = MedianOf([&] { return MeasureBinSource(source); });
             std::cout << "AssetLoadBinSource source=" << SourceName(source) << " allocs=" << median.allocs << " bytes=" << median.bytes << " loadMs=" << median.loadMs << "\n";
+        }
+        {
+            EngineEnvironment::EnsureCoreServices();
+            const SceneFixture fixture;
+            for (const FileFormat format : {FileFormat::Xml, FileFormat::Binary}) {
+                const LoadMeasure median = MedianOf([&] { return MeasureSceneLoad(fixture, format); });
+                std::cout << "AssetLoadScene format=" << FormatName(format) << " groups=" << kSceneGroups << " allocs=" << median.allocs << " bytes=" << median.bytes << " loadMs=" << median.loadMs
+                          << "\n";
+            }
         }
     }
 
