@@ -4,6 +4,7 @@
 #include <BECore/Logger/Logger.h>
 #include <BECore/Values/Context.h>
 #include <BECore/Values/Value.h>
+#include <bit>
 #include <cstdint>
 
 namespace BECore {
@@ -12,17 +13,16 @@ namespace BECore {
      * @brief A `Value<T>` that keeps the last result of its formula and recomputes only when something the formula reads has changed
      *
      * `Evaluate` returns what `Value::Evaluate` returns. A `Const` and a `Slot` are delegated (a read is cheaper than a key). A `Program`
-     * is run once and its result kept while `Context::VersionKey` of the levels it reads is the same: the owner of each object bumps
-     * the counter given to `Context::Set` when the object changes, as for any other user of the key. A context rebuilt each frame over
-     * the same objects and counters has the same key, so it hits. A program with no `Reads()` (a hand-assembled one; the compiler folds
-     * those to a `Const`) is run once and kept until `Invalidate` or `Reset`.
+     * is run once and its result kept while the levels it reads hold what they held then (`Context::Matches`: the same four parts as
+     * `Context::VersionKey`, compared exactly): the owner of each object bumps the counter given to `Context::Set` when the object
+     * changes, as for any other user of the key. A context rebuilt each frame over the same objects and counters matches, so it hits. A program
+     * with no `Reads()` (a hand-assembled one; the compiler folds those to a `Const`) is run once and kept until `Invalidate` or `Reset`.
      *
      * The cache is valid only when every level the program reads has an object and a counter (`Context::IsVersioned`). With another
      * context the program runs on every call, `Computations()` rises each time and a debug build says so once per instance in the log.
      *
      * Not thread-safe: one owner per instance (the program pool stays thread-safe). Not a field type: no reflection, nothing is saved, a
-     * content file holds a `Value<T>` and the code that evaluates it holds the `CachedValue`. A call in which the key did not move
-     * computes and allocates nothing.
+     * content file holds a `Value<T>` and the code that evaluates it holds the `CachedValue`. A call that hits computes and allocates nothing.
      */
     template <ValueType T>
     class CachedValue {
@@ -36,6 +36,7 @@ namespace BECore {
         void Reset(const Value<T>& value) {
             _value = value;
             _reads = value.Reads();
+            _stamps.resize(static_cast<size_t>(std::popcount(_reads)));
             _warned = false;
             Invalidate();
         }
@@ -48,17 +49,19 @@ namespace BECore {
             if (_reads == 0) {
                 return _valid ? _result : Compute(context);
             }
-            if (!context.IsVersioned(_reads)) {
-                WarnUnversioned();
-                _valid = false;
-                return Compute(context);
-            }
-            const uint64_t key = context.VersionKey(_reads);
-            if (_valid && key == _key) {
+            // The stamps describe the kept result, so the unversioned compute below must drop it: a later call
+            // over the old levels would match the old stamps and return the result of the other context
+            if (_valid && context.Matches(_reads, _stamps.data())) {
                 return _result;
             }
+            if (!context.IsVersioned(_reads)) {
+                WarnUnversioned();
+                const T result = Compute(context);
+                _valid = false;
+                return result;
+            }
             const T result = Compute(context);
-            _key = key;
+            context.Stamp(_reads, _stamps.data());
             return result;
         }
 
@@ -97,7 +100,7 @@ namespace BECore {
 
         Value<T> _value;
         T _result{};
-        uint64_t _key = 0;
+        Vector<LevelStamp> _stamps;
         uint32_t _computations = 0;
         LevelMask _reads = 0;
         bool _valid = false;

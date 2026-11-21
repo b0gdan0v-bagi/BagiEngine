@@ -219,6 +219,21 @@ namespace BECore::Tests {
         EXPECT_EQ(cached.Computations(), 2U);
     }
 
+    TEST(ValueCachedTest, AnUnversionedCallBetweenTwoHitsKeepsNothing) {
+        CachedWorld world;
+        CachedValue<int32_t> cached(world.Compile<int32_t>(kIntFormula));
+        EXPECT_EQ(cached.Evaluate(world.context), 12 * (100 + 3 * 10) / 100);
+
+        ValueUnitStats other;
+        other.attack = 20;
+        Context partly(world.declaration);
+        partly.Set(kCasterLevel, other);
+        partly.Set(kCastLevel, world.cast, &world.castVersion);
+        EXPECT_EQ(cached.Evaluate(partly), 20 * (100 + 3 * 10) / 100);
+
+        EXPECT_EQ(cached.Evaluate(world.context), 12 * (100 + 3 * 10) / 100) << "the result of the other context is not kept";
+    }
+
     TEST(ValueCachedTest, ResetTakesAnotherFormulaAndInvalidateKeepsTheSame) {
         CachedWorld world;
         CachedValue<int32_t> cached(world.Compile<int32_t>(kCasterOnlyFormula));
@@ -233,6 +248,25 @@ namespace BECore::Tests {
 
         cached.Reset(Value<int32_t>(7));
         EXPECT_EQ(cached.Evaluate(world.context), 7);
+    }
+
+    TEST(ValueCachedTest, AResetToAFormulaOverOtherLevelsWatchesTheNewLevels) {
+        CachedWorld world;
+        CachedValue<int32_t> cached(world.Compile<int32_t>(kCasterOnlyFormula));
+        EXPECT_EQ(cached.Evaluate(world.context), 12 * 3 + 7);
+
+        cached.Reset(world.Compile<int32_t>(kIntFormula));
+        EXPECT_EQ(cached.Evaluate(world.context), 12 * (100 + 3 * 10) / 100);
+        ++world.castVersion;
+        world.cast.level = 5;
+        EXPECT_EQ(cached.Evaluate(world.context), 12 * (100 + 5 * 10) / 100) << "the second level is read now";
+        EXPECT_EQ(cached.Computations(), 3U);
+
+        cached.Reset(world.Compile<int32_t>(kCasterOnlyFormula));
+        EXPECT_EQ(cached.Evaluate(world.context), 12 * 3 + 7);
+        ++world.castVersion;
+        EXPECT_EQ(cached.Evaluate(world.context), 12 * 3 + 7);
+        EXPECT_EQ(cached.Computations(), 4U) << "and no longer";
     }
 
     /// The cache against `Value::Evaluate`, one context rebuilt per step over objects that change and are bumped now and then

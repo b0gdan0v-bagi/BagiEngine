@@ -29,9 +29,10 @@ namespace BECore {
      *
      * `Void` is the result of a method that returns nothing and the empty alternative of a Variant (`std::monostate`).
      * `Unknown` is a type of a method signature the reflection cannot read or write (a pointer, an interface reference).
+     * `Value` is a `Value<T>` field (`Values/Value.h`): `element` is `T`. It is appended after `Unknown` so no ordinal of the older kinds moves.
      */
     CORE_ENUM(TypeKind, uint8_t, Bool, Int8, Int16, Int32, Int64, UInt8, UInt16, UInt32, UInt64, Float, Double, String, Enum, Object, List, Map, Optional, Variant, Pair, Pointer, Opaque, Void,
-              Unknown)
+              Unknown, Value)
 
     /// The lower-case name of a kind in the schema (`int32`, `string`, `list`, ...).
     StringView TypeKindName(TypeKind kind);
@@ -58,7 +59,7 @@ namespace BECore {
         size_t elementSize = 0;
         /// String: the value is a `PoolString`, so writing it puts the text into the pool, which never shrinks. Not set on a container of them: look at its element
         bool interns = false;
-        /// List: the element. Optional: the value. Map: the value. Pair: the second member.
+        /// List: the element. Optional: the value. Map: the value. Pair: the second member. Value: the `T` of `Value<T>`.
         const TypeDesc* element = nullptr;
         /// Map: the key. Pair: the first member.
         const TypeDesc* key = nullptr;
@@ -74,12 +75,12 @@ namespace BECore {
         /// read here could differ between translation units. For the same reason a Pointer does not say whether its pointee has an
         /// `AbstractFactory`: the type registry knows the factory bases.
         const ClassMeta& (*objectMeta)() = nullptr;
-        /// Opaque: `sizeof` of the type and a hash of its name as the compiler spells it (0 for a kind that is told apart by other members).
+        /// Opaque and Value: `sizeof` of the type and a hash of its name as the compiler spells it (0 for a kind that is told apart by other members).
         /// Without them every self-serializing type (`Vec2`, `Vec3`, `Color`) would be one type to `SameType`. Never an address:
         /// equal in every translation unit and every shared library.
         size_t opaqueSize = 0;
         uint64_t opaqueHash = 0;
-        /// Opaque: the name the hash was made of, for messages only (its address is not the same in every translation unit, so `SameType` never looks at it)
+        /// Opaque and Value: the name the hash was made of, for messages only (its address is not the same in every translation unit, so `SameType` never looks at it)
         StringView opaqueName{};
 
         /// The name of the class of an Object or a Pointer; empty when the type has none.
@@ -254,6 +255,13 @@ namespace BECore {
             value.Deserialize(reader);
         };
 
+        /// A `Value<T>` (`Values/Value.h`, which this header does not include): it names itself by `ValueMarker` and its `T` by `ValueOf`
+        template <typename T>
+        concept IsValueField = requires {
+            typename T::ValueMarker;
+            typename T::ValueOf;
+        };
+
         /// A `BE_CLASS` / `BE_EVENT` type: the macro declares `GetStaticTypeMeta`, whatever translation unit defines it
         template <typename T>
         concept HasStaticMeta = requires {
@@ -390,7 +398,10 @@ namespace BECore {
                     desc.kind = TypeKind::Object;
                     desc.objectMeta = &T::GetStaticTypeMeta;
                 } else {
-                    desc.kind = TypeKind::Opaque;
+                    desc.kind = IsValueField<T> ? TypeKind::Value : TypeKind::Opaque;
+                    if constexpr (IsValueField<T>) {
+                        desc.element = &DescHolder<typename T::ValueOf>::kValue;
+                    }
                     desc.opaqueSize = sizeof(T);
                     desc.opaqueName = OpaqueTypeName<T>();
                     desc.opaqueHash = StringUtils::GetHash(desc.opaqueName);
