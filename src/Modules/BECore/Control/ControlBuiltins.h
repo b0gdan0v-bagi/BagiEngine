@@ -4,6 +4,7 @@
 #include <BECore/Control/JsonFwd.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -23,6 +24,13 @@ namespace BECore {
 
     /// Writes DescribeControlClock() as one object, the form `step` and the writers of the games use; the same text as `DescribeControlClock()` dumps to
     void WriteControlClock(JsonWriter& writer);
+
+    /**
+     * WriteControlClock() with the members of an answer that carries the clock among its own, in the key order of a `Json` object: @p beforeTotalTime writes
+     * members that sort after "frame" and before "totalTime", @p afterTotalTime those that sort after "totalTime". The object is begun and ended here;
+     * the callbacks write whole members (`Member` or `Key` and a value). A name of its own, so a function name passed to `Reply` stays unambiguous.
+     */
+    void WriteControlClockWith(JsonWriter& writer, FunctionRef<void(JsonWriter&)> beforeTotalTime, FunctionRef<void(JsonWriter&)> afterTotalTime);
 
     /// The frame count at @p key of @p params, 1 to kMaxStepFrames, @p fallback when absent; invalid_params when it is not an integer in range. Client data
     [[nodiscard]] std::expected<uint32_t, ControlError> ReadControlFrames(const Json& params, StringView key, uint32_t fallback);

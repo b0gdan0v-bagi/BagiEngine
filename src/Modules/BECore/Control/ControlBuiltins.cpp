@@ -40,14 +40,20 @@ namespace BECore {
         return clock;
     }
 
-    void WriteControlClock(JsonWriter& writer) {
+    void WriteControlClockWith(JsonWriter& writer, FunctionRef<void(JsonWriter&)> beforeTotalTime, FunctionRef<void(JsonWriter&)> afterTotalTime) {
         const ClockSample sample = ClockSample::Read();
         writer.BeginObject();
         writer.Member("deltaTime", sample.deltaTime);
         writer.Member("fixedDeltaTime", sample.fixedDeltaTime);
         writer.Member("frame", sample.frame);
+        beforeTotalTime(writer);
         writer.Member("totalTime", sample.totalTime);
+        afterTotalTime(writer);
         writer.EndObject();
+    }
+
+    void WriteControlClock(JsonWriter& writer) {
+        WriteControlClockWith(writer, [](JsonWriter&) {}, [](JsonWriter&) {});
     }
 
     std::expected<uint32_t, ControlError> ReadControlFrames(const Json& params, StringView key, uint32_t fallback) {
@@ -86,26 +92,24 @@ namespace BECore {
         void HandleStatus(ControlCall& call, const ControlService& service) {
             // A line logged earlier in this frame is still in the ring buffer: handlers run outside Flush(), on the thread that flushes
             LogEvent::Flush();
-            const ClockSample clock = ClockSample::Read();
             const GamePause* pause = service.GetPause();
             const bool paused = pause != nullptr && pause->IsPaused();
             call.Reply([&](JsonWriter& writer) {
-                // The clock's members of WriteControlClock, with the other members between them in alphabetical order
-                writer.BeginObject();
-                writer.Member("deltaTime", clock.deltaTime);
-                writer.Member("fixedDeltaTime", clock.fixedDeltaTime);
-                writer.Member("frame", clock.frame);
-                writer.Key("log");
-                writer.BeginObject();
-                writer.Member("errors", service.Log().GetErrors());
-                writer.Member("warnings", service.Log().GetWarnings());
-                writer.EndObject();
-                writer.Member("manualClock", service.IsManualClock());
-                writer.Member("paused", paused);
-                writer.Member("totalTime", clock.totalTime);
-                writer.Key("window");
-                WriteWindowStatus(writer);
-                writer.EndObject();
+                WriteControlClockWith(
+                    writer,
+                    [&](JsonWriter& members) {
+                        members.Key("log");
+                        members.BeginObject();
+                        members.Member("errors", service.Log().GetErrors());
+                        members.Member("warnings", service.Log().GetWarnings());
+                        members.EndObject();
+                        members.Member("manualClock", service.IsManualClock());
+                        members.Member("paused", paused);
+                    },
+                    [](JsonWriter& members) {
+                        members.Key("window");
+                        WriteWindowStatus(members);
+                    });
             });
         }
 
