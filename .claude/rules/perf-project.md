@@ -195,6 +195,20 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
       }
     },
     {
+      "name": "particles-parallel",
+      "about": "The geometry of N particle emitters of M particles built per frame, serial against `ParallelFor` over four workers (ParticleParallelBenchTest, the flipbook and jitter maths of a looping effect). A `ParticleParallel emitters=N particles=M` line is one cell of the grid of 1, 8, 64 emitters by 64 to 4096 particles, a median over 400 frames; only three cells are metrics: 1 x 4096 (one big emitter), 8 x 1024 (the threshold) and 64 x 256 (many small ones: the bench forks every emitter, as the component never does below its threshold, so parallel is slower here by design and shows the price of a fork-join). The `ParticleParallelChunk` lines sweep the smallest chunk. The numbers set `kDefaultParallelMinParticles` (1024) and `kMinChunkParticles` (128) of ParticleEmitterComponent.cpp: on the benchmark machine parallel breaks even at 512 particles, wins by a third at 1024 and by two thirds at 4096. Watch parallel against serial in each cell, not the absolute times (they move with the load of the machine)",
+      "fast": true,
+      "command": ["{bin}/BagiEngineTests", "--gtest_also_run_disabled_tests", "--gtest_filter=ParticleParallelBenchTest.DISABLED_*"],
+      "metrics": {
+        "1x4096_serial_us": {"source": "regex", "pattern": "^ParticleParallel emitters=1 particles=4096 serial_us=([0-9.]+)", "unit": "us/frame", "better": "lower", "gate": false},
+        "1x4096_parallel_us": {"source": "regex", "pattern": "^ParticleParallel emitters=1 particles=4096 serial_us=[0-9.]+ parallel_us=([0-9.]+)", "unit": "us/frame", "better": "lower", "gate": false},
+        "8x1024_serial_us": {"source": "regex", "pattern": "^ParticleParallel emitters=8 particles=1024 serial_us=([0-9.]+)", "unit": "us/frame", "better": "lower", "gate": false},
+        "8x1024_parallel_us": {"source": "regex", "pattern": "^ParticleParallel emitters=8 particles=1024 serial_us=[0-9.]+ parallel_us=([0-9.]+)", "unit": "us/frame", "better": "lower", "gate": false},
+        "64x256_serial_us": {"source": "regex", "pattern": "^ParticleParallel emitters=64 particles=256 serial_us=([0-9.]+)", "unit": "us/frame", "better": "lower", "gate": false},
+        "64x256_parallel_us": {"source": "regex", "pattern": "^ParticleParallel emitters=64 particles=256 serial_us=[0-9.]+ parallel_us=([0-9.]+)", "unit": "us/frame", "better": "lower", "gate": false}
+      }
+    },
+    {
       "name": "ui-web-limits",
       "about": "The web-style UI compiler on documents far over its limits (depth, nodes, a 10 MiB sheet, the cascade work, a descendant selector over a deep chain, a hostile cascade of long class attributes and selectors): the limits have to keep hostile files cheap",
       "fast": false,

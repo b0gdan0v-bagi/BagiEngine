@@ -3,8 +3,10 @@
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Threading/Thread.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <BECore/Utils/PassKey.h>
 #include <BECore/Utils/Singleton.h>
+#include <TaskSystem/ParallelFor.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskHandle.h>
 #include <TaskSystem/TaskLabel.h>
@@ -114,6 +116,14 @@ namespace BECore {
         [[nodiscard]] size_t GetWorkerCount() const;
 
         [[nodiscard]] size_t GetPendingTaskCount() const;
+
+        /**
+         * Runs `body(begin, end)` over chunks of `[0, count)` on the pool's workers and on the calling thread, and returns when all are done
+         * (the free `ParallelFor` of `TaskSystem/ParallelFor.h` over this manager's pool: its contract, the body's rules and `minChunk` are there).
+         * Before Initialize, after Shutdown, in a single-thread build (the inline pool has no worker) and below `2 * minChunk` indices it calls
+         * `body(0, count)` once on the calling thread, so the result is the same everywhere. Allocates nothing in a steady call.
+         */
+        void ParallelFor(size_t count, size_t minChunk, FunctionRef<void(size_t begin, size_t end)> body);
 
         /**
          * Sends the sizes of the queues of the task system to the profiler as counters. Update samples once per

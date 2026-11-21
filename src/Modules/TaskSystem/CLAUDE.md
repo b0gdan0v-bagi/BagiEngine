@@ -12,6 +12,7 @@ Coroutine-based asynchronous tasks (C++20 coroutines, no exceptions: results are
 | `TaskHandle<T>` | track and cancel; `GetResult()` returns `std::expected`. `Wait()` blocks on a condition variable and also returns on cancel; completion is signalled from `final_suspend`. `GetStatus()` reads a done task as `Completed`; `Cancel()` on a finished task is a no-op that keeps its result (both decided under the completion's mutex). A copyable result can be read again; a move-only one is handed out once |
 | `TaskManager` | singleton: `Run()` (default `Normal` on `Background`), `RunOnMainThread()`, `RunDelayed()` (wall clock), `RunDelayedGameTime()` (game time, default `MainThread`). The scheduled job holds the handle and the handle keeps itself alive until the coroutine ends, so **dropping the returned handle is safe** (fire and forget). `SetFrameBudget()` / `ShouldYield()`: "Frame budget" |
 | `ThreadPool` | workers with work stealing; an idle worker waits on the pool, so a job of any queue wakes it; `ThreadPool(InlineTag{})` is the inline pool of a single-thread build |
+| `ParallelFor` | `ParallelFor(pool, count, minChunk, body)` / `TaskManager::ParallelFor`: a fork-join of `body(begin, end)` over chunks of `[0, count)` on the workers and the caller; no task, no handle (section "ParallelFor") |
 | `TaskScheduler` | priority queues, the cooperative queue, delayed tasks on two clocks (`WallClock`: `steady_clock`; `GameTime`: moved only by `AdvanceGameTime`, which ignores NaN, infinity and negative steps) |
 | `TaskLabel` | `BE_TASK_LABEL("name")`, last argument of `Run*` / `SwitchTo*`: names the profiler zone of the slice (`Profiler/CLAUDE.md`) |
 | `CancellationToken` | `Create()`, `CreateLinked()`: a child sees the parent's cancellation, cancelling the child leaves the parent |
@@ -73,6 +74,16 @@ On Emscripten the default is the **threaded** build: `-pthread` everywhere, work
 - **Blocking on the main thread** busy-spins (browsers forbid `Atomics.wait` there). The start-up `WaitAll` is short; a long main-thread `Wait()` stays a DON'T. A **Debug** build (`-sASSERTIONS`) prints "Blocking on the main thread is very dangerous" once to `console.error`: harmless, so its browser smoke needs `--allow-console "Blocking on the main thread is very dangerous"`; a Release build that prints it fails.
 - **EASTL atomics are ARM assembly** (`eastl::cpu_pause()`, the barrier of `eastl::atomic`) and do not assemble for wasm: use `std::atomic` only.
 
+## ParallelFor
+
+For data-parallel work inside one frame step (the particle geometry, `BECore/Particles/CLAUDE.md`), where a task per slice would cost more than the slice. Contract in `ParallelFor.h`; what the code does not say:
+
+- **Who runs the chunks.** The caller submits up to `workers` helper jobs and claims chunks in the same loop as they do (`fetch_add` on a counter); the ranges are fixed by `count`, `minChunk` and the worker count. Which thread runs which chunk is timing.
+- **The caller spins only for chunks others have claimed and not finished** (`yield`, never `Wait()`, a condition variable or a lock): the chunk is bounded by its size, and the main thread never sleeps on the pool. A pool whose workers are all busy, a call from inside a chunk and a call from a pool job all finish by the caller's own chunks.
+- **Inline cases:** `count == 0` (nothing), the inline pool of a single-thread build, a pool with no worker, a stopped pool and fewer than `2 * minChunk` indices run `body(0, count)` once on the caller and submit nothing; `TaskManager::ParallelFor` does the same before `Initialize` and after `Shutdown`. The result is the same everywhere.
+- **Lifetime.** A helper job can start after the call returned, so the shared state (counters, the `FunctionRef`) is a counted block from an immortal `ConcurrentBlockPool`, never on the caller's stack; the job's capture is one reference that a dropped job releases too. The body is called only for a claimed chunk, so a late helper finds the counter spent and touches neither the body nor the caller's frame. A steady call allocates nothing (`ParallelForTest`; the counts need `macos-profile`).
+- Each chunk is the zone `ParallelFor chunk`, so a trace shows them on the worker threads.
+
 ## Best Practices
 
 ### DO
@@ -83,6 +94,7 @@ On Emscripten the default is the **threaded** build: `-pthread` everywhere, work
 
 ### DON'T
 - Schedule a game-time delay from a worker when the run must be deterministic: it counts from whatever game time the main thread has reached. Schedule it from the main thread.
+- Write outside its own range `[begin, end)` in a `ParallelFor` body, or block in it on the caller or on another chunk (it runs on several threads at once; the caller waits for it).
 - Block the main thread with `Wait()`. Only start-up does (`ConfigManager::Initialize`, `WaitAll` over background tasks).
 - `Wait()` on the main thread for a `ThreadType::MainThread` task: that queue drains in `Update`, so it blocks for ever.
 - Create tasks in a tight loop without yielding, or run a long background task that never yields (freezes the single-thread page).

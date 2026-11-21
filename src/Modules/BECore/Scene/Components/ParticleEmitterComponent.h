@@ -27,7 +27,7 @@ namespace BECore {
     class ParticleEmitterComponent : public IComponent {
         BE_CLASS(ParticleEmitterComponent, ICON = sparkles)
     public:
-        ParticleEmitterComponent() = default;
+        ParticleEmitterComponent();
         ~ParticleEmitterComponent() override = default;
 
         static constexpr int32_t kEffectBurstCount = -1;  ///< the `count` of `Burst` that means the effect's own `burstCount`
@@ -50,6 +50,12 @@ namespace BECore {
 
         /// Spawn @p count particles now around (@p x, @p y) in scene units; -1 is the effect's `burstCount`. @p tint multiplies their color
         void Burst(float x, float y, int32_t count = kEffectBurstCount, Color tint = Color(255, 255, 255, 255));
+
+        /**
+         * Draw builds the vertices through `TaskManager::ParallelFor` when at least @p minParticles are alive, on the drawing thread below
+         * that. 0 never goes parallel. The picture is byte-equal either way; a game's switch and a test hook.
+         */
+        void SetParallelMinParticles(size_t minParticles);
 
         [[nodiscard]] bool IsEmitting() const {
             return _simulation.IsEmitting();
@@ -96,6 +102,7 @@ namespace BECore {
         PoolString _resolvedTexturePath;
         PoolString _loadedPath;  ///< the path `_texture` was loaded from; empty for none or a `SetTexture` one
         bool _resolved = false;
+        size_t _parallelMinParticles;      ///< the live count from which `OnDraw` builds in parallel; 0 never
         int32_t _reservedParticles = 0;    ///< the pool size reserved so far
         Vector<GeometryVertex> _vertices;  ///< scratch of `OnDraw`, reserved with the pool
         Vector<int> _indices;
