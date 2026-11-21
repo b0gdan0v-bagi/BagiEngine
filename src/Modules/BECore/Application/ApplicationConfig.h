@@ -2,6 +2,7 @@
 
 #include <BECore/Application/RunMode.h>
 #include <BECore/Control/ControlSettings.h>
+#include <BECore/FileSystem/FileWatchSetting.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
@@ -29,7 +30,7 @@ namespace BECore {
      * `mode` asks for the run mode (RunMode.h); `control`, `controlPort`, `manualClock` and `headless` are the settings of the control
      * API (ControlSettings.h, the command line is applied over them); `taskFrameBudgetMs` is the time per frame, in milliseconds, that a
      * single-thread build gives to the background tasks (TaskManager::SetFrameBudget; a negative or missing value keeps the default of
-     * TaskManager). Every field has the default of a missing attribute.
+     * TaskManager); `fileWatch` is whether the FileWatcher runs (FileWatchSetting.h). Every field has the default of a missing attribute.
      */
     struct ApplicationConfig {
         BE_CLASS(ApplicationConfig)
@@ -43,6 +44,7 @@ namespace BECore {
         BE_REFLECT_FIELD bool _manualClock = false;
         BE_REFLECT_FIELD bool _headless = false;
         BE_REFLECT_FIELD double _taskFrameBudgetMs = kNoTaskFrameBudget;
+        BE_REFLECT_FIELD FileWatchSetting _fileWatch = FileWatchSetting::Auto;
     };
 
     /// An ApplicationConfig and what went wrong while reading it. A field with an error keeps its default. `warnings` are the

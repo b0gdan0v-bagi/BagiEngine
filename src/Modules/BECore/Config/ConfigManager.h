@@ -1,6 +1,8 @@
 #pragma once
 
 #include <BECore/Config/XmlDocument.h>
+#include <BECore/FileSystem/FileSystem.h>
+#include <BECore/FileSystem/FileWatcher.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/PoolString/PoolStringMap.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
@@ -9,6 +11,7 @@
 #include <TaskSystem/Task.h>
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 
 namespace BECore {
@@ -25,6 +28,9 @@ namespace BECore {
     class ConfigManager {
     public:
         ConfigManager() = default;
+
+        /// Scans and resolves through @p fileSystem instead of CoreManager's, so a test can give a manager folders of its own; it must outlive the manager
+        explicit ConfigManager(const FileSystem& fileSystem) : _fileSystem(&fileSystem) {}
         ~ConfigManager() = default;
 
         ConfigManager(const ConfigManager&) = delete;
@@ -73,22 +79,50 @@ namespace BECore {
         /// The file the config was loaded from (the layer that won), or an empty path when the name is unknown
         std::filesystem::path GetConfigFilePath(PoolString name) const;
 
-        /// Writes the cached document back to the file it was loaded from
+        /// Writes the cached document back to the file it was loaded from, then emits ConfigEvents::ConfigChangedEvent
         bool SaveConfig(PoolString name);
 
-        /// Replaces the cached document with the file's current content; an XmlNode taken before is stale after it
+        /// Replaces the cached document with the file's current content and emits ConfigEvents::ConfigChangedEvent; an XmlNode taken before is stale after it
         bool ReloadConfig(PoolString name);
+
+        /// Emits ConfigEvents::ConfigChangedEvent for a caller that changed the cached document in place
+        void NotifyConfigChanged(PoolString name) const;
+
+        /**
+         * @brief Reloads a config whose file changed on disk (needs a running FileWatcher; `Config/CLAUDE.md`, "Hot reload")
+         *
+         * Watches the `config` mount point until StopWatching() or the destruction. A file whose text is the one the manager last read or wrote
+         * (its own SaveConfig, a second post of one save) changes nothing.
+         */
+        void StartWatching(FileWatcher& watcher);
+
+        /// Ends the watch of StartWatching(); the FileWatcher may be stopped or destroyed after it
+        void StopWatching();
 
     private:
         struct ConfigEntry {
             IntrusivePtrAtomic<XmlDocument> doc;
             std::filesystem::path filePath;
+            uint64_t fileHash = 0;  ///< of the file text the document reflects: set at load, SaveConfig and ReloadConfig
         };
+
+        const FileSystem& GetFileSystem() const;
+
+        /// The config whose file is @p virtualPath (`config/<relative>`) in the layer that won, or an empty name
+        PoolString FindConfigByVirtualPath(StringView virtualPath);
+
+        void OnFileChanged(FileChange& change);
+
+        /// Reads the file and replaces the document. With @p skipIfSame a missing file or one with the text already read is not an error and changes nothing.
+        /// @p failure, when given, gets the reason of a file that could not be read or parsed (not for a text that is the same)
+        bool ReloadFromDisk(PoolString name, bool skipIfSame, String* failure);
 
         void ScanDirectory(const std::filesystem::path& dir, Vector<Pair<std::filesystem::path, PoolString>>& filesToLoad) const;
 
         Task<void> LoadConfigAsync(std::filesystem::path path, PoolString name);
 
+        const FileSystem* _fileSystem = nullptr;  ///< null: CoreManager's
+        FileWatchHandle _watch;
         Mutex _writeMutex{BE_LOCK_SITE("Config write")};
         UnorderedPoolMap<ConfigEntry> _configs;
         std::atomic<bool> _initialized{false};
