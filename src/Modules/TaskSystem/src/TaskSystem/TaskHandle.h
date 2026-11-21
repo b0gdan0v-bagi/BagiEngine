@@ -4,6 +4,7 @@
 #include <BECore/RefCounted/RefCounted.h>
 #include <TaskSystem/LiveTasks.h>
 #include <TaskSystem/Task.h>
+#include <TaskSystem/TaskMemory.h>
 #include <TaskSystem/TaskPriority.h>
 #include <atomic>
 #include <expected>
@@ -57,6 +58,11 @@ namespace BECore {
         void SetStatus(TaskStatus status) {
             _status.store(status, std::memory_order_release);
         }
+
+    private:
+        // The links of Detail::LiveTasks' list, guarded by its mutex: registering a handle costs no allocation
+        TaskHandleBase* _liveNext = nullptr;
+        TaskHandleBase* _livePrev = nullptr;
     };
 
     /**
@@ -70,6 +76,19 @@ namespace BECore {
     template <typename T = void>
     class TaskHandle : public TaskHandleBase {
     public:
+        // From TaskMemory like the frames; a derived class has another size and gets the class that fits. The placement form is declared because a
+        // class-scope operator new hides the global one (MakeIntrusive, New)
+        static void* operator new(size_t size) {
+            return Detail::TaskMemory::Allocate(size);
+        }
+        static void* operator new(size_t, void* where) noexcept {
+            return where;
+        }
+        static void operator delete(void* ptr, size_t size) {
+            Detail::TaskMemory::Deallocate(ptr, size);
+        }
+        static void operator delete(void*, void*) noexcept {}
+
         TaskHandle() = default;
 
         explicit TaskHandle(Task<T>&& task) : _task(std::move(task)) {

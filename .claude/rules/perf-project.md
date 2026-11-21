@@ -175,6 +175,22 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
       }
     },
     {
+      "name": "task-submit-cost",
+      "about": "What one submitted task costs on every route of the task system (inline, pool, main-thread queue, delayed, a started coroutine, a nested one, a yielded one; TaskAllocationTest): allocations per task have to stay at 0 and the time per task must not grow (the bench line carries the allocations only in a build with the tracker, not in the Release one the perf set runs)",
+      "fast": true,
+      "command": ["{bin}/BagiEngineTests", "--gtest_also_run_disabled_tests", "--gtest_filter=TaskAllocationTest.DISABLED_*"],
+      "metrics": {
+        "inline_submit_ns": {"source": "regex", "pattern": "^TaskAllocCost route=inline-submit ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
+        "pool_submit_ns": {"source": "regex", "pattern": "^TaskAllocCost route=pool-submit ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
+        "main_queue_ns": {"source": "regex", "pattern": "^TaskAllocCost route=main-queue ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
+        "delayed_ns": {"source": "regex", "pattern": "^TaskAllocCost route=delayed ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
+        "run_coroutine_ns": {"source": "regex", "pattern": "^TaskAllocCost route=run-coroutine ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
+        "run_nested_ns": {"source": "regex", "pattern": "^TaskAllocCost route=run-nested ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
+        "yield_inline_ns": {"source": "regex", "pattern": "^TaskAllocCost route=yield-inline ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false},
+        "run_coroutine_4_workers_ns": {"source": "regex", "pattern": "^TaskAllocCost route=run-coroutine-4-workers ns_per_task=([0-9.e+-]+)", "unit": "ns/task", "better": "lower", "gate": false}
+      }
+    },
+    {
       "name": "ui-web-limits",
       "about": "The web-style UI compiler on documents far over its limits (depth, nodes, a 10 MiB sheet, the cascade work, a descendant selector over a deep chain, a hostile cascade of long class attributes and selectors): the limits have to keep hostile files cheap",
       "fast": false,
