@@ -98,6 +98,17 @@ namespace BECore {
         return _threadPool ? _threadPool->GetThreadCount() : 0;
     }
 
+    void TaskManager::ParallelFor(size_t count, size_t minChunk, FunctionRef<void(size_t begin, size_t end)> body) {
+        if (!_isInitialized || !_threadPool) {
+            if (count > 0) {
+                body(0, count);
+            }
+            return;
+        }
+
+        BECore::ParallelFor(*_threadPool, count, minChunk, body);
+    }
+
     void TaskManager::SampleProfilerCounters() {
 #if BE_PROFILER
         if (!_isInitialized || Profiler::GetBackend() == nullptr) {
