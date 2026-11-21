@@ -2,6 +2,7 @@
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Text/Font.h>
 #include <BECore/Text/TextLayout.h>
+#include <BECore/Threading/Thread.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
@@ -453,6 +454,32 @@ namespace BECore::Tests {
         for (size_t i = 0; i < first.glyphs.size(); ++i) {
             EXPECT_FLOAT_EQ(first.glyphs[i].x, second.glyphs[i].x);
             EXPECT_FLOAT_EQ(first.glyphs[i].y, second.glyphs[i].y);
+        }
+    }
+
+    // The temporaries of a layout are on the calling thread's scratch arena: a pool thread lays out beside the main one and the two agree
+    TEST_F(TextLayoutTest, ALayoutOnAnotherThreadEqualsTheOneOnThisThread) {
+        if constexpr (!Thread::kAvailable) {
+            GTEST_SKIP() << "a single-thread build has no second thread";
+        }
+        options.maxWidth = 150.0f;
+        options.maxHeight = 60.0f;
+        options.overflow = TextOverflow::AutoFit;
+        constexpr StringView kText = "Съешь ещё этих мягких французских булок,\nда выпей чаю";
+        const TextLayoutResult here = Layout(kText);
+
+        TextLayoutResult there;
+        Thread thread("Test text layout", [&] { there = Layout(kText); });
+        thread.join();
+
+        ASSERT_FALSE(here.glyphs.empty());
+        EXPECT_FLOAT_EQ(there.fontSize, here.fontSize);
+        ASSERT_EQ(there.glyphs.size(), here.glyphs.size());
+        ASSERT_EQ(there.lines.size(), here.lines.size());
+        for (size_t i = 0; i < here.glyphs.size(); ++i) {
+            EXPECT_EQ(there.glyphs[i].glyph, here.glyphs[i].glyph);
+            EXPECT_FLOAT_EQ(there.glyphs[i].x, here.glyphs[i].x);
+            EXPECT_FLOAT_EQ(there.glyphs[i].y, here.glyphs[i].y);
         }
     }
 

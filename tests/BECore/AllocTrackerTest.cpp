@@ -1,4 +1,5 @@
 #include <BECore/Control/Json.h>
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Profiler/Alloc/AllocRouting.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
@@ -146,6 +147,66 @@ namespace BECore::Tests {
         EXPECT_EQ(AllocTracker::GetTotals().noAllocViolations, before);
     }
 
+    TEST(AllocTrackerTest, AnAllocationAndItsFreeInAPauseMoveNothing) {
+        AllocTracker::ResetZoneStats();
+        const AllocTracker::ThreadCounters threadBefore = AllocTracker::GetThreadCounters();
+        const uint64_t violationsBefore = AllocTracker::GetTotals().noAllocViolations;
+        {
+            BE_PROFILE_NO_ALLOC("PausedAllocates");
+            BE_PROFILE_SCOPE("PausedZone");
+            const ScopedAllocCountersPause pause;
+            ::operator delete(::operator new(kBlock));
+            void* kept = ::operator new(kBlock);
+            Use(kept);
+            ::operator delete(kept);
+        }
+        const AllocTracker::ThreadCounters threadAfter = AllocTracker::GetThreadCounters();
+        EXPECT_EQ(threadAfter.count, threadBefore.count);
+        EXPECT_EQ(threadAfter.bytes, threadBefore.bytes);
+        EXPECT_EQ(StatsOf("PausedZone").count, 0u);
+        EXPECT_EQ(AllocTracker::GetTotals().noAllocViolations, violationsBefore);
+    }
+
+    TEST(AllocTrackerTest, PausesNestAndCountingComesBackAfterTheLastOne) {
+        const uint64_t start = AllocTracker::GetThreadCounters().count;
+        {
+            const ScopedAllocCountersPause outer;
+            {
+                const ScopedAllocCountersPause inner;
+                ::operator delete(::operator new(kBlock));
+            }
+            ::operator delete(::operator new(kBlock));
+            EXPECT_EQ(AllocTracker::GetThreadCounters().count, start);
+        }
+        ::operator delete(::operator new(kBlock));
+        EXPECT_EQ(AllocTracker::GetThreadCounters().count, start + 1);
+    }
+
+    TEST(AllocTrackerTest, APauseOfOneThreadLeavesAnotherThreadCounting) {
+        const ScopedAllocCountersPause pause;
+        uint64_t counted = 0;
+        std::thread other([&counted] {
+            const uint64_t before = AllocTracker::GetThreadCounters().count;
+            ::operator delete(::operator new(kBlock));
+            counted = AllocTracker::GetThreadCounters().count - before;
+        });
+        other.join();
+        EXPECT_EQ(counted, 1u);
+    }
+
+    TEST(AllocTrackerTest, ABlockMadeInAPauseAndFreedAfterItDoesNotWrapTheLiveBytes) {
+        void* block = nullptr;
+        {
+            const ScopedAllocCountersPause pause;
+            block = ::operator new(kBlock);
+        }
+        const AllocTotals before = AllocTracker::GetTotals();
+        ::operator delete(block);
+        const AllocTotals after = AllocTracker::GetTotals();
+        EXPECT_GE(after.frees, before.frees + 1);
+        EXPECT_LT(after.liveBytes, before.liveBytes + kBlock * 16);
+    }
+
     TEST(AllocTrackerTest, ARoutedAllocationMovesTheTotalsTheSourceTheThreadAndTheZone) {
         AllocTracker::ResetZoneStats();
         const AllocTotals totalsBefore = AllocTracker::GetTotals();
@@ -250,6 +311,142 @@ namespace BECore::Tests {
         EXPECT_EQ(AllocTracker::GetTotals().noAllocViolations, before + 1);
     }
 
+    TEST(AllocTrackerTest, ABlockFreedOutsideItsScopeIsSubtractedFromItsTag) {
+        const AllocTagTotals before = AllocTracker::GetTagTotals(MemTag::UI);
+        void* block = nullptr;
+        {
+            BE_MEM_TAG(UI);
+            block = ::operator new(kBlock);
+        }
+        const AllocTagTotals during = AllocTracker::GetTagTotals(MemTag::UI);
+        EXPECT_EQ(during.count, before.count + 1);
+        EXPECT_EQ(during.bytes, before.bytes + kBlock);
+        EXPECT_GE(during.liveBytes, before.liveBytes + kBlock);
+        EXPECT_GE(during.peakLiveBytes, during.liveBytes);
+        ::operator delete(block);
+        const AllocTagTotals after = AllocTracker::GetTagTotals(MemTag::UI);
+        EXPECT_EQ(after.frees, before.frees + 1);
+        EXPECT_EQ(after.liveBytes, before.liveBytes);
+    }
+
+    TEST(AllocTrackerTest, ANestedScopeCountsItsAllocationsUnderTheInnerTag) {
+        const AllocTagTotals sceneBefore = AllocTracker::GetTagTotals(MemTag::Scene);
+        const AllocTagTotals textBefore = AllocTracker::GetTagTotals(MemTag::Text);
+        {
+            BE_MEM_TAG(Scene);
+            void* outer = ::operator new(kBlock);
+            {
+                BE_MEM_TAG(Text);
+                void* inner = ::operator new(kBlock * 2);
+                ::operator delete(inner);
+            }
+            void* afterInner = ::operator new(kBlock);
+            ::operator delete(afterInner);
+            ::operator delete(outer);
+        }
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Scene).count, sceneBefore.count + 2);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Text).count, textBefore.count + 1);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Text).bytes, textBefore.bytes + kBlock * 2);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Scene).liveBytes, sceneBefore.liveBytes);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Text).liveBytes, textBefore.liveBytes);
+    }
+
+    TEST(AllocTrackerTest, ARoutedAllocationIsTaggedAndAReallocMovesItToTheTagInForce) {
+        const AllocTagTotals resourceBefore = AllocTracker::GetTagTotals(MemTag::Resource);
+        const AllocTagTotals audioBefore = AllocTracker::GetTagTotals(MemTag::Audio);
+        void* block = nullptr;
+        {
+            BE_MEM_TAG(Resource);
+            block = AllocRouting::Malloc(AllocSource::Stb, kBlock);
+        }
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Resource).count, resourceBefore.count + 1);
+        {
+            BE_MEM_TAG(Audio);
+            block = AllocRouting::Realloc(AllocSource::Stb, block, kBlock * 8);
+        }
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Resource).liveBytes, resourceBefore.liveBytes);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Resource).frees, resourceBefore.frees + 1);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Audio).count, audioBefore.count + 1);
+        AllocRouting::Free(AllocSource::Stb, block);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Audio).liveBytes, audioBefore.liveBytes);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::Audio).frees, audioBefore.frees + 1);
+    }
+
+    TEST(AllocTrackerTest, EveryThreadAllocatesUnderItsOwnTag) {
+        const AllocTagTotals networkBefore = AllocTracker::GetTagTotals(MemTag::Network);
+        {
+            // Starting the thread allocates under Game on this thread; its block is the one counted under Network
+            BE_MEM_TAG(Game);
+            std::thread worker([] {
+                BE_MEM_TAG(Network);
+                ::operator delete(::operator new(kBlock));
+            });
+            worker.join();
+        }
+        const AllocTagTotals network = AllocTracker::GetTagTotals(MemTag::Network);
+        EXPECT_EQ(network.count, networkBefore.count + 1);
+        EXPECT_EQ(network.bytes, networkBefore.bytes + kBlock);
+    }
+
+    TEST(AllocTrackerTest, TheTagsSumToTheTotals) {
+        {
+            BE_MEM_TAG(Core);
+            ::operator delete(::operator new(kBlock));
+        }
+        ::operator delete(::operator new(kBlock));
+        // Other threads allocate while the two snapshots are read: take them again until nothing moved in between
+        for (int attempt = 0; attempt < 100; ++attempt) {
+            const AllocTotals first = AllocTracker::GetTotals();
+            AllocTagTotals sum;
+            for (const AllocTagTotals& tag : AllocTracker::GetTagTotals()) {
+                sum.count += tag.count;
+                sum.bytes += tag.bytes;
+                sum.frees += tag.frees;
+            }
+            const AllocTotals second = AllocTracker::GetTotals();
+            if (first.count == second.count && first.frees == second.frees) {
+                EXPECT_EQ(sum.count, first.count);
+                EXPECT_EQ(sum.bytes, first.bytes);
+                EXPECT_EQ(sum.frees, first.frees);
+                return;
+            }
+        }
+        ADD_FAILURE() << "no quiet moment to compare the tags with the totals";
+    }
+
+    TEST(AllocTrackerTest, AFreeOfABlockTheTableDoesNotKnowIsSubtractedFromUntaggedWithoutWrapping) {
+        constexpr size_t kBig = size_t{1} << 20;
+        void* foreign = std::malloc(kBig);
+        ASSERT_NE(foreign, nullptr);
+        const AllocTagTotals before = AllocTracker::GetTagTotals(MemTag::Untagged);
+        const AllocTagTotals uiBefore = AllocTracker::GetTagTotals(MemTag::UI);
+        AllocRouting::Free(AllocSource::DrLibs, foreign);
+        const AllocTagTotals after = AllocTracker::GetTagTotals(MemTag::Untagged);
+        EXPECT_EQ(after.frees, before.frees + 1);
+        EXPECT_LE(after.liveBytes, before.liveBytes);
+        EXPECT_EQ(after.liveBytes, before.liveBytes > kBig ? before.liveBytes - kBig : 0u);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::UI).liveBytes, uiBefore.liveBytes);
+    }
+
+    TEST(AllocTrackerTest, ABlockTheTableCannotHoldIsCountedUnderUntaggedAndFreedThere) {
+        const uint32_t previousLimit = AllocTracker::SetBlockProbeLimitForTests(0);
+        const uint64_t untrackedBefore = AllocTracker::GetTotals().untrackedBlocks;
+        const AllocTagTotals uiBefore = AllocTracker::GetTagTotals(MemTag::UI);
+        const AllocTagTotals untaggedBefore = AllocTracker::GetTagTotals(MemTag::Untagged);
+        void* block = nullptr;
+        {
+            BE_MEM_TAG(UI);
+            block = ::operator new(kBlock);
+        }
+        AllocTracker::SetBlockProbeLimitForTests(previousLimit);
+        EXPECT_EQ(AllocTracker::GetTotals().untrackedBlocks, untrackedBefore + 1);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::UI).count, uiBefore.count);
+        EXPECT_GE(AllocTracker::GetTagTotals(MemTag::Untagged).count, untaggedBefore.count + 1);
+        ::operator delete(block);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::UI).frees, uiBefore.frees);
+        EXPECT_EQ(AllocTracker::GetTagTotals(MemTag::UI).liveBytes, uiBefore.liveBytes);
+    }
+
     TEST(AllocTrackerTest, TheChromeTraceCarriesTheAllocationsOfAZone) {
         ChromeTraceBackend recorder;
         Profiler::SetBackend(&recorder);
@@ -273,6 +470,145 @@ namespace BECore::Tests {
         EXPECT_TRUE(found);
     }
 
+    namespace {
+
+        /// The name row of the zone called @p zone (nullptr: outside every zone) and the allocation name @p name (nullptr: unnamed)
+        AllocSiteStats NameRow(const char* zone, const char* name) {
+            for (const AllocSiteStats& row : AllocTracker::GetNameStats()) {
+                const bool sameZone = zone == nullptr ? row.zone == nullptr : (row.zone != nullptr && std::strcmp(row.zone->name, zone) == 0);
+                const bool sameName = name == nullptr ? row.name == nullptr : (row.name != nullptr && std::strcmp(row.name, name) == 0);
+                if (sameZone && sameName) {
+                    return row;
+                }
+            }
+            return {};
+        }
+
+        constexpr size_t kInts = 100;
+
+    }  // namespace
+
+    TEST(AllocTrackerTest, ANamedContainerAllocationIsCountedUnderItsZoneAndName) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("NameZone");
+            Vector<int> values;
+            values.get_allocator().set_name("NamedValues");
+            values.reserve(kInts);
+        }
+        const AllocSiteStats row = NameRow("NameZone", "NamedValues");
+        EXPECT_EQ(row.count, 1u);
+        EXPECT_EQ(row.bytes, kInts * sizeof(int));
+    }
+
+    TEST(AllocTrackerTest, ADefaultContainerCarriesEastlsOwnName) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("DefaultNameZone");
+            Vector<int> values;
+            values.reserve(kInts);
+        }
+        EXPECT_EQ(NameRow("DefaultNameZone", "EASTL vector").count, 1u);
+    }
+
+    TEST(AllocTrackerTest, AnAllocationIsChargedToTheInnermostZoneOnly) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("NameOuter");
+            {
+                BE_PROFILE_SCOPE("NameInner");
+                Vector<int> values;
+                values.get_allocator().set_name("InnerValues");
+                values.reserve(kInts);
+            }
+            // the outer zone is innermost again
+            Vector<int> after;
+            after.get_allocator().set_name("OuterValues");
+            after.reserve(kInts);
+        }
+        EXPECT_EQ(NameRow("NameInner", "InnerValues").count, 1u);
+        EXPECT_EQ(NameRow("NameOuter", "InnerValues").count, 0u);
+        EXPECT_EQ(NameRow("NameOuter", "OuterValues").count, 1u);
+    }
+
+    TEST(AllocTrackerTest, UnnamedAndZonelessAllocationsHaveNullKeys) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("UnnamedZone");
+            ::operator delete(::operator new(kBlock));
+        }
+        EXPECT_EQ(NameRow("UnnamedZone", nullptr).count, 1u);
+        EXPECT_EQ(NameRow("UnnamedZone", nullptr).bytes, kBlock);
+        ::operator delete(::operator new(kBlock * 3));
+        EXPECT_GE(NameRow(nullptr, nullptr).count, 1u);
+    }
+
+    TEST(AllocTrackerTest, ANameBelongsToItsOwnAllocationOnly) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("StickyZone");
+            Vector<int> values;
+            values.get_allocator().set_name("StickyValues");
+            values.reserve(kInts);
+            ::operator delete(::operator new(kBlock));
+        }
+        EXPECT_EQ(NameRow("StickyZone", "StickyValues").count, 1u);
+        EXPECT_EQ(NameRow("StickyZone", nullptr).count, 1u);
+    }
+
+    TEST(AllocTrackerTest, AnotherThreadsAllocationIsNotChargedToThisThreadsZone) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("NameThisThread");
+            std::thread other([] {
+                Vector<int> values;
+                values.get_allocator().set_name("OtherThreadValues");
+                values.reserve(kInts);
+            });
+            other.join();
+        }
+        EXPECT_EQ(NameRow("NameThisThread", "OtherThreadValues").count, 0u);
+        EXPECT_EQ(NameRow(nullptr, "OtherThreadValues").count, 1u);
+    }
+
+    TEST(AllocTrackerTest, ResettingTheZoneStatisticsClearsTheNames) {
+        {
+            BE_PROFILE_SCOPE("ResetNameZone");
+            ::operator delete(::operator new(kBlock));
+        }
+        EXPECT_EQ(NameRow("ResetNameZone", nullptr).count, 1u);
+        AllocTracker::ResetZoneStats();
+        EXPECT_EQ(NameRow("ResetNameZone", nullptr).count, 0u);
+    }
+
+    TEST(AllocTrackerTest, TheChromeTraceCarriesTheAllocationNames) {
+        AllocTracker::ResetZoneStats();
+        ChromeTraceBackend recorder;
+        Profiler::SetBackend(&recorder);
+        {
+            BE_PROFILE_SCOPE("TraceNameZone");
+            Vector<int> values;
+            values.get_allocator().set_name("TraceNamed");
+            values.reserve(kInts);
+        }
+        Profiler::SetBackend(nullptr);
+        const auto parsed = ParseJson(recorder.WriteJson());
+        ASSERT_TRUE(parsed.has_value());
+        const Json* other = FindJsonMember(*parsed, "otherData");
+        ASSERT_NE(other, nullptr);
+        const Json* rows = FindJsonMember(*other, "allocNames");
+        ASSERT_NE(rows, nullptr);
+        bool found = false;
+        for (const Json& row : *rows) {
+            if (GetJsonString(row, "zone") == String("TraceNameZone") && GetJsonString(row, "name") == String("TraceNamed")) {
+                EXPECT_EQ(GetJsonInt(row, "allocs"), 1);
+                EXPECT_EQ(GetJsonInt(row, "bytes"), static_cast<int64_t>(kInts * sizeof(int)));
+                found = true;
+            }
+        }
+        EXPECT_TRUE(found);
+    }
+
 #else
 
     TEST(AllocTrackerTest, WithoutTheOptionNothingIsCounted) {
@@ -282,6 +618,7 @@ namespace BECore::Tests {
         EXPECT_EQ(totals.count, 0u);
         EXPECT_EQ(totals.liveBytes, 0u);
         EXPECT_TRUE(AllocTracker::GetZoneStats().empty());
+        EXPECT_TRUE(AllocTracker::GetNameStats().empty());
     }
 
 #endif

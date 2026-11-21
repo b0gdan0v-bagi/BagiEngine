@@ -7,6 +7,8 @@
 
 namespace BECore {
 
+    class WriteTargets;
+
     /**
      * @brief The context declaration the values read while a document loads: the loader of a document opens one, the accessor of `Value<T>`
      *        links the paths it reads against it
@@ -14,7 +16,8 @@ namespace BECore {
      * A stack per thread, so two threads loading at once each see their own declaration and never the other's. A scope gets its declaration
      * from code (the constructor that takes one) or from the document itself (`<context>`, `Declare`, which keeps a copy: the object that
      * was read may move). A `from` read where no scope has a declaration is a load error: the document has no context to name a level of.
-     * A scope may also carry the named tables of the game (`UseTables`) for `ByLevel`; like the declaration, they are found in the innermost scope that has them.
+     * A scope may also carry the named tables of the game (`UseTables`) for `ByLevel` and the paths a script may write (`UseWriteTargets`); like the declaration, they are found in the innermost
+     * scope that has them.
      */
     class ValueLinkScope {
     public:
@@ -35,11 +38,19 @@ namespace BECore {
             _tables = &tables;
         }
 
+        /// Makes @p targets, which outlives the scope, the paths the scripts loaded under this scope may write (`Effects/CLAUDE.md`); an empty set is still a decision: nothing is writable
+        void UseWriteTargets(const WriteTargets& targets) {
+            _writeTargets = &targets;
+        }
+
         /// The declaration of the innermost scope that has one, null when none has: an empty scope does not hide the declaration of the scope around it
         [[nodiscard]] static const ContextDecl* Current();
 
         /// The tables of the innermost scope that has some, null when none has: a scope without tables does not hide the ones around it
         [[nodiscard]] static const IValueTables* Tables();
+
+        /// The write targets of the innermost scope that has some, null when none has: the host did not say what a script may write
+        [[nodiscard]] static const WriteTargets* Targets();
 
         /// Gives the innermost scope a copy of @p declaration; the error text when no scope is open or that scope has a declaration already
         [[nodiscard]] static std::expected<void, String> Declare(const ContextDecl& declaration);
@@ -50,6 +61,10 @@ namespace BECore {
         /// @p message, ending with the document's name when a scope has one, so that an error read alone names the file
         [[nodiscard]] static String AtDocument(StringView message);
 
+        /// `AtDocument` for a message that may be long (a list of every function a formula may call): the reader cuts a report at `ReaderLimits::kMaxErrorTextBytes`, so the message
+        /// is cut and ends with `...` before the name, and the name survives
+        [[nodiscard]] static String AtDocumentWithin(StringView message);
+
     private:
         [[nodiscard]] const ContextDecl* Declaration() const {
             return _external != nullptr ? _external : (_owned.has_value() ? &*_owned : nullptr);
@@ -57,6 +72,7 @@ namespace BECore {
 
         const ContextDecl* _external = nullptr;
         const IValueTables* _tables = nullptr;
+        const WriteTargets* _writeTargets = nullptr;
         Optional<ContextDecl> _owned;
         String _documentName;
         ValueLinkScope* _previous;

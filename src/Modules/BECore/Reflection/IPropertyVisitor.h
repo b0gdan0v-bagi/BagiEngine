@@ -162,12 +162,25 @@ namespace BECore {
             return false;
         }
 
+        /**
+         * @brief The String a text field that is not a `String` (a FixedString, another allocator) is edited through, for the dispatch (`VisitText` of PropertyVisitorDispatch.h)
+         *
+         * One per visitor, so its capacity is kept from field to field: a text that fits the inline buffer never allocates and a longer one allocates once, not once per field. Nothing else
+         * uses it, and a text field has no children, so no visit of one is open while another starts.
+         */
+        String& TextScratch() {
+            return _textScratch;
+        }
+
     protected:
         IPropertyVisitor() = default;
         IPropertyVisitor(const IPropertyVisitor&) = default;
         IPropertyVisitor& operator=(const IPropertyVisitor&) = default;
         IPropertyVisitor(IPropertyVisitor&&) = default;
         IPropertyVisitor& operator=(IPropertyVisitor&&) = default;
+
+    private:
+        String _textScratch;
     };
 
 }  // namespace BECore

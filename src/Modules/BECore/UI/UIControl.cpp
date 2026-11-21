@@ -361,16 +361,13 @@ namespace BECore {
         /// Whether a press on @p element only closes the open list of its canvas: a list is open and the element is neither the dropdown that owns it (its header) nor below it.
         /// The canvas consumes such a press (UICanvasComponent::OnMouseButtonDown), so the element emits nothing
         bool PressOnlyClosesList(const UICanvasLayout& layout, const UIElement& element) {
-            const Vector<UIElement*> open = layout.OpenPopups();
-            if (open.empty()) {
-                return false;
-            }
-            for (const UIElement* popup : open) {
-                if (IsSameOrBelow(*popup, element)) {
-                    return false;
-                }
-            }
-            return true;
+            bool anyOpen = false;
+            bool owned = false;
+            layout.ForEachOpenPopup([&](UIElement& popup) {
+                anyOpen = true;
+                owned = owned || IsSameOrBelow(popup, element);
+            });
+            return anyOpen && !owned;
         }
 
         constexpr float kHalf = 0.5f;

@@ -1,5 +1,7 @@
 #include "Program.h"
 
+#include <BECore/Values/Programs/Domain/ProgramDomain.h>
+#include <BECore/Values/Programs/Lists/ListImage.h>
 #include <BECore/Values/Programs/Native/NativePrograms.h>
 
 namespace BECore {
@@ -8,6 +10,38 @@ namespace BECore {
 
         constexpr uint64_t kHashSeed = 0xcbf29ce484222325ULL;
         constexpr uint64_t kHashPrime = 0x100000001b3ULL;
+
+        /// The line of a list or loop instruction (jump targets are instruction indexes), nothing for any other; a descriptor constant that is not there reads as an empty one, `Finish` refused it
+        Optional<String> DisassembleList(size_t i, const Instruction& ins, Span<const RegisterImage> constants) {
+            const StringView name = EnumUtils<Opcode>::ToString(ins.op);
+            const auto descriptor = [&] { return ins.imm < constants.size() ? ListDescriptor::FromImage(constants[ins.imm]) : ListDescriptor{}; };
+            const auto where = [&] {
+                const ListDescriptor list = descriptor();
+                return Format("offset {} stride {} {} count {}", list.offset, list.stride, IsValidListLayout(list.layout) ? EnumUtils<ListLayout>::ToString(list.layout) : StringView("?"), list.count);
+            };
+            switch (ins.op) {
+                case Opcode::ListSlot:
+                    return Format("{}: {} r{} <- level {} list at {}\n", i, name, ins.dst, ins.a, where());
+                case Opcode::ListElem:
+                    return Format("{}: {} r{} <- list at {} of element r{}\n", i, name, ins.dst, where(), ins.a);
+                case Opcode::ListSize:
+                    return Format("{}: {} r{} <- size of list r{}\n", i, name, ins.dst, ins.a);
+                case Opcode::ListAt:
+                    return Format("{}: {} r{} <- element r{} of list r{}\n", i, name, ins.dst, ins.b, ins.a);
+                case Opcode::LoopBegin:
+                    return Format("{}: {} r{} over list r{}, none: jump to {}\n", i, name, ins.dst, ins.a, ins.imm);
+                case Opcode::LoopEnd:
+                    return Format("{}: {} r{} next of list r{}, one: jump to {}\n", i, name, ins.dst, ins.a, ins.imm);
+                case Opcode::BreakIf:
+                    return Format("{}: {} r{} is {}: jump to {}\n", i, name, ins.a, ins.b, ins.imm);
+                default:
+                    break;
+            }
+            if (IsLoadElem(ins.op)) {
+                return Format("{}: {} r{} <- element r{} offset {}{}\n", i, name, ins.dst, ins.a, ins.imm, ins.op == Opcode::LoadElemEnum ? Format(" ({} bytes)", ins.b) : String());
+            }
+            return std::nullopt;
+        }
 
         /// FNV-1a over a 64-bit word: the hash only buckets programs, equality is `SameCode`
         constexpr uint64_t Fold(uint64_t hash, uint64_t word) {
@@ -172,6 +206,15 @@ namespace BECore {
             }
             if (ins.op == Opcode::LoadTableSlot) {
                 text += Format("{}: LoadTableSlot r{} <- level {} offset {} [{} entries from constant {}]\n", i, ins.dst, ins.a, LowHalf(ins.imm), TableEntryCount(ins), HighHalf(ins.imm));
+                continue;
+            }
+            if (ins.op == Opcode::CallDomain && ins.imm < ProgramDomain::OperationCount()) {
+                const DomainOperation& operation = ProgramDomain::Operation(ins.imm);
+                text += Format("{}: CallDomain r{} <- {}(r{} r{} r{}) [operation {}]\n", i, ins.dst, operation.name.ToStringView(), ins.a, ins.b, ins.c, ins.imm);
+                continue;
+            }
+            if (const Optional<String> line = DisassembleList(i, ins, _constants)) {
+                text += *line;
                 continue;
             }
             text += Format("{}: {} r{} <- r{} r{} r{} imm {}\n", i, EnumUtils<Opcode>::ToString(ins.op), ins.dst, ins.a, ins.b, ins.c, ins.imm);

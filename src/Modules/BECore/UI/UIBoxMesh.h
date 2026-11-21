@@ -66,7 +66,7 @@ namespace BECore {
     /**
      * @brief Turns a rounded box into anti-aliased triangles for IRenderer::DrawGeometry (untextured, per-vertex alpha, clockwise on the screen).
      *
-     * Pure, like UINineSlice. Every function appends to the lists it is given (the element keeps them as scratch, so a steady frame allocates nothing);
+     * Pure, like UINineSlice. Every function appends to the lists it is given (a `Vector` or a `FrameVector` of `GeometryVertex` and of `int`, the two that are instantiated);
      * indices are positions in @p vertices, not relative to the call. A rect with no area, a non-finite number or one past `UIBounds::kMaxExtent`, or a
      * @p pixelsPerUnit outside [`UIBounds::kMinScale`, `UIBounds::kMaxScale`], draws nothing.
      *
@@ -105,15 +105,16 @@ namespace BECore {
          * The core (of a fill, a shadow and a glow) is cut along the four arc centres, not fanned from one corner: the SDL software renderer pays every
          * triangle the pixels of its bounding rectangle (`SDL_SW_FillTriangle`), so a fan of n points costs n times the area. The covered area is the same.
          */
-        static void AppendFill(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, const UIGradientSpec& gradient,
-                               float pixelsPerUnit);
+        template <typename VertexList, typename IndexList>
+        static void AppendFill(VertexList& vertices, IndexList& indices, const Rect& rect, const UICorners& corners, const Color& color, const UIGradientSpec& gradient, float pixelsPerUnit);
 
         /**
          * The ring between the outline of @p rect and the outline moved inwards by @p width, feathered on both sides. It is drawn over a fill of the whole
          * rect; to avoid the overlap (a translucent border) fill the inner outline instead: `rect` inset by @p width on every side with `corners.Inset(width)`.
          * A width larger than the shape holds is the whole shape; a width under one output pixel is drawn as a fainter line.
          */
-        static void AppendBorder(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, float width, const Color& color, float pixelsPerUnit);
+        template <typename VertexList, typename IndexList>
+        static void AppendBorder(VertexList& vertices, IndexList& indices, const Rect& rect, const UICorners& corners, float width, const Color& color, float pixelsPerUnit);
 
         /**
          * A shadow or a glow of the box: @p rect moved by the offset and grown by the spread, the alpha falling by a smooth curve from the colour's at the
@@ -123,14 +124,16 @@ namespace BECore {
          * @p detail is what the renderer asks for (`IRenderer::GetGeometryDetail()`): Reduced has kReducedBlurRings steps and corners within
          * kReducedCornerSagittaPixels, for a renderer that pays for each triangle. The bounds of a call hold for both.
          */
-        static void AppendShadow(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, const UIShadowSpec& shadow, float pixelsPerUnit,
+        template <typename VertexList, typename IndexList>
+        static void AppendShadow(VertexList& vertices, IndexList& indices, const Rect& rect, const UICorners& corners, const UIShadowSpec& shadow, float pixelsPerUnit,
                                  GeometryDetail detail = GeometryDetail::Full);
 
         /**
          * A line of @ref kHighlightWidth units just inside the top edge, following the top corners (it starts and fades out half way round each of them), for a
          * raised look. It stays inside the shape. Nothing for a rect too small to hold it.
          */
-        static void AppendHighlight(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, float pixelsPerUnit);
+        template <typename VertexList, typename IndexList>
+        static void AppendHighlight(VertexList& vertices, IndexList& indices, const Rect& rect, const UICorners& corners, const Color& color, float pixelsPerUnit);
     };
 
 }  // namespace BECore

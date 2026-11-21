@@ -59,6 +59,10 @@ namespace BECore {
          * @param[out] rects one rect per child, resized to children.size()
          */
         static void LayoutStack(const Rect& parent, const UIStackSpec& stack, Span<const UIRectSpec> children, Vector<Rect>& rects);
+
+        /// The same into storage the caller sized: @p rects holds exactly one slot per child, every one is written. Takes its temporaries from the scratch arena, so it allocates nothing
+        /// from the heap once the thread's scratch arena has its chunk
+        static void LayoutStack(const Rect& parent, const UIStackSpec& stack, Span<const UIRectSpec> children, Span<Rect> rects);
     };
 
     constexpr Pair<float, float> UILayout::AnchorFraction(UIAnchor anchor) {

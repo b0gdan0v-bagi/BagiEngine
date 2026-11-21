@@ -1,5 +1,7 @@
 #include "NativePrograms.h"
 
+#include <BECore/Values/Programs/Domain/ProgramDomain.h>
+
 namespace BECore {
 
     namespace {
@@ -16,15 +18,44 @@ namespace BECore {
             void Add(Span<const NativeProgramEntry> entries) {
                 LockGuard lock(_mutex);
                 for (const NativeProgramEntry& entry : entries) {
-                    if (entry.fn != nullptr) {
+                    if (entry.fn == nullptr) {
+                        continue;
+                    }
+                    if (entry.domainFingerprint != 0) {
+                        _pending.push_back(Pending{&entry, false});
+                    } else {
                         _byHash[entry.codeHash].push_back(&entry);
                     }
                 }
             }
 
+            /// Moves the waiting entries whose fingerprint equals the process's now into the table; returns how many still wait and were not reported yet when @p report is on
+            size_t BindPending(bool report) {
+                LockGuard lock(_mutex);
+                if (_pending.empty()) {
+                    return 0;
+                }
+                const uint64_t fingerprint = ProgramDomain::Fingerprint();
+                size_t kept = 0;
+                size_t unreported = 0;
+                for (Pending& waiting : _pending) {
+                    if (waiting.entry->domainFingerprint == fingerprint) {
+                        _byHash[waiting.entry->codeHash].push_back(waiting.entry);
+                        continue;
+                    }
+                    if (report && !waiting.reported) {
+                        waiting.reported = true;
+                        ++unreported;
+                    }
+                    _pending[kept++] = waiting;
+                }
+                _pending.resize(kept);
+                return unreported;
+            }
+
             bool Empty() const {
                 LockGuard lock(_mutex);
-                return _byHash.empty();
+                return _byHash.empty() && _pending.empty();
             }
 
             NativeProgramFn Find(const Program& program) const {
@@ -55,10 +86,16 @@ namespace BECore {
             }
 
         private:
+            struct Pending {
+                const NativeProgramEntry* entry = nullptr;
+                bool reported = false;
+            };
+
             Registry() = default;
 
             mutable Mutex _mutex{BE_LOCK_SITE("NativePrograms")};
             HashMap<uint64_t, SmallVector<const NativeProgramEntry*, kExpectedEntriesPerHash>> _byHash;
+            Vector<Pending> _pending;
             std::atomic<bool> _enabled{true};
             std::atomic<bool> _warnOnMiss{false};
         };
@@ -67,7 +104,18 @@ namespace BECore {
 
     void NativePrograms::Install(Span<const NativeProgramEntry> entries) {
         Registry::Instance().Add(entries);
+        BindPending();
+    }
+
+    void NativePrograms::BindPending() {
+        const bool warn = Registry::Instance().WarnOnMiss().load(std::memory_order_acquire);
+        const size_t unreported = Registry::Instance().BindPending(warn);
         ProgramPool::RebindNative();
+        if (unreported > 0) {
+            LOG_WARNING(Format("Native programs: {} generated functions were made for another set of registered types and operations (ProgramDomain::Fingerprint) and are not used; "
+                               "register the game's types and operations in the order the tool does, before ApplyNativeProgramsFlags(); those programs run in the interpreter",
+                               unreported));
+        }
     }
 
     void NativePrograms::SetEnabled(bool enabled) {

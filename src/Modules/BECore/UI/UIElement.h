@@ -279,10 +279,6 @@ namespace BECore {
         float _inheritedDuration = 0.0f;        ///< runtime: the owner's `GetStateDuration()`, passed down with it
         UIBlend<UIStateLook::Look> _lookBlend;  ///< runtime: the box as it is shown while a state change eases; not saved, not copied with the element
         uint64_t _themeVersion = 0;             ///< UIThemes::GetVersion() at the last resolve; 0: never (the table starts at 1)
-
-        // The triangles of DrawBox, kept so that a steady frame allocates nothing
-        Vector<GeometryVertex> _boxVertices;
-        Vector<int> _boxIndices;
     };
 
 }  // namespace BECore

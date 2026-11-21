@@ -1,5 +1,6 @@
 #include "UIBoxMesh.h"
 
+#include <BECore/Memory/FrameAllocator.h>
 #include <BECore/UI/UIGeometryBounds.h>
 #include <cmath>
 #include <numbers>
@@ -103,7 +104,8 @@ namespace BECore {
             return (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y);
         }
 
-        void AddTriangle(Vector<int>& indices, int a, int b, int c) {
+        template <typename IndexList>
+        void AddTriangle(IndexList& indices, int a, int b, int c) {
             indices.push_back(a);
             indices.push_back(b);
             indices.push_back(c);
@@ -117,8 +119,8 @@ namespace BECore {
          * radius has no fan and no side triangle (they would have no area). The centres are appended to @p vertices, coloured by @p colorOf at the centre
          * (exact: a gradient is linear in the position), with the alpha of the ring.
          */
-        template <typename ColorFn>
-        void AppendCore(Vector<GeometryVertex>& vertices, Vector<int>& indices, int ring, const int* segments, const Array<Arc, kCornerCount>& arcs, float alpha, ColorFn&& colorOf) {
+        template <typename VertexList, typename IndexList, typename ColorFn>
+        void AppendCore(VertexList& vertices, IndexList& indices, int ring, const int* segments, const Array<Arc, kCornerCount>& arcs, float alpha, ColorFn&& colorOf) {
             int cornerFirst[kCornerCount];
             int next = ring;
             for (int c = 0; c < kCornerCount; ++c) {
@@ -171,9 +173,9 @@ namespace BECore {
          * neighbours), strips of triangles between each two rings and, with @p fillCore, the core inside the last ring (`AppendCore`: not a fan, whose
          * bounding boxes would all be the whole box). @p colorOf gives the colour of a point before the ring's alpha is applied.
          */
-        template <typename ColorFn>
-        void AppendRings(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, const Ring* rings, int ringCount, const Path& path, bool roundOutwards,
-                         bool fillCore, float pixelsPerUnit, float cornerSagitta, ColorFn&& colorOf) {
+        template <typename VertexList, typename IndexList, typename ColorFn>
+        void AppendRings(VertexList& vertices, IndexList& indices, const Rect& rect, const UICorners& corners, const Ring* rings, int ringCount, const Path& path, bool roundOutwards, bool fillCore,
+                         float pixelsPerUnit, float cornerSagitta, ColorFn&& colorOf) {
             const UICorners baseCorners = corners.Clamped(rect.w, rect.h);
             const float halfShortSide = std::min(rect.w, rect.h) * 0.5f;
 
@@ -196,6 +198,21 @@ namespace BECore {
                 pointsPerRing += range.last - range.first + 1;
             }
 
+            // The direction of each point of a ring depends on the corner and the step, not on the ring: one cos and sin per point for all the rings
+            struct Direction {
+                float cos;
+                float sin;
+            };
+            Direction directions[UIBoxMesh::kMaxRingPoints];
+            int directionCount = 0;
+            for (int c = firstCorner; c <= lastCorner; ++c) {
+                const StepRange range = VisitedSteps(path, c, segments[c]);
+                for (int step = range.first; step <= range.last; ++step) {
+                    const float angle = kCornerStartAngle[c] + (segments[c] > 0 ? kHalfPi * static_cast<float>(step) / static_cast<float>(segments[c]) : 0.0f);
+                    directions[directionCount++] = {std::cos(angle), std::sin(angle)};
+                }
+            }
+
             const int firstVertex = static_cast<int>(vertices.size());
             Array<Arc, kCornerCount> lastArcs;
             for (int r = 0; r < ringCount; ++r) {
@@ -203,14 +220,15 @@ namespace BECore {
                 const float offset = std::max(rings[r].offset, -halfShortSide);
                 const auto arcs = MakeArcs(rect, baseCorners, offset, roundOutwards);
                 lastArcs = arcs;
+                int direction = 0;
                 for (int c = firstCorner; c <= lastCorner; ++c) {
                     const Arc& arc = arcs[c];
                     const StepRange range = VisitedSteps(path, c, segments[c]);
                     for (int step = range.first; step <= range.last; ++step) {
-                        const float angle = kCornerStartAngle[c] + (segments[c] > 0 ? kHalfPi * static_cast<float>(step) / static_cast<float>(segments[c]) : 0.0f);
+                        const Direction& unit = directions[direction++];
                         PointInfo point;
-                        point.x = arc.centerX + arc.radius * std::cos(angle);
-                        point.y = arc.centerY + arc.radius * std::sin(angle);
+                        point.x = arc.centerX + arc.radius * unit.cos;
+                        point.y = arc.centerY + arc.radius * unit.sin;
                         point.corner = c;
                         point.step = step;
                         point.segments = segments[c];
@@ -305,8 +323,8 @@ namespace BECore {
         return std::clamp(segments, kMinCornerSegments, kMaxCornerSegments);
     }
 
-    void UIBoxMesh::AppendFill(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, const UIGradientSpec& gradient,
-                               float pixelsPerUnit) {
+    template <typename VertexList, typename IndexList>
+    void UIBoxMesh::AppendFill(VertexList& vertices, IndexList& indices, const Rect& rect, const UICorners& corners, const Color& color, const UIGradientSpec& gradient, float pixelsPerUnit) {
         if (!IsValidBox(rect, pixelsPerUnit)) {
             return;
         }
@@ -333,7 +351,8 @@ namespace BECore {
         });
     }
 
-    void UIBoxMesh::AppendBorder(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, float width, const Color& color, float pixelsPerUnit) {
+    template <typename VertexList, typename IndexList>
+    void UIBoxMesh::AppendBorder(VertexList& vertices, IndexList& indices, const Rect& rect, const UICorners& corners, float width, const Color& color, float pixelsPerUnit) {
         if (!IsValidBox(rect, pixelsPerUnit) || !UIBounds::IsBounded(width) || width <= 0.0f || color.a == 0) {
             return;
         }
@@ -350,8 +369,8 @@ namespace BECore {
         AppendRings(vertices, indices, rect, corners, rings, ringCount, Path{}, false, false, pixelsPerUnit, UIBoxMesh::kCornerSagittaPixels, [&](const PointInfo&) { return color; });
     }
 
-    void UIBoxMesh::AppendShadow(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, const UIShadowSpec& shadow, float pixelsPerUnit,
-                                 GeometryDetail detail) {
+    template <typename VertexList, typename IndexList>
+    void UIBoxMesh::AppendShadow(VertexList& vertices, IndexList& indices, const Rect& rect, const UICorners& corners, const UIShadowSpec& shadow, float pixelsPerUnit, GeometryDetail detail) {
         if (!IsValidBox(rect, pixelsPerUnit) || !UIBounds::IsBounded(shadow.offsetX) || !UIBounds::IsBounded(shadow.offsetY) || !UIBounds::IsBounded(shadow.blur) ||
             !UIBounds::IsBounded(shadow.spread) || shadow.color.a == 0) {
             return;
@@ -392,7 +411,8 @@ namespace BECore {
         AppendRings(vertices, indices, base, baseCorners, rings, steps + 1, Path{}, true, true, pixelsPerUnit, sagitta, flat);
     }
 
-    void UIBoxMesh::AppendHighlight(Vector<GeometryVertex>& vertices, Vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, float pixelsPerUnit) {
+    template <typename VertexList, typename IndexList>
+    void UIBoxMesh::AppendHighlight(VertexList& vertices, IndexList& indices, const Rect& rect, const UICorners& corners, const Color& color, float pixelsPerUnit) {
         if (!IsValidBox(rect, pixelsPerUnit) || color.a == 0) {
             return;
         }
@@ -420,5 +440,15 @@ namespace BECore {
             return faded;
         });
     }
+
+    // The definitions live here: the lists are a Vector (tests, tools) or a FrameVector (the draw of a UI element)
+    template void UIBoxMesh::AppendFill(Vector<GeometryVertex>&, Vector<int>&, const Rect&, const UICorners&, const Color&, const UIGradientSpec&, float);
+    template void UIBoxMesh::AppendBorder(Vector<GeometryVertex>&, Vector<int>&, const Rect&, const UICorners&, float, const Color&, float);
+    template void UIBoxMesh::AppendShadow(Vector<GeometryVertex>&, Vector<int>&, const Rect&, const UICorners&, const UIShadowSpec&, float, GeometryDetail);
+    template void UIBoxMesh::AppendHighlight(Vector<GeometryVertex>&, Vector<int>&, const Rect&, const UICorners&, const Color&, float);
+    template void UIBoxMesh::AppendFill(FrameVector<GeometryVertex>&, FrameVector<int>&, const Rect&, const UICorners&, const Color&, const UIGradientSpec&, float);
+    template void UIBoxMesh::AppendBorder(FrameVector<GeometryVertex>&, FrameVector<int>&, const Rect&, const UICorners&, float, const Color&, float);
+    template void UIBoxMesh::AppendShadow(FrameVector<GeometryVertex>&, FrameVector<int>&, const Rect&, const UICorners&, const UIShadowSpec&, float, GeometryDetail);
+    template void UIBoxMesh::AppendHighlight(FrameVector<GeometryVertex>&, FrameVector<int>&, const Rect&, const UICorners&, const Color&, float);
 
 }  // namespace BECore

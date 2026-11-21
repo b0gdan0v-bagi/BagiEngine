@@ -1,5 +1,6 @@
 #include "UITreeLayout.h"
 
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/UI/UILayout.h>
 
 namespace BECore {
@@ -39,8 +40,12 @@ namespace BECore {
                 return;
             }
 
-            Vector<UIElement*> visible;
-            Vector<UIRectSpec> specs;
+            // The lists die with this call, and the recursion below nests, so they take the scratch arena and a scope of this call
+            const ScratchScope scratch;
+            ArenaVector<UIElement*> visible;
+            ArenaVector<UIRectSpec> specs;
+            visible.reserve(parent.children.size());
+            specs.reserve(parent.children.size());
             for (const auto& child : parent.children) {
                 if (child->active.visible) {
                     visible.push_back(child.Get());
@@ -51,8 +56,8 @@ namespace BECore {
             }
 
             if (parent.layout == UILayoutKind::Stack) {
-                Vector<Rect> rects;
-                UILayout::LayoutStack(parent.rect, parent.active.stack, specs, rects);
+                ArenaVector<Rect> rects(visible.size());
+                UILayout::LayoutStack(parent.rect, parent.active.stack, Span<const UIRectSpec>(specs.data(), specs.size()), Span<Rect>(rects.data(), rects.size()));
                 for (size_t i = 0; i < visible.size(); ++i) {
                     visible[i]->rect = rects[i];
                 }

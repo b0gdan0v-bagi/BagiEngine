@@ -47,6 +47,16 @@ Ctrl+Shift+E to the editor, then Ctrl+Shift+P opens the Profiler panel. Zones ne
 }                                                   // written here
 ```
 
+## Who allocates in a steady frame
+
+In `macos-profile`, with the game running (`--headless --control --manual-clock`), call `zone_allocs` with `reset: true`, `step` some frames, then `zone_allocs` again. `zones` says which zone allocates; `names` says through which container (`zone`, `name`, `allocs`, `bytes`, innermost zone, most bytes first). The default names split by kind (`"EASTL vector"`, `"EASTL basic_string"`); when one zone holds several vectors, name the suspect:
+
+```cpp
+_cells.get_allocator().set_name("Board cells");  // a literal: the table keys the name by its address
+```
+
+The name has to be a string literal (or live as long as the program). An allocation with an empty `name` came through a plain `operator new`, not an EASTL container. A trace written during the run (`--trace`) carries the same table in `otherData.allocNames`.
+
 ## Tracy
 
 For a live view (zones, frames, plots, allocations with call stacks, while the game runs):

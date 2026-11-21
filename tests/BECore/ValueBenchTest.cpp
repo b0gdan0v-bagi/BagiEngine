@@ -8,16 +8,35 @@
 // `madd_native` and `madd_unfused` time `slot * k + b` alone, so what the peephole and the generated code gain is one number each. Every case must sum to what the plain one does.
 // The same lines are printed for `int32_t` (`caster.attack * (100 + cast.level * 10) / 100`, `caster.attack * 3 + 7`) and for `Vec3`
 // (`(caster.velocity + cast.target) * cast.power - caster.velocity * 0.5`, `caster.velocity * 2 + vec3(1, 2, 3)`: every step is one `Vec3` instruction and no conversion).
+// A formula over a game's registered type is timed as `mask_plain` (C++ over the toy 256-bit mask: `popcount((a & shift(b, East)) | c) > 3` over three context objects),
+// `mask_program` (the interpreter: five `CallDomain` instructions, each an indirect call of a registered function), `mask_run` (`Run` called directly) and `mask_native` (the
+// generated function of the engine's set); the lines are `ValueBench mask_<case> ns_per_get=<x>`.
+// A trigger of `Values/Effects/CLAUDE.md` (count a timer down, flip a flag and emit a command at zero, or narrow a mask and emit another) is timed as `trigger_plain` (C++ writing the
+// same cell and pushing into the same `EmitBuffer`) and `trigger_script` (`RunEffects`); a case is a copy of a prototype cell, the trigger and a digest of the cell and the commands,
+// `ns_per_get` is the time of one such round.
+// `list_count`, `list_any`, `list_any_early`, `list_sum` and `list_nested` time a formula with a loop over the lists of a `ProgramListHand` (`Values/Programs/Lists/`) as `list_<op>_plain` (a C++
+// loop of the same shape), `_program` (the interpreter) and `_native` (the generated function): 14 tiles in an array and a few sets of four in a vector, 64 seeded hands.
 
+#include <BECore/EffectsToys.h>
+#include <BECore/ProgramDomainTypes.h>
+#include <BECore/ProgramListTypes.h>
+#include <BECore/ProgramRowTypes.h>
+#include <BECore/Random/Rng.h>
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/CachedValue.h>
 #include <BECore/Values/Context.h>
+#include <BECore/Values/Effects/EffectCommands.h>
+#include <BECore/Values/Effects/EffectCompiler.h>
+#include <BECore/Values/Effects/EffectRunner.h>
+#include <BECore/Values/Effects/WriteTargets.h>
 #include <BECore/Values/Programs/Interpreter.h>
 #include <BECore/Values/Programs/Native/NativePrograms.h>
 #include <BECore/Values/Programs/Opcode.h>
 #include <BECore/Values/Programs/Program.h>
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <BECore/Values/Value.h>
+#include <NativePrograms/NativeProgramFormulas.h>
+#include <NativePrograms/NativeProgramSet.h>
 #include <bit>
 #include <chrono>
 #include <cstdio>
@@ -27,6 +46,12 @@
 namespace BECore::Tests {
 
     using namespace ValueTestData;
+    using ProgramDomainData::BitsAnd;
+    using ProgramDomainData::BitsOr;
+    using ProgramDomainData::BitsPopcount;
+    using ProgramDomainData::BitsShift;
+    using ProgramDomainData::DomainBits256;
+    using ProgramDomainData::DomainDirection;
 
     namespace {
 
@@ -36,8 +61,6 @@ namespace BECore::Tests {
         /// A power of two, so the index of an iteration wraps with a mask; the objects (about 16 KB) stay in the cache whatever the case
         constexpr size_t kObjects = 64;
         constexpr size_t kObjectMask = kObjects - 1;
-        constexpr LevelIndex kCasterLevel = 0;
-        constexpr LevelIndex kCastLevel = 1;
         constexpr StringView kFormula = "caster.attack * (100 + cast.level * 10) / 100";
         constexpr int32_t kFormulaBase = 100;
         constexpr int32_t kFormulaPerLevel = 10;
@@ -209,7 +232,16 @@ namespace BECore::Tests {
             }
         };
 
-        /// Runs @p read for @p iterations and returns the sum of the folded results; the time per read is printed when @p printing
+        uint64_t Fold(bool value) {
+            return value ? 1U : 0U;
+        }
+
+        uint64_t Fold(uint64_t value) {
+            return value;
+        }
+
+        /// Runs @p read for @p iterations and returns the sum of the folded results; the time per read is printed when @p printing, as `ValueBench <type> <name>` or, with no @p type, `ValueBench
+        /// <name>`
         template <typename TRead>
         uint64_t TimeCase(const char* type, const char* name, uint64_t iterations, bool printing, TRead&& read) {
             uint64_t sum = 0;
@@ -221,7 +253,11 @@ namespace BECore::Tests {
             Escape(sum);
             if (printing) {
                 const double nanos = std::chrono::duration<double>(elapsed).count() * kNanosPerSecond / static_cast<double>(iterations);
-                std::printf("ValueBench %s %s ns_per_get=%.3f\n", type, name, nanos);
+                if (type != nullptr) {
+                    std::printf("ValueBench %s %s ns_per_get=%.3f\n", type, name, nanos);
+                } else {
+                    std::printf("ValueBench %s ns_per_get=%.3f\n", name, nanos);
+                }
             }
             return sum;
         }
@@ -517,6 +553,317 @@ namespace BECore::Tests {
             BenchFormulaCases<Vec3>(world, kVec3Madd, kMaddNames, [&](size_t index) { return PlainVec3Madd(world.casters[index]); }, nullptr, true);
         }
 
+        constexpr StringView kMaskFormula = kNativeDomainBoolFormulas[0];
+        constexpr int32_t kMaskPopcountLimit = 3;
+        constexpr uint64_t kMaskSeed = 0x6d61736b;
+        constexpr size_t kMaskWords = 4;
+
+        /// `kMaskFormula` as C++ over the toy mask, calling the same functions the registered operations are
+        bool PlainMask(const DomainBits256& a, const DomainBits256& b, const DomainBits256& c) {
+            return BitsPopcount(BitsOr(BitsAnd(a, BitsShift(b, DomainDirection::East)), c)) > kMaskPopcountLimit;
+        }
+
+        /// Three levels of masks, an object of each per iteration; the masks are sparse so that the answer changes from one object to the next
+        struct MaskWorld {
+            Vector<ProgramRowData::ProgramRowOperands> a;
+            Vector<ProgramRowData::ProgramRowOperands> b;
+            Vector<ProgramRowData::ProgramRowOperands> c;
+            Vector<Context> contexts;
+
+            MaskWorld() : a(kObjects), b(kObjects), c(kObjects) {
+                Rng rng(kMaskSeed);
+                contexts.reserve(kObjects);
+                for (size_t index = 0; index < kObjects; ++index) {
+                    for (size_t word = 0; word < kMaskWords; ++word) {
+                        a[index].mask.words[word] = rng.Next64() & rng.Next64() & rng.Next64();
+                        b[index].mask.words[word] = rng.Next64() & rng.Next64() & rng.Next64();
+                        c[index].mask.words[word] = ((index >> word) & 1) != 0 ? uint64_t{1} << (rng.Next64() % 64) : 0;
+                    }
+                    Context& context = contexts.emplace_back(NativeProgramSetDeclaration());
+                    context.Set(kOperandsLevelA, a[index]);
+                    context.Set(kOperandsLevelB, b[index]);
+                    context.Set(kOperandsLevelC, c[index]);
+                }
+            }
+
+            MaskWorld(const MaskWorld&) = delete;
+            MaskWorld& operator=(const MaskWorld&) = delete;
+        };
+
+        size_t CountCallDomain(const Program& program) {
+            return static_cast<size_t>(std::count_if(program.Code().begin(), program.Code().end(), [](const Instruction& instruction) { return instruction.op == Opcode::CallDomain; }));
+        }
+
+        void BenchMask() {
+            bool printing = false;
+            const uint64_t iterations = Iterations(printing);
+            // The toys first: the generated function of the set binds while the registry is what the tool had
+            static_cast<void>(ProgramDomainData::RegisterDomainToys());
+            const MaskWorld world;
+            const auto compiled = CompileValue<bool>(kMaskFormula, NativeProgramSetDeclaration());
+            ASSERT_TRUE(compiled.has_value()) << String(kMaskFormula).c_str();
+            const Value<bool>& value = *compiled;
+            ASSERT_EQ(value.Kind(), ValueKind::Program);
+            // A case that ran no `CallDomain` would time the interpreter's other instructions and say nothing about a registered operation
+            EXPECT_GE(CountCallDomain(ProgramPool::Get(value.Id())), 1U);
+
+            const uint64_t plain = TimeCase(nullptr, "mask_plain", iterations, printing, [&](size_t index) { return PlainMask(world.a[index].mask, world.b[index].mask, world.c[index].mask); });
+            EXPECT_GT(plain, 0U) << "the masks never pass the test";
+            EXPECT_LT(plain, iterations) << "the masks always pass the test";
+            {
+                const NativeSwitch interpreted(false);
+                EXPECT_EQ(TimeCase(nullptr, "mask_program", iterations, printing, [&](size_t index) { return value.Evaluate(world.contexts[index]); }), plain);
+                const ProgramId id = value.Id();
+                EXPECT_EQ(TimeCase(nullptr, "mask_run", iterations, printing, [&](size_t index) { return Run<bool>(ProgramPool::Get(id), world.contexts[index]); }), plain);
+            }
+            {
+                const NativeSwitch generated(true);
+                ASSERT_NE(ProgramPool::Native(value.Id()), nullptr) << "mask_native: no generated function is bound to " << String(kMaskFormula).c_str();
+                EXPECT_EQ(TimeCase(nullptr, "mask_native", iterations, printing, [&](size_t index) { return value.Evaluate(world.contexts[index]); }), plain);
+            }
+        }
+
+        constexpr StringView kTriggerScript = "if (cell.i32 > 0) { cell.i32 -= 1; if (cell.i32 == 0) { cell.flag = !cell.flag; emit FxCount(cell.i32b); } } "
+                                              "else if (board.mask != cell.mask) { cell.mask = and_mask(cell.mask, board.mask); emit FxMask(cell.mask); }";
+        constexpr uint64_t kTriggerSeed = 0x74726967;
+        constexpr size_t kTriggerBufferCapacity = 4;
+        constexpr uint64_t kDigestMultiplier = 0x100000001b3ULL;
+        constexpr uint32_t kTimerRange = 4;
+        constexpr size_t kEveryNthSharesTheMask = 3;
+        constexpr LevelIndex kCellLevel = 0;
+        constexpr LevelIndex kBoardLevel = 1;
+
+        using TriggerObject = ProgramRowData::ProgramRowOperands;
+
+        /// A digest of the cell and of what the run pushed, so that a case that stored or emitted differently sums differently
+        uint64_t Digest(const TriggerObject& cell, const EmitBuffer& buffer) {
+            uint64_t digest = static_cast<uint64_t>(static_cast<uint32_t>(cell.i32));
+            const auto mix = [&digest](uint64_t value) { digest = (digest ^ value) * kDigestMultiplier; };
+            mix(cell.flag ? 1U : 0U);
+            for (const uint64_t word : cell.mask.words) {
+                mix(word);
+            }
+            mix(buffer.Count());
+            for (const EmittedCommand& command : buffer.Commands()) {
+                mix(command.id);
+                uint64_t first = 0;
+                std::memcpy(&first, command.arguments[0].bytes.data(), sizeof(first));
+                mix(first);
+            }
+            return digest;
+        }
+
+        /// The script as C++: the commands go to the same buffer type
+        void PlainTrigger(TriggerObject& cell, const TriggerObject& board, EmitBuffer& buffer, const EffectsData::EffectToys& toys) {
+            EmittedCommand command;
+            command.count = 1;
+            if (cell.i32 > 0) {
+                cell.i32 -= 1;
+                if (cell.i32 == 0) {
+                    cell.flag = !cell.flag;
+                    command.id = toys.count;
+                    std::memcpy(command.arguments[0].bytes.data(), &cell.i32b, sizeof(cell.i32b));
+                    buffer.Push(command);
+                }
+            } else if (board.mask != cell.mask) {
+                cell.mask = BitsAnd(cell.mask, board.mask);
+                command.id = toys.mask;
+                std::memcpy(command.arguments[0].bytes.data(), &cell.mask, sizeof(cell.mask));
+                buffer.Push(command);
+            }
+        }
+
+        void BenchTrigger() {
+            bool printing = false;
+            const uint64_t iterations = Iterations(printing);
+            const EffectsData::EffectToys& toys = EffectsData::RegisterEffectToys();
+            ContextDecl declaration;
+            ASSERT_TRUE(declaration.Add<TriggerObject>("cell").has_value());
+            ASSERT_TRUE(declaration.Add<TriggerObject>("board").has_value());
+            WriteTargets targets;
+            ASSERT_TRUE(targets.Allow("cell"));
+            EffectOptions options;
+            options.targets = &targets;
+            const auto compiled = CompileEffects(kTriggerScript, declaration, options);
+            ASSERT_TRUE(compiled.has_value());
+            const EffectScript& script = *compiled;
+
+            Rng rng(kTriggerSeed);
+            TriggerObject board;
+            for (uint64_t& word : board.mask.words) {
+                word = rng.Next64();
+            }
+            // Prototypes reach every branch: a timer that ends, a timer still running, a spent timer with another mask and one with the board's
+            Vector<TriggerObject> prototypes(kObjects);
+            for (size_t index = 0; index < kObjects; ++index) {
+                TriggerObject& cell = prototypes[index];
+                cell.i32 = static_cast<int32_t>(rng.Next32() % kTimerRange);
+                cell.i32b = static_cast<int32_t>(index);
+                cell.flag = (rng.Next32() & 1U) != 0;
+                for (size_t word = 0; word < kMaskWords; ++word) {
+                    cell.mask.words[word] = index % kEveryNthSharesTheMask == 0 ? board.mask.words[word] : rng.Next64();
+                }
+            }
+            Vector<TriggerObject> cells = prototypes;
+            Vector<uint64_t> versions(kObjects, 0);
+            Vector<Context> contexts;
+            contexts.reserve(kObjects);
+            for (size_t index = 0; index < kObjects; ++index) {
+                Context& context = contexts.emplace_back(declaration);
+                context.SetMutable(kCellLevel, cells[index], &versions[index]);
+                context.Set(kBoardLevel, board);
+            }
+            EmitBufferStorage<kTriggerBufferCapacity> storage;
+            EmitBuffer& buffer = storage.Buffer();
+
+            // The script must store and emit, or both cases would time a trigger that does nothing
+            uint64_t emittedTotal = 0;
+            uint64_t changedTotal = 0;
+            for (size_t index = 0; index < kObjects; ++index) {
+                buffer.Clear();
+                const EffectResult result = RunEffects(*script.Program(), contexts[index], buffer);
+                emittedTotal += result.emitted;
+                changedTotal += result.changed;
+            }
+            EXPECT_GT(emittedTotal, 0U);
+            EXPECT_GT(changedTotal, 0U);
+            EXPECT_LT(emittedTotal, kObjects);
+
+            const uint64_t plain = TimeCase(nullptr, "trigger_plain", iterations, printing, [&](size_t index) {
+                cells[index] = prototypes[index];
+                buffer.Clear();
+                PlainTrigger(cells[index], board, buffer, toys);
+                return Digest(cells[index], buffer);
+            });
+            EXPECT_EQ(TimeCase(nullptr, "trigger_script", iterations, printing,
+                               [&](size_t index) {
+                                   cells[index] = prototypes[index];
+                                   buffer.Clear();
+                                   RunEffects(*script.Program(), contexts[index], buffer);
+                                   return Digest(cells[index], buffer);
+                               }),
+                      plain);
+        }
+
+        using ProgramListData::ProgramListHand;
+        using ProgramListData::ProgramListSet;
+        using ProgramListData::ProgramListTile;
+
+        constexpr uint64_t kListSeed = 20260301;
+        constexpr int32_t kMaxRank = 8;
+        constexpr double kTerminalChance = 0.3;
+        constexpr size_t kFewestSets = 4;
+        constexpr size_t kSetCountSpread = 5;
+
+        /// Hands whose answers vary from one to the next but whose ranks never pass `kMaxRank`, so `any(.., t.rank > 8)` is a full loop; the first tile of every hand is a terminal, so
+        /// `any(.., t.terminal)` is answered by the first element
+        struct ListWorld {
+            Vector<ProgramListHand> hands;
+            Vector<Context> contexts;
+
+            ListWorld() : hands(kObjects) {
+                Rng rng(kListSeed);
+                const auto fill = [&rng](ProgramListTile& tile) {
+                    tile.rank = rng.UniformInt<int32_t>(0, kMaxRank);
+                    tile.terminal = rng.Chance(kTerminalChance);
+                };
+                contexts.reserve(kObjects);
+                for (size_t index = 0; index < kObjects; ++index) {
+                    ProgramListHand& hand = hands[index];
+                    for (ProgramListTile& tile : hand.tiles) {
+                        fill(tile);
+                    }
+                    hand.tiles[0].terminal = true;
+                    for (size_t s = 0; s < kFewestSets + index % kSetCountSpread; ++s) {
+                        ProgramListSet set;
+                        for (ProgramListTile& tile : set.tiles) {
+                            fill(tile);
+                        }
+                        hand.sets.push_back(set);
+                    }
+                    Context& context = contexts.emplace_back(NativeProgramSetDeclaration());
+                    context.Set(kListsLevel, hand);
+                }
+            }
+
+            ListWorld(const ListWorld&) = delete;
+            ListWorld& operator=(const ListWorld&) = delete;
+        };
+
+        /// Times `list_<op>` as a plain C++ loop, as the interpreter's program and through the generated function; the formula must be one of the set (tests/NativePrograms), or the
+        /// last case would time the interpreter twice, and every case must sum to the plain one
+        template <typename T, typename TPlain>
+        void BenchListCase(const ListWorld& world, const char* type, StringView op, StringView text, TPlain&& plainRead) {
+            bool printing = false;
+            const uint64_t iterations = Iterations(printing);
+            const String plainName = Format("list_{}_plain", op);
+            const String programName = Format("list_{}_program", op);
+            const String nativeName = Format("list_{}_native", op);
+
+            const auto compiled = CompileValue<T>(text, NativeProgramSetDeclaration());
+            ASSERT_TRUE(compiled.has_value()) << String(text).c_str();
+            const Value<T>& value = *compiled;
+            ASSERT_EQ(value.Kind(), ValueKind::Program) << String(text).c_str();
+
+            const uint64_t plain = TimeCase(type, plainName.c_str(), iterations, printing, plainRead);
+            if constexpr (!std::is_same_v<T, bool>) {
+                EXPECT_NE(plain, 0U) << plainName.c_str();
+            }
+            {
+                const NativeSwitch interpreted(false);
+                EXPECT_EQ(TimeCase(type, programName.c_str(), iterations, printing, [&](size_t index) { return value.Evaluate(world.contexts[index]); }), plain) << programName.c_str();
+            }
+            {
+                const NativeSwitch generated(true);
+                ASSERT_NE(ProgramPool::Native(value.Id()), nullptr)
+                    << nativeName.c_str() << ": no generated function is bound to " << String(text).c_str() << ", the set in tests/NativePrograms lacks it";
+                EXPECT_EQ(TimeCase(type, nativeName.c_str(), iterations, printing, [&](size_t index) { return value.Evaluate(world.contexts[index]); }), plain) << nativeName.c_str();
+            }
+        }
+
+        void BenchLists() {
+            const ListWorld world;
+            BenchListCase<int32_t>(world, "int32_t", "count", "count(hand.tiles, t, t.terminal)", [&](size_t index) {
+                int32_t count = 0;
+                for (const ProgramListTile& tile : world.hands[index].tiles) {
+                    count += tile.terminal ? 1 : 0;
+                }
+                return count;
+            });
+            BenchListCase<bool>(world, "bool", "any", "any(hand.tiles, t, t.rank > 8)", [&](size_t index) {
+                for (const ProgramListTile& tile : world.hands[index].tiles) {
+                    if (tile.rank > kMaxRank) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+            BenchListCase<bool>(world, "bool", "any_early", "any(hand.tiles, t, t.terminal)", [&](size_t index) {
+                for (const ProgramListTile& tile : world.hands[index].tiles) {
+                    if (tile.terminal) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+            BenchListCase<int32_t>(world, "int32_t", "sum", "sum(hand.tiles, t, t.rank)", [&](size_t index) {
+                int32_t sum = 0;
+                for (const ProgramListTile& tile : world.hands[index].tiles) {
+                    sum += tile.rank;
+                }
+                return sum;
+            });
+            BenchListCase<int32_t>(world, "int32_t", "nested", "sum(hand.sets, s, count(s.tiles, t, t.terminal))", [&](size_t index) {
+                int32_t sum = 0;
+                for (const ProgramListSet& set : world.hands[index].sets) {
+                    for (const ProgramListTile& tile : set.tiles) {
+                        sum += tile.terminal ? 1 : 0;
+                    }
+                }
+                return sum;
+            });
+        }
+
     }  // namespace
 
     TEST(ValueBenchTest, Int32) {
@@ -541,6 +888,18 @@ namespace BECore::Tests {
 
     TEST(ValueBenchTest, Vec3Madd) {
         BenchVec3Madd();
+    }
+
+    TEST(ValueBenchTest, Mask) {
+        BenchMask();
+    }
+
+    TEST(ValueBenchTest, Trigger) {
+        BenchTrigger();
+    }
+
+    TEST(ValueBenchTest, Lists) {
+        BenchLists();
     }
 
 }  // namespace BECore::Tests

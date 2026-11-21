@@ -3,6 +3,7 @@
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Scene/SceneManager.h>
@@ -58,7 +59,10 @@ namespace BECore {
             SessionRecorder::GetInstance().Stop();
         }
         if (_active) {
-            _active->Stop();
+            {
+                BE_MEM_TAG(Game);
+                _active->Stop();
+            }
             _active.Reset();
         }
         _games.clear();
@@ -77,6 +81,7 @@ namespace BECore {
         }
 
         if (_active) {
+            BE_MEM_TAG(Game);
             _active->Stop();
         }
 
@@ -86,13 +91,17 @@ namespace BECore {
         }
 
         _active = std::move(next);
-        _active->Start();
+        {
+            BE_MEM_TAG(Game);
+            _active->Start();
+        }
 
         LOG_INFO(Format("GameManager: switched to '{}'", _active->GetName().ToStringView()).c_str());
     }
 
     void GameManager::ResetActive() {
         if (_active) {
+            BE_MEM_TAG(Game);
             _active->Reset();
         }
     }

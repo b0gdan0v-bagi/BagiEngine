@@ -46,13 +46,15 @@ namespace BECore {
      *
      * **Limits.** The parsers keep the size of the input within bounds (`UIHtmlParser`, `UICssParser`); the cost of matching is a product of the two (elements, rules,
      * declarations, once for the base and again for every `@media` block and every state), so the cascades of one compile together may take `kMaxCascadeWork` steps. Past it
-     * the report says so and the rest of the elements are styled by what they inherit and their `style=""` only.
+     * the matcher stops at once, the report says so and the rest of the elements are styled by what they inherit and their `style=""` only.
      */
     class UIWebCompiler {
     public:
-        /// Steps of matching a rule against an element (and of listing what matched) that all cascades of one compile may take together. The largest screen of the engine
-        /// takes a few thousand
-        static constexpr size_t kMaxCascadeWork = 2'000'000;
+        /// Steps of matching that all cascades of one compile may take together: one per element (plus its rules and inherited declarations), per selector tried and per compound
+        /// checked, and the declarations that matched. The largest screen of the engine takes a few thousand. The matcher stops at once when they are spent
+        static constexpr size_t kMaxCascadeWork = 1'000'000;
+        /// Bytes of a `class` attribute scanned for one step: a compound with classes pays for a scan of the whole attribute per class (a miss reads all of it)
+        static constexpr size_t kClassScanUnit = 16;
 
         /// Gives the text of the style sheet at @p href (relative to the document), or nothing when it cannot be read
         using StylesheetLoader = MoveOnlyFunction<Optional<String>(StringView href)>;

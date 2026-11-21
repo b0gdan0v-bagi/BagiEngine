@@ -60,7 +60,7 @@ A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` wi
 
 Logic reads input and writes state; render only reads state. Do not draw from `SceneUpdateEvent` handlers and do not change game state from `OnDraw()`.
 
-After the present and `LogEvent::Flush()` the loop calls `ControlService::EndFrame()`: it runs the frame end hooks and counts down a control call that waits for frames (a `step`, a `screenshot`). Then the profiler's frame mark (`BE_PROFILE_FRAME`); the stages above are profiler zones (`Profiler/CLAUDE.md`).
+After the present and `LogEvent::Flush()` the loop calls `ControlService::EndFrame()`: it runs the frame end hooks and counts down a control call that waits for frames (a `step`, a `screenshot`). Then `FrameArena::Advance()` gives the frame's memory back (`Memory/CLAUDE.md`, "Frame arena") and the profiler's frame mark (`BE_PROFILE_FRAME`) follows; the stages above are profiler zones (`Profiler/CLAUDE.md`).
 
 With the manual clock (`--manual-clock`, `Control/CLAUDE.md`) `Application::RunFrame` skips the whole frame unless a `step` or another deferred control call asks for one, and calls `CoreManager::OnIdleCycle` instead. The frame it does run is a Stepped frame of the pause, the same as above, so game logic cannot tell the clocks apart except that `deltaTime` is what the client asked for.
 

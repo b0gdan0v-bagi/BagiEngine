@@ -4,6 +4,7 @@
 #include <BECore/Input/PointerId.h>
 #include <BECore/Input/UIInput.h>
 #include <BECore/MainWindow/IMainWindow.h>
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Scene/Components/TransformComponent.h>
@@ -184,6 +185,7 @@ namespace BECore {
 
     void UICanvasComponent::UpdateLayout(float outputWidth, float outputHeight) {
         BE_PROFILE_SCOPE("UICanvas::UpdateLayout");
+        BE_MEM_TAG(UI);
         if (outputWidth <= 0.0f || outputHeight <= 0.0f) {
             return;
         }
@@ -226,11 +228,11 @@ namespace BECore {
     }
 
     void UICanvasComponent::DrawPopups(IRenderer& renderer) const {
-        for (UIElement* popup : _layout.OpenPopups()) {
-            for (const auto& child : popup->children) {
+        _layout.ForEachOpenPopup([&](UIElement& popup) {
+            for (const auto& child : popup.children) {
                 DrawElement(renderer, *child);
             }
-        }
+        });
     }
 
     void UICanvasComponent::UpdateTooltip(UIElement* under, bool touch) {
@@ -275,26 +277,32 @@ namespace BECore {
     }
 
     bool UICanvasComponent::SyncPopups() {
-        const Vector<UIElement*> open = _layout.OpenPopups();
+        // Pass 1: which popup stays (the one opened since the last look, the last in tree order; else the one we know) and whether the known one is still open
+        UIElement* const known = _popup.Get();
         UIElement* keep = nullptr;
-        for (UIElement* popup : open) {
-            if (popup != _popup.Get()) {
-                keep = popup;  // opened since the last look; the last one in tree order wins
+        bool knownIsOpen = false;
+        bool anyOpen = false;
+        _layout.ForEachOpenPopup([&](UIElement& popup) {
+            anyOpen = true;
+            if (&popup == known) {
+                knownIsOpen = true;
+            } else {
+                keep = &popup;
             }
+        });
+        if (!keep && anyOpen) {
+            keep = known;
         }
-        if (!keep && !open.empty()) {
-            keep = _popup.Get();
+        bool changed = keep != known;
+        if (known && known->IsPopupOpen() && !knownIsOpen) {
+            known->ClosePopup();  // it left the list of open popups without being closed: it (or an ancestor) was hidden
         }
-        bool changed = keep != _popup.Get();
-        if (_popup && _popup->IsPopupOpen() && eastl::find(open.begin(), open.end(), _popup.Get()) == open.end()) {
-            _popup->ClosePopup();  // it left the list of open popups without being closed: it (or an ancestor) was hidden
-        }
-        for (UIElement* popup : open) {
-            if (popup != keep) {
-                popup->ClosePopup();
+        _layout.ForEachOpenPopup([&](UIElement& popup) {
+            if (&popup != keep) {
+                popup.ClosePopup();
                 changed = true;
             }
-        }
+        });
         _popup = keep ? IntrusivePtr<UIElement>(keep) : IntrusivePtr<UIElement>{};
         if (changed) {
             Invalidate();
@@ -304,10 +312,10 @@ namespace BECore {
 
     void UICanvasComponent::CloseAllPopups() {
         bool changed = static_cast<bool>(_popup);
-        for (UIElement* popup : _layout.OpenPopups()) {
-            popup->ClosePopup();
+        _layout.ForEachOpenPopup([&](UIElement& popup) {
+            popup.ClosePopup();
             changed = true;
-        }
+        });
         _popup.Reset();
         if (changed) {
             Invalidate();
@@ -315,28 +323,27 @@ namespace BECore {
     }
 
     UIElement* UICanvasComponent::FindPopupOf(const UIElement& element, UIElement*& child) const {
-        const Vector<UIElement*> open = _layout.OpenPopups();
-        for (auto popup = open.rbegin(); popup != open.rend(); ++popup) {
-            for (const auto& candidate : (*popup)->children) {
+        UIElement* found = nullptr;
+        // The last popup in tree order that holds the element wins; inside it the first child that does
+        _layout.ForEachOpenPopup([&](UIElement& popup) {
+            for (const auto& candidate : popup.children) {
                 if (Contains(*candidate, element)) {
                     child = candidate.Get();
-                    return *popup;
+                    found = &popup;
+                    return;
                 }
             }
-        }
-        return nullptr;
+        });
+        return found;
     }
 
     bool UICanvasComponent::IsInOpenPopup(const UIElement* element) const {
         if (!element) {
             return false;
         }
-        for (UIElement* popup : _layout.OpenPopups()) {
-            if (Contains(*popup, *element)) {
-                return true;
-            }
-        }
-        return false;
+        bool inside = false;
+        _layout.ForEachOpenPopup([&](UIElement& popup) { inside = inside || Contains(popup, *element); });
+        return inside;
     }
 
     UITransitionSpec UICanvasComponent::MakeTransitionSpec() const {
@@ -362,6 +369,7 @@ namespace BECore {
 
     void UICanvasComponent::OnDraw() {
         BE_PROFILE_SCOPE("UICanvas::OnDraw");
+        BE_MEM_TAG(UI);
         // Also while hidden, so a canvas that is shown later (a modal dialog) already has its place in the input order
         RefreshInputOrder();
 
@@ -463,7 +471,7 @@ namespace BECore {
             return false;
         }
         UIElement* hit = HitTestOutput(event.x, event.y);
-        if (event.button == SDL_BUTTON_LEFT && !IsInOpenPopup(hit) && !_layout.OpenPopups().empty()) {
+        if (event.button == SDL_BUTTON_LEFT && !IsInOpenPopup(hit) && _layout.HasOpenPopup()) {
             // A press outside the open list only closes it: it is no click on what is below, and its release is ours too
             CloseAllPopups();
             _consumedButtons |= ButtonBit(event.button);

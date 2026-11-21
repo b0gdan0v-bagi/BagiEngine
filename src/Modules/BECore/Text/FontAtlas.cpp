@@ -1,5 +1,6 @@
 #include "FontAtlas.h"
 
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Text/GlyphOutline.h>
@@ -62,6 +63,7 @@ namespace BECore {
 
     bool FontAtlas::Prepare(IRenderer& renderer, Span<const uint32_t> glyphs) {
         BE_PROFILE_SCOPE("FontAtlas::Prepare");
+        BE_MEM_TAG(Text);
         Vector<uint32_t> missing;
         for (const uint32_t glyph : glyphs) {
             if (_glyphs.find(glyph) == _glyphs.end()) {
@@ -100,6 +102,7 @@ namespace BECore {
 
     void FontAtlas::BuildPages(IRenderer& renderer, Vector<Pending>& pending, bool& ok) {
         BE_PROFILE_SCOPE("FontAtlas::BuildPages");
+        BE_MEM_TAG(Text);
         while (!pending.empty()) {
             // Aim at a page just big enough; grow it while the glyphs do not fit and it is smaller than a full page
             uint64_t area = 0;

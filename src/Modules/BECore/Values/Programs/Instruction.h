@@ -9,10 +9,6 @@
 
 namespace BECore {
 
-    /// The most registers a program uses, and the size of one: the biggest value a program holds (`Vec4`, `Quat`) is 16 bytes
-    inline constexpr size_t kMaxProgramRegisters = 32;
-    inline constexpr size_t kProgramRegisterBytes = 16;
-
     /// The sizes of the field of an enum that `LoadSlotEnum` reads (the underlying types of a `CORE_ENUM`)
     [[nodiscard]] constexpr bool IsEnumFieldBytes(uint8_t bytes) {
         return bytes == sizeof(uint8_t) || bytes == sizeof(uint16_t) || bytes == sizeof(uint32_t) || bytes == sizeof(uint64_t);
@@ -36,10 +32,17 @@ namespace BECore {
      *
      * Which fields an opcode uses: `dst` is the register it writes; `a`, `b`, `c` the registers it reads (`Select` reads `a` as the condition);
      * `imm` is the index of a constant for `LoadConst` and the offset of the field for `LoadSlot`, whose `a` is the level and, for an enum, `b` the
-     * size of the field in bytes (1, 2, 4 or 8).
+     * size of the field in bytes (1, 2, 4 or 8); for `LoadSlotDomain` `b` is the size of the registered type (1 to `kProgramRegisterBytes`), and the rest of the register is zero.
+     * `CallDomain` calls the operation `imm` of `ProgramDomain` with the registers `a`, `b`, `c` (as many as the operation has parameters) and writes `dst`.
      * `Extract` takes component `imm` of the value in `a`; `Pack` reads its components from the consecutive registers `a`, `a + 1`, ... (as many as the type has).
      * `LoadTable` reads the `int32_t` index in `a` and writes to `dst` entry `index` of the run of constants that starts at constant `imm` and has
      * `TableEntryCount` entries (the count is 16 bits, low byte in `b`, high byte in `c`; `SetTableEntryCount` writes it), the index clamped to the ends.
+     *
+     * The list instructions (`Lists/CLAUDE.md`) keep list and element images in registers, which are not values of a program type: `ListSlot`: `dst` is the list in the field named by the
+     * descriptor constant `imm`, in the object of level `a`. `ListElem`: the same in the element in register `a`. `ListSize`: the `int32_t` count of the list in `a`. `ListAt`: element `index` of
+     * the list in `a`, the `int32_t` index in `b`. `LoadElem<T>`: the field at offset `imm` of the element in `a`, for an enum `b` the size of the field. `LoopBegin`: `dst` is element 0 of
+     * the list in `a`, and the program jumps to `imm`, the instruction after the matching `LoopEnd`, when there is none. `LoopEnd`: `dst` is the next element of the list in `a`, and the program
+     * jumps to `imm`, the first instruction of the body, while there is one. `BreakIf`: jumps to `imm`, the instruction after the enclosing `LoopEnd`, when the `bool` in `a` equals `b`.
      *
      * The fused instructions (`BE_PROGRAM_FUSED_ROWS`, written only by `Fuse`) read a field of the context themselves, so a field of theirs that does not fit makes the
      * sequence stay unfused. `MulAddSlot<T>`: the field at offset `imm` of level `a` times the constant `b` plus the constant `c` (both constant indexes are bytes; over `Vec3` `b` is a `float`).

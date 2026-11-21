@@ -57,15 +57,18 @@ namespace BECore {
          * @brief Every visible interactive element with a rect of a canvas that has a layout, in output pixels.
          *
          * Walks like UILayoutValidator (a hidden element skips its subtree, the children of a closed popup are not walked). `tooSmall` is its touch rule: the smaller side as the user sees it (times
-         * the canvas scale, divided by @p pixelDensity) under @p minTouchSize.
+         * the canvas scale, divided by @p pixelDensity) under @p minTouchSize. The returning form allocates; @p marks of the other is cleared first and keeps its capacity.
          */
+        static void TouchTargets(const UICanvasLayout& canvas, float minTouchSize, float pixelDensity, Vector<TouchMark>& marks);
         [[nodiscard]] static Vector<TouchMark> TouchTargets(const UICanvasLayout& canvas, float minTouchSize, float pixelDensity);
 
         /**
          * @brief Every region published for a canvas that has a layout (`UICanvasLayout::regions`), in output pixels, in the order of publishing.
          *
-         * The rects follow the canvas transform like CanvasBounds: a region partly outside the canvas is not clipped, a zero-sized one gives a zero-sized rect.
+         * The rects follow the canvas transform like CanvasBounds: a region partly outside the canvas is not clipped, a zero-sized one gives a zero-sized rect. The returning form allocates;
+         * @p marks of the other is cleared first and keeps its capacity.
          */
+        static void RegionMarks(const UICanvasLayout& canvas, Vector<RegionMark>& marks);
         [[nodiscard]] static Vector<RegionMark> RegionMarks(const UICanvasLayout& canvas);
 
         /**

@@ -556,7 +556,8 @@ namespace BECore::Tests {
         ValueFormulaDocument document;
         const ValueLinkScope scope(kDocumentName);
         const String reports = LoadXml(Format("{}{}", kContext, R"(<spot expr="caster.spawn"/>)"), document);
-        EXPECT_TRUE(HasText(reports, "vec2, vec3, vec4, ivec2, quat, color, enum or string")) << reports.c_str();
+        // The registered types of a game follow the engine's, whatever other cases registered in this process
+        EXPECT_TRUE(HasText(reports, "vec2, vec3, vec4, ivec2, quat, color, enum")) << reports.c_str();
 
         const Vector<uint8_t> data = [] {
             BinarySerializer serializer;

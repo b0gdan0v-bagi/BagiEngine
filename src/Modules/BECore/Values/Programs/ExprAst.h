@@ -20,14 +20,14 @@ namespace BECore {
     /// The place of a node in `ExprAst::nodes`; a node's operands are always earlier nodes, so a walk from the first to the last is a post-order
     using ExprNodeId = uint32_t;
 
-    CORE_ENUM(ExprNodeKind, uint8_t, Number, Bool, String, Name, Call, Member, Unary, Binary)
+    CORE_ENUM(ExprNodeKind, uint8_t, Number, Bool, String, Name, Call, Member, Unary, Binary, Index)
 
     /**
      * @brief One node of the untyped syntax tree
      *
      * `Number` keeps its text (`text`) and whether it is a float literal; a sign is a `Unary` above it. `String` is `'text'` and keeps the text between the quotes. `Name` is a whole dotted path
-     * (`caster.attack`) and `Call` a call of a dotted name (`min`, or `a.b` as a mistake the checker names); `Member` is `.x` on an expression that is not a name, `first` its base. `column` is the
-     * 1-based byte of the node in the text: the operator for `Unary` and `Binary`, the dot for `Member`, the start of the rest.
+     * (`caster.attack`) and `Call` a call of a dotted name (`min`, or `a.b` as a mistake the checker names); `Member` is `.x` on an expression that is not a name, `first` its base; `Index` is
+     * `first[second]`. `column` is the 1-based byte of the node in the text: the operator for `Unary` and `Binary`, the dot for `Member`, the `[` for `Index`, the start of the rest.
      */
     struct ExprNode {
         ExprNodeKind kind = ExprNodeKind::Number;
@@ -36,8 +36,9 @@ namespace BECore {
         bool isFloat = false;
         bool boolValue = false;
         uint32_t column = 0;
-        /// `Unary` and `Binary`: the left operand; `Member`: its base
+        /// `Unary` and `Binary`: the left operand; `Member`: its base; `Index`: the indexed expression
         ExprNodeId first = 0;
+        /// `Binary`: the right operand; `Index`: the index
         ExprNodeId second = 0;
         /// `Call`: the arguments are `ExprAst::arguments[firstArgument, firstArgument + argumentCount)`
         uint32_t firstArgument = 0;

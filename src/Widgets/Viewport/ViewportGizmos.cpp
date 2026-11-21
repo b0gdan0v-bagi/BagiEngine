@@ -120,30 +120,22 @@ namespace BECore {
         return !node.HasEditorFlag(EditorFlags::Locked) && node.GetComponent<TransformComponent>();
     }
 
-    void CollectMovable(Scene& scene, Span<SceneNode* const> selected, Vector<SceneNode*>& nodes, Vector<Gizmo::Item>& items) {
+    void CollectMovable(Span<SceneNode* const> live, Vector<SceneNode*>& nodes, Vector<Gizmo::Item>& items) {
         nodes.clear();
         items.clear();
-        for (SceneNode* const node : selected) {
-            SceneNode* const alive = HierarchyModel::FindNode(scene.GetRootNode(), node);
-            if (alive && IsMovable(*alive)) {
-                nodes.push_back(alive);
-                items.push_back(ItemOf(*alive->GetComponent<TransformComponent>()));
+        for (SceneNode* const node : live) {
+            if (IsMovable(*node)) {
+                nodes.push_back(node);
+                items.push_back(ItemOf(*node->GetComponent<TransformComponent>()));
             }
         }
     }
 
-    bool AllAlive(Scene& scene, Span<SceneNode* const> nodes) {
-        return eastl::all_of(nodes.begin(), nodes.end(), [&scene](SceneNode* node) { return HierarchyModel::FindNode(scene.GetRootNode(), node) != nullptr; });
-    }
-
-    bool WriteItems(Scene& scene, Span<SceneNode* const> nodes, Span<const Gizmo::Item> items) {
+    bool WriteItems(Span<SceneNode* const> nodes, Span<const Gizmo::Item> items) {
         if (nodes.size() != items.size()) {
             return false;
         }
-        const bool writable = eastl::all_of(nodes.begin(), nodes.end(), [&scene](SceneNode* node) {
-            const SceneNode* const alive = HierarchyModel::FindNode(scene.GetRootNode(), node);
-            return alive && alive->GetComponent<TransformComponent>();
-        });
+        const bool writable = eastl::all_of(nodes.begin(), nodes.end(), [](const SceneNode* node) { return node->GetComponent<TransformComponent>() != nullptr; });
         if (!writable) {
             return false;
         }
@@ -153,16 +145,12 @@ namespace BECore {
         return true;
     }
 
-    bool SelectionBounds(Scene& scene, Span<SceneNode* const> selected, Rect& bounds) {
+    bool SelectionBounds(Scene& scene, Span<SceneNode* const> live, Rect& bounds) {
         Vec2 low{std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
         Vec2 high{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()};
         bool any = false;
-        for (SceneNode* const node : selected) {
-            const SceneNode* const alive = HierarchyModel::FindNode(scene.GetRootNode(), node);
-            if (!alive) {
-                continue;
-            }
-            const ScenePick::Outlines outlines = ScenePick::SelectionOutlines(scene, *alive);
+        for (const SceneNode* const node : live) {
+            const ScenePick::Outlines outlines = ScenePick::SelectionOutlines(scene, *node);
             for (size_t i = 0; i < outlines.count; ++i) {
                 for (const Vec2& corner : outlines.quads[i]) {
                     low = {std::min(low.x, corner.x), std::min(low.y, corner.y)};
@@ -228,6 +216,7 @@ namespace BECore {
         _scene = &scene;
         _handle = handle;
         _nodes.assign(nodes.begin(), nodes.end());
+        _confirmed = false;
         _edits.clear();
         for (size_t i = 0; i < nodes.size(); ++i) {
             _edits.push_back({nodes[i], items[i], items[i]});
@@ -236,10 +225,15 @@ namespace BECore {
         return true;
     }
 
-    bool GizmoEditSession::CanContinue(Scene* activeScene) const {
+    bool GizmoEditSession::ConfirmNodes(Scene& scene) {
+        HierarchyModel::ResolveLive(scene.GetRootNode(), {_nodes.data(), _nodes.size()}, _alive, _missing);
         // A node that lost its TransformComponent has nothing to write to, so the drag ends as it does for a dead node
-        return activeScene != nullptr && activeScene == _scene && AllAlive(*activeScene, {_nodes.data(), _nodes.size()}) &&
-               eastl::all_of(_nodes.begin(), _nodes.end(), [](const SceneNode* node) { return node->GetComponent<TransformComponent>() != nullptr; });
+        return _alive.size() == _nodes.size() && eastl::all_of(_nodes.begin(), _nodes.end(), [](const SceneNode* node) { return node->GetComponent<TransformComponent>() != nullptr; });
+    }
+
+    bool GizmoEditSession::CanContinue(Scene* activeScene) {
+        _confirmed = activeScene != nullptr && activeScene == _scene && ConfirmNodes(*activeScene);
+        return _confirmed;
     }
 
     void GizmoEditSession::Update(Scene& scene, Vec2 point, bool snapModifier, bool keepAspect) {
@@ -255,7 +249,9 @@ namespace BECore {
             }
         }
         // Nothing is recorded or told when the write fails, so a Commit never carries values the nodes did not get
-        if (changed && WriteItems(scene, {_nodes.data(), _nodes.size()}, result)) {
+        const bool alive = changed && (_confirmed || ConfirmNodes(scene));
+        _confirmed = false;
+        if (alive && WriteItems({_nodes.data(), _nodes.size()}, result)) {
             for (size_t i = 0; i < _edits.size() && i < result.size(); ++i) {
                 _edits[i].after = result[i];
             }
@@ -267,6 +263,7 @@ namespace BECore {
         if (!_drag.IsActive()) {
             return;
         }
+        _confirmed = false;
         const bool moved = eastl::any_of(_edits.begin(), _edits.end(), [](const NodeTransformEdit& edit) { return !(edit.before == edit.after); });
         if (moved) {
             _drag.End();
@@ -394,7 +391,7 @@ namespace BECore {
         if (!context.enabled) {
             return false;
         }
-        CollectMovable(*context.scene, context.selection, _nodes, _items);
+        CollectMovable(context.selection, _nodes, _items);
         if (_items.empty()) {
             return false;
         }

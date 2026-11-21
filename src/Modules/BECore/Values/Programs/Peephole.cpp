@@ -18,7 +18,7 @@ namespace BECore {
         constexpr RegisterMask RowReads(const Instruction& ins) {
             if constexpr (Op::kShape == Kernel::OpShape::Slot) {
                 return 0;
-            } else if constexpr (Op::kShape == Kernel::OpShape::Unary || Op::kShape == Kernel::OpShape::Extract) {
+            } else if constexpr (Op::kShape == Kernel::OpShape::Unary || Op::kShape == Kernel::OpShape::Element || Op::kShape == Kernel::OpShape::Extract) {
                 return RegisterBit(ins.a);
             } else if constexpr (Op::kShape == Kernel::OpShape::Binary || Op::kShape == Kernel::OpShape::Compare) {
                 return RegisterBit(ins.a) | RegisterBit(ins.b);
@@ -46,9 +46,29 @@ namespace BECore {
                     return 0;
                 case Opcode::LoadTableSlot:
                     return 0;
+                case Opcode::CallDomain: {
+                    // As many registers as the operation has parameters; an operation that is not registered leaves the pass blind, as an opcode it does not know
+                    if (ins.imm >= ProgramDomain::OperationCount()) {
+                        return ~RegisterMask{0};
+                    }
+                    const uint32_t count = ProgramDomain::Operation(ins.imm).parameterCount;
+                    return (count > 0 ? RegisterBit(ins.a) : 0) | (count > 1 ? RegisterBit(ins.b) : 0) | (count > 2 ? RegisterBit(ins.c) : 0);
+                }
                 case Opcode::Copy:
                 case Opcode::LoadTable:
                     return RegisterBit(ins.a);
+                case Opcode::ListSlot:
+                    return 0;
+                case Opcode::ListElem:
+                case Opcode::ListSize:
+                case Opcode::BreakIf:
+                    return RegisterBit(ins.a);
+                case Opcode::ListAt:
+                    return RegisterBit(ins.a) | RegisterBit(ins.b);
+                case Opcode::LoopBegin:
+                    return RegisterBit(ins.a);
+                case Opcode::LoopEnd:
+                    return RegisterBit(ins.a) | RegisterBit(ins.dst);
 #define BE_PEEPHOLE_READS_ROW(Op, Type, Cpp)                                                                                                                                                           \
     case Opcode::Op##Type:                                                                                                                                                                             \
         return RowReads<Kernel::Op, Cpp>(ins);
@@ -222,6 +242,10 @@ namespace BECore {
     }  // namespace
 
     void Fuse(Vector<Instruction>& code, uint8_t resultRegister) {
+        // The liveness below reads the code as straight-line: a register the body writes is read again by the next round, which it does not see
+        if (std::any_of(code.begin(), code.end(), [](const Instruction& ins) { return IsListInstruction(ins.op); })) {
+            return;
+        }
         size_t at = 0;
         while (at < code.size()) {
             // A `Lerp` leaves the code of its weight where it was, so what starts at @p at now is looked at again; a fused instruction starts no sequence

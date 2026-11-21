@@ -125,6 +125,35 @@ namespace BECore::Tests {
         EXPECT_EQ(library.GetAll()[1].name.ToStringView(), "B");
     }
 
+    /// The loader reserves for `count` before it knows which entries are skipped or repeated: the reserve must change neither
+    /// the content nor the order
+    TEST(TextureLibraryTest, ALargeFileWithARepeatedAndANamelessEntryKeepsContentAndOrder) {
+        constexpr size_t kSprites = 500;
+        String xml = "<root><sprites>";
+        for (size_t i = 0; i < kSprites; ++i) {
+            xml += Format("<sprite name=\"Big{}\" texturePath=\"first{}.png\"/>", i, i);
+            if (i == 100) {
+                xml += "<sprite texturePath=\"nameless.png\"/>";
+            }
+        }
+        xml += "<sprite name=\"Big7\" texturePath=\"second.png\"><srcRect x=\"1\" y=\"2\" w=\"3\" h=\"4\"/></sprite>";
+        xml += "</sprites></root>";
+
+        TextureLibrary library;
+        ASSERT_NO_FATAL_FAILURE(LoadInto(library, xml));
+
+        ASSERT_EQ(library.GetAll().size(), kSprites);
+        for (size_t i = 0; i < kSprites; ++i) {
+            const SpriteEntry& entry = library.GetAll()[i];
+            EXPECT_EQ(entry.name.ToStringView(), StringView(Format("Big{}", i))) << i;
+            EXPECT_EQ(entry.texturePath.ToStringView(), i == 7 ? StringView("second.png") : StringView(Format("first{}.png", i))) << i;
+        }
+        EXPECT_FLOAT_EQ(library.GetAll()[7].srcRect.h, 4.0f);
+        const SpriteEntry* found = library.GetSprite("Big499"_intern);
+        ASSERT_NE(found, nullptr);
+        EXPECT_EQ(found, &library.GetAll()[499]);
+    }
+
     TEST(TextureLibraryTest, NoSpritesGivesAnEmptyLibraryWithoutErrors) {
         for (const StringView xml : {StringView("<root/>"), StringView("<root><sprites/></root>"), StringView("<root><other/></root>")}) {
             TextureLibrary library;
@@ -277,6 +306,33 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(library.Rename("A"_intern, "A"_intern));
         EXPECT_EQ(library.GetAll()[0].name.ToStringView(), "A");
+    }
+
+    /// The name index grows past its first size while entries are added one by one, and a Remove shifts the positions it points at
+    TEST(TextureLibraryTest, EveryNameIsFoundAfterTheIndexGrowsAndAfterARemove) {
+        constexpr size_t kCount = 40;
+        constexpr size_t kRemoved = 17;
+        TextureLibrary library;
+        for (size_t i = 0; i < kCount; ++i) {
+            library.AddOrUpdate(MakeEntry(Format("Grow{}", i).c_str(), "g.png", Rect(1, 2, 3, 4)));
+        }
+        ASSERT_EQ(library.GetAll().size(), kCount);
+        for (size_t i = 0; i < kCount; ++i) {
+            EXPECT_EQ(library.GetSprite(PoolString::Intern(Format("Grow{}", i))), &library.GetAll()[i]) << i;
+        }
+        EXPECT_EQ(library.GetSprite("GrowMissing"_intern), nullptr);
+
+        library.Remove(PoolString::Intern(Format("Grow{}", kRemoved)));
+        ASSERT_EQ(library.GetAll().size(), kCount - 1);
+        EXPECT_EQ(library.GetSprite(PoolString::Intern(Format("Grow{}", kRemoved))), nullptr);
+        for (size_t i = 0; i < kCount - 1; ++i) {
+            const size_t original = i < kRemoved ? i : i + 1;
+            EXPECT_EQ(library.GetSprite(PoolString::Intern(Format("Grow{}", original))), &library.GetAll()[i]) << original;
+        }
+
+        EXPECT_TRUE(library.Rename("Grow3"_intern, "GrowRenamed"_intern));
+        EXPECT_EQ(library.GetSprite("Grow3"_intern), nullptr);
+        EXPECT_EQ(library.GetSprite("GrowRenamed"_intern), &library.GetAll()[3]);
     }
 
     TEST(TextureLibraryTest, RenameOntoAnExistingNameChangesNothing) {

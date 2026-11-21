@@ -7,7 +7,9 @@
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Renderer/IRenderTarget.h>
 #include <BECore/Types/Types.h>
+#include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIPreview.h>
+#include <BECore/UI/UIPreviewOverlay.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
@@ -139,6 +141,17 @@ namespace BECore {
         PreviewShape _shape;
         SafeAreaSimulation _safeAreaSimulation = SafeAreaSimulation::None;
         PreviewOverlays _overlays;
+        // A region drawn this frame, with the rect as the game published it (canvas units) for the tooltip
+        struct HoverRegion {
+            RegionMark mark;
+            Rect canvasRect;
+        };
+        // DrawOverlays' lists of one frame, kept for their capacity; _canvasRegionMarks and _canvasTouchMarks hold one canvas at a time
+        Vector<IntrusivePtr<UICanvasComponent>> _overlayCanvases;
+        Vector<TouchMark> _touchMarks;
+        Vector<HoverRegion> _regionHits;
+        Vector<RegionMark> _canvasRegionMarks;
+        Vector<TouchMark> _canvasTouchMarks;
         ViewportUIDebug _uiDebug;        // element rects, anchors, design rectangle and findings (they keep their marks between frames)
         PreviewSettings _storedPreview;  // the choice the editor last stored (applied from a preferences event, or sent by us)
         Optional<int32_t> _forcedView;   // the index of the forced view variant, -1 the default, nullopt Auto
@@ -154,7 +167,9 @@ namespace BECore {
         int32_t _gridStep = 0;
         const Scene* _selectedScene = nullptr;  // the selection last told by SceneSelectionChangedEvent: a node is never dereferenced before it is found in the active scene
         Vector<SceneNode*> _selectedNodes;      // in selection order, the primary last
-        ViewportCamera _camera;                 // the editor camera; the image is drawn with it while the input mode is Edit
+        Vector<SceneNode*> _liveSelection;      // the part of _selectedNodes found in the active scene this frame (ResolveLive), the nodes the frame may dereference
+        HashSet<const SceneNode*> _liveScratch;
+        ViewportCamera _camera;  // the editor camera; the image is drawn with it while the input mode is Edit
         ViewportCameraInput _cameraInput;
         ViewportGizmos _gizmos;
         ViewportUIShapes _uiShapes;    // the selected element in other devices' shapes (session state)

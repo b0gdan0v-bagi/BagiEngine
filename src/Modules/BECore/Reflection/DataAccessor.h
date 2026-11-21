@@ -217,7 +217,7 @@ namespace BECore {
                 } else if constexpr (::BECore::Detail::IsIntrusivePtr<T>) {
                     using Pointee = typename ::BECore::Detail::IntrusivePtrPointeeType<T>::type;
                     if (!item) {
-                        eastl::string typeStr;
+                        String typeStr;
                         if (d.ReadAttribute("type", typeStr)) {
                             if (!FactoryTypeAllowed<Pointee>(d, StringView(typeStr))) {
                                 return;
@@ -274,6 +274,23 @@ namespace BECore {
                 }
             }
 
+            /**
+             * Makes room for the @p count the reader announced, once, so the loop never grows the block. A fixed container that cannot
+             * overflow has its whole capacity already and asserts when asked for more, so it is left alone; the loop drops what does
+             * not fit. @p count is an upper bound (a factory array counts disabled and null elements) and is already limited by
+             * ReaderLimits::kMaxArrayElements.
+             */
+            template <typename Container>
+            void ReserveForLoad(Container& container, size_t count) {
+                if constexpr (requires { Container::can_overflow(); }) {
+                    if constexpr (Container::can_overflow()) {
+                        container.reserve(count);
+                    }
+                } else {
+                    container.reserve(count);
+                }
+            }
+
             /// The data a fixed container had no room for is an error of the field like any bad input (the sizes, not the content)
             inline void ReportDropped(IDeserializer& d, StringView key, size_t kept, size_t offered, StringView unit) {
                 d.ReportError(key, Format("Data lost, the fixed container is full: kept {} of {} {}", kept, offered, unit));
@@ -302,6 +319,7 @@ namespace BECore {
                 size_t count = 0;
                 if (d.BeginArray(key, "item", count)) {
                     vec.clear();
+                    ReserveForLoad(vec, count);
                     size_t offered = 0;
                     for (size_t i = 0; i < count; ++i) {
                         if (d.BeginArrayElement()) {
@@ -352,6 +370,7 @@ namespace BECore {
                 size_t count = 0;
                 if (d.BeginArray(key, Traits::elementName, count)) {
                     vec.clear();
+                    ReserveForLoad(vec, count);
                     size_t offered = 0;
                     size_t dropped = 0;
                     for (size_t i = 0; i < count; ++i) {
@@ -529,7 +548,7 @@ namespace BECore {
             }
 
             static bool Load(IDeserializer& d, T& value, eastl::string_view key) {
-                eastl::string str;
+                String str;
                 if (d.ReadAttribute(key, str)) {
                     auto result = EnumUtils<T>::Cast(StringView(str));
                     if (result) {
@@ -622,7 +641,7 @@ namespace BECore {
             static bool Load(IDeserializer& d, Ptr& ptr, eastl::string_view key) {
                 if (d.BeginObject(key)) {
                     if (!ptr) {
-                        eastl::string typeStr;
+                        String typeStr;
                         if (d.ReadAttribute("type", typeStr)) {
                             if (!Detail::FactoryTypeAllowed<T>(d, StringView(typeStr))) {
                                 d.EndObject();
@@ -842,7 +861,7 @@ namespace BECore {
                 size_t count = map.size();
                 if (s.BeginArray(key, "entry", count)) {
                     if constexpr (requires(const K& a, const K& b) { {a < b}->std::convertible_to<bool>; }) {
-                        eastl::vector<SortedEntry<K, V>> sorted;
+                        Vector<SortedEntry<K, V>> sorted;
                         sorted.reserve(map.size());
                         for (const auto& [k, v] : map) {
                             sorted.push_back({&k, &v});

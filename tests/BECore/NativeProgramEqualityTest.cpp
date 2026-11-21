@@ -3,9 +3,12 @@
 // Every bit of a result is compared except the payload and the sign of a NaN: the compiler folds an operation with a constant NaN into some NaN (LLVM keeps no payload),
 // so which one a lane holds is not part of the meaning of a program, and `Same` of ProgramInterpreterTest makes the same exception.
 
+#include <BECore/ProgramDomainTypes.h>
 #include <BECore/ProgramEdgeValues.h>
+#include <BECore/ProgramListTypes.h>
 #include <BECore/ProgramRowTypes.h>
 #include <BECore/Random/Rng.h>
+#include <BECore/ValueListMahjongTypes.h>
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Programs/Interpreter.h>
 #include <BECore/Values/Programs/Native/NativePrograms.h>
@@ -20,16 +23,28 @@
 #include <NativePrograms/NativeProgramFormulas.h>
 #include <NativePrograms/NativeProgramSet.h>
 #include <bit>
+#include <cstring>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
 
     using namespace ValueTestData;
+    using ProgramDomainData::DomainBits256;
+    using ProgramListData::ProgramListHand;
+    using ProgramListData::ProgramListSet;
+    using ProgramListData::ProgramListSuit;
+    using ProgramListData::ProgramListTile;
     using ProgramRowData::ProgramRowOperands;
+    using ValueListMahjongData::ValueListHand;
+    using ValueListMahjongData::ValueListRank;
+    using ValueListMahjongData::ValueListSet;
+    using ValueListMahjongData::ValueListSuit;
+    using ValueListMahjongData::ValueListTile;
+    using ValueListMahjongData::ValueListYaku;
 
     namespace {
 
-        constexpr size_t kImageBytes = 16;
+        constexpr size_t kImageBytes = kProgramRegisterBytes;
         constexpr size_t kCaseCount = 2048;
         constexpr uint64_t kSeed = 20260101;
 
@@ -58,6 +73,27 @@ namespace BECore::Tests {
             } else if constexpr (std::is_same_v<T, int64_t>) {
                 for (const int64_t value : {int64_t{4294967295}, -int64_t{4294967296}, int64_t{1} << 53, (int64_t{1} << 53) + 1}) {
                     values.push_back(value);
+                }
+            } else if constexpr (std::is_same_v<T, ProgramDomainValue>) {
+                // Masks as a board has them: every bit, a bit on each side of a word, and a pattern that the shifts carry across the words
+                constexpr uint8_t kAllBits = 0xFF;
+                constexpr size_t kBitsPerByte = 8;
+                constexpr uint64_t kPatternStep = 0x9E3779B97F4A7C15ULL;
+                ProgramDomainValue all;
+                all.bytes.fill(kAllBits);
+                values.push_back(all);
+                for (const size_t bit : {size_t{0}, size_t{63}, size_t{64}, size_t{127}, size_t{128}, size_t{255}}) {
+                    ProgramDomainValue single;
+                    single.bytes[bit / kBitsPerByte] = static_cast<uint8_t>(1U << (bit % kBitsPerByte));
+                    values.push_back(single);
+                }
+                for (uint64_t seed = 1; seed <= 3; ++seed) {
+                    ProgramDomainValue pattern;
+                    for (size_t word = 0; word < pattern.bytes.size() / sizeof(uint64_t); ++word) {
+                        const uint64_t bits = (seed + word) * kPatternStep;
+                        std::memcpy(pattern.bytes.data() + word * sizeof(uint64_t), &bits, sizeof(bits));
+                    }
+                    values.push_back(pattern);
                 }
             } else if constexpr (std::is_same_v<T, Vec2>) {
                 values.push_back(Vec2{kPayloadNan, -0.0f});
@@ -112,6 +148,10 @@ namespace BECore::Tests {
             operands.quat = Choose<Quat>(pick, index, rng);
             operands.color = Choose<Color>(pick, index, rng);
             operands.text = Choose<PoolString>(pick, index, rng);
+            const ProgramDomainValue image = Choose<ProgramDomainValue>(pick, index, rng);
+            static_assert(sizeof(operands.mask) == sizeof(image) && sizeof(operands.pair) <= sizeof(image));
+            std::memcpy(&operands.mask, image.bytes.data(), sizeof(operands.mask));
+            std::memcpy(&operands.pair, image.bytes.data(), sizeof(operands.pair));
             const uint32_t element = Choose<ProgramEnum>(pick, index, rng).index;
             operands.narrow = static_cast<ValueNarrowEnum>(static_cast<uint8_t>(element));
             operands.wide16 = static_cast<ValueShortEnum>(static_cast<uint16_t>(element));
@@ -119,13 +159,101 @@ namespace BECore::Tests {
             operands.enum64 = element;
         }
 
-        /// The objects of every level of `NativeProgramSetDeclaration()`: what a formula reads is a `caster` and a `cast`, what a hand-assembled program reads is `a`, `b` and `c`
+        /// How long the lists of a hand are in case `index`: every length from none to more than a loop of a few turns, and now and then a long one
+        constexpr size_t kLongListEvery = 16;
+        constexpr size_t kLongListBase = 70;
+        constexpr size_t kLongListSpread = 230;
+        constexpr size_t kSetCountModulus = 7;
+        constexpr size_t kListLengthModulus = 9;
+
+        void Fill(ProgramListTile& tile, Rng& rng) {
+            tile.suit = static_cast<ProgramListSuit>(Choose<ProgramEnum>(Pick::Draw, 0, rng).index % EnumUtils<ProgramListSuit>::Count());
+            tile.terminal = Choose<bool>(Pick::Draw, 0, rng);
+            tile.rank = Choose<int32_t>(Pick::Draw, 0, rng);
+            tile.weight = Choose<float>(Pick::Draw, 0, rng);
+            tile.position = Choose<Vec3>(Pick::Draw, 0, rng);
+            tile.name = Choose<PoolString>(Pick::Draw, 0, rng);
+        }
+
+        /// The lists of a hand: the arrays are full of drawn tiles (NaN weights, the extremes of the ranks), the vectors have the length of the case, none is always empty
+        void Fill(ProgramListHand& hand, size_t index, Rng& rng) {
+            hand.before = Choose<int32_t>(Pick::Draw, 0, rng);
+            hand.after = Choose<int32_t>(Pick::Draw, 0, rng);
+            hand.sets.clear();
+            hand.counts.clear();
+            hand.weights.clear();
+            for (ProgramListTile& tile : hand.tiles) {
+                Fill(tile, rng);
+            }
+            for (size_t s = 0; s < index % kSetCountModulus; ++s) {
+                ProgramListSet set;
+                set.pung = Choose<bool>(Pick::Draw, 0, rng);
+                for (ProgramListTile& tile : set.tiles) {
+                    Fill(tile, rng);
+                }
+                hand.sets.push_back(set);
+            }
+            const size_t countLength = index % kLongListEvery == 0 ? kLongListBase + index % kLongListSpread : index % kListLengthModulus;
+            for (size_t k = 0; k < countLength; ++k) {
+                hand.counts.push_back(Choose<int32_t>(Pick::Draw, 0, rng));
+            }
+            for (size_t k = 0; k < index % kListLengthModulus && k < hand.weights.capacity(); ++k) {
+                hand.weights.push_back(Choose<float>(Pick::Draw, 0, rng));
+            }
+            for (bool& flag : hand.flags) {
+                flag = Choose<bool>(Pick::Draw, 0, rng);
+            }
+        }
+
+        void Fill(ValueListTile& tile, Rng& rng) {
+            tile.suit = static_cast<ValueListSuit>(rng.UniformInt<size_t>(0, EnumUtils<ValueListSuit>::Count() - 1));
+            tile.rank = static_cast<ValueListRank>(rng.UniformInt<size_t>(0, EnumUtils<ValueListRank>::Count() - 1));
+            tile.honor = Choose<bool>(Pick::Draw, 0, rng);
+            tile.terminal = Choose<bool>(Pick::Draw, 0, rng);
+            tile.dragon = Choose<bool>(Pick::Draw, 0, rng);
+        }
+
+        /// The hand of the Mahjong patterns: 0 to 4 sets and 0 to 3 yaku by the case, so a pattern that reads the first two sets sees fewer than two
+        constexpr size_t kMahjongSetCount = 5;
+        constexpr size_t kMahjongYakuCount = 4;
+        constexpr int32_t kMahjongFuSpread = 40;
+        constexpr int32_t kMahjongHanSpread = 13;
+
+        void Fill(ValueListHand& hand, size_t index, Rng& rng) {
+            hand.sets.clear();
+            hand.yaku.clear();
+            for (ValueListTile& tile : hand.tiles) {
+                Fill(tile, rng);
+            }
+            for (size_t s = 0; s < index % kMahjongSetCount; ++s) {
+                ValueListSet set;
+                for (ValueListTile& tile : set.tiles) {
+                    Fill(tile, rng);
+                }
+                set.pung = Choose<bool>(Pick::Draw, 0, rng);
+                set.dragon = Choose<bool>(Pick::Draw, 0, rng);
+                set.suit = static_cast<ValueListSuit>(rng.UniformInt<size_t>(0, EnumUtils<ValueListSuit>::Count() - 1));
+                set.fu = rng.UniformInt<int32_t>(0, kMahjongFuSpread);
+                hand.sets.push_back(set);
+            }
+            for (size_t y = 0; y < index % kMahjongYakuCount; ++y) {
+                ValueListYaku yaku;
+                yaku.on = Choose<bool>(Pick::Draw, 0, rng);
+                yaku.han = rng.UniformInt<int32_t>(0, kMahjongHanSpread);
+                hand.yaku.push_back(yaku);
+            }
+        }
+
+        /// The objects of every level of `NativeProgramSetDeclaration()`: what a formula reads is a `caster` and a `cast`, what a hand-assembled program reads is `a`, `b` and `c`, and the
+        /// loop programs read `hand`
         struct InputCase {
             ValueUnitStats caster;
             ValueCastInfo cast;
             ProgramRowOperands a;
             ProgramRowOperands b;
             ProgramRowOperands c;
+            ProgramListHand hand;
+            ValueListHand mahjong;
         };
 
         void Fill(InputCase& input, size_t index, Rng& rng) {
@@ -141,6 +269,8 @@ namespace BECore::Tests {
             Fill(input.a, Pick::Walk, index, rng);
             Fill(input.b, Pick::Step, index, rng);
             Fill(input.c, Pick::Draw, index, rng);
+            Fill(input.hand, index, rng);
+            Fill(input.mahjong, index, rng);
         }
 
         Context MakeContext(const InputCase& input) {
@@ -150,6 +280,8 @@ namespace BECore::Tests {
             context.Set(kOperandsLevelA, input.a);
             context.Set(kOperandsLevelB, input.b);
             context.Set(kOperandsLevelC, input.c);
+            context.Set(kListsLevel, input.hand);
+            context.Set(kMahjongLevel, input.mahjong);
             return context;
         }
 
@@ -308,6 +440,62 @@ namespace BECore::Tests {
         }
     }
 
+    TEST(NativeProgramEqualityTest, TheLoopProgramsAgreeOnEmptyShortAndVeryLongListsAndOnEveryIndex) {
+        const auto compiled = CompileNativeProgramSet();
+        ASSERT_TRUE(compiled.has_value()) << compiled.error().c_str();
+
+        constexpr size_t kLongList = 20000;
+        constexpr size_t kManySets = 300;
+        Vector<InputCase> inputs;
+        for (const size_t length : {size_t{0}, size_t{1}, size_t{4}, size_t{5}, kLongList}) {
+            Rng rng(kSeed + length);
+            InputCase input;
+            Fill(input, 1, rng);
+            input.hand.sets.clear();
+            input.hand.counts.clear();
+            input.hand.weights.clear();
+            for (size_t i = 0; i < length; ++i) {
+                input.hand.counts.push_back(static_cast<int32_t>(i * 7919U));
+                if (i < input.hand.weights.capacity()) {
+                    input.hand.weights.push_back(static_cast<float>(i) - 1.5f);
+                }
+                if (i < kManySets) {
+                    input.hand.sets.push_back(ProgramListSet{});
+                }
+            }
+            // An index that is inside the lists, at both ends of them, and outside
+            for (const int32_t where : {-1, 0, 1, 3, 13, 14, 15, 299, 300, 100000}) {
+                input.a.i32 = where;
+                input.b.i32 = where;
+                inputs.push_back(input);
+            }
+        }
+        size_t checked = 0;
+        for (const ProgramId id : *compiled) {
+            const Program& program = ProgramPool::Get(id);
+            if ((program.Reads() & LevelBit(kListsLevel)) == 0) {
+                continue;
+            }
+            ++checked;
+            const NativeProgramFn function = ProgramPool::Native(id);
+            ASSERT_NE(function, nullptr) << Describe(program).c_str() << " is not bound: the generated file is missing or stale";
+            for (size_t i = 0; i < inputs.size(); ++i) {
+                const Context context = MakeContext(inputs[i]);
+                Image generated;
+                Image interpreted;
+                function(context, generated.bytes);
+                BECore::Run(program, context, interpreted.bytes);
+                if (!SameResult(program.ResultType(), generated.bytes, interpreted.bytes)) {
+                    ADD_FAILURE() << Describe(program).c_str() << " case " << i << ": generated " << Hex(generated.bytes, ProgramTypeSize(program.ResultType())).c_str() << ", interpreter "
+                                  << Hex(interpreted.bytes, ProgramTypeSize(program.ResultType())).c_str() << "\n"
+                                  << program.Disassemble().c_str();
+                    break;
+                }
+            }
+        }
+        EXPECT_GT(checked, 0U) << "no program of the set reads the lists";
+    }
+
     TEST(NativeProgramEqualityTest, TheSetRunsEveryOpcode) {
         const auto compiled = CompileNativeProgramSet();
         ASSERT_TRUE(compiled.has_value()) << compiled.error().c_str();
@@ -331,7 +519,9 @@ namespace BECore::Tests {
         const Optional<String> built = ReadGeneratedFile();
         ASSERT_TRUE(built.has_value()) << "the file the build generated is not found: run the executable from the build folder";
 
-        const String now = GenerateNativeSource(Span<const ProgramId>(compiled->data(), compiled->size()), NativeCodegenOptions{kNativeProgramSetName});
+        // The registry has grown since the toys went in (other cases register operations of their own): the file is for the registry the tool had
+        const uint64_t toolFingerprint = ProgramDomainData::RegisterDomainToys().fingerprint;
+        const String now = GenerateNativeSource(Span<const ProgramId>(compiled->data(), compiled->size()), NativeCodegenOptions{kNativeProgramSetName, toolFingerprint});
         const String expected = WithoutSources(now);
         const String actual = WithoutSources(*built);
         if (expected != actual) {
@@ -410,6 +600,47 @@ namespace BECore::Tests {
             const Context context = MakeContext(input);
             EXPECT_EQ(value->Evaluate(context), Run<int32_t>(ProgramPool::Get(value->Id()), context));
         }
+    }
+
+    namespace {
+
+        /// Every formula of @p formulas, compiled through the public path, is a program with a generated function and `Evaluate` gives what `Run` gives
+        template <typename T>
+        void ExpectBoundAndEqual(Span<const StringView> formulas) {
+            constexpr size_t kCases = 64;
+            Rng rng(kSeed);
+            Vector<InputCase> inputs(kCases);
+            for (size_t i = 0; i < inputs.size(); ++i) {
+                Fill(inputs[i], i, rng);
+            }
+            for (const StringView text : formulas) {
+                const auto value = CompileValue<T>(text, NativeProgramSetDeclaration());
+                ASSERT_TRUE(value.has_value()) << String(text).c_str();
+                ASSERT_EQ(value->Kind(), ValueKind::Program) << String(text).c_str();
+                EXPECT_NE(ProgramPool::Native(value->Id()), nullptr) << String(text).c_str() << " is not bound: the generated file is missing or stale";
+                for (const InputCase& input : inputs) {
+                    const Context context = MakeContext(input);
+                    const T interpreted = Run<T>(ProgramPool::Get(value->Id()), context);
+                    const T evaluated = value->Evaluate(context);
+                    if constexpr (std::is_floating_point_v<T>) {
+                        EXPECT_TRUE(evaluated == interpreted || (std::isnan(evaluated) && std::isnan(interpreted))) << String(text).c_str();
+                    } else {
+                        EXPECT_EQ(evaluated, interpreted) << String(text).c_str();
+                    }
+                }
+            }
+        }
+
+    }  // namespace
+
+    TEST(NativeProgramEqualityTest, EveryFormulaWithALoopIsBoundAndEvaluateGivesTheInterpretersValue) {
+        ExpectBoundAndEqual<int32_t>(kNativeListIntFormulas);
+        ExpectBoundAndEqual<int64_t>(kNativeListInt64Formulas);
+        ExpectBoundAndEqual<float>(kNativeListFloatFormulas);
+        ExpectBoundAndEqual<double>(kNativeListDoubleFormulas);
+        ExpectBoundAndEqual<bool>(kNativeListBoolFormulas);
+        ExpectBoundAndEqual<bool>(kNativeMahjongBoolFormulas);
+        ExpectBoundAndEqual<int32_t>(kNativeMahjongIntFormulas);
     }
 
 }  // namespace BECore::Tests

@@ -4,6 +4,7 @@
 #include <BECore/ProgramRowTypes.h>
 #include <BECore/Values/Programs/Components.h>
 #include <BECore/Values/Programs/Kernels.h>
+#include <BECore/Values/Programs/Lists/ListImage.h>
 #include <BECore/Values/Programs/ProgramBuilder.h>
 #include <NativePrograms/NativeProgramSet.h>
 
@@ -56,14 +57,19 @@ namespace BECore::Tests {
                 return Offset(Probe().color);
             } else if constexpr (std::is_same_v<T, PoolString>) {
                 return Offset(Probe().text);
-            } else {
-                static_assert(std::is_same_v<T, ProgramEnum>, "a field for every program type");
+            } else if constexpr (std::is_same_v<T, ProgramEnum>) {
                 return Offset(Probe().wide32);
+            } else {
+                static_assert(std::is_same_v<T, ProgramDomainValue>, "a field for every program type");
+                return Offset(Probe().mask);
             }
         }
 
         /// The size of the enum field `FieldOffset<ProgramEnum>` names
         constexpr uint8_t kEnumFieldBytes = sizeof(ValueTestData::ValueWideEnum);
+
+        /// The size of the registered type `FieldOffset<ProgramDomainValue>` names
+        constexpr uint8_t kDomainFieldBytes = sizeof(ProgramDomainData::DomainBits256);
 
         /// Assembles one program: registers are taken in order and never given back, so the numbers in the code are the order of the calls
         class RowAssembler {
@@ -80,6 +86,8 @@ namespace BECore::Tests {
                 const uint8_t reg = Acquire();
                 if constexpr (std::is_same_v<T, ProgramEnum>) {
                     _builder.EmitLoadSlot(reg, ProgramType::Enum, SlotRef{level, FieldOffset<T>()}, kEnumFieldBytes);
+                } else if constexpr (std::is_same_v<T, ProgramDomainValue>) {
+                    _builder.EmitLoadSlot(reg, ProgramType::Domain, SlotRef{level, FieldOffset<T>()}, kDomainFieldBytes);
                 } else {
                     _builder.EmitLoadSlot(reg, kProgramTypeOf<T>, SlotRef{level, FieldOffset<T>(second)});
                 }
@@ -165,6 +173,36 @@ namespace BECore::Tests {
                     const uint8_t reg = assembler.Load<T>(kOperandsLevelA);
                     return assembler.Finish(kProgramTypeOf<T>, reg, programs);
                 }
+            } else if constexpr (kShape == Kernel::OpShape::Element) {
+                // The element is the operands object of level A taken as a list of one; the index is the `i32` of level B, so the element is there when it is 0 and missing in the other cases,
+                // which is the whole of what `LoadElem` does. The field of an enum is read at each width, as the slot load is
+                Steps steps;
+                const auto assemble = [&](StringView programName, uint32_t offset, uint8_t enumBytes) {
+                    RowAssembler elementAssembler{String(programName)};
+                    ListDescriptor list;
+                    list.stride = sizeof(ProgramRowOperands);
+                    list.count = 1;
+                    const uint8_t listReg = elementAssembler.Acquire();
+                    const uint8_t index = elementAssembler.Load<int32_t>(kOperandsLevelB);
+                    const uint8_t element = elementAssembler.Acquire();
+                    const uint8_t dst = elementAssembler.Acquire();
+                    elementAssembler.Builder().EmitListSlot(listReg, kOperandsLevelA, list);
+                    elementAssembler.Builder().EmitListAt(element, listReg, index);
+                    elementAssembler.Builder().EmitLoadElem(dst, kProgramTypeOf<T>, element, offset, enumBytes);
+                    steps.Add(elementAssembler.Finish(kProgramTypeOf<T>, dst, programs));
+                };
+                if constexpr (std::is_same_v<T, ProgramEnum>) {
+                    const uint32_t offsets[] = {Offset(Probe().narrow), Offset(Probe().wide16), Offset(Probe().wide32), Offset(Probe().enum64)};
+                    const uint8_t sizes[] = {sizeof(ValueTestData::ValueNarrowEnum), sizeof(ValueTestData::ValueShortEnum), sizeof(ValueTestData::ValueWideEnum), sizeof(uint64_t)};
+                    for (size_t i = 0; i < std::size(offsets); ++i) {
+                        assemble(Format("{}{}", name, sizes[i]), offsets[i], sizes[i]);
+                    }
+                } else if constexpr (std::is_same_v<T, ProgramDomainValue>) {
+                    assemble(name, FieldOffset<T>(), kDomainFieldBytes);
+                } else {
+                    assemble(name, FieldOffset<T>(), 0);
+                }
+                return steps.Result();
             } else if constexpr (kShape == Kernel::OpShape::Unary) {
                 const uint8_t a = assembler.Load<T>(kLevels[0]);
                 const uint8_t dst = assembler.Acquire();

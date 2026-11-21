@@ -9,6 +9,7 @@
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
+#include <Widgets/SceneEditor/HierarchyModel.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <gtest/gtest.h>
 
@@ -198,13 +199,12 @@ namespace BECore::Tests {
         EXPECT_FALSE(IsMovable(Node("Main", "Hud")));  // a canvas-only node has no gizmo
     }
 
-    TEST_F(ViewportGizmosTest, CollectKeepsTheMovableAliveNodesInTheOrderOfTheSelection) {
+    TEST_F(ViewportGizmosTest, CollectKeepsTheMovableNodesInTheOrderOfTheLiveSelection) {
         SceneNode* const a = &Node("Main", "A");
         SceneNode* const b = &Node("Main", "B");
-        SceneNode* const stranger = &Node("Other", "Elsewhere");  // a node of another tree is not alive in this one
-        const Vector<SceneNode*> selected{b, &Node("Main", "Locked"), stranger, &Node("Main", "Hud"), a};
+        const Vector<SceneNode*> live{b, &Node("Main", "Locked"), &Node("Main", "Hud"), a};
 
-        CollectMovable(GetScene("Main"), {selected.data(), selected.size()}, _nodes, _items);
+        CollectMovable({live.data(), live.size()}, _nodes, _items);
 
         ASSERT_EQ(_nodes.size(), 2u);
         EXPECT_EQ(_nodes[0], b);
@@ -216,11 +216,11 @@ namespace BECore::Tests {
 
     TEST_F(ViewportGizmosTest, CollectClearsTheVectorsAndKeepsTheirCapacity) {
         const Vector<SceneNode*> selected{&Node("Main", "A"), &Node("Main", "B")};
-        CollectMovable(GetScene("Main"), {selected.data(), selected.size()}, _nodes, _items);
+        CollectMovable({selected.data(), selected.size()}, _nodes, _items);
         const size_t nodeCapacity = _nodes.capacity();
         const size_t itemCapacity = _items.capacity();
 
-        CollectMovable(GetScene("Main"), {}, _nodes, _items);
+        CollectMovable({}, _nodes, _items);
 
         EXPECT_TRUE(_nodes.empty());
         EXPECT_TRUE(_items.empty());
@@ -234,23 +234,21 @@ namespace BECore::Tests {
         const Vector<SceneNode*> nodes{a, b};
         const Vector<Gizmo::Item> items{Moved(ItemOf(*a->GetComponent<TransformComponent>()), 5.0f), Moved(ItemOf(*b->GetComponent<TransformComponent>()), -7.0f)};
 
-        EXPECT_TRUE(WriteItems(GetScene("Main"), {nodes.data(), nodes.size()}, {items.data(), items.size()}));
+        EXPECT_TRUE(WriteItems({nodes.data(), nodes.size()}, {items.data(), items.size()}));
 
         EXPECT_FLOAT_EQ(Require(a->GetComponent<TransformComponent>())._x, 15.0f);
         EXPECT_FLOAT_EQ(Require(b->GetComponent<TransformComponent>())._x, 193.0f);
     }
 
-    TEST_F(ViewportGizmosTest, WriteItemsWritesNothingWhenANodeIsGoneOrTheSizesDiffer) {
+    TEST_F(ViewportGizmosTest, WriteItemsWritesNothingWhenANodeHasNoTransformOrTheSizesDiffer) {
         SceneNode* const a = &Node("Main", "A");
-        SceneNode* const stranger = &Node("Other", "Elsewhere");
-        const Vector<SceneNode*> nodes{a, stranger};
+        const Vector<SceneNode*> nodes{a, &Node("Main", "Hud")};
         const Vector<Gizmo::Item> items{Moved(ItemOf(*a->GetComponent<TransformComponent>()), 5.0f), Gizmo::Item{}};
 
-        EXPECT_FALSE(AllAlive(GetScene("Main"), {nodes.data(), nodes.size()}));
-        EXPECT_FALSE(WriteItems(GetScene("Main"), {nodes.data(), nodes.size()}, {items.data(), items.size()}));
-        EXPECT_FLOAT_EQ(Require(a->GetComponent<TransformComponent>())._x, 10.0f);  // the live node was not touched either
+        EXPECT_FALSE(WriteItems({nodes.data(), nodes.size()}, {items.data(), items.size()}));
+        EXPECT_FLOAT_EQ(Require(a->GetComponent<TransformComponent>())._x, 10.0f);  // the node that could be written was not touched either
 
-        EXPECT_FALSE(WriteItems(GetScene("Main"), {nodes.data(), 1}, {items.data(), 2}));
+        EXPECT_FALSE(WriteItems({nodes.data(), 1}, {items.data(), 2}));
         EXPECT_FLOAT_EQ(Require(a->GetComponent<TransformComponent>())._x, 10.0f);
     }
 
@@ -360,6 +358,34 @@ namespace BECore::Tests {
         EXPECT_EQ(cancel.edits[0].node, &Node("Main", "A"));
     }
 
+    TEST_F(ViewportGizmosTest, ADragOfSeveralNodesEndsWhenOneIsDeletedAndNothingIsWrittenToIt) {
+        GizmoEditSession session;
+        ASSERT_TRUE(BeginMove(session, {"A", "B"}));
+        session.Update(GetScene("Main"), {10.0f, 0.0f}, false, false);
+        ASSERT_TRUE(session.CanContinue(&GetScene("Main")));
+        const size_t told = _recorder.entries.size();
+
+        GetScene("Main").GetRootNode().RemoveChild(&Node("Main", "B"));
+
+        EXPECT_FALSE(session.CanContinue(&GetScene("Main")));
+        // An Update that follows the failed confirmation writes nothing and tells nothing
+        session.Update(GetScene("Main"), {30.0f, 0.0f}, false, false);
+        EXPECT_EQ(_recorder.entries.size(), told);
+        EXPECT_FLOAT_EQ(TransformOf("A")._x, 20.0f);
+    }
+
+    TEST_F(ViewportGizmosTest, AnUpdateWithNoConfirmationBeforeItStillRefusesADeletedNode) {
+        GizmoEditSession session;
+        ASSERT_TRUE(BeginMove(session, {"A", "B"}));
+        GetScene("Main").GetRootNode().RemoveChild(&Node("Main", "B"));
+        const size_t told = _recorder.entries.size();
+
+        session.Update(GetScene("Main"), {30.0f, 0.0f}, false, false);
+
+        EXPECT_EQ(_recorder.entries.size(), told);
+        EXPECT_FLOAT_EQ(TransformOf("A")._x, 10.0f);
+    }
+
     TEST_F(ViewportGizmosTest, ANodeThatLostItsTransformEndsTheDragAndNothingFalseIsTold) {
         GizmoEditSession session;
         ASSERT_TRUE(BeginMove(session, {"A", "B"}));
@@ -439,13 +465,48 @@ namespace BECore::Tests {
         EXPECT_NEAR(bounds.h, 200.0f, kTolerance);
     }
 
-    TEST_F(ViewportGizmosTest, NoBoundsForAnEmptySelectionOrNodesOfAnotherScene) {
+    TEST_F(ViewportGizmosTest, NoBoundsForAnEmptySelection) {
         Rect bounds{1.0f, 2.0f, 3.0f, 4.0f};
-        const Vector<SceneNode*> stranger{&Node("Other", "Elsewhere")};
 
         EXPECT_FALSE(SelectionBounds(GetScene("Main"), {}, bounds));
-        EXPECT_FALSE(SelectionBounds(GetScene("Main"), {stranger.data(), stranger.size()}, bounds));
         EXPECT_FLOAT_EQ(bounds.x, 1.0f);  // untouched
+    }
+
+    TEST_F(ViewportGizmosTest, TheLiveSelectionOfABigTreeIsWhatAWalkPerNodeGave) {
+        Scene& scene = GetScene("Main");
+        constexpr size_t kBranches = 40;
+        constexpr size_t kLeaves = 50;
+        Vector<SceneNode*> selected;
+        size_t created = 0;
+        for (size_t branch = 0; branch < kBranches; ++branch) {
+            const IntrusivePtr<SceneNode> parent = scene.CreateNode("Branch"_intern, &scene.GetRootNode());
+            for (size_t leaf = 0; leaf < kLeaves; ++leaf) {
+                SceneNode* const node = scene.CreateNode("Leaf"_intern, parent.Get()).Get();
+                // Every fourth node is selected, so a quarter of the 2000 nodes: 500
+                if (++created % 4 == 0) {
+                    selected.push_back(node);
+                }
+            }
+        }
+        ASSERT_EQ(selected.size(), 500u);
+        SceneNode* const foreign = &Node("Other", "Elsewhere");
+        selected.insert(selected.begin() + 7, foreign);
+        selected.insert(selected.begin() + 100, nullptr);
+        scene.GetRootNode().RemoveChild(scene.GetRootNode().GetChildren().back().Get());  // the last branch goes with its selected leaves
+
+        Vector<SceneNode*> expected;
+        for (SceneNode* const node : selected) {
+            if (HierarchyModel::FindNode(scene.GetRootNode(), node)) {
+                expected.push_back(node);
+            }
+        }
+        Vector<SceneNode*> live;
+        HashSet<const SceneNode*> scratch;
+        HierarchyModel::ResolveLive(scene.GetRootNode(), {selected.data(), selected.size()}, live, scratch);
+
+        EXPECT_FALSE(live.empty());
+        EXPECT_LT(live.size(), selected.size());
+        EXPECT_EQ(live, expected);
     }
 
 }  // namespace BECore::Tests

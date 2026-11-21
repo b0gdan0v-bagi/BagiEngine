@@ -1,5 +1,6 @@
 #include "ProgramCodegen.h"
 
+#include <BECore/Values/Programs/Domain/ProgramDomain.h>
 #include <BECore/Values/Programs/Opcode.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
@@ -129,16 +130,34 @@ namespace BECore {
             out += "};\n";
         }
 
-        /// The function of a program, or false when an instruction has no statement (the program is then left to the interpreter)
+        String JumpLabel(size_t index) {
+            return Format("L{}:", index);
+        }
+
+        /// The function of a program, or false when an instruction has no statement (the program is then left to the interpreter). A label `L<i>:` stands before exactly the instructions a jump
+        /// goes to (an unused label is a warning), and `L<n>` before the result is stored when a jump leaves the code
         bool AppendFunction(String& out, const Program& program, StringView name, StringView constants) {
+            const Span<const Instruction> code = program.Code();
+            Vector<bool> isTarget(code.size() + 1, false);
+            for (const Instruction& ins : code) {
+                if (IsJump(ins.op) && ins.imm < isTarget.size()) {
+                    isTarget[ins.imm] = true;
+                }
+            }
             String body;
-            for (const Instruction& ins : program.Code()) {
-                const String statement = EmitNativeInstruction(ins, constants);
+            for (size_t i = 0; i < code.size(); ++i) {
+                const String statement = EmitNativeInstruction(code[i], constants);
                 if (statement.empty()) {
                     ASSERT(false, "GenerateNativeSource: an instruction of a program has no C++ statement");
                     return false;
                 }
+                if (isTarget[i]) {
+                    AppendFormat(body, "{}\n", JumpLabel(i));
+                }
                 AppendFormat(body, "    {}\n", statement);
+            }
+            if (isTarget[code.size()]) {
+                AppendFormat(body, "{}\n", JumpLabel(code.size()));
             }
             // A zero-length array is not C++; no program has no registers, but the text must not depend on that
             const size_t registers = program.RegisterCount() > 0 ? program.RegisterCount() : 1;
@@ -150,10 +169,21 @@ namespace BECore {
             return true;
         }
 
+        /// Whether the program calls an operation of a game: the id of the operation is the order of registration, so such a program is bound in a process of the same registry only
+        bool CallsDomainOperation(const Program& program) {
+            for (const Instruction& ins : program.Code()) {
+                if (ins.op == Opcode::CallDomain) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         void AppendEntry(String& out, const Program& program, uint64_t hash, StringView name, bool hasConstants) {
-            AppendFormat(out, "    {{0x{:016x}ULL, ProgramType::{}, {}, {}, {}U, kCode_{}, {}, \"{}\", &Program_{}}},\n", hash, program.ResultType(), static_cast<uint32_t>(program.ResultRegister()),
+            AppendFormat(out, "    {{0x{:016x}ULL, ProgramType::{}, {}, {}, {}U, kCode_{}, {}, \"{}\", &Program_{}", hash, program.ResultType(), static_cast<uint32_t>(program.ResultRegister()),
                          static_cast<uint32_t>(program.RegisterCount()), static_cast<uint32_t>(program.Reads()), name, hasConstants ? Format("kConstants_{}", name) : String("{}"),
                          EscapeLiteral(program.Source().ToStringView()), name);
+            out += CallsDomainOperation(program) ? ", kDomainFingerprint},\n" : "},\n";
         }
 
     }  // namespace
@@ -171,6 +201,22 @@ namespace BECore {
                 return Format("Kernel::ExecuteLoadTable(regs, {}, {});", literal, constants);
             case Opcode::LoadTableSlot:
                 return Format("Kernel::ExecuteLoadTableSlot(regs, {}, {}, context);", literal, constants);
+            case Opcode::CallDomain:
+                return Format("Kernel::ExecuteCallDomain(regs, {}, context);", literal);
+            case Opcode::ListSlot:
+                return Format("Kernel::ExecuteListSlot(regs, {}, {}, context);", literal, constants);
+            case Opcode::ListElem:
+                return Format("Kernel::ExecuteListElem(regs, {}, {});", literal, constants);
+            case Opcode::ListSize:
+                return Format("Kernel::ExecuteListSize(regs, {});", literal);
+            case Opcode::ListAt:
+                return Format("Kernel::ExecuteListAt(regs, {});", literal);
+            case Opcode::LoopBegin:
+                return Format("if (Kernel::ExecuteLoopBegin(regs, {})) goto L{};", literal, ins.imm);
+            case Opcode::LoopEnd:
+                return Format("if (Kernel::ExecuteLoopEnd(regs, {})) goto L{};", literal, ins.imm);
+            case Opcode::BreakIf:
+                return Format("if (Kernel::ExecuteBreakIf(regs, {})) goto L{};", literal, ins.imm);
 #define BE_PROGRAM_EMIT_ROW(Op, Type, Cpp)                                                                                                                                                             \
     case Opcode::Op##Type:                                                                                                                                                                             \
         return Format("Kernel::Execute<Kernel::" #Op ", " #Cpp ">(regs, {}, context);", literal);
@@ -212,6 +258,11 @@ namespace BECore {
         String out;
         AppendFormat(out, "// Native programs generated for the content set \"{}\". Generated by ProgramCodegen: never edited, regenerate it with the build.\n", SingleLine(options.contentSet));
         out += "#include <BECore/Values/Programs/Kernels.h>\n#include <BECore/Values/Programs/Native/NativePrograms.h>\n\nnamespace BECore {\n";
+
+        const bool callsDomain = eastl::any_of(candidates.begin(), candidates.end(), [](const Candidate& candidate) { return CallsDomainOperation(*candidate.program); });
+        if (callsDomain) {
+            AppendFormat(out, "\nconstexpr uint64_t kDomainFingerprint = 0x{:016x}ULL;\n", options.domainFingerprint.value_or(ProgramDomain::Fingerprint()));
+        }
 
         String entries;
         size_t ordinal = 0;

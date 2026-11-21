@@ -2,6 +2,7 @@
 
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Scene/SceneDrawSystem.h>
@@ -32,6 +33,7 @@ namespace BECore {
 
     void Scene::Update() {
         BE_PROFILE_SCOPE("Scene::Update");
+        BE_MEM_TAG(Scene);
         if (_viewVersion != _announcedViewVersion) {
             _announcedViewVersion = _viewVersion;
             SceneEvents::SceneViewChangedEvent::Emit(this, GetActiveView());

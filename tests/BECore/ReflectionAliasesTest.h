@@ -34,24 +34,25 @@ namespace BECore {
             BE_REFLECT_FIELD Variant<int32_t, String> choice;
         };
 
-        /// The same fields spelled with the eastl:: / std:: names; no `choice`: `Variant` is `std::variant` itself,
-        /// so there is no other spelling to compare
+        /// The same fields spelled with the eastl:: / std:: names on EASTL's default allocator (the alias fields use EngineAllocator); no
+        /// `choice`: `Variant` is `std::variant` itself, so there is no other spelling to compare. The elements and keys that are strings
+        /// stay `String`: a reader fills a `String` only, the allocator of the container is what differs
         struct EastlState {
             BE_CLASS(EastlState)
 
             BE_REFLECT_FIELD eastl::string text;
             BE_REFLECT_FIELD eastl::fixed_string<char, kFixedTextLength, true> fixedText;
             BE_REFLECT_FIELD eastl::vector<int32_t> list;
-            BE_REFLECT_FIELD eastl::vector<eastl::string> words;
+            BE_REFLECT_FIELD eastl::vector<String> words;
             BE_REFLECT_FIELD eastl::fixed_vector<int32_t, 4, true> small;
             BE_REFLECT_FIELD eastl::fixed_vector<int32_t, 4, false> fixed;
             BE_REFLECT_FIELD eastl::array<int32_t, 3> triple{};
-            BE_REFLECT_FIELD eastl::hash_map<eastl::string, int32_t> hashed;
-            BE_REFLECT_FIELD eastl::map<eastl::string, int32_t> ordered;
-            BE_REFLECT_FIELD eastl::fixed_hash_map<eastl::string, int32_t, 8> fixedHashed;
+            BE_REFLECT_FIELD eastl::hash_map<String, int32_t> hashed;
+            BE_REFLECT_FIELD eastl::map<String, int32_t> ordered;
+            BE_REFLECT_FIELD eastl::fixed_hash_map<String, int32_t, 8> fixedHashed;
             BE_REFLECT_FIELD std::optional<int32_t> present;  //-NoStd: the spelling `Optional` stands for is the case
             BE_REFLECT_FIELD std::optional<int32_t> absent;   //-NoStd: the spelling `Optional` stands for is the case
-            BE_REFLECT_FIELD eastl::pair<int32_t, eastl::string> entry;
+            BE_REFLECT_FIELD eastl::pair<int32_t, String> entry;
         };
 
     }  // namespace AliasTestData
