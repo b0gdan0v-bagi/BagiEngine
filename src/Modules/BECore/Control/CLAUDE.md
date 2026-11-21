@@ -112,6 +112,7 @@ The file half is the reflected `ApplicationConfig` read with strict values (`ref
 | `BECore/Control/ReflectionControl` | `get_property` (`{root, path}`), `set_property` (`{root, path, value}`), `call_method` (`{root, method, arguments?}`) over a root; `list_types` (`{base?, recursive?, creatable?}`), `describe_type` (`{name}`), `schema`; shapes and codes in `Reflection/CLAUDE.md`, "Reflection methods" |
 | `BECore/FileSystem/FileWatchControl` | `files_rescan` (to `{changes}`), `files_apply` (`{paths?}` to `{applied}`); codes `not_watching`, `invalid_params`; `FileSystem/CLAUDE.md` |
 | `BECore/Audio/AudioControl` | `audio_state` (the backend, the levels, the last sounds asked for, played or not), `audio_set` (`{bus, volume?, muted?}`); `Audio/CLAUDE.md` |
+| `BECore/Values/Explain/ValueExplainControl` | `explain_value` (`{root, path, context?}`; `Values/Explain/CLAUDE.md`) |
 | `Games/GameControl` | `list_games`, `switch_game`, `reset`, `get_state`, `list_actions`, `perform_action`, `set_state`, `run_until`, `record_start`, `record_stop`, `replay` (`Games/CLAUDE.md`; shape of `run_until`: `.claude/rules/control-qa-api.md`) |
 
 The game methods describe only what `GameControl` itself reads; the parameters of `perform_action` and `set_state` are the game's.
@@ -129,4 +130,4 @@ An object a client may read or write by name is offered as a root: `service.Root
 
 ## Tests
 
-`tests/BECore/ControlServiceTest.cpp` is the pattern (a service of its own, a lambda as the reply, `RunDueFrames` for the manual clock); the other control tests (`Control*Test.cpp`, `ReflectionControlTest.cpp`, `GameControlTest.cpp`, `JsonTest.cpp`, `Base64Test.cpp`) sit beside it. The transport has its own tests, see `RemoteControl/CLAUDE.md`.
+`tests/BECore/ControlServiceTest.cpp` is the pattern (a service of its own, a lambda as the reply, `RunDueFrames` for the manual clock); the other control tests sit beside it. The transport has its own tests, see `RemoteControl/CLAUDE.md`.
