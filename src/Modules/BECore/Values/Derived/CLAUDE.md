@@ -18,10 +18,20 @@ A parameter of `Get` (a `FunctionRef`, valid for the call), not a stored callbac
 
 Where asserts are on, the builder gets `Context::Restricted(mask)`: a copy without the undeclared levels, so a `Value::Get` of one fails the `ASSERT` for a null level instead of leaving a stale screen. **It cannot see** a read through anything but the `Context` it was given (a captured pointer to the object, a global); keep every read of a builder in its declaration.
 
+## The pattern of a screen
+
+One `ContextDecl` and one `Context` as members, filled when the screen is attached and again only when an object is replaced (the counters move on their own, so a per-frame rebuild by hand is not needed); one `Derived` per text, list or layout, its reads declared once from the `Value`s it reads; each frame only `Get`. A screen keeps no version key, no "uses strings" flag and no copy of an input to compare. Reserve a `String` or `Vector` once (inside the builder, `reserve` is a no-op when it fits), `clear()` and append: a steady frame and a rebuild within the capacity allocate nothing. `tests/BECore/UIDerivedScreenTest.cpp` is the model, with its counts of rebuilds.
+
+## Ambient levels and the engine's own use
+
+`UIAmbient::Declare` adds the levels `language` (the `UIStrings` version) and `window` (the version of a canvas's layout context); `UIVars` and `UIStrings` give out their counters for `AddSource` (`.claude/rules/ui-controls.md`, "Derived values of a screen"). `UITextPainter` is the proof in the engine: its display text is a `Derived<String>` over the `UIVars` counter and, for a text with a `{#key}`, the `UIStrings` counter.
+
 ## Traps
 
-A counter nobody bumps is a value that never rebuilds; a counter that goes down can fold back to an earlier key; an object replaced without a bump is the owner's trap (`../CLAUDE.md`, "Versions"). Not thread-safe; movable, not copyable.
+A counter nobody bumps is a value that never rebuilds; a counter that goes down can fold back to an earlier key; an object replaced without a bump is the owner's trap (`../CLAUDE.md`, "Versions"); versions are per level, so a change of one field moves every value that reads the level. A builder that reads through a captured pointer instead of its `Context` is a stale screen no assert sees. Not thread-safe; movable, not copyable.
 
 ## When `CachedValue` is the better tool
 
 A result that is a `ValueType` of one formula: `CachedValue` runs the program and keeps the result. `Derived` is for anything else, or for a result of several values and C++.
+
+What stays the game's: the content of its screens (a game's HUD and plates drop their own keys for `Derived` values over a `Context`); the engine has no template language for a derived text.
