@@ -1,6 +1,10 @@
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/Config/ContentVersion.h>
+#include <BECore/FileSystem/MountPoints.h>
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
+#include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneLoader.h>
 #include <BECore/Scene/SceneNodeFiles.h>
@@ -224,6 +228,106 @@ namespace BECore::Tests {
         EXPECT_EQ(actual, expected);
         EXPECT_EQ(actualSource, expectedSource);
         EXPECT_EQ(actualSource, PoolString::Intern(kHudRef));
+    }
+
+    /// Scene files: a scene config with inline nodes and one expanded from a node file, XML against its cooked form
+    class SceneBinaryScenesTest : public ::testing::Test {
+    protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
+
+        void SetUp() override {
+            _dir = TestTempDirectory("BagiSceneBinaryScenesTest");
+            std::filesystem::remove_all(_dir);
+            WriteFile(_dir / "nodes" / "Hud.xml", HudXml());
+        }
+
+        void TearDown() override {
+            std::error_code ignored;
+            std::filesystem::remove_all(_dir, ignored);
+        }
+
+        /// The scenes of the XML config: inline nodes with children and components, and a node file with an override
+        IntrusivePtrAtomic<SceneManager> LoadFromXml() {
+            const String text = SceneConfigText(R"(<node name="A" layer="3"><components><component type="TransformComponent" x="5" y="6"/></components><children><node name="A1"/></children></node>
+<node ref="nodes/Hud" name="Panel"/>)",
+                                                kMainSceneView800x600);
+            const pugi::xml_parse_result parsed = _doc.load_string(text.c_str());
+            EXPECT_TRUE(parsed) << parsed.description();
+            return LoadSceneManager(XmlNode{_doc.document_element()}, MakeDirectoryNodeLoader(_dir));
+        }
+
+        static String Printed(SceneManager& manager) {
+            XmlSerializer serializer;
+            manager.Serialize(serializer);
+            return serializer.SaveToString();
+        }
+
+        std::filesystem::path _dir;
+        pugi::xml_document _doc;
+    };
+
+    TEST_F(SceneBinaryScenesTest, ACookedSceneConfigSerializesToTheTextOfTheXmlOne) {
+        const auto fromXml = LoadFromXml();
+        BinarySerializer writer;
+        ASSERT_TRUE(WriteContentStamp(writer, kSceneManagerRootType));
+        fromXml->Serialize(writer);
+        const Vector<uint8_t> bytes = writer.GetData();
+
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromView(bytes.data(), bytes.size()));
+        const auto fromBinary = LoadSceneManagerFromBinary(reader);
+
+        const String expected = Printed(*fromXml);
+        EXPECT_EQ(Printed(*fromBinary), expected);
+        EXPECT_NE(expected.find("Panel"), String::npos);
+        EXPECT_NE(expected.find("TransformComponent"), String::npos);
+        EXPECT_NE(expected.find(kHudRef.data()), String::npos) << "sourceRef of the expanded node";
+    }
+
+    TEST_F(SceneBinaryScenesTest, AStampOfAnotherTypeIsOneErrorAndAnEmptyManager) {
+        const Vector<uint8_t> bytes = StampedContentBytes(kRootType, *NodeOf("<node name=\"A\"/>"));
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromView(bytes.data(), bytes.size()));
+        const LogRecorder log;
+
+        const auto manager = LoadSceneManagerFromBinary(reader, "WrongRoot");
+
+        LogEvent::Flush();
+        EXPECT_EQ(log.Count(LogLevel::Error, {"WrongRoot"}), 1u);
+        EXPECT_EQ(Printed(*manager), Printed(*New<SceneManager>()));
+    }
+
+    TEST_F(SceneBinaryScenesTest, LoadSceneManagerFromConfigReadsABinarySceneConfig) {
+        const auto fromXml = LoadFromXml();
+        WriteContentBin(_dir / "config" / "SceneConfig.bin", kSceneManagerRootType, *fromXml);
+        FileSystem fs;
+        ASSERT_TRUE(fs.Mount(MountPoints::config, _dir / "config"));
+        ConfigManager configs{fs};
+        configs.Initialize();
+        ASSERT_TRUE(configs.IsBinaryConfig(kSceneConfigName));
+
+        const auto loaded = LoadSceneManagerFromConfig(configs, fs);
+
+        EXPECT_EQ(Printed(*loaded), Printed(*fromXml));
+    }
+
+    TEST_F(SceneBinaryScenesTest, ACookedSceneConfigOfAnotherLayoutIsAbsentAndTheManagerEmpty) {
+        const auto fromXml = LoadFromXml();
+        WriteContentBytes(_dir / "config" / "SceneConfig.bin", StampedContentBytesWithLayout(kSceneManagerRootType, 0x1234, *fromXml));
+        FileSystem fs;
+        ASSERT_TRUE(fs.Mount(MountPoints::config, _dir / "config"));
+        ConfigManager configs{fs};
+        const LogRecorder log;
+        configs.Initialize();
+
+        const auto loaded = LoadSceneManagerFromConfig(configs, fs);
+
+        LogEvent::Flush();
+        EXPECT_FALSE(configs.HasConfig(kSceneConfigName));
+        EXPECT_EQ(Printed(*loaded), Printed(*New<SceneManager>()));
+        EXPECT_GE(log.Count(LogLevel::Error, {"SceneConfig"}), 1u);
     }
 
 }  // namespace BECore::Tests
