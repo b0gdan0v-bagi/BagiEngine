@@ -14,6 +14,7 @@ namespace BECore {
      * The engine builds without exceptions, so nlohmann/json aborts the process where it would throw: at(), get<T>()
      * on the wrong type, value() on a non-object and operator[] by a missing key on a const object. Never call those
      * on client data: parse with ParseJson() and read members with the helpers below (Control/CLAUDE.md, "JSON rules").
+     * New JSON is not built here: it is written with JsonWriter; a Json is what a client sent or a document that stays a DOM.
      */
 
     /// True when `[` and `{` outside strings nest deeper than @p maxDepth. A scan that does not recurse and does not judge the syntax (the parser does).
