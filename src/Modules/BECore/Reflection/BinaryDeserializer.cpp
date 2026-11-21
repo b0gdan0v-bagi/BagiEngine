@@ -1,19 +1,47 @@
 #include <BECore/Reflection/BinaryDeserializer.h>
+#include <EASTL/sort.h>
 
 namespace BECore {
 
     namespace {
 
-        bool ValidateScope(const uint8_t* data, size_t begin, size_t end, size_t depth);
+        /// Scopes of up to this many entries are checked for a repeated name on the stack
+        constexpr size_t kInlineNameKeys = 16;
+
+        /// A scope with more entries is not checked: it is taken as holding a repeated name, which only costs the old scan (the check is bounded in memory)
+        constexpr size_t kMaxTrackedEntries = 65536;
+
+        /// The first block of ValidateState::spill, so a file of ordinary wide scopes allocates once and not at every doubling
+        constexpr size_t kSpillReserve = 64;
+
+        constexpr uint64_t kNameClassSalt = 0x9E3779B97F4A7C15ULL;
+
+        /// What validation collects on the way: the whole file's verdict on repeated names and the keys of the scopes that are being walked
+        struct ValidateState {
+            const uint8_t* data = nullptr;
+            bool hasDuplicateNames = false;
+            /// The keys of the scopes beyond kInlineNameKeys entries. A scope owns the tail from where it began and cuts it back when it ends,
+            /// so the nested scopes that are walked in between do not mix with it
+            Vector<uint64_t> spill;
+        };
+
+        /// Equal for the same name of the same kind of entry (scalar, object, array); different names or kinds collide only by chance,
+        /// and a collision only sends the file to the slow lookup
+        uint64_t NameKey(const BinaryFormat::EntryView& entry) {
+            const uint64_t kind = BinaryFormat::IsScalarTag(entry.tag) ? 0 : (entry.tag == BinaryFormat::Tag::Object ? 1 : 2);
+            return StringUtils::GetHash(entry.name) + kind * kNameClassSalt;
+        }
+
+        bool ValidateScope(ValidateState& state, size_t begin, size_t end, size_t depth);
 
         /// Validate the array payload: u32 size | u32 count | count x (u32 size | entries)
-        bool ValidateArray(const uint8_t* data, const BinaryFormat::EntryView& entry, size_t depth) {
+        bool ValidateArray(ValidateState& state, const BinaryFormat::EntryView& entry, size_t depth) {
             const size_t countOffset = entry.payloadBegin + sizeof(uint32_t);
             if (entry.end - countOffset < sizeof(uint32_t)) {
                 return false;
             }
 
-            const size_t count = BinaryFormat::Load<uint32_t>(data + countOffset);
+            const size_t count = BinaryFormat::Load<uint32_t>(state.data + countOffset);
             if (count > ReaderLimits::kMaxArrayElements) {
                 return false;
             }
@@ -22,12 +50,12 @@ namespace BECore {
                 if (entry.end - position < sizeof(uint32_t)) {
                     return false;
                 }
-                const size_t elementSize = BinaryFormat::Load<uint32_t>(data + position);
+                const size_t elementSize = BinaryFormat::Load<uint32_t>(state.data + position);
                 position += sizeof(uint32_t);
                 if (elementSize > entry.end - position) {
                     return false;
                 }
-                if (!ValidateScope(data, position, position + elementSize, depth + 1)) {
+                if (!ValidateScope(state, position, position + elementSize, depth + 1)) {
                     return false;
                 }
                 position += elementSize;
@@ -35,28 +63,63 @@ namespace BECore {
             return position == entry.end;
         }
 
-        /// Check that [begin, end) is a sequence of well-formed entries, recursively
-        bool ValidateScope(const uint8_t* data, size_t begin, size_t end, size_t depth) {
+        /// Check that [begin, end) is a sequence of well-formed entries, recursively, and note whether a name repeats in any scope
+        bool ValidateScope(ValidateState& state, size_t begin, size_t end, size_t depth) {
             if (depth > BinaryFormat::MaxDepth) {
                 return false;
             }
 
+            uint64_t keys[kInlineNameKeys];
+            size_t keyCount = 0;
+            size_t entryCount = 0;
+            const size_t spillBegin = state.spill.size();
+
             size_t position = begin;
             while (position < end) {
                 BinaryFormat::EntryView entry;
-                if (!BinaryFormat::ParseEntry(data, position, end, entry)) {
+                if (!BinaryFormat::ParseEntry(state.data, position, end, entry)) {
                     return false;
                 }
+
+                if (!state.hasDuplicateNames) {
+                    const uint64_t key = NameKey(entry);
+                    if (++entryCount > kMaxTrackedEntries) {
+                        state.hasDuplicateNames = true;
+                    } else if (keyCount < kInlineNameKeys) {
+                        for (size_t i = 0; i < keyCount; ++i) {
+                            state.hasDuplicateNames = state.hasDuplicateNames || keys[i] == key;
+                        }
+                        keys[keyCount++] = key;
+                    } else {
+                        if (state.spill.capacity() == 0) {
+                            state.spill.reserve(kSpillReserve);
+                        }
+                        state.spill.push_back(key);
+                    }
+                }
+
                 if (entry.tag == BinaryFormat::Tag::Object) {
-                    if (!ValidateScope(data, entry.payloadBegin + sizeof(uint32_t), entry.end, depth + 1)) {
+                    if (!ValidateScope(state, entry.payloadBegin + sizeof(uint32_t), entry.end, depth + 1)) {
                         return false;
                     }
                 } else if (entry.tag == BinaryFormat::Tag::Array) {
-                    if (!ValidateArray(data, entry, depth)) {
+                    if (!ValidateArray(state, entry, depth)) {
                         return false;
                     }
                 }
                 position = entry.end;
+            }
+
+            if (state.spill.size() > spillBegin) {
+                if (!state.hasDuplicateNames) {
+                    // The inline keys joined the tail, so one sort finds a repeat among all of them
+                    state.spill.insert(state.spill.end(), keys, keys + keyCount);
+                    eastl::sort(state.spill.begin() + spillBegin, state.spill.end());
+                    for (size_t i = spillBegin + 1; i < state.spill.size(); ++i) {
+                        state.hasDuplicateNames = state.hasDuplicateNames || state.spill[i] == state.spill[i - 1];
+                    }
+                }
+                state.spill.resize(spillBegin);
             }
             return true;
         }
@@ -70,6 +133,7 @@ namespace BECore {
     void BinaryDeserializer::ResetState() {
         _data = nullptr;
         _size = 0;
+        _hasDuplicateNames = false;
         _owned.clear();
         _scopeStack.clear();
         _arrayStack.clear();
@@ -97,10 +161,13 @@ namespace BECore {
             AddError("", "Binary data is truncated or has trailing bytes", 0);
             return false;
         }
-        if (!ValidateScope(data, BinaryFormat::HeaderSize, size, 0)) {
+        ValidateState state;
+        state.data = data;
+        if (!ValidateScope(state, BinaryFormat::HeaderSize, size, 0)) {
             AddError("", "Binary data is corrupt (or an array has more elements than the limit)", 0);
             return false;
         }
+        _hasDuplicateNames = state.hasDuplicateNames;
         return true;
     }
 
@@ -108,10 +175,7 @@ namespace BECore {
         _data = data;
         _size = size;
 
-        Scope root;
-        root.begin = BinaryFormat::HeaderSize;
-        root.end = size;
-        _scopeStack.push_back(root);
+        _scopeStack.push_back(Scope{BinaryFormat::HeaderSize, size, BinaryFormat::HeaderSize});
     }
 
     bool BinaryDeserializer::LoadFromView(const uint8_t* data, size_t size) {
@@ -180,35 +244,62 @@ namespace BECore {
     // Lookup
     // =============================================================================
 
-    bool BinaryDeserializer::FindEntry(StringView name, TagPredicate accepts, BinaryFormat::EntryView& outEntry) const {
+    bool BinaryDeserializer::FindEntry(StringView name, TagPredicate accepts, bool moveCursor, BinaryFormat::EntryView& outEntry) const {
         if (_scopeStack.empty()) {
             return false;
         }
 
         const Scope& scope = _scopeStack.back();
-        bool found = false;
-        size_t position = scope.begin;
-        while (position < scope.end) {
-            BinaryFormat::EntryView entry;
-            if (!BinaryFormat::ParseEntry(_data, position, scope.end, entry)) {
-                break;  // cannot happen after validation
+
+        if (_hasDuplicateNames) {
+            bool found = false;
+            size_t position = scope.begin;
+            while (position < scope.end) {
+                BinaryFormat::EntryView entry;
+                if (!BinaryFormat::ParseEntry(_data, position, scope.end, entry)) {
+                    break;  // cannot happen after validation
+                }
+                if (accepts(entry.tag) && entry.name == name) {
+                    outEntry = entry;
+                    found = true;  // keep scanning: the last write wins
+                }
+                position = entry.end;
             }
-            if (accepts(entry.tag) && entry.name == name) {
-                outEntry = entry;
-                found = true;  // keep scanning: the last write wins
-            }
-            position = entry.end;
+            return found;
         }
-        return found;
+
+        // Every name is written once per kind, so the first match is the only one: look after the last match first, where a reader of the
+        // fields in the order they were written finds the next one at once, then wrap round to the entries before it
+        const auto scan = [&](size_t from, size_t to) {
+            for (size_t position = from; position < to;) {
+                BinaryFormat::EntryView entry;
+                if (!BinaryFormat::ParseEntry(_data, position, scope.end, entry)) {
+                    return false;  // cannot happen after validation
+                }
+                if (accepts(entry.tag) && entry.name == name) {
+                    outEntry = entry;
+                    return true;
+                }
+                position = entry.end;
+            }
+            return false;
+        };
+        if (!scan(scope.cursor, scope.end) && !scan(scope.begin, scope.cursor)) {
+            return false;
+        }
+        if (moveCursor) {
+            scope.cursor = outEntry.end;
+        }
+        return true;
     }
 
     bool BinaryDeserializer::HasKey(StringView name) const {
         BinaryFormat::EntryView entry;
-        return FindEntry(name, [](uint8_t) { return true; }, entry);
+        return FindEntry(name, [](uint8_t) { return true; }, false, entry);
     }
 
     bool BinaryDeserializer::FindScalar(StringView name, uint8_t expectedTag, bool reportMissing, BinaryFormat::EntryView& outEntry) {
-        if (!FindEntry(name, &BinaryFormat::IsScalarTag, outEntry)) {
+        if (!FindEntry(name, &BinaryFormat::IsScalarTag, true, outEntry)) {
             if (reportMissing) {
                 ReportError(name, "Element not found");
             }
@@ -392,14 +483,12 @@ namespace BECore {
 
     bool BinaryDeserializer::BeginObject(StringView name) {
         BinaryFormat::EntryView entry;
-        if (!FindEntry(name, &BinaryFormat::IsObjectTag, entry)) {
+        if (!FindEntry(name, &BinaryFormat::IsObjectTag, true, entry)) {
             return false;
         }
 
-        Scope scope;
-        scope.begin = entry.payloadBegin + sizeof(uint32_t);
-        scope.end = entry.end;
-        _scopeStack.push_back(scope);
+        const size_t begin = entry.payloadBegin + sizeof(uint32_t);
+        _scopeStack.push_back(Scope{begin, entry.end, begin});
         PushPathSegment(name);
         return true;
     }
@@ -417,35 +506,19 @@ namespace BECore {
 
     bool BinaryDeserializer::BeginArray(StringView name, StringView /*elementName*/, size_t& count) {
         BinaryFormat::EntryView entry;
-        if (!FindEntry(name, &BinaryFormat::IsArrayTag, entry)) {
+        if (!FindEntry(name, &BinaryFormat::IsArrayTag, true, entry)) {
             return false;
         }
 
         // Layout (validated on load): u32 size | u32 count | count x (u32 size | entries)
-        const size_t elementCount = BinaryFormat::Load<uint32_t>(_data + entry.payloadBegin + sizeof(uint32_t));
-
         ArrayContext context;
-        context.elements.reserve(elementCount);
-        size_t position = entry.payloadBegin + 2 * sizeof(uint32_t);
-        for (size_t i = 0; i < elementCount; ++i) {
-            const size_t elementSize = BinaryFormat::Load<uint32_t>(_data + position);
-            position += sizeof(uint32_t);
-
-            Scope element;
-            element.begin = position;
-            element.end = position + elementSize;
-            context.elements.push_back(element);
-            position += elementSize;
-        }
-
-        count = context.elements.size();
-        _arrayStack.push_back(eastl::move(context));
+        context.count = BinaryFormat::Load<uint32_t>(_data + entry.payloadBegin + sizeof(uint32_t));
+        context.next = entry.payloadBegin + 2 * sizeof(uint32_t);
+        count = context.count;
+        _arrayStack.push_back(context);
 
         // The array itself holds no entries, only elements: an empty scope keeps stray lookups from reading them
-        Scope arrayScope;
-        arrayScope.begin = entry.end;
-        arrayScope.end = entry.end;
-        _scopeStack.push_back(arrayScope);
+        _scopeStack.push_back(Scope{entry.end, entry.end, entry.end});
         PushPathSegment(name);
         return true;
     }
@@ -465,11 +538,15 @@ namespace BECore {
             return false;
         }
         ArrayContext& context = _arrayStack.back();
-        if (context.currentIndex >= context.elements.size()) {
+        if (context.index >= context.count) {
             return false;
         }
-        PushPathArrayIndex(context.currentIndex);
-        _scopeStack.push_back(context.elements[context.currentIndex++]);
+
+        const size_t begin = context.next + sizeof(uint32_t);
+        const size_t end = begin + BinaryFormat::Load<uint32_t>(_data + context.next);
+        context.next = end;
+        PushPathArrayIndex(context.index++);
+        _scopeStack.push_back(Scope{begin, end, begin});
         return true;
     }
 

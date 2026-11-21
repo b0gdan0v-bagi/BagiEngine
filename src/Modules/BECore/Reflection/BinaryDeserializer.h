@@ -6,6 +6,10 @@
 
 namespace BECore {
 
+    namespace Tests {
+        struct BinaryDeserializerAccess;
+    }
+
     /**
      * @brief Binary deserializer (reader) for the format written by BinarySerializer
      *
@@ -115,15 +119,21 @@ namespace BECore {
         void AddError(StringView path, StringView message, int32_t line) override;
 
     private:
+        friend struct Tests::BinaryDeserializerAccess;  // reads _hasDuplicateNames: the fast lookup is a test subject
+
         /// Byte range [begin, end) holding the entries of the current object or array element
         struct Scope {
             size_t begin = 0;
             size_t end = 0;
+            /// Where the entry after the last match of FindEntry() starts (always the start of an entry, or end); the next lookup begins there
+            mutable size_t cursor = 0;
         };
 
+        /// The elements of an open array are not listed: the position of the next one is enough, because their sizes were validated on load
         struct ArrayContext {
-            Vector<Scope> elements;
-            size_t currentIndex = 0;
+            size_t next = 0;  // the u32 size of the next element
+            size_t count = 0;
+            size_t index = 0;
         };
 
         using TagPredicate = bool (*)(uint8_t tag);
@@ -131,9 +141,16 @@ namespace BECore {
         /**
          * @brief Find the entry called @p name in the current scope whose tag satisfies @p accepts
          *
-         * A name written more than once resolves to the last entry.
+         * A name written more than once resolves to the last entry. A reader asks for the fields in the order they were
+         * written, so the scan starts at Scope::cursor (after the last match) and wraps round to the start of the scope; a
+         * name that is not there costs one pass over the scope. That order says nothing about which entry wins when a name
+         * repeats, so a file in which any scope holds one name twice in one kind of entry (scalar, object, array) is marked
+         * by validation (_hasDuplicateNames) and always scans the whole scope forward, which keeps the last one.
+         *
+         * @param moveCursor false for a question that is not a read (HasKey): the read that follows it would otherwise
+         *        start after the answer and go all the way round
          */
-        bool FindEntry(StringView name, TagPredicate accepts, BinaryFormat::EntryView& outEntry) const;
+        bool FindEntry(StringView name, TagPredicate accepts, bool moveCursor, BinaryFormat::EntryView& outEntry) const;
 
         /// Find a scalar entry and check its tag. Reports "Element not found" only if @p reportMissing.
         bool FindScalar(StringView name, uint8_t expectedTag, bool reportMissing, BinaryFormat::EntryView& outEntry);
@@ -156,6 +173,8 @@ namespace BECore {
         size_t _size = 0;
         /// Backs _data only for LoadFromBuffer() and LoadFromFile(); a default move keeps _data valid because the heap block moves with it
         Vector<uint8_t> _owned;
+        /// Set by Validate(): some scope of the stream holds a name twice in one kind of entry (see FindEntry)
+        bool _hasDuplicateNames = false;
         Vector<Scope> _scopeStack;
         Vector<ArrayContext> _arrayStack;
         Vector<DeserializeError> _errors;
