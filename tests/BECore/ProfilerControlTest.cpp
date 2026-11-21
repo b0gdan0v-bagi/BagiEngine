@@ -1,3 +1,4 @@
+#include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -5,10 +6,13 @@
 #include <BECore/Memory/LinearArena.h>
 #include <BECore/Memory/MemTag.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/Profiler/Backends/ChromeTraceBackend.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/ProfilerControl.h>
+#include <Common/AllocCheck.h>
 #include <Common/ControlTestSupport.h>
+#include <Common/TempPath.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -26,6 +30,238 @@ namespace BECore::Tests {
 
         ControlService service;
     };
+
+    namespace {
+
+        uint64_t g_fakeNowNs = 0;
+
+        uint64_t FakeNowNs() {
+            return g_fakeNowNs;
+        }
+
+        constexpr uint64_t kNsPerMs = 1'000'000;
+
+        /// The raw text of the answer: the tests below pin its bytes
+        String Ask(ControlService& service, StringView method, const Json& params = Json::object()) {
+            String text;
+            service.Post(MakeRequest(1, method, params), [&text](const String& reply) { text = reply; });
+            service.Drain();
+            return text;
+        }
+
+        /// @p text with every integer replaced by N: a counter that depends on the process (live bytes, arenas) keeps its place but not its value
+        String MaskIntegers(const String& text) {
+            String masked;
+            size_t i = 0;
+            while (i < text.size()) {
+                const bool digit = text[i] >= '0' && text[i] <= '9';
+                if (!digit) {
+                    masked.push_back(text[i]);
+                    ++i;
+                    continue;
+                }
+                size_t end = i;
+                while (end < text.size() && text[end] >= '0' && text[end] <= '9') {
+                    ++end;
+                }
+                const bool fraction = end < text.size() && (text[end] == '.' || text[end] == 'e' || text[end] == 'E');
+                const bool afterPoint = i > 0 && text[i - 1] == '.';
+                if (fraction || afterPoint) {
+                    masked.append(text.data() + i, end - i);
+                } else {
+                    masked.push_back('N');
+                }
+                i = end;
+            }
+            return masked;
+        }
+
+        /// The `{...}` row of @p text that holds @p needle (rows here have no nested object)
+        String RowAround(const String& text, StringView needle) {
+            const size_t at = text.find(needle.data(), 0, needle.size());
+            if (at == String::npos) {
+                return String();
+            }
+            const size_t open = text.rfind('{', at);
+            const size_t close = text.find('}', at);
+            return open == String::npos || close == String::npos ? String() : String(text.substr(open, close - open + 1));
+        }
+
+        /// A reply is written in the order the `Json` object keeps: its text is the canonical dump of its own parse
+        void ExpectCanonical(const String& text) {
+            const auto parsed = ParseJson(text);
+            ASSERT_TRUE(parsed.has_value());
+            EXPECT_EQ(DumpJson(*parsed), text);
+        }
+
+    }  // namespace
+
+    /// Fills the process's collector with frames of a fake clock; the first frame only moves the clock out of the real one's reach
+    class ProfilerControlGoldenTest : public ProfilerControlTest {
+    protected:
+        void SetUp() override {
+            ProfilerControlTest::SetUp();
+            CoreManager::GetFrameStats().SetClock(FakeNowNs);
+            g_fakeNowNs = kNsPerMs;
+            AddFrame(0);
+        }
+
+        void TearDown() override {
+            CoreManager::GetFrameStats().SetClock(nullptr);
+            ProfilerControlTest::TearDown();
+        }
+
+        /// A frame of @p index * 2 ms with a stage of 1 ms and counters set in an order that differs from the order they sort in
+        void AddFrame(uint32_t index) {
+            FrameStatsCollector& collector = CoreManager::GetFrameStats();
+            collector.BeginFrame(index == 2);
+            collector.BeginStage(FrameStage::Update);
+            g_fakeNowNs += kNsPerMs;
+            collector.EndStage(FrameStage::Update);
+            collector.BeginStage(FrameStage::SceneDraw);
+            g_fakeNowNs += kNsPerMs / 4;
+            collector.EndStage(FrameStage::SceneDraw);
+            collector.SetCounter("zeta"_intern, 1.5);
+            collector.SetCounter("alpha"_intern, 2.0);
+            collector.SetCounter("Mid"_intern, 0.25);
+            g_fakeNowNs += kNsPerMs * index;
+            collector.EndFrame(RenderCounters{.drawCalls = 4, .triangles = 8, .textureSwitches = 1}, AllocTotals{});
+        }
+    };
+
+    TEST_F(ProfilerControlGoldenTest, FrameStatsOfOneFrameKeepsItsBytes) {
+        AddFrame(1);
+
+        const String text = Ask(service, "frame_stats");
+
+        ExpectCanonical(text);
+        const size_t from = text.find("\"frames\":");
+        const size_t to = text.find(",\"pools\":");
+        ASSERT_NE(from, String::npos);
+        ASSERT_NE(to, String::npos);
+        EXPECT_EQ(
+            MaskIntegers(String(text.substr(from, to - from))),
+            R"json("frames":[{"allocBytes":N,"allocCount":N,"arenaOverflows":N,"arenaPeakBytes":N,"arenaUsedBytes":N,"counters":{"Mid":0.25,"alpha":2.0,"zeta":1.5},"cpuMs":2.25,"drawCalls":N,"frame":N,"frameMs":2.25,"liveBytes":N,"paused":false,"poolLiveBlocks":N,"poolPageBytes":N,"stagesMs":{"Present":0.0,"Render":0.0,"SceneDraw":0.25,"SceneUpdate":0.0,"Update":1.0},"tagAllocCount":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"tagLiveBytes":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"textureSwitches":N,"triangles":N}])json");
+    }
+
+    TEST_F(ProfilerControlGoldenTest, FrameStatsOfSeveralFramesKeepsTheirBytes) {
+        AddFrame(1);
+        AddFrame(2);
+        AddFrame(3);
+        Json params = Json::object();
+        params["frames"] = 3;
+
+        const String text = Ask(service, "frame_stats", params);
+
+        ExpectCanonical(text);
+        const size_t from = text.find("\"frames\":");
+        const size_t to = text.find(",\"pools\":");
+        ASSERT_NE(from, String::npos);
+        ASSERT_NE(to, String::npos);
+        EXPECT_EQ(
+            MaskIntegers(String(text.substr(from, to - from))),
+            R"json("frames":[{"allocBytes":N,"allocCount":N,"arenaOverflows":N,"arenaPeakBytes":N,"arenaUsedBytes":N,"counters":{"Mid":0.25,"alpha":2.0,"zeta":1.5},"cpuMs":2.25,"drawCalls":N,"frame":N,"frameMs":2.25,"liveBytes":N,"paused":false,"poolLiveBlocks":N,"poolPageBytes":N,"stagesMs":{"Present":0.0,"Render":0.0,"SceneDraw":0.25,"SceneUpdate":0.0,"Update":1.0},"tagAllocCount":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"tagLiveBytes":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"textureSwitches":N,"triangles":N},{"allocBytes":N,"allocCount":N,"arenaOverflows":N,"arenaPeakBytes":N,"arenaUsedBytes":N,"counters":{"Mid":0.25,"alpha":2.0,"zeta":1.5},"cpuMs":3.25,"drawCalls":N,"frame":N,"frameMs":3.25,"liveBytes":N,"paused":true,"poolLiveBlocks":N,"poolPageBytes":N,"stagesMs":{"Present":0.0,"Render":0.0,"SceneDraw":0.25,"SceneUpdate":0.0,"Update":1.0},"tagAllocCount":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"tagLiveBytes":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"textureSwitches":N,"triangles":N},{"allocBytes":N,"allocCount":N,"arenaOverflows":N,"arenaPeakBytes":N,"arenaUsedBytes":N,"counters":{"Mid":0.25,"alpha":2.0,"zeta":1.5},"cpuMs":4.25,"drawCalls":N,"frame":N,"frameMs":4.25,"liveBytes":N,"paused":false,"poolLiveBlocks":N,"poolPageBytes":N,"stagesMs":{"Present":0.0,"Render":0.0,"SceneDraw":0.25,"SceneUpdate":0.0,"Update":1.0},"tagAllocCount":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"tagLiveBytes":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"textureSwitches":N,"triangles":N}])json");
+    }
+
+    TEST_F(ProfilerControlGoldenTest, FrameStatsListsArenasPoolsAndTagsInTheirOwnKeyOrder) {
+        LinearArena arena("GoldenArena");
+        ASSERT_NE(arena.Allocate(48, 1), nullptr);
+        BlockPool pool("GoldenPool", 40, alignof(void*));
+        void* block = pool.Allocate();
+        AddFrame(1);
+
+        const String text = Ask(service, "frame_stats");
+
+        EXPECT_EQ(MaskIntegers(RowAround(text, "\"name\":\"GoldenArena\"")), R"json({"capacity":N,"chunks":N,"name":"GoldenArena","overflows":N,"peak":N,"used":N})json");
+        EXPECT_EQ(MaskIntegers(RowAround(text, "\"name\":\"GoldenPool\"")), R"json({"allocations":N,"blockSize":N,"live":N,"name":"GoldenPool","pages":N,"peak":N})json");
+        EXPECT_EQ(MaskIntegers(RowAround(text, "\"tag\":\"Scene\"")), R"json({"count":N,"frees":N,"liveBytes":N,"peakLiveBytes":N,"tag":"Scene"})json");
+        pool.Deallocate(block);
+    }
+
+    TEST_F(ProfilerControlGoldenTest, ZoneAllocsKeepsItsBytesAndResetsAfterTheText) {
+        static constexpr ProfileSite kBig{"GoldenBig", "GoldenFunction", "Golden \"quoted\".cpp", 42, 0};
+        static constexpr ProfileSite kSmall{"GoldenSmall", "GoldenFunction", "Golden.cpp", 7, 0};
+        AllocTracker::ResetZoneStats();
+        AllocTracker::AddZone(kSmall, 3, 30);
+        AllocTracker::AddZone(kBig, 5, 500);
+        Json params = Json::object();
+        params["reset"] = true;
+
+        const String text = Ask(service, "zone_allocs", params);
+
+        ExpectCanonical(text);
+        EXPECT_EQ(RowAround(text, "\"name\":\"GoldenBig\""), R"json({"allocs":5,"bytes":500,"calls":1,"file":"Golden \"quoted\".cpp","line":42,"name":"GoldenBig"})json");
+        EXPECT_EQ(RowAround(text, "\"name\":\"GoldenSmall\""), R"json({"allocs":3,"bytes":30,"calls":1,"file":"Golden.cpp","line":7,"name":"GoldenSmall"})json");
+        EXPECT_EQ(MaskIntegers(RowAround(text, "\"largest\":")), R"json({"bytes":N,"count":N,"frees":N,"largest":N,"liveBytes":N,"noAllocViolations":N,"peakLiveBytes":N})json");
+        const String after = Ask(service, "zone_allocs");
+        EXPECT_EQ(RowAround(after, "\"name\":\"GoldenBig\""), "");
+    }
+
+    TEST_F(ProfilerControlGoldenTest, ZoneAllocsTopCutsTheZones) {
+        static constexpr ProfileSite kBig{"GoldenTopBig", "f", "a.cpp", 1, 0};
+        static constexpr ProfileSite kSmall{"GoldenTopSmall", "f", "a.cpp", 2, 0};
+        AllocTracker::ResetZoneStats();
+        AllocTracker::AddZone(kSmall, 1, 10);
+        AllocTracker::AddZone(kBig, 1, 1000);
+        Json params = Json::object();
+        params["top"] = 1;
+
+        const String text = Ask(service, "zone_allocs", params);
+
+        EXPECT_EQ(RowAround(text, "\"name\":\"GoldenTopBig\""), R"json({"allocs":1,"bytes":1000,"calls":1,"file":"a.cpp","line":1,"name":"GoldenTopBig"})json");
+        EXPECT_EQ(RowAround(text, "\"name\":\"GoldenTopSmall\""), "");
+        AllocTracker::ResetZoneStats();
+    }
+
+    TEST_F(ProfilerControlGoldenTest, ProfilerDumpAnswersThePathAndTheDroppedCount) {
+        IProfilerBackend* const previous = Profiler::GetPrimaryBackend();
+        Profiler::SetBackend(&Profiler::GetChromeTrace());
+        const std::filesystem::path file = TestTempPath("ProfilerDump caf\xC3\xA9").filename();
+        Json params = Json::object();
+        params["path"] = file.string();
+
+        const String text = Ask(service, "profiler_dump", params);
+
+        Profiler::SetBackend(previous);
+        std::error_code ignored;
+        const bool written = std::filesystem::remove(file, ignored);
+        EXPECT_TRUE(written);
+        ExpectCanonical(text);
+        String shown = text;
+        const size_t pathAt = shown.find(file.string().c_str());
+        ASSERT_NE(pathAt, String::npos);
+        shown.replace(pathAt, file.string().size(), "FILE");
+        EXPECT_EQ(MaskIntegers(shown), R"json({"id":N,"ok":true,"result":{"dropped":N,"path":"FILE"}})json");
+    }
+
+    TEST_F(ProfilerControlGoldenTest, FrameStatsAllocatesNothingBeyondTheStatsItReads) {
+        // The stats are returned as Vectors, which allocate whoever asks: a method that reads the same three and answers `{}` is the measure of the rest
+        service.RegisterHandler("reads_only", [](ControlCall& call) {
+            const Vector<FrameStats> history = CoreManager::GetFrameStats().GetHistory(1);
+            const Vector<ArenaStatsEntry> arenas = AllocTracker::GetArenaStats();
+            const Vector<PoolStatsEntry> pools = AllocTracker::GetPoolStats();
+            call.Reply([](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.EndObject();
+            });
+        });
+        AddFrame(1);
+        const auto drained = [this](StringView method) {
+            service.Post(MakeRequest(1, method), [](const String&) {});
+            return CountAllocations([this] { service.Drain(); });
+        };
+        drained("frame_stats");
+        drained("reads_only");
+
+        const AllocCount stats = drained("frame_stats");
+        const AllocCount reads = drained("reads_only");
+
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+        EXPECT_EQ(stats.count, reads.count);
+        EXPECT_EQ(stats.bytes, reads.bytes);
+    }
 
     TEST_F(ProfilerControlTest, FrameStatsAnswersTheLastFrames) {
         FrameStatsCollector& collector = CoreManager::GetFrameStats();
