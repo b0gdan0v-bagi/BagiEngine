@@ -1,102 +1,15 @@
 #include "Peephole.h"
 
-#include <BECore/Values/Programs/Kernels.h>
+#include <BECore/Values/Programs/InstructionInfo.h>
 
 namespace BECore {
 
     namespace {
 
-        using RegisterMask = uint32_t;
-        static_assert(kMaxProgramRegisters <= std::numeric_limits<RegisterMask>::digits, "a RegisterMask holds a bit per register");
-
-        constexpr RegisterMask RegisterBit(uint32_t reg) {
-            return reg < kMaxProgramRegisters ? RegisterMask{1} << reg : RegisterMask{0};
-        }
-
-        /// The registers a row reads, by the shape of its operation
-        template <typename Op, typename T>
-        constexpr RegisterMask RowReads(const Instruction& ins) {
-            if constexpr (Op::kShape == Kernel::OpShape::Slot) {
-                return 0;
-            } else if constexpr (Op::kShape == Kernel::OpShape::Unary || Op::kShape == Kernel::OpShape::Element || Op::kShape == Kernel::OpShape::Extract) {
-                return RegisterBit(ins.a);
-            } else if constexpr (Op::kShape == Kernel::OpShape::Binary || Op::kShape == Kernel::OpShape::Compare) {
-                return RegisterBit(ins.a) | RegisterBit(ins.b);
-            } else if constexpr (Op::kShape == Kernel::OpShape::Pack) {
-                RegisterMask mask = 0;
-                for (uint32_t i = 0; i < ComponentTraits<T>::kCount; ++i) {
-                    mask |= RegisterBit(ins.a + i);
-                }
-                return mask;
-            } else {
-                return RegisterBit(ins.a) | RegisterBit(ins.b) | RegisterBit(ins.c);
-            }
-        }
-
-        /// The registers a fused instruction reads: the weight of `LerpSlots`; the others read fields only
-        RegisterMask FusedReads(const Instruction& ins) {
-            return IsLerpSlots(ins.op) ? RegisterBit(ins.c) : RegisterMask{0};
-        }
-
-        /// Every register the instruction reads: what must stay intact for it. A new opcode that this switch lacks is a compile error
-        RegisterMask Reads(const Instruction& ins) {
-            switch (ins.op) {
-                case Opcode::Invalid:
-                case Opcode::LoadConst:
-                    return 0;
-                case Opcode::LoadTableSlot:
-                    return 0;
-                case Opcode::CallDomain: {
-                    // As many registers as the operation has parameters; an operation that is not registered leaves the pass blind, as an opcode it does not know
-                    if (ins.imm >= ProgramDomain::OperationCount()) {
-                        return ~RegisterMask{0};
-                    }
-                    const uint32_t count = ProgramDomain::Operation(ins.imm).parameterCount;
-                    return (count > 0 ? RegisterBit(ins.a) : 0) | (count > 1 ? RegisterBit(ins.b) : 0) | (count > 2 ? RegisterBit(ins.c) : 0);
-                }
-                case Opcode::Copy:
-                case Opcode::LoadTable:
-                    return RegisterBit(ins.a);
-                case Opcode::ListSlot:
-                    return 0;
-                case Opcode::ListElem:
-                case Opcode::ListSize:
-                case Opcode::BreakIf:
-                    return RegisterBit(ins.a);
-                case Opcode::ListAt:
-                    return RegisterBit(ins.a) | RegisterBit(ins.b);
-                case Opcode::LoopBegin:
-                    return RegisterBit(ins.a);
-                case Opcode::LoopEnd:
-                    return RegisterBit(ins.a) | RegisterBit(ins.dst);
-#define BE_PEEPHOLE_READS_ROW(Op, Type, Cpp)                                                                                                                                                           \
-    case Opcode::Op##Type:                                                                                                                                                                             \
-        return RowReads<Kernel::Op, Cpp>(ins);
-                    BE_PROGRAM_ROWS(BE_PEEPHOLE_READS_ROW)
-#undef BE_PEEPHOLE_READS_ROW
-#define BE_PEEPHOLE_READS_FUSED(Op, Type, Cpp)                                                                                                                                                         \
-    case Opcode::Op##Type:                                                                                                                                                                             \
-        return FusedReads(ins);
-                    BE_PROGRAM_FUSED_ROWS(BE_PEEPHOLE_READS_FUSED)
-#undef BE_PEEPHOLE_READS_FUSED
-#define BE_PEEPHOLE_READS_MIXED(Op, LName, LCpp, RName, RCpp)                                                                                                                                          \
-    case Opcode::Op##LName##RName:                                                                                                                                                                     \
-        return RegisterBit(ins.a) | RegisterBit(ins.b);
-                    BE_PROGRAM_MIXED_ROWS(BE_PEEPHOLE_READS_MIXED)
-#undef BE_PEEPHOLE_READS_MIXED
-#define BE_PEEPHOLE_READS_CONVERSION(Src, SrcCpp, Dst, DstCpp)                                                                                                                                         \
-    case Opcode::Src##To##Dst:                                                                                                                                                                         \
-        return RegisterBit(ins.a);
-                    BE_PROGRAM_CONVERSIONS(BE_PEEPHOLE_READS_CONVERSION)
-#undef BE_PEEPHOLE_READS_CONVERSION
-            }
-            return ~RegisterMask{0};
-        }
-
         /// Whether nothing after @p from reads what @p reg holds now: the next access is a write, or there is none and the register is not the result
         bool IsDeadAfter(const Vector<Instruction>& code, size_t from, uint8_t reg, uint8_t resultRegister) {
             for (size_t i = from + 1; i < code.size(); ++i) {
-                if ((Reads(code[i]) & RegisterBit(reg)) != 0) {
+                if ((DescribeInstruction(code[i]).reads & RegisterBit(reg)) != 0) {
                     return false;
                 }
                 if (code[i].dst == reg) {
@@ -200,7 +113,7 @@ namespace BECore {
                 const Instruction& ins = code[i];
                 const bool isLerp = ins.op == row->lerp && ins.a == from.dst && ins.b == to.dst;
                 if (!isLerp) {
-                    if (((Reads(ins) | RegisterBit(ins.dst)) & watched) != 0) {
+                    if (((DescribeInstruction(ins).reads | RegisterBit(ins.dst)) & watched) != 0) {
                         return false;
                     }
                     continue;
