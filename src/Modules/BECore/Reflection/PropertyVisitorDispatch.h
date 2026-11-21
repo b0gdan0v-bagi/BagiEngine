@@ -60,8 +60,9 @@ namespace BECore {
                 if constexpr (std::is_same_v<Text, String>) {
                     return v.Visit(key, value);
                 } else {
-                    // The visitor edits a String: edit a copy and take it back when it changed
-                    String text(value.data(), value.size());
+                    // The visitor edits a String: edit a copy and take it back when it changed. The copy is the visitor's scratch, which keeps its capacity
+                    String& text = v.TextScratch();
+                    text.assign(value.data(), value.size());
                     if (!v.Visit(key, text)) {
                         return false;
                     }

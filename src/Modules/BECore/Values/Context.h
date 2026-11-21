@@ -27,7 +27,7 @@ namespace BECore {
         return static_cast<LevelMask>(LevelMask{1} << level);
     }
 
-    CORE_ENUM(LinkErrorCode, uint8_t, invalid_path, unknown_type, duplicate_level, too_many_levels, unknown_level, unknown_field, not_fixed, type_mismatch, too_far)
+    CORE_ENUM(LinkErrorCode, uint8_t, invalid_path, unknown_type, duplicate_level, too_many_levels, unknown_level, unknown_field, not_fixed, type_mismatch, too_far, not_a_list, bad_element)
 
     /// A refused declaration or link: the code and a message that names the path, the field and what is wrong
     struct LinkError {
@@ -103,13 +103,45 @@ namespace BECore {
             T::GetStaticTypeMeta();
         }
         void Set(LevelIndex level, const T& object, const uint64_t* version = nullptr) {
-            SetObject(level, std::addressof(object), T::GetStaticTypeMeta(), version);
+            SetObject(level, std::addressof(object), T::GetStaticTypeMeta(), version, false);
+        }
+
+        /**
+         * @brief Puts @p object at @p level like `Set` and marks the level writable, so a script may store into it
+         *
+         * @p version is the counter a store bumps when it changes a byte (`BumpVersion`), null for an object nobody versions. A later `Set` of the level clears the mark.
+         */
+        template <typename T>
+        requires requires {
+            T::GetStaticTypeMeta();
+        }
+        void SetMutable(LevelIndex level, T& object, uint64_t* version = nullptr) {
+            SetObject(level, std::addressof(object), T::GetStaticTypeMeta(), version, true);
         }
 
         /// The object of the level as the declared type, null while none is set
         [[nodiscard]] const void* Object(LevelIndex level) const {
             ASSERT(level < kMaxContextLevels);
             return _objects[level];
+        }
+
+        [[nodiscard]] bool IsMutable(LevelIndex level) const {
+            return level < kMaxContextLevels && (_mutable & LevelBit(level)) != 0;
+        }
+
+        /// The object of a level that `SetMutable` filled, null for any other level
+        [[nodiscard]] void* MutableObject(LevelIndex level) const {
+            // The pointer came from a non-const reference in `SetMutable`, the only place that marks a level, so writing through it is not a write to a const object
+            return IsMutable(level) ? const_cast<void*>(_objects[level]) : nullptr;
+        }
+
+        /// Counts a change of the level's object for `VersionKey`; nothing for a level with no counter
+        void BumpVersion(LevelIndex level) const {
+            ASSERT(level < kMaxContextLevels);
+            if (IsMutable(level) && _versions[level] != nullptr) {
+                // Same origin as `MutableObject`: a mutable level's counter was given as `uint64_t*`
+                ++*const_cast<uint64_t*>(_versions[level]);
+            }
         }
 
         /// The counter of the level now, 0 for a level that has none
@@ -136,12 +168,13 @@ namespace BECore {
         [[nodiscard]] bool IsVersioned(LevelMask levels) const;
 
     private:
-        void SetObject(LevelIndex level, const void* object, const ClassMeta& type, const uint64_t* version);
-        void Store(LevelIndex level, const void* object, const uint64_t* version);
+        void SetObject(LevelIndex level, const void* object, const ClassMeta& type, const uint64_t* version, bool writable);
+        void Store(LevelIndex level, const void* object, const uint64_t* version, bool writable);
 
         Array<const void*, kMaxContextLevels> _objects{};
         Array<const uint64_t*, kMaxContextLevels> _versions{};
         Array<uint32_t, kMaxContextLevels> _sets{};
+        LevelMask _mutable = 0;
         const ContextDecl* _declaration = nullptr;
     };
 
@@ -151,6 +184,20 @@ namespace BECore {
         uint32_t offset = 0;
     };
 
+    /// A field a path names: where it is and its own type
+    struct LinkedField {
+        SlotRef slot;
+        const TypeDesc* type = nullptr;
+    };
+
+    /**
+     * @brief Turns `level.field.path` into the slot of a field and its type, the same checks as `LinkSlot` without a type to match
+     *
+     * What a script's write target and a formula's operand both need: the type tells what the field may hold. The refusals and their messages are those of `LinkSlot`
+     * (`unknown_level`, `unknown_field`, `not_fixed`, `too_far`, ...).
+     */
+    [[nodiscard]] std::expected<LinkedField, LinkError> LinkField(const ContextDecl& declaration, StringView path, const TypeRegistry& registry = TypeRegistry::GetInstance());
+
     /**
      * @brief Turns `level.field.path` into a slot, checking it against the declaration and the type asked for
      *
@@ -159,6 +206,41 @@ namespace BECore {
      * Allocates; it runs when content is loaded, never in a frame.
      */
     [[nodiscard]] std::expected<SlotRef, LinkError> LinkSlot(const ContextDecl& declaration, StringView path, const TypeDesc& expected, const TypeRegistry& registry = TypeRegistry::GetInstance());
+
+    /// Where a list sits: the level, the distance from that level's object to the list field and the field's type (static storage), from which `MakeListDescriptor` takes the layout
+    struct ListLink {
+        LevelIndex level = 0;
+        uint32_t offset = 0;
+        const TypeDesc* list = nullptr;
+    };
+
+    /// Where a field sits in the element of a list: the distance from the element and the field's own type, a value or a list (the caller looks at `type->kind`)
+    struct ElementLink {
+        uint32_t offset = 0;
+        const TypeDesc* type = nullptr;
+    };
+
+    /**
+     * @brief Turns `level.field.path` into the list it names, as `LinkSlot` does for a value
+     *
+     * The path must end at a list field and be fully fixed; the list's element must be one a formula can read (`DescribeListElement`). `not_a_list` says what the field is instead, `bad_element`
+     * what a list may hold. Allocates; it runs when content is loaded.
+     */
+    [[nodiscard]] std::expected<ListLink, LinkError> LinkList(const ContextDecl& declaration, StringView path, const TypeRegistry& registry = TypeRegistry::GetInstance());
+
+    /**
+     * @brief The field `a.b.c` of an element of type @p element, fully fixed (embedded objects are crossed, an element of a list inside is not)
+     *
+     * The messages name @p path as given (the fields after the element's name) and the element's type. No type is asked for: the caller reads `type->kind` and compares as it needs.
+     */
+    [[nodiscard]] std::expected<ElementLink, LinkError> LinkElementField(const TypeInfo& element, StringView path, const TypeRegistry& registry = TypeRegistry::GetInstance());
+
+    /**
+     * @brief The type of the elements of the list type @p list: null for a scalar, an enum, a math type or a `PoolString`, the registered class for an object
+     *
+     * Refuses (`bad_element`) what a formula cannot read: a list of pointers, maps, optionals, variants, pairs, lists or strings that own their text; the message says what a list may hold.
+     */
+    [[nodiscard]] std::expected<const TypeInfo*, LinkError> DescribeListElement(const TypeDesc& list, const TypeRegistry& registry = TypeRegistry::GetInstance());
 
 }  // namespace BECore
 

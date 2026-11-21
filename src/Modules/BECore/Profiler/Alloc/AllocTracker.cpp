@@ -2,6 +2,7 @@
 
 #include <BECore/Profiler/Alloc/AllocPlatform.h>
 #include <BECore/Profiler/Profiler.h>
+#include <cstring>
 
 namespace BECore {
 
@@ -15,12 +16,34 @@ namespace BECore {
         constinit std::atomic<uint64_t> g_largest{0};
         constinit std::atomic<uint64_t> g_noAllocViolations{0};
 
+        struct SourceSlot {
+            std::atomic<uint64_t> count{0};
+            std::atomic<uint64_t> bytes{0};
+            std::atomic<uint64_t> frees{0};
+            std::atomic<uint64_t> liveBytes{0};
+        };
+        constinit SourceSlot g_sources[EnumUtils<AllocSource>::Count()];
+
+        struct TagSlot {
+            std::atomic<uint64_t> count{0};
+            std::atomic<uint64_t> bytes{0};
+            std::atomic<uint64_t> frees{0};
+            std::atomic<uint64_t> liveBytes{0};
+            std::atomic<uint64_t> peakLiveBytes{0};
+        };
+        constinit TagSlot g_tags[kMemTagCount];
+        constinit std::atomic<uint64_t> g_untrackedBlocks{0};
+
         struct ThreadState {
             uint64_t count = 0;
             uint64_t bytes = 0;
             uint32_t noAllocDepth = 0;
+            uint32_t pauseDepth = 0;  // ScopedAllocCountersPause: nothing of this thread is counted while it is above zero
             uint64_t noAllocViolations = 0;
-            bool inTracker = false;  // the backend's OnAlloc may allocate: that allocation is not reported again
+            MemTag tag = MemTag::Untagged;
+            bool inTracker = false;             // the backend's OnAlloc may allocate: that allocation is not reported again
+            const char* nextName = nullptr;     // set by SetNextName, taken by the very next allocation of this thread
+            const ProfileSite* zone = nullptr;  // the innermost open zone (ProfileZone)
         };
         constinit thread_local ThreadState t_state;
 
@@ -31,6 +54,10 @@ namespace BECore {
             std::atomic<uint64_t> bytes{0};
         };
         constinit ZoneSlot g_zoneSlots[AllocTracker::kZoneSlots];
+
+#if BE_PROFILER_ALLOC
+        constinit AllocSiteTable g_nameTable;
+#endif
 
         void RaiseTo(std::atomic<uint64_t>& value, uint64_t candidate) {
             uint64_t current = value.load(std::memory_order_relaxed);
@@ -56,47 +83,213 @@ namespace BECore {
             return nullptr;
         }
 
+#if BE_PROFILER_ALLOC
+        // The block-tag table: the tag a block was allocated under, found again by its address when it is freed (blocks carry no
+        // header: Alloc/CLAUDE.md). Open addressing over fixed zero-initialised arrays, which cost untouched BSS only. A key is 0 (never
+        // used), kTombstoneKey (erased: an insert may reuse it, a lookup goes on past it) or kReservedKey (an insert wrote the claim and
+        // not yet the tag: a lookup of another key goes on past it) or the block's address, published after its tag byte.
+        constexpr uint32_t kBlockTableBits = 20;
+        constexpr size_t kBlockTableSize = size_t{1} << kBlockTableBits;
+        constexpr uint32_t kBlockProbeLimit = 64;
+        constexpr uint32_t kInsertAttempts = 4;
+        constexpr uint64_t kHashMultiplier = 0x9E3779B97F4A7C15ull;
+        constexpr uintptr_t kEmptyKey = 0;
+        constexpr uintptr_t kTombstoneKey = 1;
+        constexpr uintptr_t kReservedKey = 2;
+        constexpr size_t kNoSlot = ~size_t{0};
+
+        // Plain arrays, zero in BSS, read through atomic_ref: a million `constinit` atomics exceed the compiler's constant-evaluation limit
+        alignas(std::atomic_ref<uintptr_t>::required_alignment) uintptr_t g_blockKeyStorage[kBlockTableSize];
+        uint8_t g_blockTagStorage[kBlockTableSize];
+
+        std::atomic_ref<uintptr_t> BlockKey(size_t index) {
+            return std::atomic_ref<uintptr_t>(g_blockKeyStorage[index]);
+        }
+
+        std::atomic_ref<uint8_t> BlockTag(size_t index) {
+            return std::atomic_ref<uint8_t>(g_blockTagStorage[index]);
+        }
+
+        constinit std::atomic<uint32_t> g_insertProbeLimit{kBlockProbeLimit};
+
+        size_t BlockHome(uintptr_t key) {
+            return static_cast<size_t>((static_cast<uint64_t>(key >> 4) * kHashMultiplier) >> (64 - kBlockTableBits));
+        }
+
+        /// Registers @p key under @p tag; false when no slot was found within the probe limit (the block stays unregistered)
+        bool InsertBlock(uintptr_t key, MemTag tag) {
+            const uint32_t limit = g_insertProbeLimit.load(std::memory_order_relaxed);
+            for (uint32_t attempt = 0; attempt < kInsertAttempts; ++attempt) {
+                size_t index = BlockHome(key);
+                size_t reusable = kNoSlot;
+                uintptr_t reusableKey = kEmptyKey;
+                for (uint32_t probe = 0; probe < limit; ++probe, index = (index + 1) & (kBlockTableSize - 1)) {
+                    const uintptr_t current = BlockKey(index).load(std::memory_order_acquire);
+                    if (current == key) {
+                        // The address of a block whose free was never seen: it is this block now
+                        BlockTag(index).store(static_cast<uint8_t>(tag), std::memory_order_relaxed);
+                        return true;
+                    }
+                    if ((current == kEmptyKey || current == kTombstoneKey) && reusable == kNoSlot) {
+                        reusable = index;
+                        reusableKey = current;
+                    }
+                    if (current == kEmptyKey) {
+                        break;
+                    }
+                }
+                if (reusable == kNoSlot) {
+                    return false;
+                }
+                uintptr_t expected = reusableKey;
+                if (BlockKey(reusable).compare_exchange_strong(expected, kReservedKey, std::memory_order_acq_rel)) {
+                    BlockTag(reusable).store(static_cast<uint8_t>(tag), std::memory_order_relaxed);
+                    BlockKey(reusable).store(key, std::memory_order_release);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// Unregisters @p key and returns its tag; Untagged when it was never registered (made before the tracker, untagged or unregistered)
+        MemTag EraseBlock(uintptr_t key) {
+            size_t index = BlockHome(key);
+            for (uint32_t probe = 0; probe < kBlockProbeLimit; ++probe, index = (index + 1) & (kBlockTableSize - 1)) {
+                const uintptr_t current = BlockKey(index).load(std::memory_order_acquire);
+                if (current == key) {
+                    const auto tag = static_cast<MemTag>(BlockTag(index).load(std::memory_order_relaxed));
+                    BlockKey(index).store(kTombstoneKey, std::memory_order_release);
+                    return tag;
+                }
+                if (current == kEmptyKey) {
+                    break;
+                }
+            }
+            return MemTag::Untagged;
+        }
+#endif
+
+        /// Takes @p amount off @p value, stopping at zero: a block made before the routing started is freed without an alloc
+        void SubtractSaturating(std::atomic<uint64_t>& value, uint64_t amount) {
+            uint64_t current = value.load(std::memory_order_relaxed);
+            while (!value.compare_exchange_weak(current, current > amount ? current - amount : 0, std::memory_order_relaxed)) {
+            }
+        }
+
+        /// The one place every counted allocation passes, whatever its source. The thread's MemTag is read here (a field of t_state)
+        /// and kept next to the source; it must not allocate or lock.
+        void RecordAlloc(AllocSource source, void* ptr, size_t size, size_t usable) {
+            ThreadState& state = t_state;
+            // Taken before the re-entrancy check: a name belongs to this one allocation and never sticks to a later one
+            const char* const name = state.nextName;
+            state.nextName = nullptr;
+            if (state.inTracker) {
+                return;
+            }
+            state.inTracker = true;
+            if (state.pauseDepth > 0) {
+                // The backend still sees the block: its memory events must stay balanced with the real memory
+                if (IProfilerBackend* backend = Profiler::GetBackend()) {
+                    backend->OnAlloc(ptr, size);
+                }
+                state.inTracker = false;
+                return;
+            }
+            SourceSlot& slot = g_sources[static_cast<size_t>(source)];
+            ++state.count;
+            state.bytes += size;
+            g_count.fetch_add(1, std::memory_order_relaxed);
+            g_bytes.fetch_add(size, std::memory_order_relaxed);
+            slot.count.fetch_add(1, std::memory_order_relaxed);
+            slot.bytes.fetch_add(size, std::memory_order_relaxed);
+            slot.liveBytes.fetch_add(usable, std::memory_order_relaxed);
+            RaiseTo(g_largest, size);
+            const uint64_t live = g_liveBytes.fetch_add(usable, std::memory_order_relaxed) + usable;
+            RaiseTo(g_peakLiveBytes, live);
+            MemTag tag = state.tag;
+#if BE_PROFILER_ALLOC
+            // An untagged block needs no entry: a free that finds none is subtracted from Untagged
+            if (tag != MemTag::Untagged && !InsertBlock(reinterpret_cast<uintptr_t>(ptr), tag)) {
+                g_untrackedBlocks.fetch_add(1, std::memory_order_relaxed);
+                tag = MemTag::Untagged;
+            }
+#endif
+            TagSlot& tagSlot = g_tags[static_cast<size_t>(tag)];
+            tagSlot.count.fetch_add(1, std::memory_order_relaxed);
+            tagSlot.bytes.fetch_add(size, std::memory_order_relaxed);
+            RaiseTo(tagSlot.peakLiveBytes, tagSlot.liveBytes.fetch_add(usable, std::memory_order_relaxed) + usable);
+            if (state.noAllocDepth > 0) {
+                ++state.noAllocViolations;
+                g_noAllocViolations.fetch_add(1, std::memory_order_relaxed);
+            }
+#if BE_PROFILER_ALLOC
+            g_nameTable.Add(state.zone, name, size);
+#else
+            static_cast<void>(name);
+#endif
+            if (IProfilerBackend* backend = Profiler::GetBackend()) {
+                backend->OnAlloc(ptr, size);
+            }
+            state.inTracker = false;
+        }
+
+        /// The counterpart of RecordAlloc; @p usable is read from the block before it is freed
+        void RecordFree(AllocSource source, void* ptr, size_t usable) {
+            ThreadState& state = t_state;
+            if (state.inTracker) {
+                return;
+            }
+            state.inTracker = true;
+            if (state.pauseDepth > 0) {
+#if BE_PROFILER_ALLOC
+                // Not counted, but a tagged block made outside the pause must not leave its entry in the table
+                EraseBlock(reinterpret_cast<uintptr_t>(ptr));
+#endif
+                if (IProfilerBackend* backend = Profiler::GetBackend()) {
+                    backend->OnFree(ptr);
+                }
+                state.inTracker = false;
+                return;
+            }
+            SourceSlot& slot = g_sources[static_cast<size_t>(source)];
+            g_frees.fetch_add(1, std::memory_order_relaxed);
+            slot.frees.fetch_add(1, std::memory_order_relaxed);
+            SubtractSaturating(g_liveBytes, usable);
+            SubtractSaturating(slot.liveBytes, usable);
+#if BE_PROFILER_ALLOC
+            const MemTag tag = EraseBlock(reinterpret_cast<uintptr_t>(ptr));
+#else
+            const MemTag tag = MemTag::Untagged;
+#endif
+            TagSlot& tagSlot = g_tags[static_cast<size_t>(tag)];
+            tagSlot.frees.fetch_add(1, std::memory_order_relaxed);
+            SubtractSaturating(tagSlot.liveBytes, usable);
+            if (IProfilerBackend* backend = Profiler::GetBackend()) {
+                backend->OnFree(ptr);
+            }
+            state.inTracker = false;
+        }
+
     }  // namespace
 
     void AllocTracker::OnAlloc(void* ptr, size_t size) {
-        ThreadState& state = t_state;
-        if (state.inTracker) {
-            return;
-        }
-        state.inTracker = true;
-        ++state.count;
-        state.bytes += size;
-        g_count.fetch_add(1, std::memory_order_relaxed);
-        g_bytes.fetch_add(size, std::memory_order_relaxed);
-        RaiseTo(g_largest, size);
-        const size_t usable = AllocPlatform::UsableSize(ptr);
-        const uint64_t live = g_liveBytes.fetch_add(usable, std::memory_order_relaxed) + usable;
-        RaiseTo(g_peakLiveBytes, live);
-        if (state.noAllocDepth > 0) {
-            ++state.noAllocViolations;
-            g_noAllocViolations.fetch_add(1, std::memory_order_relaxed);
-        }
-        if (IProfilerBackend* backend = Profiler::GetBackend()) {
-            backend->OnAlloc(ptr, size);
-        }
-        state.inTracker = false;
+        RecordAlloc(AllocSource::GlobalNew, ptr, size, AllocPlatform::UsableSize(ptr));
     }
 
     void AllocTracker::OnFree(void* ptr) {
-        if (ptr == nullptr) {
-            return;
+        if (ptr != nullptr) {
+            RecordFree(AllocSource::GlobalNew, ptr, AllocPlatform::UsableSize(ptr));
         }
-        ThreadState& state = t_state;
-        if (state.inTracker) {
-            return;
+    }
+
+    void AllocTracker::OnRoutedAlloc(AllocSource source, void* ptr, size_t size, size_t usable) {
+        RecordAlloc(source, ptr, size, usable);
+    }
+
+    void AllocTracker::OnRoutedFree(AllocSource source, void* ptr, size_t usable) {
+        if (ptr != nullptr) {
+            RecordFree(source, ptr, usable);
         }
-        state.inTracker = true;
-        g_frees.fetch_add(1, std::memory_order_relaxed);
-        g_liveBytes.fetch_sub(AllocPlatform::UsableSize(ptr), std::memory_order_relaxed);
-        if (IProfilerBackend* backend = Profiler::GetBackend()) {
-            backend->OnFree(ptr);
-        }
-        state.inTracker = false;
     }
 
     AllocTotals AllocTracker::GetTotals() {
@@ -108,6 +301,26 @@ namespace BECore {
         totals.peakLiveBytes = g_peakLiveBytes.load(std::memory_order_relaxed);
         totals.largest = g_largest.load(std::memory_order_relaxed);
         totals.noAllocViolations = g_noAllocViolations.load(std::memory_order_relaxed);
+        totals.untrackedBlocks = g_untrackedBlocks.load(std::memory_order_relaxed);
+        return totals;
+    }
+
+    AllocSourceTotals AllocTracker::GetSourceTotals(AllocSource source) {
+        const SourceSlot& slot = g_sources[static_cast<size_t>(source)];
+        return {slot.count.load(std::memory_order_relaxed), slot.bytes.load(std::memory_order_relaxed), slot.frees.load(std::memory_order_relaxed), slot.liveBytes.load(std::memory_order_relaxed)};
+    }
+
+    AllocTagTotals AllocTracker::GetTagTotals(MemTag tag) {
+        const TagSlot& slot = g_tags[static_cast<size_t>(tag)];
+        return {slot.count.load(std::memory_order_relaxed), slot.bytes.load(std::memory_order_relaxed), slot.frees.load(std::memory_order_relaxed), slot.liveBytes.load(std::memory_order_relaxed),
+                slot.peakLiveBytes.load(std::memory_order_relaxed)};
+    }
+
+    Array<AllocTagTotals, kMemTagCount> AllocTracker::GetTagTotals() {
+        Array<AllocTagTotals, kMemTagCount> totals;
+        for (size_t i = 0; i < kMemTagCount; ++i) {
+            totals[i] = GetTagTotals(static_cast<MemTag>(i));
+        }
         return totals;
     }
 
@@ -145,6 +358,36 @@ namespace BECore {
             slot.count.store(0, std::memory_order_relaxed);
             slot.bytes.store(0, std::memory_order_relaxed);
         }
+#if BE_PROFILER_ALLOC
+        g_nameTable.Reset();
+#endif
+    }
+
+    void AllocTracker::SetNextName(const char* name) {
+        t_state.nextName = name;
+    }
+
+    const ProfileSite* AllocTracker::ExchangeCurrentZone(const ProfileSite* zone) {
+        ThreadState& state = t_state;
+        const ProfileSite* previous = state.zone;
+        state.zone = zone;
+        return previous;
+    }
+
+    Vector<AllocSiteStats> AllocTracker::GetNameStats() {
+#if BE_PROFILER_ALLOC
+        return g_nameTable.GetStats();
+#else
+        return {};
+#endif
+    }
+
+    uint64_t AllocTracker::GetNameOverflow() {
+#if BE_PROFILER_ALLOC
+        return g_nameTable.GetOverflow();
+#else
+        return 0;
+#endif
     }
 
     uint64_t AllocTracker::EnterNoAlloc(const ProfileSite& /*site*/) {
@@ -159,6 +402,44 @@ namespace BECore {
             --state.noAllocDepth;
         }
         return state.noAllocViolations;
+    }
+
+    uint32_t AllocTracker::SetBlockProbeLimitForTests([[maybe_unused]] uint32_t limit) {
+#if BE_PROFILER_ALLOC
+        return g_insertProbeLimit.exchange(limit, std::memory_order_relaxed);
+#else
+        return 0;
+#endif
+    }
+
+    MemTag AllocTracker::GetCurrentTag() {
+        return t_state.tag;
+    }
+
+    MemTag AllocTracker::SwapTag(MemTag tag) {
+        ThreadState& state = t_state;
+        const MemTag previous = state.tag;
+        state.tag = tag;
+        return previous;
+    }
+
+    void AllocTracker::PauseCounting() {
+        ++t_state.pauseDepth;
+    }
+
+    void AllocTracker::ResumeCounting() {
+        ThreadState& state = t_state;
+        if (state.pauseDepth > 0) {
+            --state.pauseDepth;
+        }
+    }
+
+    Vector<ArenaStatsEntry> AllocTracker::GetArenaStats() {
+        return BECore::GetArenaStats();
+    }
+
+    Vector<PoolStatsEntry> AllocTracker::GetPoolStats() {
+        return BECore::GetPoolStats();
     }
 
 }  // namespace BECore

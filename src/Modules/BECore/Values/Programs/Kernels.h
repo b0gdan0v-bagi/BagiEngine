@@ -5,7 +5,9 @@
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Values/Context.h>
 #include <BECore/Values/Programs/Components.h>
+#include <BECore/Values/Programs/Domain/ProgramDomain.h>
 #include <BECore/Values/Programs/Instruction.h>
+#include <BECore/Values/Programs/Lists/ListImage.h>
 #include <BECore/Values/Programs/Opcode.h>
 #include <algorithm>
 #include <cmath>
@@ -25,7 +27,7 @@
 namespace BECore::Kernel {
 
     /// How an operation reads its registers and what it writes
-    CORE_ENUM(OpShape, uint8_t, Slot, Unary, Binary, Compare, Ternary, Blend, Select, Extract, Pack)
+    CORE_ENUM(OpShape, uint8_t, Slot, Unary, Binary, Compare, Ternary, Blend, Select, Extract, Pack, Element)
 
     template <typename T>
     concept Integer = std::is_integral_v<T> && !std::is_same_v<T, bool>;
@@ -183,6 +185,14 @@ namespace BECore::Kernel {
 
     struct LoadSlot {
         static constexpr OpShape kShape = OpShape::Slot;
+        template <typename T>
+        static constexpr bool kSupports = true;
+    };
+
+    /// The field at `imm` of the element in register `a`, as `LoadSlot` reads a field of a context object; a missing element (`ElementImage::ptr` null) gives `T{}`, so a program over a list never
+    /// reads outside it. Over an enum `b` is the size of the field in bytes
+    struct LoadElem {
+        static constexpr OpShape kShape = OpShape::Element;
         template <typename T>
         static constexpr bool kSupports = true;
     };
@@ -510,7 +520,7 @@ namespace BECore::Kernel {
         template <typename T>
         static constexpr bool kSupports = true;
 
-        /// Both branches were computed already: a program has no control flow
+        /// Both branches were computed already: `select` does not branch (only the loops of `Lists/` do)
         template <typename T>
         [[nodiscard]] static T Apply(bool condition, T a, T b) {
             return condition ? a : b;
@@ -722,6 +732,15 @@ namespace BECore::Kernel {
         return value;
     }
 
+    /// `LoadSlotDomain`: the @p bytes of the registered type at @p offset of the object of @p level, the rest of the register zero (equal values are equal images)
+    inline void LoadDomainField(RegisterImage& dst, const Context& context, uint8_t level, uint32_t offset, uint8_t bytes) {
+        const void* object = context.Object(level);
+        ASSERT(object != nullptr, "Program: the context has no object at the level the program reads from");
+        ASSERT(bytes >= 1 && bytes <= kProgramRegisterBytes, "Program: a registered type is 1 to one register of bytes");
+        dst = RegisterImage{};
+        std::memcpy(dst.bytes.data(), static_cast<const uint8_t*>(object) + offset, std::min<size_t>(bytes, kProgramRegisterBytes));
+    }
+
     /// Runs one typed row of the instruction set: the shape of the operation says which registers it reads and writes
     template <typename Op, typename T>
     inline void Execute(RegisterImage* regs, const Instruction& ins, const Context& context) {
@@ -730,8 +749,28 @@ namespace BECore::Kernel {
                 const void* object = context.Object(ins.a);
                 ASSERT(object != nullptr, "Program: the context has no object at the level the program reads from");
                 Store<ProgramEnum>(regs[ins.dst], ProgramEnum{LoadEnumIndex(static_cast<const uint8_t*>(object) + ins.imm, ins.b)});
+            } else if constexpr (std::is_same_v<T, ProgramDomainValue>) {
+                LoadDomainField(regs[ins.dst], context, ins.a, ins.imm, ins.b);
             } else {
                 Store<T>(regs[ins.dst], LoadField<T>(context, ins.a, ins.imm));
+            }
+        } else if constexpr (Op::kShape == OpShape::Element) {
+            const auto element = Load<ElementImage>(regs[ins.a]);
+            if constexpr (std::is_same_v<T, ProgramEnum>) {
+                Store<ProgramEnum>(regs[ins.dst], ProgramEnum{element.ptr != nullptr ? LoadEnumIndex(element.ptr + ins.imm, ins.b) : 0U});
+            } else if constexpr (std::is_same_v<T, ProgramDomainValue>) {
+                // As `LoadDomainField`: only the type's own bytes, the rest of the register zero; a missing element is the zero image
+                ASSERT(ins.b >= 1 && ins.b <= kProgramRegisterBytes, "Program: a registered type is 1 to one register of bytes");
+                regs[ins.dst] = RegisterImage{};
+                if (element.ptr != nullptr) {
+                    std::memcpy(regs[ins.dst].bytes.data(), element.ptr + ins.imm, std::min<size_t>(ins.b, kProgramRegisterBytes));
+                }
+            } else {
+                T value{};
+                if (element.ptr != nullptr) {
+                    std::memcpy(&value, element.ptr + ins.imm, sizeof(T));
+                }
+                Store<T>(regs[ins.dst], value);
             }
         } else if constexpr (Op::kShape == OpShape::Unary) {
             Store<ResultOf<Op, T>>(regs[ins.dst], Op::Apply(Load<T>(regs[ins.a])));
@@ -781,6 +820,42 @@ namespace BECore::Kernel {
         Store<T>(regs[ins.dst], Lerp::Apply(from, to, Load<T>(regs[ins.c])));
     }
 
+    /// Runs `LoadConst`: the constant at `imm`, whatever its type
+    inline void ExecuteLoadConst(RegisterImage* regs, const Instruction& ins, Span<const RegisterImage> constants) {
+        ASSERT(ins.imm < constants.size());
+        regs[ins.dst] = constants[ins.imm];
+    }
+
+    /// Runs `Copy`: register `a` into `dst`
+    inline void ExecuteCopy(RegisterImage* regs, const Instruction& ins) {
+        regs[ins.dst] = regs[ins.a];
+    }
+
+    /// Runs `LoadTable`: the entry of the run of constants that `TableIndex` picks for the `int32_t` in register `a`
+    inline void ExecuteLoadTable(RegisterImage* regs, const Instruction& ins, Span<const RegisterImage> constants) {
+        const uint32_t count = TableEntryCount(ins);
+        ASSERT(count > 0 && ins.imm + count <= constants.size());
+        regs[ins.dst] = constants[ins.imm + TableIndex(Load<int32_t>(regs[ins.a]), count)];
+    }
+
+    /// Runs `LoadTableSlot`: `LoadTable` of an `int32_t` field read where `LoadSlot` reads it (the offset in the low half of `imm`, the first entry in the high half)
+    inline void ExecuteLoadTableSlot(RegisterImage* regs, const Instruction& ins, Span<const RegisterImage> constants, const Context& context) {
+        const uint32_t count = TableEntryCount(ins);
+        const uint32_t first = HighHalf(ins.imm);
+        ASSERT(count > 0 && first + count <= constants.size());
+        regs[ins.dst] = constants[first + TableIndex(LoadField<int32_t>(context, ins.a, LowHalf(ins.imm)), count)];
+    }
+
+    /// Runs `CallDomain`: the operation of the game that `imm` names, through the plain function pointer of the registry
+    inline void ExecuteCallDomain(RegisterImage* regs, const Instruction& ins, const Context& context) {
+        ProgramDomain::Operation(ins.imm).function(regs, ins, context);
+    }
+
+    /// Writes the result of a program, `ProgramTypeSize(type)` bytes of register @p resultRegister, to @p result
+    inline void StoreResult(const RegisterImage* regs, uint8_t resultRegister, ProgramType type, void* result) {
+        std::memcpy(result, regs[resultRegister].bytes.data(), ProgramTypeSize(type));
+    }
+
     /// Whether `BE_PROGRAM_ROWS` has a row for the operation and the type
     template <typename Op, typename T>
     inline constexpr bool kHasRow = false;
@@ -825,7 +900,8 @@ namespace BECore::Kernel {
 
 namespace BECore {
 
-    /// The type an instruction writes to its destination register: a row's result (`bool` for a comparison), a conversion's target; `nullopt` for `LoadConst`, `Copy` and `Invalid`
+    /// The type an instruction writes to its destination register: a row's result (`bool` for a comparison), a conversion's target; `nullopt` for `LoadConst`, `Copy`, `Invalid` and the instructions
+    /// that write a list or an element register or none (`ListSize` gives `Int32`)
     [[nodiscard]] constexpr Optional<ProgramType> ResultTypeOf(Opcode op) {
         switch (op) {
 #define BE_PROGRAM_RESULT_ROW(Op, Type, Cpp)                                                                                                                                                           \
@@ -853,9 +929,21 @@ namespace BECore {
             case Opcode::Copy:
             case Opcode::LoadTable:
             case Opcode::LoadTableSlot:
+            case Opcode::CallDomain:
+            case Opcode::ListSlot:
+            case Opcode::ListElem:
+            case Opcode::ListAt:
+            case Opcode::LoopBegin:
+            case Opcode::LoopEnd:
+            case Opcode::BreakIf:
                 break;
+            case Opcode::ListSize:
+                return ProgramType::Int32;
         }
         return std::nullopt;
     }
 
 }  // namespace BECore
+
+// The kernels of the list instructions come last: they use `Load`, `Store` and the registers above, and a generated file includes this header only
+#include <BECore/Values/Programs/Lists/ListKernels.h>

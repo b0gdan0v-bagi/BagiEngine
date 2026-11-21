@@ -316,7 +316,7 @@ namespace BECore::Tests {
         const ValueWorld world;
         const auto rect = CompileExpression("((( not a formula", world.declaration, DescribeType<Rect>());
         ASSERT_FALSE(rect.has_value());
-        EXPECT_TRUE(Contains(rect.error().message, "bool, int, int64, float, double, vec2, vec3, vec4, ivec2, quat, color, enum or string")) << rect.error().message.c_str();
+        EXPECT_TRUE(Contains(rect.error().message, "bool, int, int64, float, double, vec2, vec3, vec4, ivec2, quat, color, enum")) << rect.error().message.c_str();
         EXPECT_TRUE(Contains(rect.error().message, "Rect")) << rect.error().message.c_str();
         EXPECT_EQ(rect.error().column, 0U);
         const auto unsigned32 = CompileValue<uint32_t>("caster.count", world.declaration);

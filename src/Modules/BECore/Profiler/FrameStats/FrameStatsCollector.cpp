@@ -42,6 +42,7 @@ namespace BECore {
         _frameBegin = Now();
         _stageBegin = {};
         _allocsAtBegin = AllocTracker::GetTotals();
+        _tagsAtBegin = AllocTracker::GetTagTotals();
     }
 
     void FrameStatsCollector::BeginStage(FrameStage stage) {
@@ -85,6 +86,18 @@ namespace BECore {
         _current.allocCount = allocs.count - _allocsAtBegin.count;
         _current.allocBytes = allocs.bytes - _allocsAtBegin.bytes;
         _current.liveBytes = allocs.liveBytes;
+        const Array<AllocTagTotals, kMemTagCount> tags = AllocTracker::GetTagTotals();
+        for (size_t i = 0; i < kMemTagCount; ++i) {
+            _current.tagAllocCount[i] = tags[i].count - _tagsAtBegin[i].count;
+            _current.tagLiveBytes[i] = tags[i].liveBytes;
+        }
+        const ArenaTotals arenas = GetArenaTotals();
+        _current.arenaUsedBytes = arenas.used;
+        _current.arenaPeakBytes = arenas.peak;
+        _current.arenaOverflows = arenas.overflows;
+        const PoolTotals pools = GetPoolTotals();
+        _current.poolLiveBlocks = pools.liveBlocks;
+        _current.poolPageBytes = pools.pageBytes;
         _ring[(_frames - 1) % kFrameHistory] = _current;
 
         BE_PROFILE_COUNTER("Draw calls", draws.drawCalls);

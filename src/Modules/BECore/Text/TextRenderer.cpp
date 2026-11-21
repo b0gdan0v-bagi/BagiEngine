@@ -1,5 +1,7 @@
 #include "TextRenderer.h"
 
+#include <BECore/Memory/ArenaAllocator.h>
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Text/FontAtlas.h>
@@ -39,7 +41,8 @@ namespace BECore {
             if (complete) {
                 return;
             }
-            Vector<uint32_t> glyphs;
+            const ScratchScope scratch;  // the list is read by Prepare() and not kept
+            ArenaVector<uint32_t> glyphs;
             glyphs.reserve(layout.glyphs.size());
             for (const PositionedGlyph& positioned : layout.glyphs) {
                 glyphs.push_back(positioned.glyph);
@@ -56,6 +59,7 @@ namespace BECore {
     size_t TextRenderer::Draw(IRenderer& renderer, FontAtlas& fillAtlas, FontAtlas* outlineAtlas, const TextLayoutResult& layout, float originX, float originY, const Color& tint,
                               const TextEffects& effects) {
         BE_PROFILE_SCOPE("TextRenderer::Draw");
+        BE_MEM_TAG(Text);
         if (layout.glyphs.empty()) {
             return 0;
         }

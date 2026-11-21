@@ -1,5 +1,6 @@
 #include "PropertyVisitorContainersTest.h"
 
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Reflection/IPropertyVisitor.h>
 #include <BECore/Reflection/PropertyVisitorDispatch.h>
 #include <Common/NullPropertyVisitor.h>
@@ -168,6 +169,21 @@ namespace BECore::Tests {
             Vector<String> _tokens;
             Vector<FieldAttributes> _fields;
         };
+
+        /// Sets every String it is given to @c text
+        class TextSetter final : public NullPropertyVisitor {
+        public:
+            bool Visit(StringView, String& value) override {
+                value.assign(text.data(), text.size());
+                return true;
+            }
+
+            String text;
+        };
+
+        constexpr size_t kFixedCapacity = 8;
+        constexpr size_t kLongCapacity = 64;
+        constexpr int kMeasuredVisits = 16;
 
     }  // namespace
 
@@ -544,6 +560,50 @@ namespace BECore::Tests {
         CompoundVisitor visitor;
         EXPECT_FALSE(PropVisit::Visit(visitor, list, "list"));
         EXPECT_EQ(visitor.trace, "<list> [0]=1 [1]=2 </> ");
+    }
+
+    // ---- text fields of other string types ---------------------------------------------------------------------------------
+
+    TEST(PropertyVisitorContainersTest, AnEditOfAFixedStringReachesItAndALongOneIsCutAtItsCapacity) {
+        FixedString<kFixedCapacity, false> capped("abc");
+        FixedString<kFixedCapacity, true> growing("abc");
+        TextSetter setter;
+        setter.text = "0123456789abcdef";
+
+        EXPECT_TRUE(PropVisit::Visit(setter, capped, "capped"));
+        EXPECT_TRUE(PropVisit::Visit(setter, growing, "growing"));
+
+        // The cut is at what the string holds (one less than its size in bytes, for the terminator)
+        ASSERT_LT(capped.max_size(), setter.text.size());
+        EXPECT_EQ(String(capped.data(), capped.size()), String(setter.text.data(), capped.max_size()));
+        EXPECT_EQ(String(growing.data(), growing.size()), "0123456789abcdef");
+
+        NullPropertyVisitor nothing;
+        EXPECT_FALSE(PropVisit::Visit(nothing, capped, "capped"));
+        EXPECT_EQ(capped.size(), capped.max_size());
+    }
+
+    // Counts only with ENGINE_PROFILER_ALLOC (the profile preset): elsewhere the counter stays zero and the case passes with no meaning
+    TEST(PropertyVisitorContainersTest, ATextFieldOfAnotherStringTypeAllocatesNothingPerVisitAfterTheFirst) {
+        // Longer than the inline buffer of a String, so a copy made per visit would allocate
+        const char* const longText = "a text that does not fit the inline buffer of a string";
+        FixedString<kLongCapacity, false> first(longText);
+        FixedString<kLongCapacity, true> second(longText);
+        String third(longText);
+        NullPropertyVisitor visitor;
+        const auto visitAll = [&] {
+            PropVisit::Visit(visitor, first, "first");
+            PropVisit::Visit(visitor, second, "second");
+            PropVisit::Visit(visitor, third, "third");
+        };
+        visitAll();
+
+        const uint64_t before = AllocTracker::GetThreadCounters().count;
+        for (int visit = 0; visit < kMeasuredVisits; ++visit) {
+            visitAll();
+        }
+
+        EXPECT_EQ(AllocTracker::GetThreadCounters().count - before, 0u);
     }
 
 }  // namespace BECore::Tests

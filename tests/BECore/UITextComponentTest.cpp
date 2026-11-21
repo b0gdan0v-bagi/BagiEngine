@@ -448,6 +448,20 @@ namespace BECore::Tests {
         EXPECT_NEAR(two.y, one.y, one.y * 0.1f);
     }
 
+    TEST_F(UITextMeasureTest, AChangedVariableInTheTextIsMeasuredAgain) {
+        UIVars& vars = CoreManager::GetUIVars();
+        const PoolString name = "measure_var"_intern;
+        const auto label = MakeLabel("{measure_var}");
+        vars.Set(name, "Hi");
+        const Vec2 shortSize = label.MeasureText(UITooltip::kMaxWidth, 1.0f);
+        EXPECT_EQ(label.MeasureText(UITooltip::kMaxWidth, 1.0f), shortSize) << "the same question, the same answer";
+
+        vars.Set(name, "A much longer value of the variable");
+        EXPECT_GT(label.MeasureText(UITooltip::kMaxWidth, 1.0f).x, shortSize.x);
+        EXPECT_EQ(label.MeasureText(UITooltip::kMaxWidth, 1.0f).x, label.MeasureText(UITooltip::kMaxWidth, 1.0f).x);
+        vars.Clear();
+    }
+
     TEST_F(UITextMeasureTest, AnEmptyTextOrNoRoomIsZero) {
         const auto empty = MakeLabel("");
         EXPECT_EQ(empty.MeasureText(UITooltip::kMaxWidth, 1.0f), Vec2{});

@@ -12,6 +12,7 @@
 #include <BECore/Logger/LoggerManager.h>
 #include <BECore/Logger/OutputSink.h>
 #include <BECore/MainWindow/IMainWindow.h>
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Profiler/ProfilerControl.h>
 #include <BECore/Scene/SceneLoader.h>
 #include <BECore/Scene/SceneManager.h>
@@ -181,6 +182,7 @@ namespace BECore {
         }
         {
             BE_PROFILE_SCOPE("Scene update");
+            BE_MEM_TAG(Game);
             const FrameStatsCollector::StageScope sceneUpdate(_frameStats, FrameStage::SceneUpdate);
             _sceneManager->UpdateAll();  // game logic before UI
         }

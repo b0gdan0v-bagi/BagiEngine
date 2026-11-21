@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/EngineAllocator.h>
 #include <BECore/Types/Strings.h>
 #include <EASTL/array.h>
 #include <EASTL/fixed_hash_map.h>
@@ -22,7 +23,8 @@
 #include <type_traits>
 #include <variant>
 
-// The container types of the engine (Types/CLAUDE.md). All but the maps keyed by String are plain `using`: the same type as the eastl:: name.
+// The container types of the engine (Types/CLAUDE.md): the eastl:: containers on EngineAllocator, so none is the type of the same name in eastl::
+// with its default allocator.
 namespace BECore {
 
     /// The hash, equality and order a key gets by default: those of the key, except for String, whose map looks up by StringView
@@ -35,15 +37,27 @@ namespace BECore {
     using DefaultLess = std::conditional_t<std::is_same_v<Key, String>, StringLess, eastl::less<Key>>;
 
     template <typename T>
-    using Vector = eastl::vector<T>;
+    using Vector = eastl::vector<T, EngineAllocator>;
+
+    /// A vector whose memory comes from an arena (Memory/CLAUDE.md, "ArenaAllocator"); include <BECore/Memory/ArenaAllocator.h> to use it.
+    template <typename T>
+    using ArenaVector = eastl::vector<T, ArenaAllocator>;
+
+    /// The EASTL allocator of the frame arena (Memory/FrameAllocator.h); only declared here, like ArenaAllocator.
+    class FrameAllocator;
+
+    /// A vector whose memory comes from the calling thread's frame arena and is given back after the present (Memory/CLAUDE.md, "Frame arena");
+    /// include <BECore/Memory/FrameAllocator.h> to use it.
+    template <typename T>
+    using FrameVector = eastl::vector<T, FrameAllocator>;
 
     /// A vector with N elements inside the object that moves to the heap when it grows past N.
     template <typename T, size_t N>
-    using SmallVector = eastl::fixed_vector<T, N, true>;
+    using SmallVector = eastl::fixed_vector<T, N, true, EngineAllocator>;
 
     /// A vector with room for exactly N elements, all inside the object; it never allocates and never grows past N.
     template <typename T, size_t N>
-    using FixedVector = eastl::fixed_vector<T, N, false>;
+    using FixedVector = eastl::fixed_vector<T, N, false, EngineAllocator>;
 
     template <typename T, size_t N>
     using Array = eastl::array<T, N>;
@@ -55,32 +69,32 @@ namespace BECore {
     /// The hash table: the default container for a key lookup. A String key hashes and compares by StringView, so `find`,
     /// `contains`, `count` and `at` take a StringView or a literal without making a String.
     template <typename Key, typename T, typename Hash = DefaultHash<Key>, typename Equal = DefaultEqual<Key>>
-    using HashMap = eastl::hash_map<Key, T, Hash, Equal>;
+    using HashMap = eastl::hash_map<Key, T, Hash, Equal, EngineAllocator>;
 
     /// The ordered map (a red-black tree); a String key compares by StringView as HashMap's does.
     template <typename Key, typename T, typename Compare = DefaultLess<Key>>
-    using Map = eastl::map<Key, T, Compare>;
+    using Map = eastl::map<Key, T, Compare, EngineAllocator>;
 
     /// The hash set: a HashMap without values. A String key hashes and compares as HashMap's does, so `find`, `contains`, `count`
     /// and `erase` take a StringView or a literal without making a String.
     template <typename Key, typename Hash = DefaultHash<Key>, typename Equal = DefaultEqual<Key>>
-    using HashSet = eastl::hash_set<Key, Hash, Equal>;
+    using HashSet = eastl::hash_set<Key, Hash, Equal, EngineAllocator>;
 
     /// The ordered set (a red-black tree); a String key compares by StringView as Map's does. EASTL has no `extract` or `merge`.
     template <typename Key, typename Compare = DefaultLess<Key>>
-    using Set = eastl::set<Key, Compare>;
+    using Set = eastl::set<Key, Compare, EngineAllocator>;
 
     /// A hash map with its nodes inside the object (BucketCount: how many buckets; Overflow: whether it may take heap nodes when full).
     template <typename Key, typename T, size_t NodeCount, size_t BucketCount = NodeCount + 1, bool Overflow = true, typename Hash = DefaultHash<Key>, typename Equal = DefaultEqual<Key>>
-    using FixedHashMap = eastl::fixed_hash_map<Key, T, NodeCount, BucketCount, Overflow, Hash, Equal>;
+    using FixedHashMap = eastl::fixed_hash_map<Key, T, NodeCount, BucketCount, Overflow, Hash, Equal, false, EngineAllocator>;
 
     /// A map kept as a sorted vector (eastl::vector_map): lookup is a binary search, insertion moves elements (Types/CLAUDE.md says when to pick it).
     template <typename Key, typename T, typename Compare = DefaultLess<Key>>
-    using FlatMap = eastl::vector_map<Key, T, Compare>;
+    using FlatMap = eastl::vector_map<Key, T, Compare, EngineAllocator>;
 
     /// The set kept as a sorted vector (eastl::vector_set), like FlatMap.
     template <typename Key, typename Compare = DefaultLess<Key>>
-    using FlatSet = eastl::vector_set<Key, Compare>;
+    using FlatSet = eastl::vector_set<Key, Compare, EngineAllocator>;
 
     /// A value or nothing. std::optional, not eastl::optional: the standard one, which the other libraries speak.
     template <typename T>

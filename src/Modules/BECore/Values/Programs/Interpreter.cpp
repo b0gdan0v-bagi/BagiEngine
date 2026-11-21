@@ -5,35 +5,55 @@
 namespace BECore {
 
     void Run(const Program& program, const Context& context, void* result) {
-        // Uninitialized on purpose: every instruction writes a register before another reads it, and zeroing 512 bytes would cost more than a small formula
+        // Uninitialized on purpose: every instruction writes a register before another reads it, and zeroing a kilobyte would cost more than a small formula
         Array<RegisterImage, kMaxProgramRegisters> registers;  // NOLINT(cppcoreguidelines-pro-type-member-init)
         RegisterImage* regs = registers.data();
         const Span<const RegisterImage> constants = program.Constants();
-        for (const Instruction& ins : program.Code()) {
+        // A jump only sets `pc`: the kernels decide it, the generated code branches on the same answers. `Finish` keeps every target inside the code and the loops finite
+        const Instruction* const code = program.Code().data();
+        const Instruction* const end = code + program.Code().size();
+        for (const Instruction* pc = code; pc != end;) {
+            const Instruction& ins = *pc++;
             switch (ins.op) {
                 case Opcode::Invalid:
                     ASSERT(false, "Run: an invalid instruction");
                     break;
                 case Opcode::LoadConst:
-                    ASSERT(ins.imm < constants.size());
-                    regs[ins.dst] = constants[ins.imm];
+                    Kernel::ExecuteLoadConst(regs, ins, constants);
                     break;
                 case Opcode::Copy:
-                    regs[ins.dst] = regs[ins.a];
+                    Kernel::ExecuteCopy(regs, ins);
                     break;
-                case Opcode::LoadTable: {
-                    const uint32_t count = TableEntryCount(ins);
-                    ASSERT(count > 0 && ins.imm + count <= constants.size());
-                    regs[ins.dst] = constants[ins.imm + Kernel::TableIndex(Kernel::Load<int32_t>(regs[ins.a]), count)];
+                case Opcode::LoadTable:
+                    Kernel::ExecuteLoadTable(regs, ins, constants);
                     break;
-                }
-                case Opcode::LoadTableSlot: {
-                    const uint32_t count = TableEntryCount(ins);
-                    const uint32_t first = HighHalf(ins.imm);
-                    ASSERT(count > 0 && first + count <= constants.size());
-                    regs[ins.dst] = constants[first + Kernel::TableIndex(Kernel::LoadField<int32_t>(context, ins.a, LowHalf(ins.imm)), count)];
+                case Opcode::LoadTableSlot:
+                    Kernel::ExecuteLoadTableSlot(regs, ins, constants, context);
                     break;
-                }
+                case Opcode::CallDomain:
+                    Kernel::ExecuteCallDomain(regs, ins, context);
+                    break;
+                case Opcode::ListSlot:
+                    Kernel::ExecuteListSlot(regs, ins, constants, context);
+                    break;
+                case Opcode::ListElem:
+                    Kernel::ExecuteListElem(regs, ins, constants);
+                    break;
+                case Opcode::ListSize:
+                    Kernel::ExecuteListSize(regs, ins);
+                    break;
+                case Opcode::ListAt:
+                    Kernel::ExecuteListAt(regs, ins);
+                    break;
+                case Opcode::LoopBegin:
+                    pc = Kernel::ExecuteLoopBegin(regs, ins) ? code + ins.imm : pc;
+                    break;
+                case Opcode::LoopEnd:
+                    pc = Kernel::ExecuteLoopEnd(regs, ins) ? code + ins.imm : pc;
+                    break;
+                case Opcode::BreakIf:
+                    pc = Kernel::ExecuteBreakIf(regs, ins) ? code + ins.imm : pc;
+                    break;
 #define BE_PROGRAM_CASE_ROW(Op, Type, Cpp)                                                                                                                                                             \
     case Opcode::Op##Type:                                                                                                                                                                             \
         Kernel::Execute<Kernel::Op, Cpp>(regs, ins, context);                                                                                                                                          \
@@ -60,7 +80,7 @@ namespace BECore {
 #undef BE_PROGRAM_CASE_CONVERSION
             }
         }
-        std::memcpy(result, regs[program.ResultRegister()].bytes.data(), ProgramTypeSize(program.ResultType()));
+        Kernel::StoreResult(regs, program.ResultRegister(), program.ResultType(), result);
     }
 
 }  // namespace BECore

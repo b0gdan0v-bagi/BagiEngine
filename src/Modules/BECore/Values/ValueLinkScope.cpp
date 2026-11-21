@@ -1,5 +1,7 @@
 #include "ValueLinkScope.h"
 
+#include <BECore/Reflection/ReaderLimits.h>
+
 namespace BECore {
 
     namespace {
@@ -38,6 +40,15 @@ namespace BECore {
         return nullptr;
     }
 
+    const WriteTargets* ValueLinkScope::Targets() {
+        for (const ValueLinkScope* scope = t_innermost; scope != nullptr; scope = scope->_previous) {
+            if (scope->_writeTargets != nullptr) {
+                return scope->_writeTargets;
+            }
+        }
+        return nullptr;
+    }
+
     std::expected<void, String> ValueLinkScope::Declare(const ContextDecl& declaration) {
         if (t_innermost == nullptr) {
             return std::unexpected(String("<context> is read where no link scope is open: load the document through MakeFromConfig or open a ValueLinkScope"));
@@ -61,6 +72,20 @@ namespace BECore {
     String ValueLinkScope::AtDocument(StringView message) {
         const StringView name = DocumentName();
         return name.empty() ? String(message) : Format("{} (document '{}')", message, name);
+    }
+
+    String ValueLinkScope::AtDocumentWithin(StringView message) {
+        const StringView name = DocumentName();
+        if (name.empty()) {
+            return String(message);
+        }
+        const String suffix = Format(" (document '{}')", name);
+        constexpr StringView kCut = "...";
+        if (message.size() + suffix.size() <= ReaderLimits::kMaxErrorTextBytes || suffix.size() + kCut.size() >= ReaderLimits::kMaxErrorTextBytes) {
+            return Format("{}{}", message, suffix);
+        }
+        const size_t room = ReaderLimits::kMaxErrorTextBytes - suffix.size() - kCut.size();
+        return Format("{}{}{}", message.substr(0, room), kCut, suffix);
     }
 
 }  // namespace BECore

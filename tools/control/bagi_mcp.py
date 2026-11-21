@@ -364,12 +364,14 @@ def click_at(
 @server.tool()
 @reports_errors
 def frame_stats(frames: int = 1) -> dict[str, Any]:
-    """What the last frames cost, oldest first: {frames: [...], allocTracking}.
+    """What the last frames cost, oldest first: {frames: [...], allocTracking, arenas, pools}.
 
     frames: how many (1 to 240). Each has frame, frameMs (end to end), cpuMs, stagesMs (Update, SceneUpdate, Render, SceneDraw, Present;
     the scene stages are inside the other two), drawCalls, triangles, textureSwitches (the engine's draws; ImGui's are the counters
     "ImGui draw calls" / "ImGui triangles"), allocCount, allocBytes, liveBytes (0 unless the game was built with ENGINE_PROFILER_ALLOC,
-    allocTracking says) and counters (named values set during the frame). Times are only meaningful in an optimized build (macos-profile).
+    allocTracking says), arenaUsedBytes, arenaPeakBytes, arenaOverflows (the memory arenas, summed), poolLiveBlocks, poolPageBytes (the block
+    pools, summed; a pool shared by threads lags by a few calls) and counters (named values set during the frame). arenas and pools list each arena (name, capacity, used, peak, overflows, chunks) and each block
+    pool (name, blockSize, live, peak, pages, allocations). Times are only meaningful in an optimized build (macos-profile).
     """
     return session.call("frame_stats", {"frames": frames})
 
@@ -388,10 +390,13 @@ def profiler_dump(path: str = "trace.json") -> dict[str, Any]:
 @server.tool()
 @reports_errors
 def zone_allocs(top: int = 20, reset: bool = False) -> dict[str, Any]:
-    """The heap allocations per profiler zone, the most bytes first, and the totals of the process: {enabled, zones, totals}.
+    """The heap allocations per profiler zone, the most bytes first, and the totals of the process: {enabled, zones, names, totals}.
 
-    A zone counts its own allocations and those of the zones inside it. enabled is false (and everything zero) unless the game was built
-    with ENGINE_PROFILER_ALLOC. top: how many zones (1 to 1000). reset: zero the zone statistics after answering, to measure the next frames.
+    A zone counts its own allocations and those of the zones inside it. names: [{zone, name, allocs, bytes}], the allocations of each
+    innermost zone by EASTL's allocation name ("EASTL vector", or the literal given to set_name; "" for a plain operator new; zone
+    "(no zone)" outside every zone), so it says which container allocates. enabled is false (and everything zero, names empty) unless the
+    game was built with ENGINE_PROFILER_ALLOC. top: how many zones and how many names (1 to 1000). reset: zero the zone and name statistics
+    after answering, to measure the next frames.
     """
     return session.call("zone_allocs", {"top": top, "reset": reset})
 

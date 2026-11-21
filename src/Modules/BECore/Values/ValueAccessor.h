@@ -97,7 +97,8 @@ namespace BECore::Ser {
                 if (printed) {
                     AppendFormat(message, " (the tree prints as '{}')", text);
                 }
-                d.ReportError(key, ValueLinkScope::AtDocument(message));
+                // A tree's text comes after the message and the reader's cut would take the name: only a formula's own message is shortened for it
+                d.ReportError(key, printed ? ValueLinkScope::AtDocument(message) : ValueLinkScope::AtDocumentWithin(message));
                 return false;
             }
             value = *compiled;

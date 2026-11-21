@@ -816,6 +816,14 @@ namespace BECore {
         ArrayContext ctx;
         ctx.parentNode = node;
         ctx.currentIndex = 0;
+        // Counted first: a pass over the children costs less than the doublings of a vector that grows to the same size
+        size_t elementCount = 0;
+        for (pugi::xml_node child : node.children()) {
+            if (child.type() == pugi::node_element && ++elementCount == ReaderLimits::kMaxArrayElements) {
+                break;
+            }
+        }
+        ctx.elements.reserve(elementCount);
         for (pugi::xml_node child : node.children()) {
             // A comment between the elements is no element: it would shift every index after it
             if (child.type() != pugi::node_element) {

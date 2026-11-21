@@ -1,5 +1,6 @@
 #include "ChromeTraceBackend.h"
 
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Backends/ChromeTraceJson.h>
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/ProfilerClock.h>
@@ -22,6 +23,7 @@ namespace BECore {
         constinit thread_local void* t_cachedBuffer = nullptr;
 
         constexpr double kNanosecondsPerMicrosecond = 1000.0;
+        constexpr size_t kMaxAllocNames = 100;
 
     }  // namespace
 
@@ -241,7 +243,23 @@ namespace BECore {
             }
         }
 
-        out.append(Format("\n],\"displayTimeUnit\":\"ms\",\"otherData\":{{\"dropped\":{}}}}}\n", GetDroppedCount()));
+        out.append(Format("\n],\"displayTimeUnit\":\"ms\",\"otherData\":{{\"dropped\":{}", GetDroppedCount()));
+        if constexpr (BE_PROFILER_ALLOC != 0) {
+            out.append(",\"allocNames\":[");
+            size_t written = 0;
+            for (const AllocSiteStats& stats : AllocTracker::GetNameStats()) {
+                if (written == kMaxAllocNames) {
+                    break;
+                }
+                out.append(written++ == 0 ? "\n{\"zone\":" : ",\n{\"zone\":");
+                AppendJsonString(out, stats.ZoneLabel());
+                out.append(",\"name\":");
+                AppendJsonString(out, stats.name != nullptr ? stats.name : "");
+                out.append(Format(",\"allocs\":{},\"bytes\":{}}}", stats.count, stats.bytes));
+            }
+            out.append("]");
+        }
+        out.append("}}\n");
         return out;
     }
 

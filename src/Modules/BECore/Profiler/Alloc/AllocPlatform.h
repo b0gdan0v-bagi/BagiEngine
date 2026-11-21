@@ -25,6 +25,9 @@ namespace BECore {
         /// Windows it reads the release CRT's block header, which the Debug CRT's _aligned_malloc does not write: valid only in a
         /// build with ENGINE_PROFILER_ALLOC (a release-runtime preset), never in a plain Debug build.
         [[nodiscard]] static size_t UsableSize(void* ptr);
+        /// The usable size of a live block of plain malloc / calloc / realloc (AllocRouting). Unlike UsableSize it is the system's own
+        /// measure on every platform, Windows included
+        [[nodiscard]] static size_t LibcUsableSize(void* ptr);
     };
 
 }  // namespace BECore

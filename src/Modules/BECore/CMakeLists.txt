@@ -34,6 +34,16 @@ endif()
 # Создаем статическую библиотеку BECore
 add_library(BECoreModule STATIC ${CORE_MODULE_SOURCES})
 
+# The sources that run the kernels of a program (Values/Programs/Kernels.h) compile without floating-point contraction, as the generated native code does
+# (be_add_native_programs): a fused multiply-add across two operations rounds once and gives another last bit than two instructions do, so the interpreter
+# and the generated function would differ in a Release build. The interpreter is the meaning of a program, so it is the one that must not depend on a flag.
+set_source_files_properties(
+    "${CMAKE_CURRENT_SOURCE_DIR}/Values/Programs/Interpreter.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Values/Programs/Peephole.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Values/Programs/ExprChecker.cpp"
+    PROPERTIES COMPILE_OPTIONS "$<IF:$<CXX_COMPILER_ID:MSVC>,/fp:precise,-ffp-contract=off>"
+)
+
 # Группировка файлов в IDE
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Core" FILES ${CORE_MODULE_SOURCES})
 

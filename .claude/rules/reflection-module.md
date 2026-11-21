@@ -60,7 +60,7 @@ The generated `Serialize` calls `Ser::Save(s, field, "name")` for every field, `
 |------|-----------|
 | arithmetic, `String` (a string of any allocator), `FixedString`, `PoolString`, reflected enum (`CORE_ENUM`) | attribute (`WriteAttribute` / `ReadAttribute`); a `FixedString` that cannot overflow keeps the part of a longer text that fits and reports the rest |
 | type with `Serialize` / `Deserialize` | child object: `BeginObject(key)` + `Serialize` |
-| `Vector<T>`, `SmallVector`, `FixedVector`, `Array` (the `eastl::` forms too) | array; elements are objects or a `value` attribute (a `FixedVector` keeps the items that fit and reports the rest) |
+| `Vector<T>`, `SmallVector`, `FixedVector`, `Array` (the `eastl::` forms of any allocator too) | array; elements are objects or a `value` attribute (a `FixedVector` keeps the items that fit and reports the rest) |
 | `HashMap`, `FixedHashMap`, `Map` | array of `entry` with a `key` attribute, in key order for the hash maps (a `FixedHashMap` that cannot overflow keeps the entries that fit and reports the rest) |
 | `Optional<T>` (`std::optional`) | the value; nothing when empty |
 | `Variant<Ts...>` (`std::variant`) | child object with an `index` attribute and the active alternative under `value` (an attribute for a scalar, a child for an object); `std::monostate` writes the index alone. As an element of an array or the value of a map the two names sit in the element itself. A missing index (`Variant index is missing`) or an out-of-range one (`Invalid variant index <n>`) is an error and keeps the variant; a valid index emplaces a default alternative before reading it. The alternatives must be default constructible and have an accessor (`static_assert`). `eastl::variant` has none |
@@ -128,7 +128,7 @@ if (serializer.BeginArray("items", "item", count)) {
     }
     serializer.EndArray();
 }
-// Reading: BeginArray fills `count`; loop count times over BeginArrayElement() / EndArrayElement().
+// Reading: BeginArray fills `count`; `container.reserve(count)`, then loop count times over BeginArrayElement() / EndArrayElement().
 ```
 
 **Reader limits** (`Reflection/ReaderLimits.h`, tests `tests/BECore/ReaderLimitsTest.cpp`): both readers refuse input beyond a named limit with an error, never an assertion. A text over 4 MiB or a binary stream over 16 MiB (a file is checked by its size before it is read, and a path that is not a regular file is refused), an array of more than 65536 elements, XML nested more than 256 open entries (a recursive type, such as a UI tree, recurses once per two), and a list of errors that stops at 64 entries and says so in its last one (an error's path and message are cut to 256 bytes, a quoted bad value to 32, and a control character in them becomes `?`: they reach logs and replies), and a value read into a `PoolString` field of more than 4096 bytes (`kMaxPoolStringBytes`: a name, an id or a key; the pool never frees, so XML, binary and JSON refuse a longer one with an error before `Intern` and the field keeps its value; a `String` field has no such limit). The limits are about 250 times what the content has: a game with more raises the constant. `XmlDeserializer::LoadFromString` reads the text as UTF-8 whatever its first bytes are; any load drops the earlier document, so after a refusal nothing is readable.

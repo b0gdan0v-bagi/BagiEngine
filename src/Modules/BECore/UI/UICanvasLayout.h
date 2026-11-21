@@ -9,6 +9,7 @@
 #include <BECore/UI/UIRegions.h>
 #include <BECore/UI/UITransitionComponent.h>
 #include <BECore/UI/UIVariant.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <cstdint>
 
 namespace BECore {
@@ -88,7 +89,14 @@ namespace BECore {
          */
         [[nodiscard]] UIElement* PickElement(float canvasX, float canvasY) const;
 
-        /// The elements with `HasPopupChildren()` that are open, in tree order; only visible ones, and a popup inside the children of another is not looked for
+        /// Calls @p visit for each element with `HasPopupChildren()` that is open, in tree order; only visible ones, and a popup inside the children of another is not looked for.
+        /// Allocates nothing. @p visit may call `ClosePopup()` on the element it is given (the walk has read the flag and does not enter it); nothing else may change the tree inside one
+        void ForEachOpenPopup(FunctionRef<void(UIElement&)> visit) const;
+
+        /// Whether any popup is open: ForEachOpenPopup() that stops at the first one
+        [[nodiscard]] bool HasOpenPopup() const;
+
+        /// The open popups in tree order as a list. **Allocates**: for tests and tools, never for a frame (use ForEachOpenPopup())
         [[nodiscard]] Vector<UIElement*> OpenPopups() const;
 
         [[nodiscard]] Vector<UILayoutIssue> Validate(const UILayoutValidatorOptions& options) const;

@@ -2,6 +2,9 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Memory/BlockPool.h>
+#include <BECore/Memory/LinearArena.h>
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -196,6 +199,118 @@ namespace BECore::Tests {
         EXPECT_EQ(collector.GetLast()->allocCount, 3u);
         EXPECT_EQ(collector.GetLast()->allocBytes, 300u);
         EXPECT_EQ(collector.GetLast()->liveBytes, 1234u);
+    }
+
+    TEST(FrameStatsCollectorTest, AFrameCountsItsAllocationsPerTagAndKeepsTheLiveBytesOfTheTagAtItsEnd) {
+        constexpr size_t kBlockBytes = 4096;
+        FrameStatsCollector collector;
+        collector.SetClock(FakeNow);
+        collector.BeginFrame();
+        void* block = nullptr;
+        {
+            BE_MEM_TAG(UI);
+            block = ::operator new(kBlockBytes);
+        }
+        collector.EndFrame({}, AllocTracker::GetTotals());
+        const FrameStats& frame = *collector.GetLast();
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_GE(frame.tagAllocCount[+MemTag::UI], 1u);
+            EXPECT_GE(frame.tagLiveBytes[+MemTag::UI], kBlockBytes);
+        } else {
+            for (size_t i = 0; i < kMemTagCount; ++i) {
+                EXPECT_EQ(frame.tagAllocCount[i], 0u);
+                EXPECT_EQ(frame.tagLiveBytes[i], 0u);
+            }
+        }
+
+        // the next frame allocates nothing under UI, yet the block is still alive at its end
+        collector.BeginFrame();
+        collector.EndFrame({}, AllocTracker::GetTotals());
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_GE(collector.GetLast()->tagLiveBytes[+MemTag::UI], kBlockBytes);
+        }
+        ::operator delete(block);
+    }
+
+    TEST(FrameStatsCollectorTest, AFrameSeesTheTotalsOfTheArenasAliveAtItsEnd) {
+        constexpr size_t kFromHeap = 100;
+        constexpr size_t kFromBuffer = 200;
+        constexpr size_t kBufferSize = 64;  // smaller than the request: one overflow
+        constexpr size_t kNoAlignment = 1;
+        FrameStatsCollector collector;
+        collector.SetClock(FakeNow);
+        collector.BeginFrame();
+        collector.EndFrame({}, AllocTotals{});
+        const FrameStats outside = *collector.GetLast();
+
+        {
+            std::byte buffer[kBufferSize];
+            LinearArena heapArena("FrameStatsHeap");
+            LinearArena bufferArena("FrameStatsBuffer", buffer, sizeof(buffer));
+            ASSERT_NE(heapArena.Allocate(kFromHeap, kNoAlignment), nullptr);
+            ASSERT_NE(bufferArena.Allocate(kFromBuffer, kNoAlignment), nullptr);
+
+            collector.BeginFrame();
+            collector.EndFrame({}, AllocTotals{});
+            const FrameStats& inside = *collector.GetLast();
+            const ArenaTotals totals = GetArenaTotals();
+            EXPECT_EQ(inside.arenaUsedBytes, totals.used);
+            EXPECT_EQ(inside.arenaPeakBytes, totals.peak);
+            EXPECT_EQ(inside.arenaOverflows, totals.overflows);
+            EXPECT_EQ(inside.arenaUsedBytes - outside.arenaUsedBytes, kFromHeap + kFromBuffer);
+            EXPECT_EQ(inside.arenaPeakBytes - outside.arenaPeakBytes, kFromHeap + kFromBuffer);
+            EXPECT_EQ(inside.arenaOverflows - outside.arenaOverflows, 1u);
+        }
+
+        collector.BeginFrame();
+        collector.EndFrame({}, AllocTotals{});
+        EXPECT_EQ(collector.GetLast()->arenaUsedBytes, outside.arenaUsedBytes);
+        EXPECT_EQ(collector.GetLast()->arenaPeakBytes, outside.arenaPeakBytes);
+        EXPECT_EQ(collector.GetLast()->arenaOverflows, outside.arenaOverflows);
+    }
+
+    TEST(FrameStatsCollectorTest, AFrameSeesTheLiveBlocksOfThePoolsAliveAtItsEnd) {
+        constexpr size_t kBlockSize = 24;
+        constexpr size_t kFirstBlocks = 3;
+        constexpr size_t kSecondBlocks = 2;
+        FrameStatsCollector collector;
+        collector.SetClock(FakeNow);
+        collector.BeginFrame();
+        collector.EndFrame({}, AllocTotals{});
+        const FrameStats outside = *collector.GetLast();
+
+        {
+            BlockPool first("FrameStatsPoolFirst", kBlockSize, alignof(void*));
+            BlockPool second("FrameStatsPoolSecond", kBlockSize, alignof(void*));
+            void* blocks[kFirstBlocks + kSecondBlocks];
+            for (size_t i = 0; i < kFirstBlocks; ++i) {
+                blocks[i] = first.Allocate();
+            }
+            for (size_t i = 0; i < kSecondBlocks; ++i) {
+                blocks[kFirstBlocks + i] = second.Allocate();
+            }
+
+            collector.BeginFrame();
+            collector.EndFrame({}, AllocTotals{});
+            const FrameStats& inside = *collector.GetLast();
+            const PoolTotals totals = GetPoolTotals();
+            EXPECT_EQ(inside.poolLiveBlocks, totals.liveBlocks);
+            EXPECT_EQ(inside.poolPageBytes, totals.pageBytes);
+            EXPECT_EQ(inside.poolLiveBlocks - outside.poolLiveBlocks, kFirstBlocks + kSecondBlocks);
+            EXPECT_EQ(inside.poolPageBytes - outside.poolPageBytes, first.GetPageBytes() + second.GetPageBytes());
+
+            for (size_t i = 0; i < kFirstBlocks; ++i) {
+                first.Deallocate(blocks[i]);
+            }
+            for (size_t i = 0; i < kSecondBlocks; ++i) {
+                second.Deallocate(blocks[kFirstBlocks + i]);
+            }
+        }
+
+        collector.BeginFrame();
+        collector.EndFrame({}, AllocTotals{});
+        EXPECT_EQ(collector.GetLast()->poolLiveBlocks, outside.poolLiveBlocks);
+        EXPECT_EQ(collector.GetLast()->poolPageBytes, outside.poolPageBytes);
     }
 
     TEST(FrameStatsCollectorTest, TheHistoryKeepsTheLastFramesOldestFirst) {

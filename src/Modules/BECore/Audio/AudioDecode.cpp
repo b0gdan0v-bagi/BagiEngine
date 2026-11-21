@@ -1,10 +1,24 @@
 #include "AudioDecode.h"
 
+#include <BECore/Profiler/Alloc/AllocRouting.h>
 #include <climits>
 #include <cmath>
 #include <cstdlib>
-#include <cstring>
-#include <utility>
+
+// stb_vorbis includes these itself and has no allocator macro: its malloc, realloc and free become the routed ones after every system header
+// it needs is in (a header included later would see the macros), and the macros end with the include
+#include <assert.h>
+#include <limits.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#if defined(_MSC_VER) || defined(__MINGW32__)
+#include <malloc.h>
+#endif
+#if defined(__linux__) || defined(__linux) || defined(__sun__) || defined(__EMSCRIPTEN__) || defined(__NEWLIB__)
+#include <alloca.h>
+#endif
 
 // The one translation unit that holds the stb_vorbis implementation (src/Modules/stb/README.md). No stdio (the engine reads the bytes) and no
 // push-data API (a clip is decoded whole). stb_vorbis has no static option: its functions (stb_vorbis_decode_memory, ...) have external C
@@ -37,7 +51,13 @@
 #elif defined(_MSC_VER)
 #pragma warning(push, 0)
 #endif
+#define malloc(size) ::BECore::AllocRouting::Malloc(::BECore::AllocSource::Stb, (size))
+#define realloc(ptr, size) ::BECore::AllocRouting::Realloc(::BECore::AllocSource::Stb, (ptr), (size))
+#define free(ptr) ::BECore::AllocRouting::Free(::BECore::AllocSource::Stb, (ptr))
 #include <stb_vorbis.c>
+#undef malloc
+#undef realloc
+#undef free
 // stb_vorbis.c defines these at file scope for its channel tables
 #undef L
 #undef C
@@ -49,6 +69,9 @@
 #define DR_FLAC_NO_OGG
 #define DRFLAC_API static
 #define DRFLAC_PRIVATE static
+#define DRFLAC_MALLOC(size) ::BECore::AllocRouting::Malloc(::BECore::AllocSource::DrLibs, (size))
+#define DRFLAC_REALLOC(ptr, size) ::BECore::AllocRouting::Realloc(::BECore::AllocSource::DrLibs, (ptr), (size))
+#define DRFLAC_FREE(ptr) ::BECore::AllocRouting::Free(::BECore::AllocSource::DrLibs, (ptr))
 #include <dr_flac.h>
 #if defined(__clang__)
 #pragma clang diagnostic pop
@@ -233,11 +256,11 @@ namespace BECore {
         short* output = nullptr;
         const int frames = stb_vorbis_decode_memory(bytes.data(), static_cast<int>(bytes.size()), &channels, &sampleRate, &output);
         if (frames <= 0 || output == nullptr) {
-            std::free(output);  // NOLINT(cppcoreguidelines-no-malloc): stb_vorbis allocates the output with malloc
+            AllocRouting::Free(AllocSource::Stb, output);  // stb_vorbis allocates the output through the routed malloc
             return std::unexpected(String("not an Ogg Vorbis file stb_vorbis can decode"));
         }
         if (channels <= 0 || channels > kMaxAudioChannels || sampleRate < static_cast<int>(kMinAudioSampleRate) || sampleRate > static_cast<int>(kMaxAudioSampleRate)) {
-            std::free(output);  // NOLINT(cppcoreguidelines-no-malloc): stb_vorbis allocates the output with malloc
+            AllocRouting::Free(AllocSource::Stb, output);  // stb_vorbis allocates the output through the routed malloc
             return std::unexpected(Format("{} channels at {} Hz is not a clip the engine plays", channels, sampleRate));
         }
 
@@ -248,7 +271,7 @@ namespace BECore {
         for (size_t i = 0; i < count; ++i) {
             decoded.samples[i] = static_cast<float>(output[i]) / kScale16;
         }
-        std::free(output);  // NOLINT(cppcoreguidelines-no-malloc): stb_vorbis allocates the output with malloc
+        AllocRouting::Free(AllocSource::Stb, output);  // stb_vorbis allocates the output through the routed malloc
         return decoded;
     }
 

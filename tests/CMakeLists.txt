@@ -25,7 +25,12 @@ endif()
 # The fuzz targets: a library of its own, because the libFuzzer executables (cmake/BagiFuzz.cmake) link the same functions
 add_subdirectory(Fuzz)
 
-be_add_game_tests(BagiEngineTests SOURCES ${TESTS_SOURCES} LINK RemoteControlModule RoomsModule RoomClientModule RoomServerModule RuntimeModule BagiFuzzTargets)
+# The set of native programs the engine's tests and benchmark run: the formulas, the tool that writes their C++ and the generated file the next line
+# gives BagiEngineTests (tests/NativePrograms/CMakeLists.txt)
+add_subdirectory(NativePrograms)
+
+be_add_game_tests(BagiEngineTests SOURCES ${TESTS_SOURCES} LINK RemoteControlModule RoomsModule RoomClientModule RoomServerModule RuntimeModule BagiFuzzTargets BagiNativeProgramSet)
+be_add_native_programs(BagiEngineTests GENERATOR BagiNativeProgramsTool)
 
 # The FuzzCorpus cases of the shards only replay the corpus; this entry runs them again with the mutations (tests/Fuzz/CLAUDE.md). 50000 per target
 # of cost weight 1 is about 2 s in Debug; the targets run one after the other in this one process.

@@ -43,27 +43,58 @@ namespace BECore {
     }
             BE_CHECKER_DESCRIBABLE_TYPES(BE_PROGRAM_TYPE_FOR, Unused)
 #undef BE_PROGRAM_TYPE_FOR
+            // The types a game registered come after the engine's rows: a descriptor an engine row matches is never a registered type
+            if (const Optional<DomainTypeId> domain = ProgramDomain::FindTypeByDescriptor(type)) {
+                return ExprType::OfDomain(*domain);
+            }
             return std::nullopt;
         }
 
-        String JoinTypes(const Vector<ProgramType>& types) {
+        String DomainTypeName(DomainTypeId id) {
+            return String(ProgramDomain::Type(id).name.ToStringView());
+        }
+
+        /// `a, b or c`
+        String JoinWithOr(const Vector<String>& words) {
             String text;
-            for (size_t i = 0; i < types.size(); ++i) {
+            for (size_t i = 0; i < words.size(); ++i) {
                 if (i > 0) {
-                    text += i + 1 == types.size() ? " or " : ", ";
+                    text += i + 1 == words.size() ? " or " : ", ";
                 }
-                const StringView name = ProgramTypeName(types[i]);
-                text.append(name.data(), name.size());
+                text += words[i];
             }
             return text;
+        }
+
+        String JoinTypes(const Vector<ProgramType>& types) {
+            Vector<String> names;
+            for (const ProgramType type : types) {
+                names.push_back(String(ProgramTypeName(type)));
+            }
+            return JoinWithOr(names);
         }
 
         Vector<ProgramType> AllTypes() {
             Vector<ProgramType> types;
             for (const ProgramType type : EnumUtils<ProgramType>::Values()) {
-                types.push_back(type);
+                // The registered types of a game are no type the messages can name as a group; the checker names each by its own name
+                if (type != ProgramType::Domain) {
+                    types.push_back(type);
+                }
             }
             return types;
+        }
+
+        /// The types a formula can have: the program types and the types a game registered
+        String ListFormulaTypes() {
+            Vector<String> names;
+            for (const ProgramType type : AllTypes()) {
+                names.push_back(String(ProgramTypeName(type)));
+            }
+            for (DomainTypeId id = 0; id < ProgramDomain::TypeCount(); ++id) {
+                names.push_back(DomainTypeName(id));
+            }
+            return JoinWithOr(names);
         }
 
         /// The types an operation has a row for, as a message lists them
@@ -152,8 +183,11 @@ namespace BECore {
             return text;
         }
 
-        /// A type as a message names it: `float`, `vec3`, `enum {Fire, Water}`
+        /// A type as a message names it: `float`, `vec3`, `enum {Fire, Water}`, the name a game registered a type under
         String DescribeExprType(const ExprType& type) {
+            if (type.program == ProgramType::Domain && type.domain != kNoDomainType) {
+                return DomainTypeName(type.domain);
+            }
             const StringView name = ProgramTypeName(type.program);
             if (type.program == ProgramType::Enum && type.enumeration != nullptr) {
                 return Format("{} {{{}}}", name, EnumeratorList(*type.enumeration));
@@ -166,6 +200,52 @@ namespace BECore {
             const String name = DescribeExprType(type);
             const bool vowel = StringView("aeiou").find(name.front()) != StringView::npos;
             return Format("{} {}", vowel ? "an" : "a", name);
+        }
+
+        /// `popcount(mask) -> int`
+        String SignatureOf(const DomainOperation& operation) {
+            String parameters;
+            for (size_t i = 0; i < operation.parameterCount; ++i) {
+                parameters += i == 0 ? "" : ", ";
+                parameters += DescribeExprType(ExprType::Of(operation.parameters[i]));
+            }
+            return Format("{}({}) -> {}", operation.name.ToStringView(), parameters, DescribeExprType(ExprType::Of(operation.result)));
+        }
+
+        String SignaturesOf(const Vector<DomainOperationId>& operations) {
+            String text;
+            for (const DomainOperationId id : operations) {
+                text += text.empty() ? "" : "; ";
+                text += SignatureOf(ProgramDomain::Operation(id));
+            }
+            return text;
+        }
+
+        /// What a value of a registered type can be given to, as a message lists it: the operators it has and the operations that take it
+        String DomainTypeHas(DomainTypeId id) {
+            Vector<String> names;
+            if (ProgramDomain::Type(id).equality == DomainEquality::Bitwise) {
+                names = {"==", "!=", "select"};
+            }
+            for (DomainOperationId operationId = 0; operationId < ProgramDomain::OperationCount(); ++operationId) {
+                const DomainOperation& operation = ProgramDomain::Operation(operationId);
+                for (size_t i = 0; i < operation.parameterCount; ++i) {
+                    const String name(operation.name.ToStringView());
+                    if (operation.parameters[i].domain == id && std::find(names.begin(), names.end(), name) == names.end()) {
+                        names.push_back(name);
+                        break;
+                    }
+                }
+            }
+            if (names.empty()) {
+                return "nothing";
+            }
+            String text;
+            for (const String& name : names) {
+                text += text.empty() ? "" : ", ";
+                text += name;
+            }
+            return text;
         }
 
         /// A type of a field or an expected type as a message names it
@@ -197,6 +277,18 @@ namespace BECore {
             }
             names.push_back(String(kTableFunction));
             names.push_back(String(kNamedTableFunction));
+            // An operation has one name for all its overloads
+            for (DomainOperationId id = 0; id < ProgramDomain::OperationCount(); ++id) {
+                const String name(ProgramDomain::Operation(id).name.ToStringView());
+                if (std::find(names.begin(), names.end(), name) == names.end()) {
+                    names.push_back(name);
+                }
+            }
+            for (const ExprListFunction& function : kListFunctions) {
+                if (FindExprFunction(function.name) == nullptr) {
+                    names.push_back(String(function.name));
+                }
+            }
             return names;
         }
 
@@ -223,17 +315,46 @@ namespace BECore {
             return operation == ProgramOperation::And || operation == ProgramOperation::Or;
         }
 
+        /// What a name or a path of a formula stands for when it is not a value: the node (a `List` or an `Element`, else any node) and what the list holds. `list` is the type of the
+        /// list (of an `Element`, the list it is an element of) and `element` the class of its elements, null for a list of scalars
+        struct Reference {
+            TypedNodeId id = 0;
+            const TypeDesc* list = nullptr;
+            const TypeInfo* element = nullptr;
+        };
+
+        using ReferenceResult = std::expected<Reference, ProgramError>;
+
+        /// A loop variable in scope: the body of its fold only
+        struct LoopScope {
+            String name;
+            uint32_t loop = 0;
+            const TypeDesc* list = nullptr;
+            const TypeInfo* element = nullptr;
+            /// The list as the source wrote it, for the message of a name that is taken
+            String source;
+        };
+
         class Checker {
         public:
             Checker(const ExprAst& ast, const ContextDecl& declaration, const CompileOptions& options) : _ast(ast), _declaration(declaration), _options(options) {
                 // The children of a node come before it, so one pass in order sees the children's answers
                 _hasName.resize(ast.nodes.size(), false);
+                // A loop variable is read from the list, so a bare name that is one gives its operand a type as a path does (`c * 2` over a list of `int`). The variable comes after the
+                // body in the node order, so the names are collected first; a bare name of the same text that is no variable counts too, which only makes it checked earlier
+                Vector<StringView> variables;
+                for (const ExprNode& node : ast.nodes) {
+                    const ExprListFunction* function = node.kind == ExprNodeKind::Call ? FindListFunction(node.text) : nullptr;
+                    if (function != nullptr && function->isFold && node.argumentCount == function->arity && ast[ast.arguments[node.firstArgument + 1]].kind == ExprNodeKind::Name) {
+                        variables.push_back(ast[ast.arguments[node.firstArgument + 1]].text);
+                    }
+                }
                 for (size_t i = 0; i < ast.nodes.size(); ++i) {
                     const ExprNode& node = ast.nodes[i];
                     switch (node.kind) {
                         case ExprNodeKind::Name:
                             // A bare name is a level, a function or an enumerator: only a path reads the context and gives its operand a type to the others
-                            _hasName[i] = node.text.find('.') != String::npos;
+                            _hasName[i] = node.text.find('.') != String::npos || std::find(variables.begin(), variables.end(), StringView(node.text)) != variables.end();
                             break;
                         case ExprNodeKind::Call:
                             // The type of a `ByLevel` is the one beside it, however its index is read, so it waits for the operands that have a type of their own
@@ -246,6 +367,7 @@ namespace BECore {
                             break;
                         case ExprNodeKind::Unary:
                         case ExprNodeKind::Member:
+                        case ExprNodeKind::Index:
                             _hasName[i] = _hasName[node.first];
                             break;
                         case ExprNodeKind::Binary:
@@ -323,11 +445,13 @@ namespace BECore {
                     case ExprNodeKind::Call:
                         return CheckCall(id, hint);
                     case ExprNodeKind::Member:
-                        return CheckMember(id);
+                        return AsValue(id, ResolveMember(id));
                     case ExprNodeKind::Unary:
                         return CheckUnary(id, hint);
                     case ExprNodeKind::Binary:
                         return CheckBinary(id, hint);
+                    case ExprNodeKind::Index:
+                        return AsValue(id, CheckIndex(id));
                 }
                 return Refuse(node.column, "unknown node");
             }
@@ -470,20 +594,37 @@ namespace BECore {
 
             // Names
 
+            /// A name or a path as a value: a list or an element is refused with the way to read it
             TypedResult CheckName(ExprNodeId id, Optional<ExprType> hint) {
+                return AsValue(id, ResolveName(id, hint));
+            }
+
+            /// What a name or a path stands for: a loop variable (or a field of its element), a field of a level, or a list
+            ReferenceResult ResolveName(ExprNodeId id, Optional<ExprType> hint) {
                 const ExprNode& node = _ast[id];
                 const StringView text = node.text;
-                if (text.find('.') == StringView::npos) {
-                    return CheckBareName(node, hint);
+                const size_t dot = text.find('.');
+                if (const LoopScope* scope = FindScope(text.substr(0, dot))) {
+                    return ResolveVariable(node, *scope, dot == StringView::npos ? StringView() : text.substr(dot + 1));
+                }
+                if (dot == StringView::npos) {
+                    return Wrap(CheckBareName(node, hint));
                 }
                 const TypeDesc* field = FieldDescriptor(text);
                 if (field == nullptr) {
                     if (const Optional<TypedResult> component = CheckComponentPath(node)) {
-                        return *component;
+                        return Wrap(*component);
                     }
                     // The refusal of a path that names no fixed field does not depend on the type asked for
                     const auto refused = LinkSlot(_declaration, text, DescribeType<int32_t>());
                     return Refuse(node.column, refused.has_value() ? FieldOfAnotherType(text, nullptr) : refused.error().message);
+                }
+                if (field->kind == TypeKind::List) {
+                    const auto list = LinkList(_declaration, text);
+                    if (!list.has_value()) {
+                        return Refuse(node.column, list.error().message);
+                    }
+                    return EmitList(text, *list->list, list->offset, SlotRef{list->level, list->offset}, std::nullopt, node.column);
                 }
                 const Optional<ExprType> type = ProgramTypeFor(*field);
                 if (!type.has_value()) {
@@ -493,7 +634,72 @@ namespace BECore {
                 if (!slot.has_value()) {
                     return Refuse(node.column, slot.error().message);
                 }
-                return EmitSlot(node.text, *type, *slot, node.column);
+                return Reference{EmitSlot(node.text, *type, *slot, node.column)};
+            }
+
+            static ReferenceResult Wrap(const TypedResult& result) {
+                if (!result.has_value()) {
+                    return std::unexpected(result.error());
+                }
+                return Reference{*result};
+            }
+
+            [[nodiscard]] const LoopScope* FindScope(StringView name) const {
+                for (const LoopScope& scope : _scopes) {
+                    if (scope.name == name) {
+                        return &scope;
+                    }
+                }
+                return nullptr;
+            }
+
+            /// The source of a node as a message names it: the path, `list[0]`, `f(...)`; what has no short form is "the expression"
+            [[nodiscard]] String Describe(ExprNodeId id) const {
+                const ExprNode& node = _ast[id];
+                switch (node.kind) {
+                    case ExprNodeKind::Name:
+                    case ExprNodeKind::Number:
+                        return node.text;
+                    case ExprNodeKind::Member:
+                        return Format("{}.{}", Describe(node.first), node.text);
+                    case ExprNodeKind::Index: {
+                        const ExprNodeKind kind = _ast[node.second].kind;
+                        const bool simple = kind == ExprNodeKind::Name || kind == ExprNodeKind::Number;
+                        return Format("{}[{}]", Describe(node.first), simple ? Describe(node.second) : String("..."));
+                    }
+                    case ExprNodeKind::Call:
+                        return Format("{}(...)", node.text);
+                    default:
+                        return "the expression";
+                }
+            }
+
+            /// What a list holds as a message names it: the class of its elements or the type of its scalars
+            static String DescribeElements(const Reference& list) {
+                return list.element != nullptr ? String(list.element->Name()) : DescribeDescriptor(*list.list->element);
+            }
+
+            /// A reference where a value is needed: a list and an element are not values, and the message says how to read them
+            TypedResult AsValue(ExprNodeId id, const ReferenceResult& reference) {
+                if (!reference.has_value()) {
+                    return std::unexpected(reference.error());
+                }
+                const TypedNode& node = _out.nodes[reference->id];
+                const String text = Describe(id);
+                if (node.kind == TypedNodeKind::List) {
+                    return Refuse(_ast[id].column, Format("'{}' is a list of {}, not a value: size({}) is its length, {}[i] its element i, and count, any, all, sum, min and max over it give values",
+                                                          text, DescribeElements(*reference), text, text));
+                }
+                if (node.kind == TypedNodeKind::Element) {
+                    return Refuse(_ast[id].column, Format("'{}' is {}, an element of a list, not a value: read a field of it, for example {}.{}", text, DescribeElements(*reference), text,
+                                                          FirstFieldName(*reference->element)));
+                }
+                return reference->id;
+            }
+
+            static String FirstFieldName(const TypeInfo& type) {
+                const Vector<FieldRef> fields = TypeRegistry::GetInstance().AllFields(type);
+                return fields.empty() ? String("field") : String(fields.front().field->name);
             }
 
             TypedNodeId EmitSlot(StringView path, const ExprType& type, SlotRef slot, uint32_t column) {
@@ -528,19 +734,191 @@ namespace BECore {
                 return id;
             }
 
-            /// `lerp(a, b, t).y`, `(a + b).z`: a component of an expression
-            TypedResult CheckMember(ExprNodeId id) {
-                const ExprNode& node = _ast[id];
-                const TypedResult base = Check(node.first, std::nullopt);
+            /// A component of an expression (`lerp(a, b, t).y`) or a field of an element: the members after a base are read together, `list[i].a.b` is one path through the element's type
+            ReferenceResult ResolveMember(ExprNodeId id) {
+                Vector<const ExprNode*> members;
+                ExprNodeId bottom = id;
+                while (_ast[bottom].kind == ExprNodeKind::Member) {
+                    members.push_back(&_ast[bottom]);
+                    bottom = _ast[bottom].first;
+                }
+                std::reverse(members.begin(), members.end());
+                const ReferenceResult base = CheckReference(bottom);
                 if (!base.has_value()) {
                     return base;
                 }
-                const ExprType type = TypeOf(*base);
-                const auto index = ComponentIndex(type, node.text, node.column);
+                if (_out.nodes[base->id].kind == TypedNodeKind::Element) {
+                    String path;
+                    for (const ExprNode* member : members) {
+                        path += path.empty() ? "" : ".";
+                        path += member->text;
+                    }
+                    return ResolveInElement(*base, path, members.front()->column, Describe(id));
+                }
+                const TypedResult value = AsValue(bottom, base);
+                if (!value.has_value()) {
+                    return std::unexpected(value.error());
+                }
+                TypedNodeId current = *value;
+                for (const ExprNode* member : members) {
+                    const ExprType type = TypeOf(current);
+                    const auto index = ComponentIndex(type, member->text, member->column);
+                    if (!index.has_value()) {
+                        return std::unexpected(index.error());
+                    }
+                    current = EmitExtract(current, type, *index, member->column);
+                }
+                return Reference{current};
+            }
+
+            /// Any node as what it stands for: a list or an element where the syntax makes one, else the value
+            ReferenceResult CheckReference(ExprNodeId id) {
+                switch (_ast[id].kind) {
+                    case ExprNodeKind::Name:
+                        return ResolveName(id, std::nullopt);
+                    case ExprNodeKind::Member:
+                        return ResolveMember(id);
+                    case ExprNodeKind::Index:
+                        return CheckIndex(id);
+                    default:
+                        return Wrap(Check(id, std::nullopt));
+                }
+            }
+
+            // Lists and elements
+
+            /// The list node of a list field: of a level (@p slot) or of the element @p owner
+            ReferenceResult EmitList(StringView path, const TypeDesc& listType, uint32_t offset, SlotRef slot, Optional<TypedNodeId> owner, uint32_t column) {
+                const auto element = DescribeListElement(listType);
+                if (!element.has_value()) {
+                    return Refuse(column, Format("path '{}': {}", path, element.error().message));
+                }
+                const auto layout = MakeListDescriptor(offset, listType);
+                if (!layout.has_value()) {
+                    return Refuse(column, Format("path '{}': {}", path, layout.error()));
+                }
+                TypedNode node;
+                node.kind = TypedNodeKind::List;
+                node.slot = slot;
+                node.path = String(path);
+                node.list = *layout;
+                node.column = column;
+                if (owner.has_value()) {
+                    node.operands[node.operandCount++] = *owner;
+                }
+                return Reference{Emit(std::move(node)), &listType, *element};
+            }
+
+            /// The read of the field at @p offset of an element, of the type @p type
+            TypedNodeId EmitElementValue(TypedNodeId element, const ExprType& type, uint32_t offset, uint32_t column) {
+                const TypedNodeId id = EmitOperation(LoadElemOpcode(type.program), type, column, {element});
+                _out.nodes[id].immediate = offset;
+                return id;
+            }
+
+            /// The component @p index of the field of @p type at @p offset of an element: a read at the component's offset where the field stores it as the program computes with it
+            TypedResult EmitElementComponent(TypedNodeId element, const ExprType& type, uint32_t offset, uint32_t index, uint32_t column) {
+                const ComponentSet set = ComponentsOf(type.program);
+                if (set.stride != ProgramTypeSize(set.type)) {
+                    return EmitExtract(EmitElementValue(element, type, offset, column), type, index, column);
+                }
+                const uint64_t at = uint64_t{offset} + set.Offset(index);
+                if (at > std::numeric_limits<uint32_t>::max()) {
+                    return Refuse(column, Format("the field is {} bytes into its element, more than a read can address", at));
+                }
+                return EmitElementValue(element, ExprType(set.type), static_cast<uint32_t>(at), column);
+            }
+
+            /// A loop variable and what follows it (`v`, `v.suit`, `v.tiles`, `v.position.x`)
+            ReferenceResult ResolveVariable(const ExprNode& node, const LoopScope& scope, StringView path) {
+                TypedNode variable;
+                variable.kind = TypedNodeKind::Element;
+                variable.loop = scope.loop;
+                variable.column = node.column;
+                return ResolveInElement(Reference{Emit(std::move(variable)), scope.list, scope.element}, path, node.column, node.text);
+            }
+
+            /**
+             * What @p path (the fields after an element, `a.b.c`) stands for in the element @p element of a list: a value (a `LoadElem`), a list of the element, or the element itself
+             * for an empty path of an object. An element that is a scalar is the value read at its start, and `.x` is a component of it. @p text names the source in messages.
+             */
+            ReferenceResult ResolveInElement(const Reference& element, StringView path, uint32_t column, StringView text) {
+                const TypeDesc& elementType = *element.list->element;
+                if (element.element == nullptr) {
+                    const Optional<ExprType> type = ProgramTypeFor(elementType);
+                    if (!type.has_value()) {
+                        return Refuse(column,
+                                      Format("'{}': the elements of this list are {}, and a formula reads only values of the types {}", text, DescribeDescriptor(elementType), JoinTypes(AllTypes())));
+                    }
+                    if (path.empty()) {
+                        return Reference{EmitElementValue(element.id, *type, 0, column)};
+                    }
+                    const auto index = ComponentIndex(*type, path, column);
+                    if (!index.has_value()) {
+                        return std::unexpected(index.error());
+                    }
+                    return Wrap(EmitElementComponent(element.id, *type, 0, *index, column));
+                }
+                if (path.empty()) {
+                    return element;
+                }
+                const auto link = LinkElementField(*element.element, path);
+                if (!link.has_value()) {
+                    if (const Optional<TypedResult> component = CheckElementComponent(element, path, column)) {
+                        return Wrap(*component);
+                    }
+                    return Refuse(column, link.error().message);
+                }
+                if (link->type->kind == TypeKind::List) {
+                    return EmitList(text, *link->type, link->offset, SlotRef{}, element.id, column);
+                }
+                const Optional<ExprType> type = ProgramTypeFor(*link->type);
+                if (!type.has_value()) {
+                    return Refuse(column, FieldOfAnotherType(text, link->type));
+                }
+                return Reference{EmitElementValue(element.id, *type, link->offset, column)};
+            }
+
+            /// `position.x` of an element, as `CheckComponentPath` reads `caster.position.x`: null when the path is no field of a type with components and one more segment
+            Optional<TypedResult> CheckElementComponent(const Reference& element, StringView path, uint32_t column) {
+                const size_t last = path.rfind('.');
+                if (last == StringView::npos) {
+                    return std::nullopt;
+                }
+                const auto prefix = LinkElementField(*element.element, path.substr(0, last));
+                const Optional<ExprType> type = prefix.has_value() ? ProgramTypeFor(*prefix->type) : std::nullopt;
+                if (!type.has_value()) {
+                    return std::nullopt;
+                }
+                const auto index = ComponentIndex(*type, path.substr(last + 1), column);
+                if (!index.has_value()) {
+                    return TypedResult(std::unexpected(index.error()));
+                }
+                return EmitElementComponent(element.id, *type, prefix->offset, *index, column);
+            }
+
+            /// `list[i]`: the element, or the value of an element that is a scalar
+            ReferenceResult CheckIndex(ExprNodeId id) {
+                const ExprNode& node = _ast[id];
+                const ReferenceResult base = CheckReference(node.first);
+                if (!base.has_value()) {
+                    return base;
+                }
+                const TypedNode& baseNode = _out.nodes[base->id];
+                if (baseNode.kind != TypedNodeKind::List) {
+                    const String what = baseNode.kind == TypedNodeKind::Element ? Format("{}, an element of a list", DescribeElements(*base)) : Typed(baseNode.type);
+                    return Refuse(node.column, Format("'{}' is {} and has no elements: '[' reads an element of a list", Describe(node.first), what));
+                }
+                const TypedResult index = CheckTableIndex(node.second, Format("the list '{}'", Describe(node.first)));
                 if (!index.has_value()) {
                     return std::unexpected(index.error());
                 }
-                return EmitExtract(*base, type, *index, node.column);
+                TypedNode element;
+                element.kind = TypedNodeKind::Element;
+                element.column = node.column;
+                element.operands[element.operandCount++] = base->id;
+                element.operands[element.operandCount++] = *index;
+                return ResolveInElement(Reference{Emit(std::move(element)), base->list, base->element}, StringView(), node.column, Describe(id));
             }
 
             /**
@@ -594,7 +972,7 @@ namespace BECore {
             /// The field exists and is fixed, but none of the program types is its type: say what it is
             String FieldOfAnotherType(StringView path, const TypeDesc* field) const {
                 const String fieldType = field != nullptr ? Format("of the type {}", DescribeDescriptor(*field)) : String("of another type");
-                return Format("path '{}': the field is {}, and a formula reads only fields of the types {}", path, fieldType, JoinTypes(AllTypes()));
+                return Format("path '{}': the field is {}, and a formula reads only fields of the types {}", path, fieldType, ListFormulaTypes());
             }
 
             TypedResult CheckBareName(const ExprNode& node, Optional<ExprType> hint) {
@@ -604,11 +982,14 @@ namespace BECore {
                     const auto slot = LinkSlot(_declaration, name, DescribeType<int32_t>());
                     return Refuse(node.column, slot.has_value() ? Format("'{}' is a level, a path names a field of it ({}.field)", name, name) : slot.error().message);
                 }
-                if (FindExprFunction(name) != nullptr || name == kTableFunction || name == kNamedTableFunction) {
+                if (FindExprFunction(name) != nullptr || FindListFunction(name) != nullptr || name == kTableFunction || name == kNamedTableFunction || !ProgramDomain::FindOperations(name).empty()) {
                     return Refuse(node.column, Format("'{}' is a function: call it as {}(...)", name, name));
                 }
                 if (hint.has_value() && hint->program == ProgramType::Enum && hint->enumeration != nullptr) {
                     return CheckEnumerator(node, *hint);
+                }
+                if (ProgramDomain::FindType(name).has_value()) {
+                    return Refuse(node.column, Format("'{}' is a type, not a value: a value of it is a field, read by a path (level.field)", name));
                 }
                 Vector<String> known;
                 String levels;
@@ -723,7 +1104,19 @@ namespace BECore {
             }
 
             std::unexpected<ProgramError> NotDefined(uint32_t column, const String& subject, ProgramOperation operation, const ExprType& type) const {
+                if (type.program == ProgramType::Domain && type.domain != kNoDomainType) {
+                    return Refuse(column, Format("{} is not defined for {}; a value of {} has: {}", subject, DescribeExprType(type), DescribeExprType(type), DomainTypeHas(type.domain)));
+                }
                 return Refuse(column, Format("{} is not defined for {}; it works on {}{}", subject, DescribeExprType(type), TypesWith(operation), MixedPairsOf(operation)));
+            }
+
+            /// `==`, `!=` and `select` of a registered type read its whole register: a type whose bytes do not say two values are equal has none of them
+            std::expected<void, ProgramError> RequireEquality(uint32_t column, const String& subject, const ExprType& type) const {
+                if (type.program == ProgramType::Domain && type.domain != kNoDomainType && ProgramDomain::Type(type.domain).equality == DomainEquality::None) {
+                    return Refuse(column, Format("{} is not defined for {}: its values are not compared by their bytes (a float member or padding); a value of it has: {}", subject,
+                                                 DescribeExprType(type), DomainTypeHas(type.domain)));
+                }
+                return {};
             }
 
             // Operators
@@ -786,6 +1179,11 @@ namespace BECore {
                     return std::unexpected(operands.error());
                 }
                 const ExprType common = TypeOf((*operands)[0]);
+                if (operation == ProgramOperation::Eq || operation == ProgramOperation::Ne) {
+                    if (const auto equality = RequireEquality(node.column, subject, common); !equality.has_value()) {
+                        return std::unexpected(equality.error());
+                    }
+                }
                 const Opcode opcode = OpcodeOf(operation, common.program);
                 if (opcode == Opcode::Invalid) {
                     return NotDefined(node.column, subject, operation, common);
@@ -832,15 +1230,34 @@ namespace BECore {
                     return CheckNamedTable(node, hint);
                 }
                 const ExprFunction* function = FindExprFunction(node.text);
+                const ExprListFunction* listFunction = FindListFunction(node.text);
+                // `min` and `max` are in both tables: three arguments are a fold, any other count is the row of the numbers and its arity error. A game's operation may
+                // share the name of a list function (`any` of a mask): a count that one of its overloads takes is the operation's, any other the list function's arity error
+                if (listFunction != nullptr && function == nullptr && node.argumentCount != listFunction->arity) {
+                    const Vector<DomainOperationId> operations = ProgramDomain::FindOperations(node.text);
+                    const bool countFits =
+                        std::any_of(operations.begin(), operations.end(), [&node](DomainOperationId id) { return ProgramDomain::Operation(id).parameterCount == node.argumentCount; });
+                    if (countFits) {
+                        return CheckDomainCall(node, operations);
+                    }
+                }
+                if (listFunction != nullptr && (function == nullptr || node.argumentCount == listFunction->arity)) {
+                    return CheckListFunction(node, *listFunction, hint);
+                }
                 if (function == nullptr) {
                     if (_declaration.IndexOf(node.text).has_value()) {
                         return Refuse(node.column, Format("'{}' is a level, not a function", node.text));
                     }
+                    if (const Vector<DomainOperationId> operations = ProgramDomain::FindOperations(node.text); !operations.empty()) {
+                        return CheckDomainCall(node, operations);
+                    }
+                    if (ProgramDomain::FindType(node.text).has_value()) {
+                        return Refuse(node.column, Format("'{}' is a type, not a function; a value of it is a field, read by a path (level.field)", node.text));
+                    }
                     return Refuse(node.column, Format("unknown function '{}'; the functions are: {}", node.text, JoinNames(FunctionNames())));
                 }
                 if (node.argumentCount != function->arity) {
-                    return Refuse(node.column, Format("'{}' takes {} argument{}, but {} {} given", function->name, function->arity, function->arity == 1 ? "" : "s", node.argumentCount,
-                                                      node.argumentCount == 1 ? "is" : "are"));
+                    return Refuse(node.column, ArityMessage(node, function->arity));
                 }
                 Vector<ExprNodeId> arguments;
                 for (uint32_t i = 0; i < node.argumentCount; ++i) {
@@ -879,6 +1296,185 @@ namespace BECore {
                     result.operands[result.operandCount++] = operand;
                 }
                 return Emit(std::move(result));
+            }
+
+            /**
+             * A call of an operation a game registered. The argument count picks the overloads; an argument is checked with the type of its parameter as the hint when the overloads
+             * at that count agree on it (so a literal takes it and a bare name is an enumerator of it), without a hint otherwise; the types of the arguments then pick the overload.
+             */
+            TypedResult CheckDomainCall(const ExprNode& node, const Vector<DomainOperationId>& overloads) {
+                Vector<DomainOperationId> candidates;
+                for (const DomainOperationId id : overloads) {
+                    if (ProgramDomain::Operation(id).parameterCount == node.argumentCount) {
+                        candidates.push_back(id);
+                    }
+                }
+                if (candidates.empty()) {
+                    Vector<uint8_t> counts;
+                    for (const DomainOperationId id : overloads) {
+                        const uint8_t count = ProgramDomain::Operation(id).parameterCount;
+                        if (std::find(counts.begin(), counts.end(), count) == counts.end()) {
+                            counts.push_back(count);
+                        }
+                    }
+                    std::sort(counts.begin(), counts.end());
+                    Vector<String> words;
+                    for (const uint8_t count : counts) {
+                        words.push_back(Format("{}", static_cast<uint32_t>(count)));
+                    }
+                    return Refuse(node.column, Format("'{}' takes {} argument{}, but {} {} given; the signatures are: {}", node.text, JoinWithOr(words),
+                                                      counts.size() == 1 && counts[0] == 1 ? "" : "s", node.argumentCount, node.argumentCount == 1 ? "is" : "are", SignaturesOf(overloads)));
+                }
+                Vector<TypedNodeId> typed;
+                String found;
+                for (uint32_t i = 0; i < node.argumentCount; ++i) {
+                    const ExprType first = ExprType::Of(ProgramDomain::Operation(candidates[0]).parameters[i]);
+                    bool agree = true;
+                    for (const DomainOperationId id : candidates) {
+                        agree = agree && ExprType::Of(ProgramDomain::Operation(id).parameters[i]) == first;
+                    }
+                    const TypedResult argument = Check(_ast.arguments[node.firstArgument + i], agree ? Optional<ExprType>(first) : std::nullopt);
+                    if (!argument.has_value()) {
+                        return argument;
+                    }
+                    typed.push_back(*argument);
+                    found += i == 0 ? "" : ", ";
+                    found += DescribeExprType(TypeOf(*argument));
+                }
+                for (const DomainOperationId id : candidates) {
+                    const DomainOperation& operation = ProgramDomain::Operation(id);
+                    bool matches = true;
+                    for (size_t i = 0; i < typed.size(); ++i) {
+                        matches = matches && ExprType::Of(operation.parameters[i]) == TypeOf(typed[i]);
+                    }
+                    if (!matches) {
+                        continue;
+                    }
+                    TypedNode result;
+                    result.kind = TypedNodeKind::Operation;
+                    result.type = ExprType::Of(operation.result);
+                    result.opcode = Opcode::CallDomain;
+                    result.immediate = id;
+                    result.column = node.column;
+                    for (const TypedNodeId operand : typed) {
+                        result.operands[result.operandCount++] = operand;
+                    }
+                    return Emit(std::move(result));
+                }
+                return Refuse(node.column, Format("no overload of '{}' takes ({}); the signatures are: {}", node.text, found, SignaturesOf(overloads)));
+            }
+
+            static String ArityMessage(const ExprNode& node, uint32_t arity) {
+                return Format("'{}' takes {} argument{}, but {} {} given", node.text, arity, arity == 1 ? "" : "s", node.argumentCount, node.argumentCount == 1 ? "is" : "are");
+            }
+
+            /// `size(list)` and the folds; a fold is told apart from the two-argument `min` and `max` by its arity before it gets here
+            TypedResult CheckListFunction(const ExprNode& node, const ExprListFunction& function, Optional<ExprType> hint) {
+                if (node.argumentCount != function.arity) {
+                    return Refuse(node.column, ArityMessage(node, function.arity));
+                }
+                const String subject = Format("the function '{}'", function.name);
+                if (function.isFold) {
+                    return CheckFold(node, function, hint);
+                }
+                const auto list = RequireList(_ast.arguments[node.firstArgument], subject);
+                if (!list.has_value()) {
+                    return std::unexpected(list.error());
+                }
+                return EmitOperation(Opcode::ListSize, ProgramType::Int32, node.column, {list->id});
+            }
+
+            /// Why @p name cannot be the element of a loop, empty when it can: one name is one thing, so a loop variable never hides a level, a function, a type or an outer variable
+            String VariableNameProblem(StringView name) const {
+                if (_declaration.IndexOf(name).has_value()) {
+                    return Format("'{}' is a level of the context", name);
+                }
+                if (FindExprFunction(name) != nullptr || FindListFunction(name) != nullptr || name == kTableFunction || name == kNamedTableFunction || !ProgramDomain::FindOperations(name).empty()) {
+                    return Format("'{}' is a function", name);
+                }
+                for (const ProgramType type : AllTypes()) {
+                    if (ProgramTypeName(type) == name) {
+                        return Format("'{}' is the name of a type", name);
+                    }
+                }
+                if (ProgramDomain::FindType(name).has_value()) {
+                    return Format("'{}' is the name of a type", name);
+                }
+                if (const LoopScope* outer = FindScope(name)) {
+                    return Format("'{}' is already the element of the enclosing loop over '{}'", name, outer->source);
+                }
+                return {};
+            }
+
+            /**
+             * `count(list, v, body)`, `any`, `all`, `sum`, `min`, `max`: @p v is the element of the list inside @p body, and nowhere else. The body of `count`, `any` and `all` is a `bool`; the body
+             * of `sum`, `min` and `max` a number, and so is the result (its type). The loop number is the one of the order the checker meets the folds in, never the node's place, which comes after
+             * the body's nodes.
+             */
+            TypedResult CheckFold(const ExprNode& node, const ExprListFunction& function, Optional<ExprType> hint) {
+                const String subject = Format("the function '{}'", function.name);
+                const ExprNodeId listSource = _ast.arguments[node.firstArgument];
+                const ExprNodeId nameSource = _ast.arguments[node.firstArgument + 1];
+                const ExprNodeId bodySource = _ast.arguments[node.firstArgument + 2];
+                const auto list = RequireList(listSource, subject);
+                if (!list.has_value()) {
+                    return std::unexpected(list.error());
+                }
+                const ExprNode& nameNode = _ast[nameSource];
+                const uint32_t nameColumn = nameNode.column;
+                if (nameNode.kind != ExprNodeKind::Name || nameNode.text.find('.') != String::npos) {
+                    return Refuse(nameColumn, Format("{} names the element in its second argument: a plain name, as {}(list, v, ...), not a value or a path", subject, function.name));
+                }
+                if (const String problem = VariableNameProblem(nameNode.text); !problem.empty()) {
+                    return Refuse(nameColumn, Format("{} names the element in its second argument, but {}: use a name of its own, for example v", subject, problem));
+                }
+                const uint32_t loop = _loopCount++;
+                _scopes.push_back(LoopScope{nameNode.text, loop, list->list, list->element, Describe(listSource)});
+                const bool isNumberFold = function.fold == FoldKind::Sum || function.fold == FoldKind::Min || function.fold == FoldKind::Max;
+                const Optional<ExprType> bodyHint = isNumberFold ? (hint.has_value() && IsNumberType(hint->program) ? hint : std::nullopt) : Optional<ExprType>(ProgramType::Bool);
+                const TypedResult body = Check(bodySource, bodyHint);
+                _scopes.pop_back();
+                if (!body.has_value()) {
+                    return body;
+                }
+                const ExprType bodyType = TypeOf(*body);
+                const uint32_t bodyColumn = _ast[bodySource].column;
+                ExprType resultType = ProgramType::Int32;
+                if (isNumberFold) {
+                    if (!IsNumberType(bodyType.program)) {
+                        return Refuse(bodyColumn, Format("{} needs a number body (an int, int64, float or double), but this one is {}: read a number of the element, or convert it with int(x)",
+                                                         subject, Typed(bodyType)));
+                    }
+                    resultType = bodyType;
+                } else {
+                    if (bodyType != ProgramType::Bool) {
+                        return Refuse(bodyColumn, Format("{} needs a bool body, but this one is {}: compare it, for example with != 0", subject, Typed(bodyType)));
+                    }
+                    resultType = function.fold == FoldKind::Count ? ProgramType::Int32 : ProgramType::Bool;
+                }
+                TypedNode fold;
+                fold.kind = TypedNodeKind::Fold;
+                fold.type = resultType;
+                fold.fold = function.fold;
+                fold.loop = loop;
+                fold.body = *body;
+                fold.column = node.column;
+                fold.operands[fold.operandCount++] = list->id;
+                return Emit(std::move(fold));
+            }
+
+            /// The first argument of a list function: a list, or the error that says what it is instead
+            ReferenceResult RequireList(ExprNodeId source, const String& subject) {
+                const ReferenceResult reference = CheckReference(source);
+                if (!reference.has_value()) {
+                    return reference;
+                }
+                const TypedNode& node = _out.nodes[reference->id];
+                if (node.kind == TypedNodeKind::List) {
+                    return reference;
+                }
+                const String what = node.kind == TypedNodeKind::Element ? Format("{}, an element of a list", DescribeElements(*reference)) : Typed(node.type);
+                return Refuse(_ast[source].column, Format("{} needs a list as its first argument, but '{}' is {}", subject, Describe(source), what));
             }
 
             /// The index of `at` or `ByLevel`: an `int`, with a hint to convert a number of another type
@@ -1100,6 +1696,9 @@ namespace BECore {
                     return std::unexpected(values.error());
                 }
                 const ExprType type = TypeOf((*values)[0]);
+                if (const auto equality = RequireEquality(node.column, subject, type); !equality.has_value()) {
+                    return std::unexpected(equality.error());
+                }
                 return EmitOperation(OpcodeOf(ProgramOperation::Select, type.program), type, node.column, {*condition, (*values)[0], (*values)[1]});
             }
 
@@ -1127,6 +1726,8 @@ namespace BECore {
             const ContextDecl& _declaration;
             const CompileOptions& _options;
             Vector<bool> _hasName;
+            Vector<LoopScope> _scopes;
+            uint32_t _loopCount = 0;
             TypedExpr _out;
         };
 
@@ -1135,7 +1736,7 @@ namespace BECore {
     std::expected<ExprType, ProgramError> CheckExpectedType(const TypeDesc& expected) {
         const Optional<ExprType> want = ProgramTypeFor(expected);
         if (!want.has_value()) {
-            return Refuse(0, Format("a formula can have the type {}, not '{}'", JoinTypes(AllTypes()), DescribeDescriptor(expected)));
+            return Refuse(0, Format("a formula can have the type {}, not '{}'", ListFormulaTypes(), DescribeDescriptor(expected)));
         }
         return *want;
     }
