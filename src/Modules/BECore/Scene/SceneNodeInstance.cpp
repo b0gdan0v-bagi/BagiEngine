@@ -135,16 +135,21 @@ namespace BECore {
 
     }  // namespace
 
-    IntrusivePtr<SceneNode> DeserializeNode(pugi::xml_node nodeEl, StringView what) {
+    IntrusivePtr<SceneNode> DeserializeNode(IDeserializer& deserializer, StringView what) {
         auto node = New<SceneNode>();
-        XmlDeserializer deserializer;
-        if (deserializer.LoadFromXmlNode(XmlNode{nodeEl})) {
-            node->Deserialize(deserializer);
-            if (deserializer.HasErrors()) {
-                LogDeserializeErrors(what, deserializer);
-            }
+        node->Deserialize(deserializer);
+        if (deserializer.HasErrors()) {
+            LogDeserializeErrors(what, deserializer);
         }
         return node;
+    }
+
+    IntrusivePtr<SceneNode> DeserializeNode(pugi::xml_node nodeEl, StringView what) {
+        XmlDeserializer deserializer;
+        if (!deserializer.LoadFromXmlNode(XmlNode{nodeEl})) {
+            return New<SceneNode>();
+        }
+        return DeserializeNode(deserializer, what);
     }
 
     void AppendNodeElement(pugi::xml_node parent, const SceneNode& node) {

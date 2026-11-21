@@ -56,6 +56,9 @@ namespace BECore {
 
     inline constexpr StringView kNodeFileExtension = ".xml";
 
+    /// The cooked form of a node file (`BECore/Config/CLAUDE.md`, "Binary configs"): a stamped binary document whose root is a SceneNode
+    inline constexpr StringView kNodeBinaryExtension = ".bin";
+
     /**
      * @brief Fills @p out (document element: the `<node>`) with the parsed node file of @p ref, which passed IsValidNodeRef
      *
@@ -140,11 +143,18 @@ namespace BECore {
     NodeFileLoader MakeDirectoryNodeLoader(std::filesystem::path baseDirectory);
 
     /**
-     * @brief Loader that reads `FileSystem::ResolvePath("config/<ref>.xml")`, so the content layers apply
+     * @brief Loader that finds `config/<ref>.xml` or `config/<ref>.bin` through the content layers
      *
-     * A file of the game with the same relative path replaces the engine's. Same checks as MakeDirectoryNodeLoader, and a
-     * file whose content version is not kContentVersion is refused (the reason names the file, the versions and the
-     * migration command). @p fs must outlive the loader.
+     * Layers are walked from the top and the first that has the reference wins, whatever the extension: a file of the game
+     * replaces the engine's. A `.xml` and a `.bin` of the reference in one layer is an error (the reason names both) and no
+     * lower layer is tried: a stale file under an error is worse than a missing one. When no layer has either, the path
+     * `FileSystem::ResolvePath` gives for the `.xml` is tried.
+     *
+     * An `.xml` gets the same checks as MakeDirectoryNodeLoader, and a content version that is not kContentVersion is
+     * refused (the reason names the file, the versions and the migration command). A `.bin` is read with a
+     * BinaryDeserializer, must carry a content stamp of the type `SceneNode` that this program accepts (the cook checked the
+     * content version) and is written to the output as the `<node>` element of that node, so ApplyNodeOverrides,
+     * ExpandNodeReference and `Scene::InstantiateNode` mean the same on a cooked node as on its XML. @p fs must outlive the loader.
      */
     NodeFileLoader MakeFileSystemNodeLoader(const FileSystem& fs);
 
