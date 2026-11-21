@@ -3,6 +3,7 @@
 #include <BECore/Reflection/BinaryFormat.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <Common/BinaryStreamBuilder.h>
 #include <Fuzz/FuzzProbeAccess.h>
 #include <Fuzz/FuzzTargets.h>
 #include <Fuzz/FuzzWebSocketInput.h>
@@ -11,6 +12,8 @@
 namespace BECore::Fuzz {
 
     namespace {
+
+        namespace BinaryStreams = Tests::BinaryStreams;
 
         constexpr const char* kBinaryFolder = "binary";
         constexpr const char* kXmlFolder = "xml";
@@ -59,11 +62,8 @@ namespace BECore::Fuzz {
         /// How many bytes a cut from the end takes off the stream that "truncated" is made from
         constexpr size_t kTruncatedBytes = 9;
 
-        /// Offset of the u32 length of the only string entry of MakeStringStream(): header, tag, name length, the name "s"
-        constexpr size_t kStringLengthOffset = BinaryFormat::HeaderSize + 1 + sizeof(uint16_t) + 1;
-
-        /// Offset of the u32 count of the only array entry of MakeArrayStream(): header, tag, name length, the name "a", the size
-        constexpr size_t kArrayCountOffset = BinaryFormat::HeaderSize + 1 + sizeof(uint16_t) + 1 + sizeof(uint32_t);
+        /// Distance from the start of the entries of a version 2 stream to the u32 payload of its first entry: the tag, the name index
+        constexpr size_t kFirstPayloadOffset = 1 + sizeof(uint32_t);
 
         constexpr uint32_t kHugeLength = 0xFFFFFFFFu;
 
@@ -197,6 +197,60 @@ namespace BECore::Fuzz {
         /// Make the payload size of the header true again after the stream was cut
         void FixPayloadSize(FuzzBytes& bytes) {
             StoreWord(bytes, BinaryFormat::PayloadSizeOffset, static_cast<uint32_t>(bytes.size() - BinaryFormat::HeaderSize));
+        }
+
+        /// Offset of the first entry's payload in a version 2 stream written by BinarySerializer
+        size_t FirstPayloadAt(const FuzzBytes& bytes) {
+            return BinaryStreams::LayoutOf(bytes).entriesOffset + kFirstPayloadOffset;
+        }
+
+        /// The documents of the version 1 seeds, as the entries a version 1 writer produced (BinaryStreams writes them in that layout)
+        Vector<BinaryStreams::Entry> MakeVersion1AllTagsTree() {
+            using namespace BinaryStreams;
+            Vector<Entry> items;
+            for (int32_t id = 0; id < 3; ++id) {
+                items.push_back(Element({Number("id", id), Text("label", id == 0 ? "first" : "other")}));
+            }
+            Vector<Entry> values;
+            for (int32_t value = 10; value < 14; ++value) {
+                values.push_back(Element({Number("value", value)}));
+            }
+            return {Number("flag", true),
+                    Number("i8", static_cast<int8_t>(-8)),
+                    Number("u16", static_cast<uint16_t>(60000)),
+                    Number("i32", static_cast<int32_t>(-320000)),
+                    Number("u64", static_cast<uint64_t>(18000000000000000000ull)),
+                    Number("f32", 1.5f),
+                    Number("f64", -2.25),
+                    Text("text", "hello"),
+                    Pooled("pooled", "pooled"),
+                    Object("player", {Number("health", static_cast<int32_t>(100)), Text("name", "Hero"), Object("position", {Number("x", 1.0f), Number("y", 2.0f)})}),
+                    BinaryStreams::Array("items", items),
+                    BinaryStreams::Array("values", values)};
+        }
+
+        Vector<BinaryStreams::Entry> MakeVersion1DuplicateNamesTree() {
+            using namespace BinaryStreams;
+            return {Number("d", static_cast<int32_t>(1)),
+                    Number("d", static_cast<int32_t>(2)),
+                    Object("d", {Number("x", static_cast<int32_t>(0)), Number("x", static_cast<int32_t>(10))}),
+                    Object("d", {Number("x", static_cast<int32_t>(1)), Number("x", static_cast<int32_t>(11))}),
+                    BinaryStreams::Array("d", {Element({Number("d", static_cast<int32_t>(0)), Number("d", static_cast<int32_t>(10))})}),
+                    BinaryStreams::Array("d", {Element({Number("d", static_cast<int32_t>(1)), Number("d", static_cast<int32_t>(11))})})};
+        }
+
+        FuzzBytes Version1Bytes(const Vector<BinaryStreams::Entry>& root) {
+            BinaryStreams::Options options;
+            options.version = BinaryFormat::LegacyVersion;
+            const Vector<uint8_t> bytes = BinaryStreams::Build(root, options);
+            return FuzzBytes(bytes.begin(), bytes.end());
+        }
+
+        FuzzBytes Version2Bytes(const Vector<BinaryStreams::Entry>& root, const Vector<String>& table = {}) {
+            BinaryStreams::Options options;
+            options.table = table;
+            const Vector<uint8_t> bytes = BinaryStreams::Build(root, options);
+            return FuzzBytes(bytes.begin(), bytes.end());
         }
 
         // =========================================================================
@@ -370,16 +424,40 @@ namespace BECore::Fuzz {
         seeds.push_back({kBinaryFolder, "header-only-cut.bin", shortStream});
 
         FuzzBytes hugeString = MakeStringStream();
-        StoreWord(hugeString, kStringLengthOffset, kHugeLength);
+        StoreWord(hugeString, FirstPayloadAt(hugeString), kHugeLength);
         seeds.push_back({kBinaryFolder, "string-length-ffffffff.bin", hugeString});
 
         FuzzBytes hugeCount = MakeArrayStream();
-        StoreWord(hugeCount, kArrayCountOffset, kHugeLength);
+        StoreWord(hugeCount, FirstPayloadAt(hugeCount) + sizeof(uint32_t), kHugeLength);
         seeds.push_back({kBinaryFolder, "array-count-ffffffff.bin", hugeCount});
 
         seeds.push_back({kBinaryFolder, "array.bin", MakeArrayStream()});
 
         seeds.push_back({kBinaryFolder, "duplicate-names.bin", MakeDuplicateNamesStream()});
+
+        seeds.push_back({kBinaryFolder, "version1-all-tags.bin", Version1Bytes(MakeVersion1AllTagsTree())});
+        seeds.push_back({kBinaryFolder, "version1-duplicate-names.bin", Version1Bytes(MakeVersion1DuplicateNamesTree())});
+
+        // The damage of version 2 that the layout allows: a table out of order, a text twice, a count the bytes cannot hold, indices past the table
+        using namespace BinaryStreams;
+        const Vector<Entry> twoNumbers = {Number("a", static_cast<int32_t>(1)), Number("b", static_cast<int32_t>(2))};
+        seeds.push_back({kBinaryFolder, "table-unsorted.bin", Version2Bytes(twoNumbers, {"b", "a"})});
+        seeds.push_back({kBinaryFolder, "table-repeated-text.bin", Version2Bytes(twoNumbers, {"a", "a", "b"})});
+
+        FuzzBytes hugeTable = Version2Bytes(twoNumbers);
+        StoreWord(hugeTable, LayoutOf(hugeTable).countOffset, kHugeLength);
+        seeds.push_back({kBinaryFolder, "table-count-ffffffff.bin", hugeTable});
+
+        FuzzBytes badName = Version2Bytes(twoNumbers);
+        StoreWord(badName, LayoutOf(badName).entriesOffset + 1, 2);
+        seeds.push_back({kBinaryFolder, "name-index-out-of-range.bin", badName});
+
+        const Vector<Entry> pooled = {Pooled("first", "shared"), Pooled("second", "shared"), Pooled("empty", ""), Pooled("third", "other"), Text("inline", "shared")};
+        seeds.push_back({kBinaryFolder, "pool-string-values.bin", Version2Bytes(pooled)});
+
+        FuzzBytes badPooled = Version2Bytes({Pooled("p", "text")});
+        StoreWord(badPooled, FirstPayloadAt(badPooled), 2);
+        seeds.push_back({kBinaryFolder, "pool-string-index-out-of-range.bin", badPooled});
 
         seeds.push_back({kXmlFolder, "probe-filled.xml", MakeProbeXml()});
 
