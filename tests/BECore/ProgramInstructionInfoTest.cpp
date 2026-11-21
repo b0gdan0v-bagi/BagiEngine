@@ -440,6 +440,20 @@ namespace BECore::Tests {
             return mask;
         }
 
+        /// The type of the value each operand register is read as: what the case was built from, which a constant learns when an instruction reads it. A move reads a register of any type, and
+        /// a registered operation names its own arguments
+        void CheckOperandTypes(const Case& made) {
+            const Opcode op = made.ins.op;
+            if (op == Opcode::Copy || op == Opcode::CallDomain || IsListInstruction(op)) {
+                return;
+            }
+            for (size_t k = 0; k < kLoadedRegisters; ++k) {
+                const bool value = k < made.operands.size() && made.operands[k].has_value() && !made.operands[k]->element;
+                const Optional<ProgramType> want = value ? Optional<ProgramType>{made.operands[k]->type} : std::nullopt;
+                EXPECT_EQ(OperandTypeOf(made.ins, static_cast<uint32_t>(k)), want) << made.name.c_str() << ": register " << k;
+            }
+        }
+
         void CheckCase(const Case& made) {
             Case probe = made;
             probe.ins.dst = kDst;
@@ -465,6 +479,7 @@ namespace BECore::Tests {
             EXPECT_EQ(info.reads & ~OperandMask(made), 0U) << made.name.c_str() << ": it lists a register that is no operand";
             EXPECT_EQ(info.operation, made.expectedOperation) << made.name.c_str();
             EXPECT_EQ(info.resultType, made.expectedResult) << made.name.c_str();
+            CheckOperandTypes(probe);
 
             // The bytes it writes are the size of its type: the rest of the register keeps what was there, whatever that was
             Rng sizeRng(static_cast<uint64_t>(made.ins.op) + 1);

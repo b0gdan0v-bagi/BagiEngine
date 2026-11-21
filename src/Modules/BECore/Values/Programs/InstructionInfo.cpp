@@ -133,7 +133,58 @@ namespace BECore {
             return ProgramDomain::Operation(ins.imm).result.type;
         }
 
+        /// The type of register @p reg of a typed row of type @p T: the operands are @p T, but for the condition of `Select`, the weight of `Lerp` and the components of `Pack`
+        template <typename Op, typename T>
+        Optional<ProgramType> RowOperandType(const Instruction& ins, uint32_t reg) {
+            if constexpr (Op::kShape == Kernel::OpShape::Slot || Op::kShape == Kernel::OpShape::Element) {
+                return std::nullopt;
+            } else if constexpr (Op::kShape == Kernel::OpShape::Pack) {
+                return ComponentsOf(kProgramTypeOf<T>).type;
+            } else if constexpr (Op::kShape == Kernel::OpShape::Select) {
+                return reg == ins.a ? ProgramType::Bool : kProgramTypeOf<T>;
+            } else if constexpr (Op::kShape == Kernel::OpShape::Blend) {
+                return reg == ins.c ? kProgramTypeOf<typename Op::template Weight<T>> : kProgramTypeOf<T>;
+            } else {
+                return kProgramTypeOf<T>;
+            }
+        }
+
     }  // namespace
+
+    Optional<ProgramType> OperandTypeOf(const Instruction& ins, uint32_t reg) {
+        if (reg >= kMaxProgramRegisters || (ReadsOf(ins) & RegisterBit(reg)) == 0) {
+            return std::nullopt;
+        }
+        switch (ins.op) {
+            case Opcode::LoadTable:
+                return ProgramType::Int32;
+            case Opcode::ListAt:
+                return reg == ins.b ? Optional<ProgramType>{ProgramType::Int32} : std::nullopt;
+            case Opcode::BreakIf:
+                return ProgramType::Bool;
+            case Opcode::LerpSlotsFloat:
+            case Opcode::LerpSlotsDouble:
+                return ResultTypeOf(ins.op);
+#define BE_INSTRUCTION_OPERAND_ROW(Op, Type, Cpp)                                                                                                                                                      \
+    case Opcode::Op##Type:                                                                                                                                                                             \
+        return RowOperandType<Kernel::Op, Cpp>(ins, reg);
+                BE_PROGRAM_ROWS(BE_INSTRUCTION_OPERAND_ROW)
+#undef BE_INSTRUCTION_OPERAND_ROW
+#define BE_INSTRUCTION_OPERAND_MIXED(Op, LName, LCpp, RName, RCpp)                                                                                                                                     \
+    case Opcode::Op##LName##RName:                                                                                                                                                                     \
+        return reg == ins.a ? ProgramType::LName : ProgramType::RName;
+                BE_PROGRAM_MIXED_ROWS(BE_INSTRUCTION_OPERAND_MIXED)
+#undef BE_INSTRUCTION_OPERAND_MIXED
+#define BE_INSTRUCTION_OPERAND_CONVERSION(Src, SrcCpp, Dst, DstCpp)                                                                                                                                    \
+    case Opcode::Src##To##Dst:                                                                                                                                                                         \
+        return ProgramType::Src;
+                BE_PROGRAM_CONVERSIONS(BE_INSTRUCTION_OPERAND_CONVERSION)
+#undef BE_INSTRUCTION_OPERAND_CONVERSION
+            default:
+                break;
+        }
+        return std::nullopt;
+    }
 
     InstructionInfo DescribeInstruction(const Instruction& instruction) {
         return InstructionInfo{ReadsOf(instruction), ResultTypeOfInstruction(instruction), OperationOf(instruction.op)};

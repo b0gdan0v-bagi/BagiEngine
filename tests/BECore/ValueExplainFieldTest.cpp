@@ -89,10 +89,31 @@ namespace BECore::Tests {
         const Levels levels;
         const auto velocity = LinkField(levels.declaration, "caster.velocity");
         ASSERT_TRUE(velocity.has_value());
-        // The middle of a Vec3 is a component, never a field
-        EXPECT_FALSE(ResolveField(levels.declaration, velocity->slot.level, velocity->slot.offset + sizeof(float)).has_value());
+        // Inside a component, and not at a component's start
+        EXPECT_FALSE(ResolveField(levels.declaration, velocity->slot.level, velocity->slot.offset + 1).has_value());
         EXPECT_FALSE(ResolveField(levels.declaration, 0, 1U << 20).has_value());
         EXPECT_FALSE(ResolveField(levels.declaration, static_cast<LevelIndex>(levels.declaration.Size()), 0).has_value());
+    }
+
+    TEST(ValueExplainFieldTest, AComponentOfAMathFieldIsNamedAfterTheField) {
+        const Levels levels;
+        const auto velocity = LinkField(levels.declaration, "caster.velocity");
+        ASSERT_TRUE(velocity.has_value());
+        const LevelIndex level = velocity->slot.level;
+        const uint32_t offset = velocity->slot.offset;
+        const auto y = ResolveField(levels.declaration, level, offset + sizeof(float));
+        ASSERT_TRUE(y.has_value());
+        EXPECT_EQ(y->path, String("caster.velocity.y"));
+        ASSERT_NE(y->type, nullptr);
+        EXPECT_EQ(y->type->kind, TypeKind::Float);
+        // At the field's own offset the type read decides: the vector is the field, a float is its first component
+        EXPECT_EQ(ResolveField(levels.declaration, level, offset)->path, String("caster.velocity"));
+        EXPECT_EQ(ResolveField(levels.declaration, level, offset, ProgramType::Vec3)->path, String("caster.velocity"));
+        EXPECT_EQ(ResolveField(levels.declaration, level, offset, ProgramType::Float)->path, String("caster.velocity.x"));
+        // A colour's channels are bytes read through `Extract`: no field of their own
+        const auto tint = LinkField(levels.declaration, "caster.tint");
+        ASSERT_TRUE(tint.has_value());
+        EXPECT_FALSE(ResolveField(levels.declaration, tint->slot.level, tint->slot.offset + 1).has_value());
     }
 
     TEST(ValueExplainFieldTest, TheFieldOfAListElementIsNamedRelativeToTheElement) {

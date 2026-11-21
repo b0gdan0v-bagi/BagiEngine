@@ -5,6 +5,7 @@
 #include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Values/Context.h>
+#include <BECore/Values/Programs/Opcode.h>
 #include <cstdint>
 
 namespace BECore {
@@ -23,11 +24,15 @@ namespace BECore {
      *
      * A field that is a scalar, an enum, a string, an opaque value (`Vec3`, a game's registered type) or a list matches by itself; an embedded object is entered and never matches itself.
      * When an object and its first field share an offset the innermost field wins, which is the one a `LoadSlot` reads (`span` begins where `span.low` does, and `span.low` is the path).
-     * A component of a `Vec3` is no field: a path never names one. Allocates; it runs only while a trace is built.
+     * A component of a math field (`caster.velocity.y`) is no field a path links, but a formula reads it where the field is (`LoadSlot` at the offset of the component), so it is named
+     * `field.component` when the offset is a component's: a component past the first always; the first (the offset of the field itself) only when @p readAs is the type of the
+     * component, not of the field. Allocates; it runs only while a trace is built.
      */
-    [[nodiscard]] Optional<ResolvedField> ResolveField(const ContextDecl& declaration, LevelIndex level, uint32_t offset, const TypeRegistry& registry = TypeRegistry::GetInstance());
+    [[nodiscard]] Optional<ResolvedField> ResolveField(const ContextDecl& declaration, LevelIndex level, uint32_t offset, Optional<ProgramType> readAs = std::nullopt,
+                                                       const TypeRegistry& registry = TypeRegistry::GetInstance());
 
     /// The same walk from a type, for the element of a list: the path is relative to the element (`rank`, `meld.size`), with no level in front
-    [[nodiscard]] Optional<ResolvedField> ResolveElementField(const TypeInfo& element, uint32_t offset, const TypeRegistry& registry = TypeRegistry::GetInstance());
+    [[nodiscard]] Optional<ResolvedField> ResolveElementField(const TypeInfo& element, uint32_t offset, Optional<ProgramType> readAs = std::nullopt,
+                                                              const TypeRegistry& registry = TypeRegistry::GetInstance());
 
 }  // namespace BECore

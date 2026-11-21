@@ -38,4 +38,13 @@ namespace BECore {
      */
     [[nodiscard]] InstructionInfo DescribeInstruction(const Instruction& instruction);
 
+    /**
+     * @brief The type of the value in register @p reg as @p instruction reads it
+     *
+     * Empty for a register the instruction does not read, for one it moves without looking (`Copy`, a constant), for a list or an element register and for the arguments of a `CallDomain`
+     * (the operation says: `ProgramDomain::Operation(imm).parameters`). The register of a `Select` that holds the condition is `Bool`, the weight of a `Lerp` over a vector a `Float`, the
+     * components a `Pack` reads the component type of the result. A constant or a table entry has no type of its own, so the explanation of a run learns it from the instruction that reads it.
+     */
+    [[nodiscard]] Optional<ProgramType> OperandTypeOf(const Instruction& instruction, uint32_t reg);
+
 }  // namespace BECore
