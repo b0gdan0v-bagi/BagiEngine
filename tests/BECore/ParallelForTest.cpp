@@ -240,26 +240,30 @@ namespace BECore::Tests {
     }
 
     TEST(ParallelForTest, ACallFromAPoolJobFinishes) {
-        ThreadPool pool(2);
+        // The pool is the last local, so a failed check below still joins the job before the locals it uses go
         HitCounters hits(kBigCount);
         std::atomic<bool> done{false};
+        ThreadPool pool(2);
         pool.Submit([&] {
             ParallelFor(pool, kBigCount, kMinChunk, [&](size_t begin, size_t end) { hits.Hit(begin, end); });
             done.store(true, std::memory_order_release);
         });
 
-        ASSERT_TRUE(WaitUntil([&] { return done.load(std::memory_order_acquire); }));
-        EXPECT_TRUE(hits.EveryIndexOnce());
+        const bool finished = WaitUntil([&] { return done.load(std::memory_order_acquire); });
         pool.Shutdown();
+        EXPECT_TRUE(finished);
+        EXPECT_TRUE(hits.EveryIndexOnce());
     }
 
     TEST(ParallelForTest, BusyWorkersDoNotHoldACallUpAndLateHelpersTouchNothing) {
         constexpr size_t kWorkers = 2;
         constexpr int kCalls = 50;
-        ThreadPool pool(kWorkers);
 
+        // The pool is the last local and `release` is always set before the checks: no failure leaves a worker spinning on a dead flag
         std::atomic<bool> release{false};
         std::atomic<size_t> holding{0};
+        std::atomic<size_t> bodyCalls{0};
+        ThreadPool pool(kWorkers);
         for (size_t i = 0; i < kWorkers; ++i) {
             pool.Submit([&] {
                 holding.fetch_add(1);
@@ -268,11 +272,11 @@ namespace BECore::Tests {
                 }
             });
         }
-        ASSERT_TRUE(WaitUntil([&] { return holding.load() == kWorkers; }));
+        const bool held = WaitUntil([&] { return holding.load() == kWorkers; });
 
         // Every worker is held: the helper jobs queue behind the long ones and the caller runs every chunk. The counter outlives the calls, the bodies do not
-        std::atomic<size_t> bodyCalls{0};
-        for (int call = 0; call < kCalls; ++call) {
+        bool everyCallRanOnTheCaller = held;
+        for (int call = 0; call < kCalls && everyCallRanOnTheCaller; ++call) {
             HitCounters hits(kPrimeCount);
             ChunkLog log;
             ParallelFor(pool, kPrimeCount, kMinChunk, [&](size_t begin, size_t end) {
@@ -280,14 +284,15 @@ namespace BECore::Tests {
                 log.Record(begin, end);
                 bodyCalls.fetch_add(1, std::memory_order_relaxed);
             });
-            ASSERT_TRUE(hits.EveryIndexOnce());
-            ASSERT_TRUE(log.RanOnlyOn(std::this_thread::get_id()));
+            everyCallRanOnTheCaller = hits.EveryIndexOnce() && log.RanOnlyOn(std::this_thread::get_id());
         }
         const size_t callsWhileHeld = bodyCalls.load();
 
         // The queued helpers start now, find every chunk claimed and never call a body that is gone
         release.store(true, std::memory_order_release);
         pool.Shutdown();
+        EXPECT_TRUE(held);
+        EXPECT_TRUE(everyCallRanOnTheCaller);
         EXPECT_EQ(bodyCalls.load(), callsWhileHeld);
     }
 

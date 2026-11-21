@@ -513,7 +513,7 @@ namespace BECore::Tests {
         };
         ThreadPool inlinePool{ThreadPool::InlineTag{}};
         build(inlinePool);
-        for (const size_t workers : {0u, 1u, 2u, 4u}) {
+        for (const size_t workers : {1u, 2u, 4u}) {
             ThreadPool pool(workers);
             build(pool);
         }
