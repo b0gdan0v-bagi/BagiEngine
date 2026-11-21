@@ -157,7 +157,7 @@ namespace BECore {
         request["id"] = _nextId++;
         request["method"] = ToStdString(command->method);
         request["params"] = std::move(command->params);
-        service.Post(DumpJson(request), [output = _output](String answer) { PrintReply(*output, answer); });
+        service.Post(DumpJson(request), [output = _output](const String& answer) { PrintReply(*output, answer); });
 
         _history.Add(line);
         return String(line);

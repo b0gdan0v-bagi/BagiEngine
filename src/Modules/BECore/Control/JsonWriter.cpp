@@ -78,9 +78,8 @@ namespace BECore {
 
     JsonWriter::JsonWriter(String& out, int indent) : _out(out), _indent(indent < 0 ? kCompact : indent) {}
 
-    bool JsonWriter::Fail(const char* why) {
+    bool JsonWriter::Fail([[maybe_unused]] const char* why) {
         EXPECT(false, why);
-        (void)why;
         _valid = false;
         return false;
     }
