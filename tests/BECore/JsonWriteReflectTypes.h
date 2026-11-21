@@ -1,6 +1,12 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
+#include <BECore/Math/IVec2.h>
+#include <BECore/Math/Quat.h>
+#include <BECore/Math/Rect.h>
 #include <BECore/Math/Vec2.h>
+#include <BECore/Math/Vec3.h>
+#include <BECore/Math/Vec4.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/RefCounted.h>
@@ -94,7 +100,7 @@ namespace BECore {
             BE_REFLECT_FIELD JsonWriteOneValue single;
         };
 
-        /// Field types the writer takes through the DOM bridge
+        /// Pairs, variants and maps of scalars and of the other shapes
         struct JsonWriteBridged {
             BE_CLASS(JsonWriteBridged)
 
@@ -103,6 +109,61 @@ namespace BECore {
             BE_REFLECT_FIELD Pair<int32_t, String> pair;
             BE_REFLECT_FIELD Vector<Vec2> points;
             BE_REFLECT_FIELD Optional<Vec2> maybePoint;
+        };
+
+        /// Every Math type once, in a list and in an optional
+        struct JsonWriteMathFields {
+            BE_CLASS(JsonWriteMathFields)
+
+            BE_REFLECT_FIELD Vec2 vec2;
+            BE_REFLECT_FIELD Vec3 vec3;
+            BE_REFLECT_FIELD Vec4 vec4;
+            BE_REFLECT_FIELD IVec2 ivec2;
+            BE_REFLECT_FIELD Quat quat;
+            BE_REFLECT_FIELD Color color;
+            BE_REFLECT_FIELD Rect rect;
+            BE_REFLECT_FIELD Vector<Vec2> points;
+            BE_REFLECT_FIELD Vector<Color> colors;
+            BE_REFLECT_FIELD FixedVector<Rect, 2> rects;
+            BE_REFLECT_FIELD Optional<Quat> maybeQuat;
+            BE_REFLECT_FIELD Optional<Vec3> noVec3;
+        };
+
+        /// A member named `key` and one named `value` next to it: the map entry's own `key` is replaced by it
+        struct JsonWriteKeyed {
+            BE_CLASS(JsonWriteKeyed)
+
+            BE_REFLECT_FIELD String key;
+            BE_REFLECT_FIELD int32_t zed = 0;
+        };
+
+        /// Maps of every native shape: hash, fixed hash and ordered, scalar and object values, number and string keys
+        struct JsonWriteMaps {
+            BE_CLASS(JsonWriteMaps)
+
+            BE_REFLECT_FIELD HashMap<String, JsonWriteInner> objects;
+            BE_REFLECT_FIELD HashMap<String, int32_t> numbers;
+            BE_REFLECT_FIELD HashMap<int32_t, String> names;
+            BE_REFLECT_FIELD FixedHashMap<String, double, 8> fixedTable;
+            BE_REFLECT_FIELD Map<String, JsonWriteInner> ordered;
+            BE_REFLECT_FIELD Map<int32_t, bool> flags;
+            BE_REFLECT_FIELD HashMap<String, JsonWriteKeyed> keyed;
+            BE_REFLECT_FIELD HashMap<String, JsonWriteEmpty> empties;
+            BE_REFLECT_FIELD HashMap<String, int32_t> none;
+        };
+
+        /// Pairs and variants whose members are written through the same helpers as fields
+        struct JsonWritePairsAndVariants {
+            BE_CLASS(JsonWritePairsAndVariants)
+
+            BE_REFLECT_FIELD Pair<int32_t, String> numberAndText;
+            BE_REFLECT_FIELD Pair<JsonWriteInner, Vec2> objectAndPoint;
+            BE_REFLECT_FIELD Pair<Optional<int32_t>, Vector<int32_t>> maybeAndList;
+            BE_REFLECT_FIELD Variant<std::monostate, int32_t, String, JsonWriteInner> choice;
+            BE_REFLECT_FIELD Variant<std::monostate, int32_t, String, JsonWriteInner> emptyChoice;
+            BE_REFLECT_FIELD Variant<Vec2, Vector<int32_t>, Pair<int32_t, int32_t>> shapes;
+            BE_REFLECT_FIELD Variant<bool, double> number;
+            BE_REFLECT_FIELD Optional<Pair<int32_t, int32_t>> maybePair;
         };
 
         /// A class with a reflected parent: the keys of both interleave, the whole object goes through the bridge

@@ -178,7 +178,7 @@ namespace BECore::Tests {
             }
         };
 
-        /// A field of every type that stays on the bridge
+        /// Pairs, variants, maps and Math values next to the one shape that stays bridged (`ones`)
         struct Bridged {
             Variant<std::monostate, int32_t, String> choice;
             HashMap<String, int32_t> map;
@@ -438,10 +438,14 @@ namespace BECore::Tests {
         using JsonWriteTestData::JsonWriteEmpty;
         using JsonWriteTestData::JsonWriteEvent;
         using JsonWriteTestData::JsonWriteInner;
+        using JsonWriteTestData::JsonWriteKeyed;
+        using JsonWriteTestData::JsonWriteMaps;
+        using JsonWriteTestData::JsonWriteMathFields;
         using JsonWriteTestData::JsonWriteMode;
         using JsonWriteTestData::JsonWriteNested;
         using JsonWriteTestData::JsonWriteOneValue;
         using JsonWriteTestData::JsonWriteOneValueList;
+        using JsonWriteTestData::JsonWritePairsAndVariants;
         using JsonWriteTestData::JsonWritePtrBase;
         using JsonWriteTestData::JsonWritePtrEarly;
         using JsonWriteTestData::JsonWritePtrHolder;
@@ -514,6 +518,59 @@ namespace BECore::Tests {
             value.pair = {3, "three"};
             value.points = {Vec2{1.0f, 2.0f}, Vec2{0.1f, 0.2f}};
             value.maybePoint = Vec2{3.0f, 4.0f};
+            return value;
+        }
+
+        JsonWriteMathFields MakeMath() {
+            JsonWriteMathFields value;
+            value.vec2 = Vec2{0.1f, -2.5f};
+            value.vec3 = Vec3{1.0f, 2.0f, 3.0f};
+            value.vec4 = Vec4{1.0f, 2.0f, 3.0f, 4.0f};
+            value.ivec2 = IVec2{-3, 4};
+            value.quat = Quat{0.5f, 0.5f, 0.5f, 0.5f};
+            value.color = Color{255, 0, 7, 128};
+            value.rect = Rect{1.0f, 2.0f, 3.5f, 4.0f};
+            value.points = {Vec2{0.1f, 0.2f}, Vec2{1e20f, -1e-20f}};
+            value.colors = {Color{1, 2, 3, 4}, Color{255, 255, 255, 255}};
+            value.rects = {Rect{0.0f, 0.0f, 1.0f, 1.0f}};
+            value.maybeQuat = Quat{0.0f, 0.0f, 1.0f, 0.0f};
+            return value;
+        }
+
+        JsonWriteMaps MakeMaps() {
+            JsonWriteMaps value;
+            value.objects = {{"b", MakeGeneratedInner(2, "two")}, {"a", MakeGeneratedInner(1, "one")}, {"c", MakeGeneratedInner(3, "")}};
+            value.numbers = {{"zeta", 1}, {"alpha", 2}, {"mid", 3}, {"", 4}};
+            value.names = {{10, "ten"}, {-1, "minus"}, {2, "two"}};
+            value.fixedTable = {{"y", 1.5}, {"x", 0.1}};
+            value.ordered = {{"q", MakeGeneratedInner(5, "q")}, {"p", MakeGeneratedInner(6, "p")}};
+            value.flags = {{3, true}, {1, false}};
+            JsonWriteKeyed own;
+            own.key = "own";
+            own.zed = 9;
+            value.keyed = {{"map key", own}, {"other", JsonWriteKeyed{}}};
+            value.empties = {{"e", JsonWriteEmpty{}}};
+            return value;
+        }
+
+        JsonWriteMaps MakeBigMap() {
+            JsonWriteMaps value;
+            for (int32_t i = 0; i < 40; ++i) {
+                value.numbers.emplace(Format("k{}", (i * 7) % 40), i);
+                value.names.emplace((i * 13) % 40 - 20, Format("n{}", i));
+            }
+            return value;
+        }
+
+        JsonWritePairsAndVariants MakePairsAndVariants() {
+            JsonWritePairsAndVariants value;
+            value.numberAndText = {7, "seven"};
+            value.objectAndPoint = {MakeGeneratedInner(1, "in"), Vec2{0.1f, 0.2f}};
+            value.maybeAndList = {Optional<int32_t>{}, Vector<int32_t>{1, 2}};
+            value.choice = MakeGeneratedInner(4, "inner");
+            value.shapes = Vector<int32_t>{5, 6};
+            value.number = 2.5;
+            value.maybePair = Pair<int32_t, int32_t>{1, 2};
             return value;
         }
 
@@ -636,6 +693,48 @@ namespace BECore::Tests {
     TEST(JsonWriteReflectTest, GeneratedBridgedFieldsEqualTheDomPath) {
         ExpectSameAsDom(JsonWriteBridged{});
         ExpectSameAsDom(MakeGeneratedBridged());
+    }
+
+    TEST(JsonWriteReflectTest, MathTypesAndSequencesOfThemEqualTheDomPath) {
+        ExpectSameAsDom(JsonWriteMathFields{});
+        ExpectSameAsDom(MakeMath());
+        const String text = Written(MakeMath(), JsonWriter::kCompact);
+        EXPECT_NE(text.find("\"color\":{\"a\":128,\"b\":7,\"g\":0,\"r\":255}"), String::npos);
+        EXPECT_NE(text.find("\"quat\":{\"w\":0.5,\"x\":0.5,\"y\":0.5,\"z\":0.5}"), String::npos);
+        EXPECT_NE(text.find("\"rect\":{\"h\":4.0,\"w\":3.5,\"x\":1.0,\"y\":2.0}"), String::npos);
+    }
+
+    TEST(JsonWriteReflectTest, MapsOfEveryNativeShapeEqualTheDomPath) {
+        ExpectSameAsDom(JsonWriteMaps{});
+        ExpectSameAsDom(MakeMaps());
+        ExpectSameAsDom(MakeBigMap());
+    }
+
+    TEST(JsonWriteReflectTest, AMapEntryWhoseValueHasAMemberNamedKeyKeepsTheValuesMember) {
+        const String text = Written(MakeMaps(), JsonWriter::kCompact);
+        EXPECT_NE(text.find("\"keyed\":[{\"key\":\"own\",\"zed\":9},{\"key\":\"\",\"zed\":0}]"), String::npos);
+    }
+
+    TEST(JsonWriteReflectTest, PairsAndVariantsEqualTheDomPath) {
+        ExpectSameAsDom(JsonWritePairsAndVariants{});
+        ExpectSameAsDom(MakePairsAndVariants());
+        JsonWritePairsAndVariants other = MakePairsAndVariants();
+        other.choice = String("text");
+        other.emptyChoice = 3;
+        other.shapes = Pair<int32_t, int32_t>{8, 9};
+        other.maybeAndList = {Optional<int32_t>{4}, Vector<int32_t>{}};
+        other.number = true;
+        other.maybePair.reset();
+        ExpectSameAsDom(other);
+        other.choice = std::monostate{};
+        other.shapes = Vec2{1.0f, 2.0f};
+        ExpectSameAsDom(other);
+    }
+
+    TEST(JsonWriteReflectTest, MathPairAndVariantFieldsAreWrittenWithoutAllocations) {
+        ExpectSecondWriteAllocatesNothing(MakeMath());
+        ExpectSecondWriteAllocatesNothing(MakePairsAndVariants());
+        ExpectSecondWriteAllocatesNothing(MakeMaps());
     }
 
     TEST(JsonWriteReflectTest, GeneratedChildInterleavesTheKeysOfItsParent) {
