@@ -26,6 +26,9 @@ namespace BECore {
     /// recursion of its printer
     inline constexpr uint32_t kMaxTraceNodes = 512;
 
+    /// The `label` of the node of a fused `MulAddSlot`: its children are the field, the factor and the addend, in that order
+    inline constexpr StringView kMulAddLabel = "MulAdd";
+
     inline constexpr uint32_t kNoTraceNode = std::numeric_limits<uint32_t>::max();
 
     /**

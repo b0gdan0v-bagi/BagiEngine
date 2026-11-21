@@ -14,7 +14,6 @@ namespace BECore {
 
         constexpr StringView kConstantLabel = "constant";
         constexpr StringView kSizeLabel = "size";
-        constexpr StringView kMulAddLabel = "MulAdd";
         constexpr StringView kHexDigits = "0123456789abcdef";
         /// Writing out a trace is bounded as the tree is: a node several parents share is written under each of them, and a hand-built program can share them again and again
         constexpr uint32_t kMaxFormattedLines = kMaxTraceNodes * 4;

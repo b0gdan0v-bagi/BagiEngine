@@ -20,6 +20,12 @@ Answers "why is this value what it is" for a `Value<T>` (`../CLAUDE.md`): the tr
 
 `ValueExplainers` is the erased form: `ExplainValue` of every `Value<T>` registered, found by the `opaqueHash` of `DescribeType<Value<T>>()`, for code that holds only the address of a field. `RegisterBuiltinValueExplainers()` registers the program types and `Rect`; a game registers its enums and its own types (`Register<T>()`), as it registers them with `ProgramDomain`.
 
+## The tooltip
+
+`FormatTooltip(template, bindings, words)` (`ValueTooltip.h`) fills `Deals {damage} damage` from `ValueExplanation`s: `{damage}` is the value and, for a `Program` whose parts differ from the value, its parts (`12 (10 + 2 per level)`); `{damage:value}` is the value only; `{{` and `}}` are braces. An unknown `{name}` stays as written and a value the context lacks is `?`: a template's mistake is never an empty hole. The parts are the formula of the trace: a constant subtree is its value, `k * field` in either order (also the fused `MulAddSlot`) is the `per` pattern, other operations are infix with the parentheses their precedence needs, a function is `name(args)`; one longer than a tooltip needs shows the value only.
+
+The words are data (`TooltipWords`): the `per` pattern (`{0}` the number, `{1}` the field's label, replaced by hand because the text is a translator's) and a label function. `MakeTooltipWords(UIStrings)` (`TooltipStrings.h`, the one file of this folder that includes `UI/`) reads `values.per` and `values.label.<path>` through `Find`, so a language is strings only and a missing label shows the path. A template that is itself a string is resolved first (`UIStrings::Resolve("{#tip.fireball}")`).
+
 ## Files
 
 | File | Holds |
@@ -27,3 +33,4 @@ Answers "why is this value what it is" for a `Value<T>` (`../CLAUDE.md`): the tr
 | `FieldResolver.h` | `ResolveField`: level + offset to the path and `TypeDesc`; a component of a `Vec3` is `field.y` |
 | `ProgramTrace.h` | `ExplainProgram`, `ProgramTrace`, `TraceNode`, `FormatImage`, `FormatTrace` |
 | `ValueExplain.h` | `ExplainValue`, `ValueExplanation`, `FormatValue`, `ValueExplainers` |
+| `ValueTooltip.h`, `TooltipStrings.h` | `FormatTooltip`, `TooltipWords`; the words from `UIStrings` |
