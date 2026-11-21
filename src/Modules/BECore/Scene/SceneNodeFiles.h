@@ -51,7 +51,7 @@ namespace BECore {
     /// Attribute of `<component>` that names its type (in the node file and in the override)
     inline constexpr StringView kComponentTypeAttribute = "type";
 
-    /// Mount point of the node files; a reference `a/b` is the file `config/a/b.xml`
+    /// Mount point of the node files; a reference `a/b` is the file `config/a/b.xml` (or `config/a/b.bin`)
     inline constexpr StringView kNodeFilesMountPoint = "config";
 
     inline constexpr StringView kNodeFileExtension = ".xml";
