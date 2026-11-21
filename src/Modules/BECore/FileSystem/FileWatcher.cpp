@@ -1,6 +1,7 @@
 #include "FileWatcher.h"
 
 #include <EASTL/algorithm.h>
+#include <EASTL/sort.h>
 #include <chrono>
 #include <system_error>
 
@@ -26,6 +27,24 @@ namespace BECore {
                 return {};
             }
             return relative;
+        }
+
+        String PathKey(const std::filesystem::path& path) {
+            return FromStdString(path.generic_string());
+        }
+
+        /// Reads the state of the regular file at @p path; false when it is missing or is not a file
+        bool ReadState(const std::filesystem::path& path, std::filesystem::file_time_type& writeTime, uintmax_t& size) {
+            std::error_code error;
+            if (!std::filesystem::is_regular_file(path, error)) {
+                return false;
+            }
+            writeTime = std::filesystem::last_write_time(path, error);
+            if (error) {
+                return false;
+            }
+            size = std::filesystem::file_size(path, error);
+            return !error;
         }
 
     }  // namespace
@@ -89,21 +108,22 @@ namespace BECore {
         _directories.clear();
         _pending.clear();
         _due.clear();
+        _baseline.clear();
         _hasDeadWatches = false;
         LockGuard lock(_queueMutex);
         _incoming.clear();
         _hasPosts.store(false, std::memory_order_relaxed);
     }
 
-    FileWatchHandle FileWatcher::WatchFile(StringView virtualPath, FileWatchCallback callback) {
-        return MakeWatch(virtualPath, false, std::move(callback));
+    FileWatchHandle FileWatcher::WatchFile(StringView virtualPath, FileWatchCallback callback, StringView consumer) {
+        return MakeWatch(virtualPath, false, std::move(callback), consumer);
     }
 
-    FileWatchHandle FileWatcher::WatchFolder(StringView virtualFolder, FileWatchCallback callback) {
-        return MakeWatch(virtualFolder, true, std::move(callback));
+    FileWatchHandle FileWatcher::WatchFolder(StringView virtualFolder, FileWatchCallback callback, StringView consumer) {
+        return MakeWatch(virtualFolder, true, std::move(callback), consumer);
     }
 
-    FileWatchHandle FileWatcher::MakeWatch(StringView virtualPath, bool folder, FileWatchCallback callback) {
+    FileWatchHandle FileWatcher::MakeWatch(StringView virtualPath, bool folder, FileWatchCallback callback, StringView consumer) {
         if (_backend == nullptr || callback == nullptr) {
             return {};
         }
@@ -140,11 +160,13 @@ namespace BECore {
         watch->folder = folder;
         watch->virtualPath = String(virtualPath);
         watch->virtualName = PoolString::Intern(virtualPath);
+        watch->consumer = consumer.empty() ? watch->virtualName : PoolString::Intern(consumer);
         watch->callback = std::move(callback);
         for (const std::filesystem::path& directory : watch->directories) {
             AcquireDirectory(directory, folder);
         }
         const uint64_t id = watch->id;
+        SnapshotWatch(*watch);
         _watches.push_back(std::move(watch));
         return FileWatchHandle(this, id);
     }
@@ -222,24 +244,29 @@ namespace BECore {
     void FileWatcher::RouteChange(const std::filesystem::path& realPath, double nowSeconds) {
         const std::filesystem::path path = realPath.lexically_normal();
         for (const UniquePtr<Watch>& watch : _watches) {
-            if (!watch->alive) {
-                continue;
-            }
-            for (const std::filesystem::path& target : watch->targets) {
-                if (!watch->folder) {
-                    if (path == target) {
-                        Schedule(watch->id, watch->virtualName, nowSeconds);
-                        break;
-                    }
-                    continue;
-                }
-                const std::filesystem::path relative = RelativeInside(path, target);
-                if (!relative.empty()) {
-                    Schedule(watch->id, PoolString::Intern(Format("{}/{}", watch->virtualPath, FromStdString(relative.generic_string()))), nowSeconds);
-                    break;
-                }
+            PoolString virtualPath;
+            if (watch->alive && Matches(*watch, path, virtualPath)) {
+                Schedule(watch->id, virtualPath, nowSeconds);
             }
         }
+    }
+
+    bool FileWatcher::Matches(const Watch& watch, const std::filesystem::path& path, PoolString& virtualPath) {
+        for (const std::filesystem::path& target : watch.targets) {
+            if (!watch.folder) {
+                if (path == target) {
+                    virtualPath = watch.virtualName;
+                    return true;
+                }
+                continue;
+            }
+            const std::filesystem::path relative = RelativeInside(path, target);
+            if (!relative.empty()) {
+                virtualPath = PoolString::Intern(Format("{}/{}", watch.virtualPath, FromStdString(relative.generic_string())));
+                return true;
+            }
+        }
+        return false;
     }
 
     void FileWatcher::Schedule(uint64_t watchId, PoolString virtualPath, double nowSeconds) {
@@ -267,7 +294,9 @@ namespace BECore {
         for (size_t i = 0; i < _due.size(); ++i) {
             Watch* watch = FindWatch(_due[i].watchId);
             if (watch != nullptr && watch->alive) {
-                watch->callback(FileChange{_due[i].virtualPath});
+                RefreshBaseline(*watch, _due[i].virtualPath.ToStringView());
+                FileChange change{_due[i].virtualPath};
+                watch->callback(change);
             }
         }
         _delivering = false;
@@ -318,6 +347,203 @@ namespace BECore {
             }
             _watches.erase(_watches.begin() + static_cast<ptrdiff_t>(i));
         }
+        PruneBaseline();
+    }
+
+    Vector<std::filesystem::path> FileWatcher::LayerFiles(const Watch& watch, StringView virtualPath) {
+        Vector<std::filesystem::path> files;
+        std::filesystem::path relative;
+        if (watch.folder) {
+            const size_t prefix = watch.virtualPath.size() + 1;  // the folder and its slash
+            if (virtualPath.size() <= prefix) {
+                return files;
+            }
+            relative = ToStd(virtualPath.substr(prefix));
+        }
+        for (const std::filesystem::path& target : watch.targets) {
+            files.push_back(watch.folder ? (target / relative).lexically_normal() : target);
+        }
+        return files;
+    }
+
+    void FileWatcher::CollectFiles(const Watch& watch, FileStates& out) {
+        for (const std::filesystem::path& target : watch.targets) {
+            FileState state;
+            if (!watch.folder) {
+                if (ReadState(target, state.writeTime, state.size)) {
+                    state.path = target;
+                    out.insert_or_assign(PathKey(target), std::move(state));
+                }
+                continue;
+            }
+            std::error_code error;
+            constexpr auto kOptions = std::filesystem::directory_options::skip_permission_denied;
+            std::filesystem::recursive_directory_iterator it(target, kOptions, error);  //-NoStd: the walk of a requested rescan, no engine type lists a folder
+            const std::filesystem::recursive_directory_iterator end;                    //-NoStd: the end marker of the listing above
+            for (; !error && it != end; it.increment(error)) {
+                state.path = it->path().lexically_normal();
+                if (ReadState(state.path, state.writeTime, state.size)) {
+                    out.insert_or_assign(PathKey(state.path), state);
+                }
+            }
+        }
+    }
+
+    void FileWatcher::SnapshotWatch(const Watch& watch) {
+        FileStates files;
+        CollectFiles(watch, files);
+        for (auto& [key, state] : files) {
+            _baseline.insert({key, std::move(state)});  // a file another watch knew keeps its older state: a change not delivered yet stays pending
+        }
+    }
+
+    void FileWatcher::RefreshBaseline(const std::filesystem::path& realPath) {
+        FileState state;
+        const String key = PathKey(realPath);
+        if (ReadState(realPath, state.writeTime, state.size)) {
+            state.path = realPath;
+            _baseline.insert_or_assign(key, std::move(state));
+        } else {
+            _baseline.erase(key);
+        }
+    }
+
+    void FileWatcher::RefreshBaseline(const Watch& watch, StringView virtualPath) {
+        for (const std::filesystem::path& file : LayerFiles(watch, virtualPath)) {
+            RefreshBaseline(file);
+        }
+    }
+
+    void FileWatcher::PruneBaseline() {
+        for (auto it = _baseline.begin(); it != _baseline.end();) {
+            bool covered = false;
+            PoolString ignored;
+            for (const UniquePtr<Watch>& watch : _watches) {
+                if (Matches(*watch, it->second.path, ignored)) {
+                    covered = true;
+                    break;
+                }
+            }
+            it = covered ? ++it : _baseline.erase(it);
+        }
+    }
+
+    Vector<FileWatcher::Detected> FileWatcher::Detect() const {
+        FileStates current;
+        for (const UniquePtr<Watch>& watch : _watches) {
+            if (watch->alive) {
+                CollectFiles(*watch, current);
+            }
+        }
+        Vector<std::filesystem::path> differing;
+        for (const auto& [key, state] : current) {
+            const auto known = _baseline.find(key);
+            if (known == _baseline.end() || known->second.writeTime != state.writeTime || known->second.size != state.size) {
+                differing.push_back(state.path);
+            }
+        }
+        for (const auto& [key, state] : _baseline) {
+            if (current.find(key) == current.end()) {
+                differing.push_back(state.path);
+            }
+        }
+
+        Vector<Detected> detected;
+        for (const std::filesystem::path& path : differing) {
+            for (const UniquePtr<Watch>& watch : _watches) {
+                PoolString virtualPath;
+                if (!watch->alive || !Matches(*watch, path, virtualPath)) {
+                    continue;
+                }
+                Detected* entry = nullptr;
+                for (Detected& candidate : detected) {
+                    if (candidate.virtualPath == virtualPath) {
+                        entry = &candidate;
+                    }
+                }
+                if (entry == nullptr) {
+                    entry = &detected.emplace_back();
+                    entry->virtualPath = virtualPath;
+                    // The layers of one virtual path are one file for the consumer: it was there before when any layer had it, is there now when any has it
+                    bool was = false;
+                    bool now = false;
+                    for (const std::filesystem::path& file : LayerFiles(*watch, virtualPath.ToStringView())) {
+                        const String key = PathKey(file);
+                        was = was || _baseline.find(key) != _baseline.end();
+                        now = now || current.find(key) != current.end();
+                    }
+                    entry->kind = was && now ? FileChangeKind::Changed : (now ? FileChangeKind::Added : FileChangeKind::Removed);
+                }
+                // Two layers of one watch both differ: the watch is told once
+                if (eastl::find(entry->watchIds.begin(), entry->watchIds.end(), watch->id) == entry->watchIds.end()) {
+                    entry->watchIds.push_back(watch->id);
+                }
+                if (eastl::find(entry->consumers.begin(), entry->consumers.end(), watch->consumer) == entry->consumers.end()) {
+                    entry->consumers.push_back(watch->consumer);
+                }
+            }
+        }
+        eastl::sort(detected.begin(), detected.end(), [](const Detected& a, const Detected& b) { return a.virtualPath.ToStringView() < b.virtualPath.ToStringView(); });
+        return detected;
+    }
+
+    Vector<PendingFileChange> FileWatcher::Rescan() {
+        Vector<PendingFileChange> pending;
+        if (_backend == nullptr) {
+            return pending;
+        }
+        for (Detected& entry : Detect()) {
+            pending.push_back({entry.virtualPath, entry.kind, std::move(entry.consumers)});
+        }
+        return pending;
+    }
+
+    Vector<AppliedFileChange> FileWatcher::Apply() {
+        if (_backend == nullptr || _delivering) {
+            return {};
+        }
+        return ApplyDetected(Detect());
+    }
+
+    Vector<AppliedFileChange> FileWatcher::Apply(Span<const StringView> virtualPaths) {
+        if (_backend == nullptr || _delivering) {
+            return {};
+        }
+        Vector<Detected> detected = Detect();
+        detected.erase(
+            eastl::remove_if(detected.begin(), detected.end(),
+                             [virtualPaths](const Detected& entry) { return eastl::find(virtualPaths.begin(), virtualPaths.end(), entry.virtualPath.ToStringView()) == virtualPaths.end(); }),
+            detected.end());
+        return ApplyDetected(detected);
+    }
+
+    Vector<AppliedFileChange> FileWatcher::ApplyDetected(const Vector<Detected>& detected) {
+        Vector<AppliedFileChange> applied;
+        _delivering = true;
+        for (const Detected& entry : detected) {
+            AppliedFileChange& result = applied.emplace_back();
+            result.virtualPath = entry.virtualPath;
+            result.consumers = entry.consumers;
+            for (const uint64_t id : entry.watchIds) {
+                // Delivered now, so the stream's own notice of the same change must not deliver it again
+                _pending.erase(eastl::remove_if(_pending.begin(), _pending.end(), [&](const Pending& pending) { return pending.watchId == id && pending.virtualPath == entry.virtualPath; }),
+                               _pending.end());
+                Watch* watch = FindWatch(id);
+                if (watch == nullptr || !watch->alive) {
+                    continue;
+                }
+                RefreshBaseline(*watch, entry.virtualPath.ToStringView());
+                FileChange change{entry.virtualPath};
+                watch->callback(change);
+                if (!change.ok && result.ok) {
+                    result.ok = false;
+                    result.error = std::move(change.error);
+                }
+            }
+        }
+        _delivering = false;
+        SweepDeadWatches();
+        return applied;
     }
 
 }  // namespace BECore

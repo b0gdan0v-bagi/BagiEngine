@@ -7,6 +7,7 @@
 #include <BECore/Config/ConfigFactory.h>
 #include <BECore/Config/ConfigNames.h>
 #include <BECore/Control/ControlBuiltins.h>
+#include <BECore/FileSystem/FileWatchControl.h>
 #include <BECore/FileSystem/PlatformFileWatchBackend.h>
 #include <BECore/Input/InputControl.h>
 #include <BECore/Logger/LoggerManager.h>
@@ -109,6 +110,7 @@ namespace BECore {
         RegisterProfilerControl(_controlService);
         RegisterClipboardControl(_controlService);
         RegisterAudioControl(_controlService, _audioManager);
+        RegisterFileWatchControl(_controlService, _fileWatcher);
     }
 
     void CoreManager::OnApplicationInit(PassKey<Application>) {

@@ -111,10 +111,11 @@ namespace BECore {
         /// The config whose file is @p virtualPath (`config/<relative>`) in the layer that won, or an empty name
         PoolString FindConfigByVirtualPath(StringView virtualPath);
 
-        void OnFileChanged(const FileChange& change);
+        void OnFileChanged(FileChange& change);
 
-        /// Reads the file and replaces the document. With @p skipIfSame a missing file or one with the text already read is not an error and changes nothing
-        bool ReloadFromDisk(PoolString name, bool skipIfSame);
+        /// Reads the file and replaces the document. With @p skipIfSame a missing file or one with the text already read is not an error and changes nothing.
+        /// @p failure, when given, gets the reason of a file that could not be read or parsed (not for a text that is the same)
+        bool ReloadFromDisk(PoolString name, bool skipIfSame, String* failure);
 
         void ScanDirectory(const std::filesystem::path& dir, Vector<Pair<std::filesystem::path, PoolString>>& filesToLoad) const;
 

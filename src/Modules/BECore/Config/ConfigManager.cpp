@@ -209,14 +209,14 @@ namespace BECore {
     bool ConfigManager::ReloadConfig(PoolString name) {
         BE_PROFILE_SCOPE("ConfigManager::ReloadConfig");
         ASSERT(_initialized.load(std::memory_order_acquire));
-        const bool reloaded = ReloadFromDisk(name, false);
+        const bool reloaded = ReloadFromDisk(name, false, nullptr);
         if (reloaded) {
             NotifyConfigChanged(name);
         }
         return reloaded;
     }
 
-    bool ConfigManager::ReloadFromDisk(PoolString name, bool skipIfSame) {
+    bool ConfigManager::ReloadFromDisk(PoolString name, bool skipIfSame, String* failure) {
         std::filesystem::path filePath;
         uint64_t knownHash = 0;
         {
@@ -232,6 +232,9 @@ namespace BECore {
 
         const Optional<String> text = XmlDocument::ReadFileBytes(filePath);
         if (!text) {
+            if (failure != nullptr) {
+                *failure = Format("the file is gone or unreadable, the loaded '{}' is kept", name.ToStringView());
+            }
             if (skipIfSame) {
                 LOG_DEBUG(Format("[ConfigManager] Config '{}': {} is gone or unreadable, keeping the loaded document", name.ToStringView(), filePath.string()).c_str());
             } else {
@@ -246,6 +249,9 @@ namespace BECore {
 
         IntrusivePtrAtomic<XmlDocument> newDoc = ParseConfigText(*text);
         if (!newDoc) {
+            if (failure != nullptr) {
+                *failure = Format("the file does not parse, the old '{}' is kept", name.ToStringView());
+            }
             LOG_ERROR(Format("[ConfigManager] ReloadConfig: failed to reload '{}' from {}", name.ToStringView(), filePath.string()).c_str());
             return false;
         }
@@ -268,7 +274,7 @@ namespace BECore {
     }
 
     void ConfigManager::StartWatching(FileWatcher& watcher) {
-        _watch = watcher.WatchFolder(PoolString(MountPoints::config).ToStringView(), [this](const FileChange& change) { OnFileChanged(change); });
+        _watch = watcher.WatchFolder(PoolString(MountPoints::config).ToStringView(), [this](FileChange& change) { OnFileChanged(change); }, "ConfigManager");
     }
 
     void ConfigManager::StopWatching() {
@@ -295,15 +301,19 @@ namespace BECore {
         return {};
     }
 
-    void ConfigManager::OnFileChanged(const FileChange& change) {
+    void ConfigManager::OnFileChanged(FileChange& change) {
         const PoolString name = FindConfigByVirtualPath(change.virtualPath.ToStringView());
         if (name.Empty()) {
             // A new file, a removed one or a file of a layer that does not win: nothing owns it (the `hot-reload` entry builds on this)
             LOG_DEBUG(Format("[ConfigManager] {} changed, no loaded config owns it", change.virtualPath.ToStringView()).c_str());
             return;
         }
-        if (ReloadFromDisk(name, true)) {
+        String failure;
+        if (ReloadFromDisk(name, true, &failure)) {
             NotifyConfigChanged(name);
+        } else if (!failure.empty()) {
+            change.ok = false;
+            change.error = std::move(failure);
         }
     }
 
