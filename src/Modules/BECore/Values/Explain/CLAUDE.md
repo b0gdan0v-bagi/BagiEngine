@@ -14,9 +14,16 @@ Answers "why is this value what it is" for a `Value<T>` (`../CLAUDE.md`): the tr
 - **Loops.** `sum(hand.tiles, t, t.rank)`: a `List` node (its path, the count as value) and, per element, a `ContextKey` node `hand.tiles[3].rank` with the list as its one child; a nested list is `hand.sets[1].tiles`. The tree has at most `kMaxTraceNodes` nodes: later steps run but are not recorded (`truncated`), and the root's value is still the program's (`ProgramTrace::result`).
 - A node several parents read (a constant register) is written under each; `FormatTrace` stops at `kMaxFormattedLines` lines.
 
+## The explanation of a value
+
+`ExplainValue(value, context, declaration)` (`ValueExplain.h`) gives a `ValueExplanation`: kind, `source` (the literal of a `Const`, the path of a `Slot`, the formula text of a `Program`), `hasValue`, `valueText` and the `trace` (none for a `Const`, one `ContextKey` node for a `Slot`, `ExplainProgram` for a `Program`). It never asserts on a context that lacks an object at a level the value reads: `hasValue` is false and `why` names the level. A `Program` whose result type is not the type of the value, or of a type no program computes (`Rect`, an unregistered game type), has no value and says why. `FormatValue<T>` is the text of a `T`: `FormatImage` for a program type, an enum or a registered type, `<Name N bytes: hex>` for the rest. An enum result is named after `T`, because a program does not know which enum it computes.
+
+`ValueExplainers` is the erased form: `ExplainValue` of every `Value<T>` registered, found by the `opaqueHash` of `DescribeType<Value<T>>()`, for code that holds only the address of a field. `RegisterBuiltinValueExplainers()` registers the program types and `Rect`; a game registers its enums and its own types (`Register<T>()`), as it registers them with `ProgramDomain`.
+
 ## Files
 
 | File | Holds |
 |------|-------|
 | `FieldResolver.h` | `ResolveField`: level + offset to the path and `TypeDesc`; a component of a `Vec3` is `field.y` |
 | `ProgramTrace.h` | `ExplainProgram`, `ProgramTrace`, `TraceNode`, `FormatImage`, `FormatTrace` |
+| `ValueExplain.h` | `ExplainValue`, `ValueExplanation`, `FormatValue`, `ValueExplainers` |

@@ -21,15 +21,6 @@ namespace BECore {
         constexpr size_t kIndentWidth = 2;
         constexpr uint32_t kMaxOperands = 4;
 
-        String Hex(const uint8_t* bytes, size_t count) {
-            String text;
-            for (size_t i = 0; i < count; ++i) {
-                text += kHexDigits[bytes[i] >> 4];
-                text += kHexDigits[bytes[i] & 0xFU];
-            }
-            return text;
-        }
-
         template <typename T>
         RegisterImage ImageOf(T value) {
             RegisterImage image{};
@@ -577,6 +568,16 @@ namespace BECore {
         return builder.Finish(result);
     }
 
+    String FormatHexBytes(const void* bytes, size_t count) {
+        const auto* data = static_cast<const uint8_t*>(bytes);
+        String text;
+        for (size_t i = 0; i < count; ++i) {
+            text += kHexDigits[data[i] >> 4];
+            text += kHexDigits[data[i] & 0xFU];
+        }
+        return text;
+    }
+
     String FormatImage(ProgramType type, const RegisterImage& image, const TypeDesc* described) {
         switch (type) {
             case ProgramType::Bool:
@@ -626,10 +627,11 @@ namespace BECore {
                 if (described != nullptr) {
                     if (const Optional<DomainTypeId> domain = ProgramDomain::FindTypeByDescriptor(*described)) {
                         const DomainType& registered = ProgramDomain::Type(*domain);
-                        return Format("<{} {} bytes: {}>", registered.name.ToStringView(), registered.size, Hex(image.bytes.data(), std::min<size_t>(registered.size, kProgramRegisterBytes)));
+                        return Format("<{} {} bytes: {}>", registered.name.ToStringView(), registered.size,
+                                      FormatHexBytes(image.bytes.data(), std::min<size_t>(registered.size, kProgramRegisterBytes)));
                     }
                 }
-                return Format("<registered {} bytes: {}>", kProgramRegisterBytes, Hex(image.bytes.data(), kProgramRegisterBytes));
+                return Format("<registered {} bytes: {}>", kProgramRegisterBytes, FormatHexBytes(image.bytes.data(), kProgramRegisterBytes));
             }
         }
         return String();

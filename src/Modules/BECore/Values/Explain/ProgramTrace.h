@@ -91,6 +91,9 @@ namespace BECore {
     /// bytes: hex>`
     [[nodiscard]] String FormatImage(ProgramType type, const RegisterImage& image, const TypeDesc* described = nullptr);
 
+    /// @p count bytes as two lowercase hex digits each: how a type nobody described is shown
+    [[nodiscard]] String FormatHexBytes(const void* bytes, size_t count);
+
     /// The value of a node as text: `FormatImage`, and `N elements` for a list
     [[nodiscard]] String FormatNodeValue(const TraceNode& node);
 
