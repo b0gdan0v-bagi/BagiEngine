@@ -4,8 +4,13 @@
 #include <BECore/Reflection/FieldAttributes.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/Utils/FunctionRef.h>
 
 namespace BECore {
+
+    class Context;
+    class ContextDecl;
+    struct ValueExplanation;
 
     /// What a container field lets its visitor do (IPropertyVisitor::BeginList)
     struct ListInfo {
@@ -14,6 +19,18 @@ namespace BECore {
         bool canAdd = false;
         /// An element can be removed: a resizable container or a map that is not empty
         bool canRemove = false;
+    };
+
+    /**
+     * @brief What a visitor is told about a `Value<T>` field (`IPropertyVisitor::VisitValueField`): where its value comes from
+     *
+     * Valid during the call only. @p source is the path of a `Slot` and the formula text of a `Program`; a `Const` has none, its literal is visited right after as the child `value`. @p explain
+     * fills the explanation of this value against a context (`ExplainValue`): it allocates, so a visitor calls it only for a field the person looks at, never for every field of every frame.
+     */
+    struct ValueFieldInfo {
+        StringView kind;
+        StringView source;
+        FunctionRef<void(const Context&, const ContextDecl&, ValueExplanation&)> explain;
     };
 
     CORE_ENUM(ListAction, uint8_t, None, Add, Remove)
@@ -151,6 +168,13 @@ namespace BECore {
         virtual bool VisitAlternative(StringView name, size_t count, size_t& index) {
             return false;
         }
+
+        /**
+         * @brief A `Value<T>` field (a literal, a read of a context or a formula) opens its compound: what it is, before its literal is visited
+         *
+         * Called for every kind, inside the compound of the field and only when the compound is open (`BeginCompound` returned true), so a closed node costs nothing. The default does nothing.
+         */
+        virtual void VisitValueField(StringView name, const ValueFieldInfo& info) {}
 
         /**
          * @brief Whether the visitor wants the fields marked `hidden` too

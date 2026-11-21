@@ -172,16 +172,22 @@ namespace BECore {
             return _constant == other._constant;
         }
 
-        /// The editor shows the literal of a `Const` as a compound `value`; a `Slot` is not a literal and is not edited as one
+        /// The editor is told what the value is (`VisitValueField`, for every kind) and shows the literal of a `Const` as a child `value`; a `Slot` or a `Program` is not a literal and is not edited
+        /// as one
         template <typename Visitor>
         bool VisitProperties(Visitor& v) {
+            const auto explain = [this](const Context& context, const ContextDecl& declaration, ValueExplanation& explanation) { explanation = ExplainValue(*this, context, declaration); };
+            v.VisitValueField(kVisitedName, ValueFieldInfo{EnumUtils<ValueKind>::ToString(_kind), _path.ToStringView(), explain});
             if (_kind != ValueKind::Const) {
                 return false;
             }
-            return PropVisit::Visit(v, _constant, "value");
+            return PropVisit::Visit(v, _constant, kVisitedName);
         }
 
     private:
+        /// The name a visitor sees the literal and the description of this value under
+        static constexpr StringView kVisitedName = "value";
+
         T _constant{};
         PoolString _path;
         uint32_t _offset = 0;
@@ -210,3 +216,5 @@ namespace BECore {
 
 // The accessor is part of the type: a generated .gen.hpp that names a Value field sees it by including this header
 #include <BECore/Values/ValueAccessor.h>
+// The editor's description of a value calls `ExplainValue`, found when a `VisitProperties` is instantiated
+#include <BECore/Values/Explain/ValueExplain.h>

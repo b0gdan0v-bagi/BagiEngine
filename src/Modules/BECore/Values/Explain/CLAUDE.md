@@ -32,6 +32,10 @@ The words are data (`TooltipWords`): the `per` pattern (`{0}` the number, `{1}` 
 
 The context is a named provider of `ValueContextRegistry` (`ValueContextRegistry.h`; main thread, names `String`, never interned) that a game fills, because a scene has no context of its own: the request's `context`, else the one named `default`. With none the answer is kind and source only (`has_value` false, `why` says no context); a provider that returns nothing now, or a context that lacks a level the value reads, gives `has_value` false too.
 
+## The inspector
+
+`Value<T>::VisitProperties` calls `IPropertyVisitor::VisitValueField(name, ValueFieldInfo)` first, for every kind, and then visits the literal of a `Const` as before. The hook runs inside the field's compound, so a closed node costs nothing. `ValueFieldInfo` carries the kind, the source (the path of a `Slot`, the formula of a `Program`, empty for a `Const`: its literal is the child `value`) and `explain`, a `FunctionRef` that fills a `ValueExplanation` for a context: it allocates, so a visitor calls it only for a field the person has opened. `ImGuiPropertyVisitor` draws a dim `Slot: caster.attack` and, when `ValueContextRegistry` has the provider `kInspectorContextName` (`inspector`), a node `Explain` with the value and the trace as a tree, the provider and the explanation called only while that node is open. A game registers the provider as it registers `default`; without it only the kind and source show.
+
 ## Files
 
 | File | Holds |

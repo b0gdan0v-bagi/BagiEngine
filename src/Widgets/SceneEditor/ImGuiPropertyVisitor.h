@@ -27,6 +27,8 @@ namespace BECore {
      *   is disabled while the field is empty; an integer key needs no field (the dispatch takes the first unused one)
      * - an `Optional` has a checkbox in front of its value (its name alone while it holds none)
      * - a `Variant` has a combo of its alternatives by index, then the active one under `value`
+     * - a `Value<T>` field says what it is in a dim line (`Slot: caster.attack`); when `ValueContextRegistry` has the provider `inspector`
+     *   it also has a node `Explain` with the value now and the trace of how it came to be. The explanation is made only while that node is open
      * The elements are visited inside the container field's `BeginField`, so `range` and `step` reach its numeric elements
      * through `CurrentField`, and `readonly` disables the elements, the buttons, the checkbox and the combo (the node can
      * still be opened).
@@ -64,6 +66,7 @@ namespace BECore {
         void VisitNewKey(String& key) override;
         bool VisitPresence(StringView name, bool& present) override;
         bool VisitAlternative(StringView name, size_t count, size_t& index) override;
+        void VisitValueField(StringView name, const ValueFieldInfo& info) override;
 
     private:
         /// What an open list allows and what its key field asked, between BeginList and EndList

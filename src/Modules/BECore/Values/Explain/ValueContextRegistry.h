@@ -10,6 +10,9 @@ namespace BECore {
     /// The provider the control API asks when a request names no context
     inline constexpr StringView kDefaultContextName = "default";
 
+    /// The provider the editor's inspector asks to explain a `Value<T>` field; without it the inspector shows the kind and the source only
+    inline constexpr StringView kInspectorContextName = "inspector";
+
     /// What a context is, in the control API and in the editor's inspector: the declaration the objects were made for and the objects
     struct ExplainContext {
         /// Outlives the call that uses it: a game's own declaration

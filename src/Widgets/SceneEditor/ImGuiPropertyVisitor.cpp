@@ -1,5 +1,7 @@
 #include "ImGuiPropertyVisitor.h"
 
+#include <BECore/Values/Explain/ValueContextRegistry.h>
+#include <BECore/Values/Explain/ValueExplain.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
@@ -102,6 +104,40 @@ namespace BECore {
                 value = FieldPresentation::FromDouble<T>(FieldPresentation::Constrain(presentation, static_cast<double>(value)));
             }
             return changed;
+        }
+
+        /// The trace as a tree of `label = value`, a node's children under it; stops at `kMaxFormattedLines` because a node several parents read is drawn under each
+        void DrawTraceNode(const ProgramTrace& trace, uint32_t index, uint32_t& drawn) {
+            if (index >= trace.nodes.size() || drawn >= kMaxFormattedLines) {
+                return;
+            }
+            const TraceNode& node = trace.nodes[index];
+            const Span<const uint32_t> children = trace.Children(node);
+            const String text = Format("{} = {}", node.label, FormatNodeValue(node));
+            ImGui::PushID(static_cast<int>(drawn++));
+            const ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | (children.empty() ? ImGuiTreeNodeFlags_Leaf : ImGuiTreeNodeFlags_None);
+            if (ImGui::TreeNodeEx(text.c_str(), flags)) {
+                for (const uint32_t child : children) {
+                    DrawTraceNode(trace, child, drawn);
+                }
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+        }
+
+        void DrawExplanation(const ValueExplanation& explanation) {
+            if (explanation.hasValue) {
+                ImGui::Text("= %s", explanation.valueText.c_str());
+            } else {
+                ImGui::TextDisabled("%s", explanation.why.c_str());
+            }
+            if (explanation.trace.root != kNoTraceNode) {
+                uint32_t drawn = 0;
+                DrawTraceNode(explanation.trace, explanation.trace.root, drawn);
+                if (explanation.trace.truncated) {
+                    ImGui::TextDisabled("(the trace is cut)");
+                }
+            }
         }
 
     }  // namespace
@@ -221,6 +257,31 @@ namespace BECore {
             ImGui::BeginDisabled();
         }
         return open;
+    }
+
+    void ImGuiPropertyVisitor::VisitValueField(StringView /*name*/, const ValueFieldInfo& info) {
+        if (info.source.empty()) {
+            ImGui::TextDisabled("%.*s", static_cast<int>(info.kind.size()), info.kind.data());
+        } else {
+            ImGui::TextDisabled("%.*s: %.*s", static_cast<int>(info.kind.size()), info.kind.data(), static_cast<int>(info.source.size()), info.source.data());
+        }
+        const ExplainContextProvider* provider = ValueContextRegistry::GetInstance().Find(kInspectorContextName);
+        if (provider == nullptr || !*provider) {
+            return;
+        }
+        char label[kIdSize];
+        MakeLabel(label, sizeof(label), "Explain", _idCounter++);
+        if (!ImGui::TreeNode(label)) {
+            return;
+        }
+        if (const Optional<ExplainContext> context = (*provider)(); context.has_value() && context->declaration != nullptr) {
+            ValueExplanation explanation;
+            info.explain(context->context, *context->declaration, explanation);
+            DrawExplanation(explanation);
+        } else {
+            ImGui::TextDisabled("no context now");
+        }
+        ImGui::TreePop();
     }
 
     bool ImGuiPropertyVisitor::VisitEnum(StringView name, const StringView* enumNames, size_t enumCount, size_t& selectedIndex) {
