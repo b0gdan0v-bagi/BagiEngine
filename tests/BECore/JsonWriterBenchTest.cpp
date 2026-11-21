@@ -1,10 +1,27 @@
+#include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlLog.h>
+#include <BECore/Control/ControlRoots.h>
+#include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/Control/JsonSerializer.h>
 #include <BECore/Control/JsonWriter.h>
+#include <BECore/GameControlTest.h>
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/JsonWriteReflectTypes.h>
+#include <BECore/Logger/LogEvent.h>
+#include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
+#include <BECore/Profiler/ProfilerControl.h>
+#include <BECore/Reflection/PropertyAccess.h>
+#include <BECore/Reflection/TypedRef.h>
 #include <BECore/Rooms/RoomMessageReference.h>
 #include <Common/AllocCheck.h>
+#include <Common/ControlTestSupport.h>
+#include <Common/EngineEnvironment.h>
+#include <Games/GameControl.h>
+#include <Games/GameManager.h>
+#include <Games/ReplayFile.h>
 #include <Rooms/RoomProtocol.h>
 #include <chrono>
 #include <gtest/gtest.h>
@@ -371,6 +388,363 @@ namespace BECore::Tests {
         }
         Print(kPrefix, "bridged-dom", MeasureRoomDom([&] { return DomText(bridged); }));
         Print(kPrefix, "bridged-writer", MeasureGenerated(bridged));
+    }
+
+    namespace {
+
+        constexpr int kLoggedLines = 20;
+        constexpr int kBenchFrames = 3;
+        constexpr int64_t kBenchRequestId = 9;
+        constexpr uint64_t kNsPerMs = 1'000'000;
+
+        uint64_t g_benchNowNs = 0;
+
+        uint64_t BenchNowNs() {
+            return g_benchNowNs;
+        }
+
+        /// What a handler of the control API costs from the posted request to the reply text: the `Drain()` alone is timed and counted (the request is posted
+        /// outside), with a kept sink, so the same path is measured for a writing handler and for its DOM twin
+        Measure MeasureHandler(ControlService& service, StringView method, const Json& params) {
+            const String request = MakeRequest(kBenchRequestId, method, params);
+            size_t replyBytes = 0;
+            const auto post = [&] { service.Post(request, [&replyBytes](const String& text) { replyBytes = text.size(); }); };
+            post();
+            service.Drain();  // sizes every buffer the second call reuses
+            double totalNs = 0.0;
+            for (int i = 0; i < kIterations; ++i) {
+                post();
+                const auto start = std::chrono::steady_clock::now();
+                service.Drain();
+                totalNs += std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - start).count();
+            }
+            post();
+            const AllocCount allocs = CountAllocations([&] { service.Drain(); });
+            EXPECT_GT(replyBytes, 0U);
+            Measure measure;
+            measure.ns = totalNs / kIterations;
+            measure.allocs = allocs.count;
+            measure.bytes = allocs.bytes;
+            return measure;
+        }
+
+        /// frame_stats of the old code: a `Json` per frame, per arena, per pool and per tag, replied as a document
+        Json DescribeFrameDom(const FrameStats& stats) {
+            Json frame = Json::object();
+            frame["frame"] = stats.frame;
+            frame["paused"] = stats.paused;
+            frame["frameMs"] = stats.frameMs;
+            frame["cpuMs"] = stats.cpuMs;
+            Json stages = Json::object();
+            for (size_t i = 0; i < kFrameStageCount; ++i) {
+                stages[ToStdString(EnumUtils<FrameStage>::ToString(static_cast<FrameStage>(i)))] = stats.stageMs[i];
+            }
+            frame["stagesMs"] = std::move(stages);
+            frame["drawCalls"] = stats.draws.drawCalls;
+            frame["triangles"] = stats.draws.triangles;
+            frame["textureSwitches"] = stats.draws.textureSwitches;
+            frame["allocCount"] = stats.allocCount;
+            frame["allocBytes"] = stats.allocBytes;
+            frame["liveBytes"] = stats.liveBytes;
+            Json tagAllocCount = Json::object();
+            Json tagLiveBytes = Json::object();
+            for (size_t i = 0; i < kMemTagCount; ++i) {
+                const auto name = ToStdString(EnumUtils<MemTag>::ToString(static_cast<MemTag>(i)));
+                tagAllocCount[name] = stats.tagAllocCount[i];
+                tagLiveBytes[name] = stats.tagLiveBytes[i];
+            }
+            frame["tagAllocCount"] = std::move(tagAllocCount);
+            frame["tagLiveBytes"] = std::move(tagLiveBytes);
+            frame["arenaUsedBytes"] = stats.arenaUsedBytes;
+            frame["arenaPeakBytes"] = stats.arenaPeakBytes;
+            frame["arenaOverflows"] = stats.arenaOverflows;
+            frame["poolLiveBlocks"] = stats.poolLiveBlocks;
+            frame["poolPageBytes"] = stats.poolPageBytes;
+            Json counters = Json::object();
+            for (const FrameCounter& counter : stats.counters) {
+                counters[ToStdString(counter.name.ToStringView())] = counter.value;
+            }
+            frame["counters"] = std::move(counters);
+            return frame;
+        }
+
+        Json DescribeFrameStatsDom() {
+            Json list = Json::array();
+            for (const FrameStats& stats : CoreManager::GetFrameStats().GetHistory(kBenchFrames)) {
+                list.push_back(DescribeFrameDom(stats));
+            }
+            Json arenas = Json::array();
+            for (const ArenaStatsEntry& entry : AllocTracker::GetArenaStats()) {
+                Json described = Json::object();
+                described["name"] = entry.name;
+                described["capacity"] = entry.capacity;
+                described["used"] = entry.used;
+                described["peak"] = entry.peak;
+                described["overflows"] = entry.overflows;
+                described["chunks"] = entry.chunks;
+                arenas.push_back(std::move(described));
+            }
+            Json tags = Json::array();
+            const Array<AllocTagTotals, kMemTagCount> totals = AllocTracker::GetTagTotals();
+            for (size_t i = 0; i < kMemTagCount; ++i) {
+                Json described = Json::object();
+                described["tag"] = ToStdString(EnumUtils<MemTag>::ToString(static_cast<MemTag>(i)));
+                described["liveBytes"] = totals[i].liveBytes;
+                described["peakLiveBytes"] = totals[i].peakLiveBytes;
+                described["count"] = totals[i].count;
+                described["frees"] = totals[i].frees;
+                tags.push_back(std::move(described));
+            }
+            Json pools = Json::array();
+            for (const PoolStatsEntry& entry : AllocTracker::GetPoolStats()) {
+                Json described = Json::object();
+                described["name"] = entry.name;
+                described["blockSize"] = entry.blockSize;
+                described["live"] = entry.live;
+                described["peak"] = entry.peak;
+                described["pages"] = entry.pages;
+                described["allocations"] = entry.allocations;
+                pools.push_back(std::move(described));
+            }
+            Json result = Json::object();
+            result["frames"] = std::move(list);
+            result["allocTracking"] = AllocTracker::kEnabled;
+            result["arenas"] = std::move(arenas);
+            result["tags"] = std::move(tags);
+            result["pools"] = std::move(pools);
+            return result;
+        }
+
+        void AddBenchFrame(uint32_t index) {
+            FrameStatsCollector& collector = CoreManager::GetFrameStats();
+            collector.BeginFrame(false);
+            collector.BeginStage(FrameStage::Update);
+            g_benchNowNs += kNsPerMs;
+            collector.EndStage(FrameStage::Update);
+            collector.BeginStage(FrameStage::SceneDraw);
+            g_benchNowNs += kNsPerMs / 4;
+            collector.EndStage(FrameStage::SceneDraw);
+            collector.SetCounter("zeta"_intern, 1.5);
+            collector.SetCounter("alpha"_intern, 2.0);
+            collector.SetCounter("Mid"_intern, 0.25);
+            g_benchNowNs += kNsPerMs * index;
+            collector.EndFrame(RenderCounters{.drawCalls = 4, .triangles = 8, .textureSwitches = 1}, AllocTotals{});
+        }
+
+        /// get_property of the old code: the value of the path as a `Json` in a document
+        void ReplyPropertyDom(ControlCall& call, const ControlService& service) {
+            const auto root = GetJsonString(call.Params(), "root");
+            const auto path = GetJsonString(call.Params(), "path");
+            if (!root || !path) {
+                call.Fail(ControlErrors::kInvalidParams, "root and path");
+                return;
+            }
+            const auto value = GetProperty(service.Roots().Resolve(*root), *path);
+            if (!value) {
+                call.Fail(ControlErrors::kInternalError, "unreadable");
+                return;
+            }
+            Json result = Json::object();
+            result["root"] = MakeJsonString(*root);
+            result["path"] = MakeJsonString(*path);
+            result["value"] = std::visit(
+                [](const auto& held) -> Json {
+                    using TValue = std::decay_t<decltype(held)>;
+                    if constexpr (std::is_same_v<TValue, String>) {
+                        return MakeJsonString(StringView(held.data(), held.size()));
+                    } else {
+                        return held;
+                    }
+                },
+                *value);
+            call.Reply(std::move(result));
+        }
+
+        /// log_since of the old code: a `Json` line per record
+        void ReplyLogSinceDom(ControlCall& call, const ControlService& service) {
+            const auto mark = GetJsonInt(call.Params(), "mark");
+            if (!mark) {
+                call.Fail(ControlErrors::kInvalidParams, "mark");
+                return;
+            }
+            LogEvent::Flush();
+            const ControlLog& log = service.Log();
+            const ControlLog::Since since = log.ReadSince(static_cast<uint64_t>(*mark), LogLevel::Warning, ControlLog::kMaxLogSinceLines);
+            Json lines = Json::array();
+            for (const LogRecord* record : since.lines) {
+                Json line = Json::object();
+                line["sequence"] = record->sequence;
+                line["level"] = "warning";
+                line["time"] = MakeJsonString(StringView(record->time));
+                line["message"] = MakeJsonString(StringView(record->message.data(), record->message.size()));
+                if (record->category != kGeneralLogCategory) {
+                    line["category"] = MakeJsonString(log.History().GetCategoryName(record->category));
+                }
+                lines.push_back(std::move(line));
+            }
+            Json result = Json::object();
+            result["lines"] = std::move(lines);
+            result["warnings"] = since.warnings;
+            result["errors"] = since.errors;
+            result["dropped"] = since.dropped;
+            result["next"] = since.next;
+            if (since.truncated) {
+                result["truncated"] = true;
+            }
+            call.Reply(std::move(result));
+        }
+
+        FakeControllableGame* FindFakeGame() {
+            for (const IntrusivePtr<IGame>& game : GameManager::GetInstance().GetAll()) {
+                if (auto* fake = game->Cast<FakeControllableGame>()) {
+                    return fake;
+                }
+            }
+            return nullptr;
+        }
+
+        /// The old `{game, outcome, version}` of perform_action as a `Json` document
+        void ReplyActionDom(ControlCall& call, FakeControllableGame& game) {
+            auto outcome = game.PerformAction(call.Params());
+            if (!outcome) {
+                call.Fail(outcome.error());
+                return;
+            }
+            Json result = Json::object();
+            result["game"] = "FakeControllable";
+            result["version"] = game.GetStateVersion();
+            result["outcome"] = std::move(*outcome);
+            call.Reply(std::move(result));
+        }
+
+        /// A replay entry of the old recorder: the pieces dumped from `Json` and joined with `AppendFormat`
+        String FormatReplayEntryDom(const ReplayEntry& entry) {
+            String line;
+            AppendFormat(line, "{{\"op\":\"action\",\"params\":{}", DumpJson(entry.params));
+            if (entry.outcome) {
+                AppendFormat(line, ",\"outcome\":{}", DumpJson(*entry.outcome));
+            }
+            AppendFormat(line, ",\"gap\":{{\"frames\":{},\"seconds\":{}}}}}", entry.gap.frames, DumpJson(Json(entry.gap.seconds)));
+            return line;
+        }
+
+    }  // namespace
+
+    TEST(JsonWriterBenchTest, DISABLED_ControlHandlers) {
+        constexpr const char* kPrefix = "ControlHandler";
+        EngineEnvironment::EnsureCoreServices();
+        ControlService service;
+        RegisterControlBuiltins(service);
+        RegisterProfilerControl(service);
+        RegisterGameControl(service);
+        service.RegisterHandler("noop", [](ControlCall& call) {
+            call.Reply([](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.EndObject();
+            });
+        });
+        service.RegisterHandler("frame_stats_dom", [](ControlCall& call) { call.Reply(DescribeFrameStatsDom()); });
+        service.RegisterHandler("get_property_dom", [&service](ControlCall& call) { ReplyPropertyDom(call, service); });
+        service.RegisterHandler("log_since_dom", [&service](ControlCall& call) { ReplyLogSinceDom(call, service); });
+        Print(kPrefix, "noop", MeasureHandler(service, "noop", Json::object()));
+
+        CoreManager::GetFrameStats().SetClock(BenchNowNs);
+        g_benchNowNs = kNsPerMs;
+        AddBenchFrame(0);
+        for (uint32_t i = 1; i <= kBenchFrames; ++i) {
+            AddBenchFrame(i);
+        }
+        Json frameParams = Json::object();
+        frameParams["frames"] = kBenchFrames;
+        Print(kPrefix, "frame_stats-dom", MeasureHandler(service, "frame_stats_dom", frameParams));
+        Print(kPrefix, "frame_stats-writer", MeasureHandler(service, "frame_stats", frameParams));
+        CoreManager::GetFrameStats().SetClock(nullptr);
+
+        JsonWriteTestData::JsonWriteScalars scalars;
+        scalars.name = "a name of the object";
+        service.Roots().Register("bench", ControlRoot{[&scalars] { return TypedRef::Of(scalars); }});
+        Json propertyParams = Json::object();
+        propertyParams["root"] = "bench";
+        propertyParams["path"] = "name";
+        Print(kPrefix, "get_property-dom", MeasureHandler(service, "get_property_dom", propertyParams));
+        Print(kPrefix, "get_property-writer", MeasureHandler(service, "get_property", propertyParams));
+
+        LogEvent::Flush();
+        const uint64_t mark = service.Log().GetNextSequence();
+        for (int i = 0; i < kLoggedLines; ++i) {
+            LogEvent::Emit(LogLevel::Warning, Format("JsonWriterBench log line {} of a message of an ordinary length", i));
+        }
+        LogEvent::Flush();
+        Json logParams = Json::object();
+        logParams["mark"] = mark;
+        Print(kPrefix, "log_since-dom", MeasureHandler(service, "log_since_dom", logParams));
+        Print(kPrefix, "log_since-writer", MeasureHandler(service, "log_since", logParams));
+
+        GameManager::GetInstance().Initialize();
+        GameManager::GetInstance().SwitchTo("FakeControllable"_intern);
+        FakeControllableGame* fake = FindFakeGame();
+        ASSERT_NE(fake, nullptr);
+        service.RegisterHandler("perform_action_dom", [fake](ControlCall& call) { ReplyActionDom(call, *fake); });
+        Json actionParams = Json::object();
+        actionParams["type"] = "inc";
+        Print(kPrefix, "perform_action-dom", MeasureHandler(service, "perform_action_dom", actionParams));
+        Print(kPrefix, "perform_action-writer", MeasureHandler(service, "perform_action", actionParams));
+        service.Shutdown();
+        GameManager::GetInstance().Shutdown();
+    }
+
+    TEST(JsonWriterBenchTest, DISABLED_ReplayLine) {
+        constexpr const char* kPrefix = "ReplayLine";
+        ReplayEntry entry;
+        entry.op = ReplayOp::Action;
+        entry.params = *ParseJson(R"({"type":"play","card":3,"seat":1})");
+        entry.outcome = *ParseJson(R"({"legal":true,"points":4,"table":[1,2,3]})");
+        entry.gap = ReplayGap{3, 0.05};
+        EXPECT_EQ(FormatReplayEntryDom(entry), FormatReplayEntry(entry));
+        Print(kPrefix, "entry-dom", MeasureRoomDom([&] { return FormatReplayEntryDom(entry); }));
+        Print(kPrefix, "entry-writer", MeasureRoomWriter([&](String& out) { AppendReplayEntry(out, entry); }));
+    }
+
+    TEST(JsonWriterBenchTest, DISABLED_ReflectedShapes) {
+        constexpr const char* kPrefix = "ReflectedWrite";
+        constexpr int kPoints = 8;
+        constexpr int kMapEntries = 8;
+
+        JsonWriteTestData::JsonWriteChainLeaf derived;
+        derived.same = "text";
+        derived.e = "e value";
+        derived.b = "b value";
+        derived.maybe = 5;
+        derived.m = {1, 2, 3};
+        derived.c = 9;
+        Print(kPrefix, "derived-dom", MeasureRoomDom([&] { return DomText(derived); }));
+        Print(kPrefix, "derived-writer", MeasureGenerated(derived));
+
+        JsonWriteTestData::JsonWriteMathFields math;
+        math.vec2 = Vec2(1.5f, 2.5f);
+        math.vec3 = Vec3(1.0f, 2.0f, 3.0f);
+        math.vec4 = Vec4(1.0f, 2.0f, 3.0f, 4.0f);
+        math.ivec2 = IVec2(3, 4);
+        math.quat = Quat(1.0f, 0.0f, 0.0f, 0.0f);
+        math.color = Color(10, 20, 30, 255);
+        math.rect = Rect(1.0f, 2.0f, 30.0f, 40.0f);
+        for (int i = 0; i < kPoints; ++i) {
+            math.points.push_back(Vec2(static_cast<float>(i), static_cast<float>(i) * 0.5f));
+        }
+        Print(kPrefix, "math-dom", MeasureRoomDom([&] { return DomText(math); }));
+        Print(kPrefix, "math-writer", MeasureGenerated(math));
+
+        JsonWriteTestData::JsonWriteMaps maps;
+        for (int i = 0; i < kMapEntries; ++i) {
+            JsonWriteTestData::JsonWriteInner inner;
+            inner.name = Format("inner {}", i);
+            inner.count = i;
+            maps.objects[Format("key{}", i)] = inner;
+            maps.numbers[Format("number{}", i)] = i;
+            maps.names[i] = Format("name {}", i);
+        }
+        Print(kPrefix, "map-dom", MeasureRoomDom([&] { return DomText(maps); }));
+        Print(kPrefix, "map-writer", MeasureGenerated(maps));
     }
 
 }  // namespace BECore::Tests
