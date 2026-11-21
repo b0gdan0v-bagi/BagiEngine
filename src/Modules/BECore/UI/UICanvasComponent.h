@@ -7,6 +7,7 @@
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Scene/IComponent.h>
 #include <BECore/Types/Types.h>
+#include <BECore/UI/UIAmbient.h>
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UITooltip.h>
@@ -133,6 +134,15 @@ namespace BECore {
         /// Lays the canvas out for an output of this size now, as the next draw would. Draw() does it itself; this is for a caller that needs the rects before one
         void UpdateLayout(float outputWidth, float outputHeight);
 
+        /// The window metrics of the last layout and the counter that moves exactly when its `UILayoutContext` changes (the first layout counts): the `window` level of a game's
+        /// `Context` (`UIAmbient::Fill`). A steady frame touches neither
+        [[nodiscard]] const UIWindowView& GetWindowView() const {
+            return _windowView;
+        }
+        [[nodiscard]] const uint64_t& GetWindowVersion() const {
+            return _windowVersion;
+        }
+
         /// The place in the input order that this canvas has registered with (Scene::GetInputOrder(), see UIInput::Register)
         [[nodiscard]] int GetInputOrder() const {
             return _inputOrder;
@@ -158,6 +168,8 @@ namespace BECore {
     private:
         [[nodiscard]] UILayoutContext MakeContext(float outputWidth, float outputHeight) const;
         void SyncParams();
+        /// Takes the window metrics of @p context into the view and moves the counter when the layout is about to be made for another context than its last
+        void NoteWindow(const UILayoutContext& context);
         void AdoptDocument();
         void DrawElement(IRenderer& renderer, UIElement& element, const UIStateLook::State* inheritedState = nullptr, float inheritedDuration = 0.0f) const;
         void DrawPopups(IRenderer& renderer) const;
@@ -192,6 +204,8 @@ namespace BECore {
         [[nodiscard]] bool ConsumeButtonUp(const SDL_MouseButtonEvent& event);
 
         UICanvasLayout _layout;
+        UIWindowView _windowView;     // the metrics of the context the layout was last made for; runtime, not saved
+        uint64_t _windowVersion = 0;  // bumped with _windowView
         int _inputOrder = 0;
         bool _registered = false;
         uint32_t _consumedButtons = 0;     // bit per SDL button that went down on this canvas and is not up yet

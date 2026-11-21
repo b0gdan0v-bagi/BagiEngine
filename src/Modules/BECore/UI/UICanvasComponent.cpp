@@ -193,7 +193,22 @@ namespace BECore {
         const double now = CoreManager::GetTime().GetTotalTime();
         _layout.time = now;
         _layout.AdvanceTransitions(now);  // a run that ended lays out again, so a hidden element goes and a shown one unlocks
-        _layout.Update(MakeContext(outputWidth, outputHeight));
+        const UILayoutContext context = MakeContext(outputWidth, outputHeight);
+        NoteWindow(context);
+        _layout.Update(context);
+    }
+
+    void UICanvasComponent::NoteWindow(const UILayoutContext& context) {
+        if (_layout.HasLayout() && context == _layout.GetContext()) {
+            return;
+        }
+        _windowView.outputWidth = context.outputWidth;
+        _windowView.outputHeight = context.outputHeight;
+        _windowView.pixelDensity = context.pixelDensity;
+        _windowView.displayScale = context.displayScale;
+        _windowView.userScale = context.userScale;
+        _windowView.safeArea = context.safeArea;
+        ++_windowVersion;
     }
 
     void UICanvasComponent::DrawElement(IRenderer& renderer, UIElement& element, const UIStateLook::State* inheritedState, float inheritedDuration) const {
