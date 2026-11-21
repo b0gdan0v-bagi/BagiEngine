@@ -1,0 +1,217 @@
+#include "ContentCookTest.h"
+
+#include <BECore/Cook/ContentCook.h>
+#include <BECore/Reflection/XmlSerializer.h>
+#include <Common/CookTestSupport.h>
+#include <Common/Printers.h>
+#include <Generated/ContentCookTest.gen.hpp>
+
+namespace BECore::Tests {
+
+    using namespace CookTestData;
+
+    namespace {
+
+        constexpr StringView kProbeXml = R"(<CookProbe id="7" title="seven" kind="seven-kind" extra="9">
+  <items><item>1</item><item>2</item></items>
+  <parts><part label="first" weight="1.5"/><part label="second"/></parts>
+</CookProbe>
+)";
+
+        /// The object a config reads as: the unit of comparison between the XML and the cooked content
+        String ReadAsText(ConfigManager& configs, StringView stem) {
+            const auto reader = configs.CreateDeserializer(stem);
+            if (!reader) {
+                ADD_FAILURE() << "no config " << String(stem).c_str();
+                return {};
+            }
+            const auto object = New<CookProbe>();
+            object->Deserialize(*reader);
+            reader->FinishLoad();
+            EXPECT_FALSE(reader->HasErrors());
+            XmlSerializer text;
+            object->Serialize(text);
+            return text.SaveToString();
+        }
+
+        bool Contains(const String& text, StringView part) {
+            return text.find(part.data(), 0, part.size()) != String::npos;
+        }
+
+        const CookRow* FindRow(const CookReport& report, size_t layer, StringView path) {
+            for (const CookRow& row : report.rows) {
+                if (row.layer == layer && row.path == path) {
+                    return &row;
+                }
+            }
+            return nullptr;
+        }
+
+    }  // namespace
+
+    class ContentCookTest : public ::testing::Test {
+    protected:
+        CookReport Cook() {
+            return CookContent(_tree.Sources(), _tree.Out(), _registry);
+        }
+
+        CookTestTree _tree;
+        ContentCookRegistry _registry;
+        CookableConfig<CookProbe> _probe{"Probe", false, _registry};
+        CookableConfig<CookProbe> _strict{"StrictProbe", true, _registry};
+    };
+
+    TEST_F(ContentCookTest, ACookedConfigReadsEqualToItsXml) {
+        _tree.Write(0, "Probe.xml", kProbeXml);
+
+        const CookReport report = Cook();
+        ASSERT_TRUE(report.Ok()) << report.ToText().c_str();
+        ASSERT_NE(FindRow(report, 0, "Probe.xml"), nullptr);
+        EXPECT_EQ(FindRow(report, 0, "Probe.xml")->outcome, CookOutcome::Cooked);
+        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(0) / "Probe.xml")) << "a .xml beside a .bin of one stem is an error of ConfigManager";
+
+        SourceContent source(_tree);
+        CookedContent cooked(_tree.Out(), CookTestTree::kLayers);
+        EXPECT_TRUE(cooked.Configs().IsBinaryConfig("Probe"));
+        const String fromXml = ReadAsText(source.Configs(), "Probe");
+        EXPECT_FALSE(fromXml.empty());
+        EXPECT_EQ(ReadAsText(cooked.Configs(), "Probe"), fromXml);
+    }
+
+    TEST_F(ContentCookTest, TheUpperLayerStillWinsAfterTheCook) {
+        _tree.Write(0, "Probe.xml", "<CookProbe id=\"1\" title=\"lower\"/>");
+        _tree.Write(1, "Probe.xml", "<CookProbe id=\"2\" title=\"upper\"/>");
+        _tree.Write(0, "OnlyLower.xml", "<CookProbe id=\"3\" title=\"only\"/>");
+        _registry.Register({"OnlyLower", "CookProbe", &CookDetail::CookReflected<CookProbe>, &CookDetail::DescribeReflected<CookProbe>, false});
+
+        const CookReport report = Cook();
+        ASSERT_TRUE(report.Ok()) << report.ToText().c_str();
+
+        CookedContent cooked(_tree.Out(), CookTestTree::kLayers);
+        SourceContent source(_tree);
+        EXPECT_TRUE(Contains(ReadAsText(cooked.Configs(), "Probe"), "upper"));
+        EXPECT_EQ(ReadAsText(cooked.Configs(), "Probe"), ReadAsText(source.Configs(), "Probe"));
+        EXPECT_EQ(ReadAsText(cooked.Configs(), "OnlyLower"), ReadAsText(source.Configs(), "OnlyLower"));
+    }
+
+    TEST_F(ContentCookTest, AFileWithNoCookerIsCopiedByteForByteAndListed) {
+        constexpr StringView kOther = "<Other  keep=\"as is\"/>\r\n";
+        _tree.Write(0, "Other.xml", kOther);
+        _tree.Write(0, "data/notes.txt", "text");
+        _tree.Write(0, ".DS_Store", "junk");
+
+        const CookReport report = Cook();
+        ASSERT_TRUE(report.Ok()) << report.ToText().c_str();
+        ASSERT_NE(FindRow(report, 0, "Other.xml"), nullptr);
+        EXPECT_EQ(FindRow(report, 0, "Other.xml")->outcome, CookOutcome::Copied);
+        ASSERT_NE(FindRow(report, 0, "data/notes.txt"), nullptr);
+        EXPECT_EQ(FindRow(report, 0, "data/notes.txt")->outcome, CookOutcome::Copied);
+        EXPECT_EQ(ReadFile(_tree.OutConfig(0) / "Other.xml"), kOther);
+        EXPECT_EQ(ReadFile(_tree.OutConfig(0) / "data" / "notes.txt"), "text");
+        EXPECT_EQ(FindRow(report, 0, ".DS_Store"), nullptr);
+        EXPECT_TRUE(Contains(report.ToText(), "Copied: layer0/config/Other.xml")) << report.ToText().c_str();
+    }
+
+    TEST_F(ContentCookTest, ARelativeFolderIsKept) {
+        _tree.Write(1, "sub/deeper/Probe.xml", kProbeXml);
+
+        const CookReport report = Cook();
+        ASSERT_TRUE(report.Ok()) << report.ToText().c_str();
+        EXPECT_TRUE(std::filesystem::is_regular_file(_tree.OutConfig(1) / "sub" / "deeper" / "Probe.bin"));
+        ASSERT_NE(FindRow(report, 1, "sub/deeper/Probe.xml"), nullptr);
+    }
+
+    TEST_F(ContentCookTest, AnUnknownKeyFailsTheCookAndNamesTheFileAndThePath) {
+        _tree.Write(1, "Probe.xml", "<CookProbe id=\"1\" bogus=\"3\"><parts><part label=\"a\" wieght=\"2\"/></parts></CookProbe>");
+
+        const CookReport report = Cook();
+        EXPECT_FALSE(report.Ok());
+        const CookRow* row = FindRow(report, 1, "Probe.xml");
+        ASSERT_NE(row, nullptr);
+        EXPECT_EQ(row->outcome, CookOutcome::Failed);
+        EXPECT_GE(row->messages.size(), 2u);
+        const String text = report.ToText();
+        EXPECT_TRUE(Contains(text, "layer1/config/Probe.xml")) << text.c_str();
+        EXPECT_TRUE(Contains(text, "bogus")) << text.c_str();
+        EXPECT_TRUE(Contains(text, "wieght")) << text.c_str();
+        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(1) / "Probe.bin"));
+    }
+
+    TEST_F(ContentCookTest, AMalformedNumberFailsOnlyUnderStrictValues) {
+        _tree.Write(0, "StrictProbe.xml", "<CookProbe id=\"12x\"/>");
+        _tree.Write(0, "Probe.xml", "<CookProbe id=\"12x\"/>");
+
+        const CookReport report = Cook();
+        ASSERT_NE(FindRow(report, 0, "StrictProbe.xml"), nullptr);
+        EXPECT_EQ(FindRow(report, 0, "StrictProbe.xml")->outcome, CookOutcome::Failed);
+        ASSERT_NE(FindRow(report, 0, "Probe.xml"), nullptr);
+        EXPECT_EQ(FindRow(report, 0, "Probe.xml")->outcome, CookOutcome::Cooked) << "the lenient read of a cooker that did not ask for strict values stays lenient";
+    }
+
+    TEST_F(ContentCookTest, AFileThatDoesNotParseFailsTheCook) {
+        _tree.Write(0, "Probe.xml", "<CookProbe id=\"1\"");
+
+        const CookReport report = Cook();
+        EXPECT_FALSE(report.Ok());
+        ASSERT_NE(FindRow(report, 0, "Probe.xml"), nullptr);
+        EXPECT_EQ(FindRow(report, 0, "Probe.xml")->outcome, CookOutcome::Failed);
+        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(0) / "Probe.bin"));
+    }
+
+    TEST_F(ContentCookTest, AnOutputFolderInsideAContentFolderIsRefusedBeforeAnythingIsWritten) {
+        _tree.Write(1, "Probe.xml", kProbeXml);
+        const std::filesystem::path inside = _tree.SourceConfig(1) / "cooked";
+
+        const CookReport report = CookContent(_tree.Sources(), inside, _registry);
+        EXPECT_FALSE(report.Ok());
+        EXPECT_FALSE(std::filesystem::exists(inside));
+        EXPECT_FALSE(std::filesystem::exists(_tree.SourceConfig(1) / "Probe.bin"));
+    }
+
+    TEST_F(ContentCookTest, AContentFolderInsideTheOutputFolderIsRefusedAndKept) {
+        _tree.Write(0, "Probe.xml", kProbeXml);
+
+        const CookReport report = CookContent(_tree.Sources(), _tree.Root(), _registry);
+        EXPECT_FALSE(report.Ok());
+        EXPECT_TRUE(std::filesystem::is_regular_file(_tree.SourceConfig(0) / "Probe.xml"));
+    }
+
+    TEST_F(ContentCookTest, AnXmlAndABinOfOneStemInOneLayerFailTheCook) {
+        _tree.Write(0, "Probe.xml", kProbeXml);
+        WriteFile(_tree.SourceConfig(0) / "Probe.bin", "x");
+        _tree.Write(1, "Fine.xml", "<Fine/>");
+
+        const CookReport report = Cook();
+        EXPECT_FALSE(report.Ok());
+        EXPECT_EQ(report.Count(CookOutcome::Failed), 2u) << "both files of the stem are named";
+        ASSERT_NE(FindRow(report, 1, "Fine.xml"), nullptr);
+        EXPECT_EQ(FindRow(report, 1, "Fine.xml")->outcome, CookOutcome::Copied);
+    }
+
+    TEST_F(ContentCookTest, TwoCooksOfTheSameInputsGiveTheSameBytes) {
+        _tree.Write(0, "Probe.xml", kProbeXml);
+        _tree.Write(1, "sub/Probe2.xml", "<CookProbe id=\"2\" title=\"two\" kind=\"k\"/>");
+        _registry.Register({"Probe2", "CookProbe", &CookDetail::CookReflected<CookProbe>, &CookDetail::DescribeReflected<CookProbe>, false});
+
+        ASSERT_TRUE(Cook().Ok());
+        const Vector<uint8_t> first0 = ReadFileBytes(_tree.OutConfig(0) / "Probe.bin");
+        const Vector<uint8_t> first1 = ReadFileBytes(_tree.OutConfig(1) / "sub" / "Probe2.bin");
+        ASSERT_TRUE(Cook().Ok());
+        EXPECT_FALSE(first0.empty());
+        EXPECT_EQ(ReadFileBytes(_tree.OutConfig(0) / "Probe.bin"), first0);
+        EXPECT_EQ(ReadFileBytes(_tree.OutConfig(1) / "sub" / "Probe2.bin"), first1);
+    }
+
+    TEST_F(ContentCookTest, AFileOfAnEarlierCookIsGoneAndOtherFilesOfTheOutputFolderStay) {
+        _tree.Write(0, "Probe.xml", kProbeXml);
+        WriteFile(_tree.OutConfig(0) / "Gone.bin", "stale");
+        WriteFile(_tree.OutConfig(1) / "deep" / "Gone.txt", "stale");
+        WriteFile(_tree.Out() / "keep.txt", "mine");
+
+        ASSERT_TRUE(Cook().Ok());
+        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(0) / "Gone.bin"));
+        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(1) / "deep"));
+        EXPECT_EQ(ReadFile(_tree.Out() / "keep.txt"), "mine");
+    }
+
+}  // namespace BECore::Tests
