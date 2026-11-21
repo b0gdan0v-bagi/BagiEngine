@@ -119,9 +119,38 @@ namespace BECore {
         /// Reserve @p vertices (four per particle) and @p indices (six) for @p maxParticles and write the index pattern `0 1 2 0 2 3 ...` once
         static void ReserveGeometry(int32_t maxParticles, Vector<GeometryVertex>& vertices, Vector<int>& indices);
 
+        /// What `BuildQuads` reads besides the particles: everything `PrepareGeometry` settles once for one frame
+        struct GeometryFrame {
+            ParticleEffect effect;  ///< sanitized
+            Rect part;              ///< the part of the texture in pixels; the whole texture when the source is empty
+            Vec2 textureSize;
+            bool textured = false;
+            double time = 0.0;  ///< emitter time of the frame
+        };
+
+        /**
+         * @brief The serial half of `BuildGeometry`: sanitize @p effect, size @p vertices to four per live particle and make sure
+         * @p indices holds the pattern for them.
+         *
+         * @param source the part of the texture in pixels; empty means the whole texture. A flipbook splits it into its grid
+         * @param textureSize the texture's size in pixels; zero in either component draws untextured (the UVs are 0)
+         * @return the frame for `BuildQuads`, valid until the next `Update`, `Burst` or `Clear`. Allocates only when the vectors are
+         *         smaller than `ReserveGeometry` makes them
+         */
+        [[nodiscard]] GeometryFrame PrepareGeometry(const ParticleEffect& effect, const Rect& source, Vec2 textureSize, Vector<GeometryVertex>& vertices, Vector<int>& indices) const;
+
+        /**
+         * @brief The range half of `BuildGeometry`: write the vertices of the live particles `[begin, end)` to `vertices[4 * begin, 4 * end)`.
+         *
+         * Touches nothing else (no member, no allocation, no lock), so ranges may run on several threads at once while nothing calls
+         * a non-const method; the bytes do not depend on the split. @p vertices is the data of the vector `PrepareGeometry` sized.
+         */
+        void BuildQuads(const GeometryFrame& frame, size_t begin, size_t end, GeometryVertex* vertices) const;
+
         /**
          * @brief Fill @p vertices with one rotated square per live particle (four vertices each, corners in the order top left,
-         * top right, bottom right, bottom left, straight-alpha color) and make sure @p indices holds the pattern for them.
+         * top right, bottom right, bottom left, straight-alpha color) and make sure @p indices holds the pattern for them:
+         * `PrepareGeometry` and one `BuildQuads` over all of them.
          *
          * @param source the part of the texture in pixels; empty means the whole texture. A flipbook splits it into its grid and
          *        each particle gets the UVs of its frame's cell

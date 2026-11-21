@@ -3,6 +3,9 @@
 #include <BECore/UI/UIColor.h>
 #include <Common/AllocCheck.h>
 #include <Common/Printers.h>
+#include <TaskSystem/ParallelFor.h>
+#include <TaskSystem/ThreadPool.h>
+#include <cstring>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -75,6 +78,28 @@ namespace BECore::Tests {
             EXPECT_FLOAT_EQ(out[2].v, v1) << quad;
             EXPECT_FLOAT_EQ(out[3].u, u0) << quad;
             EXPECT_FLOAT_EQ(out[3].v, v1) << quad;
+        }
+
+        /// A looping effect with everything that feeds the vertices: a flipbook, jitters, curves and a lifetime short enough that particles die and the pool compacts
+        ParticleEffect MakeGeometryEffect() {
+            ParticleEffect effect = MakeRandomEffect();
+            effect.rate = 400.0f;
+            effect.maxParticles = 512;
+            effect.lifetimeMin = 0.2f;
+            effect.lifetimeMax = 0.6f;
+            effect.size = ParticleCurve(4.0f, 12.0f, EaseType::QuadOut);
+            effect.rotation = ParticleCurve(0.0f, 270.0f);
+            effect.color.from = Color(255, 200, 50, 255);
+            effect.color.to = Color(20, 40, 255, 0);
+            effect.flipbook = MakeFlipbook(4, 2, 7, ParticleFlipbookMode::Loop);
+            effect.flipbook.fps = 24.0f;
+            effect.flipbook.randomStart = true;
+            return effect;
+        }
+
+        void ExpectBytesEqual(const Vector<GeometryVertex>& expected, const Vector<GeometryVertex>& actual, const char* what) {
+            ASSERT_EQ(expected.size(), actual.size()) << what;
+            EXPECT_EQ(std::memcmp(expected.data(), actual.data(), expected.size() * sizeof(GeometryVertex)), 0) << what;
         }
 
         void Step(ParticleSimulation& sim, const ParticleEffect& effect, const Rect& area, float dt, int count) {
@@ -419,6 +444,108 @@ namespace BECore::Tests {
         sim.Clear();
         EXPECT_EQ(sim.BuildGeometry(effect, Rect{}, Vec2{}, vertices, indices), 0u);
         EXPECT_TRUE(vertices.empty());
+    }
+
+    TEST(ParticleSimulationTest, TheRangesGiveTheBytesOfBuildGeometry) {
+        const ParticleEffect effect = MakeGeometryEffect();
+        const Rect source(8.0f, 4.0f, 32.0f, 16.0f);
+        const Vec2 textureSize(64.0f, 32.0f);
+        ParticleSimulation sim;
+        sim.Play();
+
+        Vector<GeometryVertex> whole;
+        Vector<GeometryVertex> pieces;
+        Vector<GeometryVertex> reversed;
+        Vector<int> wholeIndices;
+        Vector<int> piecesIndices;
+        Vector<int> reversedIndices;
+        const size_t splits[] = {1, 2, 7, 64};
+        size_t compactions = 0;
+        size_t previous = 0;
+        for (int step = 0; step < 24; ++step) {
+            sim.Update(effect, kPointArea, 0.125f);
+            if (sim.GetLiveCount() < previous + 50) {
+                ++compactions;  // fewer new than the loop spawns in a step: some died
+            }
+            previous = sim.GetLiveCount();
+            const size_t quads = sim.BuildGeometry(effect, source, textureSize, whole, wholeIndices);
+            ASSERT_GT(quads, 8u);
+
+            for (const size_t ranges : splits) {
+                const auto frame = sim.PrepareGeometry(effect, source, textureSize, pieces, piecesIndices);
+                ASSERT_EQ(pieces.size(), quads * 4);
+                for (size_t k = 0; k < ranges; ++k) {
+                    sim.BuildQuads(frame, quads * k / ranges, quads * (k + 1) / ranges, pieces.data());
+                }
+                ExpectBytesEqual(whole, pieces, "in order");
+
+                const auto reverseFrame = sim.PrepareGeometry(effect, source, textureSize, reversed, reversedIndices);
+                for (size_t k = ranges; k-- > 0;) {
+                    sim.BuildQuads(reverseFrame, quads * k / ranges, quads * (k + 1) / ranges, reversed.data());
+                }
+                ExpectBytesEqual(whole, reversed, "reversed");
+            }
+            EXPECT_EQ(wholeIndices, piecesIndices);
+        }
+        EXPECT_GT(compactions, 0u) << "the effect must retire particles for the test to cover a compacted pool";
+    }
+
+    TEST(ParticleSimulationTest, ARangeBuiltOnAnyNumberOfWorkersGivesTheBytesOfBuildGeometry) {
+        const ParticleEffect effect = MakeGeometryEffect();
+        const Rect source(8.0f, 4.0f, 32.0f, 16.0f);
+        const Vec2 textureSize(64.0f, 32.0f);
+        constexpr size_t kMinChunk = 16;
+        ParticleSimulation sim;
+        sim.Play();
+        Step(sim, effect, kPointArea, 0.125f, 12);
+
+        Vector<GeometryVertex> whole;
+        Vector<int> wholeIndices;
+        const size_t quads = sim.BuildGeometry(effect, source, textureSize, whole, wholeIndices);
+        ASSERT_GT(quads, 4 * kMinChunk) << "enough particles for every worker count to split them";
+
+        const auto build = [&](ThreadPool& pool) {
+            Vector<GeometryVertex> vertices;
+            Vector<int> indices;
+            const auto frame = sim.PrepareGeometry(effect, source, textureSize, vertices, indices);
+            ParallelFor(pool, quads, kMinChunk, [&](size_t begin, size_t end) { sim.BuildQuads(frame, begin, end, vertices.data()); });
+            ExpectBytesEqual(whole, vertices, "parallel");
+        };
+        ThreadPool inlinePool{ThreadPool::InlineTag{}};
+        build(inlinePool);
+        for (const size_t workers : {1u, 2u, 4u}) {
+            ThreadPool pool(workers);
+            build(pool);
+        }
+    }
+
+    TEST(ParticleSimulationTest, AnEmptyRangeWritesNothing) {
+        const ParticleEffect effect = MakeGeometryEffect();
+        ParticleSimulation sim;
+        sim.Play();
+        Step(sim, effect, kPointArea, 0.125f, 4);
+        Vector<GeometryVertex> vertices;
+        Vector<int> indices;
+        const auto frame = sim.PrepareGeometry(effect, Rect{}, Vec2(16.0f, 16.0f), vertices, indices);
+        ASSERT_FALSE(vertices.empty());
+        const GeometryVertex untouched{-1.0f, -2.0f, Color(1, 2, 3, 4), -3.0f, -4.0f};
+        for (GeometryVertex& vertex : vertices) {
+            vertex = untouched;
+        }
+        sim.BuildQuads(frame, 3, 3, vertices.data());
+        sim.BuildQuads(frame, 0, 0, vertices.data());
+        const size_t live = sim.GetLiveCount();
+        sim.BuildQuads(frame, live, live, vertices.data());
+        for (const GeometryVertex& vertex : vertices) {
+            ASSERT_EQ(std::memcmp(&vertex, &untouched, sizeof(GeometryVertex)), 0);
+        }
+
+        // A range writes only its own quads
+        sim.BuildQuads(frame, 2, 3, vertices.data());
+        for (size_t i = 0; i < vertices.size(); ++i) {
+            const bool written = std::memcmp(&vertices[i], &untouched, sizeof(GeometryVertex)) != 0;
+            EXPECT_EQ(written, i / 4 == 2) << i;
+        }
     }
 
     TEST(ParticleSimulationTest, TheUVsAreTheSourceRectOverTheTexture) {
@@ -790,6 +917,13 @@ namespace BECore::Tests {
             for (int frame = 0; frame < 1000; ++frame) {
                 sim.Update(effect, kPointArea, 1.0f / 60.0f);
                 ASSERT_EQ(sim.BuildGeometry(effect, Rect{}, Vec2(64.0f, 64.0f), vertices, indices), 64u);
+            }
+        });
+        ExpectNoAllocations([&] {
+            for (int frame = 0; frame < 1000; ++frame) {
+                sim.Update(effect, kPointArea, 1.0f / 60.0f);
+                const auto geometry = sim.PrepareGeometry(effect, Rect{}, Vec2(64.0f, 64.0f), vertices, indices);
+                sim.BuildQuads(geometry, 0, sim.GetLiveCount(), vertices.data());
             }
         });
         EXPECT_EQ(sim.GetCapacity(), poolCapacity);

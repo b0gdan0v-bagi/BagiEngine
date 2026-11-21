@@ -182,39 +182,49 @@ namespace BECore {
         WriteIndexPattern(indices, quads);
     }
 
-    size_t ParticleSimulation::BuildGeometry(const ParticleEffect& effect, const Rect& source, Vec2 textureSize, Vector<GeometryVertex>& vertices, Vector<int>& indices) const {
-        const ParticleEffect clean = effect.Sanitized();
+    ParticleSimulation::GeometryFrame ParticleSimulation::PrepareGeometry(const ParticleEffect& effect, const Rect& source, Vec2 textureSize, Vector<GeometryVertex>& vertices,
+                                                                          Vector<int>& indices) const {
         const size_t quads = _particles.size();
         vertices.resize(quads * kQuadVertices);
         if (indices.size() < quads * kQuadIndices) {
             WriteIndexPattern(indices, quads);
         }
 
-        const bool textured = textureSize.x > 0.0f && textureSize.y > 0.0f;
-        const Rect part = source.IsEmpty() ? Rect(0.0f, 0.0f, textureSize.x, textureSize.y) : source;
-        const ParticleFlipbook& flipbook = clean.flipbook;
+        GeometryFrame frame;
+        frame.effect = effect.Sanitized();
+        frame.textureSize = textureSize;
+        frame.textured = textureSize.x > 0.0f && textureSize.y > 0.0f;
+        frame.part = source.IsEmpty() ? Rect(0.0f, 0.0f, textureSize.x, textureSize.y) : source;
+        frame.time = _time;
+        return frame;
+    }
 
-        for (size_t i = 0; i < quads; ++i) {
+    void ParticleSimulation::BuildQuads(const GeometryFrame& frame, size_t begin, size_t end, GeometryVertex* vertices) const {
+        const ParticleEffect& clean = frame.effect;
+        const ParticleFlipbook& flipbook = clean.flipbook;
+        const double time = frame.time;
+
+        for (size_t i = begin; i < end; ++i) {
             const Particle& particle = _particles[i];
-            const float age = static_cast<float>(_time - particle.spawnTime);
+            const float age = static_cast<float>(time - particle.spawnTime);
             const ParticleLook look = SampleLook(clean, age / particle.lifetime);
-            const Vec2 center = PositionAt(particle, _time, clean.gravityX, clean.gravityY);
+            const Vec2 center = PositionAt(particle, time, clean.gravityX, clean.gravityY);
             const float half = kHalf * look.size * particle.sizeScale;
             const float angle = (look.rotation + particle.rotationOffset) * kDegreesToRadians;
             const float cosA = std::cos(angle);
             const float sinA = std::sin(angle);
             const Color color = Multiply(look.color, particle.tint);
             UvRect uv;
-            if (textured) {
-                const int32_t frame = FrameOf(flipbook, age / particle.lifetime, age, particle.frameSeed);
-                uv = CellUv(part, textureSize, flipbook.columns, flipbook.rows, frame);
+            if (frame.textured) {
+                const int32_t cell = FrameOf(flipbook, age / particle.lifetime, age, particle.frameSeed);
+                uv = CellUv(frame.part, frame.textureSize, flipbook.columns, flipbook.rows, cell);
             }
 
             const float cornerX[kQuadVertices] = {-half, half, half, -half};
             const float cornerY[kQuadVertices] = {-half, -half, half, half};
             const float cornerU[kQuadVertices] = {uv.u0, uv.u1, uv.u1, uv.u0};
             const float cornerV[kQuadVertices] = {uv.v0, uv.v0, uv.v1, uv.v1};
-            GeometryVertex* out = vertices.data() + i * kQuadVertices;
+            GeometryVertex* out = vertices + i * kQuadVertices;
             for (int corner = 0; corner < kQuadVertices; ++corner) {
                 out[corner].x = center.x + cornerX[corner] * cosA - cornerY[corner] * sinA;
                 out[corner].y = center.y + cornerX[corner] * sinA + cornerY[corner] * cosA;
@@ -223,6 +233,12 @@ namespace BECore {
                 out[corner].v = cornerV[corner];
             }
         }
+    }
+
+    size_t ParticleSimulation::BuildGeometry(const ParticleEffect& effect, const Rect& source, Vec2 textureSize, Vector<GeometryVertex>& vertices, Vector<int>& indices) const {
+        const GeometryFrame frame = PrepareGeometry(effect, source, textureSize, vertices, indices);
+        const size_t quads = _particles.size();
+        BuildQuads(frame, 0, quads, vertices.data());
         return quads;
     }
 
