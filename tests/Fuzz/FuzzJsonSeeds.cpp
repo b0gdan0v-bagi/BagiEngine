@@ -100,11 +100,10 @@ namespace BECore::Fuzz {
 
         Add(seeds, "chain.json", ChainJson(kChainLevels));
 
-        Json tooDeep = Json::array();
-        for (size_t level = 0; level < kTooDeepLevels; ++level) {
-            tooDeep = Json::array({tooDeep});
-        }
-        Add(seeds, "too-deep.json", tooDeep);
+        // Written as text: DumpJson cuts a document deeper than JsonWriter::kMaxDepth, and this one is deeper on purpose
+        String tooDeep(kTooDeepLevels + 1, '[');
+        tooDeep.append(kTooDeepLevels + 1, ']');
+        seeds.push_back({kJsonFolder, "too-deep.json", TextBytes(tooDeep)});
 
         Add(seeds, "call-scalars.json", ScalarsArguments());
         Add(seeds, "call-echo.json", Json::object({{"text", "hello"}, {"mode", "Auto"}}));

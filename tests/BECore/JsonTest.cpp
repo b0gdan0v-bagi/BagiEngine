@@ -1,4 +1,5 @@
 #include <BECore/Control/Json.h>
+#include <Common/AllocCheck.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -245,6 +246,92 @@ namespace BECore::Tests {
 
         EXPECT_EQ(PointerResult(*parsed, "/1/1"), "3");
         EXPECT_EQ(PointerResult(*parsed, "/2"), "absent");
+    }
+
+    namespace {
+
+        String NlohmannDump(const Json& value, int indent) {
+            const std::string text = value.dump(indent, ' ', false, Json::error_handler_t::replace);  //-NoStd: the reference is nlohmann's own dump
+            return String(text.c_str(), text.size());
+        }
+
+        Vector<Json> DumpDocuments() {
+            const char* const texts[] = {
+                R"({"a":[1,[],{}],"b":{"c":"x","d":[true,null,1.5]},"e":{},"f":[]})",
+                R"([])",
+                R"({})",
+                R"(null)",
+                R"("text \" \\ \n \u0001 \u00e9 \ud83d\ude00")",
+                R"({"big":18446744073709551615,"neg":-9223372036854775808,"max":9223372036854775807,"over":9223372036854775808})",
+                R"([0.1,-0.0,1e-5,1e16,5e-324,1.7976931348623157e308,100.0,3.141592653589793,12345678901234567890123])",
+                R"({"z":1,"a":2,"m":{"y":[{"k":1},{"k":2}],"b":"\u00fc"}})",
+            };
+            Vector<Json> documents;
+            for (const char* text : texts) {
+                auto parsed = ParseJson(text);
+                EXPECT_TRUE(parsed.has_value()) << text;
+                documents.push_back(parsed ? std::move(*parsed) : Json());
+            }
+            Json broken = Json::object();
+            broken["bad\xff"] = MakeJsonString("a\xC3(b\xE2\x82");
+            documents.push_back(std::move(broken));
+            return documents;
+        }
+
+    }  // namespace
+
+    TEST(JsonTest, DumpAndAppendEqualNlohmannsDump) {
+        for (const Json& document : DumpDocuments()) {
+            for (const int indent : {JsonWriter::kCompact, 2}) {
+                const String expected = NlohmannDump(document, indent);
+                EXPECT_EQ(DumpJson(document, indent), expected) << "indent " << indent;
+                String appended;
+                AppendJson(appended, document, indent);
+                EXPECT_EQ(appended, expected) << "indent " << indent;
+            }
+            EXPECT_EQ(DumpJson(document), NlohmannDump(document, JsonWriter::kCompact));
+        }
+    }
+
+    TEST(JsonTest, AppendJsonAppendsAndNeverClears) {
+        String out = "head:";
+        AppendJson(out, Json::array({1, 2}));
+        AppendJson(out, Json::object());
+        EXPECT_EQ(out, "head:[1,2]{}");
+    }
+
+    TEST(JsonTest, AppendJsonIntoAStringThatKeptItsCapacityAllocatesNothing) {
+        const Vector<Json> documents = DumpDocuments();
+        String out;
+        for (const Json& document : documents) {
+            AppendJson(out, document, 2);
+        }
+        const char* const data = out.data();
+        const size_t capacity = out.capacity();
+
+        out.clear();
+        ExpectNoAllocations([&] {
+            for (const Json& document : documents) {
+                AppendJson(out, document, 2);
+            }
+        });
+
+        EXPECT_EQ(out.data(), data);
+        EXPECT_EQ(out.capacity(), capacity);
+    }
+
+    TEST(JsonTest, ADocumentDeeperThanTheWriterAllowsIsCutNotACrash) {
+        Json deep = Json::array();
+        Json* innermost = &deep;
+        for (size_t i = 0; i < JsonWriter::kMaxDepth + 10; ++i) {
+            innermost->push_back(Json::array());
+            innermost = &innermost->back();
+        }
+
+        const String text = DumpJson(deep);
+
+        EXPECT_EQ(text.size(), JsonWriter::kMaxDepth * 2 + 4);
+        EXPECT_NE(text.find("null"), String::npos);
     }
 
 }  // namespace BECore::Tests

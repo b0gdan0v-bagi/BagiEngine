@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonFwd.h>
+#include <BECore/Control/JsonWriter.h>
 #include <expected>
 #include <nlohmann/json.hpp>
 
@@ -23,8 +24,18 @@ namespace BECore {
     /// Parses @p text. Never throws or aborts: text that is not one complete JSON value is a kParseError.
     [[nodiscard]] std::expected<Json, ControlError> ParseJson(StringView text);
 
-    /// Compact JSON text of @p value. Invalid UTF-8 in a string is replaced, not fatal.
-    [[nodiscard]] String DumpJson(const Json& value);
+    /// Writes @p value through @p writer: the object members in the map's order (alphabetical, as `dump()` writes them), numbers, strings and
+    /// the replacement of invalid UTF-8 as JsonWriter does. It recurses once per level like `dump()`; a container nested deeper than
+    /// JsonWriter::kMaxDepth is written as `null`, never a crash (client JSON is held to ControlService::kMaxRequestDepth by its readers).
+    void WriteJson(JsonWriter& writer, const Json& value);
+
+    /// Appends the JSON text of @p value to @p out, which is never cleared: compact for JsonWriter::kCompact, else indented like `dump(indent)`.
+    /// The same bytes as `dump(indent, ' ', false, error_handler_t::replace)`; invalid UTF-8 in a string is replaced, not fatal. Allocates only
+    /// for the growth of @p out.
+    void AppendJson(String& out, const Json& value, int indent = JsonWriter::kCompact);
+
+    /// The JSON text of @p value (see AppendJson)
+    [[nodiscard]] String DumpJson(const Json& value, int indent = JsonWriter::kCompact);
 
     /// A JSON string value holding @p text
     [[nodiscard]] Json MakeJsonString(StringView text);

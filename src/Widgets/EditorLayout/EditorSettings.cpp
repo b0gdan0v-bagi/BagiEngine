@@ -480,9 +480,10 @@ namespace BECore {
             unreadable = false;
         }
 
-        //-NoStd: nlohmann's dump
-        const std::string text = content.dump(kJsonIndent, ' ', false, Json::error_handler_t::replace) + "\n";
-        const std::expected<void, String> written = WriteTextFileAtomically(path, FromStd(text));
+        String text;
+        AppendJson(text, content, kJsonIndent);
+        text.push_back('\n');
+        const std::expected<void, String> written = WriteTextFileAtomically(path, text);
         if (!written) {
             _lastSaveError = written.error();
             LOG_ERROR(Format("Editor settings: {}", _lastSaveError));
