@@ -26,13 +26,14 @@ namespace BECore {
             return insets;
         }
 
-        Json DescribeInsets(const WindowInsets& insets) {
-            Json safeArea = Json::object();
-            safeArea["top"] = insets.top;
-            safeArea["right"] = insets.right;
-            safeArea["bottom"] = insets.bottom;
-            safeArea["left"] = insets.left;
-            return safeArea;
+        /// The floats are widened to double, which is what the `Json` DOM stored and so the text clients have always seen
+        void WriteInsets(JsonWriter& writer, const WindowInsets& insets) {
+            writer.BeginObject();
+            writer.Member("bottom", static_cast<double>(insets.bottom));
+            writer.Member("left", static_cast<double>(insets.left));
+            writer.Member("right", static_cast<double>(insets.right));
+            writer.Member("top", static_cast<double>(insets.top));
+            writer.EndObject();
         }
 
         ControlError InvalidParams(String message) {
@@ -169,28 +170,29 @@ namespace BECore {
             CoreManager::GetUIEnvironment().SetUserScale(request->userScale);
 
             // One frame lays the scene out for the new size, so what the client asks next is of it
-            call.DeferFrames(1, 0.0, [](ControlCall& done) { done.Reply(DescribeWindowStatus()); });
+            call.DeferFrames(1, 0.0, [](ControlCall& done) { done.Reply(WriteWindowStatus); });
         }
 
     }  // namespace
 
-    Json DescribeWindowStatus() {
+    void WriteWindowStatus(JsonWriter& writer) {
         const IntrusivePtr<IMainWindow>& window = CoreManager::GetMainWindow();
         const IntrusivePtr<IRenderer>& renderer = CoreManager::GetRenderer();
 
-        Json result = Json::object();
         const int width = window ? window->GetWidth() : 0;
         const int height = window ? window->GetHeight() : 0;
-        result["width"] = width;
-        result["height"] = height;
-        result["density"] = window ? window->GetPixelDensity() : 1.0f;
-        result["displayScale"] = window ? window->GetDisplayScale() : 1.0f;
-        result["safeArea"] = DescribeInsets(window ? InsetsOf(window->GetSafeArea(), width, height) : WindowInsets{});
-        result["outputWidth"] = renderer ? static_cast<int>(std::lround(renderer->GetOutputWidth())) : 0;
-        result["outputHeight"] = renderer ? static_cast<int>(std::lround(renderer->GetOutputHeight())) : 0;
-        result["userScale"] = CoreManager::GetUIEnvironment().GetSettings().userScale;
-        result["headless"] = window && window->IsHeadless();
-        return result;
+        writer.BeginObject();
+        writer.Member("density", static_cast<double>(window ? window->GetPixelDensity() : 1.0f));
+        writer.Member("displayScale", static_cast<double>(window ? window->GetDisplayScale() : 1.0f));
+        writer.Member("headless", window && window->IsHeadless());
+        writer.Member("height", height);
+        writer.Member("outputHeight", renderer ? static_cast<int>(std::lround(renderer->GetOutputHeight())) : 0);
+        writer.Member("outputWidth", renderer ? static_cast<int>(std::lround(renderer->GetOutputWidth())) : 0);
+        writer.Key("safeArea");
+        WriteInsets(writer, window ? InsetsOf(window->GetSafeArea(), width, height) : WindowInsets{});
+        writer.Member("userScale", static_cast<double>(CoreManager::GetUIEnvironment().GetSettings().userScale));
+        writer.Member("width", width);
+        writer.EndObject();
     }
 
     void RegisterWindowControl(ControlService& service) {

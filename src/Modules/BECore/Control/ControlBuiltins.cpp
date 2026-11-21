@@ -13,14 +13,41 @@
 
 namespace BECore {
 
+    namespace {
+
+        /// The clock as it was read once; the floats are widened to double, which is what the `Json` DOM stored and so the text clients have always seen
+        struct ClockSample {
+            uint64_t frame = 0;
+            double totalTime = 0.0;
+            double deltaTime = 0.0;
+            double fixedDeltaTime = 0.0;
+
+            [[nodiscard]] static ClockSample Read() {
+                const Time& time = CoreManager::GetTime();
+                return ClockSample{time.GetFrameCount(), time.GetTotalTime(), static_cast<double>(time.GetDeltaTime()), static_cast<double>(time.GetFixedDeltaTime())};
+            }
+        };
+
+    }  // namespace
+
     Json DescribeControlClock() {
-        const Time& time = CoreManager::GetTime();
+        const ClockSample sample = ClockSample::Read();
         Json clock = Json::object();
-        clock["frame"] = time.GetFrameCount();
-        clock["totalTime"] = time.GetTotalTime();
-        clock["deltaTime"] = time.GetDeltaTime();
-        clock["fixedDeltaTime"] = time.GetFixedDeltaTime();
+        clock["frame"] = sample.frame;
+        clock["totalTime"] = sample.totalTime;
+        clock["deltaTime"] = sample.deltaTime;
+        clock["fixedDeltaTime"] = sample.fixedDeltaTime;
         return clock;
+    }
+
+    void WriteControlClock(JsonWriter& writer) {
+        const ClockSample sample = ClockSample::Read();
+        writer.BeginObject();
+        writer.Member("deltaTime", sample.deltaTime);
+        writer.Member("fixedDeltaTime", sample.fixedDeltaTime);
+        writer.Member("frame", sample.frame);
+        writer.Member("totalTime", sample.totalTime);
+        writer.EndObject();
     }
 
     std::expected<uint32_t, ControlError> ReadControlFrames(const Json& params, StringView key, uint32_t fallback) {
@@ -48,29 +75,38 @@ namespace BECore {
     namespace {
 
         void HandlePing(ControlCall& call) {
-            Json result = Json::object();
-            result["pong"] = true;
-            result["protocol"] = ControlService::kProtocolVersion;
-            call.Reply(std::move(result));
-        }
-
-        Json DescribeLogTotals(const ControlLog& log) {
-            Json totals = Json::object();
-            totals["warnings"] = log.GetWarnings();
-            totals["errors"] = log.GetErrors();
-            return totals;
+            call.Reply([](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Member("pong", true);
+                writer.Member("protocol", ControlService::kProtocolVersion);
+                writer.EndObject();
+            });
         }
 
         void HandleStatus(ControlCall& call, const ControlService& service) {
             // A line logged earlier in this frame is still in the ring buffer: handlers run outside Flush(), on the thread that flushes
             LogEvent::Flush();
-            Json result = DescribeControlClock();
-            result["log"] = DescribeLogTotals(service.Log());
-            result["manualClock"] = service.IsManualClock();
+            const ClockSample clock = ClockSample::Read();
             const GamePause* pause = service.GetPause();
-            result["paused"] = pause != nullptr && pause->IsPaused();
-            result["window"] = DescribeWindowStatus();
-            call.Reply(std::move(result));
+            const bool paused = pause != nullptr && pause->IsPaused();
+            call.Reply([&](JsonWriter& writer) {
+                // The clock's members of WriteControlClock, with the other members between them in alphabetical order
+                writer.BeginObject();
+                writer.Member("deltaTime", clock.deltaTime);
+                writer.Member("fixedDeltaTime", clock.fixedDeltaTime);
+                writer.Member("frame", clock.frame);
+                writer.Key("log");
+                writer.BeginObject();
+                writer.Member("errors", service.Log().GetErrors());
+                writer.Member("warnings", service.Log().GetWarnings());
+                writer.EndObject();
+                writer.Member("manualClock", service.IsManualClock());
+                writer.Member("paused", paused);
+                writer.Member("totalTime", clock.totalTime);
+                writer.Key("window");
+                WriteWindowStatus(writer);
+                writer.EndObject();
+            });
         }
 
         void HandleStep(ControlCall& call, ControlService& service) {
@@ -84,7 +120,14 @@ namespace BECore {
                 call.Fail(seconds.error());
                 return;
             }
-            service.DeferSteppedFrames(call, *frames, *seconds, [](ControlCall& done) { done.Reply(DescribeControlClock()); });
+            service.DeferSteppedFrames(call, *frames, *seconds, [](ControlCall& done) { done.Reply(WriteControlClock); });
+        }
+
+        template <bool kPaused>
+        void WritePaused(JsonWriter& writer) {
+            writer.BeginObject();
+            writer.Member("paused", kPaused);
+            writer.EndObject();
         }
 
         /// `pause` and `resume`: the pause is the one the editor drives too. The manual clock is a pause that only `step` lifts frames out of, so it is always paused
@@ -95,9 +138,7 @@ namespace BECore {
                 return;
             }
             pause->SetPaused(true);
-            Json result = Json::object();
-            result["paused"] = true;
-            call.Reply(std::move(result));
+            call.Reply(WritePaused<true>);
         }
 
         void HandleResume(ControlCall& call, const ControlService& service) {
@@ -111,9 +152,7 @@ namespace BECore {
                 return;
             }
             pause->SetPaused(false);
-            Json result = Json::object();
-            result["paused"] = false;
-            call.Reply(std::move(result));
+            call.Reply(WritePaused<false>);
         }
 
         /// `list_methods`: every method of the service with the description its module gave it. The answer is built from the table only, no client data is read

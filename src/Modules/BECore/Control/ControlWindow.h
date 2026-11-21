@@ -1,6 +1,6 @@
 #pragma once
 
-#include <BECore/Control/JsonFwd.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/Types/Types.h>
 
 namespace BECore {
@@ -14,18 +14,19 @@ namespace BECore {
     }  // namespace WindowControlErrors
 
     /**
-     * @brief The window as `status` and `set_window` answer it, read from the main window, the renderer and the UI environment.
+     * @brief Writes the window as `status` and `set_window` answer it, read from the main window, the renderer and the UI environment.
      *
-     * {"width","height" (window units), "density", "displayScale", "safeArea":{"top","right","bottom","left"} (window units), "outputWidth","outputHeight" (pixels, 0 without a
-     * renderer), "userScale", "headless"}. Without a window the size and the insets are 0, the density and the scales 1 and "headless" false. Main thread.
+     * One object: {"width","height" (window units), "density", "displayScale", "safeArea":{"top","right","bottom","left"} (window units), "outputWidth","outputHeight" (pixels, 0 without a
+     * renderer), "userScale", "headless"}, written with its keys in alphabetical order. Without a window the size and the insets are 0, the density and the scales 1 and "headless" false.
+     * Main thread. @p writer is positioned where one value is due (the `window` member of `status`, the result of a call).
      */
-    [[nodiscard]] Json DescribeWindowStatus();
+    void WriteWindowStatus(JsonWriter& writer);
 
     /**
      * @brief Registers `set_window`: {"width","height" (required), "density"?, "userScale"?, "safeArea"?:{"top","right","bottom","left"}}.
      *
      * Headless windows only (`not_headless` otherwise). A value that is left out keeps its current one. Everything is checked after the merge
-     * (WindowLimits, UISettings::kMinUserScale), and nothing is applied unless all of it is valid. The answer comes after one frame and is DescribeWindowStatus(), so
+     * (WindowLimits, UISettings::kMinUserScale), and nothing is applied unless all of it is valid. The answer comes after one frame and is WriteWindowStatus(), so
      * the layout and a capture that follow are of the new size. Details: `.claude/rules/control-window-api.md`.
      */
     void RegisterWindowControl(ControlService& service);
