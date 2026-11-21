@@ -68,15 +68,15 @@ namespace BECore {
     // =============================================================================
 
     void BinaryDeserializer::ResetState() {
-        _buffer.clear();
+        _data = nullptr;
+        _size = 0;
+        _owned.clear();
         _scopeStack.clear();
         _arrayStack.clear();
         ClearPathSegments();
     }
 
-    bool BinaryDeserializer::LoadFromBuffer(const uint8_t* data, size_t size) {
-        ResetState();
-
+    bool BinaryDeserializer::Validate(const uint8_t* data, size_t size) {
         if (data == nullptr || size < BinaryFormat::HeaderSize) {
             AddError("", "Binary data is too small to hold a header", 0);
             return false;
@@ -101,13 +101,35 @@ namespace BECore {
             AddError("", "Binary data is corrupt (or an array has more elements than the limit)", 0);
             return false;
         }
+        return true;
+    }
 
-        _buffer.assign(data, data + size);
+    void BinaryDeserializer::Open(const uint8_t* data, size_t size) {
+        _data = data;
+        _size = size;
 
         Scope root;
         root.begin = BinaryFormat::HeaderSize;
         root.end = size;
         _scopeStack.push_back(root);
+    }
+
+    bool BinaryDeserializer::LoadFromView(const uint8_t* data, size_t size) {
+        ResetState();
+        if (!Validate(data, size)) {
+            return false;
+        }
+        Open(data, size);
+        return true;
+    }
+
+    bool BinaryDeserializer::LoadFromBuffer(const uint8_t* data, size_t size) {
+        ResetState();
+        if (!Validate(data, size)) {
+            return false;
+        }
+        _owned.assign(data, data + size);
+        Open(_owned.data(), _owned.size());
         return true;
     }
 
@@ -136,13 +158,18 @@ namespace BECore {
             return false;
         }
 
-        Vector<uint8_t> bytes;
-        bytes.resize(static_cast<size_t>(fileSize));
-        if (!file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(fileSize))) {
+        _owned.resize(static_cast<size_t>(fileSize));
+        if (!file.read(reinterpret_cast<char*>(_owned.data()), static_cast<std::streamsize>(fileSize))) {
+            _owned.clear();
             AddError("", "Failed to read binary file", 0);
             return false;
         }
-        return LoadFromBuffer(bytes);
+        if (!Validate(_owned.data(), _owned.size())) {
+            _owned.clear();
+            return false;
+        }
+        Open(_owned.data(), _owned.size());
+        return true;
     }
 
     void BinaryDeserializer::AddError(StringView path, StringView message, int32_t line) {
@@ -163,7 +190,7 @@ namespace BECore {
         size_t position = scope.begin;
         while (position < scope.end) {
             BinaryFormat::EntryView entry;
-            if (!BinaryFormat::ParseEntry(_buffer.data(), position, scope.end, entry)) {
+            if (!BinaryFormat::ParseEntry(_data, position, scope.end, entry)) {
                 break;  // cannot happen after validation
             }
             if (accepts(entry.tag) && entry.name == name) {
@@ -205,7 +232,7 @@ namespace BECore {
             return false;
         }
 
-        const uint8_t* payload = _buffer.data() + entry.payloadBegin;
+        const uint8_t* payload = _data + entry.payloadBegin;
         if constexpr (std::is_same_v<T, bool>) {
             outValue = (*payload != 0);
         } else {
@@ -220,8 +247,8 @@ namespace BECore {
             return false;
         }
 
-        const size_t length = BinaryFormat::Load<uint32_t>(_buffer.data() + entry.payloadBegin);
-        outValue = StringView(reinterpret_cast<const char*>(_buffer.data() + entry.payloadBegin + sizeof(uint32_t)), length);
+        const size_t length = BinaryFormat::Load<uint32_t>(_data + entry.payloadBegin);
+        outValue = StringView(reinterpret_cast<const char*>(_data + entry.payloadBegin + sizeof(uint32_t)), length);
         return true;
     }
 
@@ -395,13 +422,13 @@ namespace BECore {
         }
 
         // Layout (validated on load): u32 size | u32 count | count x (u32 size | entries)
-        const size_t elementCount = BinaryFormat::Load<uint32_t>(_buffer.data() + entry.payloadBegin + sizeof(uint32_t));
+        const size_t elementCount = BinaryFormat::Load<uint32_t>(_data + entry.payloadBegin + sizeof(uint32_t));
 
         ArrayContext context;
         context.elements.reserve(elementCount);
         size_t position = entry.payloadBegin + 2 * sizeof(uint32_t);
         for (size_t i = 0; i < elementCount; ++i) {
-            const size_t elementSize = BinaryFormat::Load<uint32_t>(_buffer.data() + position);
+            const size_t elementSize = BinaryFormat::Load<uint32_t>(_data + position);
             position += sizeof(uint32_t);
 
             Scope element;

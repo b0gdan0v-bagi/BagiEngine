@@ -10,7 +10,7 @@ namespace BECore {
      * @brief Binary deserializer (reader) for the format written by BinarySerializer
      *
      * The whole buffer is validated when it is loaded (header, sizes, tags, nesting), so reading from
-     * a truncated or corrupt buffer fails in LoadFromBuffer() and never reads out of bounds afterwards.
+     * a truncated or corrupt buffer fails in the Load*() call and never reads out of bounds afterwards.
      * Errors follow XmlDeserializer: Read() reports a missing entry, ReadAttribute() and BeginObject()
      * stay silent (the field may be optional). A type mismatch is reported by both, because the data
      * is there but is not what the reader expects.
@@ -30,8 +30,21 @@ namespace BECore {
         // =================================================================
 
         /**
-         * @brief Load and validate a buffer written by BinarySerializer (the bytes are copied)
+         * @brief Load and validate a buffer written by BinarySerializer, borrowing it (nothing is copied)
          *
+         * The memory must stay alive and unchanged until the next Load*(), a failed load or the destruction of
+         * the reader: the reader does not check it, and Read(String) / Read(PoolString) copy out of it only when asked.
+         * Bytes that point into this reader's own storage are not supported. A moved reader keeps the view.
+         * Refused like LoadFromBuffer().
+         *
+         * @return true if the buffer is valid. On failure an error is recorded and every later read fails.
+         */
+        bool LoadFromView(const uint8_t* data, size_t size);
+
+        /**
+         * @brief Load and validate a buffer written by BinarySerializer, copying the bytes
+         *
+         * For a caller that cannot promise the lifetime of the memory. A refused buffer is not copied.
          * Refused when it is over ReaderLimits::kMaxBinaryStreamBytes or holds an array of more than ReaderLimits::kMaxArrayElements.
          *
          * @return true if the buffer is valid. On failure an error is recorded and every later read fails.
@@ -42,7 +55,9 @@ namespace BECore {
         /**
          * @brief Load a file written by BinarySerializer::SaveToFile
          *
-         * Refused with an error, before the file is read, when the path is not a regular file or the file is over the limit of LoadFromBuffer.
+         * Reads the file straight into the buffer the reader keeps (one allocation of the file's size, no second copy)
+         * and validates it there. Refused with an error, before the file is read, when the path is not a regular file
+         * or the file is over the limit of LoadFromBuffer.
          *
          * @return true on success
          */
@@ -128,9 +143,19 @@ namespace BECore {
 
         bool ReadStringView(StringView name, bool reportMissing, StringView& outValue);
 
+        /// The checks of every load, on bytes that are not kept yet. Records the error and returns false on a refusal.
+        bool Validate(const uint8_t* data, size_t size);
+
+        /// Makes @p data the stream that is read and opens the root scope; @p data must have passed Validate()
+        void Open(const uint8_t* data, size_t size);
+
         void ResetState();
 
-        Vector<uint8_t> _buffer;
+        /// The bytes that are read: the caller's memory after LoadFromView(), _owned after the owning loads, null when nothing is loaded
+        const uint8_t* _data = nullptr;
+        size_t _size = 0;
+        /// Backs _data only for LoadFromBuffer() and LoadFromFile(); a default move keeps _data valid because the heap block moves with it
+        Vector<uint8_t> _owned;
         Vector<Scope> _scopeStack;
         Vector<ArrayContext> _arrayStack;
         Vector<DeserializeError> _errors;

@@ -39,9 +39,10 @@ namespace BECore {
             return Format("{} (at '{}')", error.errorMessage, error.path);
         }
 
-        /// Leaves @p deserializer inside the object `save`, so Load goes on with `state`
+        /// Leaves @p deserializer inside the object `save`, so Load goes on with `state`.
+        /// The deserializer only views @p bytes: both callers declare them before the deserializer, so they outlive it.
         std::expected<SaveInfo, SaveError> OpenEnvelope(BinaryDeserializer& deserializer, const Vector<uint8_t>& bytes, StringView slot) {
-            if (!deserializer.LoadFromBuffer(bytes)) {
+            if (!deserializer.LoadFromView(bytes.data(), bytes.size())) {
                 return MakeError(SaveErrorKind::Corrupt, Format("The save in slot '{}' is not a valid file: {}", slot, FirstErrorOr(deserializer, "unreadable data")));
             }
             if (!deserializer.BeginObject(kEnvelopeObject)) {

@@ -417,13 +417,20 @@ namespace BECore::Tests {
             return measure;
         }
 
-        CORE_ENUM(BinSource, uint8_t, Buffer, File)
+        CORE_ENUM(BinSource, uint8_t, Buffer, View, File)
 
         const char* SourceName(BinSource source) {
-            return source == BinSource::Buffer ? "buffer" : "file";
+            switch (source) {
+                case BinSource::Buffer:
+                    return "buffer";
+                case BinSource::View:
+                    return "view";
+                default:
+                    return "file";
+            }
         }
 
-        /// The sprite stream in binary, read from the memory of the caller or from a file, the file read being part of the measure.
+        /// The sprite stream in binary, copied from the memory of the caller, viewed in it, or read from a file, the file read being part of the measure.
         /// The file is written before the measure and removed after it.
         LoadMeasure MeasureBinSource(BinSource source) {
             const uint32_t salt = NextSalt();
@@ -437,7 +444,18 @@ namespace BECore::Tests {
             const LoadMeasure measure = MeasureCall(
                 [&] {
                     BinaryDeserializer deserializer;
-                    const bool opened = source == BinSource::File ? deserializer.LoadFromFile(path) : deserializer.LoadFromBuffer(file.binary);
+                    bool opened = false;
+                    switch (source) {
+                        case BinSource::Buffer:
+                            opened = deserializer.LoadFromBuffer(file.binary);
+                            break;
+                        case BinSource::View:
+                            opened = deserializer.LoadFromView(file.binary.data(), file.binary.size());
+                            break;
+                        default:
+                            opened = deserializer.LoadFromFile(path);
+                            break;
+                    }
                     if (!opened) {
                         return false;
                     }
@@ -579,7 +597,7 @@ namespace BECore::Tests {
             std::cout << "AssetLoadWide format=" << FormatName(format) << " objects=" << kWideObjects << " fields=" << kWideFields << " allocs=" << median.allocs << " bytes=" << median.bytes
                       << " loadMs=" << median.loadMs << "\n";
         }
-        for (const BinSource source : {BinSource::Buffer, BinSource::File}) {
+        for (const BinSource source : {BinSource::Buffer, BinSource::View, BinSource::File}) {
             const LoadMeasure median = MedianOf([&] { return MeasureBinSource(source); });
             std::cout << "AssetLoadBinSource source=" << SourceName(source) << " allocs=" << median.allocs << " bytes=" << median.bytes << " loadMs=" << median.loadMs << "\n";
         }
