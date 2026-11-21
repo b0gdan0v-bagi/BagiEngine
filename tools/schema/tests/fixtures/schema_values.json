@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "types": [
+    {
+      "name": "Gauge",
+      "parent": "Widget",
+      "abstract": false,
+      "creatable": true,
+      "purpose": "Common",
+      "icon": "",
+      "factoryBase": "Widget",
+      "fields": [
+        {"name": "power", "type": {"kind": "value", "element": {"kind": "int32"}}, "attributes": {}}
+      ],
+      "methods": []
+    },
+    {
+      "name": "Point",
+      "parent": null,
+      "abstract": false,
+      "creatable": false,
+      "purpose": "Common",
+      "icon": "",
+      "fields": [
+        {"name": "x", "type": {"kind": "float"}, "attributes": {"required": true}},
+        {"name": "y", "type": {"kind": "float"}, "attributes": {}},
+        {"name": "from", "type": {"kind": "float"}, "attributes": {}}
+      ],
+      "methods": []
+    },
+    {
+      "name": "Stats",
+      "parent": null,
+      "abstract": false,
+      "creatable": false,
+      "purpose": "Common",
+      "icon": "",
+      "fields": [
+        {"name": "damage", "type": {"kind": "value", "element": {"kind": "int32"}}, "attributes": {"range": [0.0, 100.0], "required": true, "tooltip": "Hit points taken"}},
+        {"name": "flag", "type": {"kind": "value", "element": {"kind": "bool"}}, "attributes": {}},
+        {"name": "mode", "type": {"kind": "value", "element": {"kind": "enum", "values": ["Easy", "Hard"]}}, "attributes": {}},
+        {"name": "pos", "type": {"kind": "value", "element": {"kind": "opaque"}}, "attributes": {}},
+        {"name": "point", "type": {"kind": "value", "element": {"kind": "object", "object": "Point"}}, "attributes": {}},
+        {"name": "scores", "type": {"kind": "list", "resizable": true, "element": {"kind": "value", "element": {"kind": "int32"}}}, "attributes": {}},
+        {"name": "widgets", "type": {"kind": "list", "resizable": true, "element": {"kind": "pointer", "object": "Widget"}}, "attributes": {}}
+      ],
+      "methods": []
+    },
+    {
+      "name": "Widget",
+      "parent": null,
+      "abstract": true,
+      "creatable": false,
+      "purpose": "Common",
+      "icon": "",
+      "factoryBase": "Widget",
+      "fields": [],
+      "methods": []
+    }
+  ],
+  "factories": [
+    {"base": "Widget", "elementName": "widget", "derived": ["Gauge"]}
+  ],
+  "roots": []
+}

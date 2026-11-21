@@ -33,6 +33,8 @@ namespace BECore {
     class Value {
     public:
         using ValueMarker = void;
+        /// The type of the literal: the reflection reads it as the `element` of the field's descriptor (`TypeKind::Value`)
+        using ValueOf = T;
 
         constexpr Value() = default;
 
