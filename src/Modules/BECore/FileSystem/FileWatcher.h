@@ -174,6 +174,7 @@ namespace BECore {
             std::filesystem::path path;
             std::filesystem::file_time_type writeTime{};
             uintmax_t size = 0;
+            bool byApply = false;  ///< set by Apply, cleared by a native delivery: a late notice of the stream for the same state is not delivered again
         };
         using FileStates = HashMap<String, FileState>;  ///< by the normalised real path
 
@@ -200,13 +201,17 @@ namespace BECore {
 
         /// Whether @p path (normalised) is a file @p watch reports; @p virtualPath is the path it reports it by
         [[nodiscard]] static bool Matches(const Watch& watch, const std::filesystem::path& path, PoolString& virtualPath);
+        /// Whether @p path is below a target of @p watch; unlike Matches it interns nothing
+        [[nodiscard]] static bool Covers(const Watch& watch, const std::filesystem::path& path);
+        /// Whether Apply delivered the state the files of @p virtualPath have now, so a notice of the stream for it has nothing to add
+        [[nodiscard]] bool IsAppliedAndUnchanged(const Watch& watch, StringView virtualPath) const;
         /// The file of @p virtualPath in each layer of @p watch
         [[nodiscard]] static Vector<std::filesystem::path> LayerFiles(const Watch& watch, StringView virtualPath);
         static void CollectFiles(const Watch& watch, FileStates& out);
         [[nodiscard]] Vector<Detected> Detect() const;
         /// Makes the baseline of @p realPath what the disk says now
-        void RefreshBaseline(const std::filesystem::path& realPath);
-        void RefreshBaseline(const Watch& watch, StringView virtualPath);
+        void RefreshBaseline(const std::filesystem::path& realPath, bool byApply);
+        void RefreshBaseline(const Watch& watch, StringView virtualPath, bool byApply);
         /// Remembers the files of a new watch that no other watch knew
         void SnapshotWatch(const Watch& watch);
         void PruneBaseline();

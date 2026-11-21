@@ -251,6 +251,15 @@ namespace BECore {
         }
     }
 
+    bool FileWatcher::Covers(const Watch& watch, const std::filesystem::path& path) {
+        for (const std::filesystem::path& target : watch.targets) {
+            if (watch.folder ? !RelativeInside(path, target).empty() : path == target) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool FileWatcher::Matches(const Watch& watch, const std::filesystem::path& path, PoolString& virtualPath) {
         for (const std::filesystem::path& target : watch.targets) {
             if (!watch.folder) {
@@ -293,8 +302,8 @@ namespace BECore {
         _delivering = true;
         for (size_t i = 0; i < _due.size(); ++i) {
             Watch* watch = FindWatch(_due[i].watchId);
-            if (watch != nullptr && watch->alive) {
-                RefreshBaseline(*watch, _due[i].virtualPath.ToStringView());
+            if (watch != nullptr && watch->alive && !IsAppliedAndUnchanged(*watch, _due[i].virtualPath.ToStringView())) {
+                RefreshBaseline(*watch, _due[i].virtualPath.ToStringView(), false);
                 FileChange change{_due[i].virtualPath};
                 watch->callback(change);
             }
@@ -397,8 +406,30 @@ namespace BECore {
         }
     }
 
-    void FileWatcher::RefreshBaseline(const std::filesystem::path& realPath) {
+    bool FileWatcher::IsAppliedAndUnchanged(const Watch& watch, StringView virtualPath) const {
+        bool applied = false;
+        for (const std::filesystem::path& file : LayerFiles(watch, virtualPath)) {
+            FileState now;
+            const bool exists = ReadState(file, now.writeTime, now.size);
+            const auto known = _baseline.find(PathKey(file));
+            if (known == _baseline.end()) {
+                if (exists) {
+                    return false;
+                }
+                continue;
+            }
+            const FileState& before = known->second;
+            if (!exists || !before.byApply || before.writeTime != now.writeTime || before.size != now.size) {
+                return false;
+            }
+            applied = true;
+        }
+        return applied;
+    }
+
+    void FileWatcher::RefreshBaseline(const std::filesystem::path& realPath, bool byApply) {
         FileState state;
+        state.byApply = byApply;
         const String key = PathKey(realPath);
         if (ReadState(realPath, state.writeTime, state.size)) {
             state.path = realPath;
@@ -408,18 +439,17 @@ namespace BECore {
         }
     }
 
-    void FileWatcher::RefreshBaseline(const Watch& watch, StringView virtualPath) {
+    void FileWatcher::RefreshBaseline(const Watch& watch, StringView virtualPath, bool byApply) {
         for (const std::filesystem::path& file : LayerFiles(watch, virtualPath)) {
-            RefreshBaseline(file);
+            RefreshBaseline(file, byApply);
         }
     }
 
     void FileWatcher::PruneBaseline() {
         for (auto it = _baseline.begin(); it != _baseline.end();) {
             bool covered = false;
-            PoolString ignored;
             for (const UniquePtr<Watch>& watch : _watches) {
-                if (Matches(*watch, it->second.path, ignored)) {
+                if (Covers(*watch, it->second.path)) {
                     covered = true;
                     break;
                 }
@@ -459,6 +489,7 @@ namespace BECore {
                 for (Detected& candidate : detected) {
                     if (candidate.virtualPath == virtualPath) {
                         entry = &candidate;
+                        break;
                     }
                 }
                 if (entry == nullptr) {
@@ -532,7 +563,7 @@ namespace BECore {
                 if (watch == nullptr || !watch->alive) {
                     continue;
                 }
-                RefreshBaseline(*watch, entry.virtualPath.ToStringView());
+                RefreshBaseline(*watch, entry.virtualPath.ToStringView(), true);
                 FileChange change{entry.virtualPath};
                 watch->callback(change);
                 if (!change.ok && result.ok) {
