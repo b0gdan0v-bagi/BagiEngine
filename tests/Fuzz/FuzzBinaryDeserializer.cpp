@@ -17,10 +17,17 @@ namespace BECore::Fuzz {
 
         template <typename T>
         constexpr uint8_t ExpectedTag() {
+            static_assert(!IsTextType<T>);
+            return BinaryFormat::TagFor<T>();
+        }
+
+        /// A String and a PoolString read either text tag
+        template <typename T>
+        bool IsTagOf(uint8_t tag) {
             if constexpr (IsTextType<T>) {
-                return BinaryFormat::Tag::String;
+                return BinaryFormat::IsTextTag(tag);
             } else {
-                return BinaryFormat::TagFor<T>();
+                return tag == ExpectedTag<T>();
             }
         }
 
@@ -34,11 +41,14 @@ namespace BECore::Fuzz {
 
         /// Whether what the reader returned is what the bytes of the entry say
         template <typename T>
-        bool SameAsEntry(const T& value, const BinaryFormat::EntryView& entry, const uint8_t* data) {
+        bool SameAsEntry(const T& value, const BinaryFormat::EntryView& entry, const uint8_t* data, const BinaryFormat::StringTable& table) {
             const uint8_t* payload = data + entry.payloadBegin;
             if constexpr (std::is_same_v<T, bool>) {
                 return value == (*payload != 0);
             } else if constexpr (IsTextType<T>) {
+                if (entry.tag == BinaryFormat::Tag::PoolString) {
+                    return TextOf(value) == table.Get(BinaryFormat::Load<uint32_t>(payload));
+                }
                 const size_t length = BinaryFormat::Load<uint32_t>(payload);
                 return TextOf(value) == StringView(reinterpret_cast<const char*>(payload + sizeof(uint32_t)), length);
             } else {
@@ -66,7 +76,8 @@ namespace BECore::Fuzz {
         /// Reads a loaded document by following the bytes: it needs no type, it asks the reader for what the bytes hold
         class DocumentWalker {
         public:
-            DocumentWalker(IDeserializer& reader, const uint8_t* data) : _reader(reader), _data(data) {}
+            /// @p table is the string table of a version 2 document, null for version 1
+            DocumentWalker(IDeserializer& reader, const uint8_t* data, const BinaryFormat::StringTable* table) : _reader(reader), _data(data), _table(table) {}
 
             void WalkScope(size_t begin, size_t end, size_t depth) {
                 FUZZ_CHECK(depth <= BinaryFormat::MaxDepth);
@@ -75,7 +86,7 @@ namespace BECore::Fuzz {
                 HashMap<StringView, LastEntries> last;
                 for (size_t position = begin; position < end;) {
                     BinaryFormat::EntryView entry;
-                    FUZZ_CHECK(BinaryFormat::ParseEntry(_data, position, end, entry));
+                    FUZZ_CHECK(_table != nullptr ? BinaryFormat::ParseEntryV2(_data, position, end, *_table, entry) : BinaryFormat::ParseEntry(_data, position, end, entry));
                     LastEntries& slot = last[entry.name];
                     const auto index = static_cast<ptrdiff_t>(entries.size());
                     if (BinaryFormat::IsScalarTag(entry.tag)) {
@@ -121,14 +132,14 @@ namespace BECore::Fuzz {
         private:
             template <typename T>
             void ProbeType(const BinaryFormat::EntryView& entry) {
-                const bool expected = entry.tag == ExpectedTag<T>();
+                const bool expected = IsTagOf<T>(entry.tag);
                 for (const bool asAttribute : {false, true}) {
                     T value{};
                     const bool ok = asAttribute ? _reader.ReadAttribute(entry.name, value) : _reader.Read(entry.name, value);
                     FUZZ_CHECK(ok == expected);
                     _digest.Add(ok);
                     if (ok) {
-                        FUZZ_CHECK(SameAsEntry(value, entry, _data));
+                        FUZZ_CHECK(SameAsEntry(value, entry, _data, _table != nullptr ? *_table : BinaryFormat::StringTable{}));
                         AddValue(_digest, value);
                     }
                 }
@@ -190,12 +201,23 @@ namespace BECore::Fuzz {
 
             IDeserializer& _reader;
             const uint8_t* _data;
+            const BinaryFormat::StringTable* _table;
             FuzzDigest _digest;
             size_t _budget = kWalkEntryBudget;
         };
 
+        /// Walks the entries of a document the reader accepted, by the layout of its version: after the header (version 1) or after the table (version 2)
         uint64_t WalkDocument(BinaryDeserializer& reader, const uint8_t* data, size_t size) {
-            DocumentWalker walker(reader, data);
+            if (BinaryFormat::Load<uint16_t>(data + sizeof(BinaryFormat::Magic)) == BinaryFormat::TabledVersion) {
+                BinaryFormat::StringTable table;
+                size_t tableEnd = 0;
+                // The reader validated the table, so the helper that the reader is built on parses it too
+                FUZZ_CHECK(BinaryFormat::ParseStringTable(data, BinaryFormat::HeaderSize, size, table, tableEnd));
+                DocumentWalker walker(reader, data, &table);
+                walker.WalkScope(tableEnd, size, 0);
+                return walker.GetDigest().Value();
+            }
+            DocumentWalker walker(reader, data, nullptr);
             walker.WalkScope(BinaryFormat::HeaderSize, size, 0);
             return walker.GetDigest().Value();
         }

@@ -1,15 +1,74 @@
 #include <BECore/Reflection/BinaryFormat.h>
 #include <BECore/Reflection/BinarySerializer.h>
+#include <EASTL/numeric.h>
+#include <EASTL/sort.h>
 
 namespace BECore {
 
     bool BinarySerializer::SaveToFile(const std::filesystem::path& path) const {
+        const Vector<uint8_t>& image = GetData();
         std::ofstream file(path, std::ios::binary | std::ios::trunc);
         if (!file) {
             return false;
         }
-        file.write(reinterpret_cast<const char*>(_buffer.data()), static_cast<std::streamsize>(_buffer.size()));
+        file.write(reinterpret_cast<const char*>(image.data()), static_cast<std::streamsize>(image.size()));
         return file.good();
+    }
+
+    const Vector<uint8_t>& BinarySerializer::GetData() const {
+        if (!_imageIsStale) {
+            return _image;
+        }
+
+        const size_t count = _texts.size();
+        Vector<const String*> textOf(count, nullptr);
+        size_t charBytes = 0;
+        for (const auto& [text, firstUse] : _texts) {
+            textOf[firstUse] = &text;
+            charBytes += text.size();
+        }
+
+        // order[i] is the first-use index of the text that sorts i-th; finalIndex is its inverse
+        Vector<uint32_t> order(count);
+        eastl::iota(order.begin(), order.end(), uint32_t{0});
+        eastl::sort(order.begin(), order.end(), [&textOf](uint32_t a, uint32_t b) { return BinaryFormat::CompareStrings(StringView(*textOf[a]), StringView(*textOf[b])) < 0; });
+        Vector<uint32_t> finalIndex(count);
+        for (size_t i = 0; i < count; ++i) {
+            finalIndex[order[i]] = static_cast<uint32_t>(i);
+        }
+
+        const size_t endsOffset = BinaryFormat::HeaderSize + 2 * sizeof(uint32_t);
+        const size_t charsOffset = endsOffset + count * sizeof(uint32_t);
+        const size_t entriesOffset = charsOffset + charBytes;
+        const size_t total = entriesOffset + _buffer.size();
+        ASSERT(total - BinaryFormat::HeaderSize <= std::numeric_limits<uint32_t>::max(), "Binary data does not fit into 4 GiB");
+
+        _image.resize(total);
+        uint8_t* out = _image.data();
+        std::memcpy(out, BinaryFormat::Magic, sizeof(BinaryFormat::Magic));
+        BinaryFormat::Store<uint16_t>(out + sizeof(BinaryFormat::Magic), BinaryFormat::CurrentVersion);
+        BinaryFormat::Store<uint32_t>(out + BinaryFormat::PayloadSizeOffset, static_cast<uint32_t>(total - BinaryFormat::HeaderSize));
+        BinaryFormat::Store<uint32_t>(out + BinaryFormat::HeaderSize, static_cast<uint32_t>(count));
+        BinaryFormat::Store<uint32_t>(out + BinaryFormat::HeaderSize + sizeof(uint32_t), static_cast<uint32_t>(charBytes));
+
+        size_t end = 0;
+        for (size_t i = 0; i < count; ++i) {
+            const String& text = *textOf[order[i]];
+            std::memcpy(out + charsOffset + end, text.data(), text.size());
+            end += text.size();
+            BinaryFormat::Store<uint32_t>(out + endsOffset + i * sizeof(uint32_t), static_cast<uint32_t>(end));
+        }
+
+        if (!_buffer.empty()) {
+            std::memcpy(out + entriesOffset, _buffer.data(), _buffer.size());
+        }
+        for (const size_t offset : _indexOffsets) {
+            uint8_t* field = out + entriesOffset + offset;
+            BinaryFormat::Store<uint32_t>(field, finalIndex[BinaryFormat::Load<uint32_t>(field)]);
+        }
+
+        _imageIsStale = false;
+        return _image;
     }
 
     // =============================================================================
@@ -19,11 +78,7 @@ namespace BECore {
     void BinarySerializer::Append(const void* data, size_t size) {
         const auto* bytes = static_cast<const uint8_t*>(data);
         _buffer.insert(_buffer.end(), bytes, bytes + size);
-
-        // The header always describes the bytes written so far
-        if (_buffer.size() >= BinaryFormat::HeaderSize) {
-            PatchSizeField(BinaryFormat::PayloadSizeOffset, _buffer.size() - BinaryFormat::HeaderSize);
-        }
+        _imageIsStale = true;
     }
 
     template <typename T>
@@ -36,13 +91,24 @@ namespace BECore {
     void BinarySerializer::PatchSizeField(size_t offset, size_t value) {
         ASSERT(value <= std::numeric_limits<uint32_t>::max(), "Binary data does not fit into 4 GiB");
         BinaryFormat::Store<uint32_t>(_buffer.data() + offset, static_cast<uint32_t>(value));
+        _imageIsStale = true;
     }
 
     BinarySerializer::BinarySerializer() {
         _buffer.reserve(256);
-        Append(BinaryFormat::Magic, sizeof(BinaryFormat::Magic));
-        AppendValue<uint16_t>(BinaryFormat::CurrentVersion);
-        AppendValue<uint32_t>(0);  // payload size, kept up to date by Append()
+    }
+
+    void BinarySerializer::AppendTextIndex(StringView text) {
+        uint32_t index = 0;
+        if (const auto found = _texts.find(text); found != _texts.end()) {
+            index = found->second;
+        } else {
+            ASSERT(_texts.size() < std::numeric_limits<uint32_t>::max(), "Binary string table is full");
+            index = static_cast<uint32_t>(_texts.size());
+            _texts.emplace(String(text), index);
+        }
+        _indexOffsets.push_back(_buffer.size());
+        AppendValue<uint32_t>(index);
     }
 
     bool BinarySerializer::BeginEntry(uint8_t tag, StringView name) {
@@ -52,11 +118,9 @@ namespace BECore {
         }
 
         ASSERT(name.size() <= std::numeric_limits<uint16_t>::max(), "Binary entry name is too long");
-        const auto nameLength = static_cast<uint16_t>(std::min<size_t>(name.size(), std::numeric_limits<uint16_t>::max()));
 
         AppendValue<uint8_t>(tag);
-        AppendValue<uint16_t>(nameLength);
-        Append(name.data(), nameLength);
+        AppendTextIndex(name);
         return true;
     }
 
@@ -83,6 +147,13 @@ namespace BECore {
         ASSERT(value.size() <= std::numeric_limits<uint32_t>::max(), "Binary string is too long");
         AppendValue<uint32_t>(static_cast<uint32_t>(value.size()));
         Append(value.data(), value.size());
+    }
+
+    void BinarySerializer::WritePoolString(StringView name, StringView value) {
+        if (!BeginEntry(BinaryFormat::Tag::PoolString, name)) {
+            return;
+        }
+        AppendTextIndex(value);
     }
 
     void BinarySerializer::Write(StringView name, bool value) {
@@ -134,7 +205,7 @@ namespace BECore {
     }
 
     void BinarySerializer::Write(StringView name, const PoolString& value) {
-        WriteString(name, value.ToStringView());
+        WritePoolString(name, value.ToStringView());
     }
 
     // =============================================================================
@@ -190,7 +261,7 @@ namespace BECore {
     }
 
     void BinarySerializer::WriteAttribute(StringView name, const PoolString& value) {
-        WriteString(name, value.ToStringView());
+        WritePoolString(name, value.ToStringView());
     }
 
     // =============================================================================

@@ -6,6 +6,7 @@
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Resource/TextureLibrary.h>
 #include <Common/AllocCheck.h>
+#include <Common/BinaryStreams.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <algorithm>
@@ -65,6 +66,26 @@ namespace BECore::Tests {
             serializer.EndArray();
         }
 
+        void RetagAsPoolStrings(Vector<BinaryStreams::Entry>& entries, const Vector<StringView>& names) {
+            for (BinaryStreams::Entry& entry : entries) {
+                if (entry.tag == BinaryFormat::Tag::String && eastl::find(names.begin(), names.end(), StringView(entry.name)) != names.end()) {
+                    entry.tag = BinaryFormat::Tag::PoolString;
+                }
+                RetagAsPoolStrings(entry.children, names);
+            }
+        }
+
+        /**
+         * The same document with the string entries called @p names as `PoolString` entries (tag 15, text in the table). The fields
+         * are `PoolString`s, and `Write` of one writes the table form; the hand-written files cannot build a `PoolString` without
+         * interning it, so they write the text inline and this makes them what `Write` writes.
+         */
+        Vector<uint8_t> WithPoolStrings(const Vector<uint8_t>& stream, std::initializer_list<StringView> names) {
+            Vector<BinaryStreams::Entry> tree = BinaryStreams::ReadTree(stream);
+            RetagAsPoolStrings(tree, Vector<StringView>(names));
+            return BinaryStreams::Build(tree);
+        }
+
         CORE_ENUM(FileFormat, uint8_t, Xml, Binary)
 
         const char* FormatName(FileFormat format) {
@@ -88,7 +109,7 @@ namespace BECore::Tests {
             } else {
                 BinarySerializer serializer;
                 WriteSprites(serializer, salt, count);
-                file.binary = serializer.GetData();
+                file.binary = WithPoolStrings(serializer.GetData(), {"name", "texturePath"});
             }
             return file;
         }
@@ -274,7 +295,7 @@ namespace BECore::Tests {
             } else {
                 BinarySerializer serializer;
                 WriteWide(serializer, salt, count);
-                file.binary = serializer.GetData();
+                file.binary = WithPoolStrings(serializer.GetData(), {"first", "second"});
             }
             return file;
         }
@@ -507,7 +528,7 @@ namespace BECore::Tests {
         library.Write(writtenBinary);
         BinarySerializer byHandBinary;
         WriteSprites(byHandBinary, salt, kCount);
-        EXPECT_EQ(writtenBinary.GetData(), byHandBinary.GetData());
+        EXPECT_EQ(writtenBinary.GetData(), WithPoolStrings(byHandBinary.GetData(), {"name", "texturePath"}));
     }
 
     TEST(AssetLoadAllocTest, BothFormatsLoadTheSameLibrary) {
@@ -521,9 +542,12 @@ namespace BECore::Tests {
     }
 
     /// The entries and the index are one block each, reserved for the reader's count, so the load allocates a few blocks
-    /// whatever the number of sprites. The slack is those blocks, the reader's own lists and a pool block.
+    /// whatever the number of sprites. The slack is those blocks, the reader's own lists and a pool block. The binary file's
+    /// `PoolString`s are interned by one `InternBatch`, whose lists of new texts grow by doubling: a number of blocks that
+    /// grows with the logarithm of the count, which is why its slack is larger.
     TEST(AssetLoadAllocTest, LoadOfAParsedFileAllocatesAFewBlocks) {
-        constexpr uint64_t kLoadSlack = 16;
+        constexpr uint64_t kXmlLoadSlack = 16;
+        constexpr uint64_t kBinaryLoadSlack = 96;
         for (const FileFormat format : {FileFormat::Xml, FileFormat::Binary}) {
             const AssetFile file = MakeFile(format, NextSalt(), kSpriteCount);
             TextureLibrary library;
@@ -539,7 +563,7 @@ namespace BECore::Tests {
             }
             ASSERT_EQ(library.GetAll().size(), kSpriteCount) << FormatName(format);
             if constexpr (AllocTracker::kEnabled) {
-                EXPECT_LE(allocs.count, kLoadSlack) << FormatName(format);
+                EXPECT_LE(allocs.count, format == FileFormat::Xml ? kXmlLoadSlack : kBinaryLoadSlack) << FormatName(format);
             } else {
                 GTEST_SKIP() << kNoAllocTracker;
             }

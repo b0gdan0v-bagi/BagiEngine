@@ -9,8 +9,13 @@ namespace BECore {
      * @brief Binary serializer (writer): compact, name-keyed, little-endian
      *
      * Same call sequence as XmlSerializer, so every type that serializes to XML serializes to binary.
-     * Layout: BinaryFormat.h. Skipped fields (SetSkipDefaults, null pointers, empty optionals) are not
+     * Layout: BinaryFormat.h (version 2). Skipped fields (SetSkipDefaults, null pointers, empty optionals) are not
      * written; the reader finds the rest by name.
+     *
+     * The names of all entries and the text of PoolString values go into a string table, one entry per distinct
+     * text, and the entries carry its index. A String value (`Write(name, StringView)`) is not tabled: it is written
+     * inline, so it never reaches the pool of the reader. The table is sorted in the image, so the same document gives
+     * the same bytes whatever order the texts were first written in.
      */
     class BinarySerializer : public ISerializer {
     public:
@@ -23,13 +28,13 @@ namespace BECore {
         BinarySerializer& operator=(BinarySerializer&&) = default;
 
         /**
-         * @brief Bytes written so far, header included
+         * @brief The stream: header, string table and entries, as written so far
          *
-         * Loadable by BinaryDeserializer once every Begin* has its matching End*.
+         * Loadable by BinaryDeserializer once every Begin* has its matching End*. The image is built here, on the first
+         * call after a write (the table is final only then), and kept until the next write. The reference is valid until
+         * the next write or the destruction of the serializer.
          */
-        const Vector<uint8_t>& GetData() const {
-            return _buffer;
-        }
+        const Vector<uint8_t>& GetData() const;
 
         /// Writes the bytes to a file; false if it cannot be written.
         bool SaveToFile(const std::filesystem::path& path) const;
@@ -85,7 +90,7 @@ namespace BECore {
         };
 
         /**
-         * @brief Write the tag and the name of a new entry
+         * @brief Write the tag and the name index of a new entry
          * @return false if an entry cannot start here (directly inside an array, outside an element)
          */
         bool BeginEntry(uint8_t tag, StringView name);
@@ -94,6 +99,11 @@ namespace BECore {
         void WriteScalar(StringView name, T value);
 
         void WriteString(StringView name, StringView value);
+
+        void WritePoolString(StringView name, StringView value);
+
+        /// Write the u32 table index of @p text (added to the table when new) and remember where it is, for GetData()
+        void AppendTextIndex(StringView text);
 
         /// Start a size-prefixed scope (object or array element) after the entry header
         void OpenScope(bool isArray);
@@ -108,8 +118,17 @@ namespace BECore {
 
         void PatchSizeField(size_t offset, size_t value);
 
+        /// Entries only; the header and the table are put in front of them by GetData()
         Vector<uint8_t> _buffer;
         Vector<Scope> _scopes;
+
+        /// Distinct texts of the table and their index in order of first use (the index the entries hold until GetData())
+        HashMap<String, uint32_t> _texts;
+        /// Offsets in _buffer of every u32 that holds a table index, patched to the sorted index in the image
+        Vector<size_t> _indexOffsets;
+
+        mutable Vector<uint8_t> _image;
+        mutable bool _imageIsStale = true;
     };
 
 }  // namespace BECore

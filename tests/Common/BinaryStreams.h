@@ -96,7 +96,14 @@ namespace BECore::Tests::BinaryStreams {
                 if (entry.tag == BinaryFormat::Tag::PoolString) {
                     texts.push_back(entry.text);
                 }
-                CollectTexts(entry.children, texts);
+                if (entry.tag == BinaryFormat::Tag::Array) {
+                    // An element has no name in the stream
+                    for (const Entry& element : entry.children) {
+                        CollectTexts(element.children, texts);
+                    }
+                } else {
+                    CollectTexts(entry.children, texts);
+                }
             }
         }
 

@@ -36,9 +36,9 @@ namespace BECore::BinaryFormat {
     // =========================================================================
 
     inline constexpr char Magic[4] = {'B', 'E', 'B', 'N'};
-    inline constexpr uint16_t LegacyVersion = 1;  ///< Names inline in every entry; still read, no longer written
-    inline constexpr uint16_t TabledVersion = 2;  ///< Names and PoolString texts in a string table; the readers take it
-    inline constexpr uint16_t CurrentVersion = 1;
+    inline constexpr uint16_t LegacyVersion = 1;               ///< Names inline in every entry; still read, no longer written
+    inline constexpr uint16_t TabledVersion = 2;               ///< Names and PoolString texts in a string table
+    inline constexpr uint16_t CurrentVersion = TabledVersion;  ///< What BinarySerializer writes; a change of the byte layout moves it and keeps the old ones readable
 
     inline constexpr size_t PayloadSizeOffset = sizeof(Magic) + sizeof(uint16_t);
     inline constexpr size_t HeaderSize = PayloadSizeOffset + sizeof(uint32_t);
