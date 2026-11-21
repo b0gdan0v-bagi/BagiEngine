@@ -14,8 +14,10 @@
 // A trigger of `Values/Effects/CLAUDE.md` (count a timer down, flip a flag and emit a command at zero, or narrow a mask and emit another) is timed as `trigger_plain` (C++ writing the
 // same cell and pushing into the same `EmitBuffer`) and `trigger_script` (`RunEffects`); a case is a copy of a prototype cell, the trigger and a digest of the cell and the commands,
 // `ns_per_get` is the time of one such round.
-// `list_count`, `list_any`, `list_any_early`, `list_sum` and `list_nested` time a formula with a loop over the lists of a `ProgramListHand` (`Values/Programs/Lists/`) as `list_<op>_plain` (a C++
-// loop of the same shape), `_program` (the interpreter) and `_native` (the generated function): 14 tiles in an array and a few sets of four in a vector, 64 seeded hands.
+// A derived value (`Values/Derived/CLAUDE.md`) read with nothing changed is timed as `derived_hit_1` (one level), `derived_hit_2` (two levels) and `derived_hit_sources` (one source counter, no
+// level), and `derived_hand` is the hand-kept compare it replaces (two `uint64_t` members against the counters of two levels); the lines are `ValueBench derived_<case> ns_per_get=<x>`. `list_count`,
+// `list_any`, `list_any_early`, `list_sum` and `list_nested` time a formula with a loop over the lists of a `ProgramListHand` (`Values/Programs/Lists/`) as `list_<op>_plain` (a C++ loop of the same
+// shape), `_program` (the interpreter) and `_native` (the generated function): 14 tiles in an array and a few sets of four in a vector, 64 seeded hands.
 
 #include <BECore/EffectsToys.h>
 #include <BECore/ProgramDomainTypes.h>
@@ -25,6 +27,7 @@
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/CachedValue.h>
 #include <BECore/Values/Context.h>
+#include <BECore/Values/Derived/Derived.h>
 #include <BECore/Values/Effects/EffectCommands.h>
 #include <BECore/Values/Effects/EffectCompiler.h>
 #include <BECore/Values/Effects/EffectRunner.h>
@@ -623,6 +626,102 @@ namespace BECore::Tests {
             }
         }
 
+        constexpr StringView kDerivedAttackFormula = "caster.attack";
+        constexpr StringView kDerivedLevelFormula = "cast.level";
+
+        /// What the four derived cases compute, so that a hit and a hand-kept compare are checked against the same C++
+        int32_t DerivedOneLevel(const ValueUnitStats& caster) {
+            return caster.attack * kMaddFactor + kMaddTerm;
+        }
+
+        int32_t DerivedTwoLevels(const ValueUnitStats& caster, const ValueCastInfo& cast) {
+            return caster.attack * kMaddFactor + cast.level;
+        }
+
+        /// The version compare a screen keeps by hand: the counters it saw at the last build, one member each
+        struct HandKept {
+            uint64_t casterSeen = 0;
+            uint64_t castSeen = 0;
+            int32_t result = 0;
+            bool valid = false;
+            uint32_t builds = 0;
+
+            int32_t Get(const Context& context, const ValueUnitStats& caster, const ValueCastInfo& cast) {
+                const uint64_t casterNow = context.Version(kCasterLevel);
+                const uint64_t castNow = context.Version(kCastLevel);
+                if (!valid || casterNow != casterSeen || castNow != castSeen) {
+                    result = DerivedTwoLevels(caster, cast);
+                    casterSeen = casterNow;
+                    castSeen = castNow;
+                    valid = true;
+                    ++builds;
+                }
+                return result;
+            }
+        };
+
+        void BenchDerived() {
+            bool printing = false;
+            const uint64_t iterations = Iterations(printing);
+            const FormulaWorld world;
+            Value<int32_t> attack;
+            Value<int32_t> level;
+            ASSERT_TRUE(attack.Link(world.declaration, kDerivedAttackFormula).has_value());
+            ASSERT_TRUE(level.Link(world.declaration, kDerivedLevelFormula).has_value());
+            const Context noLevels;
+
+            const uint64_t plainOne = TimeCase(nullptr, "derived_plain_1", iterations, false, [&](size_t index) { return DerivedOneLevel(world.casters[index]); });
+            const uint64_t plainTwo = TimeCase(nullptr, "derived_plain_2", iterations, false, [&](size_t index) { return DerivedTwoLevels(world.casters[index], world.casts[index]); });
+
+            // One value per object, each built once before the clock starts: a case that timed a build would be a case about the builder
+            Vector<Derived<int32_t>> oneLevel;
+            Vector<Derived<int32_t>> twoLevels;
+            Vector<Derived<int32_t>> sources;
+            oneLevel.reserve(kObjects);
+            twoLevels.reserve(kObjects);
+            sources.reserve(kObjects);
+            for (size_t index = 0; index < kObjects; ++index) {
+                DerivedReads one;
+                one.Add(attack);
+                oneLevel.emplace_back(std::move(one));
+                DerivedReads two;
+                two.Add(attack).Add(level);
+                twoLevels.emplace_back(std::move(two));
+                DerivedReads counted;
+                ASSERT_TRUE(counted.AddSource(world.casterVersions[index]));
+                sources.emplace_back(std::move(counted));
+            }
+            const auto buildOne = [&](int32_t& out, const Context& view) { out = attack.Get(view) * kMaddFactor + kMaddTerm; };
+            const auto buildTwo = [&](int32_t& out, const Context& view) { out = attack.Get(view) * kMaddFactor + level.Get(view); };
+            const auto buildCounted = [&](size_t index) { return [&world, index](int32_t& out, const Context&) { out = DerivedOneLevel(world.casters[index]); }; };
+            for (size_t index = 0; index < kObjects; ++index) {
+                static_cast<void>(oneLevel[index].Get(world.versionedContexts[index], buildOne));
+                static_cast<void>(twoLevels[index].Get(world.versionedContexts[index], buildTwo));
+                static_cast<void>(sources[index].Get(noLevels, buildCounted(index)));
+            }
+            Vector<HandKept> hand(kObjects);
+            for (size_t index = 0; index < kObjects; ++index) {
+                static_cast<void>(hand[index].Get(world.versionedContexts[index], world.casters[index], world.casts[index]));
+            }
+
+            EXPECT_EQ(TimeCase(nullptr, "derived_hit_1", iterations, printing, [&](size_t index) { return oneLevel[index].Get(world.versionedContexts[index], buildOne); }), plainOne)
+                << "derived_hit_1";
+            EXPECT_EQ(TimeCase(nullptr, "derived_hit_2", iterations, printing, [&](size_t index) { return twoLevels[index].Get(world.versionedContexts[index], buildTwo); }), plainTwo)
+                << "derived_hit_2";
+            EXPECT_EQ(TimeCase(nullptr, "derived_hit_sources", iterations, printing, [&](size_t index) { return sources[index].Get(noLevels, buildCounted(index)); }), plainOne)
+                << "derived_hit_sources";
+            EXPECT_EQ(TimeCase(nullptr, "derived_hand", iterations, printing, [&](size_t index) { return hand[index].Get(world.versionedContexts[index], world.casters[index], world.casts[index]); }),
+                      plainTwo)
+                << "derived_hand";
+
+            for (size_t index = 0; index < kObjects; ++index) {
+                EXPECT_EQ(oneLevel[index].Rebuilds(), 1U) << "derived_hit_1 built again with nothing changed";
+                EXPECT_EQ(twoLevels[index].Rebuilds(), 1U) << "derived_hit_2 built again with nothing changed";
+                EXPECT_EQ(sources[index].Rebuilds(), 1U) << "derived_hit_sources built again with nothing changed";
+                EXPECT_EQ(hand[index].builds, 1U) << "derived_hand built again with nothing changed";
+            }
+        }
+
         constexpr StringView kTriggerScript = "if (cell.i32 > 0) { cell.i32 -= 1; if (cell.i32 == 0) { cell.flag = !cell.flag; emit FxCount(cell.i32b); } } "
                                               "else if (board.mask != cell.mask) { cell.mask = and_mask(cell.mask, board.mask); emit FxMask(cell.mask); }";
         constexpr uint64_t kTriggerSeed = 0x74726967;
@@ -892,6 +991,10 @@ namespace BECore::Tests {
 
     TEST(ValueBenchTest, Mask) {
         BenchMask();
+    }
+
+    TEST(ValueBenchTest, Derived) {
+        BenchDerived();
     }
 
     TEST(ValueBenchTest, Trigger) {
