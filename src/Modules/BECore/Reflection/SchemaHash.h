@@ -4,8 +4,12 @@
 #include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Types/Types.h>
 #include <cstdint>
+#include <expected>
 
 namespace BECore {
+
+    class ISerializer;
+    class IDeserializer;
 
     /**
      * @brief A 64-bit hash of the reflected layout of a type: what a file written from it has to agree on with the program that reads it
@@ -41,5 +45,41 @@ namespace BECore {
 
     /// As above over the types of the program; none for an unknown name
     [[nodiscard]] Optional<uint64_t> ComputeLayoutHash(StringView rootTypeName);
+
+    /// What a cooked content file says of itself: the type its root is read as and the hash of that type's layout when the file was written
+    struct ContentStamp {
+        String rootType;
+        uint64_t layout = 0;
+    };
+
+    /**
+     * @brief Writes the stamp of a content file: the Object `BinaryFormat::ContentStampName` with `root` (the type name, a `String`) and
+     *        `layout` (`ComputeLayoutHash` of it, a `UInt64`); false for a type the program does not have, and nothing is written
+     *
+     * Call it first in the root scope, before the root's own fields: `CheckContentStamp` reads it before anything else. The stamp is an
+     * ordinary entry, so the byte layout and the version of the format are the same with or without it, and a reader that does not
+     * look for it reads the root as before. A save never has one. Neither a name nor a value of it is interned.
+     */
+    [[nodiscard]] bool WriteContentStamp(ISerializer& writer, StringView rootTypeName);
+
+    /**
+     * @brief Reads the stamp from the root scope of @p reader, which must be positioned there (a fresh reader is)
+     *
+     * Silent: it records no error on a reader that had none (a missing stamp, a stamp of the wrong shape, either is the error string
+     * of the result), and it interns nothing. Needs no more than the `IDeserializer` interface, so a reader of another format that has
+     * the entry works too.
+     */
+    [[nodiscard]] std::expected<ContentStamp, String> ReadContentStamp(IDeserializer& reader);
+
+    /**
+     * @brief Reads the stamp and checks it against this program: the file must have one, name a type the program has, and the layout
+     *        of that type must hash to the recorded value
+     *
+     * Every refusal is a message that names @p sourceName (the file), says what is wrong, gives both hashes in hex where it has them
+     * and says to cook the content again with this build. The hash is the layout of the type in the program that reads the file, so
+     * the file has to be cooked by a program that links the same types (a factory base's derived types included). Silent as
+     * `ReadContentStamp`.
+     */
+    [[nodiscard]] std::expected<ContentStamp, String> CheckContentStamp(IDeserializer& reader, StringView sourceName);
 
 }  // namespace BECore

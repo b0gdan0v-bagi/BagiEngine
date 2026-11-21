@@ -2,8 +2,10 @@
 
 #include <BECore/Reflection/BinaryFormat.h>
 #include <BECore/Reflection/BinarySerializer.h>
+#include <BECore/Reflection/SchemaHash.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <Common/BinaryStreamBuilder.h>
+#include <Fuzz/FuzzChecks.h>
 #include <Fuzz/FuzzProbeAccess.h>
 #include <Fuzz/FuzzTargets.h>
 #include <Fuzz/FuzzWebSocketInput.h>
@@ -188,6 +190,15 @@ namespace BECore::Fuzz {
             MakeFilledProbe().Serialize(writer);
             const String text = writer.SaveToString();
             return TextBytes(StringView(text));
+        }
+
+        /// A cooked content file: the stamp of the probe's type first, then the filled probe
+        FuzzBytes MakeContentStampStream() {
+            BinarySerializer writer;
+            const bool stamped = WriteContentStamp(writer, "ProbeState");
+            FUZZ_CHECK(stamped);
+            MakeFilledProbe().Serialize(writer);
+            return ToBytes(writer);
         }
 
         void StoreWord(FuzzBytes& bytes, size_t offset, uint32_t value) {
@@ -458,6 +469,8 @@ namespace BECore::Fuzz {
         FuzzBytes badPooled = Version2Bytes({Pooled("p", "text")});
         StoreWord(badPooled, FirstPayloadAt(badPooled), 2);
         seeds.push_back({kBinaryFolder, "pool-string-index-out-of-range.bin", badPooled});
+
+        seeds.push_back({kBinaryFolder, "content-stamp.bin", MakeContentStampStream()});
 
         seeds.push_back({kXmlFolder, "probe-filled.xml", MakeProbeXml()});
 

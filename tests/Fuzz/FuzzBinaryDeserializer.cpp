@@ -1,4 +1,5 @@
 #include <BECore/Reflection/BinaryDeserializer.h>
+#include <BECore/Reflection/SchemaHash.h>
 #include <Fuzz/FuzzChecks.h>
 #include <Fuzz/FuzzTargets.h>
 
@@ -252,6 +253,10 @@ namespace BECore::Fuzz {
             }
 
             reader.ClearErrors();
+            // The stamp of a content file is a question about any accepted document: an answer either way, never an error on the reader
+            const std::expected<ContentStamp, String> stamp = ReadContentStamp(reader);
+            FUZZ_CHECK(!reader.HasErrors());
+            FUZZ_CHECK(stamp.has_value() || !stamp.error().empty());
             const uint64_t first = WalkDocument(reader, data, size);
 
             // The same buffer through a fresh reader and through the reader that has just been walked: no hidden state

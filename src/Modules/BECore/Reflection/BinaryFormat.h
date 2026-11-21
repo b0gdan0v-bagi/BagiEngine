@@ -33,12 +33,17 @@ namespace BECore::BinaryFormat {
     // (skip-defaults, null pointers, optionals) and reordered. A name that is written twice reads as the last write.
     // Write() and WriteAttribute() produce the same entry: there is no attribute/child split in binary.
     // The table holds the names of all entries and the text of the PoolString values; a String value is never in it.
+    // A cooked content file starts its root scope with the Object entry ContentStampName (SchemaHash.h); no C++ field has that name,
+    // so it is reserved there. The byte layout is the same with or without it: a reader that does not ask for it never sees it.
     // =========================================================================
 
     inline constexpr char Magic[4] = {'B', 'E', 'B', 'N'};
     inline constexpr uint16_t LegacyVersion = 1;               ///< Names inline in every entry; still read, no longer written
     inline constexpr uint16_t TabledVersion = 2;               ///< Names and PoolString texts in a string table
     inline constexpr uint16_t CurrentVersion = TabledVersion;  ///< What BinarySerializer writes; a change of the byte layout moves it and keeps the old ones readable
+
+    /// The root-scope entry of a cooked content file that names its root type and the hash of its layout (`WriteContentStamp`); `$` cannot start a C++ name
+    inline constexpr StringView ContentStampName = "$content";
 
     inline constexpr size_t PayloadSizeOffset = sizeof(Magic) + sizeof(uint16_t);
     inline constexpr size_t HeaderSize = PayloadSizeOffset + sizeof(uint32_t);

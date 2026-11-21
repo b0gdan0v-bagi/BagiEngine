@@ -1,5 +1,8 @@
 #include "SchemaHash.h"
 
+#include <BECore/Reflection/BinaryFormat.h>
+#include <BECore/Reflection/IDeserializer.h>
+#include <BECore/Reflection/ISerializer.h>
 #include <climits>
 
 namespace BECore {
@@ -161,6 +164,66 @@ namespace BECore {
 
     Optional<uint64_t> ComputeLayoutHash(StringView rootTypeName) {
         return ComputeLayoutHash(TypeRegistry::GetInstance(), rootTypeName);
+    }
+
+    namespace {
+
+        constexpr StringView kRootKey = "root";
+        constexpr StringView kLayoutKey = "layout";
+
+        constexpr StringView kCookAgain = "cook the content again with this build";
+
+    }  // namespace
+
+    bool WriteContentStamp(ISerializer& writer, StringView rootTypeName) {
+        const Optional<uint64_t> layout = ComputeLayoutHash(rootTypeName);
+        if (!layout.has_value()) {
+            return false;
+        }
+        if (!writer.BeginObject(BinaryFormat::ContentStampName)) {
+            return false;
+        }
+        writer.Write(kRootKey, rootTypeName);
+        writer.Write(kLayoutKey, *layout);
+        writer.EndObject();
+        return true;
+    }
+
+    std::expected<ContentStamp, String> ReadContentStamp(IDeserializer& reader) {
+        // A read of the wrong type records "Type mismatch" in binary; the stamp is a question, not a load, so it takes back what it caused
+        const bool hadErrors = reader.HasErrors();
+        const auto result = [&reader]() -> std::expected<ContentStamp, String> {
+            if (!reader.BeginObject(BinaryFormat::ContentStampName)) {
+                return std::unexpected(reader.HasKey(BinaryFormat::ContentStampName) ? String("the content stamp is not an object") : String("no content stamp"));
+            }
+            ContentStamp stamp;
+            const bool hasRoot = reader.ReadAttribute(kRootKey, stamp.rootType);
+            const bool hasLayout = reader.ReadAttribute(kLayoutKey, stamp.layout);
+            reader.EndObject();
+            if (!hasRoot || !hasLayout) {
+                return std::unexpected(String("the content stamp needs 'root' as a text and 'layout' as a UInt64"));
+            }
+            return stamp;
+        }();
+        if (!hadErrors && reader.HasErrors()) {
+            reader.ClearErrors();
+        }
+        return result;
+    }
+
+    std::expected<ContentStamp, String> CheckContentStamp(IDeserializer& reader, StringView sourceName) {
+        std::expected<ContentStamp, String> stamp = ReadContentStamp(reader);
+        if (!stamp.has_value()) {
+            return std::unexpected(Format("{}: {} ({})", sourceName, stamp.error(), kCookAgain));
+        }
+        const Optional<uint64_t> layout = ComputeLayoutHash(stamp->rootType);
+        if (!layout.has_value()) {
+            return std::unexpected(Format("{}: the content stamp names the type '{}' (layout {:016x}), which this program does not have ({})", sourceName, stamp->rootType, stamp->layout, kCookAgain));
+        }
+        if (*layout != stamp->layout) {
+            return std::unexpected(Format("{}: the layout of '{}' is {:016x} here and {:016x} in the file ({})", sourceName, stamp->rootType, *layout, stamp->layout, kCookAgain));
+        }
+        return stamp;
     }
 
 }  // namespace BECore
