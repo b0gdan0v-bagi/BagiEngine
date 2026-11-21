@@ -310,6 +310,19 @@ namespace BECore {
 
         const Scope& scope = _scopeStack.back();
 
+        // The entry at the cursor is where a reader of the fields in the order they were written looks next: comparing its text is cheaper
+        // than a search of a table that can hold thousands of strings, and without duplicates the first match from the cursor is the only one
+        if (_tabled && !_hasDuplicateNames && scope.cursor < scope.end) {
+            BinaryFormat::EntryView entry;
+            if (ParseAt(scope.cursor, scope.end, entry) && accepts(entry.tag) && _table.Get(entry.nameIndex) == name) {
+                outEntry = entry;
+                if (moveCursor) {
+                    scope.cursor = entry.end;
+                }
+                return true;
+            }
+        }
+
         // A name that is not in the table of the file is in no entry of it
         uint32_t nameIndex = 0;
         if (_tabled) {
