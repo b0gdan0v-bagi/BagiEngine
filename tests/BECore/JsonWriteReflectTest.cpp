@@ -442,6 +442,14 @@ namespace BECore::Tests {
         using JsonWriteTestData::JsonWriteNested;
         using JsonWriteTestData::JsonWriteOneValue;
         using JsonWriteTestData::JsonWriteOneValueList;
+        using JsonWriteTestData::JsonWritePtrBase;
+        using JsonWriteTestData::JsonWritePtrEarly;
+        using JsonWriteTestData::JsonWritePtrHolder;
+        using JsonWriteTestData::JsonWritePtrLate;
+        using JsonWriteTestData::JsonWritePtrListHolder;
+        using JsonWriteTestData::JsonWritePtrPlain;
+        using JsonWriteTestData::JsonWritePtrPlainChild;
+        using JsonWriteTestData::JsonWritePtrSame;
         using JsonWriteTestData::JsonWriteScalars;
 
         constexpr float kAwkwardFloat = 0.1f;
@@ -693,6 +701,81 @@ namespace BECore::Tests {
             base.WriteJson(writer);
         }
         EXPECT_EQ(viaBase, Written(leaf, JsonWriter::kCompact));
+    }
+
+    namespace {
+
+        template <typename T>
+        JsonWritePtrHolder MakeHolder(IntrusivePtrNonAtomic<T> factory) {
+            JsonWritePtrHolder value;
+            factory->label = "lbl";
+            value.factory = factory;
+            return value;
+        }
+
+    }  // namespace
+
+    TEST(JsonWriteReflectTest, AFactoryPointerWritesTheTypeBeforeAndAfterTheKeysOfItsObject) {
+        auto early = New<JsonWritePtrEarly>();
+        early->alpha = 4;
+        JsonWritePtrHolder holder = MakeHolder(early);
+        ExpectSameAsDom(holder);
+        EXPECT_NE(Written(holder, JsonWriter::kCompact).find("\"factory\":{\"alpha\":4,\"label\":\"lbl\",\"type\":\"JsonWritePtrEarly\"}"), String::npos);
+
+        auto late = New<JsonWritePtrLate>();
+        late->zeta = 5;
+        holder = MakeHolder(late);
+        ExpectSameAsDom(holder);
+        EXPECT_NE(Written(holder, JsonWriter::kCompact).find("\"factory\":{\"label\":\"lbl\",\"type\":\"JsonWritePtrLate\",\"zeta\":5}"), String::npos);
+    }
+
+    TEST(JsonWriteReflectTest, AMemberNamedTypeReplacesTheClassNameAsOnTheDomPath) {
+        auto same = New<JsonWritePtrSame>();
+        same->type = "mine";
+        JsonWritePtrHolder holder = MakeHolder(same);
+        ExpectSameAsDom(holder);
+        const String text = Written(holder, JsonWriter::kCompact);
+        EXPECT_NE(text.find("\"type\":\"mine\""), String::npos);
+        EXPECT_EQ(text.find("JsonWritePtrSame"), String::npos);
+    }
+
+    TEST(JsonWriteReflectTest, ANullPointerWritesNoMemberAndAPlainPointerWritesItsDynamicObject) {
+        JsonWritePtrHolder holder;
+        ExpectSameAsDom(holder);
+        EXPECT_EQ(Written(holder, JsonWriter::kCompact), "{}");
+
+        auto child = New<JsonWritePtrPlainChild>();
+        child->id = 3;
+        child->name = "n";
+        child->extra = 8;
+        child->_count = 9;
+        holder.plain = child;
+        ExpectSameAsDom(holder);
+        const String text = Written(holder, JsonWriter::kCompact);
+        EXPECT_NE(text.find("\"plain\":{\"count\":9,\"extra\":8,\"id\":3,\"name\":\"n\"}"), String::npos);
+    }
+
+    TEST(JsonWriteReflectTest, ASequenceOfPointersStaysOnTheBridgeWithTheSameBytes) {
+        JsonWritePtrListHolder holder;
+        auto early = New<JsonWritePtrEarly>();
+        early->alpha = 1;
+        holder.list.push_back(early);
+        holder.list.emplace_back();
+        holder.list.push_back(New<JsonWritePtrLate>());
+        ExpectSameAsDom(holder);
+        EXPECT_NE(Written(holder, JsonWriter::kCompact).find("\"enabled\":true"), String::npos);
+    }
+
+    TEST(JsonWriteReflectTest, ThePointerFieldsAreWrittenWithoutAllocations) {
+        JsonWritePtrHolder holder;
+        auto early = New<JsonWritePtrEarly>();
+        early->alpha = 4;
+        early->label = "x";
+        holder.factory = early;
+        auto child = New<JsonWritePtrPlainChild>();
+        child->name = "n";
+        holder.plain = child;
+        ExpectSecondWriteAllocatesNothing(holder);
     }
 
     TEST(JsonWriteReflectTest, GeneratedEventEqualsTheDomPath) {

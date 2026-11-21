@@ -16,23 +16,34 @@
  * the reflection pair"); the generator sorts the keys, these helpers write the values.
  *
  * **Native** (nothing allocates beyond the growth of the caller's String): numbers and `bool`, strings (`String`, `FixedString`, any
- * `eastl::basic_string<char>`, `PoolString`), reflected enums (the name), an object that has `WriteJson`, `Optional` of a native type (an empty one
- * writes no member), and a `Vector` / `SmallVector` / `FixedVector` / `Array` of numbers, strings or objects that have `WriteJson` and at least two
- * fields. **Bridged** (the DOM path through `Ser::Save`, same bytes, allocates): every other field type.
+ * `eastl::basic_string<char>`, `PoolString`), reflected enums (the name), an object that has `WriteJson`, a single `IntrusivePtr` of such an object (null writes no member; a factory pointer merges
+ * the member `type` into the sorted keys of the object), `Optional` of a native type (an empty one writes no member), and a `Vector` / `SmallVector` / `FixedVector` / `Array` of numbers, strings or
+ * objects that have `WriteJson` and at least two fields. **Bridged** (the DOM path through `Ser::Save`, same bytes, allocates): every other field type.
  *
- * Why sequences of one-field objects bridge: on the DOM path an element that holds only a scalar `value` is that scalar (`[1,2,3]`), and a
- * streaming writer cannot take a written object back. An element with two or more fields never collapses. Known gap: an element with a field `value` whose other
- * fields are all absent (an empty `Optional`, a null pointer) collapses on the DOM path and is written as an object here.
+ * Sequences of pointers bridge as well: an element carries `type` and `enabled` and a null one still counts in the array. Why sequences of one-field objects bridge: on the DOM path an element that
+ * holds only a scalar `value` is that scalar (`[1,2,3]`), and a streaming writer cannot take a written object back. An element with two or more fields never collapses. Known gap: an element with a
+ * field `value` whose other fields are all absent (an empty `Optional`, a null pointer) collapses on the DOM path and is written as an object here.
+ *
+ * A class with a reflected parent is native: its members merge with its parent's (MemberMerge). A member that writes nothing (an empty `Optional`, a null
+ * pointer) hides a member of the same key in a parent, and in a factory object the `type` the pointer writes, where the DOM path keeps that one.
  *
  * This header must stay light, it is included by every generated file: the Json type lives in JsonWriteReflect.cpp, never include Json.h here.
  */
 
 namespace BECore::JsonWrite {
 
+    class MemberMerge;
+
     /// The object writes itself into a JsonWriter (a generated `WriteJson`)
     template <typename T>
     concept HasWriteJson = requires(const T& value, JsonWriter& writer) {
         value.WriteJson(writer);
+    };
+
+    /// The class writes its members into an open object (a `BE_CLASS`; a `BE_EVENT` has none)
+    template <typename T>
+    concept HasWriteJsonMembers = requires(const T& value, JsonWriter& writer, MemberMerge* outer) {
+        value.WriteJsonMembers(writer, outer);
     };
 
     /// The class declares how many fields it has (BE_CLASS and BE_EVENT do)
@@ -70,6 +81,9 @@ namespace BECore::JsonWrite {
 
     }  // namespace Detail
 
+    /// A key that a level and the level that asks have both: whose member is written
+    CORE_ENUM(MergeTie, uint8_t, ThisLevel, Caller)
+
     /**
      * @brief The members of one derived level of a class chain, waiting to be written between those of the classes above it.
      *
@@ -87,8 +101,10 @@ namespace BECore::JsonWrite {
     public:
         using WriteMember = FunctionRef<void(JsonWriter&, size_t)>;
 
-        /// @p keys are the bare names of this level, sorted and unique; @p write writes member `i` of them as `SaveField` does
-        MemberMerge(const StringView* keys, size_t count, WriteMember write, MemberMerge* outer) : _keys(keys), _count(count), _write(write), _outer(outer) {}
+        /// @p keys are the bare names of this level, sorted and unique; @p write writes member `i` of them as `SaveField` does. A derived class's level
+        /// keeps its ties; the `type` of a factory pointer yields them (the DOM path writes it first and the object's own member replaces it)
+        MemberMerge(const StringView* keys, size_t count, WriteMember write, MemberMerge* outer, MergeTie tie = MergeTie::ThisLevel)
+            : _keys(keys), _count(count), _write(write), _outer(outer), _tie(tie) {}
 
         MemberMerge(const MemberMerge&) = delete;
         MemberMerge& operator=(const MemberMerge&) = delete;
@@ -111,6 +127,7 @@ namespace BECore::JsonWrite {
         size_t _count;
         WriteMember _write;
         MemberMerge* _outer;
+        MergeTie _tie;
         size_t _next = 0;
     };
 
@@ -120,6 +137,39 @@ namespace BECore::JsonWrite {
 
     /// Writes the object @p serialize saves (`Serialize(s)` of a class) as the next value, as the DOM path would
     void WriteSerializedObject(JsonWriter& w, FunctionRef<void(ISerializer&)> serialize);
+
+    namespace Detail {
+
+        /// A single `IntrusivePtr`: nothing for null; the object of the dynamic type (`WriteJson` is virtual); for a factory pointer the same with the member
+        /// `type` merged into the sorted keys, as `DataAccessor` writes it. A pointee with no writer of its own is bridged.
+        template <typename Ptr>
+        void SavePointer(JsonWriter& w, StringView keyLiteral, StringView key, const Ptr& ptr) {
+            using Pointee = typename ::BECore::Detail::IntrusivePtrPointeeType<Ptr>::type;
+            if constexpr (::BECore::Detail::HasInnerFactory<Ptr> && HasWriteJsonMembers<Pointee>) {
+                if (ptr) {
+                    static constexpr StringView kTypeKey = "type";
+                    const StringView typeName = ptr->GetTypeMeta().typeName;
+                    const auto writeType = [typeName](JsonWriter& writer, size_t) {
+                        writer.KeyLiteral("\"type\":");
+                        writer.Value(typeName);
+                    };
+                    MemberMerge typeMerge(&kTypeKey, 1, writeType, nullptr, MergeTie::Caller);
+                    w.KeyLiteral(keyLiteral);
+                    w.BeginObject();
+                    ptr->WriteJsonMembers(w, &typeMerge);
+                    w.EndObject();
+                }
+            } else if constexpr (!::BECore::Detail::HasInnerFactory<Ptr> && HasWriteJson<Pointee>) {
+                if (ptr) {
+                    w.KeyLiteral(keyLiteral);
+                    ptr->WriteJson(w);
+                }
+            } else {
+                WriteSerializedMember(w, key, [&](ISerializer& s) { Ser::Save(s, ptr, key); });
+            }
+        }
+
+    }  // namespace Detail
 
     /**
      * @brief Writes the member of the open object that holds @p value
@@ -166,6 +216,8 @@ namespace BECore::JsonWrite {
             } else {
                 saveBridged();
             }
+        } else if constexpr (::BECore::Detail::IsIntrusivePtr<T>) {
+            Detail::SavePointer(w, keyLiteral, key, value);
         } else {
             WriteSerializedMember(w, key, [&](ISerializer& s) { Ser::Save(s, value, key); });
         }

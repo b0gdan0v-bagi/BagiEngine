@@ -2,6 +2,8 @@
 
 #include <BECore/Math/Vec2.h>
 #include <BECore/PoolString/PoolString.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Types/Types.h>
@@ -172,6 +174,82 @@ namespace BECore {
             BE_CLASS(JsonWriteChildBefore)
 
             BE_REFLECT_FIELD int32_t aaa = 11;
+        };
+
+        /// A factory base of the pointer cases; abstract, so only the derived classes register
+        class JsonWritePtrBase : public RefCounted {
+            BE_CLASS(JsonWritePtrBase, FACTORY_BASE, ELEMENT = item)
+        public:
+            ~JsonWritePtrBase() override = default;
+            virtual int32_t Rank() const = 0;
+
+            BE_REFLECT_FIELD String label;
+        };
+
+        /// A key that sorts before `type`
+        class JsonWritePtrEarly : public JsonWritePtrBase {
+            BE_CLASS(JsonWritePtrEarly)
+        public:
+            int32_t Rank() const override {
+                return 1;
+            }
+
+            BE_REFLECT_FIELD int32_t alpha = 0;
+        };
+
+        /// A key that sorts after `type`
+        class JsonWritePtrLate : public JsonWritePtrBase {
+            BE_CLASS(JsonWritePtrLate)
+        public:
+            int32_t Rank() const override {
+                return 2;
+            }
+
+            BE_REFLECT_FIELD int32_t zeta = 0;
+        };
+
+        /// Has a member named `type`: the DOM path lets it replace the class name
+        class JsonWritePtrSame : public JsonWritePtrBase {
+            BE_CLASS(JsonWritePtrSame)
+        public:
+            int32_t Rank() const override {
+                return 3;
+            }
+
+            BE_REFLECT_FIELD String type;
+        };
+
+        /// A pointee that is no factory object
+        class JsonWritePtrPlain : public RefCounted {
+            BE_CLASS(JsonWritePtrPlain)
+        public:
+            ~JsonWritePtrPlain() override = default;
+
+            BE_REFLECT_FIELD int32_t id = 0;
+            BE_REFLECT_FIELD String name;
+        };
+
+        class JsonWritePtrPlainChild : public JsonWritePtrPlain {
+            BE_CLASS(JsonWritePtrPlainChild)
+        public:
+            BE_REFLECT_FIELD int32_t extra = 0;
+            BE_REFLECT_FIELD int32_t _count = 0;
+        };
+
+        struct JsonWritePtrHolder {
+            BE_CLASS(JsonWritePtrHolder)
+
+            BE_REFLECT_FIELD IntrusivePtrNonAtomic<JsonWritePtrBase> factory;
+            BE_REFLECT_FIELD IntrusivePtrNonAtomic<JsonWritePtrBase> none;
+            BE_REFLECT_FIELD IntrusivePtrNonAtomic<JsonWritePtrPlain> plain;
+            BE_REFLECT_FIELD IntrusivePtrNonAtomic<JsonWritePtrPlain> nothing;
+        };
+
+        /// Sequences of pointers stay on the bridge
+        struct JsonWritePtrListHolder {
+            BE_CLASS(JsonWritePtrListHolder)
+
+            BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<JsonWritePtrBase>> list;
         };
 
         struct JsonWriteEvent {

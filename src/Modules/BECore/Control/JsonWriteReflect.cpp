@@ -11,11 +11,12 @@ namespace BECore::JsonWrite {
         }
         const bool outerFree = _outer == nullptr || _outer->Before(w, limit);
         if (_next < _count && _keys[_next] == limit) {
-            if (outerFree) {
+            const bool ownsTie = _tie == MergeTie::ThisLevel;
+            if (outerFree && ownsTie) {
                 _write(w, _next);
             }
             ++_next;
-            return false;
+            return ownsTie ? false : outerFree;
         }
         return outerFree;
     }
