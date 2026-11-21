@@ -8,7 +8,8 @@
  *
  * The generated `Generated/<Stem>.gen.hpp` is included by the class's own .cpp only: it holds non-template definitions,
  * so other callers of Serialize / Deserialize / WriteJson link against them without including it. `WriteJson` writes the object
- * `Serialize` saves into a JsonSerializer, as the same bytes (Control/JsonWriteReflect.h).
+ * `Serialize` saves into a JsonSerializer, as the same bytes; a `BE_CLASS` also has `WriteJsonMembers`, which a class with a reflected parent
+ * merges with the members of the classes above it (Control/JsonWriteReflect.h).
  */
 
 namespace BECore {
@@ -26,6 +27,12 @@ namespace BECore {
     class IPropertyVisitor;
 
 }  // namespace BECore
+
+namespace BECore::JsonWrite {
+
+    class MemberMerge;
+
+}  // namespace BECore::JsonWrite
 
 // =============================================================================
 // BE_CLASS - inside the class body; declares what the generated .gen.hpp defines
@@ -85,6 +92,8 @@ public:                                                                         
     virtual void Deserialize(::BECore::IDeserializer& d);                                                                                                                                              \
     /** @brief Write the reflected fields as one JSON object (keys sorted: the bytes of JsonSerializer) */                                                                                             \
     virtual void WriteJson(::BECore::JsonWriter& w) const;                                                                                                                                             \
+    /** @brief Write the members of this class into the object a JsonWriter has open, merged by key with @p outer, the classes below it (JsonWriteReflect.h) */                                        \
+    virtual void WriteJsonMembers(::BECore::JsonWriter& w, ::BECore::JsonWrite::MemberMerge* outer) const;                                                                                             \
     /** @brief Visit all reflected fields for in-place editing (e.g. ImGui inspector) */                                                                                                               \
     virtual bool AcceptPropertyVisitor(::BECore::IPropertyVisitor& v);                                                                                                                                 \
                                                                                                                                                                                                        \

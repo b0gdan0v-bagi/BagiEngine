@@ -70,6 +70,50 @@ namespace BECore::JsonWrite {
 
     }  // namespace Detail
 
+    /**
+     * @brief The members of one derived level of a class chain, waiting to be written between those of the classes above it.
+     *
+     * `JsonSerializer` of a class with a reflected parent gets one object: the parent's members first, then the child's, by key, so the keys come out
+     * sorted over the whole chain and a key that child and parent both have holds the child's value. A streaming writer cannot sort, so the
+     * generated `WriteJsonMembers` of the root class (the one with no reflected parent) writes its sorted members, and before each one asks its
+     * @c outer (the level just below it) to write what sorts before that key. The level of a derived class holds its sorted keys and a
+     * function that writes member `i`; it passes itself up the chain by a qualified call of the parent's `WriteJsonMembers`.
+     *
+     * The root level asks about its keys in increasing order, so each level walks its members once. The merge lives on the stack of the call: nothing allocates.
+     * Known gap: a member that writes nothing (an empty `Optional`, a null pointer) still hides the same key of a parent,
+     * where the DOM path would keep the parent's.
+     */
+    class MemberMerge {
+    public:
+        using WriteMember = FunctionRef<void(JsonWriter&, size_t)>;
+
+        /// @p keys are the bare names of this level, sorted and unique; @p write writes member `i` of them as `SaveField` does
+        MemberMerge(const StringView* keys, size_t count, WriteMember write, MemberMerge* outer) : _keys(keys), _count(count), _write(write), _outer(outer) {}
+
+        MemberMerge(const MemberMerge&) = delete;
+        MemberMerge& operator=(const MemberMerge&) = delete;
+
+        /**
+         * @brief Writes every pending member of this level and of the levels below it whose key sorts before @p limit.
+         *
+         * @return false when a pending member has exactly @p limit: it was written here (the most derived one) and the caller skips its own
+         */
+        bool Before(JsonWriter& w, StringView limit);
+
+        /// Writes what is left of this level and of the levels below it, in key order
+        void Finish(JsonWriter& w);
+
+    private:
+        /// Writes member `_next` unless a level below holds the same key, which wins; the keys below it that sort first are written either way
+        void WriteNext(JsonWriter& w);
+
+        const StringView* _keys;
+        size_t _count;
+        WriteMember _write;
+        MemberMerge* _outer;
+        size_t _next = 0;
+    };
+
     /// Writes the member @p key of the open object from what @p save writes with `Ser::Save` into a `JsonSerializer`, as the DOM path would; nothing when
     /// the member is absent (an empty `Optional`, a null pointer). @p key is the bare name. A writer that is not valid is not asked again.
     void WriteSerializedMember(JsonWriter& w, StringView key, FunctionRef<void(ISerializer&)> save);

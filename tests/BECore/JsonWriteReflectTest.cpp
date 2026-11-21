@@ -427,7 +427,14 @@ namespace BECore::Tests {
     namespace {
 
         using JsonWriteTestData::JsonWriteBridged;
+        using JsonWriteTestData::JsonWriteChainBase;
+        using JsonWriteTestData::JsonWriteChainEmptyLeaf;
+        using JsonWriteTestData::JsonWriteChainEmptyMid;
+        using JsonWriteTestData::JsonWriteChainLeaf;
+        using JsonWriteTestData::JsonWriteChainMid;
         using JsonWriteTestData::JsonWriteChild;
+        using JsonWriteTestData::JsonWriteChildBefore;
+        using JsonWriteTestData::JsonWriteChildOfEmpty;
         using JsonWriteTestData::JsonWriteEmpty;
         using JsonWriteTestData::JsonWriteEvent;
         using JsonWriteTestData::JsonWriteInner;
@@ -507,6 +514,19 @@ namespace BECore::Tests {
             static_cast<JsonWriteScalars&>(value) = MakeScalars();
             value.label = "child";
             value.extra = 42;
+            return value;
+        }
+
+        JsonWriteChainLeaf MakeLeaf() {
+            JsonWriteChainLeaf value;
+            value.SetHidden(50);
+            value.JsonWriteChainMid::same = "mid";
+            value.e = "e";
+            value.b = "b";
+            value.maybe = 12;
+            value.m = {1, 2};
+            value.z = {MakeGeneratedInner(1, "z"), MakeGeneratedInner(2, "y")};
+            value._0first = true;
             return value;
         }
 
@@ -624,6 +644,57 @@ namespace BECore::Tests {
         EXPECT_LT(extra, label);
     }
 
+    TEST(JsonWriteReflectTest, AChainOfThreeMergesTheKeysOfAllItsLevels) {
+        ExpectSameAsDom(JsonWriteChainBase{});
+        ExpectSameAsDom(JsonWriteChainMid{});
+        ExpectSameAsDom(JsonWriteChainLeaf{});
+        ExpectSameAsDom(MakeLeaf());
+        JsonWriteChainMid mid;
+        mid.e = "mid only";
+        mid.maybe = 1;
+        ExpectSameAsDom(mid);
+        JsonWriteChainLeaf bare = MakeLeaf();
+        bare.maybe.reset();
+        ExpectSameAsDom(bare);
+    }
+
+    TEST(JsonWriteReflectTest, TheMostDerivedLevelHoldsAKeyThatSeveralLevelsHave) {
+        const String text = Written(MakeLeaf(), JsonWriter::kCompact);
+        EXPECT_NE(text.find("\"m\":[1,2]"), String::npos);
+        EXPECT_NE(text.find("\"same\":\"mid\""), String::npos);
+        EXPECT_EQ(text.find("\"m\":2"), String::npos);
+        EXPECT_EQ(text.find("\"same\":1"), String::npos);
+        EXPECT_NE(text.find("\"hidden\":50"), String::npos);
+    }
+
+    TEST(JsonWriteReflectTest, AParentWithNoFieldsAndAMiddleLevelWithNoFieldsDoNotBreakTheMerge) {
+        ExpectSameAsDom(JsonWriteChildOfEmpty{});
+        ExpectSameAsDom(JsonWriteChainEmptyMid{});
+        JsonWriteChainEmptyLeaf leaf;
+        leaf.SetHidden(3);
+        ExpectSameAsDom(leaf);
+        EXPECT_NE(Written(leaf, JsonWriter::kCompact).find("\"a\":8"), String::npos);
+    }
+
+    TEST(JsonWriteReflectTest, ChildKeysThatAllSortBeforeTheParentsKeysComeFirst) {
+        JsonWriteChildBefore value;
+        value.name = "n";
+        value.count = 2;
+        ExpectSameAsDom(value);
+        EXPECT_EQ(Written(value, JsonWriter::kCompact), "{\"aaa\":11,\"count\":2,\"name\":\"n\"}");
+    }
+
+    TEST(JsonWriteReflectTest, AWriteThroughABaseReferenceOfAChainWritesTheMostDerivedMembers) {
+        const JsonWriteChainLeaf leaf = MakeLeaf();
+        const JsonWriteChainBase& base = leaf;
+        String viaBase;
+        {
+            JsonWriter writer(viaBase);
+            base.WriteJson(writer);
+        }
+        EXPECT_EQ(viaBase, Written(leaf, JsonWriter::kCompact));
+    }
+
     TEST(JsonWriteReflectTest, GeneratedEventEqualsTheDomPath) {
         JsonWriteEvent event;
         event.text = "event \"text\"";
@@ -676,6 +747,8 @@ namespace BECore::Tests {
     TEST(JsonWriteReflectTest, TheSecondGeneratedWriteOfTheNativeTypesAllocatesNothing) {
         ExpectSecondWriteAllocatesNothing(MakeScalars());
         ExpectSecondWriteAllocatesNothing(MakeNested());
+        ExpectSecondWriteAllocatesNothing(MakeLeaf());
+        ExpectSecondWriteAllocatesNothing(MakeChild());
         JsonWriteEvent event;
         event.text = "event";
         event.id = 4;

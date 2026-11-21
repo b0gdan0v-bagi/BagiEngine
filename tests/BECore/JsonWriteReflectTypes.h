@@ -111,6 +111,69 @@ namespace BECore {
             BE_REFLECT_FIELD int32_t extra = 0;
         };
 
+        /// A chain of three: the keys of the levels interleave (a, b, c, m ...), `m` and `same` are in more than one level (the most derived wins)
+        /// and the private fields of a parent are out of reach of its children
+        struct JsonWriteChainBase {
+            BE_CLASS(JsonWriteChainBase)
+
+            BE_REFLECT_FIELD int32_t same = 1;
+            BE_REFLECT_FIELD int32_t _m = 2;
+            BE_REFLECT_FIELD int32_t a = 3;
+            BE_REFLECT_FIELD int32_t g = 4;
+
+            void SetHidden(int32_t value) {
+                _hidden = value;
+            }
+
+        private:
+            BE_REFLECT_FIELD int32_t _hidden = 5;
+        };
+
+        struct JsonWriteChainMid : JsonWriteChainBase {
+            BE_CLASS(JsonWriteChainMid)
+
+            BE_REFLECT_FIELD String same;
+            BE_REFLECT_FIELD String e;
+            BE_REFLECT_FIELD String b;
+            BE_REFLECT_FIELD Optional<int32_t> maybe;
+        };
+
+        struct JsonWriteChainLeaf : JsonWriteChainMid {
+            BE_CLASS(JsonWriteChainLeaf)
+
+            BE_REFLECT_FIELD Vector<int32_t> m;
+            BE_REFLECT_FIELD Vector<JsonWriteInner> z;
+            BE_REFLECT_FIELD bool _0first = false;
+            BE_REFLECT_FIELD int32_t c = 6;
+        };
+
+        /// No fields of its own between two levels that have some
+        struct JsonWriteChainEmptyMid : JsonWriteChainBase {
+            BE_CLASS(JsonWriteChainEmptyMid)
+        };
+
+        struct JsonWriteChainEmptyLeaf : JsonWriteChainEmptyMid {
+            BE_CLASS(JsonWriteChainEmptyLeaf)
+
+            BE_REFLECT_FIELD int32_t f = 7;
+            BE_REFLECT_FIELD int32_t _a = 8;
+        };
+
+        /// A parent with no fields at all
+        struct JsonWriteChildOfEmpty : JsonWriteEmpty {
+            BE_CLASS(JsonWriteChildOfEmpty)
+
+            BE_REFLECT_FIELD int32_t value2 = 9;
+            BE_REFLECT_FIELD int32_t value1 = 10;
+        };
+
+        /// Every key of the child sorts before every key of the parent
+        struct JsonWriteChildBefore : JsonWriteInner {
+            BE_CLASS(JsonWriteChildBefore)
+
+            BE_REFLECT_FIELD int32_t aaa = 11;
+        };
+
         struct JsonWriteEvent {
             BE_EVENT(JsonWriteEvent)
 

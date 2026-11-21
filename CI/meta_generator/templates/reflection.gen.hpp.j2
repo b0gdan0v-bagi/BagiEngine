@@ -40,10 +40,11 @@ struct FactoryTraits<{{ dep.full_qualified_name }}> {
 {% endif %}
 
 {% macro write_json(cls) %}
+{% if cls.is_event %}
 // {{ cls.full_qualified_name }}::WriteJson() - the object Serialize saves into a JsonSerializer, as the same bytes: keys sorted, one call per field
 void {{ cls.full_qualified_name }}::WriteJson(::BECore::JsonWriter& w) const {
 {% if cls.parent_has_be_class %}
-    // The keys of the parent and of this class interleave in one sorted object, and the parent's private fields are out of reach here: write what Serialize saves
+    // An event has no WriteJsonMembers to merge with its parent's: write what Serialize saves
     ::BECore::JsonWrite::WriteSerializedObject(w, [&](::BECore::ISerializer& s) { Serialize(s); });
 {% else %}
     w.BeginObject();
@@ -53,6 +54,54 @@ void {{ cls.full_qualified_name }}::WriteJson(::BECore::JsonWriter& w) const {
     w.EndObject();
 {% endif %}
 }
+{% else %}
+// {{ cls.full_qualified_name }}::WriteJsonMembers() - the members of this class in the sorted order of their serialized names, merged with those of the
+// classes above and below it in the chain (JsonWrite::MemberMerge): the keys of one object, as the object JsonSerializer builds
+void {{ cls.full_qualified_name }}::WriteJsonMembers(::BECore::JsonWriter& w, ::BECore::JsonWrite::MemberMerge* outer) const {
+{% if cls.parent_has_be_class %}
+{% if cls.json_fields %}
+    static constexpr ::BECore::StringView kKeys[] = {
+{% for field in cls.json_fields %}
+        "{{ field.key }}",
+{% endfor %}
+    };
+    // `this->` on every field: a field may be named like a parameter of this function
+    const auto writeMember = [this](::BECore::JsonWriter& writer, size_t memberIndex) {
+        switch (memberIndex) {
+{% for field in cls.json_fields %}
+            case {{ loop.index0 }}:
+                ::BECore::JsonWrite::SaveField(writer, "\"{{ field.key }}\":", "{{ field.key }}", this->{{ field.name }});
+                break;
+{% endfor %}
+            default:
+                break;
+        }
+    };
+    ::BECore::JsonWrite::MemberMerge merge(kKeys, std::size(kKeys), writeMember, outer);
+{% else %}
+    const auto writeMember = [](::BECore::JsonWriter&, size_t) {};
+    ::BECore::JsonWrite::MemberMerge merge(nullptr, 0, writeMember, outer);
+{% endif %}
+    {{ cls.parent_full_qualified_name }}::WriteJsonMembers(w, &merge);
+{% else %}
+{% for field in cls.json_fields %}
+    if (outer == nullptr || outer->Before(w, "{{ field.key }}")) {
+        ::BECore::JsonWrite::SaveField(w, "\"{{ field.key }}\":", "{{ field.key }}", this->{{ field.name }});
+    }
+{% endfor %}
+    if (outer != nullptr) {
+        outer->Finish(w);
+    }
+{% endif %}
+}
+
+// {{ cls.full_qualified_name }}::WriteJson() - the object Serialize saves into a JsonSerializer, as the same bytes
+void {{ cls.full_qualified_name }}::WriteJson(::BECore::JsonWriter& w) const {
+    w.BeginObject();
+    {{ cls.full_qualified_name }}::WriteJsonMembers(w, nullptr);
+    w.EndObject();
+}
+{% endif %}
 {% endmacro %}
 
 {% if enums %}
