@@ -9,6 +9,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Time/Time.h>
 #include <BECore/UI/UIColor.h>
+#include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/EvictProbe.h>
 #include <Common/NullPropertyVisitor.h>
@@ -16,6 +17,7 @@
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
 #include <Events/InputEvents.h>
+#include <cstring>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -32,6 +34,7 @@ namespace BECore::Tests {
 
         // Scene "A" is the active one. "OneShot" fires 8 particles of half a second at the first update. "Glow" is the same with Add. "Manual" does not play on its own,
         // stands still (speed 0) with a square of 10 and bursts on the action "Pop". "Loop" emits 32 a second once played. "Spark" draws a sprite of the library, "Unknown" one that is not there.
+        // "Serial" and "Parallel" are the same big effect (a flipbook of the sprite, jitters, long lives) that the tests burst and draw by the two paths of `OnDraw`.
         // Scene "B" is not active and has the same "Manual".
         constexpr const char* kScenesXml = R"(
 <SceneManager><scenes>
@@ -61,6 +64,24 @@ namespace BECore::Tests {
     <node name="Unknown"><components>
       <component type="TransformComponent" x="0" y="0" width="0" height="0"/>
       <component type="ParticleEmitterComponent" playOnStart="false"><effect burstCount="2" spriteId="NoSuchSprite"/></component>
+    </components></node>
+    <node name="Serial"><components>
+      <component type="TransformComponent" x="40" y="30" width="0" height="0"/>
+      <component type="ParticleEmitterComponent" playOnStart="false">
+        <effect burstCount="3000" maxParticles="4096" seed="5" lifetimeMin="6" lifetimeMax="10" speedMin="10" speedMax="60" spread="360" sizeJitter="0.4" rotationJitter="90" spriteId="ParticleTestSpark">
+          <size from="6" to="14"/><rotation from="0" to="200"/>
+          <flipbook columns="2" rows="2" frames="3" mode="Loop" fps="12" randomStart="true"/>
+        </effect>
+      </component>
+    </components></node>
+    <node name="Parallel"><components>
+      <component type="TransformComponent" x="40" y="30" width="0" height="0"/>
+      <component type="ParticleEmitterComponent" playOnStart="false">
+        <effect burstCount="3000" maxParticles="4096" seed="5" lifetimeMin="6" lifetimeMax="10" speedMin="10" speedMax="60" spread="360" sizeJitter="0.4" rotationJitter="90" spriteId="ParticleTestSpark">
+          <size from="6" to="14"/><rotation from="0" to="200"/>
+          <flipbook columns="2" rows="2" frames="3" mode="Loop" fps="12" randomStart="true"/>
+        </effect>
+      </component>
     </components></node>
   </nodes></scene>
   <scene type="Scene" name="B"><nodes>
@@ -483,6 +504,51 @@ namespace BECore::Tests {
         EXPECT_EQ(copy->_effect.size.ease, EaseType::QuadOut);
         EXPECT_PRED2(ColorsEqual, copy->_effect.color.to, Color(1, 2, 3, 4));
         EXPECT_EQ(copy->_effect.spriteId, PoolString::Intern(kSparkSprite));
+    }
+
+    TEST_F(ParticleEmitterComponentTest, TheParallelAndTheSerialBuildDrawTheSameBytes) {
+        auto serial = Emitter("Serial");
+        auto parallel = Emitter("Parallel");
+        const Vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * kBytesPerPixel, 255);
+        const auto texture = _renderer->CreateTexture(pixels.data(), kTextureSize, kTextureSize);
+        serial->SetTexture(texture);
+        parallel->SetTexture(texture);
+        serial->SetParallelMinParticles(0);
+        parallel->SetParallelMinParticles(1);
+        serial->Burst(40.0f, 30.0f);
+        parallel->Burst(40.0f, 30.0f);
+        Frames(8);
+        ASSERT_EQ(serial->GetLiveCount(), 3000u);
+        ASSERT_EQ(parallel->GetLiveCount(), 3000u);
+
+        const Vector<DrawCall> calls = Draw();
+        ASSERT_GE(calls.size(), 2u);
+        const DrawCall& expected = calls[calls.size() - 2];  // the two big emitters are the last nodes of the scene
+        const DrawCall& actual = calls[calls.size() - 1];
+        ASSERT_EQ(expected.vertices.size(), 3000u * 4);
+        ASSERT_EQ(actual.vertices.size(), expected.vertices.size());
+        EXPECT_EQ(std::memcmp(expected.vertices.data(), actual.vertices.data(), expected.vertices.size() * sizeof(GeometryVertex)), 0);
+        EXPECT_EQ(expected.indices, actual.indices);
+        EXPECT_EQ(expected.texture, actual.texture);
+    }
+
+    TEST_F(ParticleEmitterComponentTest, AParallelDrawOfAFullPoolAllocatesNothing) {
+        auto parallel = Emitter("Parallel");
+        const Vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * kBytesPerPixel, 255);
+        parallel->SetTexture(_renderer->CreateTexture(pixels.data(), kTextureSize, kTextureSize));
+        parallel->SetParallelMinParticles(1);
+        parallel->Burst(40.0f, 30.0f);
+        Frames(2);
+        for (int warmUp = 0; warmUp < 4; ++warmUp) {
+            _renderer->ClearCalls();
+            _manager->DrawAll();
+        }
+        ExpectNoAllocations([&] {
+            for (int frame = 0; frame < 100; ++frame) {
+                _renderer->ClearCalls();
+                _manager->DrawAll();
+            }
+        });
     }
 
 }  // namespace BECore::Tests

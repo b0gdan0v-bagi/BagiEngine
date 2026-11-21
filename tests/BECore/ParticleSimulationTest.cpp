@@ -3,6 +3,8 @@
 #include <BECore/UI/UIColor.h>
 #include <Common/AllocCheck.h>
 #include <Common/Printers.h>
+#include <TaskSystem/ParallelFor.h>
+#include <TaskSystem/ThreadPool.h>
 #include <cstring>
 #include <gtest/gtest.h>
 
@@ -486,6 +488,35 @@ namespace BECore::Tests {
             EXPECT_EQ(wholeIndices, piecesIndices);
         }
         EXPECT_GT(compactions, 0u) << "the effect must retire particles for the test to cover a compacted pool";
+    }
+
+    TEST(ParticleSimulationTest, ARangeBuiltOnAnyNumberOfWorkersGivesTheBytesOfBuildGeometry) {
+        const ParticleEffect effect = MakeGeometryEffect();
+        const Rect source(8.0f, 4.0f, 32.0f, 16.0f);
+        const Vec2 textureSize(64.0f, 32.0f);
+        constexpr size_t kMinChunk = 16;
+        ParticleSimulation sim;
+        sim.Play();
+        Step(sim, effect, kPointArea, 0.125f, 12);
+
+        Vector<GeometryVertex> whole;
+        Vector<int> wholeIndices;
+        const size_t quads = sim.BuildGeometry(effect, source, textureSize, whole, wholeIndices);
+        ASSERT_GT(quads, 4 * kMinChunk) << "enough particles for every worker count to split them";
+
+        const auto build = [&](ThreadPool& pool) {
+            Vector<GeometryVertex> vertices;
+            Vector<int> indices;
+            const auto frame = sim.PrepareGeometry(effect, source, textureSize, vertices, indices);
+            ParallelFor(pool, quads, kMinChunk, [&](size_t begin, size_t end) { sim.BuildQuads(frame, begin, end, vertices.data()); });
+            ExpectBytesEqual(whole, vertices, "parallel");
+        };
+        ThreadPool inlinePool{ThreadPool::InlineTag{}};
+        build(inlinePool);
+        for (const size_t workers : {0u, 1u, 2u, 4u}) {
+            ThreadPool pool(workers);
+            build(pool);
+        }
     }
 
     TEST(ParticleSimulationTest, AnEmptyRangeWritesNothing) {

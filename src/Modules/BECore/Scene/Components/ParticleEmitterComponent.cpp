@@ -10,6 +10,7 @@
 #include <Events/InputEvents.h>
 #include <Events/SceneEvents.h>
 #include <Generated/ParticleEmitterComponent.gen.hpp>
+#include <TaskSystem/TaskManager.h>
 
 namespace BECore {
 
@@ -19,7 +20,15 @@ namespace BECore {
         constexpr size_t kIndicesPerQuad = 6;
         constexpr float kHalf = 0.5f;
 
+        // A first guess, to be replaced by the benchmark `particles-parallel`. A fork-join costs a few microseconds of waking helpers and
+        // joining, which the maths of fewer particles does not repay, so a small emitter stays on the drawing thread
+        constexpr size_t kDefaultParallelMinParticles = 512;
+        // The smallest range a thread takes: it keeps a chunk long enough that claiming it is cheap next to building it
+        constexpr size_t kMinChunkParticles = 256;
+
     }  // namespace
+
+    ParticleEmitterComponent::ParticleEmitterComponent() : _parallelMinParticles(kDefaultParallelMinParticles) {}
 
     void ParticleEmitterComponent::OnAttached() {
         SubscribeInScene<SceneEvents::SceneUpdateEvent, &ParticleEmitterComponent::OnUpdate>(this);
@@ -56,6 +65,10 @@ namespace BECore {
     void ParticleEmitterComponent::Burst(float x, float y, int32_t count, Color tint) {
         ReservePools();
         _simulation.Burst(_effect, Vec2(x, y), count < 0 ? _effect.burstCount : count, tint);
+    }
+
+    void ParticleEmitterComponent::SetParallelMinParticles(size_t minParticles) {
+        _parallelMinParticles = minParticles;
     }
 
     void ParticleEmitterComponent::SetTexture(IntrusivePtr<ITexture> texture) {
@@ -138,9 +151,17 @@ namespace BECore {
         }
         ITexture* texture = _texture.Get();
         const Vec2 textureSize = texture ? Vec2(texture->GetWidth(), texture->GetHeight()) : Vec2();
-        const size_t quads = _simulation.BuildGeometry(_effect, _source, textureSize, _vertices, _indices);
+        const auto frame = _simulation.PrepareGeometry(_effect, _source, textureSize, _vertices, _indices);
+        const size_t quads = _simulation.GetLiveCount();
         if (quads == 0) {
             return;
+        }
+        GeometryVertex* vertices = _vertices.data();
+        if (_parallelMinParticles != 0 && quads >= _parallelMinParticles) {
+            // The ranges write disjoint vertices and the simulation is not touched until the call returns
+            CoreManager::GetTaskManager().ParallelFor(quads, kMinChunkParticles, [&](size_t begin, size_t end) { _simulation.BuildQuads(frame, begin, end, vertices); });
+        } else {
+            _simulation.BuildQuads(frame, 0, quads, vertices);
         }
         const ScopedBlendMode blend(*renderer, _effect.blend);
         renderer->DrawGeometry(texture, {_vertices.data(), quads * kVerticesPerQuad}, {_indices.data(), quads * kIndicesPerQuad}, 0.0f, 0.0f);
