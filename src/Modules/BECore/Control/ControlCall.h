@@ -1,7 +1,9 @@
 #pragma once
 
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <BECore/Utils/PassKey.h>
 
@@ -9,10 +11,18 @@ namespace BECore {
 
     class ControlService;
 
-    /// The response text of a successful call: {"id":..,"ok":true,"result":..}
+    /// Appends the response of a successful call, {"id":..,"ok":true,"result":..}, to @p out (never cleared); @p writeResult writes the one value
+    /// of `result`. The keys are in alphabetical order, as a `Json` object keeps them, so the order a client sees does not depend on the way a response is written. Allocates only for the growth of @p
+    /// out
+    void AppendOkResponse(String& out, const Json& id, FunctionRef<void(JsonWriter&)> writeResult);
+
+    /// Appends the response of a failed call, {"error":{"code":..,"message":..},"id":..,"ok":false}, to @p out (never cleared)
+    void AppendErrorResponse(String& out, const Json& id, const ControlError& error);
+
+    /// The response text of a successful call (AppendOkResponse with a `Json` result)
     [[nodiscard]] String MakeOkResponse(const Json& id, Json result);
 
-    /// The response text of a failed call: {"id":..,"ok":false,"error":{"code":..,"message":..}}
+    /// The response text of a failed call (AppendErrorResponse)
     [[nodiscard]] String MakeErrorResponse(const Json& id, const ControlError& error);
 
     /**
@@ -26,7 +36,7 @@ namespace BECore {
     public:
         using DoneFn = MoveOnlyFunction<void(ControlCall&)>;
 
-        ControlCall(PassKey<ControlService>, String method, Json id, Json params, ControlReplyFn reply);
+        ControlCall(PassKey<ControlService>, ControlService& service, String method, Json id, Json params, ControlReplyFn reply);
 
         /// A call that runs inside another one: its answer is kept as a value (ControlService::RunNested) instead of being sent
         ControlCall(PassKey<ControlService>, String method, Json params);
@@ -44,8 +54,17 @@ namespace BECore {
             return _params;
         }
 
-        /// Answers with success
+        /// Answers with success; @p result is written as the `result` of the response
         void Reply(Json result);
+
+        /**
+         * @brief Answers with success, the `result` written by @p writeResult in place: no DOM, and no allocation once the service's reply buffer has grown.
+         *
+         * @p writeResult runs before this returns and writes exactly one value (`writer` is the open writer of the response: `BeginObject()` ... `EndObject()`,
+         * or a scalar). It must not answer or defer the call. The text the transport gets is valid for the reply function's call only (ControlReplyFn).
+         * Inside a nested call (ControlService::RunNested) the written value is read back into a `Json`.
+         */
+        void Reply(FunctionRef<void(JsonWriter&)> writeResult);
 
         /// Answers with an error
         void Fail(StringView code, StringView message);
@@ -77,6 +96,7 @@ namespace BECore {
     private:
         friend class ControlService;
 
+        ControlService* _service = nullptr;  // null for a nested call, which sends nothing
         String _method;
         Json _id;
         Json _params;

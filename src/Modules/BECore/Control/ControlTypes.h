@@ -18,8 +18,9 @@ namespace BECore {
     using ControlAnswer = std::expected<Json, ControlError>;
 
     /// Receives the serialized JSON text of a response. Called on the main thread, except for a request posted after
-    /// ControlService::Shutdown() (answered on the posting thread).
-    using ControlReplyFn = MoveOnlyFunction<void(String)>;
+    /// ControlService::Shutdown() (answered on the posting thread). The text lives in a buffer of the service that the next
+    /// response reuses: it is valid for the call only, so a transport sends or copies it before it returns.
+    using ControlReplyFn = MoveOnlyFunction<void(const String&)>;
 
     /// What the transport is doing, for whoever shows it (the editor's status bar). Application publishes it every frame, so a widget
     /// does not reach into the transport

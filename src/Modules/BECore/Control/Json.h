@@ -25,8 +25,8 @@ namespace BECore {
     [[nodiscard]] std::expected<Json, ControlError> ParseJson(StringView text);
 
     /// Writes @p value through @p writer: the object members in the map's order (alphabetical, as `dump()` writes them), numbers, strings and
-    /// the replacement of invalid UTF-8 as JsonWriter does. It recurses once per level like `dump()`; a container nested deeper than
-    /// JsonWriter::kMaxDepth is written as `null`, never a crash (client JSON is held to ControlService::kMaxRequestDepth by its readers).
+    /// the replacement of invalid UTF-8 as JsonWriter does. It recurses once per level like `dump()`; a container that would make the writer deeper than
+    /// JsonWriter::kMaxDepth (the containers its caller already opened count) is written as `null`, never a crash (client JSON is held to ControlService::kMaxRequestDepth by its readers).
     void WriteJson(JsonWriter& writer, const Json& value);
 
     /// Appends the JSON text of @p value to @p out, which is never cleared: compact for JsonWriter::kCompact, else indented like `dump(indent)`.

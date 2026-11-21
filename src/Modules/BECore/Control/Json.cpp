@@ -37,10 +37,10 @@ namespace BECore {
 
     namespace {
 
-        void WriteJsonAt(JsonWriter& writer, const Json& value, size_t depth) {
+        void WriteJsonAt(JsonWriter& writer, const Json& value) {
             switch (value.type()) {
                 case Json::value_t::object:
-                    if (depth >= JsonWriter::kMaxDepth) {
+                    if (writer.GetDepth() >= JsonWriter::kMaxDepth) {
                         writer.Null();
                         return;
                     }
@@ -48,18 +48,18 @@ namespace BECore {
                     for (auto it = value.cbegin(); it != value.cend(); ++it) {
                         const auto& key = it.key();
                         writer.Key(StringView(key.data(), key.size()));
-                        WriteJsonAt(writer, *it, depth + 1);
+                        WriteJsonAt(writer, *it);
                     }
                     writer.EndObject();
                     return;
                 case Json::value_t::array:
-                    if (depth >= JsonWriter::kMaxDepth) {
+                    if (writer.GetDepth() >= JsonWriter::kMaxDepth) {
                         writer.Null();
                         return;
                     }
                     writer.BeginArray();
                     for (const Json& element : value) {
-                        WriteJsonAt(writer, element, depth + 1);
+                        WriteJsonAt(writer, element);
                     }
                     writer.EndArray();
                     return;
@@ -90,7 +90,7 @@ namespace BECore {
     }  // namespace
 
     void WriteJson(JsonWriter& writer, const Json& value) {
-        WriteJsonAt(writer, value, 0);
+        WriteJsonAt(writer, value);
     }
 
     void AppendJson(String& out, const Json& value, int indent) {

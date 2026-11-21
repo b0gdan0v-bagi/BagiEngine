@@ -5,6 +5,7 @@
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/LockSite.h>
 #include <BECore/Threading/Mutex.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <EASTL/deque.h>
 #include <chrono>
 
@@ -12,6 +13,7 @@ namespace BECore {
 
     class ControlCall;
     class ControlLog;
+    class JsonWriter;
     class ControlRoots;
 
     /**
@@ -197,6 +199,8 @@ namespace BECore {
         void Shutdown();
 
     private:
+        friend class ControlCall;
+
         struct Request;
         struct HandlerEntry {
             Handler handler;
@@ -214,6 +218,11 @@ namespace BECore {
         };
 
         static void ParseRequest(StringView text, Request& request);
+
+        /// Write a response into the reply buffer and give it to @p reply (main thread: ControlCall and the answers of Process and Shutdown). The buffer
+        /// keeps its capacity between replies; a reply sent from inside a reply function gets a local String, never the busy buffer
+        void SendOk(ControlReplyFn& reply, const Json& id, FunctionRef<void(JsonWriter&)> writeResult);
+        void SendError(ControlReplyFn& reply, const Json& id, const ControlError& error);
 
         [[nodiscard]] bool BypassesBarrier(const Request& request) const;
         void Process(Request& request);
@@ -247,6 +256,10 @@ namespace BECore {
         ControlServerStatus _serverStatus;
         EventSink _eventSink;               // empty while the sink runs (Publish moves it out)
         uint64_t _eventSinkGeneration = 0;  // the registration of the current sink; a running sink goes back only if no other was set
+        String _replyScratch;               // the text of the response being sent on the main thread; a reply from the posting thread (Post) uses a local String
+        bool _replyScratchBusy = false;
+        String _publishScratch;  // the text of the event being published, apart from the replies: a sink may answer a request
+        bool _publishScratchBusy = false;
         Vector<HookEntry> _frameEndHooks;
         bool _inFrameEnd = false;     // EndFrame is running the done function of a deferred call
         uint64_t _registrations = 0;  // counts RegisterHandler, SetFrameEndHook and SetEventSink calls; the source of the generations

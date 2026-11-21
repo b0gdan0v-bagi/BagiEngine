@@ -85,6 +85,11 @@ namespace BECore {
             Value(std::forward<T>(value));
         }
 
+        /// How many containers are open now (a writer of a nested value cuts it before kMaxDepth, counting the containers its caller opened)
+        [[nodiscard]] size_t GetDepth() const {
+            return _depth;
+        }
+
         /// False after the first misuse
         [[nodiscard]] bool IsValid() const {
             return _valid;
