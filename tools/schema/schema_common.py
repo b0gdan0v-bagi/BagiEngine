@@ -42,6 +42,14 @@ ENABLED_ATTRIBUTE = "enabled"
 PAIR_FIRST = "first"
 PAIR_SECOND = "second"
 
+# A `Value<T>` field (Values/CLAUDE.md, "Loading"): the schema kind and the reserved keys of its element
+VALUE_KIND = "value"
+FROM_ATTRIBUTE = "from"
+EXPR_ATTRIBUTE = "expr"
+KIND_ATTRIBUTE = "kind"
+TREE_ELEMENT = "tree"
+VALUE_KIND_NAMES = ("Const", "Slot", "Program")
+
 # A content file is read after the loader has taken what is its own (BECore/Config/ContentVersion.h, Scene/SceneNodeFiles.h)
 CONTENT_VERSION_ATTRIBUTE = "contentVersion"
 CONTENT_ROOTS = ("SceneManager", "node")
