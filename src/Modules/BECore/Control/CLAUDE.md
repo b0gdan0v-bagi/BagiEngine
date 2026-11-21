@@ -16,7 +16,7 @@ The core of the external control API: a program or a model sends commands, the e
 | `ControlSettings` | `ResolveControlSettings(args, ApplicationConfigLoad)`: the start-up flags and the settings of the reflected `ApplicationConfig` (`Application/ApplicationConfig.h`), the manual clock included, a pure function |
 | `ControlTypes.h` | `ControlError`, `ControlErrors::k*` (error codes), `ControlReplyFn`, `ControlServerStatus`, `ControlParamInfo` / `ControlMethodInfo` (what a module says about a method) and `ControlMethodListing` (what `GetMethods()` returns) |
 | `JsonWriter` | Streaming JSON writer that appends to a caller's `String`: no DOM, no temporary, no allocation beyond the growth of that `String`; compact or indented, byte-identical to nlohmann's `dump` |
-| `JsonSerializer` | `ISerializer` into a `Json` document (`Take()`); DOM-backed, not for writing: a reflected value has its generated `WriteJson` (`JsonWriteReflect.h`) |
+| `JsonSerializer` | `ISerializer` into a `Json` (`Take()`); DOM-backed, not the fast path for writing: a reflected value has its generated `WriteJson` (`JsonWriteReflect.h`) |
 | `JsonDeserializer` | `IDeserializer` over a `const Json&` the caller keeps alive; always strict, with findings; interim, like the writer (entry `json-deserializer`) |
 | `Json.h`, `JsonFwd.h` | nlohmann/json behind checked helpers (see "JSON rules"); `DumpJson` / `AppendJson` write a `Json` through `JsonWriter` |
 | `Utils/Base64.h` (one level up) | Base64 for the screenshot and the WebSocket handshake |
