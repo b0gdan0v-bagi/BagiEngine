@@ -1,6 +1,8 @@
 #include <Application/Application.h>
+#include <BECore/Cook/CookCommand.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <cstdio>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
@@ -28,6 +30,18 @@ int RunApplication(int argc, const char* const* argv) {
 #endif
 
     BECore::Application::GetInstance().SetArguments(argc, argv);
+
+#ifndef __EMSCRIPTEN__
+    // The cook is a mode of this executable (its types decide the layout hash): it runs before anything of the window or the GPU exists
+    const auto cook = BECore::ParseCookArguments(BECore::CoreManager::GetCommandLine().GetArguments());
+    if (!cook) {
+        std::fprintf(stderr, "%s\n", cook.error().c_str());  //-NoStd: the loggers are not up, the message is the program's output
+        return BECore::kCookExitUsage;
+    }
+    if (cook->has_value()) {
+        return BECore::Application::GetInstance().RunCook(**cook);
+    }
+#endif
 
     if (!BECore::Application::GetInstance().Initialize()) {
         return -1;

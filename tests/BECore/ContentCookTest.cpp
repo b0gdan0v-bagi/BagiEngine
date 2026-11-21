@@ -2,6 +2,7 @@
 
 #include <BECore/Config/ContentVersion.h>
 #include <BECore/Cook/ContentCook.h>
+#include <BECore/Cook/CookCommand.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneLoader.h>
@@ -363,6 +364,57 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(NodeFileText(both.Files(), kHudRef), "Up"));
         CookedContent lowerOnly(_tree.Out(), 1);
         EXPECT_TRUE(Contains(NodeFileText(lowerOnly.Files(), kHudRef), "Low"));
+    }
+
+    namespace {
+
+        std::expected<Optional<CookRequest>, String> Parse(std::initializer_list<const char*> arguments) {
+            Vector<String> list;
+            for (const char* argument : arguments) {
+                list.emplace_back(argument);
+            }
+            return ParseCookArguments(list);
+        }
+
+    }  // namespace
+
+    TEST(CookCommandTest, NoCookFlagIsNoRequestAndForeignFlagsAreIgnored) {
+        const auto none = Parse({"--control", "--cooked=1", "--cook-verifier"});
+        ASSERT_TRUE(none.has_value());
+        EXPECT_FALSE(none->has_value());
+    }
+
+    TEST(CookCommandTest, TheFolderAndTheVerifyFlagMakeTheRequestInAnyOrder) {
+        for (const auto& parsed : {Parse({"--cook=out/cooked", "--cook-verify"}), Parse({"--cook-verify", "--headless", "--cook=out/cooked"})}) {
+            ASSERT_TRUE(parsed.has_value()) << parsed.error().c_str();
+            ASSERT_TRUE(parsed->has_value());
+            EXPECT_EQ((*parsed)->outDir, "out/cooked");
+            EXPECT_TRUE((*parsed)->verify);
+        }
+        const auto plain = Parse({"--cook=out"});
+        ASSERT_TRUE(plain.has_value() && plain->has_value());
+        EXPECT_FALSE((*plain)->verify);
+    }
+
+    TEST(CookCommandTest, AnEmptyMissingOrRepeatedFolderAndAVerifyWithoutACookAreMessages) {
+        for (const auto& parsed : {Parse({"--cook="}), Parse({"--cook"}), Parse({"--cook=a", "--cook=b"}), Parse({"--cook-verify"})}) {
+            ASSERT_FALSE(parsed.has_value());
+            EXPECT_FALSE(parsed.error().empty());
+        }
+    }
+
+    TEST(CookCommandTest, TheRunCooksAndVerifiesAFolderAndReturnsTheExitCode) {
+        CookTestTree tree;
+        tree.Write(0, "Plain.xml", "<Plain/>");
+        tree.Write(1, "SceneConfig.xml", SceneText(R"(<node name="A"/>)"));
+        const CookRequest request{FromStdString(tree.Out().string()), true};
+
+        EXPECT_EQ(RunCookCommand(request, tree.Sources()), 0);
+        EXPECT_TRUE(std::filesystem::is_regular_file(tree.OutConfig(1) / "SceneConfig.bin"));
+        EXPECT_TRUE(std::filesystem::is_regular_file(tree.OutConfig(0) / "Plain.xml"));
+
+        tree.Write(1, "SceneConfig.xml", SceneText(R"(<node name="A"/>)", 4));
+        EXPECT_EQ(RunCookCommand(request, tree.Sources()), kCookExitFailed);
     }
 
 }  // namespace BECore::Tests

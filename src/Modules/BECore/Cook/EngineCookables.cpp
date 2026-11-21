@@ -3,7 +3,7 @@
 // A registration here claims that the file reads the same from its XML and from its `.bin`: `ContentCookEquivalenceTest` checks it over the
 // shipped `config/` (`VerifyCooked`), and a config whose type does not round-trip is left out and copied (the test lists it with the reason).
 // A config that no reflected type reads (`UIConfig`, `TextConfig`, `UIStrings`, `UIThemes`, `SDLWindowConfig`: the path in `ApplicationConfig` names the `.xml`) has no
-// registrar and is copied. The Games module registers `GamesConfig` beside its type.
+// registrar and is copied, as is `WidgetsConfig` (below). The Games module registers `GamesConfig` beside its type.
 
 #include <BECore/Application/ApplicationConfig.h>
 #include <BECore/Application/RunMode.h>
@@ -55,10 +55,8 @@ namespace BECore {
         const CookableConfig<AudioSettings> kAudioConfig{"AudioConfig"};
         const CookableConfigWith kTextureLibrary{ContentCooker{kTextureLibraryStem, kTextureLibraryRootType, &CookTextureLibrary, &DescribeTextureLibrary, false}};
 
-#if BE_WITH_EDITOR
-        // Game mode never reads it, and a build without the editor cannot read the editor widgets' types.
-        const CookableConfig<WidgetList> kWidgetsConfig{"WidgetsConfig"};
-#endif
+        // `WidgetsConfig` has no registrar: the editor widgets start their runtime in `Initialize` (ImGui's style, the user's preferences folder,
+        // a hardware monitor thread), and the cook would run it. Game mode never reads the file and a build without the editor cannot read its types.
 
     }  // namespace
 

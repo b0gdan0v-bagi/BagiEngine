@@ -2,7 +2,6 @@
 // engine config file that is neither fails the test, so nobody ships a file that the cooked release path silently reads another way.
 
 #include <BECore/Application/ApplicationConfig.h>
-#include <BECore/Application/RunMode.h>
 #include <BECore/Assert/AssertHandlers.h>
 #include <BECore/Cook/ContentVerify.h>
 #include <BECore/Logger/LoggerManager.h>
@@ -20,17 +19,18 @@ namespace BECore::Tests {
         };
 
         /// Files a cook copies: no reflected type reads them, so there is no cooker
-        constexpr Array<ListedConfig, 3> kCopied = {{
+        constexpr Array<ListedConfig, 4> kCopied = {{
             {"TextConfig", "read by hand: the font and text settings of the text system (entry config-xmlnode-by-hand)"},
             {"UIConfig", "read by hand: the UI environment (entry config-xmlnode-by-hand)"},
+            {"WidgetsConfig", "the editor widgets start their runtime in Initialize (ImGui, the user's preferences folder, a hardware monitor thread), which a cook would run; Game mode never reads "
+                              "it and a build without the editor cannot read its types"},
             {"SDLWindowConfig", "the path in ApplicationConfig names the .xml, and the window config is read by SDLWindowConfig::Deserialize from that file"},
         }};
 
         /// Files whose widget types only the application executable registers, so the executable of this test cannot read them: `<exe> --cook-verify`
         /// checks them (the ctest entry of each executable that has the widgets)
-        constexpr Array<ListedConfig, 2> kApplicationOnly = {{
+        constexpr Array<ListedConfig, 1> kApplicationOnly = {{
             {"GameWidgetsConfig", "a WidgetList of widgets that only the application executable registers"},
-            {"WidgetsConfig", "as above; registered only in a build with the editor"},
         }};
 
         /// Cookers that no file of the engine's `config/` feeds: a game's file or a library the engine ships none of
@@ -121,8 +121,7 @@ namespace BECore::Tests {
     TEST_F(ContentCookEngineConfigTest, TheApplicationExecutableFilesAndTheRegistryAgree) {
         for (const ListedConfig& listed : kApplicationOnly) {
             const bool registered = ContentCookRegistry::GetInstance().Find(listed.stem) != nullptr;
-            const bool expected = listed.stem != "WidgetsConfig" || kEditorBuilt;
-            EXPECT_EQ(registered, expected) << listed.stem.data();
+            EXPECT_TRUE(registered) << listed.stem.data();
             EXPECT_TRUE(IsShipped(listed.stem)) << listed.stem.data() << " is not shipped";
         }
         for (const ContentCooker& cooker : ContentCookRegistry::GetInstance().All()) {

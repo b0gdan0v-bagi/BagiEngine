@@ -809,6 +809,16 @@ function(be_add_game_executable NAME)
         be_web_configure_target(${NAME} GAME_ROOT ${ARG_GAME_ROOT})
     else()
         be_link_content_roots(${NAME} ENGINE "${BAGI_ENGINE_DIR}" GAME "${ARG_GAME_ROOT}")
+
+        # <Name>Cook: the release content of this executable, cooked and verified by the executable itself (the layout hash is the one of
+        # the types linked into it: src/Modules/BECore/Cook/CLAUDE.md). Not in ALL, so no developer preset runs it. The web page takes
+        # the result through ENGINE_WEB_COOKED_DIR of a desktop build with the same type set
+        add_custom_target(${NAME}Cook
+            COMMAND ${NAME} --cook=${CMAKE_BINARY_DIR}/cooked/${NAME} --cook-verify
+            DEPENDS ${NAME}
+            COMMENT "Cooking the content of ${NAME} into ${CMAKE_BINARY_DIR}/cooked/${NAME}"
+            USES_TERMINAL)
+        set_target_properties(${NAME}Cook PROPERTIES FOLDER "Generated")
     endif()
 
     be_deploy_runtime_libs(${NAME})
@@ -970,6 +980,27 @@ if(ENGINE_BUILD_TESTS)
             TIMEOUT 120
             RESOURCE_LOCK bagi_control_smoke
             ENVIRONMENT "BAGI_ENGINE_DIR=${BAGI_ENGINE_DIR}"
+            LABELS smoke
+        )
+    endfunction()
+
+    # be_add_game_cook_test(<ExeTarget>)
+    # ctest entry <ExeTarget>CookVerify: the executable cooks the content of its own roots into a folder of its own under the build
+    # folder and reads the result back against the XML (--cook-verify), so a config of the game that the cook cannot read, or reads
+    # differently from the XML, fails here and not on the release machine (src/Modules/BECore/Cook/CLAUDE.md). The test needs the types
+    # of the executable and nothing of a window, a GPU or a port: no RESOURCE_LOCK. Call it from the game's CMakeLists, never from the
+    # engine's tests/. A missing executable is a skip: the script prints the line SKIP_REGULAR_EXPRESSION matches (cmake -P cannot
+    # return 77, the code the siblings skip with)
+    function(be_add_game_cook_test EXE_TARGET)
+        set(TEST_NAME ${EXE_TARGET}CookVerify)
+        add_test(NAME ${TEST_NAME}
+            COMMAND ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:${EXE_TARGET}>
+                -DOUT=${CMAKE_BINARY_DIR}/cook-verify/${EXE_TARGET}
+                -P ${BAGI_ENGINE_DIR}/cmake/BagiCookVerify.cmake)
+        set_tests_properties(${TEST_NAME} PROPERTIES
+            SKIP_REGULAR_EXPRESSION "BagiCookVerify: skipped"
+            TIMEOUT 120
             LABELS smoke
         )
     endfunction()

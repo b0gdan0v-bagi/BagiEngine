@@ -181,6 +181,11 @@ namespace BECore {
         // Pre-initialization function (FileSystem, AssertHandlers, runtime ITests)
         void OnApplicationPreInit(PassKey<Application>);
 
+        // The services of `--cook=<dir>` (Cook/CLAUDE.md): the file system with its mounts and the task manager that ConfigManager loads on, nothing
+        // of the window, the logger, the widgets or the rest of InitializeCoreServices. OnCookDeinit stops the task manager
+        void OnCookInit(PassKey<Application>);
+        void OnCookDeinit(PassKey<Application>);
+
         // Core services for the gtest executable: the same services as OnApplicationPreInit,
         // without running the runtime ITests and with the debugger break on assert disabled
         void OnTestEnvironmentInit(PassKey<Tests::EngineEnvironment>);
