@@ -8,6 +8,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/Time/Time.h>
+#include <BECore/Values/Explain/ValueExplainControl.h>
 #include <Events/ApplicationEvents.h>
 
 namespace BECore {
@@ -419,6 +420,7 @@ namespace BECore {
         service.SetFrameEndHook("log_push", [&service] { PushLogLines(service); });
         service.Log().Start();
         RegisterReflectionControl(service);
+        RegisterValueExplainControl(service);
         RegisterWindowControl(service);
 
         service.DescribeMethod("ping", {"Answers pong and the protocol version", {}});

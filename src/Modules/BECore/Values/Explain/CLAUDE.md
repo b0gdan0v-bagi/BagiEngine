@@ -26,6 +26,12 @@ Answers "why is this value what it is" for a `Value<T>` (`../CLAUDE.md`): the tr
 
 The words are data (`TooltipWords`): the `per` pattern (`{0}` the number, `{1}` the field's label, replaced by hand because the text is a translator's) and a label function. `MakeTooltipWords(UIStrings)` (`TooltipStrings.h`, the one file of this folder that includes `UI/`) reads `values.per` and `values.label.<path>` through `Find`, so a language is strings only and a missing label shows the path. A template that is itself a string is resolved first (`UIStrings::Resolve("{#tip.fireball}")`).
 
+## The control method
+
+`explain_value {root, path, context?}` (`ValueExplainControl.h`, registered by `RegisterControlBuiltins`) finds the `Value<T>` field at `root.object + CompilePath(path).offset`, its `ValueExplainers` entry by the field's `opaqueHash`, and answers `{kind, source, has_value, value?, why?, trace?, truncated?}`; `trace` is the tree as nested `{source, label, value, type, children}` (`source` the `TraceStepKind`), cut at `kMaxFormattedLines` nodes like `FormatTrace`. Codes: the by-name ones (`unknown_root`, `no_object`, `invalid_params`, `invalid_path`, `not_found`), `not_a_value` (the message lists the registered types), `not_fixed` (an element or a pointee in the path) and `unknown_context`. Everything is client data: no assert, no `PoolString`.
+
+The context is a named provider of `ValueContextRegistry` (`ValueContextRegistry.h`; main thread, names `String`, never interned) that a game fills, because a scene has no context of its own: the request's `context`, else the one named `default`. With none the answer is kind and source only (`has_value` false, `why` says no context); a provider that returns nothing now, or a context that lacks a level the value reads, gives `has_value` false too.
+
 ## Files
 
 | File | Holds |
@@ -33,4 +39,5 @@ The words are data (`TooltipWords`): the `per` pattern (`{0}` the number, `{1}` 
 | `FieldResolver.h` | `ResolveField`: level + offset to the path and `TypeDesc`; a component of a `Vec3` is `field.y` |
 | `ProgramTrace.h` | `ExplainProgram`, `ProgramTrace`, `TraceNode`, `FormatImage`, `FormatTrace` |
 | `ValueExplain.h` | `ExplainValue`, `ValueExplanation`, `FormatValue`, `ValueExplainers` |
+| `ValueExplainControl.h`, `ValueContextRegistry.h` | the method `explain_value`, the named contexts a game registers |
 | `ValueTooltip.h`, `TooltipStrings.h` | `FormatTooltip`, `TooltipWords`; the words from `UIStrings` |

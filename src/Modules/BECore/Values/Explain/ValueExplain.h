@@ -156,18 +156,27 @@ namespace BECore {
         /// Registers the explanation of `Value<T>`; registering a type again changes nothing
         template <ValueType T>
         void Register() {
-            Add(DescribeType<Value<T>>().opaqueHash,
+            const TypeDesc& type = DescribeType<Value<T>>();
+            Add(type.opaqueHash, type.opaqueName,
                 [](const void* value, const Context& context, const ContextDecl& declaration) { return ExplainValue(*static_cast<const Value<T>*>(value), context, declaration); });
         }
 
         /// The explanation of the `Value<T>` whose descriptor has @p opaqueHash, null when no such type was registered
         [[nodiscard]] ValueExplainFn Find(uint64_t opaqueHash) const;
 
+        /// The names of the registered `Value<T>` types, sorted: what an error message tells a client who asked about another type
+        [[nodiscard]] Vector<String> Names() const;
+
     private:
-        void Add(uint64_t opaqueHash, ValueExplainFn explain);
+        struct Entry {
+            ValueExplainFn explain = nullptr;
+            StringView name;
+        };
+
+        void Add(uint64_t opaqueHash, StringView name, ValueExplainFn explain);
 
         mutable Mutex _mutex{BE_LOCK_SITE("ValueExplainers")};
-        HashMap<uint64_t, ValueExplainFn> _explainers;
+        HashMap<uint64_t, Entry> _explainers;
     };
 
     /// Registers `Value<T>` for the numbers, `bool`, the vectors, `Quat`, `Color`, `PoolString` and `Rect`; an enum or a game's type is the game's to register

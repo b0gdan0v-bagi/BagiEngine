@@ -51,12 +51,25 @@ namespace BECore {
     ValueExplainFn ValueExplainers::Find(uint64_t opaqueHash) const {
         LockGuard lock(_mutex);
         const auto found = _explainers.find(opaqueHash);
-        return found != _explainers.end() ? found->second : nullptr;
+        return found != _explainers.end() ? found->second.explain : nullptr;
     }
 
-    void ValueExplainers::Add(uint64_t opaqueHash, ValueExplainFn explain) {
+    Vector<String> ValueExplainers::Names() const {
+        Vector<String> names;
+        {
+            LockGuard lock(_mutex);
+            names.reserve(_explainers.size());
+            for (const auto& entry : _explainers) {
+                names.push_back(String(entry.second.name));
+            }
+        }
+        std::sort(names.begin(), names.end());
+        return names;
+    }
+
+    void ValueExplainers::Add(uint64_t opaqueHash, StringView name, ValueExplainFn explain) {
         LockGuard lock(_mutex);
-        _explainers[opaqueHash] = explain;
+        _explainers[opaqueHash] = Entry{explain, name};
     }
 
     void RegisterBuiltinValueExplainers() {
