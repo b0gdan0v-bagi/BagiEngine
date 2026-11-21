@@ -33,18 +33,20 @@ namespace BECore {
         return found == _rooms.end() ? nullptr : found->second.get();
     }
 
-    void RoomHub::SendText(ConnectionId id, String text) {
+    void RoomHub::SendText(ConnectionId id, const String& text) {
         if (_sink.send) {
-            _sink.send(id, std::move(text));
+            _sink.send(id, text);
         }
     }
 
     void RoomHub::SendError(ConnectionId id, StringView code, StringView message, StringView ref) {
-        SendText(id, MakeErrorMessage(code, message, ref));
+        _sendScratch.clear();
+        AppendErrorMessage(_sendScratch, code, message, ref);
+        SendText(id, _sendScratch);
     }
 
     void RoomHub::SendError(ConnectionId id, const ControlError& error, StringView ref) {
-        SendText(id, MakeErrorMessage(error.code, error.message, ref));
+        SendError(id, StringView(error.code), StringView(error.message), ref);
     }
 
     bool RoomHub::JoinBudgetOpen(const Connection& connection, RoomTime now) const {
@@ -213,7 +215,9 @@ namespace BECore {
                     HandleList(id, connection, typed, now);
                 } else {
                     static_assert(std::is_same_v<T, PingMessage>, "a new client message needs its handler");
-                    SendText(id, MakePongMessage());
+                    _sendScratch.clear();
+                    AppendPongMessage(_sendScratch);
+                    SendText(id, _sendScratch);
                 }
             },
             message);
@@ -279,7 +283,9 @@ namespace BECore {
         RoomEntry& stored = *entry;
         _rooms.emplace(code, std::move(entry));
 
-        SendText(id, MakeJoinedMessage(code, joined->player, joined->token, joined->seat, stored.room->IsHost(joined->player)));
+        _sendScratch.clear();
+        AppendJoinedMessage(_sendScratch, code, joined->player, joined->token, joined->seat, stored.room->IsHost(joined->player));
+        SendText(id, _sendScratch);
         Flush(stored, now);
     }
 
@@ -318,7 +324,9 @@ namespace BECore {
         for (size_t i = 0; i < found.size() && i < cap; ++i) {
             list.rooms.push_back(found[i]->room->GetListing());
         }
-        SendText(id, MakeRoomListMessage(list));
+        _sendScratch.clear();
+        AppendRoomListMessage(_sendScratch, list);
+        SendText(id, _sendScratch);
     }
 
     void RoomHub::HandleJoin(ConnectionId id, Connection& connection, const JoinRoomMessage& message, RoomTime now) {
@@ -352,7 +360,9 @@ namespace BECore {
             for (const ConnectionId other : entry->connections) {
                 const auto otherFound = _connections.find(other);
                 if (otherFound != _connections.end() && otherFound->second.player == *player) {
-                    SendText(other, MakeLeftMessage(RoomCloseReasons::kReplaced));
+                    _sendScratch.clear();
+                    AppendLeftMessage(_sendScratch, RoomCloseReasons::kReplaced);
+                    SendText(other, _sendScratch);
                     Detach(other, otherFound->second);
                     CloseConnection(other, RoomCloseReasons::kReplaced, now);
                     break;
@@ -367,7 +377,9 @@ namespace BECore {
             connection.failedJoinsInRow = 0;
             entry->connections.push_back(id);
             entry->lastActivity = now;
-            SendText(id, MakeJoinedMessage(room.GetCode(), *player, message.token, *room.GetSeatOf(*player), room.IsHost(*player)));
+            _sendScratch.clear();
+            AppendJoinedMessage(_sendScratch, room.GetCode(), *player, message.token, *room.GetSeatOf(*player), room.IsHost(*player));
+            SendText(id, _sendScratch);
             Flush(*entry, now);
             return;
         }
@@ -383,7 +395,9 @@ namespace BECore {
         connection.failedJoinsInRow = 0;
         entry->connections.push_back(id);
         entry->lastActivity = now;
-        SendText(id, MakeJoinedMessage(room.GetCode(), joined->player, joined->token, joined->seat, room.IsHost(joined->player)));
+        _sendScratch.clear();
+        AppendJoinedMessage(_sendScratch, room.GetCode(), joined->player, joined->token, joined->seat, room.IsHost(joined->player));
+        SendText(id, _sendScratch);
         Flush(*entry, now);
     }
 
@@ -438,7 +452,9 @@ namespace BECore {
         }
         const String code = connection.roomCode;
         entry->room->Leave(connection.player);
-        SendText(id, MakeLeftMessage(RoomCloseReasons::kLeft));
+        _sendScratch.clear();
+        AppendLeftMessage(_sendScratch, RoomCloseReasons::kLeft);
+        SendText(id, _sendScratch);
         Detach(id, connection);
         connection.lastActivity = now;
         if (!CloseIfDone(code, now)) {
@@ -454,7 +470,9 @@ namespace BECore {
         if (!view || !actions || !seat) {
             return;
         }
-        SendText(id, MakeViewMessage(room.GetCode(), *seat, room.GetGameVersion(), room.GetPhase() == RoomPhase::Finished, *view, *actions));
+        _sendScratch.clear();
+        AppendViewMessage(_sendScratch, room.GetCode(), *seat, room.GetGameVersion(), room.GetPhase() == RoomPhase::Finished, *view, *actions);
+        SendText(id, _sendScratch);
         connection.sentView = true;
         connection.sentGameVersion = room.GetGameVersion();
         connection.sentSeat = *seat;
@@ -468,8 +486,10 @@ namespace BECore {
         }
         const uint64_t revision = room.GetLobbyRevision();
         const bool started = room.GetPhase() != RoomPhase::Lobby;
-        // Made for the first connection that is behind: a room in which nothing changed costs no snapshot on every tick
-        Optional<String> lobbyText;
+        // Written for the first connection that is behind: a room in which nothing changed costs no snapshot on every tick. Not
+        // _sendScratch: ResendView writes a `view` there between two sends of this text.
+        bool lobbyWritten = false;
+        _lobbyText.clear();
         // Copy: a sink is not allowed to call back, but the loop must not depend on that
         _flushIds = entry.connections;
         for (const ConnectionId id : _flushIds) {
@@ -480,10 +500,11 @@ namespace BECore {
             Connection& connection = found->second;
             if (connection.sentLobbyRevision != revision) {
                 connection.sentLobbyRevision = revision;
-                if (!lobbyText) {
-                    lobbyText = MakeLobbyMessage(room.GetLobbySnapshot());
+                if (!lobbyWritten) {
+                    AppendLobbyMessage(_lobbyText, room.GetLobbySnapshot());
+                    lobbyWritten = true;
                 }
-                SendText(id, *lobbyText);
+                SendText(id, _lobbyText);
             }
             if (started) {
                 const Optional<int> seat = room.GetSeatOf(connection.player);
@@ -500,12 +521,15 @@ namespace BECore {
             return;
         }
         const Vector<ConnectionId> ids = found->second->connections;
+        // The same text for every member; no other send runs inside the loop, so the scratch stays intact
+        _sendScratch.clear();
+        AppendLeftMessage(_sendScratch, reason);
         for (const ConnectionId id : ids) {
             const auto connection = _connections.find(id);
             if (connection == _connections.end()) {
                 continue;
             }
-            SendText(id, MakeLeftMessage(reason));
+            SendText(id, _sendScratch);
             connection->second.roomCode.clear();
             connection->second.player = 0;
             connection->second.sentLobbyRevision = 0;

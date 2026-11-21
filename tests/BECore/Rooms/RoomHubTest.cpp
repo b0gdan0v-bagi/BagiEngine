@@ -10,7 +10,114 @@ namespace BECore::Tests {
         using std::chrono::milliseconds;
         using std::chrono::seconds;
 
+        /// A hub whose sink takes the text by reference, as the contract says, and records the address of the String it was handed
+        class ReferenceSinkWorld {
+        public:
+            struct Sent {
+                ConnectionId id = 0;
+                const String* address = nullptr;
+                String text;
+            };
+
+            ReferenceSinkWorld() : _hub(MakeRegistry(), MakeSettings(), MakeSequence(42), MakeSink()) {}
+
+            static RoomHubSettings MakeSettings() {
+                RoomHubSettings settings;
+                settings.timings = NoComputerDelayTimings();
+                return settings;
+            }
+
+            void Connect(ConnectionId id) {
+                _hub.OnConnected(id, _now, {});
+            }
+
+            void Send(ConnectionId id, const ClientMessage& message) {
+                _hub.OnMessage(id, SerializeClientMessage(message), _now);
+            }
+
+            RoomHub& Hub() {
+                return _hub;
+            }
+
+            Vector<Sent> sent;
+
+        private:
+            SeatedGameRegistry& MakeRegistry() {
+                EXPECT_TRUE(_registry.Register(SeatedGameInfo{"fake", FakeSeatedGame::kSeatCount}, [] { return MakeUnique<FakeSeatedGame>(); }));
+                return _registry;
+            }
+
+            HubSink MakeSink() {
+                HubSink sink;
+                sink.send = [this](ConnectionId id, const String& text) { sent.push_back(Sent{id, &text, text}); };
+                sink.close = [](ConnectionId, String) {};
+                return sink;
+            }
+
+            SeatedGameRegistry _registry;
+            RoomTime _now{};
+            RoomHub _hub;
+        };
+
+        [[nodiscard]] String SentTypeOf(const String& text) {
+            const auto parsed = ParseServerMessage(text);
+            return parsed ? String(GetServerMessageType(*parsed)) : String("unparsed");
+        }
+
     }  // namespace
+
+    TEST(RoomHubTest, TwoSingleMessagesGoOutThroughTheSameBufferWithTheirOwnText) {
+        ReferenceSinkWorld world;
+        world.Connect(1);
+        world.Send(1, PingMessage{});
+        world.Send(1, StartMessage{});
+
+        ASSERT_EQ(world.sent.size(), 2u);
+        EXPECT_EQ(world.sent[0].text, MakePongMessage());
+        EXPECT_EQ(world.sent[1].text, MakeErrorMessage(RoomErrors::kNotInRoom, "You are not in a room", RoomMessageTypes::kStart));
+        EXPECT_EQ(world.sent[0].address, world.sent[1].address);
+    }
+
+    TEST(RoomHubTest, EveryMemberBehindOnTheLobbyGetsTheSameTextWhileViewsAreSentBetween) {
+        ReferenceSinkWorld world;
+        constexpr int kMembers = 3;
+        world.Connect(1);
+        world.Send(1, CreateRoomMessage{"fake", "P0", Json::object(), false});
+        ASSERT_FALSE(world.sent.empty());
+        const auto joined = ParseServerMessage(world.sent.front().text);
+        ASSERT_TRUE(joined.has_value());
+        const String code = Require(std::get_if<JoinedMessage>(&*joined)).room;
+        for (ConnectionId id = 2; id <= kMembers; ++id) {
+            world.Connect(id);
+            JoinRoomMessage join;
+            join.code = code;
+            join.name = "P";
+            world.Send(id, join);
+        }
+        world.sent.clear();
+
+        // The start moves the lobby (phase) and the game version for everybody at once: one Flush sends lobby, view, lobby, view, ...
+        world.Send(1, StartMessage{});
+
+        ASSERT_EQ(world.sent.size(), static_cast<size_t>(2 * kMembers));
+        const auto lobby = ParseServerMessage(world.sent[0].text);
+        ASSERT_TRUE(lobby.has_value());
+        const String expectedLobby = MakeLobbyMessage(Require(std::get_if<LobbyMessage>(&*lobby)));
+        EXPECT_EQ(expectedLobby, world.sent[0].text);
+        for (int member = 0; member < kMembers; ++member) {
+            const auto& lobbySent = At(world.sent, static_cast<size_t>(2 * member));
+            const auto& viewSent = At(world.sent, static_cast<size_t>(2 * member + 1));
+            EXPECT_EQ(lobbySent.id, static_cast<ConnectionId>(member + 1));
+            EXPECT_EQ(lobbySent.text, expectedLobby) << "member " << member;
+            EXPECT_EQ(SentTypeOf(viewSent.text), "view");
+            EXPECT_EQ(viewSent.id, lobbySent.id);
+            const auto view = ParseServerMessage(viewSent.text);
+            ASSERT_TRUE(view.has_value());
+            const ViewMessage& parsed = Require(std::get_if<ViewMessage>(&*view));
+            EXPECT_EQ(parsed.seat, member);
+            EXPECT_EQ(viewSent.text, MakeViewMessage(parsed.room, parsed.seat, parsed.version, parsed.finished, parsed.view, parsed.actions));
+        }
+    }
 
     TEST(RoomHubTest, ATickOfARoomInWhichNothingChangedSendsAndAllocatesNothing) {
         constexpr int kTicks = 64;
