@@ -81,6 +81,7 @@ namespace BECore {
         if (!target) {
             if (_default.Empty()) {
                 _default = language;
+                SyncLanguageView();
             }
             _languages.push_back(Language{language, {}});
             _languageIds.push_back(language);
@@ -104,6 +105,7 @@ namespace BECore {
             return;
         }
         _default = language;
+        SyncLanguageView();
         ++_version;
     }
 
@@ -115,6 +117,7 @@ namespace BECore {
             ++_version;
         }
         _current = language;
+        SyncLanguageView();
         return true;
     }
 
@@ -199,7 +202,13 @@ namespace BECore {
         _missing.clear();
         _default = PoolString{};
         _current = PoolString{};
+        SyncLanguageView();
         ++_version;
+    }
+
+    void UIStrings::SyncLanguageView() {
+        _languageView.language = GetLanguage();
+        _languageView.defaultLanguage = _default;
     }
 
     Vector<String> UIStrings::LoadFromXml(const XmlNode& node) {

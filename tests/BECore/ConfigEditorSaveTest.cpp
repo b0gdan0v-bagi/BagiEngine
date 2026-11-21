@@ -1,4 +1,7 @@
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/Config/XmlDocument.h>
+#include <BECore/FileSystem/FileSystem.h>
+#include <BECore/FileSystem/MountPoints.h>
 #include <BECore/Logger/FileSink.h>
 #include <BECore/Logger/LoggerManager.h>
 #include <BECore/Logger/OutputSink.h>
@@ -6,6 +9,10 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
+#include <Events/ConfigEvents.h>
+#include <Events/SubscriptionHolder.h>
+#include <Widgets/ConfigEditor/ConfigEditorWidget.h>
 #include <Widgets/ConfigEditor/ConfigFieldSchema.h>
 #include <Widgets/ConfigEditor/StagedChanges.h>
 
@@ -336,6 +343,113 @@ namespace BECore::Tests {
         EXPECT_EQ(manager->GetSink<OutputSink>(), nullptr);
         ASSERT_EQ(manager->GetSinks().size(), 1u);
         EXPECT_EQ(TypeNameOf(*manager->GetSinks()[0]), "FileSink");
+    }
+
+    namespace {
+
+        const PoolString kPanelConfig = "PanelConfig"_intern;
+        const PoolString kOtherPanelConfig = "OtherPanelConfig"_intern;
+        constexpr StringView kPanelText = "<PanelConfig value=\"one\"/>\n";
+        constexpr StringView kOtherPanelText = "<OtherPanelConfig value=\"other\"/>\n";
+        constexpr StringView kValueKey = "root@value";
+
+        class ChangeCounter : public SubscriptionHolder {
+        public:
+            ChangeCounter() {
+                Subscribe<ConfigEvents::ConfigChangedEvent, &ChangeCounter::OnChanged>(this);
+            }
+
+            size_t Count(PoolString name) const {
+                size_t count = 0;
+                for (const PoolString& seen : _names) {
+                    count += seen == name ? 1 : 0;
+                }
+                return count;
+            }
+
+        private:
+            void OnChanged(const ConfigEvents::ConfigChangedEvent& event) {
+                _names.push_back(event.name);
+            }
+
+            Vector<PoolString> _names;
+        };
+
+    }  // namespace
+
+    /// The Config Editor over a manager of its own on a `config` folder in a temporary directory: the engine's files are never written
+    class ConfigEditorChangeTest : public ::testing::Test {
+    protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
+
+        void SetUp() override {
+            _dir = TestTempDirectory("cfg_editor_change");
+            MakeEmptyDirectory(_dir);
+            WriteFile(_dir / "PanelConfig.xml", kPanelText);
+            WriteFile(_dir / "OtherPanelConfig.xml", kOtherPanelText);
+            ASSERT_TRUE(_fileSystem.Mount(MountPoints::config, _dir));
+            _manager.Initialize();
+
+            XmlDeserializer deserializer;
+            _widget = New<ConfigEditorWidget>();
+            ASSERT_TRUE(_widget->Initialize(deserializer));
+            _widget->UseConfigManager(&_manager);
+            _widget->SelectConfig(kPanelConfig);
+        }
+
+        void TearDown() override {
+            _widget.Reset();
+            ConfigFieldSchema::DestroyInstance();
+            RemoveDirectory(_dir);
+        }
+
+        void StageNewValue(StringView value) {
+            const XmlNode root = _manager.GetConfig(kPanelConfig);
+            _widget->GetStagedChanges().Set(String{kValueKey.data(), kValueKey.size()}, root.GetPugiNode().attribute("value"), value);
+        }
+
+        std::filesystem::path _dir;
+        FileSystem _fileSystem;
+        ConfigManager _manager{_fileSystem};
+        IntrusivePtrNonAtomic<ConfigEditorWidget> _widget;
+    };
+
+    TEST_F(ConfigEditorChangeTest, SavingThroughTheEditorPublishesTheChangeOnceAndTheEditorStaysQuiet) {
+        const ChangeCounter changes;
+        StageNewValue("two");
+
+        _widget->SaveSelectedConfig();
+
+        EXPECT_EQ(changes.Count(kPanelConfig), 1u);
+        EXPECT_NE(ReadFile(_dir / "PanelConfig.xml").find("two"), String::npos);
+        EXPECT_TRUE(_widget->GetStagedChanges().IsEmpty());
+        EXPECT_FALSE(_widget->ShowsChangedOnDiskNotice()) << "the event of its own save is not news to the panel";
+    }
+
+    TEST_F(ConfigEditorChangeTest, AChangeOfTheSelectedConfigDropsTheStagedEditsAndSaysSo) {
+        StageNewValue("two");
+
+        _manager.ReloadConfig(kPanelConfig);  // what a file change on disk does, not the panel's own call
+
+        EXPECT_TRUE(_widget->GetStagedChanges().IsEmpty());
+        EXPECT_TRUE(_widget->ShowsChangedOnDiskNotice());
+    }
+
+    TEST_F(ConfigEditorChangeTest, AChangeOfAnotherConfigKeepsTheStagedEdits) {
+        StageNewValue("two");
+
+        EXPECT_FALSE(_widget->DropStagedForChange(kOtherPanelConfig));
+        _manager.ReloadConfig(kOtherPanelConfig);
+
+        EXPECT_FALSE(_widget->GetStagedChanges().IsEmpty());
+        EXPECT_FALSE(_widget->ShowsChangedOnDiskNotice());
+    }
+
+    TEST_F(ConfigEditorChangeTest, AChangeWithNothingStagedSaysNothing) {
+        EXPECT_FALSE(_widget->DropStagedForChange(kPanelConfig));
+        EXPECT_FALSE(_widget->ShowsChangedOnDiskNotice());
     }
 
 }  // namespace BECore::Tests

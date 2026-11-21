@@ -72,6 +72,11 @@ namespace BECore {
         /// The font file the text is measured and drawn with, empty when it did not load
         [[nodiscard]] PoolString GetResolvedFontPath() const;
 
+        /// How many times the display text was expanded (`UITextPainter::GetExpandCount`)
+        [[nodiscard]] uint32_t GetExpandCount() const {
+            return _painter.GetExpandCount();
+        }
+
         /// How many times the text was laid out: an unchanged text is not laid out again
         [[nodiscard]] uint32_t GetLayoutCount() const {
             return _painter.GetLayoutCount();

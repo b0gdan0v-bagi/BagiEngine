@@ -239,6 +239,7 @@ namespace BECore {
             CommandMenuItem(kViewViewport, "Viewport");
             CommandMenuItem(kViewSceneEditor, "Scene Editor");
             CommandMenuItem(kViewConfigEditor, "Config Editor");
+            CommandMenuItem(kViewFileChanges, "File Changes");
             CommandMenuItem(kViewSpriteLibrary, "Sprite Library");
             CommandMenuItem(kViewGame, "Game Panel");
             CommandMenuItem(kViewConsole, "Console");

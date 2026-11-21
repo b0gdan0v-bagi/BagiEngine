@@ -44,6 +44,7 @@ namespace BECore {
                 {kViewGame, "Game Panel", kCtrlShiftG, true},
                 {kViewSceneEditor, "Scene Editor", std::nullopt, true},
                 {kViewConfigEditor, "Config Editor", std::nullopt, true},
+                {kViewFileChanges, "File Changes", std::nullopt, true},
                 {kViewSpriteLibrary, "Sprite Library", std::nullopt, true},
                 {kViewViewport, "Viewport", std::nullopt, true},
                 {kViewGenerate, "Generate Art", std::nullopt, true},

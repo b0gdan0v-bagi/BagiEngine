@@ -7,6 +7,8 @@
 #include <BECore/Config/ConfigFactory.h>
 #include <BECore/Config/ConfigNames.h>
 #include <BECore/Control/ControlBuiltins.h>
+#include <BECore/FileSystem/FileWatchControl.h>
+#include <BECore/FileSystem/PlatformFileWatchBackend.h>
 #include <BECore/Input/InputControl.h>
 #include <BECore/Logger/LoggerManager.h>
 #include <BECore/Logger/OutputSink.h>
@@ -28,7 +30,7 @@ namespace BECore {
 
     }  // namespace
 
-    CoreManager::CoreManager() = default;
+    CoreManager::CoreManager() : _fileWatcher(_fileSystem) {}
 
     CoreManager::~CoreManager() = default;
 
@@ -59,6 +61,8 @@ namespace BECore {
         _audioManager.Shutdown();
         _tweenManager.Clear();  // no callbacks: what they point at may be gone
         _controlService.Shutdown();
+        _configManager.StopWatching();
+        _fileWatcher.Stop();
         TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});
     }
 
@@ -106,6 +110,7 @@ namespace BECore {
         RegisterProfilerControl(_controlService);
         RegisterClipboardControl(_controlService);
         RegisterAudioControl(_controlService, _audioManager);
+        RegisterFileWatchControl(_controlService, _fileWatcher);
     }
 
     void CoreManager::OnApplicationInit(PassKey<Application>) {
@@ -113,6 +118,13 @@ namespace BECore {
         _widgetManager.CreateWidgets();
         _sceneManager = LoadSceneManagerFromConfig();  // SceneConfig, with its node files
         _sceneManager->Initialize();
+    }
+
+    void CoreManager::StartFileWatching(PassKey<Application>, bool enabled) {
+        if (enabled) {
+            _fileWatcher.Start(MakePlatformFileWatchBackend());
+            _configManager.StartWatching(_fileWatcher);
+        }
     }
 
     void CoreManager::OnGameCycle(PassKey<Application>, FrameKind kind) {
@@ -124,6 +136,7 @@ namespace BECore {
                 BE_PROFILE_SCOPE("Input");
                 _eventsProviderManager.ProcessEvents();
                 _clipboard.Update();  // the answers of the reads and the pastes of the page, after the input that asked for them
+                _fileWatcher.Update();
             }
             _controlService.Drain();  // commands of the control API see this frame's input and run before the tasks and the logic
             UpdateGame(kind);
@@ -179,6 +192,7 @@ namespace BECore {
 
     void CoreManager::OnIdleCycle(PassKey<Application>) {
         _eventsProviderManager.ProcessEvents();  // the window keeps answering and a close still quits
+        _fileWatcher.Update();                   // a native backend posts from its own thread: without a take the queue would grow while the clock stands still
         _controlService.Drain();
         _audioManager.Update(0.0f);  // the manual clock between steps: the music is still fed, its fades wait for game time
         if (!_controlService.IsStepDue()) {
@@ -191,6 +205,8 @@ namespace BECore {
         _tweenManager.Clear();     // no callbacks: the scenes and what the setters point at may be going away
         _audioManager.Shutdown();  // a backend still open here (none closed it at the clean-up) is closed before the task system goes
         _controlService.Shutdown();
+        _configManager.StopWatching();
+        _fileWatcher.Stop();
         TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});
     }
 

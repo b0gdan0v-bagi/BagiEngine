@@ -167,6 +167,26 @@ namespace BECore {
         /// True when every level of @p levels has an object and a counter (`Set` with a version): the key then tells whether a value that reads them changed. The empty mask is true
         [[nodiscard]] bool IsVersioned(LevelMask levels) const;
 
+        /**
+         * @brief A copy that holds only the levels of @p levels: the object, counter and `Set` count of every other level are cleared
+         *
+         * The declaration and the writable marks of the kept levels stay, so `VersionKey` of a kept level is the original's. It is the
+         * debug check of `Derived`: a builder given this copy that reads an undeclared level meets a null level and fails the `ASSERT` of
+         * `Value::Get`. A copy of the whole array, so not for a frame that must stay cheap.
+         */
+        [[nodiscard]] Context Restricted(LevelMask levels) const {
+            Context view = *this;
+            for (LevelIndex level = 0; level < kMaxContextLevels; ++level) {
+                if ((levels & LevelBit(level)) == 0) {
+                    view._objects[level] = nullptr;
+                    view._versions[level] = nullptr;
+                    view._sets[level] = 0;
+                    view._mutable = static_cast<LevelMask>(view._mutable & ~LevelBit(level));
+                }
+            }
+            return view;
+        }
+
     private:
         void SetObject(LevelIndex level, const void* object, const ClassMeta& type, const uint64_t* version, bool writable);
         void Store(LevelIndex level, const void* object, const uint64_t* version, bool writable);

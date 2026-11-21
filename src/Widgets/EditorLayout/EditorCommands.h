@@ -71,6 +71,7 @@ namespace BECore {
         /// Show and hide the always-present panels; each panel owns its command. No default chord
         inline constexpr auto kViewSceneEditor = "view.sceneEditor"_intern;
         inline constexpr auto kViewConfigEditor = "view.configEditor"_intern;
+        inline constexpr auto kViewFileChanges = "view.fileChanges"_intern;
         inline constexpr auto kViewSpriteLibrary = "view.spriteLibrary"_intern;
         inline constexpr auto kViewViewport = "view.viewport"_intern;
     }  // namespace EditorCommandIds

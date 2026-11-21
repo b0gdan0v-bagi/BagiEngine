@@ -7,6 +7,7 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlSettings.h>
 #include <BECore/Control/Json.h>
+#include <BECore/FileSystem/FileWatchSetting.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/MainWindow/IMainWindow.h>
@@ -37,6 +38,14 @@ namespace BECore {
     namespace {
         // The only request the application posts to itself, so its id needs no other meaning
         constexpr int64_t kReplayRequestId = 1;
+
+        /// The condition that turns ASSERT on (Assert/AssertMacros.h): the Debug builds, where FileWatchSetting::Auto watches
+        constexpr bool kAssertsOn = ENGINE_ENABLE_ASSERTS != 0;
+#if defined(__EMSCRIPTEN__)
+        constexpr bool kIsWeb = true;
+#else
+        constexpr bool kIsWeb = false;
+#endif
     }  // namespace
 
     Application::Application() = default;
@@ -140,6 +149,12 @@ namespace BECore {
             LogEvent::Flush();
             return false;
         }
+
+        // Resolved without the warning: CreateWidgets resolves and warns once. After the config is final and before the widgets, so what they create can watch
+        const RunMode resolvedMode = kEditorBuilt ? config._mode : RunMode::Game;
+        const bool watchFiles = ShouldWatchFiles(config._fileWatch, resolvedMode, kAssertsOn, kIsWeb);
+        CoreManager::GetInstance().StartFileWatching({}, watchFiles);
+        LOG_INFO("File watching: {}"_format(watchFiles ? "on" : "off"));
 
         CoreManager::GetInstance().OnApplicationInit({});
 

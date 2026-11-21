@@ -12,6 +12,7 @@
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UITooltip.h>
 #include <BECore/UI/UIVars.h>
+#include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/LogRecorder.h>
 #include <Common/Printers.h>
@@ -204,6 +205,64 @@ namespace BECore::Tests {
         Draw();
         EXPECT_FALSE(Glyphs().empty());
         EXPECT_EQ(caption.GetDisplayText(), "Score: 100");
+    }
+
+    TEST_F(UITextComponentTest, ADisplayTextIsExpandedAgainOnlyWhenWhatItReadsMoved) {
+        UIStrings& strings = CoreManager::GetUIStrings();
+        strings.Set("en"_intern, "k", "Hello");
+        strings.Set("ru"_intern, "k", "Privet");
+        strings.SetLanguage("en"_intern);
+        UIVars& vars = CoreManager::GetUIVars();
+        vars.Set("score"_intern, 1);
+        UITextComponent& caption = CaptionOf("Cap");
+        caption.text = "{#k} {score}";
+
+        EXPECT_EQ(caption.GetDisplayText(), "Hello 1");
+        const uint32_t first = caption.GetExpandCount();
+        EXPECT_EQ(caption.GetDisplayText(), "Hello 1");
+        EXPECT_EQ(caption.GetExpandCount(), first);
+
+        strings.SetLanguage("ru"_intern);
+        EXPECT_EQ(caption.GetDisplayText(), "Privet 1");
+        EXPECT_EQ(caption.GetExpandCount(), first + 1);
+
+        vars.Set("score"_intern, 2);
+        EXPECT_EQ(caption.GetDisplayText(), "Privet 2");
+        EXPECT_EQ(caption.GetExpandCount(), first + 2);
+
+        EXPECT_EQ(caption.GetDisplayText(), "Privet 2");
+        EXPECT_EQ(caption.GetExpandCount(), first + 2);
+    }
+
+    TEST_F(UITextComponentTest, ATextWithNoStringIsLeftAloneByALanguageSwitch) {
+        UIStrings& strings = CoreManager::GetUIStrings();
+        strings.Set("en"_intern, "k", "Hello");
+        strings.Set("ru"_intern, "k", "Privet");
+        strings.SetLanguage("en"_intern);
+        CoreManager::GetUIVars().Set("score"_intern, 7);
+        UITextComponent& caption = CaptionOf("Cap");
+        caption.text = "Score {score}";
+
+        EXPECT_EQ(caption.GetDisplayText(), "Score 7");
+        const uint32_t first = caption.GetExpandCount();
+        strings.SetLanguage("ru"_intern);
+        strings.Set("ru"_intern, "k", "Else");
+        EXPECT_EQ(caption.GetDisplayText(), "Score 7");
+        EXPECT_EQ(caption.GetExpandCount(), first);
+    }
+
+    TEST_F(UITextComponentTest, ASteadyDisplayTextAllocatesNothing) {
+        CoreManager::GetUIStrings().Set("en"_intern, "k", "Hello");
+        CoreManager::GetUIVars().Set("score"_intern, 7);
+        UITextComponent& caption = CaptionOf("Cap");
+        caption.text = "{#k}: {score}";
+        ASSERT_EQ(caption.GetDisplayText(), "Hello: 7");
+
+        ExpectNoAllocations([&] {
+            for (int frame = 0; frame < 100; ++frame) {
+                static_cast<void>(caption.GetDisplayText());
+            }
+        });
     }
 
     TEST_F(UITextComponentTest, AnUnchangedTextIsLaidOutOnce) {

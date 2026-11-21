@@ -43,6 +43,11 @@ namespace BECore {
             return _version;
         }
 
+        /// The address of the counter behind GetVersion(), for `DerivedReads::AddSource`; valid as long as the table
+        [[nodiscard]] const uint64_t* GetVersionCounter() const {
+            return &_version;
+        }
+
         /// @p text with every `{name}` replaced by the value of the variable; `{{` and `}}` become one brace. An unclosed `{` stays as it is
         [[nodiscard]] String Expand(StringView text) const;
 

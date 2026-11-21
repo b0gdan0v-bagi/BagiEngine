@@ -95,15 +95,14 @@ namespace BECore {
 
         if (_drainingInline) {
             // A job is running on this stack: the outer call runs this one after it.
-            _inlineQueue.push_back(std::move(task));
+            _inlineQueue.PushBack(std::move(task));
             return;
         }
 
         _drainingInline = true;
         task();
-        while (!_inlineQueue.empty()) {
-            TaskQueue::TaskFunc next = std::move(_inlineQueue.front());
-            _inlineQueue.pop_front();
+        while (!_inlineQueue.Empty()) {
+            TaskQueue::TaskFunc next = _inlineQueue.PopFront();
             next();
         }
         _drainingInline = false;
@@ -136,7 +135,7 @@ namespace BECore {
     }
 
     size_t ThreadPool::GetPendingTaskCount() const {
-        size_t count = _inlineQueue.size();
+        size_t count = _inlineQueue.Size();
         for (const auto& queue : _queues) {
             count += queue->Size();
         }

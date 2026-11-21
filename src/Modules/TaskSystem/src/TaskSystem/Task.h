@@ -7,6 +7,7 @@
 #include <BECore/Threading/LockGuards.h>
 #include <BECore/Threading/LockSite.h>
 #include <BECore/Threading/Mutex.h>
+#include <TaskSystem/TaskMemory.h>
 #include <TaskSystem/TaskPriority.h>
 #include <coroutine>
 #include <expected>
@@ -121,6 +122,14 @@ namespace BECore {
 
         template <typename T>
         struct TaskPromiseBase {
+            // The coroutine frame comes from TaskMemory; the sized delete of a promise gets the frame size, which picks the class back
+            static void* operator new(size_t size) {
+                return TaskMemory::Allocate(size);
+            }
+            static void operator delete(void* ptr, size_t size) {
+                TaskMemory::Deallocate(ptr, size);
+            }
+
             TaskError _error = TaskError::None;
             std::coroutine_handle<> _continuation;
             CompletionEvent* _completion = nullptr;  // set by TaskHandle; null for tasks awaited via co_await

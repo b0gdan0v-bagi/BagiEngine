@@ -39,7 +39,42 @@ namespace BECore {
         schema.RegisterFlags("SDLWindowConfig"_intern, "window/@windowFlags", SDLUtils::GetWindowFlagNames());
 
         Subscribe<EditorCommandEvent, &ConfigEditorWidget::OnCommand>(this);
+        Subscribe<ConfigEvents::ConfigChangedEvent, &ConfigEditorWidget::OnConfigChanged>(this);
         return true;
+    }
+
+    ConfigManager& ConfigEditorWidget::Manager() {
+        return _configManager != nullptr ? *_configManager : CoreManager::GetConfigManager();
+    }
+
+    void ConfigEditorWidget::OnConfigChanged(const ConfigEvents::ConfigChangedEvent& event) {
+        if (!_ownWrite) {
+            DropStagedForChange(event.name);
+        }
+    }
+
+    bool ConfigEditorWidget::DropStagedForChange(PoolString changedConfig) {
+        if (changedConfig != _selectedConfig) {
+            return false;
+        }
+        const bool hadEdits = !_staged.IsEmpty();
+        ClearTransientState();  // the inspectors' state may point into the replaced document too
+        _showChangedOnDisk = _showChangedOnDisk || hadEdits;
+        return hadEdits;
+    }
+
+    void ConfigEditorWidget::SelectConfig(PoolString name) {
+        _selectedConfig = name;
+        _showChangedOnDisk = false;
+        ClearTransientState();
+    }
+
+    void ConfigEditorWidget::ReloadSelectedConfig() {
+        _ownWrite = true;
+        Manager().ReloadConfig(_selectedConfig);
+        _ownWrite = false;
+        _showChangedOnDisk = false;
+        ClearTransientState();
     }
 
     void ConfigEditorWidget::OnCommand(const EditorCommandEvent& event) {
@@ -53,12 +88,16 @@ namespace BECore {
     }
 
     void ConfigEditorWidget::SaveSelectedConfig() {
-        auto& configManager = CoreManager::GetConfigManager();
+        ConfigManager& configManager = Manager();
         const XmlNode rootNode = configManager.GetConfig(_selectedConfig);
         if (rootNode) {
             _staged.ApplyTo(rootNode.GetPugiNode());
         }
-        if (configManager.SaveConfig(_selectedConfig)) {
+        _ownWrite = true;
+        const bool saved = configManager.SaveConfig(_selectedConfig);
+        _ownWrite = false;
+        if (saved) {
+            _showChangedOnDisk = false;
             ClearTransientState();
         }
     }
@@ -73,7 +112,7 @@ namespace BECore {
             return;
         }
 
-        auto& configManager = CoreManager::GetConfigManager();
+        ConfigManager& configManager = Manager();
         const auto configNames = configManager.GetAllConfigNames();
 
         const float leftPanelWidth = 220.0f;
@@ -92,8 +131,7 @@ namespace BECore {
                         _pendingSwitchConfig = name;
                         _showSwitchConfirm = true;
                     } else {
-                        _selectedConfig = name;
-                        ClearTransientState();
+                        SelectConfig(name);
                     }
                 }
             }
@@ -142,14 +180,17 @@ namespace BECore {
             if (hasStagedChanges) {
                 _showReloadConfirm = true;
             } else {
-                configManager.ReloadConfig(_selectedConfig);
-                ClearTransientState();
+                ReloadSelectedConfig();
             }
         }
 
         if (hasStagedChanges) {
             ImGui::SameLine();
             ImGui::TextColored(GetImGuiPalette().warning, "(unsaved changes)");
+        }
+        if (_showChangedOnDisk) {
+            ImGui::SameLine();
+            ImGui::TextColored(GetImGuiPalette().warning, "changed on disk, staged edits dropped");
         }
 
         ImGui::Separator();
@@ -177,8 +218,7 @@ namespace BECore {
         }
 
         if (RenderReloadConfirmPopup()) {
-            configManager.ReloadConfig(_selectedConfig);
-            ClearTransientState();
+            ReloadSelectedConfig();
         }
 
         if (ImGui::BeginPopupModal("Unsaved Changes##switch", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -186,9 +226,8 @@ namespace BECore {
             ImGui::Text("Switch config and discard changes?");
             ImGui::Separator();
             if (IconTextButton(ICON_LC_UNDO_2, "Discard & Switch")) {
-                _selectedConfig = _pendingSwitchConfig;
+                SelectConfig(_pendingSwitchConfig);
                 _pendingSwitchConfig = PoolString{};
-                ClearTransientState();
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();

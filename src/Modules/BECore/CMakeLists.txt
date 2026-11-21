@@ -105,6 +105,11 @@ if(WIN32)
     target_link_libraries(BECoreModule PUBLIC dbghelp)
 endif()
 
+# FSEvents, the macOS file watch backend (FileSystem/FSEventsFileWatchBackend.cpp)
+if(APPLE)
+    target_link_libraries(BECoreModule PUBLIC "-framework CoreServices")
+endif()
+
 # =============================================================================
 # Reflection Code Generation
 # =============================================================================
