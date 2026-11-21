@@ -13,7 +13,7 @@ The client is `RoomClient/CLAUDE.md`.
 | `RoomTypes.h/.cpp` | `ConnectionId`, `PlayerId`, `RoomTime` (`steady_clock::time_point`, always passed in), `RandomFn` (`MoveOnlyFunction<uint64_t()>`, injected), `MakeSecureRandom()` (`std::random_device`, held through a `UniquePtr`: the device cannot be moved), `RoomPhase` (`Lobby`, `Playing`, `Finished`), `SeatKind` (`Human`, `Computer`, `Empty`) and their wire names |
 | `RoomLimits.h` | `RoomLimits::k*` (the constants of the table below), `RoomTimings` (grace, abandoned timeout, computer delay) and `RoomHubSettings` (the same values as defaults, so a test overrides them; the three times are its member `timings`, handed to every room) |
 | `RoomErrors.h` | `RoomErrors::k*`, the stable error codes |
-| `RoomProtocol.h/.cpp` | `ClientMessage` (a `Variant` of the eight client messages), `ParseClientMessage`, `SerializeClientMessage`, `SanitizePlayerName`, the builders of the server messages, `LobbySnapshot`, `ParseServerMessage` (the inverse of the builders, for clients: `ServerMessage` variant, an unknown `type` is ignorable) |
+| `RoomProtocol.h/.cpp` | `ClientMessage` (the eight client messages), `ParseClientMessage`, `SerializeClientMessage`, `SanitizePlayerName`, `Append*Message` writers of the server messages, `LobbySnapshot`, `ParseServerMessage` (their inverse, for clients; an unknown `type` is ignorable) |
 | `RoomCode.h/.cpp` | `GenerateRoomCode`, `NormalizeRoomCode`, `GenerateToken`, `IsWellFormedToken` |
 | `RateLimiter.h/.cpp` | a token bucket over `RoomTime` |
 | `Room.h/.cpp` | `Room`: members, seats, host, lobby snapshot and revision, phase, the game (start, actions, views, computers), absence and return (see "Room lifecycle") |
@@ -36,7 +36,7 @@ JSON text, one message per WebSocket text message, `{"v":1,"type":"...", ...}` (
 | `ping` | | |
 | `list_rooms` | `game` (1 to 64 bytes, as in `create_room`) | for a connection in no room: the public rooms of that game; see "RoomHub" |
 
-**Server to client** (the builders `Make*Message`):
+**Server to client** (`Append*Message` writes, `Make*Message` returns):
 
 | `type` | Members | When |
 |--------|---------|------|
