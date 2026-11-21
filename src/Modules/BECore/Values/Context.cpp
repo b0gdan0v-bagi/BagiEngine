@@ -3,6 +3,7 @@
 #include <BECore/Reflection/CompiledPath.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/PropertyPath.h>
+#include <BECore/Values/ContextMessages.h>
 
 namespace BECore {
 
@@ -151,12 +152,7 @@ namespace BECore {
 
             const Optional<LevelIndex> index = declaration.IndexOf(levelName);
             if (!index.has_value()) {
-                Vector<String> names;
-                for (const ContextLevel& level : declaration.Levels()) {
-                    names.push_back(level.name);
-                }
-                const String hint = IDeserializer::MakeDidYouMeanHint(levelName, {&names});
-                return Refuse(LinkErrorCode::unknown_level, Format("path '{}': unknown level '{}'{}; the declared levels are: {}", path, levelName, hint, LevelNames(declaration)));
+                return Refuse(LinkErrorCode::unknown_level, Format("path '{}': {}", path, DescribeUnknownLevel(declaration, levelName)));
             }
             if (segments.size() == 1) {
                 return Refuse(LinkErrorCode::invalid_path, Format("path '{}': '{}' is a level, a path names a field of it (level.field)", path, levelName));
@@ -185,6 +181,15 @@ namespace BECore {
         }
 
     }  // namespace
+
+    String DescribeUnknownLevel(const ContextDecl& declaration, StringView levelName) {
+        Vector<String> names;
+        for (const ContextLevel& level : declaration.Levels()) {
+            names.push_back(level.name);
+        }
+        const String hint = IDeserializer::MakeDidYouMeanHint(levelName, {&names});
+        return Format("unknown level '{}'{}; the declared levels are: {}", levelName, hint, LevelNames(declaration));
+    }
 
     std::expected<LevelIndex, LinkError> ContextDecl::Add(StringView name, StringView typeName, const TypeRegistry& registry) {
         if (name.empty()) {
