@@ -79,9 +79,19 @@ namespace BECore {
 
     namespace CookDetail {
 
+        /// A config object: reference counted types are made as `New` makes them, a plain struct (`ApplicationConfig`) on the heap
+        template <typename T>
+        auto MakeConfigObject() {
+            if constexpr (std::is_base_of_v<RefCountedAtomic, T> || std::is_base_of_v<RefCounted, T>) {
+                return New<T>();
+            } else {
+                return MakeUnique<T>();
+            }
+        }
+
         template <typename T>
         void CookReflected(const ContentCooker& cooker, IDeserializer& reader, ISerializer& writer, Vector<String>& findings) {
-            const auto object = New<T>();
+            const auto object = MakeConfigObject<T>();
             {
                 const ValueLinkScope scope(cooker.stem);
                 object->Deserialize(reader);
@@ -100,7 +110,7 @@ namespace BECore {
 
         template <typename T>
         String DescribeReflected(const ContentCooker& cooker, IDeserializer& reader) {
-            const auto object = New<T>();
+            const auto object = MakeConfigObject<T>();
             {
                 const ValueLinkScope scope(cooker.stem);
                 object->Deserialize(reader);
@@ -117,12 +127,12 @@ namespace BECore {
      * @brief A registrar object (namespace scope, in the module that owns the config) that makes the config of stem @p stem cookable
      *        as the reflected type @p T
      *
-     * The type is read as `MakeFromConfig<T>` reads it (`New<T>()`, a `ValueLinkScope` named after the stem so `<context>` and `from` of a
+     * The type is read as `MakeFromConfig<T>` reads it (a new object, `RefCounted` or a plain struct, a `ValueLinkScope` named after the stem so `<context>` and `from` of a
      * `Value` field work, `FinishLoad`) and written with its own `Serialize`. A registration claims that the file reads the same
      * from its XML and from its `.bin`: a type that writes state its reader does not take, or whose `Serialize` is not the inverse of
      * its read, must not be registered (the equivalence check, `VerifyCooked`, is what finds out).
      *
-     * @tparam T A reflected `RefCounted` type; its `GetStaticTypeName()` is the stamped root type
+     * @tparam T A reflected type, `RefCounted` or a plain struct; its `GetStaticTypeName()` is the stamped root type
      */
     template <typename T>
     class CookableConfig {
