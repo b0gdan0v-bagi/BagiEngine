@@ -14,7 +14,12 @@ namespace BECore {
         /// The first block of ValidateState::spill, so a file of ordinary wide scopes allocates once and not at every doubling
         constexpr size_t kSpillReserve = 64;
 
+        /// The 64-bit golden-ratio constant: an odd multiplier that spreads the kind into the high bits of the name hash
         constexpr uint64_t kNameClassSalt = 0x9E3779B97F4A7C15ULL;
+
+        constexpr uint64_t kNameKindScalar = 0;
+        constexpr uint64_t kNameKindObject = 1;
+        constexpr uint64_t kNameKindArray = 2;
 
         /// What validation collects on the way: the whole file's verdict on repeated names and the keys of the scopes that are being walked
         struct ValidateState {
@@ -28,7 +33,7 @@ namespace BECore {
         /// Equal for the same name of the same kind of entry (scalar, object, array); different names or kinds collide only by chance,
         /// and a collision only sends the file to the slow lookup
         uint64_t NameKey(const BinaryFormat::EntryView& entry) {
-            const uint64_t kind = BinaryFormat::IsScalarTag(entry.tag) ? 0 : (entry.tag == BinaryFormat::Tag::Object ? 1 : 2);
+            const uint64_t kind = BinaryFormat::IsScalarTag(entry.tag) ? kNameKindScalar : entry.tag == BinaryFormat::Tag::Object ? kNameKindObject : kNameKindArray;
             return StringUtils::GetHash(entry.name) + kind * kNameClassSalt;
         }
 

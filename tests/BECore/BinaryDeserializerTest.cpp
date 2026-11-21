@@ -1,5 +1,6 @@
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
+#include <BECore/Resource/TextureLibrary.h>
 #include <Common/AllocCheck.h>
 #include <Common/TempPath.h>
 #include <filesystem>
@@ -529,8 +530,27 @@ namespace BECore::Tests {
         ExpectLookupMatchesScan(WideDocument(kInlineKeyLimit + 1), false, "just over the inline keys");
     }
 
-    TEST(BinaryDeserializerTest, TheStreamOfAReflectedStructHasNoRepeatedNames) {
+    TEST(BinaryDeserializerTest, ADocumentOfDistinctNamesHasNoDuplicateFlag) {
         const Vector<uint8_t> bytes = MakeStream(kSpriteSizedElements);
+        BinaryDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromView(bytes.data(), bytes.size()));
+        EXPECT_FALSE(BinaryDeserializerAccess::HasDuplicateNames(deserializer));
+    }
+
+    // The generated Serialize writes each member once, so the fast lookup applies to every file the engine writes itself.
+    TEST(BinaryDeserializerTest, TheStreamOfAGeneratedSerializeHasNoDuplicateFlag) {
+        TextureLibrary library;
+        for (size_t i = 0; i < kSpriteSizedElements; ++i) {
+            SpriteEntry entry;
+            entry.name = PoolString::Intern(Format("binary_deserializer_sprite_{}", i));
+            entry.texturePath = PoolString::Intern(Format("assets/binary_deserializer/atlas_{}.png", i));
+            entry.srcRect = Rect{static_cast<float>(i), 0.0f, 16.0f, 32.0f};
+            library.AddOrUpdate(eastl::move(entry));
+        }
+        BinarySerializer writer;
+        library.Write(writer);
+
+        const Vector<uint8_t>& bytes = writer.GetData();
         BinaryDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromView(bytes.data(), bytes.size()));
         EXPECT_FALSE(BinaryDeserializerAccess::HasDuplicateNames(deserializer));
