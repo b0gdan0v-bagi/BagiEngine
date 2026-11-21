@@ -132,9 +132,12 @@ namespace BECore {
         request->reply(MakeErrorResponse(request->id, MakeControlError(ControlErrors::kShuttingDown, "the application is shutting down")));
     }
 
-    void ControlService::SendOk(ControlReplyFn& reply, const Json& id, FunctionRef<void(JsonWriter&)> writeResult) {
+    void ControlService::SendOk(ControlReplyFn& reply, const Json& id, WriteResultFn writeResult) {
         ScratchLease lease(_replyScratch, _replyScratchBusy);
-        AppendOkResponse(lease.Text(), id, writeResult);
+        const std::expected<void, ControlError> written = TryAppendOkResponse(lease.Text(), id, writeResult);
+        if (!written) {
+            AppendErrorResponse(lease.Text(), id, written.error());
+        }
         reply(lease.Text());
     }
 
@@ -232,6 +235,51 @@ namespace BECore {
             writer.Member("event", event);
             writer.EndObject();
             sink(lease.Text());
+        }
+        if (_eventSinkGeneration == generation) {
+            _eventSink = std::move(sink);
+        }
+    }
+
+    void ControlService::Publish(StringView event, FunctionRef<void(JsonWriter&)> writeData) {
+        const bool hasObservers = !_publishObservers.empty() && !_notifyingObservers;
+        if (!hasObservers && !_eventSink) {
+            return;
+        }
+
+        String observed;  // the data as text, written once for the observers and entered into the envelope with Raw
+        if (hasObservers) {
+            JsonWriter writer(observed);
+            writeData(writer);
+            EXPECT(writer.IsComplete(), "ControlService::Publish: the data is not one JSON value");
+            auto parsed = ParseJson(observed);
+            if (!writer.IsComplete() || !parsed) {
+                return;
+            }
+            NotifyPublishObservers(event, *parsed);
+            if (!_eventSink) {
+                return;
+            }
+        }
+
+        const uint64_t generation = _eventSinkGeneration;
+        EventSink sink = std::move(_eventSink);
+        {
+            ScratchLease lease(_publishScratch, _publishScratchBusy);
+            JsonWriter writer(lease.Text());
+            writer.BeginObject();
+            writer.Key("data");
+            if (hasObservers) {
+                writer.Raw(observed);
+            } else {
+                writeData(writer);
+            }
+            writer.Member("event", event);
+            writer.EndObject();
+            EXPECT(writer.IsComplete(), "ControlService::Publish: the data is not one JSON value");
+            if (writer.IsComplete()) {
+                sink(lease.Text());
+            }
         }
         if (_eventSinkGeneration == generation) {
             _eventSink = std::move(sink);

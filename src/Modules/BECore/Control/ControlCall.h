@@ -13,8 +13,12 @@ namespace BECore {
 
     /// Appends the response of a successful call, {"id":..,"ok":true,"result":..}, to @p out (never cleared); @p writeResult writes the one value
     /// of `result`. The keys are in alphabetical order, as a `Json` object keeps them, so the order a client sees does not depend on the way a response is written. Allocates only for the growth of @p
-    /// out
-    void AppendOkResponse(String& out, const Json& id, FunctionRef<void(JsonWriter&)> writeResult);
+    /// out. False when @p writeResult did not write exactly one complete value: @p out is then back to its length before the call, with nothing appended
+    bool AppendOkResponse(String& out, const Json& id, FunctionRef<void(JsonWriter&)> writeResult);
+
+    /// AppendOkResponse for a writer that may fail (a different name: two FunctionRef parameters would make a lambda ambiguous): its error, or `internal_error` when it wrote no complete value, leaves
+    /// @p out as it was (nothing appended)
+    [[nodiscard]] std::expected<void, ControlError> TryAppendOkResponse(String& out, const Json& id, WriteResultFn writeResult);
 
     /// Appends the response of a failed call, {"error":{"code":..,"message":..},"id":..,"ok":false}, to @p out (never cleared)
     void AppendErrorResponse(String& out, const Json& id, const ControlError& error);
@@ -65,6 +69,14 @@ namespace BECore {
          * Inside a nested call (ControlService::RunNested) the written value is read back into a `Json`.
          */
         void Reply(FunctionRef<void(JsonWriter&)> writeResult);
+
+        /**
+         * @brief Reply() for a writer that can fail half way: when @p writeResult returns an error, what it wrote is discarded and the call is answered with that error.
+         *
+         * Nothing of the half-written text reaches the transport. A callback that wrote no value, two, or left a container open is answered with
+         * `internal_error` the same way (Reply(FunctionRef) too). Use Fail() when the error is known before the first byte.
+         */
+        void TryReply(WriteResultFn writeResult);
 
         /// Answers with an error
         void Fail(StringView code, StringView message);

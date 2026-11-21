@@ -13,7 +13,6 @@ namespace BECore {
 
     class ControlCall;
     class ControlLog;
-    class JsonWriter;
     class ControlRoots;
 
     /**
@@ -102,6 +101,15 @@ namespace BECore {
 
         /// Sends {"event":..,"data":..} to the event sink, if there is one. A sink may replace or clear itself; a Publish from inside the sink sends nothing
         void Publish(StringView event, const Json& data);
+
+        /**
+         * @brief Publish() with the data written by @p writeData: the same bytes as the `Json` form, no `Json` built.
+         *
+         * Neither a sink nor an observer: returns at once and does not call @p writeData. An observer gets a `Json` parsed back from the written data
+         * (so the text is written to a local String first); with a sink alone the data is written in place into the publish buffer, and a second push
+         * allocates nothing. @p writeData writes exactly one value; one that does not is not sent. It must not Publish itself (the nested push reaches only the observers).
+         */
+        void Publish(StringView event, FunctionRef<void(JsonWriter&)> writeData);
 
         /**
          * @brief Calls @p observer with the name and the data of every Publish() from now on, whether or not an event sink is set.
@@ -220,8 +228,9 @@ namespace BECore {
         static void ParseRequest(StringView text, Request& request);
 
         /// Write a response into the reply buffer and give it to @p reply (main thread: ControlCall and the answers of Process and Shutdown). The buffer
-        /// keeps its capacity between replies; a reply sent from inside a reply function gets a local String, never the busy buffer
-        void SendOk(ControlReplyFn& reply, const Json& id, FunctionRef<void(JsonWriter&)> writeResult);
+        /// keeps its capacity between replies; a reply sent from inside a reply function gets a local String, never the busy buffer. SendOk sends the error
+        /// response in place of the result when @p writeResult fails or does not write one value
+        void SendOk(ControlReplyFn& reply, const Json& id, WriteResultFn writeResult);
         void SendError(ControlReplyFn& reply, const Json& id, const ControlError& error);
 
         [[nodiscard]] bool BypassesBarrier(const Request& request) const;

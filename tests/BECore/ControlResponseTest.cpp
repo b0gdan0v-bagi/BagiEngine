@@ -4,6 +4,7 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <Common/AllocCheck.h>
+#include <Common/AssertBridge.h>
 #include <Common/ControlTestSupport.h>
 #include <gtest/gtest.h>
 #include <thread>
@@ -203,6 +204,199 @@ namespace BECore::Tests {
         ASSERT_EQ(texts.size(), 2u);
         EXPECT_EQ(texts[0], String(R"({"data":{"version":3},"event":"state \"x\""})"));
         EXPECT_EQ(texts[1], String(R"({"data":null,"event":"e"})"));
+    }
+
+    TEST_F(ControlResponseTest, TryReplyWithASuccessIsTheSameTextAsReplyWithTheSameJson) {
+        service.RegisterHandler("viaJson", [](ControlCall& call) { call.Reply(ObjectResult()); });
+        service.RegisterHandler("viaTry", [](ControlCall& call) {
+            call.TryReply([](JsonWriter& writer) -> std::expected<void, ControlError> {
+                WriteJson(writer, ObjectResult());
+                return {};
+            });
+        });
+
+        service.Post(MakeRequest(4, "viaJson"), Raw());
+        service.Post(MakeRequest(4, "viaTry"), Raw());
+        service.Drain();
+
+        ASSERT_EQ(texts.size(), 2u);
+        EXPECT_EQ(texts[0], texts[1]);
+    }
+
+    TEST_F(ControlResponseTest, TryReplyThatFailsAfterHalfAnObjectSendsExactlyTheErrorResponse) {
+        const ControlError error = MakeControlError("game_broke", "no \"state\" \xFF");
+        service.RegisterHandler("fails", [&error](ControlCall& call) {
+            call.TryReply([&error](JsonWriter& writer) -> std::expected<void, ControlError> {
+                writer.BeginObject();
+                writer.Member("half", "written");
+                writer.Key("more");
+                return std::unexpected(error);
+            });
+        });
+        service.RegisterHandler("after", [](ControlCall& call) { call.Reply([](JsonWriter& writer) { writer.Value("intact"); }); });
+
+        service.Post(MakeRequest(3, "fails"), Raw());
+        service.Post(MakeRequest(4, "after"), Raw());
+        service.Drain();
+
+        ASSERT_EQ(texts.size(), 2u);
+        EXPECT_EQ(texts[0], MakeErrorResponse(Json(3), error));
+        EXPECT_EQ(texts[1], String(R"({"id":4,"ok":true,"result":"intact"})"));
+    }
+
+    TEST_F(ControlResponseTest, AWriterThatDoesNotWriteOneValueIsAnInternalErrorForBothForms) {
+        size_t misuses = 0;
+        AssertBridge::Capture capture([&misuses](const AssertEvent&) { ++misuses; });  // the writer's own EXPECT of a misuse
+        const String expected = MakeErrorResponse(Json(1), MakeControlError(ControlErrors::kInternalError, "the handler wrote a result that is not one JSON value"));
+
+        const auto nothing = [](JsonWriter&) {};
+        const auto two = [](JsonWriter& writer) {
+            writer.Value(1);
+            writer.Value(2);
+        };
+        const auto open = [](JsonWriter& writer) {
+            writer.BeginObject();
+            writer.Member("a", 1);
+        };
+        const Vector<FunctionRef<void(JsonWriter&)>> cases = {nothing, two, open};
+        for (const FunctionRef<void(JsonWriter&)>& writeResult : cases) {
+            texts.clear();
+            service.RegisterHandler("plain", [&writeResult](ControlCall& call) { call.Reply(writeResult); });
+            service.RegisterHandler("tried", [&writeResult](ControlCall& call) {
+                call.TryReply([&writeResult](JsonWriter& writer) -> std::expected<void, ControlError> {
+                    writeResult(writer);
+                    return {};
+                });
+            });
+            service.Post(MakeRequest(1, "plain"), Raw());
+            service.Post(MakeRequest(1, "tried"), Raw());
+            service.Drain();
+
+            ASSERT_EQ(texts.size(), 2u);
+            EXPECT_EQ(texts[0], expected);
+            EXPECT_EQ(texts[1], expected);
+        }
+        EXPECT_GT(misuses, 0u);
+    }
+
+    TEST_F(ControlResponseTest, TheReplyAfterARollbackIsIntactAndKeepsTheScratch) {
+        service.RegisterHandler("fails", [](ControlCall& call) {
+            call.TryReply([](JsonWriter& writer) -> std::expected<void, ControlError> {
+                writer.BeginArray();
+                writer.Value("a long text that grows the reply buffer well past a small reply");
+                return std::unexpected(MakeControlError("c", "m"));
+            });
+        });
+        service.RegisterHandler("ok", [](ControlCall& call) { call.Reply([](JsonWriter& writer) { writer.Value(1); }); });
+
+        service.Post(MakeRequest(1, "fails"), Raw());
+        service.Post(MakeRequest(2, "ok"), Raw());
+        service.Drain();
+
+        ASSERT_EQ(texts.size(), 2u);
+        EXPECT_EQ(texts[1], String(R"({"id":2,"ok":true,"result":1})"));
+    }
+
+    TEST_F(ControlResponseTest, TryReplyInANestedCallIsReadBackAsAValueOrItsError) {
+        service.RegisterHandler("good", [](ControlCall& call) {
+            call.TryReply([](JsonWriter& writer) -> std::expected<void, ControlError> {
+                writer.BeginObject();
+                writer.Member("n", 5);
+                writer.EndObject();
+                return {};
+            });
+        });
+        service.RegisterHandler("bad", [](ControlCall& call) {
+            call.TryReply([](JsonWriter& writer) -> std::expected<void, ControlError> {
+                writer.BeginObject();
+                return std::unexpected(MakeControlError("nested_failure", "m"));
+            });
+        });
+        service.RegisterHandler("outer", [this](ControlCall& call) {
+            auto good = service.RunNested(call, "good", Json::object(), [](ControlCall&, ControlAnswer) {});
+            auto bad = service.RunNested(call, "bad", Json::object(), [](ControlCall&, ControlAnswer) {});
+            ASSERT_TRUE(good.has_value() && good->has_value());
+            ASSERT_TRUE(bad.has_value() && !bad->has_value());
+            Json result = Json::object();
+            result["good"] = std::move(**good);
+            result["bad"] = MakeJsonString(bad->error().code);
+            call.Reply(std::move(result));
+        });
+
+        service.Post(MakeRequest(1, "outer"), Raw());
+        service.Drain();
+
+        ASSERT_EQ(texts.size(), 1u);
+        EXPECT_EQ(texts[0], String(R"({"id":1,"ok":true,"result":{"bad":"nested_failure","good":{"n":5}}})"));
+    }
+
+    TEST_F(ControlResponseTest, PublishWithAWriterIsTheSameBytesAsPublishWithTheJson) {
+        service.SetEventSink([this](const String& text) { texts.emplace_back(text.c_str(), text.size()); });
+
+        service.Publish("state_changed", ObjectResult());
+        service.Publish("state_changed", [](JsonWriter& writer) { WriteJson(writer, ObjectResult()); });
+        service.Publish("e \"x\"", Json());
+        service.Publish("e \"x\"", [](JsonWriter& writer) { writer.Null(); });
+
+        ASSERT_EQ(texts.size(), 4u);
+        EXPECT_EQ(texts[0], texts[1]);
+        EXPECT_EQ(texts[2], texts[3]);
+    }
+
+    TEST_F(ControlResponseTest, PublishWithAWriterDoesNothingWithoutASinkAndAnObserver) {
+        int calls = 0;
+        service.Publish("e", [&calls](JsonWriter& writer) {
+            ++calls;
+            writer.Null();
+        });
+
+        EXPECT_EQ(calls, 0);
+    }
+
+    TEST_F(ControlResponseTest, PublishWithAWriterGivesAnObserverTheWrittenDataAndTheSinkTheSameText) {
+        service.SetEventSink([this](const String& text) { texts.emplace_back(text.c_str(), text.size()); });
+        Vector<Json> seen;
+        const auto id = service.AddPublishObserver([&seen](StringView, const Json& data) { seen.push_back(data); });
+
+        service.Publish("e", [](JsonWriter& writer) { WriteJson(writer, ObjectResult()); });
+        service.RemovePublishObserver(id);
+
+        ASSERT_EQ(seen.size(), 1u);
+        const auto expectedData = ParseJson(DumpJson(ObjectResult()));  // the invalid UTF-8 of the sample is replaced by the dump, in the observer's copy too
+        ASSERT_TRUE(expectedData.has_value());
+        EXPECT_TRUE(seen[0] == *expectedData);  // not EXPECT_EQ: a failure would print the Json
+        ASSERT_EQ(texts.size(), 1u);
+        String reference;
+        service.SetEventSink([&reference](const String& text) { reference = text; });
+        service.Publish("e", ObjectResult());
+        EXPECT_EQ(texts[0], reference);
+    }
+
+    TEST_F(ControlResponseTest, PublishWithAWriterThatWritesNoValueSendsNothing) {
+        AssertBridge::Capture capture([](const AssertEvent&) {});  // the EXPECT of Publish
+        service.SetEventSink([this](const String& text) { texts.emplace_back(text.c_str(), text.size()); });
+
+        service.Publish("e", [](JsonWriter&) {});
+
+        EXPECT_TRUE(texts.empty());
+    }
+
+    TEST_F(ControlResponseTest, ASecondPushWithAWriterIntoTheKeptBufferAllocatesNothing) {
+        size_t sent = 0;
+        service.SetEventSink([&sent](const String& text) { sent += text.size(); });
+        const auto push = [this] {
+            service.Publish("state_changed", [](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Member("game", "Stress");
+                writer.Member("version", 12);
+                writer.EndObject();
+            });
+        };
+        push();
+
+        ExpectNoAllocations(push);
+
+        EXPECT_GT(sent, 0u);
     }
 
     TEST_F(ControlResponseTest, AReplyFromInsideAReplyFunctionLeavesTheOuterTextIntact) {

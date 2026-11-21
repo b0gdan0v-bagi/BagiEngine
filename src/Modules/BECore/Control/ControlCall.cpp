@@ -4,15 +4,34 @@
 
 namespace BECore {
 
-    void AppendOkResponse(String& out, const Json& id, FunctionRef<void(JsonWriter&)> writeResult) {
+    std::expected<void, ControlError> TryAppendOkResponse(String& out, const Json& id, WriteResultFn writeResult) {
+        const size_t start = out.size();
         JsonWriter writer(out);
         writer.BeginObject();
         writer.Key("id");
         WriteJson(writer, id);
         writer.Member("ok", true);
         writer.Key("result");
-        writeResult(writer);
-        writer.EndObject();
+        std::expected<void, ControlError> written = writeResult(writer);
+        if (written) {
+            writer.EndObject();
+            if (!writer.IsComplete()) {
+                written = std::unexpected(MakeControlError(ControlErrors::kInternalError, "the handler wrote a result that is not one JSON value"));
+            }
+        }
+        if (!written) {
+            out.resize(start);
+        }
+        return written;
+    }
+
+    bool AppendOkResponse(String& out, const Json& id, FunctionRef<void(JsonWriter&)> writeResult) {
+        return TryAppendOkResponse(out, id,
+                                   [&writeResult](JsonWriter& writer) -> std::expected<void, ControlError> {
+                                       writeResult(writer);
+                                       return {};
+                                   })
+            .has_value();
     }
 
     void AppendErrorResponse(String& out, const Json& id, const ControlError& error) {
@@ -31,7 +50,8 @@ namespace BECore {
 
     String MakeOkResponse(const Json& id, Json result) {
         String text;
-        AppendOkResponse(text, id, [&result](JsonWriter& writer) { WriteJson(writer, result); });
+        const bool written = AppendOkResponse(text, id, [&result](JsonWriter& writer) { WriteJson(writer, result); });
+        EXPECT(written, "MakeOkResponse: the writer of a Json value wrote no complete value");
         return text;
     }
 
@@ -56,10 +76,20 @@ namespace BECore {
             _captured = ControlAnswer(std::move(result));
             return;
         }
-        _service->SendOk(_reply, _id, [&result](JsonWriter& writer) { WriteJson(writer, result); });
+        _service->SendOk(_reply, _id, [&result](JsonWriter& writer) -> std::expected<void, ControlError> {
+            WriteJson(writer, result);
+            return {};
+        });
     }
 
     void ControlCall::Reply(FunctionRef<void(JsonWriter&)> writeResult) {
+        TryReply([&writeResult](JsonWriter& writer) -> std::expected<void, ControlError> {
+            writeResult(writer);
+            return {};
+        });
+    }
+
+    void ControlCall::TryReply(WriteResultFn writeResult) {
         EXPECT(!_answered, "ControlCall: the call is already answered");
         if (_answered) {
             return;
@@ -73,7 +103,11 @@ namespace BECore {
         // A nested call keeps its answer as a value, so the written text is read back; the value is the writer's own output, not a client's
         String text;
         JsonWriter writer(text);
-        writeResult(writer);
+        const std::expected<void, ControlError> written = writeResult(writer);
+        if (!written) {
+            _captured = std::unexpected(written.error());
+            return;
+        }
         auto parsed = ParseJson(text);
         if (writer.IsComplete() && parsed) {
             _captured = ControlAnswer(std::move(*parsed));

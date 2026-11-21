@@ -3,6 +3,7 @@
 #include <BECore/Control/JsonFwd.h>
 #include <BECore/Time/GamePause.h>  // kDefaultStepSeconds
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <expected>
 
@@ -16,6 +17,11 @@ namespace BECore {
 
     /// What a call that ran inside another call answered (ControlService::RunNested): the result, or the error
     using ControlAnswer = std::expected<Json, ControlError>;
+
+    class JsonWriter;
+
+    /// A callback that writes the result of a call and may fail: nothing, or the error that answers the call instead (ControlCall::TryReply)
+    using WriteResultFn = FunctionRef<std::expected<void, ControlError>(JsonWriter&)>;
 
     /// Receives the serialized JSON text of a response. Called on the main thread, except for a request posted after
     /// ControlService::Shutdown() (answered on the posting thread). The text lives in a buffer of the service that the next
