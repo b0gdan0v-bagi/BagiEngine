@@ -216,23 +216,29 @@ namespace BECore {
         void HandleLogMark(ControlCall& call, const ControlService& service) {
             LogEvent::Flush();
             const ControlLog& log = service.Log();
-            Json result = Json::object();
-            result["mark"] = log.GetNextSequence();
-            result["warnings"] = log.GetWarnings();
-            result["errors"] = log.GetErrors();
-            call.Reply(std::move(result));
+            call.Reply([&](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Member("errors", log.GetErrors());
+                writer.Member("mark", log.GetNextSequence());
+                writer.Member("warnings", log.GetWarnings());
+                writer.EndObject();
+            });
         }
 
-        Json DescribeLogLine(const LogHistory& history, const LogRecord& record) {
-            Json line = Json::object();
-            line["sequence"] = record.sequence;
-            line["level"] = MakeJsonString(LogLevelName(record.level));
-            line["time"] = MakeJsonString(record.time);
-            line["message"] = MakeJsonString(StringView(record.message.data(), record.message.size()));
+        /// One line of the log, as `log_since` lists it and `log` pushes it; @p skipped (0: none) is the count of lines a push left out after this one
+        void WriteLogLine(JsonWriter& writer, const LogHistory& history, const LogRecord& record, uint64_t skipped) {
+            writer.BeginObject();
             if (record.category != kGeneralLogCategory) {
-                line["category"] = MakeJsonString(history.GetCategoryName(record.category));
+                writer.Member("category", history.GetCategoryName(record.category));
             }
-            return line;
+            writer.Member("level", LogLevelName(record.level));
+            writer.Member("message", StringView(record.message.data(), record.message.size()));
+            writer.Member("sequence", record.sequence);
+            if (skipped != 0) {
+                writer.Member("skipped", skipped);
+            }
+            writer.Member("time", StringView(record.time));
+            writer.EndObject();
         }
 
         void HandleLogSince(ControlCall& call, const ControlService& service) {
@@ -251,20 +257,23 @@ namespace BECore {
             const ControlLog& log = service.Log();
             const ControlLog::Since since = log.ReadSince(static_cast<uint64_t>(*mark), *level, ControlLog::kMaxLogSinceLines);
 
-            Json lines = Json::array();
-            for (const LogRecord* record : since.lines) {
-                lines.push_back(DescribeLogLine(log.History(), *record));
-            }
-            Json result = Json::object();
-            result["lines"] = std::move(lines);
-            result["warnings"] = since.warnings;
-            result["errors"] = since.errors;
-            result["dropped"] = since.dropped;
-            result["next"] = since.next;
-            if (since.truncated) {
-                result["truncated"] = true;
-            }
-            call.Reply(std::move(result));
+            call.Reply([&](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Member("dropped", since.dropped);
+                writer.Member("errors", since.errors);
+                writer.Key("lines");
+                writer.BeginArray();
+                for (const LogRecord* record : since.lines) {
+                    WriteLogLine(writer, log.History(), *record, 0);
+                }
+                writer.EndArray();
+                writer.Member("next", since.next);
+                if (since.truncated) {
+                    writer.Member("truncated", true);
+                }
+                writer.Member("warnings", since.warnings);
+                writer.EndObject();
+            });
         }
 
         void HandleLogSubscribe(ControlCall& call, ControlService& service) {
@@ -287,10 +296,12 @@ namespace BECore {
             push.enabled = *enabled;
             push.minLevel = *level;
 
-            Json result = Json::object();
-            result["enabled"] = push.enabled;
-            result["level"] = MakeJsonString(LogLevelName(push.minLevel));
-            call.Reply(std::move(result));
+            call.Reply([&](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Member("enabled", push.enabled);
+                writer.Member("level", LogLevelName(push.minLevel));
+                writer.EndObject();
+            });
         }
 
         /// Frame end hook `log_push`: one `log` event per new line while log_subscribe is on. It allocates nothing when no line is new
@@ -321,12 +332,9 @@ namespace BECore {
                 if (record.level < push.minLevel) {
                     continue;
                 }
-                Json data = DescribeLogLine(history, record);
                 ++pushed;
-                if (pushed == ControlLog::kMaxLogPushPerFrame && matching > pushed) {
-                    data["skipped"] = matching - pushed;
-                }
-                service.Publish("log", data);
+                const uint64_t skipped = pushed == ControlLog::kMaxLogPushPerFrame && matching > pushed ? matching - pushed : 0;
+                service.Publish("log", [&](JsonWriter& writer) { WriteLogLine(writer, history, record, skipped); });
             }
         }
 
@@ -341,7 +349,7 @@ namespace BECore {
             Vector<BatchEntry> entries;
             bool continueOnError = false;
             size_t next = 0;
-            Json results = Json::array();
+            Vector<ControlAnswer> results;
             Optional<size_t> stopped;
 
             [[nodiscard]] bool IsFinished() const {
@@ -349,21 +357,34 @@ namespace BECore {
             }
 
             void Record(ControlAnswer answer) {
-                Json entry = Json::object();
-                entry["ok"] = answer.has_value();
-                if (answer) {
-                    entry["result"] = std::move(*answer);
-                } else {
-                    Json error = Json::object();
-                    error["code"] = MakeJsonString(answer.error().code);
-                    error["message"] = MakeJsonString(answer.error().message);
-                    entry["error"] = std::move(error);
-                }
-                results.push_back(std::move(entry));
-                if (!answer && !continueOnError) {
+                const bool failed = !answer;
+                results.push_back(std::move(answer));
+                if (failed && !continueOnError) {
                     stopped = next;
                 }
                 ++next;
+            }
+
+            /// `{ok, result}` or `{error: {code, message}, ok}` per call, in the order the `Json` object keeps its keys
+            void WriteResults(JsonWriter& writer) const {
+                writer.BeginArray();
+                for (const ControlAnswer& answer : results) {
+                    writer.BeginObject();
+                    if (answer) {
+                        writer.Member("ok", true);
+                        writer.Key("result");
+                        WriteJson(writer, *answer);
+                    } else {
+                        writer.Key("error");
+                        writer.BeginObject();
+                        writer.Member("code", StringView(answer.error().code));
+                        writer.Member("message", StringView(answer.error().message));
+                        writer.EndObject();
+                        writer.Member("ok", false);
+                    }
+                    writer.EndObject();
+                }
+                writer.EndArray();
             }
         };
 
@@ -419,12 +440,15 @@ namespace BECore {
                 batch->Record(std::move(*answer));
             }
 
-            Json result = Json::object();
-            result["results"] = std::move(batch->results);
-            if (batch->stopped) {
-                result["stopped"] = *batch->stopped;
-            }
-            outer.Reply(std::move(result));
+            outer.Reply([batch](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Key("results");
+                batch->WriteResults(writer);
+                if (batch->stopped) {
+                    writer.Member("stopped", *batch->stopped);
+                }
+                writer.EndObject();
+            });
         }
 
         void HandleBatch(ControlCall& call, ControlService& service) {

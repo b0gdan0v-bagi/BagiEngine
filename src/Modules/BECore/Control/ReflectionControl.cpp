@@ -107,14 +107,15 @@ namespace BECore {
             return InvalidParams("'value' has to be a boolean, a number or a string");
         }
 
-        Json ToJson(const PropertyValue& value) {
-            return std::visit(
-                [](const auto& held) -> Json {
+        /// The value as the `Json` form wrote it: the numbers through the writer's own text, a string escaped by the writer
+        void WriteValue(JsonWriter& writer, const PropertyValue& value) {
+            std::visit(
+                [&writer](const auto& held) {
                     using Held = std::decay_t<decltype(held)>;
                     if constexpr (std::is_same_v<Held, String>) {
-                        return MakeJsonString(held);
+                        writer.Value(StringView(held));
                     } else {
-                        return Json(held);
+                        writer.Value(held);
                     }
                 },
                 value);
@@ -126,12 +127,13 @@ namespace BECore {
             return MakeControlError(EnumUtils<PropertyErrorCode>::ToString(code), error.message);
         }
 
-        Json DescribeAccess(StringView root, StringView path, const PropertyValue& value) {
-            Json result = Json::object();
-            result["root"] = MakeJsonString(root);
-            result["path"] = MakeJsonString(path);
-            result["value"] = ToJson(value);
-            return result;
+        void WriteAccess(JsonWriter& writer, StringView root, StringView path, const PropertyValue& value) {
+            writer.BeginObject();
+            writer.Member("path", path);
+            writer.Member("root", root);
+            writer.Key("value");
+            WriteValue(writer, value);
+            writer.EndObject();
         }
 
         /// Whether a type holds a `PoolString` anywhere inside; every object type is entered once, so a type that holds its own kind ends the walk
@@ -194,7 +196,7 @@ namespace BECore {
                 call.Fail(FromPropertyError(value.error()));
                 return;
             }
-            call.Reply(DescribeAccess(names->root, names->path, *value));
+            call.Reply([&](JsonWriter& writer) { WriteAccess(writer, names->root, names->path, *value); });
         }
 
         void HandleSetProperty(ControlCall& call, const ControlService& service) {
@@ -224,7 +226,7 @@ namespace BECore {
                 call.Fail(ControlErrors::kInternalError, Format("The value was written but cannot be read back: {}", readBack.error().message));
                 return;
             }
-            call.Reply(DescribeAccess(names->root, names->path, *readBack));
+            call.Reply([&](JsonWriter& writer) { WriteAccess(writer, names->root, names->path, *readBack); });
         }
 
         /// The wire code of a refused call; `CallStatus::unknown_method` is renamed so it is not taken for the control method of that name
@@ -275,15 +277,18 @@ namespace BECore {
                 return;
             }
 
-            Json written = writer.Take();
-            Json result = Json::object();
-            result["root"] = MakeJsonString(*rootName);
-            result["method"] = MakeJsonString(*method);
+            const Json written = writer.Take();
             const auto answer = written.find("result");
-            if (answer != written.end()) {
-                result["result"] = std::move(*answer);
-            }
-            call.Reply(std::move(result));
+            call.Reply([&](JsonWriter& out) {
+                out.BeginObject();
+                out.Member("method", StringView(*method));
+                if (answer != written.end()) {
+                    out.Key("result");
+                    WriteJson(out, *answer);
+                }
+                out.Member("root", StringView(*rootName));
+                out.EndObject();
+            });
         }
 
         /// An optional boolean member: @p fallback when absent, an `invalid_params` error when present and not a boolean

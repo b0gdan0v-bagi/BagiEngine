@@ -110,7 +110,7 @@ The game methods describe only what `GameControl` itself reads; the parameters o
 ## Adding a method
 
 1. Write a handler `void(ControlCall&)` in the module that owns the behaviour (BECore only for things that need nothing above it).
-2. Read `call.Params()` with the checked helpers; answer with `call.Reply(Json)` or `call.Fail(code, message)`. For an answer that needs frames to pass (step, screenshot) use `call.DeferFrames(...)`.
+2. Read `call.Params()` with the checked helpers; answer with `call.Reply(writer)` (a `JsonWriter` callback, keys alphabetical; `Reply(Json)` only for a document you already hold) or `call.Fail(code, message)`. For an answer that needs frames to pass (step, screenshot) use `call.DeferFrames(...)`.
 3. Register it with `CoreManager::GetControlService().RegisterHandler("name", handler)` where the owning module starts up (registering again replaces the handler).
 4. Describe it with `DescribeMethod("name", {summary, params})` beside the registration, so `list_methods` and the editor's console can offer and complete it. For people only, never checked against the handler; a method without one still runs.
 5. Test it with a `ControlService` of its own and a lambda as the reply function: no transport needed.

@@ -4,6 +4,7 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Types/Types.h>
 #include <Common/Require.h>
+#include <gtest/gtest.h>
 
 namespace BECore::Tests {
 
@@ -65,6 +66,14 @@ namespace BECore::Tests {
 
     inline Optional<bool> BoolOf(const Json* object, StringView key) {
         return object != nullptr ? GetJsonBool(*object, key) : Optional<bool>();
+    }
+
+    /// Each reply text of @p actual equals the one of @p expected byte for byte: a writer's answer is pinned by the text the `Json` form made of it
+    inline void ExpectTexts(const Vector<String>& actual, const Vector<StringView>& expected) {
+        ASSERT_EQ(actual.size(), expected.size());
+        for (size_t i = 0; i < expected.size(); ++i) {
+            EXPECT_TRUE(StringView(actual[i]) == expected[i]) << "reply " << i << ": " << actual[i].c_str();
+        }
     }
 
 }  // namespace BECore::Tests

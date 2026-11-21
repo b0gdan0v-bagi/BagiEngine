@@ -3,14 +3,17 @@
 #include "ReflectionControlTest.h"
 
 #include <BECore/Control/ControlBuiltins.h>
+#include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/Control/ReflectionControl.h>
 #include <BECore/Control/SchemaExport.h>
+#include <BECore/Reflection/PropertyAccess.h>
 #include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Reflection/TypedRef.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <Common/AllocCheck.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/FreshText.h>
 #include <Common/Printers.h>
@@ -63,6 +66,41 @@ namespace BECore::Tests {
                 });
                 service.Drain();
                 return response;
+            }
+
+            /// The text of the answer as it was sent
+            String Raw(StringView method, Json params) {
+                Json request = Json::object();
+                request["id"] = ++nextId;
+                request["method"] = MakeJsonString(method);
+                request["params"] = std::move(params);
+                String text;
+                service.Post(DumpJson(request), [&text](const String& reply) { text = reply; });
+                service.Drain();
+                return text;
+            }
+
+            String RawGet(StringView root, StringView path) {
+                Json params = Json::object();
+                params["root"] = MakeJsonString(root);
+                params["path"] = MakeJsonString(path);
+                return Raw("get_property", std::move(params));
+            }
+
+            String RawSet(StringView root, StringView path, Json value) {
+                Json params = Json::object();
+                params["root"] = MakeJsonString(root);
+                params["path"] = MakeJsonString(path);
+                params["value"] = std::move(value);
+                return Raw("set_property", std::move(params));
+            }
+
+            String RawCall(StringView root, StringView method, Json arguments) {
+                Json params = Json::object();
+                params["root"] = MakeJsonString(root);
+                params["method"] = MakeJsonString(method);
+                params["arguments"] = std::move(arguments);
+                return Raw("call_method", std::move(params));
             }
 
             Json Get(StringView root, StringView path) {
@@ -153,6 +191,111 @@ namespace BECore::Tests {
         check("tag", MakeJsonString("rc_tag_in_the_object"));
         check("mode", MakeJsonString("On"));
         check("leaf.id", Json(int64_t{42}));
+    }
+
+    TEST_F(ReflectionControlTest, GetPropertyAnswersTheSameBytesForEveryKind) {
+        box.flag = true;
+        box.big = -5000000000;
+        box.huge = 9223372036854775808ULL;
+        box.ratio = 1.5f;
+        box.wide = 0.1;
+        box.text = "quote \" slash \\ newline \n caf\xC3\xA9 bad \xFF end";
+        box.tag = "rc_tag_in_the_object"_intern;
+        box.mode = RcMode::On;
+        box.leaf.id = 42;
+
+        Vector<String> replies;
+        for (const StringView path : {"flag", "count", "big", "huge", "ratio", "wide", "text", "tag", "mode", "leaf.id"}) {
+            replies.push_back(RawGet("box", path));
+        }
+
+        ExpectTexts(replies,
+                    {R"json({"id":1,"ok":true,"result":{"path":"flag","root":"box","value":true}})json", R"json({"id":2,"ok":true,"result":{"path":"count","root":"box","value":3}})json",
+                     R"json({"id":3,"ok":true,"result":{"path":"big","root":"box","value":-5000000000}})json",
+                     R"json({"id":4,"ok":true,"result":{"path":"huge","root":"box","value":9223372036854775808}})json",
+                     R"json({"id":5,"ok":true,"result":{"path":"ratio","root":"box","value":1.5}})json", R"json({"id":6,"ok":true,"result":{"path":"wide","root":"box","value":0.1}})json",
+                     R"json({"id":7,"ok":true,"result":{"path":"text","root":"box","value":"quote \" slash \\ newline \n café bad � end"}})json",
+                     R"json({"id":8,"ok":true,"result":{"path":"tag","root":"box","value":"rc_tag_in_the_object"}})json",
+                     R"json({"id":9,"ok":true,"result":{"path":"mode","root":"box","value":"On"}})json", R"json({"id":10,"ok":true,"result":{"path":"leaf.id","root":"box","value":42}})json"});
+    }
+
+    TEST_F(ReflectionControlTest, SetPropertyAnswersTheSameBytesWithTheValueReadBack) {
+        Vector<String> replies;
+        replies.push_back(RawSet("box", "count", Json(7)));
+        replies.push_back(RawSet("box", "text", MakeJsonString("a \"quoted\" caf\xC3\xA9\n")));
+        replies.push_back(RawSet("box", "flag", Json(true)));
+        replies.push_back(RawSet("box", "wide", Json(0.1)));
+        replies.push_back(RawSet("box", "big", Json(int64_t{-5000000000})));
+        replies.push_back(RawSet("box", "huge", Json(uint64_t{9223372036854775808ULL})));
+        replies.push_back(RawSet("box", "mode", MakeJsonString("On")));
+        replies.push_back(RawSet("box", "ratio", Json(2.0)));
+
+        ExpectTexts(replies, {R"json({"id":1,"ok":true,"result":{"path":"count","root":"box","value":7}})json",
+                              R"json({"id":2,"ok":true,"result":{"path":"text","root":"box","value":"a \"quoted\" café\n"}})json",
+                              R"json({"id":3,"ok":true,"result":{"path":"flag","root":"box","value":true}})json", R"json({"id":4,"ok":true,"result":{"path":"wide","root":"box","value":0.1}})json",
+                              R"json({"id":5,"ok":true,"result":{"path":"big","root":"box","value":-5000000000}})json",
+                              R"json({"id":6,"ok":true,"result":{"path":"huge","root":"box","value":9223372036854775808}})json",
+                              R"json({"id":7,"ok":true,"result":{"path":"mode","root":"box","value":"On"}})json", R"json({"id":8,"ok":true,"result":{"path":"ratio","root":"box","value":2.0}})json"});
+    }
+
+    TEST_F(ReflectionControlTest, CallMethodAnswersTheSameBytesWithAndWithoutAResult) {
+        Vector<String> replies;
+        Json add = Json::object();
+        add["first"] = 2;
+        add["second"] = 3;
+        replies.push_back(RawCall("tool", "Add", add));
+        Json echo = Json::object();
+        echo["text"] = MakeJsonString("line \"one\"\ncaf\xC3\xA9");
+        replies.push_back(RawCall("tool", "Echo", echo));
+        Json leaf = Json::object();
+        leaf["id"] = 4;
+        leaf["label"] = MakeJsonString("x");
+        Json shift = Json::object();
+        shift["leaf"] = leaf;
+        replies.push_back(RawCall("tool", "Shift", shift));
+        Json total = Json::object();
+        total["numbers"] = Json::array({1, 2, 3});
+        replies.push_back(RawCall("tool", "Total", total));
+        replies.push_back(RawCall("tool", "Touch", Json::object()));
+        replies.push_back(RawCall("tool", "Count", Json::object()));
+
+        ExpectTexts(replies, {R"json({"id":1,"ok":true,"result":{"method":"Add","result":5,"root":"tool"}})json",
+                              R"json({"id":2,"ok":true,"result":{"method":"Echo","result":"line \"one\"\ncafé","root":"tool"}})json",
+                              R"json({"id":3,"ok":true,"result":{"method":"Shift","result":{"id":5,"label":"x"},"root":"tool"}})json",
+                              R"json({"id":4,"ok":true,"result":{"method":"Total","result":6,"root":"tool"}})json", R"json({"id":5,"ok":true,"result":{"method":"Touch","root":"tool"}})json",
+                              R"json({"id":6,"ok":true,"result":{"method":"Count","result":5,"root":"tool"}})json"});
+    }
+
+    TEST_F(ReflectionControlTest, ASecondGetPropertyOfANumberAllocatesNothingBeyondWhatItReads) {
+        // The path walk of GetProperty allocates whoever asks: a method that reads the same field and answers `{}` is the measure of the rest
+        service.RegisterHandler("reads_only", [this](ControlCall& call) {
+            const auto value = GetProperty(TypedRef::Of(box), "count");
+            EXPECT_TRUE(value.has_value());
+            call.Reply([](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.EndObject();
+            });
+        });
+        Json params = Json::object();
+        params["root"] = MakeJsonString("box");
+        params["path"] = MakeJsonString("count");
+        // Post() parses the request and Drain() makes the call object, and both allocate whatever the handler is, so the two Drain() calls are compared after a first round
+        // that grew the reply buffer
+        const auto drained = [&](StringView method) {
+            service.Post(MakeRequest(++nextId, method, params), [](const String&) {});
+            return CountAllocations([this] { service.Drain(); });
+        };
+        drained("get_property");
+        drained("reads_only");
+
+        const AllocCount get = drained("get_property");
+        const AllocCount reads = drained("reads_only");
+
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+        EXPECT_EQ(get.count, reads.count);
+        EXPECT_EQ(get.bytes, reads.bytes);
     }
 
     TEST_F(ReflectionControlTest, TheAnswerEchoesTheRootAndThePath) {

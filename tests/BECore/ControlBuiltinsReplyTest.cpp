@@ -5,6 +5,7 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Logger/LogEvent.h>
 #include <BECore/Time/GamePause.h>
 #include <BECore/Time/Time.h>
 #include <Common/AllocCheck.h>
@@ -57,6 +58,7 @@ namespace BECore::Tests {
         class ControlBuiltinsReplyTest : public ::testing::Test {
         protected:
             void SetUp() override {
+                LogEvent::Flush();  // an error line that an earlier test of this process left in the ring buffer is not this service's
                 CoreManager::GetTime().Reset();
                 CoreManager::GetTime().Advance(kFrameSeconds);
                 CoreManager::GetTime().Advance(kFrameSeconds);

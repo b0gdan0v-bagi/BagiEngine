@@ -3,6 +3,8 @@
 #include <BECore/Control/ControlLog.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Logger/LogEvent.h>
+#include <Common/AllocCheck.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <gtest/gtest.h>
@@ -270,6 +272,28 @@ namespace BECore::Tests {
                 return static_cast<uint64_t>(GetJsonInt(object, key).value_or(-1));
             }
 
+            /// The text of the answer as it was sent, with the clock text of every line replaced by `T`
+            String Raw(StringView method, const Json& params = Json::object()) {
+                String text;
+                service.Post(MakeRequest(++nextId, method, params), [&text](const String& reply) { text = reply; });
+                service.Drain();
+                return MaskTimes(text);
+            }
+
+            static String MaskTimes(const String& text) {
+                constexpr StringView kTimeKey = "\"time\":\"";
+                String masked;
+                size_t from = 0;
+                for (size_t at = text.find(kTimeKey.data(), 0, kTimeKey.size()); at != String::npos; at = text.find(kTimeKey.data(), from, kTimeKey.size())) {
+                    const size_t begin = at + kTimeKey.size();
+                    masked.append(text.data() + from, begin - from);
+                    masked.push_back('T');
+                    from = text.find('"', begin);
+                }
+                masked.append(text.data() + from, text.size() - from);
+                return masked;
+            }
+
             static void Warn(StringView message, LogLevel level = LogLevel::Warning) {
                 LogEvent::Emit(level, message);
             }
@@ -406,6 +430,103 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString(lines->back(), "message").value_or(""), Format("ControlLogTest cap {}", kLines - 1));
         EXPECT_EQ(GetJsonBool(since, "truncated"), true);
         EXPECT_EQ(Number(since, "warnings"), static_cast<uint64_t>(kLines));
+    }
+
+    TEST_F(ControlLogMethodsTest, TheLogMethodsAnswerTheSameBytes) {
+        constexpr LogSite kSite{"src/Modules/GoldenCategory/Golden.cpp", 3};
+        Vector<String> replies;
+        replies.push_back(Raw("log_mark"));
+        LogEvent::Emit(LogLevel::Warning, "ControlLogTest golden warning", kSite);
+        LogEvent::Emit(LogLevel::Error, "quote \" slash \\ newline \n caf\xC3\xA9 bad \xFF end");
+        LogEvent::Emit(LogLevel::Fatal, "ControlLogTest golden fatal");
+        Json since = Json::object();
+        since["mark"] = 0;
+        replies.push_back(Raw("log_since", since));
+        since["level"] = "error";
+        replies.push_back(Raw("log_since", since));
+        replies.push_back(Raw("log_mark"));
+        Json subscribe = Json::object();
+        subscribe["enabled"] = true;
+        replies.push_back(Raw("log_subscribe", subscribe));
+        subscribe["level"] = "error";
+        replies.push_back(Raw("log_subscribe", subscribe));
+        subscribe["enabled"] = false;
+        replies.push_back(Raw("log_subscribe", subscribe));
+
+        ExpectTexts(
+            replies,
+            {R"json({"id":1,"ok":true,"result":{"errors":0,"mark":1,"warnings":0}})json",
+             R"json({"id":2,"ok":true,"result":{"dropped":0,"errors":2,"lines":[{"category":"GoldenCategory","level":"warning","message":"ControlLogTest golden warning","sequence":1,"time":"T"},{"level":"error","message":"quote \" slash \\ newline \n café bad � end","sequence":2,"time":"T"},{"level":"fatal","message":"ControlLogTest golden fatal","sequence":3,"time":"T"}],"next":4,"warnings":1}})json",
+             R"json({"id":3,"ok":true,"result":{"dropped":0,"errors":2,"lines":[{"level":"error","message":"quote \" slash \\ newline \n café bad � end","sequence":2,"time":"T"},{"level":"fatal","message":"ControlLogTest golden fatal","sequence":3,"time":"T"}],"next":4,"warnings":1}})json",
+             R"json({"id":4,"ok":true,"result":{"errors":2,"mark":4,"warnings":1}})json", R"json({"id":5,"ok":true,"result":{"enabled":true,"level":"warning"}})json",
+             R"json({"id":6,"ok":true,"result":{"enabled":true,"level":"error"}})json", R"json({"id":7,"ok":true,"result":{"enabled":false,"level":"error"}})json"});
+    }
+
+    TEST_F(ControlLogMethodsTest, ATruncatedLogSinceAnswersTheSameTail) {
+        for (size_t i = 0; i < ControlLog::kMaxLogSinceLines + kSurplusLines; ++i) {
+            Warn(Format("ControlLogTest golden {}", i));
+        }
+        Json since = Json::object();
+        since["mark"] = 0;
+
+        const String text = Raw("log_since", since);
+
+        const size_t next = text.find("\"next\":");
+        ASSERT_NE(next, String::npos);
+        EXPECT_EQ(String(text.substr(next)), R"json("next":206,"truncated":true,"warnings":205}})json");
+    }
+
+    TEST_F(ControlLogMethodsTest, ThePushedLinesAreTheSameBytesAndTheLastOneCountsTheSkipped) {
+        Vector<String> pushed;
+        service.SetEventSink([&pushed](const String& text) { pushed.push_back(MaskTimes(text)); });
+        Json subscribe = Json::object();
+        subscribe["enabled"] = true;
+        Raw("log_subscribe", subscribe);
+        constexpr LogSite kSite{"src/Modules/GoldenCategory/Golden.cpp", 3};
+        LogEvent::Emit(LogLevel::Warning, "ControlLogTest golden push \"quoted\" caf\xC3\xA9", kSite);
+        for (size_t i = 0; i < ControlLog::kMaxLogPushPerFrame + kSurplusLines; ++i) {
+            Warn(Format("ControlLogTest golden push {}", i));
+        }
+        LogEvent::Flush();
+        service.EndFrame();
+
+        ASSERT_EQ(pushed.size(), ControlLog::kMaxLogPushPerFrame);
+        ExpectTexts({pushed.front(), pushed[1], pushed.back()},
+                    {R"json({"data":{"category":"GoldenCategory","level":"warning","message":"ControlLogTest golden push \"quoted\" café","sequence":1,"time":"T"},"event":"log"})json",
+                     R"json({"data":{"level":"warning","message":"ControlLogTest golden push 0","sequence":2,"time":"T"},"event":"log"})json",
+                     R"json({"data":{"level":"warning","message":"ControlLogTest golden push 14","sequence":16,"skipped":6,"time":"T"},"event":"log"})json"});
+    }
+
+    TEST_F(ControlLogMethodsTest, ASecondLogSinceWithLinesAllocatesNothingBeyondWhatItReads) {
+        // ReadSince() lists the lines in a Vector, which allocates whoever asks: a method that reads the same lines and answers `{}` is the measure of the rest
+        service.RegisterHandler("reads_only", [this](ControlCall& call) {
+            const ControlLog::Since since = service.Log().ReadSince(0, LogLevel::Warning, ControlLog::kMaxLogSinceLines);
+            call.Reply([](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.EndObject();
+            });
+        });
+        for (size_t i = 0; i < kSurplusLines; ++i) {
+            Warn(Format("ControlLogTest alloc {}", i));
+        }
+        LogEvent::Flush();
+        Json params = Json::object();
+        params["mark"] = 0;
+        const auto drained = [&](StringView method) {
+            service.Post(MakeRequest(++nextId, method, params), [](const String&) {});
+            return CountAllocations([this] { service.Drain(); });
+        };
+        drained("log_since");
+        drained("reads_only");
+
+        const AllocCount since = drained("log_since");
+        const AllocCount reads = drained("reads_only");
+
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+        EXPECT_EQ(since.count, reads.count);
+        EXPECT_EQ(since.bytes, reads.bytes);
     }
 
     TEST_F(ControlLogMethodsTest, NothingIsPushedUntilSubscribed) {
