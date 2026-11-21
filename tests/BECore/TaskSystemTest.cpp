@@ -836,6 +836,30 @@ namespace BECore::Tests {
         EXPECT_EQ(*result, 42);
     }
 
+    TEST_F(TaskManagerLifetimeTest, AbandonAllFindsTheRestAfterHandlesLeaveInAnyOrder) {
+        // Registration order is a, b, c, d, e; the registry is a list through the handles, so leaving as the head, the tail and the middle
+        // must each re-link the neighbours.
+        auto make = [] { return MakeIntrusive<TaskHandle<void>>(SimpleVoidTask()); };  // never started: stays Pending
+        auto a = make();
+        auto b = make();
+        auto c = make();
+        auto d = make();
+        auto e = make();
+
+        c.Reset();
+        e.Reset();
+        a.Reset();
+        Detail::LiveTasks::GetInstance().AbandonAll();
+        EXPECT_EQ(b->GetStatus(), TaskStatus::Cancelled);
+        EXPECT_EQ(d->GetStatus(), TaskStatus::Cancelled);
+
+        d.Reset();
+        b.Reset();  // the registry is empty now and still works
+        auto lone = make();
+        Detail::LiveTasks::GetInstance().AbandonAll();
+        EXPECT_EQ(lone->GetStatus(), TaskStatus::Cancelled);
+    }
+
     TEST_F(TaskManagerLifetimeTest, HandlesComingAndGoingWhileAbandonAllRuns) {
         // Registration and AbandonAll share one lock: a handle that is being destroyed must never be seen half gone.
         constexpr int kThreads = 4;

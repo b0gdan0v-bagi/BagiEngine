@@ -413,6 +413,34 @@ namespace BECore::Tests {
         EXPECT_FALSE(_scheduler.ShouldYield()) << "The flag of the job is restored when the drain is over";
     }
 
+    TEST_F(TaskSystemBudgetTest, AResumedSliceSeesTheBudgetAndAMainThreadJobOfTheFrameDoesNot) {
+        EndFirstFrame();
+        bool sliceSawAtStart = true;
+        bool sliceSawWhenSpent = false;
+        bool mainJobSaw = true;
+
+        _scheduler.Schedule(
+            [&] {
+                _scheduler.ScheduleYielded(
+                    [&] {
+                        sliceSawAtStart = _scheduler.ShouldYield();
+                        g_fakeNow += kBudget + kUnit;
+                        sliceSawWhenSpent = _scheduler.ShouldYield();
+                    },
+                    ThreadType::Background);
+            },
+            TaskPriority::Normal, ThreadType::Background);
+        _scheduler.Schedule([&] { mainJobSaw = _scheduler.ShouldYield(); }, TaskPriority::Normal, ThreadType::MainThread);
+
+        // The frame as TaskManager::Update runs it: the main-thread jobs, then the slices
+        _scheduler.ProcessMainThreadTasks();
+        EXPECT_EQ(_scheduler.ProcessBackgroundSlices(kBudget), 1u);
+
+        EXPECT_FALSE(mainJobSaw) << "A main-thread job is never budgeted, even with the window spent";
+        EXPECT_FALSE(sliceSawAtStart) << "The window of the drain is open when the slice starts";
+        EXPECT_TRUE(sliceSawWhenSpent);
+    }
+
     TEST_F(TaskSystemBudgetTest, AHugeBudgetDoesNotOverflow) {
         Trace trace;
         EndFirstFrame();

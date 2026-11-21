@@ -3,7 +3,6 @@
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/Singleton.h>
-#include <EASTL/hash_set.h>
 
 namespace BECore {
 
@@ -15,7 +14,8 @@ namespace BECore {
          * LiveTasks - every TaskHandle that currently exists, so TaskManager::Shutdown can find the tasks that
          * will never finish: parked on Delay / SwitchTo*, queued but dropped with the scheduler queues, or never started.
          *
-         * Entries are raw pointers. A handle unregisters itself first thing in its destruction (LiveTaskRegistration is
+         * An intrusive doubly linked list through the handles (TaskHandleBase::_liveNext / _livePrev), so registering costs
+         * no allocation and Remove is O(1). Entries are raw pointers. A handle unregisters itself first thing in its destruction (LiveTaskRegistration is
          * its last member), and the registry lock is held while the entries are used, so a registered handle is never
          * seen half-destroyed.
          */
@@ -40,7 +40,7 @@ namespace BECore {
             // Level 0: handles are destroyed under the locks of the scheduler queues and of a TaskGroup (their Remove takes this one), and
             // AbandonAll takes the completion lock of a handle under this one, so no single order holds on every path
             Mutex _mutex{BE_LOCK_SITE("Live tasks")};
-            HashSet<TaskHandleBase*> _handles;
+            TaskHandleBase* _head = nullptr;
         };
 
         /**

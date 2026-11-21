@@ -7,6 +7,7 @@
 #include <BECore/Text/TextLayoutCache.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UITextEffects.h>
+#include <BECore/Values/Derived/Derived.h>
 
 namespace BECore {
 
@@ -32,7 +33,7 @@ namespace BECore {
     /**
      * @brief The text machinery of a label and of a text component: the placeholder expansion, the font, the layout cache, the drawing, the measure and the fit check.
      *
-     * Not reflected and kept by its owner, one per text, because it caches: the expanded text (made again only when the source, a variable or, for a text with a `{#key}`, the string
+     * Not reflected and kept by its owner, one per text, because it caches: the expanded text (a `Derived`, made again only when the source, a variable or, for a text with a `{#key}`, the string
      * table changed), the font handle (loaded again when the path changes; a family nobody knows and a font that does not load are logged once) and the layouts of a draw, a measure and a check (each
      * made again only when the text or what shapes it changed, so a steady screen and a shown tooltip cost no layout). It knows nothing of the element it serves: every call takes the fields as a
      * `UITextParams`.
@@ -67,6 +68,11 @@ namespace BECore {
             return _layoutCache.GetLast();
         }
 
+        /// How many times the display text was expanded: a steady text, variable and string table cost none (tests read it)
+        [[nodiscard]] uint32_t GetExpandCount() const {
+            return _expanded.Rebuilds();
+        }
+
         /// How many times the text was laid out for a draw
         [[nodiscard]] uint32_t GetLayoutCount() const {
             return _layoutCache.GetLayoutCount();
@@ -84,11 +90,9 @@ namespace BECore {
         TextLayoutCache _layoutCache;
         TextLayoutCache _measureCache;
         TextLayoutCache _checkCache;
-        String _expandedSource;  // the source that _expanded was made from
-        String _expanded;
-        uint64_t _expandedVersion = 0;         // the version of UIVars it was made at
-        uint64_t _expandedStringsVersion = 0;  // the version of UIStrings it was made at, read only when _expandedUsesStrings
-        bool _expandedUsesStrings = false;     // the text holds a `{#key}`
+        String _expandedSource;  // the source that _expanded was declared for: a new source declares the reads again
+        // The reads are the UIVars counter, and the UIStrings counter only for a source that holds a `{#key}`, so a language switch leaves a text with no string alone
+        Derived<String> _expanded{DerivedReads{}};
     };
 
 }  // namespace BECore

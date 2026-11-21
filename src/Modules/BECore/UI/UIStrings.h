@@ -3,6 +3,7 @@
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/PoolString/PoolStringMap.h>
 #include <BECore/Types/Types.h>
+#include <BECore/UI/UIAmbient.h>
 #include <cstdint>
 
 namespace BECore {
@@ -84,6 +85,16 @@ namespace BECore {
             return _version;
         }
 
+        /// The effective and the default language as the `language` level of a `Context` (`UIAmbient`); kept in step with GetLanguage() and GetDefaultLanguage()
+        [[nodiscard]] const UILanguageView& GetLanguageView() const {
+            return _languageView;
+        }
+
+        /// The address of the counter behind GetVersion(), for `Context::Set` and `DerivedReads::AddSource`; valid as long as the table
+        [[nodiscard]] const uint64_t* GetVersionCounter() const {
+            return &_version;
+        }
+
         /**
          * @brief Adds the languages of a `<UIStrings>` node on top of what the table holds
          * @return the problems it found, as text for the log: a language without an id, a string without a key, with a key that has a `}`, or without a `text`, a duplicate key in
@@ -101,12 +112,14 @@ namespace BECore {
         [[nodiscard]] const Language* FindLanguage(PoolString language) const;
         [[nodiscard]] const String* FindString(const Language* language, StringView key) const;
         void RecordMissing(StringView key);
+        void SyncLanguageView();
 
         Vector<Language> _languages;
         Vector<PoolString> _languageIds;
         Vector<MissingString> _missing;
         PoolString _default;
         PoolString _current;
+        UILanguageView _languageView;
         uint64_t _version = 0;
     };
 

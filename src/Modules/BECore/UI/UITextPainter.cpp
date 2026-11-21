@@ -12,6 +12,9 @@ namespace BECore {
 
     namespace {
 
+        /// What `GetDisplayText` hands to `Derived`: its reads are plain counters and no level, so the context is never read
+        const Context kNoContext;
+
         TextLayoutOptions MakeOptions(const UITextParams& params, float width, float height, float scale) {
             // The text is laid out and rasterized in output pixels, so that a glyph lands on the pixels it was drawn for (the way TextComponent does it)
             TextLayoutOptions options;
@@ -38,27 +41,28 @@ namespace BECore {
         }
         const UIVars& variables = CoreManager::GetUIVars();
         UIStrings& strings = CoreManager::GetUIStrings();
-        // A text that names no string does not depend on the string table, so a language switch leaves it alone
-        const bool stale = StringView(_expandedSource) != source || _expandedVersion != variables.GetVersion() || (_expandedUsesStrings && _expandedStringsVersion != strings.GetVersion());
-        if (stale) {
-            _expandedUsesStrings = UIStrings::HasReferences(source);
-            if (_expandedUsesStrings) {
-                // Strings first, variables second: a translation may hold `{score}`, and a string is not resolved again
-                const size_t missingBefore = strings.GetMissing().size();
-                const String resolved = strings.Resolve(source);
-                const auto& missing = strings.GetMissing();
-                for (size_t i = missingBefore; i < missing.size(); ++i) {
-                    LOG_WARNING("UIText: no string '{}' in the language '{}' or the default one"_format(missing[i].key.c_str(), missing[i].language.ToStringView()));
-                }
-                _expanded = variables.Expand(StringView(resolved));
-                _expandedStringsVersion = strings.GetVersion();
-            } else {
-                _expanded = variables.Expand(source);
-            }
+        if (StringView(_expandedSource) != source) {
+            DerivedReads reads;
+            [[maybe_unused]] const bool added = reads.AddSource(*variables.GetVersionCounter()) && (!UIStrings::HasReferences(source) || reads.AddSource(*strings.GetVersionCounter()));
+            ASSERT(added, "UITextPainter: two sources always fit");
+            _expanded.Reset(reads);
             _expandedSource.assign(source.data(), source.size());
-            _expandedVersion = variables.GetVersion();
         }
-        return StringView(_expanded);
+        const auto build = [&](String& out, const Context& /*view*/) {
+            if (!UIStrings::HasReferences(source)) {
+                out = variables.Expand(source);
+                return;
+            }
+            // Strings first, variables second: a translation may hold `{score}`, and a string is not resolved again
+            const size_t missingBefore = strings.GetMissing().size();
+            const String resolved = strings.Resolve(source);
+            const auto& missing = strings.GetMissing();
+            for (size_t i = missingBefore; i < missing.size(); ++i) {
+                LOG_WARNING("UIText: no string '{}' in the language '{}' or the default one"_format(missing[i].key.c_str(), missing[i].language.ToStringView()));
+            }
+            out = variables.Expand(StringView(resolved));
+        };
+        return StringView(_expanded.Get(kNoContext, build));
     }
 
     Font* UITextPainter::ResolveFont(const UITextParams& params) {

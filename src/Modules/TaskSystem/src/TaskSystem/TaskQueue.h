@@ -4,7 +4,7 @@
 #include <BECore/Threading/LockGuards.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
-#include <EASTL/deque.h>
+#include <TaskSystem/MoveRing.h>
 #include <atomic>
 #include <cstddef>
 #include <utility>
@@ -31,7 +31,7 @@ namespace BECore {
         void Push(TaskFunc task) {
             {
                 LockGuard lock(_mutex);
-                _tasks.push_back(std::move(task));
+                _tasks.PushBack(std::move(task));
             }
             _condition.notify_one();
         }
@@ -39,36 +39,33 @@ namespace BECore {
         /** Blocks until a job is queued or the queue is stopped; false when stopped and empty. */
         bool Pop(TaskFunc& task) {
             UniqueLock lock(_mutex);
-            _condition.wait(lock, [this] { return !_tasks.empty() || _stopped.load(std::memory_order_acquire); });
+            _condition.wait(lock, [this] { return !_tasks.Empty() || _stopped.load(std::memory_order_acquire); });
 
-            if (_stopped.load(std::memory_order_acquire) && _tasks.empty()) {
+            if (_stopped.load(std::memory_order_acquire) && _tasks.Empty()) {
                 return false;
             }
 
-            task = std::move(_tasks.front());
-            _tasks.pop_front();
+            task = _tasks.PopFront();
             return true;
         }
 
         /** Takes the oldest job without waiting. */
         bool TryPop(TaskFunc& task) {
             LockGuard lock(_mutex);
-            if (_tasks.empty()) {
+            if (_tasks.Empty()) {
                 return false;
             }
-            task = std::move(_tasks.front());
-            _tasks.pop_front();
+            task = _tasks.PopFront();
             return true;
         }
 
         /** Takes the newest job without waiting (the other end from TryPop: work stealing). */
         bool TrySteal(TaskFunc& task) {
             LockGuard lock(_mutex);
-            if (_tasks.empty()) {
+            if (_tasks.Empty()) {
                 return false;
             }
-            task = std::move(_tasks.back());
-            _tasks.pop_back();
+            task = _tasks.PopBack();
             return true;
         }
 
@@ -88,21 +85,21 @@ namespace BECore {
 
         [[nodiscard]] size_t Size() const {
             LockGuard lock(_mutex);
-            return _tasks.size();
+            return _tasks.Size();
         }
 
         [[nodiscard]] bool Empty() const {
             LockGuard lock(_mutex);
-            return _tasks.empty();
+            return _tasks.Empty();
         }
 
         void Clear() {
             LockGuard lock(_mutex);
-            _tasks.clear();
+            _tasks.Clear();
         }
 
     private:
-        eastl::deque<TaskFunc> _tasks;
+        Detail::MoveRing<TaskFunc> _tasks;
         mutable Mutex _mutex{BE_LOCK_SITE("Task queue")};
         ConditionVariable _condition;
         std::atomic<bool> _stopped{false};
