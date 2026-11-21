@@ -4,7 +4,6 @@
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
-#include <BECore/Reflection/ReaderLimits.h>
 #include <BECore/Reflection/SchemaHash.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <EASTL/sort.h>
@@ -46,18 +45,10 @@ namespace BECore {
 
         /// The bytes of a `.bin` file, or the reason it cannot be read
         std::expected<Vector<uint8_t>, String> ReadBinaryFile(const std::filesystem::path& path) {
-            std::error_code error;
-            if (!std::filesystem::is_regular_file(path, error)) {
-                return std::unexpected(String("the file is not readable"));
-            }
-            const uintmax_t size = std::filesystem::file_size(path, error);
-            if (error || size > ReaderLimits::kMaxBinaryStreamBytes) {
-                return std::unexpected(String(error ? "the size of the file cannot be read" : "the file is over the limit of a binary document"));
-            }
-            std::ifstream in(path, std::ios::in | std::ios::binary);  //-NoStd: a content file, read byte for byte
-            Vector<uint8_t> bytes(static_cast<size_t>(size));
-            if (!in.is_open() || !in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()))) {
-                return std::unexpected(String("the file could not be read"));
+            Vector<uint8_t> bytes;
+            const std::expected<void, StringView> read = ReadBinaryDocumentFile(path, bytes);
+            if (!read.has_value()) {
+                return std::unexpected(String(read.error()));
             }
             return bytes;
         }

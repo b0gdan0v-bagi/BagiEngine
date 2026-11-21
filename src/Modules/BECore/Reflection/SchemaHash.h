@@ -2,6 +2,7 @@
 
 #include <BECore/Reflection/TypeInfo.h>
 #include <BECore/Reflection/TypeRegistry.h>
+#include <BECore/Threading/Mutex.h>
 #include <BECore/Types/Types.h>
 #include <cstdint>
 #include <expected>
@@ -46,6 +47,36 @@ namespace BECore {
     /// As above over the types of the program; none for an unknown name
     [[nodiscard]] Optional<uint64_t> ComputeLayoutHash(StringView rootTypeName);
 
+    /**
+     * @brief The layout hash of a type by name, computed once per type for as long as the registry does not grow
+     *
+     * `CheckContentStamp` runs for every `.bin` of the content on `TaskManager` workers, and the walk of a scene's type reaches every
+     * widget and component: the same hash would be computed once per file. A type registered later can move the hash of a root that
+     * reaches it (a factory base lists its derived types), so the whole cache is dropped when `TypeRegistry::RegisteredCount()` has
+     * changed since the last lookup; a type is never cached under a stale count. Thread-safe: one lock, the walk runs under it, so
+     * parallel first lookups of a type compute it once. `ComputeLayoutHash` itself stays uncached.
+     */
+    class LayoutHashCache {
+    public:
+        explicit LayoutHashCache(const TypeRegistry& registry) : _registry(registry) {}
+
+        LayoutHashCache(const LayoutHashCache&) = delete;
+        LayoutHashCache& operator=(const LayoutHashCache&) = delete;
+
+        /// As `ComputeLayoutHash(registry, rootTypeName)`; none for a name the registry does not have
+        [[nodiscard]] Optional<uint64_t> Find(StringView rootTypeName);
+
+        /// How many walks this cache has made: a lookup that was answered from the cache does not count
+        [[nodiscard]] size_t Computations() const;
+
+    private:
+        const TypeRegistry& _registry;
+        mutable Mutex _mutex{BE_LOCK_SITE("Layout hash cache")};
+        size_t _registeredCount = 0;
+        size_t _computations = 0;
+        HashMap<const TypeInfo*, uint64_t> _hashes;
+    };
+
     /// What a cooked content file says of itself: the type its root is read as and the hash of that type's layout when the file was written
     struct ContentStamp {
         String rootType;
@@ -81,5 +112,8 @@ namespace BECore {
      * `ReadContentStamp`.
      */
     [[nodiscard]] std::expected<ContentStamp, String> CheckContentStamp(IDeserializer& reader, StringView sourceName);
+
+    /// As above, taking the layout of the type from @p layouts (a cache over the registry the file is read against) instead of the one of the program
+    [[nodiscard]] std::expected<ContentStamp, String> CheckContentStamp(IDeserializer& reader, StringView sourceName, LayoutHashCache& layouts);
 
 }  // namespace BECore

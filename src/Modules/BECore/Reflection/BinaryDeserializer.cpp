@@ -255,31 +255,36 @@ namespace BECore {
         return LoadFromBuffer(data.data(), data.size());
     }
 
-    bool BinaryDeserializer::LoadFromFile(const std::filesystem::path& path) {
-        ResetState();
-
+    std::expected<void, StringView> ReadBinaryDocumentFile(const std::filesystem::path& path, Vector<uint8_t>& out) {
         std::error_code error;
         if (!std::filesystem::is_regular_file(path, error)) {
             // A folder, a pipe or a device has no size to read (tellg() of it is -1)
-            AddError("", std::filesystem::exists(path, error) ? "Binary path is not a regular file" : "Failed to open binary file", 0);
-            return false;
+            return std::unexpected(std::filesystem::exists(path, error) ? StringView("Binary path is not a regular file") : StringView("Failed to open binary file"));
         }
         const uintmax_t fileSize = std::filesystem::file_size(path, error);
         if (error || fileSize > ReaderLimits::kMaxBinaryStreamBytes) {
-            AddError("", error ? "Failed to read the size of the binary file" : "Binary file is larger than the limit", 0);
-            return false;
+            return std::unexpected(error ? StringView("Failed to read the size of the binary file") : StringView("Binary file is larger than the limit"));
         }
 
-        std::ifstream file(path, std::ios::binary);
+        std::ifstream file(path, std::ios::binary);  //-NoStd: a content file, read byte for byte
         if (!file) {
-            AddError("", "Failed to open binary file", 0);
-            return false;
+            return std::unexpected(StringView("Failed to open binary file"));
         }
 
-        _owned.resize(static_cast<size_t>(fileSize));
-        if (!file.read(reinterpret_cast<char*>(_owned.data()), static_cast<std::streamsize>(fileSize))) {
-            _owned.clear();
-            AddError("", "Failed to read binary file", 0);
+        out.resize(static_cast<size_t>(fileSize));
+        if (!file.read(reinterpret_cast<char*>(out.data()), static_cast<std::streamsize>(fileSize))) {
+            out.clear();
+            return std::unexpected(StringView("Failed to read binary file"));
+        }
+        return {};
+    }
+
+    bool BinaryDeserializer::LoadFromFile(const std::filesystem::path& path) {
+        ResetState();
+
+        const std::expected<void, StringView> read = ReadBinaryDocumentFile(path, _owned);
+        if (!read.has_value()) {
+            AddError("", read.error(), 0);
             return false;
         }
         Checked checked;

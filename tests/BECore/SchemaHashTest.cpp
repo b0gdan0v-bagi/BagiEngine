@@ -1,8 +1,10 @@
 #include "SchemaHashTest.h"
 
+#include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/SchemaHash.h>
 #include <BECore/Reflection/TypeInfo.h>
 #include <BECore/Reflection/TypeRegistry.h>
+#include <Common/BinaryStreams.h>
 #include <Generated/SchemaHashTest.gen.hpp>
 #include <gtest/gtest.h>
 
@@ -54,6 +56,15 @@ namespace BECore::Tests {
                 shapes.Add(MakeTypeInfo<HshSquare>());
             }
             return shapes.HashOfList();
+        }
+
+        /// A reader over a document that holds only the stamp of @p rootType with @p layout
+        BinaryDeserializer StampOnly(StringView rootType, uint64_t layout) {
+            BinaryDeserializer reader;
+            const Vector<uint8_t> bytes =
+                BinaryStreams::Build({BinaryStreams::Object(BinaryFormat::ContentStampName, {BinaryStreams::Text("root", rootType), BinaryStreams::Number("layout", layout)})});
+            EXPECT_TRUE(reader.LoadFromBuffer(bytes));
+            return reader;
         }
 
     }  // namespace
@@ -180,6 +191,41 @@ namespace BECore::Tests {
         other.Register(MakeTypeInfo<HshHolderInner>());
         other.Register(MakeTypeInfo<HshInner>());
         EXPECT_NE(hash, ComputeLayoutHash(other, "HshHolderInner"));
+    }
+
+    TEST(LayoutHashCache, ComputesOnceWhileTheRegistryDoesNotGrow) {
+        ShapeRegistry shapes;
+        shapes.Add(MakeTypeInfo<HshShapeList>());
+        shapes.Add(MakeTypeInfo<HshShape>());
+        LayoutHashCache cache(shapes.registry);
+        const Optional<uint64_t> first = cache.Find("HshShapeList");
+        ASSERT_TRUE(first.has_value());
+        EXPECT_EQ(first, cache.Find("HshShapeList"));
+        EXPECT_EQ(first, shapes.HashOfList());
+        EXPECT_EQ(cache.Computations(), 1U);
+        EXPECT_FALSE(cache.Find("HshNoSuchType").has_value());
+        EXPECT_EQ(cache.Computations(), 1U);
+    }
+
+    // A derived type registered after the first lookup is part of the list's layout: a stale entry would accept a file cooked without it
+    TEST(LayoutHashCache, ATypeRegisteredLaterMovesTheNextAnswer) {
+        ShapeRegistry shapes;
+        shapes.Add(MakeTypeInfo<HshShapeList>());
+        shapes.Add(MakeTypeInfo<HshShape>());
+        LayoutHashCache cache(shapes.registry);
+        const uint64_t before = cache.Find("HshShapeList").value_or(0);
+
+        BinaryDeserializer oldFile = StampOnly("HshShapeList", before);
+        EXPECT_TRUE(CheckContentStamp(oldFile, "shapes.bin", cache).has_value());
+
+        shapes.Add(MakeTypeInfo<HshCircle>());
+        const uint64_t after = cache.Find("HshShapeList").value_or(0);
+        EXPECT_NE(before, after);
+        EXPECT_EQ(after, shapes.HashOfList());
+        EXPECT_EQ(cache.Computations(), 2U);
+
+        BinaryDeserializer staleFile = StampOnly("HshShapeList", before);
+        EXPECT_FALSE(CheckContentStamp(staleFile, "shapes.bin", cache).has_value());
     }
 
 }  // namespace BECore::Tests

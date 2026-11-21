@@ -2,6 +2,7 @@
 
 #include <BECore/Reflection/BinaryFormat.h>
 #include <BECore/Reflection/IDeserializer.h>
+#include <expected>
 #include <filesystem>
 
 namespace BECore {
@@ -9,6 +10,17 @@ namespace BECore {
     namespace Tests {
         struct BinaryDeserializerAccess;
     }
+
+    /**
+     * @brief Reads the bytes of a binary document into @p out (resized to the file's size, one allocation)
+     *
+     * The one reading of a binary file: `BinaryDeserializer::LoadFromFile` and `ConfigManager` use it, so the checks do not drift
+     * apart. Refused before the file is read when the path is not a regular file or the file is over
+     * ReaderLimits::kMaxBinaryStreamBytes; the bytes are not validated here. On a refusal @p out is empty or untouched.
+     *
+     * @return nothing on success, else a message (a literal, valid for the whole run) that says what is wrong with the file
+     */
+    [[nodiscard]] std::expected<void, StringView> ReadBinaryDocumentFile(const std::filesystem::path& path, Vector<uint8_t>& out);
 
     /**
      * @brief Binary deserializer (reader) for the format written by BinarySerializer

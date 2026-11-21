@@ -166,6 +166,32 @@ namespace BECore {
         return ComputeLayoutHash(TypeRegistry::GetInstance(), rootTypeName);
     }
 
+    Optional<uint64_t> LayoutHashCache::Find(StringView rootTypeName) {
+        const TypeInfo* root = _registry.Find(rootTypeName);
+        if (root == nullptr) {
+            return std::nullopt;
+        }
+        LockGuard lock(_mutex);
+        const size_t registered = _registry.RegisteredCount();
+        if (registered != _registeredCount) {
+            _hashes.clear();
+            _registeredCount = registered;
+        }
+        const auto found = _hashes.find(root);
+        if (found != _hashes.end()) {
+            return found->second;
+        }
+        ++_computations;
+        const uint64_t layout = ComputeLayoutHash(_registry, *root);
+        _hashes.emplace(root, layout);
+        return layout;
+    }
+
+    size_t LayoutHashCache::Computations() const {
+        LockGuard lock(_mutex);
+        return _computations;
+    }
+
     namespace {
 
         constexpr StringView kRootKey = "root";
@@ -212,11 +238,17 @@ namespace BECore {
     }
 
     std::expected<ContentStamp, String> CheckContentStamp(IDeserializer& reader, StringView sourceName) {
+        // One cache for the program's registry, which is complete once `main` runs
+        static LayoutHashCache programLayouts(TypeRegistry::GetInstance());
+        return CheckContentStamp(reader, sourceName, programLayouts);
+    }
+
+    std::expected<ContentStamp, String> CheckContentStamp(IDeserializer& reader, StringView sourceName, LayoutHashCache& layouts) {
         std::expected<ContentStamp, String> stamp = ReadContentStamp(reader);
         if (!stamp.has_value()) {
             return std::unexpected(Format("{}: {} ({})", sourceName, stamp.error(), kCookAgain));
         }
-        const Optional<uint64_t> layout = ComputeLayoutHash(stamp->rootType);
+        const Optional<uint64_t> layout = layouts.Find(stamp->rootType);
         if (!layout.has_value()) {
             return std::unexpected(Format("{}: the content stamp names the type '{}' (layout {:016x}), which this program does not have ({})", sourceName, stamp->rootType, stamp->layout, kCookAgain));
         }
