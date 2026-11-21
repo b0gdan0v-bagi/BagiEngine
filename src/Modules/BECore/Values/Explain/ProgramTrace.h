@@ -29,6 +29,9 @@ namespace BECore {
     /// The most nodes any text or answer made from a trace writes out: a node several parents share is written under each of them, and a hand-built program can share them again and again
     inline constexpr uint32_t kMaxFormattedLines = kMaxTraceNodes * 4;
 
+    /// What precedes the component name in the label of a component read (`Extract .y`); the tooltip reads the name back by it
+    inline constexpr StringView kComponentLabelMark = " .";
+
     /// The `label` of the node of a fused `MulAddSlot`: its children are the field, the factor and the addend, in that order
     inline constexpr StringView kMulAddLabel = "MulAdd";
 
@@ -44,7 +47,7 @@ namespace BECore {
         TraceStepKind kind = TraceStepKind::Constant;
         /// What `image` holds (an `Int32` count for a `List`)
         ProgramType type = ProgramType::Int32;
-        /// The instruction that made the node: `Invalid` for a field read inside a fused instruction, which has none
+        /// The instruction that made the node: `Invalid` for a field read or a constant inside a fused instruction, which have none
         Opcode opcode = Opcode::Invalid;
         /// The operation of the language it is, when it is one (`Add`, `Lerp`); empty for a fused instruction that is two (`MulAddSlot`), a conversion, a call, a table or a list
         Optional<ProgramOperation> operation;

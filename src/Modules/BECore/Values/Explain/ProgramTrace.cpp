@@ -16,7 +16,6 @@ namespace BECore {
         constexpr StringView kSizeLabel = "size";
         constexpr StringView kHexDigits = "0123456789abcdef";
         constexpr size_t kIndentWidth = 2;
-        constexpr uint32_t kMaxOperands = 4;
 
         template <typename T>
         RegisterImage ImageOf(T value) {
@@ -417,7 +416,7 @@ namespace BECore {
                 }
                 const ComponentSet set = ComponentsOf(*type);
                 if (ins.imm < set.count) {
-                    node.label += Format(" .{}", set.names[ins.imm]);
+                    node.label += Format("{}{}", kComponentLabelMark, set.names[ins.imm]);
                 }
             }
 

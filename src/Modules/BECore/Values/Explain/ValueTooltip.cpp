@@ -6,11 +6,10 @@ namespace BECore {
 
         constexpr StringView kValueOnlySuffix = "value";
         constexpr StringView kNoValueText = "?";
-        constexpr StringView kExtractLabel = "Extract";
         /// A formula longer than this (a fold over a long list) shows its value only: a tooltip is read by a person
         constexpr size_t kMaxPartsBytes = 256;
         /// The nodes one rendering may visit: a hand-built program can share nodes between parents and the expanded tree would be exponential
-        constexpr uint32_t kMaxVisitedNodes = kMaxTraceNodes * 4;
+        constexpr uint32_t kMaxVisitedNodes = kMaxFormattedLines;
 
         /// How tightly an operator binds: a child that binds looser than its parent gets parentheses
         constexpr int kPrecedenceOr = 1;
@@ -169,7 +168,7 @@ namespace BECore {
             }
 
             [[nodiscard]] Rendered Function(StringView name, Span<const uint32_t> arguments) {
-                String text = String(name) + "(";
+                String text = Format("{}(", name);
                 for (size_t i = 0; i < arguments.size(); ++i) {
                     text += Format("{}{}", i == 0 ? "" : ", ", Render(arguments[i]).text);
                 }
@@ -213,9 +212,13 @@ namespace BECore {
                 if (children.size() == 1 && (operation == ProgramOperation::Neg || operation == ProgramOperation::Not)) {
                     return Rendered{Format("{}{}", operation == ProgramOperation::Neg ? "-" : "!", Wrap(Render(children[0]), kPrecedenceUnary)), kPrecedenceUnary};
                 }
-                if (operation == ProgramOperation::Extract && children.size() == 1 && node.label.size() > kExtractLabel.size()) {
-                    // The label is `Extract .y`: the component follows the operand like a member
-                    return Rendered{Format("{}{}", Wrap(Render(children[0]), kPrecedenceAtom), StringView(node.label.c_str() + kExtractLabel.size() + 1)), kPrecedenceAtom};
+                if (operation == ProgramOperation::Extract && children.size() == 1) {
+                    // The component follows the operand like a member: `.y` of the label `Extract .y`
+                    const size_t mark = node.label.find(kComponentLabelMark.data(), 0, kComponentLabelMark.size());
+                    if (mark != String::npos) {
+                        const StringView component(node.label.c_str() + mark + 1, node.label.size() - mark - 1);
+                        return Rendered{Format("{}{}", Wrap(Render(children[0]), kPrecedenceAtom), component), kPrecedenceAtom};
+                    }
                 }
                 if (operation == ProgramOperation::Pack) {
                     return Function(Lowercase(EnumUtils<ProgramType>::ToString(node.type)), children);
