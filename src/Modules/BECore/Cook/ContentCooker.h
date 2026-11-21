@@ -71,7 +71,10 @@ namespace BECore {
         Vector<ContentCooker> _cookers;
     };
 
-    /// Appends the errors, then the warnings, of @p reader to @p findings as `<path>: <message>` (the message alone when the path is empty)
+    /// Appends @p messages to @p findings as `<path>: <message>` (the message alone when the path is empty)
+    void AppendFindings(const Vector<DeserializeError>& messages, Vector<String>& findings);
+
+    /// Appends the errors, then the warnings, of @p reader to @p findings
     void AppendFindings(const IDeserializer& reader, Vector<String>& findings);
 
     namespace CookDetail {

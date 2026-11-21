@@ -1,9 +1,14 @@
 #include "ContentCook.h"
 
+#include <BECore/Config/ContentVersion.h>
 #include <BECore/Config/XmlDocument.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/Reflection/BinarySerializer.h>
+#include <BECore/Reflection/SchemaHash.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Scene/SceneLoader.h>
+#include <BECore/Scene/SceneNodeFiles.h>
+#include <BECore/Scene/SceneNodeInstance.h>
 #include <EASTL/sort.h>
 
 namespace BECore {
@@ -99,32 +104,110 @@ namespace BECore {
             return !ec;
         }
 
-        /// Reads @p source as the cooker says and writes @p target; the findings are the reason it did not
-        void CookOne(const ContentCooker& cooker, const std::filesystem::path& source, const std::filesystem::path& target, Vector<String>& findings) {
-            XmlDocument document;
-            if (!document.LoadFromFile(source)) {
-                findings.push_back("the file does not parse");
-                return;
-            }
-            XmlDeserializer reader;
-            if (!reader.LoadFromXmlNode(document.GetRoot())) {
-                findings.push_back("the document cannot be read");
-                return;
-            }
-            reader.SetDiagnostics(DiagnosticsMode::Error);
-            reader.SetStrictValues(cooker.strictValues);
-
-            BinarySerializer writer;
-            cooker.cook(cooker, reader, writer, findings);
-            if (!findings.empty()) {
-                return;
-            }
+        /// Writes the stream of @p writer to @p target, making the folder above it; the findings get the reason it could not
+        void SaveCooked(const BinarySerializer& writer, const std::filesystem::path& target, Vector<String>& findings) {
             String error;
             if (!MakeParentFolder(target, error)) {
                 findings.push_back(eastl::move(error));
             } else if (!writer.SaveToFile(target)) {
                 findings.push_back(Format("cannot write '{}'", target.string()));
             }
+        }
+
+        /// Reads @p root as the reflected type of @p cooker
+        void CookWith(const ContentCooker& cooker, const XmlNode& root, BinarySerializer& writer, Vector<String>& findings) {
+            XmlDeserializer reader;
+            if (!reader.LoadFromXmlNode(root)) {
+                findings.push_back("the document cannot be read");
+                return;
+            }
+            reader.SetDiagnostics(DiagnosticsMode::Error);
+            reader.SetStrictValues(cooker.strictValues);
+            cooker.cook(cooker, reader, writer, findings);
+        }
+
+        /// The scene config as the game loads it: node references expanded (the loader sees every layer of @p fs), `sourceRef` set
+        void CookScene(const FileSystem& fs, StringView stem, const XmlNode& root, BinarySerializer& writer, Vector<String>& findings) {
+            if (const auto version = CheckContentVersion(root.GetPugiNode(), Format("Config '{}'", stem)); !version) {
+                findings.push_back(version.error());
+                return;
+            }
+            SceneLoadFindings loaded;
+            const NodeFileLoader loader = MakeFileSystemNodeLoader(fs);
+            const IntrusivePtrAtomic<SceneManager> manager = LoadSceneManager(root, loader, stem, &loaded);
+            for (const String& error : loaded.expansionErrors) {
+                findings.push_back(error);
+            }
+            AppendFindings(loaded.errors, findings);
+            AppendFindings(loaded.warnings, findings);
+            if (!findings.empty()) {
+                return;
+            }
+            if (!WriteContentStamp(writer, kSceneManagerRootType)) {
+                findings.push_back(Format("the type '{}' is not reflected in this program", kSceneManagerRootType));
+                return;
+            }
+            manager->Serialize(writer);
+        }
+
+        /// A node file as `Scene::InstantiateNode` reads it: the node of the file, its children inline (a node file has no references of its own)
+        void CookNode(StringView stem, const XmlNode& root, BinarySerializer& writer, Vector<String>& findings) {
+            if (const auto version = CheckContentVersion(root.GetPugiNode(), Format("Config '{}'", stem)); !version) {
+                findings.push_back(version.error());
+                return;
+            }
+            if (root.GetPugiNode().attribute(kNodeRefAttribute.data())) {
+                findings.push_back("the node of a node file cannot be a reference itself");
+                return;
+            }
+            XmlDeserializer reader;
+            if (!reader.LoadFromXmlNode(root)) {
+                findings.push_back("the document cannot be read");
+                return;
+            }
+            reader.SetDiagnostics(DiagnosticsMode::Error);
+            reader.NoteKnownKey(kContentVersionAttribute);
+            const IntrusivePtr<SceneNode> node = DeserializeNode(reader, stem);
+            reader.FinishLoad();
+            AppendFindings(reader, findings);
+            if (!findings.empty()) {
+                return;
+            }
+            if (!WriteContentStamp(writer, kNodeRootType)) {
+                findings.push_back(Format("the type '{}' is not reflected in this program", kNodeRootType));
+                return;
+            }
+            node->Serialize(writer);
+        }
+
+        /// Cooks the XML file @p source into @p target when its root element or its stem says how; false (nothing written, @p findings empty) when it is to be copied
+        bool CookXml(const FileSystem& fs, const ContentCookRegistry& registry, const std::filesystem::path& source, const std::filesystem::path& target, Vector<String>& findings) {
+            const String stem = FromStdString(source.stem().string());
+            const ContentCooker* cooker = registry.Find(stem);
+            XmlDocument document;
+            if (!document.LoadFromFile(source)) {
+                if (cooker != nullptr) {
+                    findings.push_back("the file does not parse");
+                    return true;
+                }
+                return false;
+            }
+            const XmlNode root = document.GetRoot();
+            const StringView rootName = root.Name();
+            BinarySerializer writer;
+            if (rootName == kSceneConfigRootName) {
+                CookScene(fs, stem, root, writer, findings);
+            } else if (rootName == kNodeFileRootName) {
+                CookNode(stem, root, writer, findings);
+            } else if (cooker != nullptr) {
+                CookWith(*cooker, root, writer, findings);
+            } else {
+                return false;
+            }
+            if (findings.empty()) {
+                SaveCooked(writer, target, findings);
+            }
+            return true;
         }
 
         void CopyOne(const std::filesystem::path& source, const std::filesystem::path& target, Vector<String>& findings) {
@@ -140,7 +223,7 @@ namespace BECore {
             }
         }
 
-        void CookLayer(size_t layerIndex, const std::filesystem::path& layer, const std::filesystem::path& outDir, const ContentCookRegistry& registry, CookReport& report) {
+        void CookLayer(const FileSystem& fs, size_t layerIndex, const std::filesystem::path& layer, const std::filesystem::path& outDir, const ContentCookRegistry& registry, CookReport& report) {
             String listError;
             const Vector<std::filesystem::path> files = ListFiles(layer, listError);
             if (!listError.empty()) {
@@ -168,15 +251,19 @@ namespace BECore {
                     }
                 }
 
-                const ContentCooker* cooker = relative.extension() == kXmlExtension.data() ? registry.Find(FromStdString(relative.stem().string())) : nullptr;
-                if (cooker != nullptr) {
-                    std::filesystem::path target = outLayer / relative;
+                std::filesystem::path target = outLayer / relative;
+                bool cooked = false;
+                if (relative.extension() == kXmlExtension.data()) {
                     target.replace_extension(kBinaryExtension.data());
-                    CookOne(*cooker, source, target, row.messages);
-                    row.outcome = row.messages.empty() ? CookOutcome::Cooked : CookOutcome::Failed;
-                } else {
+                    cooked = CookXml(fs, registry, source, target, row.messages);
+                }
+                if (!cooked) {
                     CopyOne(source, outLayer / relative, row.messages);
-                    row.outcome = row.messages.empty() ? CookOutcome::Copied : CookOutcome::Failed;
+                }
+                if (!row.messages.empty()) {
+                    row.outcome = CookOutcome::Failed;
+                } else {
+                    row.outcome = cooked ? CookOutcome::Cooked : CookOutcome::Copied;
                 }
                 report.rows.push_back(eastl::move(row));
             }
@@ -255,7 +342,7 @@ namespace BECore {
         }
 
         for (size_t layerIndex = 0; layerIndex < layers.size(); ++layerIndex) {
-            CookLayer(layerIndex, layers[layerIndex], outDir, registry, report);
+            CookLayer(fs, layerIndex, layers[layerIndex], outDir, registry, report);
         }
         return report;
     }

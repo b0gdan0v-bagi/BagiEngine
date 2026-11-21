@@ -1,9 +1,16 @@
 #include "ContentCookTest.h"
 
+#include <BECore/Config/ContentVersion.h>
 #include <BECore/Cook/ContentCook.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneLoader.h>
+#include <BECore/Scene/SceneManager.h>
+#include <BECore/Scene/SceneNodeInstance.h>
 #include <Common/CookTestSupport.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
+#include <Common/SceneTestSupport.h>
 #include <Generated/ContentCookTest.gen.hpp>
 
 namespace BECore::Tests {
@@ -36,6 +43,62 @@ namespace BECore::Tests {
 
         bool Contains(const String& text, StringView part) {
             return text.find(part.data(), 0, part.size()) != String::npos;
+        }
+
+        /// A scene config of the current format with the one scene Main holding @p nodesXml
+        String SceneText(StringView nodesXml, uint32_t version = kContentVersion) {
+            return Format(R"(<SceneManager contentVersion="{}"><scenes><scene type="Scene" name="Main" {}><nodes>{}</nodes></scene></scenes></SceneManager>)", version, kMainSceneView800x600,
+                          nodesXml);
+        }
+
+        String HudNodeText(StringView name, uint32_t version = kContentVersion) {
+            return Format(R"(<node contentVersion="{}" name="{}" layer="10"><components>
+  <component type="TransformComponent" x="1" y="2" width="3" height="4"/>
+  <component type="QuadRendererComponent"><color r="9" g="8" b="7" a="255"/></component>
+</components><children><node name="Child" layer="1"/></children></node>)",
+                          version, name);
+        }
+
+        constexpr StringView kHudRef = "nodes/Hud";
+
+        /// The SceneManager a game reads from the layers of @p fs and @p configs, as text
+        String SceneManagerText(ConfigManager& configs, const FileSystem& fs) {
+            const IntrusivePtrAtomic<SceneManager> manager = LoadSceneManagerFromConfig(configs, fs);
+            XmlSerializer text;
+            manager->Serialize(text);
+            return text.SaveToString();
+        }
+
+        /// The node file @p ref as the loader of @p fs gives it, read as a node and printed
+        String NodeFileText(const FileSystem& fs, StringView ref) {
+            const NodeFileLoader loader = MakeFileSystemNodeLoader(fs);
+            pugi::xml_document document;
+            String error;
+            if (!loader(ref, document, error)) {
+                return error;
+            }
+            pugi::xml_document out;
+            AppendNodeElement(out, *DeserializeNode(document.document_element(), "test"));
+            return XmlTextIndented(out);
+        }
+
+        /// What `Scene::InstantiateNode` makes of @p reference with the node files of @p fs: the node, its source reference and its layer, printed
+        String InstanceText(const FileSystem& fs, const pugi::xml_node& reference) {
+            const NodeFileLoader loader = MakeFileSystemNodeLoader(fs);
+            pugi::xml_document scenes;
+            EXPECT_TRUE(scenes.load_string(SceneText("<node name=\"A\"/>").c_str()));
+            IntrusivePtrAtomic<SceneManager> manager = LoadSceneManager(XmlNode{scenes.document_element()}, loader);
+            manager->Initialize();
+            Scene& scene = Require(manager->GetSceneByName("Main"_intern));
+            const IntrusivePtr<SceneNode> node = scene.InstantiateNode(reference, loader);
+            String text;
+            if (node) {
+                pugi::xml_document out;
+                AppendNodeElement(out, *node);
+                text = Format("{}ref={}\n{}", XmlTextIndented(out), node->GetSourceRef().CStr(), TreeOf(scene.GetRootNode()));
+            }
+            manager.Reset();
+            return text;
         }
 
         const CookRow* FindRow(const CookReport& report, size_t layer, StringView path) {
@@ -212,6 +275,117 @@ namespace BECore::Tests {
         EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(0) / "Gone.bin"));
         EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(1) / "deep"));
         EXPECT_EQ(ReadFile(_tree.Out() / "keep.txt"), "mine");
+    }
+
+    TEST_F(ContentCookTest, ASceneWithInlineNodesAndAReferenceCooksAndLoadsLikeItsXml) {
+        _tree.Write(0, "nodes/Hud.xml", HudNodeText("Hud"));
+        _tree.Write(1, "SceneConfig.xml", SceneText(R"(<node name="A" layer="3"><components><component type="TransformComponent" x="5"/></components></node>
+<node ref="nodes/Hud" name="Crate" layer="5"><components>
+  <component type="TransformComponent" x="100"/>
+  <component type="QuadRendererComponent"><color r="1" g="2" b="3" a="255"/></component>
+</components></node>)"));
+
+        const CookReport report = Cook();
+        ASSERT_TRUE(report.Ok()) << report.ToText().c_str();
+        ASSERT_NE(FindRow(report, 1, "SceneConfig.xml"), nullptr);
+        EXPECT_EQ(FindRow(report, 1, "SceneConfig.xml")->outcome, CookOutcome::Cooked);
+        EXPECT_TRUE(std::filesystem::is_regular_file(_tree.OutConfig(1) / "SceneConfig.bin"));
+        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(1) / "SceneConfig.xml"));
+
+        SourceContent source(_tree);
+        CookedContent cooked(_tree.Out(), CookTestTree::kLayers);
+        ASSERT_TRUE(cooked.Configs().IsBinaryConfig(kSceneConfigName));
+        const String fromXml = SceneManagerText(source.Configs(), _tree.Sources());
+        EXPECT_TRUE(Contains(fromXml, "Crate"));
+        EXPECT_TRUE(Contains(fromXml, "sourceRef=\"nodes/Hud\"")) << "the expansion marks the node with its file, as the loader does";
+        EXPECT_EQ(SceneManagerText(cooked.Configs(), cooked.Files()), fromXml);
+    }
+
+    TEST_F(ContentCookTest, ASceneWithADanglingReferenceFailsTheCookWithTheExpansionMessage) {
+        _tree.Write(1, "SceneConfig.xml", SceneText(R"(<node name="A"/><node ref="nodes/Missing"/>)"));
+
+        const CookReport report = Cook();
+        EXPECT_FALSE(report.Ok());
+        const CookRow* row = FindRow(report, 1, "SceneConfig.xml");
+        ASSERT_NE(row, nullptr);
+        EXPECT_EQ(row->outcome, CookOutcome::Failed);
+        EXPECT_TRUE(Contains(report.ToText(), "nodes/Missing")) << report.ToText().c_str();
+        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(1) / "SceneConfig.bin"));
+    }
+
+    TEST_F(ContentCookTest, AnUnknownKeyInASceneFailsTheCook) {
+        _tree.Write(1, "SceneConfig.xml", SceneText(R"(<node name="A" colour="red"/>)"));
+
+        const CookReport report = Cook();
+        EXPECT_FALSE(report.Ok());
+        EXPECT_TRUE(Contains(report.ToText(), "colour")) << report.ToText().c_str();
+    }
+
+    TEST_F(ContentCookTest, ASceneOrANodeFileOfAnotherContentVersionFailsLikeTheLoader) {
+        _tree.Write(1, "SceneConfig.xml", SceneText(R"(<node name="A"/>)", 4));
+        _tree.Write(0, "nodes/Old.xml", HudNodeText("Old", 4));
+
+        const CookReport report = Cook();
+        EXPECT_FALSE(report.Ok());
+        ASSERT_NE(FindRow(report, 1, "SceneConfig.xml"), nullptr);
+        EXPECT_EQ(FindRow(report, 1, "SceneConfig.xml")->outcome, CookOutcome::Failed);
+        ASSERT_NE(FindRow(report, 0, "nodes/Old.xml"), nullptr);
+        EXPECT_EQ(FindRow(report, 0, "nodes/Old.xml")->outcome, CookOutcome::Failed);
+        EXPECT_TRUE(Contains(report.ToText(), "content version 4")) << report.ToText().c_str();
+        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(1) / "SceneConfig.bin"));
+    }
+
+    TEST_F(ContentCookTest, ANodeFileCooksToTheNodeOfItsXmlAndInstantiatesTheSame) {
+        _tree.Write(0, "nodes/Hud.xml", HudNodeText("Hud"));
+
+        const CookReport report = Cook();
+        ASSERT_TRUE(report.Ok()) << report.ToText().c_str();
+        EXPECT_EQ(FindRow(report, 0, "nodes/Hud.xml")->outcome, CookOutcome::Cooked);
+        EXPECT_TRUE(std::filesystem::is_regular_file(_tree.OutConfig(0) / "nodes" / "Hud.bin")) << "the reference nodes/Hud finds the file by this path";
+        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(0) / "nodes" / "Hud.xml"));
+
+        CookedContent cooked(_tree.Out(), CookTestTree::kLayers);
+        const String fromXml = NodeFileText(_tree.Sources(), kHudRef);
+        EXPECT_TRUE(Contains(fromXml, "Child"));
+        EXPECT_EQ(NodeFileText(cooked.Files(), kHudRef), fromXml);
+
+        pugi::xml_document plain;
+        ASSERT_TRUE(plain.load_string(R"(<node ref="nodes/Hud"/>)"));
+        pugi::xml_document overridden;
+        ASSERT_TRUE(overridden.load_string(R"(<node ref="nodes/Hud" name="Crate" layer="5"><components>
+  <component type="TransformComponent" x="100"/>
+  <component type="QuadRendererComponent"><color r="1" g="2" b="3" a="255"/></component>
+</components></node>)"));
+        for (const pugi::xml_node reference : {plain.document_element(), overridden.document_element()}) {
+            const String expected = InstanceText(_tree.Sources(), reference);
+            EXPECT_TRUE(Contains(expected, "ref=nodes/Hud")) << expected.c_str();
+            EXPECT_EQ(InstanceText(cooked.Files(), reference), expected);
+        }
+    }
+
+    TEST_F(ContentCookTest, ANodeFileWithAnUnknownKeyOrAReferenceOfItsOwnFailsTheCook) {
+        _tree.Write(0, "nodes/Typo.xml", R"(<node contentVersion="5" name="Typo" layr="1"/>)");
+        _tree.Write(0, "nodes/Loop.xml", R"(<node contentVersion="5" ref="nodes/Other"/>)");
+
+        const CookReport report = Cook();
+        EXPECT_EQ(report.Count(CookOutcome::Failed), 2u) << report.ToText().c_str();
+        EXPECT_TRUE(Contains(report.ToText(), "layr")) << report.ToText().c_str();
+        EXPECT_TRUE(Contains(report.ToText(), "reference")) << report.ToText().c_str();
+    }
+
+    TEST_F(ContentCookTest, ANodeFileOfTheLowerLayerThatTheUpperOneShadowsIsCookedInItsOwnLayerOnly) {
+        _tree.Write(0, "nodes/Hud.xml", HudNodeText("Low"));
+        _tree.Write(1, "nodes/Hud.xml", HudNodeText("Up"));
+
+        const CookReport report = Cook();
+        ASSERT_TRUE(report.Ok()) << report.ToText().c_str();
+        EXPECT_TRUE(std::filesystem::is_regular_file(_tree.OutConfig(0) / "nodes" / "Hud.bin"));
+        EXPECT_TRUE(std::filesystem::is_regular_file(_tree.OutConfig(1) / "nodes" / "Hud.bin"));
+
+        CookedContent both(_tree.Out(), CookTestTree::kLayers);
+        EXPECT_TRUE(Contains(NodeFileText(both.Files(), kHudRef), "Up"));
+        CookedContent lowerOnly(_tree.Out(), 1);
+        EXPECT_TRUE(Contains(NodeFileText(lowerOnly.Files(), kHudRef), "Low"));
     }
 
 }  // namespace BECore::Tests

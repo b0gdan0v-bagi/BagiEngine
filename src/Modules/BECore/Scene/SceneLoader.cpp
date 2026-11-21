@@ -23,6 +23,9 @@ namespace BECore {
         for (const String& error : expansion.errors) {
             LOG_ERROR(Format("Config '{}': {}", configName, error).c_str());
         }
+        if (findings != nullptr) {
+            findings->expansionErrors = expansion.errors;
+        }
 
         XmlDeserializer deserializer;
         deserializer.SetDiagnostics(ConfigManager::GetDiagnostics());

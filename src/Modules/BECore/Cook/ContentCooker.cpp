@@ -24,19 +24,15 @@ namespace BECore {
         return nullptr;
     }
 
-    namespace {
-
-        void Append(const Vector<DeserializeError>& messages, Vector<String>& findings) {
-            for (const DeserializeError& message : messages) {
-                findings.push_back(message.path.empty() ? message.errorMessage : Format("{}: {}", message.path, message.errorMessage));
-            }
+    void AppendFindings(const Vector<DeserializeError>& messages, Vector<String>& findings) {
+        for (const DeserializeError& message : messages) {
+            findings.push_back(message.path.empty() ? message.errorMessage : Format("{}: {}", message.path, message.errorMessage));
         }
-
-    }  // namespace
+    }
 
     void AppendFindings(const IDeserializer& reader, Vector<String>& findings) {
-        Append(reader.GetErrors(), findings);
-        Append(reader.GetWarnings(), findings);
+        AppendFindings(reader.GetErrors(), findings);
+        AppendFindings(reader.GetWarnings(), findings);
     }
 
 }  // namespace BECore

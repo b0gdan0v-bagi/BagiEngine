@@ -183,8 +183,6 @@ namespace BECore {
             return true;
         }
 
-        constexpr StringView kNodeRootType = "SceneNode";
-
         /// Reads the cooked node file @p file into @p out as the `<node>` element of the same node, so the overrides and the
         /// instantiation work on it as on a file written by hand. @p label names the file in the messages
         bool ReadNodeFileBinary(const std::filesystem::path& file, StringView label, pugi::xml_document& out, String& error) {

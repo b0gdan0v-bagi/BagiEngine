@@ -44,6 +44,11 @@ namespace BECore {
      * the relative paths, and a cooked layer replaces its source layer in the same place: the upper layer still wins, and the rule of
      * one stem per layer is the one of `ConfigManager`, with no merge step.
      *
+     * - A `.xml` whose root element is `SceneManager` (a scene config) or `node` (a node file) is cooked by what the root says, before the
+     *   registry is asked: the scene with its node references expanded as `LoadSceneManager` expands them (the node loader sees every layer of
+     *   @p fs, `sourceRef` is kept), the node as the `SceneNode` it deserializes to. A content version that is not `kContentVersion`, an
+     *   expansion error, an error or a warning of the read fails the file. A relative path is kept, so `<node ref="nodes/X"/>` finds
+     *   `nodes/X.bin`.
      * - A `.xml` whose stem has a cooker in @p registry is parsed, read under `DiagnosticsMode::Error` (and strict values when the
      *   cooker asks) and written as `<stem>.bin` with a content stamp. Any finding, a file that does not parse or a cooker that wrote
      *   nothing makes the file `Failed` and no `.bin` is left for it; its `.xml` is never copied (a `.xml` beside a `.bin` of one stem

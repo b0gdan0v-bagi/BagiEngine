@@ -33,6 +33,9 @@ namespace BECore {
     /// Name of the element that is a node and of the one that may be a reference
     inline constexpr StringView kNodeElementName = "node";
 
+    /// The type a cooked node file is stamped with (what the cook of the file reads it as)
+    inline constexpr StringView kNodeRootType = "SceneNode";
+
     /// Attribute of `<node>` that makes it a reference
     inline constexpr StringView kNodeRefAttribute = "ref";
 
