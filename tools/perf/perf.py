@@ -1,6 +1,7 @@
 """The benchmark runner of the perf skill (`.claude/skills/perf/SKILL.md`). Standard library only.
 
     python3 <engine>/tools/perf/perf.py [--fast] [--only NAME,...] [--repetitions N] [--no-build] [--update-baseline] [--env-file F] [--json FILE]
+    python3 <engine>/tools/perf/perf.py --update-baseline --from-report FILE [--env-file F]
 
 Run from the root of a repository whose `.claude/rules/perf-project.md` holds the benchmark set (a fenced JSON block under
 "## Benchmark set"; the format is in `tools/perf/CLAUDE.md`). It builds the set's preset and targets, runs each benchmark N times after
@@ -202,6 +203,49 @@ def compare_with(results: dict, baseline: dict | None, bench_set: dict, threshol
     return report
 
 
+def results_of_report(path: Path, bench_set: dict, fingerprint: dict, allow_dirty: bool) -> tuple[dict, str]:
+    """The results and the preset of a `--json` report, checked against this machine and the set: only a report the runner wrote here, of the
+    set as it is now, becomes a baseline. Every benchmark keeps the commit it was measured on."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise PerfError(f"{path}: not a report of perf.py: {error}") from error
+    if "results" not in data or "area" not in data:
+        raise PerfError(f"{path}: a report without its samples (written before --from-report existed): measure again with --update-baseline")
+    if data["area"] != bench_set["area"] or data.get("preset") != bench_set["preset"]:
+        raise PerfError(f"{path}: measured for area {data['area']} in {data.get('preset')}, the set is area {bench_set['area']} in {bench_set['preset']}")
+    if data.get("machine") != fingerprint:
+        raise PerfError(f"{path}: measured on another machine ({perf_baseline.machine_slug(data['machine'])}): one machine, one baseline")
+    specs = {bench["name"]: bench for bench in bench_set["benchmarks"]}
+    for name, result in data["results"].items():
+        if name not in specs or set(result["metrics"]) != set(specs[name]["metrics"]):
+            raise PerfError(f"{path}: benchmark '{name}' is not in the set as it is now (its metrics changed or it was removed): measure again")
+        if "dirty" in result["commit"] and not allow_dirty:
+            raise PerfError(f"{path}: '{name}' was measured with uncommitted changes ({result['commit']}): a baseline names a commit (--allow-dirty to record it anyway)")
+    return data["results"], data["preset"]
+
+
+def read_baseline(bench_set: dict, fingerprint: dict, args) -> tuple[str, str | None, dict | None]:
+    """The plan name, its text (None when there is none yet) and its newest record."""
+    name = perf_baseline.baseline_name(bench_set["area"], perf_baseline.machine_slug(fingerprint))
+    if args.baseline_file:
+        path = Path(args.baseline_file)
+        content = path.read_text(encoding="utf-8") if path.is_file() else None
+    else:
+        content = perf_baseline.read_store(name, args.env_file)
+    return name, content, perf_baseline.latest_record(content) if content else None
+
+
+def write_baseline(content: str | None, baseline: dict | None, results: dict, preset: str, fingerprint: dict, bench_set: dict, name: str, args) -> None:
+    record = perf_baseline.merge_record(baseline, results, datetime.date.today().isoformat(), preset, fingerprint)
+    updated = perf_baseline.append_record(content, bench_set["area"], fingerprint, record)
+    if args.baseline_file:
+        Path(args.baseline_file).write_text(updated, encoding="utf-8")
+        print(f"baseline written to {args.baseline_file}")
+    else:
+        print(f"baseline: {perf_baseline.write_store(name, updated, args.env_file)}")
+
+
 def format_report(report: dict) -> str:
     lines = [f"{'benchmark / metric':<44} {'mean':>12} {'± 95%':>10} {'baseline':>12} {'change':>9}  verdict"]
     for name, bench in report.items():
@@ -226,7 +270,8 @@ def main() -> int:
     parser.add_argument("--update-baseline", action="store_true", help="append the results to the baseline in the store (the owner's word only)")
     parser.add_argument("--env-file", help="the .env whose token reads and writes the baseline in the store (default: the checkout's)")
     parser.add_argument("--allow-dirty", action="store_true", help="let --update-baseline record a commit with uncommitted changes")
-    parser.add_argument("--json", help="write the full report to this file")
+    parser.add_argument("--from-report", metavar="FILE", help="with --update-baseline: record the run of this --json report instead of measuring")
+    parser.add_argument("--json", help="write the full report to this file (with the samples: --from-report records it later)")
     parser.add_argument("--list", action="store_true", help="print the benchmarks of the set and stop")
     parser.add_argument("--trace", metavar="NAME", help="record a Chrome trace of one benchmark in the set's profile preset and summarize it (perf-investigate)")
     parser.add_argument("--trace-file", help="where --trace writes the trace (default build/perf/<name>-trace.json, git-ignored)")
@@ -256,6 +301,17 @@ def main() -> int:
 
             print(trace_summary.format_text(trace_summary.summarize(trace_summary.load_events(str(trace))), 25))
             return 0
+        if args.from_report:
+            if not args.update_baseline or args.only or args.fast or args.repetitions or args.json:
+                raise PerfError("--from-report goes with --update-baseline alone: it records the whole report as it was measured")
+            if not args.baseline_file:
+                perf_baseline.require_area(bench_set["area"], args.env_file)
+            fingerprint = perf_baseline.machine_fingerprint()
+            results, preset = results_of_report(Path(args.from_report), bench_set, fingerprint, args.allow_dirty)
+            name, content, baseline = read_baseline(bench_set, fingerprint, args)
+            print(f"recording {', '.join(results)} of {args.from_report} ({', '.join(sorted({r['commit'] for r in results.values()}))})")
+            write_baseline(content, baseline, results, preset, fingerprint, bench_set, name, args)
+            return 0
         if args.only:
             wanted = set(args.only.split(","))
             unknown = wanted - {bench["name"] for bench in benches}
@@ -274,13 +330,7 @@ def main() -> int:
         if args.update_baseline and not args.baseline_file:
             perf_baseline.require_area(bench_set["area"], args.env_file)
         fingerprint = perf_baseline.machine_fingerprint()
-        name = perf_baseline.baseline_name(bench_set["area"], perf_baseline.machine_slug(fingerprint))
-        if args.baseline_file:
-            path = Path(args.baseline_file)
-            content = path.read_text(encoding="utf-8") if path.is_file() else None
-        else:
-            content = perf_baseline.read_store(name, args.env_file)
-        baseline = perf_baseline.latest_record(content) if content else None
+        name, content, baseline = read_baseline(bench_set, fingerprint, args)
 
         if not args.no_build:
             print(f"build {preset}: {', '.join(bench_set.get('targets', [])) or 'all'}", file=sys.stderr)
@@ -299,16 +349,12 @@ def main() -> int:
               f"{'' if baseline else ' (none yet)'}")
         print(format_report(report))
         if args.json:
-            Path(args.json).write_text(json.dumps({"commit": commit, "preset": preset, "machine": fingerprint, "baseline": name, "report": report}, indent=2), encoding="utf-8")
+            Path(args.json).write_text(
+                json.dumps({"area": bench_set["area"], "commit": commit, "preset": preset, "machine": fingerprint, "baseline": name, "report": report, "results": results}, indent=2),
+                encoding="utf-8",
+            )
         if args.update_baseline:
-            date = datetime.date.today().isoformat()
-            record = perf_baseline.merge_record(baseline, results, date, preset, fingerprint)
-            updated = perf_baseline.append_record(content, bench_set["area"], fingerprint, record)
-            if args.baseline_file:
-                Path(args.baseline_file).write_text(updated, encoding="utf-8")
-                print(f"baseline written to {args.baseline_file}")
-            else:
-                print(f"baseline: {perf_baseline.write_store(name, updated, args.env_file)}")
+            write_baseline(content, baseline, results, preset, fingerprint, bench_set, name, args)
         regressed = [name for name, bench in report.items() if bench["verdict"] == perf_stats.REGRESSION]
         return EXIT_REGRESSION if regressed else 0
     except (PerfError, perf_baseline.StoreError, subprocess.CalledProcessError) as error:

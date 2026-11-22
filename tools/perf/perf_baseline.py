@@ -109,7 +109,7 @@ def token_areas(env_file: str | None = None) -> list[str]:
 
 
 def require_area(area: str, env_file: str | None = None) -> None:
-    """Stops before a measurement whose baseline this token could not write: the numbers of a run are never written later."""
+    """Stops before a measurement (or the recording of a report) whose baseline this token could not write."""
     areas = token_areas(env_file)
     if area not in areas:
         raise StoreError(
