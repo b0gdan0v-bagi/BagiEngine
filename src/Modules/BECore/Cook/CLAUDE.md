@@ -12,7 +12,7 @@ Every `.bin` starts with a content stamp: the root type and its **layout hash** 
 
 ## Output and what is cooked
 
-`CookContent` (`ContentCook.h`) writes **one output folder per source layer**: `<dir>/layer<k>/config/<relative path>`, `k = 0` the lowest layer. The layers, the one-stem-per-layer rule and the web overlay keep the meaning they have for the XML; a merged tree would need its own "which layer wins". `<dir>/layer*` is removed first; an output folder inside a content root, and a `.xml` and a `.bin` of one stem in one layer, are `Failed`. The walk is sorted and dot files are skipped, so the same inputs give the same bytes (`ListContentFiles` is shared with the verify).
+`CookContent` (`ContentCook.h`) writes **one output folder per source layer**: `<dir>/layer<k>/config/<relative path>`, `k = 0` the lowest layer. The layers, the one-stem-per-layer rule and the web overlay keep the meaning they have for the XML; a merged tree would need its own "which layer wins". `<dir>/layer*` is removed first; an output folder inside a content root, and a `.xml` and a `.bin` of one stem in one layer, are `Failed`. The walk is sorted and dot files and the editor's `imgui.ini` (its window layout, kept in `config/`) are skipped, so the same inputs give the same bytes (`ListContentFiles` is shared with the verify).
 
 What a file becomes is decided by its root element, then by the registry:
 

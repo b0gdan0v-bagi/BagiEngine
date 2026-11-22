@@ -196,7 +196,9 @@ namespace BECore::Tests {
         }
         EXPECT_EQ(cell.timer, 1);
         EXPECT_GT(result.refused, 0U);
+#if ENGINE_ENABLE_ASSERTS
         EXPECT_GT(asserts, 0);
+#endif
     }
 
 }  // namespace BECore::Tests

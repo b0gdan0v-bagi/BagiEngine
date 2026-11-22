@@ -32,6 +32,15 @@ add_subdirectory(NativePrograms)
 be_add_game_tests(BagiEngineTests SOURCES ${TESTS_SOURCES} LINK RemoteControlModule RoomsModule RoomClientModule RoomServerModule RuntimeModule BagiFuzzTargets BagiNativeProgramSet)
 be_add_native_programs(BagiEngineTests GENERATOR BagiNativeProgramsTool)
 
+# The tests that compare the bits of a program with plain C++ compile without floating-point contraction, as the interpreter does
+# (src/Modules/BECore/CMakeLists.txt): in Release the compiler fuses the reference's multiply and add, which rounds once, and the
+# interpreter's two instructions do not (Lerp of a large float: -inf against -1.7e38)
+set_source_files_properties(
+    "${CMAKE_CURRENT_SOURCE_DIR}/BECore/ProgramInterpreterTest.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/BECore/ValueProgramLoadTest.cpp"
+    PROPERTIES COMPILE_OPTIONS "$<IF:$<CXX_COMPILER_ID:MSVC>,/fp:precise,-ffp-contract=off>"
+)
+
 # The FuzzCorpus cases of the shards only replay the corpus; this entry runs them again with the mutations (tests/Fuzz/CLAUDE.md). 50000 per target
 # of cost weight 1 is about 2 s in Debug; the targets run one after the other in this one process.
 # A filter that matches nothing (a renamed instantiation) exits 0, and the vendored gtest has no --gtest_fail_if_no_test_selected: the

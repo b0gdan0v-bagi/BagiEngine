@@ -37,8 +37,8 @@ namespace BECore {
         [[nodiscard]] String ToText() const;
     };
 
-    /// The files of @p layer relative to it, sorted by their generic path; dot files (`.DS_Store`) are not content. The reason goes to @p error when the folder cannot be listed.
-    /// What the cook and its check (`VerifyCooked`) both walk, so they cannot disagree on which files exist
+    /// The files of @p layer relative to it, sorted by their generic path; dot files (`.DS_Store`) and the editor's `imgui.ini` are not content. The reason goes to @p error when the folder cannot be
+    /// listed. What the cook and its check (`VerifyCooked`) both walk, so they cannot disagree on which files exist
     Vector<std::filesystem::path> ListContentFiles(const std::filesystem::path& layer, String& error);
 
     /**

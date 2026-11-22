@@ -19,6 +19,8 @@ namespace BECore {
         constexpr StringView kBinaryExtension = ".bin";
         constexpr StringView kLayerFolderPrefix = "layer";
         constexpr StringView kConfigFolder = "config";
+        /// The editor keeps its window layout in `config/` so that it survives a clean build; it is the developer's state, not content, and a cook must not ship it
+        constexpr StringView kEditorLayoutFile = "imgui.ini";
 
         /// True when @p inner is @p outer or lies below it; both are compared as they exist on disk (symbolic links and `..` resolved)
         bool IsInside(const std::filesystem::path& inner, const std::filesystem::path& outer) {
@@ -274,7 +276,8 @@ namespace BECore {
         Vector<std::filesystem::path> files;
         std::error_code ec;
         for (std::filesystem::recursive_directory_iterator it(layer, ec), end; !ec && it != end; it.increment(ec)) {  //-NoStd: an offline tool lists the content folder once
-            if (it->is_regular_file(ec) && !ec && it->path().filename().string().front() != '.') {
+            const String name = FromStdString(it->path().filename().string());
+            if (it->is_regular_file(ec) && !ec && name.front() != '.' && name != kEditorLayoutFile) {
                 files.push_back(it->path().lexically_relative(layer));
             }
         }
