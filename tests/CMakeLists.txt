@@ -52,6 +52,16 @@ set_tests_properties(BagiFuzzMutations PROPERTIES
     ENVIRONMENT "BAGI_FUZZ_ITERATIONS=50000"
     LABELS extended)
 
+# The cases over the real OS watch backend wait for the platform (fseventsd drops events on a busy machine and a case sits out its wait), so the
+# shards and the perf run skip them (tests/Common/NativeFileWatch.h) and this entry runs them, with the polling and facade cases of the same files.
+# No test preset runs the label: `ctest --test-dir build/<preset> -L native-watch` after a change of the backends (.claude/rules/todo-project.md)
+add_test(NAME BagiNativeFileWatch COMMAND BagiEngineTests --gtest_filter=FileWatchBackend*:FileWatcherFSEventsRescanTest.* --gtest_brief=1)
+set_tests_properties(BagiNativeFileWatch PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    FAIL_REGULAR_EXPRESSION "\\] 0 tests from 0 test suites ran"
+    ENVIRONMENT "BAGI_NATIVE_FILEWATCH_TESTS=1"
+    LABELS native-watch)
+
 # VulkanSwapchainPolicy.h is header only (<vulkan/vulkan.h>, BECore's EnumUtils.h for SwapchainStatus and
 # SwapchainRecreateResult, and the standard library), so the test needs the headers and the include path but not
 # VulkanModule: its loader library is not deployed next to the test executable (BagiEngineTests links BECore).

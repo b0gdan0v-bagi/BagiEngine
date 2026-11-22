@@ -72,12 +72,12 @@ Engine:
 
 Engine: `ctest --preset <p>` runs the gtest executables `BagiEngineTests` and `StressTests` as shards (`<Exe>.Shard<k>`, `ENGINE_TEST_SHARDS` per executable, many cases in one process; a failing case, a crash and a re-run of one case: `.claude/rules/tests-module.md`, "Shards"; `-DENGINE_TESTS_PER_CASE=ON` makes one entry per case), `BagiStressControlSmoke` and `BagiStressScenario.*`, Python scripts that start `BagiStress` `--headless` and play it over the control API. The smoke test is skipped (exit code 77) when the executable is not built. A `--target` list without the product (what the argument `tests` builds) builds no game, so add the product to run the smoke test. The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests tools/perf/tests`.
 
-**Labels and presets.** The `be_add_*` helpers label their entries: `unit` (the gtest shards), `smoke` (control smoke tests), `scenario` (scenario files and their QA replays); `extended` marks what only the full run needs: the hygiene checks (`BagiHeadersStandalone`, `BagiTypesCheck`, `BagiIncludeStyle`, `BagiPoolStrings`, `BagiThirdPartyNotices`), `BagiFuzzMutations`, `BagiRoomServerSmoke` (also `smoke`), `BagiRoomServerHostile`, `BagiTlsLocalEndpoint`. Every test preset `<p>` has four siblings (mixins `test-*` of `CMakePresets.json`, so the games get them too):
+**Labels and presets.** The `be_add_*` helpers label their entries: `unit` (the gtest shards), `smoke` (control smoke tests), `scenario` (scenario files and their QA replays); `native-watch` marks `BagiNativeFileWatch` (the real OS file watch, run in no preset: `ctest --test-dir build/<p> -L native-watch` for a change of the watch backends, `tests-module.md`); `extended` marks what only the full run needs: the hygiene checks (`BagiHeadersStandalone`, `BagiTypesCheck`, `BagiIncludeStyle`, `BagiPoolStrings`, `BagiThirdPartyNotices`), `BagiFuzzMutations`, `BagiRoomServerSmoke` (also `smoke`), `BagiRoomServerHostile`, `BagiTlsLocalEndpoint`. Every test preset `<p>` has four siblings (mixins `test-*` of `CMakePresets.json`, so the games get them too):
 
 | Preset | Runs |
 |--------|------|
 | `<p>` | everything but `extended`: the everyday run of a developer and the loop |
-| `<p>-all` | every test: the full run (alltests, before a deploy, `sync-engine`) |
+| `<p>-all` | every test but `native-watch`: the full run (alltests, before a deploy, `sync-engine`) |
 | `<p>-fast` | the default set without `smoke` and `scenario` (no game is started) |
 | `<p>-smoke` | `smoke` only, `extended` ones included |
 | `<p>-scenarios` | `scenario` only |

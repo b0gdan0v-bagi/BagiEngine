@@ -589,17 +589,17 @@
             },
             "filter": {
                 "exclude": {
-                    "label": "^extended$"
+                    "label": "^(extended|native-watch)$"
                 }
             }
         },
         {
             "name": "test-all",
             "hidden": true,
-            "description": "Every test, extended included. An inherited filter field can be replaced but not removed, and ^$ matches no label",
+            "description": "Every test, extended included; native-watch (the real OS file watch, run only for a change of it: ctest --test-dir build/<preset> -L native-watch) is not. An inherited filter field can be replaced but not removed",
             "filter": {
                 "exclude": {
-                    "label": "^$"
+                    "label": "^native-watch$"
                 }
             }
         },
@@ -609,7 +609,7 @@
             "description": "The default set without the tests that start a game",
             "filter": {
                 "exclude": {
-                    "label": "^(smoke|scenario|extended)$"
+                    "label": "^(smoke|scenario|extended|native-watch)$"
                 }
             }
         },

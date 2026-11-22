@@ -19,6 +19,7 @@ Read by the skills `todo-loop`, `todo-merge`, `todo-add`, `todo-db` and by the a
 ## Build and test (baseline and reviewer)
 
 - Targets: `BagiEngineTests StressTests` and `BagiStress`, which the smoke tests need; then `ctest --preset <p>`. The preset comes from `cmake --list-presets=build` (the `build` skill picks it); its test preset leaves out the label `extended`, which only `alltests` runs through `<p>-all` (`build-project.md`).
+- A diff that touches `src/Modules/BECore/FileSystem/*FileWatch*`, `tests/BECore/FileWatchBackendTest.cpp`, `tests/BECore/FileWatcherRescanTest.cpp` or `tests/Common/NativeFileWatch.h` also runs `ctest --test-dir build/<p> -L native-watch` (the real OS watch backend; no preset runs it).
 - The build, format and include commands (product, test targets, configure triggers, the `format_sources.py` and `strip_pch_includes.py` calls) are in `build-project.md`; the targets above are the ones the loop uses.
 - Read first: `CLAUDE.md` (style, DO and DON'T), the nested `CLAUDE.md` of the touched directories and the matching `.claude/rules/` file.
 

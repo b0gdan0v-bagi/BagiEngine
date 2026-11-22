@@ -3,6 +3,7 @@
 #include <BECore/FileSystem/PollingFileWatchBackend.h>
 #include <BECore/RefCounted/New.h>
 #include <Common/AllocCheck.h>
+#include <Common/NativeFileWatch.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Common/Wait.h>
@@ -137,6 +138,7 @@ namespace BECore::Tests {
     } while (false)
 
         struct PollingMaker {
+            static constexpr bool kNative = false;
             static constexpr bool kMayDropEvents = false;
             static IntrusivePtrAtomic<IFileWatchBackend> Make() {
                 return New<PollingFileWatchBackend>();
@@ -145,6 +147,7 @@ namespace BECore::Tests {
 
 #if defined(__APPLE__)
         struct FSEventsMaker {
+            static constexpr bool kNative = true;
             static constexpr bool kMayDropEvents = true;
             static IntrusivePtrAtomic<IFileWatchBackend> Make() {
                 return MakeFSEventsFileWatchBackend();
@@ -153,6 +156,7 @@ namespace BECore::Tests {
 #endif
 #if defined(__linux__)
         struct InotifyMaker {
+            static constexpr bool kNative = true;
             static constexpr bool kMayDropEvents = false;
             static IntrusivePtrAtomic<IFileWatchBackend> Make() {
                 return MakeInotifyFileWatchBackend();
@@ -161,6 +165,7 @@ namespace BECore::Tests {
 #endif
 #if defined(_WIN32)
         struct WindowsMaker {
+            static constexpr bool kNative = true;
             static constexpr bool kMayDropEvents = false;
             static IntrusivePtrAtomic<IFileWatchBackend> Make() {
                 return MakeWindowsFileWatchBackend();
@@ -175,6 +180,9 @@ namespace BECore::Tests {
     class FileWatchBackendContractTest : public ::testing::Test {
     protected:
         void SetUp() override {
+            if (TMaker::kNative && !NativeFileWatchRequested()) {
+                GTEST_SKIP() << kNativeFileWatchSkip;
+            }
             _harness.emplace(TMaker::Make(), TMaker::kMayDropEvents);
         }
 
@@ -290,6 +298,9 @@ namespace BECore::Tests {
     class FileWatchBackendFSEventsTest : public ::testing::Test {
     protected:
         void SetUp() override {
+            if (!NativeFileWatchRequested()) {
+                GTEST_SKIP() << kNativeFileWatchSkip;
+            }
             _harness.emplace(MakeFSEventsFileWatchBackend(), true);
         }
 

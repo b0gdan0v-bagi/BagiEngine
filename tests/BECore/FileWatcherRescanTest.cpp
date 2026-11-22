@@ -4,6 +4,7 @@
 #include <BECore/FileSystem/PlatformFileWatchBackend.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/RefCounted/New.h>
+#include <Common/NativeFileWatch.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
@@ -259,6 +260,9 @@ namespace BECore::Tests {
     };
 
     TEST_F(FileWatcherFSEventsRescanTest, ARescanFindsAWriteWhetherOrNotTheStreamDeliveredIt) {
+        if (!NativeFileWatchRequested()) {
+            GTEST_SKIP() << kNativeFileWatchSkip;
+        }
         _watcher.Start(MakeFSEventsFileWatchBackend());
         ASSERT_NO_FATAL_FAILURE(WatchFolder());
         PumpFor(std::chrono::milliseconds(1000));
