@@ -22,7 +22,7 @@ python3 <engine>/tools/perf/trace_summary.py trace.json [--top N] [--json]
 .venv/bin/python -m pytest tools/perf/tests                  # in the engine
 ```
 
-Exit code of `perf.py`: 0 (no regression), 3 (a regression), 1 (a failed build or run, a bad set, the store unreachable).
+Exit code of `perf.py`: 0 (no regression), 3 (a regression), 1 (a failed build or run, a bad set, the store unreachable). A failed run prints the tails of its stdout and stderr apart and writes the whole output to `build/perf/<name>-failed.log`, the next failure of that benchmark overwriting it.
 
 ## The benchmark set
 

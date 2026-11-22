@@ -273,3 +273,15 @@ def test_another_failure_of_the_write_stays_as_it_is(tmp_path, monkeypatch, caps
     code, _ = run_update(tmp_path, monkeypatch)
     err = capsys.readouterr().err
     assert code == 1 and "the service does not answer" in err and "missing right" not in err
+
+
+def test_a_failed_run_keeps_the_end_of_stdout_and_writes_the_whole_output(tmp_path):
+    # gtest prints its list of failures last on stdout while the engine logs to stderr: a shared tail lost the name of the failed test
+    script = "import sys; print('[  FAILED  ] Suite.Case'); sys.stderr.write('log line\\n' * 2000); sys.exit(1)"
+    bench = {"name": "fails", "command": ["{python}", "-c", script], "metrics": {}}
+    with pytest.raises(perf.PerfError) as error:
+        perf.run_once(bench, tmp_path, "any")
+    assert "[  FAILED  ] Suite.Case" in str(error.value)
+    log = tmp_path / "build" / "perf" / "fails-failed.log"
+    assert str(log) in str(error.value)
+    assert log.read_text(encoding="utf-8").endswith("--- stderr\n" + "log line\n" * 2000)

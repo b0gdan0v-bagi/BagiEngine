@@ -130,6 +130,15 @@ def read_metrics(bench: dict, stdout: str, wall: float) -> dict[str, float]:
     return values
 
 
+def failed_run(bench: dict, root: Path, what: str, command: list[str], done: subprocess.CompletedProcess) -> PerfError:
+    """The error of a run that failed. The whole output goes to `build/perf/<name>-failed.log`: the message keeps a tail of stdout and of stderr apart,
+    because a program that logs to stderr (the engine) would push the end of its stdout (gtest's `[  FAILED  ]` list) out of one shared tail."""
+    log = root / "build" / "perf" / f"{bench['name']}-failed.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(f"$ {' '.join(command)}\nexit code {done.returncode}\n--- stdout\n{done.stdout}\n--- stderr\n{done.stderr}", encoding="utf-8")
+    return PerfError(f"{bench['name']}: {what}: {' '.join(command)}\nthe whole output: {log}\n--- stdout (tail)\n{done.stdout[-1500:]}\n--- stderr (tail)\n{done.stderr[-500:]}")
+
+
 def run_once(bench: dict, root: Path, preset: str) -> dict[str, float]:
     command = expand(bench["command"], root, preset)
     started = time.perf_counter()
@@ -142,7 +151,7 @@ def run_once(bench: dict, root: Path, preset: str) -> dict[str, float]:
         raise PerfError(f"{bench['name']}: cannot run {' '.join(command)}: {error}") from error
     wall = time.perf_counter() - started
     if done.returncode != 0:
-        raise PerfError(f"{bench['name']}: exit code {done.returncode}: {' '.join(command)}\n{(done.stdout + done.stderr)[-2000:]}")
+        raise failed_run(bench, root, f"exit code {done.returncode}", command, done)
     return read_metrics(bench, done.stdout, wall)
 
 
@@ -153,7 +162,7 @@ def record_trace(bench: dict, root: Path, preset: str, trace: Path) -> list[str]
     command = expand(bench["traceCommand"], root, preset, str(trace.resolve()))
     done = subprocess.run(command, cwd=root, capture_output=True, text=True, errors="replace", timeout=bench.get("timeoutSeconds", DEFAULT_TIMEOUT_SECONDS))
     if done.returncode != 0 or not trace.is_file():
-        raise PerfError(f"{bench['name']}: the trace run failed (exit {done.returncode}): {' '.join(command)}\n{(done.stdout + done.stderr)[-2000:]}")
+        raise failed_run(bench, root, f"the trace run failed (exit {done.returncode})", command, done)
     return command
 
 
