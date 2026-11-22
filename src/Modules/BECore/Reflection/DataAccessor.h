@@ -168,8 +168,15 @@ namespace BECore {
                 } else if constexpr (::BECore::Detail::IsIntrusivePtr<T>) {
                     if (item) {
                         using Pointee = typename ::BECore::Detail::IntrusivePtrPointeeType<T>::type;
-                        if constexpr (HasFactory<Pointee>)
+                        if constexpr (HasFactory<Pointee>) {
                             s.WriteAttribute("type", item->GetTypeMeta().typeName);
+                        } else if constexpr (requires { item->GetTypeMeta(); }) {
+                            // A base that has no FactoryTraits (IComponent) but whose derived types register themselves: the reader
+                            // recreates the element by `type`, so a file without it would load as the base class
+                            if (AbstractFactory<Pointee>::GetInstance().FindMeta(item->GetTypeMeta().typeName) != nullptr) {
+                                s.WriteAttribute("type", item->GetTypeMeta().typeName);
+                            }
+                        }
                         if constexpr (::BECore::Detail::HasSerialize<Pointee, ISerializer>)
                             item->Serialize(s);
                     }

@@ -3,6 +3,8 @@
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/BinaryDeserializer.h>
+#include <BECore/Reflection/SchemaHash.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <EASTL/sort.h>
 #include <Events/ConfigEvents.h>
@@ -34,6 +36,42 @@ namespace BECore {
             return text ? HashFileText(*text) : 0;
         }
 
+        constexpr StringView kXmlExtension = ".xml";
+        constexpr StringView kBinaryExtension = ".bin";
+
+        bool IsBinaryPath(const std::filesystem::path& path) {
+            return path.extension() == kBinaryExtension.data();
+        }
+
+        /// The bytes of a `.bin` file, or the reason it cannot be read
+        std::expected<Vector<uint8_t>, String> ReadBinaryFile(const std::filesystem::path& path) {
+            Vector<uint8_t> bytes;
+            const std::expected<void, StringView> read = ReadBinaryDocumentFile(path, bytes);
+            if (!read.has_value()) {
+                return std::unexpected(String(read.error()));
+            }
+            return bytes;
+        }
+
+        /// The bytes of the `.bin` at @p path once they are a valid document with a stamp that this program accepts, or the reason they are not
+        std::expected<Vector<uint8_t>, String> LoadCheckedBinary(const std::filesystem::path& path) {
+            auto bytes = ReadBinaryFile(path);
+            if (!bytes) {
+                return bytes;
+            }
+            BinaryDeserializer reader;
+            if (!reader.LoadFromView(bytes->data(), bytes->size())) {
+                const auto& errors = reader.GetErrors();
+                return std::unexpected(errors.empty() ? String("the file is not a binary document") : errors.front().errorMessage);
+            }
+            const std::string source = path.string();  //-NoStd: the path API's own text
+            const auto stamp = CheckContentStamp(reader, StringView(source.data(), source.size()));
+            if (!stamp) {
+                return std::unexpected(stamp.error());
+            }
+            return bytes;
+        }
+
     }  // namespace
 
     const FileSystem& ConfigManager::GetFileSystem() const {
@@ -57,9 +95,10 @@ namespace BECore {
         }
 
         Vector<Pair<std::filesystem::path, PoolString>> filesToLoad;
+        Vector<PoolString> conflicted;
         for (const auto& layer : layers) {
             Vector<Pair<std::filesystem::path, PoolString>> layerFiles;
-            ScanDirectory(layer, layerFiles);
+            ScanDirectory(layer, layerFiles, conflicted);
 
             for (auto& layerFile : layerFiles) {
                 auto existing = eastl::find_if(filesToLoad.begin(), filesToLoad.end(), [&](const auto& loaded) { return loaded.second == layerFile.second; });
@@ -72,8 +111,13 @@ namespace BECore {
             }
         }
 
+        // A stem in conflict in any layer is absent, not resolved to another layer's file
+        for (const PoolString& name : conflicted) {
+            filesToLoad.erase(eastl::remove_if(filesToLoad.begin(), filesToLoad.end(), [&](const auto& file) { return file.second == name; }), filesToLoad.end());
+        }
+
         if (filesToLoad.empty()) {
-            LOG_WARNING("[ConfigManager] No XML files found in config directory");
+            LOG_WARNING("[ConfigManager] No config files found in config directory");
             _initialized.store(true, std::memory_order_release);
             return;
         }
@@ -105,7 +149,7 @@ namespace BECore {
 
     namespace {
 
-        UniquePtr<IDeserializer> MakeDeserializer(const XmlNode& root) {
+        UniquePtr<IDeserializer> MakeXmlDeserializer(const XmlNode& root) {
             if (!root) {
                 return nullptr;
             }
@@ -117,18 +161,52 @@ namespace BECore {
             return deserializer;
         }
 
+        UniquePtr<IDeserializer> MakeBinaryDeserializer(const Vector<uint8_t>& bytes) {
+            auto deserializer = MakeUnique<BinaryDeserializer>();
+            if (!deserializer->LoadFromView(bytes.data(), bytes.size())) {
+                return nullptr;
+            }
+            return deserializer;
+        }
+
     }  // namespace
+
+    UniquePtr<IDeserializer> ConfigManager::MakeDeserializerOf(const ConfigEntry* entry) {
+        if (entry == nullptr) {
+            return nullptr;
+        }
+        if (entry->binary) {
+            return MakeBinaryDeserializer(entry->bytes);
+        }
+        return entry->doc ? MakeXmlDeserializer(entry->doc->GetRoot()) : nullptr;
+    }
 
     DiagnosticsMode ConfigManager::GetDiagnostics() {
         return CoreManager::GetCommandLine().HasFlag(kStrictConfigFlag) ? DiagnosticsMode::Error : DiagnosticsMode::Warn;
     }
 
     UniquePtr<IDeserializer> ConfigManager::CreateDeserializer(PoolString name) const {
-        return MakeDeserializer(GetConfig(name));
+        ASSERT(_initialized.load(std::memory_order_acquire));
+        const auto it = _configs.find(name);
+        return MakeDeserializerOf(it != _configs.end() ? &it->second : nullptr);
     }
 
     UniquePtr<IDeserializer> ConfigManager::CreateDeserializer(StringView name) const {
-        return MakeDeserializer(GetConfig(name));
+        ASSERT(_initialized.load(std::memory_order_acquire));
+        const auto it = _configs.Find(name);
+        return MakeDeserializerOf(it != _configs.end() ? &it->second : nullptr);
+    }
+
+    bool ConfigManager::IsBinaryConfig(PoolString name) const {
+        ASSERT(_initialized.load(std::memory_order_acquire));
+        const auto it = _configs.find(name);
+        return it != _configs.end() && it->second.binary;
+    }
+
+    bool ConfigManager::IsBinaryConfig(StringView name) const {
+        ASSERT(_initialized.load(std::memory_order_acquire));
+        const auto it = _configs.Find(name);
+        return it != _configs.end() && it->second.binary;
     }
 
     bool ConfigManager::HasConfig(PoolString name) const {
@@ -182,6 +260,10 @@ namespace BECore {
         {
             LockGuard lock(_writeMutex);
             auto it = _configs.find(name);
+            if (it != _configs.end() && it->second.binary) {
+                LOG_ERROR(Format("[ConfigManager] SaveConfig: config '{}' is a binary file and cannot be saved", name.ToStringView()).c_str());
+                return false;
+            }
             if (it == _configs.end() || !it->second.doc) {
                 LOG_ERROR(Format("[ConfigManager] SaveConfig: config '{}' not found", name.ToStringView()).c_str());
                 return false;
@@ -224,6 +306,15 @@ namespace BECore {
             auto it = _configs.find(name);
             if (it == _configs.end()) {
                 LOG_ERROR(Format("[ConfigManager] ReloadConfig: config '{}' not found", name.ToStringView()).c_str());
+                return false;
+            }
+            if (it->second.binary) {
+                // Hot reload of a cooked file is not built: the bytes of an entry never change, a deserializer may hold them
+                if (skipIfSame) {
+                    LOG_DEBUG(Format("[ConfigManager] Config '{}': {} changed, binary configs are not reloaded", name.ToStringView(), it->second.filePath.string()).c_str());
+                } else {
+                    LOG_ERROR(Format("[ConfigManager] ReloadConfig: config '{}' is a binary file and cannot be reloaded", name.ToStringView()).c_str());
+                }
                 return false;
             }
             filePath = it->second.filePath;
@@ -317,11 +408,11 @@ namespace BECore {
         }
     }
 
-    void ConfigManager::ScanDirectory(const std::filesystem::path& dir, Vector<Pair<std::filesystem::path, PoolString>>& filesToLoad) const {
+    void ConfigManager::ScanDirectory(const std::filesystem::path& dir, Vector<Pair<std::filesystem::path, PoolString>>& filesToLoad, Vector<PoolString>& conflicted) const {
         Vector<std::filesystem::path> paths;
         Vector<String> stems;
         for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
-            if (entry.is_regular_file() && entry.path().extension() == ".xml") {
+            if (entry.is_regular_file() && (entry.path().extension() == kXmlExtension.data() || IsBinaryPath(entry.path()))) {
                 const auto stemStr = entry.path().stem().string();
                 paths.push_back(entry.path());
                 stems.push_back(String(stemStr.c_str(), stemStr.length()));
@@ -339,7 +430,28 @@ namespace BECore {
         Vector<PoolString> names(views.size());
         PoolString::InternBatch(Span<const StringView>(views.data(), views.size()), Span<PoolString>(names.data(), names.size()));
 
+        // Whether a stem has a file of each extension, to tell a stem with both from a stem with two files of one kind
+        struct StemFiles {
+            const std::filesystem::path* xml = nullptr;
+            const std::filesystem::path* binary = nullptr;
+        };
+        UnorderedPoolMap<StemFiles> seen;
         for (size_t i = 0; i < paths.size(); ++i) {
+            StemFiles& files = seen[names[i]];
+            (IsBinaryPath(paths[i]) ? files.binary : files.xml) = &paths[i];
+        }
+
+        for (size_t i = 0; i < paths.size(); ++i) {
+            const StemFiles& files = seen[names[i]];
+            if (files.xml != nullptr && files.binary != nullptr) {
+                if (eastl::find(conflicted.begin(), conflicted.end(), names[i]) == conflicted.end()) {
+                    LOG_ERROR(Format("[ConfigManager] Config '{}' has both {} and {} in one layer, it is not loaded; remove one of them", names[i].ToStringView(), files.xml->string(),
+                                     files.binary->string())
+                                  .c_str());
+                    conflicted.push_back(names[i]);
+                }
+                continue;
+            }
             filesToLoad.push_back({eastl::move(paths[i]), names[i]});
         }
     }
@@ -356,6 +468,25 @@ namespace BECore {
             }
         }
 
+        if (IsBinaryPath(path)) {
+            auto bytes = LoadCheckedBinary(path);
+            if (!bytes) {
+                LOG_ERROR(Format("[ConfigManager] Failed to load config: {} from {}: {}", name.ToStringView(), path.string(), bytes.error()).c_str());
+                co_return;
+            }
+            LockGuard lock(_writeMutex);
+            if (_configs.find(name) != _configs.end()) {
+                LOG_WARNING(Format("[ConfigManager] Config {} was loaded by another thread, discarding duplicate", name.ToStringView()).c_str());
+                co_return;
+            }
+            ConfigEntry entry;
+            entry.filePath = path;
+            entry.bytes = eastl::move(*bytes);
+            entry.binary = true;
+            _configs[name] = eastl::move(entry);
+            co_return;
+        }
+
         const Optional<String> text = XmlDocument::ReadFileBytes(path);
         IntrusivePtrAtomic<XmlDocument> doc = text ? ParseConfigText(*text) : IntrusivePtrAtomic<XmlDocument>{};
         if (!doc) {
@@ -370,7 +501,7 @@ namespace BECore {
                 LOG_WARNING(Format("[ConfigManager] Config {} was loaded by another thread, discarding duplicate", name.ToStringView()).c_str());
                 co_return;
             }
-            _configs[name] = ConfigEntry{doc, path, HashFileText(*text)};
+            _configs[name] = ConfigEntry{doc, path, HashFileText(*text), {}, false};
         }
 
         LOG_DEBUG(Format("[ConfigManager] Config loaded: {}", name.ToStringView()).c_str());

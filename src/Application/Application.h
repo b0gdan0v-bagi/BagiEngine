@@ -16,6 +16,7 @@ namespace BECore {
     }
 
     class ApplicationMainAccess;
+    struct CookRequest;
 #if BE_WITH_REMOTE_CONTROL
     class WebSocketServer;
 #endif
@@ -27,6 +28,10 @@ namespace BECore {
 
         /// Stores the command line without the program name. Call it before Initialize()
         void SetArguments(int argc, const char* const* argv);
+
+        /// `--cook=<dir>` (BECore/Cook/CLAUDE.md): cooks, and verifies when asked, the content of the roots added to the file system, with the file
+        /// system and the task manager only: no window, GPU or control server, and no `Initialize()`. Returns the exit code of the process
+        int RunCook(const CookRequest& request);
 
         bool Initialize();
         /// The whole run: RunFrame() until it returns false, then Finish(). What a desktop executable calls

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/Scene/SceneNodeFiles.h>
 #include <BECore/Types/Types.h>
@@ -17,6 +18,9 @@ namespace BECore {
      * @param what Names the node in the log messages (`Scene 'Main': nodes/Hud`)
      */
     IntrusivePtr<SceneNode> DeserializeNode(pugi::xml_node nodeEl, StringView what);
+
+    /// The same from any deserializer positioned at the root scope of a node (a cooked node file): the one place that builds a SceneNode from a reader
+    IntrusivePtr<SceneNode> DeserializeNode(IDeserializer& deserializer, StringView what);
 
     /**
      * @brief Appends to @p parent the `<node>` element of @p node and, in `<children>`, of every node below it: the inline form of a scene file

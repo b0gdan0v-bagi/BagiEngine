@@ -48,6 +48,15 @@ namespace BECore {
         _testManager.RunAllTests();
     }
 
+    void CoreManager::OnCookInit(PassKey<Application>) {
+        _fileSystem.Initialize();
+        TaskManager::GetInstance().Initialize(PassKey<CoreManager>{});
+    }
+
+    void CoreManager::OnCookDeinit(PassKey<Application>) {
+        TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});
+    }
+
     void CoreManager::OnTestEnvironmentInit(PassKey<Tests::EngineEnvironment>) {
         InitializeCoreServices();
 

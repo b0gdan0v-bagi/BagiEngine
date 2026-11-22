@@ -11,7 +11,6 @@ src/Modules/BECore/Config/XmlDocument.cpp fstream 2
 src/Modules/BECore/FileSystem/FileSystem.cpp directory-iterator 2
 src/Modules/BECore/Logger/FileSink.h fstream 1
 src/Modules/BECore/Logger/FileSink.h include-stream 1
-src/Modules/BECore/Reflection/BinaryDeserializer.cpp fstream 1
 src/Modules/BECore/Reflection/BinarySerializer.cpp fstream 1
 src/Modules/BECore/Save/SaveGame.cpp fstream 2
 src/Modules/BECore/Text/FontLoader.cpp fstream 1

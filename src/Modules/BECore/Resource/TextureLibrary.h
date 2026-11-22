@@ -57,6 +57,18 @@ namespace BECore {
         BE_REFLECT_FIELD Optional<SpriteAtlasLink> atlas;
     };
 
+    /**
+     * @brief The reflected root of a cooked `TextureLibrary.bin`: it names the layout of the file for the content stamp and nothing else
+     *
+     * `TextureLibrary` reads and writes by hand (`<sprite>` elements), so it has no reflected type to stamp. The binary form ignores
+     * element names, so `TextureLibrary::Write` and `Serialize` of this type give the same bytes. The engine never fills one.
+     */
+    struct TextureLibraryFile {
+        BE_CLASS(TextureLibraryFile)
+
+        BE_REFLECT_FIELD Vector<SpriteEntry> sprites;
+    };
+
     /** @brief Named sprites from the active game's TextureLibrary.xml; reached through CoreManager::GetTextureLibrary(). */
     class TextureLibrary {
     public:

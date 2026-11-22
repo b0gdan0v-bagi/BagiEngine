@@ -68,6 +68,35 @@ be_web_parse_preload_spec(SPEC "${spec}" FOLDER parsed_folder VIRTUAL parsed_vir
 check_equal("parsed folder, two @" "${parsed_folder}" "${CHECK_DIR}/a@b@@c/config")
 check_equal("parsed virtual path, two @" "${parsed_virtual}" "/bagi/engine/config")
 
+# COOKED_DIR: the config/ of the engine and game layers come from layer0 and layer1 of the cooked folder (the numbering of the cook counts
+# the layers that have a config/), assets/ and the web layer stay as they are
+file(MAKE_DIRECTORY "${CHECK_DIR}/cooked/layer0/config" "${CHECK_DIR}/cooked/layer1/config" "${CHECK_DIR}/game/assets")
+be_web_preload_args(OUT preload ENGINE_ROOT "${CHECK_DIR}/engine" GAME_ROOT "${CHECK_DIR}/game" WEB_ROOT "${CHECK_DIR}/web"
+    COOKED_DIR "${CHECK_DIR}/cooked" MISSING missing)
+set(expected
+    "--preload-file ${CHECK_DIR}/cooked/layer0/config@/bagi/engine/config"
+    "--preload-file ${CHECK_DIR}/engine/assets@/bagi/engine/assets"
+    "--preload-file ${CHECK_DIR}/cooked/layer1/config@/bagi/game/config"
+    "--preload-file ${CHECK_DIR}/game/assets@/bagi/game/assets"
+    "--preload-file ${CHECK_DIR}/web/config@/bagi/web/config")
+check_equal("preload, cooked layers" "${preload}" "${expected}")
+check_equal("nothing missing" "${missing}" "")
+
+# A game without config/ is not a layer of the cook: its assets/ stay and the numbering does not move
+file(MAKE_DIRECTORY "${CHECK_DIR}/noconfig/assets")
+be_web_preload_args(OUT preload ENGINE_ROOT "${CHECK_DIR}/engine" GAME_ROOT "${CHECK_DIR}/noconfig" COOKED_DIR "${CHECK_DIR}/cooked")
+set(expected
+    "--preload-file ${CHECK_DIR}/cooked/layer0/config@/bagi/engine/config"
+    "--preload-file ${CHECK_DIR}/engine/assets@/bagi/engine/assets"
+    "--preload-file ${CHECK_DIR}/noconfig/assets@/bagi/game/assets")
+check_equal("preload, cooked, a game without config" "${preload}" "${expected}")
+
+# A layer the cook did not write is no entry and is named in MISSING, a missing folder names every layer
+be_web_preload_args(OUT preload ENGINE_ROOT "${CHECK_DIR}/engine" GAME_ROOT "${CHECK_DIR}/game" COOKED_DIR "${CHECK_DIR}/cooked-none" MISSING missing)
+check_equal("missing cooked layers" "${missing}" "${CHECK_DIR}/cooked-none/layer0/config;${CHECK_DIR}/cooked-none/layer1/config")
+check_equal("no entry for a missing layer" "${preload}"
+    "--preload-file ${CHECK_DIR}/engine/assets@/bagi/engine/assets;--preload-file ${CHECK_DIR}/game/assets@/bagi/game/assets")
+
 # --- be_web_content_inputs: the files of a folder plus a stamp with the sorted list of them, rewritten only when the list changes
 set(content "${CHECK_DIR}/content")
 set(stamp "${CHECK_DIR}/stamps/content.txt")

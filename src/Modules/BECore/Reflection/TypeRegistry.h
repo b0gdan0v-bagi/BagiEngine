@@ -69,6 +69,15 @@ namespace BECore {
             return _infos;
         }
 
+        /**
+         * @brief How many types are registered; a caller that keeps a result computed from the whole table drops it when this moves
+         *
+         * Registration is static-initializer work, so the count does not move once `main` runs; a registry of a test is the one that grows later.
+         */
+        [[nodiscard]] size_t RegisteredCount() const {
+            return _infos.size();
+        }
+
         /// How many types `Register` refused for a hash that another type already has: not 0 is a build-time bug (two names that hash alike, or two types of one name)
         [[nodiscard]] size_t RefusedCount() const {
             return _refused;

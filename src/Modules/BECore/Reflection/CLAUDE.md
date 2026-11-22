@@ -43,14 +43,19 @@ The surface of the control API over this module (`Control/ReflectionControl`, re
 - An attribute and a child are the same member. An object is a member object, an array a member array of element objects; an element that holds only `value` is that scalar (`[1,2,3]`), and the reader takes both forms. A map is an array of `{key, value}`, a variant `{index, value}` (`monostate`: the index alone), a factory element carries `type` and `enabled`.
 - Integers are exact (`uint64_t` above 2^63 too), a `float` is the shortest text that reads back, a non-finite number is `null`, which the reader refuses.
 - The reader is always strict: a JSON bool is the only bool, a number the only number (`3.0` and `1.5` are no integers, a string is no number, a negative is no unsigned), a string target takes only a string. A refusal is an error under the field's path and the target keeps its value; a missing key is no error. Under diagnostics an unknown key is a finding with `did you mean`. Limits are those of `ReaderLimits.h`; `StoreError` cuts the text and replaces control characters with `?`. Check `IsJsonNestedDeeperThan` on input first.
-- A `SceneNode` does not round-trip: `IComponent` has no `FactoryTraits`, so no serializer writes the `type` member of a component.
+- A factory element is written with `type` when its base has `FactoryTraits`, and also when the base has none but the derived type registered itself in the `AbstractFactory` of the base (`IComponent`): the reader recreates the element by `type`, so a `SceneNode` round-trips and a cooked node file keeps its component types.
 
 ## Load allocations
 
 - An array loader reserves from the `count` that `BeginArray` gives (`DataAccessor.h`): an upper bound for a factory array (disabled and null elements count), never past the capacity of a fixed container. A hand-written loop reserves too after `BeginArray` (`TextureLibrary::Load` is the example).
 - `XmlDeserializer` allocates nothing per element in the default diagnostics mode: per array it takes the element list (counted first, reserved once) and its own stacks. The `Warn` mode keeps a scope per opened node and was not measured. The DOM of pugixml is the text's own cost.
+- `BinaryDeserializer` allocates nothing per array or per field (an array is a cursor into the validated bytes); `LoadFromView` also nothing for the stream itself, `LoadFromBuffer` and `LoadFromFile` one block of its size. A version 2 file with `PoolString` values also keeps one small bitmap of the table strings they use, and the first `PoolString` read interns them in one batch (the new strings and the batch's own lists are the allocations; a file with none, or a `Peek`, allocates none). A version 1 file interns each `PoolString` read one by one.
 - A reader does not know the totals (new `PoolString`s, string bytes), and `PoolString::Reserve` alone removes only table growth, not the unique lock each new string takes. So no reader carries a size hint: one `PoolString::Reserve` of the exact totals saves no allocations (the `AssetLoadReserved` line of `AssetLoadAllocBenchTest`).
 - Figures: `AssetLoadAllocBenchTest` (the perf benchmark `asset-load`; counts need the profile preset). None are kept in the docs.
+
+## Layout hash
+
+`SchemaHash.h`: `ComputeLayoutHash(type name | TypeInfo)` is a 64-bit FNV-1a over a canonical stream of the fields of a type in `Serialize` order (own and inherited): names, kinds by `TypeKindName`, `resizable`, capacity, `interns`, elements, keys, alternatives, enum value names and width, nested objects, and for a pointer field every derived type of its base. It leaves out offsets, attributes and the compiler's spelling of an `Opaque` type (so a file cooked on one compiler loads on another; the price is that `Vec2` to `Vec3` does not move it), and a type seen again contributes its name only. `WriteContentStamp` / `ReadContentStamp` / `CheckContentStamp` write and check the `$content` entry of a cooked file; the check is the recorded hash against the layout of the same type in the reading program, so a file is cooked by a program that links the same types.
 
 ## Schema export
 

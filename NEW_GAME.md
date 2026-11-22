@@ -135,6 +135,7 @@ ctest --preset macos-debug
 ```
 
 - The `build` skill finds `.claude/rules/build-project.md` and builds `Bagi<Name>` and `<Name>Tests`.
+- Release path: the sources stay XML; build the release preset, run `<Name>Cook` (`engine/src/Modules/BECore/Cook/CLAUDE.md`) and ship `cooked/<Name>/layer*/config` in place of `config/`. `be_add_game_cook_test(Bagi<Name>)` puts the check into `ctest`.
 - A game with a control API adds `be_add_game_control_tests(Bagi<Name> ...)`. ctest skips it (77) when the executable is not built.
 - `ctest --preset <p>` runs 8 tests at once (`execution.jobs` of `test-base` in the included presets; `-j1` switches it off), so the game's own tests must be safe side by side: temp names from `<Common/TempPath.h>` (`engine/tests/Common/TempPath.h`), port 0, polling instead of fixed sleeps, or `RUN_SERIAL` / `RESOURCE_LOCK` on the one that cannot (`.claude/rules/tests-module.md`).
 - `python3 engine/tools/todo/todo.py list --area <area>` works (empty at first).
