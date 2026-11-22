@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Math/Rect.h>
+#include <BECore/PoolString/StaticPoolString.h>
 #include <BECore/Types/Types.h>
 #include <Common/Require.h>
 #include <Common/TempPath.h>
