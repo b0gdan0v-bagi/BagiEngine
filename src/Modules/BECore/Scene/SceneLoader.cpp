@@ -5,6 +5,7 @@
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/OpenDeserializer.h>
+#include <BECore/Reflection/SchemaHash.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 
 namespace BECore {
@@ -21,6 +22,9 @@ namespace BECore {
         const NodeExpansion expansion = ExpandNodeReferences(expanded.document_element(), loader, true);
         for (const String& error : expansion.errors) {
             LOG_ERROR(Format("Config '{}': {}", configName, error).c_str());
+        }
+        if (findings != nullptr) {
+            findings->expansionErrors = expansion.errors;
         }
 
         XmlDeserializer deserializer;
@@ -49,8 +53,41 @@ namespace BECore {
         return LoadSceneManager(configRoot, loader, configName);
     }
 
+    IntrusivePtrAtomic<SceneManager> LoadSceneManagerFromBinary(IDeserializer& reader, StringView configName, SceneLoadFindings* findings) {
+        auto manager = New<SceneManager>();
+        const auto stamp = CheckContentStamp(reader, configName);
+        if (!stamp) {
+            LOG_ERROR(Format("Config '{}': {}", configName, stamp.error()).c_str());
+            return manager;
+        }
+        if (stamp->rootType != kSceneManagerRootType) {
+            LOG_ERROR(Format("Config '{}' holds a '{}', not a '{}'", configName, stamp->rootType, kSceneManagerRootType).c_str());
+            return manager;
+        }
+        manager->Deserialize(reader);
+        reader.FinishLoad();
+        LogDeserializeErrors(configName, reader);
+        if (findings != nullptr) {
+            findings->errors = reader.GetErrors();
+            findings->warnings = reader.GetWarnings();
+        }
+        return manager;
+    }
+
     IntrusivePtrAtomic<SceneManager> LoadSceneManagerFromConfig() {
-        return LoadCheckedSceneManager(CoreManager::GetConfigManager().GetConfig(kSceneConfigName), MakeFileSystemNodeLoader(CoreManager::GetFileSystem()), kSceneConfigName);
+        return LoadSceneManagerFromConfig(CoreManager::GetConfigManager(), CoreManager::GetFileSystem());
+    }
+
+    IntrusivePtrAtomic<SceneManager> LoadSceneManagerFromConfig(const ConfigManager& configs, const FileSystem& fs) {
+        if (configs.IsBinaryConfig(kSceneConfigName)) {
+            const UniquePtr<IDeserializer> reader = configs.CreateDeserializer(kSceneConfigName);
+            if (!reader) {
+                LOG_ERROR(Format("Config '{}' cannot be read", kSceneConfigName).c_str());
+                return New<SceneManager>();
+            }
+            return LoadSceneManagerFromBinary(*reader, kSceneConfigName);
+        }
+        return LoadCheckedSceneManager(configs.GetConfig(kSceneConfigName), MakeFileSystemNodeLoader(fs), kSceneConfigName);
     }
 
 }  // namespace BECore

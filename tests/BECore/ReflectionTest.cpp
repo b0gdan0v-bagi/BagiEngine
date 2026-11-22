@@ -200,15 +200,37 @@ namespace BECore::Tests {
             EXPECT_FALSE(deserializer.HasErrors()) << DescribeErrors(deserializer).c_str();
         }
 
-        /// Header + @p payload, with a consistent payload size, for hand-made (valid or corrupt) streams.
-        ByteBuffer MakeStream(std::initializer_list<uint8_t> payload) {
+        /// Name indices of the table that MakeStream() puts in front of the entries of a version 2 stream
+        constexpr uint8_t kNameA = 0;
+        constexpr uint8_t kNameO = 1;
+        constexpr uint8_t kNameS = 2;
+        constexpr uint8_t kNameX = 3;
+
+        /**
+         * Header of @p version + @p payload, with a consistent payload size, for hand-made (valid or corrupt) streams.
+         * Version 2 puts the table {"a", "o", "s", "x"} (kNameA...) before the payload, so an entry names itself by index.
+         */
+        ByteBuffer MakeStream(uint16_t version, std::initializer_list<uint8_t> payload) {
+            // clang-format off
+            static constexpr uint8_t kTable[] = {
+                0x04, 0x00, 0x00, 0x00,                                                         // count
+                0x04, 0x00, 0x00, 0x00,                                                         // charBytes
+                0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,  // end[]
+                'a', 'o', 's', 'x',
+            };
+            // clang-format on
+            ByteBuffer body;
+            if (version == BinaryFormat::TabledVersion) {
+                body.insert(body.end(), kTable, kTable + sizeof(kTable));
+            }
+            body.insert(body.end(), payload.begin(), payload.end());
+
             ByteBuffer stream;
             stream.insert(stream.end(), BinaryFormat::Magic, BinaryFormat::Magic + sizeof(BinaryFormat::Magic));
-            const uint16_t version = BinaryFormat::CurrentVersion;
             stream.insert(stream.end(), reinterpret_cast<const uint8_t*>(&version), reinterpret_cast<const uint8_t*>(&version) + sizeof(version));
-            const auto payloadSize = static_cast<uint32_t>(payload.size());
+            const auto payloadSize = static_cast<uint32_t>(body.size());
             stream.insert(stream.end(), reinterpret_cast<const uint8_t*>(&payloadSize), reinterpret_cast<const uint8_t*>(&payloadSize) + sizeof(payloadSize));
-            stream.insert(stream.end(), payload.begin(), payload.end());
+            stream.insert(stream.end(), body.begin(), body.end());
             return stream;
         }
 
@@ -410,8 +432,10 @@ namespace BECore::Tests {
         state.inventory.itemCount = 5;
         state.level = 3;
 
-        const ByteBuffer binary = SaveToBinary("Save", "state", state);
-        const String xml = SaveToXml("Save", "state", state);
+        // Every name is stored once in the string table, so the size advantage is for a document whose shape repeats
+        Vector<TestData::SavedGameState> states(8, state);
+        const ByteBuffer binary = SaveToBinary("Save", "state", states);
+        const String xml = SaveToXml("Save", "state", states);
 
         EXPECT_LT(binary.size(), xml.size()) << "binary " << binary.size() << " bytes, XML " << xml.size() << " bytes";
     }
@@ -616,10 +640,14 @@ namespace BECore::Tests {
 
             // clang-format off
             const ByteBuffer expected = {
-                'B', 'E', 'B', 'N', 0x01, 0x00,                                                 // magic, version 1
-                0x15, 0x00, 0x00, 0x00,                                                         // payload size: 21
-                0x06, 0x01, 0x00, 'a', 0x01, 0x00, 0x00, 0x00,                                  // Int32 "a" = 1
-                0x0D, 0x01, 0x00, 'o', 0x05, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00, 'b', 0x01,     // Object "o" { Bool "b" = true }
+                'B', 'E', 'B', 'N', 0x02, 0x00,                                                 // magic, version 2
+                0x2F, 0x00, 0x00, 0x00,                                                         // payload size: 47
+                0x03, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,                                 // table: 3 strings, 3 bytes of characters
+                0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,         // string ends
+                'a', 'b', 'o',                                                                  // 0 "a", 1 "b", 2 "o": sorted
+                0x06, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,                           // Int32 "a" = 1
+                0x0D, 0x02, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,                           // Object "o", size 6
+                0x01, 0x01, 0x00, 0x00, 0x00, 0x01,                                             //   Bool "b" = true
             };
             // clang-format on
             EXPECT_TRUE(serializer.GetData() == expected) << "unexpected bytes, size " << serializer.GetData().size();
@@ -641,11 +669,14 @@ namespace BECore::Tests {
 
             // clang-format off
             const ByteBuffer expected = {
-                'B', 'E', 'B', 'N', 0x01, 0x00,                                                 // magic, version 1
-                0x19, 0x00, 0x00, 0x00,                                                         // payload size: 25
-                0x0E, 0x01, 0x00, 'x', 0x11, 0x00, 0x00, 0x00,                                  // Array "x", size 17
+                'B', 'E', 'B', 'N', 0x02, 0x00,                                                 // magic, version 2
+                0x2D, 0x00, 0x00, 0x00,                                                         // payload size: 45
+                0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,                                 // table: 2 strings, 2 bytes of characters
+                0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,                                 // string ends
+                'v', 'x',                                                                       // 0 "v", 1 "x"
+                0x0E, 0x01, 0x00, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00,                           // Array "x", size 18
                 0x02, 0x00, 0x00, 0x00,                                                         // 2 elements
-                0x05, 0x00, 0x00, 0x00, 0x03, 0x01, 0x00, 'v', 0x07,                            // element 0 { UInt8 "v" = 7 }
+                0x06, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x07,                     // element 0 { UInt8 "v" = 7 }
                 0x00, 0x00, 0x00, 0x00,                                                         // element 1 {}
             };
             // clang-format on
@@ -895,12 +926,15 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, BinaryHeaderOnlyStreamIsValid) {
-        const ByteBuffer empty = MakeStream({});
+        for (const uint16_t version : {BinaryFormat::LegacyVersion, BinaryFormat::TabledVersion}) {
+            SCOPED_TRACE(version);
+            const ByteBuffer empty = MakeStream(version, {});
 
-        BinaryDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromBuffer(empty)) << DescribeErrors(deserializer).c_str();
-        EXPECT_FALSE(deserializer.BeginObject("anything"));
-        EXPECT_FALSE(deserializer.HasErrors());
+            BinaryDeserializer deserializer;
+            ASSERT_TRUE(deserializer.LoadFromBuffer(empty)) << DescribeErrors(deserializer).c_str();
+            EXPECT_FALSE(deserializer.BeginObject("anything"));
+            EXPECT_FALSE(deserializer.HasErrors());
+        }
 
         const BinarySerializer untouched;
         BinaryDeserializer fromUntouched;
@@ -986,35 +1020,71 @@ namespace BECore::Tests {
             ByteBuffer data;
         };
 
-        const Case cases[] = {
-            {"unknown tag", MakeStream({0xFF, 0x01, 0x00, 'a', 0x00, 0x00, 0x00, 0x00})},
-            {"tag zero", MakeStream({0x00, 0x01, 0x00, 'a', 0x00, 0x00, 0x00, 0x00})},
-            {"entry header cut short", MakeStream({0x06})},
-            {"name longer than the data", MakeStream({0x06, 0xFF, 0xFF, 'a'})},
-            {"scalar payload cut short", MakeStream({0x06, 0x01, 0x00, 'a', 0x01, 0x00})},
-            {"string longer than the data", MakeStream({0x0C, 0x01, 0x00, 's', 0xFF, 0xFF, 0xFF, 0x7F})},
-            {"object larger than the data", MakeStream({0x0D, 0x01, 0x00, 'o', 0x10, 0x00, 0x00, 0x00})},
-            {"object holding a broken entry", MakeStream({0x0D, 0x01, 0x00, 'o', 0x01, 0x00, 0x00, 0x00, 0x06})},
-            {"array without a count", MakeStream({0x0E, 0x01, 0x00, 'x', 0x00, 0x00, 0x00, 0x00})},
-            {"array count larger than the data", MakeStream({0x0E, 0x01, 0x00, 'x', 0x04, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x7F})},
-            {"array element larger than the array", MakeStream({0x0E, 0x01, 0x00, 'x', 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00})},
-            {"array with bytes after its elements", MakeStream({0x0E, 0x01, 0x00, 'x', 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA})},
+        const uint8_t a = kNameA;
+        const uint8_t o = kNameO;
+        const uint8_t s = kNameS;
+        const uint8_t x = kNameX;
+        constexpr uint16_t v1 = BinaryFormat::LegacyVersion;
+        constexpr uint16_t v2 = BinaryFormat::TabledVersion;
+
+        const Case legacyCases[] = {
+            {"unknown tag", MakeStream(v1, {0xFF, 0x01, 0x00, 'a', 0x00, 0x00, 0x00, 0x00})},
+            {"tag zero", MakeStream(v1, {0x00, 0x01, 0x00, 'a', 0x00, 0x00, 0x00, 0x00})},
+            {"entry header cut short", MakeStream(v1, {0x06})},
+            {"name longer than the data", MakeStream(v1, {0x06, 0xFF, 0xFF, 'a'})},
+            {"scalar payload cut short", MakeStream(v1, {0x06, 0x01, 0x00, 'a', 0x01, 0x00})},
+            {"string longer than the data", MakeStream(v1, {0x0C, 0x01, 0x00, 's', 0xFF, 0xFF, 0xFF, 0x7F})},
+            {"object larger than the data", MakeStream(v1, {0x0D, 0x01, 0x00, 'o', 0x10, 0x00, 0x00, 0x00})},
+            {"object holding a broken entry", MakeStream(v1, {0x0D, 0x01, 0x00, 'o', 0x01, 0x00, 0x00, 0x00, 0x06})},
+            {"array without a count", MakeStream(v1, {0x0E, 0x01, 0x00, 'x', 0x00, 0x00, 0x00, 0x00})},
+            {"array count larger than the data", MakeStream(v1, {0x0E, 0x01, 0x00, 'x', 0x04, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x7F})},
+            {"array element larger than the array", MakeStream(v1, {0x0E, 0x01, 0x00, 'x', 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00})},
+            {"array with bytes after its elements", MakeStream(v1, {0x0E, 0x01, 0x00, 'x', 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA})},
         };
 
-        for (const Case& testCase : cases) {
-            SCOPED_TRACE(testCase.description);
+        const Case tabledCases[] = {
+            {"unknown tag", MakeStream(v2, {0xFF, a, 0, 0, 0, 0x00, 0x00, 0x00, 0x00})},
+            {"tag zero", MakeStream(v2, {0x00, a, 0, 0, 0, 0x00, 0x00, 0x00, 0x00})},
+            {"entry header cut short", MakeStream(v2, {0x06, a, 0})},
+            {"name index outside the table", MakeStream(v2, {0x06, 0x04, 0, 0, 0, 0x01, 0x00, 0x00, 0x00})},
+            {"scalar payload cut short", MakeStream(v2, {0x06, a, 0, 0, 0, 0x01, 0x00})},
+            {"pool string index outside the table", MakeStream(v2, {0x0F, a, 0, 0, 0, 0x04, 0x00, 0x00, 0x00})},
+            {"pool string payload cut short", MakeStream(v2, {0x0F, a, 0, 0, 0, 0x01, 0x00})},
+            {"string longer than the data", MakeStream(v2, {0x0C, s, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0x7F})},
+            {"object larger than the data", MakeStream(v2, {0x0D, o, 0, 0, 0, 0x10, 0x00, 0x00, 0x00})},
+            {"object holding a broken entry", MakeStream(v2, {0x0D, o, 0, 0, 0, 0x01, 0x00, 0x00, 0x00, 0x06})},
+            {"array without a count", MakeStream(v2, {0x0E, x, 0, 0, 0, 0x00, 0x00, 0x00, 0x00})},
+            {"array count larger than the data", MakeStream(v2, {0x0E, x, 0, 0, 0, 0x04, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x7F})},
+            {"array element larger than the array", MakeStream(v2, {0x0E, x, 0, 0, 0, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00})},
+            {"array with bytes after its elements", MakeStream(v2, {0x0E, x, 0, 0, 0, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA})},
+        };
+
+        for (const Case& testCase : legacyCases) {
+            SCOPED_TRACE(Format("version 1: {}", testCase.description));
+            BinaryDeserializer deserializer;
+            EXPECT_FALSE(deserializer.LoadFromBuffer(testCase.data));
+            EXPECT_TRUE(deserializer.HasErrors());
+        }
+        for (const Case& testCase : tabledCases) {
+            SCOPED_TRACE(Format("version 2: {}", testCase.description));
             BinaryDeserializer deserializer;
             EXPECT_FALSE(deserializer.LoadFromBuffer(testCase.data));
             EXPECT_TRUE(deserializer.HasErrors());
         }
 
         // Positive controls: the same shapes, well-formed, load
-        const ByteBuffer validScalar = MakeStream({0x06, 0x01, 0x00, 'a', 0x01, 0x00, 0x00, 0x00});
-        const ByteBuffer validObject = MakeStream({0x0D, 0x01, 0x00, 'o', 0x08, 0x00, 0x00, 0x00, 0x06, 0x01, 0x00, 'a', 0x01, 0x00, 0x00, 0x00});
-        const ByteBuffer validArray = MakeStream({0x0E, 0x01, 0x00, 'x', 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00});
-        for (const ByteBuffer* data : {&validScalar, &validObject, &validArray}) {
+        const ByteBuffer controls[] = {
+            MakeStream(v1, {0x06, 0x01, 0x00, 'a', 0x01, 0x00, 0x00, 0x00}),
+            MakeStream(v1, {0x0D, 0x01, 0x00, 'o', 0x08, 0x00, 0x00, 0x00, 0x06, 0x01, 0x00, 'a', 0x01, 0x00, 0x00, 0x00}),
+            MakeStream(v1, {0x0E, 0x01, 0x00, 'x', 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}),
+            MakeStream(v2, {0x06, a, 0, 0, 0, 0x01, 0x00, 0x00, 0x00}),
+            MakeStream(v2, {0x0F, a, 0, 0, 0, s, 0, 0, 0}),
+            MakeStream(v2, {0x0D, o, 0, 0, 0, 0x09, 0x00, 0x00, 0x00, 0x06, a, 0, 0, 0, 0x01, 0x00, 0x00, 0x00}),
+            MakeStream(v2, {0x0E, x, 0, 0, 0, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}),
+        };
+        for (const ByteBuffer& data : controls) {
             BinaryDeserializer deserializer;
-            EXPECT_TRUE(deserializer.LoadFromBuffer(*data)) << DescribeErrors(deserializer).c_str();
+            EXPECT_TRUE(deserializer.LoadFromBuffer(data)) << DescribeErrors(deserializer).c_str();
         }
     }
 

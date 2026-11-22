@@ -69,7 +69,10 @@ namespace BECore {
         bool _paused = false;
         bool _ringRequested = false;  // what this widget asked of Profiler::SetRingEnabled
         Vector<FrameStats> _history;
-        RingSnapshot _snapshot;
+        RingSnapshot _snapshot;  // what the panels show
+        // The ring is copied into this one and swapped with _snapshot, so both keep the capacity of their vectors and a steady frame allocates
+        // nothing for the copy; while paused it is refilled and the spikes still see it, _snapshot stays
+        RingSnapshot _fresh;
         uint64_t _snapshotVersion = 0;      // counts the snapshots taken, so the zone table knows when its rows are stale
         Optional<uint64_t> _selectedFrame;  // a RingFrame::index
         SpikeCapture _spikes;

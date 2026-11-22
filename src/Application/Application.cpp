@@ -7,6 +7,7 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlSettings.h>
 #include <BECore/Control/Json.h>
+#include <BECore/Cook/CookCommand.h>
 #include <BECore/FileSystem/FileWatchSetting.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
@@ -57,6 +58,13 @@ namespace BECore {
             _arguments.emplace_back(argv[i]);
         }
         CoreManager::GetCommandLine().Set(_arguments);
+    }
+
+    int Application::RunCook(const CookRequest& request) {
+        CoreManager::GetInstance().OnCookInit(PassKey<Application>{});
+        const int code = RunCookCommand(request, CoreManager::GetFileSystem());
+        CoreManager::GetInstance().OnCookDeinit(PassKey<Application>{});
+        return code;
     }
 
     bool Application::Initialize() {

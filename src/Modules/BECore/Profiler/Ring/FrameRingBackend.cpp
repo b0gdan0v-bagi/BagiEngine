@@ -213,8 +213,14 @@ namespace BECore {
 
     RingSnapshot FrameRingBackend::Snapshot() const {
         RingSnapshot snapshot;
-        snapshot.nanosecondsPerTick = _options.nanosecondsPerTick;
-        snapshot.dropped = GetDroppedCount();
+        Snapshot(snapshot);
+        return snapshot;
+    }
+
+    void FrameRingBackend::Snapshot(RingSnapshot& into) const {
+        into.nanosecondsPerTick = _options.nanosecondsPerTick;
+        into.dropped = GetDroppedCount();
+        into.frames.clear();
 
         // Frames: mark k ends frame k, which begins at mark k-1; the first frame of an epoch (the ring made, or Start) begins at the epoch's
         // tick, and what came before the epoch is left out. The oldest mark still held has lost its predecessor, so the frame it ends is
@@ -229,28 +235,31 @@ namespace BECore {
                 epochTicks = _epochTicks;
             }
             const uint64_t first = count > kMaxFrames ? count - kMaxFrames : 0;
-            Vector<uint64_t> ticks;
-            ticks.reserve(static_cast<size_t>(count - first));
+            uint64_t ticks[kMaxFrames];  // on the stack: a refill allocates nothing
             for (uint64_t index = first; index < count; ++index) {
-                ticks.push_back(LoadWord(_markTicks[index % kMaxFrames]));
+                ticks[index - first] = LoadWord(_markTicks[index % kMaxFrames]);
             }
             std::atomic_thread_fence(std::memory_order_acquire);
             const uint64_t intact = std::max(first, FirstIntactIndex(_markReserved.load(std::memory_order_relaxed), kMaxFrames));
             for (uint64_t index = std::max(intact, epochMark); index < count; ++index) {
                 if (index == epochMark) {
-                    snapshot.frames.push_back(RingFrame{index, epochTicks, ticks[static_cast<size_t>(index - first)]});
+                    into.frames.push_back(RingFrame{index, epochTicks, ticks[static_cast<size_t>(index - first)]});
                 } else if (index > intact) {
-                    snapshot.frames.push_back(RingFrame{index, ticks[static_cast<size_t>(index - 1 - first)], ticks[static_cast<size_t>(index - first)]});
+                    into.frames.push_back(RingFrame{index, ticks[static_cast<size_t>(index - 1 - first)], ticks[static_cast<size_t>(index - first)]});
                 }
             }
         }
 
         // No registry mutex: a buffer is published by the release store of the count, and is never freed or moved before the destructor
         const uint32_t bufferCount = _bufferCount.load(std::memory_order_acquire);
+        // Resized, not rebuilt: a thread slot keeps the capacity of its zones and its name from the last refill
+        into.threads.resize(bufferCount);
         for (uint32_t i = 0; i < bufferCount; ++i) {
             const ThreadBuffer& buffer = *_buffers[i];
-            RingThread& thread = snapshot.threads.emplace_back();
+            RingThread& thread = into.threads[i];
             thread.threadId = buffer.threadId;
+            thread.name.clear();
+            thread.zones.clear();
             if (const char* name = Profiler::GetThreadName(buffer.threadId)) {
                 thread.name = name;
             }
@@ -283,7 +292,6 @@ namespace BECore {
             const auto older = eastl::lower_bound(thread.zones.begin(), thread.zones.end(), epochTicks, [](const ZoneRecord& zone, uint64_t ticks) { return zone.beginTicks < ticks; });
             thread.zones.erase(thread.zones.begin(), older);
         }
-        return snapshot;
     }
 
 }  // namespace BECore

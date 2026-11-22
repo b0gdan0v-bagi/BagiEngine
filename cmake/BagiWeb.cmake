@@ -8,12 +8,16 @@
 # The settings below were checked against settings.js of emsdk 4.0.23 and linked with it (the first game links, packages, the module
 # instantiates under node, and the page ran in headless Chromium and Edge: tools/web/web_smoke.py, tools/web/CLAUDE.md).
 #
-#   be_web_preload_args(OUT <var> ENGINE_ROOT <dir> GAME_ROOT <dir> WEB_ROOT <dir>)
+#   be_web_preload_args(OUT <var> ENGINE_ROOT <dir> GAME_ROOT <dir> WEB_ROOT <dir> [COOKED_DIR <dir> [MISSING <var>]])
 #       The content as a preloaded package: one "--preload-file <dir>@<virtual dir>" entry per config/ and assets/ folder that exists,
 #       in the order of the layers (engine, game, web: lowest priority first, as AddContentRoot in src/main.cpp). The virtual roots are
 #       BE_WEB_ENGINE_ROOT, BE_WEB_GAME_ROOT and BE_WEB_WEB_ROOT, the values of BAGI_ENGINE_ROOT / BAGI_GAME_ROOT / BAGI_WEB_ROOT.
 #       An "@" in a source path is written "@@", which is how emcc's file packager takes a literal "@" (the single "@" splits the
 #       source from the virtual path).
+#       COOKED_DIR (a folder a desktop cook wrote: `<Name>Cook`, src/Modules/BECore/Cook/CLAUDE.md) takes the config/ of the ENGINE and GAME
+#       layers from <dir>/layer<k>/config in place of <root>/config (k counts the layers that have a config/ folder, lowest first: the
+#       numbering of the cook). assets/ and the WEB layer, whose config/ overlay stays XML and wins, are as they are. A cooked layer
+#       that is not there is no entry and goes to MISSING (a list of the paths), which be_web_configure_target turns into an error.
 #   be_web_parse_preload_spec(SPEC <spec> FOLDER <var> VIRTUAL <var>)
 #       The inverse of one entry of be_web_preload_args ("<source>@<virtual>", without "--preload-file "): the source folder as it is on
 #       disk ("@@" back to "@") and the virtual path. The virtual paths are ours and have no "@", so the last "@" splits.
@@ -33,7 +37,9 @@
 #       configuration). Without SINGLE_THREAD it also has -pthread and the Web Worker pool (BE_WEB_THREAD_POOL_SIZE); with
 #       SINGLE_THREAD it has neither (no thread, no shared memory).
 #   be_web_configure_target(<target> GAME_ROOT <dir>)
-#       Makes the executable an HTML page with its content package and the virtual content roots as definitions.
+#       Makes the executable an HTML page with its content package and the virtual content roots as definitions. With the cache variable
+#       ENGINE_WEB_COOKED_DIR (empty: the XML sources) the config/ folders are the cooked layers of that folder (be_web_preload_args); a
+#       folder or layer that is not there stops the configure and names the target <target>Cook that writes it.
 include_guard(GLOBAL)
 
 # The page the link produces is <target>.html next to <target>.js, <target>.wasm and <target>.data
@@ -68,12 +74,14 @@ set(BE_WEB_SHELL_FILE "${BE_WEB_DIR}/shell.html")
 set(BE_WEB_SAVES_JS "${BE_WEB_DIR}/saves.js")
 
 function(be_web_preload_args)
-    cmake_parse_arguments(ARG "" "OUT;ENGINE_ROOT;GAME_ROOT;WEB_ROOT" "" ${ARGN})
+    cmake_parse_arguments(ARG "" "OUT;ENGINE_ROOT;GAME_ROOT;WEB_ROOT;COOKED_DIR;MISSING" "" ${ARGN})
     if(NOT ARG_OUT)
         message(FATAL_ERROR "be_web_preload_args: OUT is required")
     endif()
 
     set(_args "")
+    set(_missing "")
+    set(_cooked_layer 0)
     # Lowest priority first, the order of AddContentRoot in src/main.cpp
     foreach(_layer ENGINE GAME WEB)
         set(_root "${ARG_${_layer}_ROOT}")
@@ -81,13 +89,26 @@ function(be_web_preload_args)
             continue()
         endif()
         foreach(_folder config assets)
-            if(IS_DIRECTORY "${_root}/${_folder}")
-                string(REPLACE "@" "@@" _source "${_root}/${_folder}")
-                list(APPEND _args "--preload-file ${_source}@${BE_WEB_${_layer}_ROOT}/${_folder}")
+            if(NOT IS_DIRECTORY "${_root}/${_folder}")
+                continue()
             endif()
+            set(_folder_path "${_root}/${_folder}")
+            if(ARG_COOKED_DIR AND _folder STREQUAL "config" AND NOT _layer STREQUAL "WEB")
+                set(_folder_path "${ARG_COOKED_DIR}/layer${_cooked_layer}/config")
+                math(EXPR _cooked_layer "${_cooked_layer} + 1")
+                if(NOT IS_DIRECTORY "${_folder_path}")
+                    list(APPEND _missing "${_folder_path}")
+                    continue()
+                endif()
+            endif()
+            string(REPLACE "@" "@@" _source "${_folder_path}")
+            list(APPEND _args "--preload-file ${_source}@${BE_WEB_${_layer}_ROOT}/${_folder}")
         endforeach()
     endforeach()
     set(${ARG_OUT} "${_args}" PARENT_SCOPE)
+    if(ARG_MISSING)
+        set(${ARG_MISSING} "${_missing}" PARENT_SCOPE)
+    endif()
 endfunction()
 
 function(be_web_parse_preload_spec)
@@ -222,10 +243,21 @@ function(be_web_configure_target TARGET_NAME)
     # The saves script is part of the output .js: an edit relinks
     set_property(TARGET ${TARGET_NAME} APPEND PROPERTY LINK_DEPENDS "${BE_WEB_SAVES_JS}")
 
+    set(_cooked "")
+    if(ENGINE_WEB_COOKED_DIR)
+        set(_cooked COOKED_DIR "${ENGINE_WEB_COOKED_DIR}" MISSING _missing_layers)
+    endif()
     be_web_preload_args(OUT _preload
         ENGINE_ROOT "${BAGI_ENGINE_DIR}"
         GAME_ROOT "${ARG_GAME_ROOT}"
-        WEB_ROOT "${BE_WEB_DIR}")
+        WEB_ROOT "${BE_WEB_DIR}"
+        ${_cooked})
+    if(_missing_layers)
+        string(REPLACE ";" "\n  " _missing_text "${_missing_layers}")
+        message(FATAL_ERROR "ENGINE_WEB_COOKED_DIR=${ENGINE_WEB_COOKED_DIR} lacks:\n  ${_missing_text}\n"
+            "Cook the content with a desktop build of the same type set (no editor): cmake --build <desktop preset> --target ${TARGET_NAME}Cook, "
+            "then pass <desktop build>/cooked/${TARGET_NAME}")
+    endif()
     foreach(_entry IN LISTS _preload)
         # One "--preload-file <spec>" per entry: SHELL: keeps the pair together and stops CMake from dropping the repeated flag
         # as a duplicate; the quotes keep a path with a space in one piece
@@ -253,6 +285,8 @@ endfunction()
 # they only take effect when it is included before the targets are created. Checked: -O2 -DNDEBUG is on every compile line of
 # web-release (compile_commands.json) and on its link line, and Debug is -O0 -g
 if(EMSCRIPTEN)
+    set(ENGINE_WEB_COOKED_DIR "" CACHE PATH "A folder a desktop cook wrote (<desktop build>/cooked/<Game>): the page preloads its layer<k>/config in place of the XML config/ folders")
+
     # The level of the Release build, compile and link (-Oz is smaller, see the size table in tools/web/CLAUDE.md). A cache variable only so
     # that the two can be compared; the plain variables below win over CMAKE_*_FLAGS_RELEASE of the cache
     set(BE_WEB_OPTIMIZATION "-O2" CACHE STRING "Optimisation level of the web Release build: -O2 (default), -Oz, -Os, -O3")

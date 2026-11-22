@@ -1,6 +1,10 @@
 #include "SceneNodeFiles.h"
 
 #include <BECore/Config/ContentVersion.h>
+#include <BECore/FileSystem/MountPoints.h>
+#include <BECore/Reflection/BinaryDeserializer.h>
+#include <BECore/Reflection/SchemaHash.h>
+#include <BECore/Scene/SceneNodeInstance.h>
 
 namespace BECore {
 
@@ -179,6 +183,50 @@ namespace BECore {
             return true;
         }
 
+        /// Reads the cooked node file @p file into @p out as the `<node>` element of the same node, so the overrides and the
+        /// instantiation work on it as on a file written by hand. @p label names the file in the messages
+        bool ReadNodeFileBinary(const std::filesystem::path& file, StringView label, pugi::xml_document& out, String& error) {
+            BinaryDeserializer reader;
+            if (!reader.LoadFromFile(file)) {
+                const auto& errors = reader.GetErrors();
+                error = Format("the node file '{}' is not a valid binary document: {}", label, errors.empty() ? StringView{"it cannot be read"} : StringView{errors.front().errorMessage});
+                return false;
+            }
+            const auto stamp = CheckContentStamp(reader, label);
+            if (!stamp) {
+                error = stamp.error();
+                return false;
+            }
+            if (stamp->rootType != kNodeRootType) {
+                error = Format("the node file '{}' holds a '{}', not a '{}'", label, stamp->rootType, kNodeRootType);
+                return false;
+            }
+            out.reset();
+            AppendNodeElement(out, *DeserializeNode(reader, label));
+            return true;
+        }
+
+        /// What of a node file one layer holds: the path of its `.xml`, of its `.bin`, none or both
+        struct NodeFileInLayer {
+            std::filesystem::path xml;
+            std::filesystem::path binary;
+        };
+
+        NodeFileInLayer FindInLayer(const std::filesystem::path& layer, StringView ref) {
+            const std::filesystem::path stem = layer / std::filesystem::path(ToStd(ref));
+            NodeFileInLayer found;
+            std::error_code ec;
+            const std::filesystem::path xml = std::filesystem::path(stem) += kNodeFileExtension.data();
+            const std::filesystem::path binary = std::filesystem::path(stem) += kNodeBinaryExtension.data();
+            if (std::filesystem::is_regular_file(xml, ec)) {
+                found.xml = xml;
+            }
+            if (std::filesystem::is_regular_file(binary, ec)) {
+                found.binary = binary;
+            }
+            return found;
+        }
+
         std::filesystem::path FileOf(const std::filesystem::path& baseDirectory, StringView ref) {
             return baseDirectory / (std::filesystem::path(ToStd(ref)) += kNodeFileExtension.data());
         }
@@ -306,6 +354,22 @@ namespace BECore {
                 error = "not a valid reference";
                 return false;
             }
+            const Vector<std::filesystem::path> layers = fs.GetMountLayers(MountPoints::config);
+            for (auto layer = layers.rbegin(); layer != layers.rend(); ++layer) {
+                const NodeFileInLayer found = FindInLayer(*layer, ref);
+                if (!found.xml.empty() && !found.binary.empty()) {
+                    error = Format("'{}' and '{}' are both node files of one reference: keep one", found.xml.string(), found.binary.string());
+                    return false;
+                }
+                if (!found.binary.empty()) {
+                    return ReadNodeFileBinary(found.binary, Format("{}/{}{}", kNodeFilesMountPoint, ref, kNodeBinaryExtension), out, error);
+                }
+                if (!found.xml.empty()) {
+                    const String virtualPath = Format("{}/{}{}", kNodeFilesMountPoint, ref, kNodeFileExtension);
+                    return ReadNodeFile(found.xml, out, error, virtualPath);
+                }
+            }
+            // No layer has it: what a mount that is not a layer of `config` resolves to, and the usual "does not exist"
             const String virtualPath = Format("{}/{}{}", kNodeFilesMountPoint, ref, kNodeFileExtension);
             return ReadNodeFile(fs.ResolvePath(virtualPath), out, error, virtualPath);
         };

@@ -5,8 +5,6 @@
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/ProfilerClock.h>
 #include <bit>
-#include <cerrno>
-#include <cstdio>
 #include <cstdlib>
 #include <new>
 #include <thread>
@@ -167,7 +165,8 @@ namespace BECore {
         const uint64_t start = _startTicks.load(std::memory_order_relaxed);
         const auto timestamp = [start](uint64_t ticks) { return ticks > start ? ProfilerClock::ToNanoseconds(ticks - start) / kNanosecondsPerMicrosecond : 0.0; };
 
-        std::lock_guard lock(_registryMutex);  //-NoStd: profiler lock (Threading/CLAUDE.md); against MarkTraceStart and a buffer being registered, recording threads never take it
+        std::lock_guard lock(_registryMutex);  //-NoStd: profiler lock (Threading/CLAUDE.md); against MarkTraceStart and a buffer being registered, a recording thread takes it only to register its
+                                               // buffer, on its first event
         String out;
         out.append("{\"traceEvents\":[");
         bool first = true;
@@ -184,12 +183,10 @@ namespace BECore {
 
             if (const char* name = Profiler::GetThreadName(tid)) {
                 beginEvent();
-                out.append(Format("{{\"name\":\"thread_name\",\"ph\":\"M\",\"pid\":{},\"tid\":{},\"args\":{{\"name\":", kPid, tid));
-                AppendJsonString(out, name);
-                out.append("}}");
+                AppendThreadNameEvent(out, kPid, tid, name);
                 if (const uint32_t sortIndex = Profiler::GetThreadSortIndex(tid); sortIndex != Profiler::kNoSortIndex) {
                     beginEvent();
-                    out.append(Format("{{\"name\":\"thread_sort_index\",\"ph\":\"M\",\"pid\":{},\"tid\":{},\"args\":{{\"sort_index\":{}}}}}", kPid, tid, sortIndex));
+                    AppendThreadSortIndexEvent(out, kPid, tid, sortIndex);
                 }
             }
 
@@ -205,11 +202,7 @@ namespace BECore {
                         const auto* site = static_cast<const ProfileSite*>(event.data);
                         open.push_back(site);
                         beginEvent();
-                        out.append("{\"name\":");
-                        AppendJsonString(out, site->name);
-                        out.append(Format(",\"cat\":\"zone\",\"ph\":\"B\",\"pid\":{},\"tid\":{},\"ts\":{:.3f},\"args\":{{\"file\":", kPid, tid, ts));
-                        AppendJsonString(out, site->file);
-                        out.append(Format(",\"line\":{}}}}}", site->line));
+                        AppendZoneBeginEvent(out, kPid, tid, ts, *site);
                         break;
                     }
                     case TraceEventType::End:
@@ -218,11 +211,7 @@ namespace BECore {
                         }
                         open.pop_back();
                         beginEvent();
-                        out.append(Format("{{\"ph\":\"E\",\"pid\":{},\"tid\":{},\"ts\":{:.3f}", kPid, tid, ts));
-                        if constexpr (BE_PROFILER_ALLOC != 0) {
-                            out.append(Format(",\"args\":{{\"allocs\":{},\"bytes\":{}}}", event.a, event.b));
-                        }
-                        out.append("}");
+                        AppendZoneEndEvent(out, kPid, tid, ts, event.a, event.b);
                         break;
                     case TraceEventType::Counter:
                         beginEvent();
@@ -264,18 +253,7 @@ namespace BECore {
     }
 
     std::expected<void, String> ChromeTraceBackend::WriteFile(StringView path) const {
-        const String text = WriteJson();
-        const String fileName(path.data(), path.size());
-        std::FILE* file = std::fopen(fileName.c_str(), "wb");
-        if (file == nullptr) {
-            return std::unexpected(Format("cannot write '{}': {}", fileName, std::strerror(errno)));
-        }
-        const size_t written = std::fwrite(text.data(), 1, text.size(), file);
-        const bool closed = std::fclose(file) == 0;
-        if (written != text.size() || !closed) {
-            return std::unexpected(Format("cannot write '{}': the disk refused part of it", fileName));
-        }
-        return {};
+        return WriteTextFile(path, WriteJson());
     }
 
 }  // namespace BECore

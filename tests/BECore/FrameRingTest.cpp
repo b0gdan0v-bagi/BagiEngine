@@ -404,8 +404,10 @@ namespace BECore::Tests {
             }
         };
         // No assertion returns before the join: the writer uses the ring on this stack, and a joinable thread that goes out of scope ends the process
+        RingSnapshot reused;  // the refill form under a writer, as the Profiler panel takes it
         while (!done && !HasFatalFailure()) {
-            check(ring.Snapshot());
+            ring.Snapshot(reused);
+            check(reused);
             ++snapshots;
         }
         stop = true;
@@ -417,6 +419,97 @@ namespace BECore::Tests {
         const RingSnapshot last = ring.Snapshot();
         ASSERT_EQ(last.threads.size(), 1u);
         EXPECT_EQ(last.threads[0].zones.size(), FrameRingBackend::kEventsPerThread);
+    }
+
+    TEST(FrameRingTest, RefillingASnapshotGivesTheContentOfTheByValueForm) {
+        FrameRingBackend ring(ManualOptions());
+        RecordZone(ring, kOuterSite, 1, 9, {.count = 2, .bytes = 64});
+        RecordZone(ring, kInnerSite, 2, 4);
+        g_manualTick = 10;
+        ring.FrameMark();
+
+        RingSnapshot into;
+        into.dropped = 77;  // stale content that the refill must replace
+        ring.Snapshot(into);
+        const RingSnapshot value = ring.Snapshot();
+        EXPECT_EQ(into.dropped, value.dropped);
+        EXPECT_EQ(into.nanosecondsPerTick, value.nanosecondsPerTick);
+        ASSERT_EQ(into.frames.size(), value.frames.size());
+        ASSERT_EQ(into.threads.size(), value.threads.size());
+        ASSERT_EQ(into.threads[0].zones.size(), value.threads[0].zones.size());
+        for (size_t i = 0; i < value.threads[0].zones.size(); ++i) {
+            EXPECT_EQ(into.threads[0].zones[i].site, value.threads[0].zones[i].site);
+            EXPECT_EQ(into.threads[0].zones[i].beginTicks, value.threads[0].zones[i].beginTicks);
+            EXPECT_EQ(into.threads[0].zones[i].endTicks, value.threads[0].zones[i].endTicks);
+        }
+        ring.Snapshot(into);  // a second refill adds nothing to the first
+        EXPECT_EQ(into.frames.size(), value.frames.size());
+        EXPECT_EQ(into.threads.size(), value.threads.size());
+        EXPECT_EQ(into.threads[0].zones.size(), value.threads[0].zones.size());
+    }
+
+    TEST(FrameRingTest, ARefillLeavesNoThreadOrZoneOfTheContentBefore) {
+        FrameRingBackend busy(ManualOptions());
+        RecordZone(busy, kOuterSite, 1, 2);
+        std::thread other([&] { RecordZone(busy, kInnerSite, 3, 4); });
+        other.join();
+        RingSnapshot into;
+        busy.Snapshot(into);
+        ASSERT_EQ(into.threads.size(), 2u);
+
+        FrameRingBackend quiet(ManualOptions());
+        RecordZone(quiet, kLeafSite, 5, 6);
+        quiet.Snapshot(into);
+        ASSERT_EQ(into.threads.size(), 1u);
+        ASSERT_EQ(into.threads[0].zones.size(), 1u);
+        EXPECT_EQ(into.threads[0].zones[0].site, &kLeafSite);
+
+        FrameRingBackend empty(ManualOptions());
+        empty.Snapshot(into);
+        EXPECT_TRUE(into.threads.empty());
+        EXPECT_TRUE(into.frames.empty());
+    }
+
+    TEST(FrameRingTest, ARefillKeepsTheCapacityOfTheZoneLists) {
+        constexpr uint32_t kZones = 40;
+        FrameRingBackend ring(ManualOptions());
+        for (uint32_t i = 0; i < kZones; ++i) {
+            RecordZone(ring, kLeafSite, 10 + 2 * i, 11 + 2 * i);
+        }
+        RingSnapshot into;
+        ring.Snapshot(into);
+        ASSERT_EQ(into.threads.size(), 1u);
+        ASSERT_EQ(into.threads[0].zones.size(), size_t{kZones});
+        const ZoneRecord* storage = into.threads[0].zones.data();
+        const size_t capacity = into.threads[0].zones.capacity();
+
+        ring.Snapshot(into);  // the same window
+        EXPECT_EQ(into.threads[0].zones.data(), storage);
+
+        g_manualTick = 1000;
+        EXPECT_TRUE(ring.Start());  // the whole window is copied and then cut to the epoch: nothing is left, the storage stays
+        ring.Snapshot(into);
+        ASSERT_EQ(into.threads.size(), 1u);
+        EXPECT_TRUE(into.threads[0].zones.empty());
+        EXPECT_EQ(into.threads[0].zones.data(), storage);
+        EXPECT_EQ(into.threads[0].zones.capacity(), capacity);
+    }
+
+    TEST(FrameRingTest, AReusedSnapshotHoldsNoZoneOfAnEarlierEpoch) {
+        FrameRingBackend ring(ManualOptions());
+        RecordZone(ring, kOuterSite, 1, 2);
+        RecordZone(ring, kOuterSite, 3, 4);
+        RingSnapshot into;
+        ring.Snapshot(into);
+        ASSERT_EQ(into.threads[0].zones.size(), 2u);
+
+        g_manualTick = 100;
+        EXPECT_TRUE(ring.Start());
+        RecordZone(ring, kInnerSite, 101, 102);
+        ring.Snapshot(into);
+        ASSERT_EQ(into.threads.size(), 1u);
+        ASSERT_EQ(into.threads[0].zones.size(), 1u);
+        EXPECT_EQ(into.threads[0].zones[0].site, &kInnerSite);
     }
 
     // ---- The ring beside the primary backend (Profiler::SetRingEnabled) ----

@@ -35,7 +35,7 @@ namespace BECore::Fuzz {
      * @brief The same bytes under a header that is true (magic, version, payload size)
      *
      * Any change of the length breaks the payload size of a binary stream, and the load stops at the header, before the checks that matter: a target
-     * that reads a binary stream feeds the repaired bytes too. Empty when there is no room for a header.
+     * that reads a binary stream feeds the repaired bytes too. The version is kept when it is 1, the current one otherwise. Empty when there is no room for a header.
      */
     Vector<uint8_t> WithTrueBinaryHeader(const uint8_t* data, size_t size);
 
