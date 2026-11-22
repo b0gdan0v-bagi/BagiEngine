@@ -275,6 +275,85 @@ def test_another_failure_of_the_write_stays_as_it_is(tmp_path, monkeypatch, caps
     assert code == 1 and "the service does not answer" in err and "missing right" not in err
 
 
+def measure_report(tmp_path, monkeypatch, value: str = "5") -> tuple[Path, Path, Path]:
+    """A plain run of area `engine` with --json; returns the rules, the report and the marker of a measurement."""
+    marker = tmp_path / "measured.txt"
+    bench_set = {
+        "area": "engine",
+        "preset": "none",
+        "repetitions": 2,
+        "benchmarks": [
+            {
+                "name": "fake",
+                "warmup": 0,
+                "command": ["{python}", "-c", f"open({str(marker)!r}, 'a').close(); print('{{\"ms\": {value}}}')"],
+                "metrics": {"ms": {"source": "json", "key": "ms", "unit": "ms", "better": "lower"}},
+            }
+        ],
+    }
+    rules = write_rules(tmp_path / "perf-project.md", bench_set)
+    report = tmp_path / "report.json"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["perf.py", "--rules", str(rules), "--no-build", "--baseline-file", str(tmp_path / "none.md"), "--json", str(report)])
+    assert perf.main() == 0
+    marker.unlink()
+    return rules, report, marker
+
+
+def record_report(monkeypatch, rules: Path, report: Path, *extra: str) -> int:
+    monkeypatch.setattr(sys, "argv", ["perf.py", "--rules", str(rules), "--update-baseline", "--from-report", str(report), "--allow-dirty", *extra])
+    return perf.main()
+
+
+def test_a_report_is_recorded_without_measuring_again(tmp_path, monkeypatch, fake_store):
+    rules, report, marker = measure_report(tmp_path, monkeypatch, "7")
+    baseline = tmp_path / "local.md"
+    assert record_report(monkeypatch, rules, report, "--baseline-file", str(baseline)) == 0
+    assert not marker.exists()
+    record = perf_baseline.latest_record(baseline.read_text(encoding="utf-8"))
+    assert record["benchmarks"]["fake"]["metrics"]["ms"]["samples"] == [7.0, 7.0]
+
+
+def test_recording_a_report_checks_the_area_of_the_token(tmp_path, monkeypatch, capsys, fake_store):
+    rules, report, _ = measure_report(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_TODO_AREAS", "match3")
+    assert record_report(monkeypatch, rules, report) == 1
+    assert "not `engine`" in capsys.readouterr().err and "put" not in fake_store.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "change, message",
+    [
+        (lambda data: data["machine"].update(cores=999), "another machine"),
+        (lambda data: data.update(area="match3"), "area match3"),
+        (lambda data: data["results"]["fake"]["metrics"].pop("ms"), "not in the set as it is now"),
+        (lambda data: data.pop("results"), "without its samples"),
+    ],
+)
+def test_a_report_that_does_not_fit_is_refused(tmp_path, monkeypatch, capsys, fake_store, change, message):
+    rules, report, _ = measure_report(tmp_path, monkeypatch)
+    data = json.loads(report.read_text(encoding="utf-8"))
+    change(data)
+    report.write_text(json.dumps(data), encoding="utf-8")
+    assert record_report(monkeypatch, rules, report, "--baseline-file", str(tmp_path / "local.md")) == 1
+    assert message in capsys.readouterr().err and not (tmp_path / "local.md").exists()
+
+
+def test_a_dirty_report_needs_allow_dirty(tmp_path, monkeypatch, capsys, fake_store):
+    rules, report, _ = measure_report(tmp_path, monkeypatch)
+    data = json.loads(report.read_text(encoding="utf-8"))
+    data["results"]["fake"]["commit"] = "abc1234-dirty"
+    report.write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["perf.py", "--rules", str(rules), "--update-baseline", "--from-report", str(report), "--baseline-file", str(tmp_path / "local.md")])
+    assert perf.main() == 1 and "uncommitted changes" in capsys.readouterr().err
+
+
+def test_a_report_is_recorded_whole(tmp_path, monkeypatch, capsys, fake_store):
+    rules, report, _ = measure_report(tmp_path, monkeypatch)
+    assert record_report(monkeypatch, rules, report, "--only", "fake") == 1
+    assert "--update-baseline alone" in capsys.readouterr().err
+
+
 def test_a_failed_run_keeps_the_end_of_stdout_and_writes_the_whole_output(tmp_path):
     # gtest prints its list of failures last on stdout while the engine logs to stderr: a shared tail lost the name of the failed test
     script = "import sys; print('[  FAILED  ] Suite.Case'); sys.stderr.write('log line\\n' * 2000); sys.exit(1)"

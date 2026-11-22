@@ -15,7 +15,8 @@ The benchmark runner of the skills `perf` and `perf-investigate` (`.claude/skill
 ```bash
 python3 <engine>/tools/perf/perf.py --list                   # from the root of the repository whose set is meant
 python3 <engine>/tools/perf/perf.py [--fast] [--only a,b] [--repetitions N] [--no-build] [--json FILE]
-python3 <engine>/tools/perf/perf.py --update-baseline [--env-file F]  # the owner's word only (the skill asks)
+python3 <engine>/tools/perf/perf.py --update-baseline [--env-file F]  # the owner's word only (the skill asks): measures, then writes
+python3 <engine>/tools/perf/perf.py --update-baseline --from-report FILE   # the owner's word only: writes the run of a --json report
 python3 <engine>/tools/perf/perf.py --trace NAME [--trace-file F]   # the profile preset, one run with a trace (build/perf/), its summary
 python3 <engine>/tools/perf/stress_frames.py --exe build/macos-release/bin/BagiStress --scene sprites --count 5000 --frames 300 --warmup 30   # or --ramp
 python3 <engine>/tools/perf/trace_summary.py trace.json [--top N] [--json]
@@ -49,7 +50,9 @@ Each metric: the mean of the repetitions and the half-width of its 95 % interval
 
 A plan of the todo store, one per area and machine, without an entry and of kind `owner` (the store has no kind of its own for it; the name `perf-baseline-*.md` tells it apart). The machine is named by a fingerprint (model, CPU, cores, memory, OS and its major version); the slug of the plan name keeps model, cores and OS (`mac16-7-14c-macos26`). Each `--update-baseline` appends a section (the date, the commits, the preset) with a fenced JSON record; the last record is the baseline, the ones above are its history. A record holds every benchmark of the area, each with the commit it was measured on and its samples, so updating a few keeps the others. The commit is `<repo>[-dirty]` (changes to tracked files; untracked ones do not count) plus `+engine-<commit>[-dirty]` in a game; `--update-baseline` refuses a dirty tree unless `--allow-dirty`. `--baseline-file F` uses a local file instead of the store (tests, offline).
 
-A token reads and writes the baselines of the areas it holds. `--update-baseline` checks that with `todo.py ping` before it builds or measures, because the numbers of a run are never written later: a token without the set's `area` stops at once, naming the area and the ways out (`--env-file F` with a token that holds it, or `--baseline-file`). A refusal of the write itself is reported as a missing right.
+A token reads and writes the baselines of the areas it holds. `--update-baseline` checks that with `todo.py ping` before it builds or measures, so a run is not spent on a baseline the token cannot write: a token without the set's `area` stops at once, naming the area and the ways out (`--env-file F` with a token that holds it, or `--baseline-file`). A refusal of the write itself is reported as a missing right.
+
+**A run the owner has seen** is recorded without measuring again: the `--json` report carries the samples (`results`), and `--update-baseline --from-report FILE` writes them, each benchmark with the commit it was measured on. The owner decides on the numbers the report showed, so they are the numbers written. A report is refused when it was measured on another machine, for another area or preset, of a benchmark or metric list the set no longer has (the set changed since), or with uncommitted changes (`--allow-dirty`); a report of an older runner (no `results`) too. It is the whole report or nothing: `--only`, `--fast`, `--repetitions` do not go with it.
 
 ## Caveats
 
