@@ -4,6 +4,7 @@
 #include <BECore/Values/Programs/Domain/ProgramDomain.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
+#include <Common/Wait.h>
 #include <Generated/ProgramDomainTypes.gen.hpp>
 #include <atomic>
 #include <gtest/gtest.h>
@@ -308,6 +309,8 @@ namespace BECore::Tests {
                 lookups.fetch_add(1);
             }
         });
+        // The registrations take less time than a thread start on a loaded machine: without the wait the reader could look only after the last one
+        EXPECT_TRUE(WaitUntil([&] { return lookups.load() > 0; })) << "the reader did not start";
         for (int32_t i = 0; i < kRegistrations; ++i) {
             static_cast<void>(Require(ProgramDomain::AddOperation<&BitsAny>(Format("{}_{}", stem, i))));
         }
