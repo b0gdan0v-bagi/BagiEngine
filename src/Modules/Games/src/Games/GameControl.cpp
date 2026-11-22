@@ -32,12 +32,12 @@ namespace BECore {
             return ActiveGame{game, control};
         }
 
-        /// {"game": name, "version": state version}: what every answer about the active game starts with
-        Json DescribeGame(const ActiveGame& active) {
-            Json result = Json::object();
-            result["game"] = MakeJsonString(active.game->GetName().ToStringView());
-            result["version"] = active.control->GetStateVersion();
-            return result;
+        /// {"game": name, "version": state version}: the answer of a call that changed the active game and says nothing else
+        void WriteGame(JsonWriter& writer, const ActiveGame& active) {
+            writer.BeginObject();
+            writer.Member("game", active.game->GetName().ToStringView());
+            writer.Member("version", active.control->GetStateVersion());
+            writer.EndObject();
         }
 
         /**
@@ -67,11 +67,20 @@ namespace BECore {
                     return;
                 }
 
-                Json data = DescribeGame(*active);
-                if (auto state = active->control->GetState()) {
-                    data["state"] = std::move(*state);
-                }
-                _service.Publish(GameControlEvents::kStateChanged, data);
+                // The state is written first, apart: a state that fails leaves `state` out of the push, and a writer cannot be rewound after a partial write
+                _state.clear();
+                JsonWriter stateWriter(_state);
+                const bool hasState = active->control->WriteState(stateWriter).has_value() && stateWriter.IsComplete();
+                _service.Publish(GameControlEvents::kStateChanged, [&](JsonWriter& writer) {
+                    writer.BeginObject();
+                    writer.Member("game", active->game->GetName().ToStringView());
+                    if (hasState) {
+                        writer.Key("state");
+                        writer.Raw(_state);
+                    }
+                    writer.Member("version", version);
+                    writer.EndObject();
+                });
             }
 
         private:
@@ -82,36 +91,46 @@ namespace BECore {
 
             ControlService& _service;
             Optional<Seen> _seen;
+            String _state;  // the text of the state being pushed; keeps its capacity
         };
 
-        /// `get_state` as a value: {"game", "version", "state"}
+        /// `get_state` as a value: {"game", "version", "state"}. The one document of the game methods that stays a `Json`: the `pointer` of `run_until` is a
+        /// JSON Pointer that is evaluated against it
         std::expected<Json, ControlError> DescribeState(const ActiveGame& active) {
             auto state = active.control->GetState();
             if (!state) {
                 return std::unexpected(state.error());
             }
-            Json result = DescribeGame(active);
+            Json result = Json::object();
+            result["game"] = MakeJsonString(active.game->GetName().ToStringView());
             result["state"] = std::move(*state);
+            result["version"] = active.control->GetStateVersion();
             return result;
         }
 
         void HandleListGames(ControlCall& call) {
             const GameManager& manager = GameManager::GetInstance();
-
-            Json games = Json::array();
-            for (const IntrusivePtr<IGame>& game : manager.GetAll()) {
-                Json entry = Json::object();
-                entry["name"] = MakeJsonString(game->GetName().ToStringView());
-                entry["scene"] = MakeJsonString(game->GetSceneName().ToStringView());
-                entry["controllable"] = game->AsControllable() != nullptr;
-                games.push_back(std::move(entry));
-            }
-
             const IGame* active = manager.GetActive();
-            Json result = Json::object();
-            result["active"] = active != nullptr ? MakeJsonString(active->GetName().ToStringView()) : Json();
-            result["games"] = std::move(games);
-            call.Reply(std::move(result));
+            call.Reply([&](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Key("active");
+                if (active != nullptr) {
+                    writer.Value(active->GetName().ToStringView());
+                } else {
+                    writer.Null();
+                }
+                writer.Key("games");
+                writer.BeginArray();
+                for (const IntrusivePtr<IGame>& game : manager.GetAll()) {
+                    writer.BeginObject();
+                    writer.Member("controllable", game->AsControllable() != nullptr);
+                    writer.Member("name", game->GetName().ToStringView());
+                    writer.Member("scene", game->GetSceneName().ToStringView());
+                    writer.EndObject();
+                }
+                writer.EndArray();
+                writer.EndObject();
+            });
         }
 
         void HandleSwitchGame(ControlCall& call) {
@@ -131,9 +150,11 @@ namespace BECore {
                         SessionRecorder::GetInstance().Stop();
                     }
                     manager.SwitchTo(game->GetName());
-                    Json result = Json::object();
-                    result["active"] = MakeJsonString(game->GetName().ToStringView());
-                    call.Reply(std::move(result));
+                    call.Reply([&](JsonWriter& writer) {
+                        writer.BeginObject();
+                        writer.Member("active", game->GetName().ToStringView());
+                        writer.EndObject();
+                    });
                     return;
                 }
             }
@@ -150,9 +171,11 @@ namespace BECore {
             IControllableGame* control = game->AsControllable();
             if (control == nullptr) {
                 GameManager::GetInstance().ResetActive();
-                Json result = Json::object();
-                result["game"] = MakeJsonString(game->GetName().ToStringView());
-                call.Reply(std::move(result));
+                call.Reply([&](JsonWriter& writer) {
+                    writer.BeginObject();
+                    writer.Member("game", game->GetName().ToStringView());
+                    writer.EndObject();
+                });
                 return;
             }
 
@@ -160,7 +183,7 @@ namespace BECore {
                 call.Fail(reset.error());
                 return;
             }
-            call.Reply(DescribeGame(ActiveGame{game, control}));
+            call.Reply([&](JsonWriter& writer) { WriteGame(writer, ActiveGame{game, control}); });
         }
 
         void HandleGetState(ControlCall& call) {
@@ -169,12 +192,18 @@ namespace BECore {
                 call.Fail(active.error());
                 return;
             }
-            auto state = DescribeState(*active);
-            if (!state) {
-                call.Fail(state.error());
-                return;
-            }
-            call.Reply(std::move(*state));
+            const uint64_t version = active->control->GetStateVersion();
+            call.TryReply([&](JsonWriter& writer) -> std::expected<void, ControlError> {
+                writer.BeginObject();
+                writer.Member("game", active->game->GetName().ToStringView());
+                writer.Key("state");
+                if (auto written = active->control->WriteState(writer); !written) {
+                    return written;
+                }
+                writer.Member("version", version);
+                writer.EndObject();
+                return {};
+            });
         }
 
         void HandleListActions(ControlCall& call) {
@@ -183,14 +212,18 @@ namespace BECore {
                 call.Fail(active.error());
                 return;
             }
-            auto actions = active->control->GetActions();
-            if (!actions) {
-                call.Fail(actions.error());
-                return;
-            }
-            Json result = DescribeGame(*active);
-            result["actions"] = std::move(*actions);
-            call.Reply(std::move(result));
+            const uint64_t version = active->control->GetStateVersion();
+            call.TryReply([&](JsonWriter& writer) -> std::expected<void, ControlError> {
+                writer.BeginObject();
+                writer.Key("actions");
+                if (auto written = active->control->WriteActions(writer); !written) {
+                    return written;
+                }
+                writer.Member("game", active->game->GetName().ToStringView());
+                writer.Member("version", version);
+                writer.EndObject();
+                return {};
+            });
         }
 
         void HandlePerformAction(ControlCall& call) {
@@ -204,9 +237,15 @@ namespace BECore {
                 call.Fail(outcome.error());
                 return;
             }
-            Json result = DescribeGame(*active);  // the version after the action
-            result["outcome"] = std::move(*outcome);
-            call.Reply(std::move(result));
+            // The version is read inside the writer, after the action
+            call.Reply([&](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Member("game", active->game->GetName().ToStringView());
+                writer.Key("outcome");
+                WriteJson(writer, *outcome);
+                writer.Member("version", active->control->GetStateVersion());
+                writer.EndObject();
+            });
         }
 
         void HandleSetState(ControlCall& call) {
@@ -219,7 +258,7 @@ namespace BECore {
                 call.Fail(loaded.error());
                 return;
             }
-            call.Reply(DescribeGame(*active));
+            call.Reply([&](JsonWriter& writer) { WriteGame(writer, *active); });
         }
 
         constexpr uint32_t kDefaultRunUntilFrames = 600;
@@ -386,17 +425,25 @@ namespace BECore {
         }
 
         /// {met, frames, reason?, game?, version?} and the clock of `step`; the game is left out when none can be read (an `event` wait needs none)
-        Json DescribeRunUntil(const RunUntilState& state, Optional<StringView> reason) {
-            Json result = DescribeControlClock();
-            result["met"] = reason.has_value();
-            result["frames"] = state.frames;
-            if (reason) {
-                result["reason"] = MakeJsonString(*reason);
-            }
-            if (const auto active = FindActiveControllable()) {
-                result.update(DescribeGame(*active));
-            }
-            return result;
+        void WriteRunUntil(JsonWriter& writer, const RunUntilState& state, Optional<StringView> reason) {
+            const auto active = FindActiveControllable();
+            WriteControlClockWith(
+                writer,
+                [&](JsonWriter& members) {
+                    members.Member("frames", state.frames);
+                    if (active) {
+                        members.Member("game", active->game->GetName().ToStringView());
+                    }
+                    members.Member("met", reason.has_value());
+                    if (reason) {
+                        members.Member("reason", *reason);
+                    }
+                },
+                [&](JsonWriter& members) {
+                    if (active) {
+                        members.Member("version", active->control->GetStateVersion());
+                    }
+                });
         }
 
         /// Checks the condition, then answers or waits for one more frame; every frame is a barrier frame of its own, like a `step`
@@ -407,7 +454,7 @@ namespace BECore {
                 return;
             }
             if (*met || state->frames >= state->maxFrames) {
-                call.Reply(DescribeRunUntil(*state, *met));
+                call.Reply([&](JsonWriter& writer) { WriteRunUntil(writer, *state, *met); });
                 return;
             }
 

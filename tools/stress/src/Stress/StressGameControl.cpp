@@ -1,6 +1,7 @@
 #include "StressGameControl.h"
 
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonWriter.h>
 
 namespace BECore::Stress {
 
@@ -65,6 +66,69 @@ namespace BECore::Stress {
             return shown;
         }
 
+        /**
+         * Tells @p visitor each listed action in the order of the list: OnScene(StressScene), OnCount(uint32_t), OnLanguage(StressLanguage). The one
+         * place that decides what is listed, so the Json and the writing form cannot drift apart.
+         */
+        template <typename TVisitor>
+        void VisitActions(const StressState& state, TVisitor& visitor) {
+            for (const StressScene scene : EnumUtils<StressScene>::Values()) {
+                if (scene != state.GetScene()) {
+                    visitor.OnScene(scene);
+                }
+            }
+
+            const uint32_t count = state.GetCount();
+            const uint32_t half = count / 2;
+            const uint64_t twice = static_cast<uint64_t>(count) * 2;
+            if (half >= 1 && half != count) {
+                visitor.OnCount(half);
+            }
+            if (count >= 1 && twice <= kMaxCount) {
+                visitor.OnCount(static_cast<uint32_t>(twice));
+            }
+
+            visitor.OnLanguage(state.GetLanguage() == StressLanguage::En ? StressLanguage::Ru : StressLanguage::En);
+        }
+
+        struct ActionsToJson {
+            void OnScene(StressScene scene) {
+                actions.push_back(DescribeAction(kSetScene, "scene", MakeJsonString(ToFlagValue(scene))));
+            }
+            void OnCount(uint32_t count) {
+                actions.push_back(DescribeAction(kSetCount, "count", count));
+            }
+            void OnLanguage(StressLanguage language) {
+                actions.push_back(DescribeAction(kSetLanguage, "language", MakeJsonString(ToFlagValue(language))));
+            }
+
+            Json actions = Json::array();
+        };
+
+        /// An action is an object with its keys in alphabetical order: the argument, then `type`
+        struct ActionsToWriter {
+            void OnScene(StressScene scene) {
+                writer.BeginObject();
+                writer.Member("scene", ToFlagValue(scene));
+                writer.Member("type", kSetScene);
+                writer.EndObject();
+            }
+            void OnCount(uint32_t count) {
+                writer.BeginObject();
+                writer.Member("count", count);
+                writer.Member("type", kSetCount);
+                writer.EndObject();
+            }
+            void OnLanguage(StressLanguage language) {
+                writer.BeginObject();
+                writer.Member("language", ToFlagValue(language));
+                writer.Member("type", kSetLanguage);
+                writer.EndObject();
+            }
+
+            JsonWriter& writer;
+        };
+
     }  // namespace
 
     StressGameControl::StressGameControl(StressState& state, MoveOnlyFunction<void()> onSceneChanged) : _state(state), _onSceneChanged(std::move(onSceneChanged)) {}
@@ -87,26 +151,33 @@ namespace BECore::Stress {
     }
 
     std::expected<Json, ControlError> StressGameControl::GetActions() const {
-        Json actions = Json::array();
+        ActionsToJson visitor;
+        VisitActions(_state, visitor);
+        return std::move(visitor.actions);
+    }
+
+    std::expected<void, ControlError> StressGameControl::WriteState(JsonWriter& writer) const {
+        writer.BeginObject();
+        writer.Member("count", _state.GetCount());
+        writer.Member("language", ToFlagValue(_state.GetLanguage()));
+        writer.Member("maxCount", kMaxCount);
+        writer.Member("scene", ToFlagValue(_state.GetScene()));
+        writer.Key("scenes");
+        writer.BeginArray();
         for (const StressScene scene : EnumUtils<StressScene>::Values()) {
-            if (scene != _state.GetScene()) {
-                actions.push_back(DescribeAction(kSetScene, "scene", MakeJsonString(ToFlagValue(scene))));
-            }
+            writer.Value(ToFlagValue(scene));
         }
+        writer.EndArray();
+        writer.EndObject();
+        return {};
+    }
 
-        const uint32_t count = _state.GetCount();
-        const uint32_t half = count / 2;
-        const uint64_t twice = static_cast<uint64_t>(count) * 2;
-        if (half >= 1 && half != count) {
-            actions.push_back(DescribeAction(kSetCount, "count", half));
-        }
-        if (count >= 1 && twice <= kMaxCount) {
-            actions.push_back(DescribeAction(kSetCount, "count", static_cast<uint32_t>(twice)));
-        }
-
-        const StressLanguage other = _state.GetLanguage() == StressLanguage::En ? StressLanguage::Ru : StressLanguage::En;
-        actions.push_back(DescribeAction(kSetLanguage, "language", MakeJsonString(ToFlagValue(other))));
-        return actions;
+    std::expected<void, ControlError> StressGameControl::WriteActions(JsonWriter& writer) const {
+        writer.BeginArray();
+        ActionsToWriter visitor{writer};
+        VisitActions(_state, visitor);
+        writer.EndArray();
+        return {};
     }
 
     std::expected<Json, ControlError> StressGameControl::PerformAction(const Json& action) {

@@ -12,6 +12,10 @@ namespace BECore {
 
 #if defined(_WIN32)
 
+#if BE_PROFILER_ALLOC && defined(_DEBUG)
+#error "ENGINE_PROFILER_ALLOC reads the block header of the release CRT's _aligned_malloc (AllocPlatform::UsableSize); the Debug CRT lays its blocks out differently. Use a release-runtime preset."
+#endif
+
     namespace {
 
         /// Every block is _aligned_malloc memory, so _aligned_free is right for each whatever operator delete frees it
@@ -32,8 +36,9 @@ namespace BECore {
     }
 
     size_t AllocPlatform::UsableSize(void* ptr) {
-        // _aligned_msize needs the alignment, which is not kept. The CRT keeps the pointer of the underlying malloc block in the word
-        // in front of an aligned block (what _aligned_free and _aligned_msize read); its _msize is the block with the padding
+        // _aligned_msize needs the alignment, which is not kept. The release CRT keeps the pointer of the underlying malloc block in
+        // the word in front of an aligned block (what _aligned_free and _aligned_msize read); its _msize is the block with the
+        // padding. The Debug CRT puts a debug header and guard bytes around the block instead, so this read is refused for it above.
         void* const* header = static_cast<void* const*>(ptr) - 1;
         return _msize(*header);
     }

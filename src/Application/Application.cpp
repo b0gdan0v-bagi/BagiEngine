@@ -191,7 +191,7 @@ namespace BECore {
         request["params"] = Json::object({{"path", MakeJsonString(path)}});
 
         // Answered on the main thread, from a frame or from Shutdown(); the application outlives the control service
-        CoreManager::GetControlService().Post(DumpJson(request), [this, quitWhenDone](String text) {
+        CoreManager::GetControlService().Post(DumpJson(request), [this, quitWhenDone](const String& text) {
             const auto answer = ParseJson(text);
             const Json* result = answer ? FindJsonMember(*answer, "result") : nullptr;
             const Json* error = answer ? FindJsonMember(*answer, "error") : nullptr;

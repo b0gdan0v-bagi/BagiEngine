@@ -220,11 +220,18 @@ namespace BECore {
             return ClientMessage(std::move(message));
         }
 
-        [[nodiscard]] Json MakeEnvelope(StringView type) {
-            Json root = Json::object();
-            root["v"] = kRoomProtocolVersion;
-            root["type"] = MakeJsonString(type);
-            return root;
+        /// `type` and `v` are written where alphabetical order puts them, in the middle of each message, so each function writes its members around this
+        void WriteTypeAndVersion(JsonWriter& writer, StringView type) {
+            writer.Member("type", type);
+            writer.Member("v", kRoomProtocolVersion);
+        }
+
+        /// `options` of `lobby` and of a `rooms` listing: not written unless it is a non-empty object
+        void WriteOptionsMember(JsonWriter& writer, const Json& options) {
+            if (options.is_object() && !options.empty()) {
+                writer.Key("options");
+                WriteJson(writer, options);
+            }
         }
 
         [[nodiscard]] Optional<RoomPhase> ParsePhaseName(StringView name) {
@@ -596,37 +603,55 @@ namespace BECore {
                           message);
     }
 
-    String SerializeClientMessage(const ClientMessage& message) {
-        Json root = MakeEnvelope(GetClientMessageType(message));
+    void AppendClientMessage(String& out, const ClientMessage& message) {
+        const StringView type = GetClientMessageType(message);
+        JsonWriter writer(out);
+        writer.BeginObject();
         std::visit(overload{
                        [&](const CreateRoomMessage& m) {
-                           root["game"] = MakeJsonString(m.game);
-                           root["name"] = MakeJsonString(m.name);
-                           root["options"] = m.options;
+                           writer.Member("game", m.game);
+                           writer.Member("name", m.name);
+                           writer.Key("options");
+                           WriteJson(writer, m.options);
                            if (m.isPublic) {
-                               root["public"] = true;
+                               writer.Member("public", true);
                            }
+                           WriteTypeAndVersion(writer, type);
                        },
                        [&](const JoinRoomMessage& m) {
-                           root["code"] = MakeJsonString(m.code);
+                           writer.Member("code", m.code);
                            if (m.IsReconnect()) {
-                               root["token"] = MakeJsonString(m.token);
+                               writer.Member("token", m.token);
                            } else {
-                               root["name"] = MakeJsonString(m.name);
+                               writer.Member("name", m.name);
                            }
+                           WriteTypeAndVersion(writer, type);
                        },
-                       [&](const ChooseSeatMessage& m) { root["seat"] = m.seat; },
+                       [&](const ChooseSeatMessage& m) {
+                           writer.Member("seat", m.seat);
+                           WriteTypeAndVersion(writer, type);
+                       },
                        [&](const ActionMessage& m) {
-                           root["version"] = m.version;
-                           root["action"] = m.action;
+                           writer.Key("action");
+                           WriteJson(writer, m.action);
+                           WriteTypeAndVersion(writer, type);
+                           writer.Member("version", m.version);
                        },
-                       [](const StartMessage&) {},
-                       [](const LeaveMessage&) {},
-                       [](const PingMessage&) {},
-                       [&](const ListRoomsMessage& m) { root["game"] = MakeJsonString(m.game); },
+                       [&](const ListRoomsMessage& m) {
+                           writer.Member("game", m.game);
+                           WriteTypeAndVersion(writer, type);
+                       },
+                       [&](const auto&) { WriteTypeAndVersion(writer, type); },
                    },
                    message);
-        return DumpJson(root);
+        writer.EndObject();
+        EXPECT(writer.IsComplete());
+    }
+
+    String SerializeClientMessage(const ClientMessage& message) {
+        String out;
+        AppendClientMessage(out, message);
+        return out;
     }
 
     Optional<String> SanitizePlayerName(StringView text) {
@@ -658,90 +683,156 @@ namespace BECore {
         return String(text.data() + first, length);
     }
 
+    void AppendJoinedMessage(String& out, StringView room, PlayerId player, StringView token, int seat, bool host) {
+        JsonWriter writer(out);
+        writer.BeginObject();
+        writer.Member("host", host);
+        writer.Member("player", player);
+        writer.Member("room", room);
+        writer.Member("seat", seat);
+        writer.Member("token", token);
+        WriteTypeAndVersion(writer, RoomMessageTypes::kJoined);
+        writer.EndObject();
+        EXPECT(writer.IsComplete());
+    }
+
     String MakeJoinedMessage(StringView room, PlayerId player, StringView token, int seat, bool host) {
-        Json root = MakeEnvelope(RoomMessageTypes::kJoined);
-        root["room"] = MakeJsonString(room);
-        root["player"] = player;
-        root["token"] = MakeJsonString(token);
-        root["seat"] = seat;
-        root["host"] = host;
-        return DumpJson(root);
+        String out;
+        AppendJoinedMessage(out, room, player, token, seat, host);
+        return out;
+    }
+
+    void AppendLobbyMessage(String& out, const LobbySnapshot& lobby) {
+        JsonWriter writer(out);
+        writer.BeginObject();
+        writer.Member("game", lobby.game);
+        writer.Member("host", lobby.hostSeat);
+        WriteOptionsMember(writer, lobby.options);
+        writer.Member("phase", GetPhaseName(lobby.phase));
+        writer.Member("room", lobby.room);
+        writer.Key("seats");
+        writer.BeginArray();
+        for (const LobbySeat& seat : lobby.seats) {
+            writer.BeginObject();
+            if (seat.kind == SeatKind::Human) {
+                writer.Member("connected", seat.connected);
+            }
+            writer.Member("kind", GetSeatKindName(seat.kind));
+            if (seat.kind == SeatKind::Human) {
+                writer.Member("name", seat.name);
+            }
+            writer.Member("seat", seat.seat);
+            writer.EndObject();
+        }
+        writer.EndArray();
+        WriteTypeAndVersion(writer, RoomMessageTypes::kLobby);
+        writer.EndObject();
+        EXPECT(writer.IsComplete());
     }
 
     String MakeLobbyMessage(const LobbySnapshot& lobby) {
-        Json root = MakeEnvelope(RoomMessageTypes::kLobby);
-        root["room"] = MakeJsonString(lobby.room);
-        root["game"] = MakeJsonString(lobby.game);
-        root["phase"] = MakeJsonString(GetPhaseName(lobby.phase));
-        root["host"] = lobby.hostSeat;
-        Json seats = Json::array();
-        for (const LobbySeat& seat : lobby.seats) {
-            Json entry = Json::object();
-            entry["seat"] = seat.seat;
-            entry["kind"] = MakeJsonString(GetSeatKindName(seat.kind));
-            if (seat.kind == SeatKind::Human) {
-                entry["name"] = MakeJsonString(seat.name);
-                entry["connected"] = seat.connected;
-            }
-            seats.push_back(std::move(entry));
+        String out;
+        AppendLobbyMessage(out, lobby);
+        return out;
+    }
+
+    void AppendRoomListMessage(String& out, const RoomListMessage& list) {
+        JsonWriter writer(out);
+        writer.BeginObject();
+        writer.Member("game", list.game);
+        writer.Member("more", list.more);
+        writer.Key("rooms");
+        writer.BeginArray();
+        for (const RoomListing& listing : list.rooms) {
+            writer.BeginObject();
+            writer.Member("host", listing.host);
+            WriteOptionsMember(writer, listing.options);
+            writer.Member("room", listing.room);
+            writer.Member("seats", listing.seats);
+            writer.Member("started", listing.started);
+            writer.Member("taken", listing.taken);
+            writer.EndObject();
         }
-        root["seats"] = std::move(seats);
-        if (lobby.options.is_object() && !lobby.options.empty()) {
-            root["options"] = lobby.options;
-        }
-        return DumpJson(root);
+        writer.EndArray();
+        WriteTypeAndVersion(writer, RoomMessageTypes::kRooms);
+        writer.EndObject();
+        EXPECT(writer.IsComplete());
     }
 
     String MakeRoomListMessage(const RoomListMessage& list) {
-        Json root = MakeEnvelope(RoomMessageTypes::kRooms);
-        root["game"] = MakeJsonString(list.game);
-        Json rooms = Json::array();
-        for (const RoomListing& listing : list.rooms) {
-            Json entry = Json::object();
-            entry["room"] = MakeJsonString(listing.room);
-            entry["host"] = MakeJsonString(listing.host);
-            entry["taken"] = listing.taken;
-            entry["seats"] = listing.seats;
-            entry["started"] = listing.started;
-            if (listing.options.is_object() && !listing.options.empty()) {
-                entry["options"] = listing.options;
-            }
-            rooms.push_back(std::move(entry));
-        }
-        root["rooms"] = std::move(rooms);
-        root["more"] = list.more;
-        return DumpJson(root);
+        String out;
+        AppendRoomListMessage(out, list);
+        return out;
+    }
+
+    void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions) {
+        JsonWriter writer(out);
+        writer.BeginObject();
+        writer.Key("actions");
+        WriteJson(writer, actions);
+        writer.Member("finished", finished);
+        writer.Member("room", room);
+        writer.Member("seat", seat);
+        WriteTypeAndVersion(writer, RoomMessageTypes::kView);
+        writer.Member("version", version);
+        writer.Key("view");
+        WriteJson(writer, view);
+        writer.EndObject();
+        EXPECT(writer.IsComplete());
     }
 
     String MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions) {
-        Json root = MakeEnvelope(RoomMessageTypes::kView);
-        root["room"] = MakeJsonString(room);
-        root["seat"] = seat;
-        root["version"] = version;
-        root["finished"] = finished;
-        root["view"] = view;
-        root["actions"] = actions;
-        return DumpJson(root);
+        String out;
+        AppendViewMessage(out, room, seat, version, finished, view, actions);
+        return out;
+    }
+
+    void AppendErrorMessage(String& out, StringView code, StringView message, StringView ref) {
+        JsonWriter writer(out);
+        writer.BeginObject();
+        writer.Member("code", code);
+        writer.Member("message", message);
+        if (!ref.empty()) {
+            writer.Member("ref", ref);
+        }
+        WriteTypeAndVersion(writer, RoomMessageTypes::kError);
+        writer.EndObject();
+        EXPECT(writer.IsComplete());
     }
 
     String MakeErrorMessage(StringView code, StringView message, StringView ref) {
-        Json root = MakeEnvelope(RoomMessageTypes::kError);
-        root["code"] = MakeJsonString(code);
-        root["message"] = MakeJsonString(message);
-        if (!ref.empty()) {
-            root["ref"] = MakeJsonString(ref);
-        }
-        return DumpJson(root);
+        String out;
+        AppendErrorMessage(out, code, message, ref);
+        return out;
+    }
+
+    void AppendLeftMessage(String& out, StringView reason) {
+        JsonWriter writer(out);
+        writer.BeginObject();
+        writer.Member("reason", reason);
+        WriteTypeAndVersion(writer, RoomMessageTypes::kLeft);
+        writer.EndObject();
+        EXPECT(writer.IsComplete());
     }
 
     String MakeLeftMessage(StringView reason) {
-        Json root = MakeEnvelope(RoomMessageTypes::kLeft);
-        root["reason"] = MakeJsonString(reason);
-        return DumpJson(root);
+        String out;
+        AppendLeftMessage(out, reason);
+        return out;
+    }
+
+    void AppendPongMessage(String& out) {
+        JsonWriter writer(out);
+        writer.BeginObject();
+        WriteTypeAndVersion(writer, RoomMessageTypes::kPong);
+        writer.EndObject();
+        EXPECT(writer.IsComplete());
     }
 
     String MakePongMessage() {
-        return DumpJson(MakeEnvelope(RoomMessageTypes::kPong));
+        String out;
+        AppendPongMessage(out);
+        return out;
     }
 
     std::expected<ServerMessage, ControlError> ParseServerMessage(StringView text, size_t maxBytes) {

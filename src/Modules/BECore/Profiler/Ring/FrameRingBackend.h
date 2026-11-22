@@ -57,6 +57,10 @@ namespace BECore {
         /// A copy of the window of every thread and of the frames (any thread; writers go on recording)
         [[nodiscard]] RingSnapshot Snapshot() const;
 
+        /// The same copy into @p into, which keeps the capacity of its vectors and names, so a caller that keeps it allocates nothing once
+        /// the window has been seen at its largest. Nothing of the previous content stays.
+        void Snapshot(RingSnapshot& into) const;
+
         /// Zones lost because there were too many threads or a zone was deeper than kMaxZoneDepth
         [[nodiscard]] uint64_t GetDroppedCount() const;
 

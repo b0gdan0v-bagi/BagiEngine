@@ -105,7 +105,11 @@ namespace BECore {
     /// The `type` of a parsed message
     [[nodiscard]] StringView GetClientMessageType(const ClientMessage& message);
 
-    /// The text a client sends for @p message (the inverse of ParseClientMessage; for clients and tests)
+    /// Appends the text a client sends for @p message to @p out, which is never cleared (the inverse of ParseClientMessage; for clients and tests).
+    /// The keys are in alphabetical order on purpose, as in the server messages below. An `options` or `action` is written as it is.
+    void AppendClientMessage(String& out, const ClientMessage& message);
+
+    /// The text of AppendClientMessage in a new String
     [[nodiscard]] String SerializeClientMessage(const ClientMessage& message);
 
     /**
@@ -167,26 +171,37 @@ namespace BECore {
         bool more = false;
     };
 
+    // Every Append*Message appends to @p out and never clears it, like AppendJson; Make*Message returns the same text in a new String. The keys of
+    // a message are in alphabetical order on purpose: those are the bytes the `Json` DOM wrote before, and a client of another language may
+    // rely on them, so a change of the order is a protocol decision of the owner.
+
     /// `joined {room, player, token, seat, host}`. The token is a secret: this message goes to its owner only.
+    void AppendJoinedMessage(String& out, StringView room, PlayerId player, StringView token, int seat, bool host);
     [[nodiscard]] String MakeJoinedMessage(StringView room, PlayerId player, StringView token, int seat, bool host);
 
     /// `lobby {room, game, phase, host, seats:[{seat, kind, name?, connected?}], options?}`; to every member when it changes
+    void AppendLobbyMessage(String& out, const LobbySnapshot& lobby);
     [[nodiscard]] String MakeLobbyMessage(const LobbySnapshot& lobby);
 
     /// `view {room, seat, version, finished, view, actions}`: what the game says the seat sees and may send now (no hidden information
-    /// of the others: the game's contract)
+    /// of the others: the game's contract). @p view and @p actions are written as they are, an @p actions that is no array too.
+    void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions);
     [[nodiscard]] String MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions);
 
     /// `rooms {game, rooms:[{room, host, taken, seats, started, options?}], more}`: the answer to `list_rooms`
+    void AppendRoomListMessage(String& out, const RoomListMessage& list);
     [[nodiscard]] String MakeRoomListMessage(const RoomListMessage& list);
 
     /// `error {code, message, ref?}`; @p ref is the type of the message it answers (left out when empty)
+    void AppendErrorMessage(String& out, StringView code, StringView message, StringView ref = {});
     [[nodiscard]] String MakeErrorMessage(StringView code, StringView message, StringView ref = {});
 
     /// `left {reason}`: the sender is no longer in the room
+    void AppendLeftMessage(String& out, StringView reason);
     [[nodiscard]] String MakeLeftMessage(StringView reason);
 
     /// `pong {}`
+    void AppendPongMessage(String& out);
     [[nodiscard]] String MakePongMessage();
 
     // ---- Server to client, read by a client -------------------------------------------------------------------------------------

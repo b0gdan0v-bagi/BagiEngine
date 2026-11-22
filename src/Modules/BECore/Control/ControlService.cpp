@@ -12,6 +12,46 @@ namespace BECore {
         /// A method name from a client is echoed in an error message; keep the message short
         constexpr size_t kMaxEchoedMethodLength = 64;
 
+        /// A reply buffer that grew past this (a screenshot as text) is released after its message, so one large answer does not keep its memory for good
+        constexpr size_t kMaxKeptScratchBytes = 1024 * 1024;
+
+        /// The buffer a message is written into: the service's scratch when it is free, else a local one (a send from inside a send). Marks the scratch busy
+        /// for the lease's life, so the text handed to a callback is never overwritten while the callback runs
+        class ScratchLease {
+        public:
+            ScratchLease(String& scratch, bool& busy) : _busy(busy), _usesScratch(!busy) {
+                if (_usesScratch) {
+                    _busy = true;
+                    scratch.clear();
+                    _text = &scratch;
+                } else {
+                    _text = &_local;
+                }
+            }
+
+            ~ScratchLease() {
+                if (_usesScratch) {
+                    _busy = false;
+                    if (_text->capacity() > kMaxKeptScratchBytes) {
+                        String().swap(*_text);
+                    }
+                }
+            }
+
+            ScratchLease(const ScratchLease&) = delete;
+            ScratchLease& operator=(const ScratchLease&) = delete;
+
+            [[nodiscard]] String& Text() {
+                return *_text;
+            }
+
+        private:
+            bool& _busy;
+            bool _usesScratch;
+            String _local;
+            String* _text = nullptr;
+        };
+
     }  // namespace
 
     struct ControlService::Request {
@@ -88,7 +128,23 @@ namespace BECore {
             }
         }
 
+        // The posting thread, not the main one: the reply buffer of the service is not its to use
         request->reply(MakeErrorResponse(request->id, MakeControlError(ControlErrors::kShuttingDown, "the application is shutting down")));
+    }
+
+    void ControlService::SendOk(ControlReplyFn& reply, const Json& id, WriteResultFn writeResult) {
+        ScratchLease lease(_replyScratch, _replyScratchBusy);
+        const std::expected<void, ControlError> written = TryAppendOkResponse(lease.Text(), id, writeResult);
+        if (!written) {
+            AppendErrorResponse(lease.Text(), id, written.error());
+        }
+        reply(lease.Text());
+    }
+
+    void ControlService::SendError(ControlReplyFn& reply, const Json& id, const ControlError& error) {
+        ScratchLease lease(_replyScratch, _replyScratchBusy);
+        AppendErrorResponse(lease.Text(), id, error);
+        reply(lease.Text());
     }
 
     void ControlService::RegisterHandler(StringView method, Handler handler, bool bypassBarrier) {
@@ -166,14 +222,65 @@ namespace BECore {
         if (!_eventSink) {
             return;
         }
-        Json message = Json::object();
-        message["event"] = MakeJsonString(event);
-        message["data"] = data;
 
         // The running sink is moved out like a running handler: it may set another sink, and its capture must live until it returns
         const uint64_t generation = _eventSinkGeneration;
         EventSink sink = std::move(_eventSink);
-        sink(DumpJson(message));
+        {
+            ScratchLease lease(_publishScratch, _publishScratchBusy);
+            JsonWriter writer(lease.Text());
+            writer.BeginObject();
+            writer.Key("data");
+            WriteJson(writer, data);
+            writer.Member("event", event);
+            writer.EndObject();
+            sink(lease.Text());
+        }
+        if (_eventSinkGeneration == generation) {
+            _eventSink = std::move(sink);
+        }
+    }
+
+    void ControlService::Publish(StringView event, FunctionRef<void(JsonWriter&)> writeData) {
+        const bool hasObservers = !_publishObservers.empty() && !_notifyingObservers;
+        if (!hasObservers && !_eventSink) {
+            return;
+        }
+
+        String observed;  // the data as text, written once for the observers and entered into the envelope with Raw
+        if (hasObservers) {
+            JsonWriter writer(observed);
+            writeData(writer);
+            EXPECT(writer.IsComplete(), "ControlService::Publish: the data is not one JSON value");
+            auto parsed = ParseJson(observed);
+            if (!writer.IsComplete() || !parsed) {
+                return;
+            }
+            NotifyPublishObservers(event, *parsed);
+            if (!_eventSink) {
+                return;
+            }
+        }
+
+        const uint64_t generation = _eventSinkGeneration;
+        EventSink sink = std::move(_eventSink);
+        {
+            ScratchLease lease(_publishScratch, _publishScratchBusy);
+            JsonWriter writer(lease.Text());
+            writer.BeginObject();
+            writer.Key("data");
+            if (hasObservers) {
+                writer.Raw(observed);
+            } else {
+                writeData(writer);
+            }
+            writer.Member("event", event);
+            writer.EndObject();
+            EXPECT(writer.IsComplete(), "ControlService::Publish: the data is not one JSON value");
+            if (writer.IsComplete()) {
+                sink(lease.Text());
+            }
+        }
         if (_eventSinkGeneration == generation) {
             _eventSink = std::move(sink);
         }
@@ -218,18 +325,18 @@ namespace BECore {
     void ControlService::Process(Request& request) {
         BE_PROFILE_SCOPE("ControlService::Process");
         if (request.error) {
-            request.reply(MakeErrorResponse(request.id, *request.error));
+            SendError(request.reply, request.id, *request.error);
             return;
         }
 
         const auto entry = _handlers.find(request.method);
         if (entry == _handlers.end()) {
             const String name = request.method.substr(0, kMaxEchoedMethodLength);
-            request.reply(MakeErrorResponse(request.id, MakeControlError(ControlErrors::kUnknownMethod, Format("unknown method '{}'", name))));
+            SendError(request.reply, request.id, MakeControlError(ControlErrors::kUnknownMethod, Format("unknown method '{}'", name)));
             return;
         }
 
-        auto call = MakeUnique<ControlCall>(PassKey<ControlService>{}, std::move(request.method), std::move(request.id), std::move(request.params), std::move(request.reply));
+        auto call = MakeUnique<ControlCall>(PassKey<ControlService>{}, *this, std::move(request.method), std::move(request.id), std::move(request.params), std::move(request.reply));
         InvokeHandler(entry->second, *call);
         Settle(std::move(call));
     }
@@ -379,7 +486,7 @@ namespace BECore {
         while (!_inbox.empty()) {
             UniquePtr<Request> request = std::move(_inbox.front());
             _inbox.pop_front();
-            request->reply(MakeErrorResponse(request->id, error));
+            SendError(request->reply, request->id, error);
         }
     }
 

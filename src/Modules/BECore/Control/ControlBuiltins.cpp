@@ -13,14 +13,47 @@
 
 namespace BECore {
 
+    namespace {
+
+        /// The clock as it was read once; the floats are widened to double, which is what the `Json` DOM stored and so the text clients have always seen
+        struct ClockSample {
+            uint64_t frame = 0;
+            double totalTime = 0.0;
+            double deltaTime = 0.0;
+            double fixedDeltaTime = 0.0;
+
+            [[nodiscard]] static ClockSample Read() {
+                const Time& time = CoreManager::GetTime();
+                return ClockSample{time.GetFrameCount(), time.GetTotalTime(), static_cast<double>(time.GetDeltaTime()), static_cast<double>(time.GetFixedDeltaTime())};
+            }
+        };
+
+    }  // namespace
+
     Json DescribeControlClock() {
-        const Time& time = CoreManager::GetTime();
+        const ClockSample sample = ClockSample::Read();
         Json clock = Json::object();
-        clock["frame"] = time.GetFrameCount();
-        clock["totalTime"] = time.GetTotalTime();
-        clock["deltaTime"] = time.GetDeltaTime();
-        clock["fixedDeltaTime"] = time.GetFixedDeltaTime();
+        clock["frame"] = sample.frame;
+        clock["totalTime"] = sample.totalTime;
+        clock["deltaTime"] = sample.deltaTime;
+        clock["fixedDeltaTime"] = sample.fixedDeltaTime;
         return clock;
+    }
+
+    void WriteControlClockWith(JsonWriter& writer, FunctionRef<void(JsonWriter&)> beforeTotalTime, FunctionRef<void(JsonWriter&)> afterTotalTime) {
+        const ClockSample sample = ClockSample::Read();
+        writer.BeginObject();
+        writer.Member("deltaTime", sample.deltaTime);
+        writer.Member("fixedDeltaTime", sample.fixedDeltaTime);
+        writer.Member("frame", sample.frame);
+        beforeTotalTime(writer);
+        writer.Member("totalTime", sample.totalTime);
+        afterTotalTime(writer);
+        writer.EndObject();
+    }
+
+    void WriteControlClock(JsonWriter& writer) {
+        WriteControlClockWith(writer, [](JsonWriter&) {}, [](JsonWriter&) {});
     }
 
     std::expected<uint32_t, ControlError> ReadControlFrames(const Json& params, StringView key, uint32_t fallback) {
@@ -48,29 +81,36 @@ namespace BECore {
     namespace {
 
         void HandlePing(ControlCall& call) {
-            Json result = Json::object();
-            result["pong"] = true;
-            result["protocol"] = ControlService::kProtocolVersion;
-            call.Reply(std::move(result));
-        }
-
-        Json DescribeLogTotals(const ControlLog& log) {
-            Json totals = Json::object();
-            totals["warnings"] = log.GetWarnings();
-            totals["errors"] = log.GetErrors();
-            return totals;
+            call.Reply([](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Member("pong", true);
+                writer.Member("protocol", ControlService::kProtocolVersion);
+                writer.EndObject();
+            });
         }
 
         void HandleStatus(ControlCall& call, const ControlService& service) {
             // A line logged earlier in this frame is still in the ring buffer: handlers run outside Flush(), on the thread that flushes
             LogEvent::Flush();
-            Json result = DescribeControlClock();
-            result["log"] = DescribeLogTotals(service.Log());
-            result["manualClock"] = service.IsManualClock();
             const GamePause* pause = service.GetPause();
-            result["paused"] = pause != nullptr && pause->IsPaused();
-            result["window"] = DescribeWindowStatus();
-            call.Reply(std::move(result));
+            const bool paused = pause != nullptr && pause->IsPaused();
+            call.Reply([&](JsonWriter& writer) {
+                WriteControlClockWith(
+                    writer,
+                    [&](JsonWriter& members) {
+                        members.Key("log");
+                        members.BeginObject();
+                        members.Member("errors", service.Log().GetErrors());
+                        members.Member("warnings", service.Log().GetWarnings());
+                        members.EndObject();
+                        members.Member("manualClock", service.IsManualClock());
+                        members.Member("paused", paused);
+                    },
+                    [](JsonWriter& members) {
+                        members.Key("window");
+                        WriteWindowStatus(members);
+                    });
+            });
         }
 
         void HandleStep(ControlCall& call, ControlService& service) {
@@ -84,7 +124,14 @@ namespace BECore {
                 call.Fail(seconds.error());
                 return;
             }
-            service.DeferSteppedFrames(call, *frames, *seconds, [](ControlCall& done) { done.Reply(DescribeControlClock()); });
+            service.DeferSteppedFrames(call, *frames, *seconds, [](ControlCall& done) { done.Reply(WriteControlClock); });
+        }
+
+        template <bool kPaused>
+        void WritePaused(JsonWriter& writer) {
+            writer.BeginObject();
+            writer.Member("paused", kPaused);
+            writer.EndObject();
         }
 
         /// `pause` and `resume`: the pause is the one the editor drives too. The manual clock is a pause that only `step` lifts frames out of, so it is always paused
@@ -95,9 +142,7 @@ namespace BECore {
                 return;
             }
             pause->SetPaused(true);
-            Json result = Json::object();
-            result["paused"] = true;
-            call.Reply(std::move(result));
+            call.Reply(WritePaused<true>);
         }
 
         void HandleResume(ControlCall& call, const ControlService& service) {
@@ -111,9 +156,7 @@ namespace BECore {
                 return;
             }
             pause->SetPaused(false);
-            Json result = Json::object();
-            result["paused"] = false;
-            call.Reply(std::move(result));
+            call.Reply(WritePaused<false>);
         }
 
         /// `list_methods`: every method of the service with the description its module gave it. The answer is built from the table only, no client data is read
@@ -177,23 +220,29 @@ namespace BECore {
         void HandleLogMark(ControlCall& call, const ControlService& service) {
             LogEvent::Flush();
             const ControlLog& log = service.Log();
-            Json result = Json::object();
-            result["mark"] = log.GetNextSequence();
-            result["warnings"] = log.GetWarnings();
-            result["errors"] = log.GetErrors();
-            call.Reply(std::move(result));
+            call.Reply([&](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Member("errors", log.GetErrors());
+                writer.Member("mark", log.GetNextSequence());
+                writer.Member("warnings", log.GetWarnings());
+                writer.EndObject();
+            });
         }
 
-        Json DescribeLogLine(const LogHistory& history, const LogRecord& record) {
-            Json line = Json::object();
-            line["sequence"] = record.sequence;
-            line["level"] = MakeJsonString(LogLevelName(record.level));
-            line["time"] = MakeJsonString(record.time);
-            line["message"] = MakeJsonString(StringView(record.message.data(), record.message.size()));
+        /// One line of the log, as `log_since` lists it and `log` pushes it; @p skipped (0: none) is the count of lines a push left out after this one
+        void WriteLogLine(JsonWriter& writer, const LogHistory& history, const LogRecord& record, uint64_t skipped) {
+            writer.BeginObject();
             if (record.category != kGeneralLogCategory) {
-                line["category"] = MakeJsonString(history.GetCategoryName(record.category));
+                writer.Member("category", history.GetCategoryName(record.category));
             }
-            return line;
+            writer.Member("level", LogLevelName(record.level));
+            writer.Member("message", StringView(record.message.data(), record.message.size()));
+            writer.Member("sequence", record.sequence);
+            if (skipped != 0) {
+                writer.Member("skipped", skipped);
+            }
+            writer.Member("time", StringView(record.time));
+            writer.EndObject();
         }
 
         void HandleLogSince(ControlCall& call, const ControlService& service) {
@@ -212,20 +261,23 @@ namespace BECore {
             const ControlLog& log = service.Log();
             const ControlLog::Since since = log.ReadSince(static_cast<uint64_t>(*mark), *level, ControlLog::kMaxLogSinceLines);
 
-            Json lines = Json::array();
-            for (const LogRecord* record : since.lines) {
-                lines.push_back(DescribeLogLine(log.History(), *record));
-            }
-            Json result = Json::object();
-            result["lines"] = std::move(lines);
-            result["warnings"] = since.warnings;
-            result["errors"] = since.errors;
-            result["dropped"] = since.dropped;
-            result["next"] = since.next;
-            if (since.truncated) {
-                result["truncated"] = true;
-            }
-            call.Reply(std::move(result));
+            call.Reply([&](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Member("dropped", since.dropped);
+                writer.Member("errors", since.errors);
+                writer.Key("lines");
+                writer.BeginArray();
+                for (const LogRecord* record : since.lines) {
+                    WriteLogLine(writer, log.History(), *record, 0);
+                }
+                writer.EndArray();
+                writer.Member("next", since.next);
+                if (since.truncated) {
+                    writer.Member("truncated", true);
+                }
+                writer.Member("warnings", since.warnings);
+                writer.EndObject();
+            });
         }
 
         void HandleLogSubscribe(ControlCall& call, ControlService& service) {
@@ -248,10 +300,12 @@ namespace BECore {
             push.enabled = *enabled;
             push.minLevel = *level;
 
-            Json result = Json::object();
-            result["enabled"] = push.enabled;
-            result["level"] = MakeJsonString(LogLevelName(push.minLevel));
-            call.Reply(std::move(result));
+            call.Reply([&](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Member("enabled", push.enabled);
+                writer.Member("level", LogLevelName(push.minLevel));
+                writer.EndObject();
+            });
         }
 
         /// Frame end hook `log_push`: one `log` event per new line while log_subscribe is on. It allocates nothing when no line is new
@@ -282,12 +336,9 @@ namespace BECore {
                 if (record.level < push.minLevel) {
                     continue;
                 }
-                Json data = DescribeLogLine(history, record);
                 ++pushed;
-                if (pushed == ControlLog::kMaxLogPushPerFrame && matching > pushed) {
-                    data["skipped"] = matching - pushed;
-                }
-                service.Publish("log", data);
+                const uint64_t skipped = pushed == ControlLog::kMaxLogPushPerFrame && matching > pushed ? matching - pushed : 0;
+                service.Publish("log", [&](JsonWriter& writer) { WriteLogLine(writer, history, record, skipped); });
             }
         }
 
@@ -302,7 +353,7 @@ namespace BECore {
             Vector<BatchEntry> entries;
             bool continueOnError = false;
             size_t next = 0;
-            Json results = Json::array();
+            Vector<ControlAnswer> results;
             Optional<size_t> stopped;
 
             [[nodiscard]] bool IsFinished() const {
@@ -310,21 +361,34 @@ namespace BECore {
             }
 
             void Record(ControlAnswer answer) {
-                Json entry = Json::object();
-                entry["ok"] = answer.has_value();
-                if (answer) {
-                    entry["result"] = std::move(*answer);
-                } else {
-                    Json error = Json::object();
-                    error["code"] = MakeJsonString(answer.error().code);
-                    error["message"] = MakeJsonString(answer.error().message);
-                    entry["error"] = std::move(error);
-                }
-                results.push_back(std::move(entry));
-                if (!answer && !continueOnError) {
+                const bool failed = !answer;
+                results.push_back(std::move(answer));
+                if (failed && !continueOnError) {
                     stopped = next;
                 }
                 ++next;
+            }
+
+            /// `{ok, result}` or `{error: {code, message}, ok}` per call, in the order the `Json` object keeps its keys
+            void WriteResults(JsonWriter& writer) const {
+                writer.BeginArray();
+                for (const ControlAnswer& answer : results) {
+                    writer.BeginObject();
+                    if (answer) {
+                        writer.Member("ok", true);
+                        writer.Key("result");
+                        WriteJson(writer, *answer);
+                    } else {
+                        writer.Key("error");
+                        writer.BeginObject();
+                        writer.Member("code", StringView(answer.error().code));
+                        writer.Member("message", StringView(answer.error().message));
+                        writer.EndObject();
+                        writer.Member("ok", false);
+                    }
+                    writer.EndObject();
+                }
+                writer.EndArray();
             }
         };
 
@@ -380,12 +444,15 @@ namespace BECore {
                 batch->Record(std::move(*answer));
             }
 
-            Json result = Json::object();
-            result["results"] = std::move(batch->results);
-            if (batch->stopped) {
-                result["stopped"] = *batch->stopped;
-            }
-            outer.Reply(std::move(result));
+            outer.Reply([batch](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Key("results");
+                batch->WriteResults(writer);
+                if (batch->stopped) {
+                    writer.Member("stopped", *batch->stopped);
+                }
+                writer.EndObject();
+            });
         }
 
         void HandleBatch(ControlCall& call, ControlService& service) {

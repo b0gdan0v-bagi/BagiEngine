@@ -13,8 +13,9 @@ namespace BECore {
     /// Where the hub's output goes. Both calls are made from inside OnConnected / OnMessage / OnDisconnected / Tick, on the caller's
     /// thread; a sink must not call back into the hub.
     struct HubSink {
-        /// A text message for a connection
-        MoveOnlyFunction<void(ConnectionId, String)> send;
+        /// A text message for a connection. The text is valid for the call only: the hub reuses its buffer for the next message, so a
+        /// sink that keeps it copies it.
+        MoveOnlyFunction<void(ConnectionId, const String&)> send;
         /// The hub is done with the connection: the transport closes it (and need not report it with OnDisconnected, which would be
         /// ignored). The reason is one of RoomCloseReasons: the transport sends it as the close reason and picks the close code by it.
         MoveOnlyFunction<void(ConnectionId, String)> close;
@@ -125,7 +126,7 @@ namespace BECore {
         /// Sends `error`
         void SendError(ConnectionId id, const ControlError& error, StringView ref);
         void SendError(ConnectionId id, StringView code, StringView message, StringView ref);
-        void SendText(ConnectionId id, String text);
+        void SendText(ConnectionId id, const String& text);
         /// Sends `error` for a failed join, counts it and closes the connection when the limit is reached. @p spendBudget takes a
         /// token of the failed-join budgets (false for the answer that an empty budget gave).
         void FailJoin(ConnectionId id, Connection& connection, const ControlError& error, RoomTime now, bool spendBudget = true);
@@ -170,6 +171,10 @@ namespace BECore {
         Vector<ConnectionId> _tickIdle;
         Vector<String> _tickCodes;
         Vector<ConnectionId> _flushIds;
+        // Output buffers, kept so that a steady send allocates nothing. Two on purpose: a Flush sends the shared lobby text to several
+        // members and ResendView writes a `view` between those sends, so one buffer would be overwritten.
+        String _sendScratch;
+        String _lobbyText;
     };
 
 }  // namespace BECore

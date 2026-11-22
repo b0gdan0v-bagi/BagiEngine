@@ -1,6 +1,13 @@
+#include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonWriter.h>
+#include <Common/AllocCheck.h>
+#include <Common/ControlTestSupport.h>
+#include <Games/GameControl.h>
 #include <Stress/StressGameControl.h>
 #include <gtest/gtest.h>
+#include <tests/StressSceneFixture.h>
 
 /// The adapter needs no scene: a scene change reaches the test as a counter.
 namespace BECore::Stress::Tests {
@@ -271,6 +278,105 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(ErrorCodeOf(result.error()), "invalid_params");
         EXPECT_EQ(state.Version(), version);
         EXPECT_EQ(state.GetScene(), StressScene::Ui);
+    }
+
+    namespace {
+
+        String WrittenState(const StressGameControl& control) {
+            String text;
+            JsonWriter writer(text);
+            EXPECT_TRUE(control.WriteState(writer).has_value());
+            EXPECT_TRUE(writer.IsComplete());
+            return text;
+        }
+
+        String WrittenActions(const StressGameControl& control) {
+            String text;
+            JsonWriter writer(text);
+            EXPECT_TRUE(control.WriteActions(writer).has_value());
+            EXPECT_TRUE(writer.IsComplete());
+            return text;
+        }
+
+    }  // namespace
+
+    TEST_F(StressGameControlTest, TheWritingFormsAreTheDumpOfTheJsonForms) {
+        for (const StressScene scene : EnumUtils<StressScene>::Values()) {
+            for (const StressLanguage language : {StressLanguage::En, StressLanguage::Ru}) {
+                for (const uint32_t count : {1u, 2u, 3u, 100u, kMaxCount / 2, kMaxCount / 2 + 1, kMaxCount}) {
+                    state.SetScene(scene);
+                    state.SetLanguage(language);
+                    state.SetCount(count);
+                    const String where = Format("scene {} language {} count {}", ToFlagValue(scene), ToFlagValue(language), count);
+
+                    EXPECT_EQ(WrittenState(control), DumpJson(State())) << where.c_str();
+                    EXPECT_EQ(WrittenActions(control), DumpJson(Actions())) << where.c_str();
+                }
+            }
+        }
+    }
+
+    TEST_F(StressGameControlTest, TheWritingFormsAreAlphabeticalLikeTheDump) {
+        EXPECT_EQ(WrittenState(control), R"({"count":100,"language":"en","maxCount":1000000,"scene":"sprites","scenes":["sprites","entities","ui"]})");
+        EXPECT_EQ(WrittenActions(control), R"([{"scene":"entities","type":"set_scene"},{"scene":"ui","type":"set_scene"},{"count":50,"type":"set_count"},)"
+                                           R"({"count":200,"type":"set_count"},{"language":"ru","type":"set_language"}])");
+    }
+
+    TEST_F(StressGameControlTest, TheSecondWritingIntoAKeptTextAllocatesNothing) {
+        String text;
+        const auto write = [&] {
+            text.clear();
+            JsonWriter writer(text);
+            EXPECT_TRUE(control.WriteState(writer).has_value());
+            text.clear();
+            JsonWriter actions(text);
+            EXPECT_TRUE(control.WriteActions(actions).has_value());
+        };
+        write();
+        BECore::Tests::ExpectNoAllocations(write);
+    }
+
+    namespace {
+
+        /// The game that owns the adapter, active in the manager, behind a ControlService with the handlers of the games
+        class StressGameControlServiceTest : public StressSceneFixture {
+        protected:
+            void SetUp() override {
+                StartGame();
+                RegisterGameControl(service);
+            }
+
+            void TearDown() override {
+                service.Shutdown();
+                StressSceneFixture::TearDown();
+            }
+
+            String Ask(StringView method) {
+                String text;
+                service.Post(BECore::Tests::MakeRequest(1, method), [&text](const String& reply) { text = reply; });
+                service.Drain();
+                return text;
+            }
+
+            ControlService service;
+        };
+
+    }  // namespace
+
+    TEST_F(StressGameControlServiceTest, GetStateAndListActionsAreTheTextOfTheJsonPath) {
+        StressGame& game = *StressGame::GetActive();
+        game.GetState().SetCount(40);
+        IControllableGame& control = *game.AsControllable();
+
+        const auto expectSame = [&](StringView method, const char* member, const Json& document) {
+            Json result = Json::object();
+            result["game"] = ToStdString(game.GetName().ToStringView());
+            result[member] = document;
+            result["version"] = control.GetStateVersion();
+            EXPECT_EQ(Ask(method), MakeOkResponse(Json(1), std::move(result))) << method.data();
+        };
+        expectSame("get_state", "state", *control.GetState());
+        expectSame("list_actions", "actions", *control.GetActions());
     }
 
 }  // namespace BECore::Stress::Tests

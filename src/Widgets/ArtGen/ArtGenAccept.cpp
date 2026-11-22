@@ -88,8 +88,10 @@ namespace BECore {
         }
 
         std::expected<void, String> WriteProvenance(const std::filesystem::path& file, const Json& record) {
-            const std::string text = record.dump(kProvenanceIndent, ' ', false, Json::error_handler_t::replace) + "\n";  //-NoStd: nlohmann's dump
-            return WriteTextFileAtomically(file, StringView(text.data(), text.size()));
+            String text;
+            AppendJson(text, record, kProvenanceIndent);
+            text.push_back('\n');
+            return WriteTextFileAtomically(file, text);
         }
 
         bool IsClipPart(StringView part) {

@@ -67,7 +67,7 @@ Every other close retries, 1013 (server full) and a normal 1000 from the server 
 
 ## Allocations
 
-`Poll()` with nothing to do allocates nothing: the polled event is a member, the event queue keeps its capacity, the clocks are plain values, and the transports' `PollEvent` does not allocate when empty. A message that arrives allocates, as any parse does, and so does the `ping` that goes out every ten quiet seconds. `RoomClientTest.PollingWithNothingToDoAllocatesNothing` counts the allocations of the thread in the profile build (`ENGINE_PROFILER_ALLOC`, where the global `operator new` is replaced); the other builds keep the capacity check.
+`Poll()` with nothing to do allocates nothing: the polled event is a member, the event queue keeps its capacity, and the transports' `PollEvent` does not allocate when empty. A message that arrives allocates; the `ping` and the other steady sends are written into `_sendScratch` without allocating, but the transport's copy of the frame still allocates. `RoomClientTest.PollingWithNothingToDoAllocatesNothing` counts the thread's allocations in the profile build (`ENGINE_PROFILER_ALLOC`, which replaces the global `operator new`); the other builds keep the capacity check.
 
 ## Tests
 

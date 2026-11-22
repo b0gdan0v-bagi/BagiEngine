@@ -1,6 +1,7 @@
 #include "ReplayFile.h"
 
 #include <BECore/Control/ControlService.h>
+#include <BECore/Control/JsonWriter.h>
 #include <cmath>
 
 namespace BECore {
@@ -203,23 +204,41 @@ namespace BECore {
     }
 
     String FormatReplayHeader(const ReplayHeader& header) {
+        // The order is the file's own, not alphabetical: the writer keeps the order it is given
         String line;
-        AppendFormat(line, "{{\"{}\":{},\"{}\":{},\"{}\":{}", kKeyReplay, kReplayFormatVersion, kKeyGame, DumpJson(MakeJsonString(header.game)), kKeyEngine, DumpJson(MakeJsonString(header.engine)));
+        JsonWriter writer(line);
+        writer.BeginObject();
+        writer.Member(kKeyReplay, kReplayFormatVersion);
+        writer.Member(kKeyGame, StringView(header.game));
+        writer.Member(kKeyEngine, StringView(header.engine));
         if (!header.title.empty()) {
-            AppendFormat(line, ",\"{}\":{}", kKeyTitle, DumpJson(MakeJsonString(header.title)));
+            writer.Member(kKeyTitle, StringView(header.title));
         }
-        line.push_back('}');
+        writer.EndObject();
         return line;
     }
 
-    String FormatReplayEntry(const ReplayEntry& entry) {
-        // The order is written by hand: a Json object keeps its members sorted by name
-        String line;
-        AppendFormat(line, "{{\"{}\":\"{}\",\"{}\":{}", kKeyOp, ReplayOpName(entry.op), kKeyParams, DumpJson(entry.params));
+    void AppendReplayEntry(String& out, const ReplayEntry& entry) {
+        JsonWriter writer(out);
+        writer.BeginObject();
+        writer.Member(kKeyOp, ReplayOpName(entry.op));
+        writer.Key(kKeyParams);
+        WriteJson(writer, entry.params);
         if (entry.outcome) {
-            AppendFormat(line, ",\"{}\":{}", kKeyOutcome, DumpJson(*entry.outcome));
+            writer.Key(kKeyOutcome);
+            WriteJson(writer, *entry.outcome);
         }
-        AppendFormat(line, ",\"{}\":{{\"{}\":{},\"{}\":{}}}}}", kKeyGap, kKeyFrames, entry.gap.frames, kKeySeconds, DumpJson(Json(entry.gap.seconds)));
+        writer.Key(kKeyGap);
+        writer.BeginObject();
+        writer.Member(kKeyFrames, entry.gap.frames);
+        writer.Member(kKeySeconds, entry.gap.seconds);
+        writer.EndObject();
+        writer.EndObject();
+    }
+
+    String FormatReplayEntry(const ReplayEntry& entry) {
+        String line;
+        AppendReplayEntry(line, entry);
         return line;
     }
 

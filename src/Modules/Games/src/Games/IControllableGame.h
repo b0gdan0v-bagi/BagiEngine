@@ -48,6 +48,17 @@ namespace BECore {
         [[nodiscard]] virtual std::expected<Json, ControlError> GetActions() const = 0;
 
         /**
+         * @brief GetState() written into @p writer without a `Json`: what get_state and the state_changed push use.
+         *
+         * Writes exactly one value on success, the same one GetState() gives (dumped); on an error whatever it wrote is discarded. The default
+         * goes through GetState(). A game that overrides it keeps the two equal; GetState() stays the form that replay, the Game panel and tests read.
+         */
+        [[nodiscard]] virtual std::expected<void, ControlError> WriteState(JsonWriter& writer) const;
+
+        /// GetActions() written into @p writer, with the contract of WriteState()
+        [[nodiscard]] virtual std::expected<void, ControlError> WriteActions(JsonWriter& writer) const;
+
+        /**
          * @brief Applies @p action, an object that the game described in GetActions().
          *
          * @return What the action did (for example the points it gave), or an error: illegal_action for an action that

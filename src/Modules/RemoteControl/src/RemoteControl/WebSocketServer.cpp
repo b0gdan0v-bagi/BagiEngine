@@ -27,7 +27,7 @@ namespace BECore {
             handler.onClosed = [&clientCount](const WebSocketHandler::ConnectionPtr&) { clientCount.fetch_sub(1, std::memory_order_relaxed); };
             handler.onMessage = [&service](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessage message) {
                 WebSocketHandler::ConnectionPtr target = connection;
-                service.Post(message.GetText(), [target](String response) { target->QueueText(response); });
+                service.Post(message.GetText(), [target](const String& response) { target->QueueText(response); });
                 return true;
             };
             return handler;

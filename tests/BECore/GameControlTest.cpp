@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
@@ -41,6 +42,39 @@ namespace BECore::Tests {
         Json inc = Json::object();
         inc["type"] = "inc";
         return Json::array({inc});
+    }
+
+    std::expected<void, ControlError> FakeControllableGame::WriteState(JsonWriter& writer) const {
+        if (!handWritten && !failWrites) {
+            return IControllableGame::WriteState(writer);
+        }
+        ++writeStateCalls;
+        writer.BeginObject();
+        if (failWrites) {
+            writer.Member("half", 1);
+            writer.Key("more");
+            return std::unexpected(MakeControlError("write_failed", "the state cannot be written"));
+        }
+        writer.Member("counter", counter);
+        writer.EndObject();
+        return {};
+    }
+
+    std::expected<void, ControlError> FakeControllableGame::WriteActions(JsonWriter& writer) const {
+        if (!handWritten && !failWrites) {
+            return IControllableGame::WriteActions(writer);
+        }
+        ++writeActionsCalls;
+        writer.BeginArray();
+        if (failWrites) {
+            writer.Value("half");
+            return std::unexpected(MakeControlError("write_failed", "the actions cannot be written"));
+        }
+        writer.BeginObject();
+        writer.Member("type", "inc");
+        writer.EndObject();
+        writer.EndArray();
+        return {};
     }
 
     std::expected<Json, ControlError> FakeControllableGame::PerformAction(const Json& action) {

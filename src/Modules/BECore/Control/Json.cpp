@@ -35,10 +35,73 @@ namespace BECore {
         return parsed;
     }
 
-    String DumpJson(const Json& value) {
-        //-NoStd: nlohmann's dump
-        const std::string text = value.dump(-1, ' ', false, Json::error_handler_t::replace);
-        return String(text.c_str(), text.size());
+    namespace {
+
+        void WriteJsonAt(JsonWriter& writer, const Json& value) {
+            switch (value.type()) {
+                case Json::value_t::object:
+                    if (writer.GetDepth() >= JsonWriter::kMaxDepth) {
+                        writer.Null();
+                        return;
+                    }
+                    writer.BeginObject();
+                    for (auto it = value.cbegin(); it != value.cend(); ++it) {
+                        const auto& key = it.key();
+                        writer.Key(StringView(key.data(), key.size()));
+                        WriteJsonAt(writer, *it);
+                    }
+                    writer.EndObject();
+                    return;
+                case Json::value_t::array:
+                    if (writer.GetDepth() >= JsonWriter::kMaxDepth) {
+                        writer.Null();
+                        return;
+                    }
+                    writer.BeginArray();
+                    for (const Json& element : value) {
+                        WriteJsonAt(writer, element);
+                    }
+                    writer.EndArray();
+                    return;
+                case Json::value_t::string: {
+                    const auto& text = value.get_ref<const Json::string_t&>();
+                    writer.Value(StringView(text.data(), text.size()));
+                    return;
+                }
+                case Json::value_t::boolean:
+                    writer.Value(value.get<bool>());
+                    return;
+                case Json::value_t::number_integer:
+                    writer.Value(value.get<int64_t>());
+                    return;
+                case Json::value_t::number_unsigned:
+                    writer.Value(value.get<uint64_t>());
+                    return;
+                case Json::value_t::number_float:
+                    writer.Value(value.get<double>());
+                    return;
+                default:
+                    // null, and the binary and discarded values that no parsed or built control document holds
+                    writer.Null();
+                    return;
+            }
+        }
+
+    }  // namespace
+
+    void WriteJson(JsonWriter& writer, const Json& value) {
+        WriteJsonAt(writer, value);
+    }
+
+    void AppendJson(String& out, const Json& value, int indent) {
+        JsonWriter writer(out, indent);
+        WriteJson(writer, value);
+    }
+
+    String DumpJson(const Json& value, int indent) {
+        String out;
+        AppendJson(out, value, indent);
+        return out;
     }
 
     Json MakeJsonString(StringView text) {

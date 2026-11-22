@@ -86,7 +86,8 @@ namespace BECore::Tests {
             }
 
             ControlReplyFn Collect() {
-                return [this](String text) {
+                return [this](const String& text) {
+                    raw.push_back(text);
                     auto parsed = ParseJson(text);
                     responses.push_back(parsed ? std::move(*parsed) : Json());
                 };
@@ -146,6 +147,7 @@ namespace BECore::Tests {
 
             ControlService service;
             Vector<Json> responses;
+            Vector<String> raw;  // the reply texts as they were sent
             Vector<String> order;
             Vector<NestedStep> plan;
             Vector<ControlAnswer> answers;
@@ -512,6 +514,32 @@ namespace BECore::Tests {
         EXPECT_EQ(ErrorCode(responses[0]), ControlErrors::kShuttingDown);
         EXPECT_EQ(ErrorCode(responses[1]), ControlErrors::kShuttingDown);
         EXPECT_TRUE(order.empty());
+    }
+
+    TEST_F(ControlBatchTest, TheBatchAnswersTheSameBytes) {
+        service.RegisterHandler("echo_text", [](ControlCall& call) {
+            call.Reply([](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Member("list", 3);
+                writer.Member("text", "quote \" caf\xC3\xA9\n");
+                writer.EndObject();
+            });
+        });
+        Json calls = Json::array();
+        calls.push_back(CallOf("ping"));
+        calls.push_back(CallOf("echo_text"));
+        calls.push_back(CallOf("fail"));
+        calls.push_back(CallOf("ping"));
+        Post(MakeRequest(1, "batch", BatchOf(calls)));
+        Post(MakeRequest(2, "batch", BatchOf(calls, true)));
+        Post(MakeRequest(3, "batch", BatchOf(Json::array({CallOf("ping")}))));
+        service.Drain();
+
+        ExpectTexts(
+            raw,
+            {R"json({"id":1,"ok":true,"result":{"results":[{"ok":true,"result":{"pong":true,"protocol":1}},{"ok":true,"result":{"list":3,"text":"quote \" café\n"}},{"error":{"code":"boom","message":"it failed"},"ok":false}],"stopped":2}})json",
+             R"json({"id":2,"ok":true,"result":{"results":[{"ok":true,"result":{"pong":true,"protocol":1}},{"ok":true,"result":{"list":3,"text":"quote \" café\n"}},{"error":{"code":"boom","message":"it failed"},"ok":false},{"ok":true,"result":{"pong":true,"protocol":1}}]}})json",
+             R"json({"id":3,"ok":true,"result":{"results":[{"ok":true,"result":{"pong":true,"protocol":1}}]}})json"});
     }
 
 }  // namespace BECore::Tests

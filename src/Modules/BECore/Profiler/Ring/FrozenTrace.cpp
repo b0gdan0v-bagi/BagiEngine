@@ -4,8 +4,6 @@
 #include <BECore/Profiler/Profiler.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
-#include <cerrno>
-#include <cstdio>
 
 namespace BECore {
 
@@ -71,12 +69,10 @@ namespace BECore {
         for (ThreadLane& lane : lanes) {
             if (!lane.name.empty()) {
                 beginEvent();
-                out.append(Format("{{\"name\":\"thread_name\",\"ph\":\"M\",\"pid\":{},\"tid\":{},\"args\":{{\"name\":", kPid, lane.threadId));
-                AppendJsonString(out, lane.name.c_str());
-                out.append("}}");
+                AppendThreadNameEvent(out, kPid, lane.threadId, lane.name.c_str());
                 if (lane.sortIndex != Profiler::kNoSortIndex) {
                     beginEvent();
-                    out.append(Format("{{\"name\":\"thread_sort_index\",\"ph\":\"M\",\"pid\":{},\"tid\":{},\"args\":{{\"sort_index\":{}}}}}", kPid, lane.threadId, lane.sortIndex));
+                    AppendThreadSortIndexEvent(out, kPid, lane.threadId, lane.sortIndex);
                 }
             }
 
@@ -89,25 +85,15 @@ namespace BECore {
             Vector<const ThreadZone*> open;
             const auto endEvent = [&](const ThreadZone& zone, uint64_t endTicks) {
                 beginEvent();
-                out.append(Format("{{\"ph\":\"E\",\"pid\":{},\"tid\":{},\"ts\":{:.3f}", kPid, lane.threadId, timestamp(endTicks, zone.nanosecondsPerTick)));
-                if constexpr (BE_PROFILER_ALLOC != 0) {
-                    out.append(Format(",\"args\":{{\"allocs\":{},\"bytes\":{}}}", zone.zone.allocCount, zone.zone.allocBytes));
-                }
-                out.append("}");
+                AppendZoneEndEvent(out, kPid, lane.threadId, timestamp(endTicks, zone.nanosecondsPerTick), zone.zone.allocCount, zone.zone.allocBytes);
             };
             for (const ThreadZone& entry : lane.zones) {
                 while (!open.empty() && (open.back()->zone.endTicks < entry.zone.beginTicks || open.back()->zone.endTicks < entry.zone.endTicks)) {
                     endEvent(*open.back(), eastl::min(open.back()->zone.endTicks, entry.zone.beginTicks));
                     open.pop_back();
                 }
-                const ProfileSite* site = entry.zone.site;
                 beginEvent();
-                out.append("{\"name\":");
-                AppendJsonString(out, site->name);
-                out.append(
-                    Format(",\"cat\":\"zone\",\"ph\":\"B\",\"pid\":{},\"tid\":{},\"ts\":{:.3f},\"args\":{{\"file\":", kPid, lane.threadId, timestamp(entry.zone.beginTicks, entry.nanosecondsPerTick)));
-                AppendJsonString(out, site->file);
-                out.append(Format(",\"line\":{}}}}}", site->line));
+                AppendZoneBeginEvent(out, kPid, lane.threadId, timestamp(entry.zone.beginTicks, entry.nanosecondsPerTick), *entry.zone.site);
                 open.push_back(&entry);
             }
             while (!open.empty()) {
@@ -127,18 +113,7 @@ namespace BECore {
     }
 
     std::expected<void, String> WriteFrozenTraceFile(StringView path, const Vector<FrozenFrame>& frames) {
-        const String text = WriteFrozenTraceJson(frames);
-        const String fileName(path.data(), path.size());
-        std::FILE* file = std::fopen(fileName.c_str(), "wb");
-        if (file == nullptr) {
-            return std::unexpected(Format("cannot write '{}': {}", fileName, std::strerror(errno)));
-        }
-        const size_t written = std::fwrite(text.data(), 1, text.size(), file);
-        const bool closed = std::fclose(file) == 0;
-        if (written != text.size() || !closed) {
-            return std::unexpected(Format("cannot write '{}': the disk refused part of it", fileName));
-        }
-        return {};
+        return WriteTextFile(path, WriteFrozenTraceJson(frames));
     }
 
 }  // namespace BECore

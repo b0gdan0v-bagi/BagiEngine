@@ -13,7 +13,7 @@ The client is `RoomClient/CLAUDE.md`.
 | `RoomTypes.h/.cpp` | `ConnectionId`, `PlayerId`, `RoomTime` (`steady_clock::time_point`, always passed in), `RandomFn` (`MoveOnlyFunction<uint64_t()>`, injected), `MakeSecureRandom()` (`std::random_device`, held through a `UniquePtr`: the device cannot be moved), `RoomPhase` (`Lobby`, `Playing`, `Finished`), `SeatKind` (`Human`, `Computer`, `Empty`) and their wire names |
 | `RoomLimits.h` | `RoomLimits::k*` (the constants of the table below), `RoomTimings` (grace, abandoned timeout, computer delay) and `RoomHubSettings` (the same values as defaults, so a test overrides them; the three times are its member `timings`, handed to every room) |
 | `RoomErrors.h` | `RoomErrors::k*`, the stable error codes |
-| `RoomProtocol.h/.cpp` | `ClientMessage` (a `Variant` of the eight client messages), `ParseClientMessage`, `SerializeClientMessage`, `SanitizePlayerName`, the builders of the server messages, `LobbySnapshot`, `ParseServerMessage` (the inverse of the builders, for clients: `ServerMessage` variant, an unknown `type` is ignorable) |
+| `RoomProtocol.h/.cpp` | `ClientMessage` (the eight client messages), `ParseClientMessage`, `SerializeClientMessage`, `SanitizePlayerName`, `Append*Message` writers of the server messages, `LobbySnapshot`, `ParseServerMessage` (their inverse, for clients; an unknown `type` is ignorable) |
 | `RoomCode.h/.cpp` | `GenerateRoomCode`, `NormalizeRoomCode`, `GenerateToken`, `IsWellFormedToken` |
 | `RateLimiter.h/.cpp` | a token bucket over `RoomTime` |
 | `Room.h/.cpp` | `Room`: members, seats, host, lobby snapshot and revision, phase, the game (start, actions, views, computers), absence and return (see "Room lifecycle") |
@@ -36,7 +36,7 @@ JSON text, one message per WebSocket text message, `{"v":1,"type":"...", ...}` (
 | `ping` | | |
 | `list_rooms` | `game` (1 to 64 bytes, as in `create_room`) | for a connection in no room: the public rooms of that game; see "RoomHub" |
 
-**Server to client** (the builders `Make*Message`):
+**Server to client** (`Append*Message` writes, `Make*Message` returns):
 
 | `type` | Members | When |
 |--------|---------|------|
@@ -101,25 +101,7 @@ After the start the host is only shown: `MarkAway` does not move it, `Leave` pas
 
 ## RoomHub
 
-`RoomHub(registry, RoomHubSettings, RandomFn, HubSink)`; `HubSink {send(ConnectionId, text), close(ConnectionId, reason)}` are `MoveOnlyFunction`s the transport provides. **The hub owns the one `RandomFn` and its rooms draw through a forwarding function that points at it**, so the hub is neither copied nor moved. A `Room` made on its own owns the `RandomFn` it is given. The transport calls `OnConnected(id, now, address)` (the client's address as an opaque string, empty when unknown: then no per-address rule; compared, never logged or sent), `OnMessage(id, text, now)`, `OnDisconnected(id, now)` and, regularly, `Tick(now)`. The hub reads no clock and makes no thread: **it is single-threaded and the caller serializes every call** (the server posts transport events to a queue that one thread drains). A sink must not call back into the hub. A handler never throws or trusts its input: every failure is an `error` with a stable code (`ref` is the type it answers; none if it did not parse).
-
-| Message | What the hub does |
-|---------|-------------------|
-| `create_room` | `already_in_room`, `unknown_game`, `too_many_rooms`, `internal_error` (no free room code in 16 draws); else a room with a new code, the sender is host on the lowest seat; `joined`, then `lobby`. The `options` go to the game at `start`, their public part to the lobby; `public` lists the room |
-| `join_room` by code and name | `unknown_room` (a failed join), `room_full`, `game_started`, `bad_name`; else `joined`, then `lobby` to everybody |
-| `join_room` by token | `bad_token` (a failed join); else the member returns: a live connection of the same member is sent `left {replaced}` and closed with reason `replaced`, then `joined`, `lobby`, and `view` (only once the game has started) to the new one |
-| `choose_seat`, `start`, `action`, `leave` | `not_in_room` without a room; else the room's errors. A `stale_action` is followed by the current `view`. `leave` answers `left {left}`; the seat is freed (lobby) or played by a computer for good (game) |
-| `ping` | `pong` |
-| `list_rooms` | `already_in_room`, `unknown_game`, then the per-connection list bucket (`rate_limited` with `ref: list_rooms`: no failed join, no close); else `rooms`: the rooms of that game that are public, in the lobby (a started one too when `listsStartedRooms`, never a finished one) and have a free seat, oldest first (a creation counter), at most the cap. Join from it is `join_room {code, name}`, so every rule and failed-join count of the code path applies. A private room is in no answer and its code goes to its members only |
-
-- **Flush.** After every handled message, disconnect and `Tick`, the hub compares for each connection of the affected room the lobby revision and the game version (and seat) with what that connection was last sent and sends `lobby` and/or `view` only when they moved. So a no-op changes nothing on the wire and the room logic never names who gets what. **The order a client sees:** `joined` (to its owner only; the only message with the token), then `lobby`, then `view` (after the start); `left` is last. The outcome of an `action` is not sent: clients learn it from the next `view`.
-- **Disconnect.** In a lobby the member is removed (the host passes on, the lobby message goes to the rest); in a game it is marked away (`connected: false` in the lobby) and keeps the seat for the grace. A room is closed (and its code free again) when `Room::ShouldClose` says so: checked after every leave and disconnect and in `Tick`.
-- **Tick.** Closes connections in no room that sent nothing for the idle timeout (`idle`; a `ping` is no activity), lets each room's computers make at most one move, closes abandoned rooms, closes a lobby with no message but `ping` for `lobbyTimeout` (`left {lobby_timeout}`; the sockets stay and fall under the idle rule; a started room is not touched), and closes a finished room (members get `left {room_finished}`, stay connected, in no room) after `abandonedTimeout`; people in it can read the end until then.
-- **Limits** (`RoomHubSettings`): `rate_limited` is the answer to a message over the token bucket of the connection, and after `maxRateLimitedInRow` in a row the connection is closed (`rate_limited`); a code or token that cannot exist counts as a failed join like an unknown code or a wrong token and also takes a token from the failed-join buckets of its address and of the server (an empty bucket answers `rate_limited` before the room is looked up, so it tells nothing about codes; a member's own valid token passes it), `maxFailedJoinsInRow` in a row close the connection (`too_many_failed_joins`; a successful join, and a `create_room` that succeeds, resets the count; any other message does not); a connection over `maxConnections` is closed on arrival (`server_full`); the size limit is checked by the parser first. A close goes through `sink.close` and the connection is forgotten at once (the later `OnDisconnected` is ignored).
-- **When a computer takes over an absent seat:** nothing is sent at the end of the grace; clients know the player is gone (`connected: false`) and see the computer from the next `view`.
-- **Browsing is polled, not pushed.** A push needs subscription state and a send to every subscriber on every join, leave and start: an amplification that no rate limit bounds. A client asks again (not faster than the bucket refills); the join path re-checks everything, so a list a few seconds old is fine. A list counts as activity for the idle timeout (a `ping` does not). No server-wide list bucket: a list is O(rooms) over 64 rooms and 20 entries, and a shared bucket would let one flooder starve the honest.
-
-The protocol and the hub are fuzzed (`tests/Fuzz/CLAUDE.md`: `FuzzRoomProtocol`, `FuzzRoomHub`).
+`RoomHub(registry, settings, RandomFn, HubSink)` is single-threaded and reads no clock: the caller serializes `OnConnected`, `OnMessage`, `OnDisconnected` and `Tick(now)`; a sink must not call back into the hub; the text a sink gets is valid for the call only. Every failure is an `error` with a stable code. The message table, the flush order, disconnect, tick and the limits: `.claude/rules/rooms-protocol.md`.
 
 ## Room codes and tokens
 

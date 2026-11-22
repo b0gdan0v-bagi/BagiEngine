@@ -59,16 +59,15 @@ namespace BECore {
     }
 
     void ProfilerWidget::Capture() {
-        RingSnapshot fresh;
         if constexpr (BE_PROFILER != 0) {
-            fresh = Profiler::GetFrameRing().Snapshot();
-            _spikes.Update(fresh);  // also while paused: the frames go on
+            Profiler::GetFrameRing().Snapshot(_fresh);
+            _spikes.Update(_fresh);  // also while paused: the frames go on
         }
         if (_paused) {
             return;
         }
         _history = CoreManager::GetFrameStats().GetHistory(FrameStatsCollector::kFrameHistory);
-        _snapshot = eastl::move(fresh);
+        eastl::swap(_snapshot, _fresh);
         ++_snapshotVersion;
         if (_selectedFrame && (_snapshot.frames.empty() || *_selectedFrame < _snapshot.frames.front().index)) {
             _selectedFrame.reset();  // the ring has overwritten it

@@ -38,9 +38,7 @@ namespace BECore {
         }
 
         String DumpIndented(const Json& value) {
-            //-NoStd: nlohmann's dump
-            const std::string text = value.dump(kStateIndent, ' ', false, Json::error_handler_t::replace);
-            return String(text.c_str(), text.size());
+            return DumpJson(value, kStateIndent);
         }
 
         String FormatError(const ControlError& error) {

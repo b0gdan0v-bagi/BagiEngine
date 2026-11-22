@@ -1,5 +1,6 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
+#include <BECore/Profiler/Backends/ChromeTraceJson.h>
 #include <BECore/Profiler/ProfilerClock.h>
 #include <BECore/Profiler/ProfilerSettings.h>
 #include <BECore/Profiler/ScopedTrace.h>
@@ -251,6 +252,20 @@ namespace BECore::Tests {
         const auto written = recorder.WriteFile(String(missing.string().c_str()));
         ASSERT_FALSE(written.has_value());
         EXPECT_FALSE(written.error().empty());
+    }
+
+    TEST(ChromeTraceJsonTest, WriteTextFileWritesTheBytesAndNamesAnUnwritablePath) {
+        const TestTempFolder folder("profiler_text");
+        // CRLF and a NUL byte: the file holds the bytes as they are
+        const String text("one\r\ntwo\n\0three", 15);
+        const String path = folder.PathOf("out.json");
+        ASSERT_TRUE(WriteTextFile(path, text).has_value());
+        EXPECT_EQ(ReadFile(std::filesystem::path(path.c_str())), text);
+
+        const String missing = folder.PathOf("no-such-folder/out.json");
+        const auto refused = WriteTextFile(missing, text);
+        ASSERT_FALSE(refused.has_value());
+        EXPECT_NE(refused.error().find(missing), String::npos);
     }
 
     // ---- The macros ----

@@ -2,7 +2,9 @@
 
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonFwd.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -17,8 +19,18 @@ namespace BECore {
     /// Most calls one `batch` may hold
     inline constexpr size_t kMaxBatchCalls = 1000;
 
-    /// The frame clock as `status` and `step` answer it: {"frame","totalTime","deltaTime","fixedDeltaTime"}
+    /// The frame clock as `status` and `step` answer it: {"deltaTime","fixedDeltaTime","frame","totalTime"}
     [[nodiscard]] Json DescribeControlClock();
+
+    /// Writes DescribeControlClock() as one object, the form `step` and the writers of the games use; the same text as `DescribeControlClock()` dumps to
+    void WriteControlClock(JsonWriter& writer);
+
+    /**
+     * WriteControlClock() with the members of an answer that carries the clock among its own, in the key order of a `Json` object: @p beforeTotalTime writes
+     * members that sort after "frame" and before "totalTime", @p afterTotalTime those that sort after "totalTime". The object is begun and ended here;
+     * the callbacks write whole members (`Member` or `Key` and a value). A name of its own, so a function name passed to `Reply` stays unambiguous.
+     */
+    void WriteControlClockWith(JsonWriter& writer, FunctionRef<void(JsonWriter&)> beforeTotalTime, FunctionRef<void(JsonWriter&)> afterTotalTime);
 
     /// The frame count at @p key of @p params, 1 to kMaxStepFrames, @p fallback when absent; invalid_params when it is not an integer in range. Client data
     [[nodiscard]] std::expected<uint32_t, ControlError> ReadControlFrames(const Json& params, StringView key, uint32_t fallback);
@@ -48,7 +60,7 @@ namespace BECore {
      * `batch` runs the calls in order inside the one request and an error ends it (`stopped` is its index) unless `continueOnError`; `batch` and `quit` are refused per call, and a call that waits
      * for frames (`step`) makes the whole batch wait.
      *
-     * `status` also answers `window` (DescribeWindowStatus). It also registers the by-name methods (`RegisterReflectionControl`) and `set_window` (`RegisterWindowControl`).
+     * `status` also answers `window` (WriteWindowStatus). It also registers the by-name methods (`RegisterReflectionControl`) and `set_window` (`RegisterWindowControl`).
      *
      * `step` is a barrier; what it means on the real and the manual clock: Control/CLAUDE.md, "Manual clock and `step`".
      *
