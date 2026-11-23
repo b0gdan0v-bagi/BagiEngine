@@ -79,6 +79,38 @@ namespace BECore::Tests {
         EXPECT_EQ(_seen[0], "fwtest/a.xml");
     }
 
+    TEST_F(FileWatcherTest, AFileWithANonAsciiNameInANonAsciiFolderNotifiesOnceUnderItsVirtualPath) {
+        MountLower();
+        const Path folder = Path(_lower) / "Папка_é";
+        MakeDirectory(folder);
+        FileWatchHandle handle = _watcher.WatchFile("fwtest/Папка_é/данные_é.xml", Record());
+        ASSERT_TRUE(handle.IsActive());
+
+        _fake->Emit(folder / "данные_é.xml");
+        _fake->Emit(folder / "другой_é.xml");
+        _watcher.Update(0.0);
+        _watcher.Update(After(0.0));
+
+        ASSERT_EQ(_seen.size(), 1u);
+        EXPECT_EQ(_seen[0], "fwtest/Папка_é/данные_é.xml");
+    }
+
+    TEST_F(FileWatcherTest, AFolderWatchReportsANonAsciiFileOfANestedNonAsciiFolderOnce) {
+        MountLower();
+        const Path nested = Path(_lower) / "Папка_é" / "вложенная_é";
+        MakeDirectory(nested);
+        FileWatchHandle handle = _watcher.WatchFolder("fwtest/Папка_é", Record());
+        ASSERT_TRUE(handle.IsActive());
+
+        _fake->Emit(nested / "данные_é.png");
+        _fake->Emit(nested / "данные_é.png");
+        _watcher.Update(0.0);
+        _watcher.Update(After(0.0));
+
+        ASSERT_EQ(_seen.size(), 1u);
+        EXPECT_EQ(_seen[0], "fwtest/Папка_é/вложенная_é/данные_é.png");
+    }
+
     TEST_F(FileWatcherTest, ABurstIsOneCallbackAndTwoBurstsApartAreTwo) {
         MountLower();
         FileWatchHandle handle = _watcher.WatchFile("fwtest/a.xml", Record());

@@ -11,7 +11,6 @@
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <atomic>
 #include <cstdint>
-#include <filesystem>
 
 namespace BECore {
 
@@ -151,8 +150,8 @@ namespace BECore {
             String virtualPath;
             PoolString virtualName;  ///< the reported path of a file watch
             PoolString consumer;
-            Vector<std::filesystem::path> targets;  ///< the file (or the folder) in each layer, absolute and normalised
-            Vector<Path> directories;               ///< what this watch holds in the backend
+            Vector<Path> targets;      ///< the file (or the folder) in each layer, absolute and normalised
+            Vector<Path> directories;  ///< what this watch holds in the backend
             FileWatchCallback callback;
         };
 
@@ -171,9 +170,9 @@ namespace BECore {
 
         /// The write time and size of a file at the last look; the baseline of Rescan
         struct FileState {
-            std::filesystem::path path;
-            std::filesystem::file_time_type writeTime{};
-            uintmax_t size = 0;
+            Path path;
+            int64_t writeTimeNs = 0;
+            uint64_t size = 0;
             bool byApply = false;  ///< set by Apply, cleared by a native delivery: a late notice of the stream for the same state is not delivered again
         };
         using FileStates = HashMap<String, FileState>;  ///< by the normalised real path
@@ -200,17 +199,17 @@ namespace BECore {
         void SweepDeadWatches();
 
         /// Whether @p path (normalised) is a file @p watch reports; @p virtualPath is the path it reports it by
-        [[nodiscard]] static bool Matches(const Watch& watch, const std::filesystem::path& path, PoolString& virtualPath);
+        [[nodiscard]] static bool Matches(const Watch& watch, const Path& path, PoolString& virtualPath);
         /// Whether @p path is below a target of @p watch; unlike Matches it interns nothing
-        [[nodiscard]] static bool Covers(const Watch& watch, const std::filesystem::path& path);
+        [[nodiscard]] static bool Covers(const Watch& watch, const Path& path);
         /// Whether Apply delivered the state the files of @p virtualPath have now, so a notice of the stream for it has nothing to add
         [[nodiscard]] bool IsAppliedAndUnchanged(const Watch& watch, StringView virtualPath) const;
         /// The file of @p virtualPath in each layer of @p watch
-        [[nodiscard]] static Vector<std::filesystem::path> LayerFiles(const Watch& watch, StringView virtualPath);
+        [[nodiscard]] static Vector<Path> LayerFiles(const Watch& watch, StringView virtualPath);
         static void CollectFiles(const Watch& watch, FileStates& out);
         [[nodiscard]] Vector<Detected> Detect() const;
         /// Makes the baseline of @p realPath what the disk says now
-        void RefreshBaseline(const std::filesystem::path& realPath, bool byApply);
+        void RefreshBaseline(const Path& realPath, bool byApply);
         void RefreshBaseline(const Watch& watch, StringView virtualPath, bool byApply);
         /// Remembers the files of a new watch that no other watch knew
         void SnapshotWatch(const Watch& watch);

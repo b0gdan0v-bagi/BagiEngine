@@ -112,6 +112,29 @@ namespace BECore::Tests {
         EXPECT_EQ(_watcher.Rescan().size(), 3u) << "and looking again changes nothing";
     }
 
+    TEST_F(FileWatcherRescanTest, ARescanListsNonAsciiFilesOfNestedFoldersInTheOrderOfTheirVirtualPaths) {
+        ASSERT_NO_FATAL_FAILURE(WatchFolder());
+        const Path folder = Path(_lower) / "Папка_é";
+        Write(folder / "б_é.xml", "one");
+        Write(folder / "в_é.xml", "two");
+        static_cast<void>(_watcher.Apply());  // moves the baseline over the two files
+        _seen.clear();
+
+        Write(folder / "б_é.xml", "one, rewritten");
+        ASSERT_TRUE(RemoveFile(PathToUtf8(folder / "в_é.xml")).has_value());
+        Write(folder / "вложенная_é" / "г_é.xml", "three");
+
+        const Vector<PendingFileChange> changes = _watcher.Rescan();
+
+        ASSERT_EQ(changes.size(), 3u);
+        EXPECT_EQ(changes[0].virtualPath, "fwrtest/Папка_é/б_é.xml"_intern);
+        EXPECT_EQ(changes[0].kind, FileChangeKind::Changed);
+        EXPECT_EQ(changes[1].virtualPath, "fwrtest/Папка_é/в_é.xml"_intern);
+        EXPECT_EQ(changes[1].kind, FileChangeKind::Removed);
+        EXPECT_EQ(changes[2].virtualPath, "fwrtest/Папка_é/вложенная_é/г_é.xml"_intern);
+        EXPECT_EQ(changes[2].kind, FileChangeKind::Added);
+    }
+
     TEST_F(FileWatcherRescanTest, ApplyDeliversEachChangeOnceAndARescanAfterwardsListsNothing) {
         ASSERT_NO_FATAL_FAILURE(WatchFolder());
         Write(_lower / "a.xml", "one, rewritten");
