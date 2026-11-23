@@ -8,12 +8,9 @@
 #include <TaskSystem/TaskMemory.h>
 #include <TaskSystem/TaskScheduler.h>
 #include <TaskSystem/ThreadPool.h>
-#include <atomic>
 #include <coroutine>
-#include <cstring>
 #include <gtest/gtest.h>
 #include <thread>
-#include <utility>
 
 namespace BECore::Tests {
 
@@ -94,6 +91,49 @@ namespace BECore::Tests {
             EXPECT_EQ(TaskMemory::GetPool(index).GetBlockSize(), TaskMemory::GetClassSize(index));
         }
         EXPECT_EQ(TaskMemory::GetClassIndex(kBiggestPooled + 1), TaskMemory::kClassCount);
+    }
+
+    TEST(TaskMemoryTest, EveryBlockIsAlignedAsTheDefaultOperatorNewAligns) {
+        EXPECT_EQ(TaskMemory::kBlockAlignment, static_cast<size_t>(__STDCPP_DEFAULT_NEW_ALIGNMENT__));
+        auto expectAligned = [](size_t size) {
+            void* block = TaskMemory::Allocate(size);
+            ASSERT_NE(block, nullptr);
+            EXPECT_EQ(reinterpret_cast<uintptr_t>(block) % TaskMemory::kBlockAlignment, 0u) << size;
+            TaskMemory::Deallocate(block, size);
+        };
+        for (size_t i = 0; i < TaskMemory::kClassCount; ++i) {
+            expectAligned(TaskMemory::GetClassSize(i));
+        }
+        expectAligned(kBiggestPooled + 1);
+    }
+
+    TEST(TaskMemoryTest, TheClassesWorkAtTheAlignmentOfWasm32) {
+        // wasm32 aligns the default `operator new` to 8; this is that configuration on a 64-bit host
+        constexpr size_t kWasmAlignment = 8;
+        // The counters registry keeps the pointer of the name, so each is a literal
+        constexpr const char* kNames[TaskMemory::kClassCount] = {"Test wasm 64",  "Test wasm 96",  "Test wasm 128", "Test wasm 192", "Test wasm 256",
+                                                                 "Test wasm 384", "Test wasm 512", "Test wasm 768", "Test wasm 1024"};
+        for (size_t i = 0; i < TaskMemory::kClassCount; ++i) {
+            const size_t classSize = TaskMemory::GetClassSize(i);
+            ConcurrentBlockPool pool(kNames[i], classSize, kWasmAlignment);
+            EXPECT_EQ(pool.GetBlockSize(), classSize);
+            Vector<unsigned char*> blocks;
+            while (pool.GetPageCount() < 2) {
+                auto* block = static_cast<unsigned char*>(pool.Allocate());
+                ASSERT_EQ(reinterpret_cast<uintptr_t>(block) % kWasmAlignment, 0u) << classSize;
+                std::memset(block, static_cast<int>(blocks.size() % 251), classSize);
+                blocks.push_back(block);
+            }
+            for (size_t b = 0; b < blocks.size(); ++b) {
+                for (size_t byte = 0; byte < classSize; ++byte) {
+                    ASSERT_EQ(blocks[b][byte], static_cast<unsigned char>(b % 251)) << "class " << classSize << " block " << b << " byte " << byte;
+                }
+            }
+            for (unsigned char* block : blocks) {
+                pool.Deallocate(block);
+            }
+            EXPECT_EQ(pool.GetLiveCount(), 0u);
+        }
     }
 
     TEST(TaskMemoryTest, ABlockAboveTheLastClassIsAHeapBlockFreedWithTheSameSize) {
