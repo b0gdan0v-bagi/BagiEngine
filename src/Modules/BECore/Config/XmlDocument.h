@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/LinearArena.h>
 #include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Types/Types.h>
 #include <filesystem>
@@ -19,6 +20,14 @@ namespace BECore {
 
         /// The bytes of the file at @p path, or nothing when it is not a regular file, is bigger than the limit of an XML document or cannot be read
         static Optional<String> ReadFileBytes(const std::filesystem::path& path);
+
+        /**
+         * @brief ReadFileBytes into @p arena: a view of the file's bytes (valid until the arena is rewound or reset), no heap block
+         *
+         * The same checks, and nothing when the file is bigger than @p maxBytes (at most the limit of an XML document): a caller that
+         * reads in a scratch scope keeps its big files out of the arena, whose chunks stay allocated after a rewind.
+         */
+        static Optional<StringView> ReadFileInto(const std::filesystem::path& path, LinearArena& arena, size_t maxBytes);
 
         /// @return false when the file is missing, is not a regular file or does not parse
         bool LoadFromFile(const std::filesystem::path& filepath);
