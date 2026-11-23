@@ -311,6 +311,53 @@ namespace BECore::Tests {
         EXPECT_EQ(Path(StringView("x/y")).View(), "x/y");
     }
 
+    namespace {
+
+        /// What a function of the old signatures does with its argument: they accept the other type through the bridge
+        String TakesStd(const std::filesystem::path& path) {  //-NoStd: the bridge under test
+            return PathToUtf8(path);
+        }
+
+        StringView TakesPath(const Path& path, String& keep) {
+            keep = String(path.View());
+            return keep;
+        }
+
+    }  // namespace
+
+    TEST(PathTest, StdBridgeRoundTripKeepsNonAsciiNames) {
+        for (const StringView text : {StringView("dir/file.txt"), StringView("/папка/файл.тхт"), StringView("日本/語.日本"), StringView("é/ü.ñ"), StringView("")}) {
+            SCOPED_TRACE(String(text).c_str());
+            const Path path(text);
+            const std::filesystem::path asStd = path;  //-NoStd: the bridge under test
+            EXPECT_EQ(PathToUtf8(asStd), String(text));
+            const Path back(asStd);
+            EXPECT_EQ(back.View(), text);
+            EXPECT_TRUE(back == path);
+        }
+    }
+
+    TEST(PathTest, EachPathTypeIsAcceptedWhereTheOtherIsTaken) {
+        const Path path("é/ü.ñ");
+        const std::filesystem::path asStd = path;  //-NoStd: the bridge under test
+        String keep;
+
+        EXPECT_EQ(TakesStd(path), "é/ü.ñ");
+        EXPECT_EQ(TakesPath(asStd, keep), "é/ü.ñ");
+    }
+
+    TEST(PathTest, JoinWithAStdPathOnEitherSideIsNotAmbiguous) {
+        const Path base("root");
+        const std::filesystem::path stdPart("é/x");      //-NoStd: the bridge under test
+        const std::filesystem::path stdBase("rootStd");  //-NoStd: the bridge under test
+
+        EXPECT_EQ((base / stdPart).View(), "root/é/x");
+        EXPECT_EQ(PathToUtf8(stdBase / base), "rootStd/root");
+        Path accumulated = base;
+        accumulated /= stdPart;
+        EXPECT_EQ(accumulated.View(), "root/é/x");
+    }
+
 #ifdef _WIN32
     TEST(PathTest, WindowsBackslashesBecomeSlashesAndDrivesAreRoots) {
         EXPECT_EQ(Path("C:\\a\\b").View(), "C:/a/b");

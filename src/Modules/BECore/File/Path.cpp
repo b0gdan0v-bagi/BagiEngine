@@ -1,5 +1,7 @@
 #include "Path.h"
 
+#include <BECore/File/FilePath.h>
+
 namespace BECore {
 
     namespace {
@@ -222,6 +224,13 @@ namespace BECore {
             hash = CombineHash(hash, eastl::hash<StringView>{}(name));
         }
         return hash;
+    }
+
+    Path::Path(const std::filesystem::path& path) : Path(PathToUtf8(path)) {}
+
+    Path::operator std::filesystem::path() const {
+        const auto* bytes = reinterpret_cast<const char8_t*>(_text.data());
+        return std::filesystem::path(std::u8string_view(bytes, _text.size()));  //-NoStd: the bridge, UTF-8 into a path
     }
 
     void Path::ToGenericSeparators() {
