@@ -8,6 +8,7 @@
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/Time/GamePause.h>
 #include <BECore/Time/Time.h>
+#include <BECore/UI/UIEnvironment.h>
 #include <Common/AllocCheck.h>
 #include <Common/ControlTestSupport.h>
 #include <gtest/gtest.h>

@@ -7,6 +7,7 @@
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Profiler.h>
+#include <EASTL/sort.h>
 
 namespace BECore {
 

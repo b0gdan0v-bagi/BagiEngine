@@ -1,5 +1,6 @@
 #include "AssetParts.h"
 
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Reflection/ReaderLimits.h>

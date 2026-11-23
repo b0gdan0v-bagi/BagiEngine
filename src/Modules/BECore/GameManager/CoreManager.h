@@ -1,41 +1,44 @@
 #pragma once
 
-#include <BECore/Animation/TweenManager.h>
-#include <BECore/Application/CommandLine.h>
-#include <BECore/Audio/AudioManager.h>
-#include <BECore/Clipboard/Clipboard.h>
-#include <BECore/Config/ConfigManager.h>
-#include <BECore/Control/ControlService.h>
-#include <BECore/FileSystem/FileSystem.h>
-#include <BECore/FileSystem/FileWatcher.h>
-#include <BECore/Input/UIInput.h>
-#include <BECore/MainWindow/MainWindowManager.h>
-#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
-#include <BECore/Renderer/RendererManager.h>
-#include <BECore/Resource/ResourceManager.h>
-#include <BECore/Resource/TextureLibrary.h>
-#include <BECore/Tests/TestManager.h>
-#include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/Time/GamePause.h>
-#include <BECore/Time/Time.h>
-#include <BECore/UI/UIEnvironment.h>
-#include <BECore/UI/UIStrings.h>
-#include <BECore/UI/UIThemes.h>
-#include <BECore/UI/UIVars.h>
+#include <BECore/Time/FrameKind.h>
+#include <BECore/Types/Containers.h>
 #include <BECore/Utils/PassKey.h>
 #include <BECore/Utils/Singleton.h>
-#include <BECore/Widgets/WidgetManager.h>
-#include <Events/EventsProviderManager.h>
 
 namespace BECore {
 
-    // Forward declarations
     class Application;
     class AssertHandlerManager;
+    class AudioManager;
+    class Clipboard;
+    class CommandLine;
+    class ConfigManager;
+    class ControlService;
+    class EventsProviderManager;
+    class FileSystem;
+    class FileWatcher;
+    class FontAtlasLibrary;
+    class FrameStatsCollector;
+    class GamePause;
+    class IMainWindow;
+    class IRenderer;
     class LoggerManager;
+    class MainWindowManager;
+    class RendererManager;
+    class ResourceManager;
     class SceneManager;
     class TaskManager;
+    class TestManager;
+    class TextureLibrary;
+    class Time;
+    class TweenManager;
+    class UIEnvironment;
+    class UIInput;
+    class UIStrings;
+    class UIThemes;
+    class UIVars;
+    class WidgetManager;
 
     namespace Tests {
         class EngineEnvironment;
@@ -43,33 +46,33 @@ namespace BECore {
 
     class CoreManager : public Singleton<CoreManager> {
     public:
-        // Out of line: the pointers to the logger, assert handler and scene managers need their complete types to be dropped (the destructor)
+        // Out of line: every service is held through a pointer to a type this header only declares, and dropping it needs the complete type
         CoreManager();
         ~CoreManager() override;
 
         static WidgetManager& GetWidgetManager() {
-            return GetInstance()._widgetManager;
+            return *GetInstance()._widgetManager;
         }
 
         static EventsProviderManager& GetEventsProviderManager() {
-            return GetInstance()._eventsProviderManager;
+            return *GetInstance()._eventsProviderManager;
         }
 
         static MainWindowManager& GetMainWindowManager() {
-            return GetInstance()._mainWindowManager;
+            return *GetInstance()._mainWindowManager;
         }
 
         /// The program's arguments, stored by `Application::SetArguments`: a game reads its own flags here (`Application/CommandLine.h`)
         static CommandLine& GetCommandLine() {
-            return GetInstance()._commandLine;
+            return *GetInstance()._commandLine;
         }
 
         static FileSystem& GetFileSystem() {
-            return GetInstance()._fileSystem;
+            return *GetInstance()._fileSystem;
         }
 
         static ConfigManager& GetConfigManager() {
-            return GetInstance()._configManager;
+            return *GetInstance()._configManager;
         }
 
         static AssertHandlerManager& GetAssertHandlerManager() {
@@ -77,7 +80,7 @@ namespace BECore {
         }
 
         static TestManager& GetTestManager() {
-            return GetInstance()._testManager;
+            return *GetInstance()._testManager;
         }
 
         static LoggerManager& GetLoggerManager() {
@@ -85,7 +88,7 @@ namespace BECore {
         }
 
         static ResourceManager& GetResourceManager() {
-            return GetInstance()._resourceManager;
+            return *GetInstance()._resourceManager;
         }
 
         static TaskManager& GetTaskManager();
@@ -93,12 +96,10 @@ namespace BECore {
         static const IntrusivePtr<IMainWindow>& GetMainWindow();
 
         static RendererManager& GetRendererManager() {
-            return GetInstance()._rendererManager;
+            return *GetInstance()._rendererManager;
         }
 
-        static const IntrusivePtr<IRenderer>& GetRenderer() {
-            return GetInstance()._rendererManager.GetRenderer();
-        }
+        static const IntrusivePtr<IRenderer>& GetRenderer();
 
         static SceneManager& GetSceneManager() {
             return *GetInstance()._sceneManager;
@@ -110,72 +111,72 @@ namespace BECore {
         }
 
         static TextureLibrary& GetTextureLibrary() {
-            return GetInstance()._textureLibrary;
+            return *GetInstance()._textureLibrary;
         }
 
         static FontAtlasLibrary& GetFontAtlasLibrary() {
-            return GetInstance()._fontAtlasLibrary;
+            return *GetInstance()._fontAtlasLibrary;
         }
 
         static Time& GetTime() {
-            return GetInstance()._time;
+            return *GetInstance()._time;
         }
 
         /// Whether the game runs, is paused or steps: the single truth for the editor, the control API and the manual clock (`Time/GamePause.h`). Main thread only
         static GamePause& GetPause() {
-            return GetInstance()._pause;
+            return *GetInstance()._pause;
         }
 
         /// The tweens of the game, ticked once per frame from the frame time (`Animation/CLAUDE.md`). Main thread only
         static TweenManager& GetTweens() {
-            return GetInstance()._tweenManager;
+            return *GetInstance()._tweenManager;
         }
 
         /// The cost of the last frames: stage times, draws, allocations, named counters (Profiler/CLAUDE.md, "Frame statistics")
         static FrameStatsCollector& GetFrameStats() {
-            return GetInstance()._frameStats;
+            return *GetInstance()._frameStats;
         }
 
         static ControlService& GetControlService() {
-            return GetInstance()._controlService;
+            return *GetInstance()._controlService;
         }
 
         /// The text clipboard: SetText, RequestText (answered from Update), RequestPaste and ClipboardEvents::PasteEvent; the backend is the platform's (`Clipboard/CLAUDE.md`). Main thread only
         static Clipboard& GetClipboard() {
-            return GetInstance()._clipboard;
+            return *GetInstance()._clipboard;
         }
 
         /// Tells the game that a file or a folder changed on disk (`FileSystem/CLAUDE.md`, "FileWatcher"); idle until StartFileWatching(true). Main thread only
         static FileWatcher& GetFileWatcher() {
-            return GetInstance()._fileWatcher;
+            return *GetInstance()._fileWatcher;
         }
 
         /// The sound: clips on the voices of the backend the application fabric sets (`Audio/CLAUDE.md`); no backend in the gtest executable
         static AudioManager& GetAudio() {
-            return GetInstance()._audioManager;
+            return *GetInstance()._audioManager;
         }
 
         static UIInput& GetUIInput() {
-            return GetInstance()._uiInput;
+            return *GetInstance()._uiInput;
         }
 
         static UIEnvironment& GetUIEnvironment() {
-            return GetInstance()._uiEnvironment;
+            return *GetInstance()._uiEnvironment;
         }
 
         /// The variables that UI text is bound to (`text="Score: {score}"`)
         static UIVars& GetUIVars() {
-            return GetInstance()._uiVars;
+            return *GetInstance()._uiVars;
         }
 
         /// The string table of the UI (`text="{#menu.start}"`), loaded from `config/UIStrings.xml` when the game ships one
         static UIStrings& GetUIStrings() {
-            return GetInstance()._uiStrings;
+            return *GetInstance()._uiStrings;
         }
 
         /// The colour themes of the UI (`color="@primary"`), loaded from `config/UIThemes.xml` when the game ships one; `SetTheme` switches the open screen at its next draw
         static UIThemes& GetUIThemes() {
-            return GetInstance()._uiThemes;
+            return *GetInstance()._uiThemes;
         }
 
         // Pre-initialization function (FileSystem, AssertHandlers, runtime ITests)
@@ -222,36 +223,38 @@ namespace BECore {
         // Game time of the delayed tasks, tasks, tweens and the scene update: everything a Held frame leaves out. Does nothing for FrameKind::Held
         void UpdateGame(FrameKind kind);
 
-        CommandLine _commandLine;
-        FileSystem _fileSystem;
-        FileWatcher _fileWatcher;  // after _fileSystem, which it resolves paths with; the handles of the services below must not outlive it
-        ConfigManager _configManager;
+        // Declaration order is construction order and the reverse of destruction order, as for members held by value: the constructor creates the
+        // services in this order and the order comments below still hold
+        UniquePtr<CommandLine> _commandLine;
+        UniquePtr<FileSystem> _fileSystem;
+        UniquePtr<FileWatcher> _fileWatcher;  // after _fileSystem, which it resolves paths with; the handles of the services below must not outlive it
+        UniquePtr<ConfigManager> _configManager;
         IntrusivePtrAtomic<LoggerManager> _loggerManager;
         IntrusivePtrAtomic<AssertHandlerManager> _assertHandlerManager;
-        TestManager _testManager;
-        ResourceManager _resourceManager;
-        WidgetManager _widgetManager;
-        EventsProviderManager _eventsProviderManager;
-        Clipboard _clipboard;
-        AudioManager _audioManager;
-        MainWindowManager _mainWindowManager;
-        RendererManager _rendererManager;
+        UniquePtr<TestManager> _testManager;
+        UniquePtr<ResourceManager> _resourceManager;
+        UniquePtr<WidgetManager> _widgetManager;
+        UniquePtr<EventsProviderManager> _eventsProviderManager;
+        UniquePtr<Clipboard> _clipboard;
+        UniquePtr<AudioManager> _audioManager;
+        UniquePtr<MainWindowManager> _mainWindowManager;
+        UniquePtr<RendererManager> _rendererManager;
         // Declared before _sceneManager, so they outlive the scenes: a canvas unregisters from UIInput when its scene is destroyed
-        UIInput _uiInput;
-        UIEnvironment _uiEnvironment;
-        UIVars _uiVars;
-        UIStrings _uiStrings;
-        UIThemes _uiThemes;
+        UniquePtr<UIInput> _uiInput;
+        UniquePtr<UIEnvironment> _uiEnvironment;
+        UniquePtr<UIVars> _uiVars;
+        UniquePtr<UIStrings> _uiStrings;
+        UniquePtr<UIThemes> _uiThemes;
         IntrusivePtrAtomic<SceneManager> _sceneManager;
-        TextureLibrary _textureLibrary;
-        FontAtlasLibrary _fontAtlasLibrary;
-        Time _time;
-        GamePause _pause;
+        UniquePtr<TextureLibrary> _textureLibrary;
+        UniquePtr<FontAtlasLibrary> _fontAtlasLibrary;
+        UniquePtr<Time> _time;
+        UniquePtr<GamePause> _pause;
         // A setter may point into a scene: OnApplicationDeinit and OnTestEnvironmentDeinit Clear() it first. Declared after _sceneManager on purpose: the
         // destructor then drops the tweens before the scenes go, a second guarantee besides Clear(); moving it above _sceneManager could break that silently
-        TweenManager _tweenManager;
-        FrameStatsCollector _frameStats;
-        ControlService _controlService;
+        UniquePtr<TweenManager> _tweenManager;
+        UniquePtr<FrameStatsCollector> _frameStats;
+        UniquePtr<ControlService> _controlService;
     };
 
 }  // namespace BECore

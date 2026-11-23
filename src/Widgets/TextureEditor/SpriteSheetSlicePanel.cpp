@@ -1,5 +1,6 @@
 #include "SpriteSheetSlicePanel.h"
 
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Math/NumberUtils.h>
 #include <BECore/Resource/TextureLibrary.h>

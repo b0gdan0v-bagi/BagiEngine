@@ -6,6 +6,7 @@
 #include <BECore/Control/Json.h>
 #include <BECore/GameControlTest.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Time/Time.h>
 #include <Common/AllocCheck.h>
 #include <Common/ControlTestSupport.h>

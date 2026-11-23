@@ -1,5 +1,6 @@
 #include "ConfigManager.h"
 
+#include <BECore/Application/CommandLine.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>

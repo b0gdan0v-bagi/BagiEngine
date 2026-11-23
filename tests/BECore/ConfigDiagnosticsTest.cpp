@@ -1,4 +1,5 @@
 #include <BECore/Application/ApplicationConfig.h>
+#include <BECore/Application/CommandLine.h>
 #include <BECore/Config/ConfigFactory.h>
 #include <BECore/Config/ContentVersion.h>
 #include <BECore/Reflection/XmlDeserializer.h>
