@@ -2,6 +2,7 @@
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Text/Font.h>
 #include <BECore/Text/TextLayout.h>
+#include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/TextTestSupport.h>
@@ -178,6 +179,51 @@ namespace BECore::Tests {
         const float boldWidth = TextLayout::Layout(*bold, "Weighty text", options).width;
 
         EXPECT_GT(boldWidth, regularWidth);
+    }
+
+    TEST_F(FontTest, TheGlyphBoxIsTheSizeAndOffsetOfTheRasterizedBitmap) {
+        for (const char32_t codePoint : {U'H', U'p', U'.', U' ', char32_t{0x0416}, char32_t{0x2026}}) {
+            for (const float size : {9.0f, kSize, 71.0f}) {
+                const uint32_t glyph = font->FindGlyph(codePoint);
+                const GlyphBitmap bitmap = font->RasterizeGlyph(glyph, size);
+
+                const GlyphBox box = font->GetGlyphBox(glyph, size);
+
+                EXPECT_EQ(box.width, bitmap.width) << "U+" << std::hex << static_cast<uint32_t>(codePoint) << " at " << size;
+                EXPECT_EQ(box.height, bitmap.height);
+                EXPECT_EQ(box.offsetX, bitmap.offsetX);
+                EXPECT_EQ(box.offsetY, bitmap.offsetY);
+                EXPECT_EQ(box.Empty(), bitmap.coverage.empty());
+            }
+        }
+    }
+
+    // The buffer is the caller's and may hold anything: what the glyph does not cover must come out 0, as in a fresh bitmap
+    TEST_F(FontTest, RasterizingIntoABufferGivesTheBitmapOfRasterizeGlyph) {
+        for (const char32_t codePoint : {U'H', U'g', char32_t{0x0416}}) {
+            const uint32_t glyph = font->FindGlyph(codePoint);
+            const GlyphBitmap bitmap = font->RasterizeGlyph(glyph, kSize);
+            const GlyphBox box = font->GetGlyphBox(glyph, kSize);
+            Vector<uint8_t> buffer(box.PixelCount(), 0xCD);
+
+            font->RasterizeGlyphInto(glyph, kSize, box, Span<uint8_t>(buffer.data(), buffer.size()));
+
+            EXPECT_EQ(buffer, bitmap.coverage) << "U+" << std::hex << static_cast<uint32_t>(codePoint);
+        }
+    }
+
+    // The profile preset counts: stb_truetype's own blocks went to the heap before, 3-4 per glyph
+    TEST_F(FontTest, MeasuringAndRasterizingAGlyphMakeNoHeapBlocks) {
+        const uint32_t glyph = font->FindGlyph(U'g');
+        const GlyphBox box = font->GetGlyphBox(glyph, kSize);  // the first use of the thread's scratch arena takes its chunk
+        Vector<uint8_t> buffer(box.PixelCount());
+        const Span<uint8_t> coverage(buffer.data(), buffer.size());
+        font->RasterizeGlyphInto(glyph, kSize, box, coverage);
+
+        ExpectNoAllocations([&] {
+            const GlyphBox again = font->GetGlyphBox(glyph, kSize);
+            font->RasterizeGlyphInto(glyph, kSize, again, coverage);
+        });
     }
 
     TEST(FontLoadTest, DataThatIsNotAFontFails) {

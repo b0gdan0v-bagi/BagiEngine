@@ -1,15 +1,63 @@
 #include "Font.h"
 
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Profiler/Alloc/AllocRouting.h>
 #include <BECore/Text/Utf8.h>
 #include <Generated/Font.gen.hpp>
 
+namespace BECore {
+
+    namespace {
+
+        /// The arena that stb_truetype takes its memory from on this thread, null outside a StbScratchGuard
+        LinearArena*& StbArena() {
+            static thread_local LinearArena* arena = nullptr;
+            return arena;
+        }
+
+        void* StbAllocate(size_t size) {
+            if (LinearArena* arena = StbArena()) {
+                return arena->Allocate(size);
+            }
+            return AllocRouting::Malloc(AllocSource::Stb, size);
+        }
+
+        /// Under a guard the block is in the arena, which takes it back when the guard's scope ends. Every stb call frees what it allocated before
+        /// it returns (the rasterizer's edges and scanline, the outline's vertices), so no block made under a guard is freed outside it, nor the reverse
+        void StbRelease(void* pointer) {
+            if (StbArena() == nullptr) {
+                AllocRouting::Free(AllocSource::Stb, pointer);
+            }
+        }
+
+        /// Around every stb call that can allocate: its temporaries come from the thread's scratch arena and are given back at the end of the scope
+        class StbScratchGuard {
+        public:
+            StbScratchGuard() : _previous(StbArena()) {
+                StbArena() = &_scope.GetArena();
+            }
+            ~StbScratchGuard() {
+                StbArena() = _previous;
+            }
+            StbScratchGuard(const StbScratchGuard&) = delete;
+            StbScratchGuard& operator=(const StbScratchGuard&) = delete;
+
+        private:
+            ScratchScope _scope;
+            LinearArena* _previous;
+        };
+
+    }  // namespace
+
+}  // namespace BECore
+
 // The one translation unit that holds the stb_truetype implementation (src/Modules/stb/README.md). The functions stay
-// internal to it, so they cannot clash with the copy inside ImGui. Its allocations go through AllocRouting (the allocation tracker sees them).
+// internal to it, so they cannot clash with the copy inside ImGui. Its allocations go to the scratch arena inside a StbScratchGuard and through
+// AllocRouting (the allocation tracker sees them) outside one.
 #define STB_TRUETYPE_IMPLEMENTATION
 #define STBTT_STATIC
-#define STBTT_malloc(size, userData) ((void)(userData), ::BECore::AllocRouting::Malloc(::BECore::AllocSource::Stb, (size)))
-#define STBTT_free(ptr, userData) ((void)(userData), ::BECore::AllocRouting::Free(::BECore::AllocSource::Stb, (ptr)))
+#define STBTT_malloc(size, userData) ((void)(userData), ::BECore::StbAllocate((size)))
+#define STBTT_free(ptr, userData) ((void)(userData), ::BECore::StbRelease((ptr)))
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-function"
@@ -155,27 +203,53 @@ namespace BECore {
         return static_cast<float>(kerning) * stbtt_ScaleForMappingEmToPixels(&_impl->info, fontSize);
     }
 
-    GlyphBitmap Font::RasterizeGlyph(uint32_t glyph, float fontSize) const {
-        GlyphBitmap bitmap;
+    GlyphBox Font::GetGlyphBox(uint32_t glyph, float fontSize) const {
+        GlyphBox box;
         if (!_impl) {
-            return bitmap;
+            return box;
         }
         const float scale = stbtt_ScaleForMappingEmToPixels(&_impl->info, fontSize);
         int x0 = 0;
         int y0 = 0;
         int x1 = 0;
         int y1 = 0;
-        stbtt_GetGlyphBitmapBox(&_impl->info, static_cast<int>(glyph), scale, scale, &x0, &y0, &x1, &y1);
+        {
+            const StbScratchGuard guard;  // a CFF outline is built (and freed) to measure it
+            stbtt_GetGlyphBitmapBox(&_impl->info, static_cast<int>(glyph), scale, scale, &x0, &y0, &x1, &y1);
+        }
         if (x1 <= x0 || y1 <= y0) {
+            return box;
+        }
+        box.width = static_cast<uint32_t>(x1 - x0);
+        box.height = static_cast<uint32_t>(y1 - y0);
+        box.offsetX = x0;
+        box.offsetY = y0;
+        return box;
+    }
+
+    void Font::RasterizeGlyphInto(uint32_t glyph, float fontSize, const GlyphBox& box, Span<uint8_t> coverage) const {
+        ASSERT(coverage.size() == box.PixelCount(), "the buffer is the box's width * height bytes");
+        std::fill(coverage.begin(), coverage.end(), uint8_t{0});
+        if (!_impl || box.Empty()) {
+            return;
+        }
+        const float scale = stbtt_ScaleForMappingEmToPixels(&_impl->info, fontSize);
+        const StbScratchGuard guard;
+        stbtt_MakeGlyphBitmap(&_impl->info, coverage.data(), static_cast<int>(box.width), static_cast<int>(box.height), static_cast<int>(box.width), scale, scale, static_cast<int>(glyph));
+    }
+
+    GlyphBitmap Font::RasterizeGlyph(uint32_t glyph, float fontSize) const {
+        GlyphBitmap bitmap;
+        const GlyphBox box = GetGlyphBox(glyph, fontSize);
+        if (box.Empty()) {
             return bitmap;
         }
-        bitmap.width = static_cast<uint32_t>(x1 - x0);
-        bitmap.height = static_cast<uint32_t>(y1 - y0);
-        bitmap.offsetX = x0;
-        bitmap.offsetY = y0;
-        bitmap.coverage.resize(static_cast<size_t>(bitmap.width) * bitmap.height, 0);
-        stbtt_MakeGlyphBitmap(&_impl->info, bitmap.coverage.data(), static_cast<int>(bitmap.width), static_cast<int>(bitmap.height), static_cast<int>(bitmap.width), scale, scale,
-                              static_cast<int>(glyph));
+        bitmap.width = box.width;
+        bitmap.height = box.height;
+        bitmap.offsetX = box.offsetX;
+        bitmap.offsetY = box.offsetY;
+        bitmap.coverage.resize(box.PixelCount());
+        RasterizeGlyphInto(glyph, fontSize, box, Span<uint8_t>(bitmap.coverage.data(), bitmap.coverage.size()));
         return bitmap;
     }
 
