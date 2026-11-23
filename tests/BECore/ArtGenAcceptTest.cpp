@@ -722,8 +722,52 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenAcceptTest, TheProvenanceFileIsBesideTheMediaFile) {
-        EXPECT_EQ(ProvenanceFileOf("assets/artgen/queen.png").generic_string(), "assets/artgen/queen.artgen.json");
-        EXPECT_EQ(ProvenanceFileOf("assets/sounds/move.wav").generic_string(), "assets/sounds/move.artgen.json");
+        EXPECT_EQ(ProvenanceFileOf("assets/artgen/queen.png"), Path("assets/artgen/queen.artgen.json"));
+        EXPECT_EQ(ProvenanceFileOf("assets/sounds/move.wav"), Path("assets/sounds/move.artgen.json"));
+    }
+
+    TEST_F(ArtGenAcceptTest, OnlyTheLastExtensionOfTheMediaFileIsReplacedByTheProvenanceOne) {
+        EXPECT_EQ(ProvenanceFileOf("x/a.b.png"), Path("x/a.b.artgen.json"));
+        EXPECT_EQ(ProvenanceFileOf("a.png"), Path("a.artgen.json"));
+    }
+
+    TEST_F(ArtGenAcceptTest, AFileShorterThanThePngHeaderHasNoSize) {
+        const auto shortFile = folder / "out" / "short.png";
+        WriteFile(shortFile, "\x89PNG");
+        EXPECT_FALSE(ReadPngSize(shortFile).has_value());
+        EXPECT_FALSE(ReadPngSize(folder / "out" / "nothing.png").has_value());
+    }
+
+    TEST_F(ArtGenAcceptTest, AnAcceptIntoAGameWhoseAssetsFolderIsNonAsciiWritesTheFiles) {
+        const Path assets(folder / "caf\xC3\xA9" / "assets");
+        const auto identity = CopyVariantIntoAssets(png, provenance, assets, "queen", kIdentity);
+        ASSERT_TRUE(identity.has_value()) << identity.error().c_str();
+        EXPECT_EQ(ReadPngSize(identity->pngFile)->first, 1024u);
+        EXPECT_EQ(ReadFile(identity->provenanceFile), "{\"seed\": 7}");
+
+        const auto source = folder / "out" / "real.png";
+        ASSERT_NO_FATAL_FAILURE(WriteRealPng(source, 256, 256, {40, 40, 100, 100}));
+        ArtGenImagePlan own;
+        own.settings = ArtGenImageSettings{true, 5, 64};
+        const auto processed = CopyVariantIntoAssets(source, provenance, assets, "king", own);
+        ASSERT_TRUE(processed.has_value()) << processed.error().c_str();
+        EXPECT_EQ(processed->pngFile, assets / "artgen" / "king.png");
+        EXPECT_TRUE(ReadPngSize(processed->pngFile).has_value());
+        EXPECT_FALSE(std::filesystem::exists(std::filesystem::path(processed->pngFile) += ".tmp"));
+        EXPECT_TRUE(ParseJson(StringView(ReadFile(processed->provenanceFile))).has_value());
+    }
+
+    TEST_F(ArtGenAcceptTest, AnIdentityAcceptWithNoProvenanceRemovesTheOldRecordOfTheName) {
+        ASSERT_TRUE(CopyVariantIntoAssets(png, provenance, folder / "assets", "queen", kIdentity).has_value());
+        const auto old = folder / "assets" / "artgen" / "queen.artgen.json";
+        ASSERT_TRUE(std::filesystem::exists(old));
+
+        const auto copied = CopyVariantIntoAssets(png, folder / "out" / "none.artgen.json", folder / "assets", "queen", kIdentity);
+        ASSERT_TRUE(copied.has_value()) << copied.error().c_str();
+        EXPECT_FALSE(std::filesystem::exists(old));
+
+        const auto again = CopyVariantIntoAssets(png, Path(), folder / "assets", "queen", kIdentity);
+        EXPECT_TRUE(again.has_value()) << "a name with no old record is no error";
     }
 
     TEST_F(ArtGenAcceptTest, KeptIsAddedToTheCopiedProvenanceAndItsOwnKeysStay) {

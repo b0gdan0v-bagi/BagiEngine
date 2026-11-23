@@ -60,7 +60,7 @@ namespace BECore {
                                                         FunctionRef<bool()> save) {
         const PoolString name = PoolString::Intern(sprite);
         const PoolString texturePath = PoolString::Intern(copied.texturePath);
-        const String png = Format("{}", copied.pngFile.generic_string());
+        const String png(copied.pngFile.View());
 
         auto entry = AcceptedSpriteEntryInGroup(library, name, texturePath, copied.width, copied.height, group);
         if (!entry) {
