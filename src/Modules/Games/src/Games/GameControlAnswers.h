@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/ControlClock.h>
+#include <BECore/Control/JsonPayload.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
@@ -49,6 +50,33 @@ namespace BECore {
         BE_REFLECT_FIELD Optional<PoolString> game;
         BE_REFLECT_FIELD Optional<PoolString> reason;
         BE_REFLECT_FIELD Optional<uint64_t> version;
+    };
+
+    /// `get_state` and the `state_changed` push. `state` is the game's own document, written by its `WriteState` (the push: the text of it, left out when the state failed)
+    struct GameStateAnswer {
+        BE_CLASS(GameStateAnswer)
+
+        BE_REFLECT_FIELD PoolString game;
+        BE_REFLECT_FIELD Optional<JsonPayload> state;
+        BE_REFLECT_FIELD uint64_t version = 0;
+    };
+
+    /// `list_actions`: `actions` is the game's own array, written by its `WriteActions`
+    struct GameActionsAnswer {
+        BE_CLASS(GameActionsAnswer)
+
+        BE_REFLECT_FIELD JsonPayload actions;
+        BE_REFLECT_FIELD PoolString game;
+        BE_REFLECT_FIELD uint64_t version = 0;
+    };
+
+    /// `perform_action`: `outcome` is what the game's `PerformAction` answered, `version` the state version after the action
+    struct GameActionAnswer {
+        BE_CLASS(GameActionAnswer)
+
+        BE_REFLECT_FIELD PoolString game;
+        BE_REFLECT_FIELD JsonPayload outcome;
+        BE_REFLECT_FIELD uint64_t version = 0;
     };
 
 }  // namespace BECore

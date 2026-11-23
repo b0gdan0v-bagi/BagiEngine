@@ -231,6 +231,29 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString(*Member(shapes, "element"), "object"), String("SchemaShape"));
     }
 
+    TEST(SchemaExportPayloadTest, AJsonPayloadFieldIsAny) {
+        TypeRegistry local;
+        Add<SchemaPayloadFields>(local);
+        const TypeInfo& info = Require(local.Find("SchemaPayloadFields"));
+
+        const Json described = ToJson(DescribeTypeSchema(info, local));
+        const Json body = TypeOfField(described, "body");
+        EXPECT_EQ(KindOf(body), "any");
+        EXPECT_EQ(DumpJson(body), R"({"kind":"any"})");
+
+        const Json maybeBody = TypeOfField(described, "maybeBody");
+        EXPECT_EQ(KindOf(maybeBody), "optional");
+        EXPECT_EQ(KindOf(*Member(maybeBody, "element")), "any");
+
+        EXPECT_EQ(KindOf(TypeOfField(described, "position")), "opaque") << "another opaque type is still told as such";
+
+        ControlRoots roots;
+        const Json schema = ToJson(MakeSchemaAnswer(local, roots));
+        const Json* entry = EntryNamed(*Member(schema, "types"), "SchemaPayloadFields");
+        ASSERT_NE(entry, nullptr);
+        EXPECT_EQ(KindOf(TypeOfField(*entry, "body")), "any");
+    }
+
     TEST_F(SchemaExportTest, AValueFieldIsDescribedAsSuchWithItsType) {
         const Json& fields = Entry("SchemaValueFields");
 

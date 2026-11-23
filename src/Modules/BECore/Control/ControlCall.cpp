@@ -1,25 +1,22 @@
 #include "ControlCall.h"
 
+#include <BECore/Control/ControlEnvelope.h>
 #include <BECore/Control/ControlService.h>
 
 namespace BECore {
 
-    // The response envelope is written by hand, not as a reflected struct: `id` is the client's own `Json` (a number or a string, copied back as it came)
-    // and `result` is whatever the handler's callback writes between `ok` and the end, so no struct has a type for either member.
     std::expected<void, ControlError> TryAppendOkResponse(String& out, const Json& id, WriteResultFn writeResult) {
         const size_t start = out.size();
         JsonWriter writer(out);
-        writer.BeginObject();
-        writer.Key("id");
-        WriteJson(writer, id);
-        writer.Member("ok", true);
-        writer.Key("result");
-        std::expected<void, ControlError> written = writeResult(writer);
-        if (written) {
-            writer.EndObject();
-            if (!writer.IsComplete()) {
-                written = std::unexpected(MakeControlError(ControlErrors::kInternalError, "the handler wrote a result that is not one JSON value"));
-            }
+        ControlOkEnvelope envelope;
+        envelope.id = JsonPayload::Borrowed(id);
+        envelope.result = JsonPayload::Streamed(writeResult);
+        envelope.WriteJson(writer);
+        std::expected<void, ControlError> written;
+        if (const ControlError* failure = writer.GetFailure()) {
+            written = std::unexpected(*failure);
+        } else if (!writer.IsComplete()) {
+            written = std::unexpected(MakeControlError(ControlErrors::kInternalError, "the handler wrote a result that is not one JSON value"));
         }
         if (!written) {
             out.resize(start);
@@ -38,16 +35,11 @@ namespace BECore {
 
     void AppendErrorResponse(String& out, const Json& id, const ControlError& error) {
         JsonWriter writer(out);
-        writer.BeginObject();
-        writer.Key("error");
-        writer.BeginObject();
-        writer.Member("code", StringView(error.code));
-        writer.Member("message", StringView(error.message));
-        writer.EndObject();
-        writer.Key("id");
-        WriteJson(writer, id);
-        writer.Member("ok", false);
-        writer.EndObject();
+        ControlErrorEnvelope envelope;
+        envelope.error.code = error.code;
+        envelope.error.message = error.message;
+        envelope.id = JsonPayload::Borrowed(id);
+        envelope.WriteJson(writer);
     }
 
     String MakeOkResponse(const Json& id, Json result) {
@@ -108,6 +100,10 @@ namespace BECore {
         const std::expected<void, ControlError> written = writeResult(writer);
         if (!written) {
             _captured = std::unexpected(written.error());
+            return;
+        }
+        if (const ControlError* failure = writer.GetFailure()) {
+            _captured = std::unexpected(*failure);
             return;
         }
         auto parsed = ParseJson(text);

@@ -307,28 +307,6 @@ namespace BECore {
                 }
                 ++next;
             }
-
-            /// `{ok, result}` or `{error: {code, message}, ok}` per call, in the order the `Json` object keeps its keys. By hand: a `result` is the `Json` of any method, not one struct
-            void WriteResults(JsonWriter& writer) const {
-                writer.BeginArray();
-                for (const ControlAnswer& answer : results) {
-                    writer.BeginObject();
-                    if (answer) {
-                        writer.Member("ok", true);
-                        writer.Key("result");
-                        WriteJson(writer, *answer);
-                    } else {
-                        writer.Key("error");
-                        writer.BeginObject();
-                        writer.Member("code", StringView(answer.error().code));
-                        writer.Member("message", StringView(answer.error().message));
-                        writer.EndObject();
-                        writer.Member("ok", false);
-                    }
-                    writer.EndObject();
-                }
-                writer.EndArray();
-            }
         };
 
         /// The calls of a batch as the client sent them, or the error to answer with. Nothing is built from a bad shape
@@ -383,16 +361,24 @@ namespace BECore {
                 batch->Record(std::move(*answer));
             }
 
-            // By hand: the answer is `results`, which holds the `Json` result of each call (`WriteResults`), and the one optional `stopped` beside it; a struct could hold neither payload
-            outer.Reply([batch](JsonWriter& writer) {
-                writer.BeginObject();
-                writer.Key("results");
-                batch->WriteResults(writer);
-                if (batch->stopped) {
-                    writer.Member("stopped", *batch->stopped);
+            ControlBatchAnswer answer;
+            answer.results.reserve(batch->results.size());
+            for (const ControlAnswer& done : batch->results) {
+                ControlBatchResult& row = answer.results.emplace_back();
+                row.ok = done.has_value();
+                if (done) {
+                    row.result = JsonPayload::Borrowed(*done);
+                } else {
+                    ControlErrorAnswer error;
+                    error.code = done.error().code;
+                    error.message = done.error().message;
+                    row.error = std::move(error);
                 }
-                writer.EndObject();
-            });
+            }
+            if (batch->stopped) {
+                answer.stopped = *batch->stopped;
+            }
+            outer.ReplyObject(answer);
         }
 
         void HandleBatch(ControlCall& call, ControlService& service) {

@@ -107,7 +107,8 @@ namespace BECore {
          *
          * Neither a sink nor an observer: returns at once and does not call @p writeData. An observer gets a `Json` parsed back from the written data
          * (so the text is written to a local String first); with a sink alone the data is written in place into the publish buffer, and a second push
-         * allocates nothing. @p writeData writes exactly one value; one that does not is not sent. It must not Publish itself (the nested push reaches only the observers).
+         * allocates nothing. @p writeData writes exactly one value; one that does not, or whose writer recorded a failure (JsonWriter::Fail), is not sent. It must not Publish itself (the nested push
+         * reaches only the observers).
          */
         void Publish(StringView event, FunctionRef<void(JsonWriter&)> writeData);
 
