@@ -1,3 +1,5 @@
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/Reflection/BinaryFormat.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <EASTL/numeric.h>
@@ -7,12 +9,7 @@ namespace BECore {
 
     bool BinarySerializer::SaveToFile(const std::filesystem::path& path) const {
         const Vector<uint8_t>& image = GetData();
-        std::ofstream file(path, std::ios::binary | std::ios::trunc);
-        if (!file) {
-            return false;
-        }
-        file.write(reinterpret_cast<const char*>(image.data()), static_cast<std::streamsize>(image.size()));
-        return file.good();
+        return WriteFileAtomically(PathToUtf8(path), Span<const uint8_t>(image.data(), image.size())).has_value();
     }
 
     const Vector<uint8_t>& BinarySerializer::GetData() const {

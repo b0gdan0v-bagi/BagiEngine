@@ -9,6 +9,7 @@
 #include <BECore/Reflection/XmlSerializer.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/map.h>
 #include <Generated/ReflectionTest.gen.hpp>
@@ -1196,9 +1197,6 @@ namespace BECore::Tests {
         EXPECT_FALSE(deserializer.LoadFromFile(missing));
         EXPECT_TRUE(deserializer.HasErrors());
 
-        const BinarySerializer serializer;
-        EXPECT_FALSE(serializer.SaveToFile(std::filesystem::temp_directory_path() / "BagiEngineTests_NoSuchDirectory" / "file.bin"));
-
         // A file that is not a binary stream is rejected like a corrupt buffer
         const std::filesystem::path garbage = TestTempPath("BagiEngineTests_Garbage");
         {
@@ -1210,6 +1208,41 @@ namespace BECore::Tests {
         std::filesystem::remove(garbage, ignored);
         EXPECT_FALSE(loaded);
         EXPECT_TRUE(fromGarbage.HasErrors());
+    }
+
+    TEST(ReflectionTest, BinarySaveToFileMakesTheFolderAndReplacesTheFileWhole) {
+        const std::filesystem::path folder = TestTempPath("BagiEngineTests_BinarySaveToFileFolder");
+        const std::filesystem::path path = folder / "inner" / "file.bin";
+        std::error_code ignored;
+        std::filesystem::remove_all(folder, ignored);
+
+        const auto fill = [](BinarySerializer& serializer, int32_t level) {
+            if (serializer.BeginObject("Save")) {
+                serializer.WriteAttribute("level", level);
+                serializer.EndObject();
+            }
+        };
+        BinarySerializer first;
+        BinarySerializer second;
+        fill(first, 1);
+        fill(second, 2);
+        ASSERT_TRUE(first.SaveToFile(path));
+        ASSERT_TRUE(second.SaveToFile(path));
+
+        const Vector<uint8_t> expected = second.GetData();
+        const Vector<uint8_t> onDisk = ReadFileBytes(path);
+        std::filesystem::remove_all(folder, ignored);
+        EXPECT_EQ(onDisk, expected);
+    }
+
+    TEST(ReflectionTest, BinarySaveToFileFailsWhenAFileIsInTheWay) {
+        const std::filesystem::path blocker = TestTempPath("BagiEngineTests_BinarySaveToFileBlocker");
+        WriteFile(blocker, "x");
+        const BinarySerializer serializer;
+        const bool saved = serializer.SaveToFile(blocker / "file.bin");
+        std::error_code ignored;
+        std::filesystem::remove(blocker, ignored);
+        EXPECT_FALSE(saved);
     }
 
     TEST(ReflectionTest, MethodReflection) {
