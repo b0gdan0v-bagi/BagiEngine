@@ -660,7 +660,7 @@ namespace BECore {
                 switch (node.kind) {
                     case ExprNodeKind::Name:
                     case ExprNodeKind::Number:
-                        return node.text;
+                        return String(StringView(node.text));
                     case ExprNodeKind::Member:
                         return Format("{}.{}", Describe(node.first), node.text);
                     case ExprNodeKind::Index: {
@@ -752,7 +752,7 @@ namespace BECore {
                     String path;
                     for (const ExprNode* member : members) {
                         path += path.empty() ? "" : ".";
-                        path += member->text;
+                        path.append(member->text.data(), member->text.size());
                     }
                     return ResolveInElement(*base, path, members.front()->column, Describe(id));
                 }
@@ -1430,7 +1430,7 @@ namespace BECore {
                     return Refuse(nameColumn, Format("{} names the element in its second argument, but {}: use a name of its own, for example v", subject, problem));
                 }
                 const uint32_t loop = _loopCount++;
-                _scopes.push_back(LoopScope{nameNode.text, loop, list->list, list->element, Describe(listSource)});
+                _scopes.push_back(LoopScope{String(StringView(nameNode.text)), loop, list->list, list->element, Describe(listSource)});
                 const bool isNumberFold = function.fold == FoldKind::Sum || function.fold == FoldKind::Min || function.fold == FoldKind::Max;
                 const Optional<ExprType> bodyHint = isNumberFold ? (hint.has_value() && IsNumberType(hint->program) ? hint : std::nullopt) : Optional<ExprType>(ProgramType::Bool);
                 const TypedResult body = Check(bodySource, bodyHint);
@@ -1568,7 +1568,7 @@ namespace BECore {
                 if (_ast[nameSource].kind != ExprNodeKind::String) {
                     return Refuse(_ast[nameSource].column, Format("{} needs the name of the table as a 'text' literal, as {}('Name', i)", subject, kNamedTableFunction));
                 }
-                const String name = _ast[nameSource].text;
+                const String name(StringView(_ast[nameSource].text));
                 if (hint.has_value() && !IsNumberType(hint->program)) {
                     return Refuse(node.column, Format("{} gives a number, but {} is needed here: a named table holds numbers, use at(i, ...) for other types", subject, Typed(*hint)));
                 }

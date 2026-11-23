@@ -1,8 +1,11 @@
-// The heap cost of compiling formulas and scripts (Values/Programs, Values/Effects): a benchmark shaped like a content load, run by hand with the profile preset.
+// The heap cost of compiling formulas and scripts (Values/Programs, Values/Effects): what the front end allocates on the heap (the profile preset counts) and a benchmark shaped like a
+// content load, run by hand.
 
 #include <BECore/EffectsToys.h>
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Effects/EffectCompiler.h>
+#include <BECore/Values/Programs/ExprParser.h>
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <Common/AllocCheck.h>
 #include <algorithm>
@@ -166,6 +169,19 @@ namespace BECore::Tests {
         }
 
     }  // namespace
+
+    TEST(CompileScratchTest, ParsingAFormulaInAScopeAllocatesNothingOnTheHeap) {
+        constexpr StringView kFormula = "clamp(caster.attack * 2 + cast.level, 0, 100) - abs(lerp(caster.speed, cast.power, 0.25))";
+        {
+            // The first use of the thread's arena takes its chunk from the heap
+            const ScratchScope warmUp;
+            EXPECT_TRUE(ParseExpression(kFormula).has_value());
+        }
+        ExpectNoAllocations([&] {
+            const ScratchScope scratch;
+            EXPECT_TRUE(ParseExpression(kFormula).has_value());
+        });
+    }
 
     /// A benchmark, not a check: the counts are zero without the profile preset (`kNoAllocTracker`)
     TEST(CompileScratchBenchTest, DISABLED_CompileOfFormulasAndScripts) {

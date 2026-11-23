@@ -29,7 +29,7 @@ namespace BECore {
 
         class ScriptParser {
         public:
-            explicit ScriptParser(Vector<ExprToken> tokens) : _tokens(std::move(tokens)) {}
+            explicit ScriptParser(ArenaVector<ExprToken> tokens) : _tokens(std::move(tokens)) {}
 
             std::expected<ScriptAst, ProgramError> Run() {
                 Vector<ScriptStatementId> top;
@@ -349,7 +349,7 @@ namespace BECore {
                 return *first;
             }
 
-            Vector<ExprToken> _tokens;
+            ArenaVector<ExprToken> _tokens;
             size_t _index = 0;
             ScriptAst _ast;
         };

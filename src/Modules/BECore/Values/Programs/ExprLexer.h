@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Values/Programs/ExprAst.h>
@@ -29,11 +30,14 @@ namespace BECore {
     /**
      * @brief The tokens of a formula, the last one `End`
      *
+     * The list is on the thread's scratch arena and opens no scope of its own: the caller holds a `ScratchScope` that outlives the list and copies out of it what must
+     * stay (`Memory/CLAUDE.md`, "Scratch arena and scopes"). The tokens are views of @p text.
+     *
      * Refuses a text over `ExprLimits::kMaxTextBytes`, a byte that is no part of the language (a control byte, a byte of invalid UTF-8 or any non-ASCII
      * character are named as such), a `'string'` that is not closed or holds anything but printable ASCII (no escapes: a string cannot hold `'`) and a malformed number (`1..2`, `1e`, `12ab`). `[` and
      * `]` are tokens of an index; what may be indexed is the checker's business. With `options.statements` the script tokens are read and the limit is `options.maxBytes` (a message says "script").
      */
-    [[nodiscard]] std::expected<Vector<ExprToken>, ProgramError> LexExpression(StringView text, const LexOptions& options = {});
+    [[nodiscard]] std::expected<ArenaVector<ExprToken>, ProgramError> LexExpression(StringView text, const LexOptions& options = {});
 
     /// How a token reads in a message: `'+'`, `the string 'Fire'`, `the end of the text`
     [[nodiscard]] String DescribeToken(const ExprToken& token);
