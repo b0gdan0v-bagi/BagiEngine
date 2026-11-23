@@ -187,6 +187,9 @@ namespace BECore {
         out.images.resize(actualCount);
         vkGetSwapchainImagesKHR(device.GetDevice(), out.swapchain, &actualCount, out.images.data());
 
+        LOG_INFO("Vulkan: swapchain {}x{}, present mode {}, {} images ({} requested)", extent.width, extent.height,
+                 VulkanSwapchainPolicy::PresentModeName(presentMode), actualCount, imageCount);
+
         out.format = surfaceFormat->format;
         out.extent = extent;
         return true;

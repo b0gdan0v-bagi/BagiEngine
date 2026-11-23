@@ -172,6 +172,14 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(SampleOf(stats).workMs, 0.0) << "a present longer than the frame (a clock that stepped) is not a negative work time";
     }
 
+    TEST(StressRecorderTest, TheWorkTimeAlsoLeavesOutTheWait) {
+        FrameStats stats;
+        stats.cpuMs = 20.0;
+        stats.stageMs[+FrameStage::Present] = 4.0;
+        stats.stageMs[+FrameStage::Wait] = 9.0;
+        EXPECT_DOUBLE_EQ(SampleOf(stats).workMs, 7.0);
+    }
+
     TEST(StressRecorderTest, NumbersArePlainDecimalsAndNeverNanOrInf) {
         EXPECT_EQ(FormatNumber(12.3456789), "12.3457");
         EXPECT_EQ(FormatNumber(0.00001), "0.0000") << "never `1e-05`";

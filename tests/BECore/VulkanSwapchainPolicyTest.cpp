@@ -52,6 +52,15 @@ namespace BECore::Tests {
         EXPECT_EQ(ActionAfter(SwapchainStage::Present, SwapchainStatus::Failed), SwapchainAction::Fail);
     }
 
+    TEST(VulkanSwapchainPolicyTest, PresentModeNameNamesTheModesAndAnythingElseIsOther) {
+        static_assert(PresentModeName(VK_PRESENT_MODE_FIFO_KHR) == "FIFO");
+        EXPECT_EQ(PresentModeName(VK_PRESENT_MODE_FIFO_KHR), "FIFO");
+        EXPECT_EQ(PresentModeName(VK_PRESENT_MODE_MAILBOX_KHR), "MAILBOX");
+        EXPECT_EQ(PresentModeName(VK_PRESENT_MODE_IMMEDIATE_KHR), "IMMEDIATE");
+        EXPECT_EQ(PresentModeName(VK_PRESENT_MODE_FIFO_RELAXED_KHR), "FIFO_RELAXED");
+        EXPECT_EQ(PresentModeName(VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR), "other");
+    }
+
     TEST(VulkanSwapchainPolicyTest, IsMinimizedWhenEitherSideIsZero) {
         static_assert(IsMinimized(0, 600) && !IsMinimized(800, 600));
         EXPECT_TRUE(IsMinimized(0, 0));

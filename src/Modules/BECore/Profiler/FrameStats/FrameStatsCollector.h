@@ -13,10 +13,12 @@
 
 namespace BECore {
 
-    /// The timed stages of a frame (CoreManager::OnGameCycle, Scene::Draw, the present in Application::RunFrame)
-    CORE_ENUM(FrameStage, uint8_t, Update, SceneUpdate, Render, SceneDraw, Present)
+    /// The timed stages of a frame (CoreManager::OnGameCycle, Scene::Draw, the present in Application::RunFrame). Wait is timed by the
+    /// renderer backend (the fence and the swapchain acquire, between BeginFrame and the game cycle), a sibling of the others, not nested
+    CORE_ENUM(FrameStage, uint8_t, Update, SceneUpdate, Render, SceneDraw, Present, Wait)
 
-    inline constexpr size_t kFrameStageCount = 5;
+    inline constexpr size_t kFrameStageCount = 6;
+    static_assert(kFrameStageCount == EnumUtils<FrameStage>::Count(), "kFrameStageCount follows FrameStage");
     inline constexpr size_t kMaxFrameCounters = 16;
 
     struct FrameCounter {
@@ -30,7 +32,7 @@ namespace BECore {
         bool paused = false;                        // a held frame: the game did not advance (a stepped frame is a game frame)
         double frameMs = 0.0;                       // from the end of the frame before to the end of this one (the first frame: its cpuMs)
         double cpuMs = 0.0;                         // from BeginFrame to EndFrame
-        Array<double, kFrameStageCount> stageMs{};  // by FrameStage; SceneUpdate is inside Update, SceneDraw inside Render
+        Array<double, kFrameStageCount> stageMs{};  // by FrameStage; SceneUpdate is inside Update, SceneDraw inside Render, Wait outside all of them
         RenderCounters draws;
         uint64_t allocCount = 0;  // the allocations of the frame (ENGINE_PROFILER_ALLOC; 0 without it)
         uint64_t allocBytes = 0;

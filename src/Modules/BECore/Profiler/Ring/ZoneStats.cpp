@@ -173,14 +173,39 @@ namespace BECore {
         const double sceneUpdate = eastl::max(frame.GetStageMs(FrameStage::SceneUpdate), 0.0);
         const double sceneDraw = eastl::max(frame.GetStageMs(FrameStage::SceneDraw), 0.0);
         const double present = eastl::max(frame.GetStageMs(FrameStage::Present), 0.0);
+        const double wait = eastl::max(frame.GetStageMs(FrameStage::Wait), 0.0);
         Array<double, kExclusiveStageCount> result{};
         result[+ExclusiveStage::UpdateOnly] = eastl::max(frame.GetStageMs(FrameStage::Update) - sceneUpdate, 0.0);
         result[+ExclusiveStage::SceneUpdateStage] = sceneUpdate;
         result[+ExclusiveStage::RenderOnly] = eastl::max(frame.GetStageMs(FrameStage::Render) - sceneDraw, 0.0);
         result[+ExclusiveStage::SceneDrawStage] = sceneDraw;
         result[+ExclusiveStage::PresentStage] = present;
-        result[+ExclusiveStage::OtherStage] = eastl::max(frame.cpuMs - (result[+ExclusiveStage::UpdateOnly] + sceneUpdate + result[+ExclusiveStage::RenderOnly] + sceneDraw + present), 0.0);
+        result[+ExclusiveStage::OtherStage] = eastl::max(frame.cpuMs - (result[+ExclusiveStage::UpdateOnly] + sceneUpdate + result[+ExclusiveStage::RenderOnly] + sceneDraw + present + wait), 0.0);
+        result[+ExclusiveStage::WaitStage] = wait;
         return result;
+    }
+
+    double FrameWorkMs(const FrameStats& frame) {
+        return eastl::max(frame.cpuMs - eastl::max(frame.GetStageMs(FrameStage::Wait), 0.0), 0.0);
+    }
+
+    WorkWaitMean SummarizeWorkWait(const Vector<FrameStats>& history) {
+        WorkWaitMean sum;
+        size_t counted = 0;
+        for (const FrameStats& frame : history) {
+            if (frame.paused) {
+                continue;
+            }
+            sum.workMs += FrameWorkMs(frame);
+            sum.waitMs += eastl::max(frame.GetStageMs(FrameStage::Wait), 0.0);
+            ++counted;
+        }
+        if (counted == 0) {
+            return {};
+        }
+        sum.workMs /= static_cast<double>(counted);
+        sum.waitMs /= static_cast<double>(counted);
+        return sum;
     }
 
 }  // namespace BECore
