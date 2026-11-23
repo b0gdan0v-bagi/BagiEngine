@@ -1,5 +1,6 @@
 #include "ArtGenSetPanel.h"
 
+#include <BECore/File/File.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
@@ -520,14 +521,13 @@ namespace BECore {
             }
             Thumb thumb;
             thumb.seed = variant.seed;
-            const std::filesystem::path root(ToStd(StringView(session.GetGameRoot())));  //-NoStd: std::filesystem::path takes a std::string_view
-            const std::filesystem::path file = AbsoluteInSet(root, StringView(set.name), StringView(variant.file));
-            std::error_code error;
-            if (file.empty() || !std::filesystem::is_regular_file(file, error)) {
+            const Path root{StringView(session.GetGameRoot())};
+            const Path file = AbsoluteInSet(root, StringView(set.name), StringView(variant.file));
+            const auto info = file.Empty() ? Optional<FileInfo>() : GetFileInfo(file);
+            if (!info || info->kind != FileKind::File) {
                 thumb.missing = true;
             } else {
-                const std::string text = file.generic_string();  //-NoStd: the text of a std::filesystem::path
-                thumb.path = String(FromStd(text));
+                thumb.path = String(file.View());
                 if (StringView(variant.kind) == kKindAudio) {
                     thumb.clip = resources.Load<AudioClip>(StringView(thumb.path));
                 } else {
