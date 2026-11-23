@@ -19,6 +19,12 @@ namespace BECore::Tests {
             return eastl::any_of(lines.begin(), lines.end(), [part](const String& line) { return Contains(line, part); });
         }
 
+        constexpr uint64_t kFrameNanoseconds = 16000000;
+        uint64_t g_clockNanoseconds = 0;
+        uint64_t SteadyClock() {
+            return g_clockNanoseconds;
+        }
+
         FrameStats SampleFrame() {
             FrameStats stats;
             stats.frame = 42;
@@ -158,6 +164,49 @@ namespace BECore::Tests {
         }
         EXPECT_GT(_renderer->calls.size(), 0u);
         EXPECT_EQ(AllocTracker::GetThreadCounters().count, before);
+    }
+
+    TEST_F(ProfilerOverlayWidgetTest, DrawingTwiceWithTheSameStatsRecordsTheSameCalls) {
+        if (!kProfilerViewsBuilt) {
+            GTEST_SKIP() << "the overlay draws only in a build with the profiler views";
+        }
+        ProfilerOverlayWidget overlay;
+        overlay.SetVisible(true);
+        overlay.DrawScreen();
+        const auto first = _renderer->calls;
+        _renderer->ClearCalls();
+        overlay.DrawScreen();
+        ASSERT_EQ(_renderer->calls.size(), first.size());
+        for (size_t i = 0; i < first.size(); ++i) {
+            EXPECT_EQ(_renderer->calls[i].kind, first[i].kind) << "call " << i;
+        }
+    }
+
+    TEST_F(ProfilerOverlayWidgetTest, ANewFrameWithTheSameTextShapeDrawsTheSameNumberOfCalls) {
+        if (!kProfilerViewsBuilt) {
+            GTEST_SKIP() << "the overlay draws only in a build with the profiler views";
+        }
+        FrameStatsCollector& collector = CoreManager::GetFrameStats();
+        collector.SetClock(SteadyClock);
+        // A full history (the bars stay as many) and two frames of the same length whose numbers have the same digit count
+        const auto endFrame = [&collector] {
+            g_clockNanoseconds += kFrameNanoseconds;
+            collector.BeginFrame();
+            g_clockNanoseconds += kFrameNanoseconds;
+            collector.EndFrame(RenderCounters{.drawCalls = 4}, AllocTotals{});
+        };
+        for (size_t i = 0; i < FrameStatsCollector::kFrameHistory || collector.GetFrameCount() % 10 != 5; ++i) {
+            endFrame();
+        }
+        ProfilerOverlayWidget overlay;
+        overlay.SetVisible(true);
+        overlay.DrawScreen();
+        const size_t firstCount = _renderer->calls.size();
+        _renderer->ClearCalls();
+        endFrame();
+        overlay.DrawScreen();
+        collector.SetClock(nullptr);
+        EXPECT_EQ(_renderer->calls.size(), firstCount);
     }
 
     TEST_F(ProfilerOverlayWidgetTest, AHiddenOverlayDrawsNothing) {

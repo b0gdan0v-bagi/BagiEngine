@@ -1,6 +1,7 @@
 #include "ProfilerOverlayWidget.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/FrameStats/FrameStatsText.h>
@@ -23,6 +24,7 @@ namespace BECore {
         constexpr Color kSlowBar{230, 90, 70, 255};
         constexpr Color kBudgetLine{255, 255, 255, 120};
         constexpr size_t kBars = 120;
+        constexpr size_t kTextCapacity = 1024;  // the overlay's lines, so the text grows once
         constexpr float kBarWidth = 3.0f;
         constexpr float kBarsHeight = 48.0f;
         constexpr float kBudgetLineHeight = 1.0f;
@@ -80,19 +82,19 @@ namespace BECore {
         const ViewTransform sceneView = renderer.GetViewTransform();
         renderer.SetViewTransform(ViewTransform{});
 
-        String text;
-        for (const String& line : FormatOverlayLines(*last, AllocTracker::GetTotals(), AllocTracker::kEnabled)) {
-            text.append(line);
+        const ScratchScope scratch;
+        ArenaString text;
+        text.reserve(kTextCapacity);
+        FormatOverlayLinesTo(*last, AllocTracker::GetTotals(), AllocTracker::kEnabled, [&text](StringView line) {
+            text.append(line.data(), line.size());
             text.push_back('\n');
-        }
+        });
         TextLayoutOptions options;
         options.fontSize = _fontSize;
         options.wrap = false;
         Font* font = ResolveFont();
-        TextLayoutResult layout;
-        if (font != nullptr) {
-            layout = TextLayout::Layout(*font, text, options);
-        }
+        // _layoutCache is only ever given _font, which ResolveFont never changes after the first call, so it needs no Reset
+        const TextLayoutResult& layout = font != nullptr ? _layoutCache.Get(*font, StringView(text.data(), text.size()), options) : _noLayout;
 
         const float width = std::max(layout.width, kBars * kBarWidth) + 2.0f * _margin;
         const float height = layout.height + kBarsHeight + 3.0f * _margin;
@@ -107,13 +109,13 @@ namespace BECore {
         // One bar per frame, the newest on the right; the line is the frame budget
         const float barsBottom = 2.0f * _margin + layout.height + _margin + kBarsHeight;
         const float msPerPixel = (_budgetMs * kBudgetsShown) / kBarsHeight;
-        const Vector<FrameStats> history = CoreManager::GetFrameStats().GetHistory(kBars);
-        float x = 2.0f * _margin + (kBars - history.size()) * kBarWidth;
-        for (const FrameStats& frame : history) {
+        const FrameStatsCollector& frameStats = CoreManager::GetFrameStats();
+        float x = 2.0f * _margin + (kBars - frameStats.RecentCount(kBars)) * kBarWidth;
+        frameStats.ForEachRecent(kBars, [&](const FrameStats& frame) {
             const float barHeight = std::min(kBarsHeight, static_cast<float>(frame.frameMs) / msPerPixel);
             renderer.DrawFilledRect(x, barsBottom - barHeight, kBarWidth - 1.0f, barHeight, frame.frameMs > _budgetMs ? kSlowBar : kBar);
             x += kBarWidth;
-        }
+        });
         renderer.DrawFilledRect(2.0f * _margin, barsBottom - _budgetMs / msPerPixel, kBars * kBarWidth, kBudgetLineHeight, kBudgetLine);
 
         renderer.SetViewTransform(sceneView);

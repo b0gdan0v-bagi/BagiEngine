@@ -2,6 +2,8 @@
 
 #include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Text/Font.h>
+#include <BECore/Text/TextLayout.h>
+#include <BECore/Text/TextLayoutCache.h>
 #include <BECore/Widgets/IWidget.h>
 
 namespace BECore {
@@ -53,6 +55,8 @@ namespace BECore {
 
         ResourceHandle<Font> _font;
         bool _fontTried = false;
+        TextLayoutCache _layoutCache;  // the text changes with every frame's numbers, but the result keeps its capacity
+        TextLayoutResult _noLayout;    // what is drawn around when there is no font: no text
     };
 
 }  // namespace BECore
