@@ -1,5 +1,6 @@
 #include "File.h"
 
+#include <BECore/Memory/LinearArena.h>
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_iostream.h>
@@ -308,6 +309,30 @@ namespace BECore {
             return std::unexpected(std::move(read.error()));
         }
         return text;
+    }
+
+    std::expected<ScratchFileBytes, String> ReadFileBytesScratch(StringView path, LinearArena& arena, size_t maxScratchBytes, size_t maxBytes) {
+        auto whole = OpenForWholeRead(path, maxBytes);
+        if (!whole) {
+            return std::unexpected(std::move(whole.error()));
+        }
+        ScratchFileBytes result;
+        if (whole->size <= maxScratchBytes) {
+            if (whole->size != 0) {
+                uint8_t* data = arena.Allocate<uint8_t>(whole->size);
+                if (auto read = ReadToTheEnd(whole->file, data, whole->size, path); !read) {
+                    return std::unexpected(std::move(read.error()));
+                }
+                result._inArena = Span<const uint8_t>{data, whole->size};
+            }
+            return result;
+        }
+        result._heap.resize(whole->size);
+        if (auto read = ReadToTheEnd(whole->file, result._heap.data(), result._heap.size(), path); !read) {
+            return std::unexpected(std::move(read.error()));
+        }
+        result._onHeap = true;
+        return result;
     }
 
     std::expected<void, String> WriteFileAtomically(StringView path, Span<const uint8_t> bytes) {

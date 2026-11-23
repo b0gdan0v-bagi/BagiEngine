@@ -2,6 +2,7 @@
 
 #include <BECore/File/File.h>
 #include <BECore/File/FilePath.h>
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Save/SaveStorage.h>
@@ -41,9 +42,22 @@ namespace BECore {
             return Format("{} (at '{}')", error.errorMessage, error.path);
         }
 
+        // A save is about 1 KB, so the bytes of a slot normally live in the call's scratch scope; the bound is the config's (XmlDocument), a bigger
+        // slot is read to the heap so the thread's scratch arena does not keep its chunk
+        constexpr size_t kMaxScratchSaveBytes = size_t{256} * 1024;
+
+        /// The bytes of the slot file: in @p arena up to kMaxScratchSaveBytes (valid until the caller's ScratchScope ends), else on the heap
+        std::expected<ScratchFileBytes, SaveError> ReadSlotScratch(const std::filesystem::path& path, LinearArena& arena) {
+            auto bytes = ReadFileBytesScratch(PathToUtf8(path), arena, kMaxScratchSaveBytes, ReaderLimits::kMaxBinaryStreamBytes);
+            if (!bytes) {
+                return MakeError(SaveErrorKind::ReadFailed, std::move(bytes.error()));
+            }
+            return std::move(*bytes);
+        }
+
         /// Leaves @p deserializer inside the object `save`, so Load goes on with `state`.
-        /// The deserializer only views @p bytes: both callers declare them before the deserializer, so they outlive it.
-        std::expected<SaveInfo, SaveError> OpenEnvelope(BinaryDeserializer& deserializer, const Vector<uint8_t>& bytes, StringView slot) {
+        /// The deserializer only views @p bytes: both callers declare their scratch scope and bytes before the deserializer, so they outlive it.
+        std::expected<SaveInfo, SaveError> OpenEnvelope(BinaryDeserializer& deserializer, Span<const uint8_t> bytes, StringView slot) {
             if (!deserializer.LoadFromView(bytes.data(), bytes.size())) {
                 return MakeError(SaveErrorKind::Corrupt, Format("The save in slot '{}' is not a valid file: {}", slot, FirstErrorOr(deserializer, "unreadable data")));
             }
@@ -135,7 +149,7 @@ namespace BECore {
         return {};
     }
 
-    std::expected<Vector<uint8_t>, SaveError> SaveGameService::ReadSlot(StringView slot) const {
+    std::expected<std::filesystem::path, SaveError> SaveGameService::FindSlotFile(StringView slot) const {
         if (!_initialized) {
             return NotInitializedError();
         }
@@ -143,12 +157,20 @@ namespace BECore {
             return InvalidSlotNameError(slot);
         }
 
-        const std::filesystem::path path = ResolveSlot(slot);
+        std::filesystem::path path = ResolveSlot(slot);
         if (path.empty()) {
             return MakeError(SaveErrorKind::NotFound, Format("No save in slot '{}'", slot));
         }
+        return path;
+    }
 
-        auto bytes = ReadFileBytes(PathToUtf8(path), ReaderLimits::kMaxBinaryStreamBytes);
+    std::expected<Vector<uint8_t>, SaveError> SaveGameService::ReadSlot(StringView slot) const {
+        const auto path = FindSlotFile(slot);
+        if (!path) {
+            return std::unexpected(path.error());
+        }
+
+        auto bytes = ReadFileBytes(PathToUtf8(*path), ReaderLimits::kMaxBinaryStreamBytes);
         if (!bytes) {
             return MakeError(SaveErrorKind::ReadFailed, std::move(bytes.error()));
         }
@@ -177,13 +199,19 @@ namespace BECore {
 
     std::expected<SaveInfo, SaveError> SaveGameService::Load(StringView slot, const SaveSchema& schema, FunctionRef<void(IDeserializer&)> readState) const {
         BE_PROFILE_SCOPE("SaveGame::Load");
-        const auto bytes = ReadSlot(slot);
+        // The deserializer views the bytes and readState runs while they are alive: both end with this call. No co_await here
+        ScratchScope scratch;
+        const auto path = FindSlotFile(slot);
+        if (!path) {
+            return std::unexpected(path.error());
+        }
+        const auto bytes = ReadSlotScratch(*path, scratch.GetArena());
         if (!bytes) {
             return std::unexpected(bytes.error());
         }
 
         BinaryDeserializer deserializer;
-        auto info = OpenEnvelope(deserializer, *bytes, slot);
+        auto info = OpenEnvelope(deserializer, bytes->Bytes(), slot);
         if (!info) {
             return info;
         }
@@ -210,12 +238,17 @@ namespace BECore {
     }
 
     std::expected<SaveInfo, SaveError> SaveGameService::Peek(StringView slot) const {
-        const auto bytes = ReadSlot(slot);
+        ScratchScope scratch;
+        const auto path = FindSlotFile(slot);
+        if (!path) {
+            return std::unexpected(path.error());
+        }
+        const auto bytes = ReadSlotScratch(*path, scratch.GetArena());
         if (!bytes) {
             return std::unexpected(bytes.error());
         }
         BinaryDeserializer deserializer;
-        return OpenEnvelope(deserializer, *bytes, slot);
+        return OpenEnvelope(deserializer, bytes->Bytes(), slot);
     }
 
     bool SaveGameService::Exists(StringView slot) const {

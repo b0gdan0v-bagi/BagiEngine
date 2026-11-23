@@ -1,6 +1,8 @@
 #include "UIDropdown.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Memory/ArenaAllocator.h>
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/UI/UIChoice.h>
 #include <BECore/UI/UITextComponent.h>
@@ -38,8 +40,9 @@ namespace BECore {
         return strips;
     }
 
-    UIDropdown::PopupGeometry UIDropdown::GetPopupGeometry(const Rect& header, const Vector<OptionSize>& options, const Rect& bounds) {
-        PopupGeometry geometry;
+    UIDropdown::PopupPlacement UIDropdown::PlacePopup(const Rect& header, Span<const OptionSize> options, const Rect& bounds, Span<Rect> optionRects) {
+        ASSERT(optionRects.size() == options.size(), "one rect slot per option");
+        PopupPlacement placement;
         float width = header.w;
         float height = 0.0f;
         for (const OptionSize& option : options) {
@@ -56,19 +59,27 @@ namespace BECore {
         if (below + height > bounds.y + bounds.h) {
             if (above >= bounds.y) {
                 y = above;
-                geometry.above = true;
+                placement.above = true;
             } else {
                 y = std::max(bounds.y, bounds.y + bounds.h - height);
             }
         }
 
-        geometry.list = {x, y, width, height};
-        geometry.options.reserve(options.size());
+        placement.list = {x, y, width, height};
         float top = y;
-        for (const OptionSize& option : options) {
-            geometry.options.push_back({x, top, width, option.height});
-            top += option.height;
+        for (size_t i = 0; i < options.size(); ++i) {
+            optionRects[i] = {x, top, width, options[i].height};
+            top += options[i].height;
         }
+        return placement;
+    }
+
+    UIDropdown::PopupGeometry UIDropdown::GetPopupGeometry(const Rect& header, const Vector<OptionSize>& options, const Rect& bounds) {
+        PopupGeometry geometry;
+        geometry.options.resize(options.size());
+        const PopupPlacement placement = PlacePopup(header, Span<const OptionSize>(options.data(), options.size()), bounds, Span<Rect>(geometry.options.data(), geometry.options.size()));
+        geometry.list = placement.list;
+        geometry.above = placement.above;
         return geometry;
     }
 
@@ -197,9 +208,13 @@ namespace BECore {
     }
 
     void UIDropdown::LayoutPopup(const Rect& contentBounds) {
+        // Runs per layout pass: the working lists are scratch, so a warm arena makes no heap allocation
+        const ScratchScope scratch;
         // An option that is not shown takes no room: the layout gives it an empty rect afterwards
-        Vector<UIElement*> shown;
-        Vector<OptionSize> sizes;
+        ArenaVector<UIElement*> shown;
+        ArenaVector<OptionSize> sizes;
+        shown.reserve(children.size());
+        sizes.reserve(children.size());
         for (const auto& child : children) {
             UIElement* option = child.Get();
             if (!UIChoice::IsOption(*option) || !option->active.visible) {
@@ -215,9 +230,10 @@ namespace BECore {
             sizes.push_back(size);
         }
 
-        const PopupGeometry geometry = GetPopupGeometry(rect, sizes, contentBounds);
+        ArenaVector<Rect> rects(shown.size());
+        PlacePopup(rect, Span<const OptionSize>(sizes.data(), sizes.size()), contentBounds, Span<Rect>(rects.data(), rects.size()));
         for (size_t i = 0; i < shown.size(); ++i) {
-            shown[i]->rect = geometry.options[i];
+            shown[i]->rect = rects[i];
         }
     }
 

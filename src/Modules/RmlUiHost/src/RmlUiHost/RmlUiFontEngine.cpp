@@ -2,6 +2,8 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/Memory/ArenaAllocator.h>
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Text/Utf8.h>
 #include <RmlUi/Core/RenderManager.h>
@@ -13,6 +15,7 @@ namespace BECore {
 
         // The page of glyphs is a square this big, in pixels: smaller than the 1024 of the engine's own atlases, since every pixel size of every face has its own
         constexpr uint32_t kPageSize = 512;
+        constexpr size_t kExpectedPagesPerText = 4;
         // A transparent border around each glyph, so bilinear filtering never reads the neighbour (the same as FontAtlas)
         constexpr uint32_t kGlyphPadding = 1;
         constexpr uint32_t kBytesPerPixel = 4;
@@ -243,8 +246,11 @@ namespace BECore {
         const float size = static_cast<float>(handle->size);
         const bool kerning = IsKerningEnabled(textShapingContext);
 
-        // One mesh per page that the text touches, in the order the pages first appear
-        HashMap<int, size_t> meshOfPage;
+        // One mesh per page that the text touches, in the order the pages first appear. `pageOfMesh[i]` is the page of `meshList[i]`: a face has a handful of pages, so a linear
+        // search over a scratch list beats a hash map that would need buckets and nodes of its own. `meshList` is RmlUi's and never holds scratch memory.
+        const ScratchScope scratch;
+        ArenaVector<int> pageOfMesh;
+        pageOfMesh.reserve(kExpectedPagesPerText);
         meshList.clear();
 
         uint32_t previous = 0;
@@ -261,13 +267,13 @@ namespace BECore {
                 pen += font.GetKerning(previous, glyph->index, size);
             }
             if (glyph->page >= 0) {
-                auto found = meshOfPage.find(glyph->page);
-                if (found == meshOfPage.end()) {
-                    found = meshOfPage.emplace(glyph->page, meshList.size()).first;
+                const size_t meshIndex = static_cast<size_t>(eastl::find(pageOfMesh.begin(), pageOfMesh.end(), glyph->page) - pageOfMesh.begin());
+                if (meshIndex == pageOfMesh.size()) {
+                    pageOfMesh.push_back(glyph->page);
                     Rml::TexturedMesh& textured = meshList.emplace_back();
                     textured.texture = GetPage(*handle, glyph->page)->source.GetTexture(renderManager);
                 }
-                Rml::Mesh& mesh = meshList[found->second].mesh;
+                Rml::Mesh& mesh = meshList[meshIndex].mesh;
                 // Each glyph lands on a whole pixel, so the page is drawn 1:1 and stays sharp
                 const float left = RoundToPixel(position.x + pen + glyph->offsetX);
                 const float top = RoundToPixel(position.y + glyph->offsetY);

@@ -29,8 +29,13 @@ namespace BECore {
      */
     [[nodiscard]] AudioDecodeResult DecodeWav(Span<const uint8_t> bytes);
 
-    /// Decodes an Ogg Vorbis file with the vendored stb_vorbis, which trusts its input: only for the assets of the engine and the games
-    [[nodiscard]] AudioDecodeResult DecodeOgg(Span<const uint8_t> bytes);
+    /// What stb_vorbis may take from the scratch arena for the decoder of one clip (the setup: codebooks, windows; and its temporaries). The
+    /// fixture reports 148080 + 7209 bytes; a clip that needs more is opened again on the heap, so this is a speed bound and not a limit
+    inline constexpr size_t kOggDecoderScratchBytes = size_t{160} * 1024;
+
+    /// Decodes an Ogg Vorbis file with the vendored stb_vorbis, which trusts its input: only for the assets of the engine and the games.
+    /// The decoder works in @p decoderScratchBytes of the thread's scratch arena (a test passes less to take the heap path)
+    [[nodiscard]] AudioDecodeResult DecodeOgg(Span<const uint8_t> bytes, size_t decoderScratchBytes = kOggDecoderScratchBytes);
 
     /// The longest sound DecodeFlac() makes by default: ten minutes at 48 kHz. A FLAC frame of a few bytes can stand for 65535 samples, so a
     /// whole decode is bounded by this and not by the size of the file; longer music is streamed (OpenAudioStream())

@@ -1,8 +1,11 @@
 #include <BECore/File/File.h>
 #include <BECore/File/FilePath.h>
+#include <BECore/Memory/ArenaAllocator.h>
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
+#include <bit>
 
 namespace BECore {
 
@@ -29,12 +32,13 @@ namespace BECore {
             const uint8_t* data = nullptr;
             /// The string table of a version 2 stream; null for version 1
             const BinaryFormat::StringTable* table = nullptr;
-            /// One bit per table string that a tag PoolString entry refers to, sized when the first one is met
+            /// One bit per table string that a tag PoolString entry refers to, sized when the first one is met. On the heap: it is moved into
+            /// the reader, which keeps it until the first PoolString read
             Vector<uint64_t> poolBits;
             bool hasDuplicateNames = false;
             /// The keys of the scopes beyond kInlineNameKeys entries. A scope owns the tail from where it began and cuts it back when it ends,
             /// so the nested scopes that are walked in between do not mix with it
-            Vector<uint64_t> spill;
+            ArenaVector<uint64_t> spill;
         };
 
         constexpr unsigned kNameKindBits = 2;
@@ -201,6 +205,8 @@ namespace BECore {
             return false;
         }
 
+        // The spill list dies with this call; the scope is made first so the state's default allocator binds to it
+        ScratchScope scratch;
         ValidateState state;
         state.data = data;
         outChecked.version = version;
@@ -430,7 +436,14 @@ namespace BECore {
             return;
         }
 
-        Vector<StringView> texts;
+        // The list dies with this call (InternBatch copies the texts into the pool); reserved, because an arena container leaves its old blocks on a growth
+        ScratchScope scratch;
+        size_t marked = 0;
+        for (const uint64_t word : _poolBits) {
+            marked += static_cast<size_t>(std::popcount(word));
+        }
+        ArenaVector<StringView> texts;
+        texts.reserve(marked);
         for (size_t word = 0; word < _poolBits.size(); ++word) {
             for (size_t bit = 0; bit < kBitsPerWord; ++bit) {
                 if (((_poolBits[word] >> bit) & 1) == 0) {

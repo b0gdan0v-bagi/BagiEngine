@@ -425,7 +425,9 @@ Examples:
         verbose_log("Scanning for derived classes...")
         scan_headers_list = scan_headers(scan_dirs)
         for file_path in scan_headers_list:
-            if str(file_path.resolve()) not in cache.files:
+            # The cache's content hash decides, as for source_dirs: a header that changed since the
+            # last run is parsed again and its .gen.hpp rewritten.
+            if cache.is_file_changed(file_path):
                 verbose_log(f"  Parsing: {file_path.name}")
                 try:
                     classes, enums = cpp_parser.parse_file(file_path)

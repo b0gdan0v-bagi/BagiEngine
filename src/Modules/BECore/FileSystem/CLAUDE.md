@@ -28,7 +28,7 @@ Without the macros (a target not built through `be_add_game_executable`) the gam
 | `Mount(virtualPath, realPath)` / `Unmount(virtualPath)` | Add a directory (must exist) as the top layer of a mount point / drop the mount point with all its layers |
 | `GetMountedPath(mountPoint)` / `GetMountLayers(mountPoint)` | Top layer / all layers, lowest priority first |
 | `GetRootPath()` | Highest priority root (the game's) |
-| `EnumerateFiles(mountPoint, extensions)` | Recursive listing of all layers of a mount point, filtered by extension, as `PoolString`s; a file present in several layers is listed once |
+| `EnumerateFiles(mountPoint, extensions)` | Recursive listing of all layers of a mount point, filtered by extension, as `PoolString`s, in `std::filesystem::path` order (component by component: `a/b.txt` before `a.txt`); a file present in several layers is listed once. Its working lists are on the scratch arena |
 | `SetRootPath(path)` | Replace all roots with this one |
 
 `ResolvePath` tries, in order: absolute path as given → mount point (first path segment) + remainder, layer by layer from the top → relative to each root, top first → relative to the current directory. A missing file gives an empty path, not an error: check the result.

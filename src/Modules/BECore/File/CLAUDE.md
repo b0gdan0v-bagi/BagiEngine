@@ -10,6 +10,7 @@ The engine's own file layer over SDL3 (`SDL_IOStream`, `SDL_GetPathInfo`, `SDL_R
 | `GetFileInfo(path)` | `Optional<FileInfo>` (kind, size, mtime); nullopt for a missing or unreadable path; allocates nothing on POSIX |
 | `CreateDirectories`, `RemoveFile`, `RenameFile` | folder tree, one file, a rename that replaces a file |
 | `ReadFileBytes`, `ReadTextFile` | a whole file in one allocation, refused above `maxBytes` (default `kDefaultMaxFileBytes`) before anything is allocated |
+| `ReadFileBytesScratch(path, arena, maxScratchBytes)` | `ReadFileBytes` into the caller's `LinearArena` (a `ScratchScope`) when the file is at most `maxScratchBytes`, else into a heap block the `ScratchFileBytes` owns; `Bytes()` is the span either way |
 | `WriteFileAtomically` | folder made, `<path>.tmp` written, flushed, closed, renamed over the target |
 | `PathToUtf8(path)` (`FilePath.h`) | the UTF-8 `String` of a `std::filesystem::path`: the one `u8string()` call, so `File.h` stays free of `<filesystem>` |
 | `TextFileWriter<N>` (`TextFileWriter.h`) | text into an inline buffer of `N` bytes over a `File`, for a writer with nowhere to return an error (a log sink): `Append`, `AppendFormat` (cut at `N`, never allocated), `Flush`, `Close`; the first write error is kept (`HasError`, `TakeError`) and later calls do nothing; no allocation after `Open` |
@@ -21,6 +22,7 @@ The engine's own file layer over SDL3 (`SDL_IOStream`, `SDL_GetPathInfo`, `SDL_R
 - **Errors** are `std::expected<T, String>` with a sentence for the log. `Open` and the whole-file calls name the path; the calls on an open `File` name only SDL's error (the file keeps no path, that would allocate), so the caller adds the path. Read `SDL_GetError` right after the failed call: it is thread-local and the next SDL call overwrites it.
 - **Every mode is binary**: no line-end translation. `Write`, `Append` and `CreateNew` do not make the folder above.
 - **`Size()` comes from the stream**, not from the path: on Android `SDL_IOFromFile` falls back to the APK assets, which `GetFileInfo` does not know. The whole-file reads use it for that reason and take the limit check before the allocation, because the size of a file is untrusted input.
+- **A scratch read has a bound, and a bigger file goes to the heap:** the chunks of a scratch arena stay allocated after the scope ends, so one big file would stay with the thread for good. The caller names the bound for its site (`ConfigManager`: `kMaxScratchConfigBytes`); `maxBytes` is still checked before the arena is asked. The bytes live as long as the scope (no `co_await` in it); `IsOnHeap()` tells which path was taken.
 - **`RemoveFile` of a missing path is an error** (SDL's `SDL_RemovePath` succeeds): on success the file was there and is gone. A folder is refused too.
 - **`WriteFileAtomically`** removes its temp file on every failure after it was opened, closed first (Windows cannot delete an open file); a temp name that cannot be opened (a folder) is left alone. The old target is untouched until the rename. There is no `fsync`: it is about a failed write, not durability against a power loss.
 
