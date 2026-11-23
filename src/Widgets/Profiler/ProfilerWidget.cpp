@@ -66,7 +66,7 @@ namespace BECore {
         if (_paused) {
             return;
         }
-        _history = CoreManager::GetFrameStats().GetHistory(FrameStatsCollector::kFrameHistory);
+        CoreManager::GetFrameStats().GetHistoryInto(FrameStatsCollector::kFrameHistory, _history);
         eastl::swap(_snapshot, _fresh);
         ++_snapshotVersion;
         if (_selectedFrame && (_snapshot.frames.empty() || *_selectedFrame < _snapshot.frames.front().index)) {
@@ -139,9 +139,7 @@ namespace BECore {
             _selectedFrame = clicked;
         }
         // The overlay's text: one place says what a frame cost
-        for (const String& line : FormatOverlayLines(_history.back(), AllocTracker::GetTotals(), AllocTracker::kEnabled)) {
-            ImGui::TextUnformatted(line.c_str());
-        }
+        FormatOverlayLinesTo(_history.back(), AllocTracker::GetTotals(), AllocTracker::kEnabled, [](StringView line) { ImGui::TextUnformatted(line.data(), line.data() + line.size()); });
     }
 
     void ProfilerWidget::DrawTimeline() {
