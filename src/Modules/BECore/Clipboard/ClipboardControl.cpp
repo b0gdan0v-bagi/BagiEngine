@@ -1,6 +1,7 @@
 #include "ClipboardControl.h"
 
 #include <BECore/Clipboard/Clipboard.h>
+#include <BECore/Clipboard/ClipboardAnswers.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
@@ -11,6 +12,28 @@ namespace BECore {
     namespace {
 
         constexpr StringView kTimeoutCode = "clipboard_timeout";
+
+        /// The words of `ToString(ClipboardStatus)` as interned constants
+        struct StatusWords {
+            static constexpr auto ok = "ok"_intern;
+            static constexpr auto empty = "empty"_intern;
+            static constexpr auto refused = "refused"_intern;
+            static constexpr auto unavailable = "unavailable"_intern;
+        };
+
+        PoolString StatusWord(ClipboardStatus status) {
+            switch (status) {
+                case ClipboardStatus::Ok:
+                    return StatusWords::ok;
+                case ClipboardStatus::Empty:
+                    return StatusWords::empty;
+                case ClipboardStatus::Refused:
+                    return StatusWords::refused;
+                case ClipboardStatus::Unavailable:
+                    break;
+            }
+            return StatusWords::unavailable;
+        }
 
         /// A call that waits, frame by frame, for the clipboard: @c isDone is asked at the end of each frame, @c finish answers
         struct Waiting {
@@ -47,9 +70,9 @@ namespace BECore {
                 call.Fail(ControlErrors::kInvalidParams, "'text' has to be a string");
                 return;
             }
-            Json result = Json::object();
-            result["ok"] = CoreManager::GetClipboard().SetText(*text);
-            call.Reply(std::move(result));
+            ClipboardSetAnswer answer;
+            answer.ok = CoreManager::GetClipboard().SetText(*text);
+            call.ReplyObject(answer);
         }
 
         void HandleGet(ControlCall& call) {
@@ -61,10 +84,10 @@ namespace BECore {
             auto waiting = MakeUnique<Waiting>();
             waiting->isDone = [answer]() { return answer->arrived; };
             waiting->finish = [answer](ControlCall& done) {
-                Json result = Json::object();
-                result["status"] = MakeJsonString(ToString(answer->text.status));
-                result["text"] = MakeJsonString(answer->text.text);
-                done.Reply(std::move(result));
+                ClipboardGetAnswer reply;
+                reply.status = StatusWord(answer->text.status);
+                reply.text = answer->text.text;
+                done.ReplyObject(reply);
             };
             Await(call, std::move(waiting));
         }
@@ -73,6 +96,7 @@ namespace BECore {
             CoreManager::GetClipboard().RequestPaste();
             auto waiting = MakeUnique<Waiting>();
             waiting->isDone = []() { return !CoreManager::GetClipboard().HasPending(); };
+            // An empty answer, like `quit`: the paste itself reaches the game as `PasteEvent`
             waiting->finish = [](ControlCall& done) { done.Reply(Json::object()); };
             Await(call, std::move(waiting));
         }

@@ -8,6 +8,7 @@
 
 namespace BECore::JsonWrite {
 
+    // By hand: this is the native leaf of the generated writer (`JsonWriteReflect.h` calls it for a `Math` type), so nothing below it is left to reflect.
     // The keys of every overload are in the order a `Json` object sorts them, which is the order JsonSerializer + DumpJson give.
 
     void WriteMath(JsonWriter& w, const Vec2& value) {

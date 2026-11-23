@@ -1,6 +1,7 @@
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlWindow.h>
+#include <BECore/Control/ControlWindowStatus.h>
 #include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
@@ -416,6 +417,39 @@ namespace BECore::Tests {
         EXPECT_EQ(NumberOf(safeArea, "right"), 10.0);
         EXPECT_EQ(NumberOf(safeArea, "bottom"), 20.0);
         EXPECT_EQ(NumberOf(safeArea, "left"), 30.0);
+    }
+
+    TEST_F(ControlWindowTest, TheWrittenWindowStatusIsTheTextOfTheDomItReplaced) {
+        WindowSimulation current;
+        current.width = 480;
+        current.height = 320;
+        current.density = 2.0f;
+        current.safeArea = {40.0f, 10.0f, 20.0f, 30.0f};
+        window->SetCurrent(current);
+        renderer->width = 960.0f;
+        renderer->height = 640.0f;
+
+        Json insets = Json::object();
+        insets["top"] = 40.0;
+        insets["right"] = 10.0;
+        insets["bottom"] = 20.0;
+        insets["left"] = 30.0;
+        Json expected = Json::object();
+        expected["width"] = 480;
+        expected["height"] = 320;
+        expected["density"] = 2.0;
+        expected["displayScale"] = 1.0;
+        expected["safeArea"] = std::move(insets);
+        expected["outputWidth"] = 960;
+        expected["outputHeight"] = 640;
+        expected["userScale"] = static_cast<double>(kStartUserScale);
+        expected["headless"] = true;
+
+        String written;
+        JsonWriter writer(written);
+        ControlWindowStatus::Read().WriteJson(writer);
+
+        EXPECT_EQ(written, DumpJson(expected));
     }
 
     TEST_F(ControlWindowTest, StatusTellsARealWindowToo) {

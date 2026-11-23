@@ -121,21 +121,14 @@ namespace BECore {
         }
 
         /// The line a successful More variants leaves: what was queued, and the rows left out with the reason
-        String DescribeMore(const Json& reply) {
-            const Optional<int64_t> count = GetJsonInt(reply, "count");
-            const Optional<int64_t> seed = GetJsonInt(reply, "seed");
-            String message = Format("Queued {} more per row on seed {}", count ? *count : 0, seed ? *seed : 0);
-            const Json* skipped = FindJsonMember(reply, "skipped");
-            if (skipped == nullptr || !skipped->is_array() || skipped->empty()) {
+        String DescribeMore(const ArtGenMoreAnswer& reply) {
+            String message = Format("Queued {} more per row on seed {}", reply.count, reply.seed);
+            if (reply.skipped.empty()) {
                 return message;
             }
             String left;
-            for (const Json& row : *skipped) {
-                const Optional<String> job = GetJsonString(row, "job");
-                const Optional<String> reason = GetJsonString(row, "reason");
-                if (job && reason) {
-                    left.append(left.empty() ? "" : ", ").append(Format("{} ({})", *job, *reason));
-                }
+            for (const ArtGenMoreSkippedAnswer& row : reply.skipped) {
+                left.append(left.empty() ? "" : ", ").append(Format("{} ({})", row.job, row.reason));
             }
             return Format("{}; left out: {}", message, left);
         }
@@ -909,14 +902,11 @@ namespace BECore {
             auto result = session.AcceptSet(StringView(set.name));
             _acceptFailed = !result.has_value();
             if (result) {
-                const Json* accepted = FindJsonMember(*result, "accepted");
                 int32_t written = 0;
                 int32_t replaced = 0;
-                if (accepted != nullptr && accepted->is_array()) {
-                    for (const Json& row : *accepted) {
-                        written += FindJsonMember(row, "as") != nullptr ? 1 : 0;
-                        replaced += FindJsonMember(row, "replacedBy") != nullptr ? 1 : 0;
-                    }
+                for (const ArtGenAcceptedRow& row : result->accepted) {
+                    written += row.as ? 1 : 0;
+                    replaced += row.replacedBy ? 1 : 0;
                 }
                 _acceptMessage = replaced > 0 ? Format("Accepted {} row(s) into the game; {} left as they are: a newer set holds their names", written, replaced)
                                               : Format("Accepted {} row(s) into the game", written);
@@ -931,7 +921,7 @@ namespace BECore {
         if (IconTextButton(ICON_LC_LOCK, "Keep all", keepBlocker != nullptr ? keepBlocker : kKeepAllTip)) {
             auto result = session.KeepSet(StringView(set.name));
             _acceptFailed = !result.has_value();
-            _acceptMessage = result ? Format("Kept {} row(s)", keepable) : result.error().message;
+            _acceptMessage = result ? Format("Kept {} row(s)", result->kept.size()) : result.error().message;
         }
         ImGui::EndDisabled();
         if (set.kind != kKindAudio) {

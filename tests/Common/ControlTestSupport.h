@@ -2,6 +2,9 @@
 
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonWriter.h>
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Time/Time.h>
 #include <BECore/Types/Types.h>
 #include <Common/Require.h>
 #include <gtest/gtest.h>
@@ -29,6 +32,33 @@ namespace BECore::Tests {
         });
         service.Drain();
         return response;
+    }
+
+    /// The clock of `CoreManager::GetTime()` as a hand-built DOM: the oracle of every answer that carries `ControlClock`
+    inline Json DomClock() {
+        const Time& time = CoreManager::GetTime();
+        Json clock = Json::object();
+        clock["frame"] = time.GetFrameCount();
+        clock["totalTime"] = time.GetTotalTime();
+        clock["deltaTime"] = time.GetDeltaTime();
+        clock["fixedDeltaTime"] = time.GetFixedDeltaTime();
+        return clock;
+    }
+
+    /// The text the generated writer makes of a reflected @p answer
+    template <typename T>
+    String WrittenText(const T& answer) {
+        String text;
+        JsonWriter writer(text);
+        answer.WriteJson(writer);
+        return text;
+    }
+
+    /// The parsed text of a reflected @p answer; a null Json when it did not parse
+    template <typename T>
+    Json ToJson(const T& answer) {
+        auto parsed = ParseJson(WrittenText(answer));
+        return parsed ? std::move(*parsed) : Json();
     }
 
     // The readers below go through the checked accessors of Json.h: nlohmann's throwing ones would abort the whole test process on a bad answer

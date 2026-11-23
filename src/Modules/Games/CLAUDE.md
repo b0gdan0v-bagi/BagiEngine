@@ -17,13 +17,13 @@ The contract between the engine and a game. `Games` provides `IGame` and `GameMa
 
 ## Control API (`IControllableGame`, `GameControl`)
 
-A program or a model plays a game through `IControllableGame` (`Games/IControllableGame.h`), which the game hands out from `IGame::AsControllable()`. The engine asks through that call, never through a cast, so no engine code names a game. `GameManager::Initialize()` calls `RegisterGameControl()`, which registers the methods below in `CoreManager::GetControlService()` (protocol and threading: `BECore/Control/CLAUDE.md`). They act on the active game, looked up on every call, and every one writes its answer in place with a `JsonWriter` (the clock members of `run_until` through `WriteControlClockWith`); the one `Json` document that stays is the state `run_until` evaluates its `pointer` against. `RegisterGameControl()` also installs a frame end hook that pushes `{"event": "state_changed", "data": {"game", "version", "state"}}` when the state version of the active game moved since the previous frame, whatever moved it (a client, a reset, a person's click); the first frame only records the version, and a game that is not controllable never pushes (`Control/CLAUDE.md`).
+A program or a model plays a game through `IControllableGame` (`Games/IControllableGame.h`), which the game hands out from `IGame::AsControllable()`. The engine asks through that call, never through a cast, so no engine code names a game. `GameManager::Initialize()` calls `RegisterGameControl()`, which registers the methods below in `CoreManager::GetControlService()` (protocol and threading: `BECore/Control/CLAUDE.md`). They act on the active game, looked up on every call, and every one writes its answer in place with a `JsonWriter`: `list_games`, `switch_game`, `reset`, `set_state` and `run_until` are the reflected structs of `GameControlAnswers.h` (`call.ReplyObject(answer)`; `run_until` derives `ControlClock`), and `get_state`, `list_actions`, `perform_action` and the push stay by hand because the game's own document sits between the keys `game` and `version`. The one `Json` document that stays is the state `run_until` evaluates its `pointer` against. `RegisterGameControl()` also installs a frame end hook that pushes `{"event": "state_changed", "data": {"game", "version", "state"}}` when the state version of the active game moved since the previous frame, whatever moved it (a client, a reset, a person's click); the first frame only records the version, and a game that is not controllable never pushes (`Control/CLAUDE.md`).
 
 `RegisterGameControl` also registers the control root `game` (`Control/CLAUDE.md`, `ControlRoots`): the active game, resolved on every request to its most derived type, empty when no game is active. It keeps `allowInterning` off, so a client cannot grow the `PoolString` pool through it. A game adds what a client may do beyond the table below by marking a method of its `IGame` `BE_FUNCTION` (`call_method` with the root `game`) and a field `BE_REFLECT_FIELD` (`get_property` / `set_property`); `BagiStress` is the engine's example (`tools/stress/CLAUDE.md`), Mahjong the next user. Parameters, codes and limits: `BECore/Reflection/CLAUDE.md`, "Reflection methods".
 
 | Method | Params | Result |
 |--------|--------|--------|
-| `list_games` | none | `{"active": name or null, "games": [{"name", "scene", "controllable"}]}` |
+| `list_games` | none | `{"active": name, "games": [{"name", "scene", "controllable"}]}`; `active` is left out when no game is active |
 | `switch_game` | `{"name"}` | `{"active"}` |
 | `reset` | the game's options (e.g. a seed) | `{"game", "version"}`; a game that is not controllable gets a plain `IGame::Reset()` and no version |
 | `get_state` | none | `{"game", "version", "state"}` |
@@ -33,6 +33,8 @@ A program or a model plays a game through `IControllableGame` (`Games/IControlla
 | `run_until` | `{condition, maxFrames?, dt?}`: a state pointer equals a value, the version moved, or an event arrived | `{met, frames, reason?, game?, version?}` and the clock of `step`; the limit is `met: false` (`.claude/rules/control-qa-api.md`) |
 
 `IControllableGame`: `GetState()`, `GetActions()` (a JSON array; every element is accepted by `PerformAction` as is), `WriteState()` / `WriteActions()` (what `get_state`, `list_actions` and the push call: the default writes `GetState()` / `GetActions()`, an override skips the `Json` and keeps the two equal), `PerformAction(action)`, `Reset(options)`, `SetState(state)` (default: `unsupported`), `GetStateVersion()`. Errors are `std::expected<.., ControlError>`: `GameControlErrors` (codes in `IControllableGame.h`), a bad parameter is `ControlErrors::kInvalidParams`.
+
+The engine writes the clock, window, status and every plain answer through reflected structs; a game's own answers (`GetState`, `GetActions`, `PerformAction`, its control methods) may keep returning `Json`. A game that wants the same writes a `BE_CLASS` answer and `call.ReplyObject(answer)` in its control method; `ISeatedGame` still returns `Json`. A game's tool that reads `schema` follows `isConst` (the old `const`) and a type with no `parent` has no `parent` member.
 
 Writing the adapter of a game:
 
@@ -45,7 +47,7 @@ Writing the adapter of a game:
 
 ## Record and replay
 
-A recording is JSON lines of the accepted `reset`, `perform_action` and `set_state` calls; a game opts in with `IsReplayable()` and `GetReplayStart()`, and is replayable only when all its randomness comes from the seed and its delayed tasks follow game time. The file format, the methods, the mismatch kinds and the adoption steps: `.claude/rules/games-replay.md`.
+A recording is JSON lines of the accepted `reset`, `perform_action` and `set_state` calls; a game opts in with `IsReplayable()` and `GetReplayStart()`, and is replayable only when all its randomness comes from the seed and its delayed tasks follow game time. `record_start` and `record_stop` are the reflected structs of `ReplayAnswers.h`; `replay` is a reflected `ReplayAnswer` (counts and clock) whose document gets the `mismatch` by hand, since it embeds the game's own documents. The file format, the methods, the mismatch kinds and the adoption steps: `.claude/rules/games-replay.md`.
 
 ## Seats (`ISeatedGame`)
 

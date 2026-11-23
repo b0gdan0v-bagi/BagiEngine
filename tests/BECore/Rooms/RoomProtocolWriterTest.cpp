@@ -108,9 +108,9 @@ namespace BECore::Tests {
         lobby.room = kRoomCode;
         lobby.game = "cards";
         lobby.hostSeat = 0;
-        lobby.seats = {LobbySeat{0, SeatKind::Human, "Ann", true}, LobbySeat{1, SeatKind::Computer, {}, false}, LobbySeat{2, SeatKind::Empty, {}, false}};
+        lobby.seats = {LobbySeat{0, SeatKind::Human, "Ann", true}, LobbySeat{1, SeatKind::Computer, {}, false}, LobbySeat{2, SeatKind::Empty, {}, false}, LobbySeat{3, SeatKind::Human, "Bob", false}};
         EXPECT_EQ(MakeLobbyMessage(lobby), R"({"game":"cards","host":0,"phase":"lobby","room":"ABCDE","seats":[{"connected":true,"kind":"human","name":"Ann","seat":0},)"
-                                           R"({"kind":"computer","seat":1},{"kind":"empty","seat":2}],"type":"lobby","v":1})");
+                                           R"({"kind":"computer","seat":1},{"kind":"empty","seat":2},{"connected":false,"kind":"human","name":"Bob","seat":3}],"type":"lobby","v":1})");
 
         const Json view = Json{{"hand", Json::array({1, 2})}, {"turn", 1}};
         const Json actions = Json::array({Json{{"type", "play"}}});

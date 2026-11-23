@@ -234,6 +234,7 @@ namespace BECore::Tests {
                     request["params"] = params;
                 }
                 service.Post(DumpJson(request), [this](String text) {
+                    lastText = text;
                     auto parsed = ParseJson(text);
                     responses.push_back(parsed ? std::move(*parsed) : Json());
                 });
@@ -245,6 +246,7 @@ namespace BECore::Tests {
 
             ControlService service;
             Vector<Json> responses;
+            String lastText;  // the text of the newest response, as the transport got it
             IntrusivePtr<IRenderer> previousRenderer;
             int64_t lastId = 0;
         };
@@ -1054,6 +1056,25 @@ namespace BECore::Tests {
         const int64_t height = GetJsonInt(Require(Result(0)), "height").value_or(0);
         EXPECT_EQ(width, 1024);  // the window of the engine config is 1920 by 1080, cut to the default 1024
         EXPECT_EQ(height, 576);
+    }
+
+    TEST_F(ScreenshotControlTest, TheAnswerHasExactlyTheKeysHeightPngBase64AndWidthInThisOrder) {
+        DrawFrame();
+        Post("screenshot");
+        service.Drain();
+        renderer->Present();
+        service.EndFrame();
+
+        ASSERT_EQ(responses.size(), 1u);
+        const size_t height = lastText.find("\"height\":");
+        const size_t png = lastText.find("\"png_base64\":\"");
+        const size_t width = lastText.find("\"width\":");
+        ASSERT_NE(height, String::npos);
+        ASSERT_NE(png, String::npos);
+        ASSERT_NE(width, String::npos);
+        EXPECT_LT(height, png);
+        EXPECT_LT(png, width);
+        EXPECT_EQ(Require(Result(0)).size(), 3u);
     }
 
     TEST_F(ScreenshotControlTest, MaxSizeSetsTheLongerSide) {

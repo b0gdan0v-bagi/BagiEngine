@@ -181,10 +181,10 @@ namespace BECore::Tests {
             if (const auto min = GetJsonNumber(element, "minValue")) {
                 range = Format("{}..{} step {}", Number(*min), Number(GetJsonNumber(element, "maxValue").value_or(0.0)), Number(GetJsonNumber(element, "step").value_or(0.0)));
             }
-            // A slider answers `value` as a number: the clicker's value is the string; only a string is read here
-            String line = Format("type={}; text={}; icon={}; action={}; value={}; tooltip={}; bind={}; range={}; disabled={}", JsonText(element, "type"), JsonText(element, "text"),
-                                 JsonText(element, "icon"), JsonText(element, "action"), range.empty() ? JsonText(element, "value") : String(), JsonText(element, "tooltip"), JsonText(element, "bind"),
-                                 range, JsonFlag(element, "disabled"));
+            // A slider has no `value` (its number is `sliderValue`), so its line carries an empty one, as a control with no clicker value
+            String line =
+                Format("type={}; text={}; icon={}; action={}; value={}; tooltip={}; bind={}; range={}; disabled={}", JsonText(element, "type"), JsonText(element, "text"), JsonText(element, "icon"),
+                       JsonText(element, "action"), JsonText(element, "value"), JsonText(element, "tooltip"), JsonText(element, "bind"), range, JsonFlag(element, "disabled"));
             if (FindJsonMember(element, "checked") != nullptr) {
                 AppendFormat(line, "; checked={}", JsonFlag(element, "checked"));
             }

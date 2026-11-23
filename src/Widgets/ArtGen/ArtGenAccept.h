@@ -6,6 +6,7 @@
 #include <BECore/Resource/TextureLibrary.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
+#include <Widgets/ArtGen/ArtGenAnswers.h>
 #include <Widgets/ArtGen/ArtGenImage.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
 #include <Widgets/TextureEditor/SpriteAtlas.h>
@@ -154,8 +155,12 @@ namespace BECore {
         bool _repacked = false;
     };
 
-    /// What `artgen_accept` answers as `atlas`: `null` when no atlas was written, else `{name, texturePath, width, height, members}`
-    [[nodiscard]] Json AtlasReplyToJson(const Optional<AtlasWritten>& repacked);
+    /// What `artgen_accept` answers as `atlas` when an atlas was written
+    [[nodiscard]] ArtGenAtlasAnswer MakeArtGenAtlasAnswer(const AtlasWritten& repacked);
+
+    /// The `processing` an image accept answers: the settings it was made with and the placement of the written picture (`crop`, `scale`, `size`,
+    /// `frame`: `set` when the crop came from the frame of a set, else `sprite`). The provenance file records the same placement, written by hand
+    [[nodiscard]] ArtGenProcessingAnswer MakeArtGenProcessingAnswer(const ArtGenCopied& copied);
 
     /// What AcceptVariant did
     struct ArtGenAccepted {
@@ -245,18 +250,16 @@ namespace BECore {
      * the resource cache and every AudioSourceComponent of the active scene that names it reloaded; with @p node, the clip put on its
      * AudioSourceComponent (the scene editor is told the scene changed).
      *
-     * Answers `{clip, wav, sampleRate, channels, seconds, peakDb, reloadedSources, usedOn}`; a failure is `artgen_accept_failed`.
+     * Answers the sound members of `ArtGenAcceptAnswer`; a failure is `artgen_accept_failed`.
      */
-    std::expected<Json, ControlError> AcceptSoundForControl(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node);
+    std::expected<ArtGenAcceptAnswer, ControlError> AcceptSoundForControl(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node);
 
     /**
      * @brief The editor's ArtGenSession::Acceptor: AcceptVariant, then UseSpriteOn @p node when one is given (the scene editor is told the scene changed).
      *
-     * Answers `{sprite, texturePath, png, width, height, processing, reloadedSprites, atlasGroup, atlas, usedOn}` (the size is the written file's;
-     * `processing` is `{trim, padding, maxSize, crop, scale, size, frame}`; `atlasGroup` the group the sprite joined or null, `atlas` the packed
-     * file or null, also while a pack is deferred); a failure is `artgen_accept_failed` with the reason.
+     * Answers the image members of `ArtGenAcceptAnswer` (the size is the written file's); a failure is `artgen_accept_failed` with the reason.
      */
-    std::expected<Json, ControlError> AcceptForControl(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node);
+    std::expected<ArtGenAcceptAnswer, ControlError> AcceptForControl(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node);
 
     /**
      * @brief The editor's ArtGenSession::FrameMeasurer: decodes each of @p pngFiles one at a time (a 1024 square is about 4 MB, freed before the
@@ -269,7 +272,8 @@ namespace BECore {
     [[nodiscard]] std::filesystem::path ProvenanceFileOf(const std::filesystem::path& mediaFile);
 
     /// Adds `"kept": {"seed", "date"}` to the provenance file @p file (replacing an earlier one), the rest of it as it was, written atomically;
-    /// a missing or unreadable file is an error that names it
+    /// a missing or unreadable file is an error that names it. The provenance records of an accept are by hand too: they merge into the
+    /// document the service wrote, whose other keys stay as they are
     std::expected<void, String> MarkProvenanceKept(const std::filesystem::path& file, int64_t seed, StringView date);
 
     /**

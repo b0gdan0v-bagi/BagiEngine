@@ -1,7 +1,6 @@
 #include "SchemaExport.h"
 
 #include <BECore/Control/ControlRoots.h>
-#include <BECore/Control/Json.h>
 #include <BECore/Reflection/TypeRegistry.h>
 #include <EASTL/sort.h>
 
@@ -9,73 +8,75 @@ namespace BECore {
 
     namespace {
 
-        Json AttributesJson(const FieldAttributes& attributes) {
-            Json json = Json::object();
+        String ToText(StringView view) {
+            return String(view.data(), view.size());
+        }
+
+        TypeSchemaAttributes MakeAttributes(const FieldAttributes& attributes) {
+            TypeSchemaAttributes result;
             if (attributes.hasRange) {
-                json["range"] = Json::array({attributes.rangeMin, attributes.rangeMax});
+                result.range = Vector<double>{attributes.rangeMin, attributes.rangeMax};
             }
             if (attributes.step != 0.0) {
-                json["step"] = attributes.step;
+                result.step = attributes.step;
             }
             if (!attributes.tooltip.empty()) {
-                json["tooltip"] = MakeJsonString(attributes.tooltip);
+                result.tooltip = ToText(attributes.tooltip);
             }
             if (attributes.readOnly) {
-                json["readonly"] = true;
+                result.readonly = true;
             }
             if (attributes.hidden) {
-                json["hidden"] = true;
+                result.hidden = true;
             }
             if (attributes.required) {
-                json["required"] = true;
+                result.required = true;
             }
-            return json;
+            return result;
         }
 
-        Json FieldJson(const FieldDesc& field) {
-            Json json = Json::object();
-            json["name"] = MakeJsonString(field.name);
-            json["type"] = field.type != nullptr ? TypeDescJson(*field.type) : TypeDescJson(TypeDesc{});
-            json["attributes"] = AttributesJson(field.attributes);
-            return json;
+        /// A type the reflection could not read is `unknown`, the descriptor a default `TypeDesc` is
+        IntrusivePtr<TypeSchemaDesc> MakeTypeOrUnknown(const TypeDesc* desc) {
+            return MakeTypeSchemaDesc(desc != nullptr ? *desc : TypeDesc{});
         }
 
-        Json MethodJson(const MethodDesc& method) {
-            Json json = Json::object();
-            json["name"] = MakeJsonString(method.name);
-            json["const"] = method.isConst;
-            json["callable"] = method.callable;
-            Json params = Json::array();
+        TypeSchemaField MakeField(const FieldDesc& field) {
+            TypeSchemaField result;
+            result.name = ToText(field.name);
+            result.type = MakeTypeOrUnknown(field.type);
+            result.attributes = MakeAttributes(field.attributes);
+            return result;
+        }
+
+        TypeSchemaMethod MakeMethod(const MethodDesc& method) {
+            TypeSchemaMethod result;
+            result.name = ToText(method.name);
+            result.isConst = method.isConst;
+            result.callable = method.callable;
             for (const ParamDesc& param : method.params) {
-                Json entry = Json::object();
-                entry["name"] = MakeJsonString(param.name);
-                entry["type"] = param.type != nullptr ? TypeDescJson(*param.type) : TypeDescJson(TypeDesc{});
-                params.push_back(std::move(entry));
+                TypeSchemaParam& entry = result.params.emplace_back();
+                entry.name = ToText(param.name);
+                entry.type = MakeTypeOrUnknown(param.type);
             }
-            json["params"] = std::move(params);
-            json["result"] = method.result != nullptr ? TypeDescJson(*method.result) : TypeDescJson(TypeDesc{});
-            return json;
+            result.result = MakeTypeOrUnknown(method.result);
+            return result;
         }
 
         bool IsCreatable(const TypeInfo& info) {
             return info.create != nullptr;
         }
 
-        Json ParentJson(const TypeInfo& info, const TypeRegistry& registry) {
+        /// The members the type entry and the `list_types` row share
+        void FillHead(TypeSchemaHead& head, const TypeInfo& info, const TypeRegistry& registry) {
+            head.name = ToText(info.Name());
             const TypeInfo* parent = registry.Parent(info);
-            return parent != nullptr ? MakeJsonString(parent->Name()) : Json();
-        }
-
-        /// The members the type entry and the `list_types` entry share
-        Json TypeHeadJson(const TypeInfo& info, const TypeRegistry& registry) {
-            Json json = Json::object();
-            json["name"] = MakeJsonString(info.Name());
-            json["parent"] = ParentJson(info, registry);
-            json["abstract"] = info.isAbstract;
-            json["creatable"] = IsCreatable(info);
-            json["purpose"] = MakeJsonString(PurposeName(info.meta.purpose));
-            json["icon"] = MakeJsonString(info.meta.icon);
-            return json;
+            if (parent != nullptr) {
+                head.parent = ToText(parent->Name());
+            }
+            head.abstract = info.isAbstract;
+            head.creatable = IsCreatable(info);
+            head.purpose = ToText(PurposeName(info.meta.purpose));
+            head.icon = ToText(info.meta.icon);
         }
 
         Vector<const TypeInfo*> SortedByName(const Vector<const TypeInfo*>& infos) {
@@ -84,16 +85,17 @@ namespace BECore {
             return sorted;
         }
 
-        Json NamesOf(const Vector<const TypeInfo*>& infos) {
-            Json names = Json::array();
+        Vector<String> NamesOf(const Vector<const TypeInfo*>& infos) {
+            Vector<String> names;
+            names.reserve(infos.size());
             for (const TypeInfo* info : infos) {
-                names.push_back(MakeJsonString(info->Name()));
+                names.push_back(ToText(info->Name()));
             }
             return names;
         }
 
-        Json FactoriesJson(const TypeRegistry& registry) {
-            Json factories = Json::array();
+        Vector<TypeSchemaFactory> MakeFactories(const TypeRegistry& registry) {
+            Vector<TypeSchemaFactory> factories;
             for (const TypeInfo* base : registry.FactoryBases()) {
                 Vector<const TypeInfo*> members;
                 for (const TypeInfo* info : registry.All()) {
@@ -101,149 +103,139 @@ namespace BECore {
                         members.push_back(info);
                     }
                 }
-                Json entry = Json::object();
-                entry["base"] = MakeJsonString(base->Name());
+                TypeSchemaFactory& entry = factories.emplace_back();
+                entry.base = ToText(base->Name());
                 const StringView elementName = registry.FactoryElementName(*base);
                 if (!elementName.empty()) {
-                    entry["elementName"] = MakeJsonString(elementName);
+                    entry.elementName = ToText(elementName);
                 }
-                entry["derived"] = NamesOf(SortedByName(members));
-                factories.push_back(std::move(entry));
+                entry.derived = NamesOf(SortedByName(members));
             }
             return factories;
         }
 
-        Json RootsJson(const ControlRoots& roots) {
-            Json json = Json::array();
+        Vector<TypeSchemaRoot> MakeRoots(const ControlRoots& roots) {
+            Vector<TypeSchemaRoot> result;
             for (const String& name : roots.Names()) {
-                Json entry = Json::object();
-                entry["name"] = MakeJsonString(name);
+                TypeSchemaRoot& entry = result.emplace_back();
+                entry.name = name;
                 const TypedRef object = roots.Resolve(name);
                 if (object) {
-                    entry["type"] = MakeJsonString(object.type->Name());
+                    entry.type = ToText(object.type->Name());
                 }
-                json.push_back(std::move(entry));
             }
-            return json;
+            return result;
+        }
+
+        void FillEntry(TypeSchemaEntry& entry, const TypeInfo& info, const TypeRegistry& registry) {
+            FillHead(entry, info, registry);
+            if (info.factoryBase != 0) {
+                const TypeInfo* base = registry.Find(info.factoryBase);
+                if (base != nullptr) {
+                    entry.factoryBase = ToText(base->Name());
+                }
+            }
+            for (const FieldDesc& field : info.fields) {
+                entry.fields.push_back(MakeField(field));
+            }
+            for (const MethodDesc& method : info.methods) {
+                entry.methods.push_back(MakeMethod(method));
+            }
         }
 
     }  // namespace
 
-    Json TypeDescJson(const TypeDesc& desc) {
-        Json json = Json::object();
-        json["kind"] = MakeJsonString(TypeKindName(desc.kind));
+    IntrusivePtr<TypeSchemaDesc> MakeTypeSchemaDesc(const TypeDesc& desc) {
+        IntrusivePtr<TypeSchemaDesc> result = New<TypeSchemaDesc>();
+        result->kind = ToText(TypeKindName(desc.kind));
         switch (desc.kind) {
             case TypeKind::Object:
             case TypeKind::Pointer:
                 if (!desc.ObjectName().empty()) {
-                    json["object"] = MakeJsonString(desc.ObjectName());
+                    result->object = ToText(desc.ObjectName());
                 }
                 break;
             case TypeKind::Enum: {
-                Json values = Json::array();
+                Vector<String> values;
                 for (const StringView name : desc.names) {
-                    values.push_back(MakeJsonString(name));
+                    values.push_back(ToText(name));
                 }
-                json["values"] = std::move(values);
+                result->values = std::move(values);
                 break;
             }
             case TypeKind::List:
             case TypeKind::Map:
-                json["resizable"] = desc.resizable;
+                result->resizable = desc.resizable;
                 break;
             case TypeKind::Variant: {
-                Json alternatives = Json::array();
+                Vector<IntrusivePtr<TypeSchemaDesc>> alternatives;
                 for (const TypeDesc* alternative : desc.alternatives) {
-                    alternatives.push_back(TypeDescJson(*alternative));
+                    alternatives.push_back(MakeTypeSchemaDesc(*alternative));
                 }
-                json["alternatives"] = std::move(alternatives);
+                result->alternatives = std::move(alternatives);
                 break;
             }
             default:
                 break;
         }
         if (desc.element != nullptr) {
-            json["element"] = TypeDescJson(*desc.element);
+            result->element = MakeTypeSchemaDesc(*desc.element);
         }
         if (desc.key != nullptr) {
-            json["key"] = TypeDescJson(*desc.key);
+            result->key = MakeTypeSchemaDesc(*desc.key);
         }
         if (desc.capacity != 0) {
-            json["capacity"] = desc.capacity;
+            result->capacity = static_cast<uint64_t>(desc.capacity);
         }
-        return json;
+        return result;
     }
 
-    Json TypeEntryJson(const TypeInfo& info, const TypeRegistry& registry) {
-        Json json = TypeHeadJson(info, registry);
-        if (info.factoryBase != 0) {
-            const TypeInfo* base = registry.Find(info.factoryBase);
-            if (base != nullptr) {
-                json["factoryBase"] = MakeJsonString(base->Name());
-            }
-        }
-        Json fields = Json::array();
-        for (const FieldDesc& field : info.fields) {
-            fields.push_back(FieldJson(field));
-        }
-        json["fields"] = std::move(fields);
-        Json methods = Json::array();
-        for (const MethodDesc& method : info.methods) {
-            methods.push_back(MethodJson(method));
-        }
-        json["methods"] = std::move(methods);
-        return json;
+    TypeSchemaEntry MakeTypeSchemaEntry(const TypeInfo& info, const TypeRegistry& registry) {
+        TypeSchemaEntry entry;
+        FillEntry(entry, info, registry);
+        return entry;
     }
 
-    Json DescribeTypeJson(const TypeInfo& info, const TypeRegistry& registry) {
-        Json json = TypeEntryJson(info, registry);
-
-        Json bases = Json::array();
+    TypeSchemaDescribed DescribeTypeSchema(const TypeInfo& info, const TypeRegistry& registry) {
+        TypeSchemaDescribed described;
+        FillEntry(described, info, registry);
         for (const TypeInfo* base : registry.Bases(info)) {
-            bases.push_back(MakeJsonString(base->Name()));
+            described.bases.push_back(ToText(base->Name()));
         }
-        json["bases"] = std::move(bases);
-        json["derived"] = NamesOf(registry.Derived(info, false));
-
-        Json allFields = Json::array();
+        described.derived = NamesOf(registry.Derived(info, false));
         for (const FieldRef& ref : registry.AllFields(info)) {
-            Json entry = FieldJson(*ref.field);
-            entry["owner"] = MakeJsonString(ref.owner->Name());
-            allFields.push_back(std::move(entry));
+            TypeSchemaOwnedField& entry = described.allFields.emplace_back();
+            static_cast<TypeSchemaField&>(entry) = MakeField(*ref.field);
+            entry.owner = ToText(ref.owner->Name());
         }
-        json["allFields"] = std::move(allFields);
-        return json;
+        return described;
     }
 
-    Json ListTypesJson(const TypeRegistry& registry, const ListTypesFilter& filter) {
+    ListTypesAnswer MakeListTypesAnswer(const TypeRegistry& registry, const ListTypesFilter& filter) {
         const Vector<const TypeInfo*>& source = filter.base != nullptr ? registry.Derived(*filter.base, filter.recursive) : registry.All();
 
-        Json types = Json::array();
+        ListTypesAnswer answer;
         for (const TypeInfo* info : SortedByName(source)) {
             if (filter.creatableOnly && !IsCreatable(*info)) {
                 continue;
             }
-            Json entry = TypeHeadJson(*info, registry);
-            entry["fields"] = info->fields.size();
-            entry["methods"] = info->methods.size();
-            types.push_back(std::move(entry));
+            TypeSchemaListed& row = answer.types.emplace_back();
+            FillHead(row, *info, registry);
+            row.fields = static_cast<uint64_t>(info->fields.size());
+            row.methods = static_cast<uint64_t>(info->methods.size());
         }
-        Json json = Json::object();
-        json["types"] = std::move(types);
-        return json;
+        return answer;
     }
 
-    Json BuildSchemaJson(const TypeRegistry& registry, const ControlRoots& roots) {
-        Json types = Json::array();
+    SchemaAnswer MakeSchemaAnswer(const TypeRegistry& registry, const ControlRoots& roots) {
+        SchemaAnswer answer;
+        answer.version = kSchemaVersion;
         for (const TypeInfo* info : SortedByName(registry.All())) {
-            types.push_back(TypeEntryJson(*info, registry));
+            answer.types.push_back(MakeTypeSchemaEntry(*info, registry));
         }
-        Json json = Json::object();
-        json["version"] = kSchemaVersion;
-        json["types"] = std::move(types);
-        json["factories"] = FactoriesJson(registry);
-        json["roots"] = RootsJson(roots);
-        return json;
+        answer.factories = MakeFactories(registry);
+        answer.roots = MakeRoots(roots);
+        return answer;
     }
 
 }  // namespace BECore

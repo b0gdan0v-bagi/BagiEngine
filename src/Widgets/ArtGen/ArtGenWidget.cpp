@@ -171,7 +171,7 @@ namespace BECore {
             *event.result = ArtGenDropResult{false, String(kArtGenSoundIsNotASprite)};
             return;
         }
-        std::expected<Json, ControlError> result;
+        std::expected<ArtGenAcceptAnswer, ControlError> result;
         if (payload.set[0] == '\0') {
             // Exactly the Accept button: the form's settings, the preset's atlas group, no node
             const ArtGenImageSettings settings = _form.GetImageAccept();
@@ -183,7 +183,7 @@ namespace BECore {
         *event.result = ArtGenDropResult{result.has_value(), _acceptMessage};
     }
 
-    void ArtGenWidget::NoteImageAccepted(StringView sprite, const std::expected<Json, ControlError>& result) {
+    void ArtGenWidget::NoteImageAccepted(StringView sprite, const std::expected<ArtGenAcceptAnswer, ControlError>& result) {
         _acceptFailed = !result.has_value();
         _acceptedSprite.clear();
         if (!result) {
@@ -191,12 +191,9 @@ namespace BECore {
             return;
         }
         _acceptedSprite = String(sprite);
-        const auto reloaded = GetJsonInt(*result, "reloadedSprites").value_or(0);
-        const auto texture = GetJsonString(*result, "texturePath").value_or(String());
-        _acceptMessage = Format("Accepted as '{}' ({}); {} sprite(s) reloaded", sprite, texture, reloaded);
-        if (const Json* atlas = FindJsonMember(*result, "atlas"); atlas != nullptr && atlas->is_object()) {
-            _acceptMessage +=
-                Format("; atlas '{}' repacked ({}x{})", GetJsonString(*atlas, "name").value_or(String()), GetJsonInt(*atlas, "width").value_or(0), GetJsonInt(*atlas, "height").value_or(0));
+        _acceptMessage = Format("Accepted as '{}' ({}); {} sprite(s) reloaded", sprite, result->texturePath.value_or(String()), result->reloadedSprites.value_or(0));
+        if (result->atlas) {
+            _acceptMessage += Format("; atlas '{}' repacked ({}x{})", result->atlas->name, result->atlas->width, result->atlas->height);
         }
     }
 
@@ -1163,9 +1160,7 @@ namespace BECore {
             auto result = session.AcceptSound(*_selectedSeed, target, _soundSettings, _useOnSelected);
             _acceptFailed = !result.has_value();
             if (result) {
-                const auto clip = GetJsonString(*result, "clip").value_or(String());
-                const auto reloaded = GetJsonInt(*result, "reloadedSources").value_or(0);
-                _acceptMessage = Format("Accepted as {}; {} source(s) reloaded", clip, reloaded);
+                _acceptMessage = Format("Accepted as {}; {} source(s) reloaded", result->clip.value_or(String()), result->reloadedSources.value_or(0));
             } else {
                 _acceptMessage = result.error().message;
             }

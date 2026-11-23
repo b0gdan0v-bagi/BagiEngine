@@ -40,15 +40,10 @@ namespace BECore::Tests {
         }
 
         Json DomStatus(bool manualClock, bool paused) {
-            const Time& time = CoreManager::GetTime();
             Json totals = Json::object();
             totals["warnings"] = 0;
             totals["errors"] = 0;
-            Json result = Json::object();
-            result["frame"] = time.GetFrameCount();
-            result["totalTime"] = time.GetTotalTime();
-            result["deltaTime"] = time.GetDeltaTime();
-            result["fixedDeltaTime"] = time.GetFixedDeltaTime();
+            Json result = DomClock();
             result["log"] = std::move(totals);
             result["manualClock"] = manualClock;
             result["paused"] = paused;
@@ -127,7 +122,7 @@ namespace BECore::Tests {
             service.EndFrame();
         }
 
-        EXPECT_EQ(text, MakeOkResponse(Json(5), DescribeControlClock()));
+        EXPECT_EQ(text, MakeOkResponse(Json(5), DomClock()));
         const auto parsed = ParseJson(text);
         ASSERT_TRUE(parsed.has_value());
         const Json* result = FindJsonMember(*parsed, "result");
@@ -135,20 +130,49 @@ namespace BECore::Tests {
         EXPECT_DOUBLE_EQ(NumberOf(result, "totalTime"), 2 * kFrameSeconds + 3 * 0.25);
     }
 
-    TEST_F(ControlBuiltinsReplyTest, TheWrittenClockIsTheDescribedOne) {
-        String text;
-        JsonWriter writer(text);
-        WriteControlClock(writer);
-
-        EXPECT_TRUE(writer.IsComplete());
-        EXPECT_EQ(text, DumpJson(DescribeControlClock()));
-    }
-
     TEST_F(ControlBuiltinsReplyTest, PauseAndResumeAreWrittenAsTheirPinnedText) {
         EXPECT_EQ(Ask(1, "pause"), String(R"({"id":1,"ok":true,"result":{"paused":true}})"));
         EXPECT_TRUE(pause.IsPaused());
         EXPECT_EQ(Ask(2, "resume"), String(R"({"id":2,"ok":true,"result":{"paused":false}})"));
         EXPECT_FALSE(pause.IsPaused());
+    }
+
+    TEST_F(ControlBuiltinsReplyTest, ListMethodsWritesTheDescriptionsOfTheTableSortedByName) {
+        ControlService small;
+        small.RegisterHandler("zzz_last", [](ControlCall& call) { call.Reply(Json::object()); });
+        small.RegisterHandler("aaa_first", [](ControlCall& call) { call.Reply(Json::object()); });
+        small.DescribeMethod("aaa_first", {"First method", {{"count", "integer", true, "How many"}, {"flag", "boolean", false, "Whether"}}});
+        small.DescribeMethod("zzz_last", {"Last method", {}});
+        RegisterControlBuiltins(small);
+        String text;
+        small.Post(MakeRequest(1, "list_methods"), [&text](const String& reply) { text = reply; });
+        small.Drain();
+
+        const auto parsed = ParseJson(text);
+        ASSERT_TRUE(parsed.has_value());
+        const Json* methods = FindJsonMember(Require(FindJsonMember(*parsed, "result")), "methods");
+        ASSERT_NE(methods, nullptr);
+        Json expectedFirst = Json::object();
+        expectedFirst["name"] = "aaa_first";
+        expectedFirst["summary"] = "First method";
+        Json count = Json::object();
+        count["name"] = "count";
+        count["type"] = "integer";
+        count["required"] = true;
+        count["description"] = "How many";
+        Json flag = Json::object();
+        flag["name"] = "flag";
+        flag["type"] = "boolean";
+        flag["required"] = false;
+        flag["description"] = "Whether";
+        expectedFirst["params"] = Json::array({count, flag});
+        Json expectedLast = Json::object();
+        expectedLast["name"] = "zzz_last";
+        expectedLast["summary"] = "Last method";
+        expectedLast["params"] = Json::array();
+        ASSERT_GE(methods->size(), 2u);
+        EXPECT_EQ(DumpJson((*methods)[0]), DumpJson(expectedFirst));
+        EXPECT_EQ(DumpJson(methods->back()), DumpJson(expectedLast));
     }
 
     TEST_F(ControlBuiltinsReplyTest, TheWritersAnswerInsideABatchAsTheirValues) {

@@ -127,6 +127,7 @@ namespace BECore {
             return MakeControlError(EnumUtils<PropertyErrorCode>::ToString(code), error.message);
         }
 
+        /// By hand, not a reflected struct: `value` is a `PropertyValue`, written as the bare scalar a client sent, where a reflected variant is `{index, value}`
         void WriteAccess(JsonWriter& writer, StringView root, StringView path, const PropertyValue& value) {
             writer.BeginObject();
             writer.Member("path", path);
@@ -277,6 +278,7 @@ namespace BECore {
                 return;
             }
 
+            // By hand, not a reflected struct: `result` is the document the method's own serializer wrote, a `Json` payload between `method` and `root`
             const Json written = writer.Take();
             const auto answer = written.find("result");
             call.Reply([&](JsonWriter& out) {
@@ -341,7 +343,7 @@ namespace BECore {
             }
             filter.recursive = *recursive;
             filter.creatableOnly = *creatable;
-            call.Reply(ListTypesJson(registry, filter));
+            call.ReplyObject(MakeListTypesAnswer(registry, filter));
         }
 
         void HandleDescribeType(ControlCall& call) {
@@ -356,11 +358,11 @@ namespace BECore {
                 call.Fail(info.error());
                 return;
             }
-            call.Reply(DescribeTypeJson(**info, registry));
+            call.ReplyObject(DescribeTypeSchema(**info, registry));
         }
 
         void HandleSchema(ControlCall& call, const ControlService& service) {
-            call.Reply(BuildSchemaJson(TypeRegistry::GetInstance(), service.Roots()));
+            call.ReplyObject(MakeSchemaAnswer(TypeRegistry::GetInstance(), service.Roots()));
         }
 
     }  // namespace

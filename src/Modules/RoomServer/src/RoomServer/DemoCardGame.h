@@ -18,6 +18,9 @@ namespace BECore {
      * The view of a seat is {"seat", "hand", "cardCounts", "table", "turn", "finished"}: its own cards, how many cards every
      * seat holds, the cards played (seat and card) and whose turn it is, and nothing else. ChooseComputerAction plays the
      * lowest card id of the hand.
+     *
+     * The view, the actions and the outcome are built as `Json` because `ISeatedGame` returns `Json` (a public interface of every game); a reflected struct
+     * could only reach it through the DOM-backed `JsonSerializer`, so none is used on purpose.
      */
     class DemoCardGame : public ISeatedGame {
     public:

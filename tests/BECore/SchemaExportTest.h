@@ -105,6 +105,13 @@ namespace BECore::SchemaTestData {
         BE_REFLECT_FIELD Vector<IntrusivePtr<SchemaShape>> shapes;
     };
 
+    /// A value type that holds a value type that holds one: the schema nests `element`, `key` and `alternatives` as deep
+    struct SchemaNested {
+        BE_CLASS(SchemaNested)
+
+        BE_REFLECT_FIELD Map<int32_t, Variant<int32_t, Vector<String>>> table;
+    };
+
     /// A field of each kind of attribute, and one with none
     struct SchemaAttributed {
         BE_CLASS(SchemaAttributed)

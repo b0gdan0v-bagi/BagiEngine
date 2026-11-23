@@ -7,6 +7,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <BECore/Utils/Singleton.h>
+#include <Widgets/ArtGen/ArtGenAnswers.h>
 #include <Widgets/ArtGen/ArtGenImage.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
@@ -119,7 +120,7 @@ namespace BECore {
 
     /// What the write of a switch of a live row (PickVariant) answered: the acceptor's answer, or why it failed
     struct ArtGenSwitch {
-        Json answer;  // the acceptor's answer; null when nothing was written (a row that is not live, or the pick it already has)
+        Optional<ArtGenAcceptAnswer> answer;  // the acceptor's answer; none when nothing was written (a row that is not live, or the pick it already has)
         String error;
     };
 
@@ -141,9 +142,9 @@ namespace BECore {
         using Clock = MoveOnlyFunction<double()>;
         /// Accepts a variant as the sprite @p sprite, cut and scaled by @p plan, and, when @p node is given, puts it on that node; the answer of
         /// `artgen_accept`
-        using Acceptor = std::expected<Json, ControlError> (*)(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node);
+        using Acceptor = std::expected<ArtGenAcceptAnswer, ControlError> (*)(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node);
         /// Accepts a sound variant as a clip at @p target, processed by @p settings, and puts it on @p node's AudioSourceComponent when given
-        using SoundAcceptor = std::expected<Json, ControlError> (*)(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node);
+        using SoundAcceptor = std::expected<ArtGenAcceptAnswer, ControlError> (*)(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node);
         /// The frame every image of a set is cut from: the union of the drawn boxes of the PNG files @p pngFiles (real paths, all of one size)
         /// grown and scaled by @p settings. Decodes them, so it is injected like the acceptors (a fake in the tests)
         using FrameMeasurer = std::expected<ArtGenImageFrame, String> (*)(const Vector<String>& pngFiles, const ArtGenImageSettings& settings);
@@ -151,7 +152,7 @@ namespace BECore {
         using Keeper = std::expected<void, ControlError> (*)(StringView kind, StringView name, int64_t seed, StringView date);
         /// Packs the atlas group @p group once, after the rows of an Accept all that were written without packing and before the batch
         /// ends; the answer is the `atlas` of `artgen_accept_set` (`PackAtlasForControl` in the editor, a fake in the tests)
-        using AtlasPacker = std::expected<Json, ControlError> (*)(StringView group);
+        using AtlasPacker = std::expected<ArtGenAtlasAnswer, ControlError> (*)(StringView group);
         /// Opens and closes the batch of one Accept all of images: the acceptors called between them write their files and change the library
         /// in memory only, and the end saves it once. The end's failure says the library was not saved
         using BatchBegin = void (*)();
@@ -231,7 +232,7 @@ namespace BECore {
             _keeper = keeper;
         }
         /// What an Accept all of a set with an atlas group packs it with, once after the rows. With none installed each row packs through its
-        /// own acceptor and the answer's `atlas` stays null
+        /// own acceptor and the answer's `atlas` stays absent
         void SetAtlasPacker(AtlasPacker packer) {
             _atlasPacker = packer;
         }
@@ -260,10 +261,10 @@ namespace BECore {
         /// Accepts the variant @p seed as @p sprite, and puts it on the selected node when @p useOnSelected. The image is processed by
         /// @p settings (the panel's form), or by ImageSettingsOfRun() when null; a single image has no frame of a set, so it is trimmed on its own.
         /// The sprite joins the atlas group @p atlas and the group is packed (`ArtGenImagePlan::atlas`); null is AtlasOfRun(), "" no group
-        std::expected<Json, ControlError> Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings = nullptr, const String* atlas = nullptr);
+        std::expected<ArtGenAcceptAnswer, ControlError> Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings = nullptr, const String* atlas = nullptr);
         /// Accepts the sound variant @p seed as a clip at @p target, processed by @p settings; on the selected node's AudioSourceComponent
         /// when @p useOnSelected
-        std::expected<Json, ControlError> AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected);
+        std::expected<ArtGenAcceptAnswer, ControlError> AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected);
 
         [[nodiscard]] bool IsServiceConnected() const;
         [[nodiscard]] const ArtGenServiceStatus& GetServiceStatus() const {
@@ -303,7 +304,7 @@ namespace BECore {
          * are left out and listed in the answer. Everything is checked first and a refusal changes nothing: `artgen_no_set`, `artgen_busy` (the set is
          * active), `invalid_params` (a bad count or seed, a seed that meets a variant of a row that would run, nothing to run)
          */
-        std::expected<Json, ControlError> MoreVariants(StringView set, int32_t count, Optional<int64_t> seed = {}, const Vector<String>& jobs = {});
+        std::expected<ArtGenMoreAnswer, ControlError> MoreVariants(StringView set, int32_t count, Optional<int64_t> seed = {}, const Vector<String>& jobs = {});
         /// Picks the variant @p seed of a job (saved in the manifest). On a **live** row (accepted, not kept) it switches: the variant is
         /// written into the game under the name the row was accepted as, and only then are the pick and the date changed; a failed write
         /// (also a row that another set replaced, FindNewerOwner) is `WriteFailed` and changes nothing. A kept row takes no other pick
@@ -313,7 +314,7 @@ namespace BECore {
         /// the set's own processing (settings and frame, so a pawn stays smaller than a king), else the settings of its preset with a frame
         /// of its own; the set's atlas group. Only a write: the manifest, the pick and the row's `accepted` stay as they were, and no node is
         /// touched. The acceptor's answer, or `artgen_no_set`, `artgen_no_variant`, `artgen_accept_failed` (a sound variant, a bad name, a gone file)
-        std::expected<Json, ControlError> AcceptSetVariant(StringView set, StringView job, int64_t seed, StringView sprite);
+        std::expected<ArtGenAcceptAnswer, ControlError> AcceptSetVariant(StringView set, StringView job, int64_t seed, StringView sprite);
         /// Accepts the candidate of every job of a finished set as its job's name, through the acceptors Accept uses, marking each row in the
         /// manifest (Sets/CLAUDE.md, "Accept all"): the pick, else for images the first variant. A kept row and a row another set replaced are skipped. The checks come first and a
         /// refusal by them changes nothing. With the batch hooks an image set's files are written first and the library is saved once; the
@@ -323,12 +324,12 @@ namespace BECore {
         /// the last row, inside the batch, so nothing reaches TextureLibrary.xml before the batch's one save (the answer's `atlas`; a set of
         /// only kept or replaced rows packs nothing). A failed row or a failed pack leaves the rows done marked and in the game, says the
         /// group is not packed, and calling again finishes it
-        std::expected<Json, ControlError> AcceptSet(StringView name);
+        std::expected<ArtGenAcceptSetAnswer, ControlError> AcceptSet(StringView name);
         /// Fixes the choice of every live row of a set, or of @p job only: the Keeper writes the kept seed into the game first, then the row is
         /// kept (its other variants leave the manifest) and the manifest written. Final; nothing live to keep is `invalid_params`, and so is a named
         /// row that another set replaced (the whole-set call skips such rows and lists them). The answer
         /// names the rows kept; a failure halfway names the row and the rows done
-        std::expected<Json, ControlError> KeepSet(StringView name, StringView job = {});
+        std::expected<ArtGenKeepAnswer, ControlError> KeepSet(StringView name, StringView job = {});
         /// The other set that accepted a row under the same name and kind of @p job later, so the game's file is its variant now (null when
         /// @p job owns it, or was never accepted). A new accept's date is strictly later than the others' (`NewAcceptDate`), so a tie
         /// (the set later in the list is the newer) is left only for manifests written before that rule
@@ -345,25 +346,28 @@ namespace BECore {
             return _pollCount;
         }
 
-        /// The handlers, public for the tests: each takes the params of the call and answers like the method
+        /// The handlers, public for the tests: each takes the params of the call and answers like the method. `HandlePoll` and `HandleSet` answer a
+        /// `Json` document by hand: `request.preset` of the poll is a preset's name or an inline draft (two types under one key, a payload in the
+        /// middle), and `artgen_set` is the manifest file (`ArtGenSetToJson`). A reflected leaf type for a `Json` payload does not
+        /// exist; one would let them go
         std::expected<Json, ControlError> HandlePoll(const Json& params);
-        std::expected<Json, ControlError> HandleProgress(const Json& params);
-        std::expected<Json, ControlError> HandleImage(const Json& params);
-        std::expected<Json, ControlError> HandleDone(const Json& params);
-        std::expected<Json, ControlError> HandleGenerate(const Json& params);
-        std::expected<Json, ControlError> HandleCancel(const Json& params);
-        std::expected<Json, ControlError> HandleAccept(const Json& params);
-        std::expected<Json, ControlError> HandleSetupReport(const Json& params);
-        std::expected<Json, ControlError> HandleSetup(const Json& params);
-        std::expected<Json, ControlError> HandleSavePreset(const Json& params);
-        std::expected<Json, ControlError> HandleEnqueue(const Json& params);
+        std::expected<ArtGenStaleAnswer, ControlError> HandleProgress(const Json& params);
+        std::expected<ArtGenStaleAnswer, ControlError> HandleImage(const Json& params);
+        std::expected<ArtGenStaleAnswer, ControlError> HandleDone(const Json& params);
+        std::expected<ArtGenQueuedAnswer, ControlError> HandleGenerate(const Json& params);
+        std::expected<ArtGenCancelAnswer, ControlError> HandleCancel(const Json& params);
+        std::expected<ArtGenAcceptAnswer, ControlError> HandleAccept(const Json& params);
+        std::expected<ArtGenStaleAnswer, ControlError> HandleSetupReport(const Json& params);
+        std::expected<ArtGenSetupQueuedAnswer, ControlError> HandleSetup(const Json& params);
+        std::expected<ArtGenSavedAnswer, ControlError> HandleSavePreset(const Json& params);
+        std::expected<ArtGenEnqueueAnswer, ControlError> HandleEnqueue(const Json& params);
         std::expected<Json, ControlError> HandleSet(const Json& params);
-        std::expected<Json, ControlError> HandlePick(const Json& params);
-        std::expected<Json, ControlError> HandleRetry(const Json& params);
-        std::expected<Json, ControlError> HandleAcceptSet(const Json& params);
-        std::expected<Json, ControlError> HandleKeep(const Json& params);
-        std::expected<Json, ControlError> HandleMore(const Json& params);
-        [[nodiscard]] Json StateJson() const;
+        std::expected<ArtGenPickAnswer, ControlError> HandlePick(const Json& params);
+        std::expected<ArtGenRetryAnswer, ControlError> HandleRetry(const Json& params);
+        std::expected<ArtGenAcceptSetAnswer, ControlError> HandleAcceptSet(const Json& params);
+        std::expected<ArtGenKeepAnswer, ControlError> HandleKeep(const Json& params);
+        std::expected<ArtGenMoreAnswer, ControlError> HandleMore(const Json& params);
+        [[nodiscard]] ArtGenStateAnswer BuildState() const;
 
     private:
         /// The run a report of the service is about, or null when it is about an older one (a late message after a new request)
@@ -394,8 +398,8 @@ namespace BECore {
         /// The methods of the sets (ArtGenSessionSets.cpp): the handlers and their descriptions
         void RegisterSetControl(ControlService& service);
         /// `artgen_cancel` with `job` or `set`: the one job, or the whole set
-        std::expected<Json, ControlError> CancelFromParams(const Json& params);
-        [[nodiscard]] Json SetsJson() const;
+        std::expected<ArtGenCancelAnswer, ControlError> CancelFromParams(const Json& params);
+        [[nodiscard]] Vector<ArtGenSetSummaryAnswer> BuildSetSummaries() const;
 
         Clock _clock;
         Acceptor _acceptor = nullptr;

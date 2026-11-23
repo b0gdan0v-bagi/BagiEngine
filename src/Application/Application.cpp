@@ -185,6 +185,7 @@ namespace BECore {
     }
 
     void Application::PostReplay(const String& path, bool quitWhenDone) {
+        // A request, not an answer: `ControlService::Post` takes the request as text and nothing reads it back as a struct
         Json request = Json::object();
         request["id"] = kReplayRequestId;
         request["method"] = "replay";

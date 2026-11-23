@@ -10,6 +10,9 @@
  * components, so an element never collapses to a scalar). The types are only declared here: this header is included by every generated file, the
  * definitions include the types. `Mat4` has no `Serialize` (a transform is built, never stored) and no writer.
  *
+ * These stay hand-written on purpose: they are the native leaf of the generated writer. The `Math` types have a `Serialize` and no `BE_CLASS`, so
+ * the generator has nothing to emit for them, and reflecting them would only move the same lines.
+ *
  * A new `Math` type with a `Serialize` needs its overload here, or a reflected field of it takes the DOM bridge.
  */
 

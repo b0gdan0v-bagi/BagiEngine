@@ -112,6 +112,15 @@ namespace BECore::Tests {
             return FindJsonMember(response, "result");
         }
 
+        /// The member names of an object, sorted: the DOM sorts them, and the generated writer does the same by design
+        Vector<String> KeysOf(const Json& object) {
+            Vector<String> keys;
+            for (const auto& member : object.items()) {
+                keys.push_back(FromStdString(member.key()));
+            }
+            return keys;
+        }
+
     }  // namespace
 
     TEST_F(ReplayControlTest, TheAcceptedCallsAreInTheFileAndTheRefusedOnesAreNot) {
@@ -141,6 +150,17 @@ namespace BECore::Tests {
         EXPECT_EQ(replay.entries[1].op, ReplayOp::Action);
         EXPECT_EQ(replay.entries[2].params, Params(R"({"type":"arm"})"));
         EXPECT_EQ(replay.entries[3].op, ReplayOp::State);
+    }
+
+    TEST_F(ReplayControlTest, TheRecordingAnswersHaveExactlyTheirKeys) {
+        const Json started = Call("record_start", PathParams());
+        ASSERT_TRUE(IsOk(started));
+        EXPECT_EQ(KeysOf(Require(FindResult(started))), (Vector<String>{"game", "path"}));
+
+        ASSERT_TRUE(IsOk(Call("reset", Params(R"({"seed":9})"))));
+        const Json stopped = Call("record_stop", Json::object());
+        ASSERT_TRUE(IsOk(stopped));
+        EXPECT_EQ(DumpJson(Require(FindResult(stopped))), "{\"entries\":1}");
     }
 
     TEST_F(ReplayControlTest, ATitleLandsInTheHeader) {
@@ -379,7 +399,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(GetJsonBool(*result, "ok").value_or(false));
         EXPECT_EQ(GetJsonInt(*result, "entries").value_or(-1), 6);
         EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 1 + kLockFrames);
-        EXPECT_NE(FindJsonMember(*result, "frame"), nullptr);  // the clock of `step`
+        EXPECT_EQ(KeysOf(*result), (Vector<String>{"deltaTime", "entries", "fixedDeltaTime", "frame", "frames", "ok", "totalTime"}));
         EXPECT_EQ(*Game().GetState(), recordedState);
         EXPECT_FALSE(SessionRecorder::GetInstance().IsRecording());
         EXPECT_FALSE(_service.IsStepDue());

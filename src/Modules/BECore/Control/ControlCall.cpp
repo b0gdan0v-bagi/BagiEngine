@@ -4,6 +4,8 @@
 
 namespace BECore {
 
+    // The response envelope is written by hand, not as a reflected struct: `id` is the client's own `Json` (a number or a string, copied back as it came)
+    // and `result` is whatever the handler's callback writes between `ok` and the end, so no struct has a type for either member.
     std::expected<void, ControlError> TryAppendOkResponse(String& out, const Json& id, WriteResultFn writeResult) {
         const size_t start = out.size();
         JsonWriter writer(out);

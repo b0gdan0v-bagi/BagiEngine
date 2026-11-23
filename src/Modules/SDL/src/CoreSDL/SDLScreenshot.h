@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Renderer/IRenderer.h>
 
 namespace BECore {
@@ -23,6 +24,15 @@ namespace BECore {
         uint32_t width = 0;
         uint32_t height = 0;
         Vector<uint8_t> bytes;
+    };
+
+    /// The answer of `screenshot`; the string is moved in, so a picture of megabytes is not copied into a DOM
+    struct ScreenshotAnswer {
+        BE_CLASS(ScreenshotAnswer)
+
+        BE_REFLECT_FIELD uint32_t height = 0;
+        BE_REFLECT_FIELD String png_base64;
+        BE_REFLECT_FIELD uint32_t width = 0;
     };
 
     /**

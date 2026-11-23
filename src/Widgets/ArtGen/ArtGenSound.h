@@ -30,7 +30,7 @@ namespace BECore {
     };
 
     /// The settings as `artgen_accept` takes them and the provenance records them: `{mono, trimDb|null, maxSeconds, sampleRate, fadeInMs,
-    /// fadeOutMs, peakDb|null}`
+    /// fadeOutMs, peakDb|null}`: a value inside a `Json` record, which is why it stays a document
     [[nodiscard]] Json ArtGenSoundSettingsToJson(const ArtGenSoundSettings& settings);
     /// Reads what ArtGenSoundSettingsToJson writes; a missing key keeps the default, a wrong type or a value out of range is the error
     [[nodiscard]] std::expected<ArtGenSoundSettings, String> ArtGenSoundSettingsFromJson(const Json& json);

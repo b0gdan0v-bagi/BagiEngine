@@ -1,9 +1,11 @@
 #include "ControlBuiltins.h"
 
+#include <BECore/Control/ControlBuiltinAnswers.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlLog.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlWindow.h>
+#include <BECore/Control/ControlWindowStatus.h>
 #include <BECore/Control/ReflectionControl.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
@@ -12,49 +14,6 @@
 #include <Events/ApplicationEvents.h>
 
 namespace BECore {
-
-    namespace {
-
-        /// The clock as it was read once; the floats are widened to double, which is what the `Json` DOM stored and so the text clients have always seen
-        struct ClockSample {
-            uint64_t frame = 0;
-            double totalTime = 0.0;
-            double deltaTime = 0.0;
-            double fixedDeltaTime = 0.0;
-
-            [[nodiscard]] static ClockSample Read() {
-                const Time& time = CoreManager::GetTime();
-                return ClockSample{time.GetFrameCount(), time.GetTotalTime(), static_cast<double>(time.GetDeltaTime()), static_cast<double>(time.GetFixedDeltaTime())};
-            }
-        };
-
-    }  // namespace
-
-    Json DescribeControlClock() {
-        const ClockSample sample = ClockSample::Read();
-        Json clock = Json::object();
-        clock["frame"] = sample.frame;
-        clock["totalTime"] = sample.totalTime;
-        clock["deltaTime"] = sample.deltaTime;
-        clock["fixedDeltaTime"] = sample.fixedDeltaTime;
-        return clock;
-    }
-
-    void WriteControlClockWith(JsonWriter& writer, FunctionRef<void(JsonWriter&)> beforeTotalTime, FunctionRef<void(JsonWriter&)> afterTotalTime) {
-        const ClockSample sample = ClockSample::Read();
-        writer.BeginObject();
-        writer.Member("deltaTime", sample.deltaTime);
-        writer.Member("fixedDeltaTime", sample.fixedDeltaTime);
-        writer.Member("frame", sample.frame);
-        beforeTotalTime(writer);
-        writer.Member("totalTime", sample.totalTime);
-        afterTotalTime(writer);
-        writer.EndObject();
-    }
-
-    void WriteControlClock(JsonWriter& writer) {
-        WriteControlClockWith(writer, [](JsonWriter&) {}, [](JsonWriter&) {});
-    }
 
     std::expected<uint32_t, ControlError> ReadControlFrames(const Json& params, StringView key, uint32_t fallback) {
         if (FindJsonMember(params, key) == nullptr) {
@@ -81,36 +40,23 @@ namespace BECore {
     namespace {
 
         void HandlePing(ControlCall& call) {
-            call.Reply([](JsonWriter& writer) {
-                writer.BeginObject();
-                writer.Member("pong", true);
-                writer.Member("protocol", ControlService::kProtocolVersion);
-                writer.EndObject();
-            });
+            ControlPingAnswer answer;
+            answer.protocol = ControlService::kProtocolVersion;
+            call.ReplyObject(answer);
         }
 
         void HandleStatus(ControlCall& call, const ControlService& service) {
             // A line logged earlier in this frame is still in the ring buffer: handlers run outside Flush(), on the thread that flushes
             LogEvent::Flush();
             const GamePause* pause = service.GetPause();
-            const bool paused = pause != nullptr && pause->IsPaused();
-            call.Reply([&](JsonWriter& writer) {
-                WriteControlClockWith(
-                    writer,
-                    [&](JsonWriter& members) {
-                        members.Key("log");
-                        members.BeginObject();
-                        members.Member("errors", service.Log().GetErrors());
-                        members.Member("warnings", service.Log().GetWarnings());
-                        members.EndObject();
-                        members.Member("manualClock", service.IsManualClock());
-                        members.Member("paused", paused);
-                    },
-                    [](JsonWriter& members) {
-                        members.Key("window");
-                        WriteWindowStatus(members);
-                    });
-            });
+            ControlStatusAnswer answer;
+            static_cast<ControlClock&>(answer) = ControlClock::Read();
+            answer.log.errors = service.Log().GetErrors();
+            answer.log.warnings = service.Log().GetWarnings();
+            answer.manualClock = service.IsManualClock();
+            answer.paused = pause != nullptr && pause->IsPaused();
+            answer.window = ControlWindowStatus::Read();
+            call.ReplyObject(answer);
         }
 
         void HandleStep(ControlCall& call, ControlService& service) {
@@ -124,14 +70,7 @@ namespace BECore {
                 call.Fail(seconds.error());
                 return;
             }
-            service.DeferSteppedFrames(call, *frames, *seconds, [](ControlCall& done) { done.Reply(WriteControlClock); });
-        }
-
-        template <bool kPaused>
-        void WritePaused(JsonWriter& writer) {
-            writer.BeginObject();
-            writer.Member("paused", kPaused);
-            writer.EndObject();
+            service.DeferSteppedFrames(call, *frames, *seconds, [](ControlCall& done) { done.ReplyObject(ControlClock::Read()); });
         }
 
         /// `pause` and `resume`: the pause is the one the editor drives too. The manual clock is a pause that only `step` lifts frames out of, so it is always paused
@@ -142,7 +81,9 @@ namespace BECore {
                 return;
             }
             pause->SetPaused(true);
-            call.Reply(WritePaused<true>);
+            ControlPausedAnswer answer;
+            answer.paused = true;
+            call.ReplyObject(answer);
         }
 
         void HandleResume(ControlCall& call, const ControlService& service) {
@@ -156,49 +97,49 @@ namespace BECore {
                 return;
             }
             pause->SetPaused(false);
-            call.Reply(WritePaused<false>);
+            call.ReplyObject(ControlPausedAnswer());
         }
 
         /// `list_methods`: every method of the service with the description its module gave it. The answer is built from the table only, no client data is read
         void HandleListMethods(ControlCall& call, const ControlService& service) {
-            Json methods = Json::array();
+            ControlMethodsAnswer answer;
             for (const ControlMethodListing& listing : service.GetMethods()) {
-                Json method = Json::object();
-                method["name"] = MakeJsonString(listing.name);
-                method["summary"] = MakeJsonString(listing.info != nullptr ? StringView(listing.info->summary) : StringView());
-                Json params = Json::array();
-                if (listing.info != nullptr) {
-                    for (const ControlParamInfo& param : listing.info->params) {
-                        Json entry = Json::object();
-                        entry["name"] = MakeJsonString(param.name);
-                        entry["type"] = MakeJsonString(param.type);
-                        entry["required"] = param.required;
-                        entry["description"] = MakeJsonString(param.description);
-                        params.push_back(std::move(entry));
-                    }
+                ControlListedMethod& method = answer.methods.emplace_back();
+                method.name = listing.name;
+                if (listing.info == nullptr) {
+                    continue;
                 }
-                method["params"] = std::move(params);
-                methods.push_back(std::move(method));
+                method.summary = listing.info->summary;
+                for (const ControlParamInfo& param : listing.info->params) {
+                    ControlListedParam& entry = method.params.emplace_back();
+                    entry.description = param.description;
+                    entry.name = param.name;
+                    entry.required = param.required;
+                    entry.type = param.type;
+                }
             }
-            Json result = Json::object();
-            result["methods"] = std::move(methods);
-            call.Reply(std::move(result));
+            call.ReplyObject(answer);
         }
 
         constexpr StringView kBatchMethod = "batch";
         constexpr StringView kQuitMethod = "quit";
-        constexpr StringView kWarningLevelName = "warning";
-        constexpr StringView kErrorLevelName = "error";
+
+        /// The names of the levels the log keeps, as the answers and the `level` filter spell them
+        struct LogLevelNames {
+            static constexpr auto warning = "warning"_intern;
+            static constexpr auto error = "error"_intern;
+            static constexpr auto fatal = "fatal"_intern;
+        };
 
         /// The lowercase name a line's level has in the answers: Warning, Error and Fatal are the levels the log keeps
-        StringView LogLevelName(LogLevel level) {
+        PoolString LogLevelName(LogLevel level) {
             switch (level) {
                 case LogLevel::Warning:
-                    return kWarningLevelName;
+                    return LogLevelNames::warning;
                 case LogLevel::Error:
-                    return kErrorLevelName;
+                    return LogLevelNames::error;
                 default:
-                    return "fatal";
+                    return LogLevelNames::fatal;
             }
         }
 
@@ -208,10 +149,10 @@ namespace BECore {
                 return LogLevel::Warning;
             }
             const auto name = GetJsonString(params, "level");
-            if (name && *name == kWarningLevelName) {
+            if (name && *name == LogLevelNames::warning.View()) {
                 return LogLevel::Warning;
             }
-            if (name && *name == kErrorLevelName) {
+            if (name && *name == LogLevelNames::error.View()) {
                 return LogLevel::Error;
             }
             return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'level' has to be \"warning\" or \"error\""));
@@ -220,22 +161,21 @@ namespace BECore {
         void HandleLogMark(ControlCall& call, const ControlService& service) {
             LogEvent::Flush();
             const ControlLog& log = service.Log();
-            call.Reply([&](JsonWriter& writer) {
-                writer.BeginObject();
-                writer.Member("errors", log.GetErrors());
-                writer.Member("mark", log.GetNextSequence());
-                writer.Member("warnings", log.GetWarnings());
-                writer.EndObject();
-            });
+            ControlLogMarkAnswer answer;
+            answer.errors = log.GetErrors();
+            answer.mark = log.GetNextSequence();
+            answer.warnings = log.GetWarnings();
+            call.ReplyObject(answer);
         }
 
-        /// One line of the log, as `log_since` lists it and `log` pushes it; @p skipped (0: none) is the count of lines a push left out after this one
+        /// One line of the log, as `log_since` lists it and `log` pushes it. By hand, not a reflected struct: the lines stream from the ring buffer of `LogHistory` and a struct
+        /// would copy up to `ControlLog::kMaxLogSinceLines` messages per reply; @p skipped (0: none) is the count of lines a push left out after this one
         void WriteLogLine(JsonWriter& writer, const LogHistory& history, const LogRecord& record, uint64_t skipped) {
             writer.BeginObject();
             if (record.category != kGeneralLogCategory) {
                 writer.Member("category", history.GetCategoryName(record.category));
             }
-            writer.Member("level", LogLevelName(record.level));
+            writer.Member("level", LogLevelName(record.level).ToStringView());
             writer.Member("message", StringView(record.message.data(), record.message.size()));
             writer.Member("sequence", record.sequence);
             if (skipped != 0) {
@@ -261,6 +201,7 @@ namespace BECore {
             const ControlLog& log = service.Log();
             const ControlLog::Since since = log.ReadSince(static_cast<uint64_t>(*mark), *level, ControlLog::kMaxLogSinceLines);
 
+            // By hand for the same reason as WriteLogLine: `lines` streams from the ring buffer between the counts, and a struct would copy it
             call.Reply([&](JsonWriter& writer) {
                 writer.BeginObject();
                 writer.Member("dropped", since.dropped);
@@ -300,12 +241,10 @@ namespace BECore {
             push.enabled = *enabled;
             push.minLevel = *level;
 
-            call.Reply([&](JsonWriter& writer) {
-                writer.BeginObject();
-                writer.Member("enabled", push.enabled);
-                writer.Member("level", LogLevelName(push.minLevel));
-                writer.EndObject();
-            });
+            ControlLogSubscribeAnswer answer;
+            answer.enabled = push.enabled;
+            answer.level = LogLevelName(push.minLevel);
+            call.ReplyObject(answer);
         }
 
         /// Frame end hook `log_push`: one `log` event per new line while log_subscribe is on. It allocates nothing when no line is new
@@ -369,7 +308,7 @@ namespace BECore {
                 ++next;
             }
 
-            /// `{ok, result}` or `{error: {code, message}, ok}` per call, in the order the `Json` object keeps its keys
+            /// `{ok, result}` or `{error: {code, message}, ok}` per call, in the order the `Json` object keeps its keys. By hand: a `result` is the `Json` of any method, not one struct
             void WriteResults(JsonWriter& writer) const {
                 writer.BeginArray();
                 for (const ControlAnswer& answer : results) {
@@ -444,6 +383,7 @@ namespace BECore {
                 batch->Record(std::move(*answer));
             }
 
+            // By hand: the answer is `results`, which holds the `Json` result of each call (`WriteResults`), and the one optional `stopped` beside it; a struct could hold neither payload
             outer.Reply([batch](JsonWriter& writer) {
                 writer.BeginObject();
                 writer.Key("results");

@@ -38,7 +38,8 @@ namespace BECore {
         bool operator==(const ArtGenReference& other) const = default;
     };
 
-    /// `{"mode", "image"}` and `weight` when there is one
+    /// `{"mode", "image"}` and `weight` when there is one: the writer of a preset or a manifest file. The answers of `artgen_state` write the same keys through
+    /// `ArtGenReferenceAnswer` (ArtGenAnswers.h); a test holds the two texts equal
     [[nodiscard]] Json ArtGenReferenceToJson(const ArtGenReference& reference);
 
     /// The reference of a JSON value, or the error that names the key (`reference.mode`, ...). A null `weight` counts as absent

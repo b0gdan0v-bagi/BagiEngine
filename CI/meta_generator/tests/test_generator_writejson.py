@@ -22,6 +22,10 @@ HEADER = textwrap.dedent("""\
     struct Bare {
         BE_CLASS(Bare)
     };
+    struct Versioned {
+        BE_CLASS(Versioned)
+        BE_REFLECT_FIELD int v = 0;
+    };
     struct Child : Plain {
         BE_CLASS(Child)
         BE_REFLECT_FIELD int extra = 0;
@@ -78,7 +82,7 @@ def test_the_file_includes_the_helpers(generated):
 
 
 def test_the_cache_version_regenerates_unchanged_sources():
-    assert MetadataCache.CACHE_VERSION == "2.14"
+    assert MetadataCache.CACHE_VERSION == "2.15"
 
 
 def test_a_class_writes_its_members_in_the_order_of_their_serialized_names_each_guarded_by_the_merge(generated):
@@ -106,6 +110,12 @@ def test_of_two_fields_with_one_serialized_name_only_the_later_is_written(genera
         '::BECore::JsonWrite::SaveField(w, "\\"x\\":", "x", this->x);',
         '::BECore::JsonWrite::SaveField(w, "\\"y\\":", "y", this->y);',
     ]
+
+
+def test_a_field_named_v_does_not_meet_the_parameter_of_the_property_visitor(generated):
+    body = body_of(generated, "Versioned::AcceptPropertyVisitor(")
+    assert "IPropertyVisitor& propertyVisitor)" in body
+    assert 'Visit(propertyVisitor, v, "v")' in body
 
 
 def test_a_class_without_fields_writes_an_empty_object(generated):

@@ -46,7 +46,7 @@ The config holds the defaults; the player's choice is the slot `audio` (`kAudioP
 
 ## Control API
 
-`audio_state`: `backend` (the reflected type name, or null), `voices` (of the effects), `playing`, `started`, `requested`, `levels` (`master`, `sfx`, `music`, `ui`: `volume`, `muted`), `music` (`clip` or null, `playing`, `loop`, `volume`, `fading`) and `recent` (`index`, `clip`, `bus`, `volume`, `played`, oldest first; music requests too). `audio_set {bus, volume?, muted?}` sets one level (`volume` is the slider position in both calls, not the gain) and answers `levels`; anything else is `invalid_params` and changes nothing. The bus names on the wire are lower case.
+`audio_state`: `backend` (the reflected type name; no member without a backend), `voices` (of the effects), `playing`, `started`, `requested`, `levels` (`master`, `sfx`, `music`, `ui`: `volume`, `muted`), `music` (`clip`, no member while no music is loaded, `playing`, `loop`, `volume`, `fading`) and `recent` (`index`, `clip`, `bus`, `volume`, `played`, oldest first; music requests too). `audio_set {bus, volume?, muted?}` sets one level (`volume` is the slider position in both calls, not the gain) and answers `levels`; anything else is `invalid_params` and changes nothing. The bus names on the wire are lower case. The answers are reflected structs (`AudioControlAnswers.h`): a value that is absent (no backend, no music loaded) is left out, not null, while an empty list is written as `[]` (`recent` before the first play).
 
 ## The SDL backend
 

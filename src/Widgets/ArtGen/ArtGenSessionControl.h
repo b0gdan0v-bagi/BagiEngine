@@ -7,6 +7,7 @@
 #include <BECore/Types/Types.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <expected>
+#include <type_traits>
 
 namespace BECore::ArtGenControl {
 
@@ -49,13 +50,18 @@ namespace BECore::ArtGenControl {
         return GetJsonString(holder, "value");
     }
 
-    /// Wraps a handler of the session as a control method: a value is the reply, an error the failure
+    /// Wraps a handler of the session as a control method: a value is the reply, an error the failure. A handler answers a `Json` document (a payload that stays by hand,
+    /// src/Widgets/ArtGen/CLAUDE.md, "The contract") or a reflected struct of ArtGenAnswers.h, which writes itself
     template <auto Method>
     void Register(ControlService& service, ArtGenSession& session, StringView name) {
         service.RegisterHandler(name, [&session](ControlCall& call) {
             auto result = (session.*Method)(call.Params());
             if (result) {
-                call.Reply(std::move(*result));
+                if constexpr (std::is_same_v<std::remove_cvref_t<decltype(*result)>, Json>) {
+                    call.Reply(std::move(*result));
+                } else {
+                    call.ReplyObject(*result);
+                }
             } else {
                 call.Fail(result.error());
             }

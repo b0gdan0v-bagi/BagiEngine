@@ -7,6 +7,7 @@
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Profiler.h>
+#include <BECore/Profiler/ProfilerAnswers.h>
 #include <EASTL/sort.h>
 
 namespace BECore {
@@ -35,47 +36,6 @@ namespace BECore {
                 writeValue(index);
             }
             writer.EndObject();
-        }
-
-        /// The zone x name rows of EASTL's allocations (Alloc/CLAUDE.md, "Names"), the most bytes first; empty without ENGINE_PROFILER_ALLOC
-        void WriteNames(JsonWriter& writer, const Vector<AllocSiteStats>& names, size_t top) {
-            writer.BeginArray();
-            for (size_t i = 0; i < names.size() && i < top; ++i) {
-                const AllocSiteStats& stats = names[i];
-                writer.BeginObject();
-                writer.Member("allocs", stats.count);
-                writer.Member("bytes", stats.bytes);
-                writer.Member("name", stats.name != nullptr ? stats.name : "");
-                writer.Member("zone", stats.ZoneLabel());
-                writer.EndObject();
-            }
-            writer.EndArray();
-        }
-
-        /// The size histograms of the innermost zones (Alloc/CLAUDE.md, "Sizes"), the most allocations first: the non-empty buckets only, `upTo` the bucket's
-        /// largest size in bytes and 0 for the open last bucket; empty without ENGINE_PROFILER_ALLOC
-        void WriteSizes(JsonWriter& writer, const Vector<AllocSizeStats>& sizes, size_t top) {
-            writer.BeginArray();
-            for (size_t i = 0; i < sizes.size() && i < top; ++i) {
-                const AllocSizeStats& stats = sizes[i];
-                writer.BeginObject();
-                writer.Member("allocs", stats.allocs);
-                writer.Key("buckets");
-                writer.BeginArray();
-                for (uint32_t bucket = 0; bucket < kSizeBuckets; ++bucket) {
-                    if (stats.buckets[bucket] == 0) {
-                        continue;
-                    }
-                    writer.BeginObject();
-                    writer.Member("allocs", stats.buckets[bucket]);
-                    writer.Member("upTo", SizeBucketBound(bucket));
-                    writer.EndObject();
-                }
-                writer.EndArray();
-                writer.Member("zone", stats.ZoneLabel());
-                writer.EndObject();
-            }
-            writer.EndArray();
         }
 
         void WriteFrame(JsonWriter& writer, const FrameStats& stats) {
@@ -121,14 +81,7 @@ namespace BECore {
         void WriteArenas(JsonWriter& writer, const Vector<ArenaStatsEntry>& arenas) {
             writer.BeginArray();
             for (const ArenaStatsEntry& entry : arenas) {
-                writer.BeginObject();
-                writer.Member("capacity", entry.capacity);
-                writer.Member("chunks", entry.chunks);
-                writer.Member("name", entry.name);
-                writer.Member("overflows", entry.overflows);
-                writer.Member("peak", entry.peak);
-                writer.Member("used", entry.used);
-                writer.EndObject();
+                ProfilerArenaRow::Read(entry).WriteJson(writer);
             }
             writer.EndArray();
         }
@@ -137,13 +90,7 @@ namespace BECore {
             const Array<AllocTagTotals, kMemTagCount> totals = AllocTracker::GetTagTotals();
             writer.BeginArray();
             for (size_t i = 0; i < kMemTagCount; ++i) {
-                writer.BeginObject();
-                writer.Member("count", totals[i].count);
-                writer.Member("frees", totals[i].frees);
-                writer.Member("liveBytes", totals[i].liveBytes);
-                writer.Member("peakLiveBytes", totals[i].peakLiveBytes);
-                writer.Member("tag", EnumUtils<MemTag>::ToString(static_cast<MemTag>(i)));
-                writer.EndObject();
+                ProfilerTagRow::Read(totals[i], static_cast<MemTag>(i)).WriteJson(writer);
             }
             writer.EndArray();
         }
@@ -151,18 +98,15 @@ namespace BECore {
         void WritePools(JsonWriter& writer, const Vector<PoolStatsEntry>& pools) {
             writer.BeginArray();
             for (const PoolStatsEntry& entry : pools) {
-                writer.BeginObject();
-                writer.Member("allocations", entry.allocations);
-                writer.Member("blockSize", entry.blockSize);
-                writer.Member("live", entry.live);
-                writer.Member("name", entry.name);
-                writer.Member("pages", entry.pages);
-                writer.Member("peak", entry.peak);
-                writer.EndObject();
+                ProfilerPoolRow::Read(entry).WriteJson(writer);
             }
             writer.EndArray();
         }
 
+        /// Streamed by hand, not a reflected struct: `frames` is written straight from the history copy (up to a few hundred frames), and each frame holds objects keyed
+        /// by names a module chooses (`counters`, `stagesMs`, `tagAllocCount`, `tagLiveBytes`), which a reflected map cannot write (it is an array of `{key, value}`).
+        /// The rows of `arenas`, `pools` and `tags` are reflected structs written one at a time: a `Vector` of them would allocate, and the answer allocates nothing
+        /// beyond the stats it reads. `allocTracking` is one flag of the same object, written beside the streamed `frames`
         void HandleFrameStats(ControlCall& call) {
             const auto frames = ReadCount(call.Params(), "frames", 1, static_cast<int64_t>(FrameStatsCollector::kFrameHistory));
             if (!frames) {
@@ -230,12 +174,10 @@ namespace BECore {
                 return;
             }
             const uint64_t dropped = recorder.GetDroppedCount();
-            call.Reply([&](JsonWriter& writer) {
-                writer.BeginObject();
-                writer.Member("dropped", dropped);
-                writer.Member("path", StringView(path));
-                writer.EndObject();
-            });
+            ProfilerDumpAnswer answer;
+            answer.dropped = dropped;
+            answer.path = path;
+            call.ReplyObject(answer);
         }
 
         void HandleZoneAllocs(ControlCall& call) {
@@ -258,39 +200,20 @@ namespace BECore {
             const Vector<AllocSiteStats> names = AllocTracker::GetNameStats();
             const Vector<AllocSizeStats> sizes = AllocTracker::GetSizeStats();
             const AllocTotals totals = AllocTracker::GetTotals();
-            call.Reply([&](JsonWriter& writer) {
-                writer.BeginObject();
-                writer.Member("enabled", AllocTracker::kEnabled);
-                writer.Key("names");
-                WriteNames(writer, names, static_cast<size_t>(*top));
-                writer.Key("sizes");
-                WriteSizes(writer, sizes, static_cast<size_t>(*top));
-                writer.Key("totals");
-                writer.BeginObject();
-                writer.Member("bytes", totals.bytes);
-                writer.Member("count", totals.count);
-                writer.Member("frees", totals.frees);
-                writer.Member("largest", totals.largest);
-                writer.Member("liveBytes", totals.liveBytes);
-                writer.Member("noAllocViolations", totals.noAllocViolations);
-                writer.Member("peakLiveBytes", totals.peakLiveBytes);
-                writer.EndObject();
-                writer.Key("zones");
-                writer.BeginArray();
-                for (size_t i = 0; i < zones.size() && i < static_cast<size_t>(*top); ++i) {
-                    const ZoneAllocStats& stats = zones[i];
-                    writer.BeginObject();
-                    writer.Member("allocs", stats.count);
-                    writer.Member("bytes", stats.bytes);
-                    writer.Member("calls", stats.calls);
-                    writer.Member("file", stats.site->file);
-                    writer.Member("line", stats.site->line);
-                    writer.Member("name", stats.site->name);
-                    writer.EndObject();
-                }
-                writer.EndArray();
-                writer.EndObject();
-            });
+            ZoneAllocsAnswer answer;
+            answer.enabled = AllocTracker::kEnabled;
+            const size_t limit = static_cast<size_t>(*top);
+            for (size_t i = 0; i < names.size() && i < limit; ++i) {
+                answer.names.push_back(ProfilerAllocName::Read(names[i]));
+            }
+            for (size_t i = 0; i < sizes.size() && i < limit; ++i) {
+                answer.sizes.push_back(ProfilerAllocSizes::Read(sizes[i]));
+            }
+            answer.totals = ProfilerAllocTotals::Read(totals);
+            for (size_t i = 0; i < zones.size() && i < limit; ++i) {
+                answer.zones.push_back(ProfilerAllocZone::Read(zones[i]));
+            }
+            call.ReplyObject(answer);
             if (reset) {
                 AllocTracker::ResetZoneStats();
             }

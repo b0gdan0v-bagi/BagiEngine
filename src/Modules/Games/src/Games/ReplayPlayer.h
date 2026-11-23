@@ -67,7 +67,8 @@ namespace BECore {
     /**
      * @brief The mismatch as the answer of the control method `replay` carries it.
      *
-     * {index, line, kind, entry (as a line of the file holds it), error? ({code, message}), expected?, actual?}.
+     * {index, line, kind, entry (as a line of the file holds it), error? ({code, message}), expected?, actual?}. A DOM on purpose: the entry's params and the two outcomes
+     * are documents of the game that sit between its own keys.
      */
     [[nodiscard]] Json ReplayMismatchJson(const ReplayMismatch& mismatch);
 

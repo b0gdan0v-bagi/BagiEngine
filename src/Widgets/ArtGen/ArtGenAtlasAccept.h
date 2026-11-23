@@ -60,10 +60,10 @@ namespace BECore {
                                                         FunctionRef<bool()> save);
 
     /**
-     * @brief The atlas keys of the row answer of `artgen_accept`, added to @p reply: `atlasGroup` is @p group (null for none) and `atlas`
-     * is `AtlasReplyToJson` of @p repacked (null with no group and while a pack is deferred).
+     * @brief The atlas members of the row answer of `artgen_accept`, set on @p reply: `atlasGroup` is @p group (absent for none) and `atlas`
+     * is @p repacked (absent with no group and while a pack is deferred).
      */
-    void AddAtlasKeysToReply(Json& reply, StringView group, const Optional<AtlasWritten>& repacked);
+    void AddAtlasKeysToReply(ArtGenAcceptAnswer& reply, StringView group, const Optional<AtlasWritten>& repacked);
 
     /**
      * @brief Packs group @p group of the game's library (`PackGroupAfterAccept`, which has the order and what a failure leaves), drops the
@@ -71,8 +71,8 @@ namespace BECore {
      * The editor's way to pack once after the rows of a set. It saves through `SaveGameLibraryForAccept` and tells an open batch that an
      * atlas file was rewritten (`NoteAtlasRewrittenForAccept`), so with a batch open it never writes `TextureLibrary.xml` itself.
      *
-     * Answers `AtlasReplyToJson`'s object; a failure is `artgen_accept_failed` with the reason.
+     * Answers the atlas written; a failure is `artgen_accept_failed` with the reason.
      */
-    std::expected<Json, ControlError> PackAtlasForControl(StringView group);
+    std::expected<ArtGenAtlasAnswer, ControlError> PackAtlasForControl(StringView group);
 
 }  // namespace BECore

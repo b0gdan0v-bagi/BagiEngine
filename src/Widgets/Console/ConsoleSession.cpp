@@ -153,6 +153,7 @@ namespace BECore {
             return std::nullopt;
         }
 
+        // A request, not an answer: `params` is the object the person typed, a `Json` that `ControlService::Post` takes as text
         Json request = Json::object();
         request["id"] = _nextId++;
         request["method"] = ToStdString(command->method);

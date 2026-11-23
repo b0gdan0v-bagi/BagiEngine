@@ -47,7 +47,8 @@ namespace BECore {
     [[nodiscard]] bool IsArtGenServiceInput(StringView input);
 
     /// A preset as the text of its file: the keys in the order of the docs (preset, title, workflow, prompt, negative, size, params, accept,
-    /// then `reference`, then any other), two-space indented, a newline at the end
+    /// then `reference`, then any other), two-space indented, a newline at the end. By hand: a file, with the keys of the docs in their order and
+    /// the keys the form does not know
     [[nodiscard]] String FormatArtGenPresetFile(const Json& preset);
 
     /// Checks the shape the C++ side owns before a save: an object with `preset` 1, `workflow` and `prompt` text, `size` [w, h] of positive
@@ -87,6 +88,7 @@ namespace BECore {
         /// The content now written to `<game>/artgen/presets/<name>.json`: it is the saved state, of the game
         void MarkSaved();
 
+        /// The preset file's document: the keys of the form on top of `_extra`, the keys of the file that the form does not know and keeps as they were
         [[nodiscard]] Json ToJson() const;
         /// The content differs from what it was loaded with, or it was never saved
         [[nodiscard]] bool IsDirty() const;

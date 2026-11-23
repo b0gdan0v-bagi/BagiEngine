@@ -83,12 +83,16 @@ namespace BECore {
         return packed;
     }
 
-    void AddAtlasKeysToReply(Json& reply, StringView group, const Optional<AtlasWritten>& repacked) {
-        reply["atlasGroup"] = group.empty() ? Json() : Json(ToStdString(group));
-        reply["atlas"] = AtlasReplyToJson(repacked);
+    void AddAtlasKeysToReply(ArtGenAcceptAnswer& reply, StringView group, const Optional<AtlasWritten>& repacked) {
+        if (!group.empty()) {
+            reply.atlasGroup = String(group);
+        }
+        if (repacked) {
+            reply.atlas = MakeArtGenAtlasAnswer(*repacked);
+        }
     }
 
-    std::expected<Json, ControlError> PackAtlasForControl(StringView group) {
+    std::expected<ArtGenAtlasAnswer, ControlError> PackAtlasForControl(StringView group) {
         auto fail = [](const String& message) { return std::unexpected(ControlError{String("artgen_accept_failed"), message}); };
         auto& files = CoreManager::GetFileSystem();
         const std::filesystem::path assetsDir = files.GetMountedPath(MountPoints::assets);
@@ -110,7 +114,7 @@ namespace BECore {
                 ReloadSpritesUsing(scene->GetRootNode(), member, PoolString{});
             }
         }
-        return AtlasReplyToJson(packed->repacked);
+        return MakeArtGenAtlasAnswer(*packed->repacked);
     }
 
 }  // namespace BECore

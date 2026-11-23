@@ -133,7 +133,7 @@ def play_basics(client: BagiControlClient) -> None:
     check(pong.get("pong") is True and isinstance(pong.get("protocol"), int), f"ping answered {pong}")
 
     games = client.call("list_games")
-    check(games["active"] is not None, "no game is active")
+    check(games.get("active") is not None, "no game is active")
     check(any(game["name"] == games["active"] for game in games["games"]), f"the active game is not in the list: {games}")
 
     expect_error("unknown_method", lambda: client.call("no_such_method"), "an unknown method")

@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/InputControl.h>
 #include <BECore/Input/UIInput.h>
@@ -10,6 +11,7 @@
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIChoice.h>
+#include <BECore/UI/UIControlAnswers.h>
 #include <BECore/UI/UIDropdown.h>
 #include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UIImageComponent.h>
@@ -42,54 +44,52 @@ namespace BECore {
             }
         }
 
-        Json RectToJson(const Rect& rect) {
-            Json json = Json::object();
-            json["x"] = rect.x;
-            json["y"] = rect.y;
-            json["w"] = rect.w;
-            json["h"] = rect.h;
-            return json;
+        String Text(StringView text) {
+            return String(text.data(), text.size());
         }
 
-        Json DescribeShadow(const UIShadowSpec& shadow) {
-            Json json = Json::object();
-            json["offsetX"] = shadow.offsetX;
-            json["offsetY"] = shadow.offsetY;
-            json["blur"] = shadow.blur;
-            json["spread"] = shadow.spread;
-            json["color"] = MakeJsonString(UIText::FormatColor(shadow.color));
-            return json;
+        UIShadowAnswer BuildShadow(const UIShadowSpec& shadow) {
+            UIShadowAnswer answer;
+            answer.blur = shadow.blur;
+            answer.color = UIText::FormatColor(shadow.color);
+            answer.offsetX = shadow.offsetX;
+            answer.offsetY = shadow.offsetY;
+            answer.spread = shadow.spread;
+            return answer;
         }
 
-        /// The authored box style, each setting only when it differs from the default (the state shifts of a button are paint, not reported, like `color`)
-        Json DescribeBox(const UIBoxStyle& box) {
+        /// The authored box style, each setting only when it differs from the default (the state shifts of a button are paint, not reported, like `color`). Nothing for the default style
+        Optional<UIBoxAnswer> BuildBox(const UIBoxStyle& box) {
             const UIBoxStyle defaults;
-            Json json = Json::object();
+            if (box == defaults) {
+                return std::nullopt;
+            }
+            UIBoxAnswer answer;
             if (!(box.cornerRadius == defaults.cornerRadius)) {
-                json["cornerRadius"] = Json::array({box.cornerRadius.topLeft, box.cornerRadius.topRight, box.cornerRadius.bottomRight, box.cornerRadius.bottomLeft});
+                answer.cornerRadius = Vector<double>{box.cornerRadius.topLeft, box.cornerRadius.topRight, box.cornerRadius.bottomRight, box.cornerRadius.bottomLeft};
             }
             if (box.borderWidth != defaults.borderWidth) {
-                json["borderWidth"] = box.borderWidth;
+                answer.borderWidth = box.borderWidth;
             }
             if (!ColorsEqual(box.borderColor, defaults.borderColor)) {
-                json["borderColor"] = MakeJsonString(UIText::FormatColor(box.borderColor));
+                answer.borderColor = UIText::FormatColor(box.borderColor);
             }
             if (box.gradientDirection != defaults.gradientDirection || !ColorsEqual(box.gradientColor, defaults.gradientColor)) {
-                Json gradient = Json::object();
-                gradient["direction"] = MakeJsonString(EnumUtils<UIGradientDirection>::ToString(box.gradientDirection));
-                gradient["color"] = MakeJsonString(UIText::FormatColor(box.gradientColor));
-                json["gradient"] = std::move(gradient);
+                UIBoxGradientAnswer gradient;
+                gradient.color = UIText::FormatColor(box.gradientColor);
+                gradient.direction = box.gradientDirection;
+                answer.gradient = std::move(gradient);
             }
             if (!(box.shadow == defaults.shadow)) {
-                json["shadow"] = DescribeShadow(box.shadow);
+                answer.shadow = BuildShadow(box.shadow);
             }
             if (!(box.glow == defaults.glow)) {
-                json["glow"] = DescribeShadow(box.glow);
+                answer.glow = BuildShadow(box.glow);
             }
             if (!ColorsEqual(box.highlight, defaults.highlight)) {
-                json["highlight"] = MakeJsonString(UIText::FormatColor(box.highlight));
+                answer.highlight = UIText::FormatColor(box.highlight);
             }
-            return json;
+            return answer;
         }
 
         /// The first component of type `T` that `accept` takes, in the descendants of `element` (depth first, in the order of the children). It does not go through an element with a
@@ -113,179 +113,193 @@ namespace BECore {
         /// The button-like facts of an element that is composed (a button is not a class): the type names of its components and what its text, clicker, image and tooltip say.
         /// Only what the element has: a plain element gets nothing. A clicker element with no text or image of its own answers
         /// `text` and `icon` from the first descendant that has one (the caption and the icon child of a button made of children)
-        void DescribeComponents(const UIElement& element, Json& json) {
+        void FillComponents(const UIElement& element, UITreeElement& out) {
             if (element.components.empty()) {
                 return;
             }
-            Json types = Json::array();
+            Vector<String> types;
+            types.reserve(element.components.size());
             for (const auto& component : element.components) {
-                types.push_back(MakeJsonString(component->GetTypeMeta().typeName));
+                types.push_back(Text(component->GetTypeMeta().typeName));
             }
-            json["components"] = std::move(types);
+            out.components = std::move(types);
             const bool hasClicker = element.GetComponent<UIInputClicker>() != nullptr;
             const UITextComponent* caption = element.GetComponent<UITextComponent>();
             if (caption == nullptr && hasClicker) {
                 caption = FindInDescendants<UITextComponent>(element, [](const UITextComponent&) { return true; });
             }
             if (caption != nullptr) {
-                json["text"] = MakeJsonString(caption->GetDisplayText(element));  // as shown: a dropdown's header says the chosen caption
+                out.text = Text(caption->GetDisplayText(element));  // as shown: a dropdown's header says the chosen caption
             }
             if (const auto* clicker = element.GetComponent<UIInputClicker>()) {
-                json["action"] = MakeJsonString(clicker->action.ToStringView());
-                json["disabled"] = element.IsDisabled();
-                json["value"] = MakeJsonString(clicker->value.ToStringView());
-                json["selected"] = element.selected;
+                out.action = clicker->action;
+                out.disabled = element.IsDisabled();
+                out.value = clicker->value;
+                out.selected = element.selected;
             }
             const UIImageComponent* image = element.GetComponent<UIImageComponent>();
             if (image == nullptr && hasClicker) {
                 image = FindInDescendants<UIImageComponent>(element, [](const UIImageComponent& found) { return !found.sprite.Empty(); });
             }
             if (image != nullptr && !image->sprite.Empty()) {
-                json["icon"] = MakeJsonString(image->sprite.ToStringView());
+                out.icon = image->sprite;
             }
             const String& tooltip = element.GetTooltipText();
             if (!tooltip.empty()) {
-                json["tooltip"] = MakeJsonString(StringView(tooltip));
+                out.tooltip = tooltip;
             }
         }
 
-        Json DescribeElement(UIElement& element, const UICanvasResolved* resolved) {
-            Json json = Json::object();
-            json["type"] = MakeJsonString(element.GetTypeMeta().typeName);
-            json["name"] = MakeJsonString(element.name.ToStringView());
-            json["interactive"] = element.IsInteractive();
-            json["blocksInput"] = element.blocksInput;
-            json["hovered"] = element.hovered;
-            json["pressed"] = element.pressed;
+        /// A deeper tree is cut at this depth: the generated writer fails the whole answer past `JsonWriter::kMaxDepth`, and a real screen is far from the cap, so it only
+        /// protects against a hostile or broken file. An element with children at the cap has none left in the answer and `truncated`
+        constexpr size_t kMaxElementDepth = 100;
+        /// The containers above the elements (the answer, `canvases`, a canvas, `elements`): a margin, not a count
+        constexpr size_t kContainersAboveElements = 8;
+        static_assert(2 * kMaxElementDepth + kContainersAboveElements < JsonWriter::kMaxDepth, "the cap must leave the writer's depth to the answer around the tree");
+
+        /// Fills @p out from @p element and its subtree; @p depth is 1 for an element of the canvas
+        void BuildElement(UIElement& element, const UICanvasResolved* resolved, size_t depth, UITreeElement& out) {
+            out.type = Text(element.GetTypeMeta().typeName);
+            out.name = element.name;
+            out.interactive = element.IsInteractive();
+            out.blocksInput = element.blocksInput;
+            out.hovered = element.hovered;
+            out.pressed = element.pressed;
             if (resolved != nullptr) {
                 const Rect& rect = element.rect;
-                json["visible"] = !rect.IsEmpty();
-                json["rect"] = RectToJson(rect);
-                json["outputRect"] = RectToJson(resolved->transform.ToOutput(rect.x, rect.y, rect.w, rect.h));
+                out.visible = !rect.IsEmpty();
+                out.rect = rect;
+                out.outputRect = resolved->transform.ToOutput(rect.x, rect.y, rect.w, rect.h);
             }
             if (!element.active.rect.region.Empty()) {
                 // The name, published or not: a client reads the cause of a MissingRegion in `issues` here
-                json["region"] = MakeJsonString(element.active.rect.region.ToStringView());
+                out.region = element.active.rect.region;
             }
-            if (!(element.box == UIBoxStyle{})) {
-                json["box"] = DescribeBox(element.box);
-            }
-            DescribeComponents(element, json);
+            out.box = BuildBox(element.box);
+            FillComponents(element, out);
             if (auto* group = element.Cast<UISegmented>()) {
                 // The segments take `selected` and `groupDisabled` at the draw; apply them now so the tree shows the variable as it is, not as of the last draw
                 group->SyncChildren();
-                json["bind"] = MakeJsonString(group->bind.ToStringView());
-                json["selectedValue"] = MakeJsonString(group->GetSelectedValue());
-                json["disabled"] = group->disabled;
+                out.bind = group->bind;
+                out.selectedValue = Text(group->GetSelectedValue());
+                out.disabled = group->disabled;
             }
             if (auto* dropdown = element.Cast<UIDropdown>()) {
                 // Like the group: the options take `selected` now, and the children below are described after this, so they show the variable as it is
                 dropdown->SyncChildren();
-                json["bind"] = MakeJsonString(dropdown->bind.ToStringView());
-                json["selectedValue"] = MakeJsonString(dropdown->GetSelectedValue());
-                json["open"] = dropdown->IsPopupOpen();
-                json["action"] = MakeJsonString(dropdown->action.ToStringView());
-                json["disabled"] = dropdown->disabled;
+                out.bind = dropdown->bind;
+                out.selectedValue = Text(dropdown->GetSelectedValue());
+                out.open = dropdown->IsPopupOpen();
+                out.action = dropdown->action;
+                out.disabled = dropdown->disabled;
             }
             if (const auto* bar = element.Cast<UIProgressBar>()) {
-                json["bind"] = MakeJsonString(bar->bind.ToStringView());
-                json["minValue"] = bar->minValue;
-                json["maxValue"] = bar->maxValue;
-                json["fraction"] = bar->GetFraction();
+                out.bind = bar->bind;
+                out.minValue = bar->minValue;
+                out.maxValue = bar->maxValue;
+                out.fraction = bar->GetFraction();
             }
-            // The toggle and the slider read the variable now, not as of the last draw. After `DescribeComponents`, so the `action` they carry replaces the empty one of the clicker beside
-            // them. A toggle's `text` is its caption, found by `DescribeComponents` below the row's clicker
+            // The toggle and the slider read the variable now, not as of the last draw. After `FillComponents`, so the `action` they carry replaces the empty one of the clicker beside
+            // them. A toggle's `text` is its caption, found by `FillComponents` below the row's clicker
             if (const auto* toggle = element.GetComponent<UIToggleComponent>()) {
-                json["bind"] = MakeJsonString(toggle->bind.ToStringView());
-                json["onValue"] = MakeJsonString(toggle->onValue.ToStringView());
-                json["offValue"] = MakeJsonString(toggle->offValue.ToStringView());
-                json["checked"] = toggle->IsOn();
-                json["action"] = MakeJsonString(toggle->action.ToStringView());
-                json["disabled"] = element.IsDisabled();
+                out.bind = toggle->bind;
+                out.onValue = toggle->onValue;
+                out.offValue = toggle->offValue;
+                out.checked = toggle->IsOn();
+                out.action = toggle->action;
+                out.disabled = element.IsDisabled();
             }
             if (const auto* slider = element.GetComponent<UISliderComponent>()) {
-                json["bind"] = MakeJsonString(slider->bind.ToStringView());
-                json["minValue"] = slider->minValue;
-                json["maxValue"] = slider->maxValue;
-                json["step"] = slider->step;
-                json["value"] = slider->GetValue();
-                json["fraction"] = slider->GetFraction();
-                json["action"] = MakeJsonString(slider->action.ToStringView());
-                json["disabled"] = element.IsDisabled();
+                out.bind = slider->bind;
+                out.minValue = slider->minValue;
+                out.maxValue = slider->maxValue;
+                out.step = slider->step;
+                out.value.reset();  // a slider's number is `sliderValue`: `value` is the string of the clicker beside it
+                out.sliderValue = slider->GetValue();
+                out.fraction = slider->GetFraction();
+                out.action = slider->action;
+                out.disabled = element.IsDisabled();
             }
-            Json children = Json::array();
+            if (depth >= kMaxElementDepth) {
+                if (!element.children.empty()) {
+                    out.truncated = true;
+                }
+                return;
+            }
+            out.children.reserve(element.children.size());
             for (const auto& child : element.children) {
-                children.push_back(DescribeElement(*child, resolved));
+                out.children.emplace_back();
+                BuildElement(*child, resolved, depth + 1, out.children.back());
             }
-            json["children"] = std::move(children);
-            return json;
         }
 
-        Json DescribeIssue(const UILayoutIssue& issue) {
-            Json json = Json::object();
-            json["kind"] = MakeJsonString(EnumUtils<UILayoutIssueKind>::ToString(issue.kind));
-            json["element"] = MakeJsonString(issue.element.ToStringView());
-            json["other"] = MakeJsonString(issue.other.ToStringView());
-            json["rect"] = RectToJson(issue.rect);
-            return json;
+        UILayoutIssueAnswer BuildIssue(const UILayoutIssue& issue) {
+            UILayoutIssueAnswer answer;
+            answer.element = issue.element;
+            answer.kind = issue.kind;
+            answer.other = issue.other;
+            answer.rect = issue.rect;
+            return answer;
         }
 
-        /// The regions the game published, also before the first draw (they do not depend on one)
-        Json DescribeRegions(const UIRegionSet& regions) {
-            Json json = Json::object();
+        /// The regions the game published, also before the first draw (they do not depend on one), sorted by name
+        Vector<UIRegionAnswer> BuildRegions(const UIRegionSet& regions) {
+            Vector<UIRegionAnswer> answer;
             for (const UIRegionSet::Entry& entry : regions) {
-                json[ToStdString(entry.name.ToStringView())] = RectToJson(entry.rect);
+                UIRegionAnswer region;
+                region.name = entry.name;
+                region.rect = entry.rect;
+                answer.push_back(std::move(region));
             }
-            return json;
+            eastl::sort(answer.begin(), answer.end(), [](const UIRegionAnswer& a, const UIRegionAnswer& b) { return a.name.ToStringView() < b.name.ToStringView(); });
+            return answer;
         }
 
-        Json DescribeCanvas(const CanvasEntry& entry, const Scene& scene) {
+        UICanvasAnswer BuildCanvas(const CanvasEntry& entry, const Scene& scene) {
             const UICanvasComponent& canvas = *entry.canvas;
             const UICanvasLayout& layout = canvas.GetLayout();
-            Json json = Json::object();
-            json["node"] = MakeJsonString(entry.node.ToStringView());
-            json["space"] = MakeJsonString(EnumUtils<CanvasSpace>::ToString(canvas._space));
-            json["visible"] = canvas._visible;
-            json["modal"] = canvas._modal;
-            json["inputEnabled"] = canvas._inputEnabled;
-            json["takesInput"] = canvas.TakesInput();
-            json["inputOrder"] = canvas.GetInputOrder();
-            json["laidOut"] = layout.HasLayout();
-            json["regions"] = DescribeRegions(layout.regions);
+            UICanvasAnswer answer;
+            answer.node = entry.node;
+            answer.space = canvas._space;
+            answer.visible = canvas._visible;
+            answer.modal = canvas._modal;
+            answer.inputEnabled = canvas._inputEnabled;
+            answer.takesInput = canvas.TakesInput();
+            answer.inputOrder = canvas.GetInputOrder();
+            answer.laidOut = layout.HasLayout();
+            answer.regions = BuildRegions(layout.regions);
             if (canvas._space == CanvasSpace::SceneView) {
                 // The view the scene drew with last: the canvas is laid out against it
                 const ActiveSceneView view = scene.GetActiveView();
-                Json viewJson = Json::object();
-                viewJson["name"] = MakeJsonString(view.name.ToStringView());
-                viewJson["width"] = view.width;
-                viewJson["height"] = view.height;
-                json["view"] = std::move(viewJson);
+                UICanvasViewAnswer viewAnswer;
+                viewAnswer.height = view.height;
+                viewAnswer.name = view.name;
+                viewAnswer.width = view.width;
+                answer.view = std::move(viewAnswer);
             }
 
             const UICanvasResolved* resolved = layout.HasLayout() ? &layout.GetResolved() : nullptr;
             if (resolved != nullptr) {
-                json["scale"] = resolved->scale;
-                json["bounds"] = RectToJson(resolved->bounds);
-                json["safeBounds"] = RectToJson(resolved->safeBounds);
-                json["contentBounds"] = RectToJson(resolved->contentBounds);
+                answer.scale = resolved->scale;
+                answer.bounds = resolved->bounds;
+                answer.safeBounds = resolved->safeBounds;
+                answer.contentBounds = resolved->contentBounds;
             }
-            Json elements = Json::array();
+            answer.elements.reserve(layout.root->children.size());
             for (const auto& child : layout.root->children) {
-                elements.push_back(DescribeElement(*child, resolved));
+                answer.elements.emplace_back();
+                BuildElement(*child, resolved, 1, answer.elements.back());
             }
-            json["elements"] = std::move(elements);
 
-            Json issues = Json::array();
             if (resolved != nullptr) {
                 UILayoutValidatorOptions options;
                 options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
                 options.pixelDensity = layout.GetContext().pixelDensity;
                 for (const UILayoutIssue& issue : layout.Validate(options)) {
-                    issues.push_back(DescribeIssue(issue));
+                    answer.issues.push_back(BuildIssue(issue));
                 }
             }
-            json["issues"] = std::move(issues);
-            return json;
+            return answer;
         }
 
         void HandleUITree(ControlCall& call) {
@@ -297,14 +311,13 @@ namespace BECore {
             Vector<CanvasEntry> canvases;
             CollectCanvases(scene->GetRootNode(), canvases);
 
-            Json list = Json::array();
+            UITreeAnswer answer;
+            answer.scene = scene->GetName();
+            answer.canvases.reserve(canvases.size());
             for (const CanvasEntry& entry : canvases) {
-                list.push_back(DescribeCanvas(entry, *scene));
+                answer.canvases.push_back(BuildCanvas(entry, *scene));
             }
-            Json result = Json::object();
-            result["scene"] = MakeJsonString(scene->GetName().ToStringView());
-            result["canvases"] = std::move(list);
-            call.Reply(std::move(result));
+            call.ReplyObject(answer);
         }
 
         /// Why no element of this name can be clicked, kept while the canvases are searched so that the answer names the closest miss
@@ -443,9 +456,12 @@ namespace BECore {
             return Format("'{}' cannot be clicked", text);
         }
 
-        constexpr StringView kTakenByNone = "none";
-        constexpr StringView kTakenByElement = "element";
-        constexpr StringView kTakenByTarget = "target";
+        /// The words of `takenBy`: lower case, so not the names of a reflected enum
+        struct TakenBy {
+            static constexpr auto none = "none"_intern;
+            static constexpr auto element = "element"_intern;
+            static constexpr auto target = "target"_intern;
+        };
 
         void HandleUIClick(ControlCall& call) {
             const auto nameText = GetJsonString(call.Params(), "name");
@@ -519,34 +535,34 @@ namespace BECore {
                 // A handler above the element (a scene target, a modal canvas) that took the press left the element nothing to emit
                 const bool takenAbove = consumed && click.taker != canvasHandler;
 
-                Json result = Json::object();
-                result["clicked"] = MakeJsonString(StringView(nameText->c_str(), nameText->size()));
-                result["canvas"] = MakeJsonString(canvasNode.ToStringView());
-                result["x"] = outputX;
-                result["y"] = outputY;
-                result["consumed"] = consumed;
-                result["takenBy"] = MakeJsonString(!consumed ? kTakenByNone : takenAbove ? kTakenByTarget : kTakenByElement);
+                UIClickAnswer answer;
+                answer.clicked = String(nameText->c_str(), nameText->size());
+                answer.canvas = canvasNode;
+                answer.x = outputX;
+                answer.y = outputY;
+                answer.consumed = consumed;
+                answer.takenBy = !consumed ? PoolString(TakenBy::none) : takenAbove ? PoolString(TakenBy::target) : PoolString(TakenBy::element);
                 if (owner != nullptr) {
-                    result["action"] = MakeJsonString(optionAction.ToStringView());
-                    result["value"] = MakeJsonString(optionValue.ToStringView());
+                    answer.action = optionAction;
+                    answer.value = optionValue;
                 } else if (toggleComponent != nullptr) {
-                    result["action"] = MakeJsonString(toggleAction.ToStringView());
-                    result["value"] = MakeJsonString(toggleValue.ToStringView());
+                    answer.action = toggleAction;
+                    answer.value = toggleValue;
                 } else if (sliderComponent != nullptr) {
                     const PoolString emitted = sliderCanEmit ? sliderComponent->GetLastEmittedValue() : PoolString{};
-                    result["action"] = MakeJsonString(emitted.Empty() ? StringView{} : sliderComponent->action.ToStringView());
-                    result["value"] = MakeJsonString(emitted.ToStringView());
+                    answer.action = emitted.Empty() ? PoolString{} : sliderComponent->action;
+                    answer.value = emitted;
                 } else if (clicker != nullptr) {
                     // After the toggle and the slider: their clicker has no action of its own, and must not shadow them
-                    result["action"] = MakeJsonString(clickerAction.ToStringView());
-                    result["value"] = MakeJsonString(clickerValue.ToStringView());
+                    answer.action = clickerAction;
+                    answer.value = clickerValue;
                 }
-                if ((onlyClosesList || takenAbove) && result.contains("action")) {
+                if ((onlyClosesList || takenAbove) && answer.action) {
                     // The press only closed the open list, or a handler above took it: the element emitted nothing
-                    result["action"] = MakeJsonString(StringView{});
-                    result["value"] = MakeJsonString(StringView{});
+                    answer.action = PoolString{};
+                    answer.value = PoolString{};
                 }
-                call.Reply(std::move(result));
+                call.ReplyObject(answer);
                 return;
             }
             if (!anyNamed) {
