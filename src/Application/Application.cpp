@@ -249,6 +249,7 @@ namespace BECore {
         BE_PROFILE_SCOPE("Frame");
         FrameStatsCollector& frameStats = CoreManager::GetFrameStats();
         frameStats.BeginFrame(frame.kind == FrameKind::Held);
+        // Outside every stage of OnGameCycle but inside cpuMs: the Vulkan backend times FrameStage::Wait in here
         RenderEvents::NewFrameEvent::Emit();
         CoreManager::GetInstance().OnGameCycle({}, frame.kind);
         {

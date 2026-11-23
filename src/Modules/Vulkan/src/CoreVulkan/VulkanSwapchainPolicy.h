@@ -146,6 +146,23 @@ namespace BECore::VulkanSwapchainPolicy {
         return channel <= kLinearSegment ? channel / kLinearSlope : std::pow((channel + kOffset) / (1.0f + kOffset), kGamma);
     }
 
+    /// The name of a present mode for the log line of a swapchain: what the display wait of a frame depends on
+    /// (FIFO and FIFO_RELAXED wait for the vertical blank, MAILBOX and IMMEDIATE do not). Any other value is "other".
+    [[nodiscard]] constexpr StringView PresentModeName(VkPresentModeKHR mode) {
+        switch (mode) {
+            case VK_PRESENT_MODE_FIFO_KHR:
+                return "FIFO";
+            case VK_PRESENT_MODE_MAILBOX_KHR:
+                return "MAILBOX";
+            case VK_PRESENT_MODE_IMMEDIATE_KHR:
+                return "IMMEDIATE";
+            case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
+                return "FIFO_RELAXED";
+            default:
+                return "other";
+        }
+    }
+
     /// ImGui's vertex colours are sRGB values and an sRGB attachment encodes what it is given, so Linearize turns them
     /// linear first; a swapchain that is not sRGB takes them as they are.
     [[nodiscard]] constexpr ImGuiColorMode ChooseImGuiColorMode(VkFormat mainSwapchainFormat) {
