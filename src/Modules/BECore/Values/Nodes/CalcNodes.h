@@ -68,7 +68,7 @@ namespace BECore {
         [[nodiscard]] std::expected<ExprNodeId, ProgramError> Append(ExprAst& ast, CalcBuildState& state) const override;
 
         BE_REFLECT_FIELD ProgramOperation op = ProgramOperation::Neg;
-        BE_REFLECT_FIELD IntrusivePtrNonAtomic<CalcNode> operand;
+        BE_REFLECT_FIELD IntrusivePtr<CalcNode> operand;
     };
 
     /// `left op right` for `Add Sub Mul Div Mod Eq Ne Lt Le Gt Ge And Or`
@@ -81,8 +81,8 @@ namespace BECore {
         [[nodiscard]] std::expected<ExprNodeId, ProgramError> Append(ExprAst& ast, CalcBuildState& state) const override;
 
         BE_REFLECT_FIELD ProgramOperation op = ProgramOperation::Add;
-        BE_REFLECT_FIELD IntrusivePtrNonAtomic<CalcNode> left;
-        BE_REFLECT_FIELD IntrusivePtrNonAtomic<CalcNode> right;
+        BE_REFLECT_FIELD IntrusivePtr<CalcNode> left;
+        BE_REFLECT_FIELD IntrusivePtr<CalcNode> right;
     };
 
     /// `function(args...)`: `min`, `lerp`, `select`, `vec3`, `at` (an inline table, the index first) and every other function of the language
@@ -96,7 +96,7 @@ namespace BECore {
 
         BE_REFLECT_FIELD String function;
         /// The elements are written `<node type="...">`, the element name of the base
-        BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<CalcNode>> args;
+        BE_REFLECT_FIELD Vector<IntrusivePtr<CalcNode>> args;
     };
 
     /// `base.name` for a base that is no bare path (`lerp(a, b, t).x`)
@@ -108,7 +108,7 @@ namespace BECore {
 
         [[nodiscard]] std::expected<ExprNodeId, ProgramError> Append(ExprAst& ast, CalcBuildState& state) const override;
 
-        BE_REFLECT_FIELD IntrusivePtrNonAtomic<CalcNode> base;
+        BE_REFLECT_FIELD IntrusivePtr<CalcNode> base;
         BE_REFLECT_FIELD String name;
     };
 
@@ -122,7 +122,7 @@ namespace BECore {
         [[nodiscard]] std::expected<ExprNodeId, ProgramError> Append(ExprAst& ast, CalcBuildState& state) const override;
 
         BE_REFLECT_FIELD String table;
-        BE_REFLECT_FIELD IntrusivePtrNonAtomic<CalcNode> index;
+        BE_REFLECT_FIELD IntrusivePtr<CalcNode> index;
     };
 
 }  // namespace BECore

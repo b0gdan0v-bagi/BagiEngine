@@ -241,7 +241,7 @@ namespace BECore {
     }
 
     bool ReadFormulaTree(IDeserializer& d, StringView key, String& text) {
-        IntrusivePtrNonAtomic<CalcNode> root;
+        IntrusivePtr<CalcNode> root;
         const size_t reported = d.GetErrors().size();
         const bool opened = Ser::Load(d, root, key);
         if (!root) {

@@ -6,19 +6,19 @@
 namespace BECore {
 
     /// The backend of this platform (the table in `FileSystem/CLAUDE.md`, "FileWatcher"); null where the platform has no file system to watch (the web)
-    IntrusivePtrAtomic<IFileWatchBackend> MakePlatformFileWatchBackend();
+    IntrusivePtr<IFileWatchBackend> MakePlatformFileWatchBackend();
 
 #if defined(__APPLE__)
     /// FSEvents (`FSEventsFileWatchBackend.cpp`)
-    IntrusivePtrAtomic<IFileWatchBackend> MakeFSEventsFileWatchBackend();
+    IntrusivePtr<IFileWatchBackend> MakeFSEventsFileWatchBackend();
 #endif
 #if defined(__linux__)
     /// inotify (`InotifyFileWatchBackend.cpp`)
-    IntrusivePtrAtomic<IFileWatchBackend> MakeInotifyFileWatchBackend();
+    IntrusivePtr<IFileWatchBackend> MakeInotifyFileWatchBackend();
 #endif
 #if defined(_WIN32)
     /// ReadDirectoryChangesW (`WindowsFileWatchBackend.cpp`)
-    IntrusivePtrAtomic<IFileWatchBackend> MakeWindowsFileWatchBackend();
+    IntrusivePtr<IFileWatchBackend> MakeWindowsFileWatchBackend();
 #endif
 
 }  // namespace BECore

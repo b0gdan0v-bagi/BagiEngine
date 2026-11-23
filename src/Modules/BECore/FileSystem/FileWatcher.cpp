@@ -87,7 +87,7 @@ namespace BECore {
         Stop();
     }
 
-    void FileWatcher::Start(IntrusivePtrAtomic<IFileWatchBackend> backend) {
+    void FileWatcher::Start(IntrusivePtr<IFileWatchBackend> backend) {
         Stop();
         if (backend == nullptr) {
             return;

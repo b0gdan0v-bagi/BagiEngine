@@ -120,7 +120,7 @@ namespace BECore {
             }
             SceneLoadFindings loaded;
             const NodeFileLoader loader = MakeFileSystemNodeLoader(fs);
-            const IntrusivePtrAtomic<SceneManager> manager = LoadSceneManager(root, loader, stem, &loaded);
+            const IntrusivePtr<SceneManager> manager = LoadSceneManager(root, loader, stem, &loaded);
             for (const String& error : loaded.expansionErrors) {
                 findings.push_back(error);
             }

@@ -194,7 +194,7 @@ namespace BECore {
 
         // A test builds its scenes from an XML string and owns the manager. Components that switch scenes ask CoreManager::GetSceneManager(), which is
         // empty in the gtest executable, so the test hands its manager over here (and an empty pointer back at the end)
-        void SetSceneManagerForTest(IntrusivePtrAtomic<SceneManager> manager, PassKey<Tests::EngineEnvironment>);
+        void SetSceneManagerForTest(IntrusivePtr<SceneManager> manager, PassKey<Tests::EngineEnvironment>);
 
         // The part of OnGameCycle that a pause skips (game time of the tasks, tasks, tweens, scene update), so a test can run it without a window and the widgets
         void UpdateGameForTest(FrameKind kind, PassKey<Tests::EngineEnvironment>);
@@ -229,8 +229,8 @@ namespace BECore {
         UniquePtr<FileSystem> _fileSystem;
         UniquePtr<FileWatcher> _fileWatcher;  // after _fileSystem, which it resolves paths with; the handles of the services below must not outlive it
         UniquePtr<ConfigManager> _configManager;
-        IntrusivePtrAtomic<LoggerManager> _loggerManager;
-        IntrusivePtrAtomic<AssertHandlerManager> _assertHandlerManager;
+        IntrusivePtr<LoggerManager> _loggerManager;
+        IntrusivePtr<AssertHandlerManager> _assertHandlerManager;
         UniquePtr<TestManager> _testManager;
         UniquePtr<ResourceManager> _resourceManager;
         UniquePtr<WidgetManager> _widgetManager;
@@ -245,7 +245,7 @@ namespace BECore {
         UniquePtr<UIVars> _uiVars;
         UniquePtr<UIStrings> _uiStrings;
         UniquePtr<UIThemes> _uiThemes;
-        IntrusivePtrAtomic<SceneManager> _sceneManager;
+        IntrusivePtr<SceneManager> _sceneManager;
         UniquePtr<TextureLibrary> _textureLibrary;
         UniquePtr<FontAtlasLibrary> _fontAtlasLibrary;
         UniquePtr<Time> _time;
