@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlClock.h>
 #include <BECore/Control/JsonPayload.h>
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
@@ -23,7 +24,7 @@ namespace BECore {
         BE_CLASS(GameListAnswer)
 
         BE_REFLECT_FIELD Optional<PoolString> active;
-        BE_REFLECT_FIELD Vector<GameListedGame> games;
+        BE_REFLECT_FIELD ArenaVector<GameListedGame> games;
     };
 
     /// `switch_game`

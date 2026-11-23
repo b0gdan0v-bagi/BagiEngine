@@ -113,6 +113,7 @@ namespace BECore {
             if (active != nullptr) {
                 answer.active = active->GetName();
             }
+            answer.games.reserve(manager.GetAll().size());
             for (const IntrusivePtr<IGame>& game : manager.GetAll()) {
                 GameListedGame& listed = answer.games.emplace_back();
                 listed.controllable = game->AsControllable() != nullptr;

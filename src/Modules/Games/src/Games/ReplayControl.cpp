@@ -50,7 +50,7 @@ namespace BECore {
 
             ReplayRecordStartAnswer answer;
             answer.game = game->GetName();
-            answer.path = *path;
+            answer.path = TextView(StringView(*path));
             call.ReplyObject(answer);
         }
 
