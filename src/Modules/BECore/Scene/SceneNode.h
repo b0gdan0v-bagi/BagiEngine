@@ -38,6 +38,14 @@ namespace BECore {
     public:
         BE_POOLED_SINGLE_THREAD(SceneNode)
 
+        /// Components a node keeps without a heap block: a transform and a renderer cover nearly every node a scene or a spawner builds
+        static constexpr size_t kInlineComponents = 2;
+        /// Children a node keeps without a heap block: nearly every node is a leaf and pays 8 B per slot, so one is all the inline list affords
+        static constexpr size_t kInlineChildren = 1;
+
+        using ComponentList = SmallVector<IntrusivePtr<IComponent>, kInlineComponents>;
+        using ChildList = SmallVector<IntrusivePtr<SceneNode>, kInlineChildren>;
+
         SceneNode();
         ~SceneNode() override = default;
 
@@ -45,7 +53,7 @@ namespace BECore {
 
         /// True when @p ancestor is above this node (its parent, the parent's parent, ...); a node is not its own ancestor
         bool IsDescendantOf(const SceneNode& ancestor) const;
-        const Vector<IntrusivePtr<SceneNode>>& GetChildren() const;
+        const ChildList& GetChildren() const;
         IntrusivePtr<SceneNode> AddChild(PoolString name);
         void RemoveChild(SceneNode* child);
 
@@ -93,7 +101,7 @@ namespace BECore {
         bool HasEditorFlag(EditorFlags flag) const;
 
         entt::entity GetEntity() const;
-        const Vector<IntrusivePtr<IComponent>>& GetComponents() const;
+        const ComponentList& GetComponents() const;
 
     private:
         friend class Scene;
@@ -107,8 +115,8 @@ namespace BECore {
         Scene* _scene = nullptr;
         SceneNode* _parent = nullptr;
         EditorFlags _editorFlags = EditorFlags::None;
-        BE_REFLECT_FIELD Vector<IntrusivePtr<IComponent>> _components;
-        BE_REFLECT_FIELD Vector<IntrusivePtr<SceneNode>> _children;
+        BE_REFLECT_FIELD ComponentList _components;
+        BE_REFLECT_FIELD ChildList _children;
     };
 
 }  // namespace BECore

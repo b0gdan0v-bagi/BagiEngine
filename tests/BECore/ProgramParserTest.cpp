@@ -2,10 +2,13 @@
 
 #include <BECore/Values/Programs/ExprAst.h>
 #include <BECore/Values/Programs/ExprParser.h>
+#include <Common/ScratchScopeFixture.h>
 #include <Common/TestText.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
+
+    using ProgramParserTest = ScratchScopeFixture;
 
     namespace {
 
@@ -56,7 +59,7 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(ProgramParserTest, EveryOperatorParsesToItsOperation) {
+    TEST_F(ProgramParserTest, EveryOperatorParsesToItsOperation) {
         struct Row {
             StringView symbol;
             ProgramOperation operation;
@@ -75,7 +78,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ProgramParserTest, PrecedenceAndAssociativityAreTheTableSaysAsFullyParenthesizedText) {
+    TEST_F(ProgramParserTest, PrecedenceAndAssociativityAreTheTableSaysAsFullyParenthesizedText) {
         struct Row {
             StringView text;
             StringView expected;
@@ -113,7 +116,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ProgramParserTest, UnaryMinusBeforeALiteralIsAnOperatorAboveTheNumber) {
+    TEST_F(ProgramParserTest, UnaryMinusBeforeALiteralIsAnOperatorAboveTheNumber) {
         const ExprAst ast = Parse("-5");
         ASSERT_EQ(ast.nodes.size(), 2U);
         EXPECT_EQ(ast[ast.root].kind, ExprNodeKind::Unary);
@@ -127,7 +130,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Parse("!a")[Parse("!a").root].operation, ProgramOperation::Not);
     }
 
-    TEST(ProgramParserTest, NumbersKeepTheirTextAndTellFloatsFromIntegers) {
+    TEST_F(ProgramParserTest, NumbersKeepTheirTextAndTellFloatsFromIntegers) {
         struct Row {
             StringView text;
             bool isFloat;
@@ -145,7 +148,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Printed("x*.5"), "x * .5");
     }
 
-    TEST(ProgramParserTest, BoolLiteralsAreNotNames) {
+    TEST_F(ProgramParserTest, BoolLiteralsAreNotNames) {
         const ExprAst yes = Parse("true");
         EXPECT_EQ(yes[yes.root].kind, ExprNodeKind::Bool);
         EXPECT_TRUE(yes[yes.root].boolValue);
@@ -157,7 +160,7 @@ namespace BECore::Tests {
         EXPECT_EQ(name[name.root].kind, ExprNodeKind::Name);
     }
 
-    TEST(ProgramParserTest, AFunctionCallHasZeroOneOrManyArguments) {
+    TEST_F(ProgramParserTest, AFunctionCallHasZeroOneOrManyArguments) {
         const ExprAst none = Parse("f()");
         EXPECT_EQ(none[none.root].kind, ExprNodeKind::Call);
         EXPECT_EQ(none[none.root].text, "f");
@@ -175,7 +178,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Printed("f(  1 ,2,   g( ) )"), "f(1, 2, g())");
     }
 
-    TEST(ProgramParserTest, ADottedNameIsOneNameAndACallOfADottedNameIsACall) {
+    TEST_F(ProgramParserTest, ADottedNameIsOneNameAndACallOfADottedNameIsACall) {
         const ExprAst path = Parse("a.b.c");
         ASSERT_EQ(path.nodes.size(), 1U);
         EXPECT_EQ(path[path.root].kind, ExprNodeKind::Name);
@@ -190,7 +193,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Printed("caster.span.low + cast.level"), "caster.span.low + cast.level");
     }
 
-    TEST(ProgramParserTest, AMemberOnAnExpressionThatIsNoNameIsAMember) {
+    TEST_F(ProgramParserTest, AMemberOnAnExpressionThatIsNoNameIsAMember) {
         const ExprAst ast = Parse("f(x).y.z");
         ASSERT_EQ(ast[ast.root].kind, ExprNodeKind::Member);
         EXPECT_EQ(ast[ast.root].text, "z");
@@ -205,7 +208,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Printed("(-a).x"), "(-a).x");
     }
 
-    TEST(ProgramParserTest, WhitespaceAndTabsAreOnlySeparators) {
+    TEST_F(ProgramParserTest, WhitespaceAndTabsAreOnlySeparators) {
         EXPECT_EQ(Printed("  a\t+\tb  "), "a + b");
         EXPECT_EQ(Printed("a+b*c"), "a + (b * c)");
         EXPECT_EQ(Printed("a\n+\r\nb"), "a + b");
@@ -214,7 +217,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Printed("a != b"), "a != b");
     }
 
-    TEST(ProgramParserTest, APrintedTextParsesToTheSameTreeAndPrintsAgain) {
+    TEST_F(ProgramParserTest, APrintedTextParsesToTheSameTreeAndPrintsAgain) {
         const StringView texts[] = {"caster.attack * (100 + cast.level * 10) / 100",
                                     "a || b && c == d + e * f",
                                     "-(-5) - - 3",
@@ -233,7 +236,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ProgramParserTest, ColumnsAreOneBasedBytesOfTheNodes) {
+    TEST_F(ProgramParserTest, ColumnsAreOneBasedBytesOfTheNodes) {
         const ExprAst ast = Parse("ab + cd.e");
         EXPECT_EQ(ast[ast.root].column, 4U) << "a binary node is at its operator";
         EXPECT_EQ(ast[ast[ast.root].first].column, 1U);
@@ -242,7 +245,7 @@ namespace BECore::Tests {
         EXPECT_EQ(sign[sign.root].column, 3U);
     }
 
-    TEST(ProgramParserTest, ErrorsNameWhatWasExpectedAndFoundAndWhere) {
+    TEST_F(ProgramParserTest, ErrorsNameWhatWasExpectedAndFoundAndWhere) {
         ExpectError("1 $ 2", 3, "unexpected '$'");
         ExpectError("(1 + 2", 7, "expected ')'");
         EXPECT_TRUE(Contains(ExpectError("(1 + 2", 7, "end of the text").message, "column 1"));
@@ -264,7 +267,7 @@ namespace BECore::Tests {
         ExpectError("true(1)", 5, "expected an operator");
     }
 
-    TEST(ProgramParserTest, MalformedNumbersAreErrorsAtTheBadByte) {
+    TEST_F(ProgramParserTest, MalformedNumbersAreErrorsAtTheBadByte) {
         ExpectError("1..2", 3, "expected a digit after the decimal point, found '.'");
         ExpectError("1.", 3, "expected a digit after the decimal point, found the end of the text");
         ExpectError("1.x", 3, "found 'x'");
@@ -275,12 +278,12 @@ namespace BECore::Tests {
         ExpectError("1 + 3f", 6, "after the number");
     }
 
-    TEST(ProgramParserTest, AnEmptyTextIsAnError) {
+    TEST_F(ProgramParserTest, AnEmptyTextIsAnError) {
         ExpectError("", 1, "empty");
         ExpectError("   \t ", 1, "empty");
     }
 
-    TEST(ProgramParserTest, AnIndexIsAPostfixNodeThatPrintsAndParsesBack) {
+    TEST_F(ProgramParserTest, AnIndexIsAPostfixNodeThatPrintsAndParsesBack) {
         const ExprAst simple = Parse("hand.tiles[0]");
         ASSERT_EQ(simple[simple.root].kind, ExprNodeKind::Index);
         EXPECT_EQ(simple[simple.root].column, 11U) << "the node is at the '['";
@@ -303,7 +306,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Printed("(a + b)[0]"), "(a + b)[0]");
     }
 
-    TEST(ProgramParserTest, AnUnclosedOrEmptyIndexIsAnErrorAtTheBadToken) {
+    TEST_F(ProgramParserTest, AnUnclosedOrEmptyIndexIsAnErrorAtTheBadToken) {
         ExpectError("a[0", 4, "to close the '[' at column 2");
         ExpectError("a[0 b]", 5, "to close the '[' at column 2, found 'b'");
         ExpectError("a[]", 3, "expected a value, found ']'");
@@ -313,7 +316,7 @@ namespace BECore::Tests {
         ExpectError("a[(0]", 5, "to close the '(' at column 3");
     }
 
-    TEST(ProgramParserTest, AnIndexCountsAgainstTheLimits) {
+    TEST_F(ProgramParserTest, AnIndexCountsAgainstTheLimits) {
         constexpr size_t kDeep = ExprLimits::kMaxTreeHeight;
         EXPECT_TRUE(ParseExpression(Format("{}a{}", Repeated("a[", kDeep), Repeated("]", kDeep))).has_value());
         const auto tooHigh = ParseExpression(Format("{}a{}", Repeated("a[", kDeep + 1), Repeated("]", kDeep + 1)));
@@ -334,7 +337,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(parsed.error().message, "more than 512 parts")) << parsed.error().message.c_str();
     }
 
-    TEST(ProgramParserTest, TheLimitsAreErrorsThatNameThem) {
+    TEST_F(ProgramParserTest, TheLimitsAreErrorsThatNameThem) {
         EXPECT_TRUE(ParseExpression(Repeated("a", ExprLimits::kMaxTextBytes)).has_value());
         const ProgramError longText = ExpectError(Repeated("a", ExprLimits::kMaxTextBytes + 1), ExprLimits::kMaxTextBytes + 1, "longer than 4096 bytes");
         EXPECT_FALSE(longText.message.empty());
@@ -356,7 +359,7 @@ namespace BECore::Tests {
         EXPECT_GT(parsed.error().column, 0U);
     }
 
-    TEST(ProgramParserTest, ATreeHigherThanTheHeightLimitIsRefusedWhateverMakesItHigh) {
+    TEST_F(ProgramParserTest, ATreeHigherThanTheHeightLimitIsRefusedWhateverMakesItHigh) {
         constexpr size_t kLevels = ExprLimits::kMaxTreeHeight;
         // A left-nested chain is a loop of the parser but a tree as high as it is long: n operators are n levels
         const auto chain = [](size_t operators) { return Format("a{}", Repeated(" + a", operators)); };
@@ -381,7 +384,7 @@ namespace BECore::Tests {
         EXPECT_EQ(unary.error().column, 1U);
     }
 
-    TEST(ProgramParserTest, AStringIsAnOperandWithItsTextBetweenTheQuotes) {
+    TEST_F(ProgramParserTest, AStringIsAnOperandWithItsTextBetweenTheQuotes) {
         const ExprAst ast = Parse("a == 'Fire'");
         ASSERT_EQ(ast.nodes.size(), 3U);
         EXPECT_EQ(ast[ast[ast.root].second].kind, ExprNodeKind::String);
@@ -394,7 +397,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Printed("'x' != a"), "'x' != a");
     }
 
-    TEST(ProgramParserTest, AStringMayBeEmptyAndHoldSpacesOperatorsAndDotsAsText) {
+    TEST_F(ProgramParserTest, AStringMayBeEmptyAndHoldSpacesOperatorsAndDotsAsText) {
         const ExprAst empty = Parse("''");
         ASSERT_EQ(empty.nodes.size(), 1U);
         EXPECT_EQ(empty[empty.root].kind, ExprNodeKind::String);
@@ -408,7 +411,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Printed("'ab'.x"), "('ab').x");
     }
 
-    TEST(ProgramParserTest, APrintedStringParsesToTheSameTree) {
+    TEST_F(ProgramParserTest, APrintedStringParsesToTheSameTree) {
         const StringView texts[] = {"a == 'Fire'", "select(a < b, 'x y', '')", "'a' == 'b' || c", "'it.s'.x", "f('a', 'b + c', 1)"};
         for (const StringView text : texts) {
             const ExprAst first = Parse(text);
@@ -419,7 +422,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ProgramParserTest, ABadStringIsAnErrorAtTheRightByte) {
+    TEST_F(ProgramParserTest, ABadStringIsAnErrorAtTheRightByte) {
         ExpectError("a == 'Fire", 6, "unterminated string, expected ' to close it");
         ExpectError("'", 1, "unterminated string");
         ExpectError("a + 'b' + 'c", 11, "unterminated string");
@@ -435,7 +438,7 @@ namespace BECore::Tests {
         ExpectError("a 'b'", 3, "found the string 'b'");
     }
 
-    TEST(ProgramParserTest, AStringCountsInTheLimits) {
+    TEST_F(ProgramParserTest, AStringCountsInTheLimits) {
         const String longest = Format("'{}'", Repeated("a", ExprLimits::kMaxTextBytes - 2));
         const ExprAst fits = Parse(longest);
         EXPECT_EQ(fits[fits.root].text.size(), ExprLimits::kMaxTextBytes - 2);
@@ -449,7 +452,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(parsed.error().message, "more than 512 parts")) << parsed.error().message.c_str();
     }
 
-    TEST(ProgramParserTest, InvalidUtf8AndForeignCharactersAreErrorsNotCrashes) {
+    TEST_F(ProgramParserTest, InvalidUtf8AndForeignCharactersAreErrorsNotCrashes) {
         const ProgramError invalid = ExpectError("1 + \xFF", 5, "invalid UTF-8 byte 0xff");
         EXPECT_FALSE(Contains(invalid.message, "\xFF")) << "the bad byte is never copied into the message";
         ExpectError("1 + \xE2\x82", 5, "invalid UTF-8 byte 0xe2");

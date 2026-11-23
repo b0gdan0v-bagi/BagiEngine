@@ -228,8 +228,14 @@ namespace BECore {
             return options.maxHeight <= 0.0f || static_cast<float>(laid.lines.size()) * lineHeight <= options.maxHeight + kEpsilon;
         }
 
-        TextLayoutResult Assemble(const Font& font, Laid laid, float fontSize, const TextLayoutOptions& options) {
-            TextLayoutResult result;
+        void Assemble(const Font& font, Laid laid, float fontSize, const TextLayoutOptions& options, TextLayoutResult& result) {
+            result.Clear();
+            size_t glyphTotal = 0;
+            for (const Line& line : laid.lines) {
+                glyphTotal += line.items.size();
+            }
+            result.glyphs.reserve(glyphTotal);
+            result.lines.reserve(laid.lines.size());
             const FontVerticalMetrics metrics = font.GetVerticalMetrics(fontSize);
             result.fontSize = fontSize;
             result.lineHeight = metrics.LineHeight() * options.lineSpacing;
@@ -268,15 +274,21 @@ namespace BECore {
             }
 
             result.overflowed = (options.maxWidth > 0.0f && result.width > options.maxWidth + kEpsilon) || (options.maxHeight > 0.0f && result.height > options.maxHeight + kEpsilon);
-            return result;
         }
 
     }  // namespace
 
     TextLayoutResult TextLayout::Layout(const Font& font, StringView utf8, const TextLayoutOptions& options) {
+        TextLayoutResult result;
+        Layout(font, utf8, options, result);
+        return result;
+    }
+
+    void TextLayout::Layout(const Font& font, StringView utf8, const TextLayoutOptions& options, TextLayoutResult& into) {
         BE_PROFILE_SCOPE("TextLayout::Layout");
         if (font.GetState() != ResourceState::Loaded || options.fontSize <= 0.0f) {
-            return {};
+            into.Clear();
+            return;
         }
 
         const ScratchScope scratch;  // the items and lines are temporaries of this call; TextLayoutResult is built on the heap
@@ -313,7 +325,7 @@ namespace BECore {
             }
         }
 
-        return Assemble(font, LayoutLines(font, utf8, fontSize, options, ellipsize), fontSize, options);
+        Assemble(font, LayoutLines(font, utf8, fontSize, options, ellipsize), fontSize, options, into);
     }
 
 }  // namespace BECore

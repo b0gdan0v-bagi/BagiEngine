@@ -51,6 +51,18 @@ namespace BECore {
         float lineHeight = 0.0f;
         bool truncated = false;   ///< text was cut for an ellipsis
         bool overflowed = false;  ///< a line is wider or the text is taller than the box (with Clip, the drawer clips)
+
+        /// Every field back to its default; glyphs and lines are emptied with their capacity kept, so the next layout into this result does not allocate
+        void Clear() {
+            glyphs.clear();
+            lines.clear();
+            width = 0.0f;
+            height = 0.0f;
+            fontSize = 0.0f;
+            lineHeight = 0.0f;
+            truncated = false;
+            overflowed = false;
+        }
     };
 
     /**
@@ -63,7 +75,12 @@ namespace BECore {
      */
     class TextLayout {
     public:
+        /// Lays @p utf8 out into a new result; a wrapper of the form below
         [[nodiscard]] static TextLayoutResult Layout(const Font& font, StringView utf8, const TextLayoutOptions& options);
+
+        /// Lays @p utf8 out into @p into, which ends as the by-value form returns it (a font that is not loaded or a font size of 0 leaves it empty).
+        /// The capacity of its glyphs and lines is kept and grown to the laid text, so a text that changes again and again allocates nothing once @p into has held a larger one
+        static void Layout(const Font& font, StringView utf8, const TextLayoutOptions& options, TextLayoutResult& into);
     };
 
 }  // namespace BECore

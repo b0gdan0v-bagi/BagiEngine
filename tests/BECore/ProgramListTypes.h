@@ -43,7 +43,7 @@ namespace BECore::ProgramListData {
         BE_REFLECT_FIELD Vector<ProgramListSet> sets;
         BE_REFLECT_FIELD SmallVector<int32_t, 4> counts;
         BE_REFLECT_FIELD FixedVector<float, 8> weights;
-        BE_REFLECT_FIELD Array<bool, 3> flags;
+        BE_REFLECT_FIELD Array<bool, 3> flags{};
         BE_REFLECT_FIELD Vector<ProgramListTile> none;
         BE_REFLECT_FIELD int32_t after = 0;
     };

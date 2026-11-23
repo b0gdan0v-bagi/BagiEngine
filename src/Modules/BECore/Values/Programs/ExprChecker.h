@@ -99,11 +99,11 @@ namespace BECore {
         Array<TypedNodeId, kMaxTypedOperands> operands{};
         RegisterImage constant{};
         SlotRef slot{};
-        String path;
+        ArenaString path;
         /// `Operation`: the immediate of the instruction when the opcode has one (the index of a component for `Extract`, the operation id for `CallDomain`)
         uint32_t immediate = 0;
         /// `LoadTable`: the nodes of the entries, in order
-        Vector<TypedNodeId> entries;
+        ArenaVector<TypedNodeId> entries;
         /// `List`: where the list sits in its object and how it is walked
         ListDescriptor list;
         /// `Element` of a variable and `Fold`: the number of the loop, given by the checker in the order it meets the folds
@@ -114,9 +114,14 @@ namespace BECore {
         uint32_t column = 0;
     };
 
-    /// A formula that passed the checker, in post-order: the root is the last node
+    /**
+     * @brief A formula that passed the checker, in post-order: the root is the last node
+     *
+     * The nodes, their entries and their paths are on the thread's scratch arena, so a typed formula belongs to the `ScratchScope` that is alive when `CheckExpression` runs and must not
+     * outlive it, be stored in a longer-lived object or cross threads (`Memory/CLAUDE.md`, "Scratch arena and scopes"); what is kept (a path, a program) is copied to engine containers first.
+     */
     struct TypedExpr {
-        Vector<TypedNode> nodes;
+        ArenaVector<TypedNode> nodes;
         TypedNodeId root = 0;
         ExprType type;
 
@@ -143,6 +148,8 @@ namespace BECore {
      *
      * `ByLevel('Name', i)` is read from `options.tables` here: its entries are copied into constant nodes of the type beside it (an `int`, `int64`, `float` or `double`, else `double`),
      * so the lowering sees an inline table and the program keeps nothing of the provider.
+     *
+     * It returns containers of the thread's scratch arena and opens no scope of its own: the caller holds the `ScratchScope` and copies what it keeps before the scope ends.
      */
     [[nodiscard]] std::expected<TypedExpr, ProgramError> CheckExpression(const ExprAst& ast, const ContextDecl& declaration, const TypeDesc& expected, const CompileOptions& options = {});
 

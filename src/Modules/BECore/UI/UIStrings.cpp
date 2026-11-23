@@ -2,6 +2,7 @@
 
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/UI/UITidyMessage.h>
 
 namespace BECore {
@@ -165,9 +166,9 @@ namespace BECore {
         _missing.push_back(MissingString{language, String(key.data(), key.size())});
     }
 
-    String UIStrings::Resolve(StringView text) {
-        String result;
-        result.reserve(text.size());
+    template <typename TString>
+    void UIStrings::ResolveInto(StringView text, TString& result) {
+        result.clear();
         for (size_t i = 0; i < text.size(); ++i) {
             const char c = text[i];
             if (c != '{') {
@@ -193,7 +194,18 @@ namespace BECore {
             }
             i = close;
         }
+    }
+
+    String UIStrings::Resolve(StringView text) {
+        String result;
+        result.reserve(text.size());
+        ResolveInto(text, result);
         return result;
+    }
+
+    void UIStrings::Resolve(StringView text, ArenaString& out) {
+        out.reserve(text.size());
+        ResolveInto(text, out);
     }
 
     void UIStrings::Clear() {

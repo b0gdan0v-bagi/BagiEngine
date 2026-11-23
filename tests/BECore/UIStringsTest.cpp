@@ -1,6 +1,9 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Memory/ArenaAllocator.h>
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UIVars.h>
+#include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
@@ -210,6 +213,33 @@ namespace BECore::Tests {
 
         strings.SetLanguage("ru"_intern);
         EXPECT_EQ(Resolve(strings, "{#menu.start}: {#menu.quit}"), "Начать: Quit");
+    }
+
+    TEST(UIStringsTest, ResolveIntoTheScratchArenaGivesWhatTheValueFormGives) {
+        UIStrings strings = MakeTable();
+        strings.Set("en"_intern, "score.title", "Score");
+        UIStrings valueForm = MakeTable();
+        valueForm.Set("en"_intern, "score.title", "Score");
+
+        for (const char* text : {"{#menu.start}/{#menu.quit}", "{#score.title}: {score}", "{{#menu.start}}", "{{ {#menu.start} }}", "{#menu.start", "{#}", "plain", "", "{#menu.options}"}) {
+            const ScratchScope scratch;
+            ArenaString out;
+            strings.Resolve(text, out);
+            EXPECT_EQ(StringView(out.data(), out.size()), StringView(Resolve(valueForm, text))) << text;
+        }
+        EXPECT_EQ(strings.GetMissing().size(), valueForm.GetMissing().size());
+    }
+
+    TEST(UIStringsTest, ResolveIntoTheScratchArenaRecordsAMissingKeyOnceAndReplacesWhatTheBufferHeld) {
+        UIStrings strings = MakeTable();
+
+        const ScratchScope scratch;
+        ArenaString out("something that was there before");
+        strings.Resolve("{#menu.options}", out);
+        EXPECT_EQ(StringView(out.data(), out.size()), "menu.options");
+        strings.Resolve("{#menu.options}", out);
+        EXPECT_EQ(StringView(out.data(), out.size()), "menu.options");
+        EXPECT_EQ(strings.GetMissing().size(), 1u);
     }
 
     TEST(UIStringsTest, VariablesAndEscapesAreLeftForTheVariableStep) {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Values/Programs/Opcode.h>
 #include <cstddef>
@@ -44,13 +45,18 @@ namespace BECore {
         uint32_t firstArgument = 0;
         uint32_t argumentCount = 0;
         /// `Number`: the digits as written; `String`: the characters between the quotes; `Name`, `Call`: the dotted name; `Member`: the member
-        String text;
+        ArenaString text;
     };
 
-    /// The arena of a parsed formula: nodes by index, the arguments of calls in one list, the root last
+    /**
+     * @brief The nodes of a parsed formula: by index, the arguments of calls in one list, the root last
+     *
+     * Every container is on the thread's scratch arena, so a tree belongs to the `ScratchScope` that is alive when it is made and must not outlive it, be stored in a longer-lived
+     * object or cross threads (`Memory/CLAUDE.md`, "Scratch arena and scopes"). `text` is an `ArenaString` because a dotted path is joined by the parser: it is not always a slice of the source.
+     */
     struct ExprAst {
-        Vector<ExprNode> nodes;
-        Vector<ExprNodeId> arguments;
+        ArenaVector<ExprNode> nodes;
+        ArenaVector<ExprNodeId> arguments;
         ExprNodeId root = 0;
 
         [[nodiscard]] const ExprNode& operator[](ExprNodeId id) const {
