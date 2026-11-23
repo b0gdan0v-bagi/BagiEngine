@@ -203,7 +203,7 @@ namespace BECore::Tests {
         EXPECT_EQ(NamedCount(AllocSource::Stb) - namedBefore, after.count - before.count);
     }
 
-    TEST(AllocRoutingTest, AnOggDecodeIsCountedAsStbAndFreesItsOutput) {
+    TEST(AllocRoutingTest, AnOggStreamIsCountedAsStbAndFreesItsDecoder) {
         if constexpr (!AllocTracker::kEnabled) {
             GTEST_SKIP() << kNoAllocTracker;
         }
@@ -212,10 +212,13 @@ namespace BECore::Tests {
 
         const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::Stb);
         const uint64_t namedBefore = NamedCount(AllocSource::Stb);
-        const auto decoded = DecodeOgg(bytes);
+        // DecodeOgg opens its decoder on scratch memory and so allocates nothing in stb_vorbis; the stream's decoder is the heap one
+        {
+            const auto stream = OpenAudioStream(bytes);
+            ASSERT_TRUE(stream.has_value());
+        }
         const AllocSourceTotals after = AllocTracker::GetSourceTotals(AllocSource::Stb);
 
-        ASSERT_TRUE(decoded.has_value());
         EXPECT_GT(after.count, before.count);
         EXPECT_EQ(after.liveBytes, before.liveBytes);
         EXPECT_EQ(after.frees - before.frees, after.count - before.count);
