@@ -87,6 +87,8 @@ namespace BECore {
             return {};
         }
 
+        /// The `.artgen.json` file is a `Json` document by hand, like every record built around it (`accepted`, `kept`): it is the service's own record, read back and
+        /// merged into, so its other keys are a payload of another program that no struct of the engine types
         std::expected<void, String> WriteProvenance(const std::filesystem::path& file, const Json& record) {
             String text;
             AppendJson(text, record, kProvenanceIndent);

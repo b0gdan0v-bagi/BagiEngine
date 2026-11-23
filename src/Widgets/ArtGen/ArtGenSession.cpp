@@ -384,6 +384,7 @@ namespace BECore {
         return IsServiceConnected() && StringView(_status.state) == kGeneratorReady;
     }
 
+    // By hand (ArtGenSession.h, `HandlePoll`): `request.preset` is a name or an inline draft document, a `Json` payload in the middle of the reply
     std::expected<Json, ControlError> ArtGenSession::HandlePoll(const Json& params) {
         if (!params.is_object()) {
             return std::unexpected(InvalidParams("params must be an object"));

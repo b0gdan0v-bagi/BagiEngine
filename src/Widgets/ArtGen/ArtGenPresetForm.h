@@ -88,6 +88,7 @@ namespace BECore {
         /// The content now written to `<game>/artgen/presets/<name>.json`: it is the saved state, of the game
         void MarkSaved();
 
+        /// The preset file's document: the keys of the form on top of `_extra`, the keys of the file that the form does not know and keeps as they were
         [[nodiscard]] Json ToJson() const;
         /// The content differs from what it was loaded with, or it was never saved
         [[nodiscard]] bool IsDirty() const;

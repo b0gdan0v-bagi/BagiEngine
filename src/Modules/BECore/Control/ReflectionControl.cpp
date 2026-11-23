@@ -127,6 +127,7 @@ namespace BECore {
             return MakeControlError(EnumUtils<PropertyErrorCode>::ToString(code), error.message);
         }
 
+        /// By hand, not a reflected struct: `value` is a `PropertyValue`, written as the bare scalar a client sent, where a reflected variant is `{index, value}`
         void WriteAccess(JsonWriter& writer, StringView root, StringView path, const PropertyValue& value) {
             writer.BeginObject();
             writer.Member("path", path);
@@ -277,6 +278,7 @@ namespace BECore {
                 return;
             }
 
+            // By hand, not a reflected struct: `result` is the document the method's own serializer wrote, a `Json` payload between `method` and `root`
             const Json written = writer.Take();
             const auto answer = written.find("result");
             call.Reply([&](JsonWriter& out) {

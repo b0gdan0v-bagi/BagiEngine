@@ -43,7 +43,7 @@ namespace BECore {
         }
     };
 
-    /// `{trim, padding, maxSize}`
+    /// `{trim, padding, maxSize}`: a value inside a `Json` record (a preset, the provenance, the parameters of `artgen_accept`), not an answer of its own
     [[nodiscard]] Json ArtGenImageSettingsToJson(const ArtGenImageSettings& settings);
     /// Reads what ArtGenImageSettingsToJson writes; null is the defaults, a missing key keeps the default, a wrong type or a value out of
     /// range is the error and names the key
@@ -88,7 +88,7 @@ namespace BECore {
     /// Whether @p inner lies wholly inside the frame's crop
     [[nodiscard]] bool FrameContains(const ArtGenImageFrame& frame, const ArtGenIntRect& inner);
 
-    /// `{x, y, w, h, outWidth, outHeight}`
+    /// `{x, y, w, h, outWidth, outHeight}`: a value inside a `Json` record, like ArtGenImageSettingsToJson
     [[nodiscard]] Json ArtGenImageFrameToJson(const ArtGenImageFrame& frame);
     [[nodiscard]] std::expected<ArtGenImageFrame, String> ArtGenImageFrameFromJson(const Json& json);
 

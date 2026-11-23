@@ -106,7 +106,7 @@ namespace BECore {
         /// Streamed by hand, not a reflected struct: `frames` is written straight from the history copy (up to a few hundred frames), and each frame holds objects keyed
         /// by names a module chooses (`counters`, `stagesMs`, `tagAllocCount`, `tagLiveBytes`), which a reflected map cannot write (it is an array of `{key, value}`).
         /// The rows of `arenas`, `pools` and `tags` are reflected structs written one at a time: a `Vector` of them would allocate, and the answer allocates nothing
-        /// beyond the stats it reads
+        /// beyond the stats it reads. `allocTracking` is one flag of the same object, written beside the streamed `frames`
         void HandleFrameStats(ControlCall& call) {
             const auto frames = ReadCount(call.Params(), "frames", 1, static_cast<int64_t>(FrameStatsCollector::kFrameHistory));
             if (!frames) {

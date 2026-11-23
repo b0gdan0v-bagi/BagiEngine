@@ -215,6 +215,8 @@ namespace BECore {
         PrunePublishObservers();
     }
 
+    // The push envelope is written by hand in both overloads: `data` is the caller's own document (a `Json` or a writer callback of the game or a module),
+    // which no struct of the engine can type.
     void ControlService::Publish(StringView event, const Json& data) {
         if (!_publishObservers.empty() && !_notifyingObservers) {
             NotifyPublishObservers(event, data);

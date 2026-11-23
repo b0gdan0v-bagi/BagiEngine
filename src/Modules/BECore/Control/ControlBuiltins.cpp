@@ -201,6 +201,7 @@ namespace BECore {
             const ControlLog& log = service.Log();
             const ControlLog::Since since = log.ReadSince(static_cast<uint64_t>(*mark), *level, ControlLog::kMaxLogSinceLines);
 
+            // By hand for the same reason as WriteLogLine: `lines` streams from the ring buffer between the counts, and a struct would copy it
             call.Reply([&](JsonWriter& writer) {
                 writer.BeginObject();
                 writer.Member("dropped", since.dropped);
@@ -382,6 +383,7 @@ namespace BECore {
                 batch->Record(std::move(*answer));
             }
 
+            // By hand: the answer is `results`, which holds the `Json` result of each call (`WriteResults`), and the one optional `stopped` beside it; a struct could hold neither payload
             outer.Reply([batch](JsonWriter& writer) {
                 writer.BeginObject();
                 writer.Key("results");

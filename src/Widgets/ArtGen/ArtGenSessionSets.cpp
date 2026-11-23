@@ -875,6 +875,7 @@ namespace BECore {
         return reply;
     }
 
+    // By hand: the answer is the manifest file (`ArtGenSetToJson`) with `state` added, and the manifest holds a `Json` payload (ArtGenSet.h)
     std::expected<Json, ControlError> ArtGenSession::HandleSet(const Json& params) {
         const auto name = GetJsonString(params, "set");
         if (!name) {
