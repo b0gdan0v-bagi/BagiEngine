@@ -35,7 +35,7 @@
 
 - **The readers (XML, binary, JSON) intern one value at a time**, with `Intern`, and do not batch. A batch needs the texts up front, and a reader does not have them: the target of a `PoolString` read is not stable until the end of the document (a generated loader reads an element into a temporary and moves it into a vector; a `PoolString` map key is read into a local and used at once), so a write deferred to the end of the document would dangle or find an empty key.
 - **A batch is for a caller that holds its texts**: a directory listing (`FileSystem::EnumerateFiles`), a list of slots (`SaveGameService::List`), the stems of the config files (`ConfigManager::ScanDirectory`). Each collects its names, then makes one `InternBatch`. Names from outside use the form that hashes (the form with `hashes` is for a cook's own output).
-- **The string table of a cooked file** is read straight into pool memory with `AllocateBlock` + `AdoptBlock` (the entry `pool-string-binary-strings`), which is the batch of a reader.
+- **The `PoolString` texts of a binary file** (a save, a cooked `.bin`) are in a pool section in the layout of a pool entry, and the reader still hashes each one itself and interns them all by one `InternBatch` at the first `PoolString` read; the hashes in the file are ignored. Reading the section straight into pool memory with `AllocateBlock` + `AdoptBlock` (the entry `pool-string-binary-strings`, next stage) is the batch of a reader that trusts a cooked file.
 
 ## Statistics
 
