@@ -13,15 +13,17 @@ namespace BECore {
 
         constexpr size_t k_textBufSize = 256;
         constexpr const char* k_unknownValueMarker = "(not a known value)";
+        // The label of every control: the field's own id is on the ImGui id stack (PushID in RenderFieldInspector)
+        constexpr const char* k_valueLabel = "##value";
         using TextBuf = Array<char, k_textBufSize>;
 
         // Persistent char buffers for InputText fields, keyed by widgetId
         HashMap<String, TextBuf> s_textBuffers;
 
-        char* GetOrCreateTextBuffer(const String& widgetId, StringView initialValue) {
+        char* GetOrCreateTextBuffer(StringView widgetId, StringView initialValue) {
             auto it = s_textBuffers.find(widgetId);
             if (it == s_textBuffers.end()) {
-                auto& buf = s_textBuffers[widgetId];
+                auto& buf = s_textBuffers[String(widgetId.data(), widgetId.size())];
                 buf.fill('\0');
                 const size_t copyLen = std::min(initialValue.size(), buf.size() - 1);
                 std::copy_n(initialValue.data(), copyLen, buf.data());
@@ -30,40 +32,37 @@ namespace BECore {
             return it->second.data();
         }
 
-        InspectorResult RenderBool(const String& widgetId, StringView currentValue) {
+        InspectorResult RenderBool(StringView currentValue) {
             bool value = (currentValue == "true");
-            const String label = Format("##{}", widgetId);
-            if (ImGui::Checkbox(label.c_str(), &value)) {
+            if (ImGui::Checkbox(k_valueLabel, &value)) {
                 return {true, value ? String{"true"} : String{"false"}};
             }
             return {};
         }
 
-        InspectorResult RenderInt(const String& widgetId, StringView currentValue) {
+        InspectorResult RenderInt(StringView currentValue) {
             int value = 0;
             std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), value);
-            const String label = Format("##{}", widgetId);
             ImGui::SetNextItemWidth(-1.0f);
             const ScopedMonoFont mono;
-            if (ImGui::InputInt(label.c_str(), &value, 0, 0)) {
+            if (ImGui::InputInt(k_valueLabel, &value, 0, 0)) {
                 return {true, Format("{}", value)};
             }
             return {};
         }
 
-        InspectorResult RenderFloat(const String& widgetId, StringView currentValue) {
+        InspectorResult RenderFloat(StringView currentValue) {
             float value = 0.0f;
             std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), value);
-            const String label = Format("##{}", widgetId);
             ImGui::SetNextItemWidth(-1.0f);
             const ScopedMonoFont mono;
-            if (ImGui::InputFloat(label.c_str(), &value, 0.0f, 0.0f, "%.6g")) {
+            if (ImGui::InputFloat(k_valueLabel, &value, 0.0f, 0.0f, "%.6g")) {
                 return {true, Format("{}", value)};
             }
             return {};
         }
 
-        InspectorResult RenderEnum(const String& widgetId, StringView currentValue, const Vector<String>& options) {
+        InspectorResult RenderEnum(StringView currentValue, const Vector<String>& options) {
             if (options.empty()) {
                 return {};
             }
@@ -78,13 +77,14 @@ namespace BECore {
 
             // A value that is not an option (a typo, or a name the code no longer knows) is shown as it is and flagged
             const bool isUnknown = selectedIndex < 0 && !currentValue.empty();
-            const String preview{currentValue.data(), currentValue.size()};
-
-            const String label = Format("##{}", widgetId);
+            char preview[k_textBufSize];
+            const size_t previewLength = std::min(currentValue.size(), k_textBufSize - 1);
+            std::memcpy(preview, currentValue.data(), previewLength);
+            preview[previewLength] = '\0';
             ImGui::SetNextItemWidth(isUnknown ? -(ImGui::CalcTextSize(k_unknownValueMarker).x + ImGui::GetStyle().ItemSpacing.x) : -1.0f);
 
             InspectorResult result;
-            if (ImGui::BeginCombo(label.c_str(), preview.c_str())) {
+            if (ImGui::BeginCombo(k_valueLabel, preview)) {
                 for (int i = 0; i < static_cast<int>(options.size()); ++i) {
                     const bool isSelected = (i == selectedIndex);
                     ImGui::PushID(i);
@@ -106,36 +106,45 @@ namespace BECore {
             return result;
         }
 
-        InspectorResult RenderFlags(const String& widgetId, StringView currentValue, const Vector<String>& options) {
+        InspectorResult RenderFlags(StringView currentValue, const Vector<String>& options) {
             if (options.empty()) {
                 return {};
             }
 
-            // A token that is not an option stays a checked row until the user unchecks it, so saving never drops it silently
-            const Vector<String> tokens = SplitFlagTokens(currentValue);
-            const Vector<String> unknown = UnknownFlagTokens(currentValue, options);
-
+            // At most one box changes per frame (one press, one key): the first change is the one applied
+            int toggledOption = -1;
+            bool toggledOptionState = false;
+            String toggledUnknown;
+            bool toggledUnknownState = false;
             bool anyChanged = false;
-            Vector<bool> checked(options.size());
+
             for (size_t i = 0; i < options.size(); ++i) {
-                checked[i] = eastl::find(tokens.begin(), tokens.end(), options[i]) != tokens.end();
-                const String checkLabel = Format("{}##flag{}", options[i], widgetId);
-                bool state = checked[i];
-                if (ImGui::Checkbox(checkLabel.c_str(), &state)) {
-                    checked[i] = state;
+                bool state = HasFlagToken(currentValue, StringView(options[i].data(), options[i].size()));
+                ImGui::PushID(static_cast<int>(i));
+                const bool clicked = ImGui::Checkbox(options[i].c_str(), &state);
+                ImGui::PopID();
+                if (clicked && !anyChanged) {
                     anyChanged = true;
+                    toggledOption = static_cast<int>(i);
+                    toggledOptionState = state;
                 }
             }
 
-            Vector<bool> unknownChecked(unknown.size(), true);
-            for (size_t i = 0; i < unknown.size(); ++i) {
-                const String checkLabel = Format("{} {}##unknownFlag{}{}", unknown[i], k_unknownValueMarker, widgetId, unknown[i]);
+            // A token that is not an option stays a checked row until the user unchecks it, so saving never drops it silently
+            ForEachUnknownFlagToken(currentValue, options, [&](StringView token) {
+                char label[k_textBufSize];
+                const FormatResult written = FormatToN(label, sizeof(label) - 1, "{} {}", token, k_unknownValueMarker);
+                label[std::min(written.size, sizeof(label) - 1)] = '\0';
                 bool state = true;
-                if (ImGui::Checkbox(checkLabel.c_str(), &state)) {
-                    unknownChecked[i] = state;
+                ImGui::PushID(token.data(), token.data() + token.size());
+                const bool clicked = ImGui::Checkbox(label, &state);
+                ImGui::PopID();
+                if (clicked && !anyChanged) {
                     anyChanged = true;
+                    toggledUnknown.assign(token.data(), token.size());
+                    toggledUnknownState = state;
                 }
-            }
+            });
 
             if (!anyChanged) {
                 return {};
@@ -143,23 +152,24 @@ namespace BECore {
 
             Vector<String> result;
             for (size_t i = 0; i < options.size(); ++i) {
-                if (checked[i]) {
+                const bool checked = (static_cast<int>(i) == toggledOption) ? toggledOptionState : HasFlagToken(currentValue, StringView(options[i].data(), options[i].size()));
+                if (checked) {
                     result.push_back(options[i]);
                 }
             }
-            for (size_t i = 0; i < unknown.size(); ++i) {
-                if (unknownChecked[i]) {
-                    result.push_back(unknown[i]);
+            ForEachUnknownFlagToken(currentValue, options, [&](StringView token) {
+                const bool toggledThis = !toggledUnknown.empty() && StringView(toggledUnknown.data(), toggledUnknown.size()) == token;
+                if (!toggledThis || toggledUnknownState) {
+                    result.emplace_back(token.data(), token.size());
                 }
-            }
+            });
             return {true, JoinFlagTokens(result)};
         }
 
-        InspectorResult RenderString(const String& widgetId, StringView currentValue) {
+        InspectorResult RenderString(StringView widgetId, StringView currentValue) {
             char* buf = GetOrCreateTextBuffer(widgetId, currentValue);
-            const String label = Format("##{}", widgetId);
             ImGui::SetNextItemWidth(-1.0f);
-            if (ImGui::InputText(label.c_str(), buf, k_textBufSize, ImGuiInputTextFlags_EnterReturnsTrue)) {
+            if (ImGui::InputText(k_valueLabel, buf, k_textBufSize, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 return {true, String{buf}};
             }
             return {};
@@ -167,23 +177,33 @@ namespace BECore {
 
     }  // namespace
 
-    InspectorResult RenderFieldInspector(const String& widgetId, StringView currentValue, const FieldHint& hint) {
+    InspectorResult RenderFieldInspector(StringView widgetId, StringView currentValue, const FieldHint& hint) {
+        // The field's own id scopes the fixed labels of its controls, so no label is formatted per frame
+        ImGui::PushID(widgetId.data(), widgetId.data() + widgetId.size());
+        InspectorResult result;
         switch (hint.type) {
             case FieldType::Bool:
-                return RenderBool(widgetId, currentValue);
+                result = RenderBool(currentValue);
+                break;
             case FieldType::Int:
-                return RenderInt(widgetId, currentValue);
+                result = RenderInt(currentValue);
+                break;
             case FieldType::Float:
-                return RenderFloat(widgetId, currentValue);
+                result = RenderFloat(currentValue);
+                break;
             case FieldType::Enum:
-                return RenderEnum(widgetId, currentValue, hint.options);
+                result = RenderEnum(currentValue, hint.options);
+                break;
             case FieldType::Flags:
-                return RenderFlags(widgetId, currentValue, hint.options);
+                result = RenderFlags(currentValue, hint.options);
+                break;
             case FieldType::String:
-                return RenderString(widgetId, currentValue);
             default:
-                return RenderString(widgetId, currentValue);
+                result = RenderString(widgetId, currentValue);
+                break;
         }
+        ImGui::PopID();
+        return result;
     }
 
     void ClearFieldInspectorState() {

@@ -3,6 +3,7 @@
 #include <BECore/Logger/ILogSink.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <CoreSDL/SDLUtils.h>
@@ -135,6 +136,42 @@ namespace BECore::Tests {
         const FieldHint unknown = schema.Resolve(kLoggerConfig, kSinkTypePath, "NoSuchSink");
         EXPECT_EQ(unknown.type, FieldType::Enum);
         EXPECT_FALSE(Contains(unknown.options, "NoSuchSink"));
+    }
+
+    TEST_F(ConfigFieldSchemaTest, ResolveAllocatesNothingAndSharesTheHeuristicHints) {
+        ConfigFieldSchema& schema = ConfigFieldSchema::GetInstance();
+        schema.RegisterFactoryTypes<ILogSink>(kLoggerConfig, kSinkTypePath);
+        const PoolString other = "OtherConfig"_intern;
+        // The first calls make the scratch arena's chunk
+        const FieldHint* intHint = &schema.Resolve(other, "node/@count", "42");
+        schema.Resolve(kLoggerConfig, kSinkTypePath, "ConsoleSink");
+
+        ExpectNoAllocations([&] {
+            for (const StringView value : {"42", "true", "x", "1.5"}) {
+                schema.Resolve(other, "node/@count", value);
+            }
+            schema.Resolve(kLoggerConfig, kSinkTypePath, "ConsoleSink");
+        });
+        EXPECT_EQ(&schema.Resolve(other, "node/@other", "7"), intHint);
+        EXPECT_EQ(&schema.Resolve(other, "node/@count", "x"), &schema.Resolve(other, "node/@name", "y"));
+    }
+
+    TEST_F(ConfigFieldSchemaTest, HasFlagTokenMatchesWholeTrimmedTokens) {
+        EXPECT_TRUE(HasFlagToken("A|B", "A"));
+        EXPECT_TRUE(HasFlagToken(" A | B ", "B"));
+        EXPECT_FALSE(HasFlagToken("AB|C", "A"));
+        EXPECT_FALSE(HasFlagToken("A|B", "A|B"));
+        EXPECT_FALSE(HasFlagToken("", "A"));
+        EXPECT_FALSE(HasFlagToken(" | ", ""));
+    }
+
+    TEST_F(ConfigFieldSchemaTest, ForEachUnknownFlagTokenMatchesUnknownFlagTokens) {
+        const Vector<String> options{"A", "B"};
+        for (const StringView value : {"Z|A|Y|B|Z", "B|A", "", " Z | Z|Y ", "Y||Z|Y"}) {
+            Vector<String> seen;
+            ForEachUnknownFlagToken(value, options, [&](StringView token) { seen.emplace_back(token.data(), token.size()); });
+            EXPECT_EQ(seen, UnknownFlagTokens(value, options)) << String(value.data(), value.size()).c_str();
+        }
     }
 
     TEST_F(ConfigFieldSchemaTest, SplitFlagTokensTrimsAndSkipsEmpty) {
