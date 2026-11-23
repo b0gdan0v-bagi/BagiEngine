@@ -16,6 +16,14 @@
 
 namespace BECore {
 
+    StringView FormatOutputLine(char (&buffer)[kOutputLineSize], LogLevel level, StringView time, StringView message) {
+        // The last byte is kept for the terminator
+        const FormatResult written = FormatToN(buffer, kOutputLineSize - 1, "[{}] [{}] {}\n", level, time, message);
+        const size_t length = std::min(written.size, kOutputLineSize - 1);
+        buffer[length] = '\0';
+        return StringView{buffer, length};
+    }
+
     void OutputSink::Initialize() {
         UnsubscribeAll();
         Subscribe<LogEvent, &OutputSink::OnLogEvent>(this);
@@ -31,12 +39,13 @@ namespace BECore {
         }
 
         char timeBuffer[kLogTimeLength];
-        const String formatted = Format("[{}] [{}] {}\n", level, FormatLogTimeNow(timeBuffer), message);
+        char lineBuffer[kOutputLineSize];
+        const StringView line = FormatOutputLine(lineBuffer, level, FormatLogTimeNow(timeBuffer), message);
 
 #if defined(PLATFORM_WINDOWS)
-        OutputDebugStringA(formatted.c_str());
+        OutputDebugStringA(line.data());
 #elif defined(PLATFORM_MACOS)
-        std::fprintf(stderr, "%s", formatted.c_str());
+        std::fwrite(line.data(), 1, line.size(), stderr);
         std::fflush(stderr);
 #endif
     }
