@@ -65,7 +65,7 @@ namespace BECore {
         }
 
         void HandleSet(ControlCall& call) {
-            const auto text = GetParamString(call.ParamsView(), "text");
+            const auto text = GetParamString(call.Params(), "text");
             if (!text) {
                 call.Fail(ControlErrors::kInvalidParams, "'text' has to be a string");
                 return;

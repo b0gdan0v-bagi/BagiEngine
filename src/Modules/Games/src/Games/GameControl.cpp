@@ -124,7 +124,7 @@ namespace BECore {
         }
 
         void HandleSwitchGame(ControlCall& call) {
-            const auto name = GetJsonString(call.Params(), "name");
+            const auto name = GetJsonString(call.ParamsJson(), "name");
             if (!name) {
                 call.Fail(ControlErrors::kInvalidParams, "'name' has to be a string");
                 return;
@@ -165,7 +165,7 @@ namespace BECore {
                 return;
             }
 
-            if (auto reset = ControlledReset(*control, call.Params()); !reset) {
+            if (auto reset = ControlledReset(*control, call.ParamsJson()); !reset) {
                 call.Fail(reset.error());
                 return;
             }
@@ -206,7 +206,7 @@ namespace BECore {
                 call.Fail(active.error());
                 return;
             }
-            const auto outcome = ControlledAction(*active->control, call.Params());
+            const auto outcome = ControlledAction(*active->control, call.ParamsJson());
             if (!outcome) {
                 call.Fail(outcome.error());
                 return;
@@ -224,7 +224,7 @@ namespace BECore {
                 call.Fail(active.error());
                 return;
             }
-            if (auto loaded = ControlledSetState(*active->control, call.Params()); !loaded) {
+            if (auto loaded = ControlledSetState(*active->control, call.ParamsJson()); !loaded) {
                 call.Fail(loaded.error());
                 return;
             }
@@ -434,7 +434,7 @@ namespace BECore {
 
         void HandleRunUntil(ControlCall& call, ControlService& service) {
             auto state = MakeUnique<RunUntilState>(service);
-            if (auto condition = ReadRunUntilCondition(call.Params(), *state); !condition) {
+            if (auto condition = ReadRunUntilCondition(call.ParamsJson(), *state); !condition) {
                 call.Fail(condition.error());
                 return;
             }

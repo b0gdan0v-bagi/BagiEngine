@@ -87,7 +87,7 @@ namespace BECore {
         }
 
         void HandleSet(ControlCall& call, AudioManager& manager) {
-            const JsonView params = call.ParamsView();
+            const JsonView params = call.Params();
             const auto busName = GetParamString(params, "bus");
             Optional<AudioBus> bus;
             bool master = false;

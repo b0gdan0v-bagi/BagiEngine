@@ -20,15 +20,9 @@ namespace BECore {
     inline constexpr size_t kMaxBatchCalls = 1000;
 
     /// The frame count at @p key of @p params, 1 to kMaxStepFrames, @p fallback when absent; invalid_params when it is not an integer in range. Client data
-    [[nodiscard]] std::expected<uint32_t, ControlError> ReadControlFrames(const Json& params, StringView key, uint32_t fallback);
-
-    /// The same over the view of a call's params
     [[nodiscard]] std::expected<uint32_t, ControlError> ReadControlFrames(JsonView params, StringView key, uint32_t fallback);
 
     /// The seconds per frame at `dt` of @p params, 0 to Time::kMaxFrameTime, kDefaultStepSeconds when absent; invalid_params when out of range. Client data
-    [[nodiscard]] std::expected<double, ControlError> ReadControlFrameSeconds(const Json& params);
-
-    /// The same over the view of a call's params
     [[nodiscard]] std::expected<double, ControlError> ReadControlFrameSeconds(JsonView params);
 
     /**

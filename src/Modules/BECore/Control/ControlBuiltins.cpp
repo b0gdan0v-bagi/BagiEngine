@@ -41,16 +41,8 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<uint32_t, ControlError> ReadControlFrames(const Json& params, StringView key, uint32_t fallback) {
-        return CheckFrames(FindJsonMember(params, key) != nullptr, GetJsonInt(params, key), key, fallback);
-    }
-
     std::expected<uint32_t, ControlError> ReadControlFrames(JsonView params, StringView key, uint32_t fallback) {
         return CheckFrames(FindParam(params, key).has_value(), GetParamInt(params, key), key, fallback);
-    }
-
-    std::expected<double, ControlError> ReadControlFrameSeconds(const Json& params) {
-        return CheckFrameSeconds(FindJsonMember(params, "dt") != nullptr, GetJsonNumber(params, "dt"));
     }
 
     std::expected<double, ControlError> ReadControlFrameSeconds(JsonView params) {
@@ -80,12 +72,12 @@ namespace BECore {
         }
 
         void HandleStep(ControlCall& call, ControlService& service) {
-            const auto frames = ReadControlFrames(call.ParamsView(), "frames", 1);
+            const auto frames = ReadControlFrames(call.Params(), "frames", 1);
             if (!frames) {
                 call.Fail(frames.error());
                 return;
             }
-            const auto seconds = ReadControlFrameSeconds(call.ParamsView());
+            const auto seconds = ReadControlFrameSeconds(call.Params());
             if (!seconds) {
                 call.Fail(seconds.error());
                 return;
@@ -209,12 +201,12 @@ namespace BECore {
         }
 
         void HandleLogSince(ControlCall& call, const ControlService& service) {
-            const auto mark = GetParamInt(call.ParamsView(), "mark");
+            const auto mark = GetParamInt(call.Params(), "mark");
             if (!mark || *mark < 0) {
                 call.Fail(ControlErrors::kInvalidParams, "'mark' has to be an integer, 0 or more (the mark of log_mark)");
                 return;
             }
-            const auto level = ReadLogLevel(call.ParamsView());
+            const auto level = ReadLogLevel(call.Params());
             if (!level) {
                 call.Fail(level.error());
                 return;
@@ -245,12 +237,12 @@ namespace BECore {
         }
 
         void HandleLogSubscribe(ControlCall& call, ControlService& service) {
-            const auto enabled = GetParamBool(call.ParamsView(), "enabled");
+            const auto enabled = GetParamBool(call.Params(), "enabled");
             if (!enabled) {
                 call.Fail(ControlErrors::kInvalidParams, "'enabled' has to be a boolean");
                 return;
             }
-            const auto level = ReadLogLevel(call.ParamsView());
+            const auto level = ReadLogLevel(call.Params());
             if (!level) {
                 call.Fail(level.error());
                 return;
@@ -405,7 +397,7 @@ namespace BECore {
         }
 
         void HandleBatch(ControlCall& call, ControlService& service) {
-            auto state = ReadBatch(call.ParamsView());
+            auto state = ReadBatch(call.Params());
             if (!state) {
                 call.Fail(state.error());
                 return;

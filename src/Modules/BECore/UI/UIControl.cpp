@@ -476,7 +476,7 @@ namespace BECore {
         };
 
         void HandleUIClick(ControlCall& call) {
-            const JsonView params = call.ParamsView();
+            const JsonView params = call.Params();
             const auto nameText = GetParamString(params, "name");
             if (!nameText || nameText->empty()) {
                 call.Fail(ControlErrors::kInvalidParams, "'name' has to be the name of an element");

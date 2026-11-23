@@ -131,7 +131,7 @@ namespace BECore {
                 return;
             }
 
-            const auto request = ReadWindowRequest(call.ParamsView(), *window);
+            const auto request = ReadWindowRequest(call.Params(), *window);
             if (!request) {
                 call.Fail(request.error());
                 return;

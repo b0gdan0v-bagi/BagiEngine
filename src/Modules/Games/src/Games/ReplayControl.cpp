@@ -23,14 +23,14 @@ namespace BECore {
         constexpr size_t kMaxReplayFileBytes = 64ULL * 1024 * 1024;
 
         void HandleRecordStart(ControlCall& call) {
-            const auto path = GetJsonString(call.Params(), "path");
+            const auto path = GetJsonString(call.ParamsJson(), "path");
             if (!path || path->empty()) {
                 call.Fail(ControlErrors::kInvalidParams, "'path' has to be a non-empty string");
                 return;
             }
             String title;
-            if (FindJsonMember(call.Params(), "title") != nullptr) {
-                const auto requested = GetJsonString(call.Params(), "title");
+            if (FindJsonMember(call.ParamsJson(), "title") != nullptr) {
+                const auto requested = GetJsonString(call.ParamsJson(), "title");
                 if (!requested) {
                     call.Fail(ControlErrors::kInvalidParams, "'title' has to be a string");
                     return;
@@ -158,7 +158,7 @@ namespace BECore {
         }
 
         void HandleReplay(ControlCall& call, ControlService& service) {
-            const auto path = GetJsonString(call.Params(), "path");
+            const auto path = GetJsonString(call.ParamsJson(), "path");
             if (!path || path->empty()) {
                 call.Fail(ControlErrors::kInvalidParams, "'path' has to be a non-empty string");
                 return;

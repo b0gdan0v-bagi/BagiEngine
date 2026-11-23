@@ -533,8 +533,8 @@ namespace BECore::Tests {
 
         /// get_property of the old code: the value of the path as a `Json` in a document
         void ReplyPropertyDom(ControlCall& call, const ControlService& service) {
-            const auto root = GetJsonString(call.Params(), "root");
-            const auto path = GetJsonString(call.Params(), "path");
+            const auto root = GetJsonString(call.ParamsJson(), "root");
+            const auto path = GetJsonString(call.ParamsJson(), "path");
             if (!root || !path) {
                 call.Fail(ControlErrors::kInvalidParams, "root and path");
                 return;
@@ -562,7 +562,7 @@ namespace BECore::Tests {
 
         /// log_since of the old code: a `Json` line per record
         void ReplyLogSinceDom(ControlCall& call, const ControlService& service) {
-            const auto mark = GetJsonInt(call.Params(), "mark");
+            const auto mark = GetJsonInt(call.ParamsJson(), "mark");
             if (!mark) {
                 call.Fail(ControlErrors::kInvalidParams, "mark");
                 return;
@@ -605,7 +605,7 @@ namespace BECore::Tests {
 
         /// The old `{game, outcome, version}` of perform_action as a `Json` document
         void ReplyActionDom(ControlCall& call, FakeControllableGame& game) {
-            auto outcome = game.PerformAction(call.Params());
+            auto outcome = game.PerformAction(call.ParamsJson());
             if (!outcome) {
                 call.Fail(outcome.error());
                 return;

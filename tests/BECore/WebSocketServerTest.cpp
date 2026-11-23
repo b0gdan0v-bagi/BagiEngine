@@ -61,7 +61,7 @@ namespace BECore::Tests {
                 });
                 service.RegisterHandler("echo", [this](ControlCall& call) {
                     ++echoCalls;
-                    call.Reply(call.Params());
+                    call.Reply([&call](JsonWriter& writer) { writer.Raw(call.Params().Raw()); });
                 });
             }
 

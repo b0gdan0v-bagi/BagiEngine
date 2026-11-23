@@ -109,7 +109,7 @@ namespace BECore {
         /// The rows of `arenas`, `pools` and `tags` are reflected structs written one at a time: a `Vector` of them would allocate, and the answer allocates nothing
         /// beyond the stats it reads. `allocTracking` is one flag of the same object, written beside the streamed `frames`
         void HandleFrameStats(ControlCall& call) {
-            const auto frames = ReadCount(call.ParamsView(), "frames", 1, static_cast<int64_t>(FrameStatsCollector::kFrameHistory));
+            const auto frames = ReadCount(call.Params(), "frames", 1, static_cast<int64_t>(FrameStatsCollector::kFrameHistory));
             if (!frames) {
                 call.Fail(frames.error());
                 return;
@@ -156,7 +156,7 @@ namespace BECore {
 
         void HandleProfilerDump(ControlCall& call) {
             String path(kDefaultTracePath.data(), kDefaultTracePath.size());
-            const JsonView params = call.ParamsView();
+            const JsonView params = call.Params();
             if (FindParam(params, "path")) {
                 const auto given = GetParamString(params, "path");
                 if (!given || !IsSafeRelativePath(*given)) {
@@ -183,14 +183,14 @@ namespace BECore {
         }
 
         void HandleZoneAllocs(ControlCall& call) {
-            const auto top = ReadCount(call.ParamsView(), "top", kDefaultTopZones, kMaxTopZones);
+            const auto top = ReadCount(call.Params(), "top", kDefaultTopZones, kMaxTopZones);
             if (!top) {
                 call.Fail(top.error());
                 return;
             }
             bool reset = false;
-            if (FindParam(call.ParamsView(), "reset")) {
-                const auto value = GetParamBool(call.ParamsView(), "reset");
+            if (FindParam(call.Params(), "reset")) {
+                const auto value = GetParamBool(call.Params(), "reset");
                 if (!value) {
                     call.Fail(ControlErrors::kInvalidParams, "'reset' has to be a boolean");
                     return;

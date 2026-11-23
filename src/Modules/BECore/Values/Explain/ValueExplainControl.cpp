@@ -130,7 +130,7 @@ namespace BECore {
         }
 
         void HandleExplainValue(ControlCall& call, const ControlService& service) {
-            const JsonView params = call.ParamsView();
+            const JsonView params = call.Params();
             const auto rootName = ReadText(params, "root");
             if (!rootName) {
                 call.Fail(rootName.error());

@@ -176,7 +176,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ControlServiceTest, EchoesIntegerAndStringIds) {
-        service.RegisterHandler("echo", [](ControlCall& call) { call.Reply(call.Params()); });
+        service.RegisterHandler("echo", [](ControlCall& call) { call.Reply([&call](JsonWriter& writer) { writer.Raw(call.Params().Raw()); }); });
 
         Json params = Json::object();
         params["value"] = 42;
@@ -316,8 +316,8 @@ namespace BECore::Tests {
     TEST_F(ControlServiceTest, ParamsDefaultToAnEmptyObject) {
         int seen = 0;
         service.RegisterHandler("params", [&](ControlCall& call) {
-            EXPECT_TRUE(call.Params().is_object());
-            EXPECT_TRUE(call.Params().empty());
+            EXPECT_TRUE(call.Params().IsObject());
+            EXPECT_EQ(call.Params().Size(), 0u);
             ++seen;
             call.Reply(Json::object());
         });
@@ -457,8 +457,8 @@ namespace BECore::Tests {
 
         Vector<Vector<int64_t>> seen(kThreads);
         service.RegisterHandler("seq", [&](ControlCall& call) {
-            const auto thread = GetJsonInt(call.Params(), "thread");
-            const auto seq = GetJsonInt(call.Params(), "seq");
+            const auto thread = GetParamInt(call.Params(), "thread");
+            const auto seq = GetParamInt(call.Params(), "seq");
             ASSERT_TRUE(thread && seq);
             seen[static_cast<size_t>(*thread)].push_back(*seq);
             call.Reply(Json::object());
@@ -651,7 +651,7 @@ namespace BECore::Tests {
 
         bool intact = false;
         service.RegisterHandler("big", [&](ControlCall& call) {
-            const auto received = GetJsonString(call.Params(), "blob");
+            const auto received = GetParamString(call.Params(), "blob");
             intact = received && *received == blob;
             call.Reply(Json::object());
         });

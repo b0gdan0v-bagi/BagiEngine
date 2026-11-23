@@ -74,7 +74,7 @@ namespace BECore {
         }
 
         void HandleClickAt(ControlCall& call) {
-            const JsonView params = call.ParamsView();
+            const JsonView params = call.Params();
             const auto x = ReadCoordinate(params, "x");
             const auto y = ReadCoordinate(params, "y");
             if (!x || !y) {

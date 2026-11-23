@@ -79,7 +79,7 @@ namespace BECore {
         void HandleApply(ControlCall& call, FileWatcher& watcher) {
             Vector<String> paths;
             bool hasPaths = false;
-            if (!ReadPaths(call.ParamsView(), paths, hasPaths)) {
+            if (!ReadPaths(call.Params(), paths, hasPaths)) {
                 call.Fail(ControlErrors::kInvalidParams, "'paths' has to be a list of virtual paths");
                 return;
             }

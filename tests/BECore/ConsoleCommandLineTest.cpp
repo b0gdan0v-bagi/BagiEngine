@@ -55,9 +55,9 @@ namespace BECore::Tests {
                 service.DescribeMethod("step", {"Runs frames", {{"frames", "integer", false, ""}, {"dt", "number", false, ""}}});
                 service.RegisterHandler("echo", [this](ControlCall& call) {
                     ++echoCalls;
-                    lastParams = DumpJson(call.Params());
+                    lastParams = DumpJson(call.ParamsJson());
                     Json result = Json::object();
-                    result["params"] = call.Params();
+                    result["params"] = call.ParamsJson();
                     call.Reply(std::move(result));
                 });
                 service.DescribeMethod("echo", {"Answers its parameters", {{"from", "string", true, ""}, {"to", "string", true, ""}, {"flag", "boolean", false, ""}, {"format", "string", false, ""}}});

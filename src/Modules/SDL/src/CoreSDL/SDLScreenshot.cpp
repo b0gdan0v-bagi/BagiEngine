@@ -50,8 +50,8 @@ namespace BECore {
 
         void HandleScreenshot(ControlCall& call) {
             uint32_t maxSize = kDefaultScreenshotSize;
-            if (FindParam(call.ParamsView(), "maxSize")) {
-                const auto requested = GetParamInt(call.ParamsView(), "maxSize");
+            if (FindParam(call.Params(), "maxSize")) {
+                const auto requested = GetParamInt(call.Params(), "maxSize");
                 if (!requested || *requested < kMinScreenshotSize || *requested > kMaxScreenshotSize) {
                     call.Fail(ControlErrors::kInvalidParams, Format("'maxSize' has to be an integer from {} to {}", kMinScreenshotSize, kMaxScreenshotSize));
                     return;

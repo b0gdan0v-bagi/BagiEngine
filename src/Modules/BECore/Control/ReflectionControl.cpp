@@ -191,7 +191,7 @@ namespace BECore {
         };
 
         void HandleGetProperty(ControlCall& call, const ControlService& service) {
-            const auto names = ReadNames(call.ParamsView());
+            const auto names = ReadNames(call.Params());
             if (!names) {
                 call.Fail(names.error());
                 return;
@@ -210,12 +210,12 @@ namespace BECore {
         }
 
         void HandleSetProperty(ControlCall& call, const ControlService& service) {
-            const auto names = ReadNames(call.ParamsView());
+            const auto names = ReadNames(call.Params());
             if (!names) {
                 call.Fail(names.error());
                 return;
             }
-            const auto value = ReadValue(call.ParamsView());
+            const auto value = ReadValue(call.Params());
             if (!value) {
                 call.Fail(value.error());
                 return;
@@ -246,7 +246,7 @@ namespace BECore {
         }
 
         void HandleCallMethod(ControlCall& call, const ControlService& service) {
-            const JsonView params = call.ParamsView();
+            const JsonView params = call.Params();
             const auto rootName = ReadText(params, "root");
             if (!rootName) {
                 call.Fail(rootName.error());
@@ -327,7 +327,7 @@ namespace BECore {
         }
 
         void HandleListTypes(ControlCall& call) {
-            const JsonView params = call.ParamsView();
+            const JsonView params = call.Params();
             const TypeRegistry& registry = TypeRegistry::GetInstance();
             ListTypesFilter filter;
             if (FindParam(params, "base")) {
@@ -359,7 +359,7 @@ namespace BECore {
         }
 
         void HandleDescribeType(ControlCall& call) {
-            const auto name = ReadText(call.ParamsView(), "name");
+            const auto name = ReadText(call.Params(), "name");
             if (!name) {
                 call.Fail(name.error());
                 return;

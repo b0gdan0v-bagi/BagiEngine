@@ -55,7 +55,7 @@ namespace BECore::ArtGenControl {
     template <auto Method>
     void Register(ControlService& service, ArtGenSession& session, StringView name) {
         service.RegisterHandler(name, [&session](ControlCall& call) {
-            auto result = (session.*Method)(call.Params());
+            auto result = (session.*Method)(call.ParamsJson());
             if (result) {
                 if constexpr (std::is_same_v<std::remove_cvref_t<decltype(*result)>, Json>) {
                     call.Reply(std::move(*result));

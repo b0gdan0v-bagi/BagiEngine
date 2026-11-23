@@ -44,8 +44,7 @@ namespace BECore {
      *
      * ControlService hands a call to the registered handler on the main thread. The handler has to end in exactly one
      * of Reply(), Fail() or DeferFrames(); a handler that does none of them is answered with an internal_error.
-     * The parameters are always a JSON object, but its members come from a client: read them with the checked helpers (`ControlParams.h` over ParamsView(),
-     * `Json.h` over Params()).
+     * The parameters are always a JSON object, but its members come from a client: read them with the checked helpers (`ControlParams.h` over Params()).
      *
      * The handler and every `done` of DeferFrames() run inside a `ScratchScope` of the service, so an answer struct whose strings and lists are
      * `ArenaString` / `ArenaVector` is a local of the handler (or of `done`) and is given back right after the reply is written.
@@ -72,17 +71,13 @@ namespace BECore {
         }
 
         /// The request parameters; an empty object when the request had none. Valid while the call lives
-        [[nodiscard]] JsonView ParamsView() const {
+        [[nodiscard]] JsonView Params() const {
             return _params;
         }
 
-        /// The request parameters as a DOM, parsed from ParamsView() on first use: for the handlers that are not moved to the view yet
+        /// The request parameters as a DOM, parsed from Params() on first use. Interim, for the readers that still hold a DOM (`GameControl` and `ReplayControl`,
+        /// `ArtGenSessionControl`); it goes with them
         [[nodiscard]] const Json& ParamsJson() const;
-
-        /// ParamsJson() under its old name
-        [[nodiscard]] const Json& Params() const {
-            return ParamsJson();
-        }
 
         /// Answers with success; @p result is written as the `result` of the response
         void Reply(Json result);
