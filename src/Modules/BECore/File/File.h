@@ -103,8 +103,8 @@ namespace BECore {
     [[nodiscard]] std::expected<String, String> ReadTextFile(StringView path, size_t maxBytes = kDefaultMaxFileBytes);
 
     /**
-     * The bytes of ReadFileBytesScratch: in the caller's arena or, for a big file, in a heap block this object owns. Move-only.
-     * Bytes() is valid while the arena memory is (the scratch scope of the call that read the file) and, on the heap path, while this object lives.
+     * The bytes of ReadFileBytesScratch: in the caller's arena or, for a big file, in a heap block this object owns. A copy of the heap form copies the block; a copy of the arena form only views the
+     * arena memory. Bytes() is valid while the arena memory is (the scratch scope of the call that read the file) and, on the heap path, while this object lives.
      */
     class ScratchFileBytes {
     public:
