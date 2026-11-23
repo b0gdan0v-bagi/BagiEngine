@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Assert/AssertMacros.h>
+#include <BECore/Memory/Pooled.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/New.h>
 #include <BECore/RefCounted/RefCounted.h>
@@ -70,6 +71,22 @@ namespace BECore {
         return EventAwaiter<EventType>{};
     }
 
+    namespace Detail {
+
+        /**
+         * What the scheduled timeout of an EventAwaiterWithTimeout holds in place of the awaiter. It outlives the awaiter in the scheduler's queue, so a
+         * timeout that comes due after the coroutine is gone finds no owner. Not a template, so every event type shares one pool; the scheduler's thread
+         * may release the last reference, hence BE_POOLED.
+         */
+        struct TimerLink : RefCountedAtomic {
+            BE_POOLED(TimerLink)
+
+            void* owner = nullptr;
+            void (*finish)(void* owner) = nullptr;
+        };
+
+    }  // namespace Detail
+
     /**
      * Awaits one event of `EventType` for at most a wall-clock time: `co_await` gives the event, or an empty Optional when the time ran out first.
      *
@@ -108,12 +125,13 @@ namespace BECore {
             ASSERT(TaskManager::GetInstance().IsMainThread());
             _handle = handle;
             Subscribe<EventType, &EventAwaiterWithTimeout::OnEvent>(this);
-            _timer = New<TimerLink>();
+            _timer = New<Detail::TimerLink>();
             _timer->owner = this;
+            _timer->finish = [](void* awaiter) { static_cast<EventAwaiterWithTimeout*>(awaiter)->Finish(); };
             scheduler->ScheduleDelayed(
                 [timer = _timer]() {
                     if (timer->owner != nullptr) {
-                        timer->owner->Finish();
+                        timer->finish(timer->owner);
                     }
                 },
                 _timeout, TaskPriority::Normal, ThreadType::MainThread);
@@ -125,11 +143,6 @@ namespace BECore {
         }
 
     private:
-        // Outlives the awaiter in the scheduler's queue, so a timeout that comes due after the coroutine is gone finds no owner
-        struct TimerLink : RefCountedAtomic {
-            EventAwaiterWithTimeout* owner = nullptr;
-        };
-
         void OnEvent(const EventType& event) {
             _receivedEvent = event;
             Finish();
@@ -155,7 +168,7 @@ namespace BECore {
         Duration _timeout;
         std::coroutine_handle<> _handle;
         Optional<EventType> _receivedEvent;
-        IntrusivePtr<TimerLink> _timer;
+        IntrusivePtr<Detail::TimerLink> _timer;
     };
 
     /**

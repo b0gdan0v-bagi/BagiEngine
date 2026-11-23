@@ -1,5 +1,6 @@
 #include <Common/AllocCheck.h>
 #include <EASTL/deque.h>
+#include <cstring>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -44,6 +45,17 @@ namespace BECore::Tests {
                 ++*calls;
             }
         };
+
+        /// The allocations the tracker charged to the name @p name, summed over the zones (AllocTracker::GetNameStats)
+        uint64_t NamedAllocations(const char* name) {
+            uint64_t count = 0;
+            for (const AllocSiteStats& row : AllocTracker::GetNameStats()) {
+                if (row.name != nullptr && std::strcmp(row.name, name) == 0) {
+                    count += row.count;
+                }
+            }
+            return count;
+        }
 
         using Small = Counted<8>;
         using Large = Counted<kDefaultFunctionInlineBytes * 2>;
@@ -148,6 +160,21 @@ namespace BECore::Tests {
         EXPECT_EQ(afterSmall.count, start.count);
         EXPECT_EQ(afterLarge.count, afterSmall.count + 1);
         EXPECT_EQ(afterMove.count, afterLarge.count);
+    }
+
+    TEST_F(MoveOnlyFunctionTest, TheHeapPathIsNamedForTheAllocationTracker) {
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+        constexpr const char* kHeapName = "MoveOnlyFunction heap";
+        int calls = 0;
+        const uint64_t start = NamedAllocations(kHeapName);
+        Task small(Small{&calls});
+        Escape(&small);
+        EXPECT_EQ(NamedAllocations(kHeapName), start);
+        Task large(Large{&calls});
+        Escape(&large);
+        EXPECT_EQ(NamedAllocations(kHeapName), start + 1);
     }
 
     TEST_F(MoveOnlyFunctionTest, ACallableThatMayThrowWhileMovingOrNeedsMoreAlignmentWorks) {
