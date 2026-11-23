@@ -91,7 +91,7 @@ namespace BECore::Tests {
             return XmlText(serializer.GetRootNode());
         }
 
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
         Scene* _scene = nullptr;
     };
 
