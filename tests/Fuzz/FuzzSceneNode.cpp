@@ -80,7 +80,7 @@ namespace BECore::Fuzz {
         FUZZ_CHECK(ExpandNodeReferences(expanded.document_element(), loader, true).expanded == 0);
 
         // The components of the expanded scene deserialized, as the loader does
-        const IntrusivePtrAtomic<SceneManager> manager = LoadSceneManager(XmlNode{sceneDocument.document_element()}, loader);
+        const IntrusivePtr<SceneManager> manager = LoadSceneManager(XmlNode{sceneDocument.document_element()}, loader);
         FUZZ_CHECK(manager);
     }
 

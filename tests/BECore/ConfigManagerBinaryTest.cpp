@@ -237,7 +237,7 @@ namespace BECore::Tests {
         WriteFile(_lower / "Plain.xml", "<Plain value=\"one\"/>\n");
         Start();
         auto fake = New<FakeFileWatchBackend>();
-        _watcher.Start(IntrusivePtrAtomic<IFileWatchBackend>(fake));
+        _watcher.Start(IntrusivePtr<IFileWatchBackend>(fake));
         _manager.StartWatching(_watcher);
 
         ChangeCounter changes;

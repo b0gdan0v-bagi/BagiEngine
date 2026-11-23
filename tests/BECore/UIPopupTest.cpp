@@ -178,7 +178,7 @@ namespace BECore::Tests {
         }
 
         IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
         IntrusivePtr<UICanvasComponent> _canvas;
         IntrusivePtr<TestPopup> _pop;
         IntrusivePtr<ClickCounter> _first;

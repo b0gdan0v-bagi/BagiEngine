@@ -71,7 +71,7 @@ namespace BECore::Tests {
         /// Starts @p task on @p pool. The pool must be destroyed before the returned handle: the queued lambda
         /// keeps a raw pointer, exactly like TaskManager::Run.
         IntrusivePtr<TaskHandle<void>> StartOnPool(ThreadPool& pool, Task<void> task) {
-            auto handle = MakeIntrusive<TaskHandle<void>>(std::move(task));
+            auto handle = New<TaskHandle<void>>(std::move(task));
             auto* rawHandle = handle.Get();
             pool.Submit([rawHandle]() { rawHandle->Start(); });
             return handle;
@@ -424,8 +424,8 @@ namespace BECore::Tests {
         TaskGroup group;
         EXPECT_EQ(group.Size(), 0u) << "New group should be empty";
 
-        auto handle1 = MakeIntrusive<TaskHandle<void>>(SimpleVoidTask());
-        auto handle2 = MakeIntrusive<TaskHandle<void>>(SimpleVoidTask());
+        auto handle1 = New<TaskHandle<void>>(SimpleVoidTask());
+        auto handle2 = New<TaskHandle<void>>(SimpleVoidTask());
 
         group.Add(handle1);
         group.Add(handle2);
@@ -435,7 +435,7 @@ namespace BECore::Tests {
 
     TEST(TaskSystemTest, TaskGroupCancelAll) {
         TaskGroup group;
-        auto handle = MakeIntrusive<TaskHandle<void>>(SimpleVoidTask());
+        auto handle = New<TaskHandle<void>>(SimpleVoidTask());
         group.Add(handle);
 
         group.CancelAll();
@@ -479,7 +479,7 @@ namespace BECore::Tests {
 
     TEST(TaskSystemTest, WaitAfterCompletionReturnsImmediately) {
         // The task finishes inline in Start(), so the signal is already set when Wait() is called.
-        auto handle = MakeIntrusive<TaskHandle<int>>(SimpleIntTask(21));
+        auto handle = New<TaskHandle<int>>(SimpleIntTask(21));
         handle->Start();
         EXPECT_TRUE(handle->IsDone());
 
@@ -492,7 +492,7 @@ namespace BECore::Tests {
     }
 
     TEST(TaskSystemTest, WaitOnEmptyHandleReturns) {
-        auto handle = MakeIntrusive<TaskHandle<void>>(Task<void>{});
+        auto handle = New<TaskHandle<void>>(Task<void>{});
         EXPECT_TRUE(handle->IsDone());
 
         AsyncWaiter waiter(handle);
@@ -501,7 +501,7 @@ namespace BECore::Tests {
 
     TEST(TaskSystemTest, WaitReturnsForTaskCancelledBeforeStart) {
         std::atomic<bool> ran{false};
-        auto handle = MakeIntrusive<TaskHandle<void>>(FlagTask(ran));
+        auto handle = New<TaskHandle<void>>(FlagTask(ran));
 
         handle->Cancel();
         handle->Start();  // a cancelled handle is no longer Pending, so the body must not run
@@ -517,7 +517,7 @@ namespace BECore::Tests {
 
     TEST(TaskSystemTest, CancelFromAnotherThreadWakesWait) {
         std::atomic<bool> ran{false};
-        auto handle = MakeIntrusive<TaskHandle<void>>(FlagTask(ran));  // never started, so only Cancel() can end the wait
+        auto handle = New<TaskHandle<void>>(FlagTask(ran));  // never started, so only Cancel() can end the wait
 
         AsyncWaiter waiter(handle);
         std::this_thread::sleep_for(kLetWaiterBlock);
@@ -528,7 +528,7 @@ namespace BECore::Tests {
     }
 
     TEST(TaskSystemTest, StatusIsCompletedWithoutCallingWait) {
-        auto handle = MakeIntrusive<TaskHandle<int>>(SimpleIntTask(21));
+        auto handle = New<TaskHandle<int>>(SimpleIntTask(21));
         EXPECT_TRUE(handle->GetStatus() == TaskStatus::Pending);
 
         handle->Start();  // finishes inline
@@ -553,7 +553,7 @@ namespace BECore::Tests {
     }
 
     TEST(TaskSystemTest, CancelAfterCompletionIsIgnored) {
-        auto handle = MakeIntrusive<TaskHandle<int>>(SimpleIntTask(21));
+        auto handle = New<TaskHandle<int>>(SimpleIntTask(21));
         handle->Start();
         ASSERT_TRUE(handle->IsDone());
 
@@ -573,7 +573,7 @@ namespace BECore::Tests {
         int inconsistent = 0;
 
         for (int round = 0; round < kRounds; ++round) {
-            auto handle = MakeIntrusive<TaskHandle<void>>(SimpleVoidTask());
+            auto handle = New<TaskHandle<void>>(SimpleVoidTask());
             std::atomic<int> arrived{0};
             auto rendezvous = [&arrived] {
                 arrived.fetch_add(1);
@@ -753,7 +753,7 @@ namespace BECore::Tests {
 
     TEST_F(TaskManagerLifetimeTest, TaskCancelledBeforeStartIsReleasedWithItsHandle) {
         LifetimeProbe probe;
-        auto handle = MakeIntrusive<TaskHandle<void>>(ProbeTask(FrameGuard(probe), probe, false));
+        auto handle = New<TaskHandle<void>>(ProbeTask(FrameGuard(probe), probe, false));
 
         handle->Cancel();
         handle->Start();  // a cancelled handle is no longer Pending, so it must not keep itself alive
@@ -809,7 +809,7 @@ namespace BECore::Tests {
 
     TEST_F(TaskManagerLifetimeTest, AbandonCancelsTaskThatWasNeverStarted) {
         std::atomic<bool> ran{false};
-        auto handle = MakeIntrusive<TaskHandle<void>>(FlagTask(ran));  // Pending: its Start() job was lost with a queue
+        auto handle = New<TaskHandle<void>>(FlagTask(ran));  // Pending: its Start() job was lost with a queue
         AsyncWaiter waiter(handle);
         std::this_thread::sleep_for(kLetWaiterBlock);
         ASSERT_FALSE(waiter.HasReturned());
@@ -839,7 +839,7 @@ namespace BECore::Tests {
     TEST_F(TaskManagerLifetimeTest, AbandonAllFindsTheRestAfterHandlesLeaveInAnyOrder) {
         // Registration order is a, b, c, d, e; the registry is a list through the handles, so leaving as the head, the tail and the middle
         // must each re-link the neighbours.
-        auto make = [] { return MakeIntrusive<TaskHandle<void>>(SimpleVoidTask()); };  // never started: stays Pending
+        auto make = [] { return New<TaskHandle<void>>(SimpleVoidTask()); };  // never started: stays Pending
         auto a = make();
         auto b = make();
         auto c = make();
@@ -866,13 +866,13 @@ namespace BECore::Tests {
         constexpr int kHandlesPerThread = 5000;
         std::atomic<int> running{kThreads};
         // Lives through every AbandonAll: each of them reaches it while the other handles come and go
-        const auto witness = MakeIntrusive<TaskHandle<void>>(SimpleVoidTask());
+        const auto witness = New<TaskHandle<void>>(SimpleVoidTask());
 
         Vector<std::thread> threads;
         for (int i = 0; i < kThreads; ++i) {
             threads.emplace_back([&running] {
                 for (int n = 0; n < kHandlesPerThread; ++n) {
-                    auto handle = MakeIntrusive<TaskHandle<void>>(SimpleVoidTask());  // never started: stays Pending
+                    auto handle = New<TaskHandle<void>>(SimpleVoidTask());  // never started: stays Pending
                 }
                 running.fetch_sub(1);
             });
@@ -954,7 +954,7 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST(TaskSystemTest, ACopyableResultCanBeReadAgain) {
-        auto handle = MakeIntrusive<TaskHandle<String>>(LongTextTask());
+        auto handle = New<TaskHandle<String>>(LongTextTask());
         handle->Start();
 
         const auto first = handle->GetResult();
@@ -967,7 +967,7 @@ namespace BECore::Tests {
     }
 
     TEST(TaskSystemTest, AMoveOnlyResultIsHandedOut) {
-        auto handle = MakeIntrusive<TaskHandle<UniquePtr<int>>>(MoveOnlyTask());
+        auto handle = New<TaskHandle<UniquePtr<int>>>(MoveOnlyTask());
         handle->Start();
 
         auto result = handle->GetResult();
@@ -1006,7 +1006,7 @@ namespace BECore::Tests {
     }
 
     TEST(TaskSystemTest, ACancelAfterTheTaskFinishedKeepsItsResult) {
-        auto handle = MakeIntrusive<TaskHandle<int>>(SimpleIntTask(21));
+        auto handle = New<TaskHandle<int>>(SimpleIntTask(21));
         handle->Start();
 
         handle->Cancel();

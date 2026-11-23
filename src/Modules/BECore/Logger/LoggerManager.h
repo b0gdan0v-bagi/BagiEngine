@@ -49,14 +49,14 @@ namespace BECore {
         }
 
         /// Sorted ascending by priority (equal ones in config order) once Initialize() has run
-        const Vector<IntrusivePtrAtomic<ILogSink>>& GetSinks() const {
+        const Vector<IntrusivePtr<ILogSink>>& GetSinks() const {
             return _sinks;
         }
 
     private:
         void SortSinksByPriority();
 
-        BE_REFLECT_FIELD Vector<IntrusivePtrAtomic<ILogSink>> _sinks;
+        BE_REFLECT_FIELD Vector<IntrusivePtr<ILogSink>> _sinks;
         bool _initialized = false;
     };
 

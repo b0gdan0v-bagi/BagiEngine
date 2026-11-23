@@ -19,7 +19,7 @@ namespace BECore {
     namespace {
 
         /// The document of @p text, or nothing when it does not parse
-        IntrusivePtrAtomic<XmlDocument> ParseConfigText(const String& text) {
+        IntrusivePtr<XmlDocument> ParseConfigText(const String& text) {
             auto doc = BECore::New<XmlDocument>();
             if (!doc->LoadFromString(text)) {
                 return {};
@@ -339,7 +339,7 @@ namespace BECore {
             return false;
         }
 
-        IntrusivePtrAtomic<XmlDocument> newDoc = ParseConfigText(*text);
+        IntrusivePtr<XmlDocument> newDoc = ParseConfigText(*text);
         if (!newDoc) {
             if (failure != nullptr) {
                 *failure = Format("the file does not parse, the old '{}' is kept", name.ToStringView());
@@ -489,7 +489,7 @@ namespace BECore {
         }
 
         const Optional<String> text = XmlDocument::ReadFileBytes(path);
-        IntrusivePtrAtomic<XmlDocument> doc = text ? ParseConfigText(*text) : IntrusivePtrAtomic<XmlDocument>{};
+        IntrusivePtr<XmlDocument> doc = text ? ParseConfigText(*text) : IntrusivePtr<XmlDocument>{};
         if (!doc) {
             LOG_ERROR(Format("[ConfigManager] Failed to load config: {} from {}", name.ToStringView(), path.string()).c_str());
             co_return;

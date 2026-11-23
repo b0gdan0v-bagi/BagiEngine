@@ -38,7 +38,7 @@ namespace BECore {
      * @param configName Name used in the log messages
      * @param findings When not null, receives the expansion errors and the errors and warnings of the deserializer (a test, or a check of the files)
      */
-    IntrusivePtrAtomic<SceneManager> LoadSceneManager(const XmlNode& configRoot, NodeFileLoaderRef loader, StringView configName = kSceneConfigName, SceneLoadFindings* findings = nullptr);
+    IntrusivePtr<SceneManager> LoadSceneManager(const XmlNode& configRoot, NodeFileLoaderRef loader, StringView configName = kSceneConfigName, SceneLoadFindings* findings = nullptr);
 
     /**
      * @brief LoadSceneManager of a root whose content version is checked first
@@ -46,7 +46,7 @@ namespace BECore {
      * A root that is not kContentVersion (`BECore/Config/ContentVersion.h`) is one LOG_ERROR with the message of
      * CheckContentVersion and gives an empty SceneManager: no scene is read from a format the engine does not know.
      */
-    IntrusivePtrAtomic<SceneManager> LoadCheckedSceneManager(const XmlNode& configRoot, NodeFileLoaderRef loader, StringView configName = kSceneConfigName);
+    IntrusivePtr<SceneManager> LoadCheckedSceneManager(const XmlNode& configRoot, NodeFileLoaderRef loader, StringView configName = kSceneConfigName);
 
     /// The type a cooked `SceneConfig` is stamped with (what the cook of the file reads it as)
     inline constexpr StringView kSceneManagerRootType = "SceneManager";
@@ -63,13 +63,13 @@ namespace BECore {
      * @param configName Name used in the log messages
      * @param findings When not null, receives the errors and warnings of the reader
      */
-    IntrusivePtrAtomic<SceneManager> LoadSceneManagerFromBinary(IDeserializer& reader, StringView configName = kSceneConfigName, SceneLoadFindings* findings = nullptr);
+    IntrusivePtr<SceneManager> LoadSceneManagerFromBinary(IDeserializer& reader, StringView configName = kSceneConfigName, SceneLoadFindings* findings = nullptr);
 
     /// LoadCheckedSceneManager of the config `SceneConfig` of ConfigManager, with the node files found through the layered FileSystem (`config/<ref>.xml` or `.bin`, checked too); a binary
     /// `SceneConfig` goes through LoadSceneManagerFromBinary
-    IntrusivePtrAtomic<SceneManager> LoadSceneManagerFromConfig();
+    IntrusivePtr<SceneManager> LoadSceneManagerFromConfig();
 
     /// The same over a ConfigManager and a FileSystem of the caller's (a test or a tool with content folders of its own); both must outlive the call
-    IntrusivePtrAtomic<SceneManager> LoadSceneManagerFromConfig(const ConfigManager& configs, const FileSystem& fs);
+    IntrusivePtr<SceneManager> LoadSceneManagerFromConfig(const ConfigManager& configs, const FileSystem& fs);
 
 }  // namespace BECore

@@ -292,7 +292,7 @@ namespace BECore::HashTestData {
         ~HshTree() override = default;
 
         BE_REFLECT_FIELD int32_t value = 0;
-        BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<HshTree>> children;
+        BE_REFLECT_FIELD Vector<IntrusivePtr<HshTree>> children;
     };
 
     // A factory base, the types of it and a list that holds them
@@ -356,7 +356,7 @@ namespace BECore::HashTestData {
     struct HshShapeList {
         BE_CLASS(HshShapeList)
 
-        BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<HshShape>> shapes;
+        BE_REFLECT_FIELD Vector<IntrusivePtr<HshShape>> shapes;
     };
 
 }  // namespace BECore::HashTestData

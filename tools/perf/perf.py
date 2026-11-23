@@ -299,7 +299,7 @@ def main() -> int:
             print(f"trace of {args.trace} ({profile}, commit {commit_of(root)}): {trace.resolve()}\ncommand: {' '.join(command)}\n")
             import trace_summary  # noqa: PLC0415 - only this mode needs it
 
-            print(trace_summary.format_text(trace_summary.summarize(trace_summary.load_events(str(trace))), 25))
+            print(trace_summary.format_text(trace_summary.summarize(*trace_summary.load_trace(str(trace))), 25))
             return 0
         if args.from_report:
             if not args.update_baseline or args.only or args.fast or args.repetitions or args.json:

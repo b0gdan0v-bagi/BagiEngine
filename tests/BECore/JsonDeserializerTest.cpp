@@ -186,7 +186,7 @@ namespace BECore::Tests {
 
     TEST(JsonDeserializerTest, AFactoryListSurvivesTheRoundTrip) {
         NoHookProbeList list;
-        IntrusivePtrNonAtomic<NoHookProbeImpl> item = New<NoHookProbeImpl>();
+        IntrusivePtr<NoHookProbeImpl> item = New<NoHookProbeImpl>();
         item->value = 11;
         list.items.push_back(item);
         const Json document = Parse(ObjectText(list));

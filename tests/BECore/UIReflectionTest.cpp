@@ -395,7 +395,7 @@ namespace BECore::Tests {
             return {};
         }
 
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
     };
 
     TEST_F(UIReflectionSceneTest, TheElementsOfTheFileAreTheTreeOfTheCanvas) {

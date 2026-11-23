@@ -53,7 +53,7 @@ namespace BECore::Tests {
         /// A folder of the test, a backend over it and the clock that drives its Tick; the same cases run on every backend of the platform
         class BackendHarness {
         public:
-            explicit BackendHarness(IntrusivePtrAtomic<IFileWatchBackend> backend, bool mayDropEvents = false)
+            explicit BackendHarness(IntrusivePtr<IFileWatchBackend> backend, bool mayDropEvents = false)
                 : _backend(std::move(backend)), _mayDropEvents(mayDropEvents), _dir(std::filesystem::absolute(TestTempDirectory("fwb")).lexically_normal()) {
                 MakeEmptyDirectory(_dir);
                 _backend->SetSink(&_sink);
@@ -118,7 +118,7 @@ namespace BECore::Tests {
             }
 
         private:
-            IntrusivePtrAtomic<IFileWatchBackend> _backend;
+            IntrusivePtr<IFileWatchBackend> _backend;
             bool _mayDropEvents = false;
             std::filesystem::path _dir;
             RecordingSink _sink;
@@ -140,7 +140,7 @@ namespace BECore::Tests {
         struct PollingMaker {
             static constexpr bool kNative = false;
             static constexpr bool kMayDropEvents = false;
-            static IntrusivePtrAtomic<IFileWatchBackend> Make() {
+            static IntrusivePtr<IFileWatchBackend> Make() {
                 return New<PollingFileWatchBackend>();
             }
         };
@@ -149,7 +149,7 @@ namespace BECore::Tests {
         struct FSEventsMaker {
             static constexpr bool kNative = true;
             static constexpr bool kMayDropEvents = true;
-            static IntrusivePtrAtomic<IFileWatchBackend> Make() {
+            static IntrusivePtr<IFileWatchBackend> Make() {
                 return MakeFSEventsFileWatchBackend();
             }
         };
@@ -158,7 +158,7 @@ namespace BECore::Tests {
         struct InotifyMaker {
             static constexpr bool kNative = true;
             static constexpr bool kMayDropEvents = false;
-            static IntrusivePtrAtomic<IFileWatchBackend> Make() {
+            static IntrusivePtr<IFileWatchBackend> Make() {
                 return MakeInotifyFileWatchBackend();
             }
         };
@@ -167,7 +167,7 @@ namespace BECore::Tests {
         struct WindowsMaker {
             static constexpr bool kNative = true;
             static constexpr bool kMayDropEvents = false;
-            static IntrusivePtrAtomic<IFileWatchBackend> Make() {
+            static IntrusivePtr<IFileWatchBackend> Make() {
                 return MakeWindowsFileWatchBackend();
             }
         };

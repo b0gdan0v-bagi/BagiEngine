@@ -7,7 +7,7 @@ Each tool has its own `CLAUDE.md`; Python tools have pytest suites outside ctest
 | `todo` | CLI loader of the todo store (the BagiTodo service); nothing of the store is in git |
 | `tokstats` | token cost of a todo entry per role, with its review rounds and plan accuracy |
 | `control` | control API client, smoke test, scenario player, MCP server |
-| `rooms` | BagiRoomServer smoke test, BagiRoomClientProbe, `docker_check.py`, `Dockerfile` |
+| `rooms` | BagiRoomServer smoke test, BagiRoomClientProbe, `load.py` (traced load run), `docker_check.py`, `Dockerfile` |
 | `perf` | benchmarks, trace summary (skills `perf`, `perf-investigate`) |
 | `qa` | the QA player and monkey (skills `qa`, `qa-loop`) |
 | `stress` | `BagiStress`, the 2D stress app: benchmarks and a control smoke |

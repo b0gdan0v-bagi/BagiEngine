@@ -9,7 +9,7 @@ Defines dataclasses for representing C++ reflection metadata:
 - FileMetadata: Per-file metadata with hash for caching
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import List, Optional, Dict, Any
 
 
@@ -98,9 +98,12 @@ class FieldAttrs:
     readonly: bool = False
     hidden: bool = False
     required: bool = False
+    # The generator's own flag: a pointer field of a factory base that is not a factory field (the scene tree). It is not a
+    # FieldAttributes member, so it writes nothing into ReflectionTraits and does not make a field "have attributes".
+    no_factory: bool = False
 
     def is_empty(self) -> bool:
-        return self == FieldAttrs()
+        return replace(self, no_factory=False) == FieldAttrs()
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -112,6 +115,7 @@ class FieldAttrs:
             "readonly": self.readonly,
             "hidden": self.hidden,
             "required": self.required,
+            "no_factory": self.no_factory,
         }
 
     @classmethod
@@ -125,6 +129,7 @@ class FieldAttrs:
             readonly=data.get("readonly", False),
             hidden=data.get("hidden", False),
             required=data.get("required", False),
+            no_factory=data.get("no_factory", False),
         )
 
 

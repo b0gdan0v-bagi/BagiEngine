@@ -101,7 +101,7 @@ namespace BECore {
         FileWatcher& operator=(FileWatcher&&) = delete;
 
         /// Runs on @p backend (null: Stop()). A running watcher is stopped first, so its watches end
-        void Start(IntrusivePtrAtomic<IFileWatchBackend> backend);
+        void Start(IntrusivePtr<IFileWatchBackend> backend);
 
         /// Ends every watch (their handles turn inactive) and shuts the backend down. Not from a callback
         void Stop();
@@ -218,7 +218,7 @@ namespace BECore {
         Vector<AppliedFileChange> ApplyDetected(const Vector<Detected>& detected);
 
         const FileSystem& _fileSystem;
-        IntrusivePtrAtomic<IFileWatchBackend> _backend;
+        IntrusivePtr<IFileWatchBackend> _backend;
         uint64_t _nextId = 1;
         bool _delivering = false;
         bool _hasDeadWatches = false;

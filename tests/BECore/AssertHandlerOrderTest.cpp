@@ -38,7 +38,7 @@ namespace BECore::Tests {
         </handlers></root>)";
 
         /// A manager of the handlers of @p xml, initialised: its handlers are subscribed until it is released
-        IntrusivePtrAtomic<AssertHandlerManager> MakeManager(StringView xml) {
+        IntrusivePtr<AssertHandlerManager> MakeManager(StringView xml) {
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(String(xml)));
             auto manager = New<AssertHandlerManager>();

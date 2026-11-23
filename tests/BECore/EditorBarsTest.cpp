@@ -160,7 +160,7 @@ namespace BECore::Tests {
 
             SettableReader* reader = nullptr;    // owned by the monitor
             HardwareMonitor* monitor = nullptr;  // owned by the status bar
-            IntrusivePtrAtomic<SceneManager> sceneManager;
+            IntrusivePtr<SceneManager> sceneManager;
             ImGuiFontBuffers buffers;
             ImGuiFonts fonts;
             EditorPlayModel model;

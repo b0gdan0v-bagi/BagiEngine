@@ -50,7 +50,7 @@ namespace BECore::Tests {
 
         /// The SceneManager a game reads from the layers of @p fs and @p configs, as text
         String SceneManagerText(ConfigManager& configs, const FileSystem& fs) {
-            const IntrusivePtrAtomic<SceneManager> manager = LoadSceneManagerFromConfig(configs, fs);
+            const IntrusivePtr<SceneManager> manager = LoadSceneManagerFromConfig(configs, fs);
             XmlSerializer text;
             manager->Serialize(text);
             return text.SaveToString();
@@ -74,7 +74,7 @@ namespace BECore::Tests {
             const NodeFileLoader loader = MakeFileSystemNodeLoader(fs);
             pugi::xml_document scenes;
             EXPECT_TRUE(scenes.load_string(SceneText("<node name=\"A\"/>").c_str()));
-            IntrusivePtrAtomic<SceneManager> manager = LoadSceneManager(XmlNode{scenes.document_element()}, loader);
+            IntrusivePtr<SceneManager> manager = LoadSceneManager(XmlNode{scenes.document_element()}, loader);
             manager->Initialize();
             Scene& scene = Require(manager->GetSceneByName("Main"_intern));
             const IntrusivePtr<SceneNode> node = scene.InstantiateNode(reference, loader);

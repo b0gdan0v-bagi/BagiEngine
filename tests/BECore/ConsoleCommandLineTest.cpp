@@ -274,7 +274,7 @@ namespace BECore::Tests {
 
     TEST_F(ConsoleCommandLineTest, ADeferredAnswerAfterTheSessionIsGoneOnlyWritesTheSharedOutput) {
         auto gone = MakeUnique<ConsoleSession>();
-        const IntrusivePtrAtomic<ConsoleOutput> output(&gone->GetOutput());
+        const IntrusivePtr<ConsoleOutput> output(&gone->GetOutput());
         EXPECT_TRUE(gone->Submit(service, "later").has_value());
         service.Drain();
         gone.reset();

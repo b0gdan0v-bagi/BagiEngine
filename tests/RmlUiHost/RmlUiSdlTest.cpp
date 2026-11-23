@@ -128,7 +128,7 @@ namespace BECore::Tests {
 
         IntrusivePtr<SDLMainWindow> _window;
         IntrusivePtr<SDLRendererBackend> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
     };
 
     TEST_F(RmlUiSdlTest, TheGameMenuIsDrawnWithItsColorsAndText) {

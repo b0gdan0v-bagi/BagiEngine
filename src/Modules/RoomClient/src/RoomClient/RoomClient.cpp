@@ -120,6 +120,7 @@ namespace BECore {
     }
 
     std::expected<void, ControlError> RoomClient::SendToServer(const ClientMessage& message) {
+        BE_PROFILE_SCOPE("Client send");
         _sendScratch.clear();
         AppendClientMessage(_sendScratch, message);
         if (!_transport->SendText(_sendScratch)) {
@@ -209,6 +210,7 @@ namespace BECore {
     }
 
     void RoomClient::Poll(RoomTime now) {
+        BE_PROFILE_SCOPE("Client poll");
         _now = now;
         for (size_t i = 0; i < _retired.size();) {
             bool closed = false;

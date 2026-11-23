@@ -105,7 +105,7 @@ namespace BECore::Tests {
         }
 
         TestTempFolder _temp{"BagiEngineUIDocumentTest"};
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
     };
 
     // ---- the same tree from three sources ---------------------------------------------------------------------------------

@@ -222,13 +222,7 @@ namespace BECore {
         };
 
         template <typename T>
-        struct PointerTraits<IntrusivePtrAtomic<T>> {
-            static constexpr bool kMatch = true;
-            using Pointee = T;
-        };
-
-        template <typename T>
-        struct PointerTraits<IntrusivePtrNonAtomic<T>> {
+        struct PointerTraits<IntrusivePtr<T>> {
             static constexpr bool kMatch = true;
             using Pointee = T;
         };

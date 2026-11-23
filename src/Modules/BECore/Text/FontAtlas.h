@@ -1,7 +1,9 @@
 #pragma once
 
 #include <BECore/Math/Rect.h>
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Text/Font.h>
+#include <BECore/Text/GlyphOutline.h>
 #include <BECore/Text/TextSettings.h>
 
 namespace BECore {
@@ -25,6 +27,9 @@ namespace BECore {
      *
      * With `outlinePixels` above 0 the pictures are the glyphs grown by that many pixels (GlyphOutline::Dilate()), for the
      * outline of a text; their offsets follow the grown picture.
+     *
+     * Packing needs only sizes, so Prepare() measures every missing glyph first and draws each one, alone, straight into its page: the
+     * temporaries of a call live in the thread's scratch arena and the heap holds only the page buffers, the textures and the atlas's own glyph table.
      *
      * Not thread safe and main thread only: it makes GPU objects.
      */
@@ -67,9 +72,11 @@ namespace BECore {
         }
 
     private:
+        /// A glyph that waits for a page: only its sizes, the pixels are drawn into the page when it is composed
         struct Pending {
             uint32_t glyph = 0;
-            GlyphBitmap bitmap;
+            GlyphBox ink;      ///< what the font draws
+            GlyphBox picture;  ///< what the page holds: the ink grown by the outline
         };
         struct Placed {
             size_t pending = 0;
@@ -77,7 +84,8 @@ namespace BECore {
             uint32_t y = 0;
         };
 
-        void BuildPages(IRenderer& renderer, Vector<Pending>& pending, bool& ok);
+        /// @p pending is in the scratch arena of the caller's scope and is consumed
+        void BuildPages(IRenderer& renderer, ArenaVector<Pending>& pending, const GlyphOutline::Kernel& kernel, bool& ok);
 
         IntrusivePtr<Font> _font;
         int _pixelSize = 0;

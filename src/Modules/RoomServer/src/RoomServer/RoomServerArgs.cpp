@@ -186,9 +186,10 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<RoomServerArgs, String> ParseRoomServerArgs(int argc, const char* const* argv, RoomServerArgs base) {
+    std::expected<RoomServerArgs, String> ParseRoomServerArgs(int argc, const char* const* argv, RoomServerArgs base, ProfilerBuild profilerBuild) {
         RoomServerArgs args = std::move(base);
         bool hasFlagOrigins = false;
+        Vector<String> profilerArguments;
         for (int i = 1; i < argc; ++i) {
             const StringView flag = argv[i];
             if (flag == "--help" || flag == "-h") {
@@ -197,6 +198,11 @@ namespace BECore {
             }
             if (flag == "--test-games") {
                 args.testGames = true;
+                continue;
+            }
+
+            if (flag.starts_with(ProfilerArguments::kTracePrefix) || flag.starts_with(ProfilerArguments::kProfilerPrefix)) {
+                profilerArguments.emplace_back(flag);
                 continue;
             }
 
@@ -218,6 +224,12 @@ namespace BECore {
                 return std::unexpected(applied.error());
             }
         }
+
+        const auto profiler = ResolveProfilerSettings(profilerArguments, profilerBuild);
+        if (!profiler) {
+            return std::unexpected(Format("Profiler: {}", profiler.error()));
+        }
+        args.profiler = *profiler;
         return args;
     }
 
@@ -289,6 +301,8 @@ namespace BECore {
                       "  --ping-interval-ms N     a ping after this much silence, a drop after twice that, 0 is off (default {})\n"
                       "  --stats-interval-ms N    log the connections and rooms at most this often, when they changed, 0 is off (default {})\n"
                       "  --shutdown-grace-ms N    on SIGTERM, how long to wait for the clients to answer the close 1001 before stopping, 0 is off (default {})\n"
+                      "  --trace=FILE             record the run with the Chrome trace profiler and write FILE after SIGTERM (a build with ENGINE_PROFILER)\n"
+                      "  --profiler=none|chrome|tracy  the profiler backend; chrome without --trace records for nothing (default: none, tracy in a Tracy build)\n"
                       "  --test-games             register the demo games cards and cards-leaky (without it there is no game)\n"
                       "  --help                   this text\n"
                       "\n"

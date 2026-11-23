@@ -249,9 +249,49 @@ namespace BECore::Tests {
     TEST(ChromeTraceBackendTest, WriteFileReportsAnUnwritablePath) {
         ChromeTraceBackend recorder;
         const std::filesystem::path missing = TestTempDirectory("profiler") / "no-such-folder" / "trace.json";
-        const auto written = recorder.WriteFile(String(missing.string().c_str()));
+        const String missingPath(missing.string().c_str());
+        const auto written = recorder.WriteFile(missingPath);
         ASSERT_FALSE(written.has_value());
-        EXPECT_FALSE(written.error().empty());
+        EXPECT_NE(written.error().find(missingPath), String::npos);
+    }
+
+    namespace {
+
+        /// The trace up to its allocation tables, which count the writes themselves and so differ between two writes of one recorder
+        String WithoutAllocTables(const String& trace) {
+            const size_t tables = trace.find("\"allocNames\"");
+            return tables == String::npos ? trace : trace.substr(0, tables);
+        }
+
+    }  // namespace
+
+    TEST(ChromeTraceBackendTest, WriteFileWritesWhatWriteJsonReturnsWhateverTheNumberOfChunks) {
+        ChromeTraceBackend recorder;
+        Profiler::SetThreadName("Chunk main");
+        constexpr int kRounds = 3000;
+        for (int i = 0; i < kRounds; ++i) {
+            const uint64_t outer = recorder.BeginZone(kOuterSite);
+            recorder.Counter("Score", i);
+            recorder.EndZone(outer, kOuterSite, {});
+            recorder.FrameMark();
+        }
+        recorder.BeginZone(kInnerSite);  // left open: the closing events come after the last chunk is cut
+
+        const TestTempFolder folder("profiler_chunks");
+        const String path = folder.PathOf("trace.json");
+        ASSERT_TRUE(recorder.WriteFile(path).has_value());
+        const String text = ReadFile(std::filesystem::path(path.c_str()));
+        ASSERT_GT(text.size(), 4 * ChromeTraceBackend::kWriteChunkBytes);
+        EXPECT_EQ(WithoutAllocTables(text), WithoutAllocTables(recorder.WriteJson()));
+        ExpectBalanced(ParseEvents(text));
+    }
+
+    TEST(ChromeTraceBackendTest, AnEmptyRecorderWritesTheSameFileAsItsJson) {
+        ChromeTraceBackend recorder;
+        const TestTempFolder folder("profiler_empty");
+        const String path = folder.PathOf("trace.json");
+        ASSERT_TRUE(recorder.WriteFile(path).has_value());
+        EXPECT_EQ(WithoutAllocTables(ReadFile(std::filesystem::path(path.c_str()))), WithoutAllocTables(recorder.WriteJson()));
     }
 
     TEST(ChromeTraceJsonTest, WriteTextFileWritesTheBytesAndNamesAnUnwritablePath) {
@@ -365,7 +405,9 @@ namespace BECore::Tests {
             text.push_back(symbol);
         }
         const Json events = ParseEvents(text);
-        EXPECT_EQ(CountPhase(events, "B"), 2u);
+        // The function and `Late`, and the zone of the write itself, which is open inside its own file
+        EXPECT_EQ(CountPhase(events, "B"), 3u);
+        EXPECT_NE(text.find("\"name\":\"Trace write\""), String::npos);
         ExpectBalanced(events);
         RemoveDirectory(folder);
     }

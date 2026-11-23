@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Profiler/Profile.h>
 #include <BECore/RefCounted/New.h>
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/Mutex.h>
@@ -52,7 +53,7 @@ namespace BECore {
      * The reader thread is started and joined by the listener; it does the handshake, starts the writer and reads. The writer thread
      * sends from the queue, so a caller of the Queue functions (any thread) never blocks on the network, and a client that does not
      * read cannot stall anybody: when its queue passes the cap the connection is dropped. The Queue functions are safe from any
-     * thread and after the connection ended (they take nothing then), so a holder of an IntrusivePtrAtomic may call them late.
+     * thread and after the connection ended (they take nothing then), so a holder of an IntrusivePtr may call them late.
      *
      * Atomic count: the listener, the reader thread, the handler's own tables and a reply that outlives the request each hold one,
      * and the last holder is whichever thread lets go last.
@@ -127,19 +128,23 @@ namespace BECore {
 
         /// Queues a text frame; false when the connection takes no more frames
         bool QueueText(StringView text) {
+            BE_PROFILE_SCOPE("WS encode");
             return QueueFrame(EncodeTextFrame(text), /*isClose=*/false);
         }
 
         bool QueuePing(Span<const uint8_t> payload = {}) {
+            BE_PROFILE_SCOPE("WS encode");
             return QueueFrame(EncodeFrame(WebSocketOpcode::kPing, payload), /*isClose=*/false);
         }
 
         bool QueuePong(Span<const uint8_t> payload) {
+            BE_PROFILE_SCOPE("WS encode");
             return QueueFrame(EncodeFrame(WebSocketOpcode::kPong, payload), /*isClose=*/false);
         }
 
         /// Queues the close frame; the connection ends after it was sent
         bool QueueClose(uint16_t code, StringView reason) {
+            BE_PROFILE_SCOPE("WS encode");
             return QueueFrame(EncodeCloseFrame(code, reason), /*isClose=*/true);
         }
 

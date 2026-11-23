@@ -6,7 +6,6 @@
 #include <BECore/Reflection/SerializationTraits.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <array>
-#include <cstdio>
 #include <limits>
 #include <optional>
 #include <utility>
@@ -21,28 +20,6 @@ namespace BECore {
      * AcceptPropertyVisitor wraps each field in PropVisit::VisitField with a lambda that calls PropVisit::Visit.
      */
     namespace PropVisit {
-
-        namespace Detail {
-
-            template <typename Ptr>
-            struct IntrusivePtrPointee {};
-
-            template <typename T>
-            struct IntrusivePtrPointee<IntrusivePtrAtomic<T>> {
-                using type = T;
-            };
-
-            template <typename T>
-            struct IntrusivePtrPointee<IntrusivePtrNonAtomic<T>> {
-                using type = T;
-            };
-
-            template <typename Ptr>
-            concept IsIntrusivePtr = requires {
-                typename IntrusivePtrPointee<Ptr>::type;
-            };
-
-        }  // namespace Detail
 
         template <typename T>
         requires std::is_arithmetic_v<T> bool Visit(IPropertyVisitor& v, T& value, eastl::string_view key) {
@@ -98,7 +75,7 @@ namespace BECore {
         }
 
         template <typename Ptr>
-        requires(Detail::IsIntrusivePtr<Ptr>&& requires(typename Detail::IntrusivePtrPointee<Ptr>::type& t, IPropertyVisitor& v) {
+        requires(::BECore::Detail::IsIntrusivePtr<Ptr>&& requires(typename ::BECore::Detail::IntrusivePtrPointeeType<Ptr>::type& t, IPropertyVisitor& v) {
             {t.AcceptPropertyVisitor(v)}->std::same_as<bool>;
         }) bool Visit(IPropertyVisitor& v, Ptr& ptr, eastl::string_view key) {
             if (!ptr) {
@@ -113,21 +90,10 @@ namespace BECore {
         }
 
         template <typename Ptr, typename Alloc>
-        requires Detail::IsIntrusivePtr<Ptr> bool Visit(IPropertyVisitor& v, eastl::vector<Ptr, Alloc>& vec, eastl::string_view key) {
-            bool changed = false;
-            if (v.BeginCompound(key)) {
-                char indexBuf[32];
-                for (size_t i = 0; i < vec.size(); ++i) {
-                    snprintf(indexBuf, sizeof(indexBuf), "[%zu]", i);
-                    changed |= Visit(v, vec[i], eastl::string_view(indexBuf));
-                }
-                v.EndCompound();
-            }
-            return changed;
-        }
+        requires ::BECore::Detail::IsIntrusivePtr<Ptr> bool Visit(IPropertyVisitor& v, eastl::vector<Ptr, Alloc>& vec, StringView key);
 
         template <typename T>
-        requires(!Detail::IsIntrusivePtr<T> && !IsReflectedEnum<T> && !std::is_arithmetic_v<T> &&
+        requires(!::BECore::Detail::IsIntrusivePtr<T> && !IsReflectedEnum<T> && !std::is_arithmetic_v<T> &&
                  requires(T & t, IPropertyVisitor& v) { {t.AcceptPropertyVisitor(v)}->std::same_as<bool>; }) bool Visit(IPropertyVisitor& v, T& value, eastl::string_view key) {
             if (v.BeginCompound(key)) {
                 bool changed = value.AcceptPropertyVisitor(v);
@@ -187,11 +153,11 @@ namespace BECore {
         // VisitProperties), not by its own: the same rule as VisitField's.
 
         template <typename T, typename Alloc>
-        requires(!Detail::IsIntrusivePtr<T>) bool Visit(IPropertyVisitor& v, eastl::vector<T, Alloc>& items, StringView key);
+        requires(!::BECore::Detail::IsIntrusivePtr<T>) bool Visit(IPropertyVisitor& v, eastl::vector<T, Alloc>& items, StringView key);
 
         // Its own overload: through the base above, the room limit of the fixed vector would be lost
         template <typename T, size_t N, bool Overflow, typename OverflowAlloc>
-        requires(!Detail::IsIntrusivePtr<T>) bool Visit(IPropertyVisitor& v, eastl::fixed_vector<T, N, Overflow, OverflowAlloc>& items, StringView key);
+        requires(!::BECore::Detail::IsIntrusivePtr<T>) bool Visit(IPropertyVisitor& v, eastl::fixed_vector<T, N, Overflow, OverflowAlloc>& items, StringView key);
 
         template <typename T, size_t N>
         bool Visit(IPropertyVisitor& v, eastl::array<T, N>& items, StringView key);
@@ -439,13 +405,26 @@ namespace BECore {
 
         }  // namespace Detail
 
+        template <typename Ptr, typename Alloc>
+        requires ::BECore::Detail::IsIntrusivePtr<Ptr> bool Visit(IPropertyVisitor& v, eastl::vector<Ptr, Alloc>& vec, StringView key) {
+            bool changed = false;
+            if (v.BeginCompound(key)) {
+                Detail::LabelBuffer label;
+                for (size_t i = 0; i < vec.size(); ++i) {
+                    changed |= Visit(v, vec[i], Detail::FormatLabel(label, "[{}]", i));
+                }
+                v.EndCompound();
+            }
+            return changed;
+        }
+
         template <typename T, typename Alloc>
-        requires(!Detail::IsIntrusivePtr<T>) bool Visit(IPropertyVisitor& v, eastl::vector<T, Alloc>& items, StringView key) {
+        requires(!::BECore::Detail::IsIntrusivePtr<T>) bool Visit(IPropertyVisitor& v, eastl::vector<T, Alloc>& items, StringView key) {
             return Detail::VisitSequence<true>(v, items, key);
         }
 
         template <typename T, size_t N, bool Overflow, typename OverflowAlloc>
-        requires(!Detail::IsIntrusivePtr<T>) bool Visit(IPropertyVisitor& v, eastl::fixed_vector<T, N, Overflow, OverflowAlloc>& items, StringView key) {
+        requires(!::BECore::Detail::IsIntrusivePtr<T>) bool Visit(IPropertyVisitor& v, eastl::fixed_vector<T, N, Overflow, OverflowAlloc>& items, StringView key) {
             return Detail::VisitSequence<true>(v, items, key);
         }
 

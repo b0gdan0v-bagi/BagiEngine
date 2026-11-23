@@ -55,7 +55,7 @@ namespace BECore::CookEquivalenceData {
         BE_REFLECT_FIELD Optional<int32_t> maybe;
         BE_REFLECT_FIELD int32_t count = 0;
         BE_REFLECT_FIELD String title;
-        BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<EquivShape>> shapes;
+        BE_REFLECT_FIELD Vector<IntrusivePtr<EquivShape>> shapes;
     };
 
 }  // namespace BECore::CookEquivalenceData

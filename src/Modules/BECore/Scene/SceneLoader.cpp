@@ -10,7 +10,7 @@
 
 namespace BECore {
 
-    IntrusivePtrAtomic<SceneManager> LoadSceneManager(const XmlNode& configRoot, NodeFileLoaderRef loader, StringView configName, SceneLoadFindings* findings) {
+    IntrusivePtr<SceneManager> LoadSceneManager(const XmlNode& configRoot, NodeFileLoaderRef loader, StringView configName, SceneLoadFindings* findings) {
         auto manager = New<SceneManager>();
         if (!configRoot) {
             return manager;
@@ -43,7 +43,7 @@ namespace BECore {
         return manager;
     }
 
-    IntrusivePtrAtomic<SceneManager> LoadCheckedSceneManager(const XmlNode& configRoot, NodeFileLoaderRef loader, StringView configName) {
+    IntrusivePtr<SceneManager> LoadCheckedSceneManager(const XmlNode& configRoot, NodeFileLoaderRef loader, StringView configName) {
         if (configRoot) {
             if (const auto version = CheckContentVersion(configRoot.GetPugiNode(), Format("Config '{}'", configName)); !version) {
                 LOG_ERROR(version.error().c_str());
@@ -53,7 +53,7 @@ namespace BECore {
         return LoadSceneManager(configRoot, loader, configName);
     }
 
-    IntrusivePtrAtomic<SceneManager> LoadSceneManagerFromBinary(IDeserializer& reader, StringView configName, SceneLoadFindings* findings) {
+    IntrusivePtr<SceneManager> LoadSceneManagerFromBinary(IDeserializer& reader, StringView configName, SceneLoadFindings* findings) {
         auto manager = New<SceneManager>();
         const auto stamp = CheckContentStamp(reader, configName);
         if (!stamp) {
@@ -74,11 +74,11 @@ namespace BECore {
         return manager;
     }
 
-    IntrusivePtrAtomic<SceneManager> LoadSceneManagerFromConfig() {
+    IntrusivePtr<SceneManager> LoadSceneManagerFromConfig() {
         return LoadSceneManagerFromConfig(CoreManager::GetConfigManager(), CoreManager::GetFileSystem());
     }
 
-    IntrusivePtrAtomic<SceneManager> LoadSceneManagerFromConfig(const ConfigManager& configs, const FileSystem& fs) {
+    IntrusivePtr<SceneManager> LoadSceneManagerFromConfig(const ConfigManager& configs, const FileSystem& fs) {
         if (configs.IsBinaryConfig(kSceneConfigName)) {
             const UniquePtr<IDeserializer> reader = configs.CreateDeserializer(kSceneConfigName);
             if (!reader) {

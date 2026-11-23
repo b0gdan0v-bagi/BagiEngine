@@ -18,20 +18,21 @@ from .models import ClassData, EnumData, FactoryBaseData, DerivedClassData, Fiel
 # Default templates directory (relative to this file)
 DEFAULT_TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
-# Pattern to extract inner type from IntrusivePtrAtomic<T> or IntrusivePtrNonAtomic<T>
+# Pattern to extract inner type from IntrusivePtr<T>, or from the long names IntrusivePtrAtomic<T> and
+# IntrusivePtrNonAtomic<T> that a game may still spell. The word boundary keeps MyIntrusivePtr<T> out.
 _INTRUSIVE_PTR_PATTERN = re.compile(
-    r'IntrusivePtr(?:Atomic|NonAtomic)<\s*([^<>]+?)\s*>'
+    r'\bIntrusivePtr(?:Atomic|NonAtomic)?<\s*([^<>]+?)\s*>'
 )
 
 
 def extract_intrusive_inner_type(type_name: str) -> Optional[str]:
-    """Extract the inner type T from IntrusivePtrAtomic<T> or IntrusivePtrNonAtomic<T>.
+    """Extract the inner type T from IntrusivePtr<T>, IntrusivePtrAtomic<T> or IntrusivePtrNonAtomic<T>.
 
     Returns the inner type name (possibly namespace-qualified), or None.
 
     Examples:
-        'eastl::vector<IntrusivePtrAtomic<ILogSink>>' -> 'ILogSink'
-        'IntrusivePtrNonAtomic<Tests::ITest>'         -> 'Tests::ITest'
+        'eastl::vector<IntrusivePtr<ILogSink>>' -> 'ILogSink'
+        'IntrusivePtrNonAtomic<Tests::ITest>'   -> 'Tests::ITest'
     """
     m = _INTRUSIVE_PTR_PATTERN.search(type_name)
     return m.group(1) if m else None
@@ -345,12 +346,12 @@ class CodeGenerator:
             classes_data.append(cls_dict)
 
         # Collect factory deps data for inlining FactoryTraits into this gen file.
-        # One entry per unique factory base referenced by IntrusivePtr fields.
+        # One entry per unique factory base referenced by IntrusivePtr fields, except the ones marked no_factory.
         seen_factory_deps: Set[str] = set()
         factory_deps_data: List[dict] = []
         for cls in classes:
             for f in cls.fields:
-                inner = extract_intrusive_inner_type(f.type_name)
+                inner = None if f.attributes.no_factory else extract_intrusive_inner_type(f.type_name)
                 if inner:
                     short = inner.split('::')[-1]
                     if short in factory_base_map and short not in seen_factory_deps:

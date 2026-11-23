@@ -413,7 +413,7 @@ namespace BECore::Tests {
         std::filesystem::path _dir;
         FileSystem _fileSystem;
         ConfigManager _manager{_fileSystem};
-        IntrusivePtrNonAtomic<ConfigEditorWidget> _widget;
+        IntrusivePtr<ConfigEditorWidget> _widget;
     };
 
     TEST_F(ConfigEditorChangeTest, SavingThroughTheEditorPublishesTheChangeOnceAndTheEditorStaysQuiet) {

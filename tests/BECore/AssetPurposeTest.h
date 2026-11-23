@@ -83,8 +83,8 @@ namespace BECore::Tests {
             BE_REFLECT_FIELD PurposeSimProbe simPart;
             BE_REFLECT_FIELD HiddenVisualProbe visualPart;
             BE_REFLECT_FIELD PurposeCommonProbe commonPart;
-            BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<PurposeAssetBase>> elements;
-            BE_REFLECT_FIELD IntrusivePtrNonAtomic<PurposeAssetBase> single;
+            BE_REFLECT_FIELD Vector<IntrusivePtr<PurposeAssetBase>> elements;
+            BE_REFLECT_FIELD IntrusivePtr<PurposeAssetBase> single;
         };
 
         struct PurposeCommonHolder {

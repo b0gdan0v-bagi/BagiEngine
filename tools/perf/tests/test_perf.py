@@ -144,6 +144,23 @@ def test_the_trace_summary_gives_self_time_allocations_and_frames():
     assert "Outer" in trace_summary.format_text(summary, 5)
 
 
+def test_the_trace_summary_prints_allocation_names_and_sizes_only_when_the_trace_has_them(tmp_path):
+    events = [{"name": "Z", "ph": "B", "tid": 1, "ts": 0.0}, {"ph": "E", "tid": 1, "ts": 10.0, "args": {"allocs": 1, "bytes": 8}}]
+    other = {
+        "allocNames": [{"zone": "Z", "name": "vector", "allocs": 3, "bytes": 96}],
+        "allocSizes": [{"zone": "Z", "allocs": 4, "buckets": [{"upTo": 32, "allocs": 3}, {"upTo": 0, "allocs": 1}]}],
+    }
+    path = tmp_path / "trace.json"
+    path.write_text(json.dumps({"traceEvents": events, "otherData": other}), encoding="utf-8")
+    text = trace_summary.format_text(trace_summary.summarize(*trace_summary.load_trace(str(path))), 5)
+    assert "allocations by name" in text and "vector" in text
+    assert "allocation sizes" in text and "<=32:3" in text and ">:1" in text
+
+    path.write_text(json.dumps({"traceEvents": events}), encoding="utf-8")
+    plain = trace_summary.format_text(trace_summary.summarize(*trace_summary.load_trace(str(path))), 5)
+    assert "allocations by name" not in plain and "allocation sizes" not in plain
+
+
 def test_a_whole_run_compares_with_a_local_baseline_and_exits_3_on_a_regression(tmp_path):
     value = tmp_path / "value.txt"
     value.write_text("100", encoding="utf-8")

@@ -2,6 +2,7 @@
 
 #include <BECore/Profiler/IProfilerBackend.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <atomic>
 #include <cstdint>
 #include <expected>
@@ -25,6 +26,10 @@ namespace BECore {
         static constexpr uint32_t kMaxChunks = 64;
         static constexpr uint32_t kMaxEventsPerThread = kChunkEvents * kMaxChunks;
         static constexpr uint32_t kMaxThreadBuffers = 256;
+        /// WriteFile hands the file a piece of the text once it holds this much
+        static constexpr size_t kWriteChunkBytes = 64 * 1024;
+        /// The room WriteFile reserves above a chunk: an event is cut off the chunk only after it is complete; a longer one only grows the buffer once
+        static constexpr size_t kLongestEventBytes = 2048;
 
         ChromeTraceBackend();
         ~ChromeTraceBackend() override;
@@ -44,7 +49,8 @@ namespace BECore {
 
         /// The trace as JSON text (main thread; other threads may go on recording)
         [[nodiscard]] String WriteJson() const;
-        /// WriteJson() into the file @p path (created or replaced); the reason when it cannot be written
+        /// The same text as WriteJson() into the file @p path (created or replaced), formatted into one buffer that is written out in chunks of
+        /// kWriteChunkBytes, so what it allocates does not grow with the events; runs in the zone `Trace write`. The reason when it cannot be written
         [[nodiscard]] std::expected<void, String> WriteFile(StringView path) const;
 
         /// Events lost because a thread's buffer was full or there were too many threads
@@ -55,6 +61,8 @@ namespace BECore {
         struct ThreadBuffer;
 
         ThreadBuffer* GetThreadBuffer();
+        /// Appends the whole trace to @p out; @p checkpoint is called with @p out between two events, where the caller may write it out and clear it
+        void WriteEvents(String& out, FunctionRef<void(String&)> checkpoint) const;
         void Record(uint8_t type, const void* data, uint64_t a, uint64_t b, uint64_t ticks);
 
         const uint64_t _id;  // tells the thread-local cache which recorder its buffer belongs to

@@ -196,7 +196,7 @@ namespace BECore {
 
             /// Called with the mutex held; starts the one pending receive. @p self is a copy on purpose: a block captures a reference
             /// parameter as a reference, and the completion runs after the caller has returned
-            void StartReceiveLocked(IntrusivePtrAtomic<StreamState> self) {
+            void StartReceiveLocked(IntrusivePtr<StreamState> self) {
                 if (receiveInFlight || connection == nullptr) {
                     return;
                 }
@@ -256,7 +256,7 @@ namespace BECore {
             }
 
             std::expected<void, String> Connect(const TlsConnectParams& params) override {
-                const IntrusivePtrAtomic<StreamState> state = _state;
+                const IntrusivePtr<StreamState> state = _state;
                 const String host(params.host.data(), params.host.size());
                 {
                     LockGuard lock(state->mutex);
@@ -335,7 +335,7 @@ namespace BECore {
                 if (data.empty()) {
                     return IsValid();
                 }
-                const IntrusivePtrAtomic<StreamState> state = _state;
+                const IntrusivePtr<StreamState> state = _state;
                 UniqueLock lock(state->mutex);
                 if (state->closing || state->phase != Phase::Ready || state->connection == nullptr) {
                     return false;
@@ -353,7 +353,7 @@ namespace BECore {
                 if (buffer.empty()) {
                     return std::unexpected(SocketError::Failed);
                 }
-                const IntrusivePtrAtomic<StreamState> state = _state;
+                const IntrusivePtr<StreamState> state = _state;
                 UniqueLock lock(state->mutex);
                 const bool hasDeadline = state->receiveTimeout > std::chrono::milliseconds::zero();
                 const auto deadline = hasDeadline ? std::chrono::steady_clock::now() + state->receiveTimeout : std::chrono::steady_clock::time_point::max();
@@ -486,7 +486,7 @@ namespace BECore {
                 }
             }
 
-            IntrusivePtrAtomic<StreamState> _state;
+            IntrusivePtr<StreamState> _state;
         };
 
     }  // namespace

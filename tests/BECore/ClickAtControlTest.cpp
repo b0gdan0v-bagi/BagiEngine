@@ -158,7 +158,7 @@ namespace BECore::Tests {
 
         ControlService _service;
         IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
         int64_t _nextId = 0;
     };
 

@@ -12,7 +12,7 @@ namespace BECore {
     class UIScreenContent {
         BE_CLASS(UIScreenContent)
     public:
-        BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<UIElement>> elements;  // not the IntrusivePtr alias: see UIElement::children
+        BE_REFLECT_FIELD Vector<IntrusivePtr<UIElement>> elements;
         BE_REFLECT_FIELD Vector<UIVariant> variants;
     };
 

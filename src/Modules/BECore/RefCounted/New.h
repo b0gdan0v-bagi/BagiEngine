@@ -2,24 +2,19 @@
 
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/RefCounted.h>
-#include <concepts>
-#include <type_traits>
 #include <utility>
 
 namespace BECore {
-    template <typename T>
-    struct GetIntrusivePtrType {
-        // RefCounted is an alias of RefCountedNonAtomic, so testing RefCountedAtomic is enough
-        static constexpr bool IsAtomic = std::is_base_of_v<RefCountedAtomic, T>;
-        using type = std::conditional_t<IsAtomic, IntrusivePtrAtomic<T>, IntrusivePtrNonAtomic<T>>;
-    };
+
+    /// The one way to make a ref-counted object: the first owner takes the count from 0 to 1.
+    template <typename T, typename... Args>
+    IntrusivePtr<T> New(Args&&... args) {
+        return IntrusivePtr<T>(new T(std::forward<Args>(args)...));
+    }
 
     template <typename T, typename... Args>
-    auto New(Args&&... args) {
-        if constexpr (std::derived_from<T, RefCountedAtomic>) {
-            return IntrusivePtrAtomic<T>(new T(std::forward<Args>(args)...));
-        } else {
-            return IntrusivePtrNonAtomic<T>(new T(std::forward<Args>(args)...));
-        }
+    [[deprecated("use New")]] IntrusivePtr<T> MakeIntrusive(Args&&... args) {
+        return New<T>(std::forward<Args>(args)...);
     }
+
 }  // namespace BECore

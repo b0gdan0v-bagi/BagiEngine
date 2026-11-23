@@ -168,6 +168,8 @@ public:
  *
  * Attributes (comma separated, each at most once): `range(min, max)`, `step(s)`, `tooltip("text")`, `readonly`, `hidden`, `required`.
  * `range` and `step` need a numeric field. An attribute the generator cannot use is a reflection warning.
+ * `no_factory` is the generator's own flag, not a `FieldAttributes` member: the `IntrusivePtr<Base>` of the field is not a factory field, so the
+ * generated file inlines no `FactoryTraits<Base>` for it (the scene tree: `Scene::_nodes`, `SceneNode::_children`).
  *
  * @example
  *   BE_REFLECT_FIELD BE_FIELD_ATTRS(range(0, 1), step(0.05), tooltip("Share of the screen")) float _opacity = 1.0f;

@@ -63,7 +63,7 @@ namespace BECore::RegistryTestData {
         BE_REFLECT_FIELD Optional<int32_t> maybe;
         BE_REFLECT_FIELD Pair<int32_t, String> entry;
         BE_REFLECT_FIELD Variant<int32_t, String> choice;
-        BE_REFLECT_FIELD IntrusivePtrNonAtomic<RegNode> node;
+        BE_REFLECT_FIELD IntrusivePtr<RegNode> node;
         BE_REFLECT_FIELD Vector<RegInner> inners;
     };
 

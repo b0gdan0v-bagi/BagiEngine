@@ -225,7 +225,7 @@ namespace BECore::Tests {
                 std::atomic<uint64_t> ran{0};
                 Gate gate;
                 for (uint64_t i = 0; i < count; ++i) {
-                    auto handle = MakeIntrusive<TaskHandle<void>>(CountingTask(ran, gate));
+                    auto handle = New<TaskHandle<void>>(CountingTask(ran, gate));
                     scheduler.Schedule(
                         [handle = std::move(handle)]() mutable {
                             auto owned = std::move(handle);
