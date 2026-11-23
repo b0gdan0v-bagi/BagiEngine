@@ -1,5 +1,6 @@
 #include <BECore/Memory/ScratchArena.h>
 #include <BECore/Rooms/RoomMessageReference.h>
+#include <BECore/Rooms/SeatedAnswersTest.h>
 #include <BECore/Threading/Thread.h>
 #include <Common/AllocCheck.h>
 #include <Common/Printers.h>
@@ -248,6 +249,40 @@ namespace BECore::Tests {
         ExpectView(kRoomCode, 0, 0, false, Json::array({1}), Json(5));
         // the cut of a container that is too deep is the same on both paths
         ExpectView(kRoomCode, 0, 0, false, MakeDeepArray(kDeepLevels), MakeDeepArray(kDeepLevels));
+    }
+
+    TEST(RoomProtocolWriterTest, ATypedViewIsTheSameBytesAsTheJsonOverloadGivenTheEqualDocument) {
+        for (const String& name : HardTexts()) {
+            AnswerView view;
+            view.name = name;
+            view.turn = 4;
+            Json viewJson = Json::object();
+            viewJson["name"] = MakeJsonString(name);
+            viewJson["points"] = Json::array();
+            viewJson["turn"] = 4;
+            Json actionsJson = Json::array();
+            SeatedActionList<AnswerAction> actions;
+            EXPECT_EQ(MakeViewMessage(kRoomCode, 2, 9, false, view, actions), MakeViewMessage(kRoomCode, 2, 9, false, viewJson, actionsJson)) << "an empty list stays an array";
+
+            for (int32_t i = 0; i < 2; ++i) {
+                AnswerPoint& point = view.points.emplace_back();
+                point.x = i;
+                point.y = -i;
+                viewJson["points"].push_back(Json{{"x", i}, {"y", -i}});
+                AnswerAction action;
+                action.card = i + 10;
+                action.type = name;
+                actions.Add(std::move(action));
+                actionsJson.push_back(Json{{"card", i + 10}, {"type", MakeJsonString(name)}});
+            }
+            EXPECT_EQ(MakeViewMessage(kRoomCode, 2, 9, true, view, actions), MakeViewMessage(kRoomCode, 2, 9, true, viewJson, actionsJson));
+
+            String appended = "kept:";
+            const size_t scratchBefore = ScratchArena::Get().GetBytesUsed();
+            AppendViewMessage(appended, kRoomCode, 2, 9, true, view, actions);
+            EXPECT_EQ(ScratchArena::Get().GetBytesUsed(), scratchBefore);
+            EXPECT_EQ(appended, Format("kept:{}", MakeViewMessage(kRoomCode, 2, 9, true, viewJson, actionsJson)));
+        }
     }
 
     TEST(RoomProtocolWriterTest, TheNumbersOfAMessageKeepTheirLimits) {

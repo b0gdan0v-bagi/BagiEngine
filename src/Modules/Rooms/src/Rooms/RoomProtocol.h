@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/Json.h>
+#include <Games/SeatedAnswers.h>
 #include <Rooms/RoomLimits.h>
 #include <Rooms/RoomTypes.h>
 
@@ -188,6 +189,12 @@ namespace BECore {
     /// of the others: the game's contract). @p view and @p actions are written as they are, an @p actions that is no array too.
     void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions);
     [[nodiscard]] String MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions);
+
+    /// The same message from the typed answers of a game: @p view and @p actions are written by their generated `WriteJson` straight into the message, so no `Json`
+    /// tree is built on the way to the wire, and the bytes are those of the `Json` overload given the equal document. This is the form the room and the hub use;
+    /// the `Json` overload is for what a test or a client fixture builds by hand.
+    void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, const SeatedView& view, const SeatedActions& actions);
+    [[nodiscard]] String MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, const SeatedView& view, const SeatedActions& actions);
 
     /// `rooms {game, rooms:[{room, host, taken, seats, started, options?}], more}`: the answer to `list_rooms`
     void AppendRoomListMessage(String& out, const RoomListMessage& list);
