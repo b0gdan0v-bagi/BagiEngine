@@ -1,4 +1,8 @@
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Memory/FrameAllocator.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/UI/UIBoxMesh.h>
+#include <BECore/UI/UIBoxTextureCache.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIElement.h>
 #include <Common/EngineEnvironment.h>
@@ -16,6 +20,7 @@ namespace BECore::Tests {
         constexpr const char* kWindowConfig = "config/SDLWindowConfig.xml";
         constexpr const char* kSavePngVariable = "BE_UI_BOX_PNG";  // set it to a folder to keep the frames of this test as PNG files for a look
         constexpr int kBlendTolerance = 4;
+        constexpr int kRouteTolerance = 12;
 
         using Pixel = Array<int, 3>;
 
@@ -102,6 +107,7 @@ namespace BECore::Tests {
             }
 
             void TearDown() override {
+                CoreManager::GetUIBoxTextureCache().Clear();  // the textures are of this renderer
                 if (renderer) {
                     renderer->Destroy();
                 }
@@ -118,6 +124,33 @@ namespace BECore::Tests {
                     element->DrawSelf(*renderer);
                 }
                 renderer->SetViewTransform({});
+                PixelBuffer image = Capture();
+                SaveForALook(image, scale);
+                return image;
+            }
+
+            /// The same frame with every box drawn as the triangles of `GeometryDetail::Reduced`, the route a box takes when its texture cannot be made
+            PixelBuffer DrawSampleAsMesh(float scale) {
+                renderer->Clear(kBackground);
+                renderer->SetViewTransform({scale, 0.0f, 0.0f});
+                for (const auto& element : canvas->_elements) {
+                    const UIBoxStyle& style = element->box;
+                    Vector<GeometryVertex> vertices;
+                    Vector<int> indices;
+                    UIBoxMesh::AppendShadow(vertices, indices, element->rect, style.cornerRadius, style.shadow, scale, GeometryDetail::Reduced);
+                    UIBoxMesh::AppendShadow(vertices, indices, element->rect, style.cornerRadius, style.glow, scale, GeometryDetail::Reduced);
+                    UIBoxMesh::AppendFill(vertices, indices, element->rect, style.cornerRadius, element->color, style.MakeGradient(style.gradientColor), scale);
+                    if (style.borderWidth > 0.0f) {
+                        UIBoxMesh::AppendBorder(vertices, indices, element->rect, style.cornerRadius, style.borderWidth, style.borderColor, scale);
+                    }
+                    UIBoxMesh::AppendHighlight(vertices, indices, element->rect, style.cornerRadius, style.highlight, scale);
+                    renderer->DrawGeometry(nullptr, vertices, indices, 0.0f, 0.0f);
+                }
+                renderer->SetViewTransform({});
+                return Capture();
+            }
+
+            PixelBuffer Capture() {
                 Optional<CaptureResult> captured;
                 renderer->RequestCapture([&captured](CaptureResult result) { captured = std::move(result); });
                 renderer->Present();
@@ -125,9 +158,7 @@ namespace BECore::Tests {
                     ADD_FAILURE() << "the frame was not captured";
                     return {};
                 }
-                PixelBuffer image = std::move(**captured);
-                SaveForALook(image, scale);
-                return image;
+                return std::move(**captured);
             }
 
             /// Writes the frame to `<folder of kSavePngVariable>/<name>_<tag>.png` when the variable is set; never into the repository
@@ -210,6 +241,27 @@ namespace BECore::Tests {
         }
         EXPECT_GE(blendedCount, 2);
         EXPECT_TRUE(IsNear(PixelAtOutput(image, cornerX + size, cornerY + size), kButtonPixel, kBlendTolerance));
+    }
+
+    // The texture is the cached form of the mesh, so the two frames agree except where the mesh is coarser (Reduced rings, a pixel of an edge at a different place)
+    TEST_P(UIBoxCaptureScaleTest, TheTextureRouteLooksLikeTheMeshRoute) {
+        const float scale = GetParam();
+        const PixelBuffer textured = DrawSample(scale);
+        const PixelBuffer meshed = DrawSampleAsMesh(scale);
+        ASSERT_FALSE(textured.rgba.empty());
+        ASSERT_EQ(textured.rgba.size(), meshed.rgba.size());
+        size_t different = 0;
+        int largest = 0;
+        for (size_t i = 0; i < textured.rgba.size(); i += 4) {
+            int pixelLargest = 0;
+            for (size_t channel = 0; channel < 3; ++channel) {
+                pixelLargest = std::max(pixelLargest, std::abs(static_cast<int>(textured.rgba[i + channel]) - static_cast<int>(meshed.rgba[i + channel])));
+            }
+            largest = std::max(largest, pixelLargest);
+            different += pixelLargest > kRouteTolerance ? 1 : 0;
+        }
+        std::printf("route compare scale=%g differing=%zu of %zu largest=%d\n", static_cast<double>(scale), different, textured.rgba.size() / 4, largest);
+        EXPECT_LE(different * 100, textured.rgba.size() / 4) << "more than 1 % of the pixels differ by more than " << kRouteTolerance;
     }
 
     INSTANTIATE_TEST_SUITE_P(Scales, UIBoxCaptureScaleTest, ::testing::Values(1.0f, 2.0f));

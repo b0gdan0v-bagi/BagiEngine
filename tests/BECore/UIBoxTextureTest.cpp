@@ -1,5 +1,10 @@
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Memory/FrameArena.h>
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/UI/UIBoxTexture.h>
+#include <BECore/UI/UIBoxTextureCache.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/RecordingRenderer.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -7,6 +12,14 @@ namespace BECore::Tests {
     namespace {
 
         constexpr int kSideTolerance = 1;  // one step of an 8-bit channel: the stretched middle and the whole box differ only by the rounding of the same float
+
+        /// A renderer that asks for what the SDL software renderer does
+        class ReducedRecorder : public RecordingRenderer {
+        public:
+            [[nodiscard]] GeometryDetail GetGeometryDetail() const override {
+                return GeometryDetail::Reduced;
+            }
+        };
 
         /// A skin with every layer: the rim of a shadow and a glow, a gradient, a border and a highlight
         UIBoxStyle SkinnedStyle(UIGradientDirection direction) {
@@ -77,6 +90,9 @@ namespace BECore::Tests {
     protected:
         static void SetUpTestSuite() {
             EngineEnvironment::EnsureCoreServices();
+        }
+        void TearDown() override {
+            CoreManager::GetUIBoxTextureCache().Clear();
         }
     };
 
@@ -156,6 +172,96 @@ namespace BECore::Tests {
         EXPECT_FALSE(UIBoxTexture::MakeLayout(UIBoxTexture::MakeLook(style, kFill, kEnd, 1.0f, 100.0f, 100.0f), UIBoxTexture::kMaxSide + 1, 100).has_value());
         const UIBoxStyle graded = SkinnedStyle(UIGradientDirection::Vertical);
         EXPECT_FALSE(UIBoxTexture::MakeLayout(UIBoxTexture::MakeLook(graded, kFill, kEnd, 1.0f, 100.0f, 4090.0f), 3000, 4090).has_value()) << "a whole axis that would need too many pixels";
+    }
+
+    class UIBoxTextureCacheTest : public ::testing::Test {
+    protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
+        void SetUp() override {
+            CoreManager::GetUIBoxTextureCache().Clear();
+        }
+        void TearDown() override {
+            CoreManager::GetUIBoxTextureCache().Clear();
+        }
+
+        static size_t Count(const RecordingRenderer& renderer, DrawKind kind) {
+            size_t count = 0;
+            for (const DrawCall& call : renderer.calls) {
+                count += call.kind == kind ? 1 : 0;
+            }
+            return count;
+        }
+
+        ReducedRecorder _renderer;
+        UIBoxStyle _style = SkinnedStyle(UIGradientDirection::None);
+        Rect _area{20.0f, 30.0f, 300.0f, 200.0f};
+    };
+
+    TEST_F(UIBoxTextureCacheTest, ABoxIsNineBlitsOfOneTextureAndNoGeometry) {
+        auto& cache = CoreManager::GetUIBoxTextureCache();
+        const uint64_t created = cache.GetCreatedCount();
+        ASSERT_TRUE(cache.Draw(_renderer, _area, _style, kFill, kEnd));
+        EXPECT_EQ(Count(_renderer, DrawKind::Texture), 9u);
+        EXPECT_EQ(Count(_renderer, DrawKind::Geometry), 0u);
+        EXPECT_EQ(cache.GetCreatedCount(), created + 1);
+        for (const DrawCall& call : _renderer.calls) {
+            EXPECT_EQ(call.texture, _renderer.calls.front().texture);
+        }
+    }
+
+    TEST_F(UIBoxTextureCacheTest, AnEqualLookReusesTheTextureAndANewOneMakesOne) {
+        auto& cache = CoreManager::GetUIBoxTextureCache();
+        const uint64_t created = cache.GetCreatedCount();
+        ASSERT_TRUE(cache.Draw(_renderer, _area, _style, kFill, kEnd));
+        ASSERT_TRUE(cache.Draw(_renderer, Rect{500.0f, 10.0f, 640.0f, 410.0f}, _style, kFill, kEnd)) << "another size of the same style";
+        EXPECT_EQ(cache.GetCreatedCount(), created + 1);
+        ASSERT_TRUE(cache.Draw(_renderer, _area, _style, Color{201, 40, 40, 255}, kEnd));
+        EXPECT_EQ(cache.GetCreatedCount(), created + 2);
+        EXPECT_EQ(cache.GetEntryCount(), 2u);
+    }
+
+    TEST_F(UIBoxTextureCacheTest, ASteadyFrameMakesNoTextureAndAllocatesNothing) {
+        auto& cache = CoreManager::GetUIBoxTextureCache();
+        const auto frame = [&] {
+            _renderer.ClearCalls();
+            for (int i = 0; i < 4; ++i) {
+                ASSERT_TRUE(cache.Draw(_renderer, Rect{20.0f + 40.0f * static_cast<float>(i), 30.0f, 300.0f, 200.0f}, _style, kFill, kEnd));
+            }
+            FrameArena::Advance();
+        };
+        frame();
+        frame();
+        const uint64_t created = cache.GetCreatedCount();
+        const uint64_t before = AllocTracker::GetThreadCounters().count;
+        for (int i = 0; i < 16; ++i) {
+            frame();
+        }
+        EXPECT_EQ(cache.GetCreatedCount(), created);
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_EQ(AllocTracker::GetThreadCounters().count - before, 0u);
+        }
+    }
+
+    TEST_F(UIBoxTextureCacheTest, ARendererThatMakesNoTextureGetsTheMesh) {
+        class NoTextures : public ReducedRecorder {
+        public:
+            IntrusivePtr<ITexture> CreateTexture(const uint8_t*, uint32_t, uint32_t) override {
+                return {};
+            }
+        };
+        NoTextures renderer;
+        EXPECT_FALSE(CoreManager::GetUIBoxTextureCache().Draw(renderer, _area, _style, kFill, kEnd));
+        EXPECT_EQ(CoreManager::GetUIBoxTextureCache().GetEntryCount(), 0u);
+    }
+
+    TEST_F(UIBoxTextureCacheTest, TheCacheIsBounded) {
+        auto& cache = CoreManager::GetUIBoxTextureCache();
+        for (size_t i = 0; i < UIBoxTextureCache::kMaxEntries + 10; ++i) {
+            ASSERT_TRUE(cache.Draw(_renderer, _area, _style, Color{static_cast<unsigned char>(i), 40, 40, 255}, kEnd));
+        }
+        EXPECT_EQ(cache.GetEntryCount(), UIBoxTextureCache::kMaxEntries);
     }
 
 }  // namespace BECore::Tests

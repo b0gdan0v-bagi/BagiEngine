@@ -1,3 +1,6 @@
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/UI/UIBoxTexture.h>
+#include <BECore/UI/UIBoxTextureCache.h>
 #include <BECore/UI/UIElement.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
@@ -19,6 +22,7 @@ namespace BECore::Tests {
         constexpr int kWarmUpFrames = 5;
         constexpr int kTimedFrames = 30;
         constexpr double kMillisecondsPerSecond = 1000.0;
+        constexpr size_t kQuadTriangles = 2;
 
         GeometryVertex Vertex(float x, float y, unsigned char alpha) {
             GeometryVertex vertex;
@@ -146,6 +150,10 @@ namespace BECore::Tests {
                 for (const DrawCall& call : recorder.calls) {
                     if (call.kind == DrawKind::Geometry) {
                         total += MeasureRasterCost(call.vertices, call.indices, 1.0f, output);
+                    } else if (call.kind == DrawKind::Texture) {
+                        // A blit of a box texture is a quad that the software renderer blends over its destination
+                        const double pixels = static_cast<double>(call.rect.w) * static_cast<double>(call.rect.h);
+                        total += SoftwareRasterCost{kQuadTriangles, pixels, pixels};
                     }
                 }
             };
@@ -181,6 +189,7 @@ namespace BECore::Tests {
             }
 
             void TearDown() override {
+                CoreManager::GetUIBoxTextureCache().Clear();  // the textures are of this renderer
                 if (renderer) {
                     renderer->Destroy();
                 }
@@ -329,6 +338,27 @@ namespace BECore::Tests {
         const Vector<BoxSpec> boxes = BenchmarkScreen();
         for (const PartCase& partCase : kPartCases) {
             PrintCoreAndRim(partCase.name, boxes, partCase.parts);
+        }
+    }
+
+    // What a cache miss costs: the textures of the boxes of the screen made one after the other (the first frame of a screen, or a hover that changes a colour)
+    TEST_F(UIBoxRasterCostTest, DISABLED_TextureMake) {
+        const Vector<BoxSpec> boxes = BenchmarkScreen();
+        for (const float scale : kScales) {
+            double totalMs = 0.0;
+            double largestMs = 0.0;
+            for (const BoxSpec& box : boxes) {
+                const UIBoxLook look = UIBoxTexture::MakeLook(box.style, box.fill, box.gradientEnd, scale, box.rect.w / scale, box.rect.h / scale);
+                const auto layout = UIBoxTexture::MakeLayout(look, static_cast<int>(box.rect.w), static_cast<int>(box.rect.h));
+                ASSERT_TRUE(layout.has_value());
+                const auto start = std::chrono::steady_clock::now();
+                const Vector<uint8_t> pixels = UIBoxTexture::Render(*layout);
+                const double ms = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count() * kMillisecondsPerSecond;
+                EXPECT_FALSE(pixels.empty());
+                totalMs += ms;
+                largestMs = std::max(largestMs, ms);
+            }
+            std::printf("UIBoxRasterCost part=texture_make scale=%d total_ms=%.3f largest_ms=%.3f\n", static_cast<int>(scale), totalMs, largestMs);
         }
     }
 

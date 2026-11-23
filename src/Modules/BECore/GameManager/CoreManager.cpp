@@ -35,6 +35,7 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Time/GamePause.h>
 #include <BECore/Time/Time.h>
+#include <BECore/UI/UIBoxTextureCache.h>
 #include <BECore/UI/UIControl.h>
 #include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UIStrings.h>
@@ -60,8 +61,8 @@ namespace BECore {
           _eventsProviderManager(MakeUnique<EventsProviderManager>()), _clipboard(MakeUnique<Clipboard>()), _audioManager(MakeUnique<AudioManager>()),
           _mainWindowManager(MakeUnique<MainWindowManager>()), _rendererManager(MakeUnique<RendererManager>()), _uiInput(MakeUnique<UIInput>()), _uiEnvironment(MakeUnique<UIEnvironment>()),
           _uiVars(MakeUnique<UIVars>()), _uiStrings(MakeUnique<UIStrings>()), _uiThemes(MakeUnique<UIThemes>()), _textureLibrary(MakeUnique<TextureLibrary>()),
-          _fontAtlasLibrary(MakeUnique<FontAtlasLibrary>()), _time(MakeUnique<Time>()), _pause(MakeUnique<GamePause>()), _tweenManager(MakeUnique<TweenManager>()),
-          _frameStats(MakeUnique<FrameStatsCollector>()), _controlService(MakeUnique<ControlService>()) {}
+          _fontAtlasLibrary(MakeUnique<FontAtlasLibrary>()), _uiBoxTextureCache(MakeUnique<UIBoxTextureCache>()), _time(MakeUnique<Time>()), _pause(MakeUnique<GamePause>()),
+          _tweenManager(MakeUnique<TweenManager>()), _frameStats(MakeUnique<FrameStatsCollector>()), _controlService(MakeUnique<ControlService>()) {}
 
     CoreManager::~CoreManager() = default;
 
