@@ -68,21 +68,17 @@ namespace BECore {
                     return;
                 }
 
-                // By hand, not a reflected struct: the game's own document (`state`) sits between the keys `game` and `version`, and only the game's writer can write it.
                 // The state is written first, apart: a state that fails leaves `state` out of the push, and a writer cannot be rewound after a partial write
                 _state.clear();
                 JsonWriter stateWriter(_state);
                 const bool hasState = active->control->WriteState(stateWriter).has_value() && stateWriter.IsComplete();
-                _service.Publish(GameControlEvents::kStateChanged, [&](JsonWriter& writer) {
-                    writer.BeginObject();
-                    writer.Member("game", active->game->GetName().ToStringView());
-                    if (hasState) {
-                        writer.Key("state");
-                        writer.Raw(_state);
-                    }
-                    writer.Member("version", version);
-                    writer.EndObject();
-                });
+                GameStateAnswer answer;
+                answer.game = active->game->GetName();
+                if (hasState) {
+                    answer.state = JsonPayload::Text(_state);
+                }
+                answer.version = version;
+                _service.Publish(GameControlEvents::kStateChanged, [&answer](JsonWriter& writer) { answer.WriteJson(writer); });
             }
 
         private:
@@ -181,19 +177,12 @@ namespace BECore {
                 call.Fail(active.error());
                 return;
             }
-            const uint64_t version = active->control->GetStateVersion();
-            // By hand, not a reflected struct: the game's own document (`state`) sits between the keys `game` and `version`
-            call.TryReply([&](JsonWriter& writer) -> std::expected<void, ControlError> {
-                writer.BeginObject();
-                writer.Member("game", active->game->GetName().ToStringView());
-                writer.Key("state");
-                if (auto written = active->control->WriteState(writer); !written) {
-                    return written;
-                }
-                writer.Member("version", version);
-                writer.EndObject();
-                return {};
-            });
+            const auto writeState = [&](JsonWriter& writer) { return active->control->WriteState(writer); };
+            GameStateAnswer answer;
+            answer.game = active->game->GetName();
+            answer.state = JsonPayload::Streamed(writeState);
+            answer.version = active->control->GetStateVersion();
+            call.ReplyObject(answer);
         }
 
         void HandleListActions(ControlCall& call) {
@@ -202,19 +191,12 @@ namespace BECore {
                 call.Fail(active.error());
                 return;
             }
-            const uint64_t version = active->control->GetStateVersion();
-            // By hand, not a reflected struct: the game's own list (`actions`) sits before the keys `game` and `version`
-            call.TryReply([&](JsonWriter& writer) -> std::expected<void, ControlError> {
-                writer.BeginObject();
-                writer.Key("actions");
-                if (auto written = active->control->WriteActions(writer); !written) {
-                    return written;
-                }
-                writer.Member("game", active->game->GetName().ToStringView());
-                writer.Member("version", version);
-                writer.EndObject();
-                return {};
-            });
+            const auto writeActions = [&](JsonWriter& writer) { return active->control->WriteActions(writer); };
+            GameActionsAnswer answer;
+            answer.actions = JsonPayload::Streamed(writeActions);
+            answer.game = active->game->GetName();
+            answer.version = active->control->GetStateVersion();
+            call.ReplyObject(answer);
         }
 
         void HandlePerformAction(ControlCall& call) {
@@ -223,20 +205,16 @@ namespace BECore {
                 call.Fail(active.error());
                 return;
             }
-            auto outcome = ControlledAction(*active->control, call.Params());
+            const auto outcome = ControlledAction(*active->control, call.Params());
             if (!outcome) {
                 call.Fail(outcome.error());
                 return;
             }
-            // By hand, not a reflected struct: the game's own `outcome` sits between the keys `game` and `version`, and the version is read inside the writer, after the action
-            call.Reply([&](JsonWriter& writer) {
-                writer.BeginObject();
-                writer.Member("game", active->game->GetName().ToStringView());
-                writer.Key("outcome");
-                WriteJson(writer, *outcome);
-                writer.Member("version", active->control->GetStateVersion());
-                writer.EndObject();
-            });
+            GameActionAnswer answer;
+            answer.game = active->game->GetName();
+            answer.outcome = JsonPayload::Borrowed(*outcome);
+            answer.version = active->control->GetStateVersion();  // the one after the action
+            call.ReplyObject(answer);
         }
 
         void HandleSetState(ControlCall& call) {
