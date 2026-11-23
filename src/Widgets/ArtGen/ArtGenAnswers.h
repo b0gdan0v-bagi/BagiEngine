@@ -50,7 +50,7 @@ namespace BECore {
     };
 
     /// The reference picture of a run or a set: the same keys and values as `ArtGenReferenceToJson` writes into a preset or a manifest file (a test holds them equal);
-    /// the file keeps its own writer because it must read back what it wrote and keeps `null` where this answer leaves a member out
+    /// the file keeps its own writer: it is a `Json` that `ReadArtGenReference` parses back. `weight` is absent when unset, in both
     struct ArtGenReferenceAnswer {
         BE_CLASS(ArtGenReferenceAnswer)
 

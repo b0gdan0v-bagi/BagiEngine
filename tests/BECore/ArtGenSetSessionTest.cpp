@@ -1,4 +1,3 @@
-#include <BECore/ArtGenAnswerText.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <Common/ControlTestSupport.h>
@@ -88,7 +87,7 @@ namespace BECore::Tests {
             return reply;
         }
 
-        /// The member names of a JSON object, sorted as the generated writer writes them
+        /// The member names of a JSON object, sorted: the parsed DOM sorts them, and the generated writer writes them in the same order by design
         Vector<String> KeysOf(const Json& object) {
             Vector<String> keys;
             for (const auto& [key, value] : object.items()) {

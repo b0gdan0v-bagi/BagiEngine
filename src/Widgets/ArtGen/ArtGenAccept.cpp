@@ -309,7 +309,7 @@ namespace BECore {
         }
         ArtGenAcceptAnswer reply;
         reply.clip = written->clipPath;
-        reply.wav = String(Format("{}", written->wavFile.generic_string()));
+        reply.wav = Format("{}", written->wavFile.generic_string());
         reply.sampleRate = written->format.sampleRate;
         reply.channels = written->format.channels;
         reply.seconds = written->seconds;
@@ -811,7 +811,7 @@ namespace BECore {
         ArtGenAcceptAnswer reply;
         reply.sprite = String(sprite);
         reply.texturePath = accepted->copied.texturePath;
-        reply.png = String(Format("{}", accepted->copied.pngFile.generic_string()));
+        reply.png = Format("{}", accepted->copied.pngFile.generic_string());
         reply.width = accepted->copied.width;
         reply.height = accepted->copied.height;
         reply.processing = MakeArtGenProcessingAnswer(accepted->copied);
