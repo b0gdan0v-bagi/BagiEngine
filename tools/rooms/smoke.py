@@ -20,7 +20,12 @@ Scenarios, on a server with --test-games --computer-delay-ms 0 --reconnect-grace
 With the probe (the C++ client of RoomClient, a process of its own; its scenarios are skipped with a line when there is none):
   * the probe hosts a room, plays it to the end and prints `PROBE OK`;
   * the same against a server whose --origin list names only a web page: the probe sends no Origin and gets in;
-  * the server is killed after the probe's first view: the probe fails by itself, fast and non-zero, without waiting for its 30 s.
+  * the server is killed after the probe's first view: the probe fails by itself, fast and non-zero, without waiting for its 30 s;
+  * `probe-load`: three clients of one probe process (`--clients 3 --messages 20`) play against a server without the address limits
+    and print `PROBE LOAD OK`.
+Outside that list, `trace`: the server (and the probe) started with `--trace=FILE`. A build without the profiler must refuse the flag before it
+listens (exit 1 for the server, 2 for the probe, the profiler's message); a build with it writes, after SIGTERM, a trace that parses, names the
+`Main` and `Room hub` threads (`Client poll` on `Main` for the probe), holds the zone `Room message` and has every zone closed.
 The process is ended with SIGTERM and has to exit 0 in time (on Windows it is terminated, and its exit code is not checked).
 
 The judge is the rule of tests/BECore/Rooms/WireJudge.h, ported: change both together (tools/rooms/CLAUDE.md).
@@ -40,10 +45,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 TOOLS_CONTROL = Path(__file__).resolve().parents[1] / "control"
+TOOLS_PERF = Path(__file__).resolve().parents[1] / "perf"
 sys.path.insert(0, str(TOOLS_CONTROL))
+sys.path.insert(0, str(TOOLS_PERF))
 
 from bagi_control_client import BagiControlClient, ConnectionClosed, HandshakeError  # noqa: E402
 from game_process import log_tail, preset_executable  # noqa: E402
+from trace_summary import load_trace, summarize  # noqa: E402
 
 EXIT_PASSED = 0
 EXIT_FAILED = 1
@@ -82,6 +90,17 @@ PROBE_EXE_NAME = "BagiRoomClientProbe"
 PROBE_OK = "PROBE OK"
 PROBE_FIRST_VIEW = "PROBE first view"
 PROBE_FAILED = "PROBE FAILED"
+PROBE_LOAD_OK = "PROBE LOAD OK"
+PROBE_LOAD_CLIENTS = 3
+PROBE_LOAD_MESSAGES = 20  # the probe paces a client below the hub's rate bucket
+PROBE_LOAD_LIMIT_SECONDS = 60.0
+PROBE_EXIT_USAGE = 2  # what the probe answers a flag it refuses
+SERVER_EXIT_REFUSED = 1  # what the server answers a flag it refuses
+PROFILER_REFUSAL = "Profiler:"  # the line both executables print when the build has no profiler (or the flag is wrong)
+TRACE_SERVER_THREADS = ("Main", "Room hub")
+TRACE_SERVER_ZONE = "Room message"
+TRACE_PROBE_THREAD = "Main"
+TRACE_PROBE_ZONE = "Client poll"
 PROBE_LIMIT_SECONDS = 40.0  # the probe stops itself after 30 s
 PROBE_GONE_LIMIT_SECONDS = 10.0  # a probe whose server is gone has to notice at once
 PROBE_GONE_COMPUTER_DELAY_MS = 1500  # slow computers keep the hand running while the server is taken away
@@ -116,6 +135,15 @@ def find_leaked_card_ids(text: str, seat: int) -> list[str]:
     return [card for card in find_card_ids(text) if not (own_prefix and card.startswith(own_prefix)) and card not in allowed_table]
 
 
+class ServerExitedEarly(SmokeFailure):
+    """The server ended before it listened: `code` and `output` say why (for example the profiler flag it refused)."""
+
+    def __init__(self, code: int, output: str, tail: str):
+        super().__init__(f"the server exited with code {code} before it listened\n--- server log (tail) ---\n{tail}")
+        self.code = code
+        self.output = output
+
+
 class RoomServer:
     """One BagiRoomServer process on a port it picked itself (--port 0), its output in a temporary file."""
 
@@ -136,7 +164,12 @@ class RoomServer:
     def __enter__(self) -> "RoomServer":
         with open(self.log_path, "wb") as log:
             self._process = subprocess.Popen(self.command, cwd=self.exe.parent, env=self.environment, stdout=log, stderr=subprocess.STDOUT)
-        self.port = self._wait_for_listening()
+        try:
+            self.port = self._wait_for_listening()
+        except SmokeFailure:
+            # __exit__ does not run when __enter__ raises
+            self._log_dir.cleanup()
+            raise
         return self
 
     def __exit__(self, exc_type: object, *rest: object) -> None:
@@ -178,7 +211,7 @@ class RoomServer:
         deadline = time.monotonic() + STARTUP_SECONDS
         while time.monotonic() < deadline:
             if self._process.poll() is not None:
-                raise SmokeFailure(f"the server exited with code {self._process.returncode} before it listened\n--- server log (tail) ---\n{log_tail(self.log_path)}")
+                raise ServerExitedEarly(self._process.returncode, self.output(), log_tail(self.log_path))
             match = LISTENING_PATTERN.search(self.log_path.read_text(errors="replace"))
             if match:
                 return int(match.group(1))
@@ -209,8 +242,8 @@ class RoomServer:
 class Probe:
     """One BagiRoomClientProbe process against a server, its output in a temporary file."""
 
-    def __init__(self, exe: Path, port: int):
-        self.command = [str(exe), "--url", f"ws://127.0.0.1:{port}", "--game", "cards"]
+    def __init__(self, exe: Path, port: int, extra_args: list[str] | None = None):
+        self.command = [str(exe), "--url", f"ws://127.0.0.1:{port}", "--game", "cards", *(extra_args or [])]
         self.exe = exe
         self._log_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.log_path = Path(self._log_dir.name) / "probe.log"
@@ -570,6 +603,66 @@ def scenario_probe_gone(server: RoomServer, probe: Path | None) -> None:
         check(PROBE_OK not in running.output(), "the probe reported a finished game although its server was killed")
 
 
+def scenario_probe_load(server: RoomServer, probe: Path | None) -> None:
+    assert probe is not None
+    with Probe(probe, server.port, ["--clients", str(PROBE_LOAD_CLIENTS), "--messages", str(PROBE_LOAD_MESSAGES)]) as running:
+        code = running.finish(PROBE_LOAD_LIMIT_SECONDS)
+        check(code == 0 and PROBE_LOAD_OK in running.output(), f"the load probe exited with {code}\n--- probe output ---\n{running.output()}")
+
+
+def check_trace(path: Path, who: str, threads: tuple[str, ...], zone: str) -> None:
+    """The trace is a file that parses, names the threads, holds the zone and leaves no zone open."""
+    check(path.is_file() and path.stat().st_size > 0, f"the {who} wrote no trace to {path}")
+    try:
+        summary = summarize(*load_trace(str(path)))
+    except (OSError, ValueError, KeyError) as error:
+        raise SmokeFailure(f"the trace of the {who} does not parse: {error}") from None
+    known = set(summary["threads"].values())
+    for thread in threads:
+        check(thread in known, f"the trace of the {who} has no thread '{thread}' (it has {sorted(known)})")
+    zones = {entry["name"]: entry for entry in summary["zones"]}
+    check(zone in zones, f"the trace of the {who} has no zone '{zone}' (it has {sorted(zones)})")
+    check(threads[-1] in zones[zone]["threads"], f"the zone '{zone}' of the {who} did not run on '{threads[-1]}': {zones[zone]['threads']}")
+    check(summary["unclosedZones"] == 0, f"the trace of the {who} has {summary['unclosedZones']} zones that never end")
+
+
+def check_refused(code: int, output: str, expected: int, who: str) -> None:
+    check(code == expected and PROFILER_REFUSAL in output, f"the {who} answered a build without the profiler with code {code} and:\n{output}")
+
+
+def run_probe_with_trace(probe: Path, port: int, trace: Path) -> tuple[int, str]:
+    with Probe(probe, port, [f"--trace={trace}"]) as running:
+        code = running.finish(PROBE_LIMIT_SECONDS)
+        return code, running.output()
+
+
+def scenario_trace(exe: Path, probe: Path | None) -> None:
+    """The profiler flags of the server and of the probe: written in a profile build, refused in any other.
+
+    It has no server of the common shape: a refusing server ends before it listens.
+    """
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
+        server_trace = Path(folder) / "server.json"
+        probe_trace = Path(folder) / "probe.json"
+        probe_result: tuple[int, str] | None = None
+        try:
+            with RoomServer(exe, [f"--trace={server_trace}"]) as server:
+                scenario_hand(server.port)
+                if probe is not None:
+                    probe_result = run_probe_with_trace(probe, server.port, probe_trace)
+        except ServerExitedEarly as early:
+            check_refused(early.code, early.output, SERVER_EXIT_REFUSED, "server")
+            if probe is not None:
+                # Flags are read before the probe connects: no server is needed for its refusal
+                check_refused(*run_probe_with_trace(probe, 1, probe_trace), PROBE_EXIT_USAGE, "probe")
+            return
+        check_trace(server_trace, "server", TRACE_SERVER_THREADS, TRACE_SERVER_ZONE)
+        if probe_result is not None:
+            probe_code, probe_output = probe_result
+            check(probe_code == 0, f"the probe with --trace exited with {probe_code}\n--- probe output ---\n{probe_output}")
+            check_trace(probe_trace, "probe", (TRACE_PROBE_THREAD,), TRACE_PROBE_ZONE)
+
+
 def by_port(scenario: Callable[[int], None]) -> Callable[[RoomServer, Path | None], None]:
     return lambda server, _probe: scenario(server.port)
 
@@ -589,6 +682,8 @@ SCENARIOS: list[tuple[str, list[str], Callable[[RoomServer, Path | None], None],
     # The probe sends no Origin, and a server that lists only a web page lets a program in
     ("probe-no-origin", ["--origin", GOOD_ORIGIN], scenario_probe, True, {}),
     ("probe-server-gone", ["--computer-delay-ms", str(PROBE_GONE_COMPUTER_DELAY_MS)], scenario_probe_gone, True, {}),
+    # A load client sends faster than a person: the per-address limits are what the scenario would otherwise measure
+    ("probe-load", ["--max-per-address", "0"], scenario_probe_load, True, {}),
 ]
 
 
@@ -628,6 +723,13 @@ def main() -> int:
         except (SmokeFailure, OSError, ConnectionClosed, HandshakeError, ValueError) as error:
             print(f"FAILED ({name}): {error}")
             return EXIT_FAILED
+
+    print("trace: running", flush=True)
+    try:
+        scenario_trace(exe.resolve(), probe.resolve() if probe else None)
+    except (SmokeFailure, OSError, ConnectionClosed, HandshakeError, ValueError) as error:
+        print(f"FAILED (trace): {error}")
+        return EXIT_FAILED
 
     print("PASSED")
     return EXIT_PASSED

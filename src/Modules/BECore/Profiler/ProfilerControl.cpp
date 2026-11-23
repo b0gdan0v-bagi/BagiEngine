@@ -52,6 +52,32 @@ namespace BECore {
             writer.EndArray();
         }
 
+        /// The size histograms of the innermost zones (Alloc/CLAUDE.md, "Sizes"), the most allocations first: the non-empty buckets only, `upTo` the bucket's
+        /// largest size in bytes and 0 for the open last bucket; empty without ENGINE_PROFILER_ALLOC
+        void WriteSizes(JsonWriter& writer, const Vector<AllocSizeStats>& sizes, size_t top) {
+            writer.BeginArray();
+            for (size_t i = 0; i < sizes.size() && i < top; ++i) {
+                const AllocSizeStats& stats = sizes[i];
+                writer.BeginObject();
+                writer.Member("allocs", stats.allocs);
+                writer.Key("buckets");
+                writer.BeginArray();
+                for (uint32_t bucket = 0; bucket < kSizeBuckets; ++bucket) {
+                    if (stats.buckets[bucket] == 0) {
+                        continue;
+                    }
+                    writer.BeginObject();
+                    writer.Member("allocs", stats.buckets[bucket]);
+                    writer.Member("upTo", SizeBucketBound(bucket));
+                    writer.EndObject();
+                }
+                writer.EndArray();
+                writer.Member("zone", stats.ZoneLabel());
+                writer.EndObject();
+            }
+            writer.EndArray();
+        }
+
         void WriteFrame(JsonWriter& writer, const FrameStats& stats) {
             writer.BeginObject();
             writer.Member("allocBytes", stats.allocBytes);
@@ -230,12 +256,15 @@ namespace BECore {
 
             const Vector<ZoneAllocStats> zones = AllocTracker::GetZoneStats();
             const Vector<AllocSiteStats> names = AllocTracker::GetNameStats();
+            const Vector<AllocSizeStats> sizes = AllocTracker::GetSizeStats();
             const AllocTotals totals = AllocTracker::GetTotals();
             call.Reply([&](JsonWriter& writer) {
                 writer.BeginObject();
                 writer.Member("enabled", AllocTracker::kEnabled);
                 writer.Key("names");
                 WriteNames(writer, names, static_cast<size_t>(*top));
+                writer.Key("sizes");
+                WriteSizes(writer, sizes, static_cast<size_t>(*top));
                 writer.Key("totals");
                 writer.BeginObject();
                 writer.Member("bytes", totals.bytes);
@@ -279,9 +308,9 @@ namespace BECore {
                                                {{"frames", "integer", false, Format("How many frames, 1 to {} (default 1)", FrameStatsCollector::kFrameHistory)}}});
         service.DescribeMethod("profiler_dump", {"Writes the Chrome trace of the run (the game has to record one)",
                                                  {{"path", "string", false, Format("A relative file name without '..' (default {})", kDefaultTracePath)}}});
-        service.DescribeMethod("zone_allocs", {"Allocations per profiler zone, per zone and allocation name (names) and the totals",
-                                               {{"top", "integer", false, Format("How many zones and how many names, 1 to {} (default {})", kMaxTopZones, kDefaultTopZones)},
-                                                {"reset", "boolean", false, "Clear the per-zone and per-name counts after answering"}}});
+        service.DescribeMethod("zone_allocs", {"Allocations per profiler zone, per zone and allocation name (names), per zone and size bucket (sizes) and the totals",
+                                               {{"top", "integer", false, Format("How many zones, names and size histograms, 1 to {} (default {})", kMaxTopZones, kDefaultTopZones)},
+                                                {"reset", "boolean", false, "Clear the per-zone, per-name and per-size counts after answering"}}});
     }
 
 }  // namespace BECore

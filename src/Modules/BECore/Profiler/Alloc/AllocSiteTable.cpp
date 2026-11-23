@@ -48,6 +48,9 @@ namespace BECore {
 
     void AllocSiteTable::Add(const ProfileSite* zone, const char* name, uint64_t bytes) {
         const uint32_t zoneIndex = Intern(_zones, zone);
+        if (zoneIndex != kFullIndex) {
+            _sizes[zoneIndex][SizeBucket(bytes)].fetch_add(1, std::memory_order_relaxed);
+        }
         const uint32_t nameIndex = Intern(_names, name);
         if (zoneIndex == kFullIndex || nameIndex == kFullIndex) {
             _overflow.fetch_add(1, std::memory_order_relaxed);
@@ -102,6 +105,23 @@ namespace BECore {
         return merged;
     }
 
+    Vector<AllocSizeStats> AllocSiteTable::GetSizeStats() const {
+        Vector<AllocSizeStats> rows;
+        for (uint32_t zoneIndex = 0; zoneIndex <= kZonePointers; ++zoneIndex) {
+            AllocSizeStats row;
+            for (uint32_t bucket = 0; bucket < kSizeBuckets; ++bucket) {
+                row.buckets[bucket] = _sizes[zoneIndex][bucket].load(std::memory_order_relaxed);
+                row.allocs += row.buckets[bucket];
+            }
+            if (row.allocs > 0) {
+                row.zone = static_cast<const ProfileSite*>(PointerOf(_zones, zoneIndex));
+                rows.push_back(row);
+            }
+        }
+        std::sort(rows.begin(), rows.end(), [](const AllocSizeStats& a, const AllocSizeStats& b) { return a.allocs > b.allocs; });
+        return rows;
+    }
+
     uint64_t AllocSiteTable::GetOverflow() const {
         return _overflow.load(std::memory_order_relaxed);
     }
@@ -110,6 +130,11 @@ namespace BECore {
         for (PairSlot& slot : _pairs) {
             slot.count.store(0, std::memory_order_relaxed);
             slot.bytes.store(0, std::memory_order_relaxed);
+        }
+        for (auto& row : _sizes) {
+            for (std::atomic<uint64_t>& bucket : row) {
+                bucket.store(0, std::memory_order_relaxed);
+            }
         }
         _overflow.store(0, std::memory_order_relaxed);
     }

@@ -253,12 +253,21 @@ namespace BECore {
 
     void WebSocketListener::ReadMessages(const ConnectionPtr& connection, Vector<uint8_t> pendingBytes) {
         WebSocketFrameParser parser(_settings.maxMessageBytes);
-        parser.Feed(Span<const uint8_t>(pendingBytes.data(), pendingBytes.size()));
+        // The zone ends before the handler runs, so the parse is not counted with the dispatch; the blocking Receive is outside both
+        const auto feed = [&parser](Span<const uint8_t> bytes) {
+            BE_PROFILE_SCOPE("WS read");
+            parser.Feed(bytes);
+        };
+        const auto pop = [&parser] {
+            BE_PROFILE_SCOPE("WS read");
+            return parser.Pop();
+        };
+        feed(Span<const uint8_t>(pendingBytes.data(), pendingBytes.size()));
 
         Array<uint8_t, kReadChunkSize> chunk;
         for (;;) {
             for (;;) {
-                auto popped = parser.Pop();
+                auto popped = pop();
                 if (!popped) {
                     LOG_WARNING("{}: a client broke the protocol: {}"_format(_settings.logName, popped.error().reason));
                     connection->QueueClose(popped.error().closeCode, popped.error().reason);
@@ -276,11 +285,12 @@ namespace BECore {
             if (!received) {
                 return;
             }
-            parser.Feed(Span<const uint8_t>(chunk.data(), *received));
+            feed(Span<const uint8_t>(chunk.data(), *received));
         }
     }
 
     bool WebSocketListener::HandleMessage(const ConnectionPtr& connection, WebSocketMessage message) {
+        BE_PROFILE_SCOPE("WS dispatch");
         switch (message.kind) {
             case WebSocketMessageKind::Text:
                 return _handler.onMessage ? _handler.onMessage(connection, std::move(message)) : true;

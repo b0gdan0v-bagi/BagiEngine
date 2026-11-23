@@ -215,6 +215,7 @@ namespace BECore {
             for (const Event& event : batch) {
                 switch (event.kind) {
                     case EventKind::Opened: {
+                        BE_PROFILE_SCOPE("Room open");
                         const RoomTime now = Now();
                         if (const auto opened = FindConnection(event.connection)) {
                             liveness[event.connection] = Liveness{opened->GetBytesReceived(), now, false};
@@ -222,18 +223,23 @@ namespace BECore {
                         hub.OnConnected(event.connection, now, event.text);
                         break;
                     }
-                    case EventKind::Message:
+                    case EventKind::Message: {
+                        BE_PROFILE_SCOPE("Room message");
                         hub.OnMessage(event.connection, event.text, Now());
                         break;
-                    case EventKind::Closed:
+                    }
+                    case EventKind::Closed: {
+                        BE_PROFILE_SCOPE("Room close");
                         liveness.erase(event.connection);
                         hub.OnDisconnected(event.connection, Now());
                         break;
+                    }
                 }
             }
             batch.clear();
 
             if (std::chrono::steady_clock::now() >= nextTick) {
+                BE_PROFILE_SCOPE("Room tick");
                 const RoomTime now = Now();
                 hub.Tick(now);
                 CheckLiveness(liveness, now);
@@ -286,12 +292,14 @@ namespace BECore {
     }
 
     void RoomWebSocketServer::SendTo(ConnectionId connection, const String& text) {
+        BE_PROFILE_SCOPE("Room send");
         if (const auto target = FindConnection(connection)) {
             target->QueueText(text);  // a connection that is closing or dropped takes nothing: the hub learns it from the Closed event
         }
     }
 
     void RoomWebSocketServer::CloseConnection(ConnectionId connection, const String& reason) {
+        BE_PROFILE_SCOPE("Room send");
         if (const auto target = FindConnection(connection)) {
             LOG_INFO("{}: a connection was closed: {}"_format(kLogName, reason));
             target->QueueClose(GetRoomCloseCode(reason), reason);

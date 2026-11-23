@@ -55,7 +55,21 @@ In `macos-profile`, with the game running (`--headless --control --manual-clock`
 _cells.get_allocator().set_name("Board cells");  // a literal: the table keys the name by its address
 ```
 
-The name has to be a string literal (or live as long as the program). An allocation with an empty `name` came through a plain `operator new`, not an EASTL container. A trace written during the run (`--trace`) carries the same table in `otherData.allocNames`.
+The name has to be a string literal (or live as long as the program). An allocation with an empty `name` came through a plain `operator new`, not an EASTL container; a block of a vendored library that EASTL did not name carries the library's own name (`pugixml`, `ImGui`, `SDL`, `stb`, `dr_libs`). A trace written during the run (`--trace`) carries the same table in `otherData.allocNames`.
+
+`sizes` (`otherData.allocSizes` in a trace) is the histogram of what each zone allocates by size: per zone the non-empty power-of-two buckets, `upTo` the largest size of the bucket in bytes (`0`: the open last bucket, above 16 MiB). Read it when judging a pool: a zone whose allocations all sit in one or two small buckets (many 32-byte nodes) is a candidate for a block pool or an arena of that size; a few large buckets are buffers a pool does not help. Like `names` it counts the innermost zone only.
+
+## The asset load by zone
+
+`build/macos-profile/bin/BagiEngineTests --gtest_also_run_disabled_tests --gtest_filter='AssetLoadAllocBenchTest.DISABLED_*'` (from `build/macos-profile`) prints, after the medians of the benchmark `asset-load`, one report per case (`library-xml`, `library-bin`, `wide-*`, `scene-*`, `particles-*`) of one more load of a file of fresh names, its phases in zones (parse, build; stream open, build cooked). The pass is a run of its own, so the medians carry no zone cost. The zones are literals in `AssetLoadAllocTest.cpp`; the engine has none in its loaders (a zone in a loop that `xml-load-scratch` may change would stay behind).
+
+Three line kinds per zone, each with `case=<c> zone="<name>"`: `AssetLoadZone` (`calls`, `allocs`, `bytes` inclusive of the zones inside, `selfAllocs`), `AssetLoadZoneSizes` (`sizes=<upTo>:<n>,...`, `upTo` the largest size of the bucket, `inf` the open one) and `AssetLoadZoneNames` (the first allocation names of the zone: `pugixml` for the parser's blocks, `(unnamed)` for a plain `operator new`). Sizes and names are self, as in `zone_allocs`. The phase zones of a case hold the load's allocations, so their `bytes` come near the `AssetLoad*` totals of the case, not to the byte: the file of the pass has fresh names, but the pool and the allocator are in another state than in the median run. `(no zone)` is what the case allocates outside a zone (the scratch of the report itself included).
+
+The numbers rank `xml-load-scratch`: what `pugixml` and the global `new` allocate during an XML load, and in which sizes. `AssetLoadParticlesRun` is the particle scene (looping and burst emitters) after its warm-up frames: per frame the allocations and bytes of the update and of the draw, each in a zone, and the report `case=particles-run`; the draw figure includes the test double `RecordingRenderer` when it shows any.
+
+## The room server and its probe
+
+`BagiRoomServer` and `BagiRoomClientProbe` take `--trace=FILE` (profile build only; the file is written at SIGTERM, after the threads are joined). `python3 tools/rooms/load.py --preset macos-profile --clients 16 --messages 200` runs both with traces, one probe process of N clients against a server without the per-address limits, and prints `trace_summary.py` of each: the zones `Room *`, `WS *` and `Client *` by time and, with `ENGINE_PROFILER_ALLOC`, their allocation names and sizes. Those numbers rank `websocket-frame-buffers`.
 
 ## Tracy
 

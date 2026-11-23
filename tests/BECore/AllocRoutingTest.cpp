@@ -35,6 +35,17 @@ namespace BECore::Tests {
             return bytes;
         }
 
+        /// The allocations the name table holds under the name of @p source, summed over the zones
+        uint64_t NamedCount(AllocSource source) {
+            uint64_t count = 0;
+            for (const AllocSiteStats& row : AllocTracker::GetNameStats()) {
+                if (row.name != nullptr && std::strcmp(row.name, AllocTracker::GetSourceName(source)) == 0) {
+                    count += row.count;
+                }
+            }
+            return count;
+        }
+
     }  // namespace
 
     TEST(AllocRoutingTest, MallocGivesWritableMemory) {
@@ -86,6 +97,7 @@ namespace BECore::Tests {
             GTEST_SKIP() << kNoAllocTracker;
         }
         const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::Pugixml);
+        const uint64_t namedBefore = NamedCount(AllocSource::Pugixml);
         AllocSourceTotals during;
         {
             pugi::xml_document document;
@@ -97,6 +109,7 @@ namespace BECore::Tests {
         EXPECT_GT(during.liveBytes, before.liveBytes);
         EXPECT_EQ(after.liveBytes, before.liveBytes);
         EXPECT_EQ(after.frees - before.frees, during.count - before.count);
+        EXPECT_EQ(NamedCount(AllocSource::Pugixml) - namedBefore, during.count - before.count);
     }
 
     TEST(AllocRoutingTest, AnImGuiFrameIsCountedAsImGui) {
@@ -104,6 +117,7 @@ namespace BECore::Tests {
             GTEST_SKIP() << kNoAllocTracker;
         }
         const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::ImGui);
+        const uint64_t namedBefore = NamedCount(AllocSource::ImGui);
         ImGuiContext* context = ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
         io.DisplaySize = ImVec2(640.0f, 480.0f);
@@ -116,6 +130,7 @@ namespace BECore::Tests {
         EXPECT_GT(during.count, before.count);
         EXPECT_GT(during.bytes, before.bytes);
         EXPECT_LT(after.liveBytes, during.liveBytes);
+        EXPECT_GT(NamedCount(AllocSource::ImGui), namedBefore);
     }
 
     TEST(AllocRoutingTest, SdlAllocationsAreCountedAsSdlWithoutInit) {
@@ -123,6 +138,7 @@ namespace BECore::Tests {
             GTEST_SKIP() << kNoAllocTracker;
         }
         const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::SDL);
+        const uint64_t namedBefore = NamedCount(AllocSource::SDL);
         void* block = SDL_malloc(kSize);
         char* text = SDL_strdup("routed");
         const AllocSourceTotals during = AllocTracker::GetSourceTotals(AllocSource::SDL);
@@ -133,6 +149,7 @@ namespace BECore::Tests {
         EXPECT_GE(during.count, before.count + 2);
         EXPECT_GE(during.bytes, before.bytes + kSize);
         EXPECT_EQ(after.liveBytes, before.liveBytes);
+        EXPECT_EQ(NamedCount(AllocSource::SDL) - namedBefore, after.count - before.count);
 
         // SDL keeps some of what a surface needs (pixel format tables) for the process: only the count is checked
         SDL_Surface* surface = SDL_CreateSurface(4, 4, SDL_PIXELFORMAT_RGBA32);
@@ -151,6 +168,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(font);
 
         const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::Stb);
+        const uint64_t namedBefore = NamedCount(AllocSource::Stb);
         const GlyphBitmap bitmap = font->RasterizeGlyph(font->FindGlyph(kGlyphCodePoint), kGlyphSize);
         const AllocSourceTotals after = AllocTracker::GetSourceTotals(AllocSource::Stb);
 
@@ -158,6 +176,7 @@ namespace BECore::Tests {
         EXPECT_GT(after.count, before.count);
         EXPECT_EQ(after.liveBytes, before.liveBytes);
         EXPECT_EQ(after.frees - before.frees, after.count - before.count);
+        EXPECT_EQ(NamedCount(AllocSource::Stb) - namedBefore, after.count - before.count);
     }
 
     TEST(AllocRoutingTest, APngDecodeIsCountedAsStbAndLeavesNothingBehind) {
@@ -175,6 +194,7 @@ namespace BECore::Tests {
         }
 
         const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::Stb);
+        const uint64_t namedBefore = NamedCount(AllocSource::Stb);
         const auto image = ReadImageFile(path);
         const AllocSourceTotals after = AllocTracker::GetSourceTotals(AllocSource::Stb);
         std::error_code ignored;
@@ -184,6 +204,7 @@ namespace BECore::Tests {
         EXPECT_GT(after.count, before.count);
         EXPECT_EQ(after.liveBytes, before.liveBytes);
         EXPECT_EQ(after.frees - before.frees, after.count - before.count);
+        EXPECT_EQ(NamedCount(AllocSource::Stb) - namedBefore, after.count - before.count);
     }
 
     TEST(AllocRoutingTest, AnOggDecodeIsCountedAsStbAndFreesItsOutput) {
@@ -194,6 +215,7 @@ namespace BECore::Tests {
         ASSERT_FALSE(bytes.empty());
 
         const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::Stb);
+        const uint64_t namedBefore = NamedCount(AllocSource::Stb);
         const auto decoded = DecodeOgg(bytes);
         const AllocSourceTotals after = AllocTracker::GetSourceTotals(AllocSource::Stb);
 
@@ -201,6 +223,7 @@ namespace BECore::Tests {
         EXPECT_GT(after.count, before.count);
         EXPECT_EQ(after.liveBytes, before.liveBytes);
         EXPECT_EQ(after.frees - before.frees, after.count - before.count);
+        EXPECT_EQ(NamedCount(AllocSource::Stb) - namedBefore, after.count - before.count);
     }
 
     TEST(AllocRoutingTest, AFlacDecodeIsCountedAsDrLibsAndLeavesNothingBehind) {
@@ -211,6 +234,7 @@ namespace BECore::Tests {
         ASSERT_FALSE(bytes.empty());
 
         const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::DrLibs);
+        const uint64_t namedBefore = NamedCount(AllocSource::DrLibs);
         const auto decoded = DecodeFlac(bytes);
         const AllocSourceTotals after = AllocTracker::GetSourceTotals(AllocSource::DrLibs);
 
@@ -218,6 +242,7 @@ namespace BECore::Tests {
         EXPECT_GT(after.count, before.count);
         EXPECT_EQ(after.liveBytes, before.liveBytes);
         EXPECT_EQ(after.frees - before.frees, after.count - before.count);
+        EXPECT_EQ(NamedCount(AllocSource::DrLibs) - namedBefore, after.count - before.count);
     }
 
 }  // namespace BECore::Tests

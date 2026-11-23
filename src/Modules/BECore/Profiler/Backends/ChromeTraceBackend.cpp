@@ -22,6 +22,22 @@ namespace BECore {
 
         constexpr double kNanosecondsPerMicrosecond = 1000.0;
         constexpr size_t kMaxAllocNames = 100;
+        constexpr size_t kMaxAllocSizeZones = 100;
+
+        /// One zone's size histogram as an `allocSizes` row: the shape of the `sizes` rows of the control method zone_allocs
+        void AppendAllocSizeRow(String& out, const AllocSizeStats& stats) {
+            out.append("{\"zone\":");
+            AppendJsonString(out, stats.ZoneLabel());
+            AppendFormat(out, ",\"allocs\":{},\"buckets\":[", stats.allocs);
+            bool first = true;
+            for (uint32_t bucket = 0; bucket < kSizeBuckets; ++bucket) {
+                if (stats.buckets[bucket] != 0) {
+                    AppendFormat(out, "{}{{\"upTo\":{},\"allocs\":{}}}", first ? "" : ",", SizeBucketBound(bucket), stats.buckets[bucket]);
+                    first = false;
+                }
+            }
+            out.append("]}");
+        }
 
     }  // namespace
 
@@ -160,17 +176,18 @@ namespace BECore {
         return _dropped.load(std::memory_order_relaxed);
     }
 
-    String ChromeTraceBackend::WriteJson() const {
+    void ChromeTraceBackend::WriteEvents(String& out, FunctionRef<void(String&)> checkpoint) const {
         constexpr int kPid = 1;
         const uint64_t start = _startTicks.load(std::memory_order_relaxed);
         const auto timestamp = [start](uint64_t ticks) { return ticks > start ? ProfilerClock::ToNanoseconds(ticks - start) / kNanosecondsPerMicrosecond : 0.0; };
 
         std::lock_guard lock(_registryMutex);  //-NoStd: profiler lock (Threading/CLAUDE.md); against MarkTraceStart and a buffer being registered, a recording thread takes it only to register its
                                                // buffer, on its first event
-        String out;
         out.append("{\"traceEvents\":[");
         bool first = true;
-        const auto beginEvent = [&out, &first] {
+        // The previous event is complete when the next one begins, so this is where the caller may take `out` away
+        const auto beginEvent = [&out, &first, checkpoint] {
+            checkpoint(out);
             out.append(first ? "\n" : ",\n");
             first = false;
         };
@@ -217,22 +234,22 @@ namespace BECore {
                         beginEvent();
                         out.append("{\"name\":");
                         AppendJsonString(out, static_cast<const char*>(event.data));
-                        out.append(Format(",\"ph\":\"C\",\"pid\":{},\"tid\":{},\"ts\":{:.3f},\"args\":{{\"value\":{}}}}}", kPid, tid, ts, std::bit_cast<double>(event.a)));
+                        AppendFormat(out, ",\"ph\":\"C\",\"pid\":{},\"tid\":{},\"ts\":{:.3f},\"args\":{{\"value\":{}}}}}", kPid, tid, ts, std::bit_cast<double>(event.a));
                         break;
                     case TraceEventType::Frame:
                         beginEvent();
-                        out.append(Format("{{\"name\":\"Frame\",\"ph\":\"i\",\"s\":\"g\",\"pid\":{},\"tid\":{},\"ts\":{:.3f}}}", kPid, tid, ts));
+                        AppendFormat(out, "{{\"name\":\"Frame\",\"ph\":\"i\",\"s\":\"g\",\"pid\":{},\"tid\":{},\"ts\":{:.3f}}}", kPid, tid, ts);
                         break;
                 }
             }
             // Zones still running (a dump in the middle of the run) end at the thread's last event, so every B has its E
             for (size_t k = 0; k < open.size(); ++k) {
                 beginEvent();
-                out.append(Format("{{\"ph\":\"E\",\"pid\":{},\"tid\":{},\"ts\":{:.3f}}}", kPid, tid, lastTs));
+                AppendFormat(out, "{{\"ph\":\"E\",\"pid\":{},\"tid\":{},\"ts\":{:.3f}}}", kPid, tid, lastTs);
             }
         }
 
-        out.append(Format("\n],\"displayTimeUnit\":\"ms\",\"otherData\":{{\"dropped\":{}", GetDroppedCount()));
+        AppendFormat(out, "\n],\"displayTimeUnit\":\"ms\",\"otherData\":{{\"dropped\":{}", GetDroppedCount());
         if constexpr (BE_PROFILER_ALLOC != 0) {
             out.append(",\"allocNames\":[");
             size_t written = 0;
@@ -240,20 +257,52 @@ namespace BECore {
                 if (written == kMaxAllocNames) {
                     break;
                 }
+                checkpoint(out);
                 out.append(written++ == 0 ? "\n{\"zone\":" : ",\n{\"zone\":");
                 AppendJsonString(out, stats.ZoneLabel());
                 out.append(",\"name\":");
                 AppendJsonString(out, stats.name != nullptr ? stats.name : "");
-                out.append(Format(",\"allocs\":{},\"bytes\":{}}}", stats.count, stats.bytes));
+                AppendFormat(out, ",\"allocs\":{},\"bytes\":{}}}", stats.count, stats.bytes);
+            }
+            out.append("],\"allocSizes\":[");
+            written = 0;
+            for (const AllocSizeStats& stats : AllocTracker::GetSizeStats()) {
+                if (written == kMaxAllocSizeZones) {
+                    break;
+                }
+                checkpoint(out);
+                out.append(written++ == 0 ? "\n" : ",\n");
+                AppendAllocSizeRow(out, stats);
             }
             out.append("]");
         }
         out.append("}}\n");
+    }
+
+    String ChromeTraceBackend::WriteJson() const {
+        String out;
+        WriteEvents(out, [](String&) {});
         return out;
     }
 
     std::expected<void, String> ChromeTraceBackend::WriteFile(StringView path) const {
-        return WriteTextFile(path, WriteJson());
+        // Its own zone so that what the write allocates (the reader's tables) is named; the zone's E is written after the file, so inside it the zone
+        // is open and ends at its thread's last event
+        BE_PROFILE_SCOPE("Trace write");
+        auto file = TraceFileWriter::Open(path);
+        if (!file) {
+            return std::unexpected(std::move(file.error()));
+        }
+        String out;
+        out.reserve(kWriteChunkBytes + kLongestEventBytes);
+        WriteEvents(out, [&file](String& text) {
+            if (text.size() >= kWriteChunkBytes) {
+                file->Write(text);
+                text.clear();
+            }
+        });
+        file->Write(out);
+        return file->Close();
     }
 
 }  // namespace BECore

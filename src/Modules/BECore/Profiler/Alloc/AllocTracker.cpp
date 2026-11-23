@@ -24,6 +24,10 @@ namespace BECore {
         };
         constinit SourceSlot g_sources[EnumUtils<AllocSource>::Count()];
 
+        // Literals, one per source: the name table keys by pointer, so a source has exactly one. GlobalNew stays unnamed: an empty name
+        // means a plain operator new
+        constexpr const char* kSourceNames[EnumUtils<AllocSource>::Count()] = {nullptr, "pugixml", "ImGui", "SDL", "stb", "dr_libs"};
+
         struct TagSlot {
             std::atomic<uint64_t> count{0};
             std::atomic<uint64_t> bytes{0};
@@ -181,8 +185,11 @@ namespace BECore {
         void RecordAlloc(AllocSource source, void* ptr, size_t size, size_t usable) {
             ThreadState& state = t_state;
             // Taken before the re-entrancy check: a name belongs to this one allocation and never sticks to a later one
-            const char* const name = state.nextName;
+            const char* name = state.nextName;
             state.nextName = nullptr;
+            if (name == nullptr) {
+                name = kSourceNames[static_cast<size_t>(source)];
+            }
             if (state.inTracker) {
                 return;
             }
@@ -292,6 +299,10 @@ namespace BECore {
         }
     }
 
+    const char* AllocTracker::GetSourceName(AllocSource source) {
+        return kSourceNames[static_cast<size_t>(source)];
+    }
+
     AllocTotals AllocTracker::GetTotals() {
         AllocTotals totals;
         totals.count = g_count.load(std::memory_order_relaxed);
@@ -377,6 +388,14 @@ namespace BECore {
     Vector<AllocSiteStats> AllocTracker::GetNameStats() {
 #if BE_PROFILER_ALLOC
         return g_nameTable.GetStats();
+#else
+        return {};
+#endif
+    }
+
+    Vector<AllocSizeStats> AllocTracker::GetSizeStats() {
+#if BE_PROFILER_ALLOC
+        return g_nameTable.GetSizeStats();
 #else
         return {};
 #endif

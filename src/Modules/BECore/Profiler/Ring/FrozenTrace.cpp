@@ -104,11 +104,11 @@ namespace BECore {
 
         for (const FrozenFrame& frame : frames) {
             beginEvent();
-            out.append(Format("{{\"name\":\"Frozen frame\",\"ph\":\"i\",\"s\":\"g\",\"pid\":{},\"tid\":0,\"ts\":{:.3f},\"args\":{{\"frame\":{},\"ms\":{:.3f}}}}}", kPid,
-                              timestamp(frame.beginTicks, frame.nanosecondsPerTick), frame.frameIndex, frame.frameMs));
+            AppendFormat(out, "{{\"name\":\"Frozen frame\",\"ph\":\"i\",\"s\":\"g\",\"pid\":{},\"tid\":0,\"ts\":{:.3f},\"args\":{{\"frame\":{},\"ms\":{:.3f}}}}}", kPid,
+                         timestamp(frame.beginTicks, frame.nanosecondsPerTick), frame.frameIndex, frame.frameMs);
         }
 
-        out.append(Format("\n],\"displayTimeUnit\":\"ms\",\"otherData\":{{\"frozenFrames\":{},\"dropped\":{}}}}}\n", frames.size(), truncated));
+        AppendFormat(out, "\n],\"displayTimeUnit\":\"ms\",\"otherData\":{{\"frozenFrames\":{},\"dropped\":{}}}}}\n", frames.size(), truncated);
         return out;
     }
 

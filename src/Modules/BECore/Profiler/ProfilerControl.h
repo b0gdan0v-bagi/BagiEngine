@@ -11,8 +11,9 @@ namespace BECore {
      * |--------|--------|--------|
      * | frame_stats | frames? (1..FrameStatsCollector::kFrameHistory, default 1) | {frames: [...oldest first], allocTracking, arenas, pools}; a frame has "paused", "arena*", "pool*" |
      * | profiler_dump | path? (relative, no "..", default "trace.json") | {path, dropped}; `not_recording` when the Chrome trace is not the backend |
-     * | zone_allocs | top? (1..1000, default 20), reset? | {enabled, zones: [{name, file, line, calls, allocs, bytes}], names: [{zone, name, allocs, bytes}], totals}; names are the innermost-zone x
-     * EASTL name rows (empty without ENGINE_PROFILER_ALLOC); reset zeroes both after the answer |
+     * | zone_allocs | top? (1..1000, default 20), reset? | {enabled, zones: [{name, file, line, calls, allocs, bytes}], names: [{zone, name, allocs, bytes}], sizes: [{zone, allocs, buckets: [{upTo,
+     * allocs}]}], totals}; names are the innermost-zone x allocation name rows, sizes the innermost-zone histograms (non-empty power-of-two buckets, `upTo` bytes, 0 for the open last one), both empty
+     * without ENGINE_PROFILER_ALLOC; reset zeroes the three after the answer |
      */
     void RegisterProfilerControl(ControlService& service);
 
