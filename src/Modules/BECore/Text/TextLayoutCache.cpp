@@ -14,7 +14,7 @@ namespace BECore {
     const TextLayoutResult& TextLayoutCache::Get(const Font& font, StringView utf8, const TextLayoutOptions& options) {
         const bool same = _font == &font && SameOptions(_options, options) && StringView(_text) == utf8;
         if (!same) {
-            _layout = TextLayout::Layout(font, utf8, options);
+            TextLayout::Layout(font, utf8, options, _layout);
             _font = &font;
             _text.assign(utf8.data(), utf8.size());
             _options = options;
@@ -26,7 +26,7 @@ namespace BECore {
     void TextLayoutCache::Reset() {
         _font = nullptr;
         _text.clear();
-        _layout = {};
+        _layout.Clear();  // the capacity stays: the next text is about as long
     }
 
 }  // namespace BECore
