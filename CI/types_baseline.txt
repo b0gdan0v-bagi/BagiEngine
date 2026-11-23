@@ -9,7 +9,6 @@
 src/Modules/BECore/Config/ConfigManager.cpp directory-iterator 1
 src/Modules/BECore/FileSystem/FileSystem.cpp directory-iterator 2
 src/Widgets/EditorLayout/LayoutStore.cpp directory-iterator 1
-src/Widgets/EditorLayout/UserFileIo.cpp fstream 2
 tests/BECore/ConfigDeserializerTest.cpp fstream 3
 tests/BECore/EditorSettingsTest.cpp fstream 1
 tests/BECore/FuzzCorpusTest.cpp directory-iterator 1
