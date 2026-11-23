@@ -19,10 +19,10 @@
  * the reflection pair"); the generator sorts the keys, these helpers write the values.
  *
  * **Native** (nothing allocates beyond the growth of the caller's String, the sorted scratch of a large hash map aside): numbers and `bool`, strings (`String`, `FixedString`, any
- * `eastl::basic_string<char>`, `PoolString`), reflected enums (the name), an object that has `WriteJson`, the `Math` types (`JsonWriteMath.h`), a single `IntrusivePtr` of such an object (null writes
- * no member; a factory pointer merges the member `type` into the sorted keys of the object), `Optional` of a native type (an empty one writes no member), a `Pair`, a `Variant`, a map whose key is a
- * scalar and whose value is a scalar or a `BE_CLASS`, and a `Vector` / `SmallVector` / `FixedVector` / `Array` of numbers, strings, `Math` values or objects that have `WriteJson` and at least two
- * fields. **Bridged** (the DOM path through `Ser::Save`, same bytes, allocates): every other field type.
+ * `eastl::basic_string<char>`, `PoolString`), reflected enums (the name), an object that has `WriteJson` (a `JsonPayload`, the foreign JSON value of an answer, is one: JsonPayload.h), the `Math`
+ * types (`JsonWriteMath.h`), a single `IntrusivePtr` of such an object (null writes no member; a factory pointer merges the member `type` into the sorted keys of the object), `Optional` of a native
+ * type (an empty one writes no member), a `Pair`, a `Variant`, a map whose key is a scalar and whose value is a scalar or a `BE_CLASS`, and a `Vector` / `SmallVector` / `FixedVector` / `Array` of
+ * numbers, strings, `Math` values or objects that have `WriteJson` and at least two fields. **Bridged** (the DOM path through `Ser::Save`, same bytes, allocates): every other field type.
  *
  * A hash map is written in the sorted order of its accessor: the entries are sorted through pointers in a `SmallVector` of 16, which allocates only past 16 entries.
  * A map entry is the object `{key, value}`; when the value is a `BE_CLASS` its members sit in the entry itself, the `key` merged in (the object's own member `key` wins, as on the DOM path).

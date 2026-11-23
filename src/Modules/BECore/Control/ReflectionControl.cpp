@@ -1,5 +1,6 @@
 #include "ReflectionControl.h"
 
+#include <BECore/Control/ControlBuiltinAnswers.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
@@ -278,19 +279,15 @@ namespace BECore {
                 return;
             }
 
-            // By hand, not a reflected struct: `result` is the document the method's own serializer wrote, a `Json` payload between `method` and `root`
             const Json written = writer.Take();
-            const auto answer = written.find("result");
-            call.Reply([&](JsonWriter& out) {
-                out.BeginObject();
-                out.Member("method", StringView(*method));
-                if (answer != written.end()) {
-                    out.Key("result");
-                    WriteJson(out, *answer);
-                }
-                out.Member("root", StringView(*rootName));
-                out.EndObject();
-            });
+            const auto result = written.find("result");
+            ReflectionMethodAnswer answer;
+            answer.method = *method;
+            if (result != written.end()) {
+                answer.result = JsonPayload::Borrowed(*result);
+            }
+            answer.root = *rootName;
+            call.ReplyObject(answer);
         }
 
         /// An optional boolean member: @p fallback when absent, an `invalid_params` error when present and not a boolean

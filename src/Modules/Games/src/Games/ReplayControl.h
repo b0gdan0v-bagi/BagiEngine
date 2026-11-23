@@ -18,7 +18,7 @@ namespace BECore {
      * the host the game runs on.
      *
      * `replay` ({path} to {ok, entries, frames} and the clock of `step`) plays a file into the active game on the manual clock: for every entry it steps
-     * the gap the file holds and applies the entry. A mismatch is a result, {ok: false, mismatch: {...}, entries, frames} (ReplayMismatchJson), not an
+     * the gap the file holds and applies the entry. A mismatch is a result, {ok: false, mismatch: {...}, entries, frames} (ReplayMismatchAnswer), not an
      * error, and the first one ends the replay. Errors: invalid_params (no path, a file that cannot be read or parsed with its line, a file of another game,
      * a recording is running), no_active_game, not_controllable, unsupported (the game is not replayable) and replay_needs_manual_clock. The path is a
      * path of the host. RegisterGameControl() calls this.

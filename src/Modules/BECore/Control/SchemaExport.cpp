@@ -1,6 +1,7 @@
 #include "SchemaExport.h"
 
 #include <BECore/Control/ControlRoots.h>
+#include <BECore/Control/JsonPayload.h>
 #include <BECore/Reflection/TypeRegistry.h>
 #include <EASTL/sort.h>
 
@@ -148,6 +149,9 @@ namespace BECore {
     IntrusivePtr<TypeSchemaDesc> MakeTypeSchemaDesc(const TypeDesc& desc) {
         IntrusivePtr<TypeSchemaDesc> result = New<TypeSchemaDesc>();
         result->kind = ToText(TypeKindName(desc.kind));
+        if (desc.kind == TypeKind::Opaque && desc.opaqueHash == DescribeType<JsonPayload>().opaqueHash) {
+            result->kind = "any";  // a foreign JSON value: no kind of its own in TypeKind, which the layout hash and the `Values/` switches would all have to learn
+        }
         switch (desc.kind) {
             case TypeKind::Object:
             case TypeKind::Pointer:

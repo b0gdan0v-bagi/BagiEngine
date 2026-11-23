@@ -232,4 +232,19 @@ namespace BECore::Tests {
         EXPECT_GT(sent, before);
     }
 
+    TEST_F(GameControlWriterTest, ASecondGetStateIntoTheKeptScratchAllocatesNothing) {
+        size_t sent = 0;
+        const auto count = [&sent](const String& text) { sent += text.size(); };
+        Fake().handWritten = true;
+        const String request = MakeRequest(kRequestId, "get_state");
+        service.Post(request, count);
+        service.Drain();  // grows the scratch
+        service.Post(request, count);
+        const size_t before = sent;
+
+        ExpectNoAllocations([this] { service.Drain(); });
+
+        EXPECT_GT(sent, before);
+    }
+
 }  // namespace BECore::Tests

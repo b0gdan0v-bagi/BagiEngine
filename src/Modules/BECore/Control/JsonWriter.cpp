@@ -78,7 +78,14 @@ namespace BECore {
 
     JsonWriter::JsonWriter(String& out, int indent) : _out(out), _indent(indent < 0 ? kCompact : indent) {}
 
-    bool JsonWriter::Fail([[maybe_unused]] const char* why) {
+    void JsonWriter::Fail(ControlError error) {
+        if (!_failure) {
+            _failure = std::move(error);
+        }
+        _valid = false;
+    }
+
+    bool JsonWriter::Misuse([[maybe_unused]] const char* why) {
         EXPECT(false, why);
         _valid = false;
         return false;
@@ -107,12 +114,15 @@ namespace BECore {
     }
 
     bool JsonWriter::BeginValue() {
+        if (_failure) {
+            return false;
+        }
         if (_depth == 0) {
-            return _rootDone ? Fail("JsonWriter: the root value is already written") : true;
+            return _rootDone ? Misuse("JsonWriter: the root value is already written") : true;
         }
         if (InObject()) {
             if (!_keyPending) {
-                return Fail("JsonWriter: a value in an object needs a Key first");
+                return Misuse("JsonWriter: a value in an object needs a Key first");
             }
             _keyPending = false;
             return true;
@@ -132,8 +142,11 @@ namespace BECore {
     }
 
     void JsonWriter::Begin(char open, bool isObject) {
+        if (_failure) {
+            return;
+        }
         if (_depth >= kMaxDepth) {
-            Fail("JsonWriter: nesting is deeper than kMaxDepth");
+            Misuse("JsonWriter: nesting is deeper than kMaxDepth");
             return;
         }
         if (!BeginValue()) {
@@ -146,12 +159,15 @@ namespace BECore {
     }
 
     void JsonWriter::End(char close, bool isObject) {
+        if (_failure) {
+            return;
+        }
         if (_depth == 0 || GetFlag(_isObject, _depth - 1) != isObject) {
-            Fail("JsonWriter: End without a matching Begin");
+            Misuse("JsonWriter: End without a matching Begin");
             return;
         }
         if (_keyPending) {
-            Fail("JsonWriter: the Key has no value");
+            Misuse("JsonWriter: the Key has no value");
             return;
         }
         const bool hadItems = GetFlag(_hasItems, _depth - 1);
@@ -189,8 +205,11 @@ namespace BECore {
     }
 
     void JsonWriter::Key(StringView key) {
+        if (_failure) {
+            return;
+        }
         if (!InObject() || _keyPending) {
-            Fail("JsonWriter: a Key needs an open object that waits for one");
+            Misuse("JsonWriter: a Key needs an open object that waits for one");
             return;
         }
         WriteKeyPrefix();
@@ -205,12 +224,15 @@ namespace BECore {
 
     void JsonWriter::KeyLiteral(StringView ready) {
         constexpr size_t kMinLiteral = 3;  // "":
+        if (_failure) {
+            return;
+        }
         if (!InObject() || _keyPending) {
-            Fail("JsonWriter: a Key needs an open object that waits for one");
+            Misuse("JsonWriter: a Key needs an open object that waits for one");
             return;
         }
         if (ready.size() < kMinLiteral || ready.front() != '"' || ready.back() != ':') {
-            Fail("JsonWriter: KeyLiteral is a quoted name and its colon");
+            Misuse("JsonWriter: KeyLiteral is a quoted name and its colon");
             return;
         }
         WriteKeyPrefix();
@@ -255,8 +277,11 @@ namespace BECore {
     }
 
     void JsonWriter::Raw(StringView ready) {
+        if (_failure) {
+            return;
+        }
         if (ready.empty()) {
-            Fail("JsonWriter: Raw needs the text of a value");
+            Misuse("JsonWriter: Raw needs the text of a value");
             return;
         }
         if (!BeginValue()) {

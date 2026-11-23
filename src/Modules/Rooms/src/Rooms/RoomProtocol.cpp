@@ -221,18 +221,12 @@ namespace BECore {
             return ClientMessage(std::move(message));
         }
 
-        /// `type` and `v` are written where alphabetical order puts them, in the middle of each message, so each function writes its members around this
-        void WriteTypeAndVersion(JsonWriter& writer, StringView type) {
-            writer.Member("type", type);
-            writer.Member("v", kRoomProtocolVersion);
-        }
-
-        /// `options` of `lobby` and of a `rooms` listing: not written unless it is a non-empty object
-        void WriteOptionsMember(JsonWriter& writer, const Json& options) {
+        /// `options` of `lobby` and of a `rooms` listing: absent unless it is a non-empty object
+        [[nodiscard]] Optional<JsonPayload> PublicOptions(const Json& options) {
             if (options.is_object() && !options.empty()) {
-                writer.Key("options");
-                WriteJson(writer, options);
+                return JsonPayload::Borrowed(options);
             }
+            return std::nullopt;
         }
 
         [[nodiscard]] Optional<RoomPhase> ParsePhaseName(StringView name) {
@@ -607,27 +601,21 @@ namespace BECore {
     void AppendClientMessage(String& out, const ClientMessage& message) {
         JsonWriter writer(out);
         std::visit(overload{
-                       // `create_room` and `action` carry a game's own `Json` (`options`, `action`) in the middle of the object, between keys of the wire struct a
-                       // reflected message would need. They stay by hand: a reflected leaf type for a `Json` payload does not exist.
                        [&](const CreateRoomMessage& m) {
-                           writer.BeginObject();
-                           writer.Member("game", m.game);
-                           writer.Member("name", m.name);
-                           writer.Key("options");
-                           WriteJson(writer, m.options);
+                           RoomWireCreateRoom wire;
+                           wire.game = m.game;
+                           wire.name = m.name;
+                           wire.options = JsonPayload::Borrowed(m.options);
                            if (m.isPublic) {
-                               writer.Member("public", true);
+                               wire._public = true;
                            }
-                           WriteTypeAndVersion(writer, RoomMessageTypes::kCreateRoom);
-                           writer.EndObject();
+                           wire.WriteJson(writer);
                        },
                        [&](const ActionMessage& m) {
-                           writer.BeginObject();
-                           writer.Key("action");
-                           WriteJson(writer, m.action);
-                           WriteTypeAndVersion(writer, RoomMessageTypes::kAction);
-                           writer.Member("version", m.version);
-                           writer.EndObject();
+                           RoomWireAction wire;
+                           wire.action = JsonPayload::Borrowed(m.action);
+                           wire.version = m.version;
+                           wire.WriteJson(writer);
                        },
                        [&](const JoinRoomMessage& m) {
                            RoomWireJoinRoom wire;
@@ -710,33 +698,27 @@ namespace BECore {
         return out;
     }
 
-    // The public `options` are an object under names the game chose (a map keyed by chosen names, not a struct), and sit in the middle of the object between
-    // `host` and `phase`, so `lobby` stays by hand; its seats are wire structs. A reflected leaf type for a `Json` payload does not exist, so it
-    // cannot be a struct.
     void AppendLobbyMessage(String& out, const LobbySnapshot& lobby) {
-        JsonWriter writer(out);
-        writer.BeginObject();
-        writer.Member("game", lobby.game);
-        writer.Member("host", lobby.hostSeat);
-        WriteOptionsMember(writer, lobby.options);
-        writer.Member("phase", GetPhaseName(lobby.phase));
-        writer.Member("room", lobby.room);
-        writer.Key("seats");
-        writer.BeginArray();
+        RoomWireLobby wire;
+        wire.game = lobby.game;
+        wire.host = lobby.hostSeat;
+        wire.options = PublicOptions(lobby.options);
+        const StringView phase = GetPhaseName(lobby.phase);
+        wire.phase = String(phase.data(), phase.size());
+        wire.room = lobby.room;
+        wire.seats.reserve(lobby.seats.size());
         for (const LobbySeat& seat : lobby.seats) {
-            RoomWireSeat wire;
+            RoomWireSeat& wireSeat = wire.seats.emplace_back();
             if (seat.kind == SeatKind::Human) {
-                wire.connected = seat.connected;
-                wire.name = seat.name;
+                wireSeat.connected = seat.connected;
+                wireSeat.name = seat.name;
             }
             const StringView kind = GetSeatKindName(seat.kind);
-            wire.kind = String(kind.data(), kind.size());
-            wire.seat = seat.seat;
-            wire.WriteJson(writer);
+            wireSeat.kind = String(kind.data(), kind.size());
+            wireSeat.seat = seat.seat;
         }
-        writer.EndArray();
-        WriteTypeAndVersion(writer, RoomMessageTypes::kLobby);
-        writer.EndObject();
+        JsonWriter writer(out);
+        wire.WriteJson(writer);
         EXPECT(writer.IsComplete());
     }
 
@@ -746,27 +728,22 @@ namespace BECore {
         return out;
     }
 
-    // As `lobby`: the `options` of a row are a map keyed by names the game chose and sit in the middle of the row, so `rooms` stays by hand
     void AppendRoomListMessage(String& out, const RoomListMessage& list) {
-        JsonWriter writer(out);
-        writer.BeginObject();
-        writer.Member("game", list.game);
-        writer.Member("more", list.more);
-        writer.Key("rooms");
-        writer.BeginArray();
+        RoomWireRooms wire;
+        wire.game = list.game;
+        wire.more = list.more;
+        wire.rooms.reserve(list.rooms.size());
         for (const RoomListing& listing : list.rooms) {
-            writer.BeginObject();
-            writer.Member("host", listing.host);
-            WriteOptionsMember(writer, listing.options);
-            writer.Member("room", listing.room);
-            writer.Member("seats", listing.seats);
-            writer.Member("started", listing.started);
-            writer.Member("taken", listing.taken);
-            writer.EndObject();
+            RoomWireListing& wireListing = wire.rooms.emplace_back();
+            wireListing.host = listing.host;
+            wireListing.options = PublicOptions(listing.options);
+            wireListing.room = listing.room;
+            wireListing.seats = listing.seats;
+            wireListing.started = listing.started;
+            wireListing.taken = listing.taken;
         }
-        writer.EndArray();
-        WriteTypeAndVersion(writer, RoomMessageTypes::kRooms);
-        writer.EndObject();
+        JsonWriter writer(out);
+        wire.WriteJson(writer);
         EXPECT(writer.IsComplete());
     }
 
@@ -776,21 +753,16 @@ namespace BECore {
         return out;
     }
 
-    // `actions` and `view` are the game's own `Json` (`ISeatedGame` returns it) and sit between the other keys, so `view` stays by hand: a reflected leaf
-    // type for a `Json` payload does not exist
     void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions) {
+        RoomWireView wire;
+        wire.actions = JsonPayload::Borrowed(actions);
+        wire.finished = finished;
+        wire.room = String(room.data(), room.size());
+        wire.seat = seat;
+        wire.version = version;
+        wire.view = JsonPayload::Borrowed(view);
         JsonWriter writer(out);
-        writer.BeginObject();
-        writer.Key("actions");
-        WriteJson(writer, actions);
-        writer.Member("finished", finished);
-        writer.Member("room", room);
-        writer.Member("seat", seat);
-        WriteTypeAndVersion(writer, RoomMessageTypes::kView);
-        writer.Member("version", version);
-        writer.Key("view");
-        WriteJson(writer, view);
-        writer.EndObject();
+        wire.WriteJson(writer);
         EXPECT(writer.IsComplete());
     }
 

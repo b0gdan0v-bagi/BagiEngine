@@ -6,7 +6,6 @@
 #include <BECore/Control/ControlClock.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
-#include <BECore/Control/JsonSerializer.h>
 #include <BECore/File/File.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Games/GameControl.h>
@@ -80,21 +79,17 @@ namespace BECore {
             size_t applied = 0;            ///< Entries applied so far
         };
 
-        /// The answer of `replay`: the counts and the clock of `step` come from the reflected `ReplayAnswer`; the `mismatch` is added to its document by hand because it
-        /// embeds documents of the game (the params of the entry, the expected and the actual outcome) between its own keys
-        Json DescribeReplay(const ReplayRunState& state, const ReplayMismatch* mismatch) {
+        /// The answer of `replay`: the counts and the clock of `step`, and the `mismatch` when an entry differed
+        void ReplyReplay(ControlCall& call, const ReplayRunState& state, const ReplayMismatch* mismatch) {
             ReplayAnswer answer;
             static_cast<ControlClock&>(answer) = ControlClock::Read();
             answer.ok = mismatch == nullptr;
             answer.entries = state.applied;
             answer.frames = state.frames;
-            JsonSerializer serializer;
-            answer.Serialize(serializer);
-            Json result = serializer.Take();
             if (mismatch != nullptr) {
-                result["mismatch"] = ReplayMismatchJson(*mismatch);
+                FillReplayMismatchAnswer(answer.mismatch.emplace(), *mismatch);
             }
-            return result;
+            call.ReplyObject(answer);
         }
 
         /// The active game when it is still the one the replay started on
@@ -128,7 +123,7 @@ namespace BECore {
                     return;
                 }
                 if (state->player.IsDone()) {
-                    call.Reply(DescribeReplay(*state, nullptr));
+                    ReplyReplay(call, *state, nullptr);
                     return;
                 }
 
@@ -138,7 +133,7 @@ namespace BECore {
                     return;
                 }
                 if (const ReplayStep step = state->player.Apply(**game); !step) {
-                    call.Reply(DescribeReplay(*state, &step.error()));
+                    ReplyReplay(call, *state, &step.error());
                     return;
                 }
                 ++state->applied;
