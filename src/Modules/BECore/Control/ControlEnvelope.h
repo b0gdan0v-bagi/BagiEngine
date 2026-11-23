@@ -12,7 +12,7 @@ namespace BECore {
     // of the scope the writer opened.
 
     /// The error of a failed call: `error` of the error envelope, and the `error` of a failed entry of `batch`. On the scratch arena like every answer
-    /// struct: a local of the code that writes it, filled with `ArenaString(text.data(), text.size())`
+    /// struct (`Reflection/CLAUDE.md`, "Answers on the scratch arena"): a local of the code that writes it, filled with `ArenaString(text.data(), text.size())`
     struct ControlErrorAnswer {
         BE_CLASS(ControlErrorAnswer)
 

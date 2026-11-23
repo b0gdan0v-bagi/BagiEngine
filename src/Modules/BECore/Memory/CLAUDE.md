@@ -29,14 +29,14 @@ Memory an arena took back (`Reset`, `Rewind`) and fresh chunks are marked in one
 
 `ScratchScope` takes a mark and rewinds in its destructor; scopes nest like locals. **Rules:** memory of a scope must not outlive it (not returned, not stored in a longer-lived container) and must not cross to another thread; a scope ends on the thread that made it (Debug asserts). Nothing from the arena is destroyed on rewind (`LinearArena`, "No destructors").
 
-**In use:** the front end of the formula and script compilers (`Values/Programs/CLAUDE.md`, "Compiling"; `Values/Effects/CLAUDE.md`), whose caller holds the scope the returned trees live in. The glyph atlas build (`FontAtlas::Prepare`: its lists, one scope per placed glyph for its pictures) and stb_truetype's own blocks while a `Font` measures or draws a glyph (`Text/CLAUDE.md`). The program pool (`Values/Programs/CLAUDE.md`, "The frame and the pool") keeps the code of its programs in an immortal `LinearArena` named `ProgramPool`, touched only under the pool's lock.
+**In use:** every control call, so an answer struct dies with its reply (`Reflection/CLAUDE.md`, "Answers on the scratch arena"). The front end of the formula and script compilers (`Values/Programs/CLAUDE.md`, "Compiling"; `Values/Effects/CLAUDE.md`), whose caller holds the scope the returned trees live in. The glyph atlas build (`FontAtlas::Prepare`: its lists, one scope per placed glyph for its pictures) and stb_truetype's own blocks while a `Font` measures or draws a glyph (`Text/CLAUDE.md`). The program pool (`Values/Programs/CLAUDE.md`, "The frame and the pool") keeps its code in an immortal `LinearArena` named `ProgramPool`, touched under the pool's lock.
 
 ## ArenaAllocator (`ArenaAllocator.h`)
 
 The EASTL allocator over a `LinearArena&`, behind `ArenaVector<T>` and `ArenaString` (declared in `Types/`, which keeps `eastl::` and the arena headers out of the PCH). Another container takes it as its allocator parameter (`eastl::hash_map<K, V, Hash, Equal, ArenaAllocator>`).
 
-- **`deallocate` does nothing,** so a vector that grows by doubling leaves every old block in the arena until `Reset()` or the scope's rewind: `reserve` first when the size is known. The container's destructor frees nothing, but a container of non-trivial elements still runs their destructors.
-- **A default-constructed allocator binds to the thread's `ScratchArena`** (EASTL needs a default constructor, and builds one from a name string, which is not kept). Such a container belongs to the scope that is alive when it is made and must not cross threads; a container of a longer life takes its arena explicitly.
+- **`deallocate` does nothing,** so a vector that grows by doubling leaves every old block in the arena until `Reset()` or the scope's rewind: `reserve` first when the size is known. Destructors of non-trivial elements still run.
+- **A default-constructed allocator binds to the thread's `ScratchArena`** (EASTL needs a default constructor). Such a container belongs to the scope that is alive when it is made and must not cross threads; a container of a longer life takes its arena explicitly.
 - **Equality is by arena.** `offset` of the aligned `allocate` is ignored (EASTL passes 0).
 
 ## Frame arena (`FrameArena.h`, `FrameAllocator.h`)
