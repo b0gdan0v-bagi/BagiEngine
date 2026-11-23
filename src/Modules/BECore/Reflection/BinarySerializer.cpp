@@ -52,7 +52,7 @@ namespace BECore {
         _image.resize(total);
         uint8_t* out = _image.data();
         std::memcpy(out, BinaryFormat::Magic, sizeof(BinaryFormat::Magic));
-        BinaryFormat::Store<uint16_t>(out + sizeof(BinaryFormat::Magic), BinaryFormat::CurrentVersion);
+        BinaryFormat::Store<uint16_t>(out + sizeof(BinaryFormat::Magic), BinaryFormat::TabledVersion);
         BinaryFormat::Store<uint32_t>(out + BinaryFormat::PayloadSizeOffset, static_cast<uint32_t>(total - BinaryFormat::HeaderSize));
         BinaryFormat::Store<uint32_t>(out + BinaryFormat::HeaderSize, static_cast<uint32_t>(count));
         BinaryFormat::Store<uint32_t>(out + BinaryFormat::HeaderSize + sizeof(uint32_t), static_cast<uint32_t>(charBytes));

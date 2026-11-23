@@ -35,7 +35,7 @@ namespace BECore::Fuzz {
         std::memcpy(repaired.data(), BinaryFormat::Magic, sizeof(BinaryFormat::Magic));
         // A version 1 input stays version 1, so its seeds keep exercising the old layout under a true header
         const uint16_t version = BinaryFormat::Load<uint16_t>(data + sizeof(BinaryFormat::Magic));
-        BinaryFormat::Store<uint16_t>(repaired.data() + sizeof(BinaryFormat::Magic), version == BinaryFormat::LegacyVersion ? version : BinaryFormat::CurrentVersion);
+        BinaryFormat::Store<uint16_t>(repaired.data() + sizeof(BinaryFormat::Magic), version == BinaryFormat::LegacyVersion ? version : BinaryFormat::TabledVersion);
         BinaryFormat::Store<uint32_t>(repaired.data() + BinaryFormat::PayloadSizeOffset, static_cast<uint32_t>(size - BinaryFormat::HeaderSize));
         return repaired;
     }
