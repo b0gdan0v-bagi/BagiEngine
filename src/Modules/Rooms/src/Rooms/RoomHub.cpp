@@ -490,7 +490,7 @@ namespace BECore {
             return;
         }
         _sendScratch.clear();
-        AppendViewMessage(_sendScratch, room.GetCode(), *seat, room.GetGameVersion(), room.GetPhase() == RoomPhase::Finished, *view, *actions);
+        AppendViewMessage(_sendScratch, room.GetCode(), *seat, room.GetGameVersion(), room.GetPhase() == RoomPhase::Finished, **view, **actions);
         SendText(id, _sendScratch);
         connection.sentView = true;
         connection.sentGameVersion = room.GetGameVersion();

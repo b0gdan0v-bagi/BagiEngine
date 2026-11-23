@@ -1,5 +1,7 @@
 #include "DemoCardGame.h"
 
+#include <Generated/DemoCardGame.gen.hpp>
+
 namespace BECore {
 
     namespace {
@@ -61,52 +63,48 @@ namespace BECore {
         return _started && !IsFinished() && IsSeatInRange(seat) && seat == _turn;
     }
 
-    std::expected<Json, ControlError> DemoCardGame::GetSeatView(int seat) const {
+    std::expected<UniquePtr<SeatedView>, ControlError> DemoCardGame::GetSeatView(int seat) const {
         if (!IsSeatInRange(seat)) {
             return Fail(SeatedGameErrors::kInvalidSeat, Format("seat {} is out of range", seat));
         }
-        Json view = Json::object();
-        view["seat"] = seat;
-        Json hand = Json::array();
-        for (const String& card : _hands[seat]) {
-            hand.push_back(card.c_str());
-        }
-        view["hand"] = hand;
-        Json counts = Json::array();
+        return UniquePtr<SeatedView>(MakeSeatView<DemoSeatView>(seat));
+    }
+
+    template <typename TView>
+    UniquePtr<TView> DemoCardGame::MakeSeatView(int seat) const {
+        auto view = MakeUnique<TView>();
+        view->seat = seat;
+        view->hand = _hands[seat];
         for (const auto& other : _hands) {
-            counts.push_back(static_cast<int>(other.size()));
+            view->cardCounts.push_back(static_cast<int32_t>(other.size()));
         }
-        view["cardCounts"] = counts;
-        Json table = Json::array();
         for (const Play& play : _table) {
-            Json entry = Json::object();
-            entry["seat"] = play.seat;
-            entry["card"] = play.card.c_str();
-            table.push_back(entry);
+            DemoTablePlay& entry = view->table.emplace_back();
+            entry.seat = play.seat;
+            entry.card = play.card;
         }
-        view["table"] = table;
-        view["turn"] = IsFinished() ? -1 : _turn;
-        view["finished"] = IsFinished();
+        view->turn = IsFinished() ? -1 : _turn;
+        view->finished = IsFinished();
         return view;
     }
 
-    std::expected<Json, ControlError> DemoCardGame::GetSeatActions(int seat) const {
+    std::expected<UniquePtr<SeatedActions>, ControlError> DemoCardGame::GetSeatActions(int seat) const {
         if (!IsSeatInRange(seat)) {
             return Fail(SeatedGameErrors::kInvalidSeat, Format("seat {} is out of range", seat));
         }
-        Json actions = Json::array();
+        auto actions = MakeUnique<SeatedActionList<DemoSeatAction>>();
         if (CanAct(seat)) {
             for (const String& card : _hands[seat]) {
-                Json action = Json::object();
-                action["type"] = "play";
-                action["card"] = card.c_str();
-                actions.push_back(action);
+                DemoSeatAction action;
+                action.type = "play";
+                action.card = card;
+                actions->Add(std::move(action));
             }
         }
-        return actions;
+        return UniquePtr<SeatedActions>(std::move(actions));
     }
 
-    std::expected<Json, ControlError> DemoCardGame::PerformSeatAction(int seat, const Json& action) {
+    std::expected<UniquePtr<SeatedOutcome>, ControlError> DemoCardGame::PerformSeatAction(int seat, const Json& action) {
         if (!IsSeatInRange(seat)) {
             return Fail(SeatedGameErrors::kInvalidSeat, Format("seat {} is out of range", seat));
         }
@@ -134,10 +132,10 @@ namespace BECore {
         _turn = (_turn + 1) % kSeatCount;
         ++_version;
 
-        Json outcome = Json::object();
-        outcome["seat"] = seat;
-        outcome["card"] = card->c_str();
-        return outcome;
+        auto outcome = MakeUnique<DemoSeatOutcome>();
+        outcome->seat = seat;
+        outcome->card = *card;
+        return UniquePtr<SeatedOutcome>(std::move(outcome));
     }
 
     Optional<Json> DemoCardGame::ChooseComputerAction(int seat) const {
@@ -176,21 +174,15 @@ namespace BECore {
         return static_cast<int>(_table.size());
     }
 
-    std::expected<Json, ControlError> LeakyDemoCardGame::GetSeatView(int seat) const {
-        auto view = DemoCardGame::GetSeatView(seat);
-        if (!view) {
-            return view;
+    std::expected<UniquePtr<SeatedView>, ControlError> LeakyDemoCardGame::GetSeatView(int seat) const {
+        if (seat < 0 || seat >= kSeatCount) {
+            return DemoCardGame::GetSeatView(seat);
         }
-        Json allHands = Json::array();
+        auto view = MakeSeatView<LeakyDemoSeatView>(seat);
         for (int other = 0; other < kSeatCount; ++other) {
-            Json hand = Json::array();
-            for (const String& card : GetHand(other)) {
-                hand.push_back(card.c_str());
-            }
-            allHands.push_back(hand);
+            view->allHands.emplace_back().cards = GetHand(other);
         }
-        (*view)["allHands"] = allHands;
-        return view;
+        return UniquePtr<SeatedView>(std::move(view));
     }
 
     Vector<String> FindHiddenCards(const String& text, int seat, const DemoCardGame& game) {

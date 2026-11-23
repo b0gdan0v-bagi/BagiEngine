@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Control/JsonWriter.h>
 #include <RoomServer/DemoCardGame.h>
 
 namespace BECore::Tests {
@@ -17,6 +18,16 @@ namespace BECore::Tests {
         action["card"] = card.c_str();
         return action;
     }
+
+    /// The answers of a seated game as the `Json` they are written as: what the old tests read, and what a client of the wire sees
+    [[nodiscard]] Json ViewJson(const SeatedView& view);
+    [[nodiscard]] Json ActionsJson(const SeatedActions& actions);
+    [[nodiscard]] Json OutcomeJson(const SeatedOutcome& outcome);
+
+    /// The compact text of an answer of a game, or `<error>` for an error (for a leak check and a failure message)
+    [[nodiscard]] String Dump(const std::expected<UniquePtr<SeatedView>, ControlError>& view);
+    [[nodiscard]] String Dump(const std::expected<UniquePtr<SeatedActions>, ControlError>& actions);
+    [[nodiscard]] String Dump(const std::expected<UniquePtr<SeatedOutcome>, ControlError>& outcome);
 
     /// The card ids that @p text mentions and that sit in the hand of a seat other than @p seat in @p game right now
     [[nodiscard]] inline Vector<String> FindLeakedCards(const String& text, int seat, const FakeSeatedGame& game) {

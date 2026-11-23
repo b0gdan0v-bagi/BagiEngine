@@ -66,13 +66,13 @@ namespace BECore {
          *         (also for a member who is away), or the game's own error (`illegal_action`, `invalid_params`). Nothing changes on an
          *         error. When the action ends the game the phase becomes Finished.
          */
-        [[nodiscard]] std::expected<Json, ControlError> PerformAction(PlayerId player, uint64_t version, const Json& action);
+        [[nodiscard]] std::expected<UniquePtr<SeatedOutcome>, ControlError> PerformAction(PlayerId player, uint64_t version, const Json& action);
 
         /// What the member's seat may see now (`not_in_room`, `not_started`)
-        [[nodiscard]] std::expected<Json, ControlError> GetSeatView(PlayerId player) const;
+        [[nodiscard]] std::expected<UniquePtr<SeatedView>, ControlError> GetSeatView(PlayerId player) const;
 
         /// What the member's seat may send now (`not_in_room`, `not_started`)
-        [[nodiscard]] std::expected<Json, ControlError> GetSeatActions(PlayerId player) const;
+        [[nodiscard]] std::expected<UniquePtr<SeatedActions>, ControlError> GetSeatActions(PlayerId player) const;
 
         /// The version of the game, 0 before the start
         [[nodiscard]] uint64_t GetGameVersion() const;

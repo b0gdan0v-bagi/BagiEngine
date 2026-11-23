@@ -1,4 +1,5 @@
 #include <BECore/Rooms/FakeSeatedGame.h>
+#include <BECore/Rooms/TestClient.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <EASTL/algorithm.h>
@@ -11,13 +12,83 @@ namespace BECore::Tests {
 
     namespace {
 
-        String Dump(const std::expected<Json, ControlError>& value) {
-            return value ? DumpJson(*value) : String("<error>");
-        }
-
         template <typename T>
         String ErrorCode(const std::expected<T, ControlError>& value) {
             return value ? String() : value.error().code;
+        }
+
+        /// A card on the table, as the test records it while it plays: the game does not hand its table out
+        struct PlayedCard {
+            int seat = 0;
+            String card;
+        };
+
+        // The reference answers: the `Json` the demo game built before it answered typed structs, from the truth the game exposes (hands, turn)
+        // and the plays the test recorded. The typed answers must write the same text.
+
+        Json ReferenceView(const FakeSeatedGame& game, int seat, const Vector<PlayedCard>& table) {
+            Json view = Json::object();
+            view["seat"] = seat;
+            Json hand = Json::array();
+            for (const String& card : game.GetHand(seat)) {
+                hand.push_back(card.c_str());
+            }
+            view["hand"] = hand;
+            Json counts = Json::array();
+            for (int other = 0; other < FakeSeatedGame::kSeatCount; ++other) {
+                counts.push_back(static_cast<int>(game.GetHand(other).size()));
+            }
+            view["cardCounts"] = counts;
+            Json played = Json::array();
+            for (const PlayedCard& play : table) {
+                Json entry = Json::object();
+                entry["seat"] = play.seat;
+                entry["card"] = play.card.c_str();
+                played.push_back(entry);
+            }
+            view["table"] = played;
+            view["turn"] = game.IsFinished() ? -1 : game.GetTurn();
+            view["finished"] = game.IsFinished();
+            return view;
+        }
+
+        Json ReferenceActions(const FakeSeatedGame& game, int seat) {
+            Json actions = Json::array();
+            if (game.GetTurn() == seat) {
+                for (const String& card : game.GetHand(seat)) {
+                    actions.push_back(CardAction(card));
+                }
+            }
+            return actions;
+        }
+
+        Json ReferenceOutcome(int seat, const String& card) {
+            Json outcome = Json::object();
+            outcome["seat"] = seat;
+            outcome["card"] = card.c_str();
+            return outcome;
+        }
+
+        /// Plays a started game to the end by the computer's choice; @p atPoint runs at the start, after every play and at the end, with the plays so far
+        template <typename TAtPoint>
+        void PlayChecked(FakeSeatedGame& game, TAtPoint&& atPoint) {
+            Vector<PlayedCard> table;
+            atPoint(table);
+            while (!game.IsFinished()) {
+                const int seat = game.GetTurn();
+                const auto action = game.ChooseComputerAction(seat);
+                ASSERT_TRUE(action.has_value());
+                const auto outcome = game.PerformSeatAction(seat, *action);
+                ASSERT_TRUE(outcome.has_value());
+                const String card = Require(GetJsonString(*action, "card"));
+                EXPECT_EQ(DumpJson(OutcomeJson(**outcome)), DumpJson(ReferenceOutcome(seat, card)));
+                table.push_back(PlayedCard{seat, card});
+                atPoint(table);
+            }
+        }
+
+        bool Holds(const Vector<String>& cards, const String& card) {
+            return std::find(cards.begin(), cards.end(), card) != cards.end();
         }
 
         /// A started game whose first seat is 0
@@ -102,8 +173,9 @@ namespace BECore::Tests {
         for (int seat = 0; seat < FakeSeatedGame::kSeatCount; ++seat) {
             const auto actions = game.GetSeatActions(seat);
             ASSERT_TRUE(actions.has_value());
-            ASSERT_TRUE(actions->is_array());
-            EXPECT_EQ(actions->size(), seat == 0 ? 3u : 0u) << "seat " << seat;
+            const Json listed = ActionsJson(**actions);
+            ASSERT_TRUE(listed.is_array());
+            EXPECT_EQ(listed.size(), seat == 0 ? 3u : 0u) << "seat " << seat;
         }
     }
 
@@ -112,10 +184,11 @@ namespace BECore::Tests {
             FakeSeatedGame game = MakeStartedGame();
             const auto actions = game.GetSeatActions(0);
             ASSERT_TRUE(actions.has_value());
-            ASSERT_EQ(actions->size(), 3u);
-            const auto outcome = game.PerformSeatAction(0, (*actions)[static_cast<size_t>(index)]);
+            const Json listed = ActionsJson(**actions);
+            ASSERT_EQ(listed.size(), 3u);
+            const auto outcome = game.PerformSeatAction(0, listed[static_cast<size_t>(index)]);
             ASSERT_TRUE(outcome.has_value());
-            EXPECT_EQ(GetJsonInt(*outcome, "seat"), 0);
+            EXPECT_EQ(GetJsonInt(OutcomeJson(**outcome), "seat"), 0);
         }
     }
 
@@ -195,7 +268,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(chosen.has_value());
         const auto actions = game.GetSeatActions(0);
         ASSERT_TRUE(actions.has_value());
-        EXPECT_NE(std::find(actions->begin(), actions->end(), *chosen), actions->end());
+        const Json listed = ActionsJson(**actions);
+        EXPECT_NE(std::find(listed.begin(), listed.end(), *chosen), listed.end());
         Vector<String> hand = game.GetHand(0);
         eastl::sort(hand.begin(), hand.end());
         EXPECT_EQ(GetJsonString(*chosen, "card"), hand.front());
@@ -218,13 +292,14 @@ namespace BECore::Tests {
         for (int seat = 0; seat < FakeSeatedGame::kSeatCount; ++seat) {
             const auto actions = game.GetSeatActions(seat);
             ASSERT_TRUE(actions.has_value());
-            EXPECT_TRUE(actions->empty());
+            EXPECT_EQ((*actions)->Count(), 0u);
             EXPECT_FALSE(game.ChooseComputerAction(seat).has_value());
             EXPECT_EQ(ErrorCode(game.PerformSeatAction(seat, CardAction("c0_0"))), "not_your_turn");
             const auto view = game.GetSeatView(seat);
             ASSERT_TRUE(view.has_value());
-            EXPECT_EQ(GetJsonBool(*view, "finished"), true);
-            const Json* table = FindJsonMember(*view, "table");
+            const Json viewJson = ViewJson(**view);
+            EXPECT_EQ(GetJsonBool(viewJson, "finished"), true);
+            const Json* table = FindJsonMember(viewJson, "table");
             ASSERT_NE(table, nullptr);
             EXPECT_EQ(table->size(), 12u) << "all cards played are public";
         }
@@ -241,21 +316,22 @@ namespace BECore::Tests {
     TEST(SeatedGameTest, ViewHoldsOwnCardsCountsAndTableOnly) {
         FakeSeatedGame game = MakeStartedGame();
         ASSERT_TRUE(game.PerformSeatAction(0, *game.ChooseComputerAction(0)).has_value());
-        const auto view = game.GetSeatView(2);
-        ASSERT_TRUE(view.has_value());
-        ASSERT_TRUE(view->is_object());
+        const auto answer = game.GetSeatView(2);
+        ASSERT_TRUE(answer.has_value());
+        const Json view = ViewJson(**answer);
+        ASSERT_TRUE(view.is_object());
         Vector<String> keys;
-        for (const auto& item : view->items()) {
+        for (const auto& item : view.items()) {
             keys.push_back(item.key().c_str());
         }
         eastl::sort(keys.begin(), keys.end());
         const Vector<String> expected = {"cardCounts", "finished", "hand", "seat", "table", "turn"};
         EXPECT_EQ(keys, expected);
-        EXPECT_EQ(Require(FindJsonMember(*view, "hand")).size(), 3u);
-        const Json* counts = FindJsonMember(*view, "cardCounts");
+        EXPECT_EQ(Require(FindJsonMember(view, "hand")).size(), 3u);
+        const Json* counts = FindJsonMember(view, "cardCounts");
         ASSERT_NE(counts, nullptr);
         EXPECT_EQ(*counts, Json::array({2, 3, 3, 3}));
-        EXPECT_EQ(GetJsonInt(*view, "turn"), 1);
+        EXPECT_EQ(GetJsonInt(view, "turn"), 1);
     }
 
     TEST(SeatedGameTest, NoSeatViewLeaksAtAnyStep) {
@@ -272,7 +348,7 @@ namespace BECore::Tests {
             const auto outcome = game.PerformSeatAction(seat, *game.ChooseComputerAction(seat));
             ASSERT_TRUE(outcome.has_value());
             for (int other = 0; other < FakeSeatedGame::kSeatCount; ++other) {
-                ExpectNoLeak(DumpJson(*outcome), other, game);
+                ExpectNoLeak(Dump(outcome), other, game);
             }
         }
     }
@@ -298,6 +374,113 @@ namespace BECore::Tests {
         EXPECT_EQ(FindLeakedCards("c1_2", 0, game).size(), 1u);
         EXPECT_TRUE(FindLeakedCards("c0_1 c0_2", 0, game).empty()) << "a seat may name its own cards";
         EXPECT_EQ(FindLeakedCards("c1_2 c1_2 c1_2", 0, game).size(), 1u);
+    }
+
+    TEST(SeatedGameTest, TypedAnswersWriteTheBytesOfTheOldJsonAtEveryPoint) {
+        FakeSeatedGame game = MakeStartedGame();
+        PlayChecked(game, [&game](const Vector<PlayedCard>& table) {
+            for (int seat = 0; seat < FakeSeatedGame::kSeatCount; ++seat) {
+                const auto view = game.GetSeatView(seat);
+                ASSERT_TRUE(view.has_value());
+                EXPECT_EQ(DumpJson(ViewJson(**view)), DumpJson(ReferenceView(game, seat, table))) << "seat " << seat << ", plays " << table.size();
+                const auto actions = game.GetSeatActions(seat);
+                ASSERT_TRUE(actions.has_value());
+                EXPECT_EQ(DumpJson(ActionsJson(**actions)), DumpJson(ReferenceActions(game, seat))) << "seat " << seat << ", plays " << table.size();
+            }
+        });
+        EXPECT_TRUE(game.IsFinished());
+    }
+
+    TEST(SeatedGameTest, AViewMessageOfTheHubEqualsTheOneOfTheJsonWriter) {
+        HubHarness harness;
+        const auto ids = harness.MakeLobby(FakeSeatedGame::kSeatCount);
+        harness.Start(ids[0]);
+        const FakeSeatedGame* game = harness.GetGame(harness.Client(ids[0]).roomCode);
+        ASSERT_NE(game, nullptr);
+        Vector<PlayedCard> table;
+        // The first message, then the ones after plays until the end (the hub sends a `view` after every committed action)
+        for (int step = 0; step <= FakeSeatedGame::kTotalPlays; ++step) {
+            for (const ConnectionId id : ids) {
+                const TestClient& client = harness.Client(id);
+                const ReceivedMessage* message = client.Last(RoomMessageTypes::kView);
+                ASSERT_NE(message, nullptr) << "step " << step;
+                const uint64_t version = game->GetStateVersion();
+                EXPECT_EQ(message->text, MakeViewMessage(client.roomCode, client.seat, version, game->IsFinished(), ReferenceView(*game, client.seat, table), ReferenceActions(*game, client.seat)))
+                    << "step " << step << ", seat " << client.seat;
+            }
+            if (game->IsFinished()) {
+                break;
+            }
+            const int turn = game->GetTurn();
+            const auto card = game->GetHand(turn).front();
+            const ConnectionId player = *std::find_if(ids.begin(), ids.end(), [&](ConnectionId id) { return harness.Client(id).seat == turn; });
+            ASSERT_TRUE(harness.PlayFirstAction(player));
+            // PlayFirstAction sends the first listed action, which is the first card of the hand
+            table.push_back(PlayedCard{turn, card});
+        }
+        EXPECT_TRUE(game->IsFinished());
+    }
+
+    TEST(SeatedGameTest, EverySeatViewHoldsOnlyItsOwnCardsCountsAndPlayedCards) {
+        FakeSeatedGame game = MakeStartedGame(11);
+        PlayChecked(game, [&game](const Vector<PlayedCard>& table) {
+            for (int seat = 0; seat < FakeSeatedGame::kSeatCount; ++seat) {
+                const auto answer = game.GetSeatView(seat);
+                ASSERT_TRUE(answer.has_value());
+                const auto& view = static_cast<const DemoSeatView&>(**answer);
+                EXPECT_EQ(view.hand, game.GetHand(seat)) << "seat " << seat;
+                for (int other = 0; other < FakeSeatedGame::kSeatCount; ++other) {
+                    if (other == seat) {
+                        continue;
+                    }
+                    for (const String& card : game.GetHand(other)) {
+                        EXPECT_FALSE(Holds(view.hand, card)) << card.c_str() << " of seat " << other << " is in the hand of seat " << seat;
+                        for (const DemoTablePlay& play : view.table) {
+                            EXPECT_NE(play.card, card) << "a card still in a hand is on the table";
+                        }
+                    }
+                }
+                ASSERT_EQ(view.cardCounts.size(), static_cast<size_t>(FakeSeatedGame::kSeatCount));
+                for (int other = 0; other < FakeSeatedGame::kSeatCount; ++other) {
+                    EXPECT_EQ(view.cardCounts[static_cast<size_t>(other)], static_cast<int32_t>(game.GetHand(other).size())) << "count of seat " << other;
+                }
+                ASSERT_EQ(view.table.size(), table.size());
+                for (size_t i = 0; i < table.size(); ++i) {
+                    EXPECT_EQ(view.table[i].card, table[i].card);
+                    EXPECT_EQ(view.table[i].seat, table[i].seat);
+                }
+                ExpectNoLeak(Dump(answer), seat, game);
+            }
+        });
+    }
+
+    TEST(SeatedGameTest, TheLeakyGamesTypedViewIsCaughtByTheLeakCheck) {
+        LeakyFakeSeatedGame leaky;
+        ASSERT_TRUE(leaky.Start(5, Json::object()).has_value());
+        const auto answer = leaky.GetSeatView(1);
+        ASSERT_TRUE(answer.has_value());
+        const auto& view = static_cast<const LeakyDemoSeatView&>(**answer);
+        ASSERT_EQ(view.allHands.size(), static_cast<size_t>(FakeSeatedGame::kSeatCount));
+        EXPECT_EQ(view.allHands[2].cards, leaky.GetHand(2));
+        EXPECT_FALSE(FindHiddenCards(Dump(answer), 1, leaky).empty());
+
+        // Through the hub the same game is flagged by the judge of every message (counted, not failed)
+        HubHarness harness(HubHarness::MakeSettings(), true);
+        harness.SetFailOnLeak(false);
+        const auto ids = harness.MakeLobby(2);
+        harness.Start(ids[0]);
+        EXPECT_GT(harness.GetLeakCount(), 0u);
+    }
+
+    TEST(SeatedGameTest, TheErrorsOfTheTypedAnswersKeepTheirCodes) {
+        FakeSeatedGame game = MakeStartedGame();
+        EXPECT_EQ(ErrorCode(game.GetSeatView(FakeSeatedGame::kSeatCount)), SeatedGameErrors::kInvalidSeat.data());
+        EXPECT_EQ(ErrorCode(game.GetSeatActions(-1)), SeatedGameErrors::kInvalidSeat.data());
+        EXPECT_EQ(ErrorCode(game.PerformSeatAction(-1, CardAction("c0_0"))), SeatedGameErrors::kInvalidSeat.data());
+        EXPECT_EQ(ErrorCode(game.PerformSeatAction(1, CardAction("c1_0"))), SeatedGameErrors::kNotYourTurn.data());
+        EXPECT_EQ(ErrorCode(game.PerformSeatAction(0, CardAction("c3_0"))), GameControlErrors::kIllegalAction.data());
+        EXPECT_EQ(ErrorCode(game.PerformSeatAction(0, Json::object())), ControlErrors::kInvalidParams.data());
+        EXPECT_EQ(game.GetPlayCount(), 0);
     }
 
     TEST(SeatedGameRegistryTest, UnknownNameFindsAndCreatesNothing) {

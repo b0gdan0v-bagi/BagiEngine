@@ -776,6 +776,35 @@ namespace BECore {
         return out;
     }
 
+    void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, const SeatedView& view, const SeatedActions& actions) {
+        ScratchScope scratch;
+        // The payloads are views of these named callables, which outlive the one write below (JsonPayload.h: a temporary lambda does not compile)
+        const auto writeView = [&view](JsonWriter& writer) -> std::expected<void, ControlError> {
+            view.WriteJson(writer);
+            return {};
+        };
+        const auto writeActions = [&actions](JsonWriter& writer) -> std::expected<void, ControlError> {
+            actions.WriteJson(writer);
+            return {};
+        };
+        RoomWireView wire;
+        wire.actions = JsonPayload::Streamed(writeActions);
+        wire.finished = finished;
+        wire.room = TextView(room);
+        wire.seat = seat;
+        wire.version = version;
+        wire.view = JsonPayload::Streamed(writeView);
+        JsonWriter writer(out);
+        wire.WriteJson(writer);
+        EXPECT(writer.IsComplete());
+    }
+
+    String MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, const SeatedView& view, const SeatedActions& actions) {
+        String out;
+        AppendViewMessage(out, room, seat, version, finished, view, actions);
+        return out;
+    }
+
     void AppendErrorMessage(String& out, StringView code, StringView message, StringView ref) {
         ScratchScope scratch;
         RoomWireError wire;

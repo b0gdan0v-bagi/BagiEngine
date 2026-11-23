@@ -162,7 +162,7 @@ namespace BECore {
         return _game ? _game->GetStateVersion() : 0;
     }
 
-    std::expected<Json, ControlError> Room::PerformAction(PlayerId player, uint64_t version, const Json& action) {
+    std::expected<UniquePtr<SeatedOutcome>, ControlError> Room::PerformAction(PlayerId player, uint64_t version, const Json& action) {
         const Member* member = FindMember(player);
         if (!member) {
             return std::unexpected(MakeError(RoomErrors::kNotInRoom, "You are not in this room"));
@@ -183,7 +183,7 @@ namespace BECore {
         return outcome;
     }
 
-    std::expected<Json, ControlError> Room::GetSeatView(PlayerId player) const {
+    std::expected<UniquePtr<SeatedView>, ControlError> Room::GetSeatView(PlayerId player) const {
         const Member* member = FindMember(player);
         if (!member) {
             return std::unexpected(MakeError(RoomErrors::kNotInRoom, "You are not in this room"));
@@ -194,7 +194,7 @@ namespace BECore {
         return _game->GetSeatView(member->seat);
     }
 
-    std::expected<Json, ControlError> Room::GetSeatActions(PlayerId player) const {
+    std::expected<UniquePtr<SeatedActions>, ControlError> Room::GetSeatActions(PlayerId player) const {
         const Member* member = FindMember(player);
         if (!member) {
             return std::unexpected(MakeError(RoomErrors::kNotInRoom, "You are not in this room"));
