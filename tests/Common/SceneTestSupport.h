@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Config/StringXmlWriter.h>
 #include <BECore/Format/Format.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/XmlSerializer.h>
@@ -7,7 +8,6 @@
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/Types/Types.h>
 #include <pugixml.hpp>
-#include <sstream>
 
 namespace BECore::Tests {
 
@@ -44,16 +44,16 @@ namespace BECore::Tests {
 
     /// @p node printed on one line, no indentation: for comparing an element with the text it should have
     [[nodiscard]] inline String XmlText(const pugi::xml_node& node) {
-        std::ostringstream out;
-        node.print(out, "", pugi::format_raw);
-        return FromStdString(out.str());
+        StringXmlWriter writer;
+        node.print(writer, "", pugi::format_raw);
+        return eastl::move(writer.text);
     }
 
     /// @p node printed as a file is saved, two spaces per level: for comparing whole documents and for readable failures
     [[nodiscard]] inline String XmlTextIndented(const pugi::xml_node& node) {
-        std::ostringstream out;
-        node.print(out, "  ", pugi::format_indent);
-        return FromStdString(out.str());
+        StringXmlWriter writer;
+        node.print(writer, "  ", pugi::format_indent);
+        return eastl::move(writer.text);
     }
 
     /// The components of @p node as text, in order: "<type>:<the serialized element on one line>"
