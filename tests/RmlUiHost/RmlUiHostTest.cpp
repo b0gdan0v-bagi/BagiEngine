@@ -907,6 +907,25 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         EXPECT_NE(doc->GetDocument()->GetElementById("extra"), nullptr);
     }
 
+    TEST_F(RmlUiHostTest, ADocumentInANonAsciiFolderIsStaleAfterAWriteAndNotAfterTheReload) {
+        const auto directory = MakeDirectory() / "caf\xC3\xA9";
+        std::error_code error;
+        ASSERT_TRUE(std::filesystem::create_directories(directory, error)) << error.message();
+        Write(directory / "menu.rml", kBoxDocument);
+        Write(directory / "menu.rcss", BoxStyle(12).c_str());
+        auto doc = OpenFile(directory / "menu.rml");
+        ASSERT_NE(doc->GetDocument(), nullptr);
+        DrawFile();
+        ASSERT_NEAR(BoxOf(*doc, "box").x, 12.0f, kTolerance);
+        EXPECT_FALSE(doc->ReloadIfChanged());
+
+        Write(directory / "menu.rcss", BoxStyle(80).c_str());
+        EXPECT_TRUE(doc->ReloadIfChanged());
+        DrawFile();
+        EXPECT_NEAR(BoxOf(*doc, "box").x, 80.0f, kTolerance);
+        EXPECT_FALSE(doc->ReloadIfChanged());
+    }
+
     TEST_F(RmlUiHostTest, ADocumentThatHasNotChangedIsLeftAlone) {
         const auto directory = MakeDirectory();
         Write(directory / "menu.rml", kBoxDocument);
