@@ -124,6 +124,22 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonInt(*parsed, "max"), std::numeric_limits<int64_t>::max());
     }
 
+    TEST(JsonTest, IntegerValueReaderKeepsTheRulesOfTheMemberReader) {
+        auto parsed = ParseJson(R"([5,-5,9223372036854775807,-9223372036854775808,9223372036854775808,1.5,"3",true,null])");
+
+        ASSERT_TRUE(parsed.has_value());
+        ASSERT_EQ(parsed->size(), 9u);
+        EXPECT_EQ(GetJsonIntValue((*parsed)[0]), 5);
+        EXPECT_EQ(GetJsonIntValue((*parsed)[1]), -5);
+        EXPECT_EQ(GetJsonIntValue((*parsed)[2]), std::numeric_limits<int64_t>::max());
+        EXPECT_EQ(GetJsonIntValue((*parsed)[3]), std::numeric_limits<int64_t>::min());
+        EXPECT_FALSE(GetJsonIntValue((*parsed)[4]));  // unsigned above INT64_MAX
+        EXPECT_FALSE(GetJsonIntValue((*parsed)[5]));
+        EXPECT_FALSE(GetJsonIntValue((*parsed)[6]));
+        EXPECT_FALSE(GetJsonIntValue((*parsed)[7]));
+        EXPECT_FALSE(GetJsonIntValue((*parsed)[8]));
+    }
+
     TEST(JsonTest, DumpIsCompact) {
         Json object = Json::object();
         object["a"] = 1;

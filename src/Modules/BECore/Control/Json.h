@@ -57,6 +57,9 @@ namespace BECore {
     /// A string member as a copy; nullopt when it is absent or not a string
     [[nodiscard]] Optional<String> GetJsonString(const Json& object, StringView key);
 
+    /// An integer value (an array item, a member already found); nullopt when it is not an integer (1.5, "3" and a bool are not) or does not fit int64_t
+    [[nodiscard]] Optional<int64_t> GetJsonIntValue(const Json& value);
+
     /// An integer member; nullopt when it is absent, not an integer (1.5 and "3" are not) or does not fit int64_t
     [[nodiscard]] Optional<int64_t> GetJsonInt(const Json& object, StringView key);
 
