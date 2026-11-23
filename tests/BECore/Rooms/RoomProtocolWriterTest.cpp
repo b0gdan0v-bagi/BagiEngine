@@ -1,4 +1,7 @@
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Rooms/RoomMessageReference.h>
+#include <BECore/Threading/Thread.h>
+#include <Common/AllocCheck.h>
 #include <Common/Printers.h>
 #include <Rooms/RoomProtocol.h>
 #include <gtest/gtest.h>
@@ -98,6 +101,53 @@ namespace BECore::Tests {
         void ExpectView(StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions) {
             EXPECT_EQ(MakeViewMessage(room, seat, version, finished, view, actions), RoomMessageReference::MakeViewMessage(room, seat, version, finished, view, actions));
         }
+
+        constexpr StringView kLongGame = "a game whose name is longer than the small string";
+        constexpr StringView kLongToken = "0123456789abcdef0123456789abcdef";
+        constexpr StringView kLongText = "a text of more than twenty-three bytes";
+        constexpr int kLongLobbySeats = 8;
+        constexpr size_t kLongListedRooms = 20;
+        constexpr uint64_t kLongVersion = 42;
+
+        /// Every writer with texts past the small-string buffer, so a copy of any of them would be a heap block
+        struct LongMessages {
+            LobbySnapshot lobby = MakeLobby(kLongLobbySeats);
+            RoomListMessage list = MakeRoomList(kLongListedRooms);
+            Json view = Json{{"hand", Json::array({1, 2, 3})}, {"table", MakeJsonString(String(kLongText))}};
+            Json actions = Json::array({Json{{"play", 1}}, Json{{"pass", true}}});
+            ClientMessage create = CreateRoomMessage{String(kLongGame), String(kLongText), Json{{"rounds", 3}}, true};
+            ClientMessage join = JoinRoomMessage{String(kRoomCode), String(), String(kLongToken)};
+            ClientMessage listRooms = ListRoomsMessage{String(kLongGame)};
+
+            LongMessages() {
+                lobby.game = kLongGame;
+                lobby.options = Json{{"fast", true}, {"rounds", 3}};
+                for (LobbySeat& seat : lobby.seats) {
+                    if (seat.kind == SeatKind::Human) {
+                        seat.name = kLongText;
+                    }
+                }
+                for (RoomListing& listing : list.rooms) {
+                    listing.host = kLongText;
+                    listing.options = Json{{"fast", true}};
+                }
+            }
+
+            /// @p out is cleared first, so the round of a warmed-up String needs no growth
+            void WriteAll(String& out) const {
+                out.clear();
+                AppendViewMessage(out, kRoomCode, 1, kLongVersion, false, view, actions);
+                AppendLobbyMessage(out, lobby);
+                AppendRoomListMessage(out, list);
+                AppendErrorMessage(out, "illegal_action", kLongText, "action");
+                AppendJoinedMessage(out, kRoomCode, 7, kLongToken, 2, true);
+                AppendLeftMessage(out, kLongText);
+                AppendPongMessage(out);
+                AppendClientMessage(out, create);
+                AppendClientMessage(out, join);
+                AppendClientMessage(out, listRooms);
+            }
+        };
 
     }  // namespace
 
@@ -463,6 +513,54 @@ namespace BECore::Tests {
         AppendClientMessage(out, PingMessage{});
         AppendClientMessage(out, StartMessage{});
         EXPECT_EQ(out, R"(kept:{"type":"ping","v":1}{"type":"start","v":1})");
+    }
+
+    TEST(RoomProtocolWriterTest, RepeatedMessagesAllocateNothingAfterTheFirst) {
+        const LongMessages messages;
+        String out;
+        messages.WriteAll(out);  // the first round sizes the scratch chunk and the String
+        ExpectNoAllocations([&] { messages.WriteAll(out); });
+    }
+
+    TEST(RoomProtocolWriterTest, EveryWriterGivesTheScratchArenaBackAsItFoundIt) {
+        const LongMessages messages;
+        String out;
+        const size_t before = ScratchArena::Get().GetBytesUsed();
+        AppendLobbyMessage(out, messages.lobby);
+        EXPECT_EQ(ScratchArena::Get().GetBytesUsed(), before) << "lobby";
+        AppendRoomListMessage(out, messages.list);
+        EXPECT_EQ(ScratchArena::Get().GetBytesUsed(), before) << "rooms";
+        AppendViewMessage(out, kRoomCode, 1, kLongVersion, false, messages.view, messages.actions);
+        EXPECT_EQ(ScratchArena::Get().GetBytesUsed(), before) << "view";
+        AppendClientMessage(out, messages.create);
+        EXPECT_EQ(ScratchArena::Get().GetBytesUsed(), before) << "create_room";
+        EXPECT_EQ(MakeLobbyMessage(messages.lobby), RoomMessageReference::MakeLobbyMessage(messages.lobby));
+        EXPECT_EQ(ScratchArena::Get().GetBytesUsed(), before) << "Make";
+    }
+
+    TEST(RoomProtocolWriterTest, AnotherThreadWritesTheSameBytesAndKeepsItsOwnScratchArena) {
+        if (!Thread::kAvailable) {
+            GTEST_SKIP() << "a single-thread build has no second thread";
+        }
+        const LongMessages messages;
+        String mainText;
+        messages.WriteAll(mainText);
+
+        String otherText;
+        size_t before = 0;
+        size_t after = 0;
+        size_t afterAgain = 0;
+        Thread thread("Test room writers", [&] {
+            before = ScratchArena::Get().GetBytesUsed();
+            messages.WriteAll(otherText);
+            after = ScratchArena::Get().GetBytesUsed();
+            messages.WriteAll(otherText);
+            afterAgain = ScratchArena::Get().GetBytesUsed();
+        });
+        thread.join();
+        EXPECT_EQ(before, after);
+        EXPECT_EQ(before, afterAgain);
+        EXPECT_EQ(otherText, mainText);
     }
 
 }  // namespace BECore::Tests
