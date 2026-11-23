@@ -155,7 +155,8 @@ namespace BECore::Tests {
 
     // ---- The include sites of stb and dr_libs (a profile build) ----
 
-    TEST(AllocRoutingTest, ARasterizedGlyphIsCountedAsStbAndLeavesNothingBehind) {
+    // stb_truetype works in the scratch arena inside a StbScratchGuard (Text/Font.cpp), so a rasterized glyph is not a heap allocation
+    TEST(AllocRoutingTest, ARasterizedGlyphTakesNoStbBlockFromTheHeap) {
         if constexpr (!AllocTracker::kEnabled) {
             GTEST_SKIP() << kNoAllocTracker;
         }
@@ -164,15 +165,12 @@ namespace BECore::Tests {
         ASSERT_TRUE(font);
 
         const AllocSourceTotals before = AllocTracker::GetSourceTotals(AllocSource::Stb);
-        const uint64_t namedBefore = NamedCount(AllocSource::Stb);
         const GlyphBitmap bitmap = font->RasterizeGlyph(font->FindGlyph(kGlyphCodePoint), kGlyphSize);
         const AllocSourceTotals after = AllocTracker::GetSourceTotals(AllocSource::Stb);
 
         EXPECT_FALSE(bitmap.coverage.empty());
-        EXPECT_GT(after.count, before.count);
+        EXPECT_EQ(after.count, before.count);
         EXPECT_EQ(after.liveBytes, before.liveBytes);
-        EXPECT_EQ(after.frees - before.frees, after.count - before.count);
-        EXPECT_EQ(NamedCount(AllocSource::Stb) - namedBefore, after.count - before.count);
     }
 
     TEST(AllocRoutingTest, APngDecodeIsCountedAsStbAndLeavesNothingBehind) {

@@ -39,6 +39,13 @@ The checks, in this order:
      allow-list. A dist whose page has no `Module.bagiSaves` or no `Module.FS` (built before saves.js, or without it) fails. The
      --selftest page has no module, and --no-saves-check leaves the check out.
 
+  9. (only with --stats, for a `web-release-stats` build) the profiler overlay and its export: after the page prints the console line
+     "Profiler: stats build", Ctrl+Shift+P makes the canvas differ from the shot before it (the overlay is drawn), and Ctrl+Shift+T
+     gives a download named `profiler-trace.json` (retried while the ring has too few frames: one try every --settle seconds) that
+     check_stats_trace accepts: JSON, `B` and `E` zone events balanced per thread, at least STATS_MIN_FRAMES `Frame` instants and
+     `otherData.build` "stats". It runs in a browser of its own, like (8). The --selftest page imitates the overlay and the download
+     (faults stats-no-overlay, stats-no-download, stats-bad-trace), so the script is testable without a build.
+
 The page is opened with `?fullscreen=0` (the switch of the shell, web/shell.html): without it the first tap of --touch would ask for
 fullscreen and resize the canvas under checks 3 and 5. So the smoke does not exercise the first-tap request, the toggle button or the
 orientation lock (a real phone does).
@@ -49,7 +56,7 @@ makes for a real run (switch, then manifest.json `threads`, then on): a threaded
 
 --selftest serves a page generated in a temp folder (a canvas that redraws the same still pattern on every animation frame and a
 moving one after a click, with a manifest.json of `threads: false`) instead of a build, so the logic of this script runs without a
-wasm build. --selftest-fault breaks that page on purpose (flat, console-error, page-error, deaf, moving, upload): the run has to exit 1,
+wasm build. --selftest-fault breaks that page on purpose (flat, console-error, page-error, deaf, moving, upload, and with --stats the three stats-* ones): the run has to exit 1,
 which shows each of the checks can fail and check 3 can fail in both ways (deaf: the click changes nothing; moving: the canvas
 changes by itself, "cannot judge"; upload: the server has no match store, so check 7 fails). Add --timeout 5 for flat, which waits for
 a frame that never comes.
@@ -128,7 +135,19 @@ SAVES_REFUSED_SCRIPTS = {
     "throws": "IDBFactory.prototype.open = function () { throw new DOMException('refused on purpose', 'SecurityError'); };",
     "silent": "IDBFactory.prototype.open = function () { return {}; };",
 }
-SELFTEST_FAULTS = ("none", "flat", "console-error", "page-error", "deaf", "moving", "upload")
+# Check 9: the console line of Application.cpp, the two chords of ProfilerToggle.h, the file the overlay saves, and what a good trace
+# holds. The export is tried again while the ring (which runs only while the overlay is open) has too few frames
+STATS_CONSOLE_PATTERN = r"Profiler: stats build"
+STATS_OVERLAY_KEY = "Control+Shift+P"
+STATS_EXPORT_KEY = "Control+Shift+T"
+STATS_DOWNLOAD_NAME = "profiler-trace.json"
+STATS_FRAME_EVENT = "Frame"
+STATS_BUILD = "stats"
+STATS_MIN_FRAMES = 10
+STATS_EXPORT_ATTEMPTS = 6
+STATS_DOWNLOAD_TIMEOUT_SECONDS = 5.0
+SELFTEST_STATS_FAULTS = ("stats-no-overlay", "stats-no-download", "stats-bad-trace")
+SELFTEST_FAULTS = ("none", "flat", "console-error", "page-error", "deaf", "moving", "upload", *SELFTEST_STATS_FAULTS)
 SELFTEST_THREADED = False  # the generated dist/ is single-thread: its manifest.json says so, and serve.py then sends no isolation headers
 # Check 7: the version a smoke piece names (the smoke's store accepts exactly it), the wait for the answer, the poll step in the page
 SMOKE_LOG_VERSION = 1
@@ -137,6 +156,7 @@ UPLOAD_POLL_MS = 20
 UPLOAD_SCRIPT_ID = "bagi-web-post"  # the id of the page script in web/shell.html
 UPLOAD_SCRIPT_PATTERN = re.compile(r'<script id="' + UPLOAD_SCRIPT_ID + r'">(.*?)</script>', re.DOTALL)
 # Runs in the page (page.evaluate with [path, body, timeoutMs, pollMs]): posts through the page's own call and waits for the status
+STATS_SCRIPT_ID = "selftest-stats"
 UPLOAD_PAGE_SCRIPT = """async ([path, body, timeoutMs, pollMs]) => {
     const api = window.bagiWebPost;
     if (!api) {
@@ -257,6 +277,8 @@ class BrowserRun:
     web_manifest_problems: list[str] | None = None  # check 6, made by check_web_manifest (None: not made)
     upload_problems: list[str] | None = None  # check 7, made by check_upload (None: not made)
     saves_problems: list[str] | None = None  # check 8, made by check_saves (None: not made)
+    stats_problems: list[str] | None = None  # check 9, made by check_stats (None: not made)
+    stats_summary: str = ""  # what check 9 saw in the trace, for the report
 
 
 @dataclass
@@ -287,6 +309,19 @@ class SavesRefusedRun:
 
 
 @dataclass
+class StatsRun:
+    """Check 9: what the page showed for the overlay chord and the export chord."""
+
+    started: bool = False  # the console line of the stats build was seen
+    overlay_drawn: bool = False  # the canvas differed from the shot before Ctrl+Shift+P
+    download_name: str | None = None
+    trace_text: str | None = None  # the last download
+    error: str | None = None  # the page could not be driven, or no download came
+    console: list[ConsoleEntry] = field(default_factory=list)
+    page_errors: list[str] = field(default_factory=list)
+
+
+@dataclass
 class Options:
     dist: Path | None
     selftest: bool
@@ -304,6 +339,7 @@ class Options:
     expect_console: list[str] = field(default_factory=list)
     upload_check: bool = True
     saves_check: bool = True
+    stats: bool = False
 
 
 # ----- command line -----
@@ -354,6 +390,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="leave out check 7 (the page posts a match log piece): for a dist built before window.bagiWebPost existed")
     parser.add_argument("--no-saves-check", action="store_true",
                         help="leave out check 8 (the save folder survives a reload): for a dist built without web/saves.js; the --selftest page has no module")
+    parser.add_argument("--stats", action="store_true",
+                        help="also run check 9 (the overlay and the trace download of a web-release-stats build; the --selftest page imitates them)")
     return parser
 
 
@@ -365,6 +403,8 @@ def parse_options(argv: list[str] | None = None) -> Options:
         parser.error("name exactly one of --dist and --selftest")
     if args.selftest_fault != "none" and not args.selftest:
         parser.error("--selftest-fault belongs to --selftest")
+    if args.selftest_fault in SELFTEST_STATS_FAULTS and not args.stats:
+        parser.error(f"--selftest-fault {args.selftest_fault} belongs to --stats")
     if args.timeout <= 0 or args.settle < 0:
         parser.error("--timeout must be positive and --settle not negative")
     if args.device_scale_factor <= 0:
@@ -379,7 +419,7 @@ def parse_options(argv: list[str] | None = None) -> Options:
                 parser.error(f"{option} '{pattern}' is not a regular expression: {error}")
     return Options(args.dist, args.selftest, args.click, args.viewport, args.timeout, args.settle, args.allow_console,
                    args.chromium_arg, args.selftest_fault, args.browser_channel, args.executable_path, args.device_scale_factor,
-                   args.touch, args.expect_console, not args.no_upload_check, not args.no_saves_check and not args.selftest)
+                   args.touch, args.expect_console, not args.no_upload_check, not args.no_saves_check and not args.selftest, args.stats)
 
 
 # ----- judging: no browser needed -----
@@ -479,6 +519,8 @@ def evaluate(run: BrowserRun, allow_console: list[str] | None = None, expect_con
         problems.extend(run.upload_problems)
     if run.saves_problems:
         problems.extend(run.saves_problems)
+    if run.stats_problems:
+        problems.extend(run.stats_problems)
     return problems
 
 
@@ -523,6 +565,86 @@ def check_saves(persist: SavesPersistRun, refused: list[SavesRefusedRun], allow_
         elif run.state != "memory":
             problems.append(f"{label}: Module.bagiSaves.state is {run.state!r}, not 'memory'")
         problems.extend(console_error_problems(label + ":", run.console, run.page_errors, allow))
+    return problems
+
+
+def stats_trace_events(trace: object) -> list[dict] | None:
+    """The `traceEvents` of a parsed trace when it is a list of objects, else None."""
+    events = trace.get("traceEvents") if isinstance(trace, dict) else None
+    if not isinstance(events, list) or not all(isinstance(event, dict) for event in events):
+        return None
+    return events
+
+
+def check_stats_trace(text: str) -> list[str]:
+    """Check 9 on the text of a downloaded trace: the reasons, empty for a good one. It has `B` and `E` zone events that nest per
+    thread (every `E` closes an open `B`, none stays open), at least STATS_MIN_FRAMES `Frame` instants and `otherData.build` of
+    STATS_BUILD."""
+    label = "(9) the downloaded trace"
+    try:
+        trace = json.loads(text)
+    except ValueError as error:
+        return [f"{label} is not JSON: {error}"]
+    events = stats_trace_events(trace)
+    if events is None:
+        return [f"{label} has no `traceEvents` list of objects"]
+    problems = []
+    open_zones: dict[tuple, int] = {}
+    begins = ends = frames = 0
+    for event in events:
+        phase = event.get("ph")
+        thread = (event.get("pid"), event.get("tid"))
+        if phase == "B":
+            begins += 1
+            open_zones[thread] = open_zones.get(thread, 0) + 1
+        elif phase == "E":
+            ends += 1
+            if open_zones.get(thread, 0) == 0:
+                problems.append(f"{label} is unbalanced: an `E` event of thread {thread} closes no zone")
+                break
+            open_zones[thread] -= 1
+        elif phase == "i" and event.get("name") == STATS_FRAME_EVENT:
+            frames += 1
+    still_open = sum(open_zones.values())
+    if still_open and not problems:
+        problems.append(f"{label} is unbalanced: {still_open} zone(s) never end")
+    if begins == 0 or ends == 0:
+        problems.append(f"{label} holds no zone events ({begins} `B`, {ends} `E`)")
+    if frames < STATS_MIN_FRAMES:
+        problems.append(f"{label} holds {frames} `{STATS_FRAME_EVENT}` instants, fewer than {STATS_MIN_FRAMES}")
+    other = trace.get("otherData")
+    build = other.get("build") if isinstance(other, dict) else None
+    if build != STATS_BUILD:
+        problems.append(f"{label} says otherData.build {build!r}, not {STATS_BUILD!r}")
+    return problems
+
+
+def summarize_stats_trace(text: str) -> str:
+    """What check 9 saw, for the report line; empty when the text is not a trace."""
+    try:
+        events = stats_trace_events(json.loads(text))
+    except ValueError:
+        return ""
+    if events is None:
+        return ""
+    frames = sum(1 for event in events if event.get("ph") == "i" and event.get("name") == STATS_FRAME_EVENT)
+    zones = sum(1 for event in events if event.get("ph") == "B")
+    return f"{frames} {STATS_FRAME_EVENT} instants, {zones} zones"
+
+
+def check_stats(run: StatsRun, allow_console: list[str] | None = None) -> list[str]:
+    """Check 9 on what the browser run showed: the reasons, empty when the overlay was drawn and the export gave a good trace."""
+    problems = console_error_problems("(9)", run.console, run.page_errors, allow_console or [])
+    if run.error:
+        problems.append(f"(9) {run.error}")
+    elif not run.started:
+        problems.append(f"(9) no console message matched '{STATS_CONSOLE_PATTERN}': this is not a stats build, or it did not start")
+    elif not run.overlay_drawn:
+        problems.append(f"(9) the canvas did not change after {STATS_OVERLAY_KEY}: the overlay was not drawn")
+    elif run.download_name != STATS_DOWNLOAD_NAME:
+        problems.append(f"(9) the download is named {run.download_name!r}, not {STATS_DOWNLOAD_NAME!r}")
+    else:
+        problems.extend(check_stats_trace(run.trace_text or ""))
     return problems
 
 
@@ -629,6 +751,43 @@ def web_post_script() -> str:
     return found.group(1)
 
 
+SELFTEST_STATS_SCRIPT = """
+"use strict";
+// An imitation of the stats build: the console line, Ctrl+Shift+P draws a block (the overlay) and Ctrl+Shift+T downloads a trace.
+// The fault names are those of SELFTEST_STATS_FAULTS
+var statsFault = "__FAULT__";
+function statsTrace() {
+    var frames = statsFault === "stats-bad-trace" ? 3 : 12;
+    var events = [];
+    for (var i = 0; i < frames; i++) {
+        events.push({name: "Zone", ph: "B", pid: 1, tid: 1, ts: i * 1000});
+        events.push({name: "Zone", ph: "E", pid: 1, tid: 1, ts: i * 1000 + 500});
+        events.push({name: "Frame", ph: "i", s: "g", pid: 1, tid: 0, ts: i * 1000 + 900});
+    }
+    return JSON.stringify({traceEvents: events, otherData: {build: "stats"}});
+}
+function statsDownload() {
+    var link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([statsTrace()], {type: "application/json"}));
+    link.download = "profiler-trace.json";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+}
+console.log("Profiler: stats build (selftest imitation)");
+window.addEventListener("keydown", function (event) {
+    if (!event.ctrlKey || !event.shiftKey || event.repeat) {
+        return;
+    }
+    if (event.code === "KeyP" && statsFault !== "stats-no-overlay") {
+        statsOverlay = !statsOverlay;
+    } else if (event.code === "KeyT" && statsOverlay && statsFault !== "stats-no-download") {
+        statsDownload();
+    }
+});
+"""
+
+
 def selftest_page(fault: str = "none") -> str:
     """A page for the checks: a canvas that redraws the same still stripes on every animation frame (so the picture before a click
     does not depend on the frame) and other stripes (another palette, a different direction, moving) after a click. `fault` breaks
@@ -636,6 +795,7 @@ def selftest_page(fault: str = "none") -> str:
     moves by itself before any click. The page carries the real bagiWebPost script; the fault `upload` is in the server, not here."""
     flat = "true" if fault == "flat" else "false"
     post_script = web_post_script()
+    stats_script = SELFTEST_STATS_SCRIPT.replace("__FAULT__", fault if fault in SELFTEST_STATS_FAULTS else "")
     deaf = "true" if fault == "deaf" else "false"
     moving = "true" if fault == "moving" else "false"
     console_error = 'console.error("selftest: this error is on purpose");' if fault == "console-error" else ""
@@ -660,6 +820,7 @@ var deaf = {deaf};
 var moving = {moving};
 var frame = 0;
 var clicked = false;
+var statsOverlay = false;
 function draw() {{
     var width = canvas.width;
     var height = canvas.height;
@@ -682,6 +843,10 @@ function draw() {{
             context.fillRect(x, 0, 20, height);
         }}
     }}
+    if (statsOverlay) {{
+        context.fillStyle = "#ffffff";
+        context.fillRect(8, 8, 160, 60);
+    }}
     frame += 1;
     requestAnimationFrame(draw);
 }}
@@ -693,6 +858,7 @@ console.log("selftest page started");
 {page_error}
 requestAnimationFrame(draw);
 </script>
+<script id="{STATS_SCRIPT_ID}">{stats_script}</script>
 </body>
 </html>
 """
@@ -962,6 +1128,54 @@ def run_saves_checks(playwright_api, url: str, options: Options) -> list[str]:
     return check_saves(persist, refused, options.allow_console)
 
 
+def run_stats_check(browser, url: str, options: Options) -> StatsRun:
+    """Check 9: show the overlay, then save the trace until it is good or the attempts are gone."""
+    run = StatsRun()
+    page, canvas = open_game_page(browser, url, options, run.console, run.page_errors)
+    sleep = lambda seconds: page.wait_for_timeout(seconds * 1000)  # noqa: E731
+    if not game_draws(page, canvas, options.timeout):
+        run.error = "the game did not draw a frame, so the overlay was not tried"
+        return run
+    wait_for_expected_console(page, run, [STATS_CONSOLE_PATTERN], options.timeout)
+    run.started = not unmatched_patterns(run.console, [STATS_CONSOLE_PATTERN])
+    if not run.started:
+        return run
+    try:
+        before = decode(canvas.screenshot(), "(9) the shot before the overlay")
+    except SmokeFailure as error:
+        run.error = str(error).removeprefix("(9) ")
+        return run
+    page.keyboard.press(STATS_OVERLAY_KEY)
+    _, run.overlay_drawn = poll(canvas.screenshot, lambda png: png_differs_from(before, png), options.timeout, sleep=sleep)
+    if not run.overlay_drawn:
+        return run
+    for _ in range(STATS_EXPORT_ATTEMPTS):
+        page.wait_for_timeout(options.settle * 1000)  # the ring has to see frames before there is a trace to save
+        try:
+            with page.expect_download(timeout=STATS_DOWNLOAD_TIMEOUT_SECONDS * 1000) as download_info:
+                page.keyboard.press(STATS_EXPORT_KEY)
+            download = download_info.value
+            run.download_name = download.suggested_filename
+            run.trace_text = Path(download.path()).read_text(encoding="utf-8")
+        except Exception as error:  # no download within the time-out, or a file that cannot be read
+            run.error = f"{STATS_EXPORT_KEY} gave no readable download within {STATS_DOWNLOAD_TIMEOUT_SECONDS:g} s: {str(error).strip().splitlines()[0] if str(error).strip() else type(error).__name__}"
+            return run
+        if run.download_name != STATS_DOWNLOAD_NAME or not check_stats_trace(run.trace_text):
+            break
+    return run
+
+
+def run_stats_checks(playwright_api, url: str, options: Options) -> tuple[list[str], str]:
+    """Check 9 in a browser of its own: the reasons and the report text of what the trace held."""
+    with playwright_api.sync_playwright() as playwright:
+        browser = launch_browser(playwright, options)
+        try:
+            run = run_stats_check(browser, url, options)
+        finally:
+            browser.close()
+    return check_stats(run, options.allow_console), summarize_stats_trace(run.trace_text or "")
+
+
 def shot_ends_idle_wait(idle: PngImage, png: bytes) -> bool:
     """True for a shot that ends the wait with no click: a different picture, or one that cannot be read (the caller tells them apart)."""
     try:
@@ -1012,6 +1226,8 @@ def run_smoke(options: Options, playwright_api) -> int:
                 run.web_manifest_problems = check_web_manifest(fetch_from(url))
                 if options.saves_check:
                     run.saves_problems = run_saves_checks(playwright_api, url, options)
+                if options.stats:
+                    run.stats_problems, run.stats_summary = run_stats_checks(playwright_api, url, options)
             except BrowserMissing as error:
                 named = options.browser_channel or options.executable_path
                 print(f"SKIP: the browser is not installed ({'the one you named' if named else 'playwright install chromium'}): {error}")
@@ -1047,6 +1263,8 @@ def run_smoke(options: Options, playwright_api) -> int:
         print("ok: (8) a file written, flushed and reloaded is read back; with IndexedDB refused the page still starts, in state memory")
     else:
         print("skip: (8) the save folder (--no-saves-check, or the --selftest page, which has no module)")
+    if options.stats:
+        print(f"ok: (9) {STATS_OVERLAY_KEY} drew the overlay and {STATS_EXPORT_KEY} downloaded {STATS_DOWNLOAD_NAME} ({run.stats_summary})")
     print("PASS")
     return EXIT_PASSED
 
