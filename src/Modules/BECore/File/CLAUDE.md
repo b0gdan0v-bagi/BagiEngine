@@ -11,6 +11,8 @@ The engine's own file layer over SDL3 (`SDL_IOStream`, `SDL_GetPathInfo`, `SDL_R
 | `CreateDirectories`, `RemoveFile`, `RenameFile` | folder tree, one file, a rename that replaces a file |
 | `ReadFileBytes`, `ReadTextFile` | a whole file in one allocation, refused above `maxBytes` (default `kDefaultMaxFileBytes`) before anything is allocated |
 | `WriteFileAtomically` | folder made, `<path>.tmp` written, flushed, closed, renamed over the target |
+| `PathToUtf8(path)` (`FilePath.h`) | the UTF-8 `String` of a `std::filesystem::path`: the one `u8string()` call, so `File.h` stays free of `<filesystem>` |
+| `TextFileWriter<N>` (`TextFileWriter.h`) | text into an inline buffer of `N` bytes over a `File`, for a writer with nowhere to return an error (a log sink): `Append`, `AppendFormat` (cut at `N`, never allocated), `Flush`, `Close`; the first write error is kept (`HasError`, `TakeError`) and later calls do nothing; no allocation after `Open` |
 
 ## Contracts
 
