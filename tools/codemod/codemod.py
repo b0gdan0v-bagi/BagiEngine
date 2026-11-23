@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Moves the `eastl::` and `std::` type names of C++ sources to the BECore type layer (`BECore/Types/`).
 
-    python3 tools/codemod/codemod.py --root <folder> --family <optionals|views|strings|containers|maps|utility|fmt|all>
+    python3 tools/codemod/codemod.py --root <folder> --family <optionals|views|strings|containers|maps|utility|fmt|log|all>
                                      [--dry-run] [--fail-on-change] [--report]
 
 It walks `*.h *.hpp *.inl *.cpp` under `--root`, skips the vendored zones, the type layer and the reflection traits, and works on code
 only: comments and string literals are blanked for matching and kept as they were. A line that must keep a `std::` type carries
 `//-NoStd: <why>` on it or on the line before; the tool never touches such a line. A second run changes nothing. Standard library only.
-`CLAUDE.md` has the contract and the rules of each family.
+`CLAUDE.md` has the contract and the rules of each family. The family `log` is not a type move: it unwraps `LOG_X(Format(...))` and
+`LOG_X("..."_format(...))` into the formatted `LOG_X("...", args...)` of the Logger, and with `--fail-on-change` is the check that none is left.
 
 Exit code: 0 ok, 1 `--fail-on-change` found something to change, 2 an error (a bad root, a file that is not UTF-8).
 """
@@ -29,7 +30,7 @@ from nostd import exempt_lines, mask, walk  # noqa: E402
 
 EXIT_OK, EXIT_CHANGES, EXIT_ERROR = 0, 1, 2
 
-FAMILIES = ("optionals", "views", "strings", "containers", "maps", "utility", "fmt")
+FAMILIES = ("optionals", "views", "strings", "containers", "maps", "utility", "fmt", "log")
 EASTL_OPTIONAL_HEADER = re.compile(r"^[ \t]*#[ \t]*include[ \t]*<EASTL/optional\.h>[ \t]*\r?\n", re.MULTILINE)
 EASTL_OPTIONAL_LEFT = re.compile(r"(?<![\w:])(?:::)?eastl::(?:optional|nullopt|nullopt_t|make_optional|in_place|in_place_t|in_place_type|in_place_index|bad_optional_access)\b")
 MAX_PASSES = 8
@@ -230,6 +231,15 @@ FMT_VALUE = re.compile(r"\s*::\s*value(?!\w)")
 FMT_USING = re.compile(r"\busing\s+namespace\s+fmt\s*;")
 FMT_INCLUDE = re.compile(r"^[ \t]*#[ \t]*include[ \t]*<fmt/[^>\n]*>", re.MULTILINE)
 FMT_ADVICE = "use the layer's name or mark //-NoStd: <why>"
+LOG_CALL = re.compile(r"(?<!\w)LOG_(?:DEBUG|INFO|WARNING|ERROR|FATAL)\s*\(")
+LOG_FORMAT_CALL = re.compile(r"(?:::)?(?:BECore::)?Format\s*\(")
+LOG_LITERAL = r'"[^"]*"(?:\s*"[^"]*")*'  # on masked text: the insides of the literals are blanks
+LOG_LITERAL_FORMAT_CALL = re.compile("(" + LOG_LITERAL + r")_format\s*\(")
+LOG_LITERAL_ONLY = re.compile(LOG_LITERAL)
+LOG_C_STR_TAIL = re.compile(r"\s*\.\s*c_str\s*\(\s*\)\s*")
+LOG_PLAIN_NAME = re.compile(r"[A-Za-z_]\w*")
+LOG_RULE_FORMAT = "LOG_X(Format(...)) -> LOG_X(...)"
+LOG_RULE_LITERAL = 'LOG_X("..."_format(...)) -> LOG_X("...", ...)'
 
 
 @dataclass
@@ -245,6 +255,7 @@ class Note:
     line: int
     rule: str
     message: str
+    blocking: bool = False  # a left site that `--fail-on-change` counts as not done (a note of a family that has a check)
 
 
 class Pass:
@@ -288,8 +299,8 @@ class Pass:
     def replace(self, match: re.Match, text: str, rule: str) -> None:
         self.edits.append(Edit(match.start(), match.end(), text, rule))
 
-    def note(self, pos: int, rule: str, message: str) -> None:
-        self.notes.append(Note(self.line_of(pos), rule, message))
+    def note(self, pos: int, rule: str, message: str, blocking: bool = False) -> None:
+        self.notes.append(Note(self.line_of(pos), rule, message, blocking))
 
     def arguments_after(self, pos: int) -> Optional[Tuple[List[Tuple[int, int]], int, int]]:
         """The template arguments that follow the name ending at `pos`: (ranges, index of `<`, index of `>`); None without a list."""
@@ -324,6 +335,8 @@ class Pass:
             self._variant_companions()
         if "fmt" in self.families:
             self._fmt_names()
+        if "log" in self.families:
+            self._log_calls()
         for name in NAMES:
             if name.family in self.families:
                 self._simple(name)
@@ -347,6 +360,79 @@ class Pass:
         for m in FMT_INCLUDE.finditer(self.masked):
             if not self.exempt(m.start()):
                 self.note(m.start(), "#include <fmt/...>", f"{m.group(0).strip()} left: {FMT_ADVICE}")
+
+    def _log_calls(self) -> None:
+        """`LOG_X(Format(fmt, args))` and `LOG_X("fmt"_format(args))`, each with an optional `.c_str()`, to `LOG_X(fmt, args)`: the Logger
+        checks the format at compile time and formats on the stack. A call with one argument that is neither shape stays (a plain
+        string is logged raw); a shape the tool cannot unwrap with certainty is a blocking note."""
+        for m in LOG_CALL.finditer(self.masked):
+            open_pos = m.end() - 1
+            close = match_close(self.masked, open_pos)
+            if close < 0:
+                continue
+            first_line, last_line = self.line_of(m.start()), self.line_of(close)
+            if any(first_line <= line <= last_line for line in self._exempt_lines):
+                continue
+            ranges = split_args(self.masked, open_pos + 1, close, angles=False)
+            if len(ranges) != 1:
+                continue
+            begin, end = ranges[0]
+            argument = self.masked[begin:end]
+            call = LOG_FORMAT_CALL.match(argument)
+            if call:
+                self._log_format_call(m.start(), begin, end, begin + call.end() - 1, LOG_RULE_FORMAT)
+                continue
+            literal_call = LOG_LITERAL_FORMAT_CALL.match(argument)
+            if literal_call:
+                self._log_literal_call(m.start(), begin, end, begin + literal_call.end() - 1, begin + literal_call.end(1), LOG_RULE_LITERAL)
+            elif LOG_PLAIN_NAME.fullmatch(argument):
+                self.note(m.start(), "LOG_X(variable)", f"LOG_X({argument}) left: a one-argument call is logged raw; fold the line that builds the string into the call by hand")
+
+    def _log_tail_is_plain(self, open_pos: int, end: int) -> int:
+        """The index of the `)` that closes the call opened at `open_pos` when only `.c_str()` follows it before `end`, else -1."""
+        close = match_close(self.masked, open_pos)
+        if close < 0 or close >= end:
+            return -1
+        tail = self.masked[close + 1:end]
+        return close if not tail.strip() or LOG_C_STR_TAIL.fullmatch(tail) else -1
+
+    def _log_arguments(self, open_pos: int, close: int) -> List[Tuple[int, int]]:
+        """The ranges of the arguments inside `(...)`; empty for `()`."""
+        ranges = split_args(self.masked, open_pos + 1, close, angles=False)
+        return [] if len(ranges) == 1 and ranges[0][0] == ranges[0][1] else ranges
+
+    def _log_without_arguments(self, call_pos: int, begin: int, end: int, literal: Tuple[int, int], rule: str) -> None:
+        """`Format("text")` / `"text"_format()` to the raw `"text"`; a `{` or `}` in it meant escapes, which a raw string would print doubled."""
+        text = self.source[literal[0]:literal[1]]
+        if "{" in text or "}" in text:
+            self.note(call_pos, rule, "left: a literal with { or } and no arguments meant escapes, a raw string would print them doubled; write the text you mean", blocking=True)
+            return
+        self.edits.append(Edit(begin, end, text, rule))
+
+    def _log_format_call(self, call_pos: int, begin: int, end: int, open_pos: int, rule: str) -> None:
+        close = self._log_tail_is_plain(open_pos, end)
+        if close < 0:
+            self.note(call_pos, rule, "left: the Format(...) is not the whole argument (nor followed by .c_str() alone)", blocking=True)
+            return
+        inner = self._log_arguments(open_pos, close)
+        if not inner or not LOG_LITERAL_ONLY.fullmatch(self.masked[inner[0][0]:inner[0][1]]):
+            self.note(call_pos, rule, "left: the format string of Format(...) is not a string literal (the Logger checks a literal at compile time)", blocking=True)
+            return
+        if len(inner) == 1:
+            self._log_without_arguments(call_pos, begin, end, inner[0], rule)
+            return
+        self.edits.append(Edit(begin, end, self.source[inner[0][0]:inner[-1][1]], rule))
+
+    def _log_literal_call(self, call_pos: int, begin: int, end: int, open_pos: int, literal_end: int, rule: str) -> None:
+        close = self._log_tail_is_plain(open_pos, end)
+        if close < 0:
+            self.note(call_pos, rule, 'left: the "..."_format(...) is not the whole argument (nor followed by .c_str() alone)', blocking=True)
+            return
+        inner = self._log_arguments(open_pos, close)
+        if not inner:
+            self._log_without_arguments(call_pos, begin, end, (begin, literal_end), rule)
+            return
+        self.edits.append(Edit(begin, end, f"{self.source[begin:literal_end]}, {self.source[inner[0][0]:inner[-1][1]]}", rule))
 
     def _is_formattable(self, name: re.Match) -> bool:
         """`fmt::is_formattable<T>::value` -> `Formattable<T>`; False (reported by the caller) for any other shape."""
@@ -542,6 +628,10 @@ class Result:
     def replacements(self) -> int:
         return sum(stats.replacements for stats in self.rules.values())
 
+    @property
+    def blocking(self) -> List[Tuple[str, Note]]:
+        return [(relative, note) for relative, note in self.notes if note.blocking]
+
 
 def run(root: Path, families: Sequence[str], write: bool) -> Result:
     chosen = set(families)
@@ -574,9 +664,9 @@ def print_result(result: Result, dry_run: bool, report: bool) -> None:
         stats = result.rules[rule]
         print(f"{rule}: {len(stats.files)} files, {stats.replacements} replacements")
     print(f"{verb} {len(result.changed_files)} files, {result.replacements} replacements; {len(result.notes)} notes" + ("" if report else " (--report lists them)"))
-    if report:
-        for relative, note in sorted(result.notes, key=lambda item: (item[0], item[1].line)):
-            print(f"{relative}:{note.line}: [{note.rule}] {note.message}")
+    # a site that is left and still counts against `--fail-on-change` is always listed: the exit code alone would not say where
+    for relative, note in sorted(result.notes if report else result.blocking, key=lambda item: (item[0], item[1].line)):
+        print(f"{relative}:{note.line}: [{note.rule}] {note.message}")
     for error in result.errors:
         print(f"error: {error}", file=sys.stderr)
 
@@ -594,9 +684,9 @@ def parse_families(text: str) -> List[str]:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Moves eastl:: and std:: type names to the BECore type layer.")
     parser.add_argument("--root", default=".", help="the folder to walk (the engine: .; a game: its src and its tests)")
-    parser.add_argument("--family", required=True, type=parse_families, help="optionals, views, strings, containers, maps, utility, fmt, all (or a comma list)")
+    parser.add_argument("--family", required=True, type=parse_families, help="optionals, views, strings, containers, maps, utility, fmt, log, all (or a comma list)")
     parser.add_argument("--dry-run", action="store_true", help="write nothing, print what would change")
-    parser.add_argument("--fail-on-change", action="store_true", help="write nothing; exit 1 when anything would change (the check that a family is done)")
+    parser.add_argument("--fail-on-change", action="store_true", help="write nothing; exit 1 when anything would change or a blocking note is left (the check that a family is done)")
     parser.add_argument("--report", action="store_true", help="list the notes: what the tool found and left")
     args = parser.parse_args(argv)
     root = Path(args.root).resolve()
@@ -608,7 +698,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print_result(result, dry_run=not write, report=args.report)
     if result.errors:
         return EXIT_ERROR
-    if args.fail_on_change and result.replacements:
+    if args.fail_on_change and (result.replacements or result.blocking):
         return EXIT_CHANGES
     return EXIT_OK
 

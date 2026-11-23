@@ -179,6 +179,129 @@ def test_fmt_and_strings_settle_together() -> None:
     assert convert('std::string s = fmt::format("{}", 1);', ["strings", "fmt"]) == 'BECore::String s = BECore::Format("{}", 1);'
 
 
+# ---- the log family -------------------------------------------------------------------------------------------------------------
+
+
+def log(source: str) -> str:
+    return convert(source, ["log"])
+
+
+@pytest.mark.parametrize(
+    "before, after",
+    [
+        ('LOG_INFO(Format("Loaded {}", path));', 'LOG_INFO("Loaded {}", path);'),
+        ('LOG_ERROR(Format("Failed {}: {}", path, error).c_str());', 'LOG_ERROR("Failed {}: {}", path, error);'),
+        ('LOG_WARNING(BECore::Format("a {}", x));', 'LOG_WARNING("a {}", x);'),
+        ('LOG_DEBUG(::BECore::Format("a {}", x).c_str());', 'LOG_DEBUG("a {}", x);'),
+        ('LOG_FATAL(Format ("a {}", x) . c_str ( ));', 'LOG_FATAL("a {}", x);'),
+        ('LOG_INFO("Loaded {}"_format(path));', 'LOG_INFO("Loaded {}", path);'),
+        ('LOG_INFO("Loaded {}"_format(path).c_str());', 'LOG_INFO("Loaded {}", path);'),
+        ('LOG_INFO("{} and {}"_format(a, b));', 'LOG_INFO("{} and {}", a, b);'),
+        ('LOG_INFO(Format("plain"));', 'LOG_INFO("plain");'),
+        ('LOG_INFO(Format("plain").c_str());', 'LOG_INFO("plain");'),
+        ('LOG_INFO("plain"_format());', 'LOG_INFO("plain");'),
+    ],
+)
+def test_log_rule(before: str, after: str) -> None:
+    assert log(before) == after
+
+
+def test_log_keeps_the_text_of_the_arguments_exactly() -> None:
+    assert log('LOG_INFO(Format("{} {}", Foo(a, b)[1], (x < y ? "a,b" : ")\\"")));') == 'LOG_INFO("{} {}", Foo(a, b)[1], (x < y ? "a,b" : ")\\""));'
+    assert log('LOG_INFO("{}"_format(map.at({1, 2}), v.size()));') == 'LOG_INFO("{}", map.at({1, 2}), v.size());'
+    assert log('LOG_INFO(Format("{}", Format("{}", a)));') == 'LOG_INFO("{}", Format("{}", a));'
+
+
+def test_log_literal_with_a_paren_and_a_quote_is_read_as_one_literal() -> None:
+    assert log('LOG_ERROR(Format("bad ) \\" ( {}", x));') == 'LOG_ERROR("bad ) \\" ( {}", x);'
+    assert log('LOG_ERROR("bad ) \\" ( {}"_format(x));') == 'LOG_ERROR("bad ) \\" ( {}", x);'
+
+
+def test_log_adjacent_literals_and_several_lines_are_kept() -> None:
+    before = 'LOG_ERROR(Format("first {} "\n                 "second {}",\n                 a,\n                 b)\n              .c_str());'
+    assert log(before) == 'LOG_ERROR("first {} "\n                 "second {}",\n                 a,\n                 b);'
+    assert log('LOG_ERROR("first {} "\n          "second {}"_format(\n              a, b));') == 'LOG_ERROR("first {} "\n          "second {}", a, b);'
+
+
+def test_log_comment_between_the_arguments_is_kept() -> None:
+    assert log('LOG_INFO(Format("{} {}", a, /* why */ b));') == 'LOG_INFO("{} {}", a, /* why */ b);'
+
+
+def test_log_leaves_what_is_not_a_format_call() -> None:
+    for source in ('LOG_INFO("plain {}");', 'LOG_INFO(text.c_str());', 'LOG_INFO("a {}", x);', 'LOG_INFO();', 'LOG_INFO(StringView{"a"});',
+                   '#define LOG_INFO(...) ::BECore::Logger::Info(BE_LOG_SITE, __VA_ARGS__)'):
+        assert log(source) == source
+
+
+def test_log_a_literal_with_braces_and_no_arguments_is_reported_and_left() -> None:
+    for source in ('LOG_INFO(Format("a {{}}"));', 'LOG_INFO("a {{}}"_format());', 'LOG_INFO(Format("a {{}}").c_str());'):
+        out, applied, notes = codemod.transform(source, {"log"})
+        assert out == source and applied == []
+        assert [n.blocking for n in notes] == [True]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "LOG_INFO(Format(kFormat, x));",
+        "LOG_INFO(Format(RuntimeFormat(text), x));",
+        'LOG_INFO(Format("a {}", x).size());',
+        'LOG_INFO(Format("a {}", x) + suffix);',
+        'LOG_INFO("a {}"_format(x) + suffix);',
+        'LOG_INFO("a {}"_format(x).data());',
+        "LOG_INFO(Format(__VA_ARGS__));",
+        "LOG_INFO(Format());",
+    ],
+)
+def test_log_a_shape_it_cannot_unwrap_is_a_blocking_note(source: str) -> None:
+    out, applied, notes = codemod.transform(source, {"log"})
+    assert out == source and applied == []
+    assert [n.blocking for n in notes] == [True]
+
+
+def test_log_a_variable_is_reported_but_does_not_block() -> None:
+    out, _, notes = codemod.transform("String message = Format(a);\nLOG_ERROR(message);", {"log"})
+    assert out == "String message = Format(a);\nLOG_ERROR(message);"
+    assert [(n.line, n.rule, n.blocking) for n in notes] == [(2, "LOG_X(variable)", False)]
+
+
+def test_log_marker_keeps_the_line_and_a_call_over_several_lines() -> None:
+    source = 'LOG_INFO(Format("a {}", x));  //-NoStd: boundary\n//-NoStd: boundary\nLOG_INFO(Format("b {}", y));\nLOG_INFO(Format("c {}", z));\nLOG_INFO(Format("d {}",\n                w));  //-NoStd: x\n'
+    out, _, notes = codemod.transform(source, {"log"})
+    assert out == 'LOG_INFO(Format("a {}", x));  //-NoStd: boundary\n//-NoStd: boundary\nLOG_INFO(Format("b {}", y));\nLOG_INFO("c {}", z);\nLOG_INFO(Format("d {}",\n                w));  //-NoStd: x\n'
+    assert notes == []
+
+
+def test_log_in_a_comment_and_in_a_literal_is_not_touched() -> None:
+    source = '// LOG_INFO(Format("a {}", x));\n/* LOG_INFO("a {}"_format(x)); */\nconst char* a = "LOG_INFO(Format(\\"a {}\\", x))";\nconst char* b = R"x(LOG_ERROR(Format("{}", y)))x";\n'
+    out, applied, notes = codemod.transform(source, {"log"})
+    assert out == source and applied == [] and notes == []
+
+
+def test_log_is_idempotent_and_does_not_confuse_other_macros() -> None:
+    once = log('LOG_INFO(Format("a {}", x)); LOG_ERROR("b {}"_format(y).c_str()); MY_LOG_INFO(Format("c"));  LOG_INFO_IF(Format("d {}", z));')
+    assert once == 'LOG_INFO("a {}", x); LOG_ERROR("b {}", y); MY_LOG_INFO(Format("c"));  LOG_INFO_IF(Format("d {}", z));'
+    assert log(once) == once
+
+
+def test_log_family_is_in_all_and_settles_with_fmt() -> None:
+    assert "log" in codemod.FAMILIES
+    assert codemod.parse_families("fmt, log") == ["fmt", "log"]
+    assert convert('LOG_INFO(fmt::format("a {}", x));') == 'LOG_INFO("a {}", x);'
+
+
+def test_log_main_fail_on_change_counts_a_left_call_and_lists_it(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    make_tree(tmp_path, {"a.cpp": 'void f() { LOG_INFO(Format("a {}", x)); }\n', "b.cpp": 'void g() { LOG_INFO(Format(kFormat, x)); }\n', "c.cpp": 'void h() { LOG_INFO("a {}", x); }\n'})
+    assert codemod.main(["--root", str(tmp_path), "--family", "log", "--fail-on-change"]) == 1
+    assert (tmp_path / "a.cpp").read_text() == 'void f() { LOG_INFO(Format("a {}", x)); }\n'
+    assert "b.cpp:1:" in capsys.readouterr().out
+    assert codemod.main(["--root", str(tmp_path), "--family", "log"]) == 0
+    assert (tmp_path / "a.cpp").read_text() == 'void f() { LOG_INFO("a {}", x); }\n'
+    assert codemod.main(["--root", str(tmp_path), "--family", "log", "--fail-on-change"]) == 1  # b.cpp is still left
+    (tmp_path / "b.cpp").write_text('void g() { LOG_INFO("a {}", x); }\n')
+    assert codemod.main(["--root", str(tmp_path), "--family", "log", "--fail-on-change"]) == 0
+
+
 # ---- what it leaves -------------------------------------------------------------------------------------------------------------
 
 
