@@ -140,8 +140,8 @@ namespace BECore::Tests {
 
     TEST(JsonTapeTest, LegalEscapesAreAccepted) {
         ExpectAccepted(R"("\" \\ \/ \b \f \n \r \t")");
-        ExpectAccepted(R"("éé\u0000€")");
-        ExpectAccepted(R"("😀")");
+        ExpectAccepted(R"("\u00e9\u00e9\u0000\u20ac")");
+        ExpectAccepted(R"("\ud83d\ude00")");
         ExpectAccepted("\"\xC3\xA9 \xE2\x82\xAC \xF0\x9F\x98\x80\"");
         ExpectAccepted("\"\x7F\"");
     }
