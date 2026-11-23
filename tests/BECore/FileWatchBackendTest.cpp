@@ -7,6 +7,7 @@
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Common/Wait.h>
+#include <EASTL/sort.h>
 #include <chrono>
 #include <filesystem>
 #include <gtest/gtest.h>
@@ -19,20 +20,26 @@ namespace BECore::Tests {
         /// Collects what a backend posts; a native backend posts from its own thread
         class RecordingSink : public IFileWatchSink {
         public:
-            void Post(const std::filesystem::path& realPath) override {
+            void Post(const Path& realPath) override {
                 LockGuard lock(_mutex);
-                _posted.push_back(realPath.lexically_normal());
+                _posted.push_back(realPath.LexicallyNormal());
             }
 
-            [[nodiscard]] bool Has(const std::filesystem::path& path) const {
+            [[nodiscard]] bool Has(const Path& path) const {
                 LockGuard lock(_mutex);
-                const std::filesystem::path wanted = path.lexically_normal();
-                for (const std::filesystem::path& posted : _posted) {
+                const Path wanted = path.LexicallyNormal();
+                for (const Path& posted : _posted) {
                     if (posted == wanted) {
                         return true;
                     }
                 }
                 return false;
+            }
+
+            /// Every post in the order it came
+            [[nodiscard]] Vector<Path> Posted() const {
+                LockGuard lock(_mutex);
+                return _posted;
             }
 
             [[nodiscard]] size_t Count() const {
@@ -47,7 +54,7 @@ namespace BECore::Tests {
 
         private:
             mutable Mutex _mutex{BE_LOCK_SITE("Recording file watch sink")};
-            Vector<std::filesystem::path> _posted;
+            Vector<Path> _posted;
         };
 
         /// A folder of the test, a backend over it and the clock that drives its Tick; the same cases run on every backend of the platform
@@ -133,7 +140,7 @@ namespace BECore::Tests {
             if ((harness).MayDropEvents()) {                                                                                                                                                           \
                 GTEST_SKIP() << "the platform delivered no event (fseventsd under a storm of events)";                                                                                                 \
             }                                                                                                                                                                                          \
-            FAIL() << "no post for " << (path);                                                                                                                                                        \
+            FAIL() << "no post for " << PathToUtf8(path).c_str();                                                                                                                                      \
         }                                                                                                                                                                                              \
     } while (false)
 
@@ -224,6 +231,15 @@ namespace BECore::Tests {
 
         this->H().Sink().Clear();
         this->H().Write(file, "three!");
+        ASSERT_POSTED(this->H(), file);
+    }
+
+    TYPED_TEST(FileWatchBackendContractTest, AFileWithANonAsciiNameInASubfolderIsPostedUnderItsOwnName) {
+        const Path folder = Path(this->H().Dir()) / "Папка_é";
+        MakeDirectory(folder);
+        this->H().Backend().AddDirectory(this->H().Dir(), true);
+        const Path file = folder / "данные_é.xml";
+        this->H().Write(file, "pixels");
         ASSERT_POSTED(this->H(), file);
     }
 
@@ -383,6 +399,23 @@ namespace BECore::Tests {
         PostTree(_sink, Dir(), false);
         EXPECT_TRUE(_sink.Has(Dir() / "a.xml"));
         EXPECT_FALSE(_sink.Has(Dir() / "sub" / "b.xml"));
+    }
+
+    TEST_F(FileWatchPostTreeTest, ThePostsAreTheFolderJoinedToTheNamesBelowIt) {
+        WriteFile(Dir() / "Папка_é" / "данные_é.xml", "three");
+
+        PostTree(_sink, Dir(), true);
+
+        Vector<Path> posted = _sink.Posted();
+        eastl::sort(posted.begin(), posted.end());
+        const Path dir = Dir();
+        EXPECT_EQ(posted, (Vector<Path>{dir / "a.xml", dir / "sub", dir / "sub" / "b.xml", dir / "Папка_é", dir / "Папка_é" / "данные_é.xml"}));
+    }
+
+    TEST_F(FileWatchPostTreeTest, AFolderThatCannotBeListedPostsNothing) {
+        PostTree(_sink, Dir() / "missing", true);
+
+        EXPECT_EQ(_sink.Count(), 0u);
     }
 
     /// The polling backend alone: its clock is a parameter, so these cases never sleep or wait

@@ -79,6 +79,15 @@ namespace BECore {
     /// Allocates nothing on POSIX; on Windows SDL's UTF-16 conversion of the path allocates.
     [[nodiscard]] Optional<FileInfo> GetFileInfo(StringView path);
 
+    /// Whether @p path is itself a symbolic link (on Windows also a reparse point such as a junction), which GetFileInfo cannot tell: it follows links.
+    /// False for a path that is missing.
+    [[nodiscard]] bool IsSymbolicLink(StringView path);
+
+#ifdef _WIN32
+    /// UTF-16 text (the names of the Windows APIs) as UTF-8; @p length is in `wchar_t`, the text need not end in a zero
+    [[nodiscard]] String WideToUtf8(const wchar_t* text, size_t length);
+#endif
+
     /// Makes @p path and the folders above it; a folder that exists is success
     [[nodiscard]] std::expected<void, String> CreateDirectories(StringView path);
 

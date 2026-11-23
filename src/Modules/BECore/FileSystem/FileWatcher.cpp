@@ -162,7 +162,7 @@ namespace BECore {
         watch->virtualName = PoolString::Intern(virtualPath);
         watch->consumer = consumer.empty() ? watch->virtualName : PoolString::Intern(consumer);
         watch->callback = std::move(callback);
-        for (const std::filesystem::path& directory : watch->directories) {
+        for (const Path& directory : watch->directories) {
             AcquireDirectory(directory, folder);
         }
         const uint64_t id = watch->id;
@@ -171,7 +171,7 @@ namespace BECore {
         return FileWatchHandle(this, id);
     }
 
-    void FileWatcher::AcquireDirectory(const std::filesystem::path& directory, bool recursive) {
+    void FileWatcher::AcquireDirectory(const Path& directory, bool recursive) {
         for (DirectoryUse& use : _directories) {
             if (use.path != directory) {
                 continue;
@@ -188,7 +188,7 @@ namespace BECore {
         _backend->AddDirectory(directory, recursive);
     }
 
-    void FileWatcher::ReleaseDirectory(const std::filesystem::path& directory, bool recursive) {
+    void FileWatcher::ReleaseDirectory(const Path& directory, bool recursive) {
         for (size_t i = 0; i < _directories.size(); ++i) {
             DirectoryUse& use = _directories[i];
             if (use.path != directory) {
@@ -206,7 +206,7 @@ namespace BECore {
         }
     }
 
-    void FileWatcher::Post(const std::filesystem::path& realPath) {
+    void FileWatcher::Post(const Path& realPath) {
         {
             LockGuard lock(_queueMutex);
             _incoming.push_back(realPath);
@@ -231,7 +231,7 @@ namespace BECore {
                 LockGuard lock(_queueMutex);
                 _routing.swap(_incoming);
             }
-            for (const std::filesystem::path& realPath : _routing) {
+            for (const Path& realPath : _routing) {
                 RouteChange(realPath, nowSeconds);
             }
             _routing.clear();
@@ -241,8 +241,8 @@ namespace BECore {
         }
     }
 
-    void FileWatcher::RouteChange(const std::filesystem::path& realPath, double nowSeconds) {
-        const std::filesystem::path path = realPath.lexically_normal();
+    void FileWatcher::RouteChange(const Path& realPath, double nowSeconds) {
+        const std::filesystem::path path = std::filesystem::path(realPath).lexically_normal();  // transitional: the routing moves to Path with the facade
         for (const UniquePtr<Watch>& watch : _watches) {
             PoolString virtualPath;
             if (watch->alive && Matches(*watch, path, virtualPath)) {
@@ -351,7 +351,7 @@ namespace BECore {
                 ++i;
                 continue;
             }
-            for (const std::filesystem::path& directory : watch.directories) {
+            for (const Path& directory : watch.directories) {
                 ReleaseDirectory(directory, watch.folder);
             }
             _watches.erase(_watches.begin() + static_cast<ptrdiff_t>(i));

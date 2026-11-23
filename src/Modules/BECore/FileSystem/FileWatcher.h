@@ -151,14 +151,14 @@ namespace BECore {
             String virtualPath;
             PoolString virtualName;  ///< the reported path of a file watch
             PoolString consumer;
-            Vector<std::filesystem::path> targets;      ///< the file (or the folder) in each layer, absolute and normalised
-            Vector<std::filesystem::path> directories;  ///< what this watch holds in the backend
+            Vector<std::filesystem::path> targets;  ///< the file (or the folder) in each layer, absolute and normalised
+            Vector<Path> directories;               ///< what this watch holds in the backend
             FileWatchCallback callback;
         };
 
         /// A directory several watches share: the backend sees it once, recursive while any user wants it so
         struct DirectoryUse {
-            std::filesystem::path path;
+            Path path;
             int uses = 0;
             int recursiveUses = 0;
         };
@@ -186,12 +186,12 @@ namespace BECore {
             Vector<PoolString> consumers;
         };
 
-        void Post(const std::filesystem::path& realPath) override;
+        void Post(const Path& realPath) override;
 
         FileWatchHandle MakeWatch(StringView virtualPath, bool folder, FileWatchCallback callback, StringView consumer);
-        void AcquireDirectory(const std::filesystem::path& directory, bool recursive);
-        void ReleaseDirectory(const std::filesystem::path& directory, bool recursive);
-        void RouteChange(const std::filesystem::path& realPath, double nowSeconds);
+        void AcquireDirectory(const Path& directory, bool recursive);
+        void ReleaseDirectory(const Path& directory, bool recursive);
+        void RouteChange(const Path& realPath, double nowSeconds);
         void Schedule(uint64_t watchId, PoolString virtualPath, double nowSeconds);
         void Deliver(double nowSeconds);
         [[nodiscard]] Watch* FindWatch(uint64_t id) const;
@@ -226,12 +226,12 @@ namespace BECore {
         Vector<DirectoryUse> _directories;
         Vector<Pending> _pending;
         Vector<Pending> _due;
-        FileStates _baseline;                    ///< the files the watches cover, as they were at Start or at their last delivery
-        Vector<std::filesystem::path> _routing;  ///< the posts being routed; a member so Update keeps its capacity
+        FileStates _baseline;   ///< the files the watches cover, as they were at Start or at their last delivery
+        Vector<Path> _routing;  ///< the posts being routed; a member so Update keeps its capacity
 
         Mutex _queueMutex{BE_LOCK_SITE("File watch queue")};
-        Vector<std::filesystem::path> _incoming;  ///< posted from any thread, guarded by _queueMutex
-        std::atomic<bool> _hasPosts{false};       ///< lets Update skip the lock when nothing was posted
+        Vector<Path> _incoming;              ///< posted from any thread, guarded by _queueMutex
+        std::atomic<bool> _hasPosts{false};  ///< lets Update skip the lock when nothing was posted
     };
 
 }  // namespace BECore

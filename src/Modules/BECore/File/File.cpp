@@ -194,16 +194,6 @@ namespace BECore {
             SmallVector<wchar_t, kInlinePathBytes + 1> _chars;
         };
 
-        String FromWide(const wchar_t* text, size_t length) {
-            if (length == 0) {
-                return {};
-            }
-            const int bytes = WideCharToMultiByte(CP_UTF8, 0, text, static_cast<int>(length), nullptr, 0, nullptr, nullptr);
-            String result(static_cast<size_t>(bytes), '\0');
-            WideCharToMultiByte(CP_UTF8, 0, text, static_cast<int>(length), result.data(), bytes, nullptr, nullptr);
-            return result;
-        }
-
         String WindowsFailure(const char* action, StringView path) {
             return Format("Cannot {} '{}': Windows error {}", action, path, GetLastError());
         }
@@ -215,7 +205,7 @@ namespace BECore {
 #endif
 
         /// Whether @p path is itself a symbolic link (or a Windows reparse point such as a junction), which SDL_GetPathInfo cannot tell: it follows links
-        bool IsSymbolicLink(const char* path) {
+        bool IsLinkAt(const char* path) {
 #ifdef _WIN32
             const DWORD attributes = GetFileAttributesW(WidePath(path).Get());
             return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
@@ -279,7 +269,7 @@ namespace BECore {
                 return SDL_ENUM_SUCCESS;
             }
 
-            if (walker.mode == WalkMode::Tree && kind == FileKind::Directory && walker.depth < kMaxWalkDepth && !IsSymbolicLink(walker.path.c_str())) {
+            if (walker.mode == WalkMode::Tree && kind == FileKind::Directory && walker.depth < kMaxWalkDepth && !IsLinkAt(walker.path.c_str())) {
                 walker.path.push_back('/');
                 ++walker.depth;
                 // A subfolder that cannot be read is skipped: the result of the call is not looked at
@@ -311,7 +301,7 @@ namespace BECore {
         }
 
         std::expected<void, String> RemoveTreeAt(const String& path) {
-            if (!IsSymbolicLink(path.c_str())) {
+            if (!IsLinkAt(path.c_str())) {
                 const Optional<FileInfo> info = GetFileInfo(path);
                 if (!info) {
                     return std::unexpected(Format("Cannot remove '{}': there is no such file", path));
@@ -336,6 +326,22 @@ namespace BECore {
         }
 
     }  // namespace
+
+#ifdef _WIN32
+    String WideToUtf8(const wchar_t* text, size_t length) {
+        if (length == 0) {
+            return {};
+        }
+        const int bytes = WideCharToMultiByte(CP_UTF8, 0, text, static_cast<int>(length), nullptr, 0, nullptr, nullptr);
+        String result(static_cast<size_t>(bytes), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, text, static_cast<int>(length), result.data(), bytes, nullptr, nullptr);
+        return result;
+    }
+#endif
+
+    bool IsSymbolicLink(StringView path) {
+        return IsLinkAt(CPath{path}.Get());
+    }
 
     File::~File() {
         if (_stream != nullptr) {
@@ -567,7 +573,7 @@ namespace BECore {
         if (length == 0) {
             return std::unexpected(failure);
         }
-        String text = FromWide(buffer.data(), length);
+        String text = WideToUtf8(buffer.data(), length);
         const auto startsWith = [&](StringView prefix) { return text.compare(0, prefix.size(), prefix.data(), prefix.size()) == 0; };
         if (startsWith(kExtendedUncPrefix)) {
             // \\?\UNC\host\share is \\host\share

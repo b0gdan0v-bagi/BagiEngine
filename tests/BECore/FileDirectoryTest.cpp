@@ -217,6 +217,20 @@ namespace BECore::Tests {
     }
 #endif
 
+#ifndef _WIN32
+    TEST_F(FileDirectoryTest, IsSymbolicLinkSeesTheLinkAndNotWhatItPointsAt) {
+        MakeTree();
+        MakeLink(_folder.PathOf("tree/sub"), _folder.PathOf("folderLink"), true);
+        MakeLink(_folder.PathOf("tree/a.txt"), _folder.PathOf("fileLink"), false);
+
+        EXPECT_TRUE(IsSymbolicLink(_folder.PathOf("folderLink")));
+        EXPECT_TRUE(IsSymbolicLink(_folder.PathOf("fileLink")));
+        EXPECT_FALSE(IsSymbolicLink(_folder.PathOf("tree/sub")));
+        EXPECT_FALSE(IsSymbolicLink(_folder.PathOf("tree/a.txt")));
+        EXPECT_FALSE(IsSymbolicLink(_folder.PathOf("missing")));
+    }
+#endif
+
     TEST_F(FileDirectoryTest, CopyMakesAnotherFileWithTheSameBytes) {
         const String bytes("a\0b\r\n\xFF", 6);
         const String from = _folder.Write("from.bin", bytes);
