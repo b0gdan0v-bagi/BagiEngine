@@ -1,5 +1,7 @@
 #include "RoomHub.h"
 
+#include <BECore/Memory/ArenaAllocator.h>
+#include <BECore/Memory/ScratchArena.h>
 #include <Rooms/RoomCode.h>
 #include <Rooms/RoomErrors.h>
 
@@ -320,7 +322,10 @@ namespace BECore {
             return;
         }
 
-        Vector<const RoomEntry*> found;
+        // The candidates only live until the answer is written: scratch, sized for every room so it never grows (a growing arena vector keeps its old blocks)
+        const ScratchScope scratch;
+        ArenaVector<const RoomEntry*> found;
+        found.reserve(_rooms.size());
         for (const auto& [code, entry] : _rooms) {
             const Room& room = *entry->room;
             const RoomPhase phase = room.GetPhase();
