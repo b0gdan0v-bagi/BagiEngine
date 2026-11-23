@@ -109,4 +109,14 @@ namespace BECore::Tests {
         EXPECT_TRUE(IsSiteOpenable(site.c_str()));
     }
 
+    TEST(EditorLauncherTest, ASiteUnderANonAsciiFolderIsOpenable) {
+        const std::filesystem::path folder = TestTempPath("BagiEditorLauncherUtf8") / "caf\xC3\xA9";
+        WriteFile(folder / "site.cpp", "x");
+        static const String site((folder / "site.cpp").string().c_str());
+        static const String missing((folder / "nothing.cpp").string().c_str());
+        EXPECT_TRUE(IsSiteOpenable(site.c_str()));
+        EXPECT_FALSE(IsSiteOpenable(missing.c_str()));
+        RemoveDirectory(folder.parent_path());
+    }
+
 }  // namespace BECore::Tests

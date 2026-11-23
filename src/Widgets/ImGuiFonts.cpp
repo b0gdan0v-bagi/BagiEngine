@@ -1,7 +1,6 @@
 #include "ImGuiFonts.h"
 
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Widgets/Icons/IconsLucide.h>
@@ -29,7 +28,7 @@ namespace BECore {
                 LOG_ERROR("ImGuiFonts: cannot open '{}'", virtualPath);
                 return false;
             }
-            auto read = ReadFileBytes(PathToUtf8(realPath));
+            auto read = ReadFileBytes(realPath);
             if (!read || read->empty()) {
                 LOG_ERROR("ImGuiFonts: cannot read '{}'", virtualPath);
                 return false;
