@@ -10,6 +10,8 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+// windows.h spells RemoveDirectory as RemoveDirectoryW, which would rename the override of IFileWatchBackend::RemoveDirectory
+#undef RemoveDirectory
 
 namespace BECore {
 
@@ -94,22 +96,30 @@ namespace BECore {
             }
 
             void Shutdown() override {
+                {
+                    // The kernel writes into a buffer until its read is over, so every read is cancelled and its completion taken by the reader
+                    // thread before the buffers go. GetOverlappedResult cannot wait for it: with no event in the OVERLAPPED it waits on the
+                    // directory handle, which a read whose completion goes to the port never signals
+                    UniqueLock lock(_mutex);
+                    for (UniquePtr<Dir>& dir : _dirs) {
+                        dir->closing = true;
+                        if (dir->pending) {
+                            CancelIoEx(dir->handle, &dir->overlapped);
+                        }
+                    }
+                    if (_thread.joinable()) {
+                        _completed.wait(lock, [this] { return eastl::none_of(_dirs.begin(), _dirs.end(), [](const UniquePtr<Dir>& dir) { return dir->pending; }); });
+                    }
+                }
                 if (_thread.joinable()) {
                     PostQueuedCompletionStatus(_port, 0, 0, nullptr);
                     _thread.join();
                 }
                 LockGuard lock(_mutex);
                 for (UniquePtr<Dir>& dir : _dirs) {
-                    if (dir->handle == INVALID_HANDLE_VALUE) {
-                        continue;
+                    if (dir->handle != INVALID_HANDLE_VALUE) {
+                        CloseHandle(dir->handle);
                     }
-                    if (dir->pending) {
-                        CancelIoEx(dir->handle, &dir->overlapped);
-                        // The kernel writes into the buffer until the operation is over, so the buffer may be freed only after this returns
-                        DWORD ignored = 0;
-                        GetOverlappedResult(dir->handle, &dir->overlapped, &ignored, TRUE);
-                    }
-                    CloseHandle(dir->handle);
                 }
                 _dirs.clear();
                 if (_port != nullptr) {
