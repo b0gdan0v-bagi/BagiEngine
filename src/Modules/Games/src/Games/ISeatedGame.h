@@ -2,6 +2,7 @@
 
 #include <BECore/Control/Json.h>
 #include <Games/IControllableGame.h>
+#include <Games/SeatedAnswers.h>
 
 namespace BECore {
 
@@ -22,6 +23,11 @@ namespace BECore {
      *    a field a client does not draw: the server sends the view to the client as it is;
      *  - ChooseComputerAction() is how a computer plays an empty or abandoned seat. The server sends the result through
      *    PerformSeatAction() like a person's action, so a computer cannot do what a seat may not.
+     *
+     * The answers are the game's own `BE_CLASS` structs derived from SeatedView, SeatedAction and SeatedOutcome (Games/SeatedAnswers.h);
+     * the server writes them through the generated `WriteJson` and needs no game type. A view holds no hidden part of another seat in any
+     * field. ChooseComputerAction() stays `Json`: its one consumer is PerformSeatAction(), whose input is the client's `Json`, so a
+     * computer has no second way in.
      *
      * Everything that comes from a client (the seat number of a message, `options`, `action`) is untrusted: read it with the
      * checked helpers of BECore/Control/Json.h, never with the throwing accessors of nlohmann (BECore/Control/CLAUDE.md), range-check
@@ -49,27 +55,28 @@ namespace BECore {
         /**
          * @brief What @p seat may see now: its own hidden parts, public parts, the count of the hidden parts of the others.
          *
-         * Never the hidden parts of another seat. Valid before Start() too (then an empty object is fine). invalid_seat for
+         * Never the hidden parts of another seat. Valid before Start() too (then a view with no content is fine). invalid_seat for
          * a seat out of range.
          */
-        [[nodiscard]] virtual std::expected<Json, ControlError> GetSeatView(int seat) const = 0;
+        [[nodiscard]] virtual std::expected<UniquePtr<SeatedView>, ControlError> GetSeatView(int seat) const = 0;
 
         /**
-         * @brief A JSON array of what @p seat may send now; each element is accepted as is by PerformSeatAction().
+         * @brief What @p seat may send now, a list that is written as a JSON array; each element, once written as JSON, is accepted as is
+         * by PerformSeatAction() (the client sends back what it read).
          *
          * Empty when the seat cannot act (not its turn, the game is finished or not started). invalid_seat for a seat out of range.
          */
-        [[nodiscard]] virtual std::expected<Json, ControlError> GetSeatActions(int seat) const = 0;
+        [[nodiscard]] virtual std::expected<UniquePtr<SeatedActions>, ControlError> GetSeatActions(int seat) const = 0;
 
         /**
          * @brief Applies @p action for @p seat after checking it is the seat's to make.
          *
          * @param action An object from a client. Malformed (no `type`, wrong types): invalid_params.
-         * @return What the action did, as a JSON object (public information only, it may be sent to every seat), or an error:
+         * @return What the action did (public information only, it may be sent to every seat), or an error:
          *         not_your_turn when the seat cannot act now, illegal_action when the action is well-formed but the rules
          *         refuse it (including a card that belongs to another seat). Nothing changes on an error.
          */
-        virtual std::expected<Json, ControlError> PerformSeatAction(int seat, const Json& action) = 0;
+        virtual std::expected<UniquePtr<SeatedOutcome>, ControlError> PerformSeatAction(int seat, const Json& action) = 0;
 
         /**
          * @brief The action a computer would send for @p seat now, or nullopt when the seat cannot act now (or is out of range).

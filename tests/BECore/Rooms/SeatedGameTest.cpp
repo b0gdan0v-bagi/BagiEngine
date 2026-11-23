@@ -11,10 +11,6 @@ namespace BECore::Tests {
 
     namespace {
 
-        String Dump(const std::expected<Json, ControlError>& value) {
-            return value ? DumpJson(*value) : String("<error>");
-        }
-
         template <typename T>
         String ErrorCode(const std::expected<T, ControlError>& value) {
             return value ? String() : value.error().code;
@@ -102,8 +98,9 @@ namespace BECore::Tests {
         for (int seat = 0; seat < FakeSeatedGame::kSeatCount; ++seat) {
             const auto actions = game.GetSeatActions(seat);
             ASSERT_TRUE(actions.has_value());
-            ASSERT_TRUE(actions->is_array());
-            EXPECT_EQ(actions->size(), seat == 0 ? 3u : 0u) << "seat " << seat;
+            const Json listed = ActionsJson(**actions);
+            ASSERT_TRUE(listed.is_array());
+            EXPECT_EQ(listed.size(), seat == 0 ? 3u : 0u) << "seat " << seat;
         }
     }
 
@@ -112,10 +109,11 @@ namespace BECore::Tests {
             FakeSeatedGame game = MakeStartedGame();
             const auto actions = game.GetSeatActions(0);
             ASSERT_TRUE(actions.has_value());
-            ASSERT_EQ(actions->size(), 3u);
-            const auto outcome = game.PerformSeatAction(0, (*actions)[static_cast<size_t>(index)]);
+            const Json listed = ActionsJson(**actions);
+            ASSERT_EQ(listed.size(), 3u);
+            const auto outcome = game.PerformSeatAction(0, listed[static_cast<size_t>(index)]);
             ASSERT_TRUE(outcome.has_value());
-            EXPECT_EQ(GetJsonInt(*outcome, "seat"), 0);
+            EXPECT_EQ(GetJsonInt(OutcomeJson(**outcome), "seat"), 0);
         }
     }
 
@@ -195,7 +193,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(chosen.has_value());
         const auto actions = game.GetSeatActions(0);
         ASSERT_TRUE(actions.has_value());
-        EXPECT_NE(std::find(actions->begin(), actions->end(), *chosen), actions->end());
+        const Json listed = ActionsJson(**actions);
+        EXPECT_NE(std::find(listed.begin(), listed.end(), *chosen), listed.end());
         Vector<String> hand = game.GetHand(0);
         eastl::sort(hand.begin(), hand.end());
         EXPECT_EQ(GetJsonString(*chosen, "card"), hand.front());
@@ -218,13 +217,14 @@ namespace BECore::Tests {
         for (int seat = 0; seat < FakeSeatedGame::kSeatCount; ++seat) {
             const auto actions = game.GetSeatActions(seat);
             ASSERT_TRUE(actions.has_value());
-            EXPECT_TRUE(actions->empty());
+            EXPECT_EQ((*actions)->Count(), 0u);
             EXPECT_FALSE(game.ChooseComputerAction(seat).has_value());
             EXPECT_EQ(ErrorCode(game.PerformSeatAction(seat, CardAction("c0_0"))), "not_your_turn");
             const auto view = game.GetSeatView(seat);
             ASSERT_TRUE(view.has_value());
-            EXPECT_EQ(GetJsonBool(*view, "finished"), true);
-            const Json* table = FindJsonMember(*view, "table");
+            const Json viewJson = ViewJson(**view);
+            EXPECT_EQ(GetJsonBool(viewJson, "finished"), true);
+            const Json* table = FindJsonMember(viewJson, "table");
             ASSERT_NE(table, nullptr);
             EXPECT_EQ(table->size(), 12u) << "all cards played are public";
         }
@@ -241,21 +241,22 @@ namespace BECore::Tests {
     TEST(SeatedGameTest, ViewHoldsOwnCardsCountsAndTableOnly) {
         FakeSeatedGame game = MakeStartedGame();
         ASSERT_TRUE(game.PerformSeatAction(0, *game.ChooseComputerAction(0)).has_value());
-        const auto view = game.GetSeatView(2);
-        ASSERT_TRUE(view.has_value());
-        ASSERT_TRUE(view->is_object());
+        const auto answer = game.GetSeatView(2);
+        ASSERT_TRUE(answer.has_value());
+        const Json view = ViewJson(**answer);
+        ASSERT_TRUE(view.is_object());
         Vector<String> keys;
-        for (const auto& item : view->items()) {
+        for (const auto& item : view.items()) {
             keys.push_back(item.key().c_str());
         }
         eastl::sort(keys.begin(), keys.end());
         const Vector<String> expected = {"cardCounts", "finished", "hand", "seat", "table", "turn"};
         EXPECT_EQ(keys, expected);
-        EXPECT_EQ(Require(FindJsonMember(*view, "hand")).size(), 3u);
-        const Json* counts = FindJsonMember(*view, "cardCounts");
+        EXPECT_EQ(Require(FindJsonMember(view, "hand")).size(), 3u);
+        const Json* counts = FindJsonMember(view, "cardCounts");
         ASSERT_NE(counts, nullptr);
         EXPECT_EQ(*counts, Json::array({2, 3, 3, 3}));
-        EXPECT_EQ(GetJsonInt(*view, "turn"), 1);
+        EXPECT_EQ(GetJsonInt(view, "turn"), 1);
     }
 
     TEST(SeatedGameTest, NoSeatViewLeaksAtAnyStep) {
@@ -272,7 +273,7 @@ namespace BECore::Tests {
             const auto outcome = game.PerformSeatAction(seat, *game.ChooseComputerAction(seat));
             ASSERT_TRUE(outcome.has_value());
             for (int other = 0; other < FakeSeatedGame::kSeatCount; ++other) {
-                ExpectNoLeak(DumpJson(*outcome), other, game);
+                ExpectNoLeak(Dump(outcome), other, game);
             }
         }
     }

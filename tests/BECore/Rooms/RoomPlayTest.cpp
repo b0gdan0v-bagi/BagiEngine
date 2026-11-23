@@ -51,11 +51,8 @@ namespace BECore::Tests {
             return options;
         }
 
-        String CodeOf(const std::expected<void, ControlError>& result) {
-            return result ? String("<ok>") : result.error().code;
-        }
-
-        String CodeOf(const std::expected<Json, ControlError>& result) {
+        template <typename T>
+        String CodeOf(const std::expected<T, ControlError>& result) {
             return result ? String("<ok>") : result.error().code;
         }
 
@@ -67,10 +64,10 @@ namespace BECore::Tests {
                 }
                 const auto view = test.room.GetSeatView(member.player);
                 ASSERT_TRUE(view.has_value());
-                ExpectNoLeak(DumpJson(*view), member.seat, test.Game());
+                ExpectNoLeak(Dump(view), member.seat, test.Game());
                 const auto actions = test.room.GetSeatActions(member.player);
                 ASSERT_TRUE(actions.has_value());
-                ExpectNoLeak(DumpJson(*actions), member.seat, test.Game());
+                ExpectNoLeak(Dump(actions), member.seat, test.Game());
             }
         }
 
@@ -167,8 +164,8 @@ namespace BECore::Tests {
         EXPECT_GT(version, 0u);
         const auto actions = test.room.GetSeatActions(a);
         ASSERT_TRUE(actions.has_value());
-        EXPECT_EQ(actions->size(), 3u);
-        EXPECT_TRUE(test.room.GetSeatActions(b)->empty());
+        EXPECT_EQ((*actions)->Count(), 3u);
+        EXPECT_EQ((*test.room.GetSeatActions(b))->Count(), 0u);
 
         // Off turn, a card of another seat, a malformed action, a stale version: nothing changes
         EXPECT_EQ(CodeOf(test.room.PerformAction(b, version, CardAction("c1_0"))), RoomErrors::kNotYourTurn);
@@ -284,8 +281,8 @@ namespace BECore::Tests {
             for (const PlayerId player : {a, b}) {
                 const auto actions = test.room.GetSeatActions(player);
                 ASSERT_TRUE(actions.has_value());
-                if (!actions->empty()) {
-                    const auto result = test.room.PerformAction(player, test.room.GetGameVersion(), (*actions)[0]);
+                if ((*actions)->Count() != 0) {
+                    const auto result = test.room.PerformAction(player, test.room.GetGameVersion(), ActionsJson(**actions)[0]);
                     EXPECT_TRUE(result.has_value());
                     ExpectViewsDoNotLeak(test);
                 }
@@ -296,7 +293,7 @@ namespace BECore::Tests {
         EXPECT_EQ(test.room.GetPhase(), RoomPhase::Finished);
         EXPECT_EQ(test.Game().GetPlayCount(), FakeSeatedGame::kTotalPlays);
         EXPECT_EQ(test.room.GetLobbySnapshot().phase, RoomPhase::Finished);
-        EXPECT_TRUE(test.room.GetSeatActions(a)->empty());
+        EXPECT_EQ((*test.room.GetSeatActions(a))->Count(), 0u);
         EXPECT_FALSE(test.room.StepComputers(now + std::chrono::seconds(5)));
         EXPECT_EQ(CodeOf(test.room.PerformAction(a, test.room.GetGameVersion(), CardAction("c0_0"))), RoomErrors::kNotYourTurn);
     }
