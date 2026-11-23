@@ -27,7 +27,7 @@ Event-based logging. `Logger` pushes entries into a lock-free ring buffer, `LogE
 | Sink | Output | Options |
 |------|--------|---------|
 | `ConsoleSink` | stdout/stderr with ANSI colors (only when that stream is a terminal) | `colorEnabled` |
-| `FileSink` | Thread-safe file logging | `filename`, `append` |
+| `FileSink` | Thread-safe file logging through a `TextFileWriter` (a line is formatted into its buffer, no `String` per line; written out when the buffer is full, at `FlushLogsEvent` once per frame, and at destruction; a file that cannot be opened is one `LOG_WARNING`, the sink then writes nothing; a write error stops it quietly) | `filename`, `append` |
 | `OutputSink` | Platform debug output (`OutputDebugString` on Windows, stderr on macOS; nothing on the web); a line is built on the stack by `FormatOutputLine` (cut at `kOutputLineSize`, NUL-terminated) | none |
 | `LogHistorySink` | Keeps the last lines in a `LogHistory` for the editor's Console panel | `capacity` (default 2048, clamped to 64..65536 when `Initialize()` builds the history) |
 

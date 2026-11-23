@@ -5,12 +5,6 @@
 
 namespace BECore {
 
-    FileSink::~FileSink() {
-        if (_file.is_open()) {
-            _file.close();
-        }
-    }
-
     void FileSink::Initialize() {
         UnsubscribeAll();
         Subscribe<LogEvent, &FileSink::OnLogEvent>(this);
@@ -20,13 +14,11 @@ namespace BECore {
             return;
         }
 
-        auto mode = std::ios::out;
-        if (_append) {
-            mode |= std::ios::app;
-        }
-        _file.open(_filename.c_str(), mode);
-
         _initialized = true;
+
+        if (const auto opened = _writer.Open(_filename, _append ? FileMode::Append : FileMode::Write); !opened) {
+            LOG_WARNING("FileSink: cannot open the log file: {}", opened.error());
+        }
     }
 
     void FileSink::OnLogEvent(const LogEvent& event) {
@@ -35,13 +27,11 @@ namespace BECore {
 
     void FileSink::OnFlushEvent() {
         LockGuard lock(_mutex);
-        if (_file.is_open()) {
-            _file.flush();
-        }
+        _writer.Flush();
     }
 
     void FileSink::Write(LogLevel level, StringView message) {
-        if (!ShouldLog(level) || !_file.is_open()) {
+        if (!ShouldLog(level) || !_writer.IsOpen()) {
             return;
         }
 
@@ -50,9 +40,8 @@ namespace BECore {
         LockGuard lock(_mutex);
 
         // The time is written out, not {:%Y-%m-%d %H:%M:%S}: the Emscripten build cannot use fmt/chrono.h
-        const String line = Format("[{}] [{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03d}] {}\n", level, now.tm.tm_year + 1900, now.tm.tm_mon + 1, now.tm.tm_mday, now.tm.tm_hour, now.tm.tm_min,
-                                   now.tm.tm_sec, now.millisecond, message);
-        _file << line.c_str();
+        _writer.AppendFormat("[{}] [{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03d}] {}\n", level, now.tm.tm_year + 1900, now.tm.tm_mon + 1, now.tm.tm_mday, now.tm.tm_hour, now.tm.tm_min, now.tm.tm_sec,
+                             now.millisecond, message);
     }
 
     void FileSink::SetFilename(StringView filename) {
