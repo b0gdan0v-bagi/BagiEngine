@@ -346,12 +346,12 @@ class CodeGenerator:
             classes_data.append(cls_dict)
 
         # Collect factory deps data for inlining FactoryTraits into this gen file.
-        # One entry per unique factory base referenced by IntrusivePtr fields.
+        # One entry per unique factory base referenced by IntrusivePtr fields, except the ones marked no_factory.
         seen_factory_deps: Set[str] = set()
         factory_deps_data: List[dict] = []
         for cls in classes:
             for f in cls.fields:
-                inner = extract_intrusive_inner_type(f.type_name)
+                inner = None if f.attributes.no_factory else extract_intrusive_inner_type(f.type_name)
                 if inner:
                     short = inner.split('::')[-1]
                     if short in factory_base_map and short not in seen_factory_deps:

@@ -36,6 +36,13 @@ def test_every_attribute(parse):
     assert warnings == []
 
 
+def test_no_factory_alone_is_not_a_field_attribute(parse):
+    field, warnings = one_field(parse, "BE_REFLECT_FIELD BE_FIELD_ATTRS(no_factory) Vector<IntrusivePtr<Foo>> _x;")
+    assert field.attributes.no_factory
+    assert field.attributes.is_empty()
+    assert warnings == []
+
+
 def test_field_without_attributes_is_unchanged(parse):
     field, warnings = one_field(parse, "BE_REFLECT_FIELD float _x = 1.0f;")
     assert field.attributes == FieldAttrs()
@@ -57,6 +64,7 @@ def test_field_without_attributes_is_unchanged(parse):
     ("readonly", dict(readonly=True)),
     ("hidden", dict(hidden=True)),
     ("required", dict(required=True)),
+    ("no_factory", dict(no_factory=True)),
     ("readonly, required", dict(readonly=True, required=True)),
     ("tooltip(\"Speed\")", dict(tooltip="Speed")),
     ("tooltip(\"\")", dict(tooltip="")),

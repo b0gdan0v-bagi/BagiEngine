@@ -107,8 +107,8 @@ namespace BECore {
         Scene* _scene = nullptr;
         SceneNode* _parent = nullptr;
         EditorFlags _editorFlags = EditorFlags::None;
-        BE_REFLECT_FIELD Vector<IntrusivePtr<IComponent>> _components;
-        BE_REFLECT_FIELD Vector<IntrusivePtr<SceneNode>> _children;
+        BE_REFLECT_FIELD BE_FIELD_ATTRS(no_factory) Vector<IntrusivePtr<IComponent>> _components;
+        BE_REFLECT_FIELD BE_FIELD_ATTRS(no_factory) Vector<IntrusivePtr<SceneNode>> _children;
     };
 
 }  // namespace BECore

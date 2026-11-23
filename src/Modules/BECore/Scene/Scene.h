@@ -219,7 +219,7 @@ namespace BECore {
         BE_REFLECT_FIELD float _viewWidth = 0.0f;
         BE_REFLECT_FIELD float _viewHeight = 0.0f;
         BE_REFLECT_FIELD Vector<SceneViewVariant> _viewVariants;
-        BE_REFLECT_FIELD Vector<IntrusivePtr<SceneNode>> _nodes;
+        BE_REFLECT_FIELD BE_FIELD_ATTRS(no_factory) Vector<IntrusivePtr<SceneNode>> _nodes;
         UniquePtr<entt::registry> _registry;  // by pointer so that this header needs no entt.hpp
         IntrusivePtr<SceneNode> _rootNode;
         ViewTransform _viewTransform;   // fit of the view to the output, set by Draw(), read by ScreenToScene*

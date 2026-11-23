@@ -90,7 +90,7 @@ namespace BECore {
         }
 
         template <typename Ptr, typename Alloc>
-        requires ::BECore::Detail::IsIntrusivePtr<Ptr> bool Visit(IPropertyVisitor& v, eastl::vector<Ptr, Alloc>& vec, eastl::string_view key);
+        requires ::BECore::Detail::IsIntrusivePtr<Ptr> bool Visit(IPropertyVisitor& v, eastl::vector<Ptr, Alloc>& vec, StringView key);
 
         template <typename T>
         requires(!::BECore::Detail::IsIntrusivePtr<T> && !IsReflectedEnum<T> && !std::is_arithmetic_v<T> &&
