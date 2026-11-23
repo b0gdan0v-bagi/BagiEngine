@@ -209,6 +209,7 @@ def test_bad_attribute_warns_on_the_marker_line(parse, attrs, expected_message, 
     ("bool", "a bool"),
     ("String", "a string"),
     ("PoolString", "a string"),
+    ("ArenaString", "a string"),
     ("FixedString<32>", "a string"),
     ("eastl::string", "a string"),
 ])

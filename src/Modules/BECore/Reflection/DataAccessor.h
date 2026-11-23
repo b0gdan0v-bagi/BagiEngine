@@ -197,6 +197,12 @@ namespace BECore {
                 return meta == nullptr || d.AcceptsPurpose(meta->purpose, meta->typeName);
             }
 
+            template <typename T>
+            inline constexpr bool IsForeignText = false;
+
+            template <typename Alloc>
+            inline constexpr bool IsForeignText<eastl::basic_string<char, Alloc>> = !std::is_same_v<eastl::basic_string<char, Alloc>, String>;
+
             /**
              * @brief Loads one array element (a value, an object or a factory-created pointer)
              *
@@ -251,6 +257,12 @@ namespace BECore {
                     }
                 } else if constexpr (::BECore::Detail::HasDeserialize<T, IDeserializer>) {
                     item.Deserialize(d);
+                } else if constexpr (IsForeignText<T>) {
+                    // The reader fills a String only; a text of another allocator (ArenaString) takes a copy of what was read
+                    String text;
+                    if (d.ReadAttribute("value", text)) {
+                        item.assign(text.data(), text.size());
+                    }
                 } else {
                     d.ReadAttribute("value", item);
                 }

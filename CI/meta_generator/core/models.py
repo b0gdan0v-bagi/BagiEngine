@@ -34,7 +34,7 @@ PRIMITIVE_TYPES = frozenset({
     'float', 'double',
     # Strings
     'eastl::string', 'std::string', 'PoolString',
-    'String', 'BECore::String',
+    'String', 'BECore::String', 'ArenaString', 'BECore::ArenaString',
     'eastl::basic_string<char>', 'std::basic_string<char>',
     # Character
     'char', 'wchar_t', 'char8_t', 'char16_t', 'char32_t',
@@ -51,7 +51,7 @@ PRIMITIVE_PATTERNS = [
 ]
 
 
-STRING_TYPES = frozenset({'eastl::string', 'std::string', 'PoolString', 'String', 'BECore::String'})
+STRING_TYPES = frozenset({'eastl::string', 'std::string', 'PoolString', 'String', 'BECore::String', 'ArenaString', 'BECore::ArenaString'})
 
 
 def is_primitive_type(type_name: str) -> bool:
