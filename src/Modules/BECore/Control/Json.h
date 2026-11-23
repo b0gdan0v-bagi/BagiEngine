@@ -38,7 +38,7 @@ namespace BECore {
     /// The JSON text of @p value (see AppendJson)
     [[nodiscard]] String DumpJson(const Json& value, int indent = JsonWriter::kCompact);
 
-    /// A JSON string value holding @p text
+    /// A JSON string value holding @p text, the whole sized view: an embedded NUL stays
     [[nodiscard]] Json MakeJsonString(StringView text);
 
     /// The member @p key of @p object, or nullptr when @p object is not an object or has no such member
@@ -47,7 +47,14 @@ namespace BECore {
     /// The same for a document the caller owns and may take a member out of (a large `params` is moved, not copied)
     [[nodiscard]] Json* FindJsonMember(Json& object, StringView key);
 
-    /// A string member; nullopt when it is absent or not a string
+    /// The text of @p value without a copy; nullopt when it is not a string. Points into @p value: valid while that Json lives and is not changed.
+    /// Holds embedded NULs (the view is sized), so do not hand `data()` to a C function
+    [[nodiscard]] Optional<StringView> JsonStringView(const Json& value);
+
+    /// The string member @p key of @p object without a copy; nullopt when it is absent or not a string (same lifetime as JsonStringView(const Json&))
+    [[nodiscard]] Optional<StringView> JsonStringView(const Json& object, StringView key);
+
+    /// A string member as a copy; nullopt when it is absent or not a string
     [[nodiscard]] Optional<String> GetJsonString(const Json& object, StringView key);
 
     /// An integer member; nullopt when it is absent, not an integer (1.5 and "3" are not) or does not fit int64_t

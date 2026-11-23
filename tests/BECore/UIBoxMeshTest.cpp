@@ -2,6 +2,7 @@
 #include <BECore/UI/UIBoxMesh.h>
 #include <BECore/UI/UIGeometryBounds.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIBoxRasterCost.h>
 #include <EASTL/sort.h>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -99,19 +100,9 @@ namespace BECore::Tests {
             return count;
         }
 
-        /// What the SDL software rasterizer pays for a mesh: it visits every pixel of the bounding rectangle of each triangle (`SDL_SW_FillTriangle` with a blend mode), so
-        /// the sum over the triangles of that rectangle in output pixels (@p ppu is the output pixels of one unit)
+        /// What the SDL software rasterizer pays for a mesh: the bounding rectangles of its triangles in output pixels (@p ppu is the output pixels of one unit)
         double RasterCost(const Mesh& mesh, float ppu) {
-            double cost = 0.0;
-            for (size_t i = 0; i < mesh.TriangleCount(); ++i) {
-                const Triangle t = TriangleAt(mesh, i);
-                const float minX = std::min({t.a->x, t.b->x, t.c->x}) * ppu;
-                const float maxX = std::max({t.a->x, t.b->x, t.c->x}) * ppu;
-                const float minY = std::min({t.a->y, t.b->y, t.c->y}) * ppu;
-                const float maxY = std::max({t.a->y, t.b->y, t.c->y}) * ppu;
-                cost += static_cast<double>(std::ceil(maxX) - std::floor(minX)) * static_cast<double>(std::ceil(maxY) - std::floor(minY));
-            }
-            return cost;
+            return MeasureRasterCost(mesh.vertices, mesh.indices, ppu).bboxPixels;
         }
 
         /// Every index points at a vertex, the list is whole triangles, and no triangle runs the other way round (a zero-area one, from a collapsed corner, may)

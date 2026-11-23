@@ -162,6 +162,34 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(text.has_value());
         EXPECT_EQ(text->size(), 3u);
+        EXPECT_EQ(*text, withNul);
+    }
+
+    TEST(JsonTest, StringViewPointsIntoTheValueAndKeepsNulCharacters) {
+        const String withNul("a\0b", 3);
+        Json object = Json::object();
+        object["s"] = MakeJsonString(View(withNul));
+
+        const Optional<StringView> byKey = JsonStringView(object, "s");
+        ASSERT_TRUE(byKey.has_value());
+        EXPECT_EQ(*byKey, StringView(withNul.data(), withNul.size()));
+
+        const Json* member = FindJsonMember(object, "s");
+        ASSERT_NE(member, nullptr);
+        const Optional<StringView> direct = JsonStringView(*member);
+        ASSERT_TRUE(direct.has_value());
+        EXPECT_EQ(direct->data(), byKey->data());
+    }
+
+    TEST(JsonTest, StringViewIsNulloptForWhatIsNotAString) {
+        const Json object = SampleObject();
+
+        EXPECT_FALSE(JsonStringView(object, "i"));
+        EXPECT_FALSE(JsonStringView(object, "n"));
+        EXPECT_FALSE(JsonStringView(object, "missing"));
+        EXPECT_FALSE(JsonStringView(object));
+        EXPECT_FALSE(JsonStringView(Json::array(), "s"));
+        EXPECT_EQ(JsonStringView(object, "s").value_or(StringView()), StringView("x"));
     }
 
     namespace {
