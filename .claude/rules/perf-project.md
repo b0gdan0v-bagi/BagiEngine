@@ -74,7 +74,7 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
     },
     {
       "name": "stress-entities-ramp",
-      "about": "BagiStress entities ramp: the count at which work_ms fits 16.6 ms, about 150000 to 158000 nodes in 6 to 7 s over three runs (the line says verified true; a fixed run of 150000 nodes after 500 warm-up frames has work_ms_p50 16.7 ms). The tweens restart every frame at these counts. gate false until a baseline shows the noise of the number",
+      "about": "BagiStress entities ramp: the count at which work_ms fits 16.6 ms, about 150000 to 158000 nodes in 6 to 7 s over three runs (168000 to 189000 over three runs with inline subscription lists, `IComponent` at 128 bytes, on a machine loaded by other loops; the line says verified true; a fixed run of 150000 nodes after 500 warm-up frames has work_ms_p50 16.7 ms). The tweens restart every frame at these counts. gate false until a baseline shows the noise of the number",
       "fast": false,
       "repetitions": 3,
       "timeoutSeconds": 180,
