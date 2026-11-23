@@ -211,11 +211,11 @@ namespace BECore {
 
     /// Kept for one merge so that a game follows; use IntrusivePtr.
     template <typename T>
-    using IntrusivePtrAtomic = IntrusivePtr<T>;
+    using IntrusivePtrAtomic [[deprecated("use IntrusivePtr")]] = IntrusivePtr<T>;
 
     /// Kept for one merge so that a game follows; use IntrusivePtr.
     template <typename T>
-    using IntrusivePtrNonAtomic = IntrusivePtr<T>;
+    using IntrusivePtrNonAtomic [[deprecated("use IntrusivePtr")]] = IntrusivePtr<T>;
 
 }  // namespace BECore
 
