@@ -66,10 +66,7 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] String ReadRecording() const {
-                std::ifstream file(_path, std::ios::binary);  //-NoStd: see the include
-                std::ostringstream text;                      //-NoStd: see the include
-                text << file.rdbuf();
-                return FromStdString(text.str());
+                return ReadFile(_path);
             }
 
             [[nodiscard]] ParsedReplay ParseRecording() const {
