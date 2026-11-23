@@ -256,6 +256,9 @@ namespace BECore {
         if (hasObservers) {
             JsonWriter writer(observed);
             writeData(writer);
+            if (writer.GetFailure() != nullptr) {
+                return;  // the data could not be written: a push has no one to answer with the error
+            }
             EXPECT(writer.IsComplete(), "ControlService::Publish: the data is not one JSON value");
             auto parsed = ParseJson(observed);
             if (!writer.IsComplete() || !parsed) {
@@ -281,9 +284,10 @@ namespace BECore {
             }
             writer.Member("event", event);
             writer.EndObject();
-            EXPECT(writer.IsComplete(), "ControlService::Publish: the data is not one JSON value");
             if (writer.IsComplete()) {
                 sink(lease.Text());
+            } else {
+                EXPECT(writer.GetFailure() != nullptr, "ControlService::Publish: the data is not one JSON value");  // a failure is the writer's own error, not a bug
             }
         }
         if (_eventSinkGeneration == generation) {

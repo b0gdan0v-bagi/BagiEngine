@@ -438,6 +438,27 @@ namespace BECore::Tests {
         EXPECT_TRUE(writer.IsComplete());
     }
 
+    TEST(JsonWriterTest, AFailureIsKeptOnceAndInvalidatesTheWriterWithoutAnExpect) {
+        size_t expects = 0;
+        AssertBridge::Capture capture([&](const AssertEvent&) { ++expects; });
+        String out;
+        JsonWriter writer(out);
+        EXPECT_EQ(writer.GetFailure(), nullptr);
+        writer.BeginObject();
+        writer.Fail(MakeControlError("first", "one"));
+        writer.Fail(MakeControlError("second", "two"));
+        writer.Member("after", 1);  // ignored with no misuse: the failed writer of a value may have left containers open
+        writer.EndObject();
+        EXPECT_EQ(out, "{");
+
+        EXPECT_FALSE(writer.IsValid());
+        EXPECT_FALSE(writer.IsComplete());
+        ASSERT_NE(writer.GetFailure(), nullptr);
+        EXPECT_EQ(writer.GetFailure()->code, "first");
+        EXPECT_EQ(writer.GetFailure()->message, "one");
+        EXPECT_EQ(expects, 0u);
+    }
+
     // The engine's own misuse is an EXPECT and never a crash or a write past a buffer; the captured count only proves the EXPECT fired
     TEST(JsonWriterTest, MisuseIsIgnoredAndNeverAborts) {
         size_t expects = 0;

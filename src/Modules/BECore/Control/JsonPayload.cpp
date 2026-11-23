@@ -39,12 +39,14 @@ namespace BECore {
                 writer.Raw(text);
             }
             void operator()(const WriteResultFn& write) const {
-                if (!write(writer)) {
-                    writer.Fail("JsonPayload: the writing callback failed");
+                if (std::expected<void, ControlError> written = write(writer); !written) {
+                    writer.Fail(std::move(written.error()));
                 }
             }
         };
-        std::visit(Visitor{writer}, _form);
+        if (writer.GetFailure() == nullptr) {  // an earlier payload failed: the text is thrown away, so do not ask a game to write more of it
+            std::visit(Visitor{writer}, _form);
+        }
     }
 
 }  // namespace BECore

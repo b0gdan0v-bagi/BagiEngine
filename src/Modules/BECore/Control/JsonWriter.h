@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Control/ControlTypes.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Types/Types.h>
 
@@ -19,6 +20,9 @@ namespace BECore {
      * Misuse (a Begin past kMaxDepth, an End with nothing open or of the other kind, a Key outside an object or while a value is due, a Value in
      * an object without a Key, a second root value) is a bug of the engine's own code, never of a client: it is an `EXPECT`, the call is ignored
      * and IsValid() goes false. The text written after a misuse is not valid JSON. It never aborts the process.
+     *
+     * A **failure** is another thing: a writer of a nested value that cannot finish (a game's `WriteState` that returns an error) calls Fail(), which
+     * records the `ControlError` and makes IsValid() false without an `EXPECT`. The text is then to be thrown away and the error answered.
      */
     class JsonWriter {
     public:
@@ -85,8 +89,20 @@ namespace BECore {
             Value(std::forward<T>(value));
         }
 
-        /// A bug of the caller that the writer cannot see itself (a payload whose callback failed): an `EXPECT`, and IsValid() goes false
-        bool Fail(const char* why);
+        /**
+         * @brief Records that the value cannot be completed: a writer of a nested value (a `JsonPayload` of the streamed form) failed, and the text written so far is to be discarded.
+         *
+         * Not a bug of the engine, so no `EXPECT`: it is an error of a game or a handler that answers the request. The first failure is kept, a later one is dropped,
+         * and IsValid() is false. A failed callback may have left containers open, so from now on every write is ignored without a misuse: the struct around the
+         * payload goes on writing its other keys into nothing. Whoever sent the text checks GetFailure() after the write and answers that error instead
+         * (ControlCall, ControlService::Publish). It allocates only for the failure itself.
+         */
+        void Fail(ControlError error);
+
+        /// The first Fail(), or null
+        [[nodiscard]] const ControlError* GetFailure() const {
+            return _failure ? &*_failure : nullptr;
+        }
 
         /// How many containers are open now (a writer of a nested value cuts it before kMaxDepth, counting the containers its caller opened)
         [[nodiscard]] size_t GetDepth() const {
@@ -118,6 +134,7 @@ namespace BECore {
         void WriteSigned(int64_t value);
         void WriteUnsigned(uint64_t value);
         void WriteDouble(double value);
+        bool Misuse(const char* why);
 
         [[nodiscard]] bool InObject() const;
         [[nodiscard]] bool GetFlag(const Array<uint64_t, kFlagWords>& flags, size_t level) const;
@@ -131,6 +148,7 @@ namespace BECore {
         bool _keyPending = false;                 // a Key of the open object waits for its value
         bool _rootDone = false;
         bool _valid = true;
+        Optional<ControlError> _failure;
     };
 
 }  // namespace BECore

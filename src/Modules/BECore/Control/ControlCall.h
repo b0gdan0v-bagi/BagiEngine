@@ -85,7 +85,8 @@ namespace BECore {
         /**
          * @brief Reply() for a writer that can fail half way: when @p writeResult returns an error, what it wrote is discarded and the call is answered with that error.
          *
-         * Nothing of the half-written text reaches the transport. A callback that wrote no value, two, or left a container open is answered with
+         * Nothing of the half-written text reaches the transport. The same holds for a failure the writer recorded (JsonWriter::Fail, which a streamed
+         * `JsonPayload` of a reflected answer makes): the first one is answered, so `ReplyObject` answers it too. A callback that wrote no value, two, or left a container open is answered with
          * `internal_error` the same way (Reply(FunctionRef) too). Use Fail() when the error is known before the first byte.
          */
         void TryReply(WriteResultFn writeResult);

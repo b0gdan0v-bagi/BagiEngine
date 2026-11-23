@@ -17,7 +17,9 @@ namespace BECore {
         std::expected<void, ControlError> written = writeResult(writer);
         if (written) {
             writer.EndObject();
-            if (!writer.IsComplete()) {
+            if (const ControlError* failure = writer.GetFailure()) {
+                written = std::unexpected(*failure);
+            } else if (!writer.IsComplete()) {
                 written = std::unexpected(MakeControlError(ControlErrors::kInternalError, "the handler wrote a result that is not one JSON value"));
             }
         }
@@ -108,6 +110,10 @@ namespace BECore {
         const std::expected<void, ControlError> written = writeResult(writer);
         if (!written) {
             _captured = std::unexpected(written.error());
+            return;
+        }
+        if (const ControlError* failure = writer.GetFailure()) {
+            _captured = std::unexpected(*failure);
             return;
         }
         auto parsed = ParseJson(text);
