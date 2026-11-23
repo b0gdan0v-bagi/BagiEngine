@@ -4,6 +4,7 @@
 #include <BECore/Format/Format.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/Time/Time.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
 #include <Common/Printers.h>

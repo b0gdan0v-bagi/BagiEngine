@@ -4,6 +4,8 @@
 #include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
+#include <BECore/MainWindow/MainWindowManager.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/UI/UIEnvironment.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/Printers.h>

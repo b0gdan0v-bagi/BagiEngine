@@ -1,4 +1,5 @@
 #include <Application/Application.h>
+#include <BECore/Application/CommandLine.h>
 #include <BECore/Cook/CookCommand.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>

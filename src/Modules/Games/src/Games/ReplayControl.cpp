@@ -1,5 +1,6 @@
 #include "ReplayControl.h"
 
+#include <BECore/Application/CommandLine.h>
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>

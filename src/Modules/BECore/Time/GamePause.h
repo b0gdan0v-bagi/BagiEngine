@@ -1,15 +1,12 @@
 #pragma once
 
-#include <BECore/Utils/EnumUtils.h>
+#include <BECore/Time/FrameKind.h>
 #include <cstdint>
 
 namespace BECore {
 
     /// Frame time of one step when nothing says how long it lasts
     inline constexpr double kDefaultStepSeconds = 1.0 / 60.0;
-
-    /// What the game does in one frame, as GamePause::BeginFrame() decides it
-    CORE_ENUM(FrameKind, uint8_t, Running, Stepped, Held)
 
     /// The decision of one frame. @c seconds is the frame time of a Stepped frame and zero for the other kinds
     struct FrameDecision {

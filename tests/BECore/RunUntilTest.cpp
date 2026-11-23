@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameControlTest.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Time/Time.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>

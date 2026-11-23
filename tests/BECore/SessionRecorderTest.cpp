@@ -1,7 +1,9 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/ClassMeta.h>
 #include <BECore/ReplayTestGame.h>
+#include <BECore/Time/Time.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
