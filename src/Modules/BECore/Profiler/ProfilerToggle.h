@@ -7,6 +7,9 @@ namespace BECore {
     /// The profiler's views exist in a build with the editor or the profiler, not in a plain Release
     inline constexpr bool kProfilerViewsBuilt = BE_WITH_EDITOR != 0 || BE_PROFILER != 0;
 
+    /// The stats build (ENGINE_PROFILER_STATS): the profiler is on in a Release build so that a shipped page or executable can show the overlay
+    inline constexpr bool kProfilerStatsBuild = BE_PROFILER_STATS != 0;
+
     /// The chord that shows and hides the profiler's views: Ctrl+Shift+P (left or right Ctrl and Shift; the Game overlay in Game mode,
     /// the Profiler panel in the editor). Read from the raw SDL event like Ctrl+Shift+E (RunMode.h), so it also works over a text field.
     inline constexpr SDL_Keycode kProfilerToggleKey = SDLK_P;
