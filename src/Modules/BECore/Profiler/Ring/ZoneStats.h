@@ -44,17 +44,32 @@ namespace BECore {
     /// The rows whose zone name or `file:line` contains @p text, ignoring case; empty text keeps every row
     [[nodiscard]] Vector<ZoneStatRow> FilterZoneStats(const Vector<ZoneStatRow>& rows, StringView text);
 
-    /// The segments of the stacked stage bar, in the order they are stacked from the bottom
-    CORE_ENUM(ExclusiveStage, uint8_t, UpdateOnly, SceneUpdateStage, RenderOnly, SceneDrawStage, PresentStage, OtherStage)
+    /// The segments of the stacked stage bar, in the order they are stacked from the bottom. WaitStage is last on purpose: "work only"
+    /// is every segment but the last
+    CORE_ENUM(ExclusiveStage, uint8_t, UpdateOnly, SceneUpdateStage, RenderOnly, SceneDrawStage, PresentStage, OtherStage, WaitStage)
 
-    inline constexpr size_t kExclusiveStageCount = 6;
+    inline constexpr size_t kExclusiveStageCount = 7;
+    static_assert(kExclusiveStageCount == EnumUtils<ExclusiveStage>::Count(), "kExclusiveStageCount follows ExclusiveStage");
 
     /**
      * @brief The stage times of a frame without double counting (FrameStats::stageMs has SceneUpdate inside Update and SceneDraw inside
-     * Render): Update and Render lose their inner stage, and Other is what is left of cpuMs. A stage longer than the one around it (a
+     * Render): Update and Render lose their inner stage, and Other is what is left of cpuMs after every other segment, Wait included. A stage longer than the one around it (a
      * clock hiccup) and a sum over cpuMs give 0 for that segment, never a negative one, so the segments sum to cpuMs unless the stages
      * together exceed it.
      */
     [[nodiscard]] Array<double, kExclusiveStageCount> ExclusiveStageMs(const FrameStats& frame);
+
+    /// What the CPU did in the frame: cpuMs without the time the backend waited for the display (never negative)
+    [[nodiscard]] double FrameWorkMs(const FrameStats& frame);
+
+    /// The mean work and the mean wait of a history
+    struct WorkWaitMean {
+        double workMs = 0.0;
+        double waitMs = 0.0;
+    };
+
+    /// The means of FrameWorkMs and of the Wait stage over the frames of @p history that are not paused (a held frame is no game frame);
+    /// zeros when none is left
+    [[nodiscard]] WorkWaitMean SummarizeWorkWait(const Vector<FrameStats>& history);
 
 }  // namespace BECore

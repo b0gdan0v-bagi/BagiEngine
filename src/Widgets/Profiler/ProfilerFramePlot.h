@@ -10,8 +10,9 @@ namespace BECore {
      * @brief The frame time bars of the Profiler panel: one bar per frame of the collector's history, colored by the budget, with the
      * budget lines; a click on a bar picks the frame of the ring that the bar stands for.
      *
-     * The bars show the frame time or its stage split (ExclusiveStageMs), and the counters a frame carries (FrameStats::counters) can be
-     * picked and drawn as line graphs over the same frames.
+     * The bars show the frame time or its stage split (ExclusiveStageMs); "Work only" takes the Wait stage (the backend's wait for the
+     * display) out of the bar and of its scale, and a line under the plot gives the mean work and the mean wait. The counters a frame
+     * carries (FrameStats::counters) can be picked and drawn as line graphs over the same frames.
      *
      * Editor only. The budget (16.6 ms, 33.3 ms or a custom value) is a field of the plot for the run, not saved.
      */
@@ -44,17 +45,26 @@ namespace BECore {
         enum class BarMode : int { FrameTime, StageSplit };
 
         void DrawStageLegend() const;
+        void DrawWorkWaitSummary(const Vector<FrameStats>& history);
         void DrawCounters(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame);
 
         Budget _budget = Budget::Fps60;
         float _customBudgetMs = 20.0f;
         BarMode _barMode = BarMode::FrameTime;
+        bool _workOnly = false;
 
         // Kept as members so a steady panel allocates nothing: the names are rebuilt when the newest frame number moves
         Vector<PoolString> _counterNames;
         Vector<PoolString> _pickedCounters;
         Vector<float> _counterValues;
         uint64_t _counterNamesFrame = 0;
+
+        // The summary line, formatted again only when the newest frame moves
+        static constexpr size_t kSummaryCapacity = 64;
+        Array<char, kSummaryCapacity> _summaryText{};
+        uint64_t _summaryFrame = 0;
+        size_t _summaryFrameCount = 0;
+        bool _summaryBuilt = false;
     };
 
 }  // namespace BECore

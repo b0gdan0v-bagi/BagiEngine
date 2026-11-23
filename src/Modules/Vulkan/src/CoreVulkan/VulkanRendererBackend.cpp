@@ -5,6 +5,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/MainWindow/IMainWindow.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Renderer/ITexture.h>
 #include <CoreSDL/SDLEvents.h>
 #include <CoreSDL/SDLMainWindow.h>
@@ -257,27 +258,46 @@ namespace BECore {
 
         // Wait until the GPU finishes the previous use of this frame slot. The fence is reset only in EndFrame(),
         // right before the submit that signals it again, so a frame that fails before the submit leaves it signaled
-        // and the next wait on the slot cannot hang
+        // and the next wait on the slot cannot hang.
+        //
+        // The fence wait and the acquire are where vsync and a busy GPU block the thread: they are the Wait stage
+        // (a sibling of the others, inside cpuMs), not the work of the frame. Each scope covers the one call only, so
+        // a swapchain rebuild in between and the handling of the result are not counted as waiting; the stage adds up
+        // the scopes of a frame.
+        FrameStatsCollector& frameStats = CoreManager::GetFrameStats();
+        VkResult waited = VK_SUCCESS;
         {
             BE_PROFILE_SCOPE("Vulkan::WaitFence");
-            if (!FrameCallSucceeded(vkWaitForFences(vkDevice, 1, &_inFlightFences[frameIdx], VK_TRUE, VulkanFramePolicy::kFenceTimeoutNs), "waiting for the GPU")) {
-                return;
-            }
+            const FrameStatsCollector::StageScope waitStage(frameStats, FrameStage::Wait);
+            waited = vkWaitForFences(vkDevice, 1, &_inFlightFences[frameIdx], VK_TRUE, VulkanFramePolicy::kFenceTimeoutNs);
+        }
+        if (!FrameCallSucceeded(waited, "waiting for the GPU")) {
+            return;
         }
 
-        BE_PROFILE_SCOPE("Vulkan::AcquireImage");
-        SwapchainAction action = HandleSwapchainStatus(_swapchain.AcquireNextImage(_device, _imageAvailableSemaphores[frameIdx], _currentImageIndex), SwapchainStage::Acquire);
+        const auto acquire = [&] {
+            SwapchainStatus status = SwapchainStatus::Failed;
+            {
+                BE_PROFILE_SCOPE("Vulkan::AcquireImage");
+                const FrameStatsCollector::StageScope waitStage(frameStats, FrameStage::Wait);
+                status = _swapchain.AcquireNextImage(_device, _imageAvailableSemaphores[frameIdx], _currentImageIndex);
+            }
+            return HandleSwapchainStatus(status, SwapchainStage::Acquire);
+        };
+        SwapchainAction action = acquire();
         if (action == SwapchainAction::RecreateAndRetry) {
             // A failed acquire signaled nothing, so the semaphore is free for the second try. If that is out of date
             // too, the swapchain stays dirty and the next frame tries again.
             if (!RecreateSwapchain(pixelWidth, pixelHeight)) {
                 return;
             }
-            action = HandleSwapchainStatus(_swapchain.AcquireNextImage(_device, _imageAvailableSemaphores[frameIdx], _currentImageIndex), SwapchainStage::Acquire);
+            action = acquire();
         }
         if (action != SwapchainAction::Proceed && action != SwapchainAction::ProceedAndRecreateLater) {
             return;
         }
+
+        BE_PROFILE_SCOPE("Vulkan::BeginCommands");
 
         // The fence of this slot was waited on above, so the GPU is done with the geometry of its last use
         _geometryBuffer.BeginFrame(frameIdx);
