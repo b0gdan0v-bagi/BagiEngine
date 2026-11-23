@@ -174,6 +174,9 @@ namespace BECore::Tests {
     }
 
     TEST_F(FileTest, GetFileInfoAllocatesNothing) {
+#ifdef _WIN32
+        GTEST_SKIP() << "SDL converts the path to UTF-16 with SDL_malloc on Windows";
+#endif
         const String path = _folder.Write("a.txt", "abc");
 
         ExpectNoAllocations([&] {

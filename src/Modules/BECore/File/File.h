@@ -72,7 +72,8 @@ namespace BECore {
         SDL_IOStream* _stream = nullptr;
     };
 
-    /// The kind, size and modification time of @p path; nullopt for a path that is missing or cannot be read. Allocates nothing on success.
+    /// The kind, size and modification time of @p path; nullopt for a path that is missing or cannot be read.
+    /// Allocates nothing on POSIX; on Windows SDL converts the path to UTF-16 with one allocation.
     [[nodiscard]] Optional<FileInfo> GetFileInfo(StringView path);
 
     /// Makes @p path and the folders above it; a folder that exists is success

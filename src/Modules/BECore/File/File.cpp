@@ -85,10 +85,20 @@ namespace BECore {
             return {};
         }
 
-        /// The folder part of @p path without the separator; empty for a name with no folder (or one directly under the root)
+        /// The folder part of @p path without the separator; empty for a name with no folder or one directly under the root
+        /// (POSIX "/name"; on Windows also "C:\name", whose folder part "C:" is a drive that SDL_CreateDirectory refuses)
         StringView FolderOf(StringView path) {
             const size_t separator = path.find_last_of("/\\");
-            return separator == StringView::npos ? StringView{} : path.substr(0, separator);
+            if (separator == StringView::npos) {
+                return {};
+            }
+#ifdef _WIN32
+            constexpr size_t kDriveLength = 2;
+            if (separator == kDriveLength && path[1] == ':') {
+                return {};
+            }
+#endif
+            return path.substr(0, separator);
         }
 
         std::expected<void, String> WriteAndClose(File& file, const void* data, size_t size, StringView tempPath) {
