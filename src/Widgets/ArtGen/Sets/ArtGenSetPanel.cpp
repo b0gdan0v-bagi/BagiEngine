@@ -909,14 +909,11 @@ namespace BECore {
             auto result = session.AcceptSet(StringView(set.name));
             _acceptFailed = !result.has_value();
             if (result) {
-                const Json* accepted = FindJsonMember(*result, "accepted");
                 int32_t written = 0;
                 int32_t replaced = 0;
-                if (accepted != nullptr && accepted->is_array()) {
-                    for (const Json& row : *accepted) {
-                        written += FindJsonMember(row, "as") != nullptr ? 1 : 0;
-                        replaced += FindJsonMember(row, "replacedBy") != nullptr ? 1 : 0;
-                    }
+                for (const ArtGenAcceptedRow& row : result->accepted) {
+                    written += row.as ? 1 : 0;
+                    replaced += row.replacedBy ? 1 : 0;
                 }
                 _acceptMessage = replaced > 0 ? Format("Accepted {} row(s) into the game; {} left as they are: a newer set holds their names", written, replaced)
                                               : Format("Accepted {} row(s) into the game", written);

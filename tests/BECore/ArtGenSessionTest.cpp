@@ -67,17 +67,17 @@ namespace BECore::Tests {
         };
         SoundAcceptCall gSoundAccepted;
 
-        std::expected<Json, ControlError> FakeSoundAcceptor(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* /*node*/) {
+        std::expected<ArtGenAcceptAnswer, ControlError> FakeSoundAcceptor(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* /*node*/) {
             gSoundAccepted.seed = variant.seed;
             gSoundAccepted.target = target;
             gSoundAccepted.settings = settings;
             ++gSoundAccepted.calls;
-            Json reply = Json::object();
-            reply["clip"] = ToStdString(target.clip.empty() ? target.name : target.clip);
+            ArtGenAcceptAnswer reply;
+            reply.clip = target.clip.empty() ? target.name : target.clip;
             return reply;
         }
 
-        std::expected<Json, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node) {
+        std::expected<ArtGenAcceptAnswer, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node) {
             gAccepted.seed = variant.seed;
             gAccepted.settings = plan.settings;
             gAccepted.hasFrame = plan.frame.has_value();
@@ -86,8 +86,8 @@ namespace BECore::Tests {
             gAccepted.sprite = String(sprite);
             gAccepted.withNode = node != nullptr;
             ++gAccepted.calls;
-            Json reply = Json::object();
-            reply["sprite"] = ToStdString(sprite);
+            ArtGenAcceptAnswer reply;
+            reply.sprite = String(sprite);
             return reply;
         }
 

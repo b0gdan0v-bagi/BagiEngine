@@ -81,7 +81,7 @@ namespace BECore {
         return AtlasOf(_run.presetData, StringView(_run.preset));
     }
 
-    std::expected<Json, ControlError> ArtGenSession::Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings, const String* atlas) {
+    std::expected<ArtGenAcceptAnswer, ControlError> ArtGenSession::Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings, const String* atlas) {
         const ArtGenVariant* variant = FindVariant(seed);
         if (variant == nullptr) {
             return std::unexpected(ControlError{String(kNoVariantCode), Format("the current run has no image of seed {}", seed)});
@@ -104,7 +104,7 @@ namespace BECore {
         return _acceptor(*variant, sprite, plan, node);
     }
 
-    std::expected<Json, ControlError> ArtGenSession::AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected) {
+    std::expected<ArtGenAcceptAnswer, ControlError> ArtGenSession::AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected) {
         const ArtGenVariant* variant = FindVariant(seed);
         if (variant == nullptr) {
             return std::unexpected(ControlError{String(kNoVariantCode), Format("the current run has no sound of seed {}", seed)});
@@ -637,7 +637,7 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::HandleAccept(const Json& params) {
+    std::expected<ArtGenAcceptAnswer, ControlError> ArtGenSession::HandleAccept(const Json& params) {
         const auto seed = GetJsonInt(params, "seed");
         if (!seed) {
             return std::unexpected(InvalidParams("'seed' (integer) is required"));

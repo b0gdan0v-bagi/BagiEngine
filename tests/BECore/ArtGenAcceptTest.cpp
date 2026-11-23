@@ -1,3 +1,4 @@
+#include <BECore/ArtGenAnswerText.h>
 #include <BECore/Resource/IResource.h>
 #include <BECore/Resource/ResourceCache.h>
 #include <Common/ArtGenTestSupport.h>
@@ -492,10 +493,6 @@ namespace BECore::Tests {
         EXPECT_EQ(ReadFileBytes(game.Resolve(kAtlasPng)), afterAccept);
     }
 
-    TEST(ArtGenAtlasReplyTest, NoRepackIsNull) {
-        EXPECT_TRUE(AtlasReplyToJson(Optional<AtlasWritten>{}).is_null());
-    }
-
     TEST(ArtGenAtlasReplyTest, ARepackNamesTheAtlasItsFileAndSize) {
         AtlasWritten written;
         written.name = "ui"_intern;
@@ -504,7 +501,7 @@ namespace BECore::Tests {
         written.height = 32;
         written.changed = {"queen"_intern, "rook"_intern};
 
-        const Json reply = AtlasReplyToJson(written);
+        const Json reply = AnswerText(MakeArtGenAtlasAnswer(written));
 
         ASSERT_TRUE(reply.is_object());
         EXPECT_EQ(GetJsonString(reply, "name").value_or(String()), "ui");
@@ -983,6 +980,35 @@ namespace BECore::Tests {
         ASSERT_NE(size, nullptr);
         ASSERT_TRUE(size->is_array());
         EXPECT_EQ(size->size(), 2u);
+    }
+
+    TEST_F(ArtGenAcceptTest, TheAnswersProcessingSaysWhatTheProvenanceRecords) {
+        const auto source = folder / "out" / "real.png";
+        ASSERT_NO_FATAL_FAILURE(WriteRealPng(source, 512, 512, {10, 20, 100, 200}));
+        const Array<ArtGenIntRect, 1> bounds{ArtGenIntRect{10, 20, 100, 200}};
+        ArtGenImagePlan own;
+        own.settings = ArtGenImageSettings{true, 5, 64};
+        ArtGenImagePlan framed;
+        framed.frame = MakeArtGenFrame(bounds, 512, 512, ArtGenImageSettings{}).value();
+
+        for (const ArtGenImagePlan& plan : {own, framed}) {
+            const auto copied = CopyVariantIntoAssets(source, provenance, folder / "assets", "queen", plan);
+            ASSERT_TRUE(copied.has_value()) << copied.error().c_str();
+            const auto record = ParseJson(StringView(ReadFile(copied->provenanceFile)));
+            ASSERT_TRUE(record.has_value());
+            const Json& accepted = Require(FindJsonMember(*record, "accepted"));
+
+            const Json answer = AnswerText(MakeArtGenProcessingAnswer(*copied));
+
+            for (const StringView key : {"crop", "scale", "size", "frame"}) {
+                EXPECT_EQ(Require(FindJsonMember(answer, key)), Require(FindJsonMember(accepted, key))) << key.data();
+            }
+            // The settings are what the file writer says, so the two cannot drift
+            for (const auto& [key, value] : ArtGenImageSettingsToJson(copied->settings).items()) {
+                EXPECT_EQ(Require(FindJsonMember(answer, key.c_str())), value) << key.c_str();
+            }
+            EXPECT_EQ(answer.size(), 7u) << "the settings and the placement, nothing else";
+        }
     }
 
     TEST_F(ArtGenAcceptTest, APlanFrameTheImageDoesNotFitIsRefusedAndWritesNothing) {

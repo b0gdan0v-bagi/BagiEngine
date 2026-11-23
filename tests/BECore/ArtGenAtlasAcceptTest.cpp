@@ -1,3 +1,4 @@
+#include <BECore/ArtGenAnswerText.h>
 #include <Common/ArtGenTestSupport.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
@@ -354,32 +355,29 @@ namespace BECore::Tests {
         written.width = 64;
         written.height = 32;
         written.changed = {"queen"_intern, "rook"_intern};
-        Json reply = Json::object();
+        ArtGenAcceptAnswer reply;
 
         AddAtlasKeysToReply(reply, "pieces", written);
 
-        EXPECT_EQ(GetJsonString(reply, "atlasGroup").value_or(String()), "pieces");
-        const Json* atlas = FindJsonMember(reply, "atlas");
-        ASSERT_NE(atlas, nullptr);
-        EXPECT_EQ(GetJsonString(*atlas, "texturePath").value_or(String()), kPiecesAtlas);
-        EXPECT_EQ(GetJsonInt(*atlas, "members").value_or(0), 2);
+        EXPECT_EQ(reply.atlasGroup.value_or(String()), "pieces");
+        ASSERT_TRUE(reply.atlas.has_value());
+        EXPECT_EQ(reply.atlas->texturePath, kPiecesAtlas);
+        EXPECT_EQ(reply.atlas->members, 2u);
     }
 
-    TEST(ArtGenAtlasAcceptTest, TheRowAnswerKeepsBothKeysAsNullWhereNothingWasPacked) {
-        Json deferred = Json::object();
+    TEST(ArtGenAtlasAcceptTest, TheRowAnswerLeavesOutWhereNothingWasPacked) {
+        ArtGenAcceptAnswer deferred;
         AddAtlasKeysToReply(deferred, "pieces", Optional<AtlasWritten>{});
 
-        EXPECT_EQ(GetJsonString(deferred, "atlasGroup").value_or(String()), "pieces");
-        ASSERT_NE(FindJsonMember(deferred, "atlas"), nullptr);
-        EXPECT_TRUE(FindJsonMember(deferred, "atlas")->is_null());
+        EXPECT_EQ(deferred.atlasGroup.value_or(String()), "pieces");
+        EXPECT_FALSE(deferred.atlas.has_value()) << "a deferred pack has no atlas yet";
 
-        Json ungrouped = Json::object();
+        ArtGenAcceptAnswer ungrouped;
         AddAtlasKeysToReply(ungrouped, "", Optional<AtlasWritten>{});
 
-        ASSERT_NE(FindJsonMember(ungrouped, "atlasGroup"), nullptr);
-        EXPECT_TRUE(FindJsonMember(ungrouped, "atlasGroup")->is_null());
-        ASSERT_NE(FindJsonMember(ungrouped, "atlas"), nullptr);
-        EXPECT_TRUE(FindJsonMember(ungrouped, "atlas")->is_null());
+        const Json text = AnswerText(ungrouped);
+        EXPECT_EQ(FindJsonMember(text, "atlasGroup"), nullptr);
+        EXPECT_EQ(FindJsonMember(text, "atlas"), nullptr);
     }
 
 }  // namespace BECore::Tests

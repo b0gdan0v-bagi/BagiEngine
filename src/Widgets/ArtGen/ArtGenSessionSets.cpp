@@ -713,7 +713,7 @@ namespace BECore {
         return ArtGenSetEdit::Ok;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::AcceptSetVariant(StringView setName, StringView jobName, int64_t seed, StringView sprite) {
+    std::expected<ArtGenAcceptAnswer, ControlError> ArtGenSession::AcceptSetVariant(StringView setName, StringView jobName, int64_t seed, StringView sprite) {
         const ArtGenSet* set = FindSet(setName);
         const ArtGenSetJob* job = set != nullptr ? FindJob(*set, jobName) : nullptr;
         if (job == nullptr) {
@@ -893,7 +893,7 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::HandlePick(const Json& params) {
+    std::expected<ArtGenPickAnswer, ControlError> ArtGenSession::HandlePick(const Json& params) {
         const auto set = GetJsonString(params, "set");
         const auto job = GetJsonString(params, "job");
         const auto seed = GetJsonInt(params, "seed");
@@ -917,13 +917,11 @@ namespace BECore {
             case ArtGenSetEdit::Ok:
                 break;
         }
-        Json reply = Json::object();
-        reply["set"] = ToJsonString(*set);
-        reply["job"] = ToJsonString(*job);
-        reply["pick"] = *seed;
-        if (!write.answer.is_null()) {
-            reply["switched"] = std::move(write.answer);
-        }
+        ArtGenPickAnswer reply;
+        reply.set = *set;
+        reply.job = *job;
+        reply.pick = *seed;
+        reply.switched = std::move(write.answer);
         return reply;
     }
 
@@ -1004,7 +1002,7 @@ namespace BECore {
         return std::unexpected(InvalidParams("cancel a job with 'job' (and 'set' when two sets have it), or a whole set with 'set' and 'all': true"));
     }
 
-    std::expected<Json, ControlError> ArtGenSession::AcceptSet(StringView setName) {
+    std::expected<ArtGenAcceptSetAnswer, ControlError> ArtGenSession::AcceptSet(StringView setName) {
         ArtGenSet* set = MutableSet(setName);
         if (set == nullptr) {
             return std::unexpected(MakeError(kNoSetCode, Format("no set named '{}'", setName)));
@@ -1098,7 +1096,7 @@ namespace BECore {
                 set->processing = processing;
             }
         };
-        Json accepted = Json::array();
+        Vector<ArtGenAcceptedRow> accepted;
         Vector<String> done;
         Optional<String> rowFailure;
         size_t next = 0;
@@ -1107,13 +1105,13 @@ namespace BECore {
         }
         for (size_t row = 0; row < set->jobs.size(); ++row) {
             ArtGenSetJob& job = set->jobs[row];
-            Json item = Json::object();
-            item["job"] = ToJsonString(job.name);
+            ArtGenAcceptedRow item;
+            item.job = job.name;
             if (next >= planned.size() || planned[next].row != row) {
                 if (job.accepted && job.accepted->kept) {
-                    item["kept"] = true;
+                    item.kept = true;
                 } else {
-                    item["replacedBy"] = ToJsonString(newer[row]->name);
+                    item.replacedBy = newer[row]->name;
                 }
                 accepted.push_back(std::move(item));
                 continue;
@@ -1137,19 +1135,15 @@ namespace BECore {
                 SaveSet(*set);
                 ++_version;
             }
-            item["as"] = ToJsonString(job.name);
-            if (answer->is_object()) {
-                for (const auto& [key, value] : answer->items()) {
-                    item[key] = value;
-                }
-            }
-            item["seed"] = plan.seed;
-            item["alternatives"] = AlternativesBesides(job, plan.seed);
+            static_cast<ArtGenAcceptAnswer&>(item) = std::move(*answer);
+            item.as = job.name;
+            item.seed = plan.seed;
+            item.alternatives = AlternativesBesides(job, plan.seed);
             accepted.push_back(std::move(item));
         }
         // The group is packed once, after the last row and inside the batch: the pack goes through the batch's save too, so the one write
         // of TextureLibrary.xml is EndAcceptBatch's. A failed row packs nothing (the rows done are in the group, loose)
-        Json atlasReply;
+        Optional<ArtGenAtlasAnswer> atlasReply;
         Optional<String> packFailure;
         if (!rowFailure && deferPack && !done.empty()) {
             auto packed = _atlasPacker(set->atlas);
@@ -1195,10 +1189,10 @@ namespace BECore {
                 Format("the set '{}': its {} rows are accepted and in the game, but the atlas '{}' is not packed: {}; call artgen_accept_set again or press Pack in the Sprite Library to finish it",
                        setName, done.size(), set->atlas, *packFailure)));
         }
-        Json reply = Json::object();
-        reply["set"] = ToJsonString(set->name);
-        reply["accepted"] = std::move(accepted);
-        reply["atlas"] = std::move(atlasReply);
+        ArtGenAcceptSetAnswer reply;
+        reply.set = set->name;
+        reply.accepted = std::move(accepted);
+        reply.atlas = std::move(atlasReply);
         return reply;
     }
 
@@ -1329,7 +1323,7 @@ namespace BECore {
         return MoreVariants(*set, count, seed, jobs);
     }
 
-    std::expected<Json, ControlError> ArtGenSession::HandleAcceptSet(const Json& params) {
+    std::expected<ArtGenAcceptSetAnswer, ControlError> ArtGenSession::HandleAcceptSet(const Json& params) {
         const auto set = GetJsonString(params, "set");
         if (!set) {
             return std::unexpected(InvalidParams("'set' (string) is required"));

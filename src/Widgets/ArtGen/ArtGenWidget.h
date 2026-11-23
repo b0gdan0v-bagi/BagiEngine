@@ -10,6 +10,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
 #include <BECore/Widgets/IWidget.h>
+#include <Widgets/ArtGen/ArtGenAnswers.h>
 #include <Widgets/ArtGen/ArtGenImage.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
@@ -53,7 +54,7 @@ namespace BECore {
         /// A panel dropped a dragged variant (ArtGenDrag.h): accepts it as the sprite the event names and answers in the event's result
         void OnVariantDropped(const ArtGenVariantDropEvent& event);
         /// Takes the answer of an image Accept (the button's or a drop's) into the message line and the sprite Use as reference takes
-        void NoteImageAccepted(StringView sprite, const std::expected<Json, ControlError>& result);
+        void NoteImageAccepted(StringView sprite, const std::expected<ArtGenAcceptAnswer, ControlError>& result);
 
         void DrawServiceLine(ArtGenSession& session);
         void DrawSetup(ArtGenSession& session);

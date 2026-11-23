@@ -61,6 +61,103 @@ namespace BECore {
 
     [[nodiscard]] ArtGenReferenceAnswer MakeArtGenReferenceAnswer(const ArtGenReference& reference);
 
+    /// The atlas an accept packed: the `atlas` of `artgen_accept` and of `artgen_accept_set`, and the whole answer of the `AtlasPacker` seam
+    struct ArtGenAtlasAnswer {
+        BE_CLASS(ArtGenAtlasAnswer)
+
+        BE_REFLECT_FIELD uint32_t height = 0;
+        BE_REFLECT_FIELD uint64_t members = 0;
+        BE_REFLECT_FIELD String name;
+        BE_REFLECT_FIELD String texturePath;
+        BE_REFLECT_FIELD uint32_t width = 0;
+    };
+
+    /// The part of the source picture an accept kept
+    struct ArtGenCropAnswer {
+        BE_CLASS(ArtGenCropAnswer)
+
+        BE_REFLECT_FIELD int32_t h = 0;
+        BE_REFLECT_FIELD int32_t w = 0;
+        BE_REFLECT_FIELD int32_t x = 0;
+        BE_REFLECT_FIELD int32_t y = 0;
+    };
+
+    /// The `processing` of an image accept: the settings it was made with (`ArtGenImageSettingsToJson`'s keys) and the placement of the written
+    /// picture (`crop`, `scale`, `size` as `[width, height]`, `frame`: `set` when the crop came from the frame of a set, else `sprite`). The files
+    /// keep their writers (they read back what they wrote): a test holds the two equal
+    struct ArtGenProcessingAnswer {
+        BE_CLASS(ArtGenProcessingAnswer)
+
+        BE_REFLECT_FIELD ArtGenCropAnswer crop;
+        BE_REFLECT_FIELD String frame;
+        BE_REFLECT_FIELD int32_t maxSize = 0;
+        BE_REFLECT_FIELD int32_t padding = 0;
+        BE_REFLECT_FIELD double scale = 1.0;
+        BE_REFLECT_FIELD Vector<uint32_t> size;
+        BE_REFLECT_FIELD bool trim = false;
+    };
+
+    /**
+     * @brief What an accept of an image or a sound answered: `artgen_accept`, the `switched` of `artgen_pick` and, as the parent of a row,
+     * `artgen_accept_set`. One flat struct, every member `Optional`, because the two kinds share nothing but `usedOn`: exactly one group is set.
+     * An image has `sprite, texturePath, png, width, height, processing, reloadedSprites, atlasGroup, atlas`; a sound has `clip, wav, sampleRate,
+     * channels, seconds, peakDb, reloadedSources`. `usedOn` (the node's name) is present only when the accept put it on a node.
+     * `atlasGroup` is the group the sprite joined and `atlas` the file that was packed; `atlas` stays absent while a pack is deferred.
+     */
+    struct ArtGenAcceptAnswer {
+        BE_CLASS(ArtGenAcceptAnswer)
+
+        BE_REFLECT_FIELD Optional<ArtGenAtlasAnswer> atlas;
+        BE_REFLECT_FIELD Optional<String> atlasGroup;
+        BE_REFLECT_FIELD Optional<uint32_t> channels;
+        BE_REFLECT_FIELD Optional<String> clip;
+        BE_REFLECT_FIELD Optional<uint32_t> height;
+        BE_REFLECT_FIELD Optional<double> peakDb;
+        BE_REFLECT_FIELD Optional<String> png;
+        BE_REFLECT_FIELD Optional<ArtGenProcessingAnswer> processing;
+        BE_REFLECT_FIELD Optional<uint32_t> reloadedSources;
+        BE_REFLECT_FIELD Optional<uint32_t> reloadedSprites;
+        BE_REFLECT_FIELD Optional<uint32_t> sampleRate;
+        BE_REFLECT_FIELD Optional<double> seconds;
+        BE_REFLECT_FIELD Optional<String> sprite;
+        BE_REFLECT_FIELD Optional<String> texturePath;
+        BE_REFLECT_FIELD Optional<String> usedOn;
+        BE_REFLECT_FIELD Optional<String> wav;
+        BE_REFLECT_FIELD Optional<uint32_t> width;
+    };
+
+    /// A row of `artgen_accept_set`: `job` always. A row written has the acceptor's members, `as` (the name it was accepted as), `seed` and
+    /// `alternatives`; a row that was left as it is has `kept` or `replacedBy` and none of those
+    struct ArtGenAcceptedRow : ArtGenAcceptAnswer {
+        BE_CLASS(ArtGenAcceptedRow)
+
+        BE_REFLECT_FIELD Optional<int32_t> alternatives;
+        BE_REFLECT_FIELD Optional<String> as;
+        BE_REFLECT_FIELD String job;
+        BE_REFLECT_FIELD Optional<bool> kept;
+        BE_REFLECT_FIELD Optional<String> replacedBy;
+        BE_REFLECT_FIELD Optional<int64_t> seed;
+    };
+
+    /// `artgen_accept_set`: `atlas` is the pack after the rows, absent when none was made
+    struct ArtGenAcceptSetAnswer {
+        BE_CLASS(ArtGenAcceptSetAnswer)
+
+        BE_REFLECT_FIELD Vector<ArtGenAcceptedRow> accepted;
+        BE_REFLECT_FIELD Optional<ArtGenAtlasAnswer> atlas;
+        BE_REFLECT_FIELD String set;
+    };
+
+    /// `artgen_pick`: `switched` is the acceptor's answer when the pick switched a live row in the game
+    struct ArtGenPickAnswer {
+        BE_CLASS(ArtGenPickAnswer)
+
+        BE_REFLECT_FIELD String job;
+        BE_REFLECT_FIELD int64_t pick = 0;
+        BE_REFLECT_FIELD String set;
+        BE_REFLECT_FIELD Optional<ArtGenAcceptAnswer> switched;
+    };
+
     /// A preset of the catalog the service sent; a broken one has its `error`
     struct ArtGenPresetRowAnswer {
         BE_CLASS(ArtGenPresetRowAnswer)

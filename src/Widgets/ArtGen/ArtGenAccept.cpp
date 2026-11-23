@@ -285,7 +285,7 @@ namespace BECore {
         return count;
     }
 
-    std::expected<Json, ControlError> AcceptSoundForControl(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node) {
+    std::expected<ArtGenAcceptAnswer, ControlError> AcceptSoundForControl(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node) {
         auto fail = [](const String& message) { return std::unexpected(ControlError{String("artgen_accept_failed"), message}); };
         const std::filesystem::path assetsDir = CoreManager::GetFileSystem().GetMountedPath(MountPoints::assets);
         if (assetsDir.empty()) {
@@ -305,20 +305,19 @@ namespace BECore {
         if (Scene* scene = CoreManager::GetSceneManager().GetActiveScene()) {
             reloaded = ReloadAudioSourcesUsing(scene->GetRootNode(), clip);
         }
-        Json reply = Json::object();
-        reply["clip"] = ToStdString(written->clipPath);
-        reply["wav"] = written->wavFile.generic_string();
-        reply["sampleRate"] = written->format.sampleRate;
-        reply["channels"] = written->format.channels;
-        reply["seconds"] = written->seconds;
-        reply["peakDb"] = written->peakDb;
-        reply["reloadedSources"] = reloaded;
-        reply["usedOn"] = Json();
+        ArtGenAcceptAnswer reply;
+        reply.clip = written->clipPath;
+        reply.wav = String(Format("{}", written->wavFile.generic_string()));
+        reply.sampleRate = written->format.sampleRate;
+        reply.channels = written->format.channels;
+        reply.seconds = written->seconds;
+        reply.peakDb = static_cast<double>(written->peakDb);
+        reply.reloadedSources = reloaded;
         if (node != nullptr) {
             auto source = node->GetComponent<AudioSourceComponent>();
             source->_clip = clip;
             source->ReloadClip();
-            reply["usedOn"] = ToStdString(node->GetName().ToStringView());
+            reply.usedOn = String(node->GetName().ToStringView());
             SceneEditedEvent::Emit(CoreManager::GetSceneManager().GetActiveScene());
         }
         return reply;
@@ -329,7 +328,8 @@ namespace BECore {
         constexpr StringView kFrameOfSprite = "sprite";
         constexpr StringView kFrameOfSet = "set";
 
-        /// Where the written picture came from, in the provenance and in the answer: `{crop, scale, size, frame}`
+        /// Where the written picture came from, as the provenance file records it: `{crop, scale, size, frame}`. It stays a document of its own (the file keeps its
+        /// writer and merges into what the service wrote); `MakeArtGenProcessingAnswer` is the answer's mirror of it
         Json PlacementToJson(const ArtGenCopied& copied) {
             Json crop = Json::object();
             crop["x"] = copied.crop.x;
@@ -344,13 +344,6 @@ namespace BECore {
             json["scale"] = copied.scale;
             json["size"] = std::move(size);
             json["frame"] = ToStdString(copied.fromSet ? kFrameOfSet : kFrameOfSprite);
-            return json;
-        }
-
-        /// What `artgen_accept` answers as `processing`: the settings and the placement
-        Json ProcessingToJson(const ArtGenCopied& copied) {
-            Json json = ArtGenImageSettingsToJson(copied.settings);
-            json.update(PlacementToJson(copied));
             return json;
         }
 
@@ -375,6 +368,21 @@ namespace BECore {
         }
 
     }  // namespace
+
+    ArtGenProcessingAnswer MakeArtGenProcessingAnswer(const ArtGenCopied& copied) {
+        ArtGenProcessingAnswer answer;
+        answer.trim = copied.settings.trim;
+        answer.padding = copied.settings.padding;
+        answer.maxSize = copied.settings.maxSize;
+        answer.crop.x = copied.crop.x;
+        answer.crop.y = copied.crop.y;
+        answer.crop.w = copied.crop.w;
+        answer.crop.h = copied.crop.h;
+        answer.scale = copied.scale;
+        answer.size = {copied.width, copied.height};
+        answer.frame = String(copied.fromSet ? kFrameOfSet : kFrameOfSprite);
+        return answer;
+    }
 
     std::expected<ArtGenCopied, String> CopyVariantIntoAssets(const std::filesystem::path& png, const std::filesystem::path& provenance, const std::filesystem::path& assetsDir, StringView sprite,
                                                               const ArtGenImagePlan& plan) {
@@ -550,17 +558,14 @@ namespace BECore {
         return std::unexpected(String("TextureLibrary.xml could not be saved (does the game have one?)"));
     }
 
-    Json AtlasReplyToJson(const Optional<AtlasWritten>& repacked) {
-        if (!repacked) {
-            return Json();
-        }
-        Json json = Json::object();
-        json["name"] = ToStdString(repacked->name.ToStringView());
-        json["texturePath"] = ToStdString(repacked->texturePath.ToStringView());
-        json["width"] = repacked->width;
-        json["height"] = repacked->height;
-        json["members"] = repacked->changed.size();
-        return json;
+    ArtGenAtlasAnswer MakeArtGenAtlasAnswer(const AtlasWritten& repacked) {
+        ArtGenAtlasAnswer answer;
+        answer.name = String(repacked.name.ToStringView());
+        answer.texturePath = String(repacked.texturePath.ToStringView());
+        answer.width = repacked.width;
+        answer.height = repacked.height;
+        answer.members = repacked.changed.size();
+        return answer;
     }
 
     std::expected<AcceptStored, RepackError> RepackGroupAndSave(TextureLibrary& library, StringView group, const AtlasIo& io, FunctionRef<bool()> save) {
@@ -795,27 +800,26 @@ namespace BECore {
         return {};
     }
 
-    std::expected<Json, ControlError> AcceptForControl(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node) {
+    std::expected<ArtGenAcceptAnswer, ControlError> AcceptForControl(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node) {
         auto fail = [](const String& message) { return std::unexpected(ControlError{String("artgen_accept_failed"), message}); };
         auto accepted = AcceptVariant(variant, sprite, plan);
         if (!accepted) {
             return fail(accepted.error());
         }
-        Json reply = Json::object();
-        reply["sprite"] = ToStdString(sprite);
-        reply["texturePath"] = ToStdString(accepted->copied.texturePath);
-        reply["png"] = accepted->copied.pngFile.generic_string();
-        reply["width"] = accepted->copied.width;
-        reply["height"] = accepted->copied.height;
-        reply["processing"] = ProcessingToJson(accepted->copied);
-        reply["reloadedSprites"] = accepted->reloadedSprites;
+        ArtGenAcceptAnswer reply;
+        reply.sprite = String(sprite);
+        reply.texturePath = accepted->copied.texturePath;
+        reply.png = String(Format("{}", accepted->copied.pngFile.generic_string()));
+        reply.width = accepted->copied.width;
+        reply.height = accepted->copied.height;
+        reply.processing = MakeArtGenProcessingAnswer(accepted->copied);
+        reply.reloadedSprites = accepted->reloadedSprites;
         AddAtlasKeysToReply(reply, StringView(accepted->atlasGroup), accepted->repacked);
-        reply["usedOn"] = Json();
         if (node != nullptr) {
             if (auto used = UseSpriteOn(*node, PoolString::Intern(sprite)); !used) {
                 return fail(Format("accepted as '{}', but: {}", sprite, used.error()));
             }
-            reply["usedOn"] = ToStdString(node->GetName().ToStringView());
+            reply.usedOn = String(node->GetName().ToStringView());
             SceneEditedEvent::Emit(CoreManager::GetSceneManager().GetActiveScene());
         }
         return reply;

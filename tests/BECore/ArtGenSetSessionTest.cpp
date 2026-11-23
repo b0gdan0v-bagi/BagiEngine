@@ -1,3 +1,4 @@
+#include <BECore/ArtGenAnswerText.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <Common/ControlTestSupport.h>
@@ -76,15 +77,24 @@ namespace BECore::Tests {
             return {};
         }
 
-        std::expected<Json, ControlError> Answer(const ArtGenVariant& variant, StringView name, bool image, bool withNode, bool defaultSettings) {
+        std::expected<ArtGenAcceptAnswer, ControlError> Answer(const ArtGenVariant& variant, StringView name, bool image, bool withNode, bool defaultSettings) {
             if (name == gFailOn) {
                 return std::unexpected(ControlError{String("artgen_accept_failed"), String("the disk is full")});
             }
             gAccepted.push_back(AcceptedRow{variant.seed, variant.path, variant.provenancePath, String(name), image, withNode, defaultSettings});
             gEvents.push_back(Format("accept {}", name));
-            Json reply = Json::object();
-            reply[image ? "sprite" : "clip"] = ToStdString(name);
+            ArtGenAcceptAnswer reply;
+            (image ? reply.sprite : reply.clip) = String(name);
             return reply;
+        }
+
+        /// The member names of a JSON object, sorted as the generated writer writes them
+        Vector<String> KeysOf(const Json& object) {
+            Vector<String> keys;
+            for (const auto& [key, value] : object.items()) {
+                keys.push_back(String(key.c_str()));
+            }
+            return keys;
         }
 
         struct KeptRow {
@@ -107,7 +117,7 @@ namespace BECore::Tests {
         /// The plan of each call of the fake image acceptor that succeeded, in order, beside gAccepted
         Vector<ArtGenImagePlan> gPlans;
 
-        std::expected<Json, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node) {
+        std::expected<ArtGenAcceptAnswer, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* node) {
             auto answer = Answer(variant, sprite, true, node != nullptr, true);
             if (answer) {
                 gPlans.push_back(plan);
@@ -123,13 +133,16 @@ namespace BECore::Tests {
         Vector<PackCall> gPacks;
         String gPackFail;  // the fake packer fails with this text when it is not empty
 
-        std::expected<Json, ControlError> FakePacker(StringView group) {
+        std::expected<ArtGenAtlasAnswer, ControlError> FakePacker(StringView group) {
             gPacks.push_back(PackCall{String(group), gAccepted.size()});
             gEvents.push_back(Format("pack {}", group));
             if (!gPackFail.empty()) {
                 return std::unexpected(ControlError{String("artgen_accept_failed"), gPackFail});
             }
-            return Json{{"name", ToStdString(group)}, {"members", static_cast<int64_t>(gAccepted.size())}};
+            ArtGenAtlasAnswer atlas;
+            atlas.name = String(group);
+            atlas.members = gAccepted.size();
+            return atlas;
         }
 
         struct MeasureCall {
@@ -148,7 +161,7 @@ namespace BECore::Tests {
             return kFakeFrame;
         }
 
-        std::expected<Json, ControlError> FakeSoundAcceptor(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node) {
+        std::expected<ArtGenAcceptAnswer, ControlError> FakeSoundAcceptor(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node) {
             return Answer(variant, target.name, false, node != nullptr, settings == ArtGenSoundSettings{} && target.clip.empty());
         }
 
@@ -1395,6 +1408,7 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString(rows[1], "job"), Optional<String>("b"));
         EXPECT_EQ(GetJsonBool(rows[1], "kept"), Optional<bool>(true));
         EXPECT_EQ(FindJsonMember(rows[1], "as"), nullptr) << "nothing was written for it";
+        EXPECT_EQ(KeysOf(rows[1]), (Vector<String>{"job", "kept"}));
         EXPECT_TRUE(OnDisk("mixed").jobs[1].accepted->kept);
     }
 
@@ -1880,7 +1894,9 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString(rows[0], "job"), Optional<String>("a"));
         EXPECT_EQ(GetJsonString(rows[0], "replacedBy"), Optional<String>("second"));
         EXPECT_EQ(FindJsonMember(rows[0], "as"), nullptr);
+        EXPECT_EQ(KeysOf(rows[0]), (Vector<String>{"job", "replacedBy"})) << "a row left as it is has none of the acceptor's members";
         EXPECT_EQ(GetJsonString(rows[1], "as"), Optional<String>("b"));
+        EXPECT_EQ(KeysOf(rows[1]), (Vector<String>{"alternatives", "as", "job", "seed", "sprite"})) << "a row written: the acceptor's members, as, seed and alternatives";
         EXPECT_EQ(OnDisk("first").jobs[0].accepted->date, before.jobs[0].accepted->date) << "the row's mark did not move";
 
         // A set whose row of that name was never accepted writes it: it is the newest then
@@ -2215,9 +2231,7 @@ namespace BECore::Tests {
             EXPECT_TRUE(plan.atlas.empty());
             EXPECT_FALSE(plan.deferPack);
         }
-        const Json* atlas = FindJsonMember(answer, "atlas");
-        ASSERT_NE(atlas, nullptr);
-        EXPECT_TRUE(atlas->is_null());
+        EXPECT_EQ(FindJsonMember(answer, "atlas"), nullptr) << "no atlas member when none was packed";
     }
 
     TEST_F(ArtGenSetSessionTest, AcceptAllOfAGroupSetWithNoPackerLetsEveryRowPackByItself) {
@@ -2232,7 +2246,7 @@ namespace BECore::Tests {
             EXPECT_FALSE(plan.deferPack);
         }
         EXPECT_TRUE(gPacks.empty());
-        EXPECT_TRUE(FindJsonMember(answer, "atlas")->is_null());
+        EXPECT_EQ(FindJsonMember(answer, "atlas"), nullptr);
     }
 
     TEST_F(ArtGenSetSessionTest, AcceptAllOfAGroupSetPacksNothingWhenEveryRowIsKeptOrReplaced) {
@@ -2252,7 +2266,7 @@ namespace BECore::Tests {
         const Json answer = Result(AcceptAllCall("first"));
         EXPECT_TRUE(gAccepted.empty());
         EXPECT_TRUE(gPacks.empty());
-        EXPECT_TRUE(FindJsonMember(answer, "atlas")->is_null());
+        EXPECT_EQ(FindJsonMember(answer, "atlas"), nullptr);
     }
 
     TEST_F(ArtGenSetSessionTest, AFailedRowOfAGroupSetPacksNothingAndTheNextCallFinishesAndPacksOnce) {
@@ -2276,7 +2290,7 @@ namespace BECore::Tests {
         const Json again = Result(AcceptAllCall("grouped"));
         ASSERT_EQ(gPacks.size(), 1u);
         EXPECT_EQ(gPacks[0].acceptedBefore, 5u) << "the first two rows replace themselves";
-        EXPECT_FALSE(FindJsonMember(again, "atlas")->is_null());
+        EXPECT_NE(FindJsonMember(again, "atlas"), nullptr);
     }
 
     TEST_F(ArtGenSetSessionTest, AFailedFirstRowOfAGroupSetSaysNothingAboutTheAtlas) {
@@ -2312,7 +2326,7 @@ namespace BECore::Tests {
         gPackFail.clear();
         const Json again = Result(AcceptAllCall("grouped"));
         EXPECT_EQ(gPacks.size(), 2u);
-        EXPECT_FALSE(FindJsonMember(again, "atlas")->is_null());
+        EXPECT_NE(FindJsonMember(again, "atlas"), nullptr);
     }
 
     TEST_F(ArtGenSetSessionTest, AcceptAllOfAGroupSetPacksInsideTheBatchAndMarksTheRowsAfterItsSave) {
@@ -2333,7 +2347,7 @@ namespace BECore::Tests {
         const Vector<String> expected{"begin", "accept a", "accept b", "accept c", "pack pieces", "end"};
         EXPECT_EQ(gEvents, expected) << "the pack is a step of the batch, so the library is written once, by its end";
         EXPECT_EQ(markedWhileEnding, 0u);
-        EXPECT_FALSE(FindJsonMember(answer, "atlas")->is_null());
+        EXPECT_NE(FindJsonMember(answer, "atlas"), nullptr);
         for (const ArtGenSetJob& job : OnDisk("grouped").jobs) {
             EXPECT_TRUE(job.accepted.has_value());
         }
@@ -2407,7 +2421,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(MakeFiles("heard"));
         const Json answer = Result(AcceptAllCall("heard"));
         EXPECT_TRUE(gPacks.empty());
-        EXPECT_TRUE(FindJsonMember(answer, "atlas")->is_null());
+        EXPECT_EQ(FindJsonMember(answer, "atlas"), nullptr);
     }
 
     // ---- one frame for the whole set (Sets/CLAUDE.md, "Accept all") ----
@@ -3342,7 +3356,7 @@ namespace BECore::Tests {
 
         const auto answer = session.AcceptSetVariant("framed", "a", kSetSeed, "queen");
         ASSERT_TRUE(answer.has_value()) << answer.error().message.c_str();
-        EXPECT_EQ(GetJsonString(*answer, "sprite"), Optional<String>("queen"));
+        EXPECT_EQ(answer->sprite, Optional<String>("queen"));
         ASSERT_EQ(gAccepted.size(), 1u);
         EXPECT_EQ(gAccepted[0].name, "queen");
         EXPECT_EQ(gAccepted[0].seed, kSetSeed) << "the variant dropped, not the row's pick";
