@@ -10,6 +10,7 @@ The engine's own file layer over SDL3 (`SDL_IOStream`, `SDL_GetPathInfo`, `SDL_R
 | `GetFileInfo(path)` | `Optional<FileInfo>` (kind, size, mtime); nullopt for a missing or unreadable path; allocates nothing on POSIX |
 | `CreateDirectories`, `RemoveFile`, `RenameFile` | folder tree, one file, a rename that replaces a file |
 | `WalkDirectory(folder, WalkMode, visit)` | the entries of a folder or of a tree through a `FunctionRef<bool(relativePath, FileKind)>`; false from `visit` stops, as a success |
+| `IsSymbolicLink(path)` (and on Windows `WideToUtf8(text, length)`) | whether the path is itself a link (`lstat`; a reparse point on Windows), which `GetFileInfo` and the walk cannot tell: they report a link with its target's kind; UTF-16 names of the Windows APIs as UTF-8 |
 | `RemoveTree`, `CopyFileTo(from, to, CopyMode)` | a file or a whole folder; a file copied (`Fail` or `Overwrite`) |
 | `CurrentDirectory`, `AbsolutePath`, `CanonicalPath`, `WeaklyCanonicalPath`, `IsSameFile` | the working folder; `std::filesystem::absolute(p).lexically_normal()`; `realpath` (the path must exist); canonical of the part that exists plus the rest cleaned up; same device and index |
 | `ReadFileBytes`, `ReadTextFile` | a whole file in one allocation, refused above `maxBytes` (default `kDefaultMaxFileBytes`) before anything is allocated |
