@@ -617,6 +617,53 @@ namespace BECore::Tests {
         EXPECT_EQ(NameRow("ResetNameZone", nullptr).count, 0u);
     }
 
+    namespace {
+
+        /// The size row of the zone called @p zone (nullptr: outside every zone)
+        AllocSizeStats SizeRow(const char* zone) {
+            for (const AllocSizeStats& row : AllocTracker::GetSizeStats()) {
+                if (zone == nullptr ? row.zone == nullptr : (row.zone != nullptr && std::strcmp(row.zone->name, zone) == 0)) {
+                    return row;
+                }
+            }
+            return {};
+        }
+
+    }  // namespace
+
+    TEST(AllocTrackerTest, SizesLandInTheBucketsOfTheirInnermostZoneOnly) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("SizeOuter");
+            ::operator delete(::operator new(kBlock));  // 513..1024
+            {
+                BE_PROFILE_SCOPE("SizeInner");
+                ::operator delete(::operator new(kBlock));
+                ::operator delete(::operator new(kBlock * 3));  // 2049..4096
+                ::operator delete(::operator new(1));
+            }
+        }
+        const AllocSizeStats outer = SizeRow("SizeOuter");
+        EXPECT_EQ(outer.allocs, 1u);
+        EXPECT_EQ(outer.buckets[SizeBucket(kBlock)], 1u);
+        const AllocSizeStats inner = SizeRow("SizeInner");
+        EXPECT_EQ(inner.allocs, 3u);
+        EXPECT_EQ(inner.buckets[SizeBucket(kBlock)], 1u);
+        EXPECT_EQ(inner.buckets[SizeBucket(kBlock * 3)], 1u);
+        EXPECT_EQ(inner.buckets[0], 1u);
+        EXPECT_NE(SizeBucket(kBlock), SizeBucket(kBlock * 3));
+    }
+
+    TEST(AllocTrackerTest, ResettingTheZoneStatisticsClearsTheSizes) {
+        {
+            BE_PROFILE_SCOPE("ResetSizeZone");
+            ::operator delete(::operator new(kBlock));
+        }
+        EXPECT_EQ(SizeRow("ResetSizeZone").allocs, 1u);
+        AllocTracker::ResetZoneStats();
+        EXPECT_EQ(SizeRow("ResetSizeZone").allocs, 0u);
+    }
+
     TEST(AllocTrackerTest, TheChromeTraceCarriesTheAllocationNames) {
         AllocTracker::ResetZoneStats();
         ChromeTraceBackend recorder;
@@ -655,6 +702,7 @@ namespace BECore::Tests {
         EXPECT_EQ(totals.liveBytes, 0u);
         EXPECT_TRUE(AllocTracker::GetZoneStats().empty());
         EXPECT_TRUE(AllocTracker::GetNameStats().empty());
+        EXPECT_TRUE(AllocTracker::GetSizeStats().empty());
     }
 
 #endif

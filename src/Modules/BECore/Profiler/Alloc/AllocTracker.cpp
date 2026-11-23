@@ -393,6 +393,14 @@ namespace BECore {
 #endif
     }
 
+    Vector<AllocSizeStats> AllocTracker::GetSizeStats() {
+#if BE_PROFILER_ALLOC
+        return g_nameTable.GetSizeStats();
+#else
+        return {};
+#endif
+    }
+
     uint64_t AllocTracker::GetNameOverflow() {
 #if BE_PROFILER_ALLOC
         return g_nameTable.GetOverflow();

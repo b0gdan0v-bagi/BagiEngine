@@ -53,6 +53,14 @@ The tracker counts what goes through the global `operator new` and what the vend
 - **The profile build defines `EASTL_NAME_ENABLED=1` and `EASTL_DEBUGPARAMS_LEVEL=1`** (`cmake/BagiPlatformOptions.cmake`): macOS and Linux never define `_DEBUG`, so EASTL passes no names there otherwise. The definitions are global because `eastl::allocator` gets a `mpName` member (an ODR break if the engine and a test disagree). Level 2 would add file and line, but the default allocator passes its own `allocator.h` line, so they say nothing; the call site is the zone, and `set_name` where a zone is too coarse.
 - The Tracy backend does not get the names (`IProfilerBackend::OnAlloc` has no name parameter).
 
+## Sizes
+
+`AllocTracker::GetSizeStats()` answers a histogram of the allocation sizes per zone (`AllocSiteTable`, the same `Add` as the names): bucket k holds the sizes in (2^(k-1), 2^k], bucket 0 holds 0 and 1, and the last of `kSizeBuckets` (26) everything above 16 MiB, since a block that large is a rare asset buffer whose size `largest` already gives. It tells what a zone allocates with (many 32-byte nodes, a few large buffers), which a pool is sized by.
+
+- **Self-charged** to the innermost zone like `names`, not inclusive like `zones`; an allocation outside every zone is the row with a null zone. An inclusive histogram would need per-thread bucket copies read at both ends of every zone.
+- **Fixed BSS**, `kZonePointers + 1` rows indexed by the interned zone index (row 0 the null zone), 64-bit counters, about 210 KB; `Add` still never allocates, locks or logs. Counted whenever the zone fits the zone pointer table, even when the name or the pair table is full; a full zone table drops the allocation into `GetNameOverflow()`.
+- `ResetZoneStats` zeroes it with the names. Empty without `ENGINE_PROFILER_ALLOC`.
+
 ## Invisible
 
 Not counted, by design or reach: libc internals (`fopen`, `opendir`, `printf` with `%f`, `tzset`), the Vulkan driver, Tracy's own memory, the browser's JavaScript side, a game's own copy of a library with its malloc (a second stb, dr_libs or pugixml; a game that uses pugixml or ImGui before the static initializer), and anything allocated before the static initializer ran. A newly visible steady-frame allocation in a game after `Update engine` is a finding for the game's own allocation test, not a regression of this tracker. An allocation made with a plain `operator new` has no EASTL name, so it shows in `names` only under the null name; a plain `malloc` is not counted at all.
