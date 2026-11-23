@@ -81,6 +81,14 @@ namespace BECore::Tests {
         EXPECT_EQ(InstantsOf(ParseTrace(WriteRingTraceJson(snapshot, 1000.0))).size(), kFrameCount);
     }
 
+    TEST(RingTraceExportTest, CountingFramesAgreesWithTheFramesTheTraceHolds) {
+        const RingSnapshot snapshot = TenFrames();
+        for (const double seconds : {1000.0, 0.05, 0.0, -1.0}) {
+            EXPECT_EQ(CountRingTraceFrames(snapshot, seconds), InstantsOf(ParseTrace(WriteRingTraceJson(snapshot, seconds))).size()) << seconds;
+        }
+        EXPECT_EQ(CountRingTraceFrames(RingSnapshot{}, 10.0), 0u);
+    }
+
     TEST(RingTraceExportTest, TheNewestFrameIsAlwaysInAlsoForNoWindow) {
         const RingSnapshot snapshot = TenFrames();
         for (const double seconds : {0.0, -1.0, 1.0e-9}) {

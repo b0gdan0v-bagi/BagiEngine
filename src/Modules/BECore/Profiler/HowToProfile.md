@@ -36,6 +36,10 @@ Ctrl+Shift+E to the editor, then Ctrl+Shift+P opens the Profiler panel. Zones ne
 - **Zone table:** calls, total, self, mean, max, p95 and allocations over the frame, the last 60 frames or the ring; sortable, filterable, "Timeline" jumps to the slowest call.
 - **Spikes:** frames above a threshold (ms or times the median) are frozen with their zones; open one in the timeline. "Write frozen frames" writes them (or, with none, the selected frame) as a Chrome trace that Perfetto and `tools/perf/trace_summary.py` read.
 
+## In the game: the overlay and its trace
+
+In a build with the profiler (or the editor) Ctrl+Shift+P shows the overlay over the game: the last frame, the six zones with the largest self time per frame (over the last 60 frames, refreshed twice a second) and a bar per frame. Ctrl+Shift+T, or a click on the line `Save trace`, saves the last 10 seconds of the ring: a file `profiler-trace.json` in the working folder, in the browser a download. The overlay says `Saved profiler-trace.json (N frames)` under its text. Read the file in Perfetto (ui.perfetto.dev, "Open trace file") or with `python3 tools/perf/trace_summary.py profiler-trace.json`: the file has real `Frame` marks, so the summary gives frame times and the zones by self time. The overlay's own work is one block, `Profiler overlay`, on the timeline.
+
 ## A trace of a tool without a window
 
 ```cpp

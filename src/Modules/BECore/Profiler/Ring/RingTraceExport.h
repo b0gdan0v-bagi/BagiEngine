@@ -6,6 +6,9 @@
 
 namespace BECore {
 
+    /// How many frames WriteRingTraceJson puts into the trace for the same arguments (0 for an empty snapshot)
+    [[nodiscard]] size_t CountRingTraceFrames(const RingSnapshot& snapshot, double seconds);
+
     /**
      * @brief The last @p seconds of a ring snapshot as a Chrome trace, in the shape of WriteFrozenTraceJson (FrozenTrace.h).
      *

@@ -7,9 +7,11 @@
 #include <BECore/Renderer/RendererManager.h>
 #include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/Printers.h>
 #include <Common/ProfilerTestSupport.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/TestText.h>
+#include <CoreSDL/SDLEvents.h>
 #include <Widgets/ProfilerOverlayWidget.h>
 #include <chrono>
 #include <gtest/gtest.h>
@@ -75,6 +77,16 @@ namespace BECore::Tests {
         EXPECT_FALSE(IsProfilerToggle(SDLK_P, SDL_KMOD_LCTRL | SDL_KMOD_LSHIFT | SDL_KMOD_LALT, false));
         EXPECT_FALSE(IsProfilerToggle(SDLK_P, SDL_KMOD_LCTRL | SDL_KMOD_LSHIFT | SDL_KMOD_LGUI, false));
         EXPECT_FALSE(IsProfilerToggle(SDLK_E, SDL_KMOD_LCTRL | SDL_KMOD_LSHIFT, false));
+    }
+
+    TEST(ProfilerToggleTest, CtrlShiftTSavesTheTraceWithTheSameModifierRules) {
+        EXPECT_TRUE(IsProfilerExportChord(SDLK_T, SDL_KMOD_LCTRL | SDL_KMOD_LSHIFT, false));
+        EXPECT_TRUE(IsProfilerExportChord(SDLK_T, SDL_KMOD_RCTRL | SDL_KMOD_RSHIFT | SDL_KMOD_NUM, false));
+        EXPECT_FALSE(IsProfilerExportChord(SDLK_T, SDL_KMOD_LCTRL | SDL_KMOD_LSHIFT, true));
+        EXPECT_FALSE(IsProfilerExportChord(SDLK_T, SDL_KMOD_LSHIFT, false));
+        EXPECT_FALSE(IsProfilerExportChord(SDLK_T, SDL_KMOD_LCTRL | SDL_KMOD_LSHIFT | SDL_KMOD_LALT, false));
+        EXPECT_FALSE(IsProfilerExportChord(SDLK_P, SDL_KMOD_LCTRL | SDL_KMOD_LSHIFT, false));
+        EXPECT_FALSE(IsProfilerToggle(SDLK_T, SDL_KMOD_LCTRL | SDL_KMOD_LSHIFT, false));
     }
 
     TEST(FrameStatsTextTest, TheLinesNameTheFrameTheDrawsAndTheCounters) {
@@ -340,6 +352,154 @@ namespace BECore::Tests {
         }
         overlay.DrawScreen();
         EXPECT_EQ(zoneLines(), 2u);
+    }
+
+    namespace {
+
+        /// What the overlay's export hands to its sink
+        struct ExportCapture {
+            int calls = 0;
+            String fileName;
+            String json;
+            bool fail = false;
+        };
+
+        void CaptureExports(ProfilerOverlayWidget& overlay, ExportCapture& capture) {
+            overlay.SetExportSink([&capture](StringView fileName, const String& json) -> std::expected<void, String> {
+                ++capture.calls;
+                capture.fileName = String(fileName.data(), fileName.size());
+                capture.json = json;
+                if (capture.fail) {
+                    return std::unexpected(String("disk full"));
+                }
+                return {};
+            });
+        }
+
+        SDL_Event ExportChord() {
+            SDL_Event event{};
+            event.type = SDL_EVENT_KEY_DOWN;
+            event.key.key = SDLK_T;
+            event.key.mod = SDL_KMOD_LCTRL | SDL_KMOD_LSHIFT;
+            return event;
+        }
+
+        SDL_MouseButtonEvent Press(float x, float y, Uint8 button = SDL_BUTTON_LEFT) {
+            SDL_MouseButtonEvent event{};
+            event.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+            event.button = button;
+            event.x = x;
+            event.y = y;
+            return event;
+        }
+
+        String StatusLine(const ProfilerOverlayWidget& overlay) {
+            String status;
+            overlay.EmitLines(*CoreManager::GetFrameStats().GetLast(), [&status](StringView line) {
+                if (Contains(line, "Saved ") || Contains(line, "Save failed")) {
+                    status = String(line.data(), line.size());
+                }
+            });
+            return status;
+        }
+
+    }  // namespace
+
+    TEST_F(ProfilerOverlayWidgetTest, TheChordSavesTheRingsLastSecondsAndSaysSo) {
+        if constexpr (BE_PROFILER == 0) {
+            GTEST_SKIP() << "the export needs the profiler";
+        }
+        const ProfilerStateGuard guard;
+        ProfilerOverlayWidget overlay;
+        ExportCapture capture;
+        CaptureExports(overlay, capture);
+        overlay.SetVisible(true);
+        FeedRing(3);
+        overlay.OnSDLEvent(SDLEvents::SDLEventWrapper(ExportChord()));
+
+        ASSERT_EQ(capture.calls, 1);
+        EXPECT_EQ(capture.fileName, kProfilerTraceFileName);
+        EXPECT_TRUE(Contains(capture.json, "Overlay test busy zone"));
+        EXPECT_TRUE(Contains(capture.json, "\"Frame\""));
+        EXPECT_TRUE(Contains(StatusLine(overlay), Format("Saved {} (", kProfilerTraceFileName)));
+    }
+
+    TEST_F(ProfilerOverlayWidgetTest, AFailedSaveShowsItsErrorAndTheStatusGoesAfterKStatusFrames) {
+        if constexpr (BE_PROFILER == 0) {
+            GTEST_SKIP() << "the export needs the profiler";
+        }
+        const ProfilerStateGuard guard;
+        ProfilerOverlayWidget overlay;
+        ExportCapture capture;
+        capture.fail = true;
+        CaptureExports(overlay, capture);
+        overlay.SetVisible(true);
+        EXPECT_FALSE(overlay.ExportTrace());
+        EXPECT_TRUE(Contains(StatusLine(overlay), "Save failed: disk full"));
+        for (uint32_t frame = 0; frame < ProfilerOverlayWidget::kStatusFrames; ++frame) {
+            overlay.DrawScreen();
+        }
+        EXPECT_TRUE(StatusLine(overlay).empty());
+    }
+
+    TEST_F(ProfilerOverlayWidgetTest, ThereIsNoExportWhileHidden) {
+        if constexpr (BE_PROFILER == 0) {
+            GTEST_SKIP() << "the export needs the profiler";
+        }
+        const ProfilerStateGuard guard;
+        ProfilerOverlayWidget overlay;
+        ExportCapture capture;
+        CaptureExports(overlay, capture);
+        overlay.OnSDLEvent(SDLEvents::SDLEventWrapper(ExportChord()));
+        EXPECT_FALSE(overlay.ExportTrace());
+        overlay.SetVisible(true);
+        overlay.SetVisible(false);
+        EXPECT_FALSE(CoreManager::GetUIInput().DispatchMouseButtonDown(Press(0.0f, 0.0f)));
+        EXPECT_EQ(capture.calls, 0);
+    }
+
+    TEST_F(ProfilerOverlayWidgetTest, AClickOnTheSaveLineSavesAndIsTakenAnyOtherPressPassesOn) {
+        if constexpr (BE_PROFILER == 0) {
+            GTEST_SKIP() << "the export needs the profiler";
+        }
+        const ProfilerStateGuard guard;
+        ProfilerOverlayWidget overlay;
+        ExportCapture capture;
+        CaptureExports(overlay, capture);
+        overlay.SetVisible(true);
+        overlay.DrawScreen();
+        const Rect rect = overlay.GetSaveTraceRect();
+        ASSERT_FALSE(rect.IsEmpty()) << "no font: the line has no place";
+        UIInput& input = CoreManager::GetUIInput();
+
+        EXPECT_FALSE(input.DispatchMouseButtonDown(Press(rect.x + rect.w + 1.0f, rect.y + rect.h * 0.5f)));
+        EXPECT_FALSE(input.DispatchMouseButtonDown(Press(rect.x + 1.0f, rect.y - 1.0f)));
+        EXPECT_FALSE(input.DispatchMouseButtonDown(Press(rect.x + 1.0f, rect.y + rect.h * 0.5f, SDL_BUTTON_RIGHT)));
+        EXPECT_EQ(capture.calls, 0);
+
+        EXPECT_TRUE(input.DispatchMouseButtonDown(Press(rect.x + 1.0f, rect.y + rect.h * 0.5f)));
+        EXPECT_EQ(capture.calls, 1);
+    }
+
+    TEST_F(ProfilerOverlayWidgetTest, TheExportLeavesOnlyTheOverlaysOwnZoneInTheRing) {
+        if constexpr (BE_PROFILER == 0) {
+            GTEST_SKIP() << "the ring has no zones without the profiler";
+        }
+        const ProfilerStateGuard guard;
+        ProfilerOverlayWidget overlay;
+        ExportCapture capture;
+        CaptureExports(overlay, capture);
+        overlay.SetVisible(true);
+        FeedRing(2);
+        ASSERT_TRUE(overlay.ExportTrace());
+        Profiler::FrameMark();
+
+        for (const RingThread& thread : Profiler::GetFrameRing().Snapshot().threads) {
+            for (const ZoneRecord& zone : thread.zones) {
+                const StringView name = zone.site->name;
+                EXPECT_TRUE(Contains(name, "Overlay test") || name == kProfilerOverlayZone) << String(name.data(), name.size());
+            }
+        }
     }
 
     TEST_F(ProfilerOverlayWidgetTest, AHiddenOverlayDrawsNothing) {

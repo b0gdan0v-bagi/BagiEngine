@@ -3,18 +3,21 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/Profiler/Backends/ChromeTraceJson.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/FrameStats/FrameStatsText.h>
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/ProfilerToggle.h>
 #include <BECore/Profiler/Ring/FrameRingBackend.h>
 #include <BECore/Profiler/Ring/RingPause.h>
+#include <BECore/Profiler/Ring/RingTraceExport.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Text/TextLayout.h>
 #include <BECore/Text/TextRenderer.h>
 #include <CoreSDL/SDLEvents.h>
+#include <CoreSDL/SDLWebDownload.h>
 #include <Generated/ProfilerOverlayWidget.gen.hpp>
 
 namespace BECore {
@@ -32,13 +35,34 @@ namespace BECore {
         constexpr float kBarsHeight = 48.0f;
         constexpr float kBudgetLineHeight = 1.0f;
         constexpr float kBudgetsShown = 2.0f;
+        std::expected<void, String> SaveTrace(StringView fileName, const String& json) {
+#ifdef __EMSCRIPTEN__
+            return WebDownloadStart(fileName, json, "application/json");
+#else
+            return WriteTextFile(fileName, json);
+#endif
+        }
 
     }  // namespace
+
+    bool ProfilerOverlayWidget::SaveTraceTarget::ContainsPoint(float outputX, float outputY) const {
+        const Rect& rect = _owner._saveRect;
+        return outputX >= rect.x && outputX < rect.x + rect.w && outputY >= rect.y && outputY < rect.y + rect.h;
+    }
+
+    bool ProfilerOverlayWidget::SaveTraceTarget::OnMouseButtonDown(const SDL_MouseButtonEvent& event) {
+        if (event.button != SDL_BUTTON_LEFT) {
+            return false;
+        }
+        _owner.ExportTrace();
+        return true;
+    }
 
     ProfilerOverlayWidget::~ProfilerOverlayWidget() {
         // A widget destroyed by a mode switch while visible must not leave the ring recording
         if (_ringRequested) {
             Profiler::SetRingEnabled(false);
+            CoreManager::GetUIInput().Unregister(_saveTarget);
         }
     }
 
@@ -56,16 +80,45 @@ namespace BECore {
         Profiler::SetRingEnabled(wanted);
         _ringRequested = wanted;
         if (wanted) {
+            CoreManager::GetUIInput().Register(_saveTarget, kInputOrder);
             _framesSinceRefresh = kZoneRefreshFrames;
             _rows.clear();
             _windowFrames = 0;
+        } else {
+            CoreManager::GetUIInput().Unregister(_saveTarget);
+            _saveRect = Rect{};
         }
     }
 
     void ProfilerOverlayWidget::OnSDLEvent(const SDLEvents::SDLEventWrapper& event) {
         const SDL_KeyboardEvent& key = event.event.key;
-        if (kProfilerViewsBuilt && event.event.type == SDL_EVENT_KEY_DOWN && IsProfilerToggle(key.key, key.mod, key.repeat)) {
+        if (!kProfilerViewsBuilt || event.event.type != SDL_EVENT_KEY_DOWN) {
+            return;
+        }
+        if (IsProfilerToggle(key.key, key.mod, key.repeat)) {
             SetVisible(!_visible);
+        } else if (IsProfilerExportChord(key.key, key.mod, key.repeat)) {
+            ExportTrace();
+        }
+    }
+
+    bool ProfilerOverlayWidget::ExportTrace() {
+        if constexpr (BE_PROFILER == 0) {
+            return false;
+        } else {
+            if (!_visible) {
+                return false;
+            }
+            // The same exclusion as the draw: one block on the timeline, and the work inside (the JSON, the file) is not recorded
+            const ScopedAllocCountersPause allocPause;
+            BE_PROFILE_SCOPE(kProfilerOverlayZone);
+            const ScopedRingPause ringPause;
+            const RingSnapshot snapshot = Profiler::GetFrameRing().Snapshot();
+            const String json = WriteRingTraceJson(snapshot, kExportSeconds);
+            const std::expected<void, String> saved = _exportSink ? _exportSink(kProfilerTraceFileName, json) : SaveTrace(kProfilerTraceFileName, json);
+            _status = saved ? Format("Saved {} ({} frames)", kProfilerTraceFileName, CountRingTraceFrames(snapshot, kExportSeconds)) : Format("Save failed: {}", saved.error());
+            _statusFramesLeft = kStatusFrames;
+            return saved.has_value();
         }
     }
 
@@ -117,6 +170,10 @@ namespace BECore {
             const FormatResult written = FormatToN(title, kOverlayLineCapacity, "Top zones by self time (per frame, last {})", kZoneWindowFrames);
             emit(StringView(title, eastl::min(written.size, kOverlayLineCapacity)));
             FormatTopZoneLinesTo(_rows, _windowFrames, kTopZoneCount, kProfilerOverlayZone, emit);
+            emit(kSaveTraceLine);
+            if (_statusFramesLeft > 0) {
+                emit(StringView(_status.data(), eastl::min(_status.size(), kOverlayLineCapacity)));
+            }
         }
     }
 
@@ -142,16 +199,27 @@ namespace BECore {
         const ScratchScope scratch;
         ArenaString text;
         text.reserve(kTextCapacity);
-        EmitLines(*last, [&text](StringView line) {
+        size_t lineCount = 0;
+        size_t saveLine = 0;
+        EmitLines(*last, [&](StringView line) {
+            saveLine = line == kSaveTraceLine ? lineCount : saveLine;
+            ++lineCount;
             text.append(line.data(), line.size());
             text.push_back('\n');
         });
+        _statusFramesLeft -= _statusFramesLeft > 0 ? 1 : 0;
         TextLayoutOptions options;
         options.fontSize = _fontSize;
         options.wrap = false;
         Font* font = ResolveFont();
         // _layoutCache is only ever given _font, which ResolveFont never changes after the first call, so it needs no Reset
         const TextLayoutResult& layout = font != nullptr ? _layoutCache.Get(*font, StringView(text.data(), text.size()), options) : _noLayout;
+
+        // The click target of the "Save trace" line: the lines are a line height apart
+        _saveRect = Rect{};
+        if (_ringRequested && font != nullptr && saveLine < layout.lines.size()) {
+            _saveRect = Rect{2.0f * _margin, 2.0f * _margin + static_cast<float>(saveLine) * layout.lineHeight, layout.width, layout.lineHeight};
+        }
 
         const float width = std::max(layout.width, kBars * kBarWidth) + 2.0f * _margin;
         const float height = layout.height + kBarsHeight + 3.0f * _margin;

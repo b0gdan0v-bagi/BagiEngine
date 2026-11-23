@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Input/UIInput.h>
+#include <BECore/Math/Rect.h>
 #include <BECore/Profiler/Ring/RingSnapshot.h>
 #include <BECore/Profiler/Ring/ZoneStats.h>
 #include <BECore/Resource/ResourceHandle.h>
@@ -7,7 +9,10 @@
 #include <BECore/Text/TextLayout.h>
 #include <BECore/Text/TextLayoutCache.h>
 #include <BECore/Utils/FunctionRef.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <BECore/Widgets/IWidget.h>
+#include <cstdint>
+#include <expected>
 
 namespace BECore {
 
@@ -18,6 +23,12 @@ namespace BECore {
     /// The one zone of the overlay's own work that the frame ring records (its inner zones are paused, Ring/RingPause.h), and the name the
     /// list of top zones leaves out
     inline constexpr char kProfilerOverlayZone[] = "Profiler overlay";
+
+    /// The file the trace export writes, or the browser saves
+    inline constexpr char kProfilerTraceFileName[] = "profiler-trace.json";
+
+    /// The overlay line that also is the click target of the export; the lines of the overlay text end with it (and the export's status)
+    inline constexpr char kSaveTraceLine[] = "Save trace  [Ctrl+Shift+T]";
 
     namespace SDLEvents {
         struct SDLEventWrapper;
@@ -35,6 +46,10 @@ namespace BECore {
      * destroyed). Every kZoneRefreshFrames frames the overlay takes one snapshot of the ring and keeps the zone statistics of the last
      * kZoneWindowFrames frames; the frames between draw the kept rows. Its own cost stays out of those numbers: the draw is one zone,
      * kProfilerOverlayZone, and the zones inside it are not recorded.
+     *
+     * Ctrl+Shift+T or a left click on the line kSaveTraceLine saves the last kExportSeconds seconds of the ring as a Chrome trace
+     * (ExportTrace). The click is taken through UIInput (the press does not reach the game); the target exists only while the overlay is
+     * visible in a build with the profiler. The result is a line under the text for kStatusFrames frames.
      */
     class ProfilerOverlayWidget : public IWidget {
         BE_CLASS(ProfilerOverlayWidget)
@@ -42,6 +57,12 @@ namespace BECore {
         static constexpr uint32_t kZoneRefreshFrames = 30;  ///< frames between two snapshots of the ring
         static constexpr uint32_t kZoneWindowFrames = 60;   ///< the ring frames the top zones are taken over
         static constexpr size_t kTopZoneCount = 6;
+        static constexpr double kExportSeconds = 10.0;  ///< the window of the ring the export saves
+        static constexpr uint32_t kStatusFrames = 300;  ///< draws the result of the export stays under the text
+        static constexpr int kInputOrder = INT32_MAX;   ///< above every canvas: the overlay is drawn over the scene
+
+        /// Takes the file name and the trace text; the default writes the file in the working folder, in the browser starts a download
+        using ExportSink = MoveOnlyFunction<std::expected<void, String>(StringView fileName, const String& json)>;
 
         ProfilerOverlayWidget() = default;
         ~ProfilerOverlayWidget() override;
@@ -66,12 +87,41 @@ namespace BECore {
         /// profiler there are no rows
         void RefreshZones();
 
+        /// Saves the last kExportSeconds seconds of the ring through the export sink and sets the status line. Does nothing while the overlay is
+        /// hidden or in a build without the profiler. It runs under the overlay's zone and ring pause like the draw, so its cost is not in the ring.
+        /// @return whether the sink saved
+        bool ExportTrace();
+
+        /// Replaces the default sink (a test writes no file); an empty one brings the default back
+        void SetExportSink(ExportSink sink) {
+            _exportSink = std::move(sink);
+        }
+
+        /// The key chord of the export and the toggle, from the raw SDL event
+        void OnSDLEvent(const SDLEvents::SDLEventWrapper& event);
+
+        /// Where the click target of the line kSaveTraceLine is, in output pixels, as of the last draw; empty before one or without a font
+        [[nodiscard]] const Rect& GetSaveTraceRect() const {
+            return _saveRect;
+        }
+
         /// The lines of the overlay text: the last frame, then the top zones of the kept rows (in a build with the profiler)
         void EmitLines(const FrameStats& last, FunctionRef<void(StringView)> emit) const;
 
     private:
-        void OnSDLEvent(const SDLEvents::SDLEventWrapper& event);
-        /// Makes the ring's state follow the visibility
+        /// The click on the line kSaveTraceLine
+        class SaveTraceTarget final : public IUIInputHandler {
+        public:
+            explicit SaveTraceTarget(ProfilerOverlayWidget& owner) : _owner(owner) {}
+
+            [[nodiscard]] bool ContainsPoint(float outputX, float outputY) const override;
+            bool OnMouseButtonDown(const SDL_MouseButtonEvent& event) override;
+
+        private:
+            ProfilerOverlayWidget& _owner;
+        };
+
+        /// Makes the ring and the click target follow the visibility
         void SyncRing();
         Font* ResolveFont();
 
@@ -90,6 +140,12 @@ namespace BECore {
         uint32_t _windowFrames = 0;                         // the ring frames _rows cover
         RingSnapshot _snapshot;                             // refilled in place, so it keeps its capacity
         Vector<ZoneStatRow> _rows;
+
+        SaveTraceTarget _saveTarget{*this};
+        Rect _saveRect;
+        ExportSink _exportSink;
+        String _status;  // the result of the last export, shown while _statusFramesLeft > 0
+        uint32_t _statusFramesLeft = 0;
     };
 
 }  // namespace BECore

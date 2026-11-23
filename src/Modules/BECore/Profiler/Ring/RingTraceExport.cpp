@@ -20,15 +20,31 @@ namespace BECore {
             return windowTicks >= static_cast<double>(newestEnd) ? 0 : newestEnd - static_cast<uint64_t>(windowTicks);
         }
 
+        /// The newest frame is always in, also when it ended before the window start
+        bool IsInWindow(const RingSnapshot& snapshot, const RingFrame& frame, uint64_t windowStart) {
+            return &frame == &snapshot.frames.back() || frame.endTicks >= windowStart;
+        }
+
     }  // namespace
+
+    size_t CountRingTraceFrames(const RingSnapshot& snapshot, double seconds) {
+        if (snapshot.frames.empty()) {
+            return 0;
+        }
+        const uint64_t windowStart = WindowStartTicks(snapshot, seconds);
+        size_t count = 0;
+        for (const RingFrame& frame : snapshot.frames) {
+            count += IsInWindow(snapshot, frame, windowStart) ? 1 : 0;
+        }
+        return count;
+    }
 
     String WriteRingTraceJson(const RingSnapshot& snapshot, double seconds) {
         Vector<FrozenFrame> frames;
         if (!snapshot.frames.empty()) {
             const uint64_t windowStart = WindowStartTicks(snapshot, seconds);
-            const RingFrame& newest = snapshot.frames.back();
             for (const RingFrame& frame : snapshot.frames) {
-                if (&frame == &newest || frame.endTicks >= windowStart) {
+                if (IsInWindow(snapshot, frame, windowStart)) {
                     frames.push_back(FreezeFrame(snapshot, frame, 0.0));
                 }
             }

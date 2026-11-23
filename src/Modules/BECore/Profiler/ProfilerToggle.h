@@ -18,4 +18,9 @@ namespace BECore {
     /// held makes it another shortcut
     bool IsProfilerToggle(SDL_Keycode key, SDL_Keymod mod, bool repeat);
 
+    /// The chord that saves the ring's last seconds as a trace while the Game overlay is shown: Ctrl+Shift+T, the modifier rules of the toggle
+    inline constexpr SDL_Keycode kProfilerExportKey = SDLK_T;
+
+    bool IsProfilerExportChord(SDL_Keycode key, SDL_Keymod mod, bool repeat);
+
 }  // namespace BECore
