@@ -13,7 +13,8 @@ namespace BECore {
     // Wire structs, not the plain structs of `RoomProtocol.h`: those are aggregates that clients and the fuzz seeds brace-initialise and that the readers fill after
     // checking untrusted input, while a `BE_CLASS` has a virtual and the wire names differ (`kind` is lower case text, `name` and `connected` only for a human).
     // A game's own document (`view`, `actions`, `action`, `options`) is a `JsonPayload` borrowed from the `Json` the writer's caller holds: a wire struct
-    // is a local of the `Append*Message` that fills it and never outlives that `Json`.
+    // is a local of the `Append*Message` that fills it and never outlives that `Json`. `options` of `lobby` and of a listing are present only when the
+    // room has public options (a non-empty object): the one who fills the struct decides, the writer only skips an absent `Optional`.
 
     /// `type` and `v`, which every message has; the generator merges these keys with those of the derived struct, so they land between its own keys in the sorted order
     struct RoomWireEnvelope {
@@ -110,6 +111,43 @@ namespace BECore {
         BE_REFLECT_FIELD String kind;
         BE_REFLECT_FIELD Optional<String> name;
         BE_REFLECT_FIELD int seat = 0;
+    };
+
+    /// `lobby`
+    struct RoomWireLobby : RoomWireEnvelope {
+        BE_CLASS(RoomWireLobby)
+
+        BE_REFLECT_FIELD String game;
+        BE_REFLECT_FIELD int host = -1;
+        BE_REFLECT_FIELD Optional<JsonPayload> options;
+        BE_REFLECT_FIELD String phase;
+        BE_REFLECT_FIELD String room;
+        BE_REFLECT_FIELD Vector<RoomWireSeat> seats;
+
+        RoomWireLobby() : RoomWireEnvelope(RoomMessageTypes::kLobby) {}
+    };
+
+    /// One room of `rooms`
+    struct RoomWireListing {
+        BE_CLASS(RoomWireListing)
+
+        BE_REFLECT_FIELD String host;
+        BE_REFLECT_FIELD Optional<JsonPayload> options;
+        BE_REFLECT_FIELD String room;
+        BE_REFLECT_FIELD int seats = 0;
+        BE_REFLECT_FIELD bool started = false;
+        BE_REFLECT_FIELD int taken = 0;
+    };
+
+    /// `rooms`
+    struct RoomWireRooms : RoomWireEnvelope {
+        BE_CLASS(RoomWireRooms)
+
+        BE_REFLECT_FIELD String game;
+        BE_REFLECT_FIELD bool more = false;
+        BE_REFLECT_FIELD Vector<RoomWireListing> rooms;
+
+        RoomWireRooms() : RoomWireEnvelope(RoomMessageTypes::kRooms) {}
     };
 
     /// `join_room`: `token` when a member returns, `name` otherwise, never both
