@@ -695,6 +695,20 @@ namespace BECore::Tests {
             return nullptr;
         }
 
+        /// The rect of the region of that name in the `regions` array of a canvas, null when there is none
+        static const Json* RegionRect(const Json& canvas, StringView name) {
+            const Json* regions = Member(canvas, "regions");
+            if (regions == nullptr || !regions->is_array()) {
+                return nullptr;
+            }
+            for (const Json& region : *regions) {
+                if (StringMember(region, "name") == name) {
+                    return Member(region, "rect");
+                }
+            }
+            return nullptr;
+        }
+
         /// The element of a canvas, searched through the whole tree
         static const Json* FindElement(const Json& parent, StringView name) {
             const Json* list = Member(parent, parent.contains("elements") ? "elements" : "children");
@@ -1016,7 +1030,7 @@ namespace BECore::Tests {
         EXPECT_EQ(StringMember(*words, "action"), "UIControlApiWords") << "a button without words still names its action";
     }
 
-    TEST_F(UIControlApiTest, ACanvasWithNoRegionsHasAnEmptyObjectAndItsElementsHaveNoRegionMember) {
+    TEST_F(UIControlApiTest, ACanvasWithNoRegionsHasAnEmptyArrayAndItsElementsHaveNoRegionMember) {
         Show("Main");
 
         const Json response = Call("ui_tree");
@@ -1026,7 +1040,7 @@ namespace BECore::Tests {
         ASSERT_NE(hud, nullptr);
         const Json* regions = Member(*hud, "regions");
         ASSERT_NE(regions, nullptr);
-        EXPECT_TRUE(regions->is_object());
+        EXPECT_TRUE(regions->is_array());
         EXPECT_TRUE(regions->empty());
         const Json* ok = FindElement(*hud, "Ok");
         ASSERT_NE(ok, nullptr);
@@ -1048,7 +1062,7 @@ namespace BECore::Tests {
         const Json* regions = Member(*hud, "regions");
         ASSERT_NE(regions, nullptr);
         EXPECT_EQ(regions->size(), 1u);
-        ExpectRect(Member(*regions, "hud.corner"), 10.0f, 20.0f, 300.0f, 100.0f);
+        ExpectRect(RegionRect(*hud, "hud.corner"), 10.0f, 20.0f, 300.0f, 100.0f);
         const Json* ok = FindElement(*hud, "Ok");
         ASSERT_NE(ok, nullptr);
         EXPECT_EQ(StringMember(*ok, "region"), "hud.corner");
@@ -1089,7 +1103,7 @@ namespace BECore::Tests {
         const Json* hud = FindCanvas(Require(Member(response, "result")), "Hud");
         ASSERT_NE(hud, nullptr);
         EXPECT_FALSE(BoolMember(*hud, "laidOut"));
-        ExpectRect(Member(Require(Member(*hud, "regions")), "hud.corner"), 1.0f, 2.0f, 3.0f, 4.0f);
+        ExpectRect(RegionRect(*hud, "hud.corner"), 1.0f, 2.0f, 3.0f, 4.0f);
     }
 
     TEST_F(UIControlApiTest, OutputRectsAreInTheOutputPixelsOfTheCanvasTransform) {
@@ -1585,13 +1599,14 @@ namespace BECore::Tests {
         ASSERT_TRUE(IsOk(Call("ui_click", params)));
 
         const Json unchanged = Call("ui_tree");
-        EXPECT_NEAR(NumberMember(Require(FindElement(Require(FindCanvas(Require(Member(unchanged, "result")), "Settings")), "CVolume")), "value"), 0.0, kTolerance) << "the game has not answered";
+        EXPECT_NEAR(NumberMember(Require(FindElement(Require(FindCanvas(Require(Member(unchanged, "result")), "Settings")), "CVolume")), "sliderValue"), 0.0, kTolerance)
+            << "the game has not answered";
 
         CoreManager::GetUIVars().Set("uiApiCVolume"_intern, "1");
         const Json answered = Call("ui_tree");
         const Json* volume = FindElement(Require(FindCanvas(Require(Member(answered, "result")), "Settings")), "CVolume");
         ASSERT_NE(volume, nullptr);
-        EXPECT_NEAR(NumberMember(*volume, "value"), 1.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*volume, "sliderValue"), 1.0, kTolerance);
         EXPECT_NEAR(NumberMember(*volume, "fraction"), 1.0, kTolerance);
     }
 
@@ -1680,7 +1695,7 @@ namespace BECore::Tests {
         EXPECT_NEAR(NumberMember(*volume, "minValue"), 0.0, kTolerance);
         EXPECT_NEAR(NumberMember(*volume, "maxValue"), 1.0, kTolerance);
         EXPECT_NEAR(NumberMember(*volume, "step"), 0.1, kTolerance);
-        EXPECT_NEAR(NumberMember(*volume, "value"), 0.3, kTolerance);
+        EXPECT_NEAR(NumberMember(*volume, "sliderValue"), 0.3, kTolerance);
         EXPECT_NEAR(NumberMember(*volume, "fraction"), 0.3, kTolerance);
         EXPECT_EQ(StringMember(*volume, "action"), "UIControlApiCVolume");
         EXPECT_FALSE(BoolMember(*volume, "disabled"));
@@ -1696,7 +1711,7 @@ namespace BECore::Tests {
         const Json* canvas = FindCanvas(Require(Member(before, "result")), "Settings");
         ASSERT_NE(canvas, nullptr);
         EXPECT_FALSE(BoolMember(Require(FindElement(*canvas, "CSound")), "checked"));
-        EXPECT_NEAR(NumberMember(Require(FindElement(*canvas, "CVolume")), "value"), 0.0, kTolerance);
+        EXPECT_NEAR(NumberMember(Require(FindElement(*canvas, "CVolume")), "sliderValue"), 0.0, kTolerance);
 
         CoreManager::GetUIVars().Set("uiApiCSound"_intern, "on");
         CoreManager::GetUIVars().Set("uiApiCVolume"_intern, "0.7");
@@ -1705,7 +1720,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(IsOk(after));
         canvas = FindCanvas(Require(Member(after, "result")), "Settings");
         EXPECT_TRUE(BoolMember(Require(FindElement(*canvas, "CSound")), "checked"));
-        EXPECT_NEAR(NumberMember(Require(FindElement(*canvas, "CVolume")), "value"), 0.7, kTolerance);
+        EXPECT_NEAR(NumberMember(Require(FindElement(*canvas, "CVolume")), "sliderValue"), 0.7, kTolerance);
         EXPECT_NEAR(NumberMember(Require(FindElement(*canvas, "CVolume")), "fraction"), 0.7, kTolerance);
     }
 
