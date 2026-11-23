@@ -116,14 +116,28 @@ namespace BECore {
         return it == object.end() ? nullptr : &*it;
     }
 
-    Optional<String> GetJsonString(const Json& object, StringView key) {
-        const Json* member = FindJsonMember(object, key);
-        if (member == nullptr || !member->is_string()) {
+    Optional<StringView> JsonStringView(const Json& value) {
+        if (!value.is_string()) {
             return std::nullopt;
         }
         //-NoStd: nlohmann's string
-        const std::string& text = member->get_ref<const std::string&>();
-        return String(text.c_str(), text.size());
+        return FromStd(value.get_ref<const std::string&>());
+    }
+
+    Optional<StringView> JsonStringView(const Json& object, StringView key) {
+        const Json* member = FindJsonMember(object, key);
+        if (member == nullptr) {
+            return std::nullopt;
+        }
+        return JsonStringView(*member);
+    }
+
+    Optional<String> GetJsonString(const Json& object, StringView key) {
+        const Optional<StringView> text = JsonStringView(object, key);
+        if (!text) {
+            return std::nullopt;
+        }
+        return String(text->data(), text->size());
     }
 
     Optional<int64_t> GetJsonInt(const Json& object, StringView key) {
