@@ -17,7 +17,7 @@ Coroutine-based asynchronous tasks (C++20 coroutines, no exceptions: results are
 | `TaskLabel` | `BE_TASK_LABEL("name")`, last argument of `Run*` / `SwitchTo*`: names the profiler zone of the slice (`Profiler/CLAUDE.md`) |
 | `CancellationToken` | `Create()`, `CreateLinked()`: a child sees the parent's cancellation, cancelling the child leaves the parent |
 | `TaskGroup` | `Add()`, `WaitAll()`, `CancelAll()` |
-| `EventAwaiter<E>` | awaits an `EventBase` event once; `WaitForEventWithTimeout<E>(time)` gives an empty `Optional` when the wall-clock time runs out first (main thread only: `TaskManager::Update` releases the timeout). A suspended await allocates nothing: the connection is inline in the awaiter (`SubscriptionHolder`) and the timeout's `Detail::TimerLink` is one pooled block shared by every event type (`SubscriptionAllocationTest`) |
+| `EventAwaiter<E>` | awaits an `EventBase` event once; `WaitForEventWithTimeout<E>(time)` gives an empty `Optional` when the wall-clock time runs out first (main thread only: `TaskManager::Update` releases the timeout). A suspended await adds no allocation of its own: the connection is inline in the awaiter (`SubscriptionHolder`) and the timeout's `Detail::TimerLink` is one pooled block shared by every event type (`SubscriptionAllocationTest`); the event channel's listener list still grows at a new peak of listeners |
 
 ## Awaitables
 

@@ -35,7 +35,7 @@ class MyWidget : public IWidget {   // IWidget and IRenderer already derive from
 ```
 
 - Connections are held by the object and dropped in its destructor; `SubscriptionHolder::UnsubscribeAll()` drops them early. A holder is neither copied nor moved: a connection is bound to the address that subscribed.
-- The first `kInlineConnections` connections live inside the holder, so a component, widget or awaiter that subscribes that many times allocates nothing (`SubscriptionAllocationTest`); a further one moves the list to the heap once, and `UnsubscribeAll()` keeps the capacity. Every holder is that much larger, subscribed or not: it is the base of `IComponent`, `IWidget` and `IRenderer`.
+- The first `kInlineConnections` connections live inside the holder, so a component, widget or awaiter that subscribes that many times needs no allocation for the holder's own list (`SubscriptionAllocationTest`); the event channel's listener list still grows at a new peak of listeners. A further connection moves the list to the heap once, and `UnsubscribeAll()` keeps the capacity. Every holder is that much larger, subscribed or not: it is the base of `IComponent`, `IWidget` and `IRenderer`.
 - `MyEvent::Unsubscribe<&Handler>(instance)` / `MyEvent::UnsubscribeAll(instance)` are the static counterparts for a single event type.
 
 ## Emitting API
