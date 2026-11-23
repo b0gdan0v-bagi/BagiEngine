@@ -4,6 +4,7 @@
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/Thread.h>
+#include <BECore/Types/Fifo.h>
 #include <BECore/Types/Types.h>
 #include <RemoteControl/WebSocketListener.h>
 #include <RoomServer/RoomServerSettings.h>
@@ -40,7 +41,8 @@ namespace BECore {
      * is single-threaded, so **one hub thread** owns it: the reader threads push what happens (a connection opened, a text, a
      * connection closed) into a bounded queue, the hub thread drains it, feeds the hub in order and ticks it every `tickInterval`.
      * What the hub sends goes through the HubSink: `send` looks the connection up by its id and queues a text frame (it never
-     * writes to a socket, so a slow client cannot stall the hub), `close` queues a close frame. For one connection the order of
+     * writes to a socket, so a slow client cannot stall the hub), `broadcast` encodes one text into one shared frame and queues it on
+     * every recipient, `close` queues a close frame. For one connection the order of
      * the frames is the order the hub produced them.
      *
      * Liveness: on every tick the hub thread looks at the byte counter of each open connection. One that sent nothing for
@@ -119,6 +121,8 @@ namespace BECore {
         void CheckLiveness(LivenessMap& liveness, RoomTime now);
 
         void SendTo(ConnectionId connection, const String& text);
+        /// The hub's `broadcast`: one shared frame for the connections of @p ids that are still open (hub thread)
+        void BroadcastTo(Span<const ConnectionId> ids, const String& text);
         void CloseConnection(ConnectionId connection, const String& reason);
 
         [[nodiscard]] WebSocketHandler::ConnectionPtr FindConnection(ConnectionId connection);
@@ -139,10 +143,12 @@ namespace BECore {
         Mutex _queueMutex{BE_LOCK_SITE("Room event queue")};  // guards the queue, its byte count and _stopping
         ConditionVariable _hubWake;                           // the hub thread waits here for an event, the tick or the stop
         ConditionVariable _notFull;                           // a reader waits here while the queue is full
-        eastl::deque<Event> _queue;
+        Fifo<Event> _queue;
         size_t _queueBytes = 0;
         bool _stopping = false;
         Thread _hubThread;
+        // The recipients of one BroadcastTo, found under one lock and queued outside it; touched by the hub thread only
+        Vector<WebSocketHandler::ConnectionPtr> _broadcastTargets;
 
         WebSocketListener _listener;  // last: it is destroyed first, and its threads use the members above
     };

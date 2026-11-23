@@ -164,6 +164,47 @@ namespace BECore::Tests {
         EXPECT_NE(guest->token, host->token);
     }
 
+    TEST_F(RoomWebSocketServerTest, FourSocketsInARoomGetTheSameLobbyTextAfterAChangeAndTheirViewAfterIt) {
+        constexpr size_t kPlayers = FakeSeatedGame::kSeatCount;
+        const uint16_t port = StartServer();
+        Vector<RoomSocketClient> clients;
+        auto host = MakeHost(port);
+        ASSERT_TRUE(host.has_value());
+        clients.push_back(std::move(*host));
+        for (size_t i = 1; i < kPlayers; ++i) {
+            auto guest = RoomSocketClient::Connect(port);
+            ASSERT_TRUE(guest.has_value());
+            guest->JoinByName(clients.front().roomCode, "Guest");
+            clients.push_back(std::move(*guest));
+        }
+        // Read every client up to the lobby that lists all of them, so what comes next is the effect of the start alone
+        for (RoomSocketClient& client : clients) {
+            bool seen = false;
+            for (int i = 0; i < 16 && !seen; ++i) {
+                const auto lobby = client.WaitFor(RoomMessageTypes::kLobby);
+                ASSERT_TRUE(lobby.has_value());
+                seen = CountHumans(*lobby) == static_cast<int>(kPlayers);
+            }
+            ASSERT_TRUE(seen);
+        }
+
+        clients.front().Start();
+
+        String firstLobbyText;
+        for (RoomSocketClient& client : clients) {
+            const auto lobby = client.Next();
+            ASSERT_TRUE(lobby.has_value());
+            EXPECT_EQ(lobby->type.c_str(), RoomMessageTypes::kLobby);
+            if (firstLobbyText.empty()) {
+                firstLobbyText = lobby->text;
+            }
+            EXPECT_EQ(lobby->text, firstLobbyText);
+            const auto view = client.Next();
+            ASSERT_TRUE(view.has_value());
+            EXPECT_EQ(view->type.c_str(), RoomMessageTypes::kView);
+        }
+    }
+
     TEST_F(RoomWebSocketServerTest, ReplyOrderOfOneConnectionIsTheOrderOfItsMessages) {
         const uint16_t port = StartServer();
         auto client = RoomSocketClient::Connect(port);
