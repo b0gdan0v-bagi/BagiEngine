@@ -189,4 +189,20 @@ namespace BECore::Tests {
         EXPECT_EQ(SavedScene(), kExpected);
     }
 
+    // A component made with New<T> takes its block from the pool of its class, so a scene of many cells makes no heap block per component
+    template <class T>
+    void ExpectComponentComesFromItsPool() {
+        const size_t before = T::PooledPool().GetLiveCount();
+        {
+            const IntrusivePtr<IComponent> component = New<T>();
+            EXPECT_EQ(T::PooledPool().GetLiveCount(), before + 1);
+        }
+        EXPECT_EQ(T::PooledPool().GetLiveCount(), before);
+    }
+
+    TEST(SceneNodeComponentPoolsTest, QuadRendererAndClickableComponentsAreMadeInTheirOwnPools) {
+        ExpectComponentComesFromItsPool<QuadRendererComponent>();
+        ExpectComponentComesFromItsPool<ClickableComponent>();
+    }
+
 }  // namespace BECore::Tests
