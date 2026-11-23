@@ -24,9 +24,18 @@ namespace BECore {
             return result;
         }
 
-        bool Contains(const Vector<String>& names, StringView name) {
-            for (const String& known : names) {
-                if (StringView(known) == name) {
+        /// Each scope keeps a few names, and the arena is rewound with every scope: a small chunk is enough
+        constexpr size_t kNamesArenaChunkBytes = 4 * 1024;
+
+        /// The names a scope usually collects, reserved at once because an arena vector leaves its old blocks behind when it grows
+        constexpr size_t kExpectedAskedNames = 16;
+
+        bool Contains(const Optional<ArenaVector<StringView>>& names, StringView name) {
+            if (!names) {
+                return false;
+            }
+            for (const StringView known : *names) {
+                if (known == name) {
                     return true;
                 }
             }
@@ -45,6 +54,19 @@ namespace BECore {
     }
 
     JsonDeserializer::~JsonDeserializer() = default;
+
+    LinearArena& JsonDeserializer::GetNamesArena() const {
+        if (!_namesArena) {
+            _namesArena = MakeUnique<LinearArena>("JsonDeserializer", kNamesArenaChunkBytes);
+        }
+        return *_namesArena;
+    }
+
+    void JsonDeserializer::MarkScope(Scope& scope) const {
+        if (scope.tracking && _namesArena) {
+            scope.mark = _namesArena->GetMark();
+        }
+    }
 
     // =============================================================================
     // Lookup
@@ -66,9 +88,18 @@ namespace BECore {
         if (GetDiagnostics() == DiagnosticsMode::Off || !scope.tracking || scope.kind == ScopeKind::Array) {
             return;
         }
-        if (!Contains(scope.asked, name)) {
-            scope.asked.push_back(String(name));
+        if (Contains(scope.asked, name)) {
+            return;
         }
+        LinearArena& arena = GetNamesArena();
+        if (!scope.asked) {
+            scope.asked.emplace(ArenaAllocator(arena));
+            scope.asked->reserve(kExpectedAskedNames);
+        }
+        // The caller's name may be a temporary
+        char* const text = arena.Allocate<char>(name.size());
+        std::memcpy(text, name.data(), name.size());
+        scope.asked->push_back(StringView(text, name.size()));
     }
 
     const Json* JsonDeserializer::FindForRead(StringView name) {
@@ -351,6 +382,7 @@ namespace BECore {
         scope.node = member;
         scope.kind = ScopeKind::Object;
         scope.tracking = GetDiagnostics() != DiagnosticsMode::Off;
+        MarkScope(scope);
         _scopes.push_back(eastl::move(scope));
         PushPathSegment(name);
         return true;
@@ -359,7 +391,6 @@ namespace BECore {
     void JsonDeserializer::EndObject() {
         if (_scopes.size() > 1 && _scopes.back().kind == ScopeKind::Object) {
             CloseScope();
-            _scopes.pop_back();
             PopPathSegment();
         }
     }
@@ -406,6 +437,7 @@ namespace BECore {
         element.node = &(*array.node)[index];
         element.kind = ScopeKind::Element;
         element.tracking = GetDiagnostics() != DiagnosticsMode::Off;
+        MarkScope(element);
         _scopes.push_back(eastl::move(element));
         PushPathArrayIndex(index);
         return true;
@@ -414,7 +446,6 @@ namespace BECore {
     void JsonDeserializer::EndArrayElement() {
         if (_scopes.size() > 1 && _scopes.back().kind == ScopeKind::Element) {
             CloseScope();
-            _scopes.pop_back();
             PopPathSegment();
         }
     }
@@ -425,6 +456,19 @@ namespace BECore {
 
     void JsonDeserializer::CloseScope() {
         CheckScope(_scopes.back());
+        const bool tracking = _scopes.back().tracking;
+        const Optional<LinearArena::Mark> mark = _scopes.back().mark;
+        // The list is gone before its memory is given back
+        _scopes.pop_back();
+        if (!tracking || !_namesArena) {
+            return;
+        }
+        if (mark) {
+            _namesArena->Rewind(*mark);
+        } else {
+            // The arena was made inside this scope, so no outer scope holds a name in it
+            _namesArena->Reset();
+        }
     }
 
     bool JsonDeserializer::FindingsFull() const {
@@ -453,7 +497,7 @@ namespace BECore {
             }
             const StringView shown = CutText(name, ReaderLimits::kMaxQuotedValueBytes);
             const char* const cut = shown.size() < name.size() ? "..." : "";
-            const String hint = MakeDidYouMeanHint(name, {&scope.asked});
+            const String hint = scope.asked ? MakeDidYouMeanHint(name, {&*scope.asked}) : String();
             ReportFinding(Printable(shown), Format("Unknown key '{}{}'{}", Printable(shown), cut, hint));
         }
     }
