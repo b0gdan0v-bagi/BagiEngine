@@ -23,6 +23,10 @@ namespace BECore {
         template <typename TCallable, size_t InlineBytes>
         inline constexpr bool kFitsInline = sizeof(TCallable) <= InlineBytes && alignof(TCallable) <= kFunctionInlineAlign && std::is_nothrow_move_constructible_v<TCallable>;
 
+        /// Names the next allocation of this thread "MoveOnlyFunction heap" for AllocTracker (a row of `zone_allocs`); nothing without the tracker. Out of
+        /// line so that this header, which every module includes, does not include the profiler.
+        void NameHeapCallable() noexcept;
+
     }  // namespace detail
 
     /// True when a callable of the type @p TCallable stays in the buffer of @p InlineBytes of a MoveOnlyFunction; false means one heap allocation.
@@ -187,6 +191,7 @@ namespace BECore {
                 } else {
                     static_assert(AllowHeap);
                     // The one place that owns a raw allocation: the buffer holds only the pointer, kHeapOps deletes it.
+                    detail::NameHeapCallable();
                     ::new (static_cast<void*>(_buffer)) Stored*(new Stored(std::forward<TCallable>(callable)));
                     _invoke = &InvokeHeap<Stored>;
                     _ops = &kHeapOps<Stored>;
