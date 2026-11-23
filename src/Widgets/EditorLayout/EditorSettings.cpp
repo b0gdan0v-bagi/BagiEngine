@@ -56,12 +56,12 @@ namespace BECore {
             unreadable = true;
             const std::expected<String, String> text = ReadTextFile(path);
             if (!text) {
-                LOG_WARNING(Format("Editor settings: {}; using the defaults", text.error()));
+                LOG_WARNING("Editor settings: {}; using the defaults", text.error());
                 return false;
             }
             std::expected<Json, ControlError> parsed = ParseJson(StringView(text->data(), text->size()));
             if (!parsed || !parsed->is_object()) {
-                LOG_WARNING(Format("Editor settings: '{}' is not a JSON object; using the defaults", path.string()));
+                LOG_WARNING("Editor settings: '{}' is not a JSON object; using the defaults", path.string());
                 return false;
             }
             content = std::move(*parsed);
@@ -82,7 +82,7 @@ namespace BECore {
         }
 
         void WarnWrongType(StringView file, StringView key, StringView expected) {
-            LOG_WARNING(Format("Editor settings: '{}' in {} is not {}; using the default", key, file, expected));
+            LOG_WARNING("Editor settings: '{}' in {} is not {}; using the default", key, file, expected);
         }
 
         // The index of the device called @p name in the table of this build, -1 when there is none
@@ -165,7 +165,7 @@ namespace BECore {
                 } else if (!name->empty()) {
                     shape.device = FindDeviceByName(StringView(name->data(), name->size()));
                     if (shape.device < 0) {
-                        LOG_WARNING(Format("Editor settings: the preview device '{}' in {} is not known to this build; using the Free shape", *name, kPreferencesFileName));
+                        LOG_WARNING("Editor settings: the preview device '{}' in {} is not known to this build; using the Free shape", *name, kPreferencesFileName);
                         if (!shape.custom) {
                             shape.aspect = ViewportAspect::Free;
                         }
@@ -313,7 +313,7 @@ namespace BECore {
         }
         char* prefPath = SDL_GetPrefPath(kEditorOrganization, kEditorApplication);
         if (prefPath == nullptr) {
-            LOG_WARNING(Format("Editor settings: no per-user folder: {}", SDL_GetError()));
+            LOG_WARNING("Editor settings: no per-user folder: {}", SDL_GetError());
             return {};
         }
         std::filesystem::path directory(prefPath);
@@ -409,19 +409,19 @@ namespace BECore {
             const String id(key.c_str(), key.size());
             const PoolString commandId = PoolString::Intern(StringView(id));
             if (!value.is_string()) {
-                LOG_WARNING(Format("Editor settings: the hotkey of '{}' is not a text; dropped", id));
+                LOG_WARNING("Editor settings: the hotkey of '{}' is not a text; dropped", id);
                 continue;
             }
             //-NoStd: nlohmann's string
             const std::string& text = value.get_ref<const std::string&>();
             const EditorCommand* command = FindEditorCommand(commandId);
             if (command == nullptr) {
-                LOG_WARNING(Format("Editor settings: unknown command '{}' in {}; not applied, kept in the file", id, kHotkeysFileName));
+                LOG_WARNING("Editor settings: unknown command '{}' in {}; not applied, kept in the file", id, kHotkeysFileName);
                 _unknownBindings[key] = value;
                 continue;
             }
             if (!command->rebindable) {
-                LOG_WARNING(Format("Editor settings: the hotkey of '{}' is fixed; dropped", id));
+                LOG_WARNING("Editor settings: the hotkey of '{}' is fixed; dropped", id);
                 continue;
             }
             if (text.empty()) {
@@ -430,7 +430,7 @@ namespace BECore {
             }
             const Optional<KeyChord> chord = ParseKeyChord(FromStd(text));
             if (!chord) {
-                LOG_WARNING(Format("Editor settings: '{}' is not a chord ({}); dropped", text.c_str(), id));
+                LOG_WARNING("Editor settings: '{}' is not a chord ({}); dropped", text.c_str(), id);
                 continue;
             }
             overrides.push_back({commandId, chord});
@@ -450,9 +450,9 @@ namespace BECore {
             }
             const String chordText = ToString(*entry.chord);
             if (result.status == AssignStatus::Conflict) {
-                LOG_WARNING(Format("Editor settings: {} for '{}' is already used by '{}'; dropped", chordText, entry.id.ToStringView(), result.otherCommandId.ToStringView()));
+                LOG_WARNING("Editor settings: {} for '{}' is already used by '{}'; dropped", chordText, entry.id.ToStringView(), result.otherCommandId.ToStringView());
             } else {
-                LOG_WARNING(Format("Editor settings: {} is not allowed for '{}'; dropped", chordText, entry.id.ToStringView()));
+                LOG_WARNING("Editor settings: {} is not allowed for '{}'; dropped", chordText, entry.id.ToStringView());
             }
             _hotkeys.ResetOne(entry.id);
         }
@@ -462,7 +462,7 @@ namespace BECore {
         _lastSaveError.clear();
         if (_directory.empty()) {
             _lastSaveError = "There is no folder for the editor settings";
-            LOG_ERROR(Format("Editor settings: {}", _lastSaveError));
+            LOG_ERROR("Editor settings: {}", _lastSaveError);
             return false;
         }
 
@@ -474,7 +474,7 @@ namespace BECore {
             if (std::filesystem::exists(path, ec)) {
                 std::filesystem::rename(path, backup, ec);
                 if (!ec) {
-                    LOG_WARNING(Format("Editor settings: the unreadable '{}' was kept as '{}'", path.string(), backup.string()));
+                    LOG_WARNING("Editor settings: the unreadable '{}' was kept as '{}'", path.string(), backup.string());
                 }
             }
             unreadable = false;
@@ -486,7 +486,7 @@ namespace BECore {
         const std::expected<void, String> written = WriteTextFileAtomically(path, text);
         if (!written) {
             _lastSaveError = written.error();
-            LOG_ERROR(Format("Editor settings: {}", _lastSaveError));
+            LOG_ERROR("Editor settings: {}", _lastSaveError);
             return false;
         }
         return true;

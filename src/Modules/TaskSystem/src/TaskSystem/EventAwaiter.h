@@ -24,7 +24,7 @@ namespace BECore {
      * @example
      * Task<void> HandleInput() {
      *     auto event = co_await WaitForEvent<KeyPressEvent>();
-     *     LOG_INFO("Key pressed: {}"_format(event.keyCode));
+     *     LOG_INFO("Key pressed: {}", event.keyCode);
      * }
      */
     template <typename EventType>

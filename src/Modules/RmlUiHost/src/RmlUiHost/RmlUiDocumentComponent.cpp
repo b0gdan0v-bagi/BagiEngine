@@ -80,7 +80,7 @@ namespace BECore {
         _contextName = runtime.NextContextName();
         _context = Rml::CreateContext(_contextName, Rml::Vector2i(kInitialContextWidth, kInitialContextHeight));
         if (!_context) {
-            LOG_ERROR("RmlUiDocumentComponent: cannot create the context '{}'"_format(FromStd(_contextName)));
+            LOG_ERROR("RmlUiDocumentComponent: cannot create the context '{}'", FromStd(_contextName));
             DestroyContext();
             return false;
         }
@@ -124,7 +124,7 @@ namespace BECore {
         }
         Rml::ElementDocument* document = LoadSource();
         if (!document) {
-            LOG_ERROR("RmlUiDocumentComponent: cannot load the document '{}'"_format(_source.ToStringView()));
+            LOG_ERROR("RmlUiDocumentComponent: cannot load the document '{}'", _source.ToStringView());
             return;
         }
         AttachDocument(document);
@@ -147,14 +147,14 @@ namespace BECore {
         }
         Rml::ElementDocument* document = LoadSource();
         if (!document) {
-            LOG_ERROR("RmlUiDocumentComponent: cannot reload the document '{}', the old one stays"_format(_source.ToStringView()));
+            LOG_ERROR("RmlUiDocumentComponent: cannot reload the document '{}', the old one stays", _source.ToStringView());
             return false;
         }
         if (_document) {
             _context->UnloadDocument(_document);
         }
         AttachDocument(document);
-        LOG_INFO("RmlUiDocumentComponent: reloaded '{}'"_format(_source.ToStringView()));
+        LOG_INFO("RmlUiDocumentComponent: reloaded '{}'", _source.ToStringView());
         return true;
     }
 
@@ -227,7 +227,7 @@ namespace BECore {
 
         const bool ignored = _extendToOutput && _space != CanvasSpace::SceneView;
         if (ignored && !_extendWarned) {
-            LOG_WARNING("RmlUiDocumentComponent: extendToOutput applies to a SceneView document only; ignored on a {} document"_format(EnumUtils<CanvasSpace>::ToString(_space)));
+            LOG_WARNING("RmlUiDocumentComponent: extendToOutput applies to a SceneView document only; ignored on a {} document", EnumUtils<CanvasSpace>::ToString(_space));
         }
         _extendWarned = ignored;
         return params;

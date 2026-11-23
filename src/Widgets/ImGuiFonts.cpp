@@ -25,7 +25,7 @@ namespace BECore {
             const auto realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
             std::ifstream file(realPath, std::ios::binary | std::ios::ate);
             if (realPath.empty() || !file) {
-                LOG_ERROR("ImGuiFonts: cannot open '{}'"_format(virtualPath));
+                LOG_ERROR("ImGuiFonts: cannot open '{}'", virtualPath);
                 return false;
             }
             const auto size = static_cast<size_t>(file.tellg());
@@ -33,7 +33,7 @@ namespace BECore {
             file.seekg(0);
             file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
             if (!file || size == 0) {
-                LOG_ERROR("ImGuiFonts: cannot read '{}'"_format(virtualPath));
+                LOG_ERROR("ImGuiFonts: cannot read '{}'", virtualPath);
                 bytes.clear();
                 return false;
             }

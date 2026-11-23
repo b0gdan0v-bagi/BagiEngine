@@ -108,7 +108,7 @@ namespace BECore {
                 AddConnection(std::move(*accepted), std::move(peerAddress));
             } else if (accepted.error() == SocketError::Failed) {
                 if (!_stopping) {
-                    LOG_ERROR("{}: accepting connections failed, no new client can connect"_format(_settings.logName));
+                    LOG_ERROR("{}: accepting connections failed, no new client can connect", _settings.logName);
                 }
                 return;
             }
@@ -182,9 +182,9 @@ namespace BECore {
             }
         }
         if (perAddressLimit) {
-            LOG_WARNING("{}: a client was refused, {} connections are open from {}"_format(_settings.logName, _settings.maxConnectionsPerAddress, peerAddress));
+            LOG_WARNING("{}: a client was refused, {} connections are open from {}", _settings.logName, _settings.maxConnectionsPerAddress, peerAddress);
         } else {
-            LOG_WARNING("{}: a client was refused, {} connections are open"_format(_settings.logName, _settings.maxConnections));
+            LOG_WARNING("{}: a client was refused, {} connections are open", _settings.logName, _settings.maxConnections);
         }
         QueueRefusal(std::move(socket));
     }
@@ -201,7 +201,7 @@ namespace BECore {
             }
         }
         if (_settings.maxConnectionsPerAddress != 0 && fromAddress >= _settings.maxConnectionsPerAddress) {
-            LOG_WARNING("{}: a client was refused, {} connections are open from {}"_format(_settings.logName, _settings.maxConnectionsPerAddress, clientAddress));
+            LOG_WARNING("{}: a client was refused, {} connections are open from {}", _settings.logName, _settings.maxConnectionsPerAddress, clientAddress);
             return false;
         }
         connection.SetClientAddress(clientAddress);
@@ -234,14 +234,14 @@ namespace BECore {
             admit.emplace(admitByAddress);
         }
         if (connection->Handshake(_settings.policy, _settings.handshakeTimeout, pendingBytes, admit)) {
-            LOG_INFO("{}: a client connected"_format(_settings.logName));
+            LOG_INFO("{}: a client connected", _settings.logName);
             connection->StartWriter();
             if (_handler.onOpen) {
                 _handler.onOpen(connection);
             }
             ReadMessages(connection, std::move(pendingBytes));
             connection->EndReading();
-            LOG_INFO("{}: a client disconnected"_format(_settings.logName));
+            LOG_INFO("{}: a client disconnected", _settings.logName);
             if (_handler.onClosed) {
                 _handler.onClosed(connection);
             }
@@ -269,7 +269,7 @@ namespace BECore {
             for (;;) {
                 auto popped = pop();
                 if (!popped) {
-                    LOG_WARNING("{}: a client broke the protocol: {}"_format(_settings.logName, popped.error().reason));
+                    LOG_WARNING("{}: a client broke the protocol: {}", _settings.logName, popped.error().reason);
                     connection->QueueClose(popped.error().closeCode, popped.error().reason);
                     return;
                 }

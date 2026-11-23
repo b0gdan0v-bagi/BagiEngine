@@ -84,15 +84,15 @@ namespace BECore {
 
     bool RmlUiFontEngine::LoadFontFace(const Rml::String& fileName, int faceIndex, const Rml::String& family, Rml::Style::FontStyle style, Rml::Style::FontWeight weight, bool fallbackFace) {
         if (faceIndex != 0) {
-            LOG_ERROR("RmlUiFontEngine: '{}': only the first face of a font file is read"_format(fileName.c_str()));
+            LOG_ERROR("RmlUiFontEngine: '{}': only the first face of a font file is read", fileName.c_str());
             return false;
         }
         if (fallbackFace) {
-            LOG_WARNING("RmlUiFontEngine: '{}': fallback faces are not supported, it is loaded as an ordinary face"_format(fileName.c_str()));
+            LOG_WARNING("RmlUiFontEngine: '{}': fallback faces are not supported, it is loaded as an ordinary face", fileName.c_str());
         }
         auto handle = CoreManager::GetResourceManager().Load<Font>(FromStd(fileName));
         if (!handle || handle->GetState() != ResourceState::Loaded) {
-            LOG_ERROR("RmlUiFontEngine: cannot load the font '{}'"_format(fileName.c_str()));
+            LOG_ERROR("RmlUiFontEngine: cannot load the font '{}'", fileName.c_str());
             return false;
         }
         return AddFace(family, style, weight, handle.GetPtr());
@@ -340,7 +340,7 @@ namespace BECore {
             ShelfPacker::Slot slot;
             const int pageIndex = AppendToPage(handle, bitmap.width + 2 * kGlyphPadding, bitmap.height + 2 * kGlyphPadding, slot);
             if (pageIndex < 0) {
-                LOG_WARNING("RmlUiFontEngine: the glyph of U+{:04X} at {} px does not fit a page, so it is not drawn"_format(static_cast<uint32_t>(codePoint), handle.size));
+                LOG_WARNING("RmlUiFontEngine: the glyph of U+{:04X} at {} px does not fit a page, so it is not drawn", static_cast<uint32_t>(codePoint), handle.size);
             } else {
                 Page& page = *handle.pages[static_cast<size_t>(pageIndex)];
                 // White, with the coverage in alpha; premultiplied, so the color channels hold the coverage too

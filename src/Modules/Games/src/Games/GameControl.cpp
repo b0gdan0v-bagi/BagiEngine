@@ -139,7 +139,7 @@ namespace BECore {
                 if (game->GetName().ToStringView() == StringView(name->c_str(), name->size())) {
                     if (manager.GetActive() != game.Get() && SessionRecorder::GetInstance().IsRecording()) {
                         // A file is of one game
-                        LOG_INFO("The recording ended: the game switches to '{}'"_format(game->GetName().ToStringView()));
+                        LOG_INFO("The recording ended: the game switches to '{}'", game->GetName().ToStringView());
                         SessionRecorder::GetInstance().Stop();
                     }
                     manager.SwitchTo(game->GetName());

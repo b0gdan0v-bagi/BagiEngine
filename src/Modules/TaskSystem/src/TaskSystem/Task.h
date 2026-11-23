@@ -205,7 +205,7 @@ namespace BECore {
      * Task<void> DoWorkAsync() {
      *     auto result = co_await ComputeAsync();  // std::expected<int, TaskError>
      *     if (result) {
-     *         LOG_INFO("Result: {}"_format(*result));
+     *         LOG_INFO("Result: {}", *result);
      *     }
      * }
      */

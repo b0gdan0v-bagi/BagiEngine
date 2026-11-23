@@ -32,7 +32,7 @@ namespace BECore {
             const StringView name = configured.empty() ? kSdlAudioName : StringView(configured);
             IntrusivePtr<IAudioBackend> backend = AbstractFactory<IAudioBackend>::GetInstance().Create(name);
             if (!backend) {
-                LOG_ERROR("AudioConfig: backend '{}' is not available in this build"_format(name));
+                LOG_ERROR("AudioConfig: backend '{}' is not available in this build", name);
             } else if (auto* sdl = dynamic_cast<SDLAudioBackend*>(backend.Get())) {
                 sdl->SetHeadless(headless);
             }
@@ -63,13 +63,13 @@ namespace BECore {
         const bool defaultRenderer = options.headless || config._renderer.empty();
         const StringView rendererTypeName = defaultRenderer ? kSdlRendererName : StringView(config._renderer);
         if (options.headless) {
-            LOG_INFO("Headless: no window, drawing with {}"_format(rendererTypeName));
+            LOG_INFO("Headless: no window, drawing with {}", rendererTypeName);
         }
 
         auto renderer = AbstractFactory<IRenderer>::GetInstance().Create(rendererTypeName);
         if (!renderer) {
             // A name that is not registered, e.g. VulkanRendererBackend in a build without ENGINE_WITH_VULKAN
-            LOG_ERROR("ApplicationConfig: renderer '{}' is not available in this build"_format(rendererTypeName));
+            LOG_ERROR("ApplicationConfig: renderer '{}' is not available in this build", rendererTypeName);
             return false;
         }
         if (!renderer->Initialize(*window)) {

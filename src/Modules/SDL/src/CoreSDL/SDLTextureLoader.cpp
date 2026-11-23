@@ -34,7 +34,7 @@ namespace BECore {
 
         auto* sdlBackend = dynamic_cast<SDLRendererBackend*>(CoreManager::GetRenderer().Get());
         if (!sdlBackend || !sdlBackend->GetSDLRenderer()) {
-            LOG_ERROR(Format("SDLTextureLoader: renderer not available when loading '{}'", path.ToStringView()).c_str());
+            LOG_ERROR("SDLTextureLoader: renderer not available when loading '{}'", path.ToStringView());
             texture->SetFailed(path);
             return texture;
         }
@@ -42,7 +42,7 @@ namespace BECore {
         const auto realPath = CoreManager::GetFileSystem().ResolvePath(path.ToStringView());
         auto image = ReadImageFile(realPath);
         if (!image) {
-            LOG_ERROR(Format("SDLTextureLoader: failed to load image '{}': {}", path.ToStringView(), image.error()).c_str());
+            LOG_ERROR("SDLTextureLoader: failed to load image '{}': {}", path.ToStringView(), image.error());
             texture->SetFailed(path);
             return texture;
         }
@@ -50,7 +50,7 @@ namespace BECore {
         const int width = static_cast<int>(image->width);
         SDL_Surface* surface = SDL_CreateSurfaceFrom(width, static_cast<int>(image->height), SDL_PIXELFORMAT_RGBA32, image->pixels.data(), width * static_cast<int>(kBytesPerPixel));
         if (!surface) {
-            LOG_ERROR(Format("SDLTextureLoader: failed to wrap the pixels of '{}': {}", path.ToStringView(), SDL_GetError()).c_str());
+            LOG_ERROR("SDLTextureLoader: failed to wrap the pixels of '{}': {}", path.ToStringView(), SDL_GetError());
             texture->SetFailed(path);
             return texture;
         }
@@ -59,7 +59,7 @@ namespace BECore {
         SDL_DestroySurface(surface);
 
         if (!sdlTexture) {
-            LOG_ERROR(Format("SDLTextureLoader: failed to create texture from '{}': {}", path.ToStringView(), SDL_GetError()).c_str());
+            LOG_ERROR("SDLTextureLoader: failed to create texture from '{}': {}", path.ToStringView(), SDL_GetError());
             texture->SetFailed(path);
             return texture;
         }
@@ -69,7 +69,7 @@ namespace BECore {
         SDL_GetTextureSize(sdlTexture, &texWidth, &texHeight);
 
         texture->SetLoaded(path, sdlTexture, texWidth, texHeight);
-        LOG_INFO(Format("SDLTextureLoader: loaded texture '{}' ({}x{})", path.ToStringView(), texWidth, texHeight).c_str());
+        LOG_INFO("SDLTextureLoader: loaded texture '{}' ({}x{})", path.ToStringView(), texWidth, texHeight);
 
         return texture;
     }

@@ -59,10 +59,10 @@ namespace BECore {
         const UINodeFileIo io{read, write};
         UINodeFileReport report = SaveUIRectsToNodeFiles(scene, Span<const IntrusivePtr<UIElement>>(_elements.data(), _elements.size()), io);
         for (const String& note : report.notes) {
-            LOG_WARNING(Format("SceneEditor: {}", note).c_str());
+            LOG_WARNING("SceneEditor: {}", note);
         }
         if (report.filesWritten > 0) {
-            LOG_INFO(Format("SceneEditor: wrote the rects of {} UI element(s) into {} node file(s)", report.elementsPatched, report.filesWritten).c_str());
+            LOG_INFO("SceneEditor: wrote the rects of {} UI element(s) into {} node file(s)", report.elementsPatched, report.filesWritten);
         }
         _elements.clear();
         return report;

@@ -392,7 +392,7 @@ namespace BECore {
                     LockGuard lock(_errorMutex);
                     if (_failure.empty()) {
                         _failure = text;
-                        LOG_WARNING("{} (status 0x{:08X})"_format(_failure, static_cast<uint32_t>(status)));
+                        LOG_WARNING("{} (status 0x{:08X})", _failure, static_cast<uint32_t>(status));
                     }
                 }
                 _phase.store(Phase::Failed);
@@ -419,7 +419,7 @@ namespace BECore {
                     status = AcquireCredentialsHandleA(nullptr, const_cast<SEC_CHAR*>(UNISP_NAME_A), SECPKG_CRED_OUTBOUND, nullptr, &legacy, nullptr, nullptr, &_credentials, &expiry);
                 }
                 if (status != SEC_E_OK) {
-                    LOG_WARNING("TLS: AcquireCredentialsHandle failed (status 0x{:08X})"_format(static_cast<uint32_t>(status)));
+                    LOG_WARNING("TLS: AcquireCredentialsHandle failed (status 0x{:08X})", static_cast<uint32_t>(status));
                     return std::unexpected(Format("TLS: no TLS credentials: {}", _target));
                 }
                 _hasCredentials = true;
@@ -507,7 +507,7 @@ namespace BECore {
                     if (status == SEC_I_CONTEXT_EXPIRED) {
                         return std::unexpected(Format("TLS: the server closed the connection during the handshake: {}", _target));
                     }
-                    LOG_WARNING("TLS: handshake with {} failed (status 0x{:08X})"_format(_target, static_cast<uint32_t>(status)));
+                    LOG_WARNING("TLS: handshake with {} failed (status 0x{:08X})", _target, static_cast<uint32_t>(status));
                     return std::unexpected(Format("TLS: {}: {}", DescribeSecurityFailure(status), _target));
                 }
             }
@@ -701,7 +701,7 @@ namespace BECore {
                 }
                 if (policyStatus.dwError != 0) {
                     const auto policyError = static_cast<long>(policyStatus.dwError);
-                    LOG_WARNING("TLS: certificate of {} refused (policy error 0x{:08X})"_format(_target, static_cast<uint32_t>(policyStatus.dwError)));
+                    LOG_WARNING("TLS: certificate of {} refused (policy error 0x{:08X})", _target, static_cast<uint32_t>(policyStatus.dwError));
                     return std::unexpected(Format("TLS: {}: {}", DescribeSecurityFailure(policyError), _target));
                 }
                 return {};
@@ -710,7 +710,7 @@ namespace BECore {
             void LogNegotiatedVersion() {
                 SecPkgContext_ConnectionInfo info = {};
                 if (QueryContextAttributesA(&_context, SECPKG_ATTR_CONNECTION_INFO, &info) == SEC_E_OK) {
-                    LOG_INFO("TLS to {}: TLS {}"_format(_target, TlsVersionName(info.dwProtocol)));
+                    LOG_INFO("TLS to {}: TLS {}", _target, TlsVersionName(info.dwProtocol));
                 }
             }
 

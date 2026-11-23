@@ -31,7 +31,7 @@ namespace BECore {
             _threads.emplace_back(Format("Worker {}", i).c_str(), kWorkerSortBase + static_cast<uint32_t>(i), [this, i] { WorkerLoop(i); });
         }
 
-        LOG_INFO("[ThreadPool] Created with {} threads"_format(numThreads));
+        LOG_INFO("[ThreadPool] Created with {} threads", numThreads);
     }
 
     ThreadPool::ThreadPool(InlineTag) : _isInline(true), _inlineThread(Thread::CurrentId()) {

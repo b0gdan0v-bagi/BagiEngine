@@ -48,7 +48,7 @@ namespace BECore {
 
         auto opened = OpenDeserializer(configPath);
         if (!opened) {
-            LOG_ERROR(Format("[SDLMainWindow] {}", opened.error()).c_str());
+            LOG_ERROR("[SDLMainWindow] {}", opened.error());
             return false;
         }
         IDeserializer& deserializer = **opened;
@@ -88,7 +88,7 @@ namespace BECore {
             }
             _simulation.density = _startDensity.value_or(1.0f);
             if (const auto valid = ValidateWindowSimulation(_simulation); !valid) {
-                LOG_ERROR(Format("[SDLMainWindow] the start size of the headless window: {}", valid.error()).c_str());
+                LOG_ERROR("[SDLMainWindow] the start size of the headless window: {}", valid.error());
                 _simulation = WindowSimulation{};
                 return false;
             }

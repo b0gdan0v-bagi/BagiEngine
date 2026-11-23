@@ -121,7 +121,7 @@ namespace BECore {
         vkDestroyShaderModule(device, fragModule, nullptr);
 
         if (result != VK_SUCCESS) {
-            LOG_ERROR("Vulkan: vkCreateGraphicsPipelines of a 2D pipeline failed with VkResult {}"_format(static_cast<int>(result)));
+            LOG_ERROR("Vulkan: vkCreateGraphicsPipelines of a 2D pipeline failed with VkResult {}", static_cast<int>(result));
             return VK_NULL_HANDLE;
         }
         return pipeline;

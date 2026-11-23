@@ -52,7 +52,7 @@ namespace BECore {
         }
 
         _service.SetEventSink([this](const String& text) { _listener.ForEachOpenConnection([&text](WebSocketConnection& connection) { connection.QueueText(text); }); });
-        LOG_INFO("Control API listening on ws://127.0.0.1:{}"_format(*started));
+        LOG_INFO("Control API listening on ws://127.0.0.1:{}", *started);
         return started;
     }
 

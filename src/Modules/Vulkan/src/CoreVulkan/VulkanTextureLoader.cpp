@@ -31,7 +31,7 @@ namespace BECore {
         BE_PROFILE_SCOPE("VulkanTextureLoader::Load");
         auto* backend = dynamic_cast<VulkanRendererBackend*>(CoreManager::GetRenderer().Get());
         if (!backend) {
-            LOG_ERROR(Format("VulkanTextureLoader: renderer is not VulkanRendererBackend when loading '{}'", path.ToStringView()).c_str());
+            LOG_ERROR("VulkanTextureLoader: renderer is not VulkanRendererBackend when loading '{}'", path.ToStringView());
             auto texture = New<VulkanTexture>();
             texture->SetFailed(path);
             return texture;
@@ -41,7 +41,7 @@ namespace BECore {
         // The bytes are R,G,B,A in memory, which is what VK_FORMAT_R8G8B8A8_SRGB reads
         const auto image = ReadImageFile(realPath);
         if (!image) {
-            LOG_ERROR(Format("VulkanTextureLoader: failed to load image '{}': {}", path.ToStringView(), image.error()).c_str());
+            LOG_ERROR("VulkanTextureLoader: failed to load image '{}': {}", path.ToStringView(), image.error());
             auto texture = New<VulkanTexture>();
             texture->SetFailed(path);
             return texture;
