@@ -38,9 +38,9 @@ namespace BECore {
      * "bind", "onValue", "offValue", "checked" (the variable equals `onValue`), "action" (the component's own, not the empty one of the row's clicker) and "disabled"; for a `UIProgressBar` "bind",
      * "minValue", "maxValue" and "fraction" (0..1, how much is filled); for a `UIDropdown` ("text" is the header as shown, the chosen option or the placeholder) "bind", "selectedValue", "open" (the
      * list is open), "action" and "disabled", and its options are its children (elements with a `UIInputClicker`, each with "value" and "selected", hidden, with no rect, while the list is closed);
-     * for a slider (an element with a `UISliderComponent`) "bind", "minValue", "maxValue", "step", "value" (a number: the variable as the slider reads it, clamped, the minimum when unset), "fraction"
-     * (0..1, where the thumb stands), "action" and "disabled". (A slider's "value" is a number here and the text that a click emits in the `ui_click` answer; a button's "value" is its text in both.)
-     * A rect is {"x","y","w","h"}. An element is visible when its rect is not empty.
+     * for a slider (an element with a `UISliderComponent`) "bind", "minValue", "maxValue", "step", "sliderValue" (a number: the variable as the slider reads it, clamped, the minimum when unset),
+     * "fraction" (0..1, where the thumb stands), "action" and "disabled". (A slider has no "value" in the tree: its number is "sliderValue"; the `ui_click` answer's "value" is the text that the click
+     * emits. A button's "value" is its text in both.) A rect is {"x","y","w","h"}. An element is visible when its rect is not empty.
      *
      * `selected` and `selectedValue` are those of **this moment**: `ui_tree` calls `UISegmented::SyncChildren()` on every group before it describes the
      * segments, so a variable that the game set since the last draw is already in the answer (the rects are still those of the last draw). So are `checked`,

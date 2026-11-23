@@ -1093,6 +1093,77 @@ namespace BECore::Tests {
         EXPECT_EQ(StringMember((*issues)[0], "other"), "hud.gone");
     }
 
+    TEST_F(UIControlApiTest, TheRegionsAreAnArraySortedByNameWhateverTheOrderTheyWerePublishedIn) {
+        auto hudCanvas = Canvas("Main", "Hud");
+        hudCanvas->SetRegion("z.last"_intern, {1.0f, 2.0f, 3.0f, 4.0f});
+        hudCanvas->SetRegion("a.first"_intern, {5.0f, 6.0f, 7.0f, 8.0f});
+        Show("Main");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* hud = FindCanvas(Require(Member(response, "result")), "Hud");
+        ASSERT_NE(hud, nullptr);
+        const Json* regions = Member(*hud, "regions");
+        ASSERT_NE(regions, nullptr);
+        ASSERT_TRUE(regions->is_array());
+        ASSERT_EQ(regions->size(), 2u);
+        EXPECT_EQ(StringMember((*regions)[0], "name"), "a.first");
+        EXPECT_EQ(StringMember((*regions)[1], "name"), "z.last");
+        ExpectRect(Member((*regions)[0], "rect"), 5.0f, 6.0f, 7.0f, 8.0f);
+    }
+
+    TEST_F(UIControlApiTest, ASlidersNumberIsSliderValueAndAButtonKeepsItsValueAsAString) {
+        Show("Fit");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* view = FindCanvas(Require(Member(response, "result")), "View");
+        ASSERT_NE(view, nullptr);
+        const Json& slider = Require(FindElement(*view, "Slide"));
+        const Json* number = Member(slider, "sliderValue");
+        ASSERT_NE(number, nullptr);
+        EXPECT_TRUE(number->is_number());
+        EXPECT_EQ(Member(slider, "value"), nullptr) << "one key never holds a string and a number";
+        const Json* buttonValue = Member(Require(FindElement(*view, "Go")), "value");
+        ASSERT_NE(buttonValue, nullptr);
+        EXPECT_TRUE(buttonValue->is_string());
+    }
+
+    TEST_F(UIControlApiTest, ATreeDeeperThanTheCapIsCutAtTheCapAndStillAnswers) {
+        constexpr int kLevels = 130;
+        auto hudCanvas = Canvas("Main", "Hud");
+        IntrusivePtr<UIElement> parent = hudCanvas->GetLayout().root;
+        for (int level = 1; level <= kLevels; ++level) {
+            parent = parent->AddChild(PoolString::Intern(Format("Deep{}", level)));
+        }
+        hudCanvas->Invalidate();
+        Show("Main");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* hud = FindCanvas(Require(Member(response, "result")), "Hud");
+        ASSERT_NE(hud, nullptr);
+        const Json* first = FindElement(*hud, "Deep1");
+        ASSERT_NE(first, nullptr);
+        int depth = 1;
+        const Json* current = first;
+        while (true) {
+            const Json* children = Member(*current, "children");
+            ASSERT_NE(children, nullptr);
+            if (children->empty()) {
+                break;
+            }
+            current = &(*children)[0];
+            ++depth;
+        }
+        EXPECT_LT(depth, kLevels) << "the tree is cut before its end";
+        EXPECT_TRUE(BoolMember(*current, "truncated"));
+        EXPECT_EQ(Member(*first, "truncated"), nullptr);
+    }
+
     TEST_F(UIControlApiTest, TheRegionsOfACanvasThatWasNeverDrawnAreAlreadyListed) {
         _manager->SetActiveScene("Main"_intern);
         Canvas("Main", "Hud")->SetRegion("hud.corner"_intern, {1.0f, 2.0f, 3.0f, 4.0f});
