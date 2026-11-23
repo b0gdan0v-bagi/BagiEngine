@@ -2,6 +2,7 @@
 
 #include <BECore/FileSystem/IFileWatchBackend.h>
 #include <BECore/Types/Types.h>
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 
@@ -10,12 +11,17 @@ namespace BECore {
     /// How often the polling backend looks at the disk, in seconds
     inline constexpr double kPollIntervalSeconds = 0.5;
 
+    /// A folder whose write time is this close to the moment it was listed is listed again at every poll: a file system stamps a folder from a
+    /// coarse clock (NTFS from the system tick of about 15.6 ms, FAT in steps of 2 s), so a file made right after a listing may leave the stamp as it was
+    inline constexpr std::chrono::seconds kFolderStampUnsettledSeconds{2};
+
     /**
      * @brief Watches by looking: every kPollIntervalSeconds it compares the write time and the size of each known file, and the write time
      * of each folder, with the last look. The fallback for a platform without a native API, and the contract every other backend is tested against.
      *
      * No thread: it works in Tick (FileWatcher::Update), so every Post comes from the main thread. A poll that finds nothing changed only
-     * stats the known files and folders and allocates nothing; a changed folder is listed again (that allocates). A change that keeps both the
+     * stats the known files and folders and allocates nothing; a changed folder, and one changed within kFolderStampUnsettledSeconds of its last
+     * listing, is listed again (that allocates). A change that keeps both the
      * write time and the size of a file is not seen, and a file made and removed between two looks is not seen at all.
      */
     class PollingFileWatchBackend final : public IFileWatchBackend {
@@ -44,6 +50,8 @@ namespace BECore {
             std::filesystem::path root;
             bool recursive = false;
             Vector<Entry> entries;
+            /// The file clock's time taken before the last listing
+            std::filesystem::file_time_type listedAt{};
         };
 
         static bool ReadState(Entry& entry);
