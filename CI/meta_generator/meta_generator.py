@@ -372,11 +372,22 @@ Examples:
     # Get files to process
     all_headers = scan_headers(source_dirs)
 
+    def needs_processing(file_path: Path) -> bool:
+        """Changed since the last run, or a header with reflected content whose .gen.hpp is gone.
+
+        The cache hash never looks at the output, so a cleaned Generated/ folder would otherwise
+        stay empty until the cache is deleted too.
+        """
+        if cache.is_file_changed(file_path):
+            return True
+        classes, enums = cache.get_file_data(file_path)
+        return bool(classes or enums) and not (output_dir / (file_path.stem + ".gen.hpp")).exists()
+
     if args.force:
         files_to_process = all_headers
         log(f"Force mode: processing all {len(files_to_process)} files")
     else:
-        files_to_process = cache.get_outdated_files(source_dirs)
+        files_to_process = [path for path in all_headers if needs_processing(path)]
         if files_to_process:
             log(f"Processing {len(files_to_process)} changed files")
         else:
@@ -390,8 +401,14 @@ Examples:
     error_count = 0
 
     files_to_generate: List[Path] = []
+    # A header in both source_dirs and scan_dirs (scan_dirs defaults to source_dirs) is parsed once,
+    # also when it fails: its error is printed once.
+    attempted: Set[Path] = set()
 
     for file_path in files_to_process:
+        if file_path.resolve() in attempted:
+            continue
+        attempted.add(file_path.resolve())
         verbose_log(f"  Parsing: {file_path.name}")
         try:
             classes, enums = cpp_parser.parse_file(file_path)
@@ -425,9 +442,11 @@ Examples:
         verbose_log("Scanning for derived classes...")
         scan_headers_list = scan_headers(scan_dirs)
         for file_path in scan_headers_list:
-            # The cache's content hash decides, as for source_dirs: a header that changed since the
-            # last run is parsed again and its .gen.hpp rewritten.
-            if cache.is_file_changed(file_path):
+            # Decided as for source_dirs; --force covers the scan-only folders too.
+            if file_path.resolve() in attempted:
+                continue
+            if args.force or needs_processing(file_path):
+                attempted.add(file_path.resolve())
                 verbose_log(f"  Parsing: {file_path.name}")
                 try:
                     classes, enums = cpp_parser.parse_file(file_path)
