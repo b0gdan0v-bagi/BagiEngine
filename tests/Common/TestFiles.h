@@ -9,11 +9,28 @@
 
 namespace BECore::Tests {
 
-    /// Writes @p text to @p path byte for byte (no line-end translation), making the folders above it; a file that cannot be written fails the
-    /// test, so a later check does not fail for a reason it cannot name
+    /// Writes @p text to @p path byte for byte (no line-end translation), making the folders above it. The file is rewritten in place
+    /// (opened and truncated, never replaced by a rename), because the file-watch tests need the edit of an existing file to be seen as one.
+    /// A step that fails fails the test with the path, so a later check does not fail for a reason it cannot name
     inline void WriteFile(const std::filesystem::path& path, StringView text) {
-        const auto written = WriteFileAtomically(PathToUtf8(path), text);
-        EXPECT_TRUE(written.has_value()) << "could not write " << path.string() << ": " << (written ? "" : written.error().c_str());
+        const String name = PathToUtf8(path);
+        const auto folder = CreateDirectories(PathToUtf8(path.parent_path()));
+        if (!folder) {
+            ADD_FAILURE() << "could not make the folder of " << path.string() << ": " << folder.error().c_str();
+            return;
+        }
+        auto file = File::Open(name, FileMode::Write);
+        if (!file) {
+            ADD_FAILURE() << "could not open " << path.string() << ": " << file.error().c_str();
+            return;
+        }
+        const auto written = file->Write(text);
+        if (!written) {
+            ADD_FAILURE() << "could not write " << path.string() << ": " << written.error().c_str();
+            return;
+        }
+        const auto closed = file->Close();
+        EXPECT_TRUE(closed.has_value()) << "could not close " << path.string() << ": " << (closed ? "" : closed.error().c_str());
     }
 
     /// The bytes of @p path; a file that cannot be read fails the test and gives an empty result, so a later check on it does not pass on nothing
