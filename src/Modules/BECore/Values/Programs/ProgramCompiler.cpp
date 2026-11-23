@@ -1,10 +1,10 @@
 #include "ProgramCompiler.h"
 
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Values/Programs/ExprChecker.h>
 #include <BECore/Values/Programs/ExprParser.h>
 #include <BECore/Values/Programs/Interpreter.h>
 #include <BECore/Values/Programs/ProgramBuilder.h>
-#include <limits>
 
 namespace BECore {
 
@@ -36,8 +36,8 @@ namespace BECore {
         }
 
         /// The images of the entries of a table node, which the lowering has checked are constants
-        Vector<RegisterImage> EntryImages(const TypedNode& node, const Vector<RegisterImage>& images) {
-            Vector<RegisterImage> run;
+        ArenaVector<RegisterImage> EntryImages(const TypedNode& node, const ArenaVector<RegisterImage>& images) {
+            ArenaVector<RegisterImage> run;
             run.reserve(node.entries.size());
             for (const TypedNodeId entry : node.entries) {
                 run.push_back(images[entry]);
@@ -46,16 +46,17 @@ namespace BECore {
         }
 
         /// Appends the entries of a table node as a run of constants and emits its `LoadTable` of the index in @p indexRegister into @p dst
-        void EmitTable(ProgramBuilder& builder, const TypedNode& node, const Vector<RegisterImage>& images, uint8_t dst, uint8_t indexRegister) {
-            const Vector<RegisterImage> run = EntryImages(node, images);
+        void EmitTable(ProgramBuilder& builder, const TypedNode& node, const ArenaVector<RegisterImage>& images, uint8_t dst, uint8_t indexRegister) {
+            const ArenaVector<RegisterImage> run = EntryImages(node, images);
             const uint32_t first = builder.AddConstantRun(Span<const RegisterImage>(run.data(), run.size()));
             builder.EmitLoadTable(dst, indexRegister, first, static_cast<uint32_t>(run.size()));
         }
 
         /// The register image of what an operation gives: the same kernels as `Run`, so a folded value is what the program would have computed; a table is folded by running its own
         /// instruction over its own run of constants
-        std::expected<RegisterImage, ProgramError> Fold(const TypedNode& node, const Vector<RegisterImage>& images) {
+        std::expected<RegisterImage, ProgramError> Fold(const TypedNode& node, const ArenaVector<RegisterImage>& images) {
             ProgramBuilder builder;
+            builder.Reserve(node.operandCount + 1U, node.operandCount + node.entries.size());
             Array<uint8_t, kMaxTypedOperands> regs{};
             for (uint8_t i = 0; i < node.operandCount; ++i) {
                 const auto reg = builder.AcquireRegister();
@@ -101,7 +102,7 @@ namespace BECore {
                 if (root.kind == TypedNodeKind::Slot) {
                     result.kind = CompiledKind::Slot;
                     result.slot = root.slot;
-                    result.path = root.path;
+                    result.path.assign(root.path.data(), root.path.size());
                     return result;
                 }
                 const auto resultRegister = _builder.AcquireRegister();
@@ -133,6 +134,8 @@ namespace BECore {
                 const size_t count = _expr.nodes.size();
                 _isConstant.assign(count, false);
                 _images.assign(count, RegisterImage{});
+                // One instruction per node and about one constant per node is what a formula needs, so the builder never grows block by block in the arena
+                _builder.Reserve(count, count);
                 for (size_t i = 0; i < count; ++i) {
                     const TypedNode& node = _expr.nodes[i];
                     if (node.kind == TypedNodeKind::Constant) {
@@ -416,10 +419,10 @@ namespace BECore {
             StringView _source;
             bool _fuse;
             ProgramBuilder _builder;
-            Vector<bool> _isConstant;
-            Vector<RegisterImage> _images;
+            ArenaVector<bool> _isConstant;
+            ArenaVector<RegisterImage> _images;
             /// By loop number: the register that holds the element of that loop while its body is lowered
-            Vector<uint8_t> _loopRegisters;
+            ArenaVector<uint8_t> _loopRegisters;
         };
 
         char Printable(char c) {
@@ -433,6 +436,7 @@ namespace BECore {
         if (!wanted.has_value()) {
             return std::unexpected(wanted.error());
         }
+        const ScratchScope scratch;
         const auto ast = ParseExpression(text);
         if (!ast.has_value()) {
             return std::unexpected(ast.error());

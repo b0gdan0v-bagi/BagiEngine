@@ -161,7 +161,7 @@ namespace BECore {
             reads |= check.reads;
         }
         auto program = MakeIntrusive<EffectProgram>(PassKey<EffectProgramBuilder>{});
-        program->_steps = _steps;
+        program->_steps.assign(_steps.begin(), _steps.end());
         program->_reads = reads;
         program->_writes = writes;
         program->_source = std::move(source);

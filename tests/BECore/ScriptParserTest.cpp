@@ -3,10 +3,13 @@
 
 #include <BECore/Values/Effects/ScriptParser.h>
 #include <BECore/Values/Programs/ExprLexer.h>
+#include <Common/ScratchScopeFixture.h>
 #include <Common/TestText.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
+
+    using ScriptParserTest = ScratchScopeFixture;
 
     namespace {
 
@@ -118,7 +121,7 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(ScriptParserTest, EveryStatementFormIsRead) {
+    TEST_F(ScriptParserTest, EveryStatementFormIsRead) {
         EXPECT_EQ(Dumped("cell.timer = 1;"), "{ cell.timer = 1; }");
         EXPECT_EQ(Dumped("cell.timer=cell.timer+1;"), "{ cell.timer = cell.timer+1; }");
         EXPECT_EQ(Dumped("a.b += 2 * c;"), "{ a.b += 2 * c; }");
@@ -132,7 +135,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Dumped("a = 1; b = 2; toggle c;"), "{ a = 1; b = 2; toggle c; }");
     }
 
-    TEST(ScriptParserTest, AnEmptyScriptIsValidAndHasNoStatements) {
+    TEST_F(ScriptParserTest, AnEmptyScriptIsValidAndHasNoStatements) {
         for (const StringView text : {StringView{""}, StringView{"   "}, StringView{"\n\t \r\n"}}) {
             const ScriptAst ast = Parse(text);
             EXPECT_TRUE(ast.statements.empty());
@@ -140,7 +143,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ScriptParserTest, IfElseIfElseChainsAreNestedBlocks) {
+    TEST_F(ScriptParserTest, IfElseIfElseChainsAreNestedBlocks) {
         EXPECT_EQ(Dumped("if (a) { x = 1; }"), "{ if (a) { x = 1; } }");
         EXPECT_EQ(Dumped("if (a) { } else { y = 2; }"), "{ if (a) { } else { y = 2; } }");
         EXPECT_EQ(Dumped("if (a) { x = 1; } else if (b) { y = 2; } else { z = 3; }"), "{ if (a) { x = 1; } else if (b) { y = 2; } else { z = 3; } }");
@@ -149,7 +152,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Dumped("if (a) { } else { if (b) { } }"), chained) << "an else if is an else block of one if";
     }
 
-    TEST(ScriptParserTest, TheRangesAreTheExpressionsAndTheColumnsAreTheOperators) {
+    TEST_F(ScriptParserTest, TheRangesAreTheExpressionsAndTheColumnsAreTheOperators) {
         constexpr StringView text = "cell.timer -= 1 + cell.step;\nif ( cell.open && (a || b) ) { emit Act(cell.index , f(1, 2)) ; }";
         const ScriptAst ast = Parse(text);
         ASSERT_EQ(ast.root.count, 2u);
@@ -175,7 +178,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Slice(text, ast.arguments[emit.firstArgument + 1]), "f(1, 2)");
     }
 
-    TEST(ScriptParserTest, AStringKeepsItsQuotesInTheRangeAndItsEndColumn) {
+    TEST_F(ScriptParserTest, AStringKeepsItsQuotesInTheRangeAndItsEndColumn) {
         constexpr StringView text = "emit Say('a b;{}', 'c');";
         const ScriptAst ast = Parse(text);
         const ScriptStatement& emit = ast[ast.At(ast.root, 0)];
@@ -184,7 +187,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Slice(text, ast.arguments[1]), "'c'");
     }
 
-    TEST(ScriptParserTest, AnExpressionIsNotCheckedHere) {
+    TEST_F(ScriptParserTest, AnExpressionIsNotCheckedHere) {
         EXPECT_EQ(Dumped("x = 1 = 2;"), "{ x = 1 = 2; }");
         EXPECT_EQ(Dumped("x = 1 2;"), "{ x = 1 2; }");
         EXPECT_EQ(Dumped("x = (1 + ;"), "{ x = (1 +; }") << "the compiler names the open parenthesis";
@@ -192,14 +195,14 @@ namespace BECore::Tests {
         EXPECT_EQ(Dumped("emit A(1 2, 3);"), "{ emit A(1 2, 3); }");
     }
 
-    TEST(ScriptParserTest, TheKeywordsAreKeywordsAtTheStartOfAStatementOnly) {
+    TEST_F(ScriptParserTest, TheKeywordsAreKeywordsAtTheStartOfAStatementOnly) {
         EXPECT_EQ(Dumped("x = toggle;"), "{ x = toggle; }");
         EXPECT_EQ(Dumped("x = if + else + emit;"), "{ x = if + else + emit; }");
         EXPECT_EQ(Dumped("if (toggle.on) { a = emit.x + else.y; }"), "{ if (toggle.on) { a = emit.x + else.y; } }");
         ExpectError("toggle.x = 1;", 7, "'toggle' needs a field path");
     }
 
-    TEST(ScriptParserTest, EveryErrorNamesWhatWasExpectedAndWhereItWasFound) {
+    TEST_F(ScriptParserTest, EveryErrorNamesWhatWasExpectedAndWhereItWasFound) {
         ExpectError("x = 1", 6, "expected ';'");
         ExpectError("x = 1 }", 6, "expected ';'");
         ExpectError("x++", 4, "expected ';'");
@@ -243,7 +246,7 @@ namespace BECore::Tests {
         ExpectError("x = 'abc;", 5, "unterminated string");
     }
 
-    TEST(ScriptParserTest, TheTextLimitIsExactAndTheMessageSaysScript) {
+    TEST_F(ScriptParserTest, TheTextLimitIsExactAndTheMessageSaysScript) {
         const String padding = Repeated(" ", ScriptLimits::kMaxTextBytes - 5);
         const String fits = "a = 1;" + padding.substr(1);
         ASSERT_EQ(fits.size(), ScriptLimits::kMaxTextBytes);
@@ -252,7 +255,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(Contains(error.message, "formula"));
     }
 
-    TEST(ScriptParserTest, TheStatementLimitCountsEveryBlockAndIsExact) {
+    TEST_F(ScriptParserTest, TheStatementLimitCountsEveryBlockAndIsExact) {
         const String fits = Repeated("a = 1;", ScriptLimits::kMaxStatements);
         EXPECT_EQ(Parse(fits).statements.size(), ScriptLimits::kMaxStatements);
         ExpectError(fits + "a = 1;", static_cast<uint32_t>(fits.size() + 3), "more than 256 statements");
@@ -266,7 +269,7 @@ namespace BECore::Tests {
         ExpectError(nested + "c = 1;", static_cast<uint32_t>(nested.size() + 3), "more than 256 statements");
     }
 
-    TEST(ScriptParserTest, TheBlockDepthLimitIsExact) {
+    TEST_F(ScriptParserTest, TheBlockDepthLimitIsExact) {
         const auto nest = [](size_t depth) {
             String text;
             for (size_t i = 0; i < depth; ++i) {
@@ -283,7 +286,7 @@ namespace BECore::Tests {
         ExpectError(over, static_cast<uint32_t>(ScriptLimits::kMaxBlockDepth * 9 + 8), "nested deeper than 8 levels");
     }
 
-    TEST(ScriptParserTest, AnElseIfChainDoesNotNestTheBlockDepthOrTheParser) {
+    TEST_F(ScriptParserTest, AnElseIfChainDoesNotNestTheBlockDepthOrTheParser) {
         String chain = "if (a0) { }";
         for (size_t i = 1; i < ScriptLimits::kMaxStatements; ++i) {
             chain += Format(" else if (a{}) {{ }}", i);
@@ -293,7 +296,7 @@ namespace BECore::Tests {
         ExpectError(chain + " else if (z) { }", static_cast<uint32_t>(chain.size() + 7), "more than 256 statements");
     }
 
-    TEST(ScriptParserTest, HostileTextIsAnErrorOrASoundTreeAndNeverACrash) {
+    TEST_F(ScriptParserTest, HostileTextIsAnErrorOrASoundTreeAndNeverACrash) {
         constexpr size_t kHuge = 100000;
         ExpectSound(Repeated("{", kHuge));
         ExpectSound(Repeated("}", kHuge));
@@ -319,7 +322,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ScriptParserTest, MutatedScriptsAreAnErrorOrASoundTree) {
+    TEST_F(ScriptParserTest, MutatedScriptsAreAnErrorOrASoundTree) {
         const StringView good =
             "if (cell.timer > 0) { cell.timer -= 1; if (cell.timer == 0) { cell.open = !cell.open; emit Action(Open, cell.index); } } else if (b.mask != c.mask) { c.mask = f(c.mask, b.mask); "
             "toggle c.flag; c.count++; }";
@@ -358,7 +361,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ScriptParserTest, TheFormulaModeOfTheLexerRefusesTheScriptBytesAsBefore) {
+    TEST_F(ScriptParserTest, TheFormulaModeOfTheLexerRefusesTheScriptBytesAsBefore) {
         const auto refused = [](StringView text, uint32_t column, StringView words) {
             const auto tokens = LexExpression(text);
             ASSERT_FALSE(tokens.has_value()) << String(text).c_str();
@@ -377,7 +380,7 @@ namespace BECore::Tests {
         EXPECT_EQ(signs->size(), 5u) << "a formula has no `--`: it is a minus and a negation";
     }
 
-    TEST(ScriptParserTest, TheStatementModeAddsTheScriptTokens) {
+    TEST_F(ScriptParserTest, TheStatementModeAddsTheScriptTokens) {
         const auto tokens = LexExpression("{ } ; = += -= ++ -- == + - a", LexOptions{true});
         ASSERT_TRUE(tokens.has_value()) << tokens.error().message.c_str();
         const ExprTokenKind expected[] = {ExprTokenKind::LeftBrace,  ExprTokenKind::RightBrace, ExprTokenKind::Semicolon,  ExprTokenKind::Equal,      ExprTokenKind::PlusEqual,

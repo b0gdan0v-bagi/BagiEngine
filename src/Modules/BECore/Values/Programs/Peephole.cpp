@@ -7,7 +7,7 @@ namespace BECore {
     namespace {
 
         /// Whether nothing after @p from reads what @p reg holds now: the next access is a write, or there is none and the register is not the result
-        bool IsDeadAfter(const Vector<Instruction>& code, size_t from, uint8_t reg, uint8_t resultRegister) {
+        bool IsDeadAfter(const ArenaVector<Instruction>& code, size_t from, uint8_t reg, uint8_t resultRegister) {
             for (size_t i = from + 1; i < code.size(); ++i) {
                 if ((DescribeInstruction(code[i]).reads & RegisterBit(reg)) != 0) {
                     return false;
@@ -20,7 +20,7 @@ namespace BECore {
         }
 
         /// Whether every register of @p dropped other than @p kept is dead after @p from: those are the writes a fusion stops making
-        bool AreDeadAfter(const Vector<Instruction>& code, size_t from, Span<const uint8_t> dropped, uint8_t kept, uint8_t resultRegister) {
+        bool AreDeadAfter(const ArenaVector<Instruction>& code, size_t from, Span<const uint8_t> dropped, uint8_t kept, uint8_t resultRegister) {
             return std::all_of(dropped.begin(), dropped.end(), [&](uint8_t reg) { return reg == kept || IsDeadAfter(code, from, reg, resultRegister); });
         }
 
@@ -45,7 +45,7 @@ namespace BECore {
         constexpr size_t kMulAddLength = 5;
 
         /// `LoadSlot r; LoadConst k; Mul; LoadConst b; Add` at @p at, written as one `MulAddSlot`; the five instructions are replaced by it
-        bool FuseMulAdd(Vector<Instruction>& code, size_t at, uint8_t resultRegister) {
+        bool FuseMulAdd(ArenaVector<Instruction>& code, size_t at, uint8_t resultRegister) {
             if (at + kMulAddLength > code.size()) {
                 return false;
             }
@@ -97,7 +97,7 @@ namespace BECore {
         /// `LoadSlot from; LoadSlot to; <the code of t>; Lerp from, to, t` from @p at: the two loads go and the `Lerp` becomes the fused instruction, which reads the fields where the
         /// `Lerp` stood. The code of `t` stays; it must neither read nor write the two registers (a read would see a register the fusion no longer fills, a write would change what the
         /// `Lerp` read), and `t` must not be one of them.
-        bool FuseLerp(Vector<Instruction>& code, size_t at, uint8_t resultRegister) {
+        bool FuseLerp(ArenaVector<Instruction>& code, size_t at, uint8_t resultRegister) {
             constexpr size_t kLoads = 2;
             if (at + kLoads >= code.size()) {
                 return false;
@@ -133,7 +133,7 @@ namespace BECore {
         }
 
         /// `LoadSlot index; LoadTable` at @p at: a table indexed by a field, written as one `LoadTableSlot`
-        bool FuseTable(Vector<Instruction>& code, size_t at, uint8_t resultRegister) {
+        bool FuseTable(ArenaVector<Instruction>& code, size_t at, uint8_t resultRegister) {
             if (at + 1 >= code.size() || code[at].op != Opcode::LoadSlotInt32 || code[at + 1].op != Opcode::LoadTable) {
                 return false;
             }
@@ -154,7 +154,7 @@ namespace BECore {
 
     }  // namespace
 
-    void Fuse(Vector<Instruction>& code, uint8_t resultRegister) {
+    void Fuse(ArenaVector<Instruction>& code, uint8_t resultRegister) {
         // The liveness below reads the code as straight-line: a register the body writes is read again by the next round, which it does not see
         if (std::any_of(code.begin(), code.end(), [](const Instruction& ins) { return IsListInstruction(ins.op); })) {
             return;

@@ -7,11 +7,14 @@
 #include <BECore/Values/Programs/ExprParser.h>
 #include <BECore/Values/Programs/Program.h>
 #include <Common/Printers.h>
+#include <Common/ScratchScopeFixture.h>
 #include <Common/TestText.h>
 #include <gtest/gtest.h>
 #include <initializer_list>
 
 namespace BECore::Tests {
+
+    using CalcNodeTest = ScratchScopeFixture;
 
     namespace {
 
@@ -135,7 +138,7 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(CalcNodeTest, TreeAndTextAreTheSameFormula) {
+    TEST_F(CalcNodeTest, TreeAndTextAreTheSameFormula) {
         const FormulaCase cases[] = {
             {"12", Number("12")},
             {"1.5", Number("1.5")},
@@ -193,7 +196,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(CalcNodeTest, EveryBinaryOperatorPrintsAndParsesBack) {
+    TEST_F(CalcNodeTest, EveryBinaryOperatorPrintsAndParsesBack) {
         for (const ProgramOperation op : kBinaryOperations) {
             const Node tree = Binary(op, Read("a"), Read("b"));
             const auto printed = BuildFormulaText(*tree);
@@ -207,7 +210,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(CalcNodeTest, ANumberKeepsItsFloatness) {
+    TEST_F(CalcNodeTest, ANumberKeepsItsFloatness) {
         const auto whole = BuildAst(*Number("12"));
         const auto fractional = BuildAst(*Number("12.0"));
         ASSERT_TRUE(whole.has_value());
@@ -216,7 +219,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(fractional->nodes.front().isFloat);
     }
 
-    TEST(CalcNodeTest, EveryClassIsMadeByNameWithItsFields) {
+    TEST_F(CalcNodeTest, EveryClassIsMadeByNameWithItsFields) {
         struct ClassCase {
             StringView name;
             Vector<StringView> fields;
@@ -251,7 +254,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(registry.CreateAs<CalcNode>("CalcNode")) << "the base is abstract: a tree is never made of it";
     }
 
-    TEST(CalcNodeTest, AMissingChildIsNamedByItsPath) {
+    TEST_F(CalcNodeTest, AMissingChildIsNamedByItsPath) {
         auto binary = New<CalcBinary>();
         binary->op = ProgramOperation::Add;
         binary->left = Read("a");
@@ -276,14 +279,14 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(ExpectRefused(*byLevel), "'index' is missing"));
     }
 
-    TEST(CalcNodeTest, AnOperatorOfAnotherArityIsRefused) {
+    TEST_F(CalcNodeTest, AnOperatorOfAnotherArityIsRefused) {
         EXPECT_TRUE(Contains(ExpectRefused(*Unary(ProgramOperation::Add, Read("a"))), "CalcUnary: 'op' Add is not a unary operator"));
         EXPECT_TRUE(Contains(ExpectRefused(*Binary(ProgramOperation::Neg, Read("a"), Read("b"))), "CalcBinary: 'op' Neg is not a binary operator"));
         EXPECT_TRUE(Contains(ExpectRefused(*Binary(ProgramOperation::Not, Read("a"), Read("b"))), "CalcBinary: 'op' Not"));
         EXPECT_TRUE(Contains(ExpectRefused(*Binary(ProgramOperation::Min, Read("a"), Read("b"))), "CalcBinary: 'op' Min"));
     }
 
-    TEST(CalcNodeTest, ALeafThatWouldReadAsMoreThanOneTokenIsRefused) {
+    TEST_F(CalcNodeTest, ALeafThatWouldReadAsMoreThanOneTokenIsRefused) {
         EXPECT_TRUE(Contains(ExpectRefused(*Number("1 + 2")), "CalcNumber: 'text'"));
         EXPECT_TRUE(Contains(ExpectRefused(*Number("-2")), "a sign"));
         EXPECT_TRUE(Contains(ExpectRefused(*Number("")), "CalcNumber"));
@@ -298,7 +301,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(ExpectRefused(*Call("min(", {})), "CalcCall: 'function'"));
     }
 
-    TEST(CalcNodeTest, ATextTheParserRefusesIsTheParsersToReport) {
+    TEST_F(CalcNodeTest, ATextTheParserRefusesIsTheParsersToReport) {
         // The builder checks only that a leaf is one token; whether it is a name the language knows, a string it can hold or a number in range is the parser's and the checker's
         const Node tree = Text("caf\xC3\xA9");
         const auto printed = BuildFormulaText(*tree);
@@ -306,7 +309,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(ParseExpression(*printed).has_value());
     }
 
-    TEST(CalcNodeTest, TheHeightLimitStopsTheWalk) {
+    TEST_F(CalcNodeTest, TheHeightLimitStopsTheWalk) {
         const Node atLimit = DeepChain(ExprLimits::kMaxTreeHeight);
         const auto fits = BuildFormulaText(*atLimit);
         EXPECT_TRUE(fits.has_value()) << (fits.has_value() ? String() : fits.error().message).c_str();
@@ -317,13 +320,13 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(message, "(at tree.operand.operand")) << message.c_str();
     }
 
-    TEST(CalcNodeTest, AVeryDeepTreeNeverRecursesToItsEnd) {
+    TEST_F(CalcNodeTest, AVeryDeepTreeNeverRecursesToItsEnd) {
         const size_t levels = 1000;
         const Node deep = DeepChain(levels);
         EXPECT_TRUE(Contains(ExpectRefused(*deep), "levels high"));
     }
 
-    TEST(CalcNodeTest, TheNodeLimitStopsAWideTree) {
+    TEST_F(CalcNodeTest, TheNodeLimitStopsAWideTree) {
         auto call = New<CalcCall>();
         call->function = "f";
         for (size_t i = 0; i < ExprLimits::kMaxNodes; ++i) {

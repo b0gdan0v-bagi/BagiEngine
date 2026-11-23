@@ -27,6 +27,10 @@ namespace BECore {
         constexpr uint32_t kThreeByteMinimum = 0x800;
         constexpr uint32_t kFourByteMinimum = 0x10000;
 
+        /// The first guess of the token count: a token of a real formula is about this many bytes. A text of one-byte tokens grows the list once or twice
+        constexpr size_t kBytesPerToken = 3;
+        constexpr size_t kTokenSlack = 2;
+
         bool IsDigit(char c) {
             return c >= '0' && c <= '9';
         }
@@ -100,10 +104,11 @@ namespace BECore {
         public:
             Lexer(StringView text, const LexOptions& options) : _text(text), _options(options) {}
 
-            std::expected<Vector<ExprToken>, ProgramError> Run() {
+            std::expected<ArenaVector<ExprToken>, ProgramError> Run() {
                 if (_text.size() > _options.maxBytes) {
                     return Fail(_options.maxBytes, Format("the {} is longer than {} bytes", _options.statements ? "script" : "formula", _options.maxBytes));
                 }
+                _tokens.reserve(_text.size() / kBytesPerToken + kTokenSlack);
                 while (true) {
                     while (_position < _text.size() && IsSpace(_text[_position])) {
                         ++_position;
@@ -329,13 +334,13 @@ namespace BECore {
             StringView _text;
             LexOptions _options;
             size_t _position = 0;
-            Vector<ExprToken> _tokens;
+            ArenaVector<ExprToken> _tokens;
             ProgramError _error;
         };
 
     }  // namespace
 
-    std::expected<Vector<ExprToken>, ProgramError> LexExpression(StringView text, const LexOptions& options) {
+    std::expected<ArenaVector<ExprToken>, ProgramError> LexExpression(StringView text, const LexOptions& options) {
         Lexer lexer(text, options);
         return lexer.Run();
     }
