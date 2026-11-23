@@ -1,6 +1,7 @@
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/Ring/FrameRingBackend.h>
+#include <BECore/Profiler/Ring/RingPause.h>
 #include <BECore/Profiler/ScopedTrace.h>
 #include <Common/ProfilerTestSupport.h>
 #include <Common/TempPath.h>
@@ -273,6 +274,97 @@ namespace BECore::Tests {
             EXPECT_EQ(zones[i].beginTicks, uint64_t{i});
             EXPECT_EQ(zones[i].endTicks, uint64_t{1000} + (kDepth - 1 - i));
         }
+    }
+
+    TEST(FrameRingTest, ZonesUnderAPauseLeaveNoZoneAndNoOrphan) {
+        FrameRingBackend ring(ManualOptions());
+        {
+            const ScopedRingPause pause;
+            RecordZone(ring, kOuterSite, 1, 2);
+            ring.RecordZone(kLeafSite, 3, 4);
+        }
+        EXPECT_TRUE(ring.Snapshot().threads.empty() || ring.Snapshot().threads[0].zones.empty());
+
+        // The pause pushed nothing, so a zone of the next scope sits at depth 0 and an end without a begin still records nothing
+        RecordZone(ring, kInnerSite, 5, 6);
+        ring.EndZone(0, kOuterSite, {});
+        const RingSnapshot snapshot = ring.Snapshot();
+        ASSERT_EQ(snapshot.threads.size(), 1u);
+        const auto& zones = snapshot.threads[0].zones;
+        ASSERT_EQ(zones.size(), 1u);
+        EXPECT_EQ(zones[0].site, &kInnerSite);
+        EXPECT_EQ(zones[0].depth, 0u);
+        EXPECT_EQ(snapshot.dropped, 0u);
+    }
+
+    TEST(FrameRingTest, AnOuterZoneBegunBeforeAPauseIsRecordedWholeWithoutItsInnerZones) {
+        FrameRingBackend ring(ManualOptions());
+        g_manualTick = 10;
+        const uint64_t outer = ring.BeginZone(kOuterSite);
+        {
+            const ScopedRingPause pause;
+            g_manualTick = 12;
+            const uint64_t inner = ring.BeginZone(kInnerSite);
+            g_manualTick = 14;
+            ring.EndZone(inner, kInnerSite, {});
+        }
+        g_manualTick = 15;
+        const uint64_t after = ring.BeginZone(kLeafSite);
+        g_manualTick = 17;
+        ring.EndZone(after, kLeafSite, {});
+        g_manualTick = 20;
+        ring.EndZone(outer, kOuterSite, {});
+
+        const RingSnapshot snapshot = ring.Snapshot();
+        ASSERT_EQ(snapshot.threads.size(), 1u);
+        const auto& zones = snapshot.threads[0].zones;
+        ASSERT_EQ(zones.size(), 2u);
+        EXPECT_EQ(zones[0].site, &kOuterSite);
+        EXPECT_EQ(zones[0].beginTicks, 10u);
+        EXPECT_EQ(zones[0].endTicks, 20u);
+        EXPECT_EQ(zones[0].depth, 0u);
+        EXPECT_EQ(zones[1].site, &kLeafSite);
+        EXPECT_EQ(zones[1].depth, 1u);
+    }
+
+    TEST(FrameRingTest, NestedPausesCountAndFrameMarksAreNotPaused) {
+        FrameRingBackend ring(ManualOptions());
+        {
+            const ScopedRingPause outer;
+            {
+                const ScopedRingPause inner;
+            }
+            EXPECT_TRUE(ScopedRingPause::IsActive());
+            RecordZone(ring, kOuterSite, 1, 2);
+            g_manualTick = 16;
+            ring.FrameMark();
+        }
+        EXPECT_FALSE(ScopedRingPause::IsActive());
+        const RingSnapshot snapshot = ring.Snapshot();
+        EXPECT_EQ(snapshot.frames.size(), 1u);
+        EXPECT_TRUE(snapshot.threads.empty() || snapshot.threads[0].zones.empty());
+    }
+
+    TEST(FrameRingTest, APauseOnOneThreadDoesNotStopAnother) {
+        FrameRingBackend ring;
+        const ScopedRingPause pause;
+        std::thread other([&ring] {
+            const uint64_t token = ring.BeginZone(kInnerSite);
+            ring.EndZone(token, kInnerSite, {});
+        });
+        other.join();
+        const uint64_t token = ring.BeginZone(kOuterSite);
+        ring.EndZone(token, kOuterSite, {});
+
+        const RingSnapshot snapshot = ring.Snapshot();
+        size_t zones = 0;
+        for (const RingThread& thread : snapshot.threads) {
+            for (const ZoneRecord& zone : thread.zones) {
+                EXPECT_EQ(zone.site, &kInnerSite);
+                ++zones;
+            }
+        }
+        EXPECT_EQ(zones, 1u);
     }
 
     TEST(FrameRingTest, EveryThreadGetsALaneWithItsProfilerName) {
@@ -596,6 +688,21 @@ namespace BECore::Tests {
 
         Profiler::SetRingEnabled(false);
         EXPECT_EQ(Profiler::GetBackend(), &recorder);
+    }
+
+    TEST(ProfilerRingTest, APausedRingStillLetsThePrimaryHaveEveryZone) {
+        ChromeTraceBackend recorder;
+        const ProfilerStateGuard guard;
+        Profiler::SetBackend(&recorder);
+        Profiler::SetRingEnabled(true);
+        const size_t before = CountInRing(kBothSite);
+        {
+            const ScopedRingPause pause;
+            const ProfileZone zone(kBothSite);
+        }
+        EXPECT_EQ(CountInRing(kBothSite), before);
+        EXPECT_EQ(CountBegins(recorder), 1u);
+        EXPECT_EQ(CountEnds(recorder), 1u);
     }
 
     TEST(ProfilerRingTest, TheSameFanOutServesAPrimaryEveryTimeTheRingComesBack) {
