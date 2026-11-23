@@ -23,6 +23,15 @@ namespace BECore::ReflectionControlData {
         BE_REFLECT_FIELD String label;
     };
 
+    /// Declared out of alphabetical order: a `call_method` result lists the members as they were written
+    struct RcOrdered {
+        BE_CLASS(RcOrdered)
+
+        BE_REFLECT_FIELD int32_t zeta = 1;
+        BE_REFLECT_FIELD int32_t alpha = 2;
+        BE_REFLECT_FIELD RcLeaf middle;
+    };
+
     /// One field of each kind a client can read or write, and the guarded ones
     struct RcBox {
         BE_CLASS(RcBox)
@@ -94,6 +103,21 @@ namespace BECore::ReflectionControlData {
             RcLeaf shifted = leaf;
             ++shifted.id;
             return shifted;
+        }
+
+        BE_FUNCTION RcOrdered Ordered() {
+            ++calls;
+            return RcOrdered{};
+        }
+
+        BE_FUNCTION Vector<RcLeaf> Leaves() {
+            ++calls;
+            Vector<RcLeaf> leaves(2);
+            leaves[0].id = 1;
+            leaves[0].label = "a";
+            leaves[1].id = 2;
+            leaves[1].label = "b";
+            return leaves;
         }
 
         BE_FUNCTION void Touch() {

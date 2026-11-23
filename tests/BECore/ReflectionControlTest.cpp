@@ -68,6 +68,26 @@ namespace BECore::Tests {
                 return response;
             }
 
+            /// `set_property` with the text of the value as the client wrote it, which a `Json` cannot hold for a number past a double
+            Json SetText(StringView path, StringView valueText) {
+                String request = Format(R"({{"id":{},"method":"set_property","params":{{"root":"box","path":"{}","value":{}}}}})", ++nextId, path, valueText);
+                Json response;
+                service.Post(request, [&response](String text) {
+                    auto parsed = ParseJson(text);
+                    response = parsed ? std::move(*parsed) : Json();
+                });
+                service.Drain();
+                return response;
+            }
+
+            static Json CallParams(StringView root, StringView method, Json arguments) {
+                Json params = Json::object();
+                params["root"] = MakeJsonString(root);
+                params["method"] = MakeJsonString(method);
+                params["arguments"] = std::move(arguments);
+                return params;
+            }
+
             /// The text of the answer as it was sent
             String Raw(StringView method, Json params) {
                 Json request = Json::object();
@@ -416,6 +436,26 @@ namespace BECore::Tests {
         }
     }
 
+    TEST_F(ReflectionControlTest, ABigIntegerValueIsReadByItsKind) {
+        EXPECT_TRUE(IsOk(SetText("huge", "18446744073709551615")));
+        EXPECT_EQ(box.huge, std::numeric_limits<uint64_t>::max());
+        EXPECT_TRUE(IsOk(SetText("big", "-9223372036854775808")));
+        EXPECT_EQ(box.big, std::numeric_limits<int64_t>::min());
+        // Past 64 bits it is a number, which a double field takes and an integer field refuses
+        EXPECT_TRUE(IsOk(SetText("wide", "123456789012345678901234567890")));
+        EXPECT_EQ(box.wide, 1.2345678901234568e29);
+        EXPECT_FALSE(IsOk(SetText("huge", "123456789012345678901234567890")));
+        EXPECT_EQ(box.huge, std::numeric_limits<uint64_t>::max());
+    }
+
+    TEST_F(ReflectionControlTest, ANumberBeyondADoubleIsInvalidParamsNotAParseError) {
+        const Json response = SetText("wide", "1e999");
+
+        EXPECT_EQ(ErrorCode(response), "invalid_params");
+        EXPECT_EQ(ErrorMessage(response), "'value' has to be a finite number");
+        EXPECT_EQ(box.wide, 0.25);
+    }
+
     TEST_F(ReflectionControlTest, AMissingOrWrongTypedParamIsInvalidParams) {
         Json noRoot = Json::object();
         noRoot["path"] = MakeJsonString("count");
@@ -532,6 +572,18 @@ namespace BECore::Tests {
         ASSERT_NE(ResultOf(shifted), nullptr);
         EXPECT_EQ(GetJsonInt(*ResultOf(shifted), "id").value_or(0), 5);
         EXPECT_EQ(GetJsonString(*ResultOf(shifted), "label").value_or(String()), "x");
+    }
+
+    TEST_F(ReflectionControlTest, TheMembersOfAnObjectResultComeInDeclarationOrder) {
+        const String reply = Raw("call_method", CallParams("tool", "Ordered", Json::object()));
+
+        EXPECT_EQ(reply, R"json({"id":1,"ok":true,"result":{"method":"Ordered","result":{"zeta":1,"alpha":2,"middle":{"id":0,"label":""}},"root":"tool"}})json");
+    }
+
+    TEST_F(ReflectionControlTest, AnArrayResultIsAnArrayOfObjects) {
+        const String reply = Raw("call_method", CallParams("tool", "Leaves", Json::object()));
+
+        EXPECT_EQ(reply, R"json({"id":1,"ok":true,"result":{"method":"Leaves","result":[{"id":1,"label":"a"},{"id":2,"label":"b"}],"root":"tool"}})json");
     }
 
     TEST_F(ReflectionControlTest, AMethodThatReturnsNothingHasNoResultAndNeedsNoArguments) {
