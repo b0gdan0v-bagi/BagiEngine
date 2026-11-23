@@ -455,7 +455,11 @@ namespace BECore::Tests {
         Profiler::SetBackend(&recorder);
         const double zoneChrome = NanosecondsPerCall(kCostCalls / 4, [] { const ProfileZone zone(kOuterSite); });
         Profiler::SetBackend(nullptr);
-        std::printf("steady_clock::now %.1f ns, ProfilerClock::Now %.1f ns, zone without backend %.1f ns, zone into the Chrome trace %.1f ns\n", steady, clock, zoneNone, zoneChrome);
+        Profiler::SetRingEnabled(true);
+        const double zoneRing = NanosecondsPerCall(kCostCalls / 4, [] { const ProfileZone zone(kOuterSite); });
+        Profiler::SetRingEnabled(false);
+        std::printf("steady_clock::now %.1f ns, ProfilerClock::Now %.1f ns, zone without backend %.1f ns, zone into the Chrome trace %.1f ns, zone into the ring %.1f ns\n", steady, clock, zoneNone,
+                    zoneChrome, zoneRing);
     }
 
 }  // namespace BECore::Tests

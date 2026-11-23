@@ -38,6 +38,13 @@ namespace BECore {
      */
     [[nodiscard]] Vector<ZoneStatRow> ComputeZoneStats(const RingSnapshot& snapshot, uint64_t firstFrame, uint64_t lastFrame);
 
+    /// The same into @p rows, whose previous content is dropped and whose capacity is kept; the working lists are on the thread's scratch
+    /// arena, so a caller that keeps @p rows allocates nothing once the rows and the arena have grown to the window
+    void ComputeZoneStats(const RingSnapshot& snapshot, uint64_t firstFrame, uint64_t lastFrame, Vector<ZoneStatRow>& rows);
+
+    /// <0, 0, >0 by zone name, then file, then line: the order that settles equal values
+    [[nodiscard]] int CompareZoneStatIdentity(const ZoneStatRow& a, const ZoneStatRow& b);
+
     /// Orders the rows by @p column; equal values are ordered by name, then file and line, in either direction of the sort, so the order is stable
     void SortZoneStats(Vector<ZoneStatRow>& rows, ZoneStatColumn column, bool ascending);
 

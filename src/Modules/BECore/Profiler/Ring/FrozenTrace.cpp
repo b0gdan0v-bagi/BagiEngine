@@ -40,7 +40,7 @@ namespace BECore {
 
     }  // namespace
 
-    String WriteFrozenTraceJson(const Vector<FrozenFrame>& frames) {
+    String WriteFramesTraceJson(const Vector<FrozenFrame>& frames, const FramesTraceFormat& format) {
         uint64_t start = frames.empty() ? 0 : frames[0].beginTicks;
         uint64_t truncated = 0;
         Vector<ThreadLane> lanes;
@@ -104,12 +104,16 @@ namespace BECore {
 
         for (const FrozenFrame& frame : frames) {
             beginEvent();
-            AppendFormat(out, "{{\"name\":\"Frozen frame\",\"ph\":\"i\",\"s\":\"g\",\"pid\":{},\"tid\":0,\"ts\":{:.3f},\"args\":{{\"frame\":{},\"ms\":{:.3f}}}}}", kPid,
+            AppendFormat(out, "{{\"name\":\"{}\",\"ph\":\"i\",\"s\":\"g\",\"pid\":{},\"tid\":0,\"ts\":{:.3f},\"args\":{{\"frame\":{},\"ms\":{:.3f}}}}}", format.markName, kPid,
                          timestamp(frame.beginTicks, frame.nanosecondsPerTick), frame.frameIndex, frame.frameMs);
         }
 
-        AppendFormat(out, "\n],\"displayTimeUnit\":\"ms\",\"otherData\":{{\"frozenFrames\":{},\"dropped\":{}}}}}\n", frames.size(), truncated);
+        AppendFormat(out, "\n],\"displayTimeUnit\":\"ms\",\"otherData\":{{\"{}\":{},\"dropped\":{}{}}}}}\n", format.countKey, frames.size(), truncated + format.extraDropped, format.extraMembers);
         return out;
+    }
+
+    String WriteFrozenTraceJson(const Vector<FrozenFrame>& frames) {
+        return WriteFramesTraceJson(frames, FramesTraceFormat{.markName = "Frozen frame", .countKey = "frozenFrames"});
     }
 
     std::expected<void, String> WriteFrozenTraceFile(StringView path, const Vector<FrozenFrame>& frames) {

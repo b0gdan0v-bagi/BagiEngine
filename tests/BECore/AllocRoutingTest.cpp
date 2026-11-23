@@ -155,9 +155,9 @@ namespace BECore::Tests {
 
     // ---- The include sites of stb and dr_libs (a profile build) ----
 
-    // Font::RasterizeGlyph runs stb_truetype on scratch memory (an stb allocation hook), so the heap sees none of its allocations: the png case
-    // below is the one that proves the Stb routing itself
-    TEST(AllocRoutingTest, ARasterizedGlyphMakesNoStbHeapAllocation) {
+    // stb_truetype works in the scratch arena inside a StbScratchGuard (Text/Font.cpp), so a rasterized glyph is not a heap allocation; the png
+    // case below is the one that proves the Stb routing itself
+    TEST(AllocRoutingTest, ARasterizedGlyphTakesNoStbBlockFromTheHeap) {
         if constexpr (!AllocTracker::kEnabled) {
             GTEST_SKIP() << kNoAllocTracker;
         }

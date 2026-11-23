@@ -18,6 +18,7 @@
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/ProfilerSettings.h>
+#include <BECore/Profiler/ProfilerToggle.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Text/FontAtlasLibrary.h>
@@ -82,6 +83,10 @@ namespace BECore {
             LOG_ERROR("Profiler: {}", started.error());
             LogEvent::Flush();
             return false;
+        }
+        if constexpr (kProfilerStatsBuild) {
+            // The web smoke waits for this line before it opens the overlay
+            LOG_INFO("Profiler: stats build (zones in the frame ring while the overlay is open; Ctrl+Shift+P)");
         }
 
         _isRunning = true;

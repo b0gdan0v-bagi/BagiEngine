@@ -1,4 +1,5 @@
 #include <BECore/Profiler/Ring/ZoneStats.h>
+#include <Common/AllocCheck.h>
 #include <Common/Require.h>
 #include <EASTL/sort.h>
 #include <gtest/gtest.h>
@@ -188,6 +189,98 @@ namespace BECore::Tests {
         }
 
     }  // namespace
+
+    namespace {
+
+        void ExpectSameRows(const Vector<ZoneStatRow>& expected, const Vector<ZoneStatRow>& actual) {
+            ASSERT_EQ(expected.size(), actual.size());
+            for (size_t i = 0; i < expected.size(); ++i) {
+                EXPECT_EQ(expected[i].site, actual[i].site);
+                EXPECT_EQ(expected[i].calls, actual[i].calls);
+                EXPECT_DOUBLE_EQ(expected[i].totalMs, actual[i].totalMs);
+                EXPECT_DOUBLE_EQ(expected[i].selfMs, actual[i].selfMs);
+                EXPECT_DOUBLE_EQ(expected[i].meanMs, actual[i].meanMs);
+                EXPECT_DOUBLE_EQ(expected[i].maxMs, actual[i].maxMs);
+                EXPECT_DOUBLE_EQ(expected[i].p95Ms, actual[i].p95Ms);
+                EXPECT_EQ(expected[i].allocCount, actual[i].allocCount);
+                EXPECT_EQ(expected[i].allocBytes, actual[i].allocBytes);
+            }
+        }
+
+    }  // namespace
+
+    TEST(ZoneStatsTest, TheInPlaceFormGivesTheRowsOfTheByValueFormWhateverTheRowsHeld) {
+        RingSnapshot twenty = MakeSnapshot(0, 1, 1000);
+        RingThread& thread = AddThread(twenty, 1);
+        uint64_t at = 0;
+        for (uint64_t duration = 20; duration >= 1; --duration) {
+            thread.zones.push_back(Zone(kChildSite, at, at + duration));
+            at += duration + 1;
+        }
+        eastl::sort(thread.zones.begin(), thread.zones.end(), [](const ZoneRecord& a, const ZoneRecord& b) { return a.beginTicks < b.beginTicks; });
+        RingSnapshot nested = MakeSnapshot(0, 1, 100);
+        AddThread(nested, 1).zones = {Zone(kParentSite, 0, 20, 0, 3, 30), Zone(kChildSite, 2, 12, 1), Zone(kOtherSite, 3, 5, 2), Zone(kChildSite, 13, 15, 1)};
+        AddThread(nested, 2).zones = {Zone(kOtherSite, 1, 2)};
+        const RingSnapshot known = MakeKnownSnapshot();
+
+        // One `rows` for every case, so what an earlier case left in it must not show
+        Vector<ZoneStatRow> rows;
+        const auto check = [&rows](const RingSnapshot& snapshot, uint64_t first, uint64_t last) {
+            ComputeZoneStats(snapshot, first, last, rows);
+            ExpectSameRows(ComputeZoneStats(snapshot, first, last), rows);
+        };
+        check(known, 7, 7);
+        check(twenty, 0, 0);
+        check(nested, 0, 0);
+        check(known, 100, 200);  // no frame of the window: no rows
+        EXPECT_TRUE(rows.empty());
+        check(nested, 0, 0);
+    }
+
+    TEST(ZoneStatsTest, ManySitesGrowTheLookupAndKeepTheOrderTheyWereMetIn) {
+        constexpr uint32_t kSites = 700;
+        Vector<ProfileSite> sites;
+        sites.reserve(kSites);
+        for (uint32_t i = 0; i < kSites; ++i) {
+            sites.push_back(ProfileSite{"Site", "Test", "ManySites.cpp", i, 0});
+        }
+        RingSnapshot snapshot = MakeSnapshot(0, 1, 100000);
+        RingThread& thread = AddThread(snapshot, 1);
+        uint64_t at = 0;
+        for (uint32_t round = 0; round < 2; ++round) {
+            for (uint32_t i = 0; i < kSites; ++i) {
+                thread.zones.push_back(Zone(sites[i], at, at + 1));
+                at += 2;
+            }
+        }
+        Vector<ZoneStatRow> rows;
+        ComputeZoneStats(snapshot, 0, 0, rows);
+        ASSERT_EQ(rows.size(), size_t{kSites});
+        for (uint32_t i = 0; i < kSites; ++i) {
+            EXPECT_EQ(rows[i].site, &sites[i]);
+            EXPECT_EQ(rows[i].calls, 2u);
+        }
+    }
+
+    TEST(ZoneStatsTest, TheInPlaceFormKeepsTheCapacityOfTheRows) {
+        RingSnapshot snapshot = MakeSnapshot(0, 1, 100);
+        AddThread(snapshot, 1).zones = {Zone(kParentSite, 0, 20, 0), Zone(kChildSite, 2, 12, 1), Zone(kOtherSite, 3, 5, 2)};
+        Vector<ZoneStatRow> rows;
+        ComputeZoneStats(snapshot, 0, 0, rows);
+        const ZoneStatRow* const storage = rows.data();
+        ComputeZoneStats(snapshot, 0, 0, rows);
+        EXPECT_EQ(rows.data(), storage);
+        EXPECT_EQ(rows.size(), 3u);
+    }
+
+    TEST(ZoneStatsTest, ARefillOfTheSameWindowAllocatesNothingOnceTheRowsAndTheArenaHaveGrown) {
+        RingSnapshot snapshot = MakeSnapshot(0, 2, 100);
+        AddThread(snapshot, 1).zones = {Zone(kParentSite, 0, 20, 0), Zone(kChildSite, 2, 12, 1), Zone(kOtherSite, 3, 5, 2), Zone(kChildSite, 120, 125, 0)};
+        Vector<ZoneStatRow> rows;
+        ComputeZoneStats(snapshot, 0, 1, rows);
+        ExpectNoAllocations([&] { ComputeZoneStats(snapshot, 0, 1, rows); });
+        EXPECT_EQ(rows.size(), 3u);
+    }
 
     TEST(ZoneStatsTest, EveryColumnSortsBothWays) {
         for (const ZoneStatColumn column :

@@ -17,6 +17,17 @@ namespace BECore {
      */
     [[nodiscard]] String WriteFrozenTraceJson(const Vector<FrozenFrame>& frames);
 
+    /// What differs between the traces that share one writer: the frozen frames and the ring window (RingTraceExport.h)
+    struct FramesTraceFormat {
+        StringView markName;           // the instant event at each frame's begin
+        StringView countKey;           // the `otherData` member that holds the number of frames
+        uint64_t extraDropped = 0;     // zones the caller left out before the frames were cut; added to `dropped`
+        StringView extraMembers = "";  // more `otherData` members, each with its leading comma
+    };
+
+    /// The writer behind WriteFrozenTraceJson and WriteRingTraceJson: one place writes the zones, so both files keep one shape
+    [[nodiscard]] String WriteFramesTraceJson(const Vector<FrozenFrame>& frames, const FramesTraceFormat& format);
+
     /// Writes WriteFrozenTraceJson to @p path; the error names the file and the reason, as ChromeTraceBackend::WriteFile does (both call WriteTextFile)
     [[nodiscard]] std::expected<void, String> WriteFrozenTraceFile(StringView path, const Vector<FrozenFrame>& frames);
 
