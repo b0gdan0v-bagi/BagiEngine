@@ -129,7 +129,6 @@ namespace BECore {
         return step;
     }
 
-    // A DOM on purpose: `expected`, `actual` and the params of `entry` are the game's own documents, which sit between the keys of the mismatch
     Json ReplayMismatchJson(const ReplayMismatch& mismatch) {
         Json result = Json::object();
         result["index"] = mismatch.index;
