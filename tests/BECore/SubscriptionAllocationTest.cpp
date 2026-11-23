@@ -39,7 +39,6 @@ namespace BECore::Tests {
         };
 
         constexpr auto kShortTimeout = std::chrono::milliseconds(1);
-        constexpr auto kLongTimeout = std::chrono::hours(1);
     }  // namespace
 
     // The channel keeps its list across a disconnect, so a listener that came and went leaves the room the case below needs
@@ -53,7 +52,7 @@ namespace BECore::Tests {
         ExpectNoAllocations([&listener] { listener.SubscribeToBoth(); });
     }
 
-    TEST(SubscriptionAllocationTest, DISABLED_AnEventAwaiterSuspendsAndResumesWithoutAllocating) {
+    TEST(SubscriptionAllocationTest, AnEventAwaiterSuspendsAndResumesWithoutAllocating) {
         {
             EventAwaiter<AwaitedEvent> warmUp;
             warmUp.await_suspend(std::noop_coroutine());
@@ -96,37 +95,43 @@ namespace BECore::Tests {
         }
     };
 
-    TEST_F(TimedAwaiterAllocationTest, DISABLED_ATimedAwaitEndedByTheEventTakesNoHeapBlock) {
+    TEST_F(TimedAwaiterAllocationTest, ATimedAwaitEndedByTheEventGivesItsLinkBack) {
         WarmUpTheDelayedQueue();
 
         const size_t delayedBefore = Scheduler().GetDelayedTaskCount();
+        const size_t linksBefore = Detail::TimerLink::PooledPool().GetLiveCount();
         {
-            EventAwaiterWithTimeout<AwaitedEvent> awaiter{kLongTimeout};
+            EventAwaiterWithTimeout<AwaitedEvent> awaiter{kShortTimeout};
             ExpectNoAllocations([&awaiter] { awaiter.await_suspend(std::noop_coroutine()); });
             AwaitedEvent::Emit();
         }
-        // The long timeout stays queued: only the scheduled job, which holds the link, is left
-        EXPECT_EQ(Scheduler().GetDelayedTaskCount(), delayedBefore + 1);
+        // The scheduled job still holds the link until its time is due
+        RunUntilTheTimeoutsAreDue(delayedBefore);
+        EXPECT_EQ(Detail::TimerLink::PooledPool().GetLiveCount(), linksBefore);
     }
 
-    TEST_F(TimedAwaiterAllocationTest, DISABLED_ATimedAwaitEndedByTheTimeoutTakesNoHeapBlock) {
+    TEST_F(TimedAwaiterAllocationTest, ATimedAwaitEndedByTheTimeoutGivesItsLinkBack) {
         WarmUpTheDelayedQueue();
 
         const size_t delayedBefore = Scheduler().GetDelayedTaskCount();
+        const size_t linksBefore = Detail::TimerLink::PooledPool().GetLiveCount();
         EventAwaiterWithTimeout<AwaitedEvent> awaiter{kShortTimeout};
         ExpectNoAllocations([&awaiter] { awaiter.await_suspend(std::noop_coroutine()); });
         RunUntilTheTimeoutsAreDue(delayedBefore);
+        EXPECT_EQ(Detail::TimerLink::PooledPool().GetLiveCount(), linksBefore);
     }
 
-    TEST_F(TimedAwaiterAllocationTest, DISABLED_ATimedAwaitEndedByADestroyedAwaiterTakesNoHeapBlock) {
+    TEST_F(TimedAwaiterAllocationTest, ATimedAwaitEndedByADestroyedAwaiterGivesItsLinkBack) {
         WarmUpTheDelayedQueue();
 
         const size_t delayedBefore = Scheduler().GetDelayedTaskCount();
+        const size_t linksBefore = Detail::TimerLink::PooledPool().GetLiveCount();
         {
             EventAwaiterWithTimeout<AwaitedEvent> awaiter{kShortTimeout};
             ExpectNoAllocations([&awaiter] { awaiter.await_suspend(std::noop_coroutine()); });
         }
         RunUntilTheTimeoutsAreDue(delayedBefore);
+        EXPECT_EQ(Detail::TimerLink::PooledPool().GetLiveCount(), linksBefore);
     }
 
     TEST(SubscriptionAllocationTest, DISABLED_TheFirstWaiterOfATweenHandleAllocatesNothing) {
