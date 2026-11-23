@@ -67,4 +67,64 @@ namespace BECore {
         RoomWirePong() : RoomWireEnvelope(RoomMessageTypes::kPong) {}
     };
 
+    /// One seat of `lobby`: `connected` and `name` only for a human; `kind` is the lower case wire name, not the enum
+    struct RoomWireSeat {
+        BE_CLASS(RoomWireSeat)
+
+        BE_REFLECT_FIELD Optional<bool> connected;
+        BE_REFLECT_FIELD String kind;
+        BE_REFLECT_FIELD Optional<String> name;
+        BE_REFLECT_FIELD int seat = 0;
+    };
+
+    /// `join_room`: `token` when a member returns, `name` otherwise, never both
+    struct RoomWireJoinRoom : RoomWireEnvelope {
+        BE_CLASS(RoomWireJoinRoom)
+
+        BE_REFLECT_FIELD String code;
+        BE_REFLECT_FIELD Optional<String> name;
+        BE_REFLECT_FIELD Optional<String> token;
+
+        RoomWireJoinRoom() : RoomWireEnvelope(RoomMessageTypes::kJoinRoom) {}
+    };
+
+    /// `choose_seat`
+    struct RoomWireChooseSeat : RoomWireEnvelope {
+        BE_CLASS(RoomWireChooseSeat)
+
+        BE_REFLECT_FIELD int64_t seat = 0;
+
+        RoomWireChooseSeat() : RoomWireEnvelope(RoomMessageTypes::kChooseSeat) {}
+    };
+
+    /// `list_rooms`
+    struct RoomWireListRooms : RoomWireEnvelope {
+        BE_CLASS(RoomWireListRooms)
+
+        BE_REFLECT_FIELD String game;
+
+        RoomWireListRooms() : RoomWireEnvelope(RoomMessageTypes::kListRooms) {}
+    };
+
+    /// `start`
+    struct RoomWireStart : RoomWireEnvelope {
+        BE_CLASS(RoomWireStart)
+
+        RoomWireStart() : RoomWireEnvelope(RoomMessageTypes::kStart) {}
+    };
+
+    /// `leave`
+    struct RoomWireLeave : RoomWireEnvelope {
+        BE_CLASS(RoomWireLeave)
+
+        RoomWireLeave() : RoomWireEnvelope(RoomMessageTypes::kLeave) {}
+    };
+
+    /// `ping`
+    struct RoomWirePing : RoomWireEnvelope {
+        BE_CLASS(RoomWirePing)
+
+        RoomWirePing() : RoomWireEnvelope(RoomMessageTypes::kPing) {}
+    };
+
 }  // namespace BECore
