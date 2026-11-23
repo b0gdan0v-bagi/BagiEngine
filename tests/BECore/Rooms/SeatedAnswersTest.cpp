@@ -7,6 +7,7 @@
 #include <Common/ControlTestSupport.h>
 #include <Common/ScratchScopeFixture.h>
 #include <Generated/SeatedAnswersTest.gen.hpp>
+#include <RoomServer/DemoCardGame.h>
 #include <algorithm>
 #include <gtest/gtest.h>
 
@@ -97,6 +98,29 @@ namespace BECore::Tests {
         ASSERT_EQ(fields->size(), 3U);
         EXPECT_EQ(GetJsonString((*fields)[0], "name"), String("name"));
         EXPECT_EQ(GetJsonString((*fields)[2], "name"), String("turn"));
+    }
+
+    TEST_F(SeatedAnswersSchemaTest, TheDemoGamesAnswersAreListedUnderTheBases) {
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        const auto lists = [&registry](StringView base, StringView derived) {
+            const Json described = ToJson(DescribeTypeSchema(Require(registry, base), registry));
+            const Json* names = FindJsonMember(described, "derived");
+            return names != nullptr && names->is_array() && std::find(names->begin(), names->end(), MakeJsonString(derived)) != names->end();
+        };
+        EXPECT_TRUE(lists("SeatedView", "DemoSeatView"));
+        EXPECT_TRUE(lists("SeatedAction", "DemoSeatAction"));
+        EXPECT_TRUE(lists("SeatedOutcome", "DemoSeatOutcome"));
+        EXPECT_TRUE(lists("DemoSeatView", "LeakyDemoSeatView"));
+
+        const Json view = ToJson(DescribeTypeSchema(Require(registry, "DemoSeatView"), registry));
+        const Json* fields = FindJsonMember(view, "fields");
+        ASSERT_TRUE(fields != nullptr && fields->is_array());
+        Vector<String> names;
+        for (const Json& field : *fields) {
+            names.push_back(GetJsonString(field, "name").value_or(String()));
+        }
+        const Vector<String> expected = {"cardCounts", "finished", "hand", "seat", "table", "turn"};
+        EXPECT_EQ(names, expected);
     }
 
 }  // namespace BECore::Tests
