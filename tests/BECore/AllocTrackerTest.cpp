@@ -556,6 +556,42 @@ namespace BECore::Tests {
         EXPECT_EQ(NameRow("StickyZone", nullptr).count, 1u);
     }
 
+    TEST(AllocTrackerTest, APlainOperatorNewStaysUnnamedAndEveryLibraryHasItsOwnName) {
+        EXPECT_EQ(AllocTracker::GetSourceName(AllocSource::GlobalNew), nullptr);
+        for (const AllocSource source : {AllocSource::Pugixml, AllocSource::ImGui, AllocSource::SDL, AllocSource::Stb, AllocSource::DrLibs}) {
+            ASSERT_NE(AllocTracker::GetSourceName(source), nullptr);
+            for (const AllocSource other : {AllocSource::Pugixml, AllocSource::ImGui, AllocSource::SDL, AllocSource::Stb, AllocSource::DrLibs}) {
+                EXPECT_EQ(source == other, AllocTracker::GetSourceName(source) == AllocTracker::GetSourceName(other));
+            }
+        }
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("PlainNewZone");
+            ::operator delete(::operator new(kBlock));
+        }
+        EXPECT_EQ(NameRow("PlainNewZone", nullptr).count, 1u);
+    }
+
+    TEST(AllocTrackerTest, AnEastlNameWinsOverTheLibraryNameAndBelongsToOneAllocation) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("RoutedNameZone");
+            Vector<int> values;
+            values.get_allocator().set_name("NamedBeforeRouted");
+            values.reserve(kInts);
+            void* routed = AllocRouting::Malloc(AllocSource::Stb, kBlock);
+            AllocRouting::Free(AllocSource::Stb, routed);
+        }
+        EXPECT_EQ(NameRow("RoutedNameZone", "NamedBeforeRouted").count, 1u);
+        EXPECT_EQ(NameRow("RoutedNameZone", AllocTracker::GetSourceName(AllocSource::Stb)).count, 1u);
+
+        // A name set for an allocation that a library makes instead is spent on that one
+        AllocTracker::SetNextName("NamedForRouted");
+        void* routed = AllocRouting::Malloc(AllocSource::SDL, kBlock);
+        AllocRouting::Free(AllocSource::SDL, routed);
+        EXPECT_GE(NameRow(nullptr, "NamedForRouted").count, 1u);
+    }
+
     TEST(AllocTrackerTest, AnotherThreadsAllocationIsNotChargedToThisThreadsZone) {
         AllocTracker::ResetZoneStats();
         {

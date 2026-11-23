@@ -90,6 +90,9 @@ namespace BECore {
 
         [[nodiscard]] static AllocTotals GetTotals();
         [[nodiscard]] static AllocSourceTotals GetSourceTotals(AllocSource source);
+        /// The allocation name a block of @p source gets in GetNameStats() when EASTL named none (a literal: "pugixml", "SDL", ...);
+        /// nullptr for GlobalNew, whose unnamed blocks stay under the null name
+        [[nodiscard]] static const char* GetSourceName(AllocSource source);
         [[nodiscard]] static ThreadCounters GetThreadCounters();
         [[nodiscard]] static AllocTagTotals GetTagTotals(MemTag tag);
         /// Every tag, in the order of the enum; no allocation

@@ -55,7 +55,7 @@ In `macos-profile`, with the game running (`--headless --control --manual-clock`
 _cells.get_allocator().set_name("Board cells");  // a literal: the table keys the name by its address
 ```
 
-The name has to be a string literal (or live as long as the program). An allocation with an empty `name` came through a plain `operator new`, not an EASTL container. A trace written during the run (`--trace`) carries the same table in `otherData.allocNames`.
+The name has to be a string literal (or live as long as the program). An allocation with an empty `name` came through a plain `operator new`, not an EASTL container; a block of a vendored library that EASTL did not name carries the library's own name (`pugixml`, `ImGui`, `SDL`, `stb`, `dr_libs`). A trace written during the run (`--trace`) carries the same table in `otherData.allocNames`.
 
 ## Tracy
 
