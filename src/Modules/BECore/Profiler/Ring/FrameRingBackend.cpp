@@ -1,6 +1,7 @@
 #include "FrameRingBackend.h"
 
 #include <BECore/Profiler/Profiler.h>
+#include <BECore/Profiler/Ring/RingPause.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 #include <cstdlib>
@@ -135,6 +136,9 @@ namespace BECore {
     }
 
     uint64_t FrameRingBackend::BeginZone(const ProfileSite& /*site*/) {
+        if (ScopedRingPause::IsActive()) {
+            return 0;
+        }
         ThreadBuffer* buffer = GetThreadBuffer();
         if (buffer == nullptr) {
             _dropped.fetch_add(1, std::memory_order_relaxed);
@@ -155,6 +159,9 @@ namespace BECore {
     }
 
     void FrameRingBackend::EndZone(uint64_t /*token*/, const ProfileSite& site, const ZoneAllocs& allocs) {
+        if (ScopedRingPause::IsActive()) {
+            return;  // the zone began under the pause (RingPause.h), so nothing of it is open
+        }
         ThreadBuffer* buffer = GetThreadBuffer();
         if (buffer == nullptr) {
             return;
@@ -179,6 +186,9 @@ namespace BECore {
     }
 
     void FrameRingBackend::RecordZone(const ProfileSite& site, uint64_t beginTicks, uint64_t endTicks) {
+        if (ScopedRingPause::IsActive()) {
+            return;
+        }
         ThreadBuffer* buffer = GetThreadBuffer();
         if (buffer == nullptr) {
             _dropped.fetch_add(1, std::memory_order_relaxed);
