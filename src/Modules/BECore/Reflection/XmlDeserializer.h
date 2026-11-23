@@ -1,9 +1,9 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Memory/LinearArena.h>
 #include <BECore/Reflection/IDeserializer.h>
-#include <filesystem>
 #include <pugixml.hpp>
 
 namespace BECore {
@@ -44,7 +44,7 @@ namespace BECore {
          * Refused with an error, before the file is read, when the path is not a regular file or the file is over
          * ReaderLimits::kMaxXmlDocumentBytes. Any load drops the earlier document: after a refusal nothing is readable.
          */
-        bool LoadFromFile(const std::filesystem::path& path);
+        bool LoadFromFile(const Path& path);
 
         /**
          * @brief Load XML from a virtual path (CoreManager::GetFileSystem()), as LoadFromFile.

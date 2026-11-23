@@ -1,5 +1,4 @@
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Memory/ScratchArena.h>
 #include <BECore/Reflection/BinaryContent.h>
@@ -320,15 +319,14 @@ namespace BECore {
         return LoadFromBuffer(data.data(), data.size());
     }
 
-    std::expected<void, StringView> ReadBinaryDocumentFile(const std::filesystem::path& path, Vector<uint8_t>& out) {
-        const String utf8Path = PathToUtf8(path);
-        auto bytes = ReadFileBytes(utf8Path, ReaderLimits::kMaxBinaryStreamBytes);
+    std::expected<void, StringView> ReadBinaryDocumentFile(const Path& path, Vector<uint8_t>& out) {
+        auto bytes = ReadFileBytes(path, ReaderLimits::kMaxBinaryStreamBytes);
         if (bytes) {
             out = std::move(*bytes);
             return {};
         }
         // The layer's error is a sentence for the log; the reader keeps its fixed messages, which say which limit or kind of path it was
-        const Optional<FileInfo> info = GetFileInfo(utf8Path);
+        const Optional<FileInfo> info = GetFileInfo(path);
         if (!info) {
             return std::unexpected(StringView("Failed to open binary file"));
         }
@@ -341,7 +339,7 @@ namespace BECore {
         return std::unexpected(StringView("Failed to read binary file"));
     }
 
-    bool BinaryDeserializer::LoadFromFile(const std::filesystem::path& path) {
+    bool BinaryDeserializer::LoadFromFile(const Path& path) {
         ResetState();
 
         const std::expected<void, StringView> read = ReadBinaryDocumentFile(path, _owned);

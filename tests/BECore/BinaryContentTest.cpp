@@ -378,6 +378,17 @@ namespace BECore::Tests {
         EXPECT_FALSE(Load(cooked).has_value());
     }
 
+    TEST(BinaryContentTest, ACookedFileWithANonAsciiNameIsRead) {
+        const Cooked cooked = Cook(Fresh(2));
+        TestTempFolder folder("BinaryContentTest");
+        const Path file = Path(folder.PathOf("")) / "caf\xC3\xA9" / "Cook\xC3\xA9.bin";
+        WriteFile(AsPath(String(file.View())), StringView(reinterpret_cast<const char*>(cooked.bytes.data()), cooked.bytes.size()));
+
+        const auto loaded = LoadContentFile(file, Verify(true));
+        ASSERT_TRUE(loaded.has_value()) << loaded.error().c_str();
+        EXPECT_EQ(loaded->version, BF::PooledVersion);
+    }
+
     TEST(BinaryContentTest, APathThatIsNoRegularFileOrIsMissingIsRefused) {
         TestTempFolder folder("BinaryContentTest");
         EXPECT_FALSE(LoadContentFile(AsPath(folder.PathOf("")), Verify(true)).has_value());

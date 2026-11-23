@@ -137,6 +137,21 @@ namespace BECore::Tests {
         ExpectDocument(fromBuffer, 50);
     }
 
+    TEST(BinaryDeserializerTest, AFileWithANonAsciiNameIsSavedAndReadBack) {
+        TestTempFolder folder("BinaryDeserializerTest");
+        const Path directory = Path(folder.PathOf("")) / "caf\xC3\xA9";
+        ASSERT_TRUE(CreateDirectories(directory).has_value());
+        const Path file = directory / "Doc\xC3\xA9.bin";
+
+        BinarySerializer document;
+        BuildDocument(document, 4);
+        ASSERT_TRUE(document.SaveToFile(file));
+
+        BinaryDeserializer fromFile;
+        ASSERT_TRUE(fromFile.LoadFromFile(file));
+        ExpectDocument(fromFile, 4);
+    }
+
     TEST(BinaryDeserializerTest, ARefusedLoadLeavesNothingReadable) {
         const Vector<uint8_t> good = MakeStream(3);
         Vector<uint8_t> badMagic = good;
