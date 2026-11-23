@@ -69,6 +69,12 @@ namespace BECore::Tests {
             RegisterImage secondField{};
         };
 
+        /// The operand of register @p k: a loaded register past the last operand slot is no operand
+        const Optional<Operand>& OperandAt(const Case& made, size_t k) {
+            static const Optional<Operand> kNone;
+            return k < made.operands.size() ? made.operands[k] : kNone;
+        }
+
         uint32_t FieldOffset() {
             static const uint32_t offset = [] {
                 const ProgramListScratch scratch{};
@@ -369,7 +375,7 @@ namespace BECore::Tests {
             }
             for (size_t k = 0; k < kLoadedRegisters; ++k) {
                 RegisterImage image = setup.regs[k];
-                if (made.operands[k].has_value() && made.operands[k]->element) {
+                if (OperandAt(made, k).has_value() && OperandAt(made, k)->element) {
                     const ElementImage element{elements[k].bytes.data(), 0, 0};
                     image = RegisterImage{};
                     std::memcpy(image.bytes.data(), &element, sizeof(element));
@@ -407,7 +413,7 @@ namespace BECore::Tests {
         Setup MakeSetup(const Case& made, Rng& rng) {
             Setup setup;
             for (size_t k = 0; k < kLoadedRegisters; ++k) {
-                setup.regs[k] = made.operands[k].has_value() ? MakeImage(made.operands[k]->type, rng) : Filled(kPoison);
+                setup.regs[k] = OperandAt(made, k).has_value() ? MakeImage(OperandAt(made, k)->type, rng) : Filled(kPoison);
             }
             if (made.field.has_value()) {
                 setup.field = MakeImage(*made.field, rng);
@@ -419,17 +425,17 @@ namespace BECore::Tests {
         /// What register @p k holds instead: a register the case does not use gets other garbage; an operand a fresh value, or the value of another operand of its kind (so that `Eq` can
         /// turn true) when @p copy
         RegisterImage Replacement(const Case& made, size_t k, const Setup& base, Rng& rng, bool copy) {
-            if (!made.operands[k].has_value()) {
+            if (!OperandAt(made, k).has_value()) {
                 return Filled(kPoisonOther);
             }
             if (copy) {
                 for (size_t j = 0; j < kLoadedRegisters; ++j) {
-                    if (j != k && made.operands[j].has_value() && made.operands[j]->type == made.operands[k]->type && made.operands[j]->element == made.operands[k]->element) {
+                    if (j != k && OperandAt(made, j).has_value() && OperandAt(made, j)->type == OperandAt(made, k)->type && OperandAt(made, j)->element == OperandAt(made, k)->element) {
                         return base.regs[j];
                     }
                 }
             }
-            return MakeImage(made.operands[k]->type, rng);
+            return MakeImage(OperandAt(made, k)->type, rng);
         }
 
         RegisterMask OperandMask(const Case& made) {
