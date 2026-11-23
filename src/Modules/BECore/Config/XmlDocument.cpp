@@ -68,28 +68,54 @@ namespace BECore {
             return merged;
         }
 
+        /// The size of the regular file at @p path, nothing when it is not one, cannot be measured or is bigger than @p maxBytes
+        Optional<size_t> RegularFileSize(const std::filesystem::path& path, size_t maxBytes) {
+            std::error_code error;
+            if (!std::filesystem::is_regular_file(path, error)) {
+                return std::nullopt;
+            }
+            const uintmax_t size = std::filesystem::file_size(path, error);
+            if (error || size > maxBytes) {
+                return std::nullopt;
+            }
+            return static_cast<size_t>(size);
+        }
+
+        /// Reads exactly @p size bytes of the file into @p destination; false when it cannot be opened or ends early
+        bool ReadExactly(const std::filesystem::path& path, char* destination, size_t size) {
+            std::ifstream in(path, std::ios::in | std::ios::binary);  //-NoStd: the document's own file, read byte for byte
+            if (!in.is_open()) {
+                return false;
+            }
+            in.read(destination, static_cast<std::streamsize>(size));
+            return in.gcount() == static_cast<std::streamsize>(size);
+        }
+
     }  // namespace
 
     Optional<String> XmlDocument::ReadFileBytes(const std::filesystem::path& path) {
-        std::error_code error;
-        if (!std::filesystem::is_regular_file(path, error)) {
-            return std::nullopt;
-        }
-        const uintmax_t size = std::filesystem::file_size(path, error);
-        if (error || size > ReaderLimits::kMaxXmlDocumentBytes) {
-            return std::nullopt;
-        }
-        std::ifstream in(path, std::ios::in | std::ios::binary);  //-NoStd: the document's own file, read byte for byte
-        if (!in.is_open()) {
+        const Optional<size_t> size = RegularFileSize(path, ReaderLimits::kMaxXmlDocumentBytes);
+        if (!size) {
             return std::nullopt;
         }
         String bytes;
-        bytes.resize(static_cast<size_t>(size));
-        in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-        if (in.gcount() != static_cast<std::streamsize>(bytes.size())) {
+        bytes.resize(*size);
+        if (!ReadExactly(path, bytes.data(), bytes.size())) {
             return std::nullopt;
         }
         return bytes;
+    }
+
+    Optional<StringView> XmlDocument::ReadFileInto(const std::filesystem::path& path, LinearArena& arena, size_t maxBytes) {
+        const Optional<size_t> size = RegularFileSize(path, std::min(maxBytes, ReaderLimits::kMaxXmlDocumentBytes));
+        if (!size) {
+            return std::nullopt;
+        }
+        char* bytes = arena.Allocate<char>(*size);
+        if (!ReadExactly(path, bytes, *size)) {
+            return std::nullopt;
+        }
+        return StringView{bytes, *size};
     }
 
     bool XmlDocument::LoadFromFile(const std::filesystem::path& filepath) {

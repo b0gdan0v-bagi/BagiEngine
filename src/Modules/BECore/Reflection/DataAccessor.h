@@ -219,12 +219,13 @@ namespace BECore {
                 } else if constexpr (::BECore::Detail::IsIntrusivePtr<T>) {
                     using Pointee = typename ::BECore::Detail::IntrusivePtrPointeeType<T>::type;
                     if (!item) {
-                        String typeStr;
-                        if (d.ReadAttribute("type", typeStr)) {
-                            if (!FactoryTypeAllowed<Pointee>(d, StringView(typeStr))) {
+                        // A view into the reader, used before the element is read: no copy of a long type name per element
+                        StringView typeStr;
+                        if (d.ReadAttributeView("type", typeStr)) {
+                            if (!FactoryTypeAllowed<Pointee>(d, typeStr)) {
                                 return;
                             }
-                            item = AbstractFactory<Pointee>::GetInstance().Create(StringView(typeStr));
+                            item = AbstractFactory<Pointee>::GetInstance().Create(typeStr);
                             if (!item && HasFactory<Pointee>)
                                 d.ReportError("type", eastl::string_view(Format("Unknown factory type: '{}'", typeStr).c_str()));
                         }

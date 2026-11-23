@@ -322,6 +322,64 @@ namespace BECore::Tests {
         EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<String>{"Known"}));
     }
 
+    TEST_F(SceneNodeFilesTest, AFileIsLoadedOncePerExpansionHoweverManyReferencesNameIt) {
+        Vector<String> asked;
+        const NodeFileLoader loader = [&asked](StringView ref, pugi::xml_document& out, String&) {
+            asked.emplace_back(ref);
+            return static_cast<bool>(out.load_string(kHudNode));
+        };
+        pugi::xml_document doc = Parse(SceneConfigText(R"(<node ref="nodes/Hud"/><node ref="nodes/Hud" name="Two"/><node ref="nodes/Hud" name="Three" layer="4"/>)").c_str());
+
+        const auto result = ExpandNodeReferences(doc.document_element(), loader);
+
+        EXPECT_TRUE(result.Ok());
+        EXPECT_EQ(result.expanded, 3u);
+        EXPECT_EQ(asked, (Vector<String>{"nodes/Hud"}));
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<String>{"Hud", "Two", "Three"}));
+    }
+
+    TEST_F(SceneNodeFilesTest, AFileThatFailsToLoadIsReportedByEachReferenceAndAskedOnce) {
+        int asked = 0;
+        const NodeFileLoader loader = [&asked](StringView, pugi::xml_document&, String& error) {
+            ++asked;
+            error = "no such luck";
+            return false;
+        };
+        pugi::xml_document doc = Parse(SceneConfigText(R"(<node ref="gone"/><node ref="gone"/><node name="Keep"/>)").c_str());
+
+        const auto result = ExpandNodeReferences(doc.document_element(), loader);
+
+        EXPECT_EQ(asked, 1);
+        EXPECT_EQ(result.expanded, 0u);
+        ASSERT_EQ(result.errors.size(), 2u);
+        for (const String& error : result.errors) {
+            EXPECT_TRUE(Mentions(error, "'Main'")) << error.c_str();
+            EXPECT_TRUE(Mentions(error, "'gone'")) << error.c_str();
+            EXPECT_TRUE(Mentions(error, "no such luck")) << error.c_str();
+        }
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<String>{"Keep"}));
+    }
+
+    TEST_F(SceneNodeFilesTest, OverridesOfOneReferenceDoNotReachTheNextReferenceOfTheSameFile) {
+        const NodeFileLoader loader = [](StringView, pugi::xml_document& out, String&) { return static_cast<bool>(out.load_string(kHudNode)); };
+        pugi::xml_document doc = Parse(SceneConfigText(R"(<node ref="nodes/Hud" name="One"><components>
+  <component type="TransformComponent" x="100"/></components></node><node ref="nodes/Hud"><components>
+  <component type="Nothing"/></components></node><node ref="nodes/Hud"/>)")
+                                           .c_str());
+
+        const auto result = ExpandNodeReferences(doc.document_element(), loader);
+
+        // The invalid override of the second drops that reference only; the third is the file as it is
+        EXPECT_EQ(result.expanded, 2u);
+        ASSERT_EQ(result.errors.size(), 1u);
+        const pugi::xml_node first = FirstNode(doc);
+        const pugi::xml_node third = first.next_sibling("node");
+        EXPECT_STREQ(first.attribute("name").as_string(), "One");
+        EXPECT_STREQ(ComponentOf(first, "TransformComponent").attribute("x").as_string(), "100");
+        EXPECT_STREQ(third.attribute("name").as_string(), "Hud");
+        EXPECT_STREQ(ComponentOf(third, "TransformComponent").attribute("x").as_string(), "1");
+    }
+
     TEST_F(SceneNodeFilesTest, DirectoryLoaderResolvesASubFolder) {
         WriteFile(_dir / "deep" / "er" / "Leaf.xml", R"(<node name="Leaf"/>)");
         const NodeFileLoader loader = MakeDirectoryNodeLoader(_dir);

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Memory/ArenaAllocator.h>
+#include <BECore/Memory/LinearArena.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <filesystem>
 #include <pugixml.hpp>
@@ -90,6 +92,9 @@ namespace BECore {
         bool ReadAttribute(StringView name, String& outValue) override;
         bool ReadAttribute(StringView name, PoolString& outValue) override;
 
+        /// The text of the attribute in the DOM, no copy: valid until the next load of this reader
+        bool ReadAttributeView(StringView name, StringView& outView) override;
+
         bool BeginObject(StringView name) override;
         void EndObject() override;
 
@@ -157,14 +162,28 @@ namespace BECore {
         template <typename T>
         bool ApplyStrictText(StringView name, StringView text, T& outValue);
 
-        /// What one open node was asked for; in lockstep with _nodeStack while the mode is not Off
+        /// What one open node was asked for; in lockstep with _nodeStack while the mode is not Off. The lists and the text of the names sit in
+        /// the deserializer's arena from the mark of the scope on, and CloseScope gives them back.
         struct Scope {
+            Scope(pugi::xml_node openNode, LinearArena& arena, const LinearArena::Mark& openMark)
+                : node(openNode), mark(openMark), askedAttributes(ArenaAllocator(arena)), askedElements(ArenaAllocator(arena)) {}
+
             pugi::xml_node node;
-            Vector<String> askedAttributes;
-            Vector<String> askedElements;
+            LinearArena::Mark mark;
+            ArenaVector<StringView> askedAttributes;
+            ArenaVector<StringView> askedElements;
             bool isArray = false;
             bool checked = false;
         };
+
+        /// Drops every scope and everything the arena holds; no scope is alive afterwards, so no mark is used again
+        void DropScopes();
+
+        /// The arena of the scopes, made by the first scope: a deserializer that never runs with diagnostics holds none
+        LinearArena& GetScopeArena() const;
+
+        /// Adds @p name to @p names unless it is there; the text is copied into the arena, because a caller's name may be a temporary
+        void AddAskedName(ArenaVector<StringView>& names, StringView name) const;
 
         /// Notes that a key was asked of the current node, as an attribute and / or as a child element (const: HasKey asks too)
         void NoteAsked(StringView name, bool asAttribute, bool asElement) const;
@@ -188,11 +207,14 @@ namespace BECore {
         pugi::xml_document _document;
         Vector<pugi::xml_node> _nodeStack;
         mutable Vector<Scope> _scopes;
+        // Held by pointer: a LinearArena cannot move, a moved deserializer keeps its arena, and the views of the scopes point into it
+        mutable UniquePtr<LinearArena> _scopeArena;
 
         struct ArrayContext {
             pugi::xml_node parentNode;
-            Vector<pugi::xml_node> elements;
-            size_t currentIndex = 0;
+            pugi::xml_node cursor;  // the next element to hand out; empty after the last
+            size_t index = 0;
+            size_t count = 0;
         };
         Vector<ArrayContext> _arrayStack;
 

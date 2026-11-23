@@ -131,6 +131,9 @@ namespace BECore {
      * not a node file, an invalid override) is removed and recorded in the result, never half applied; the other nodes of
      * the scene are kept in order. Elements without `ref` and documents without references are left as they are.
      *
+     * @p loader is asked once per distinct reference of the call, its failure too: every reference to a file that did not
+     * load gets its own error with the same reason.
+     *
      * @param configRoot Document element of SceneConfig (`<SceneManager>`)
      * @param markSource Every expanded node gets kNodeSourceAttribute (what LoadSceneManager wants); tools that read the
      *        file leave it false, so the document they see is the plain inline one

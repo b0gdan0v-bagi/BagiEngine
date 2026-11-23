@@ -4,6 +4,7 @@
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/SchemaHash.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -19,7 +20,7 @@ namespace BECore {
     namespace {
 
         /// The document of @p text, or nothing when it does not parse
-        IntrusivePtr<XmlDocument> ParseConfigText(const String& text) {
+        IntrusivePtr<XmlDocument> ParseConfigText(StringView text) {
             auto doc = BECore::New<XmlDocument>();
             if (!doc->LoadFromString(text)) {
                 return {};
@@ -27,14 +28,40 @@ namespace BECore {
             return doc;
         }
 
-        uint64_t HashFileText(const String& text) {
-            return StringUtils::GetHash(StringView(text));
+        uint64_t HashFileText(StringView text) {
+            return StringUtils::GetHash(text);
+        }
+
+        /// A config file bigger than this is read into a heap `String`: the chunks of a scratch arena stay allocated after the
+        /// scope ends, and a pool thread must not keep one the size of the biggest file it ever loaded
+        constexpr size_t kMaxScratchConfigBytes = 256 * 1024;
+
+        /// Calls @p use with the text of the file at @p path and returns true, or returns false when the file cannot be read.
+        /// The text is valid inside @p use only. No `co_await` may sit between this call and the end of @p use: a scratch scope
+        /// ends on the thread that made it, and a coroutine may resume on another
+        template <typename Use>
+        bool WithConfigText(const std::filesystem::path& path, Use&& use) {
+            {
+                ScratchScope scratch;
+                if (const Optional<StringView> text = XmlDocument::ReadFileInto(path, scratch.GetArena(), kMaxScratchConfigBytes)) {
+                    use(*text);
+                    return true;
+                }
+            }
+            // A big file, or one that cannot be read (then this fails the same way, at the first check)
+            const Optional<String> text = XmlDocument::ReadFileBytes(path);
+            if (!text) {
+                return false;
+            }
+            use(StringView{*text});
+            return true;
         }
 
         /// The hash of the file as it is now; 0 when it cannot be read, so the next change of it reloads
         uint64_t HashFileOnDisk(const std::filesystem::path& path) {
-            const Optional<String> text = XmlDocument::ReadFileBytes(path);
-            return text ? HashFileText(*text) : 0;
+            uint64_t hash = 0;
+            WithConfigText(path, [&hash](StringView text) { hash = HashFileText(text); });
+            return hash;
         }
 
         constexpr StringView kXmlExtension = ".xml";
@@ -322,8 +349,18 @@ namespace BECore {
             knownHash = it->second.fileHash;
         }
 
-        const Optional<String> text = XmlDocument::ReadFileBytes(filePath);
-        if (!text) {
+        // One read: the hash tells a rewrite with the same text from a change, the parse follows only for a change
+        uint64_t hash = 0;
+        bool unchanged = false;
+        IntrusivePtr<XmlDocument> newDoc;
+        const bool read = WithConfigText(filePath, [&](StringView text) {
+            hash = HashFileText(text);
+            unchanged = skipIfSame && hash == knownHash;
+            if (!unchanged) {
+                newDoc = ParseConfigText(text);
+            }
+        });
+        if (!read) {
             if (failure != nullptr) {
                 *failure = Format("the file is gone or unreadable, the loaded '{}' is kept", name.ToStringView());
             }
@@ -334,12 +371,10 @@ namespace BECore {
             }
             return false;
         }
-        const uint64_t hash = HashFileText(*text);
-        if (skipIfSame && hash == knownHash) {
+        if (unchanged) {
             return false;
         }
 
-        IntrusivePtr<XmlDocument> newDoc = ParseConfigText(*text);
         if (!newDoc) {
             if (failure != nullptr) {
                 *failure = Format("the file does not parse, the old '{}' is kept", name.ToStringView());
@@ -488,8 +523,13 @@ namespace BECore {
             co_return;
         }
 
-        const Optional<String> text = XmlDocument::ReadFileBytes(path);
-        IntrusivePtr<XmlDocument> doc = text ? ParseConfigText(*text) : IntrusivePtr<XmlDocument>{};
+        // The scratch scope of WithConfigText is closed before any `co_await`: the read and the parse are plain calls
+        IntrusivePtr<XmlDocument> doc;
+        uint64_t hash = 0;
+        WithConfigText(path, [&](StringView text) {
+            doc = ParseConfigText(text);
+            hash = HashFileText(text);
+        });
         if (!doc) {
             LOG_ERROR(Format("[ConfigManager] Failed to load config: {} from {}", name.ToStringView(), path.string()).c_str());
             co_return;
@@ -502,7 +542,7 @@ namespace BECore {
                 LOG_WARNING(Format("[ConfigManager] Config {} was loaded by another thread, discarding duplicate", name.ToStringView()).c_str());
                 co_return;
             }
-            _configs[name] = ConfigEntry{doc, path, HashFileText(*text), {}, false};
+            _configs[name] = ConfigEntry{doc, path, hash, {}, false};
         }
 
         LOG_DEBUG(Format("[ConfigManager] Config loaded: {}", name.ToStringView()).c_str());

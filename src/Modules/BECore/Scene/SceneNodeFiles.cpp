@@ -231,11 +231,66 @@ namespace BECore {
             return baseDirectory / (std::filesystem::path(ToStd(ref)) += kNodeFileExtension.data());
         }
 
+        /// What one call of ExpandNodeReferences learned of one node file: the parsed document or why it failed. The
+        /// document is read only (an instance copies its node), so references to one file share it
+        struct CachedNodeFile {
+            pugi::xml_document document;
+            String error;  // empty when the file loaded
+        };
+
+        using NodeFileCache = HashMap<String, CachedNodeFile>;
+
+        /// The file of @p ref as @p loader gives it, asked once per cache; the failure reason is kept as well
+        const CachedNodeFile& LoadCached(NodeFileCache& cache, StringView ref, NodeFileLoaderRef loader) {
+            if (const auto found = cache.find(ref); found != cache.end()) {
+                return found->second;
+            }
+            CachedNodeFile& entry = cache[String{ref}];
+            if (!loader(ref, entry.document, entry.error)) {
+                if (entry.error.empty()) {
+                    entry.error = "the node file cannot be loaded";
+                }
+            } else {
+                entry.error.clear();
+            }
+            return entry;
+        }
+
+        /// The one implementation of a reference: puts a copy of the cached file's `<node>` into @p parent (before @p before,
+        /// at the end when that is empty) and applies the overrides to the copy. On false nothing of it is left in @p parent.
+        /// The copy goes straight into the document that keeps it: a `xml_document` of its own per reference would cost a page
+        bool InsertInstance(pugi::xml_node reference, NodeFileCache& cache, NodeFileLoaderRef loader, bool markSource, pugi::xml_node parent, pugi::xml_node before, String& error) {
+            const char* ref = reference.attribute(kNodeRefAttribute.data()).as_string();
+            if (!IsValidNodeRef(ref)) {
+                error = "not a valid reference (segments of letters, digits, '_' and '-' separated by '/')";
+                return false;
+            }
+
+            const CachedNodeFile& file = LoadCached(cache, ref, loader);
+            if (!file.error.empty()) {
+                error = file.error;
+                return false;
+            }
+
+            const pugi::xml_node source = file.document.document_element();
+            pugi::xml_node node = before ? parent.insert_copy_before(source, before) : parent.append_copy(source);
+            // The version is a fact about the file, not about the node in the live scene
+            node.remove_attribute(kContentVersionAttribute.data());
+            if (!ApplyNodeOverrides(node, reference, error)) {
+                parent.remove_child(node);
+                return false;
+            }
+            if (markSource) {
+                SetAttribute(node, kNodeSourceAttribute.data(), ref);
+            }
+            return true;
+        }
+
         void Fail(NodeExpansion& result, StringView scene, StringView ref, StringView reason) {
             result.errors.push_back(Format("scene '{}': node reference '{}': {}", scene, ref, reason));
         }
 
-        void ExpandScene(pugi::xml_node sceneEl, NodeFileLoaderRef loader, bool markSource, NodeExpansion& result) {
+        void ExpandScene(pugi::xml_node sceneEl, NodeFileCache& cache, NodeFileLoaderRef loader, bool markSource, NodeExpansion& result) {
             const StringView sceneName = sceneEl.attribute(kSceneNameAttribute.data()).as_string();
 
             for (pugi::xml_node nodesEl = sceneEl.child(kNodesElement.data()); nodesEl; nodesEl = nodesEl.next_sibling(kNodesElement.data())) {
@@ -248,10 +303,8 @@ namespace BECore {
                         continue;
                     }
 
-                    pugi::xml_document expanded;
                     String error;
-                    if (ExpandNodeReference(el, loader, markSource, expanded, error)) {
-                        nodesEl.insert_copy_before(expanded.document_element(), el);
+                    if (InsertInstance(el, cache, loader, markSource, nodesEl, el, error)) {
                         ++result.expanded;
                     } else {
                         Fail(result, sceneName, refAttr.as_string(), error);
@@ -302,37 +355,16 @@ namespace BECore {
 
     bool ExpandNodeReference(pugi::xml_node reference, NodeFileLoaderRef loader, bool markSource, pugi::xml_document& out, String& error) {
         out.reset();
-        const String ref = reference.attribute(kNodeRefAttribute.data()).as_string();
-        if (!IsValidNodeRef(ref)) {
-            error = "not a valid reference (segments of letters, digits, '_' and '-' separated by '/')";
-            return false;
-        }
-
-        pugi::xml_document file;
-        if (!loader(ref, file, error)) {
-            if (error.empty()) {
-                error = "the node file cannot be loaded";
-            }
-            return false;
-        }
-        if (!ApplyNodeOverrides(file.document_element(), reference, error)) {
-            return false;
-        }
-
-        // The version is a fact about the file, not about the node in the live scene
-        pugi::xml_node node = out.append_copy(file.document_element());
-        node.remove_attribute(kContentVersionAttribute.data());
-        if (markSource) {
-            SetAttribute(node, kNodeSourceAttribute.data(), ref.c_str());
-        }
-        return true;
+        NodeFileCache cache;
+        return InsertInstance(reference, cache, loader, markSource, out, {}, error);
     }
 
     NodeExpansion ExpandNodeReferences(pugi::xml_node configRoot, NodeFileLoaderRef loader, bool markSource) {
         NodeExpansion result;
+        NodeFileCache cache;
         for (pugi::xml_node scenesEl = configRoot.child(kScenesElement.data()); scenesEl; scenesEl = scenesEl.next_sibling(kScenesElement.data())) {
             for (pugi::xml_node sceneEl = scenesEl.child(kSceneElement.data()); sceneEl; sceneEl = sceneEl.next_sibling(kSceneElement.data())) {
-                ExpandScene(sceneEl, loader, markSource, result);
+                ExpandScene(sceneEl, cache, loader, markSource, result);
             }
         }
         return result;

@@ -11,6 +11,37 @@ namespace BECore {
             return Format("{}", value);
         }
 
+        // The lookups of pugixml's child(name) and attribute(name) over a view, so no name is copied to get a NUL
+        pugi::xml_node FindChild(pugi::xml_node parent, StringView name) {
+            if (name.empty()) {
+                return pugi::xml_node();
+            }
+            for (pugi::xml_node child = parent.first_child(); child; child = child.next_sibling()) {
+                if (StringView(child.name()) == name) {
+                    return child;
+                }
+            }
+            return pugi::xml_node();
+        }
+
+        pugi::xml_attribute FindAttribute(pugi::xml_node node, StringView name) {
+            if (name.empty()) {
+                return pugi::xml_attribute();
+            }
+            for (pugi::xml_attribute attribute = node.first_attribute(); attribute; attribute = attribute.next_attribute()) {
+                if (StringView(attribute.name()) == name) {
+                    return attribute;
+                }
+            }
+            return pugi::xml_attribute();
+        }
+
+        pugi::xml_node AppendElement(pugi::xml_node parent, StringView name) {
+            pugi::xml_node element = parent.append_child(pugi::node_element);
+            element.set_name(name.data(), name.size());
+            return element;
+        }
+
     }  // namespace
 
     XmlSerializer::XmlSerializer() {
@@ -39,11 +70,10 @@ namespace BECore {
         }
 
         pugi::xml_node parent = _nodeStack.back();
-        String nameStr(name);
 
-        pugi::xml_node child = parent.child(nameStr.c_str());
+        pugi::xml_node child = FindChild(parent, name);
         if (!child) {
-            child = parent.append_child(nameStr.c_str());
+            child = AppendElement(parent, name);
         }
         return child;
     }
@@ -54,11 +84,11 @@ namespace BECore {
         }
 
         pugi::xml_node node = _nodeStack.back();
-        String nameStr(name);
 
-        pugi::xml_attribute attr = node.attribute(nameStr.c_str());
+        pugi::xml_attribute attr = FindAttribute(node, name);
         if (!attr) {
-            attr = node.append_attribute(nameStr.c_str());
+            attr = node.append_attribute("");
+            attr.set_name(name.data(), name.size());
         }
         return attr;
     }
@@ -124,13 +154,13 @@ namespace BECore {
 
     void XmlSerializer::Write(StringView name, StringView value) {
         pugi::xml_node node = GetOrCreateChild(name);
-        String valueStr(value);
-        node.text().set(valueStr.c_str());
+        node.text().set(value.data(), value.size());
     }
 
     void XmlSerializer::Write(StringView name, const PoolString& value) {
         pugi::xml_node node = GetOrCreateChild(name);
-        node.text().set(value.ToStringView().data());
+        const StringView text = value.ToStringView();
+        node.text().set(text.data(), text.size());
     }
 
     // =============================================================================
@@ -194,13 +224,13 @@ namespace BECore {
 
     void XmlSerializer::WriteAttribute(StringView name, StringView value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
-        String valueStr(value);
-        attr.set_value(valueStr.c_str());
+        attr.set_value(value.data(), value.size());
     }
 
     void XmlSerializer::WriteAttribute(StringView name, const PoolString& value) {
         pugi::xml_attribute attr = GetOrCreateAttribute(name);
-        attr.set_value(value.ToStringView().data());
+        const StringView text = value.ToStringView();
+        attr.set_value(text.data(), text.size());
     }
 
     // =============================================================================
@@ -250,8 +280,7 @@ namespace BECore {
             return false;
         }
         const ArrayContext& ctx = _arrayStack.back();
-        String elemName(ctx.elementName);
-        pugi::xml_node elem = _nodeStack.back().append_child(elemName.c_str());
+        pugi::xml_node elem = AppendElement(_nodeStack.back(), ctx.elementName);
         _nodeStack.push_back(elem);
         return true;
     }

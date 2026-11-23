@@ -642,8 +642,13 @@ namespace BECore::Tests {
                 return LoadSceneManagerFromBinary(reader);
             }
 
-            /// `LoadFromXml` with a zone around the parse and around the build, for the zone pass
-            IntrusivePtr<SceneManager> LoadFromXmlByZone() const {
+            /**
+             * `LoadFromXml` with a zone per phase, for the zone pass. The engine has no zone in `LoadSceneManager`, so this repeats its
+             * three steps (copy and expand the references, deserialize; keep it in step with `SceneLoader.cpp`) and the zones stay in
+             * the test. @p diagnostics is the mode of the deserialize: `Warn` is what a config load runs with, `Off` shows what the
+             * unknown-key bookkeeping costs.
+             */
+            IntrusivePtr<SceneManager> LoadFromXmlByZone(DiagnosticsMode diagnostics = DiagnosticsMode::Warn) const {
                 pugi::xml_document document;
                 {
                     BE_PROFILE_SCOPE("Scene parse");
@@ -651,8 +656,22 @@ namespace BECore::Tests {
                         return {};
                     }
                 }
-                BE_PROFILE_SCOPE("Scene build");
-                return LoadSceneManager(XmlNode{document.document_element()}, MakeDirectoryNodeLoader(_dir));
+                pugi::xml_document expanded;
+                {
+                    BE_PROFILE_SCOPE("Scene expand");
+                    expanded.append_copy(document.document_element());
+                    ExpandNodeReferences(expanded.document_element(), MakeDirectoryNodeLoader(_dir), true);
+                }
+                auto manager = New<SceneManager>();
+                BE_PROFILE_SCOPE("Scene deserialize");
+                XmlDeserializer deserializer;
+                deserializer.SetDiagnostics(diagnostics);
+                if (deserializer.LoadFromXmlNode(XmlNode{expanded.document_element()})) {
+                    deserializer.NoteKnownKey(kContentVersionAttribute);
+                    manager->Deserialize(deserializer);
+                    deserializer.FinishLoad();
+                }
+                return manager;
             }
 
             /// `LoadFromBinary` with a zone around the stream check and around the build, for the zone pass
@@ -881,6 +900,15 @@ namespace BECore::Tests {
             });
         }
 
+        /// The XML scene again with the deserialize in the mode `Off`: its difference to `scene-xml` is the cost of `Warn`
+        void RunSceneOffZonePass(const SceneFixture& fixture) {
+            IntrusivePtr<SceneManager> manager;
+            PrintZonePass("scene-xml-off", [&] {
+                manager = fixture.LoadFromXmlByZone(DiagnosticsMode::Off);
+                return manager != nullptr;
+            });
+        }
+
     }  // namespace
 
     TEST(AssetLoadAllocTest, TheHandWrittenFileIsWhatWriteWrites) {
@@ -1037,12 +1065,15 @@ namespace BECore::Tests {
         const SceneFixture fixture;
         const auto plain = fixture.LoadFromXml();
         const auto fromXml = fixture.LoadFromXmlByZone();
+        const auto fromXmlOff = fixture.LoadFromXmlByZone(DiagnosticsMode::Off);
         const auto fromBinary = fixture.LoadFromBinaryByZone();
         ASSERT_NE(plain, nullptr);
         ASSERT_NE(fromXml, nullptr);
+        ASSERT_NE(fromXmlOff, nullptr);
         ASSERT_NE(fromBinary, nullptr);
         const String expected = PrintedScenes(*plain);
         EXPECT_EQ(PrintedScenes(*fromXml), expected);
+        EXPECT_EQ(PrintedScenes(*fromXmlOff), expected);
         EXPECT_EQ(PrintedScenes(*fromBinary), expected);
     }
 
@@ -1101,6 +1132,7 @@ namespace BECore::Tests {
         for (const FileFormat format : {FileFormat::Xml, FileFormat::Binary}) {
             RunSceneZonePass(fixture, format);
         }
+        RunSceneOffZonePass(fixture);
         const SceneFixture particles = MakeParticleFixture();
         for (const FileFormat format : {FileFormat::Xml, FileFormat::Binary}) {
             RunSceneZonePass(particles, format, "particles");

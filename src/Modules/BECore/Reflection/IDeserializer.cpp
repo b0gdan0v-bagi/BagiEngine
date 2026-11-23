@@ -1,3 +1,4 @@
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Reflection/IDeserializer.h>
 
 namespace BECore {
@@ -92,13 +93,22 @@ namespace BECore {
         return false;
     }
 
-    String IDeserializer::MakeDidYouMeanHint(StringView unknown, std::initializer_list<const Vector<String>*> askedKeys) {
+    bool IDeserializer::ReadAttributeView(StringView name, StringView& outView) {
+        if (!ReadAttribute(name, _attributeViewText)) {
+            return false;
+        }
+        outView = StringView(_attributeViewText);
+        return true;
+    }
+
+    template <typename List>
+    String IDeserializer::BuildDidYouMeanHint(StringView unknown, std::initializer_list<const List*> askedKeys) {
         const StringView cutName = CutText(unknown, kMaxSuggestedNameBytes);
         size_t bestDistance = kMaxSuggestedDistance + 1;
         StringView best;
-        for (const Vector<String>* asked : askedKeys) {
-            for (const String& candidate : *asked) {
-                const size_t distance = EditDistance(cutName, candidate);
+        for (const List* asked : askedKeys) {
+            for (const auto& candidate : *asked) {
+                const size_t distance = EditDistance(cutName, StringView(candidate));
                 if (distance < bestDistance) {
                     bestDistance = distance;
                     best = StringView(candidate);
@@ -109,6 +119,14 @@ namespace BECore {
             return {};
         }
         return Format(", did you mean '{}'?", CutText(best, ReaderLimits::kMaxQuotedValueBytes));
+    }
+
+    String IDeserializer::MakeDidYouMeanHint(StringView unknown, std::initializer_list<const Vector<String>*> askedKeys) {
+        return BuildDidYouMeanHint(unknown, askedKeys);
+    }
+
+    String IDeserializer::MakeDidYouMeanHint(StringView unknown, std::initializer_list<const ArenaVector<StringView>*> askedKeys) {
+        return BuildDidYouMeanHint(unknown, askedKeys);
     }
 
     void IDeserializer::RecordFinding(StringView key, StringView message) {
