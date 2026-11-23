@@ -1,4 +1,5 @@
 #include <Common/Printers.h>
+#include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenImage.h>
 #include <gtest/gtest.h>
 
@@ -339,6 +340,23 @@ namespace BECore::Tests {
         EXPECT_FALSE(ArtGenImageFrameFromJson(*ParseJson(StringView("{\"x\": -1, \"y\": 0, \"w\": 10, \"h\": 10, \"outWidth\": 10, \"outHeight\": 10}"))).has_value());
         EXPECT_FALSE(ArtGenImageFrameFromJson(*ParseJson(StringView("{\"x\": 0, \"y\": 0, \"w\": 10, \"h\": 10, \"outWidth\": 20, \"outHeight\": 10}"))).has_value());
         EXPECT_FALSE(ArtGenImageFrameFromJson(Json::array()).has_value());
+    }
+
+    TEST(ArtGenImageTest, APngWrittenUnderANonAsciiFolderReadsBackAndLeavesNoTemporary) {
+        TestTempFolder folder("ArtGenImageUtf8");
+        const std::filesystem::path file = std::filesystem::path(ToStd(folder.PathOf("caf\xC3\xA9"))) / "pi\xC3\xA8"
+                                                                                                        "ce.png";
+        std::filesystem::create_directories(file.parent_path());
+        ArtGenPixels pixels = MakePixels(3, 2);
+        SetPixel(pixels, 2, 1, {10, 20, 30, 200});
+
+        ASSERT_TRUE(WriteArtGenPng(file, pixels).has_value());
+        ASSERT_TRUE(WriteArtGenPng(file, pixels).has_value());
+        const auto loaded = ReadArtGenPng(file);
+        ASSERT_TRUE(loaded.has_value()) << loaded.error().c_str();
+        EXPECT_TRUE(loaded->rgba == pixels.rgba);
+        EXPECT_FALSE(std::filesystem::exists(std::filesystem::path(file) += ".tmp"));
+        EXPECT_FALSE(ReadArtGenPng(Path(folder.PathOf("missing.png"))).has_value());
     }
 
 }  // namespace BECore::Tests

@@ -1,11 +1,11 @@
 #include "ArtGenImage.h"
 
+#include <BECore/File/File.h>
 #include <BECore/Utils/ScopeGuard.h>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 #include <Widgets/TextureEditor/SpriteImage.h>
 #include <cmath>
-#include <system_error>
 
 namespace BECore {
 
@@ -305,10 +305,10 @@ namespace BECore {
         return out;
     }
 
-    std::expected<ArtGenPixels, String> ReadArtGenPng(const std::filesystem::path& file) {
+    std::expected<ArtGenPixels, String> ReadArtGenPng(const Path& file) {
         auto image = LoadRgbaImage(file);
         if (!image) {
-            return std::unexpected(Format("cannot read '{}': {}", file.generic_string(), image.error()));
+            return std::unexpected(Format("cannot read '{}': {}", file.View(), image.error()));
         }
         ArtGenPixels pixels;
         pixels.width = image->width;
@@ -318,7 +318,7 @@ namespace BECore {
         return pixels;
     }
 
-    std::expected<void, String> WriteArtGenPng(const std::filesystem::path& file, const ArtGenPixels& pixels) {
+    std::expected<void, String> WriteArtGenPng(const Path& file, const ArtGenPixels& pixels) {
         if (pixels.width == 0 || pixels.height == 0 || pixels.rgba.size() != ByteCountOf(pixels.width, pixels.height)) {
             return std::unexpected(String("the image to write is empty or its buffer does not match its size"));
         }
@@ -333,19 +333,16 @@ namespace BECore {
             std::memcpy(target + static_cast<size_t>(y) * static_cast<size_t>(surface->pitch), pixels.rgba.data() + y * rowBytes, rowBytes);
         }
 
-        std::filesystem::path temp = file;
-        temp += ".tmp";
-        std::error_code error;
-        if (!IMG_SavePNG(surface, temp.string().c_str())) {
+        const Path temp(Format("{}{}", file.View(), kAtomicTempSuffix));
+        if (!IMG_SavePNG(surface, temp.CStr())) {
             const String reason = SDL_GetError();
-            std::filesystem::remove(temp, error);
-            return std::unexpected(Format("cannot write '{}': {}", temp.generic_string(), reason));
+            static_cast<void>(RemoveFile(temp));
+            return std::unexpected(Format("cannot write '{}': {}", temp.View(), reason));
         }
         // A game may have the old picture open: the rename replaces it whole, never a half-written file
-        std::filesystem::rename(temp, file, error);
-        if (error) {
-            std::filesystem::remove(temp, error);
-            return std::unexpected(Format("cannot replace '{}': {}", file.generic_string(), error.message()));
+        if (const auto renamed = RenameFile(temp, file); !renamed) {
+            static_cast<void>(RemoveFile(temp));
+            return std::unexpected(Format("cannot replace '{}': {}", file.View(), renamed.error()));
         }
         return {};
     }

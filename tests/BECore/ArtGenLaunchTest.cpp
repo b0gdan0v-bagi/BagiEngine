@@ -15,7 +15,7 @@ namespace BECore::Tests {
         const std::filesystem::path game = base / "game";
         std::filesystem::create_directories(engine / "config");
         std::filesystem::create_directories(game / "config");
-        Vector<std::filesystem::path> layers{engine / "config", game / "config"};
+        Vector<Path> layers{Path(engine / "config"), Path(game / "config")};
         EXPECT_FALSE(FindArtGenBridge(layers).has_value());
 
         const std::filesystem::path script = engine / "tools" / "artgen" / "artgen_bridge.py";
@@ -25,7 +25,29 @@ namespace BECore::Tests {
         std::fclose(file);
         const auto found = FindArtGenBridge(layers);
         ASSERT_TRUE(found.has_value());
-        EXPECT_EQ(*found, script);
+        EXPECT_EQ(*found, Path(script));
+        std::filesystem::remove_all(base);
+    }
+
+    TEST(ArtGenLaunchTest, TheBridgeIsFoundUnderANonAsciiRootAndAFolderOfThatNameIsNoScript) {
+        const std::filesystem::path base = TestTempDirectory("artgen_launch_utf8");
+        std::filesystem::remove_all(base);
+        const std::filesystem::path engine = base / "caf\xC3\xA9";
+        const std::filesystem::path game = base / "game";
+        std::filesystem::create_directories(engine / "config");
+        std::filesystem::create_directories(game / "config");
+        std::filesystem::create_directories(game / "tools" / "artgen" / "artgen_bridge.py");
+        const Vector<Path> layers{Path(game / "config"), Path(engine / "config")};
+        EXPECT_FALSE(FindArtGenBridge(layers).has_value());
+
+        const std::filesystem::path script = engine / "tools" / "artgen" / "artgen_bridge.py";
+        std::filesystem::create_directories(script.parent_path());
+        std::FILE* file = std::fopen(script.string().c_str(), "wb");
+        ASSERT_NE(file, nullptr);
+        std::fclose(file);
+        const auto found = FindArtGenBridge(layers);
+        ASSERT_TRUE(found.has_value());
+        EXPECT_EQ(*found, Path(script));
         std::filesystem::remove_all(base);
     }
 

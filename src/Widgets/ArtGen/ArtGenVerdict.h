@@ -1,10 +1,10 @@
 #pragma once
 
 #include <BECore/Control/JsonFwd.h>
+#include <BECore/File/Path.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <cstdint>
-#include <filesystem>
 
 namespace BECore {
 
@@ -33,6 +33,6 @@ namespace BECore {
 
     /// The verdict of the provenance file @p provenanceFile; an empty path, a missing file or text that is not JSON is None. Logs nothing
     /// (a gone file is the Set tab's gap, not a warning)
-    [[nodiscard]] ArtGenVerdict ReadArtGenVerdict(const std::filesystem::path& provenanceFile);
+    [[nodiscard]] ArtGenVerdict ReadArtGenVerdict(const Path& provenanceFile);
 
 }  // namespace BECore
