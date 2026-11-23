@@ -79,6 +79,8 @@ namespace BECore {
      * (threads without one, Profiler::kNoSortIndex, after those with), then by thread id.
      */
     [[nodiscard]] Vector<TimelineLane> LayoutLanes(const RingSnapshot& snapshot, double beginTicks, double endTicks);
+    /// LayoutLanes into @p out, which keeps its capacity (the panel lays out every frame)
+    void LayoutLanesInto(const RingSnapshot& snapshot, double beginTicks, double endTicks, Vector<TimelineLane>& out);
 
     /// The y of the top of lane @p laneIndex when the lanes are stacked from y = 0, each `rows * rowHeight` high with @p laneGap between
     [[nodiscard]] float LaneTop(const Vector<TimelineLane>& lanes, size_t laneIndex, float rowHeight, float laneGap);

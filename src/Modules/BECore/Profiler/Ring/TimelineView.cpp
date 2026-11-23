@@ -86,6 +86,12 @@ namespace BECore {
 
     Vector<TimelineLane> LayoutLanes(const RingSnapshot& snapshot, double beginTicks, double endTicks) {
         Vector<TimelineLane> lanes;
+        LayoutLanesInto(snapshot, beginTicks, endTicks, lanes);
+        return lanes;
+    }
+
+    void LayoutLanesInto(const RingSnapshot& snapshot, double beginTicks, double endTicks, Vector<TimelineLane>& lanes) {
+        lanes.clear();
         for (size_t i = 0; i < snapshot.threads.size(); ++i) {
             uint32_t deepest = 0;
             bool any = false;
@@ -105,7 +111,6 @@ namespace BECore {
             return left.sortIndex != right.sortIndex ? left.sortIndex < right.sortIndex : left.threadId < right.threadId;
         });
         static_assert(Profiler::kNoSortIndex == 0xFFFFFFFFu, "threads without a sort index sort last by the plain comparison above");
-        return lanes;
     }
 
     float LaneTop(const Vector<TimelineLane>& lanes, size_t laneIndex, float rowHeight, float laneGap) {

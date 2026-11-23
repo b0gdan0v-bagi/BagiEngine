@@ -4,6 +4,7 @@
 #include <BECore/Profiler/FrameStats/FrameStatsText.h>
 #include <BECore/Profiler/ProfilerToggle.h>
 #include <BECore/Renderer/RendererManager.h>
+#include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/TestText.h>
@@ -66,6 +67,41 @@ namespace BECore::Tests {
         const Vector<String> lines = FormatOverlayLines(SampleFrame(), AllocTotals{}, false);
         EXPECT_TRUE(AnyLineContains(lines, "ENGINE_PROFILER_ALLOC=OFF"));
         EXPECT_FALSE(AnyLineContains(lines, "Live"));
+    }
+
+    TEST(FrameStatsTextTest, TheLinesToAVisitorAreTheLinesOfTheVector) {
+        AllocTotals totals;
+        totals.liveBytes = 3 * 1024 * 1024;
+        totals.peakLiveBytes = 5 * 1024 * 1024;
+        FrameStats paused = SampleFrame();
+        paused.paused = true;
+        for (const FrameStats& stats : {SampleFrame(), paused}) {
+            for (const bool tracking : {true, false}) {
+                const Vector<String> expected = FormatOverlayLines(stats, totals, tracking);
+                Vector<String> got;
+                FormatOverlayLinesTo(stats, totals, tracking, [&got](StringView line) { got.push_back(String(line.data(), line.size())); });
+                EXPECT_EQ(got, expected);
+            }
+        }
+    }
+
+    TEST(FrameStatsTextTest, ALineLongerThanTheCapacityIsCut) {
+        FrameStats stats = SampleFrame();
+        const String longName(kOverlayLineCapacity * 2, 'x');
+        stats.counters.push_back({PoolString::Intern(longName), 1.0});
+        size_t longest = 0;
+        FormatOverlayLinesTo(stats, AllocTotals{}, true, [&longest](StringView line) { longest = eastl::max(longest, line.size()); });
+        EXPECT_EQ(longest, kOverlayLineCapacity);
+    }
+
+    TEST(FrameStatsTextTest, TheLinesToAVisitorAllocateNothing) {
+        const FrameStats stats = SampleFrame();
+        const AllocTotals totals{};
+        size_t length = 0;
+        const auto emit = [&length](StringView line) { length += line.size(); };
+        FormatOverlayLinesTo(stats, totals, true, emit);
+        ExpectNoAllocations([&] { FormatOverlayLinesTo(stats, totals, true, emit); });
+        EXPECT_GT(length, 0u);
     }
 
     TEST(FrameStatsTextTest, BytesAreReadable) {

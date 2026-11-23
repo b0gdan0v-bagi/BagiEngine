@@ -1,5 +1,6 @@
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/Ring/TimelineView.h>
+#include <Common/AllocCheck.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -113,6 +114,23 @@ namespace BECore::Tests {
         AddThread(snapshot, 4, 0).zones = {Zone(kOuterSite, 0, 10, 0)};
         const auto lanes = LayoutLanes(snapshot, 0.0, 100.0);
         EXPECT_EQ(ThreadIds(snapshot, lanes), (Vector<uint32_t>{4, 9, 3, 7}));
+    }
+
+    TEST(TimelineViewTest, LayoutLanesIntoGivesTheLanesAndAReusedVectorAllocatesNothing) {
+        RingSnapshot snapshot;
+        AddThread(snapshot, 7, Profiler::kNoSortIndex).zones = {Zone(kOuterSite, 0, 10, 0)};
+        AddThread(snapshot, 9, 100).zones = {Zone(kOuterSite, 0, 10, 0), Zone(kInnerSite, 2, 4, 1)};
+        AddThread(snapshot, 4, 0).zones = {Zone(kOuterSite, 500, 600, 0)};
+        const Vector<TimelineLane> expected = LayoutLanes(snapshot, 0.0, 100.0);
+
+        Vector<TimelineLane> lanes = {{99, 99}};  // what was there is replaced
+        LayoutLanesInto(snapshot, 0.0, 100.0, lanes);
+        ASSERT_EQ(lanes.size(), expected.size());
+        for (size_t i = 0; i < lanes.size(); ++i) {
+            EXPECT_EQ(lanes[i].threadIndex, expected[i].threadIndex);
+            EXPECT_EQ(lanes[i].rows, expected[i].rows);
+        }
+        ExpectNoAllocations([&] { LayoutLanesInto(snapshot, 0.0, 100.0, lanes); });
     }
 
     TEST(TimelineViewTest, LanesWithoutZonesInTheRangeAreHiddenAndRowsFollowTheDepth) {

@@ -106,14 +106,27 @@ namespace BECore {
     }
 
     Vector<FrameStats> FrameStatsCollector::GetHistory(size_t count) const {
-        const uint64_t available = _frames < kFrameHistory ? _frames : kFrameHistory;
-        const uint64_t taken = count < available ? count : available;
         Vector<FrameStats> history;
-        history.reserve(taken);
-        for (uint64_t frame = _frames - taken + 1; frame <= _frames; ++frame) {
-            history.push_back(_ring[(frame - 1) % kFrameHistory]);
-        }
+        GetHistoryInto(count, history);
         return history;
+    }
+
+    size_t FrameStatsCollector::RecentCount(size_t count) const {
+        const uint64_t available = _frames < kFrameHistory ? _frames : kFrameHistory;
+        return count < available ? count : static_cast<size_t>(available);
+    }
+
+    void FrameStatsCollector::GetHistoryInto(size_t count, Vector<FrameStats>& out) const {
+        out.clear();
+        out.reserve(RecentCount(count));
+        ForEachRecent(count, [&out](const FrameStats& stats) { out.push_back(stats); });
+    }
+
+    void FrameStatsCollector::ForEachRecent(size_t count, FunctionRef<void(const FrameStats&)> fn) const {
+        const uint64_t taken = RecentCount(count);
+        for (uint64_t frame = _frames - taken + 1; frame <= _frames; ++frame) {
+            fn(_ring[(frame - 1) % kFrameHistory]);
+        }
     }
 
     const FrameStats* FrameStatsCollector::GetLast() const {
