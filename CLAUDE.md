@@ -53,7 +53,7 @@ tools/            Python and helper tools (tools/CLAUDE.md)
 - `ASSERT()` / `EXPECT()` / `FATALERROR()` compile out in Release: no side effects inside. `std::expected<T, E>` for recoverable errors.
 - `BECore/Threading/` primitives, each lock with `BE_LOCK_SITE("name")` (`Threading/CLAUDE.md`).
 - Callbacks: `MoveOnlyFunction` stored, `FunctionRef` as a parameter, `FixedFunction<Bytes>` where it must never allocate (`Utils/CLAUDE.md`); no `std::function`.
-- `Format("... {}", args)` / `"... {}"_format(args)` (`Format/CLAUDE.md`).
+- `Format("... {}", args)` / `"... {}"_format(args)` (`Format/CLAUDE.md`); log with `LOG_X("... {}", args)`, never `LOG_X(Format(...))`.
 - `override`, `#pragma once`, namespace closing comments, inline member initialisers.
 - **Comments** say *why* or state a contract, invariant or trap; never restate code, tell history, repeat a constant's value or retell a test; cite a `CLAUDE.md` section only if that heading exists. `CI/scripts/check_comment_only.py` proves a comment-only diff.
 - New code goes in the matching module, after looking at similar code; widely used headers go into `BECore/pch.h`; a new module: `.claude/rules/cmake-rules.md`.

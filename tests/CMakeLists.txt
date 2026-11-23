@@ -107,6 +107,9 @@ if(Python3_FOUND)
     add_test(NAME BagiTypesCheck
         COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_types.py --root ${BAGI_ENGINE_DIR}
             --baseline ${BAGI_ENGINE_DIR}/CI/types_baseline.txt)
+    # no LOG_X(Format(...)) / LOG_X("..."_format(...)) is left: LOG_X("x {}", v) is the form (the family `log` of tools/codemod, which also does the migration).
+    add_test(NAME BagiLogCalls
+        COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/tools/codemod/codemod.py --root ${BAGI_ENGINE_DIR} --family log --fail-on-change)
     # every header compiles alone (no PCH), and any header that does not fails the test: there is no baseline (CI/scripts/check_headers.py).
     # A fragment by design would be an --exclude here, with its reason in a comment above it; there is none.
     # RmlUiHost is compiled only with ENGINE_UI_RMLUI, so a build without it has no flags for its headers and the check leaves them out;
@@ -123,7 +126,7 @@ if(Python3_FOUND)
         SKIP_RETURN_CODE 77
         TIMEOUT 1800)  # it compiles every header beside the other tests: only a hang may end it
     # The hygiene checks read the whole tree and none of them tests behaviour: the full run (<preset>-all) has them, the everyday one does not
-    set_tests_properties(BagiThirdPartyNotices BagiIncludeStyle BagiPoolStrings BagiTypesCheck BagiHeadersStandalone PROPERTIES LABELS extended)
+    set_tests_properties(BagiThirdPartyNotices BagiIncludeStyle BagiPoolStrings BagiTypesCheck BagiLogCalls BagiHeadersStandalone PROPERTIES LABELS extended)
 endif()
 
 # A real TLS handshake of the platform's backend against local servers: tls_local_check.py starts a Python `ssl` WebSocket echo server
