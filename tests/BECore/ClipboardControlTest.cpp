@@ -99,6 +99,21 @@ namespace BECore::Tests {
         EXPECT_EQ(StringOf(ResultOf(1), "text"), "room 4711");
     }
 
+    TEST_F(ClipboardControlTest, AGetAnswersALongTextWholeWithoutCuttingIt) {
+        // Past the small-string buffer, and a large one: the answer looks at the held text, so a cut or a dangling view would show here
+        for (const size_t size : {size_t{64}, size_t{100} * 1024}) {
+            responses.clear();
+            const String text(size, 'x');
+            Fake().SetContent(text);
+            Post(MakeRequest(1, "clipboard_get"));
+            RunFramesUntilAnswered(1);
+
+            ASSERT_NE(ResultOf(0), nullptr) << size;
+            EXPECT_EQ(StringOf(ResultOf(0), "status"), "ok") << size;
+            EXPECT_EQ(StringOf(ResultOf(0), "text"), text) << size;
+        }
+    }
+
     TEST_F(ClipboardControlTest, GetOnAnEmptyClipboardIsEmpty) {
         Post(MakeRequest(1, "clipboard_get"));
         RunFramesUntilAnswered(1);

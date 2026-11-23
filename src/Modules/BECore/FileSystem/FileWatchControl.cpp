@@ -31,6 +31,13 @@ namespace BECore {
             return KindNames::changed;
         }
 
+        ArenaVector<PoolString> ToArena(const Vector<PoolString>& consumers) {
+            ArenaVector<PoolString> result;
+            result.reserve(consumers.size());
+            result.insert(result.end(), consumers.begin(), consumers.end());
+            return result;
+        }
+
         /// The `paths` of a request into @p paths; false when it is not a list of strings. @p present tells whether it was given
         bool ReadPaths(const Json& params, Vector<String>& paths, bool& present) {
             const Json* member = FindJsonMember(params, "paths");
@@ -56,9 +63,11 @@ namespace BECore {
                 return;
             }
             FileWatchRescanAnswer answer;
-            for (const PendingFileChange& change : watcher.Rescan()) {
+            const auto pending = watcher.Rescan();
+            answer.changes.reserve(pending.size());
+            for (const PendingFileChange& change : pending) {
                 FileWatchRescanChange item;
-                item.consumers = change.consumers;
+                item.consumers = ToArena(change.consumers);
                 item.kind = KindKey(change.kind);
                 item.path = change.virtualPath;
                 answer.changes.push_back(std::move(item));
@@ -83,19 +92,24 @@ namespace BECore {
             }
             const Vector<AppliedFileChange> applied = hasPaths ? watcher.Apply(Span<const StringView>(views.data(), views.size())) : watcher.Apply();
 
-            FileWatchApplyAnswer answer;
-            for (const AppliedFileChange& change : applied) {
-                FileWatchAppliedChange item;
-                item.consumers = change.consumers;
-                item.ok = change.ok;
-                item.path = change.virtualPath;
-                if (!change.ok) {
-                    item.error = change.error;
+            // The answer is built in `done`: it holds arena members, which the scope of this handler takes back before `done` runs. The captured list is heap
+            // data that `done` owns until it returns, so the error texts can be views. The consumers announce what they took with events, which run in the
+            // frame: the answer waits for one, with the manual clock too
+            call.DeferFrames(1, 0.0, [applied = std::move(applied)](ControlCall& done) {
+                FileWatchApplyAnswer answer;
+                answer.applied.reserve(applied.size());
+                for (const AppliedFileChange& change : applied) {
+                    FileWatchAppliedChange item;
+                    item.consumers = ToArena(change.consumers);
+                    item.ok = change.ok;
+                    item.path = change.virtualPath;
+                    if (!change.ok) {
+                        item.error = TextView(change.error);
+                    }
+                    answer.applied.push_back(std::move(item));
                 }
-                answer.applied.push_back(std::move(item));
-            }
-            // The consumers announce what they took with events, which run in the frame: the answer waits for one, with the manual clock too
-            call.DeferFrames(1, 0.0, [answer = std::move(answer)](ControlCall& done) { done.ReplyObject(answer); });
+                done.ReplyObject(answer);
+            });
         }
 
     }  // namespace

@@ -1,7 +1,9 @@
 #pragma once
 
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Reflection/TextView.h>
 #include <BECore/Types/Types.h>
 
 namespace BECore {
@@ -10,7 +12,7 @@ namespace BECore {
     struct FileWatchRescanChange {
         BE_CLASS(FileWatchRescanChange)
 
-        BE_REFLECT_FIELD Vector<PoolString> consumers;
+        BE_REFLECT_FIELD ArenaVector<PoolString> consumers;
         BE_REFLECT_FIELD PoolString kind;
         BE_REFLECT_FIELD PoolString path;
     };
@@ -19,15 +21,15 @@ namespace BECore {
     struct FileWatchRescanAnswer {
         BE_CLASS(FileWatchRescanAnswer)
 
-        BE_REFLECT_FIELD Vector<FileWatchRescanChange> changes;
+        BE_REFLECT_FIELD ArenaVector<FileWatchRescanChange> changes;
     };
 
-    /// A change of `files_apply`: `error` only when `ok` is false
+    /// A change of `files_apply`: `error` only when `ok` is false, a view of the text `done` holds until the answer is written
     struct FileWatchAppliedChange {
         BE_CLASS(FileWatchAppliedChange)
 
-        BE_REFLECT_FIELD Vector<PoolString> consumers;
-        BE_REFLECT_FIELD Optional<String> error;
+        BE_REFLECT_FIELD ArenaVector<PoolString> consumers;
+        BE_REFLECT_FIELD Optional<TextView> error;
         BE_REFLECT_FIELD bool ok = true;
         BE_REFLECT_FIELD PoolString path;
     };
@@ -36,7 +38,7 @@ namespace BECore {
     struct FileWatchApplyAnswer {
         BE_CLASS(FileWatchApplyAnswer)
 
-        BE_REFLECT_FIELD Vector<FileWatchAppliedChange> applied;
+        BE_REFLECT_FIELD ArenaVector<FileWatchAppliedChange> applied;
     };
 
 }  // namespace BECore

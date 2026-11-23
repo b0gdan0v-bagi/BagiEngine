@@ -86,7 +86,7 @@ namespace BECore {
             waiting->finish = [answer](ControlCall& done) {
                 ClipboardGetAnswer reply;
                 reply.status = StatusWord(answer->text.status);
-                reply.text = answer->text.text;
+                reply.text = TextView(answer->text.text);
                 done.ReplyObject(reply);
             };
             Await(call, std::move(waiting));
