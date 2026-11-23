@@ -265,6 +265,56 @@ namespace BECore::Tests {
         });
     }
 
+    TEST_F(UITextComponentTest, AChangedVariableOrLanguageAllocatesNothingAfterWarmUp) {
+        UIStrings& strings = CoreManager::GetUIStrings();
+        strings.Set("en"_intern, "k", "Hello");
+        strings.Set("ru"_intern, "k", "World");
+        UIVars& vars = CoreManager::GetUIVars();
+        UITextComponent& caption = CaptionOf("Cap");
+        // Longer than the inline buffer of a String, so a heap buffer that is thrown away would show
+        caption.text = "{#k}: {score} points scored in this round";
+        // Preformatted views: the arithmetic Set() makes a Format() String per call
+        constexpr StringView kScores[] = {"1000000", "22", "333", "4444", "55"};
+        vars.Set("score"_intern, kScores[0]);
+        ASSERT_EQ(caption.GetDisplayText(), "Hello: 1000000 points scored in this round");
+
+        ExpectNoAllocations([&] {
+            for (int round = 0; round < 10; ++round) {
+                for (const StringView score : kScores) {
+                    vars.Set("score"_intern, score);
+                    static_cast<void>(caption.GetDisplayText());
+                }
+                strings.SetLanguage(round % 2 == 0 ? PoolString("ru"_intern) : PoolString("en"_intern));
+                static_cast<void>(caption.GetDisplayText());
+            }
+        });
+        EXPECT_EQ(caption.GetDisplayText(), "Hello: 55 points scored in this round");
+    }
+
+    TEST_F(UITextComponentTest, MeasuringAndCheckingAChangedVariableAllocateNothingAfterWarmUp) {
+        UIVars& vars = CoreManager::GetUIVars();
+        UITextComponent& caption = CaptionOf("Cap");
+        const UIElement& cap = El("Cap");
+        caption.text = "Score: {score} points in this round";
+        constexpr StringView kScores[] = {"1000000", "22", "333", "4444", "55"};
+        // The warm-up shows every text once: a different text may wrap into more lines, and the result grows to the most it has held
+        for (const StringView score : kScores) {
+            vars.Set("score"_intern, score);
+            static_cast<void>(caption.MeasureText(cap, 200.0f, 1.0f));
+            static_cast<void>(caption.CheckContent(cap, 200.0f, 30.0f, 1.0f));
+        }
+
+        ExpectNoAllocations([&] {
+            for (int round = 0; round < 10; ++round) {
+                for (const StringView score : kScores) {
+                    vars.Set("score"_intern, score);
+                    static_cast<void>(caption.MeasureText(cap, 200.0f, 1.0f));
+                    static_cast<void>(caption.CheckContent(cap, 200.0f, 30.0f, 1.0f));
+                }
+            }
+        });
+    }
+
     TEST_F(UITextComponentTest, AnUnchangedTextIsLaidOutOnce) {
         UITextComponent& caption = CaptionOf("Cap");
         caption.text = "Score: {score}";

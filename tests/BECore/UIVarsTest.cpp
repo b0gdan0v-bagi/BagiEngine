@@ -1,5 +1,6 @@
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/UI/UIVars.h>
+#include <Common/AllocCheck.h>
 #include <Common/FreshText.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
@@ -116,6 +117,43 @@ namespace BECore::Tests {
         vars.Set("name"_intern, "Мир");
 
         EXPECT_EQ(Expand(vars, "Привет, {name}!"), "Привет, Мир!");
+    }
+
+    TEST(UIVarsTest, ExpandIntoABufferGivesWhatTheValueFormGives) {
+        UIVars vars;
+        vars.Set("a"_intern, "X");
+        vars.Set("name"_intern, "Мир");
+
+        String out;
+        for (const char* text : {"{a}", "{{a}}", "{{{a}}}", "a }} b", "open { brace", "{a", "a} lone", "{unknown} x", "{}", "Привет, {name}!", "plain", ""}) {
+            vars.Expand(text, out);
+            EXPECT_EQ(out, vars.Expand(text)) << text;
+        }
+    }
+
+    TEST(UIVarsTest, ExpandIntoABufferReplacesWhatItHeld) {
+        UIVars vars;
+        vars.Set("a"_intern, "X");
+
+        String out = "a much longer text that was there before";
+        vars.Expand("{a}", out);
+        EXPECT_EQ(out, "X");
+        vars.Expand("", out);
+        EXPECT_TRUE(out.empty());
+    }
+
+    TEST(UIVarsTest, ExpandIntoAWarmBufferAllocatesNothing) {
+        UIVars vars;
+        vars.Set("score"_intern, "1000000");
+        String out;
+        vars.Expand("Score: {score} of {score} points in this round", out);
+
+        ExpectNoAllocations([&] {
+            for (const char* value : {"1", "22", "333", "1000000"}) {
+                vars.Set("score"_intern, value);
+                vars.Expand("Score: {score} of {score} points in this round", out);
+            }
+        });
     }
 
     TEST(UIVarsTest, OnlyATextWithBracesNeedsExpanding) {

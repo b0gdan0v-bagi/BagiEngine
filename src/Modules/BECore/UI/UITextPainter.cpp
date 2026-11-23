@@ -1,6 +1,8 @@
 #include "UITextPainter.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Memory/ArenaAllocator.h>
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
@@ -50,17 +52,20 @@ namespace BECore {
         }
         const auto build = [&](String& out, const Context& /*view*/) {
             if (!UIStrings::HasReferences(source)) {
-                out = variables.Expand(source);
+                variables.Expand(source, out);
                 return;
             }
             // Strings first, variables second: a translation may hold `{score}`, and a string is not resolved again
             const size_t missingBefore = strings.GetMissing().size();
-            const String resolved = strings.Resolve(source);
+            // The translated text is a temporary of this call: only `out`, a heap String that keeps its capacity, outlives it
+            const ScratchScope scratch;
+            ArenaString resolved;
+            strings.Resolve(source, resolved);
             const auto& missing = strings.GetMissing();
             for (size_t i = missingBefore; i < missing.size(); ++i) {
                 LOG_WARNING("UIText: no string '{}' in the language '{}' or the default one"_format(missing[i].key.c_str(), missing[i].language.ToStringView()));
             }
-            out = variables.Expand(StringView(resolved));
+            variables.Expand(StringView(resolved.data(), resolved.size()), out);
         };
         return StringView(_expanded.Get(kNoContext, build));
     }

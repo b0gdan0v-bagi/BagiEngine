@@ -46,6 +46,12 @@ namespace BECore {
 
     String UIVars::Expand(StringView text) const {
         String result;
+        Expand(text, result);
+        return result;
+    }
+
+    void UIVars::Expand(StringView text, String& result) const {
+        result.clear();
         result.reserve(text.size());
         for (size_t i = 0; i < text.size(); ++i) {
             const char c = text[i];
@@ -74,7 +80,6 @@ namespace BECore {
                 result += c;
             }
         }
-        return result;
     }
 
 }  // namespace BECore

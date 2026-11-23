@@ -51,6 +51,10 @@ namespace BECore {
         /// @p text with every `{name}` replaced by the value of the variable; `{{` and `}}` become one brace. An unclosed `{` stays as it is
         [[nodiscard]] String Expand(StringView text) const;
 
+        /// The same into @p out, which is cleared and keeps its capacity, so a label whose text changes again and again allocates nothing after the first long text.
+        /// @p text must not point into @p out
+        void Expand(StringView text, String& out) const;
+
         /// True when Expand() could change @p text, so a label skips the work for a plain text
         [[nodiscard]] static bool HasPlaceholders(StringView text);
 
