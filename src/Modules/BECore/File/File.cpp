@@ -1,5 +1,6 @@
 #include "File.h"
 
+#include <BECore/File/Path.h>
 #include <BECore/Memory/LinearArena.h>
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_filesystem.h>
@@ -15,6 +16,8 @@
 #endif
 #include <windows.h>
 #else
+#include <cerrno>
+#include <cstdlib>
 #include <sys/stat.h>
 #endif
 
@@ -175,6 +178,19 @@ namespace BECore {
 #endif
         }
 
+        /// The text with `/` between the names, as Path keeps it: on Windows the system's `\` becomes `/`
+        void ToGenericSeparators(String& text) {
+#ifdef _WIN32
+            for (char& c : text) {
+                if (c == '\\') {
+                    c = '/';
+                }
+            }
+#else
+            static_cast<void>(text);
+#endif
+        }
+
         String ToString(StringView text) {
             return String(text.data(), text.size());
         }
@@ -199,6 +215,24 @@ namespace BECore {
             SmallVector<wchar_t, kInlinePathBytes + 1> _chars;
         };
 
+        String FromWide(const wchar_t* text, size_t length) {
+            if (length == 0) {
+                return {};
+            }
+            const int bytes = WideCharToMultiByte(CP_UTF8, 0, text, static_cast<int>(length), nullptr, 0, nullptr, nullptr);
+            String result(static_cast<size_t>(bytes), '\0');
+            WideCharToMultiByte(CP_UTF8, 0, text, static_cast<int>(length), result.data(), bytes, nullptr, nullptr);
+            return result;
+        }
+
+        String WindowsFailure(const char* action, StringView path) {
+            return Format("Cannot {} '{}': Windows error {}", action, path, GetLastError());
+        }
+#else
+        /// The failure of a POSIX call that SDL does not wrap, worded like SDL's own
+        String ErrnoFailure(const char* action, StringView path) {
+            return Format("Cannot {} '{}': {}", action, path, std::strerror(errno));
+        }
 #endif
 
         /// Whether @p path is itself a symbolic link (or a Windows reparse point such as a junction), which SDL_GetPathInfo cannot tell: it follows links
@@ -209,6 +243,38 @@ namespace BECore {
 #else
             struct stat info;
             return lstat(path, &info) == 0 && S_ISLNK(info.st_mode);
+#endif
+        }
+
+        /// What tells two paths that name the same file apart from two that do not
+        struct FileIdentity {
+            uint64_t volume = 0;
+            uint64_t index = 0;
+            bool operator==(const FileIdentity&) const = default;
+        };
+
+        std::expected<FileIdentity, String> IdentityOf(StringView path) {
+#ifdef _WIN32
+            const HANDLE handle = CreateFileW(WidePath(path).Get(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+            if (handle == INVALID_HANDLE_VALUE) {
+                return std::unexpected(WindowsFailure("open", path));
+            }
+            BY_HANDLE_FILE_INFORMATION info;
+            const bool known = GetFileInformationByHandle(handle, &info) != 0;
+            const String failure = known ? String{} : WindowsFailure("read the identity of", path);
+            CloseHandle(handle);
+            if (!known) {
+                return std::unexpected(failure);
+            }
+            constexpr unsigned kHighWordShift = 32;
+            return FileIdentity{info.dwVolumeSerialNumber, (static_cast<uint64_t>(info.nFileIndexHigh) << kHighWordShift) | info.nFileIndexLow};
+#else
+            const CPath cPath{path};
+            struct stat info;
+            if (stat(cPath.Get(), &info) != 0) {
+                return std::unexpected(ErrnoFailure("read the identity of", path));
+            }
+            return FileIdentity{static_cast<uint64_t>(info.st_dev), static_cast<uint64_t>(info.st_ino)};
 #endif
         }
 
@@ -243,6 +309,51 @@ namespace BECore {
             }
             walker.path.resize(folderLength);
             return walker.stopped ? SDL_ENUM_SUCCESS : SDL_ENUM_CONTINUE;
+        }
+
+        SDL_EnumerationResult SDLCALL CollectName(void* userdata, const char* /*folder*/, const char* name) {
+            static_cast<Vector<String>*>(userdata)->push_back(String(name));
+            return SDL_ENUM_CONTINUE;
+        }
+
+        /// @p path as it stands, with the working folder in front when it is relative; not normal, so `link/..` still goes through the link
+        std::expected<Path, String> JoinedWithCurrentDirectory(StringView path) {
+            if (path.empty()) {
+                return std::unexpected(String("Cannot make an empty path absolute"));
+            }
+            if (PathIsAbsolute(path)) {
+                return Path(path);
+            }
+            auto current = CurrentDirectory();
+            if (!current) {
+                return std::unexpected(std::move(current.error()));
+            }
+            return Path(*current) / path;
+        }
+
+        std::expected<void, String> RemoveTreeAt(const String& path) {
+            if (!IsSymbolicLink(path.c_str())) {
+                const Optional<FileInfo> info = GetFileInfo(path);
+                if (!info) {
+                    return std::unexpected(Format("Cannot remove '{}': there is no such file", path));
+                }
+                if (info->kind == FileKind::Directory) {
+                    // Listed first and removed after: the folder is not changed while SDL walks it
+                    Vector<String> names;
+                    if (!SDL_EnumerateDirectory(path.c_str(), &CollectName, &names)) {
+                        return std::unexpected(Failure("list", path));
+                    }
+                    for (const String& name : names) {
+                        if (auto removed = RemoveTreeAt(Format("{}/{}", path, name)); !removed) {
+                            return removed;
+                        }
+                    }
+                }
+            }
+            if (!SDL_RemovePath(path.c_str())) {
+                return std::unexpected(Failure("remove", path));
+            }
+            return {};
         }
 
     }  // namespace
@@ -393,6 +504,152 @@ namespace BECore {
             return std::unexpected(Failure("list", folder));
         }
         return {};
+    }
+
+    std::expected<void, String> RemoveTree(StringView path) {
+        return RemoveTreeAt(ToString(path));
+    }
+
+    std::expected<void, String> CopyFileTo(StringView from, StringView to, CopyMode mode) {
+        const Optional<FileInfo> source = GetFileInfo(from);
+        if (!source) {
+            return std::unexpected(Format("Cannot copy '{}': there is no such file", from));
+        }
+        if (source->kind == FileKind::Directory) {
+            return std::unexpected(Format("Cannot copy '{}': it is a folder", from));
+        }
+        if (const Optional<FileInfo> target = GetFileInfo(to)) {
+            if (target->kind == FileKind::Directory) {
+                return std::unexpected(Format("Cannot copy '{}' to '{}': the target is a folder", from, to));
+            }
+            if (mode == CopyMode::Fail) {
+                return std::unexpected(Format("Cannot copy '{}' to '{}': the target exists", from, to));
+            }
+            // Truncating the target would empty the source before it is read
+            if (const auto same = IsSameFile(from, to); same && *same) {
+                return std::unexpected(Format("Cannot copy '{}' to '{}': they are the same file", from, to));
+            }
+        }
+        const CPath cFrom{from};
+        const CPath cTo{to};
+        if (!SDL_CopyFile(cFrom.Get(), cTo.Get())) {
+            return std::unexpected(Format("Cannot copy '{}' to '{}': {}", from, to, SDL_GetError()));
+        }
+        return {};
+    }
+
+    std::expected<String, String> CurrentDirectory() {
+        char* current = SDL_GetCurrentDirectory();
+        if (current == nullptr) {
+            return std::unexpected(Failure("get the current folder"));
+        }
+        String text(current);
+        SDL_free(current);
+        ToGenericSeparators(text);
+        // SDL ends the path with a separator; Path joins with its own, and a root keeps the one it is made of
+        size_t rootLength = 1;
+#ifdef _WIN32
+        constexpr size_t kDriveRootLength = 3;
+        if (text.size() >= 2 && text[1] == ':') {
+            rootLength = kDriveRootLength;
+        }
+#endif
+        while (text.size() > rootLength && text.back() == '/') {
+            text.pop_back();
+        }
+        return text;
+    }
+
+    std::expected<String, String> AbsolutePath(StringView path) {
+        const auto joined = JoinedWithCurrentDirectory(path);
+        if (!joined) {
+            return std::unexpected(joined.error());
+        }
+        return ToString(joined->LexicallyNormal().View());
+    }
+
+    std::expected<String, String> CanonicalPath(StringView path) {
+#ifdef _WIN32
+        constexpr DWORD kStartCapacity = MAX_PATH;
+        constexpr StringView kExtendedPrefix = "\\\\?\\";
+        constexpr StringView kExtendedUncPrefix = "\\\\?\\UNC\\";
+        const HANDLE handle = CreateFileW(WidePath(path).Get(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        if (handle == INVALID_HANDLE_VALUE) {
+            return std::unexpected(WindowsFailure("resolve", path));
+        }
+        SmallVector<wchar_t, kStartCapacity> buffer(kStartCapacity);
+        DWORD length = GetFinalPathNameByHandleW(handle, buffer.data(), static_cast<DWORD>(buffer.size()), VOLUME_NAME_DOS);
+        if (length >= buffer.size()) {
+            buffer.resize(length + 1);
+            length = GetFinalPathNameByHandleW(handle, buffer.data(), static_cast<DWORD>(buffer.size()), VOLUME_NAME_DOS);
+        }
+        const String failure = length == 0 ? WindowsFailure("resolve", path) : String{};
+        CloseHandle(handle);
+        if (length == 0) {
+            return std::unexpected(failure);
+        }
+        String text = FromWide(buffer.data(), length);
+        const auto startsWith = [&](StringView prefix) { return text.compare(0, prefix.size(), prefix.data(), prefix.size()) == 0; };
+        if (startsWith(kExtendedUncPrefix)) {
+            // \\?\UNC\host\share is \\host\share
+            text.erase(0, kExtendedUncPrefix.size() - 2);
+        } else if (startsWith(kExtendedPrefix)) {
+            text.erase(0, kExtendedPrefix.size());
+        }
+        ToGenericSeparators(text);
+        return text;
+#else
+        const CPath cPath{path};
+        // realpath allocates with malloc when the buffer is null, and the result is freed below
+        char* resolved = realpath(cPath.Get(), nullptr);
+        if (resolved == nullptr) {
+            return std::unexpected(ErrnoFailure("resolve", path));
+        }
+        String text(resolved);
+        std::free(resolved);
+        return text;
+#endif
+    }
+
+    std::expected<String, String> WeaklyCanonicalPath(StringView path) {
+        const auto joined = JoinedWithCurrentDirectory(path);
+        if (!joined) {
+            return std::unexpected(joined.error());
+        }
+        // The longest part that exists is resolved with its links, so `link/..` leaves the link's target; the rest is only cleaned up
+        const StringView text = joined->View();
+        StringView existing = text;
+        while (!GetFileInfo(existing)) {
+            const StringView parent = PathParent(existing);
+            if (parent.empty() || parent.size() >= existing.size()) {
+                return std::unexpected(Format("Cannot resolve '{}': no part of it exists", path));
+            }
+            existing = parent;
+        }
+        auto canonical = CanonicalPath(existing);
+        if (!canonical) {
+            return canonical;
+        }
+        StringView rest = text.substr(existing.size());
+        while (!rest.empty() && IsSeparator(rest.front())) {
+            rest.remove_prefix(1);
+        }
+        if (rest.empty()) {
+            return canonical;
+        }
+        return ToString((Path(*canonical) / rest).LexicallyNormal().View());
+    }
+
+    std::expected<bool, String> IsSameFile(StringView first, StringView second) {
+        const auto left = IdentityOf(first);
+        if (!left) {
+            return std::unexpected(left.error());
+        }
+        const auto right = IdentityOf(second);
+        if (!right) {
+            return std::unexpected(right.error());
+        }
+        return *left == *right;
     }
 
     std::expected<Vector<uint8_t>, String> ReadFileBytes(StringView path, size_t maxBytes) {

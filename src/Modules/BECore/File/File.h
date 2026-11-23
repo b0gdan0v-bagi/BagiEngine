@@ -91,6 +91,11 @@ namespace BECore {
     /// Whether WalkDirectory lists only the entries of the folder or every entry below it
     CORE_ENUM(WalkMode, uint8_t, Folder, Tree)
 
+    /// What CopyFileTo does when @p to exists as a file
+    CORE_ENUM(CopyMode, uint8_t,
+              Fail,       ///< an error; not race-free, like FileMode::CreateNew
+              Overwrite)  ///< the file is replaced in place (truncated, then written: a failed copy leaves a partial file)
+
     /**
      * Calls @p visit for each entry of @p folder (and, in Tree mode, of every folder below it) with its path below @p folder, `/` between
      * the names, and its kind (a symbolic link shows the kind of what it points at; one that points nowhere is Other). The text is valid
@@ -102,6 +107,29 @@ namespace BECore {
      * the bound of the call (64 folders) is not entered either. @p visit must not change the folder it is listing.
      */
     [[nodiscard]] std::expected<void, String> WalkDirectory(StringView folder, WalkMode mode, FunctionRef<bool(StringView relativePath, FileKind kind)> visit);
+
+    /// Removes a file, an empty or a full folder with everything in it. A path that is missing is an error, like RemoveFile.
+    /// A symbolic link is removed, never followed: its target stays. A failure stops at the first entry that cannot be removed.
+    [[nodiscard]] std::expected<void, String> RemoveTree(StringView path);
+
+    /// Copies the bytes of the file @p from to @p to. A folder as @p from or @p to is refused, the folder above @p to is not made, and a copy onto the same file is refused
+    /// (it would truncate the source). Named `CopyFileTo` because windows.h defines the macro `CopyFile`.
+    [[nodiscard]] std::expected<void, String> CopyFileTo(StringView from, StringView to, CopyMode mode = CopyMode::Fail);
+
+    /// The working folder of the process, without a trailing separator (except for a root), `/` between the names on every platform
+    [[nodiscard]] std::expected<String, String> CurrentDirectory();
+
+    /// @p path made absolute by the working folder and lexically normal (`Path::LexicallyNormal`): the path need not exist and no link is resolved
+    [[nodiscard]] std::expected<String, String> AbsolutePath(StringView path);
+
+    /// The absolute path with every symbolic link resolved (`realpath`; `GetFinalPathNameByHandleW` on Windows, without the `\\?\` prefix). The path must exist.
+    [[nodiscard]] std::expected<String, String> CanonicalPath(StringView path);
+
+    /// CanonicalPath of the longest part of @p path that exists, followed by the rest lexically normal; for a path that may not exist yet
+    [[nodiscard]] std::expected<String, String> WeaklyCanonicalPath(StringView path);
+
+    /// Whether both paths are the same file or folder after links are followed (same device and index). Both must exist, else it is an error.
+    [[nodiscard]] std::expected<bool, String> IsSameFile(StringView first, StringView second);
 
     /// The largest file ReadFileBytes and ReadTextFile read whole unless the caller passes a tighter bound: nothing in the engine reads more at once
     inline constexpr size_t kDefaultMaxFileBytes = size_t{256} * 1024 * 1024;
