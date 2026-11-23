@@ -114,7 +114,7 @@ namespace BECore {
             }
             auto set = LoadSet(entry.path());
             if (!set) {
-                LOG_WARNING(Format("Art generation: the set '{}' is skipped and left as it is: {}", Generic(entry.path()), set.error()));
+                LOG_WARNING("Art generation: the set '{}' is skipped and left as it is: {}", Generic(entry.path()), set.error());
                 continue;
             }
             sets.push_back(std::move(*set));

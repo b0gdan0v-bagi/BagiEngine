@@ -101,12 +101,12 @@ namespace BECore {
                 }
                 _inotifyFd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
                 if (_inotifyFd < 0) {
-                    LOG_ERROR("File watch: inotify_init1 failed: {}"_format(std::strerror(errno)));
+                    LOG_ERROR("File watch: inotify_init1 failed: {}", std::strerror(errno));
                     return false;
                 }
                 _stopFd = eventfd(0, EFD_CLOEXEC);
                 if (_stopFd < 0) {
-                    LOG_ERROR("File watch: eventfd failed: {}"_format(std::strerror(errno)));
+                    LOG_ERROR("File watch: eventfd failed: {}", std::strerror(errno));
                     close(_inotifyFd);
                     _inotifyFd = -1;
                     return false;
@@ -128,7 +128,7 @@ namespace BECore {
             void AddTree(const std::filesystem::path& dir, const std::filesystem::path& root, bool recursive) {
                 const int wd = inotify_add_watch(_inotifyFd, dir.c_str(), kWatchMask);
                 if (wd < 0) {
-                    LOG_WARNING("File watch: cannot watch '{}': {}"_format(dir.c_str(), std::strerror(errno)));
+                    LOG_WARNING("File watch: cannot watch '{}': {}", dir.c_str(), std::strerror(errno));
                     return;
                 }
                 _watched.push_back(Watched{wd, dir, root, recursive});
@@ -239,7 +239,7 @@ namespace BECore {
                         if (errno == EINTR) {
                             continue;
                         }
-                        LOG_ERROR("File watch: poll failed: {}"_format(std::strerror(errno)));
+                        LOG_ERROR("File watch: poll failed: {}", std::strerror(errno));
                         return;
                     }
                     if (fds[1].revents != 0) {

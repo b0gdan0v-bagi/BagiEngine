@@ -112,9 +112,9 @@ namespace BECore {
         const size_t unreported = Registry::Instance().BindPending(warn);
         ProgramPool::RebindNative();
         if (unreported > 0) {
-            LOG_WARNING(Format("Native programs: {} generated functions were made for another set of registered types and operations (ProgramDomain::Fingerprint) and are not used; "
-                               "register the game's types and operations in the order the tool does, before ApplyNativeProgramsFlags(); those programs run in the interpreter",
-                               unreported));
+            LOG_WARNING("Native programs: {} generated functions were made for another set of registered types and operations (ProgramDomain::Fingerprint) and are not used; "
+                        "register the game's types and operations in the order the tool does, before ApplyNativeProgramsFlags(); those programs run in the interpreter",
+                        unreported);
         }
     }
 
@@ -144,7 +144,7 @@ namespace BECore {
 
     void NativePrograms::LogSummary() {
         const NativeProgramCounts counts = Counts();
-        LOG_INFO(Format("Native programs: {} bound, {} missed", counts.bound, counts.missed));
+        LOG_INFO("Native programs: {} bound, {} missed", counts.bound, counts.missed);
     }
 
     NativeProgramFn NativePrograms::Find(const Program& program) {
@@ -156,11 +156,9 @@ namespace BECore {
             return;
         }
         const StringView text = source.ToStringView();
-        const String message =
-            Format("Native programs: no generated function for the formula '{}': the generated programs file is stale or missing, regenerate it with the tool's --emit-native-programs; "
-                   "this formula runs in the interpreter",
-                   text.empty() ? StringView("(assembled by hand)") : text);
-        LOG_WARNING(message);
+        LOG_WARNING("Native programs: no generated function for the formula '{}': the generated programs file is stale or missing, regenerate it with the tool's --emit-native-programs; "
+                    "this formula runs in the interpreter",
+                    text.empty() ? StringView("(assembled by hand)") : text);
     }
 
 }  // namespace BECore

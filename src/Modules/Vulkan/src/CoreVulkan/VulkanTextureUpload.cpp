@@ -111,7 +111,7 @@ namespace BECore {
         StagingBuffer staging = CreateStagingBuffer(vkDevice, deviceObj, imageSize, rgba);
 
         if (staging.buffer == VK_NULL_HANDLE) {
-            LOG_ERROR(Format("VulkanTextureUpload: failed to create staging buffer for '{}'", path.ToStringView()).c_str());
+            LOG_ERROR("VulkanTextureUpload: failed to create staging buffer for '{}'", path.ToStringView());
             texture->SetFailed(path);
             return texture;
         }
@@ -133,7 +133,7 @@ namespace BECore {
         if (vkCreateImage(vkDevice, &imageInfo, nullptr, &image) != VK_SUCCESS) {
             vkDestroyBuffer(vkDevice, staging.buffer, nullptr);
             vkFreeMemory(vkDevice, staging.memory, nullptr);
-            LOG_ERROR(Format("VulkanTextureUpload: failed to create VkImage for '{}'", path.ToStringView()).c_str());
+            LOG_ERROR("VulkanTextureUpload: failed to create VkImage for '{}'", path.ToStringView());
             texture->SetFailed(path);
             return texture;
         }
@@ -146,7 +146,7 @@ namespace BECore {
             vkDestroyImage(vkDevice, image, nullptr);
             vkDestroyBuffer(vkDevice, staging.buffer, nullptr);
             vkFreeMemory(vkDevice, staging.memory, nullptr);
-            LOG_ERROR(Format("VulkanTextureUpload: no suitable memory type for '{}'", path.ToStringView()).c_str());
+            LOG_ERROR("VulkanTextureUpload: no suitable memory type for '{}'", path.ToStringView());
             texture->SetFailed(path);
             return texture;
         }
@@ -161,7 +161,7 @@ namespace BECore {
             vkDestroyImage(vkDevice, image, nullptr);
             vkDestroyBuffer(vkDevice, staging.buffer, nullptr);
             vkFreeMemory(vkDevice, staging.memory, nullptr);
-            LOG_ERROR(Format("VulkanTextureUpload: failed to allocate image memory for '{}'", path.ToStringView()).c_str());
+            LOG_ERROR("VulkanTextureUpload: failed to allocate image memory for '{}'", path.ToStringView());
             texture->SetFailed(path);
             return texture;
         }
@@ -170,7 +170,7 @@ namespace BECore {
             vkFreeMemory(vkDevice, imageMemory, nullptr);
             vkDestroyBuffer(vkDevice, staging.buffer, nullptr);
             vkFreeMemory(vkDevice, staging.memory, nullptr);
-            LOG_ERROR(Format("VulkanTextureUpload: failed to bind image memory for '{}'", path.ToStringView()).c_str());
+            LOG_ERROR("VulkanTextureUpload: failed to bind image memory for '{}'", path.ToStringView());
             texture->SetFailed(path);
             return texture;
         }
@@ -212,7 +212,7 @@ namespace BECore {
         if (!copied) {
             vkDestroyImage(vkDevice, image, nullptr);
             vkFreeMemory(vkDevice, imageMemory, nullptr);
-            LOG_ERROR(Format("VulkanTextureUpload: failed to copy the pixels of '{}' to the GPU", path.ToStringView()).c_str());
+            LOG_ERROR("VulkanTextureUpload: failed to copy the pixels of '{}' to the GPU", path.ToStringView());
             texture->SetFailed(path);
             return texture;
         }
@@ -232,7 +232,7 @@ namespace BECore {
         if (vkCreateImageView(vkDevice, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
             vkDestroyImage(vkDevice, image, nullptr);
             vkFreeMemory(vkDevice, imageMemory, nullptr);
-            LOG_ERROR(Format("VulkanTextureUpload: failed to create image view for '{}'", path.ToStringView()).c_str());
+            LOG_ERROR("VulkanTextureUpload: failed to create image view for '{}'", path.ToStringView());
             texture->SetFailed(path);
             return texture;
         }
@@ -248,7 +248,7 @@ namespace BECore {
 
         texture->SetLoaded(path, vkDevice, allocation.pool, image, imageMemory, imageView, allocation.set, static_cast<float>(texWidth), static_cast<float>(texHeight));
 
-        LOG_INFO(Format("VulkanTextureUpload: uploaded texture '{}' ({}x{})", path.ToStringView(), texWidth, texHeight).c_str());
+        LOG_INFO("VulkanTextureUpload: uploaded texture '{}' ({}x{})", path.ToStringView(), texWidth, texHeight);
         return texture;
     }
 

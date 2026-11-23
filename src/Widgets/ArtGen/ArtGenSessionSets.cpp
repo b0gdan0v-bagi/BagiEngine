@@ -285,7 +285,7 @@ namespace BECore {
 
     void ArtGenSession::SaveSet(const ArtGenSet& set) {
         if (auto written = WriteManifest(RootPath(_gameRoot), set); !written) {
-            LOG_WARNING(Format("Art generation: the manifest of the set '{}' was not written: {}", set.name, written.error()));
+            LOG_WARNING("Art generation: the manifest of the set '{}' was not written: {}", set.name, written.error());
         }
     }
 

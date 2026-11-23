@@ -29,7 +29,7 @@ namespace BECore::Stress {
         StressSettings LoadSettings() {
             auto settings = ParseStressSettings(CoreManager::GetCommandLine());
             if (!settings) {
-                LOG_WARNING(Format("Stress: {}; starting with the defaults", settings.error()));
+                LOG_WARNING("Stress: {}; starting with the defaults", settings.error());
                 return StressSettings{};
             }
             if (settings->ramp) {

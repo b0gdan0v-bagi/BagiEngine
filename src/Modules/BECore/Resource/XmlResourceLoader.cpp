@@ -24,13 +24,13 @@ namespace BECore {
 
         auto config = XmlConfig::Create();
         if (!config.LoadFromVirtualPath(path.ToStringView())) {
-            LOG_ERROR(Format("Failed to load XML resource: {}", path.ToStringView()).c_str());
+            LOG_ERROR("Failed to load XML resource: {}", path.ToStringView());
             resource->SetFailed(path);
             return resource;
         }
 
         resource->SetLoaded(path, std::move(config));
-        LOG_INFO(Format("Loaded XML resource: {}", path.ToStringView()).c_str());
+        LOG_INFO("Loaded XML resource: {}", path.ToStringView());
 
         return resource;
     }

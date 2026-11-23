@@ -72,7 +72,7 @@ namespace BECore {
 
         const auto key = ParseHandshakeRequest(head, policy);
         if (!key) {
-            LOG_WARNING("{}: a connection was refused: {}"_format(_settings.logName, key.error().message));
+            LOG_WARNING("{}: a connection was refused: {}", _settings.logName, key.error().message);
             const String response = BuildRejectResponse(key.error());
             (void)_socket.SendAll(AsBytes(response));
             return false;
@@ -140,7 +140,7 @@ namespace BECore {
                 return;
             }
         }
-        LOG_WARNING("{}: a client did not take its close frame, the connection is dropped"_format(_settings.logName));
+        LOG_WARNING("{}: a client did not take its close frame, the connection is dropped", _settings.logName);
         Abort();
     }
 
@@ -163,7 +163,7 @@ namespace BECore {
             }
         }
         if (overflow) {
-            LOG_WARNING("{}: a client does not read its messages, the connection is dropped"_format(_settings.logName));
+            LOG_WARNING("{}: a client does not read its messages, the connection is dropped", _settings.logName);
             Abort();
             return false;
         }

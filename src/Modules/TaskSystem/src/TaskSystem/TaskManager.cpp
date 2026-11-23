@@ -37,7 +37,7 @@ namespace BECore {
 
         _scheduler.Initialize(_threadPool.get());
 
-        LOG_INFO("[TaskManager] Initialized with {} worker threads"_format(numThreads));
+        LOG_INFO("[TaskManager] Initialized with {} worker threads", numThreads);
 #endif
         _isInitialized = true;
     }

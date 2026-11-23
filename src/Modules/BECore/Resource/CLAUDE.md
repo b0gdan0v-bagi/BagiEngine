@@ -95,7 +95,7 @@ Derive from `IResourceLoader` with `BE_CLASS(MyLoader)`, implement `CanLoad` / `
 - Call sync `Load()` on the main thread during gameplay.
 - Load the same path repeatedly: the cache already deduplicates.
 - Create circular resource dependencies.
-- Log with format arguments directly: `LOG_ERROR("Failed {}"_format(path))`.
+- Log with format arguments directly: `LOG_ERROR("Failed {}", path)`.
 
 ## Testing
 

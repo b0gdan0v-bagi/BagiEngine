@@ -8,7 +8,7 @@ Event-based logging. `Logger` pushes entries into a lock-free ring buffer, `LogE
 
 | Component | Purpose |
 |-----------|---------|
-| `Logger` | Static helper (`Debug` / `Info` / `Warning` / `Error` / `Fatal`), takes one `StringView` |
+| `Logger` | Static helper (`Debug` / `Info` / `Warning` / `Error` / `Fatal`): `(site, StringView)` raw, `(site, "fmt {}", args...)` compile-time checked and formatted on the stack |
 | `LogEvent` | Event with level, message and site; `Emit` writes to the ring buffer, `Flush` dispatches it |
 | `LogSite` | `file` / `line` of a log call; `file` is the `__FILE__` literal, kept as a pointer through the ring buffer |
 | `LogRingBuffer` | Lock-free MPSC buffer, safe from any thread; entries are dropped when it is full |
@@ -53,8 +53,8 @@ A `type` that is not registered in the factory is logged as an error by `MakeFro
 
 ## Best Practices
 
-- Use the macros: `LOG_DEBUG`, `LOG_INFO`, `LOG_WARNING`, `LOG_ERROR`, `LOG_FATAL`. The macros pass the site; a direct `Logger::Info(msg)` or `LogEvent::Emit(level, msg)` has none (`file == nullptr`). `ILogSink::Write(level, message)` does not carry it: a sink that wants it reads it from the `LogEvent`.
-- The macros take one string, so format first: `LOG_ERROR("Failed to load {}"_format(path))` (or `Format(...)`). `LOG_INFO("x {}", v)` does not compile.
+- Use the macros: `LOG_DEBUG`, `LOG_INFO`, `LOG_WARNING`, `LOG_ERROR`, `LOG_FATAL`; they call `Logger::Info(BE_LOG_SITE, args...)` (site first, so the arguments are variadic). The macros pass the site; a direct `Logger::Info(msg)` or `LogEvent::Emit(level, msg)` has none (`file == nullptr`). `ILogSink::Write(level, message)` does not carry it: a sink that wants it reads it from the `LogEvent`.
+- `LOG_ERROR("Failed to load {}", path)`: the format string is checked at compile time and formatted into a stack buffer of one ring cell (`LogEntry::MaxMessageSize - 1`, cut like a plain line), so it allocates on no thread. A wrong placeholder count or a type with no formatter does not compile (an extra argument is ignored by {fmt}); ctest `BagiLogFormatCompileFail`. `LOG_ERROR(text)` with one argument is logged raw, no parsing: a `{` in data is safe, and `LOG_ERROR("x {}")` prints `{}`. The line is formatted before the ring claim, so a slow `Formatter` never holds up the consumer. Never `LOG_ERROR(Format(...))` / `LOG_ERROR("..."_format(...))`: it still compiles but builds a heap `String` per line (`Format(...)` is checked at compile time, `"..."_format` only at run time), and the extended ctest `BagiLogCalls` fails on it (`tools/codemod/codemod.py --family log` rewrites it). Tests: `tests/BECore/LoggerFormatTest.cpp`.
 - Pick the level deliberately; `Fatal` is for unrecoverable errors.
 - Sinks receive `StringView`.
 - The sinks get the time of a line from `LogTime.h` (`GetLocalLogTime()`; `FormatLogTimeNow` of `LogHistory.h` makes the `HH:MM:SS.mmm` text) and write it as `{:02}:{:02}:{:02}` of `tm_hour`, `tm_min`, `tm_sec` (`FileSink` also the date), not `{:%H:%M:%S}` of `<fmt/chrono.h>`: the Clang of Emscripten refuses the `FMT_STRING` that header uses inside, and nothing else needs the header. Do not bring it back.

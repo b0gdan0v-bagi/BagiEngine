@@ -14,7 +14,7 @@ namespace BECore {
 
         auto fabric = AbstractFactory<IApplicationFabric>::GetInstance().Create(config._type);
         if (!fabric) {
-            LOG_ERROR("ApplicationConfig: unknown type '{}'"_format(config._type));
+            LOG_ERROR("ApplicationConfig: unknown type '{}'", config._type);
             return false;
         }
 

@@ -121,7 +121,7 @@ namespace BECore {
 
         VkDescriptorPool pool = VK_NULL_HANDLE;
         if (const VkResult result = vkCreateDescriptorPool(device, &poolInfo, nullptr, &pool); result != VK_SUCCESS) {
-            LOG_ERROR("VulkanTexturePipeline: vkCreateDescriptorPool failed with VkResult {}"_format(static_cast<int>(result)));
+            LOG_ERROR("VulkanTexturePipeline: vkCreateDescriptorPool failed with VkResult {}", static_cast<int>(result));
             return VK_NULL_HANDLE;
         }
         _descriptorPools.push_back(pool);
@@ -153,7 +153,7 @@ namespace BECore {
             result = vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet);
         }
         if (result != VK_SUCCESS) {
-            LOG_ERROR("VulkanTexturePipeline: vkAllocateDescriptorSets failed with VkResult {}"_format(static_cast<int>(result)));
+            LOG_ERROR("VulkanTexturePipeline: vkAllocateDescriptorSets failed with VkResult {}", static_cast<int>(result));
             return {};
         }
 

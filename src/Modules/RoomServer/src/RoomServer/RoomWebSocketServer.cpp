@@ -99,13 +99,13 @@ namespace BECore {
         }
         const auto started = _listener.Start(_settings.port);
         if (!started) {
-            LOG_ERROR("{}: {}"_format(kLogName, started.error().message));
+            LOG_ERROR("{}: {}", kLogName, started.error().message);
             return started;
         }
 
         // A connection that arrives before the hub thread runs waits in the queue
         _hubThread = Thread("Room hub", kThreadOrder + 3, [this] { RunHub(); });
-        LOG_INFO("{}: listening on port {}"_format(kLogName, *started));
+        LOG_INFO("{}: listening on port {}", kLogName, *started);
         return started;
     }
 
@@ -136,7 +136,7 @@ namespace BECore {
             _connections.clear();
             _draining = false;
         }
-        LOG_INFO("{}: stopped"_format(kLogName));
+        LOG_INFO("{}: stopped", kLogName);
     }
 
     void RoomWebSocketServer::DrainConnections() {
@@ -153,7 +153,7 @@ namespace BECore {
             return;
         }
 
-        LOG_INFO("{}: stopping, {} connections are told"_format(kLogName, open.size()));
+        LOG_INFO("{}: stopping, {} connections are told", kLogName, open.size());
         for (const auto& connection : open) {
             connection->QueueClose(WebSocketCloseCode::kGoingAway, kStoppingReason);  // false for one that is closing or gone already: it ends by itself
         }
@@ -167,7 +167,7 @@ namespace BECore {
             left = _connections.size();
         }
         if (left > 0) {
-            LOG_INFO("{}: {} connections did not end within {} ms and are cut"_format(kLogName, left, _settings.shutdownGrace.count()));
+            LOG_INFO("{}: {} connections did not end within {} ms and are cut", kLogName, left, _settings.shutdownGrace.count());
         }
     }
 
@@ -255,7 +255,7 @@ namespace BECore {
             return;
         }
         // Counts only: no name, code or token of anyone goes into a log line
-        LOG_INFO("{}: {} connections, {} rooms"_format(kLogName, current.connections, current.rooms));
+        LOG_INFO("{}: {} connections, {} rooms", kLogName, current.connections, current.rooms);
         lastLogged = current;
         lastLoggedAt = now;
     }
@@ -283,7 +283,7 @@ namespace BECore {
 
             const auto silence = now - state.lastLife;
             if (silence >= 2 * _settings.pingInterval) {
-                LOG_INFO("{}: a connection did not answer and was dropped"_format(kLogName));
+                LOG_INFO("{}: a connection did not answer and was dropped", kLogName);
                 connection->Abort();
             } else if (silence >= _settings.pingInterval && !state.pingSent) {
                 state.pingSent = connection->QueuePing();
@@ -301,7 +301,7 @@ namespace BECore {
     void RoomWebSocketServer::CloseConnection(ConnectionId connection, const String& reason) {
         BE_PROFILE_SCOPE("Room send");
         if (const auto target = FindConnection(connection)) {
-            LOG_INFO("{}: a connection was closed: {}"_format(kLogName, reason));
+            LOG_INFO("{}: a connection was closed: {}", kLogName, reason);
             target->QueueClose(GetRoomCloseCode(reason), reason);
         }
     }

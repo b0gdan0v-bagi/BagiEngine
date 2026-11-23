@@ -21,7 +21,7 @@ namespace BECore {
         expanded.append_copy(configRoot.GetPugiNode());
         const NodeExpansion expansion = ExpandNodeReferences(expanded.document_element(), loader, true);
         for (const String& error : expansion.errors) {
-            LOG_ERROR(Format("Config '{}': {}", configName, error).c_str());
+            LOG_ERROR("Config '{}': {}", configName, error);
         }
         if (findings != nullptr) {
             findings->expansionErrors = expansion.errors;
@@ -46,7 +46,7 @@ namespace BECore {
     IntrusivePtr<SceneManager> LoadCheckedSceneManager(const XmlNode& configRoot, NodeFileLoaderRef loader, StringView configName) {
         if (configRoot) {
             if (const auto version = CheckContentVersion(configRoot.GetPugiNode(), Format("Config '{}'", configName)); !version) {
-                LOG_ERROR(version.error().c_str());
+                LOG_ERROR(version.error());
                 return New<SceneManager>();
             }
         }
@@ -57,11 +57,11 @@ namespace BECore {
         auto manager = New<SceneManager>();
         const auto stamp = CheckContentStamp(reader, configName);
         if (!stamp) {
-            LOG_ERROR(Format("Config '{}': {}", configName, stamp.error()).c_str());
+            LOG_ERROR("Config '{}': {}", configName, stamp.error());
             return manager;
         }
         if (stamp->rootType != kSceneManagerRootType) {
-            LOG_ERROR(Format("Config '{}' holds a '{}', not a '{}'", configName, stamp->rootType, kSceneManagerRootType).c_str());
+            LOG_ERROR("Config '{}' holds a '{}', not a '{}'", configName, stamp->rootType, kSceneManagerRootType);
             return manager;
         }
         manager->Deserialize(reader);
@@ -82,7 +82,7 @@ namespace BECore {
         if (configs.IsBinaryConfig(kSceneConfigName)) {
             const UniquePtr<IDeserializer> reader = configs.CreateDeserializer(kSceneConfigName);
             if (!reader) {
-                LOG_ERROR(Format("Config '{}' cannot be read", kSceneConfigName).c_str());
+                LOG_ERROR("Config '{}' cannot be read", kSceneConfigName);
                 return New<SceneManager>();
             }
             return LoadSceneManagerFromBinary(*reader, kSceneConfigName);

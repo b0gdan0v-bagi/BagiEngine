@@ -287,7 +287,7 @@ namespace BECore {
             for (const String& name : names) {
                 if (ImGui::MenuItem(name.c_str())) {
                     if (const auto result = _layouts->Delete(name); !result) {
-                        LOG_WARNING(Format("Editor: cannot delete layout '{}': {}", name, result.error().detail));
+                        LOG_WARNING("Editor: cannot delete layout '{}': {}", name, result.error().detail);
                     }
                     // The list is read again on the next draw: the loop above goes on over the old one
                     _layoutNames.Invalidate();
@@ -393,12 +393,12 @@ namespace BECore {
     void EditorLayoutWidget::QueueLayout(const String& name) {
         const auto text = _layouts->Load(name);
         if (!text) {
-            LOG_WARNING(Format("Editor: cannot load layout '{}': {}", name, text.error().detail));
+            LOG_WARNING("Editor: cannot load layout '{}': {}", name, text.error().detail);
             return;
         }
         // ImGui reports no error for a bad ini and drops the dock tree before it reads one: keep the current layout instead
         if (!LooksLikeLayoutText(*text)) {
-            LOG_WARNING(Format("Editor: layout '{}' has no dock tree; the current layout stays", name));
+            LOG_WARNING("Editor: layout '{}' has no dock tree; the current layout stays", name);
             return;
         }
         _pendingLayoutText = *text;
@@ -411,11 +411,11 @@ namespace BECore {
         ImGui::MarkIniSettingsDirty();
         const auto result = _layouts->Save(name, StringView(text, size));
         if (!result) {
-            LOG_ERROR(Format("Editor: cannot save layout '{}': {}", name, result.error().detail));
+            LOG_ERROR("Editor: cannot save layout '{}': {}", name, result.error().detail);
             return std::unexpected(result.error().detail);
         }
         _layoutNames.Invalidate();
-        LOG_INFO(Format("Editor: layout '{}' saved", name));
+        LOG_INFO("Editor: layout '{}' saved", name);
         return {};
     }
 

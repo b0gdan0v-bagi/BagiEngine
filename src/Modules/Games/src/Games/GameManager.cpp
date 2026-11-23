@@ -23,13 +23,13 @@ namespace BECore {
         for (const auto& meta : metas) {
             auto game = AbstractFactory<IGame>::GetInstance().Create(meta);
             if (!game) {
-                LOG_ERROR(Format("GameManager: failed to create IGame of type '{}'", meta.typeName).c_str());
+                LOG_ERROR("GameManager: failed to create IGame of type '{}'", meta.typeName);
                 continue;
             }
             _games.push_back(std::move(game));
         }
 
-        LOG_INFO(Format("GameManager: registered {} game(s)", _games.size()).c_str());
+        LOG_INFO("GameManager: registered {} game(s)", _games.size());
 
         if (_games.empty()) {
             LOG_INFO("GameManager: no games registered, nothing to activate");
@@ -47,7 +47,7 @@ namespace BECore {
 
         if (defaultName.Empty()) {
             defaultName = _games.front()->GetName();
-            LOG_INFO(Format("GameManager: defaultGame not set, falling back to '{}'", defaultName.ToStringView()).c_str());
+            LOG_INFO("GameManager: defaultGame not set, falling back to '{}'", defaultName.ToStringView());
         }
 
         SwitchTo(defaultName);
@@ -76,7 +76,7 @@ namespace BECore {
 
         auto next = FindGame(name);
         if (!next) {
-            LOG_ERROR(Format("GameManager: no registered game named '{}'", name.ToStringView()).c_str());
+            LOG_ERROR("GameManager: no registered game named '{}'", name.ToStringView());
             return;
         }
 
@@ -96,7 +96,7 @@ namespace BECore {
             _active->Start();
         }
 
-        LOG_INFO(Format("GameManager: switched to '{}'", _active->GetName().ToStringView()).c_str());
+        LOG_INFO("GameManager: switched to '{}'", _active->GetName().ToStringView());
     }
 
     void GameManager::ResetActive() {

@@ -26,7 +26,7 @@ namespace BECore {
         const auto realPath = CoreManager::GetFileSystem().ResolvePath(path.ToStringView());
         std::ifstream file(realPath, std::ios::binary | std::ios::ate);
         if (realPath.empty() || !file) {
-            LOG_ERROR("FontLoader: cannot open '{}'"_format(path.ToStringView()));
+            LOG_ERROR("FontLoader: cannot open '{}'", path.ToStringView());
             return Font::CreateFromMemory(path, {});
         }
         const auto size = static_cast<size_t>(file.tellg());
@@ -34,16 +34,16 @@ namespace BECore {
         file.seekg(0);
         file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
         if (!file) {
-            LOG_ERROR("FontLoader: cannot read '{}'"_format(path.ToStringView()));
+            LOG_ERROR("FontLoader: cannot read '{}'", path.ToStringView());
             return Font::CreateFromMemory(path, {});
         }
 
         auto font = Font::CreateFromMemory(path, std::move(bytes));
         if (font->GetState() != ResourceState::Loaded) {
-            LOG_ERROR("FontLoader: '{}' is not a font file that stb_truetype can read"_format(path.ToStringView()));
+            LOG_ERROR("FontLoader: '{}' is not a font file that stb_truetype can read", path.ToStringView());
             return font;
         }
-        LOG_INFO("FontLoader: loaded font '{}'"_format(path.ToStringView()));
+        LOG_INFO("FontLoader: loaded font '{}'", path.ToStringView());
         return font;
     }
 

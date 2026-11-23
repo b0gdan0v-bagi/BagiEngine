@@ -105,7 +105,7 @@ namespace BECore {
     void UICanvasComponent::AdoptDocument() {
         const auto document = CoreManager::GetResourceManager().Load<UIDocument>(_source.ToStringView());
         if (!document || document->GetState() != ResourceState::Loaded) {
-            LOG_ERROR("UICanvasComponent: cannot load the screen '{}'"_format(_source.ToStringView()));
+            LOG_ERROR("UICanvasComponent: cannot load the screen '{}'", _source.ToStringView());
             return;
         }
         // Errors in the file are logged by Instantiate(); what could be read is used
@@ -166,7 +166,7 @@ namespace BECore {
 
         const bool ignored = _extendToOutput && _space != CanvasSpace::SceneView;
         if (ignored && !_extendWarned) {
-            LOG_WARNING("UICanvasComponent: extendToOutput applies to a SceneView canvas only; ignored on a {} canvas"_format(EnumUtils<CanvasSpace>::ToString(_space)));
+            LOG_WARNING("UICanvasComponent: extendToOutput applies to a SceneView canvas only; ignored on a {} canvas", EnumUtils<CanvasSpace>::ToString(_space));
         }
         _extendWarned = ignored;
     }

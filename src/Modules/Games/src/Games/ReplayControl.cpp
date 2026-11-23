@@ -242,10 +242,10 @@ namespace BECore {
             return;
         }
         if (const auto started = SessionRecorder::GetInstance().Start(*path, *game); !started) {
-            LOG_ERROR("Cannot record to '{}': {}; the game starts without recording"_format(*path, started.error().message));
+            LOG_ERROR("Cannot record to '{}': {}; the game starts without recording", *path, started.error().message);
             return;
         }
-        LOG_INFO("Recording the game '{}' to '{}'"_format(game->GetName().ToStringView(), *path));
+        LOG_INFO("Recording the game '{}' to '{}'", game->GetName().ToStringView(), *path);
     }
 
 }  // namespace BECore

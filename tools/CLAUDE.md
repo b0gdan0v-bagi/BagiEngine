@@ -17,7 +17,7 @@ Each tool has its own `CLAUDE.md`; Python tools have pytest suites outside ctest
 | `changelog` | engine version and changelog fragments |
 | `migrate` | rewrites a game's content files to the engine's format |
 | `schema` | XSDs from reflection |
-| `codemod` | moves `eastl::` / `std::` names to the `BECore` aliases |
+| `codemod` | moves `eastl::` / `std::` names to the `BECore` aliases; `log`: `LOG_X(Format(...))` to `LOG_X("...", args)` |
 | `dev` | `dev.py`: a game's products from its `dev.json` |
 | `artgen` | AI art and sounds: ComfyUI, presets (skill `artgen`) |
 | `ccache` | shared cache hits |

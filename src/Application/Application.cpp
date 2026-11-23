@@ -73,12 +73,12 @@ namespace BECore {
         BE_PROFILE_THREAD_ORDER("Main", 0);
         const auto profilerSettings = ResolveProfilerSettings(_arguments);
         if (!profilerSettings) {
-            LOG_ERROR("Profiler: {}"_format(profilerSettings.error()));
+            LOG_ERROR("Profiler: {}", profilerSettings.error());
             LogEvent::Flush();
             return false;
         }
         if (const auto started = Profiler::Start(*profilerSettings); !started) {
-            LOG_ERROR("Profiler: {}"_format(started.error()));
+            LOG_ERROR("Profiler: {}", started.error());
             LogEvent::Flush();
             return false;
         }
@@ -95,14 +95,14 @@ namespace BECore {
         CoreManager::GetInstance().OnApplicationPreInit({});
 
         LOG_INFO("Game started");
-        LOG_INFO("Engine version {}"_format(kEngineVersion));
+        LOG_INFO("Engine version {}", kEngineVersion);
 
         // Before the window exists: a flag that cannot be read should not cost a window and a loaded scene.
         // Nothing flushes the log before the first frame, so an error that stops the start-up flushes it itself.
         const ApplicationConfigLoad load = LoadApplicationConfig();
         const auto controlSettings = ResolveControlSettings(_arguments, load);
         if (!controlSettings) {
-            LOG_ERROR("Control API: {}"_format(controlSettings.error().message));
+            LOG_ERROR("Control API: {}", controlSettings.error().message);
             LogEvent::Flush();
             return false;
         }
@@ -118,7 +118,7 @@ namespace BECore {
         // The run mode of this run: a flag beats the file's `mode` (WidgetManager::CreateWidgets reads it the same way)
         const auto requestedMode = RequestedRunMode(load.config._mode, _arguments);
         if (!requestedMode) {
-            LOG_ERROR("Run mode: {}"_format(requestedMode.error()));
+            LOG_ERROR("Run mode: {}", requestedMode.error());
             LogEvent::Flush();
             return false;
         }
@@ -162,7 +162,7 @@ namespace BECore {
         const RunMode resolvedMode = kEditorBuilt ? config._mode : RunMode::Game;
         const bool watchFiles = ShouldWatchFiles(config._fileWatch, resolvedMode, kAssertsOn, kIsWeb);
         CoreManager::GetInstance().StartFileWatching({}, watchFiles);
-        LOG_INFO("File watching: {}"_format(watchFiles ? "on" : "off"));
+        LOG_INFO("File watching: {}", watchFiles ? "on" : "off");
 
         CoreManager::GetInstance().OnApplicationInit({});
 
@@ -197,13 +197,13 @@ namespace BECore {
             const Json* result = answer ? FindJsonMember(*answer, "result") : nullptr;
             const Json* error = answer ? FindJsonMember(*answer, "error") : nullptr;
             if (result != nullptr && GetJsonBool(*result, "ok").value_or(false)) {
-                LOG_INFO("Replay: {} entries played"_format(GetJsonInt(*result, "entries").value_or(0)));
+                LOG_INFO("Replay: {} entries played", GetJsonInt(*result, "entries").value_or(0));
             } else if (error != nullptr && GetJsonString(*error, "code").value_or(String()) == ControlErrors::kShuttingDown) {
                 return;  // the application ended before the replay did: nothing to report, and the exit code stays
             } else {
                 const Json* mismatch = result != nullptr ? FindJsonMember(*result, "mismatch") : nullptr;
                 const Json* named = mismatch != nullptr ? mismatch : error;
-                LOG_ERROR("Replay: {} {}"_format(mismatch != nullptr ? "mismatch" : "failed", named != nullptr ? DumpJson(*named) : text));
+                LOG_ERROR("Replay: {} {}", mismatch != nullptr ? "mismatch" : "failed", named != nullptr ? DumpJson(*named) : text);
                 SetExitCode(1);
             }
             if (quitWhenDone) {
@@ -324,7 +324,7 @@ namespace BECore {
         _controlServer = MakeUnique<WebSocketServer>(CoreManager::GetControlService());
         const auto started = _controlServer->Start(port);
         if (!started) {
-            LOG_ERROR("Control API: {}"_format(started.error().message));
+            LOG_ERROR("Control API: {}", started.error().message);
             LogEvent::Flush();
             _controlServer.reset();
             return false;
@@ -338,7 +338,7 @@ namespace BECore {
         }
         // The default port first, so a client that knows it (an agent, the MCP server) finds the editor; another process may hold it
         if (StartControlServer(kDefaultControlPort) || StartControlServer(0)) {
-            LOG_INFO("Control API: started on request on port {}"_format(_controlServer->GetPort()));
+            LOG_INFO("Control API: started on request on port {}", _controlServer->GetPort());
             PublishControlStatus();
         }
     }
@@ -363,7 +363,7 @@ namespace BECore {
         CoreManager::GetInstance().OnApplicationDeinit({});
         // After the deinit: the worker threads have been joined, so every zone is complete in the trace
         if (const auto finished = Profiler::Finish(); !finished) {
-            LOG_ERROR("Profiler: {}"_format(finished.error()));
+            LOG_ERROR("Profiler: {}", finished.error());
         }
         LogEvent::Flush();
     }

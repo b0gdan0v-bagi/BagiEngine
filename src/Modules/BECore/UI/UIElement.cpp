@@ -44,7 +44,7 @@ namespace BECore {
             const auto typeName = components[i]->GetTypeMeta().typeName;
             for (size_t j = 0; j < i; ++j) {
                 if (components[j]->GetTypeMeta().typeName == typeName) {
-                    LOG_WARNING("UIElement '{}': a second {} is ignored, an element holds one component of each type"_format(name.ToStringView(), typeName));
+                    LOG_WARNING("UIElement '{}': a second {} is ignored, an element holds one component of each type", name.ToStringView(), typeName);
                     components.erase(components.begin() + static_cast<ptrdiff_t>(i));
                     --i;
                     break;

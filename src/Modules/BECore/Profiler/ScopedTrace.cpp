@@ -19,7 +19,7 @@ namespace BECore {
         const auto written = Profiler::GetChromeTrace().WriteFile(_path);
         if (!written) {
             _error = written.error();
-            LOG_ERROR("Profiler: {}"_format(_error));
+            LOG_ERROR("Profiler: {}", _error);
             return false;
         }
         _error.clear();

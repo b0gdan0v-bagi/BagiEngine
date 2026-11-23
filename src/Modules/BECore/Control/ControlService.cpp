@@ -378,7 +378,7 @@ namespace BECore {
             return std::move(*nested->_captured);
         }
         if (nested->_deferFrames == 0) {
-            LOG_ERROR(Format("[ControlService] the handler of '{}' gave no answer", nested->GetMethod()));
+            LOG_ERROR("[ControlService] the handler of '{}' gave no answer", nested->GetMethod());
             return std::unexpected(MakeControlError(ControlErrors::kInternalError, "the handler gave no answer"));
         }
 
@@ -412,14 +412,14 @@ namespace BECore {
         }
 
         if (call->_deferFrames == 0) {
-            LOG_ERROR(Format("[ControlService] the handler of '{}' gave no answer", call->GetMethod()));
+            LOG_ERROR("[ControlService] the handler of '{}' gave no answer", call->GetMethod());
             call->Fail(ControlErrors::kInternalError, "the handler gave no answer");
             return;
         }
 
         if (_pending) {
             // Only a method that bypasses the barrier can get here while another call is pending
-            LOG_ERROR(Format("[ControlService] '{}' cannot defer its answer while '{}' is pending", call->GetMethod(), _pending->GetMethod()));
+            LOG_ERROR("[ControlService] '{}' cannot defer its answer while '{}' is pending", call->GetMethod(), _pending->GetMethod());
             call->Fail(ControlErrors::kInternalError, "a call that bypasses the barrier cannot defer its answer");
             return;
         }

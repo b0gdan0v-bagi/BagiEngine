@@ -91,7 +91,7 @@ namespace BECore {
             if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
                 _physicalDevice = device;
                 _queueFamilies = FindQueueFamilies(device, surface);
-                LOG_INFO(Format("Vulkan: Selected discrete GPU: {}", props.deviceName));
+                LOG_INFO("Vulkan: Selected discrete GPU: {}", props.deviceName);
                 return true;
             }
             if (fallback == VK_NULL_HANDLE) {
@@ -104,7 +104,7 @@ namespace BECore {
             _physicalDevice = fallback;
             VkPhysicalDeviceProperties props{};
             vkGetPhysicalDeviceProperties(_physicalDevice, &props);
-            LOG_INFO(Format("Vulkan: Selected GPU: {}", props.deviceName));
+            LOG_INFO("Vulkan: Selected GPU: {}", props.deviceName);
             return true;
         }
         return false;
@@ -231,7 +231,7 @@ namespace BECore {
 
         VkCommandBuffer cmd = VK_NULL_HANDLE;
         if (const VkResult result = vkAllocateCommandBuffers(_device, &allocInfo, &cmd); result != VK_SUCCESS) {
-            LOG_ERROR("VulkanDevice: vkAllocateCommandBuffers failed with VkResult {}"_format(static_cast<int>(result)));
+            LOG_ERROR("VulkanDevice: vkAllocateCommandBuffers failed with VkResult {}", static_cast<int>(result));
             return VK_NULL_HANDLE;
         }
 
@@ -239,7 +239,7 @@ namespace BECore {
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         if (const VkResult result = vkBeginCommandBuffer(cmd, &beginInfo); result != VK_SUCCESS) {
-            LOG_ERROR("VulkanDevice: vkBeginCommandBuffer failed with VkResult {}"_format(static_cast<int>(result)));
+            LOG_ERROR("VulkanDevice: vkBeginCommandBuffer failed with VkResult {}", static_cast<int>(result));
             vkFreeCommandBuffers(_device, pool, 1, &cmd);
             return VK_NULL_HANDLE;
         }
@@ -255,11 +255,11 @@ namespace BECore {
 
         VkResult result = vkEndCommandBuffer(cmd);
         if (result != VK_SUCCESS) {
-            LOG_ERROR("VulkanDevice: vkEndCommandBuffer failed with VkResult {}"_format(static_cast<int>(result)));
+            LOG_ERROR("VulkanDevice: vkEndCommandBuffer failed with VkResult {}", static_cast<int>(result));
         } else {
             result = vkQueueSubmit(_graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
             if (result != VK_SUCCESS) {
-                LOG_ERROR("VulkanDevice: vkQueueSubmit failed with VkResult {}"_format(static_cast<int>(result)));
+                LOG_ERROR("VulkanDevice: vkQueueSubmit failed with VkResult {}", static_cast<int>(result));
             } else {
                 // Only a submit that was accepted can be waited for
                 vkQueueWaitIdle(_graphicsQueue);

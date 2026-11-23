@@ -123,7 +123,7 @@ namespace BECore {
             }
             const WebCanvasSize size = FitWindowSize(innerWidth, innerHeight, kMinWindowSize, kMinWindowSize);
             if (!SDL_SetWindowSize(window, size.width, size.height)) {
-                LOG_WARNING(Format("[SDLWebCanvas] SDL_SetWindowSize({}, {}) failed: {}", size.width, size.height, SDL_GetError()).c_str());
+                LOG_WARNING("[SDLWebCanvas] SDL_SetWindowSize({}, {}) failed: {}", size.width, size.height, SDL_GetError());
             }
         }
 

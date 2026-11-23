@@ -104,7 +104,7 @@ if (deserializer.BeginObject("Player")) {
 }
 if (deserializer.HasErrors()) {
     for (const auto& err : deserializer.GetErrors()) {
-        LOG_ERROR("Deserialize error: {} - {} (line {})"_format(err.path, err.errorMessage, err.line));
+        LOG_ERROR("Deserialize error: {} - {} (line {})", err.path, err.errorMessage, err.line);
     }
 }
 ```

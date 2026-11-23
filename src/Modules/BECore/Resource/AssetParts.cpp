@@ -171,31 +171,31 @@ namespace BECore {
 
     bool SplitAssetFile(StringView virtualAssetPath, StringView outputVirtualFolder) {
         if (SplitPartPath(virtualAssetPath, AssetPurpose::Sim).empty()) {
-            LOG_ERROR(Format("SplitAssetFile: '{}' is no .asset.xml file", virtualAssetPath).c_str());
+            LOG_ERROR("SplitAssetFile: '{}' is no .asset.xml file", virtualAssetPath);
             return false;
         }
         const std::filesystem::path source = CoreManager::GetFileSystem().ResolvePath(virtualAssetPath);
         std::error_code error;
         const auto size = source.empty() ? 0 : std::filesystem::file_size(source, error);
         if (source.empty() || error || size > ReaderLimits::kMaxXmlDocumentBytes) {
-            LOG_ERROR(Format("SplitAssetFile: cannot read '{}'", virtualAssetPath).c_str());
+            LOG_ERROR("SplitAssetFile: cannot read '{}'", virtualAssetPath);
             return false;
         }
         pugi::xml_document document;
         const pugi::xml_parse_result parsed = document.load_file(source.c_str(), pugi::parse_default, kEncoding);
         if (!parsed) {
-            LOG_ERROR(Format("SplitAssetFile: '{}' does not parse: {}", virtualAssetPath, parsed.description()).c_str());
+            LOG_ERROR("SplitAssetFile: '{}' does not parse: {}", virtualAssetPath, parsed.description());
             return false;
         }
         const auto texts = SplitDocument(document);
         if (!texts) {
-            LOG_ERROR(Format("SplitAssetFile: '{}': {}", virtualAssetPath, texts.error()).c_str());
+            LOG_ERROR("SplitAssetFile: '{}': {}", virtualAssetPath, texts.error());
             return false;
         }
 
         const std::filesystem::path folder = outputVirtualFolder.empty() ? source.parent_path() : ResolveOutputFolder(outputVirtualFolder);
         if (folder.empty()) {
-            LOG_ERROR(Format("SplitAssetFile: no output folder '{}'", outputVirtualFolder).c_str());
+            LOG_ERROR("SplitAssetFile: no output folder '{}'", outputVirtualFolder);
             return false;
         }
 
@@ -207,7 +207,7 @@ namespace BECore {
             if (!text) {
                 std::filesystem::remove(file, error);
             } else if (!WriteText(file, *text)) {
-                LOG_ERROR(Format("SplitAssetFile: cannot write '{}'", file.string()).c_str());
+                LOG_ERROR("SplitAssetFile: cannot write '{}'", file.string());
                 written = false;
             }
         }

@@ -224,7 +224,7 @@ namespace BECore {
                 _swapchainDirty = true;
                 break;
             default:
-                LOG_ERROR("VulkanRendererBackend: {}"_format(stage == SwapchainStage::Acquire ? "acquiring a swapchain image failed, so the frame is skipped" : "presenting a swapchain image failed"));
+                LOG_ERROR("VulkanRendererBackend: {}", stage == SwapchainStage::Acquire ? "acquiring a swapchain image failed, so the frame is skipped" : "presenting a swapchain image failed");
                 break;
         }
         return action;
@@ -376,11 +376,11 @@ namespace BECore {
         }
         if (step == VulkanFramePolicy::FrameStep::DeviceLost) {
             if (!_deviceLost) {
-                LOG_ERROR("VulkanRendererBackend: the device is lost ({} failed), no frame is drawn from now on"_format(what));
+                LOG_ERROR("VulkanRendererBackend: the device is lost ({} failed), no frame is drawn from now on", what);
             }
             _deviceLost = true;
         } else if (VulkanFramePolicy::IsNewFailure(_lastLoggedFailure, result)) {
-            LOG_ERROR("VulkanRendererBackend: {} failed with VkResult {}, the frame is skipped"_format(what, static_cast<int>(result)));
+            LOG_ERROR("VulkanRendererBackend: {} failed with VkResult {}, the frame is skipped", what, static_cast<int>(result));
         }
         _lastLoggedFailure = result;
         return false;
@@ -520,7 +520,7 @@ namespace BECore {
             return;
         }
         _blendWarned = true;
-        LOG_WARNING("VulkanRendererBackend: the blend mode {} is not implemented, so straight alpha is used"_format(EnumUtils<BlendMode>::ToString(GetBlendMode())));
+        LOG_WARNING("VulkanRendererBackend: the blend mode {} is not implemented, so straight alpha is used", EnumUtils<BlendMode>::ToString(GetBlendMode()));
     }
 
     void VulkanRendererBackend::DrawFilledRect(float x, float y, float w, float h, const Color& color) {
@@ -622,7 +622,7 @@ namespace BECore {
         const int vertexCount = static_cast<int>(vertices.size());
         for (const int index : indices) {
             if (index < 0 || index >= vertexCount) {
-                LOG_ERROR("VulkanRendererBackend: DrawGeometry got the index {} for {} vertices, so nothing is drawn"_format(index, vertexCount));
+                LOG_ERROR("VulkanRendererBackend: DrawGeometry got the index {} for {} vertices, so nothing is drawn", index, vertexCount);
                 return;
             }
         }
@@ -818,7 +818,7 @@ namespace BECore {
             vulkanInfo.PipelineInfoForViewports.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
             vulkanInfo.PipelineInfoForViewports.PipelineRenderingCreateInfo.pColorAttachmentFormats = &_imguiViewportFormat;
         }
-        LOG_INFO("VulkanRendererBackend: ImGui colour mode {}"_format(EnumUtils<ImGuiColorMode>::ToString(colorMode)));
+        LOG_INFO("VulkanRendererBackend: ImGui colour mode {}", EnumUtils<ImGuiColorMode>::ToString(colorMode));
         ImGui_ImplVulkan_Init(&vulkanInfo);
     }
 

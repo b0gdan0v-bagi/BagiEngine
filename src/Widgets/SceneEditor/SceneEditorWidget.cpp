@@ -581,7 +581,7 @@ namespace BECore {
             return;
         }
         for (const String& note : notes) {
-            LOG_WARNING(Format("SceneEditor: scene '{}': {}", scene->GetName().CStr(), note.c_str()).c_str());
+            LOG_WARNING("SceneEditor: scene '{}': {}", scene->GetName().CStr(), note);
         }
 
         if (configManager.SaveConfig(Ids::sceneConfig)) {

@@ -65,7 +65,7 @@ namespace BECore::Stress {
             const Vector<uint8_t> pixels = MakeAtlasPixels(atlas, kAtlasCellsPerSide, kAtlasCellSize);
             IntrusivePtr<ITexture> texture = renderer->CreateTexture(pixels.data(), side, side);
             if (!texture) {
-                LOG_ERROR(Format("StressSpritesComponent: the renderer did not make atlas {}; no sprites are shown", atlas));
+                LOG_ERROR("StressSpritesComponent: the renderer did not make atlas {}; no sprites are shown", atlas);
                 _atlases.clear();
                 _atlasesFailed = true;
                 return false;

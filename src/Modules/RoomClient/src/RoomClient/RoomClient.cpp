@@ -281,7 +281,7 @@ namespace BECore {
         _pingOutstanding = false;
         auto parsed = ParseServerMessage(text, RoomLimits::kMaxServerMessageBytes);
         if (!parsed) {
-            LOG_WARNING(Format("Room client: a message from the server was dropped: {}", parsed.error().message));
+            LOG_WARNING("Room client: a message from the server was dropped: {}", parsed.error().message);
             _lastError = MakeControlError(RoomClientErrors::kBadServerMessage, parsed.error().message);
             Emit(RoomClientEventKind::Error, _lastError.code, _lastError.message);
             return;

@@ -80,7 +80,7 @@ namespace BECore {
         if (op != ReplayOp::Reset && !_started) {
             if (!_warnedDropped) {
                 _warnedDropped = true;
-                LOG_WARNING("SessionRecorder: a {} before the first reset is not recorded: the file would not hold the state it acts on"_format(ReplayOpName(op)));
+                LOG_WARNING("SessionRecorder: a {} before the first reset is not recorded: the file would not hold the state it acts on", ReplayOpName(op));
             }
             return;
         }
@@ -115,7 +115,7 @@ namespace BECore {
     }
 
     void SessionRecorder::Fail(StringView what) {
-        LOG_ERROR("SessionRecorder: cannot write {} to the replay file, the recording stops"_format(what));
+        LOG_ERROR("SessionRecorder: cannot write {} to the replay file, the recording stops", what);
         _recording = false;
         _file.close();
         _file.clear();

@@ -35,7 +35,7 @@ namespace BECore {
         }
         Scene* scene = GetSceneByName(name);
         if (!scene) {
-            LOG_ERROR(Format("SceneManager: scene '{}' not found", name.ToStringView()).c_str());
+            LOG_ERROR("SceneManager: scene '{}' not found", name.ToStringView());
             return;
         }
         if (_activeScene == scene) {

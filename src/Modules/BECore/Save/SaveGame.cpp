@@ -76,7 +76,7 @@ namespace BECore {
 
         std::filesystem::create_directories(absolute, ec);
         if (ec || !std::filesystem::is_directory(absolute, ec)) {
-            LOG_ERROR(Format("SaveGameService: cannot use '{}' as the save folder", absolute.string()).c_str());
+            LOG_ERROR("SaveGameService: cannot use '{}' as the save folder", absolute.string());
             return false;
         }
 

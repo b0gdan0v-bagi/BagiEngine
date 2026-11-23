@@ -104,7 +104,7 @@ namespace BECore {
             }
             const GlyphBox picture = _outlinePixels > 0 ? Grown(ink, _outlinePixels) : ink;
             if (PaddedWidth(picture) > _pageSize || PaddedHeight(picture) > _pageSize) {
-                LOG_ERROR("FontAtlas: a glyph of '{}' at {} px is {}x{}, larger than a {} px page"_format(_font->GetPath().ToStringView(), _pixelSize, picture.width, picture.height, _pageSize));
+                LOG_ERROR("FontAtlas: a glyph of '{}' at {} px is {}x{}, larger than a {} px page", _font->GetPath().ToStringView(), _pixelSize, picture.width, picture.height, _pageSize);
                 _glyphs[glyph] = AtlasGlyph{};
                 ok = false;
             } else {
@@ -186,7 +186,7 @@ namespace BECore {
             if (uploaded) {
                 _pages.push_back(std::move(texture));
             } else {
-                LOG_ERROR("FontAtlas: cannot make a {}x{} page for '{}' at {} px"_format(width, height, _font->GetPath().ToStringView(), _pixelSize));
+                LOG_ERROR("FontAtlas: cannot make a {}x{} page for '{}' at {} px", width, height, _font->GetPath().ToStringView(), _pixelSize);
                 ok = false;
             }
             for (const Placed& place : placed) {

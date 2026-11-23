@@ -136,7 +136,7 @@ namespace BECore {
             }
         }
         if (outcome == Outcome::Overflow) {
-            LOG_WARNING("{}: the server does not read its messages, the connection is dropped"_format(_settings.logName));
+            LOG_WARNING("{}: the server does not read its messages, the connection is dropped", _settings.logName);
             AbortConnection(WebSocketCloseCode::kAbnormalClosure, "the server does not read the messages sent to it");
         } else if (outcome == Outcome::Queued) {
             _wake.notify_one();
@@ -219,7 +219,7 @@ namespace BECore {
             _inbox.push_back(closed);
             _state = WebSocketClientState::Ended;
         }
-        LOG_INFO("{}: the connection to {}:{} ended: {} {}"_format(_settings.logName, _url.host, _url.port, closed.closeCode, closed.reason));
+        LOG_INFO("{}: the connection to {}:{} ended: {} {}", _settings.logName, _url.host, _url.port, closed.closeCode, closed.reason);
     }
 
     bool WebSocketClient::Connect() {
@@ -305,7 +305,7 @@ namespace BECore {
             }
             _state = WebSocketClientState::Open;
         }
-        LOG_INFO("{}: connected to {}:{}"_format(_settings.logName, _url.host, _url.port));
+        LOG_INFO("{}: connected to {}:{}", _settings.logName, _url.host, _url.port);
         _writer = Thread(Format("{} writer", _settings.threadName).c_str(), _settings.threadOrder + 1, [this] { WriterMain(); });
         WebSocketClientEvent opened;
         opened.kind = WebSocketClientEventKind::Opened;
@@ -331,7 +331,7 @@ namespace BECore {
             for (;;) {
                 auto popped = pop();
                 if (!popped) {
-                    LOG_WARNING("{}: the server broke the protocol: {}"_format(_settings.logName, popped.error().reason));
+                    LOG_WARNING("{}: the server broke the protocol: {}", _settings.logName, popped.error().reason);
                     SetEnd(popped.error().closeCode, popped.error().reason);
                     QueueFrame(WebSocketOpcode::kClose, EncodeClosePayload(popped.error().closeCode, popped.error().reason), /*isClose=*/true);
                     return;

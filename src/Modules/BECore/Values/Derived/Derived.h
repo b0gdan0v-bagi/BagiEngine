@@ -116,9 +116,7 @@ namespace BECore {
 #if ENGINE_ENABLE_ASSERTS
             if (!_warned) {
                 _warned = true;
-                const String message =
-                    Format("Derived: a declared level (mask {}) has no object or no counter in this context, so the value is rebuilt on every call", static_cast<uint32_t>(_reads.Mask()));
-                LOG_WARNING(message);
+                LOG_WARNING("Derived: a declared level (mask {}) has no object or no counter in this context, so the value is rebuilt on every call", static_cast<uint32_t>(_reads.Mask()));
             }
 #endif
         }

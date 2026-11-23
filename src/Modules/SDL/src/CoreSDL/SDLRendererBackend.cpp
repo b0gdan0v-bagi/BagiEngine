@@ -56,7 +56,7 @@ namespace BECore {
         // A headless window has no GPU surface behind it: only the software renderer works there
         _renderer = SDL_CreateRenderer(sdlWindow->GetSDLWindow(), sdlWindow->IsHeadless() ? kSoftwareRenderer : nullptr);
         if (!_renderer) {
-            LOG_ERROR("SDLRendererBackend: cannot create the renderer: {}"_format(SDL_GetError()));
+            LOG_ERROR("SDLRendererBackend: cannot create the renderer: {}", SDL_GetError());
             return false;
         }
 
@@ -68,7 +68,7 @@ namespace BECore {
         // the first frame has run, which turns the main loop into setTimeout(0) ticks: busy, and not in step with the display
         // (emscripten warns "rendering without using requestAnimationFrame" in a Debug build). Interval 1 keeps the loop on rAF.
         if (!SDL_SetRenderVSync(_renderer, 1)) {
-            LOG_WARNING("SDLRendererBackend: cannot turn vsync on: {}"_format(SDL_GetError()));
+            LOG_WARNING("SDLRendererBackend: cannot turn vsync on: {}", SDL_GetError());
         }
 #endif
 
@@ -197,11 +197,11 @@ namespace BECore {
         // RGBA32 is the byte order R,G,B,A on any endianness, which is what the caller hands over
         SDL_Texture* handle = SDL_CreateTexture(_renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, static_cast<int>(width), static_cast<int>(height));
         if (!handle) {
-            LOG_ERROR("SDLRendererBackend: cannot create a {}x{} texture: {}"_format(width, height, SDL_GetError()));
+            LOG_ERROR("SDLRendererBackend: cannot create a {}x{} texture: {}", width, height, SDL_GetError());
             return {};
         }
         if (!SDL_UpdateTexture(handle, nullptr, rgba, static_cast<int>(width * kBytesPerPixel))) {
-            LOG_ERROR("SDLRendererBackend: cannot fill a {}x{} texture: {}"_format(width, height, SDL_GetError()));
+            LOG_ERROR("SDLRendererBackend: cannot fill a {}x{} texture: {}", width, height, SDL_GetError());
             SDL_DestroyTexture(handle);
             return {};
         }
@@ -228,7 +228,7 @@ namespace BECore {
         const int vertexCount = static_cast<int>(vertices.size());
         for (const int index : indices) {
             if (index < 0 || index >= vertexCount) {
-                LOG_ERROR("SDLRendererBackend: DrawGeometry got the index {} for {} vertices, so nothing is drawn"_format(index, vertexCount));
+                LOG_ERROR("SDLRendererBackend: DrawGeometry got the index {} for {} vertices, so nothing is drawn", index, vertexCount);
                 return;
             }
         }
@@ -261,7 +261,7 @@ namespace BECore {
             SDL_RenderGeometryRaw(_renderer, handle, _geometryPositions.data(), 2 * sizeof(float), reinterpret_cast<const SDL_FColor*>(_geometryColors.data()), kFloatsPerColor * sizeof(float),
                                   _geometryTexCoords.data(), 2 * sizeof(float), vertexCount, indices.data(), static_cast<int>(indices.size() - indices.size() % kIndicesPerTriangle), sizeof(int));
         if (!drawn) {
-            LOG_ERROR("SDLRendererBackend: DrawGeometry failed: {}"_format(SDL_GetError()));
+            LOG_ERROR("SDLRendererBackend: DrawGeometry failed: {}", SDL_GetError());
             return;
         }
         CountDraw(texture, indices.size() / kIndicesPerTriangle);

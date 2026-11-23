@@ -24,12 +24,12 @@ namespace BECore {
 
         const SpriteEntry* entry = CoreManager::GetTextureLibrary().GetSprite(name);
         if (!entry) {
-            LOG_ERROR("UISprite: sprite '{}' is not in the TextureLibrary"_format(name.ToStringView()));
+            LOG_ERROR("UISprite: sprite '{}' is not in the TextureLibrary", name.ToStringView());
             return nullptr;
         }
         const auto handle = CoreManager::GetResourceManager().Load<ITexture>(entry->texturePath.ToStringView());
         if (!handle) {
-            LOG_ERROR("UISprite: cannot load the texture '{}' of sprite '{}'"_format(entry->texturePath.ToStringView(), name.ToStringView()));
+            LOG_ERROR("UISprite: cannot load the texture '{}' of sprite '{}'", entry->texturePath.ToStringView(), name.ToStringView());
             return nullptr;
         }
         _texture = handle.GetPtr();

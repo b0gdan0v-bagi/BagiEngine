@@ -52,7 +52,7 @@ namespace BECore {
         const TextSettings settings = TextSettings::FromConfig(CoreManager::GetConfigManager().GetConfig(ConfigNames::text));
         const Rml::String fontPath(settings.defaultFont.ToStringView().data(), settings.defaultFont.ToStringView().size());
         if (!Rml::LoadFontFace(fontPath)) {
-            LOG_ERROR("RmlUiRuntime: cannot load the font '{}'"_format(settings.defaultFont.ToStringView()));
+            LOG_ERROR("RmlUiRuntime: cannot load the font '{}'", settings.defaultFont.ToStringView());
         }
 
         // Subscribed once, after the renderer is up (its own cleanup handler is older, and EnTT calls the newest handler first, so this one runs before the renderer is destroyed)

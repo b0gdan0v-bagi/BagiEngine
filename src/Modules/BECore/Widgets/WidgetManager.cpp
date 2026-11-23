@@ -53,7 +53,7 @@ namespace BECore {
             Vector<IntrusivePtr<IWidget>> widgets;
             const PoolString configName = GetWidgetsConfigName(mode);
             if (!CoreManager::GetConfigManager().HasConfig(configName)) {
-                LOG_ERROR("WidgetManager: config '{}' not found, no widgets created"_format(configName.ToStringView()));
+                LOG_ERROR("WidgetManager: config '{}' not found, no widgets created", configName.ToStringView());
                 return widgets;
             }
 
@@ -71,7 +71,7 @@ namespace BECore {
         // An error of the flags stopped Application::Initialize before this; a test without a command line gets the file's mode
         const RunMode fileMode = LoadApplicationConfig().config._mode;
         const RunMode mode = ResolveRunMode(RequestedRunMode(fileMode, CoreManager::GetCommandLine().GetArguments()).value_or(fileMode));
-        LOG_INFO("Run mode: {}"_format(EnumUtils<RunMode>::ToString(mode)));
+        LOG_INFO("Run mode: {}", EnumUtils<RunMode>::ToString(mode));
         CreateWidgets(mode);
     }
 
@@ -114,7 +114,7 @@ namespace BECore {
 
         DestroyAll();
         CreateWidgets(mode);
-        LOG_INFO("Run mode: {}"_format(EnumUtils<RunMode>::ToString(mode)));
+        LOG_INFO("Run mode: {}", EnumUtils<RunMode>::ToString(mode));
         return true;
     }
 #endif

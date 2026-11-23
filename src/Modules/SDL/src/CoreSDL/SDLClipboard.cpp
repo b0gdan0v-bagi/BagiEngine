@@ -43,7 +43,7 @@ namespace BECore {
     bool SDLClipboardBackend::WriteText(StringView text) {
         _writeBuffer.assign(text.data(), text.size());
         if (!SDL_SetClipboardText(_writeBuffer.c_str())) {
-            LOG_WARNING("Clipboard: SDL_SetClipboardText failed: {}"_format(SDL_GetError()));
+            LOG_WARNING("Clipboard: SDL_SetClipboardText failed: {}", SDL_GetError());
             return false;
         }
         return true;

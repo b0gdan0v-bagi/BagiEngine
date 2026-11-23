@@ -157,7 +157,7 @@ namespace BECore {
             std::error_code ec;
             std::filesystem::recursive_directory_iterator fileSystemIt(basePath, std::filesystem::directory_options::skip_permission_denied, ec);
             if (ec) {
-                LOG_ERROR(Format("FileSystem::EnumerateFiles: error opening '{}': {}", mountPoint.ToStringView(), ec.message()).c_str());
+                LOG_ERROR("FileSystem::EnumerateFiles: error opening '{}': {}", mountPoint.ToStringView(), ec.message());
                 continue;
             }
             std::filesystem::recursive_directory_iterator fileSystemItEnd;
@@ -194,7 +194,7 @@ namespace BECore {
 
                 fileSystemIt.increment(ec);
                 if (ec) {
-                    LOG_ERROR(Format("FileSystem::EnumerateFiles: error scanning '{}': {}", mountPoint.ToStringView(), ec.message()).c_str());
+                    LOG_ERROR("FileSystem::EnumerateFiles: error scanning '{}': {}", mountPoint.ToStringView(), ec.message());
                     break;
                 }
             }

@@ -98,7 +98,7 @@ namespace BECore {
                 path = entry->texturePath;
                 _source = entry->srcRect;
             } else {
-                LOG_ERROR(Format("ParticleEmitterComponent: sprite '{}' not found in TextureLibrary", _effect.spriteId.ToStringView()).c_str());
+                LOG_ERROR("ParticleEmitterComponent: sprite '{}' not found in TextureLibrary", _effect.spriteId.ToStringView());
             }
         }
         if (path.Empty()) {
@@ -106,7 +106,7 @@ namespace BECore {
         }
         _texture = CoreManager::GetResourceManager().Load<ITexture>(path.ToStringView());
         if (!_texture) {
-            LOG_ERROR(Format("ParticleEmitterComponent: failed to load texture '{}'", path.ToStringView()).c_str());
+            LOG_ERROR("ParticleEmitterComponent: failed to load texture '{}'", path.ToStringView());
             return;
         }
         _loadedPath = path;

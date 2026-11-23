@@ -29,7 +29,7 @@ namespace BECore {
             return;
         }
         for (const String& problem : LoadFromXml(configs.GetConfig(ConfigName))) {
-            LOG_WARNING("UIThemes: {}"_format(problem.c_str()));
+            LOG_WARNING("UIThemes: {}", problem);
         }
     }
 
@@ -165,7 +165,7 @@ namespace BECore {
             }
         }
         _missing.push_back(color.token);
-        LOG_WARNING("UIThemes: the token '@{}' is in no theme, drawn in magenta"_format(color.token.ToStringView()));
+        LOG_WARNING("UIThemes: the token '@{}' is in no theme, drawn in magenta", color.token.ToStringView());
     }
 
     bool UIThemes::HasToken(PoolString theme, StringView token) const {

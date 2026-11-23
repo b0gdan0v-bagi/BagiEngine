@@ -22,6 +22,25 @@ if(ENGINE_UI_RMLUI)
     list(APPEND TESTS_SOURCES ${RMLUI_TESTS_SOURCES})
 endif()
 
+# A wrong LOG_X format must not compile: each case of CompileFail/LogFormat.cpp is an object target outside "all", and the ctest builds them
+# one after the other (CheckCompileFail.cmake; the control case must build, the others must fail). One test, because two concurrent
+# `cmake --build` of one build folder race on the ninja log.
+set(LOG_FORMAT_CASES ok error error error)
+set(LOG_FORMAT_CASE_TARGETS)
+foreach(CASE_INDEX RANGE 0 3)
+    list(GET LOG_FORMAT_CASES ${CASE_INDEX} CASE_EXPECTED)
+    set(CASE_TARGET BagiLogFormatCase${CASE_INDEX})
+    add_library(${CASE_TARGET} OBJECT EXCLUDE_FROM_ALL CompileFail/LogFormat.cpp)
+    target_compile_definitions(${CASE_TARGET} PRIVATE LOG_FORMAT_CASE=${CASE_INDEX})
+    target_link_libraries(${CASE_TARGET} PRIVATE BECoreModule)
+    list(APPEND LOG_FORMAT_CASE_TARGETS "${CASE_TARGET}:${CASE_EXPECTED}")
+endforeach()
+add_test(NAME BagiLogFormatCompileFail
+    COMMAND ${CMAKE_COMMAND} -DBUILD_DIR=${CMAKE_BINARY_DIR} -DCONFIG=$<CONFIG> "-DCASE_TARGETS=${LOG_FORMAT_CASE_TARGETS}"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/CompileFail/CheckCompileFail.cmake)
+# RUN_SERIAL: with a stale tree the build relinks BECoreModule and its dependants in the folder whose executables the other tests are running.
+set_tests_properties(BagiLogFormatCompileFail PROPERTIES RUN_SERIAL TRUE TIMEOUT 300)
+
 # The fuzz targets: a library of its own, because the libFuzzer executables (cmake/BagiFuzz.cmake) link the same functions
 add_subdirectory(Fuzz)
 
@@ -89,6 +108,9 @@ if(Python3_FOUND)
     add_test(NAME BagiTypesCheck
         COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_types.py --root ${BAGI_ENGINE_DIR}
             --baseline ${BAGI_ENGINE_DIR}/CI/types_baseline.txt)
+    # no LOG_X(Format(...)) / LOG_X("..."_format(...)) is left: LOG_X("x {}", v) is the form (the family `log` of tools/codemod, which also does the migration).
+    add_test(NAME BagiLogCalls
+        COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/tools/codemod/codemod.py --root ${BAGI_ENGINE_DIR} --family log --fail-on-change)
     # every header compiles alone (no PCH), and any header that does not fails the test: there is no baseline (CI/scripts/check_headers.py).
     # A fragment by design would be an --exclude here, with its reason in a comment above it; there is none.
     # RmlUiHost is compiled only with ENGINE_UI_RMLUI, so a build without it has no flags for its headers and the check leaves them out;
@@ -105,7 +127,7 @@ if(Python3_FOUND)
         SKIP_RETURN_CODE 77
         TIMEOUT 1800)  # it compiles every header beside the other tests: only a hang may end it
     # The hygiene checks read the whole tree and none of them tests behaviour: the full run (<preset>-all) has them, the everyday one does not
-    set_tests_properties(BagiThirdPartyNotices BagiIncludeStyle BagiPoolStrings BagiTypesCheck BagiHeadersStandalone PROPERTIES LABELS extended)
+    set_tests_properties(BagiThirdPartyNotices BagiIncludeStyle BagiPoolStrings BagiTypesCheck BagiLogCalls BagiHeadersStandalone PROPERTIES LABELS extended)
 endif()
 
 # A real TLS handshake of the platform's backend against local servers: tls_local_check.py starts a Python `ssl` WebSocket echo server

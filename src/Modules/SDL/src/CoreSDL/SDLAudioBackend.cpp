@@ -25,20 +25,20 @@ namespace BECore {
             SDL_SetHint(SDL_HINT_AUDIO_DRIVER, kHeadlessAudioDriver);
         }
         if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
-            LOG_WARNING("SDLAudioBackend: no audio subsystem: {}"_format(SDL_GetError()));
+            LOG_WARNING("SDLAudioBackend: no audio subsystem: {}", SDL_GetError());
             Close();
             return false;
         }
         _subsystem = true;
         _device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, nullptr);
         if (_device == 0) {
-            LOG_WARNING("SDLAudioBackend: no playback device: {}"_format(SDL_GetError()));
+            LOG_WARNING("SDLAudioBackend: no playback device: {}", SDL_GetError());
             Close();
             return false;
         }
         SDL_AudioSpec deviceSpec{};
         if (!SDL_GetAudioDeviceFormat(_device, &deviceSpec, nullptr)) {
-            LOG_WARNING("SDLAudioBackend: the playback device has no format: {}"_format(SDL_GetError()));
+            LOG_WARNING("SDLAudioBackend: the playback device has no format: {}", SDL_GetError());
             Close();
             return false;
         }
@@ -46,7 +46,7 @@ namespace BECore {
         for (uint32_t index = 0; index < voiceCount; ++index) {
             SDL_AudioStream* stream = SDL_CreateAudioStream(&deviceSpec, &deviceSpec);
             if (stream == nullptr) {
-                LOG_WARNING("SDLAudioBackend: cannot make voice {}: {}"_format(index, SDL_GetError()));
+                LOG_WARNING("SDLAudioBackend: cannot make voice {}: {}", index, SDL_GetError());
                 Close();
                 return false;
             }
@@ -54,7 +54,7 @@ namespace BECore {
         }
         _streamChannels.assign(voiceCount, 0);
         if (!SDL_BindAudioStreams(_device, _streams.data(), static_cast<int>(_streams.size()))) {
-            LOG_WARNING("SDLAudioBackend: cannot bind the voices: {}"_format(SDL_GetError()));
+            LOG_WARNING("SDLAudioBackend: cannot bind the voices: {}", SDL_GetError());
             Close();
             return false;
         }
@@ -94,7 +94,7 @@ namespace BECore {
         }
         // SDL takes the byte count as an int: a clip of 2 GiB and more (about three hours of stereo at 48 kHz) cannot be put in one call
         if (clip.GetSamples().size_bytes() > static_cast<size_t>(INT_MAX)) {
-            LOG_WARNING("SDLAudioBackend: '{}' is too long to play as one clip"_format(clip.GetPath().ToStringView()));
+            LOG_WARNING("SDLAudioBackend: '{}' is too long to play as one clip", clip.GetPath().ToStringView());
             return false;
         }
         _streamChannels[voice] = 0;
@@ -105,7 +105,7 @@ namespace BECore {
         const bool started = SDL_ClearAudioStream(stream) && SDL_SetAudioStreamFormat(stream, &source, nullptr) && SDL_SetAudioStreamGain(stream, gain) &&
                              SDL_PutAudioStreamData(stream, samples.data(), static_cast<int>(samples.size_bytes())) && SDL_FlushAudioStream(stream);
         if (!started) {
-            LOG_WARNING("SDLAudioBackend: cannot start '{}' on voice {}: {}"_format(clip.GetPath().ToStringView(), voice, SDL_GetError()));
+            LOG_WARNING("SDLAudioBackend: cannot start '{}' on voice {}: {}", clip.GetPath().ToStringView(), voice, SDL_GetError());
             SDL_ClearAudioStream(stream);
         }
         return started;
@@ -138,7 +138,7 @@ namespace BECore {
         SDL_AudioStream* stream = _streams[voice];
         const SDL_AudioSpec source{SDL_AUDIO_F32, format.channels, static_cast<int>(format.sampleRate)};
         if (!(SDL_ClearAudioStream(stream) && SDL_SetAudioStreamFormat(stream, &source, nullptr) && SDL_SetAudioStreamGain(stream, gain))) {
-            LOG_WARNING("SDLAudioBackend: cannot start a stream on voice {}: {}"_format(voice, SDL_GetError()));
+            LOG_WARNING("SDLAudioBackend: cannot start a stream on voice {}: {}", voice, SDL_GetError());
             _streamChannels[voice] = 0;
             return false;
         }

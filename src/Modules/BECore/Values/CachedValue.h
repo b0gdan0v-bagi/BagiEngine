@@ -92,8 +92,7 @@ namespace BECore {
 #if ENGINE_ENABLE_ASSERTS
             if (!_warned) {
                 _warned = true;
-                const String message = Format("CachedValue: the formula '{}' reads a level that has no object or no counter in this context, so it runs on every call", _value.Path().ToStringView());
-                LOG_WARNING(message);
+                LOG_WARNING("CachedValue: the formula '{}' reads a level that has no object or no counter in this context, so it runs on every call", _value.Path().ToStringView());
             }
 #endif
         }

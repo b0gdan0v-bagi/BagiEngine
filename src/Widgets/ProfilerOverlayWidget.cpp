@@ -63,7 +63,7 @@ namespace BECore {
             const PoolString path = CoreManager::GetFontAtlasLibrary().ResolveFontPath(FontRequest{});
             _font = CoreManager::GetResourceManager().Load<Font>(path.ToStringView());
             if (!_font || _font->GetState() != ResourceState::Loaded) {
-                LOG_ERROR("ProfilerOverlayWidget: cannot load the font '{}', the overlay shows only the bars"_format(path.ToStringView()));
+                LOG_ERROR("ProfilerOverlayWidget: cannot load the font '{}', the overlay shows only the bars", path.ToStringView());
                 _font.Reset();
             }
         }

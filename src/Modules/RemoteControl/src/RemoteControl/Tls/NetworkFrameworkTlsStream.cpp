@@ -191,7 +191,7 @@ namespace BECore {
                     code = verifyFailureCode;
                 }
                 failure = Format("TLS: {}: {}", DescribeNetworkFailure(domain, code), target);
-                LOG_WARNING("{} (error domain {}, code {})"_format(failure, EnumUtils<NetworkErrorDomain>::ToString(domain), code));
+                LOG_WARNING("{} (error domain {}, code {})", failure, EnumUtils<NetworkErrorDomain>::ToString(domain), code);
             }
 
             /// Called with the mutex held; starts the one pending receive. @p self is a copy on purpose: a block captures a reference
@@ -482,7 +482,7 @@ namespace BECore {
                 }
                 OsOwned<sec_protocol_metadata_t> secMetadata(nw_tls_copy_sec_protocol_metadata(metadata.get()));
                 if (secMetadata) {
-                    LOG_INFO("TLS to {}: TLS {}"_format(target, TlsVersionName(sec_protocol_metadata_get_negotiated_tls_protocol_version(secMetadata.get()))));
+                    LOG_INFO("TLS to {}: TLS {}", target, TlsVersionName(sec_protocol_metadata_get_negotiated_tls_protocol_version(secMetadata.get())));
                 }
             }
 

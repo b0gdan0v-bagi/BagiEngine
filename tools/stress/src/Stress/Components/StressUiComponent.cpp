@@ -57,7 +57,7 @@ namespace BECore::Stress {
         _builtLanguage = language;
         const PoolString id = PoolString::Intern(ToFlagValue(language));
         if (!CoreManager::GetUIStrings().SetLanguage(id)) {
-            LOG_WARNING(Format("StressUiComponent: the string table has no language '{}'; the {{#key}} labels show their keys", ToFlagValue(language)));
+            LOG_WARNING("StressUiComponent: the string table has no language '{}'; the {{#key}} labels show their keys", ToFlagValue(language));
         }
     }
 

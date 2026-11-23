@@ -67,7 +67,7 @@ namespace BECore {
 
         const auto html = ReadVirtualFile(path.ToStringView());
         if (!html) {
-            LOG_ERROR("UIWebDocumentLoader: cannot load '{}'"_format(path.ToStringView()));
+            LOG_ERROR("UIWebDocumentLoader: cannot load '{}'", path.ToStringView());
             document->SetFailed(path);
             return document;
         }
@@ -75,18 +75,18 @@ namespace BECore {
         UIWebReport report;
         const String xml = UIWebCompiler::Compile(*html, [&](StringView href) { return ReadVirtualFile(SiblingPath(path.ToStringView(), href)); }, report);
         for (const UIWebIssue& issue : report.issues) {
-            LOG_WARNING("UIWebDocumentLoader: '{}' {} line {}: {}"_format(path.ToStringView(), issue.source.c_str(), issue.line, issue.message.c_str()));
+            LOG_WARNING("UIWebDocumentLoader: '{}' {} line {}: {}", path.ToStringView(), issue.source, issue.line, issue.message);
         }
 
         auto config = XmlConfig::Create();
         if (!config.LoadFromString(xml)) {
-            LOG_ERROR("UIWebDocumentLoader: the compiled '{}' is not valid XML"_format(path.ToStringView()));
+            LOG_ERROR("UIWebDocumentLoader: the compiled '{}' is not valid XML", path.ToStringView());
             document->SetFailed(path);
             return document;
         }
 
         document->SetLoaded(path, std::move(config));
-        LOG_INFO("UIWebDocumentLoader: loaded '{}' ({} elements, {} variants, {} issues)"_format(path.ToStringView(), report.elements, report.variants, report.issues.size()));
+        LOG_INFO("UIWebDocumentLoader: loaded '{}' ({} elements, {} variants, {} issues)", path.ToStringView(), report.elements, report.variants, report.issues.size());
         return document;
     }
 

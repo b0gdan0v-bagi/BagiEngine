@@ -241,7 +241,7 @@ namespace BECore {
     void ConsoleWidget::OpenSite(const char* file, uint32_t line) {
         String error;
         if (!LaunchEditor(_externalEditor, file, line, error)) {
-            LOG_WARNING(Format("Console: cannot open {}:{}: {}", file, line, error));
+            LOG_WARNING("Console: cannot open {}:{}: {}", file, line, error);
         }
     }
 

@@ -119,7 +119,7 @@ namespace BECore {
         auto& warned = WarnedNames();
         if (eastl::find(warned.begin(), warned.end(), meta.icon) == warned.end()) {
             warned.push_back(meta.icon);
-            LOG_WARNING(Format("Editor: class '{}' names the icon '{}', which is not a row of IconTable (Widgets/EditorLayout/IconTable.cpp)", meta.typeName, meta.icon).c_str());
+            LOG_WARNING("Editor: class '{}' names the icon '{}', which is not a row of IconTable (Widgets/EditorLayout/IconTable.cpp)", meta.typeName, meta.icon);
         }
         return GetNodeIcon();
     }
