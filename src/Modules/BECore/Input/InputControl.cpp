@@ -1,6 +1,7 @@
 #include "InputControl.h"
 
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/InputAnswers.h>
@@ -33,19 +34,19 @@ namespace BECore {
             return event;
         }
 
-        Optional<float> ReadCoordinate(const Json& params, StringView key) {
-            const auto number = GetJsonNumber(params, key);
+        Optional<float> ReadCoordinate(JsonView params, StringView key) {
+            const auto number = GetParamNumber(params, key);
             if (!number || !std::isfinite(*number) || std::fabs(*number) > kMaxClickCoordinate) {
                 return {};
             }
             return static_cast<float>(*number);
         }
 
-        Optional<uint8_t> ReadButton(const Json& params) {
-            if (FindJsonMember(params, "button") == nullptr) {
+        Optional<uint8_t> ReadButton(JsonView params) {
+            if (!FindParam(params, "button")) {
                 return static_cast<uint8_t>(SDL_BUTTON_LEFT);
             }
-            const auto text = GetJsonString(params, "button");
+            const auto text = GetParamString(params, "button");
             if (!text) {
                 return {};
             }
@@ -61,11 +62,11 @@ namespace BECore {
             return {};
         }
 
-        Optional<uint32_t> ReadWhich(const Json& params) {
-            if (FindJsonMember(params, "which") == nullptr) {
+        Optional<uint32_t> ReadWhich(JsonView params) {
+            if (!FindParam(params, "which")) {
                 return kControlPointerId;
             }
-            const auto value = GetJsonInt(params, "which");
+            const auto value = GetParamInt(params, "which");
             if (!value || *value < 0 || *value > static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
                 return {};
             }
@@ -73,7 +74,7 @@ namespace BECore {
         }
 
         void HandleClickAt(ControlCall& call) {
-            const Json& params = call.Params();
+            const JsonView params = call.ParamsView();
             const auto x = ReadCoordinate(params, "x");
             const auto y = ReadCoordinate(params, "y");
             if (!x || !y) {
@@ -81,8 +82,8 @@ namespace BECore {
                 return;
             }
             bool sceneSpace = false;
-            if (FindJsonMember(params, "space") != nullptr) {
-                const auto space = GetJsonString(params, "space");
+            if (FindParam(params, "space")) {
+                const auto space = GetParamString(params, "space");
                 if (!space || (*space != kSpaceOutput && *space != kSpaceScene)) {
                     call.Fail(ControlErrors::kInvalidParams, "'space' has to be \"output\" or \"scene\"");
                     return;

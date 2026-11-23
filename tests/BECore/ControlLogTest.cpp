@@ -629,6 +629,12 @@ namespace BECore::Tests {
         EXPECT_TRUE(events.empty());
     }
 
+    TEST_F(ControlLogMethodsTest, TextThatTheDomCouldNotHoldIsReadByTheTape) {
+        EXPECT_EQ(ErrorCodeOf(Run(R"({"id": 1, "method": "log_since", "params": {"mark": 1e999}})")), "invalid_params") << "a number past a double is refused by the reader, not at parse";
+        EXPECT_EQ(GetJsonBool(Run(R"({"id": 2, "method": "log_since", "params": {"mark": 0, "level": "err\u006fr"}})"), "ok"), true) << "an escape in `level` is decoded";
+        EXPECT_EQ(ErrorCodeOf(Run(R"({"id": 3, "method": "log_subscribe", "params": {"enabled": true, "level": "warn\u0069ng!"}})")), "invalid_params");
+    }
+
     TEST_F(ControlLogMethodsTest, LogSubscribeRefusesBadParameters) {
         EXPECT_EQ(ErrorCodeOf(Call("log_subscribe")), "invalid_params");
         Json params = Json::object();

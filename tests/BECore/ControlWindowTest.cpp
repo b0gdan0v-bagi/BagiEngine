@@ -352,6 +352,18 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(UserScale(), kStartUserScale);
     }
 
+    TEST_F(ControlWindowTest, AnInsetPastADoubleIsInvalidParamsNotAParseError) {
+        service.Post(R"({"id":1,"method":"set_window","params":{"width":480,"height":300,"safeArea":{"top":1e999,"right":0,"bottom":0,"left":0}}})", [this](String reply) {
+            auto parsed = ParseJson(reply);
+            responses.push_back(parsed ? std::move(*parsed) : Json());
+        });
+        service.Drain();
+
+        EXPECT_EQ(LastErrorCode(), "invalid_params");
+        EXPECT_NE(LastErrorMessage().find("safeArea.top"), String::npos) << LastErrorMessage().c_str();
+        EXPECT_TRUE(window->Simulations().empty());
+    }
+
     TEST_F(ControlWindowTest, AHeightThatIsMissingIsInvalidParams) {
         Json params = Json::object();
         params["width"] = 480;

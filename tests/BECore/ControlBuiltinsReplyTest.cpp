@@ -130,6 +130,18 @@ namespace BECore::Tests {
         EXPECT_DOUBLE_EQ(NumberOf(result, "totalTime"), 2 * kFrameSeconds + 3 * 0.25);
     }
 
+    TEST_F(ControlBuiltinsReplyTest, AStepSecondsPastADoubleIsInvalidParamsNotAParseError) {
+        service.SetManualClock(true);
+        String text;
+        service.Post(R"({"id":6,"method":"step","params":{"dt":1e999}})", [&text](const String& reply) { text = reply; });
+        service.Drain();
+
+        const auto parsed = ParseJson(text);
+        ASSERT_TRUE(parsed.has_value());
+        EXPECT_EQ(ErrorCode(*parsed), "invalid_params");
+        EXPECT_FALSE(service.IsStepDue());
+    }
+
     TEST_F(ControlBuiltinsReplyTest, PauseAndResumeAreWrittenAsTheirPinnedText) {
         EXPECT_EQ(Ask(1, "pause"), String(R"({"id":1,"ok":true,"result":{"paused":true}})"));
         EXPECT_TRUE(pause.IsPaused());

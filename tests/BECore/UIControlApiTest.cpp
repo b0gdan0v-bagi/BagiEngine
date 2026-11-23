@@ -1352,6 +1352,26 @@ namespace BECore::Tests {
         EXPECT_EQ(StringMember(Require(Member(clicked, "result")), "action"), "UIControlApiPress");
     }
 
+    TEST_F(UIControlApiTest, TextThatTheDomCouldNotHoldIsReadByTheTape) {
+        Show("Targets");
+        Recorder recorder;
+        const auto clickText = [this](StringView paramsText) {
+            Json response;
+            _service.Post(Format(R"({{"id":{},"method":"ui_click","params":{}}})", ++_nextId, paramsText), [&response](String text) {
+                auto parsed = ParseJson(text);
+                response = parsed ? std::move(*parsed) : Json();
+            });
+            _service.Drain();
+            return response;
+        };
+
+        EXPECT_EQ(ErrorCode(clickText(R"({"name":"Press","at":1e999})")), "invalid_params") << "an `at` past a double is refused, not a parse error";
+
+        const Json clicked = clickText(R"({"name":"Pre\u0073s"})");
+        ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
+        EXPECT_EQ(recorder.Count("UIControlApiPress"), 1) << "an escape in `name` is decoded";
+    }
+
     TEST_F(UIControlApiTest, ASceneTargetAboveAButtonTakesTheClickAsItWouldFromAPerson) {
         Show("Targets");
         Recorder recorder;

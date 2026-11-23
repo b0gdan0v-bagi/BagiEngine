@@ -1,9 +1,9 @@
 #include "ControlWindow.h"
 
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlWindowStatus.h>
-#include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/UI/UIEnvironment.h>
@@ -20,8 +20,8 @@ namespace BECore {
         }
 
         /// A required integer; one that is out of the range of int is passed on as the nearest int, so the limits check that follows names the field
-        std::expected<int, ControlError> ReadSize(const Json& params, StringView key) {
-            const auto value = GetJsonInt(params, key);
+        std::expected<int, ControlError> ReadSize(JsonView params, StringView key) {
+            const auto value = GetParamInt(params, key);
             if (!value) {
                 return std::unexpected(InvalidParams(Format("'{}' is required and has to be an integer of window units", key)));
             }
@@ -31,11 +31,11 @@ namespace BECore {
         }
 
         /// An optional number: @p fallback when it is absent, invalid_params when it is there and is not a number
-        std::expected<float, ControlError> ReadOptionalNumber(const Json& object, StringView key, float fallback, StringView where) {
-            if (FindJsonMember(object, key) == nullptr) {
+        std::expected<float, ControlError> ReadOptionalNumber(JsonView object, StringView key, float fallback, StringView where) {
+            if (!FindParam(object, key)) {
                 return fallback;
             }
-            const auto value = GetJsonNumber(object, key);
+            const auto value = GetParamNumber(object, key);
             if (!value) {
                 return std::unexpected(InvalidParams(Format("'{}{}' has to be a number", where, key)));
             }
@@ -43,12 +43,12 @@ namespace BECore {
         }
 
         /// The `safeArea` of the request over @p current: absent keeps it, a present one needs all four members
-        std::expected<WindowInsets, ControlError> ReadSafeArea(const Json& params, const WindowInsets& current) {
-            const Json* member = FindJsonMember(params, "safeArea");
-            if (member == nullptr) {
+        std::expected<WindowInsets, ControlError> ReadSafeArea(JsonView params, const WindowInsets& current) {
+            const Optional<JsonView> member = FindParam(params, "safeArea");
+            if (!member) {
                 return current;
             }
-            if (!member->is_object()) {
+            if (!member->IsObject()) {
                 return std::unexpected(InvalidParams("'safeArea' has to be an object {top, right, bottom, left} of window units"));
             }
             WindowInsets insets;
@@ -57,7 +57,7 @@ namespace BECore {
                 float* target;
             };
             for (const Edge& edge : {Edge{"top", &insets.top}, Edge{"right", &insets.right}, Edge{"bottom", &insets.bottom}, Edge{"left", &insets.left}}) {
-                if (FindJsonMember(*member, edge.name) == nullptr) {
+                if (!FindParam(*member, edge.name)) {
                     return std::unexpected(InvalidParams(Format("'safeArea' needs all of top, right, bottom and left; '{}' is missing", edge.name)));
                 }
                 const auto value = ReadOptionalNumber(*member, edge.name, 0.0f, "safeArea.");
@@ -75,7 +75,7 @@ namespace BECore {
             float userScale = 1.0f;
         };
 
-        std::expected<WindowRequest, ControlError> ReadWindowRequest(const Json& params, const IMainWindow& window) {
+        std::expected<WindowRequest, ControlError> ReadWindowRequest(JsonView params, const IMainWindow& window) {
             WindowRequest request;
             const auto width = ReadSize(params, "width");
             if (!width) {
@@ -131,7 +131,7 @@ namespace BECore {
                 return;
             }
 
-            const auto request = ReadWindowRequest(call.Params(), *window);
+            const auto request = ReadWindowRequest(call.ParamsView(), *window);
             if (!request) {
                 call.Fail(request.error());
                 return;

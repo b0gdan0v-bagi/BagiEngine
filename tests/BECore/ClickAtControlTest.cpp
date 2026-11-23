@@ -139,6 +139,17 @@ namespace BECore::Tests {
             return response;
         }
 
+        /// One request whose params are the text as written, which a `Json` cannot hold (`1e999`, an escaped key or value)
+        Json CallText(StringView paramsText) {
+            Json response;
+            _service.Post(Format(R"({{"id":{},"method":"click_at","params":{}}})", ++_nextId, paramsText), [&response](String text) {
+                auto parsed = ParseJson(text);
+                response = parsed ? std::move(*parsed) : Json();
+            });
+            _service.Drain();
+            return response;
+        }
+
         static Json At(double x, double y) {
             Json params = Json::object();
             params["x"] = x;
@@ -285,6 +296,17 @@ namespace BECore::Tests {
         }
         EXPECT_EQ(recorder.Total(), 0u);
         EXPECT_EQ(recorder.downs, 0);
+    }
+
+    TEST_F(ClickAtControlTest, TextThatTheDomCouldNotHoldIsReadByTheTape) {
+        Show("Plain");
+        Recorder recorder;
+
+        EXPECT_EQ(ErrorCode(CallText(R"({"x":1e999,"y":150})")), "invalid_params") << "a coordinate past a double is refused as not finite, not as a parse error";
+
+        ASSERT_TRUE(IsOk(CallText(R"({"x":10,"y":10,"button":"r\u0069ght","which":-0})")));
+        EXPECT_EQ(recorder.lastButton, SDL_BUTTON_RIGHT) << "an escape in a string value is decoded";
+        EXPECT_EQ(recorder.lastWhich, 0u) << "-0 is the pointer 0";
     }
 
     TEST_F(ClickAtControlTest, ASceneUnitClickNeedsAnActiveScene) {

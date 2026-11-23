@@ -80,12 +80,12 @@ namespace BECore {
         }
 
         void HandleStep(ControlCall& call, ControlService& service) {
-            const auto frames = ReadControlFrames(call.Params(), "frames", 1);
+            const auto frames = ReadControlFrames(call.ParamsView(), "frames", 1);
             if (!frames) {
                 call.Fail(frames.error());
                 return;
             }
-            const auto seconds = ReadControlFrameSeconds(call.Params());
+            const auto seconds = ReadControlFrameSeconds(call.ParamsView());
             if (!seconds) {
                 call.Fail(seconds.error());
                 return;
@@ -167,11 +167,11 @@ namespace BECore {
         }
 
         /// The `level` filter of log_since and log_subscribe: "warning" (the default) or "error"
-        std::expected<LogLevel, ControlError> ReadLogLevel(const Json& params) {
-            if (FindJsonMember(params, "level") == nullptr) {
+        std::expected<LogLevel, ControlError> ReadLogLevel(JsonView params) {
+            if (!FindParam(params, "level")) {
                 return LogLevel::Warning;
             }
-            const auto name = GetJsonString(params, "level");
+            const auto name = GetParamString(params, "level");
             if (name && *name == LogLevelNames::warning.View()) {
                 return LogLevel::Warning;
             }
@@ -209,12 +209,12 @@ namespace BECore {
         }
 
         void HandleLogSince(ControlCall& call, const ControlService& service) {
-            const auto mark = GetJsonInt(call.Params(), "mark");
+            const auto mark = GetParamInt(call.ParamsView(), "mark");
             if (!mark || *mark < 0) {
                 call.Fail(ControlErrors::kInvalidParams, "'mark' has to be an integer, 0 or more (the mark of log_mark)");
                 return;
             }
-            const auto level = ReadLogLevel(call.Params());
+            const auto level = ReadLogLevel(call.ParamsView());
             if (!level) {
                 call.Fail(level.error());
                 return;
@@ -245,12 +245,12 @@ namespace BECore {
         }
 
         void HandleLogSubscribe(ControlCall& call, ControlService& service) {
-            const auto enabled = GetJsonBool(call.Params(), "enabled");
+            const auto enabled = GetParamBool(call.ParamsView(), "enabled");
             if (!enabled) {
                 call.Fail(ControlErrors::kInvalidParams, "'enabled' has to be a boolean");
                 return;
             }
-            const auto level = ReadLogLevel(call.Params());
+            const auto level = ReadLogLevel(call.ParamsView());
             if (!level) {
                 call.Fail(level.error());
                 return;
