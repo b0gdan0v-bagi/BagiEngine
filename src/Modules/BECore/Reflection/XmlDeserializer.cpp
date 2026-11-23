@@ -11,7 +11,7 @@ namespace BECore {
         // The nodes of the stacks belong to the document: they go before it does, so a refused load leaves nothing that points into it
         _nodeStack.clear();
         _arrayStack.clear();
-        _scopes.clear();
+        DropScopes();
         ClearPathSegments();
         _document.reset();
     }
@@ -73,7 +73,7 @@ namespace BECore {
     bool XmlDeserializer::LoadFromXmlNode(const XmlNode& node) {
         _nodeStack.clear();
         _arrayStack.clear();
-        _scopes.clear();
+        DropScopes();
         ClearPathSegments();
 
         pugi::xml_node pugiNode = node.GetPugiNode();
@@ -136,29 +136,55 @@ namespace BECore {
 
     namespace {
 
-        bool Contains(const Vector<String>& names, StringView name) {
-            for (const String& known : names) {
-                if (StringView(known) == name) {
+        /// Each scope keeps a few names, and the arena is rewound with every scope: a small chunk is enough
+        constexpr size_t kScopeArenaChunkBytes = 4 * 1024;
+
+        /// The names a scope usually collects, reserved at once because an arena vector leaves its old blocks behind when it grows
+        constexpr size_t kExpectedAskedNames = 16;
+
+        bool Contains(const ArenaVector<StringView>& names, StringView name) {
+            for (const StringView known : names) {
+                if (known == name) {
                     return true;
                 }
             }
             return false;
         }
 
-        void AddName(Vector<String>& names, StringView name) {
-            if (!Contains(names, name)) {
-                names.push_back(String(name));
-            }
-        }
-
     }  // namespace
+
+    LinearArena& XmlDeserializer::GetScopeArena() const {
+        if (!_scopeArena) {
+            _scopeArena = MakeUnique<LinearArena>("XmlDeserializer", kScopeArenaChunkBytes);
+        }
+        return *_scopeArena;
+    }
+
+    void XmlDeserializer::DropScopes() {
+        _scopes.clear();
+        if (_scopeArena) {
+            _scopeArena->Reset();
+        }
+    }
+
+    void XmlDeserializer::AddAskedName(ArenaVector<StringView>& names, StringView name) const {
+        if (Contains(names, name)) {
+            return;
+        }
+        if (names.capacity() == 0) {
+            names.reserve(kExpectedAskedNames);
+        }
+        char* const text = GetScopeArena().Allocate<char>(name.size());
+        std::memcpy(text, name.data(), name.size());
+        names.push_back(StringView(text, name.size()));
+    }
 
     void XmlDeserializer::SyncScopes() const {
         while (_scopes.size() < _nodeStack.size()) {
-            Scope scope;
-            scope.node = _nodeStack[_scopes.size()];
-            scope.checked = _scopes.size() + 1 < _nodeStack.size();
-            _scopes.push_back(eastl::move(scope));
+            LinearArena& arena = GetScopeArena();
+            const bool isInnermost = _scopes.size() + 1 == _nodeStack.size();
+            Scope& scope = _scopes.emplace_back(_nodeStack[_scopes.size()], arena, arena.GetMark());
+            scope.checked = !isInnermost;
         }
     }
 
@@ -169,10 +195,10 @@ namespace BECore {
         SyncScopes();
         Scope& scope = _scopes.back();
         if (asAttribute) {
-            AddName(scope.askedAttributes, name);
+            AddAskedName(scope.askedAttributes, name);
         }
         if (asElement) {
-            AddName(scope.askedElements, name);
+            AddAskedName(scope.askedElements, name);
         }
     }
 
@@ -202,7 +228,10 @@ namespace BECore {
             return;
         }
         CheckScope(_scopes.back());
+        // The lists are gone before their memory is given back
+        const LinearArena::Mark mark = _scopes.back().mark;
         _scopes.pop_back();
+        GetScopeArena().Rewind(mark);
     }
 
     bool XmlDeserializer::FindingsFull() const {
@@ -239,20 +268,29 @@ namespace BECore {
             return;
         }
 
-        Vector<String> reported;
-        for (const pugi::xml_node child : scope.node.children()) {
-            if (FindingsFull()) {
-                return;
-            }
-            if (child.type() != pugi::node_element) {
-                continue;
-            }
-            const StringView name = child.name();
-            if (!Contains(scope.askedElements, name) && !Contains(reported, name)) {
-                reported.push_back(String(name));
-                ReportUnknown(scope, "element", name);
+        LinearArena& arena = GetScopeArena();
+        const LinearArena::Mark reportedMark = arena.GetMark();
+        {
+            // Views into the document, which outlives the check; the list is the arena's and goes back with the mark below
+            ArenaVector<StringView> reported{ArenaAllocator(arena)};
+            for (const pugi::xml_node child : scope.node.children()) {
+                if (FindingsFull()) {
+                    break;
+                }
+                if (child.type() != pugi::node_element) {
+                    continue;
+                }
+                const StringView name = child.name();
+                if (!Contains(scope.askedElements, name) && !Contains(reported, name)) {
+                    if (reported.capacity() == 0) {
+                        reported.reserve(kExpectedAskedNames);
+                    }
+                    reported.push_back(name);
+                    ReportUnknown(scope, "element", name);
+                }
             }
         }
+        arena.Rewind(reportedMark);
     }
 
     void XmlDeserializer::FinishLoad() {

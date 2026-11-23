@@ -367,7 +367,14 @@ namespace BECore {
          */
         static String MakeDidYouMeanHint(StringView unknown, std::initializer_list<const Vector<String>*> askedKeys);
 
+        /// The same over lists of views (the lists of XmlDeserializer's scopes, which live in an arena); include <BECore/Memory/ArenaAllocator.h> to call it
+        static String MakeDidYouMeanHint(StringView unknown, std::initializer_list<const ArenaVector<StringView>*> askedKeys);
+
     private:
+        /// The one routine behind both MakeDidYouMeanHint overloads; the lists hold Strings or views
+        template <typename List>
+        static String BuildDidYouMeanHint(StringView unknown, std::initializer_list<const List*> askedKeys);
+
         void RecordFinding(StringView key, StringView message);
 
         struct PathSegment {
