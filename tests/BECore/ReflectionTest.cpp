@@ -628,6 +628,25 @@ namespace BECore::Tests {
         EXPECT_FALSE(deserializer.HasErrors()) << DescribeErrors(deserializer).c_str();
     }
 
+    namespace {
+        /// The head of a pool section with no entries as version 3 writes it, for a hand-written expected stream. The hash function id is
+        /// that of the program: it differs where `char` is unsigned, so the test stores it into the bytes instead of spelling it out
+        void AppendEmptyPoolSection(ByteBuffer& stream) {
+            const size_t at = stream.size();
+            // clang-format off
+            const ByteBuffer head = {
+                0x00, 0x00, 0x00, 0x00,                                                         // pool section: 0 entries
+                0x00, 0x00, 0x00, 0x00,                                                         //   0 bytes
+                0x00, 0x00, 0x00, 0x00,                                                         //   hash function (stored below)
+                0x00, 0x00, 0x00, 0x00,                                                         //   reserved
+                0x15, 0x7C, 0x4A, 0x7F, 0xB9, 0x79, 0x37, 0x9E,                                 //   checksum of no bytes
+            };
+            // clang-format on
+            stream.insert(stream.end(), head.begin(), head.end());
+            BinaryFormat::Store<uint32_t>(stream.data() + at + 2 * sizeof(uint32_t), Details::PoolHashFunctionId());
+        }
+    }  // namespace
+
     TEST(ReflectionTest, BinaryWireFormat) {
         // The bytes are part of the file format: this test breaks when the layout changes by accident.
         {
@@ -640,17 +659,23 @@ namespace BECore::Tests {
             }
 
             // clang-format off
-            const ByteBuffer expected = {
-                'B', 'E', 'B', 'N', 0x02, 0x00,                                                 // magic, version 2
-                0x2F, 0x00, 0x00, 0x00,                                                         // payload size: 47
-                0x03, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,                                 // table: 3 strings, 3 bytes of characters
-                0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,         // string ends
+            ByteBuffer expected = {
+                'B', 'E', 'B', 'N', 0x03, 0x00,                                                 // magic, version 3
+                0x47, 0x00, 0x00, 0x00,                                                         // payload size: 71
+                0x03, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,                                 // name table: 3 names, 3 bytes of characters
+                0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,         // name ends
                 'a', 'b', 'o',                                                                  // 0 "a", 1 "b", 2 "o": sorted
+            };
+            // clang-format on
+            AppendEmptyPoolSection(expected);
+            // clang-format off
+            const ByteBuffer entries = {
                 0x06, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,                           // Int32 "a" = 1
                 0x0D, 0x02, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,                           // Object "o", size 6
                 0x01, 0x01, 0x00, 0x00, 0x00, 0x01,                                             //   Bool "b" = true
             };
             // clang-format on
+            expected.insert(expected.end(), entries.begin(), entries.end());
             EXPECT_TRUE(serializer.GetData() == expected) << "unexpected bytes, size " << serializer.GetData().size();
         }
         {
@@ -669,20 +694,51 @@ namespace BECore::Tests {
             }
 
             // clang-format off
-            const ByteBuffer expected = {
-                'B', 'E', 'B', 'N', 0x02, 0x00,                                                 // magic, version 2
-                0x2D, 0x00, 0x00, 0x00,                                                         // payload size: 45
-                0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,                                 // table: 2 strings, 2 bytes of characters
-                0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,                                 // string ends
+            ByteBuffer expected = {
+                'B', 'E', 'B', 'N', 0x03, 0x00,                                                 // magic, version 3
+                0x45, 0x00, 0x00, 0x00,                                                         // payload size: 69
+                0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,                                 // name table: 2 names, 2 bytes of characters
+                0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,                                 // name ends
                 'v', 'x',                                                                       // 0 "v", 1 "x"
+            };
+            // clang-format on
+            AppendEmptyPoolSection(expected);
+            // clang-format off
+            const ByteBuffer entries = {
                 0x0E, 0x01, 0x00, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00,                           // Array "x", size 18
                 0x02, 0x00, 0x00, 0x00,                                                         // 2 elements
                 0x06, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x07,                     // element 0 { UInt8 "v" = 7 }
                 0x00, 0x00, 0x00, 0x00,                                                         // element 1 {}
             };
             // clang-format on
+            expected.insert(expected.end(), entries.begin(), entries.end());
             EXPECT_TRUE(serializer.GetData() == expected) << "unexpected bytes, size " << serializer.GetData().size();
         }
+    }
+
+    // The version 2 bytes the writer wrote before version 3 stay readable: a save of a player may be one
+    TEST(ReflectionTest, BinaryVersion2WireFormatIsStillRead) {
+        // clang-format off
+        const ByteBuffer v2 = {
+            'B', 'E', 'B', 'N', 0x02, 0x00,                                                     // magic, version 2
+            0x2F, 0x00, 0x00, 0x00,                                                             // payload size: 47
+            0x03, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,                                     // table: 3 strings, 3 bytes of characters
+            0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,             // string ends
+            'a', 'b', 'o',                                                                      // 0 "a", 1 "b", 2 "o": sorted
+            0x06, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,                               // Int32 "a" = 1
+            0x0D, 0x02, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,                               // Object "o", size 6
+            0x01, 0x01, 0x00, 0x00, 0x00, 0x01,                                                 //   Bool "b" = true
+        };
+        // clang-format on
+        BinaryDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromBuffer(v2)) << DescribeErrors(deserializer).c_str();
+        int32_t a = 0;
+        EXPECT_TRUE(deserializer.Read("a", a));
+        EXPECT_EQ(a, 1);
+        bool b = false;
+        ASSERT_TRUE(deserializer.BeginObject("o"));
+        EXPECT_TRUE(deserializer.ReadAttribute("b", b));
+        EXPECT_TRUE(b);
     }
 
     TEST(ReflectionTest, BinaryEntriesAreMatchedByName) {

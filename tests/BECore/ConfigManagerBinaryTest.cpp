@@ -7,9 +7,12 @@
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/RefCounted/New.h>
+#include <BECore/Reflection/SchemaHash.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <Common/BinaryStreams.h>
 #include <Common/ContentBinaryFiles.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/FreshText.h>
 #include <Common/LogRecorder.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
@@ -211,6 +214,72 @@ namespace BECore::Tests {
             EXPECT_FALSE(_manager.HasConfig(StringView(name))) << name;
             EXPECT_NE(log.Find(LogLevel::Error, {name, ".bin"}), nullptr) << name;
         }
+    }
+
+    TEST_F(ConfigManagerBinaryTest, ACookedConfigIsReadStraightIntoAPoolBlockAndItsPoolStringIsThePoolsOwn) {
+        namespace Streams = BinaryStreams;
+        const String fresh = FreshText("config_kind");
+        const uint64_t layout = ComputeLayoutHash(kRootName).value_or(0);
+        const Vector<uint8_t> stream = Streams::Build({Streams::Object(BinaryFormat::ContentStampName, {Streams::Text("root", kRootName), Streams::Number("layout", layout)}),
+                                                       Streams::Number("id", int32_t{31}), Streams::Pooled("kind", fresh)});
+        WriteContentBytes(_lower / "BinaryProbe.bin", stream);
+        ASSERT_FALSE(PoolString::Find(StringView(fresh)).has_value());
+        const size_t blocksBefore = PoolString::GetStats().adopted.blocks;
+        Start();
+
+        EXPECT_GT(PoolString::GetStats().adopted.blocks, blocksBefore);
+        const Optional<PoolString> found = PoolString::Find(StringView(fresh));
+        ASSERT_TRUE(found.has_value()) << "the text came into the pool with the file's block";
+        const auto reader = _manager.CreateDeserializer(kConfig);
+        ASSERT_NE(reader, nullptr);
+        BinaryConfigRoot read;
+        read.Deserialize(*reader);
+        EXPECT_EQ(read.id, 31);
+        EXPECT_EQ(read.kind, *found) << "a PoolString read from the content is the pool's entry of the text";
+    }
+
+    TEST_F(ConfigManagerBinaryTest, ACookedConfigWithADamagedPoolSectionLeavesTheConfigAbsentAndSaysToCookAgain) {
+        BinaryConfigRoot root = MakeRoot();
+        const String fresh = FreshText("config_damaged");
+        root.kind = PoolString::Intern(StringView(fresh));
+        Vector<uint8_t> bytes = StampedContentBytes(kRootName, root);
+        const auto at = eastl::search(bytes.begin(), bytes.end(), fresh.begin(), fresh.end());
+        ASSERT_NE(at, bytes.end());
+        *at = static_cast<uint8_t>(*at ^ 1);  // the checksum of the section no longer matches
+        WriteContentBytes(_lower / "Damaged.bin", bytes);
+        WriteContentBin(_lower / "Good.bin", kRootName, root);
+
+        LogRecorder log;
+        Start();
+        LogEvent::Flush();
+
+        EXPECT_FALSE(_manager.HasConfig("Damaged"));
+        EXPECT_TRUE(_manager.HasConfig("Good"));
+        EXPECT_NE(log.Find(LogLevel::Error, {"Damaged", ".bin", "cook"}), nullptr);
+    }
+
+    TEST_F(ConfigManagerBinaryTest, ACookedConfigOfVersionTwoStillLoadsAndItsStringsAreHashedOnRead) {
+        namespace Streams = BinaryStreams;
+        const String fresh = FreshText("config_v2");
+        const uint64_t layout = ComputeLayoutHash(kRootName).value_or(0);
+        Streams::Options options;
+        options.version = BinaryFormat::TabledVersion;
+        const Vector<uint8_t> stream = Streams::Build({Streams::Object(BinaryFormat::ContentStampName, {Streams::Text("root", kRootName), Streams::Number("layout", layout)}),
+                                                       Streams::Number("id", int32_t{31}), Streams::Pooled("kind", fresh)},
+                                                      options);
+        WriteContentBytes(_lower / "BinaryProbe.bin", stream);
+        const size_t blocksBefore = PoolString::GetStats().adopted.blocks;
+        Start();
+
+        ASSERT_TRUE(_manager.IsBinaryConfig(kConfig));
+        EXPECT_EQ(PoolString::GetStats().adopted.blocks, blocksBefore) << "a file without a pool section adopts nothing";
+        const auto reader = _manager.CreateDeserializer(kConfig);
+        ASSERT_NE(reader, nullptr);
+        BinaryConfigRoot read;
+        read.Deserialize(*reader);
+        EXPECT_EQ(read.id, 31);
+        EXPECT_EQ(read.kind.ToStringView(), StringView(fresh));
+        EXPECT_EQ(PoolString::Find(StringView(fresh)), read.kind);
     }
 
     TEST_F(ConfigManagerBinaryTest, SaveAndReloadOfABinConfigFailAndChangeNothing) {

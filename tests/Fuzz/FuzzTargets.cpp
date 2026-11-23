@@ -9,6 +9,7 @@ namespace BECore::Fuzz {
     Span<const FuzzTarget> FuzzTargetList() {
         static const FuzzTarget targets[] = {
             {"BinaryDeserializer", &FuzzBinaryDeserializer, "binary", 1},
+            {"BinaryContent", &FuzzBinaryContent, "binary_content", 1},
             {"XmlDeserializer", &FuzzXmlDeserializer, "xml", 2},
             {"JsonDeserializer", &FuzzJsonDeserializer, "json", 2},
             {"SaveEnvelope", &FuzzSaveEnvelope, "save", 10},
@@ -33,9 +34,10 @@ namespace BECore::Fuzz {
         }
         Vector<uint8_t> repaired(data, data + size);
         std::memcpy(repaired.data(), BinaryFormat::Magic, sizeof(BinaryFormat::Magic));
-        // A version 1 input stays version 1, so its seeds keep exercising the old layout under a true header
+        // An input of a version the reader knows keeps it, so its seeds keep exercising that layout under a true header
         const uint16_t version = BinaryFormat::Load<uint16_t>(data + sizeof(BinaryFormat::Magic));
-        BinaryFormat::Store<uint16_t>(repaired.data() + sizeof(BinaryFormat::Magic), version == BinaryFormat::LegacyVersion ? version : BinaryFormat::CurrentVersion);
+        const bool known = version == BinaryFormat::LegacyVersion || version == BinaryFormat::TabledVersion || version == BinaryFormat::PooledVersion;
+        BinaryFormat::Store<uint16_t>(repaired.data() + sizeof(BinaryFormat::Magic), known ? version : BinaryFormat::CurrentVersion);
         BinaryFormat::Store<uint32_t>(repaired.data() + BinaryFormat::PayloadSizeOffset, static_cast<uint32_t>(size - BinaryFormat::HeaderSize));
         return repaired;
     }

@@ -5,6 +5,7 @@
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/DataAccessor.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <Common/BinaryStreamBuilder.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
@@ -365,6 +366,35 @@ namespace BECore::Tests {
 
         String text;
         EXPECT_TRUE(reader.ReadAttribute("tooLong", text));
+        EXPECT_EQ(text, overCap);
+    }
+
+    TEST(ReaderLimitsTest, BinaryVersion3PoolStringAtTheCapIsReadAndAnInlineStringOneByteOverIsRefused) {
+        namespace Streams = Tests::BinaryStreams;
+        const String atCap = PoolStringText('d', ReaderLimits::kMaxPoolStringBytes);
+        const String overCap = PoolStringText('e', ReaderLimits::kMaxPoolStringBytes + 1);
+        // A section never holds a text over the cap: the writer puts it inline, and the reader refuses it when it is read into a PoolString
+        Streams::Options options;
+        options.version = BinaryFormat::PooledVersion;
+        const Vector<uint8_t> bytes = Streams::Build({Streams::Pooled("pooled", atCap), Streams::Text("tooLong", overCap)}, options);
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromBuffer(bytes));
+
+        PoolString atTheCap;
+        ASSERT_TRUE(reader.Read("pooled", atTheCap));
+        EXPECT_EQ(atTheCap.ToStringView(), StringView(atCap));
+
+        const PoolString kept = "kept_by_a_refused_version3_read"_intern;
+        PoolString refused = kept;
+        const size_t before = PoolString::GetStats().stringCount;
+        EXPECT_FALSE(reader.Read("tooLong", refused));
+        EXPECT_EQ(PoolString::GetStats().stringCount, before);
+        EXPECT_EQ(refused, kept);
+        ASSERT_EQ(reader.GetErrors().size(), 1u);
+        EXPECT_NE(reader.GetErrors()[0].errorMessage.find("kMaxPoolStringBytes"), String::npos);
+
+        String text;
+        EXPECT_TRUE(reader.Read("tooLong", text));
         EXPECT_EQ(text, overCap);
     }
 

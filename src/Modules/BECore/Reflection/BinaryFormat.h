@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/PoolString/PoolStringEntry.h>
+#include <BECore/Reflection/ReaderLimits.h>
 #include <BECore/Types/Types.h>
 #include <bit>
 #include <cstddef>
@@ -22,9 +24,17 @@ namespace BECore::BinaryFormat {
     //                  string i = chars[(i == 0 ? 0 : end[i-1]), end[i]); the last end is charBytes (count 0: charBytes 0);
     //                  strictly ascending in CompareStrings order, so every text is there once
     //   Entry2      := u8 tag | u32 nameIndex | Payload                       (nameIndex < count)
+    //   Version 3   := Header NameTable PoolSection Entry2*
+    //   NameTable   := the StringTable above, holding the names of the entries only (a name is a view over the stream, never interned)
+    //   PoolSection := u32 count | u32 bytes | u32 hashFunction | u32 reserved (0) | u64 checksum | PoolEntry[count]
+    //                  `bytes` is the size of the PoolEntry list after the 24-byte head, a multiple of 8
+    //   PoolEntry   := u64 hash | u32 size | chars[size] | NUL | zero padding to a multiple of 8   (Details::PoolStringEntry, PoolEntryBytes(size) bytes)
+    //                  `hashFunction` is Details::PoolHashFunctionId() of the writer; `checksum` is PoolSectionChecksum of the `bytes`.
+    //                  No text is longer than ReaderLimits::kMaxPoolStringBytes; the order and the uniqueness of the texts are not checked
     //   Payload     := fixed-size scalar                                   (Bool..Double)
-    //                | u32 len | bytes[len]                                (String, inline in both versions)
-    //                | u32 stringIndex                                     (PoolString, version 2 only; < count)
+    //                | u32 len | bytes[len]                                (String, inline in every version)
+    //                | u32 stringIndex                                     (PoolString: version 2, an index into the StringTable;
+    //                                                                       version 3, an index of the PoolSection's entries; < count)
     //                | u32 size | Entry*                                   (Object, size = bytes after the size field)
     //                | u32 size | u32 count | Element*                     (Array,  size = bytes after the size field)
     //   Element     := u32 size | Entry*                                   (size = bytes after the size field)
@@ -32,7 +42,8 @@ namespace BECore::BinaryFormat {
     // Everything is little-endian. Entries are matched by name, not by position, so fields can be skipped
     // (skip-defaults, null pointers, optionals) and reordered. A name that is written twice reads as the last write.
     // Write() and WriteAttribute() produce the same entry: there is no attribute/child split in binary.
-    // The table holds the names of all entries and the text of the PoolString values; a String value is never in it.
+    // The version 2 table holds the names of all entries and the text of the PoolString values; a String value is never in it.
+    // A version 3 stream keeps the names in its NameTable and the PoolString texts in its PoolSection.
     // A cooked content file starts its root scope with the Object entry ContentStampName (SchemaHash.h); no C++ field has that name,
     // so it is reserved there. The byte layout is the same with or without it: a reader that does not ask for it never sees it.
     // =========================================================================
@@ -40,13 +51,17 @@ namespace BECore::BinaryFormat {
     inline constexpr char Magic[4] = {'B', 'E', 'B', 'N'};
     inline constexpr uint16_t LegacyVersion = 1;               ///< Names inline in every entry; still read, no longer written
     inline constexpr uint16_t TabledVersion = 2;               ///< Names and PoolString texts in a string table
-    inline constexpr uint16_t CurrentVersion = TabledVersion;  ///< What BinarySerializer writes; a change of the byte layout moves it and keeps the old ones readable
+    inline constexpr uint16_t PooledVersion = 3;               ///< Names in a name table, PoolString texts in a pool section
+    inline constexpr uint16_t CurrentVersion = PooledVersion;  ///< What BinarySerializer writes; a change of the byte layout moves it and keeps the old ones readable
 
     /// The root-scope entry of a cooked content file that names its root type and the hash of its layout (`WriteContentStamp`); `$` cannot start a C++ name
     inline constexpr StringView ContentStampName = "$content";
 
     inline constexpr size_t PayloadSizeOffset = sizeof(Magic) + sizeof(uint16_t);
     inline constexpr size_t HeaderSize = PayloadSizeOffset + sizeof(uint32_t);
+
+    /// The fixed part of a pool section: count, bytes, hashFunction, reserved, checksum
+    inline constexpr size_t PoolSectionHeadSize = 4 * sizeof(uint32_t) + sizeof(uint64_t);
 
     /// Objects and arrays nested deeper than this are rejected when loading (bounds the validation recursion).
     inline constexpr size_t MaxDepth = 128;
@@ -67,7 +82,7 @@ namespace BECore::BinaryFormat {
         inline constexpr uint8_t String = 12;
         inline constexpr uint8_t Object = 13;
         inline constexpr uint8_t Array = 14;
-        inline constexpr uint8_t PoolString = 15;  ///< Version 2 only: a u32 index into the string table
+        inline constexpr uint8_t PoolString = 15;  ///< Versions 2 and 3: a u32 index into the string table or the pool section
     }  // namespace Tag
 
     /// Bool..Double, String and PoolString: entries read by Read() / ReadAttribute().
@@ -175,7 +190,7 @@ namespace BECore::BinaryFormat {
     }
 
     /**
-     * @brief The string table of a version 2 stream, as a view over the stream's bytes
+     * @brief The string table of a version 2 stream (the name table of version 3), as a view over the stream's bytes
      *
      * Holds offsets and the base pointer, so a stream that is copied to another place is rebased with Rebase()
      * instead of parsed again. It copies and owns nothing: the bytes must outlive the view.
@@ -285,7 +300,7 @@ namespace BECore::BinaryFormat {
     struct EntryView {
         uint8_t tag = 0;
         StringView name;
-        uint32_t nameIndex = 0;   // version 2: the name's index in the string table
+        uint32_t nameIndex = 0;   // versions 2 and 3: the name's index in the name table
         size_t payloadBegin = 0;  // first byte after the name
         size_t end = 0;           // one past the last byte of the entry
     };
@@ -356,6 +371,40 @@ namespace BECore::BinaryFormat {
         return true;
     }
 
+    namespace Detail {
+
+        /// ParseEntryV2 and ParseEntryV3: the name is index into @p names, a PoolString payload is an index below @p stringCount
+        inline bool ParseTabledEntry(const uint8_t* data, size_t position, size_t scopeEnd, const StringTable& names, size_t stringCount, EntryView& outEntry) {
+            constexpr size_t entryHeaderSize = sizeof(uint8_t) + sizeof(uint32_t);
+            if (position > scopeEnd || scopeEnd - position < entryHeaderSize) {
+                return false;
+            }
+
+            const uint8_t tag = data[position];
+            const uint32_t nameIndex = Load<uint32_t>(data + position + sizeof(uint8_t));
+            if (nameIndex >= names.count) {
+                return false;
+            }
+
+            const size_t payloadBegin = position + entryHeaderSize;
+            size_t end = 0;
+            if (!PayloadEnd(data, tag, payloadBegin, scopeEnd, end)) {
+                return false;
+            }
+            if (tag == Tag::PoolString && Load<uint32_t>(data + payloadBegin) >= stringCount) {
+                return false;
+            }
+
+            outEntry.tag = tag;
+            outEntry.name = names.Get(nameIndex);
+            outEntry.nameIndex = nameIndex;
+            outEntry.payloadBegin = payloadBegin;
+            outEntry.end = end;
+            return true;
+        }
+
+    }  // namespace Detail
+
     /**
      * @brief Parse the version 2 entry that starts at @p position inside [position, scopeEnd)
      *
@@ -365,32 +414,134 @@ namespace BECore::BinaryFormat {
      * @return false if the entry is truncated, has an unknown tag or an index outside the table
      */
     inline bool ParseEntryV2(const uint8_t* data, size_t position, size_t scopeEnd, const StringTable& table, EntryView& outEntry) {
-        constexpr size_t entryHeaderSize = sizeof(uint8_t) + sizeof(uint32_t);
-        if (position > scopeEnd || scopeEnd - position < entryHeaderSize) {
+        return Detail::ParseTabledEntry(data, position, scopeEnd, table, table.count, outEntry);
+    }
+
+    /**
+     * @brief The pool section of a version 3 stream: where it is and what its head says
+     *
+     * ParsePoolSection has walked the entries, so a reader may step through them with PoolEntryBytes(size) without checking again.
+     */
+    struct PoolSection {
+        size_t headOffset = 0;     ///< Where the 24-byte head starts
+        size_t entriesOffset = 0;  ///< Where the first entry starts
+        uint32_t count = 0;
+        uint32_t bytes = 0;         ///< Size of the entries, a multiple of 8
+        uint32_t hashFunction = 0;  ///< The writer's Details::PoolHashFunctionId()
+        uint64_t checksum = 0;      ///< PoolSectionChecksum of the entries as the writer saw them
+    };
+
+    /**
+     * @brief Parse and check the head of the pool section that starts at @p position inside [position, limit)
+     *
+     * Checks that the 24-byte head fits, `reserved` is 0, `bytes` is a multiple of 8 and fits in [head end, limit). It reads only
+     * the head, so @p data may hold nothing else: a loader that has not read the entries yet passes the size the whole stream
+     * will have as @p limit. The entries are not looked at (ParsePoolEntries walks them).
+     *
+     * @return false if the head is truncated or broken; @p outSection is then unspecified
+     */
+    inline bool ParsePoolSectionHead(const uint8_t* data, size_t position, size_t limit, PoolSection& outSection) {
+        if (data == nullptr || position > limit || limit - position < PoolSectionHeadSize) {
             return false;
         }
 
-        const uint8_t tag = data[position];
-        const uint32_t nameIndex = Load<uint32_t>(data + position + sizeof(uint8_t));
-        if (nameIndex >= table.count) {
+        PoolSection section;
+        section.headOffset = position;
+        section.entriesOffset = position + PoolSectionHeadSize;
+        section.count = Load<uint32_t>(data + position);
+        section.bytes = Load<uint32_t>(data + position + sizeof(uint32_t));
+        section.hashFunction = Load<uint32_t>(data + position + 2 * sizeof(uint32_t));
+        const uint32_t reserved = Load<uint32_t>(data + position + 3 * sizeof(uint32_t));
+        section.checksum = Load<uint64_t>(data + position + 4 * sizeof(uint32_t));
+        if (reserved != 0 || section.bytes % Details::kPoolEntryAlignment != 0 || section.bytes > limit - section.entriesOffset) {
             return false;
         }
 
-        const size_t payloadBegin = position + entryHeaderSize;
-        size_t end = 0;
-        if (!Detail::PayloadEnd(data, tag, payloadBegin, scopeEnd, end)) {
-            return false;
-        }
-        if (tag == Tag::PoolString && Load<uint32_t>(data + payloadBegin) >= table.count) {
-            return false;
-        }
-
-        outEntry.tag = tag;
-        outEntry.name = table.Get(nameIndex);
-        outEntry.nameIndex = nameIndex;
-        outEntry.payloadBegin = payloadBegin;
-        outEntry.end = end;
+        outSection = section;
         return true;
+    }
+
+    /**
+     * @brief Walk @p bytes of pool entries and check them: the structural half of ParsePoolSection, also used by a loader that holds the entries in a block
+     *
+     * Every header and padded size fits, no text is over ReaderLimits::kMaxPoolStringBytes, every NUL is there and the walk ends
+     * exactly at @p bytes after @p count entries. It looks at no hash, allocates nothing and reads only [data, data + bytes), so it is
+     * safe on untrusted data. After a true result a caller may step through the entries with Details::PoolEntryBytes(size) unchecked.
+     *
+     * @param data the first entry, 8-aligned
+     * @param bytes a multiple of 8
+     */
+    inline bool ParsePoolEntries(const uint8_t* data, size_t bytes, size_t count) {
+        constexpr size_t entryHeaderBytes = offsetof(Details::PoolStringEntry, data);
+        size_t walked = 0;
+        size_t entries = 0;
+        while (walked < bytes) {
+            const size_t remaining = bytes - walked;
+            if (remaining < entryHeaderBytes + 1) {
+                return false;
+            }
+            const uint8_t* entry = data + walked;
+            const size_t size = Load<uint32_t>(entry + offsetof(Details::PoolStringEntry, size));
+            if (size > ReaderLimits::kMaxPoolStringBytes) {
+                return false;
+            }
+            const size_t entryBytes = Details::PoolEntryBytes(size);
+            if (entryBytes > remaining || entry[entryHeaderBytes + size] != 0) {
+                return false;
+            }
+            walked += entryBytes;
+            ++entries;
+        }
+        return entries == count;
+    }
+
+    /**
+     * @brief Parse and check the pool section that starts at @p position inside [position, limit)
+     *
+     * ParsePoolSectionHead, then ParsePoolEntries over the section's own bytes. It looks at no hash and no checksum.
+     *
+     * @param outSectionEnd one past the last byte of the section
+     * @return false if the section is truncated or broken; the outputs are then unspecified
+     */
+    inline bool ParsePoolSection(const uint8_t* data, size_t position, size_t limit, PoolSection& outSection, size_t& outSectionEnd) {
+        PoolSection section;
+        if (!ParsePoolSectionHead(data, position, limit, section) || !ParsePoolEntries(data + section.entriesOffset, section.bytes, section.count)) {
+            return false;
+        }
+
+        outSection = section;
+        outSectionEnd = section.entriesOffset + section.bytes;
+        return true;
+    }
+
+    /**
+     * @brief The checksum of a pool section's entries: a word-wise mix that depends on every byte and on the order of the words
+     *
+     * Not a defence against someone who forges a file (a loader still validates every entry); it is there to tell a damaged
+     * or half-written file from a good one without hashing every text again.
+     *
+     * @param bytes a multiple of 8 (a pool section always is); a tail of fewer bytes is ignored
+     */
+    inline uint64_t PoolSectionChecksum(const uint8_t* data, size_t bytes) {
+        constexpr uint64_t seed = 0x9E3779B97F4A7C15ULL;
+        constexpr uint64_t multiplier = 0xFF51AFD7ED558CCDULL;
+        constexpr int rotation = 27;
+        uint64_t state = seed ^ bytes;
+        for (size_t offset = 0; bytes - offset >= sizeof(uint64_t); offset += sizeof(uint64_t)) {
+            state = std::rotl(state ^ Load<uint64_t>(data + offset), rotation) * multiplier;
+        }
+        return state;
+    }
+
+    /**
+     * @brief Parse the version 3 entry that starts at @p position inside [position, scopeEnd)
+     *
+     * As ParseEntryV2, but a Tag::PoolString payload is an index of the pool section's entries, so it must be below @p poolCount.
+     *
+     * @return false if the entry is truncated, has an unknown tag or an index outside its table
+     */
+    inline bool ParseEntryV3(const uint8_t* data, size_t position, size_t scopeEnd, const StringTable& nameTable, size_t poolCount, EntryView& outEntry) {
+        return Detail::ParseTabledEntry(data, position, scopeEnd, nameTable, poolCount, outEntry);
     }
 
 }  // namespace BECore::BinaryFormat

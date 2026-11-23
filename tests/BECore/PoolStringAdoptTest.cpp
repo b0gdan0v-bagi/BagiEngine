@@ -175,6 +175,7 @@ namespace BECore::Tests {
         EXPECT_EQ(stats.adopted.bytes, PoolEntryBytes(texts[1].size()) + PoolEntryBytes(texts[4].size()));
         EXPECT_EQ(stats.deadStrings, 4u);
         EXPECT_EQ(stats.deadBytes, deadBytes);
+        EXPECT_EQ(stats.adopted.blocks, 1u);
         EXPECT_EQ(pool.storage.Intern("adopt_dup_runtime"), runtime);
     }
 
@@ -267,7 +268,7 @@ namespace BECore::Tests {
     }
 
     TEST(PoolStringAdoptTest, EveryErrorHasANameForALogLine) {
-        EXPECT_EQ(EnumUtils<PoolAdoptError>::Count(), 7u);
+        EXPECT_EQ(EnumUtils<PoolAdoptError>::Count(), 8u);
         EXPECT_EQ(EnumUtils<PoolAdoptError>::ToString(PoolAdoptError::NotOwned), "NotOwned");
         EXPECT_EQ(EnumUtils<PoolAdoptError>::ToString(PoolAdoptError::UsedBytesTooLarge), "UsedBytesTooLarge");
         EXPECT_EQ(EnumUtils<PoolAdoptError>::ToString(PoolAdoptError::UsedBytesNotAligned), "UsedBytesNotAligned");
@@ -275,6 +276,7 @@ namespace BECore::Tests {
         EXPECT_EQ(EnumUtils<PoolAdoptError>::ToString(PoolAdoptError::MissingNul), "MissingNul");
         EXPECT_EQ(EnumUtils<PoolAdoptError>::ToString(PoolAdoptError::WrongHash), "WrongHash");
         EXPECT_EQ(EnumUtils<PoolAdoptError>::ToString(PoolAdoptError::OutSizeMismatch), "OutSizeMismatch");
+        EXPECT_EQ(EnumUtils<PoolAdoptError>::ToString(PoolAdoptError::TextTooLong), "TextTooLong");
         EXPECT_EQ("{}"_format(PoolAdoptError::WrongHash), "WrongHash");
     }
 
@@ -388,6 +390,35 @@ namespace BECore::Tests {
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(result->linkedStrings, 2u);
         EXPECT_TRUE(block.Data() == nullptr);
+    }
+
+    TEST(PoolStringAdoptTest, ATextOverTheLimitRefusesTheBlockBeforeAnythingIsLinked) {
+        IsolatedPool pool;
+        constexpr size_t kLimit = 16;
+        const Vector<String> texts = {"adopt_lim_short", String(kLimit + 1, 'x'), "adopt_lim_last"};
+        BuiltBlock built = Build(pool.storage, texts);
+        const PoolStringStats before = pool.storage.GetStats();
+
+        const auto refused = pool.storage.AdoptBlock(built.block, built.used, {}, PoolAdoptOptions{true, kLimit});
+        ASSERT_FALSE(refused.has_value());
+        EXPECT_EQ(refused.error(), PoolAdoptError::TextTooLong);
+        ExpectUnchanged(before, pool.storage.GetStats());
+        EXPECT_FALSE(pool.storage.Find(texts[0]).has_value());
+        EXPECT_TRUE(built.block.Data() != nullptr);
+
+        const auto accepted = pool.storage.AdoptBlock(built.block, built.used, {}, PoolAdoptOptions{true, kLimit + 1});
+        ASSERT_TRUE(accepted.has_value());
+        EXPECT_EQ(accepted->linkedStrings, 3u);
+    }
+
+    TEST(PoolStringAdoptTest, AnEntryOfExactlyTheLimitAdoptsAndTheDefaultHasNoLimit) {
+        IsolatedPool pool;
+        constexpr size_t kLimit = 20;
+        BuiltBlock exact = Build(pool.storage, {String(kLimit, 'a')});
+        EXPECT_TRUE(pool.storage.AdoptBlock(exact.block, exact.used, {}, PoolAdoptOptions{true, kLimit}).has_value());
+
+        BuiltBlock huge = Build(pool.storage, {String(kBlock, 'b')});
+        EXPECT_TRUE(Adopt(pool.storage, huge).has_value());
     }
 
     TEST(PoolStringAdoptTest, AnOutOfTheWrongSizeIsRefused) {

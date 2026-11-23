@@ -17,7 +17,8 @@ namespace BECore {
               TruncatedEntry,       ///< A header, or the text and NUL its `size` announces, runs past `usedBytes`
               MissingNul,           ///< The byte after the text of an entry is not NUL
               WrongHash,            ///< With `verifyHashes`: the hash of an entry is not the hash of its text
-              OutSizeMismatch)      ///< `out` is not empty and its size is not the number of entries of the block
+              OutSizeMismatch,      ///< `out` is not empty and its size is not the number of entries of the block
+              TextTooLong)          ///< With `maxTextBytes`: the `size` of an entry is more than the limit
 
     /// What an adopted block gave the pool
     struct PoolAdoptResult {

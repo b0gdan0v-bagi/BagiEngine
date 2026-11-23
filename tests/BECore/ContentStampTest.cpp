@@ -108,8 +108,8 @@ namespace BECore::Tests {
         EXPECT_EQ(after.stringCount, before.stringCount);
     }
 
-    TEST(ContentStamp, BothVersionsCarryIt) {
-        for (const uint16_t version : {BinaryFormat::LegacyVersion, BinaryFormat::TabledVersion}) {
+    TEST(ContentStamp, EveryVersionCarriesIt) {
+        for (const uint16_t version : {BinaryFormat::LegacyVersion, BinaryFormat::TabledVersion, BinaryFormat::PooledVersion}) {
             Streams::Options options;
             options.version = version;
             BinaryDeserializer reader = Open(Streams::Build({StampEntry(kRootName, LayoutOfRoot()), Streams::Number("id", static_cast<int32_t>(5))}, options));

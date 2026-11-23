@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstring>
 #include <new>
+#include <type_traits>
 
 namespace BECore {
 
@@ -41,6 +42,15 @@ namespace BECore {
 
         /// The longest text an entry can hold: `size` is 32 bits and the entry is padded past the NUL
         inline constexpr size_t kPoolEntryMaxTextBytes = UINT32_MAX - offsetof(PoolStringEntry, data) - kPoolEntryAlignment;
+
+        /// Names the hash a pool entry holds: FNV-1a 64 (`StringUtils::GetHash`) plus the signedness of `char`, because `GetHash`
+        /// sign-extends every byte, so text above 0x7F hashes differently where `char` is unsigned. A file cooked under another id
+        /// holds hashes this program would not compute, so its reader recomputes them.
+        [[nodiscard]] constexpr uint32_t PoolHashFunctionId() noexcept {
+            constexpr uint32_t fnv1a64 = 1;
+            constexpr uint32_t signedCharBit = 0x100;
+            return std::is_signed_v<char> ? (fnv1a64 | signedCharBit) : fnv1a64;
+        }
 
         /// Bytes an entry of a text of `textBytes` takes in a block: the header, the text and its NUL, padded to the alignment
         [[nodiscard]] constexpr size_t PoolEntryBytes(size_t textBytes) noexcept {

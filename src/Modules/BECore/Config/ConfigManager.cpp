@@ -5,6 +5,7 @@
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Memory/ScratchArena.h>
+#include <BECore/Reflection/BinaryContent.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/SchemaHash.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -71,33 +72,25 @@ namespace BECore {
             return path.extension() == kBinaryExtension.data();
         }
 
-        /// The bytes of a `.bin` file, or the reason it cannot be read
-        std::expected<Vector<uint8_t>, String> ReadBinaryFile(const std::filesystem::path& path) {
-            Vector<uint8_t> bytes;
-            const std::expected<void, StringView> read = ReadBinaryDocumentFile(path, bytes);
-            if (!read.has_value()) {
-                return std::unexpected(String(read.error()));
-            }
-            return bytes;
-        }
-
-        /// The bytes of the `.bin` at @p path once they are a valid document with a stamp that this program accepts, or the reason they are not
-        std::expected<Vector<uint8_t>, String> LoadCheckedBinary(const std::filesystem::path& path) {
-            auto bytes = ReadBinaryFile(path);
-            if (!bytes) {
-                return bytes;
+        /// The content of the `.bin` at @p path once it is a valid document with a stamp that this program accepts, or the reason it is not
+        std::expected<BinaryContent, String> LoadCheckedBinary(const std::filesystem::path& path) {
+            auto content = LoadContentFile(path);
+            if (!content) {
+                return content;
             }
             BinaryDeserializer reader;
-            if (!reader.LoadFromView(bytes->data(), bytes->size())) {
+            if (!reader.LoadFromContent(*content)) {
                 const auto& errors = reader.GetErrors();
                 return std::unexpected(errors.empty() ? String("the file is not a binary document") : errors.front().errorMessage);
             }
+            // After the adoption: the stamp is in the entries, which are read after the section, so a file that another layout
+            // refuses leaves its type and field names in the pool
             const std::string source = path.string();  //-NoStd: the path API's own text
             const auto stamp = CheckContentStamp(reader, StringView(source.data(), source.size()));
             if (!stamp) {
                 return std::unexpected(stamp.error());
             }
-            return bytes;
+            return content;
         }
 
     }  // namespace
@@ -189,9 +182,9 @@ namespace BECore {
             return deserializer;
         }
 
-        UniquePtr<IDeserializer> MakeBinaryDeserializer(const Vector<uint8_t>& bytes) {
+        UniquePtr<IDeserializer> MakeBinaryDeserializer(const BinaryContent& content) {
             auto deserializer = MakeUnique<BinaryDeserializer>();
-            if (!deserializer->LoadFromView(bytes.data(), bytes.size())) {
+            if (!deserializer->LoadFromContent(content)) {
                 return nullptr;
             }
             return deserializer;
@@ -204,7 +197,7 @@ namespace BECore {
             return nullptr;
         }
         if (entry->binary) {
-            return MakeBinaryDeserializer(entry->bytes);
+            return MakeBinaryDeserializer(entry->content);
         }
         return entry->doc ? MakeXmlDeserializer(entry->doc->GetRoot()) : nullptr;
     }
@@ -504,9 +497,9 @@ namespace BECore {
         }
 
         if (IsBinaryPath(path)) {
-            auto bytes = LoadCheckedBinary(path);
-            if (!bytes) {
-                LOG_ERROR("[ConfigManager] Failed to load config: {} from {}: {}", name.ToStringView(), path.string(), bytes.error());
+            auto content = LoadCheckedBinary(path);
+            if (!content) {
+                LOG_ERROR("[ConfigManager] Failed to load config: {} from {}: {}", name.ToStringView(), path.string(), content.error());
                 co_return;
             }
             LockGuard lock(_writeMutex);
@@ -516,7 +509,7 @@ namespace BECore {
             }
             ConfigEntry entry;
             entry.filePath = path;
-            entry.bytes = eastl::move(*bytes);
+            entry.content = eastl::move(*content);
             entry.binary = true;
             _configs[name] = eastl::move(entry);
             co_return;

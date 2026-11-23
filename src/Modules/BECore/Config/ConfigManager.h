@@ -6,6 +6,7 @@
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/PoolString/PoolStringMap.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Reflection/BinaryContent.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Types/Types.h>
 #include <TaskSystem/Task.h>
@@ -72,9 +73,9 @@ namespace BECore {
          * The deserializer has the diagnostics mode of GetDiagnostics(); the caller ends the read with FinishLoad().
          * The deserializer reads the cached document, so it must not outlive a ReloadConfig of that config.
          *
-         * For a `.bin` it is a `BinaryDeserializer` over the bytes the entry owns (`LoadFromView`): they are read once and never
-         * replaced or moved, so the reader is valid as long as the manager lives. A binary document reports no findings, so the
-         * caller's `SetDiagnostics` has no effect on it.
+         * For a `.bin` it is a `BinaryDeserializer` over the content the entry owns (`LoadFromContent`): the file is read once and
+         * never replaced or moved, so the reader is valid as long as the manager lives. A `PoolString` it reads is the entry the
+         * cooked file's pool section adopted. A binary document reports no findings, so the caller's `SetDiagnostics` has no effect on it.
          * @return The deserializer, or nullptr if the config is unknown
          */
         UniquePtr<IDeserializer> CreateDeserializer(PoolString name) const;
@@ -123,7 +124,7 @@ namespace BECore {
             IntrusivePtr<XmlDocument> doc;  ///< null for a `.bin`
             std::filesystem::path filePath;
             uint64_t fileHash = 0;  ///< of the file text the document reflects: set at load, SaveConfig and ReloadConfig
-            Vector<uint8_t> bytes;  ///< a `.bin`: the validated file, never replaced; a deserializer borrows it (a `Vector`'s block stays when the entry is moved)
+            BinaryContent content;  ///< a `.bin`: the validated file, never replaced; a deserializer borrows its `bytes` and `strings` (a `Vector`'s block stays when the entry is moved)
             bool binary = false;
         };
 

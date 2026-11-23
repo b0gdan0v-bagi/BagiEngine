@@ -2,6 +2,7 @@
 #include <BECore/File/FilePath.h>
 #include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Memory/ScratchArena.h>
+#include <BECore/Reflection/BinaryContent.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
@@ -30,8 +31,11 @@ namespace BECore {
         /// What validation collects on the way: the whole file's verdict on repeated names and the keys of the scopes that are being walked
         struct ValidateState {
             const uint8_t* data = nullptr;
-            /// The string table of a version 2 stream; null for version 1
+            /// The string table of a version 2 stream, the name table of version 3; null for version 1
             const BinaryFormat::StringTable* table = nullptr;
+            /// Version 3: a PoolString entry indexes the pool section, which holds this many entries (no table marking is needed: all of it is interned)
+            bool pooled = false;
+            size_t poolCount = 0;
             /// One bit per table string that a tag PoolString entry refers to, sized when the first one is met. On the heap: it is moved into
             /// the reader, which keeps it until the first PoolString read
             Vector<uint64_t> poolBits;
@@ -55,6 +59,9 @@ namespace BECore {
         }
 
         bool ParseEntryOf(const ValidateState& state, size_t position, size_t end, BinaryFormat::EntryView& entry) {
+            if (state.pooled) {
+                return BinaryFormat::ParseEntryV3(state.data, position, end, *state.table, state.poolCount, entry);
+            }
             return state.table != nullptr ? BinaryFormat::ParseEntryV2(state.data, position, end, *state.table, entry) : BinaryFormat::ParseEntry(state.data, position, end, entry);
         }
 
@@ -113,7 +120,7 @@ namespace BECore {
                 if (!ParseEntryOf(state, position, end, entry)) {
                     return false;
                 }
-                if (entry.tag == BinaryFormat::Tag::PoolString) {
+                if (entry.tag == BinaryFormat::Tag::PoolString && !state.pooled) {
                     MarkPooled(state, BinaryFormat::Load<uint32_t>(state.data + entry.payloadBegin));
                 }
 
@@ -170,24 +177,31 @@ namespace BECore {
         _data = nullptr;
         _size = 0;
         _hasDuplicateNames = false;
+        _version = 0;
         _tabled = false;
         _table = {};
+        _pool = {};
+        _poolOffsets.clear();
         _poolBits.clear();
         _pooledIndices.clear();
         _pooled.clear();
         _pooledReady = false;
+        _contentMode = false;
+        _contentStrings = nullptr;
         _owned.clear();
         _scopeStack.clear();
         _arrayStack.clear();
         ClearPathSegments();
     }
 
-    bool BinaryDeserializer::Validate(const uint8_t* data, size_t size, Checked& outChecked) {
+    bool BinaryDeserializer::Validate(const uint8_t* data, size_t size, Checked& outChecked, const BinaryContent* content) {
         if (data == nullptr || size < BinaryFormat::HeaderSize) {
             AddError("", "Binary data is too small to hold a header", 0);
             return false;
         }
-        if (size > ReaderLimits::kMaxBinaryStreamBytes) {
+        // Content mode: `size` is the compact stream, the pool section's entries are the BinaryContent's strings
+        const size_t omitted = content != nullptr ? content->section.bytes : 0;
+        if (size > ReaderLimits::kMaxBinaryStreamBytes || omitted > ReaderLimits::kMaxBinaryStreamBytes - size) {
             AddError("", "Binary data is larger than the limit", 0);
             return false;
         }
@@ -196,11 +210,15 @@ namespace BECore {
             return false;
         }
         const uint16_t version = BinaryFormat::Load<uint16_t>(data + sizeof(BinaryFormat::Magic));
-        if (version != BinaryFormat::LegacyVersion && version != BinaryFormat::TabledVersion) {
+        if (version != BinaryFormat::LegacyVersion && version != BinaryFormat::TabledVersion && version != BinaryFormat::PooledVersion) {
             AddError("", "Unsupported binary format version", 0);
             return false;
         }
-        if (BinaryFormat::Load<uint32_t>(data + BinaryFormat::PayloadSizeOffset) != size - BinaryFormat::HeaderSize) {
+        if (content != nullptr && version != BinaryFormat::PooledVersion) {
+            AddError("", "Binary content has a pool section only in version 3", 0);
+            return false;
+        }
+        if (BinaryFormat::Load<uint32_t>(data + BinaryFormat::PayloadSizeOffset) != size - BinaryFormat::HeaderSize + omitted) {
             AddError("", "Binary data is truncated or has trailing bytes", 0);
             return false;
         }
@@ -211,12 +229,33 @@ namespace BECore {
         state.data = data;
         outChecked.version = version;
         outChecked.rootBegin = BinaryFormat::HeaderSize;
-        if (version == BinaryFormat::TabledVersion) {
+        if (version != BinaryFormat::LegacyVersion) {
             if (!BinaryFormat::ParseStringTable(data, BinaryFormat::HeaderSize, size, outChecked.table, outChecked.rootBegin)) {
                 AddError("", "Binary string table is truncated or corrupt", 0);
                 return false;
             }
             state.table = &outChecked.table;
+        }
+        if (version == BinaryFormat::PooledVersion) {
+            if (content != nullptr) {
+                // The head is all of the section in the stream; the entries were checked by the loader that made the strings
+                const size_t headOffset = outChecked.rootBegin;
+                if (size - headOffset < BinaryFormat::PoolSectionHeadSize || !BinaryFormat::ParsePoolSectionHead(data, headOffset, size + omitted, outChecked.pool)) {
+                    AddError("", "Binary pool section is truncated or corrupt", 0);
+                    return false;
+                }
+                if (outChecked.pool.bytes != omitted || outChecked.pool.count != content->section.count || outChecked.pool.count != content->strings.size()) {
+                    AddError("", "Binary content does not match its pool section", 0);
+                    return false;
+                }
+                outChecked.rootBegin = outChecked.pool.entriesOffset;
+            } else if (!BinaryFormat::ParsePoolSection(data, outChecked.rootBegin, size, outChecked.pool, outChecked.rootBegin)) {
+                // Walks every entry of the section once and trusts none of its hashes: the texts are hashed when they are interned
+                AddError("", "Binary pool section is truncated or corrupt", 0);
+                return false;
+            }
+            state.pooled = true;
+            state.poolCount = outChecked.pool.count;
         }
         if (!ValidateScope(state, outChecked.rootBegin, size, 0)) {
             AddError("", "Binary data is corrupt (or an array has more elements than the limit)", 0);
@@ -231,8 +270,10 @@ namespace BECore {
         _data = data;
         _size = size;
         _hasDuplicateNames = checked.hasDuplicateNames;
-        _tabled = checked.version == BinaryFormat::TabledVersion;
+        _version = checked.version;
+        _tabled = checked.version != BinaryFormat::LegacyVersion;
         _table = checked.table.Rebase(data);
+        _pool = checked.pool;
         _poolBits = eastl::move(checked.poolBits);
 
         _scopeStack.push_back(Scope{checked.rootBegin, size, checked.rootBegin});
@@ -245,6 +286,22 @@ namespace BECore {
             return false;
         }
         Open(data, size, eastl::move(checked));
+        return true;
+    }
+
+    bool BinaryDeserializer::LoadFromContent(const BinaryContent& content) {
+        if (content.version != BinaryFormat::PooledVersion) {
+            return LoadFromView(content.bytes.data(), content.bytes.size());
+        }
+        ResetState();
+        Checked checked;
+        if (!Validate(content.bytes.data(), content.bytes.size(), checked, &content)) {
+            return false;
+        }
+        Open(content.bytes.data(), content.bytes.size(), eastl::move(checked));
+        _contentMode = true;
+        _contentStrings = content.strings.data();
+        _pooledReady = true;
         return true;
     }
 
@@ -310,6 +367,9 @@ namespace BECore {
     // =============================================================================
 
     bool BinaryDeserializer::ParseAt(size_t position, size_t scopeEnd, BinaryFormat::EntryView& outEntry) const {
+        if (_version == BinaryFormat::PooledVersion) {
+            return BinaryFormat::ParseEntryV3(_data, position, scopeEnd, _table, _pool.count, outEntry);
+        }
         return _tabled ? BinaryFormat::ParseEntryV2(_data, position, scopeEnd, _table, outEntry) : BinaryFormat::ParseEntry(_data, position, scopeEnd, outEntry);
     }
 
@@ -422,7 +482,12 @@ namespace BECore {
         }
 
         if (outEntry.tag == BinaryFormat::Tag::PoolString) {
-            outText = _table.Get(BinaryFormat::Load<uint32_t>(_data + outEntry.payloadBegin));
+            const uint32_t index = BinaryFormat::Load<uint32_t>(_data + outEntry.payloadBegin);
+            if (_contentMode) {
+                outText = _contentStrings[index].ToStringView();
+            } else {
+                outText = _version == BinaryFormat::PooledVersion ? PoolEntryText(index) : _table.Get(index);
+            }
         } else {
             const size_t length = BinaryFormat::Load<uint32_t>(_data + outEntry.payloadBegin);
             outText = StringView(reinterpret_cast<const char*>(_data + outEntry.payloadBegin + sizeof(uint32_t)), length);
@@ -430,8 +495,42 @@ namespace BECore {
         return true;
     }
 
+    void BinaryDeserializer::EnsurePoolOffsets() {
+        if (_poolOffsets.size() == _pool.count) {
+            return;
+        }
+        // The section was walked by Validate(), so every header is where PoolEntryBytes says
+        _poolOffsets.reserve(_pool.count);
+        size_t offset = _pool.entriesOffset;
+        for (uint32_t i = 0; i < _pool.count; ++i) {
+            _poolOffsets.push_back(static_cast<uint32_t>(offset));
+            const size_t size = BinaryFormat::Load<uint32_t>(_data + offset + offsetof(Details::PoolStringEntry, size));
+            offset += Details::PoolEntryBytes(size);
+        }
+    }
+
+    StringView BinaryDeserializer::PoolEntryText(size_t index) {
+        EnsurePoolOffsets();
+        const size_t offset = _poolOffsets[index];
+        const size_t size = BinaryFormat::Load<uint32_t>(_data + offset + offsetof(Details::PoolStringEntry, size));
+        return StringView(reinterpret_cast<const char*>(_data + offset + offsetof(Details::PoolStringEntry, data)), size);
+    }
+
     void BinaryDeserializer::InternTableStrings() {
         _pooledReady = true;
+        if (_version == BinaryFormat::PooledVersion) {
+            // The hashes in the section are never read: InternBatch of this form hashes every text itself, so a stale or forged one changes nothing
+            EnsurePoolOffsets();
+            ScratchScope scratch;
+            ArenaVector<StringView> texts;
+            texts.reserve(_pool.count);
+            for (size_t i = 0; i < _pool.count; ++i) {
+                texts.push_back(PoolEntryText(i));
+            }
+            _pooled.resize(texts.size());
+            PoolString::InternBatch(Span<const StringView>(texts.data(), texts.size()), Span<PoolString>(_pooled.data(), _pooled.size()));
+            return;
+        }
         if (_poolBits.empty()) {
             return;
         }
@@ -549,10 +648,18 @@ namespace BECore {
         }
 
         if (entry.tag == BinaryFormat::Tag::PoolString) {
+            const uint32_t index = BinaryFormat::Load<uint32_t>(_data + entry.payloadBegin);
+            if (_contentMode) {
+                outValue = _contentStrings[index];
+                return true;
+            }
             if (!_pooledReady) {
                 InternTableStrings();
             }
-            const uint32_t index = BinaryFormat::Load<uint32_t>(_data + entry.payloadBegin);
+            if (_version == BinaryFormat::PooledVersion) {
+                outValue = _pooled[index];
+                return true;
+            }
             const auto* found = eastl::lower_bound(_pooledIndices.begin(), _pooledIndices.end(), index);
             if (found != _pooledIndices.end() && *found == index) {
                 outValue = _pooled[static_cast<size_t>(found - _pooledIndices.begin())];
