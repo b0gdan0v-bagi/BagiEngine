@@ -168,6 +168,9 @@ namespace BECore {
         [[nodiscard]] Vector<PoolString> List() const;
 
     private:
+        /// The file of @p slot for a read: NotInitialized, InvalidSlotName or NotFound as ReadSlot answers them
+        [[nodiscard]] std::expected<std::filesystem::path, SaveError> FindSlotFile(StringView slot) const;
+
         /// The real path of the save file of a valid slot, or an empty path when there is none in the save folder
         [[nodiscard]] std::filesystem::path ResolveSlot(StringView slot) const;
 
