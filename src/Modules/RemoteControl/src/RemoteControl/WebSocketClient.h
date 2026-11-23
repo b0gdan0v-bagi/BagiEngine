@@ -1,8 +1,10 @@
 #pragma once
 
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/Thread.h>
+#include <BECore/Types/Fifo.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <RemoteControl/Socket.h>
@@ -154,8 +156,8 @@ namespace BECore {
         bool Connect();
         bool Handshake(Vector<uint8_t>& pendingBytes);
         void ReadMessages(Vector<uint8_t> pendingBytes);
-        bool HandleMessage(WebSocketMessage message);
-        bool PushText(WebSocketMessage& message);
+        bool HandleMessage(const WebSocketMessageView& message);
+        bool PushText(const WebSocketMessageView& message);
         void WriterMain();
 
         // Set by Open() before the reader starts and not changed until the reader has ended
@@ -178,13 +180,16 @@ namespace BECore {
         bool _aborted = false;
         bool _readerDone = false;  // the reader will read no more: a writer that sent its close frame need not wait for the answer
         bool _writerDone = false;
-        eastl::deque<OutgoingFrame> _outbox;
+        Fifo<OutgoingFrame> _outbox;
         size_t _outboxBytes = 0;
-        eastl::deque<WebSocketClientEvent> _inbox;
+        Fifo<WebSocketClientEvent> _inbox;
         size_t _inboxBytes = 0;
         bool _endSet = false;
         uint16_t _endCode = WebSocketCloseCode::kAbnormalClosure;
         String _endReason;
+
+        // The writer's alone: the masked bytes of the frame being sent, refilled for every frame so the capacity stays
+        Vector<uint8_t> _frameScratch;
     };
 
 }  // namespace BECore
