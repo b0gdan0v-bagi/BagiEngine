@@ -607,27 +607,21 @@ namespace BECore {
     void AppendClientMessage(String& out, const ClientMessage& message) {
         JsonWriter writer(out);
         std::visit(overload{
-                       // `create_room` and `action` carry a game's own `Json` (`options`, `action`) in the middle of the object, between keys of the wire struct a
-                       // reflected message would need. They stay by hand: a reflected leaf type for a `Json` payload does not exist.
                        [&](const CreateRoomMessage& m) {
-                           writer.BeginObject();
-                           writer.Member("game", m.game);
-                           writer.Member("name", m.name);
-                           writer.Key("options");
-                           WriteJson(writer, m.options);
+                           RoomWireCreateRoom wire;
+                           wire.game = m.game;
+                           wire.name = m.name;
+                           wire.options = JsonPayload::Borrowed(m.options);
                            if (m.isPublic) {
-                               writer.Member("public", true);
+                               wire._public = true;
                            }
-                           WriteTypeAndVersion(writer, RoomMessageTypes::kCreateRoom);
-                           writer.EndObject();
+                           wire.WriteJson(writer);
                        },
                        [&](const ActionMessage& m) {
-                           writer.BeginObject();
-                           writer.Key("action");
-                           WriteJson(writer, m.action);
-                           WriteTypeAndVersion(writer, RoomMessageTypes::kAction);
-                           writer.Member("version", m.version);
-                           writer.EndObject();
+                           RoomWireAction wire;
+                           wire.action = JsonPayload::Borrowed(m.action);
+                           wire.version = m.version;
+                           wire.WriteJson(writer);
                        },
                        [&](const JoinRoomMessage& m) {
                            RoomWireJoinRoom wire;
@@ -776,21 +770,16 @@ namespace BECore {
         return out;
     }
 
-    // `actions` and `view` are the game's own `Json` (`ISeatedGame` returns it) and sit between the other keys, so `view` stays by hand: a reflected leaf
-    // type for a `Json` payload does not exist
     void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions) {
+        RoomWireView wire;
+        wire.actions = JsonPayload::Borrowed(actions);
+        wire.finished = finished;
+        wire.room = String(room.data(), room.size());
+        wire.seat = seat;
+        wire.version = version;
+        wire.view = JsonPayload::Borrowed(view);
         JsonWriter writer(out);
-        writer.BeginObject();
-        writer.Key("actions");
-        WriteJson(writer, actions);
-        writer.Member("finished", finished);
-        writer.Member("room", room);
-        writer.Member("seat", seat);
-        WriteTypeAndVersion(writer, RoomMessageTypes::kView);
-        writer.Member("version", version);
-        writer.Key("view");
-        WriteJson(writer, view);
-        writer.EndObject();
+        wire.WriteJson(writer);
         EXPECT(writer.IsComplete());
     }
 
