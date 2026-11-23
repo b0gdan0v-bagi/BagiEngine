@@ -19,7 +19,8 @@ namespace BECore::Tests {
                 String text;
             };
 
-            ReferenceSinkWorld() : _hub(MakeRegistry(), MakeSettings(), MakeSequence(42), MakeSink()) {}
+            /// @param useBroadcast The sink also sets `broadcast`, which records one `Sent` per id and counts its calls
+            explicit ReferenceSinkWorld(bool useBroadcast = false) : _hub(MakeRegistry(), MakeSettings(), MakeSequence(42), MakeSink(useBroadcast)) {}
 
             static RoomHubSettings MakeSettings() {
                 RoomHubSettings settings;
@@ -39,7 +40,19 @@ namespace BECore::Tests {
                 return _hub;
             }
 
+            /// The texts one connection got, in order
+            [[nodiscard]] Vector<String> TextsOf(ConnectionId id) const {
+                Vector<String> texts;
+                for (const Sent& one : sent) {
+                    if (one.id == id) {
+                        texts.push_back(one.text);
+                    }
+                }
+                return texts;
+            }
+
             Vector<Sent> sent;
+            size_t broadcastCalls = 0;
 
         private:
             SeatedGameRegistry& MakeRegistry() {
@@ -47,9 +60,17 @@ namespace BECore::Tests {
                 return _registry;
             }
 
-            HubSink MakeSink() {
+            HubSink MakeSink(bool useBroadcast) {
                 HubSink sink;
                 sink.send = [this](ConnectionId id, const String& text) { sent.push_back(Sent{id, &text, text}); };
+                if (useBroadcast) {
+                    sink.broadcast = [this](Span<const ConnectionId> ids, const String& text) {
+                        ++broadcastCalls;
+                        for (const ConnectionId id : ids) {
+                            sent.push_back(Sent{id, &text, text});
+                        }
+                    };
+                }
                 sink.close = [](ConnectionId, String) {};
                 return sink;
             }
@@ -78,35 +99,45 @@ namespace BECore::Tests {
         EXPECT_EQ(world.sent[0].address, world.sent[1].address);
     }
 
-    TEST(RoomHubTest, EveryMemberBehindOnTheLobbyGetsTheSameTextWhileViewsAreSentBetween) {
-        ReferenceSinkWorld world;
-        constexpr int kMembers = 3;
-        world.Connect(1);
-        world.Send(1, CreateRoomMessage{"fake", "P0", Json::object(), false});
-        ASSERT_FALSE(world.sent.empty());
-        const auto joined = ParseServerMessage(world.sent.front().text);
-        ASSERT_TRUE(joined.has_value());
-        const String code = Require(std::get_if<JoinedMessage>(&*joined)).room;
-        for (ConnectionId id = 2; id <= kMembers; ++id) {
-            world.Connect(id);
-            JoinRoomMessage join;
-            join.code = code;
-            join.name = "P";
-            world.Send(id, join);
-        }
-        world.sent.clear();
+    namespace {
 
-        // The start moves the lobby (phase) and the game version for everybody at once: one Flush sends lobby, view, lobby, view, ...
+        constexpr int kFlushMembers = 3;
+
+        /// Three members in one room of the fake game; what they were sent so far is cleared
+        void MakeRoomOfThree(ReferenceSinkWorld& world) {
+            world.Connect(1);
+            world.Send(1, CreateRoomMessage{"fake", "P0", Json::object(), false});
+            ASSERT_FALSE(world.sent.empty());
+            const auto joined = ParseServerMessage(world.sent.front().text);
+            ASSERT_TRUE(joined.has_value());
+            const String code = Require(std::get_if<JoinedMessage>(&*joined)).room;
+            for (ConnectionId id = 2; id <= kFlushMembers; ++id) {
+                world.Connect(id);
+                JoinRoomMessage join;
+                join.code = code;
+                join.name = "P";
+                world.Send(id, join);
+            }
+            world.sent.clear();
+        }
+
+    }  // namespace
+
+    TEST(RoomHubTest, EveryMemberBehindOnTheLobbyGetsTheSameTextAndItsViewAfterIt) {
+        ReferenceSinkWorld world;
+        ASSERT_NO_FATAL_FAILURE(MakeRoomOfThree(world));
+
+        // The start moves the lobby (phase) and the game version for everybody at once: one Flush sends the lobby to all, then the views
         world.Send(1, StartMessage{});
 
-        ASSERT_EQ(world.sent.size(), static_cast<size_t>(2 * kMembers));
+        ASSERT_EQ(world.sent.size(), static_cast<size_t>(2 * kFlushMembers));
         const auto lobby = ParseServerMessage(world.sent[0].text);
         ASSERT_TRUE(lobby.has_value());
         const String expectedLobby = MakeLobbyMessage(Require(std::get_if<LobbyMessage>(&*lobby)));
         EXPECT_EQ(expectedLobby, world.sent[0].text);
-        for (int member = 0; member < kMembers; ++member) {
-            const auto& lobbySent = At(world.sent, static_cast<size_t>(2 * member));
-            const auto& viewSent = At(world.sent, static_cast<size_t>(2 * member + 1));
+        for (int member = 0; member < kFlushMembers; ++member) {
+            const auto& lobbySent = At(world.sent, static_cast<size_t>(member));
+            const auto& viewSent = At(world.sent, static_cast<size_t>(kFlushMembers + member));
             EXPECT_EQ(lobbySent.id, static_cast<ConnectionId>(member + 1));
             EXPECT_EQ(lobbySent.text, expectedLobby) << "member " << member;
             EXPECT_EQ(SentTypeOf(viewSent.text), "view");
@@ -116,6 +147,59 @@ namespace BECore::Tests {
             const ViewMessage& parsed = Require(std::get_if<ViewMessage>(&*view));
             EXPECT_EQ(parsed.seat, member);
             EXPECT_EQ(viewSent.text, MakeViewMessage(parsed.room, parsed.seat, parsed.version, parsed.finished, parsed.view, parsed.actions));
+        }
+    }
+
+    TEST(RoomHubTest, ASinkWithBroadcastSeesTheSameMessagesPerConnectionAsOneWithout) {
+        ReferenceSinkWorld plain(false);
+        ReferenceSinkWorld shared(true);
+        ASSERT_NO_FATAL_FAILURE(MakeRoomOfThree(plain));
+        ASSERT_NO_FATAL_FAILURE(MakeRoomOfThree(shared));
+        for (ReferenceSinkWorld* world : {&plain, &shared}) {
+            world->Send(1, StartMessage{});
+            // A member that leaves moves the lobby again; the room then closes when the last human is gone
+            world->Send(3, LeaveMessage{});
+            world->Send(2, LeaveMessage{});
+            world->Send(1, LeaveMessage{});
+        }
+
+        EXPECT_EQ(plain.broadcastCalls, 0u);
+        EXPECT_GT(shared.broadcastCalls, 0u);
+        for (ConnectionId id = 1; id <= kFlushMembers; ++id) {
+            const Vector<String> expected = plain.TextsOf(id);
+            EXPECT_FALSE(expected.empty());
+            EXPECT_EQ(shared.TextsOf(id), expected) << "connection " << id;
+        }
+    }
+
+    TEST(RoomHubTest, TheLobbyOfAChangeGoesToAllMembersInOneBroadcastCall) {
+        ReferenceSinkWorld world(true);
+        ASSERT_NO_FATAL_FAILURE(MakeRoomOfThree(world));
+        world.broadcastCalls = 0;
+
+        world.Send(2, ChooseSeatMessage{kFlushMembers});
+
+        EXPECT_EQ(world.broadcastCalls, 1u);
+        ASSERT_EQ(world.sent.size(), static_cast<size_t>(kFlushMembers));
+        for (const auto& one : world.sent) {
+            EXPECT_EQ(SentTypeOf(one.text), "lobby");
+            EXPECT_EQ(one.address, world.sent.front().address);
+        }
+    }
+
+    TEST(RoomHubTest, ARoomClosedByTheHubTellsAllItsMembersInOneBroadcastCall) {
+        ReferenceSinkWorld world(true);
+        ASSERT_NO_FATAL_FAILURE(MakeRoomOfThree(world));
+        world.broadcastCalls = 0;
+
+        // A lobby nobody spoke in for a day is closed by the hub
+        world.Hub().Tick(RoomTime{} + std::chrono::hours(24));
+
+        EXPECT_EQ(world.broadcastCalls, 1u);
+        for (ConnectionId id = 1; id <= kFlushMembers; ++id) {
+            const Vector<String> texts = world.TextsOf(id);
+            ASSERT_FALSE(texts.empty()) << "connection " << id;
+            EXPECT_EQ(SentTypeOf(texts.back()), "left");
         }
     }
 

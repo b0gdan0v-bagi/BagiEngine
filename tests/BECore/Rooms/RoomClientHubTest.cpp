@@ -81,9 +81,9 @@ namespace BECore::Tests {
                 return *_world;
             }
 
-            void ResetWorld(RoomHubSettings settings) {
+            void ResetWorld(RoomHubSettings settings, bool useBroadcast = false) {
                 ASSERT_TRUE(_players.empty());
-                _world = MakeUnique<HubWorld>(std::move(settings));
+                _world = MakeUnique<HubWorld>(std::move(settings), MakeSequence(11), useBroadcast);
             }
 
             UniquePtr<HubWorld> _world = MakeUnique<HubWorld>(HubWorld::MakeSettings(milliseconds(200)));
@@ -110,6 +110,18 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientHubTest, FourHumansPlayAHand) {
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 4));
+        ASSERT_TRUE(_players[0]->client->Start().has_value());
+        ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));
+        for (const auto& player : _players) {
+            EXPECT_EQ(player->TableSize(), kCardsPlayedInAHand);
+            EXPECT_TRUE(player->judge->leaks.empty());
+            EXPECT_EQ(player->Count(Kind::Error), 0u);
+        }
+    }
+
+    TEST_F(RoomClientHubTest, FourHumansPlayAHandOverASinkThatBroadcasts) {
+        ResetWorld(HubWorld::MakeSettings(milliseconds(200)), true);
         ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 4));
         ASSERT_TRUE(_players[0]->client->Start().has_value());
         ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));

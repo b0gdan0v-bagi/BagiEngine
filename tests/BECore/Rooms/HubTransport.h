@@ -64,7 +64,9 @@ namespace BECore::Tests {
      */
     class HubWorld {
     public:
-        explicit HubWorld(RoomHubSettings settings, RandomFn random = MakeSequence(11)) : _hub(MakeRegistry(), std::move(settings), std::move(random), MakeSink()) {}
+        /// @param useBroadcast The sink sets `broadcast` (as the room server's does), so the hub sends a shared text in one call
+        explicit HubWorld(RoomHubSettings settings, RandomFn random = MakeSequence(11), bool useBroadcast = false)
+            : _hub(MakeRegistry(), std::move(settings), std::move(random), MakeSink(useBroadcast)) {}
 
         /// The usual grace and abandon timeout with @p computerDelay between the moves of computers
         static RoomHubSettings MakeSettings(std::chrono::milliseconds computerDelay = std::chrono::milliseconds(0)) {
@@ -122,13 +124,22 @@ namespace BECore::Tests {
             return _registry;
         }
 
-        HubSink MakeSink() {
+        void QueueTextFor(ConnectionId id, StringView text) {
+            if (const auto found = _byId.find(id); found != _byId.end() && !found->second->blackhole) {
+                found->second->QueueText(text);
+            }
+        }
+
+        HubSink MakeSink(bool useBroadcast) {
             HubSink sink;
-            sink.send = [this](ConnectionId id, String text) {
-                if (const auto found = _byId.find(id); found != _byId.end() && !found->second->blackhole) {
-                    found->second->QueueText(text);
-                }
-            };
+            sink.send = [this](ConnectionId id, const String& text) { QueueTextFor(id, text); };
+            if (useBroadcast) {
+                sink.broadcast = [this](Span<const ConnectionId> ids, const String& text) {
+                    for (const ConnectionId id : ids) {
+                        QueueTextFor(id, text);
+                    }
+                };
+            }
             sink.close = [this](ConnectionId id, String reason) {
                 const auto found = _byId.find(id);
                 if (found == _byId.end()) {

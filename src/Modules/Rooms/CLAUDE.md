@@ -104,7 +104,7 @@ After the start the host is only shown: `MarkAway` does not move it, `Leave` pas
 
 ## RoomHub
 
-`RoomHub(registry, settings, RandomFn, HubSink)` is single-threaded and reads no clock: the caller serializes `OnConnected`, `OnMessage`, `OnDisconnected` and `Tick(now)`; a sink must not call back into the hub; the text a sink gets is valid for the call only. Every failure is an `error` with a stable code. The message table, the flush order, disconnect, tick and the limits: `.claude/rules/rooms-protocol.md`.
+`RoomHub(registry, settings, RandomFn, HubSink)` is single-threaded and reads no clock: the caller serializes `OnConnected`, `OnMessage`, `OnDisconnected` and `Tick(now)`; a sink must not call back into the hub; the text a sink gets is valid for the call only. `HubSink::broadcast` (optional; empty: `send` per id) takes one text for several connections so a transport encodes it once; `Flush` has two passes (the `lobby` to every connection behind, then the `view` to each that needs it), so per connection the order is still `lobby`, `view`, but across connections the messages of one flush are no longer interleaved. Every failure is an `error` with a stable code. The message table, the flush order, disconnect, tick and the limits: `.claude/rules/rooms-protocol.md`.
 
 ## Room codes and tokens
 
