@@ -51,7 +51,8 @@ BULLET = "- "
 CONTINUATION = "  "
 
 VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
-ENTRY_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+# A todo id: alltests names its entries after a ctest name, which has upper-case letters (alltests-BagiHeadersStandalone)
+ENTRY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 META_RE = re.compile(r"^- ([A-Za-z ]+): (.+?)\s*$")
 ADAPT_RE = re.compile(rf"{ADAPT_MARK}\s*\S")
@@ -161,7 +162,7 @@ def apply_meta(fragment: Fragment, meta: dict[str, str]) -> None:
         fragment.version = parse_version(meta[KEY_VERSION])
     fragment.entry = meta.get(KEY_ENTRY, "")
     if fragment.entry and not ENTRY_RE.match(fragment.entry):
-        raise ChangelogError(f"Entry `{fragment.entry}` is not a todo id (lower-case letters, digits and `-`)")
+        raise ChangelogError(f"Entry `{fragment.entry}` is not a todo id (letters, digits and `-`)")
     fragment.date = meta.get(KEY_DATE, "")
     if fragment.date:
         try:
@@ -314,7 +315,7 @@ def check_tree(root: Path) -> list[str]:
     else:
         highest = max(fragment.version for fragment in fragments)
         if highest != header:
-            problems.append(f"{VERSION_HEADER}: version {version_text(header)}, but the highest fragment is {version_text(highest)}")
+            problems.append(f"{VERSION_HEADER.as_posix()}: version {version_text(header)}, but the highest fragment is {version_text(highest)}")
     problems.extend(changelog_file_problems(root, fragments))
     return problems
 
@@ -367,7 +368,7 @@ def prepare_add(root: Path, draft: Fragment, bump: str, date: str, content_versi
     if existing:
         highest = max(fragment.version for fragment in existing)
         if highest != header:
-            raise ChangelogError(f"{VERSION_HEADER} says {version_text(header)} but the highest fragment is {version_text(highest)}: fix that first")
+            raise ChangelogError(f"{VERSION_HEADER.as_posix()} says {version_text(header)} but the highest fragment is {version_text(highest)}: fix that first")
         if version is not None and version <= highest:
             raise ChangelogError(f"--version {version_text(version)} is not above the highest fragment {version_text(highest)}")
         new_version = bumped(header, bump) if version is None else version
@@ -396,14 +397,14 @@ def command_add(root: Path, args: argparse.Namespace) -> int:
     target = root / FRAGMENT_DIR / f"{fragment.entry}.md"
     text = format_fragment(fragment)
     if args.dry_run:
-        print(f"would write {FRAGMENT_DIR}/{target.name}, set {VERSION_HEADER} to {version_text(version)} and regenerate {CHANGELOG_FILE}:\n")
+        print(f"would write {FRAGMENT_DIR}/{target.name}, set {VERSION_HEADER.as_posix()} to {version_text(version)} and regenerate {CHANGELOG_FILE}:\n")
         print(text, end="")
         return EXIT_OK
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(text.encode("utf-8"))
     write_version_header(root, version)
     (root / CHANGELOG_FILE).write_bytes(rendered.encode("utf-8"))
-    print(f"{version_text(version)}: wrote {FRAGMENT_DIR}/{target.name}, {VERSION_HEADER}, {CHANGELOG_FILE}")
+    print(f"{version_text(version)}: wrote {FRAGMENT_DIR}/{target.name}, {VERSION_HEADER.as_posix()}, {CHANGELOG_FILE}")
     return EXIT_OK
 
 

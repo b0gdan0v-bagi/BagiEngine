@@ -36,6 +36,12 @@ def test_a_malformed_fragment_names_the_line(text, message):
         changelog.parse_fragment(text)
 
 
+def test_an_alltests_entry_id_with_upper_case_letters_is_a_todo_id():
+    # alltests files its entries as alltests-<ctest name>, and a ctest name has upper-case letters
+    fragment = changelog.parse_fragment("# T\n\n- Entry: alltests-BagiHeadersStandalone\n")
+    assert fragment.entry == "alltests-BagiHeadersStandalone"
+
+
 @pytest.mark.parametrize("bump, expected", [("patch", (0, 1, 8)), ("minor", (0, 2, 0))])
 def test_a_minor_bump_resets_the_patch(bump, expected):
     assert changelog.bumped((0, 1, 7), bump) == expected
@@ -102,7 +108,7 @@ def test_add_refuses_and_changes_nothing(tree, capsys, text, bump, message):
 
 def test_add_refuses_a_draft_that_forgot_the_content_version(tree, capsys):
     tree.with_baseline()
-    (tree.root / changelog.CONTENT_VERSION_HEADER).write_text("inline constexpr uint32_t kContentVersion = 6;\n", encoding="utf-8")
+    (tree.root / changelog.CONTENT_VERSION_HEADER).write_text("inline constexpr uint32_t kContentVersion = 6;\n", encoding="utf-8", newline="\n")
     assert tree.add(draft_text()) == changelog.EXIT_REFUSED
     assert "kContentVersion is 6" in capsys.readouterr().err
     assert tree.add(draft_text(extra="- Content version: 6\n", sections=MIGRATION)) == 0
@@ -125,7 +131,7 @@ def test_render_check_notices_a_hand_edit(tree, capsys):
     tree.with_baseline()
     path = tree.root / changelog.CHANGELOG_FILE
     assert changelog.main(["render", "--check", "--root", str(tree.root)]) == 0
-    path.write_text(path.read_text(encoding="utf-8") + "hand written\n", encoding="utf-8")
+    path.write_text(path.read_text(encoding="utf-8") + "hand written\n", encoding="utf-8", newline="\n")
     assert changelog.main(["render", "--check", "--root", str(tree.root)]) == changelog.EXIT_REFUSED
     assert changelog.main(["render", "--root", str(tree.root)]) == 0
     assert changelog.main(["render", "--check", "--root", str(tree.root)]) == 0
@@ -140,7 +146,7 @@ def test_check_is_clean_on_a_good_tree(tree, capsys):
 def test_check_ignores_kcontentversion(tree):
     """A branch that bumped it has no fragment until todo-merge adds one after the merge."""
     tree.with_baseline()
-    (tree.root / changelog.CONTENT_VERSION_HEADER).write_text("inline constexpr uint32_t kContentVersion = 9;\n", encoding="utf-8")
+    (tree.root / changelog.CONTENT_VERSION_HEADER).write_text("inline constexpr uint32_t kContentVersion = 9;\n", encoding="utf-8", newline="\n")
     assert tree.check() == []
 
 
@@ -150,29 +156,29 @@ def test_check_names_the_file_of_each_problem(tree, capsys):
     directory = tree.root / changelog.FRAGMENT_DIR
 
     header = tree.root / changelog.VERSION_HEADER
-    header.write_text(header.read_text(encoding="utf-8").replace("PATCH 1", "PATCH 0"), encoding="utf-8")
+    header.write_text(header.read_text(encoding="utf-8").replace("PATCH 1", "PATCH 0"), encoding="utf-8", newline="\n")
     assert any(p.startswith("src/Modules/BECore/Utils/EngineVersion.h") and "0.1.0" in p for p in tree.check())
-    header.write_text(header.read_text(encoding="utf-8").replace("PATCH 0", "PATCH 1"), encoding="utf-8")
+    header.write_text(header.read_text(encoding="utf-8").replace("PATCH 0", "PATCH 1"), encoding="utf-8", newline="\n")
     assert tree.check() == []
 
-    (directory / "broken.md").write_text("no heading\n", encoding="utf-8")
+    (directory / "broken.md").write_text("no heading\n", encoding="utf-8", newline="\n")
     assert any(p.startswith("changelog/broken.md") for p in tree.check())
     (directory / "broken.md").unlink()
 
     text = (directory / "one.md").read_text(encoding="utf-8")
-    (directory / "twin.md").write_text(text.replace("Entry: one", "Entry: twin"), encoding="utf-8")
+    (directory / "twin.md").write_text(text.replace("Entry: one", "Entry: twin"), encoding="utf-8", newline="\n")
     assert any(p.startswith("changelog/twin.md") and "also the version" in p for p in tree.check())
     (directory / "twin.md").unlink()
 
-    (directory / "wrong-name.md").write_text(text.replace("Entry: one", "Entry: other").replace("0.1.1", "0.1.2"), encoding="utf-8")
+    (directory / "wrong-name.md").write_text(text.replace("Entry: one", "Entry: other").replace("0.1.1", "0.1.2"), encoding="utf-8", newline="\n")
     assert any(p.startswith("changelog/wrong-name.md") and "other.md" in p for p in tree.check())
     (directory / "wrong-name.md").unlink()
 
-    (directory / "one.md").write_text(text.replace("Bump: patch", "Bump: patch").replace("## Added", "## Breaking\n- gone.\n\n## Added"), encoding="utf-8")
+    (directory / "one.md").write_text(text.replace("Bump: patch", "Bump: patch").replace("## Added", "## Breaking\n- gone.\n\n## Added"), encoding="utf-8", newline="\n")
     problems = tree.check()
     assert any(p.startswith("changelog/one.md") and "breaking raises MINOR" in p for p in problems)
     assert any(p.startswith("changelog/one.md") and "Adapt" in p for p in problems)
-    (directory / "one.md").write_text(text, encoding="utf-8")
+    (directory / "one.md").write_text(text, encoding="utf-8", newline="\n")
 
     (tree.root / changelog.CHANGELOG_FILE).unlink()
     assert tree.check()[0].startswith("CHANGELOG.md")
@@ -298,7 +304,7 @@ def test_check_still_refuses_a_repeated_number_and_a_header_below_the_highest(tr
     assert add_numbered(tree, "one", "0.1.5") == 0
     assert add_numbered(tree, "two", "0.1.8") == 0
     path = tree.fragment_file("two")
-    path.write_text(path.read_text(encoding="utf-8").replace("0.1.8", "0.1.5"), encoding="utf-8")
+    path.write_text(path.read_text(encoding="utf-8").replace("0.1.8", "0.1.5"), encoding="utf-8", newline="\n")
     problems = tree.check()
     assert any("is also the version of" in problem for problem in problems)
     assert any("the highest fragment is 0.1.5" in problem for problem in problems)
