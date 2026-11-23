@@ -1,8 +1,12 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/RecordingRenderer.h>
+#include <RmlUi/Core/RenderManager.h>
 #include <RmlUi/Core/StringUtilities.h>
 #include <RmlUiHost/RmlUiFontEngine.h>
+#include <RmlUiHost/RmlUiRenderInterface.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -13,6 +17,12 @@ namespace BECore::Tests {
         constexpr int kSmall = 16;
         constexpr int kBig = 32;
         constexpr float kLetterSpacing = 3.0f;
+        // Big enough that Latin and Cyrillic together do not fit one 512-pixel page of glyphs
+        constexpr int kPageFilling = 96;
+        constexpr char32_t kLatinFirst = 0x21;
+        constexpr char32_t kLatinLast = 0x7E;
+        constexpr char32_t kCyrillicFirst = 0x410;
+        constexpr char32_t kCyrillicLast = 0x44F;
 
     }  // namespace
 
@@ -154,6 +164,61 @@ namespace BECore::Tests {
 
         EXPECT_EQ(_engine.PrepareFontEffects(Handle(kSmall), effects), 0u);
         EXPECT_EQ(_engine.PrepareFontEffects(Handle(kSmall), Rml::FontEffectList()), 0u);
+    }
+
+    TEST_F(RmlUiFontEngineTest, ATextOverSeveralPagesGetsOneMeshPerPageInTheOrderTheyFirstAppear) {
+        const Rml::FontFaceHandle handle = Handle(kPageFilling);
+        Rml::String text;
+        size_t quadCount = 0;
+        const auto append = [&](char32_t first, char32_t last) {
+            for (char32_t codePoint = first; codePoint <= last; ++codePoint) {
+                text += Rml::StringUtilities::ToUTF8(static_cast<Rml::Character>(codePoint));
+                ++quadCount;
+            }
+        };
+        append(kLatinFirst, kLatinLast);
+        append(kCyrillicFirst, kCyrillicLast);
+
+        auto renderer = New<RecordingRenderer>();
+        CoreManager::GetRendererManager().SetRenderer(renderer);
+        RmlUiRenderInterface renderInterface;
+        Rml::RenderManager renderManager(&renderInterface);
+        // The page textures belong to this render manager, so they go first, also when an ASSERT leaves the case (the mesh lists below go before this)
+        struct ReleasePages {
+            RmlUiFontEngine& engine;
+            ~ReleasePages() {
+                engine.ReleaseFontResources();
+                CoreManager::GetRendererManager().SetRenderer({});
+            }
+        } releasePages{_engine};
+        const Rml::TextShapingContext context{_language, Rml::Style::Direction::Auto, Rml::Style::FontKerning::Auto, 0.0f};
+        const Rml::ColourbPremultiplied colour(255, 200, 100, 255);
+
+        Rml::TexturedMeshList first;
+        _engine.GenerateString(renderManager, handle, 0, Rml::StringView(text.data(), text.data() + text.size()), {10.0f, 40.0f}, colour, 1.0f, context, first);
+        const size_t pageCount = _engine.GetPageCount();
+        ASSERT_GE(pageCount, 2u) << "the text must not fit one page, or the case checks nothing";
+        ASSERT_EQ(first.size(), pageCount);
+
+        size_t quads = 0;
+        float previousFirstLeft = -1.0f;
+        for (const Rml::TexturedMesh& textured : first) {
+            ASSERT_FALSE(textured.mesh.vertices.empty());
+            EXPECT_EQ(textured.mesh.indices.size(), textured.mesh.vertices.size() / 4 * 6);
+            quads += textured.mesh.vertices.size() / 4;
+            // The pen only moves right, so a page that appears later in the text starts further right
+            EXPECT_GT(textured.mesh.vertices.front().position.x, previousFirstLeft);
+            previousFirstLeft = textured.mesh.vertices.front().position.x;
+        }
+        EXPECT_EQ(quads, quadCount);
+
+        Rml::TexturedMeshList second;
+        _engine.GenerateString(renderManager, handle, 0, Rml::StringView(text.data(), text.data() + text.size()), {10.0f, 40.0f}, colour, 1.0f, context, second);
+        ASSERT_EQ(second.size(), first.size());
+        for (size_t i = 0; i < first.size(); ++i) {
+            EXPECT_EQ(second[i].mesh.vertices, first[i].mesh.vertices) << "mesh " << i;
+            EXPECT_EQ(second[i].mesh.indices, first[i].mesh.indices) << "mesh " << i;
+        }
     }
 
 }  // namespace BECore::Tests
