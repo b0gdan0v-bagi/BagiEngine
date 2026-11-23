@@ -217,4 +217,29 @@ namespace BECore::Tests {
         EXPECT_EQ(status.bytes, empty.bytes);
     }
 
+    TEST_F(ControlBuiltinsReplyTest, ListMethodsCopiesTheDescriptionsToTheArenaNotTheHeap) {
+        service.RegisterHandler("empty", [](ControlCall& call) {
+            call.Reply([](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.EndObject();
+            });
+        });
+        service.DescribeMethod("empty", {"A summary that is longer than the small string buffer", {{"a_long_parameter_name", "integer", true, "A description that is longer than the buffer"}}});
+        const auto drained = [this](StringView method) {
+            service.Post(MakeRequest(1, method), [](const String&) {});
+            return CountAllocations([this] { service.Drain(); });
+        };
+        drained("list_methods");
+        drained("empty");
+
+        const AllocCount listing = drained("list_methods");
+        const AllocCount empty = drained("empty");
+
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+        EXPECT_EQ(listing.count, empty.count);
+        EXPECT_EQ(listing.bytes, empty.bytes);
+    }
+
 }  // namespace BECore::Tests

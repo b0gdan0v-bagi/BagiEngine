@@ -3,8 +3,10 @@
 #include <BECore/Control/ControlClock.h>
 #include <BECore/Control/ControlEnvelope.h>
 #include <BECore/Control/ControlWindowStatus.h>
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Reflection/TextView.h>
 #include <BECore/Types/Types.h>
 #include <cstdint>
 
@@ -64,26 +66,26 @@ namespace BECore {
     struct ControlListedParam {
         BE_CLASS(ControlListedParam)
 
-        BE_REFLECT_FIELD String description;
-        BE_REFLECT_FIELD String name;
+        BE_REFLECT_FIELD TextView description;
+        BE_REFLECT_FIELD TextView name;
         BE_REFLECT_FIELD bool required = false;
-        BE_REFLECT_FIELD String type;
+        BE_REFLECT_FIELD TextView type;
     };
 
     /// One method of `list_methods`; a method nobody described has an empty `summary` and no `params`
     struct ControlListedMethod {
         BE_CLASS(ControlListedMethod)
 
-        BE_REFLECT_FIELD String name;
-        BE_REFLECT_FIELD Vector<ControlListedParam> params;
-        BE_REFLECT_FIELD String summary;
+        BE_REFLECT_FIELD TextView name;
+        BE_REFLECT_FIELD ArenaVector<ControlListedParam> params;
+        BE_REFLECT_FIELD TextView summary;
     };
 
     /// `list_methods`
     struct ControlMethodsAnswer {
         BE_CLASS(ControlMethodsAnswer)
 
-        BE_REFLECT_FIELD Vector<ControlListedMethod> methods;
+        BE_REFLECT_FIELD ArenaVector<ControlListedMethod> methods;
     };
 
     /// One call of a `batch`: `ok` and its `result` (the call's own document, borrowed from the batch), or the `error` of a failed one
@@ -99,17 +101,17 @@ namespace BECore {
     struct ControlBatchAnswer {
         BE_CLASS(ControlBatchAnswer)
 
-        BE_REFLECT_FIELD Vector<ControlBatchResult> results;
+        BE_REFLECT_FIELD ArenaVector<ControlBatchResult> results;
         BE_REFLECT_FIELD Optional<uint64_t> stopped;
     };
 
-    /// `call_method`: `result` is what the method's own serializer wrote, absent for a method that returns nothing. `method` and `root` are the client's text, copied
+    /// `call_method`: `result` is what the method's own serializer wrote, absent for a method that returns nothing. `method` and `root` are views of the client's text, which the handler holds
     struct ReflectionMethodAnswer {
         BE_CLASS(ReflectionMethodAnswer)
 
-        BE_REFLECT_FIELD String method;
+        BE_REFLECT_FIELD TextView method;
         BE_REFLECT_FIELD Optional<JsonPayload> result;
-        BE_REFLECT_FIELD String root;
+        BE_REFLECT_FIELD TextView root;
     };
 
 }  // namespace BECore

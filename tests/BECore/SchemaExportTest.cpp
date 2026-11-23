@@ -9,6 +9,7 @@
 #include <BECore/Widgets/IWidget.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/Require.h>
+#include <Common/ScratchScopeFixture.h>
 #include <Generated/SchemaExportTest.gen.hpp>
 #include <gtest/gtest.h>
 
@@ -114,7 +115,7 @@ namespace BECore::Tests {
             return type != nullptr ? *type : Json();
         }
 
-        class SchemaExportTest : public ::testing::Test {
+        class SchemaExportTest : public ScratchScopeFixture {
         protected:
             void SetUp() override {
                 Fill(registry, false);
@@ -144,6 +145,13 @@ namespace BECore::Tests {
             ControlRoots roots;
             Json schema;
         };
+
+        // The builders return answer structs on the thread's scratch arena: a case holds them inside the scope of its fixture.
+        using SchemaExportPayloadTest = ScratchScopeFixture;
+        using SchemaExportReferenceTest = ScratchScopeFixture;
+        using SchemaExportOrderTest = ScratchScopeFixture;
+        using SchemaExportEmptyTest = ScratchScopeFixture;
+        using SchemaExportEngineTest = ScratchScopeFixture;
 
     }  // namespace
 
@@ -231,7 +239,7 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString(*Member(shapes, "element"), "object"), String("SchemaShape"));
     }
 
-    TEST(SchemaExportPayloadTest, AJsonPayloadFieldIsAny) {
+    TEST_F(SchemaExportPayloadTest, AJsonPayloadFieldIsAny) {
         TypeRegistry local;
         Add<SchemaPayloadFields>(local);
         const TypeInfo& info = Require(local.Find("SchemaPayloadFields"));
@@ -483,7 +491,7 @@ namespace BECore::Tests {
     }
 
     // The text of the reflected answers equals the DOM they replaced (`SchemaExportReference.h`), whatever order the types were registered in
-    TEST(SchemaExportReferenceTest, TheReflectedTextEqualsTheDomOfTheOldBuilders) {
+    TEST_F(SchemaExportReferenceTest, TheReflectedTextEqualsTheDomOfTheOldBuilders) {
         for (const bool reversed : {false, true}) {
             TypeRegistry registry;
             Fill(registry, reversed);
@@ -512,13 +520,13 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(SchemaExportReferenceTest, TheRealRegistryWritesTheSameTextAsTheDom) {
+    TEST_F(SchemaExportReferenceTest, TheRealRegistryWritesTheSameTextAsTheDom) {
         const TypeRegistry& registry = TypeRegistry::GetInstance();
         const ControlRoots roots;
         EXPECT_TRUE(WrittenText(MakeSchemaAnswer(registry, roots)) == DumpJson(ReferenceBuildSchemaJson(registry, roots)));
     }
 
-    TEST(SchemaExportOrderTest, TheOrderOfRegistrationDoesNotShow) {
+    TEST_F(SchemaExportOrderTest, TheOrderOfRegistrationDoesNotShow) {
         TypeRegistry forward;
         TypeRegistry backward;
         Fill(forward, false);
@@ -530,7 +538,7 @@ namespace BECore::Tests {
         EXPECT_EQ(DumpJson(ToJson(DescribeTypeSchema(Require(forward.Find("SchemaShape")), forward))), DumpJson(ToJson(DescribeTypeSchema(Require(backward.Find("SchemaShape")), backward))));
     }
 
-    TEST(SchemaExportEmptyTest, AnEmptyRegistryGivesAnEmptyDocument) {
+    TEST_F(SchemaExportEmptyTest, AnEmptyRegistryGivesAnEmptyDocument) {
         const TypeRegistry empty;
         const Json schema = ToJson(MakeSchemaAnswer(empty, ControlRoots()));
         EXPECT_TRUE(Member(schema, "types")->empty());
@@ -539,7 +547,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(Member(ToJson(MakeListTypesAnswer(empty, {})), "types")->empty());
     }
 
-    TEST(SchemaExportEngineTest, TheRealRegistryHasTheWidgetFactoryAndNoHash) {
+    TEST_F(SchemaExportEngineTest, TheRealRegistryHasTheWidgetFactoryAndNoHash) {
         const Json schema = ToJson(MakeSchemaAnswer(TypeRegistry::GetInstance(), ControlRoots()));
         EXPECT_GT(DumpJson(schema).size(), 0U);
         EXPECT_FALSE(HasKeyNamed(schema, "hash") || HasKeyNamed(schema, "typeHash")) << "a hash is never exported";

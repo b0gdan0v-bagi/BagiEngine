@@ -3,7 +3,9 @@
 #include <BECore/Math/Vec2.h>
 #include <BECore/Math/Vec3.h>
 #include <BECore/Math/Vec4.h>
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Reflection/DataAccessor.h>
+#include <BECore/Reflection/TextView.h>
 #include <BECore/Reflection/TypeDesc.h>
 #include <BECore/TypeRegistryTest.h>
 #include <BECore/Values/Context.h>
@@ -194,6 +196,26 @@ namespace BECore::Tests {
         EXPECT_FALSE((SameAs<Map<String, int32_t>, Map<int32_t, int32_t>>()));
         EXPECT_FALSE((SameAs<Variant<int32_t, float>, Variant<float, int32_t>>()));
         EXPECT_FALSE((SameAs<RegInner, RegNode>()));
+    }
+
+    TEST(TypeDescTest, ArenaTextAndListsAreDescribedLikeTheirHeapTwins) {
+        EXPECT_TRUE((SameAs<ArenaString, String>()));
+        EXPECT_TRUE((SameAs<ArenaVector<ArenaString>, Vector<String>>()));
+        EXPECT_TRUE((SameAs<ArenaVector<uint32_t>, Vector<uint32_t>>()));
+        EXPECT_TRUE((SameAs<Optional<ArenaString>, Optional<String>>()));
+        EXPECT_TRUE((SameAs<Optional<ArenaVector<ArenaString>>, Optional<Vector<String>>>()));
+        EXPECT_TRUE((SameAs<ArenaVector<PoolString>, Vector<PoolString>>()));
+        EXPECT_FALSE((SameAs<ArenaVector<ArenaString>, Vector<int32_t>>()));
+        EXPECT_EQ(DescribeType<ArenaString>().kind, TypeKind::String);
+        EXPECT_EQ(DescribeType<ArenaVector<uint32_t>>().kind, TypeKind::List);
+        EXPECT_TRUE(DescribeType<ArenaVector<uint32_t>>().resizable);
+    }
+
+    TEST(TypeDescTest, ATextViewIsDescribedAsAString) {
+        EXPECT_EQ(DescribeType<TextView>().kind, TypeKind::String);
+        EXPECT_EQ(DescribeType<ArenaVector<TextView>>().element->kind, TypeKind::String);
+        EXPECT_TRUE(Ser::HasDataAccessor<TextView>);
+        EXPECT_TRUE((SameAs<Optional<ArenaVector<TextView>>, Optional<Vector<String>>>()));
     }
 
     TEST(TypeDescTest, EnumIdentityIsItsNamesAndItsSize) {

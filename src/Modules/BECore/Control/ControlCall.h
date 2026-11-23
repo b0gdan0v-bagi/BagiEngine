@@ -36,6 +36,9 @@ namespace BECore {
      * ControlService hands a call to the registered handler on the main thread. The handler has to end in exactly one
      * of Reply(), Fail() or DeferFrames(); a handler that does none of them is answered with an internal_error.
      * Params() is always a JSON object, but its members come from a client: read them with the helpers of Json.h.
+     *
+     * The handler and every `done` of DeferFrames() run inside a `ScratchScope` of the service, so an answer struct whose strings and lists are
+     * `ArenaString` / `ArenaVector` is a local of the handler (or of `done`) and is given back right after the reply is written.
      */
     class ControlCall {
     public:
@@ -73,7 +76,8 @@ namespace BECore {
          */
         void Reply(FunctionRef<void(JsonWriter&)> writeResult);
 
-        /// Answers with a reflected value: its generated `WriteJson` writes the `result` (Reply(FunctionRef) with its rules; `Control/JsonWriteReflect.h` has the shapes)
+        /// Answers with a reflected value: its generated `WriteJson` writes the `result` (Reply(FunctionRef) with its rules; `Control/JsonWriteReflect.h` has the shapes).
+        /// @p value may hold arena members: it is written before this returns and must be a local of the handler or of `done`, never kept or captured
         template <typename T>
         requires requires(const T& value, JsonWriter& writer) {
             value.WriteJson(writer);
@@ -101,7 +105,8 @@ namespace BECore {
          * The counter starts at @p frames (at least 1) and drops by one at the end of every frame, so DeferFrames(1)
          * completes at the end of the frame that is running now (or of the next one when the call is handled between
          * frames). Until then ControlService holds back the requests behind this one. @p done has to answer the call
-         * with Reply() or Fail(), or defer it again.
+         * with Reply() or Fail(), or defer it again. @p done runs after the handler's scratch scope has ended: it captures heap data only (an answer struct
+         * with arena members made by the handler would dangle) and builds its answer inside itself.
          */
         void DeferFrames(uint32_t frames, DoneFn done);
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
@@ -55,7 +56,7 @@ namespace BECore {
         BE_REFLECT_FIELD AudioLevelsAnswer levels;
         BE_REFLECT_FIELD AudioMusicAnswer music;
         BE_REFLECT_FIELD uint32_t playing = 0;
-        BE_REFLECT_FIELD Vector<AudioRecentPlay> recent;
+        BE_REFLECT_FIELD ArenaVector<AudioRecentPlay> recent;
         BE_REFLECT_FIELD uint64_t requested = 0;
         BE_REFLECT_FIELD uint64_t started = 0;
         BE_REFLECT_FIELD uint32_t voices = 0;

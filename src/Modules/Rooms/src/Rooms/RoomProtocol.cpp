@@ -1,5 +1,6 @@
 #include "RoomProtocol.h"
 
+#include <BECore/Memory/ScratchArena.h>
 #include <Rooms/RoomCode.h>
 #include <Rooms/RoomErrors.h>
 #include <Rooms/RoomWire.h>
@@ -599,12 +600,13 @@ namespace BECore {
     }
 
     void AppendClientMessage(String& out, const ClientMessage& message) {
+        ScratchScope scratch;  // above the wire structs: they die first, then the scope rewinds
         JsonWriter writer(out);
         std::visit(overload{
                        [&](const CreateRoomMessage& m) {
                            RoomWireCreateRoom wire;
-                           wire.game = m.game;
-                           wire.name = m.name;
+                           wire.game = TextView(m.game);
+                           wire.name = TextView(m.name);
                            wire.options = JsonPayload::Borrowed(m.options);
                            if (m.isPublic) {
                                wire._public = true;
@@ -619,11 +621,11 @@ namespace BECore {
                        },
                        [&](const JoinRoomMessage& m) {
                            RoomWireJoinRoom wire;
-                           wire.code = m.code;
+                           wire.code = TextView(m.code);
                            if (m.IsReconnect()) {
-                               wire.token = m.token;
+                               wire.token = TextView(m.token);
                            } else {
-                               wire.name = m.name;
+                               wire.name = TextView(m.name);
                            }
                            wire.WriteJson(writer);
                        },
@@ -634,7 +636,7 @@ namespace BECore {
                        },
                        [&](const ListRoomsMessage& m) {
                            RoomWireListRooms wire;
-                           wire.game = m.game;
+                           wire.game = TextView(m.game);
                            wire.WriteJson(writer);
                        },
                        [&](const StartMessage&) { RoomWireStart().WriteJson(writer); },
@@ -681,12 +683,13 @@ namespace BECore {
     }
 
     void AppendJoinedMessage(String& out, StringView room, PlayerId player, StringView token, int seat, bool host) {
+        ScratchScope scratch;
         RoomWireJoined wire;
         wire.host = host;
         wire.player = player;
-        wire.room = String(room.data(), room.size());
+        wire.room = TextView(room);
         wire.seat = seat;
-        wire.token = String(token.data(), token.size());
+        wire.token = TextView(token);
         JsonWriter writer(out);
         wire.WriteJson(writer);
         EXPECT(writer.IsComplete());
@@ -699,22 +702,21 @@ namespace BECore {
     }
 
     void AppendLobbyMessage(String& out, const LobbySnapshot& lobby) {
+        ScratchScope scratch;  // the seats are an `ArenaVector`; they go with the message
         RoomWireLobby wire;
-        wire.game = lobby.game;
+        wire.game = TextView(lobby.game);
         wire.host = lobby.hostSeat;
         wire.options = PublicOptions(lobby.options);
-        const StringView phase = GetPhaseName(lobby.phase);
-        wire.phase = String(phase.data(), phase.size());
-        wire.room = lobby.room;
+        wire.phase = TextView(GetPhaseName(lobby.phase));
+        wire.room = TextView(lobby.room);
         wire.seats.reserve(lobby.seats.size());
         for (const LobbySeat& seat : lobby.seats) {
             RoomWireSeat& wireSeat = wire.seats.emplace_back();
             if (seat.kind == SeatKind::Human) {
                 wireSeat.connected = seat.connected;
-                wireSeat.name = seat.name;
+                wireSeat.name = TextView(seat.name);
             }
-            const StringView kind = GetSeatKindName(seat.kind);
-            wireSeat.kind = String(kind.data(), kind.size());
+            wireSeat.kind = TextView(GetSeatKindName(seat.kind));
             wireSeat.seat = seat.seat;
         }
         JsonWriter writer(out);
@@ -729,15 +731,16 @@ namespace BECore {
     }
 
     void AppendRoomListMessage(String& out, const RoomListMessage& list) {
+        ScratchScope scratch;
         RoomWireRooms wire;
-        wire.game = list.game;
+        wire.game = TextView(list.game);
         wire.more = list.more;
         wire.rooms.reserve(list.rooms.size());
         for (const RoomListing& listing : list.rooms) {
             RoomWireListing& wireListing = wire.rooms.emplace_back();
-            wireListing.host = listing.host;
+            wireListing.host = TextView(listing.host);
             wireListing.options = PublicOptions(listing.options);
-            wireListing.room = listing.room;
+            wireListing.room = TextView(listing.room);
             wireListing.seats = listing.seats;
             wireListing.started = listing.started;
             wireListing.taken = listing.taken;
@@ -754,10 +757,11 @@ namespace BECore {
     }
 
     void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions) {
+        ScratchScope scratch;
         RoomWireView wire;
         wire.actions = JsonPayload::Borrowed(actions);
         wire.finished = finished;
-        wire.room = String(room.data(), room.size());
+        wire.room = TextView(room);
         wire.seat = seat;
         wire.version = version;
         wire.view = JsonPayload::Borrowed(view);
@@ -773,11 +777,12 @@ namespace BECore {
     }
 
     void AppendErrorMessage(String& out, StringView code, StringView message, StringView ref) {
+        ScratchScope scratch;
         RoomWireError wire;
-        wire.code = String(code.data(), code.size());
-        wire.message = String(message.data(), message.size());
+        wire.code = TextView(code);
+        wire.message = TextView(message);
         if (!ref.empty()) {
-            wire.ref = String(ref.data(), ref.size());
+            wire.ref = TextView(ref);
         }
         JsonWriter writer(out);
         wire.WriteJson(writer);
@@ -791,8 +796,9 @@ namespace BECore {
     }
 
     void AppendLeftMessage(String& out, StringView reason) {
+        ScratchScope scratch;
         RoomWireLeft wire;
-        wire.reason = String(reason.data(), reason.size());
+        wire.reason = TextView(reason);
         JsonWriter writer(out);
         wire.WriteJson(writer);
         EXPECT(writer.IsComplete());
@@ -805,6 +811,7 @@ namespace BECore {
     }
 
     void AppendPongMessage(String& out) {
+        ScratchScope scratch;
         const RoomWirePong wire;
         JsonWriter writer(out);
         wire.WriteJson(writer);

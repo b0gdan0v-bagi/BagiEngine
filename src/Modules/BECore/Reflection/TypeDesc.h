@@ -5,6 +5,7 @@
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/DataAccessor.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Reflection/TextView.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Utils/StringUtils.h>
@@ -121,6 +122,12 @@ namespace BECore {
 
         template <>
         struct TextTraits<PoolString> {
+            static constexpr bool kMatch = true;
+            static constexpr size_t kCapacity = 0;
+        };
+
+        template <>
+        struct TextTraits<TextView> {
             static constexpr bool kMatch = true;
             static constexpr size_t kCapacity = 0;
         };

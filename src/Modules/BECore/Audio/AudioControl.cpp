@@ -73,6 +73,7 @@ namespace BECore {
 
             Vector<AudioPlayRecord> records;
             manager.GetRecentPlays(records);
+            answer.recent.reserve(records.size());
             for (const AudioPlayRecord& record : records) {
                 AudioRecentPlay item;
                 item.bus = BusKey(record.bus);

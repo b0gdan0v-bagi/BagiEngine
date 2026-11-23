@@ -44,14 +44,16 @@ namespace BECore {
             }
         }
 
-        String Text(StringView text) {
-            return String(text.data(), text.size());
+        ArenaString ArenaText(StringView text) {
+            return ArenaString(text.data(), text.size());
         }
+
+        constexpr size_t kCornerCount = 4;
 
         UIShadowAnswer BuildShadow(const UIShadowSpec& shadow) {
             UIShadowAnswer answer;
             answer.blur = shadow.blur;
-            answer.color = UIText::FormatColor(shadow.color);
+            answer.color = ArenaText(UIText::FormatColor(shadow.color));
             answer.offsetX = shadow.offsetX;
             answer.offsetY = shadow.offsetY;
             answer.spread = shadow.spread;
@@ -66,17 +68,23 @@ namespace BECore {
             }
             UIBoxAnswer answer;
             if (!(box.cornerRadius == defaults.cornerRadius)) {
-                answer.cornerRadius = Vector<double>{box.cornerRadius.topLeft, box.cornerRadius.topRight, box.cornerRadius.bottomRight, box.cornerRadius.bottomLeft};
+                ArenaVector<double> radii;
+                radii.reserve(kCornerCount);
+                radii.push_back(box.cornerRadius.topLeft);
+                radii.push_back(box.cornerRadius.topRight);
+                radii.push_back(box.cornerRadius.bottomRight);
+                radii.push_back(box.cornerRadius.bottomLeft);
+                answer.cornerRadius = std::move(radii);
             }
             if (box.borderWidth != defaults.borderWidth) {
                 answer.borderWidth = box.borderWidth;
             }
             if (!ColorsEqual(box.borderColor, defaults.borderColor)) {
-                answer.borderColor = UIText::FormatColor(box.borderColor);
+                answer.borderColor = ArenaText(UIText::FormatColor(box.borderColor));
             }
             if (box.gradientDirection != defaults.gradientDirection || !ColorsEqual(box.gradientColor, defaults.gradientColor)) {
                 UIBoxGradientAnswer gradient;
-                gradient.color = UIText::FormatColor(box.gradientColor);
+                gradient.color = ArenaText(UIText::FormatColor(box.gradientColor));
                 gradient.direction = box.gradientDirection;
                 answer.gradient = std::move(gradient);
             }
@@ -87,7 +95,7 @@ namespace BECore {
                 answer.glow = BuildShadow(box.glow);
             }
             if (!ColorsEqual(box.highlight, defaults.highlight)) {
-                answer.highlight = UIText::FormatColor(box.highlight);
+                answer.highlight = ArenaText(UIText::FormatColor(box.highlight));
             }
             return answer;
         }
@@ -117,10 +125,10 @@ namespace BECore {
             if (element.components.empty()) {
                 return;
             }
-            Vector<String> types;
+            ArenaVector<TextView> types;
             types.reserve(element.components.size());
             for (const auto& component : element.components) {
-                types.push_back(Text(component->GetTypeMeta().typeName));
+                types.push_back(TextView(component->GetTypeMeta().typeName));
             }
             out.components = std::move(types);
             const bool hasClicker = element.GetComponent<UIInputClicker>() != nullptr;
@@ -129,7 +137,7 @@ namespace BECore {
                 caption = FindInDescendants<UITextComponent>(element, [](const UITextComponent&) { return true; });
             }
             if (caption != nullptr) {
-                out.text = Text(caption->GetDisplayText(element));  // as shown: a dropdown's header says the chosen caption
+                out.text = ArenaText(caption->GetDisplayText(element));  // as shown: a dropdown's header says the chosen caption
             }
             if (const auto* clicker = element.GetComponent<UIInputClicker>()) {
                 out.action = clicker->action;
@@ -146,7 +154,7 @@ namespace BECore {
             }
             const String& tooltip = element.GetTooltipText();
             if (!tooltip.empty()) {
-                out.tooltip = tooltip;
+                out.tooltip = TextView(tooltip);
             }
         }
 
@@ -159,7 +167,7 @@ namespace BECore {
 
         /// Fills @p out from @p element and its subtree; @p depth is 1 for an element of the canvas
         void BuildElement(UIElement& element, const UICanvasResolved* resolved, size_t depth, UITreeElement& out) {
-            out.type = Text(element.GetTypeMeta().typeName);
+            out.type = TextView(element.GetTypeMeta().typeName);
             out.name = element.name;
             out.interactive = element.IsInteractive();
             out.blocksInput = element.blocksInput;
@@ -181,14 +189,14 @@ namespace BECore {
                 // The segments take `selected` and `groupDisabled` at the draw; apply them now so the tree shows the variable as it is, not as of the last draw
                 group->SyncChildren();
                 out.bind = group->bind;
-                out.selectedValue = Text(group->GetSelectedValue());
+                out.selectedValue = TextView(group->GetSelectedValue());
                 out.disabled = group->disabled;
             }
             if (auto* dropdown = element.Cast<UIDropdown>()) {
                 // Like the group: the options take `selected` now, and the children below are described after this, so they show the variable as it is
                 dropdown->SyncChildren();
                 out.bind = dropdown->bind;
-                out.selectedValue = Text(dropdown->GetSelectedValue());
+                out.selectedValue = TextView(dropdown->GetSelectedValue());
                 out.open = dropdown->IsPopupOpen();
                 out.action = dropdown->action;
                 out.disabled = dropdown->disabled;
@@ -243,8 +251,9 @@ namespace BECore {
         }
 
         /// The regions the game published, also before the first draw (they do not depend on one), sorted by name
-        Vector<UIRegionAnswer> BuildRegions(const UIRegionSet& regions) {
-            Vector<UIRegionAnswer> answer;
+        ArenaVector<UIRegionAnswer> BuildRegions(const UIRegionSet& regions) {
+            ArenaVector<UIRegionAnswer> answer;
+            answer.reserve(regions.Size());
             for (const UIRegionSet::Entry& entry : regions) {
                 UIRegionAnswer region;
                 region.name = entry.name;
@@ -295,7 +304,9 @@ namespace BECore {
                 UILayoutValidatorOptions options;
                 options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
                 options.pixelDensity = layout.GetContext().pixelDensity;
-                for (const UILayoutIssue& issue : layout.Validate(options)) {
+                const auto issues = layout.Validate(options);
+                answer.issues.reserve(issues.size());
+                for (const UILayoutIssue& issue : issues) {
                     answer.issues.push_back(BuildIssue(issue));
                 }
             }
@@ -536,7 +547,7 @@ namespace BECore {
                 const bool takenAbove = consumed && click.taker != canvasHandler;
 
                 UIClickAnswer answer;
-                answer.clicked = String(nameText->c_str(), nameText->size());
+                answer.clicked = TextView(StringView(nameText->c_str(), nameText->size()));
                 answer.canvas = canvasNode;
                 answer.x = outputX;
                 answer.y = outputY;
