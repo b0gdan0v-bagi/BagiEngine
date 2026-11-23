@@ -1,8 +1,9 @@
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/Format/Format.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetStore.h>
-#include <Widgets/EditorLayout/UserFileIo.h>
 #include <filesystem>
 #include <gtest/gtest.h>
 
@@ -48,11 +49,11 @@ namespace BECore::Tests {
             }
 
             static void Write(const std::filesystem::path& file, StringView text) {
-                ASSERT_TRUE(WriteTextFileAtomically(file, text).has_value());
+                ASSERT_TRUE(WriteFileAtomically(PathToUtf8(file), text).has_value());
             }
 
             static String Read(const std::filesystem::path& file) {
-                auto text = ReadTextFile(file);
+                auto text = ReadTextFile(PathToUtf8(file));
                 return text ? *text : String("<unreadable>");
             }
 
@@ -73,7 +74,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(WriteManifest(_root, set).has_value());
         EXPECT_TRUE(std::filesystem::exists(ManifestPath(_root, "knights")));
         String temporary = GenericOf(ManifestPath(_root, "knights"));
-        temporary.append(kTempFileSuffix.data(), kTempFileSuffix.size());
+        temporary.append(kAtomicTempSuffix.data(), kAtomicTempSuffix.size());
         EXPECT_FALSE(std::filesystem::exists(std::filesystem::path(ToStd(temporary))));
 
         const Vector<ArtGenSet> loaded = LoadSets(_root);

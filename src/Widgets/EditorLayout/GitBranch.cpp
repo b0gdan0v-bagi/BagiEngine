@@ -1,6 +1,7 @@
 #include "GitBranch.h"
 
-#include <Widgets/EditorLayout/UserFileIo.h>
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 
 namespace BECore {
 
@@ -42,7 +43,7 @@ namespace BECore {
             if (!std::filesystem::is_regular_file(gitEntry, ec)) {
                 return {};
             }
-            const auto content = ReadTextFile(gitEntry);
+            const auto content = ReadTextFile(PathToUtf8(gitEntry));
             if (!content) {
                 return {};
             }
@@ -85,7 +86,7 @@ namespace BECore {
                 if (gitDirectory.empty()) {
                     return {};
                 }
-                const auto head = ReadTextFile(gitDirectory / ToStdString(kHeadFileName));
+                const auto head = ReadTextFile(PathToUtf8(gitDirectory / ToStdString(kHeadFileName)));
                 return head ? ParseGitHead(*head) : String();
             }
             const std::filesystem::path parent = directory.parent_path();

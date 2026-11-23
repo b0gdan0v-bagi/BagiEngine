@@ -1,3 +1,5 @@
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <Common/EngineEnvironment.h>
@@ -9,7 +11,6 @@
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetPanel.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetStore.h>
-#include <Widgets/EditorLayout/UserFileIo.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
@@ -264,7 +265,7 @@ namespace BECore::Tests {
         }
 
         static void WriteProvenance(const std::filesystem::path& file, StringView text) {
-            ASSERT_TRUE(WriteTextFileAtomically(file, text).has_value());
+            ASSERT_TRUE(WriteFileAtomically(PathToUtf8(file), text).has_value());
         }
 
         static constexpr StringView kPassedChecks = R"({"seed":5,"checks":{"passed":true,"failed":[]}})";

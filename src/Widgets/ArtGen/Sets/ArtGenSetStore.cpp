@@ -1,7 +1,8 @@
 #include "ArtGenSetStore.h"
 
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
-#include <Widgets/EditorLayout/UserFileIo.h>
 #include <system_error>
 
 namespace BECore {
@@ -42,7 +43,7 @@ namespace BECore {
             if (!IsValidSpriteName(name)) {
                 return std::unexpected(Format("'{}' is not a valid set name", name));
             }
-            const auto text = ReadTextFile(folder / PathOf(kArtGenManifestFile));
+            const auto text = ReadTextFile(PathToUtf8(folder / PathOf(kArtGenManifestFile)));
             if (!text) {
                 return std::unexpected(text.error());
             }
@@ -92,7 +93,7 @@ namespace BECore {
         }
         String text = DumpJson(ArtGenSetToJson(set));
         text += '\n';
-        return WriteTextFileAtomically(ManifestPath(gameRoot, set.name), text);
+        return WriteFileAtomically(PathToUtf8(ManifestPath(gameRoot, set.name)), text);
     }
 
     Vector<ArtGenSet> LoadSets(const std::filesystem::path& gameRoot) {

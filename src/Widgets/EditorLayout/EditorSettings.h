@@ -75,7 +75,7 @@ namespace BECore {
      * the key (an older build) or with another text reads Play. `externalEditor` is a string and `consoleHistory` an array of strings;
      * a wrong type gives the empty default.
      *
-     * Save writes atomically (UserFileIo.h). On failure it keeps the old file, logs the error and returns false; the
+     * Save writes atomically (`WriteFileAtomically`, `File/File.h`). On failure it keeps the old file, logs the error and returns false; the
      * text is in GetLastSaveError().
      */
     class EditorSettings {

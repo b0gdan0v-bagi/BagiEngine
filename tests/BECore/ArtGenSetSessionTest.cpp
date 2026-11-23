@@ -1,5 +1,7 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
@@ -7,7 +9,6 @@
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetStore.h>
-#include <Widgets/EditorLayout/UserFileIo.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -304,7 +305,7 @@ namespace BECore::Tests {
                     for (const String& file : {variant.file, variant.provenance}) {
                         const std::filesystem::path path = AbsoluteInSet(_root, set, file);
                         std::filesystem::create_directories(path.parent_path());
-                        ASSERT_TRUE(WriteTextFileAtomically(path, "x").has_value());
+                        ASSERT_TRUE(WriteFileAtomically(PathToUtf8(path), "x").has_value());
                     }
                 }
             }
@@ -384,7 +385,7 @@ namespace BECore::Tests {
 
         /// The manifest as it is on disk now
         ArtGenSet OnDisk(StringView set) const {
-            const auto text = ReadTextFile(ManifestPath(_root, set));
+            const auto text = ReadTextFile(PathToUtf8(ManifestPath(_root, set)));
             return Require(ArtGenSetFromJson(Require(ParseJson(Require(text)))));
         }
 
@@ -1146,13 +1147,13 @@ namespace BECore::Tests {
         EXPECT_FALSE(OnDisk("files").jobs[0].accepted.has_value());
 
         // The provenance of a row is gone
-        ASSERT_TRUE(WriteTextFileAtomically(AbsoluteInSet(_root, "files", "c/c_41.png"), "x").has_value());
+        ASSERT_TRUE(WriteFileAtomically(PathToUtf8(AbsoluteInSet(_root, "files", "c/c_41.png")), "x").has_value());
         std::filesystem::remove(AbsoluteInSet(_root, "files", "a/a_41.artgen.json"));
         EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "artgen_accept_failed");
         EXPECT_TRUE(gAccepted.empty());
 
         // No acceptor here
-        ASSERT_TRUE(WriteTextFileAtomically(AbsoluteInSet(_root, "files", "a/a_41.artgen.json"), "x").has_value());
+        ASSERT_TRUE(WriteFileAtomically(PathToUtf8(AbsoluteInSet(_root, "files", "a/a_41.artgen.json")), "x").has_value());
         session.SetAcceptor(nullptr);
         EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "artgen_accept_failed");
         session.SetAcceptor(&FakeAcceptor);
@@ -2838,7 +2839,7 @@ namespace BECore::Tests {
         ASSERT_NE(RequestOf(first), nullptr);
         EXPECT_EQ(FindJsonMember(*RequestOf(first), "reference"), nullptr);
         EXPECT_EQ(FindJsonMember((*FindJsonMember(Result(Call("artgen_state")), "sets"))[0], "reference"), nullptr);
-        const Json manifest = ParseJson(ReadTextFile(ManifestPath(_root, "plain")).value()).value();
+        const Json manifest = ParseJson(ReadTextFile(PathToUtf8(ManifestPath(_root, "plain"))).value()).value();
         EXPECT_TRUE(FindJsonMember(manifest, "reference")->is_null());
     }
 
