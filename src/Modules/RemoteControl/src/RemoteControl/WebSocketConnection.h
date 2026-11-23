@@ -1,10 +1,13 @@
 #pragma once
 
+#include <BECore/Memory/MemTag.h>
 #include <BECore/Profiler/Profile.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/New.h>
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/Thread.h>
+#include <BECore/Types/Fifo.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
 #include <RemoteControl/Socket.h>
@@ -46,6 +49,23 @@ namespace BECore {
     /// opens. It runs on the reader thread, and it has to call SetClientAddress() itself (so the check and the address are one step).
     /// Called only during Handshake(), so a view of the caller's lambda is enough.
     using AdmitClientFn = FunctionRef<bool(const String& clientAddress)>;
+
+    /**
+     * @brief One encoded frame that many connections send: a broadcast encodes its text once and queues this on each recipient
+     * (`WebSocketConnection::QueueShared`), instead of one copy of the bytes per connection.
+     *
+     * Immutable after construction, so the writer threads that read `bytes` need no lock; the last connection to finish with it frees
+     * it. Atomic count: the holders are the writer threads of different connections.
+     */
+    class WebSocketSharedFrame : public RefCountedAtomic {
+    public:
+        /// An unmasked text frame holding @p text, encoded with one reserve and one copy
+        [[nodiscard]] static IntrusivePtr<WebSocketSharedFrame> MakeText(StringView text);
+
+        explicit WebSocketSharedFrame(Vector<uint8_t> frameBytes) : bytes(std::move(frameBytes)) {}
+
+        const Vector<uint8_t> bytes;
+    };
 
     /**
      * @brief One client of a WebSocketListener: its socket, the two threads that serve it and the queue of frames waiting to be sent.
@@ -128,25 +148,33 @@ namespace BECore {
 
         /// Queues a text frame; false when the connection takes no more frames
         bool QueueText(StringView text) {
+            BE_MEM_TAG(Network);
             BE_PROFILE_SCOPE("WS encode");
             return QueueFrame(EncodeTextFrame(text), /*isClose=*/false);
         }
 
         bool QueuePing(Span<const uint8_t> payload = {}) {
+            BE_MEM_TAG(Network);
             BE_PROFILE_SCOPE("WS encode");
             return QueueFrame(EncodeFrame(WebSocketOpcode::kPing, payload), /*isClose=*/false);
         }
 
         bool QueuePong(Span<const uint8_t> payload) {
+            BE_MEM_TAG(Network);
             BE_PROFILE_SCOPE("WS encode");
             return QueueFrame(EncodeFrame(WebSocketOpcode::kPong, payload), /*isClose=*/false);
         }
 
         /// Queues the close frame; the connection ends after it was sent
         bool QueueClose(uint16_t code, StringView reason) {
+            BE_MEM_TAG(Network);
             BE_PROFILE_SCOPE("WS encode");
             return QueueFrame(EncodeCloseFrame(code, reason), /*isClose=*/true);
         }
+
+        /// Queues a frame that other connections send too, under the same rules as QueueText (refused when the connection takes no more
+        /// frames; its bytes count against maxOutboxBytes of this connection, and passing the cap drops only this connection)
+        bool QueueShared(const IntrusivePtr<WebSocketSharedFrame>& frame);
 
         /// Drops what is queued and ends both directions now; wakes the threads that wait on the socket or the queue
         void Abort();
@@ -155,12 +183,20 @@ namespace BECore {
         void AbortIfCloseIsOverdue(std::chrono::steady_clock::time_point now);
 
     private:
+        /// Exactly one of `own` (a frame made for this connection) and `shared` is set
         struct OutgoingFrame {
-            Vector<uint8_t> bytes;
+            Vector<uint8_t> own;
+            IntrusivePtr<WebSocketSharedFrame> shared;
             bool isClose = false;
+
+            [[nodiscard]] Span<const uint8_t> Bytes() const {
+                const Vector<uint8_t>& bytes = shared ? shared->bytes : own;
+                return Span<const uint8_t>(bytes.data(), bytes.size());
+            }
         };
 
         bool QueueFrame(Vector<uint8_t> bytes, bool isClose);
+        bool Enqueue(OutgoingFrame frame);
         void WriterLoop();
 
         const WebSocketConnectionId _id;
@@ -176,7 +212,7 @@ namespace BECore {
 
         mutable Mutex _mutex{BE_LOCK_SITE("WebSocket connection")};  // guards everything below
         ConditionVariable _wake;
-        eastl::deque<OutgoingFrame> _outbox;
+        Fifo<OutgoingFrame> _outbox;
         size_t _outboxBytes = 0;
         bool _open = false;     // handshake done, the writer runs
         bool _closing = false;  // a close frame is queued: nothing may follow it

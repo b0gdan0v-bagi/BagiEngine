@@ -636,6 +636,74 @@ namespace BECore::Tests {
         EXPECT_TRUE(StringView(refused).starts_with("HTTP/1.1 503 ")) << refused;
     }
 
+    TEST_F(WebSocketListenerTest, ASharedFrameReachesEveryConnectionAndOutlivesThem) {
+        const uint16_t port = Start();
+        Optional<WebSocketTestClient> clients[3] = {Connect(port), Connect(port), Connect(port)};
+        ASSERT_TRUE(clients[0] && clients[1] && clients[2]);
+        ASSERT_TRUE(WaitForEvents("open:", 3));
+
+        IntrusivePtr<WebSocketSharedFrame> frame = WebSocketSharedFrame::MakeText("to everyone");
+        for (size_t i = 0; i < 3; ++i) {
+            ASSERT_TRUE(recorder.ConnectionAt(i)->QueueShared(frame));
+        }
+        for (Optional<WebSocketTestClient>& client : clients) {
+            const auto received = client->WaitForFrame();
+            ASSERT_TRUE(received.has_value());
+            EXPECT_EQ(received->payload, "to everyone");
+        }
+
+        // A closing connection takes nothing after its close frame, shared frames included
+        const WebSocketHandler::ConnectionPtr first = recorder.ConnectionAt(0);
+        ASSERT_TRUE(first->QueueClose(WebSocketCloseCode::kNormal, {}));
+        EXPECT_FALSE(first->QueueShared(frame));
+
+        for (Optional<WebSocketTestClient>& client : clients) {
+            client->Send(AsBytes(EncodeCloseFrame(WebSocketCloseCode::kNormal, {}, kClientMask)));
+            EXPECT_TRUE(client->WaitForEndOfStream());
+        }
+        EXPECT_TRUE(WaitForEvents("closed:", 3));
+        EXPECT_TRUE(WaitUntil({}, [&] { return frame.GetRefCount() == 1; })) << "a finished connection keeps its reference";
+    }
+
+    TEST_F(WebSocketListenerTest, ASharedFrameOverTheCapDropsOnlyTheConnectionThatDoesNotRead) {
+        constexpr size_t kFrameBytes = 2 * 1024 * 1024;
+        constexpr size_t kMostFramesToTry = 64;
+        WebSocketListenerSettings settings;
+        settings.maxOutboxBytes = 2 * kFrameBytes;
+        const uint16_t port = Start(settings);
+        // One at a time, so that connection k of the recorder is client k
+        auto stuck = Connect(port);
+        ASSERT_TRUE(stuck.has_value());
+        ASSERT_TRUE(WaitForEvents("open:", 1));
+        auto readerA = Connect(port);
+        ASSERT_TRUE(readerA.has_value());
+        ASSERT_TRUE(WaitForEvents("open:", 2));
+        auto readerB = Connect(port);
+        ASSERT_TRUE(readerB.has_value());
+        ASSERT_TRUE(WaitForEvents("open:", 3));
+        const WebSocketHandler::ConnectionPtr stuckConnection = recorder.ConnectionAt(0);
+        const WebSocketHandler::ConnectionPtr connectionA = recorder.ConnectionAt(1);
+        const WebSocketHandler::ConnectionPtr connectionB = recorder.ConnectionAt(2);
+
+        const IntrusivePtr<WebSocketSharedFrame> frame = WebSocketSharedFrame::MakeText(String(kFrameBytes, 'x'));
+        bool stuckWasDropped = false;
+        for (size_t round = 0; round < kMostFramesToTry && !stuckWasDropped; ++round) {
+            EXPECT_TRUE(connectionA->QueueShared(frame));
+            EXPECT_TRUE(connectionB->QueueShared(frame));
+            stuckWasDropped = !stuckConnection->QueueShared(frame);
+            for (Optional<WebSocketTestClient>* reader : {&readerA, &readerB}) {
+                const auto received = (*reader)->WaitForFrame();
+                ASSERT_TRUE(received.has_value());
+                EXPECT_EQ(received->payload.size(), kFrameBytes);
+            }
+        }
+        EXPECT_TRUE(stuckWasDropped) << "a client that never reads must hit the cap";
+        EXPECT_TRUE(WaitForEvents("closed:", 1));
+        EXPECT_FALSE(stuckConnection->IsOpen());
+        EXPECT_TRUE(connectionA->IsOpen());
+        EXPECT_TRUE(connectionB->IsOpen());
+    }
+
     TEST_F(WebSocketListenerTest, AHandlerThatOwnsAMoveOnlyCaptureRunsForAConnectionAndIsDestroyedOnceWithTheListener) {
         struct Sentinel {
             explicit Sentinel(std::atomic<int>& target) : destroyed(target) {}
