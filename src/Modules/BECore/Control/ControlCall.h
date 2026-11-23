@@ -70,6 +70,15 @@ namespace BECore {
          */
         void Reply(FunctionRef<void(JsonWriter&)> writeResult);
 
+        /// Answers with a reflected value: its generated `WriteJson` writes the `result` (Reply(FunctionRef) with its rules; `Control/JsonWriteReflect.h` has the shapes)
+        template <typename T>
+        requires requires(const T& value, JsonWriter& writer) {
+            value.WriteJson(writer);
+        }
+        void ReplyObject(const T& value) {
+            Reply([&value](JsonWriter& writer) { value.WriteJson(writer); });
+        }
+
         /**
          * @brief Reply() for a writer that can fail half way: when @p writeResult returns an error, what it wrote is discarded and the call is answered with that error.
          *
