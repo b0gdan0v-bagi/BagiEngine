@@ -10,6 +10,8 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+// windows.h spells RemoveDirectory as RemoveDirectoryW, which would rename the override of IFileWatchBackend::RemoveDirectory
+#undef RemoveDirectory
 
 namespace BECore {
 
