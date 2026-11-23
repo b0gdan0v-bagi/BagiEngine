@@ -60,7 +60,7 @@ namespace BECore::Stress {
     StressSample SampleOf(const FrameStats& stats) {
         StressSample sample;
         sample.cpuMs = stats.cpuMs;
-        sample.workMs = std::max(0.0, stats.cpuMs - stats.GetStageMs(FrameStage::Present));
+        sample.workMs = std::max(0.0, stats.cpuMs - stats.GetStageMs(FrameStage::Present) - stats.GetStageMs(FrameStage::Wait));
         sample.frameMs = stats.frameMs;
         sample.drawCalls = stats.draws.drawCalls;
         sample.triangles = stats.draws.triangles;

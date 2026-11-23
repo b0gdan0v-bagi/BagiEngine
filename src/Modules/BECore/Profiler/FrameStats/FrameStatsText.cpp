@@ -25,8 +25,9 @@ namespace BECore {
         const auto give = [&](const FormatResult& written) { emit(StringView(buffer, eastl::min(written.size, kOverlayLineCapacity))); };
         const double fps = stats.frameMs > 0.0 ? kMillisecondsPerSecond / stats.frameMs : 0.0;
         give(FormatToN(buffer, kOverlayLineCapacity, "Frame {}  {:.2f} ms ({:.0f} fps)  CPU {:.2f} ms{}", stats.frame, stats.frameMs, fps, stats.cpuMs, stats.paused ? "  paused" : ""));
-        give(FormatToN(buffer, kOverlayLineCapacity, "Update {:.2f} (scene {:.2f})  Render {:.2f} (scene {:.2f})  Present {:.2f} ms", stats.GetStageMs(FrameStage::Update),
-                       stats.GetStageMs(FrameStage::SceneUpdate), stats.GetStageMs(FrameStage::Render), stats.GetStageMs(FrameStage::SceneDraw), stats.GetStageMs(FrameStage::Present)));
+        give(FormatToN(buffer, kOverlayLineCapacity, "Update {:.2f} (scene {:.2f})  Render {:.2f} (scene {:.2f})  Present {:.2f}  Wait {:.2f} ms", stats.GetStageMs(FrameStage::Update),
+                       stats.GetStageMs(FrameStage::SceneUpdate), stats.GetStageMs(FrameStage::Render), stats.GetStageMs(FrameStage::SceneDraw), stats.GetStageMs(FrameStage::Present),
+                       stats.GetStageMs(FrameStage::Wait)));
         give(FormatToN(buffer, kOverlayLineCapacity, "Draw calls {}  Triangles {}  Texture switches {}", stats.draws.drawCalls, stats.draws.triangles, stats.draws.textureSwitches));
         if (allocTracking) {
             give(FormatToN(buffer, kOverlayLineCapacity, "Allocations {} ({}) this frame  Live {}  Peak {}", stats.allocCount, FormatBytes(stats.allocBytes), FormatBytes(totals.liveBytes),

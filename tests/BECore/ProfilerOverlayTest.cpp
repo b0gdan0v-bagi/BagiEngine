@@ -30,6 +30,7 @@ namespace BECore::Tests {
             stats.frame = 42;
             stats.frameMs = 20.0;
             stats.cpuMs = 5.0;
+            stats.stageMs[+FrameStage::Wait] = 8.5;
             stats.draws = RenderCounters{.drawCalls = 12, .triangles = 24, .textureSwitches = 3};
             stats.allocCount = 7;
             stats.allocBytes = 2048;
@@ -55,6 +56,7 @@ namespace BECore::Tests {
         const Vector<String> lines = FormatOverlayLines(SampleFrame(), totals, true);
         EXPECT_TRUE(AnyLineContains(lines, "Frame 42"));
         EXPECT_TRUE(AnyLineContains(lines, "50 fps"));
+        EXPECT_TRUE(AnyLineContains(lines, "Wait 8.50 ms"));
         EXPECT_TRUE(AnyLineContains(lines, "Draw calls 12"));
         EXPECT_TRUE(AnyLineContains(lines, "Texture switches 3"));
         EXPECT_TRUE(AnyLineContains(lines, "Allocations 7 (2.0 KB)"));
