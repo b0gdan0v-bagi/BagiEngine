@@ -1,22 +1,26 @@
 #pragma once
 
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Memory/ArenaStats.h>
 #include <BECore/Memory/MemTag.h>
 #include <BECore/Memory/PoolStats.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Reflection/TextView.h>
 #include <BECore/Types/Types.h>
 #include <cstdint>
 
 namespace BECore {
+
+    // The names and files of `zone_allocs` are literals of the program image (a `ProfileSite`, an allocation name) and so views; the path of `profiler_dump` is the handler's local.
 
     /// `profiler_dump`
     struct ProfilerDumpAnswer {
         BE_CLASS(ProfilerDumpAnswer)
 
         BE_REFLECT_FIELD uint64_t dropped = 0;
-        BE_REFLECT_FIELD String path;
+        BE_REFLECT_FIELD TextView path;
     };
 
     /// The `totals` of `zone_allocs`
@@ -40,8 +44,8 @@ namespace BECore {
 
         BE_REFLECT_FIELD uint64_t allocs = 0;
         BE_REFLECT_FIELD uint64_t bytes = 0;
-        BE_REFLECT_FIELD String name;
-        BE_REFLECT_FIELD String zone;
+        BE_REFLECT_FIELD TextView name;
+        BE_REFLECT_FIELD TextView zone;
 
         [[nodiscard]] static ProfilerAllocName Read(const AllocSiteStats& stats);
     };
@@ -59,8 +63,8 @@ namespace BECore {
         BE_CLASS(ProfilerAllocSizes)
 
         BE_REFLECT_FIELD uint64_t allocs = 0;
-        BE_REFLECT_FIELD Vector<ProfilerAllocSizeBucket> buckets;
-        BE_REFLECT_FIELD String zone;
+        BE_REFLECT_FIELD ArenaVector<ProfilerAllocSizeBucket> buckets;
+        BE_REFLECT_FIELD TextView zone;
 
         [[nodiscard]] static ProfilerAllocSizes Read(const AllocSizeStats& stats);
     };
@@ -72,9 +76,9 @@ namespace BECore {
         BE_REFLECT_FIELD uint64_t allocs = 0;
         BE_REFLECT_FIELD uint64_t bytes = 0;
         BE_REFLECT_FIELD uint64_t calls = 0;
-        BE_REFLECT_FIELD String file;
+        BE_REFLECT_FIELD TextView file;
         BE_REFLECT_FIELD uint32_t line = 0;
-        BE_REFLECT_FIELD String name;
+        BE_REFLECT_FIELD TextView name;
 
         [[nodiscard]] static ProfilerAllocZone Read(const ZoneAllocStats& stats);
     };
@@ -84,10 +88,10 @@ namespace BECore {
         BE_CLASS(ZoneAllocsAnswer)
 
         BE_REFLECT_FIELD bool enabled = false;
-        BE_REFLECT_FIELD Vector<ProfilerAllocName> names;
-        BE_REFLECT_FIELD Vector<ProfilerAllocSizes> sizes;
+        BE_REFLECT_FIELD ArenaVector<ProfilerAllocName> names;
+        BE_REFLECT_FIELD ArenaVector<ProfilerAllocSizes> sizes;
         BE_REFLECT_FIELD ProfilerAllocTotals totals;
-        BE_REFLECT_FIELD Vector<ProfilerAllocZone> zones;
+        BE_REFLECT_FIELD ArenaVector<ProfilerAllocZone> zones;
     };
 
     /// A row of `arenas` in `frame_stats`, written one at a time (`frame_stats` allocates nothing beyond the stats it reads)

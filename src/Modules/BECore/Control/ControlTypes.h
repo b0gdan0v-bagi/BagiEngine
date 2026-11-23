@@ -59,6 +59,12 @@ namespace BECore {
         const ControlMethodInfo* info = nullptr;  // null without a description
     };
 
+    /// ControlMethodListing without the copy of the name (ControlService::GetMethodViews): valid until the next RegisterHandler or DescribeMethod
+    struct ControlMethodView {
+        StringView name;
+        const ControlMethodInfo* info = nullptr;  // null without a description
+    };
+
     /// Error codes of the control protocol. They are part of the protocol: clients match on them.
     namespace ControlErrors {
         inline constexpr StringView kParseError = "parse_error";

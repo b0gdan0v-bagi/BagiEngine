@@ -1,14 +1,17 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Memory/BlockPool.h>
 #include <BECore/Memory/LinearArena.h>
 #include <BECore/Memory/MemTag.h>
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Profiler.h>
+#include <BECore/Profiler/ProfilerAnswers.h>
 #include <BECore/Profiler/ProfilerControl.h>
 #include <Common/AllocCheck.h>
 #include <Common/ControlTestSupport.h>
@@ -281,6 +284,50 @@ namespace BECore::Tests {
         }
         EXPECT_EQ(stats.count, reads.count);
         EXPECT_EQ(stats.bytes, reads.bytes);
+    }
+
+    TEST_F(ProfilerControlGoldenTest, ZoneAllocsAnswerBuiltFromStatsAllocatesNothingTheSecondTime) {
+        static constexpr ProfileSite kSite{"AnswerZone", "AnswerFunction", "Answer.cpp", 12, 0};
+        static constexpr const char* kName = "AnswerName";
+        ZoneAllocStats zone;
+        zone.site = &kSite;
+        zone.calls = 2;
+        zone.count = 9;
+        zone.bytes = 900;
+        AllocSiteStats name;
+        name.zone = &kSite;
+        name.name = kName;
+        name.count = 4;
+        name.bytes = 40;
+        AllocSizeStats size;
+        size.zone = &kSite;
+        size.allocs = 5;
+        size.buckets[3] = 2;
+        size.buckets[7] = 3;
+        String out;
+        out.reserve(1024);
+        const auto writeOnce = [&] {
+            const ScratchScope scratch;
+            ZoneAllocsAnswer answer;
+            answer.enabled = true;
+            answer.names.reserve(1);
+            answer.names.push_back(ProfilerAllocName::Read(name));
+            answer.sizes.reserve(1);
+            answer.sizes.push_back(ProfilerAllocSizes::Read(size));
+            answer.zones.reserve(1);
+            answer.zones.push_back(ProfilerAllocZone::Read(zone));
+            out.clear();
+            JsonWriter writer(out, JsonWriter::kCompact);
+            answer.WriteJson(writer);
+        };
+        writeOnce();
+        const String first = out;
+
+        ExpectNoAllocations(writeOnce);
+
+        EXPECT_EQ(out, first);
+        EXPECT_NE(out.find("\"name\":\"AnswerName\""), String::npos);
+        EXPECT_NE(out.find("\"file\":\"Answer.cpp\""), String::npos);
     }
 
     TEST_F(ProfilerControlTest, FrameStatsAnswersTheLastFrames) {

@@ -16,6 +16,7 @@
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIVars.h>
+#include <Common/AllocCheck.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -1182,6 +1183,51 @@ namespace BECore::Tests {
         const Json* leaf = FindElement(*hud, "Deep100");
         ASSERT_NE(leaf, nullptr);
         EXPECT_EQ(Member(*leaf, "truncated"), nullptr);
+    }
+
+    namespace {
+
+        /// A text well past the small-string buffer, so a copy of it takes a block
+        constexpr StringView kLongCaption = "a caption that is much longer than twenty-three bytes";
+
+        /// What one `ui_tree` Drain allocated on this thread; the reply keeps nothing, so only the service and the answer are counted
+        AllocCount CountTreeAllocations(ControlService& service, int64_t id) {
+            size_t replyBytes = 0;
+            service.Post(MakeRequest(id, "ui_tree"), [&replyBytes](const String& text) { replyBytes += text.size(); });
+            const AllocCount counted = CountAllocations([&service] { service.Drain(); });
+            EXPECT_GT(replyBytes, 0U);
+            return counted;
+        }
+
+    }  // namespace
+
+    TEST_F(UIControlApiTest, ARepeatedTreeAllocatesNothingPerElement) {
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+        auto hudCanvas = Canvas("Main", "Hud");
+        const auto addCaptions = [&](int first, int count) {
+            for (int index = first; index < first + count; ++index) {
+                auto element = hudCanvas->GetLayout().root->AddChild(PoolString::Intern(Format("Caption{}", index)));
+                element->AddComponent<UITextComponent>().text = String(kLongCaption.data(), kLongCaption.size());
+            }
+            hudCanvas->Invalidate();
+            Show("Main");
+        };
+        int64_t id = 0;
+        const auto measure = [&] {
+            CountTreeAllocations(_service, ++id);  // the arena grows to the size of this answer once
+            return CountTreeAllocations(_service, ++id);
+        };
+
+        addCaptions(0, 2);
+        const AllocCount small = measure();
+        constexpr int kManyCaptions = 300;
+        addCaptions(2, kManyCaptions);
+        const AllocCount large = measure();
+
+        // What is left is a constant of the service and the validator, not of the number of elements
+        EXPECT_EQ(large.count, small.count) << "the elements of the answer take their texts and lists from the arena";
     }
 
     TEST_F(UIControlApiTest, TheRegionsOfACanvasThatWasNeverDrawnAreAlreadyListed) {

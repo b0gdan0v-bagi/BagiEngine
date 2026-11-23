@@ -7,10 +7,12 @@
 #include <BECore/Math/Vec2.h>
 #include <BECore/Math/Vec3.h>
 #include <BECore/Math/Vec4.h>
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Reflection/TextView.h>
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
@@ -311,6 +313,65 @@ namespace BECore {
             BE_CLASS(JsonWritePtrListHolder)
 
             BE_REFLECT_FIELD Vector<IntrusivePtr<JsonWritePtrBase>> list;
+        };
+
+        /// The two element types of the arena twins: `ArenaItem` holds arena text, `HeapItem` the same with `String`
+        struct ArenaItem {
+            BE_CLASS(ArenaItem)
+
+            BE_REFLECT_FIELD ArenaString label;
+            BE_REFLECT_FIELD int32_t rank = 0;
+        };
+
+        struct HeapItem {
+            BE_CLASS(HeapItem)
+
+            BE_REFLECT_FIELD String label;
+            BE_REFLECT_FIELD int32_t rank = 0;
+        };
+
+        /// An answer shape on the scratch arena (strings, lists, an optional of each) and its heap twin with the same field names
+        struct ArenaTwin {
+            BE_CLASS(ArenaTwin)
+
+            BE_REFLECT_FIELD ArenaString text;
+            BE_REFLECT_FIELD Optional<ArenaString> maybeText;
+            BE_REFLECT_FIELD ArenaVector<ArenaString> words;
+            BE_REFLECT_FIELD ArenaVector<uint32_t> numbers;
+            BE_REFLECT_FIELD ArenaVector<ArenaItem> items;
+            BE_REFLECT_FIELD Optional<ArenaVector<ArenaString>> maybeWords;
+            BE_REFLECT_FIELD ArenaVector<PoolString> pools;
+        };
+
+        struct HeapTwin {
+            BE_CLASS(HeapTwin)
+
+            BE_REFLECT_FIELD String text;
+            BE_REFLECT_FIELD Optional<String> maybeText;
+            BE_REFLECT_FIELD Vector<String> words;
+            BE_REFLECT_FIELD Vector<uint32_t> numbers;
+            BE_REFLECT_FIELD Vector<HeapItem> items;
+            BE_REFLECT_FIELD Optional<Vector<String>> maybeWords;
+            BE_REFLECT_FIELD Vector<PoolString> pools;
+        };
+
+        /// An answer of views of text kept elsewhere and its heap twin with the same field names
+        struct ViewTwin {
+            BE_CLASS(ViewTwin)
+
+            BE_REFLECT_FIELD TextView text;
+            BE_REFLECT_FIELD Optional<TextView> maybeText;
+            BE_REFLECT_FIELD ArenaVector<TextView> words;
+            BE_REFLECT_FIELD Optional<ArenaVector<TextView>> maybeWords;
+        };
+
+        struct ViewHeapTwin {
+            BE_CLASS(ViewHeapTwin)
+
+            BE_REFLECT_FIELD String text;
+            BE_REFLECT_FIELD Optional<String> maybeText;
+            BE_REFLECT_FIELD Vector<String> words;
+            BE_REFLECT_FIELD Optional<Vector<String>> maybeWords;
         };
 
         struct JsonWriteEvent {

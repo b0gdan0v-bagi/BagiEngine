@@ -6,9 +6,9 @@ namespace BECore {
 
     namespace {
 
-        /// A profiler name is a literal that may be missing
-        String TextOf(const char* text) {
-            return text != nullptr ? String(text) : String();
+        /// A profiler name is a literal of the program image that may be missing
+        TextView TextOf(const char* text) {
+            return text != nullptr ? TextView(StringView(text)) : TextView();
         }
 
     }  // namespace
@@ -37,6 +37,7 @@ namespace BECore {
     ProfilerAllocSizes ProfilerAllocSizes::Read(const AllocSizeStats& stats) {
         ProfilerAllocSizes answer;
         answer.allocs = stats.allocs;
+        answer.buckets.reserve(kSizeBuckets);
         for (uint32_t bucket = 0; bucket < kSizeBuckets; ++bucket) {
             if (stats.buckets[bucket] != 0) {
                 ProfilerAllocSizeBucket row;

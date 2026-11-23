@@ -6,6 +6,7 @@
 #include <BECore/FileSystem/FileWatchControl.h>
 #include <BECore/FileSystem/FileWatcher.h>
 #include <BECore/FileSystem/MountPoints.h>
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/RefCounted/New.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
@@ -168,6 +169,30 @@ namespace BECore::Tests {
         EXPECT_EQ(BoolOf(&(*items)[0], "ok"), Optional<bool>(false));
         EXPECT_FALSE(StringOf(&(*items)[0], "error").empty());
         EXPECT_EQ(HotValue(), "one");
+    }
+
+    TEST_F(FileWatchControlTest, ADeferredApplyWritesTheErrorAndTheConsumersAfterTheHandlerScopeEnded) {
+        StartWatching();
+        EditHot(kBrokenText);
+        const size_t usedBefore = ScratchArena::Get().GetBytesUsed();
+
+        const Json applied = Call("files_apply", Json(), 1);
+
+        // The handler's scope ended before the frame: an answer built there and captured would read freed arena memory (the Debug free pattern) instead of these
+        ASSERT_TRUE(IsOk(applied));
+        const Json* items = FindJsonMember(*FindJsonMember(applied, "result"), "applied");
+        ASSERT_NE(items, nullptr);
+        ASSERT_EQ(items->size(), 1u);
+        const Json& item = (*items)[0];
+        EXPECT_EQ(StringOf(&item, "path"), kHotPath);
+        EXPECT_EQ(BoolOf(&item, "ok"), Optional<bool>(false));
+        EXPECT_FALSE(StringOf(&item, "error").empty());
+        const Json* consumers = FindJsonMember(item, "consumers");
+        ASSERT_NE(consumers, nullptr);
+        ASSERT_EQ(consumers->size(), 1u);
+        EXPECT_TRUE((*consumers)[0].is_string());
+        EXPECT_NE(DumpJson((*consumers)[0]), "\"\"");
+        EXPECT_EQ(ScratchArena::Get().GetBytesUsed(), usedBefore) << "the answer's memory went back with its scope";
     }
 
 }  // namespace BECore::Tests

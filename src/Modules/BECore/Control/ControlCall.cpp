@@ -2,11 +2,13 @@
 
 #include <BECore/Control/ControlEnvelope.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/Memory/ScratchArena.h>
 
 namespace BECore {
 
     std::expected<void, ControlError> TryAppendOkResponse(String& out, const Json& id, WriteResultFn writeResult) {
         const size_t start = out.size();
+        ScratchScope scratch;  // the envelope may hold arena members; this also runs on a posting thread (a request after Shutdown), and a scope ends where it began
         JsonWriter writer(out);
         ControlOkEnvelope envelope;
         envelope.id = JsonPayload::Borrowed(id);
@@ -34,10 +36,11 @@ namespace BECore {
     }
 
     void AppendErrorResponse(String& out, const Json& id, const ControlError& error) {
+        ScratchScope scratch;  // as in TryAppendOkResponse
         JsonWriter writer(out);
         ControlErrorEnvelope envelope;
-        envelope.error.code = error.code;
-        envelope.error.message = error.message;
+        envelope.error.code = TextView(error.code);
+        envelope.error.message = TextView(error.message);
         envelope.id = JsonPayload::Borrowed(id);
         envelope.WriteJson(writer);
     }

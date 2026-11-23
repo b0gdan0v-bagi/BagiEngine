@@ -7,6 +7,7 @@
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/ISerializer.h>
 #include <BECore/Reflection/SerializationTraits.h>
+#include <BECore/Reflection/TextView.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <EASTL/array.h>
 #include <EASTL/fixed_hash_map.h>
@@ -177,6 +178,8 @@ namespace BECore {
                     }
                 } else if constexpr (::BECore::Detail::HasSerialize<T, ISerializer>) {
                     item.Serialize(s);
+                } else if constexpr (std::is_same_v<T, TextView>) {
+                    s.WriteAttribute("value", item.View());
                 } else {
                     s.WriteAttribute("value", item);
                 }
@@ -196,6 +199,12 @@ namespace BECore {
                 const ClassMeta* meta = AbstractFactory<Pointee>::GetInstance().FindMeta(typeText);
                 return meta == nullptr || d.AcceptsPurpose(meta->purpose, meta->typeName);
             }
+
+            template <typename T>
+            inline constexpr bool IsForeignText = false;
+
+            template <typename Alloc>
+            inline constexpr bool IsForeignText<eastl::basic_string<char, Alloc>> = !std::is_same_v<eastl::basic_string<char, Alloc>, String>;
 
             /**
              * @brief Loads one array element (a value, an object or a factory-created pointer)
@@ -251,6 +260,14 @@ namespace BECore {
                     }
                 } else if constexpr (::BECore::Detail::HasDeserialize<T, IDeserializer>) {
                     item.Deserialize(d);
+                } else if constexpr (std::is_same_v<T, TextView>) {
+                    // A view has nowhere to put the text
+                } else if constexpr (IsForeignText<T>) {
+                    // The reader fills a String only; a text of another allocator (ArenaString) takes a copy of what was read
+                    String text;
+                    if (d.ReadAttribute("value", text)) {
+                        item.assign(text.data(), text.size());
+                    }
                 } else {
                     d.ReadAttribute("value", item);
                 }
@@ -521,6 +538,21 @@ namespace BECore {
 
             static bool Load(IDeserializer& d, eastl::fixed_string<char, N, Overflow, OverflowAlloc>& value, StringView key) {
                 return Detail::LoadText(d, value, key);
+            }
+        };
+
+        // =================================================================
+        // TextView: written as a string, never read
+        // =================================================================
+
+        template <>
+        struct DataAccessor<TextView> {
+            static void Save(ISerializer& s, const TextView& value, StringView key) {
+                s.WriteAttribute(key, value.View());
+            }
+
+            static bool Load(IDeserializer& /*d*/, TextView& /*value*/, StringView /*key*/) {
+                return false;
             }
         };
 
