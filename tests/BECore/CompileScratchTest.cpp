@@ -5,6 +5,7 @@
 #include <BECore/Memory/ScratchArena.h>
 #include <BECore/ValueTestTypes.h>
 #include <BECore/Values/Effects/EffectCompiler.h>
+#include <BECore/Values/Effects/ScriptParser.h>
 #include <BECore/Values/Programs/ExprParser.h>
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <Common/AllocCheck.h>
@@ -27,6 +28,9 @@ namespace BECore::Tests {
         /// The heap allocations a second compile of the formula of the budget case may make. What remains is the linking of the five paths of the formula (the reflection's path
         /// compile, `Reflection/`) and the output: the `Program` handed to the pool (found there, so dropped) and the result's path
         constexpr uint64_t kCompileAllocBudget = 112;
+        /// The same for a second compile of the script of the budget case. The script is compiled in two passes, so each of its paths is linked twice by the reflection; the rest is the
+        /// output (the `EffectProgram`, its source text, a `CompiledExpression::path` per expression)
+        constexpr uint64_t kEffectsAllocBudget = 320;
 
         struct FormulaShape {
             StringView text;
@@ -195,6 +199,30 @@ namespace BECore::Tests {
         const AllocCount second = CountAllocations([&] { EXPECT_TRUE(CompileExpression(kFormula, world.declaration, type).has_value()); });
         if constexpr (AllocTracker::kEnabled) {
             EXPECT_LE(second.count, kCompileAllocBudget);
+        } else {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+    }
+
+    TEST(CompileScratchTest, ParsingAScriptInAScopeAllocatesNothingOnTheHeap) {
+        constexpr StringView kScript = "if (caster.attack > 3) { caster.attack -= 2; emit FxCount(caster.attack + 1); } else { caster.speed++; } toggle caster.alive;";
+        {
+            const ScratchScope warmUp;
+            EXPECT_TRUE(ParseScript(kScript).has_value());
+        }
+        ExpectNoAllocations([&] {
+            const ScratchScope scratch;
+            EXPECT_TRUE(ParseScript(kScript).has_value());
+        });
+    }
+
+    TEST(CompileScratchTest, ASecondCompileOfAScriptStaysWithinTheAllocationBudget) {
+        constexpr StringView kScript = "caster.attack = caster.attack * 2 + 7; caster.speed -= 0.5; if (caster.alive) { caster.attack++; emit FxCount(cast.level); }";
+        const EffectsWorld effects;
+        ASSERT_TRUE(CompileEffects(kScript, effects.world.declaration, effects.options).has_value());
+        const AllocCount second = CountAllocations([&] { EXPECT_TRUE(CompileEffects(kScript, effects.world.declaration, effects.options).has_value()); });
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_LE(second.count, kEffectsAllocBudget);
         } else {
             GTEST_SKIP() << kNoAllocTracker;
         }
