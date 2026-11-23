@@ -1,7 +1,6 @@
 #include "EditorSettings.h"
 
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <SDL3/SDL_filesystem.h>
 
 namespace BECore {
@@ -48,21 +47,20 @@ namespace BECore {
 
         // Reads the file at @p path into @p content. Missing file: false, no warning. A file that cannot be read or
         // parsed, or whose root is not an object: false, one warning, @p unreadable set.
-        bool ReadJsonObject(const std::filesystem::path& path, Json& content, bool& unreadable) {
+        bool ReadJsonObject(const Path& path, Json& content, bool& unreadable) {
             unreadable = false;
-            std::error_code ec;
-            if (!std::filesystem::exists(path, ec)) {
+            if (!GetFileInfo(path)) {
                 return false;
             }
             unreadable = true;
-            const std::expected<String, String> text = ReadTextFile(PathToUtf8(path));
+            const std::expected<String, String> text = ReadTextFile(path);
             if (!text) {
                 LOG_WARNING("Editor settings: {}; using the defaults", text.error());
                 return false;
             }
             std::expected<Json, ControlError> parsed = ParseJson(StringView(text->data(), text->size()));
             if (!parsed || !parsed->is_object()) {
-                LOG_WARNING("Editor settings: '{}' is not a JSON object; using the defaults", path.string());
+                LOG_WARNING("Editor settings: '{}' is not a JSON object; using the defaults", path.View());
                 return false;
             }
             content = std::move(*parsed);
@@ -308,21 +306,21 @@ namespace BECore {
         }
     }
 
-    std::filesystem::path EditorUserDirectory() {
+    Path EditorUserDirectory() {
         if (const char* overridden = std::getenv(kEditorDirectoryEnvironmentVariable); overridden != nullptr && overridden[0] != '\0') {
-            return std::filesystem::path(overridden);
+            return Path(overridden);
         }
         char* prefPath = SDL_GetPrefPath(kEditorOrganization, kEditorApplication);
         if (prefPath == nullptr) {
             LOG_WARNING("Editor settings: no per-user folder: {}", SDL_GetError());
             return {};
         }
-        std::filesystem::path directory(prefPath);
+        Path directory(prefPath);
         SDL_free(prefPath);
         return directory;
     }
 
-    EditorSettings::EditorSettings(std::filesystem::path directory) : _directory(std::move(directory)) {}
+    EditorSettings::EditorSettings(Path directory) : _directory(std::move(directory)) {}
 
     void EditorSettings::SetPreferences(const EditorPreferences& preferences) {
         _preferences = ClampPreferences(preferences);
@@ -339,7 +337,7 @@ namespace BECore {
         _extraViewportPreview = Json::object();
 
         Json content;
-        if (!ReadJsonObject(_directory / ToStdString(kPreferencesFileName), content, _preferencesUnreadable)) {
+        if (!ReadJsonObject(_directory / kPreferencesFileName, content, _preferencesUnreadable)) {
             return;
         }
         _extraPreferences =
@@ -387,7 +385,7 @@ namespace BECore {
         _unknownBindings = Json::object();
 
         Json content;
-        if (!ReadJsonObject(_directory / ToStdString(kHotkeysFileName), content, _hotkeysUnreadable)) {
+        if (!ReadJsonObject(_directory / kHotkeysFileName, content, _hotkeysUnreadable)) {
             return;
         }
         _extraHotkeys = UnknownMembers(content, {kVersionKey, kBindingsKey});
@@ -459,9 +457,9 @@ namespace BECore {
         }
     }
 
-    bool EditorSettings::Save(const std::filesystem::path& path, const Json& content, bool& unreadable) {
+    bool EditorSettings::Save(const Path& path, const Json& content, bool& unreadable) {
         _lastSaveError.clear();
-        if (_directory.empty()) {
+        if (_directory.Empty()) {
             _lastSaveError = "There is no folder for the editor settings";
             LOG_ERROR("Editor settings: {}", _lastSaveError);
             return false;
@@ -469,14 +467,9 @@ namespace BECore {
 
         // A file that did not parse is moved aside once, so the user's old text is not lost to the first change
         if (unreadable) {
-            std::filesystem::path backup = path;
-            backup += ToStdString(kBadFileSuffix);
-            std::error_code ec;
-            if (std::filesystem::exists(path, ec)) {
-                std::filesystem::rename(path, backup, ec);
-                if (!ec) {
-                    LOG_WARNING("Editor settings: the unreadable '{}' was kept as '{}'", path.string(), backup.string());
-                }
+            const Path backup(Format("{}{}", path.View(), kBadFileSuffix));
+            if (GetFileInfo(path) && RenameFile(path, backup)) {
+                LOG_WARNING("Editor settings: the unreadable '{}' was kept as '{}'", path.View(), backup.View());
             }
             unreadable = false;
         }
@@ -484,7 +477,7 @@ namespace BECore {
         String text;
         AppendJson(text, content, kJsonIndent);
         text.push_back('\n');
-        const std::expected<void, String> written = WriteFileAtomically(PathToUtf8(path), text);
+        const std::expected<void, String> written = WriteFileAtomically(path, text);
         if (!written) {
             _lastSaveError = written.error();
             LOG_ERROR("Editor settings: {}", _lastSaveError);
@@ -503,7 +496,7 @@ namespace BECore {
         content[ToStdString(kViewportInputModeKey)] = ToStdString(InputModeName(_preferences.viewportInputMode));
         content[ToStdString(kExternalEditorKey)] = ToStdString(_preferences.externalEditor);
         content[ToStdString(kConsoleHistoryKey)] = StringsToJson(_preferences.consoleHistory);
-        return Save(_directory / ToStdString(kPreferencesFileName), content, _preferencesUnreadable);
+        return Save(_directory / kPreferencesFileName, content, _preferencesUnreadable);
     }
 
     bool EditorSettings::SaveHotkeys() {
@@ -519,7 +512,7 @@ namespace BECore {
         Json content = _extraHotkeys;
         content[ToStdString(kVersionKey)] = kFileVersion;
         content[ToStdString(kBindingsKey)] = std::move(bindings);
-        return Save(_directory / ToStdString(kHotkeysFileName), content, _hotkeysUnreadable);
+        return Save(_directory / kHotkeysFileName, content, _hotkeysUnreadable);
     }
 
 }  // namespace BECore

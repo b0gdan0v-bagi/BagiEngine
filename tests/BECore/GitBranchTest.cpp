@@ -97,6 +97,24 @@ namespace BECore::Tests {
         EXPECT_EQ(ReadGitBranch(below), "todo/y");
     }
 
+    TEST_F(GitBranchTest, ReadInANonAsciiCheckoutFolder) {
+        const std::filesystem::path checkout = _root / "caf\xC3\xA9";
+        WriteFile(checkout / ".git" / "HEAD", "ref: refs/heads/todo/folder\n");
+        EXPECT_EQ(ReadGitBranch(checkout / "sub"), "todo/folder");
+
+        WriteFile(checkout / ".git" / "modules" / "engine" / "HEAD", "ref: refs/heads/todo/relative\n");
+        WriteFile(checkout / "engine" / ".git", "gitdir: ../.git/modules/engine\n");
+        EXPECT_EQ(ReadGitBranch(checkout / "engine"), "todo/relative");
+
+        WriteFile(checkout / "elsewhere" / "HEAD", "ref: refs/heads/todo/absolute\n");
+        WriteFile(checkout / "linked" / ".git", Format("gitdir: {}\n", Path(checkout / "elsewhere").View()));
+        EXPECT_EQ(ReadGitBranch(checkout / "linked"), "todo/absolute");
+    }
+
+    TEST_F(GitBranchTest, AnEmptyStartGivesEmpty) {
+        EXPECT_EQ(ReadGitBranch(Path()), "");
+    }
+
     TEST_F(GitBranchTest, ReadStopsAtTheNearestGitEntry) {
         WriteFile(_root / ".git" / "HEAD", "ref: refs/heads/outer\n");
         WriteFile(_root / "inner" / ".git" / "HEAD", "ref: refs/heads/inner\n");

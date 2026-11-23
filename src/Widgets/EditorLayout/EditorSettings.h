@@ -1,12 +1,12 @@
 #pragma once
 
 #include <BECore/Control/Json.h>
+#include <BECore/File/Path.h>
 #include <BECore/Types/Types.h>
 #include <BECore/UI/UIPreview.h>
 #include <Widgets/EditorLayout/HotkeyMap.h>
 #include <Widgets/Viewport/ViewportInput.h>
 #include <cstdint>
-#include <filesystem>
 
 namespace BECore {
 
@@ -53,7 +53,7 @@ namespace BECore {
 
     /// The per-user folder of the editor files: the environment variable BAGI_EDITOR_DIR when it is set and not empty,
     /// else SDL_GetPrefPath of the engine's organization and "Editor". Empty when SDL gives no folder.
-    [[nodiscard]] std::filesystem::path EditorUserDirectory();
+    [[nodiscard]] Path EditorUserDirectory();
 
     /**
      * @brief The preferences and the hotkeys of the editor, stored per user, never in the repository.
@@ -80,7 +80,7 @@ namespace BECore {
      */
     class EditorSettings {
     public:
-        explicit EditorSettings(std::filesystem::path directory);
+        explicit EditorSettings(Path directory);
 
         /// Reads both files (see above)
         void Load();
@@ -105,16 +105,16 @@ namespace BECore {
         [[nodiscard]] const String& GetLastSaveError() const {
             return _lastSaveError;
         }
-        [[nodiscard]] const std::filesystem::path& GetDirectory() const {
+        [[nodiscard]] const Path& GetDirectory() const {
             return _directory;
         }
 
     private:
         void LoadPreferences();
         void LoadHotkeys();
-        bool Save(const std::filesystem::path& path, const Json& content, bool& unreadable);
+        bool Save(const Path& path, const Json& content, bool& unreadable);
 
-        std::filesystem::path _directory;
+        Path _directory;
         EditorPreferences _preferences;
         HotkeyMap _hotkeys;
         String _lastSaveError;

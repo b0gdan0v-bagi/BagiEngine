@@ -1,6 +1,7 @@
 #include "EditorLayoutWidget.h"
 
 #include <BECore/Control/ControlService.h>
+#include <BECore/File/File.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -24,13 +25,13 @@ namespace BECore {
 
         /// Where the search for the engine's repository starts: the folder above the lowest layer of the `config` mount (the engine's own
         /// content), else the working directory
-        std::filesystem::path BranchSearchStart() {
+        Path BranchSearchStart() {
             const auto layers = CoreManager::GetFileSystem().GetMountLayers(MountPoints::config);
             if (!layers.empty() && !layers.front().Parent().Empty()) {
                 return layers.front().Parent();
             }
-            std::error_code error;
-            return std::filesystem::current_path(error);
+            const std::expected<String, String> current = CurrentDirectory();
+            return current ? Path(*current) : Path();
         }
 
         /// Moves the cursor back over the gap ImGui leaves after an item, so the bars and the dock space touch
@@ -48,8 +49,8 @@ namespace BECore {
     }
 
     bool EditorLayoutWidget::Initialize(IDeserializer& /*deserializer*/) {
-        const std::filesystem::path userDirectory = EditorUserDirectory();
-        if (userDirectory.empty()) {
+        const Path userDirectory = EditorUserDirectory();
+        if (userDirectory.Empty()) {
             LOG_WARNING("Editor: there is no per-user folder, so preferences, hotkeys and layouts are not stored");
         } else {
             _layouts.emplace(userDirectory);

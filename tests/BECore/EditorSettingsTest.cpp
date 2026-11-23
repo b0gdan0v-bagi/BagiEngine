@@ -177,6 +177,31 @@ namespace BECore::Tests {
         EXPECT_EQ(ReadFile("preferences.json.bad"), "kept");
     }
 
+    TEST_F(EditorSettingsTest, SettingsRoundTripUnderANonAsciiFolder) {
+        const std::filesystem::path folder = _directory / "caf\xC3\xA9";
+        EditorSettings settings(folder);
+        EditorPreferences preferences;
+        preferences.fontScale = 1.25f;
+        settings.SetPreferences(preferences);
+        ASSERT_TRUE(settings.SavePreferences());
+        ASSERT_TRUE(settings.SaveHotkeys());
+        EXPECT_TRUE(std::filesystem::exists(folder / "preferences.json"));
+
+        EditorSettings loaded(folder);
+        loaded.Load();
+        EXPECT_FLOAT_EQ(loaded.GetPreferences().fontScale, 1.25f);
+    }
+
+    TEST_F(EditorSettingsTest, AnUnreadableFileUnderANonAsciiFolderIsMovedAsideOnTheFirstSave) {
+        const std::filesystem::path folder = _directory / "caf\xC3\xA9";
+        const String garbage = "{ this is not json";
+        Tests::WriteFile(folder / "preferences.json", garbage);
+        EditorSettings settings(folder);
+        settings.Load();
+        ASSERT_TRUE(settings.SavePreferences());
+        EXPECT_EQ(Tests::ReadFile(folder / "preferences.json.bad"), garbage);
+    }
+
     TEST_F(EditorSettingsTest, AValueOfTheWrongTypeGivesTheDefaultOfThatFieldOnly) {
         WriteFile("preferences.json", R"({"fontScale":"big","viewportGrid":true,"viewportGridStep":1.5})");
         EditorSettings settings(_directory);
@@ -631,7 +656,7 @@ namespace BECore::Tests {
 #else
         ASSERT_EQ(setenv(kEditorDirectoryEnvironmentVariable, value.c_str(), 1), 0);
 #endif
-        EXPECT_EQ(EditorUserDirectory(), _directory);
+        EXPECT_EQ(EditorUserDirectory(), Path(_directory));
     }
 
 }  // namespace BECore::Tests
