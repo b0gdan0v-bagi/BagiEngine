@@ -11,6 +11,7 @@
 #include <Games/GameControl.h>
 #include <Games/GameManager.h>
 #include <Games/IControllableGame.h>
+#include <Games/ReplayAnswers.h>
 #include <Games/ReplayPlayer.h>
 #include <Games/SessionRecorder.h>
 
@@ -47,10 +48,10 @@ namespace BECore {
                 return;
             }
 
-            Json result = Json::object();
-            result["path"] = MakeJsonString(*path);
-            result["game"] = MakeJsonString(game->GetName().ToStringView());
-            call.Reply(std::move(result));
+            ReplayRecordStartAnswer answer;
+            answer.game = game->GetName();
+            answer.path = *path;
+            call.ReplyObject(answer);
         }
 
         void HandleRecordStop(ControlCall& call) {
@@ -59,9 +60,9 @@ namespace BECore {
                 call.Fail(ControlErrors::kInvalidParams, "no recording is running");
                 return;
             }
-            Json result = Json::object();
-            result["entries"] = recorder.Stop();
-            call.Reply(std::move(result));
+            ReplayRecordStopAnswer answer;
+            answer.entries = recorder.Stop();
+            call.ReplyObject(answer);
         }
 
         /**
@@ -78,15 +79,17 @@ namespace BECore {
             size_t applied = 0;            ///< Entries applied so far
         };
 
-        /// {ok, entries, frames, mismatch?} and the clock of `step`. A DOM for now: the mismatch is one (`ReplayMismatchJson`); the clock goes through a `JsonSerializer`
-        /// of `ControlClock` until the replay answer is a struct that derives it
+        /// The answer of `replay`: the counts and the clock of `step` come from the reflected `ReplayAnswer`; the `mismatch` is added to its document by hand because it
+        /// embeds documents of the game (the params of the entry, the expected and the actual outcome) between its own keys
         Json DescribeReplay(const ReplayRunState& state, const ReplayMismatch* mismatch) {
-            JsonSerializer clock;
-            ControlClock::Read().Serialize(clock);
-            Json result = clock.Take();
-            result["ok"] = mismatch == nullptr;
-            result["entries"] = state.applied;
-            result["frames"] = state.frames;
+            ReplayAnswer answer;
+            static_cast<ControlClock&>(answer) = ControlClock::Read();
+            answer.ok = mismatch == nullptr;
+            answer.entries = state.applied;
+            answer.frames = state.frames;
+            JsonSerializer serializer;
+            answer.Serialize(serializer);
+            Json result = serializer.Take();
             if (mismatch != nullptr) {
                 result["mismatch"] = ReplayMismatchJson(*mismatch);
             }
