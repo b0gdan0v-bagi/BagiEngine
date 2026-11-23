@@ -5,7 +5,10 @@
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/FrameStats/FrameStatsText.h>
+#include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/ProfilerToggle.h>
+#include <BECore/Profiler/Ring/FrameRingBackend.h>
+#include <BECore/Profiler/Ring/RingPause.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
@@ -24,7 +27,7 @@ namespace BECore {
         constexpr Color kSlowBar{230, 90, 70, 255};
         constexpr Color kBudgetLine{255, 255, 255, 120};
         constexpr size_t kBars = 120;
-        constexpr size_t kTextCapacity = 1024;  // the overlay's lines, so the text grows once
+        constexpr size_t kTextCapacity = 2048;  // the overlay's lines, so the text grows once
         constexpr float kBarWidth = 3.0f;
         constexpr float kBarsHeight = 48.0f;
         constexpr float kBudgetLineHeight = 1.0f;
@@ -32,15 +35,37 @@ namespace BECore {
 
     }  // namespace
 
+    ProfilerOverlayWidget::~ProfilerOverlayWidget() {
+        // A widget destroyed by a mode switch while visible must not leave the ring recording
+        if (_ringRequested) {
+            Profiler::SetRingEnabled(false);
+        }
+    }
+
     bool ProfilerOverlayWidget::Initialize(IDeserializer& /*deserializer*/) {
         Subscribe<SDLEvents::SDLEventWrapper, &ProfilerOverlayWidget::OnSDLEvent>(this);
+        SyncRing();  // shown from the start
         return true;
+    }
+
+    void ProfilerOverlayWidget::SyncRing() {
+        const bool wanted = kProfilerViewsBuilt && BE_PROFILER != 0 && _visible;
+        if (wanted == _ringRequested) {
+            return;
+        }
+        Profiler::SetRingEnabled(wanted);
+        _ringRequested = wanted;
+        if (wanted) {
+            _framesSinceRefresh = kZoneRefreshFrames;
+            _rows.clear();
+            _windowFrames = 0;
+        }
     }
 
     void ProfilerOverlayWidget::OnSDLEvent(const SDLEvents::SDLEventWrapper& event) {
         const SDL_KeyboardEvent& key = event.event.key;
         if (kProfilerViewsBuilt && event.event.type == SDL_EVENT_KEY_DOWN && IsProfilerToggle(key.key, key.mod, key.repeat)) {
-            _visible = !_visible;
+            SetVisible(!_visible);
         }
     }
 
@@ -49,7 +74,6 @@ namespace BECore {
     void ProfilerOverlayWidget::Draw() {}
 
     void ProfilerOverlayWidget::DrawScreen() {
-        BE_PROFILE_SCOPE("ProfilerOverlay::DrawScreen");
         const IntrusivePtr<IRenderer>& renderer = CoreManager::GetRenderer();
         if (kProfilerViewsBuilt && _visible && renderer) {
             DrawOverlay(*renderer);
@@ -70,6 +94,32 @@ namespace BECore {
         return _font ? _font.Get() : nullptr;
     }
 
+    void ProfilerOverlayWidget::RefreshZones() {
+        _framesSinceRefresh = 0;
+        if constexpr (BE_PROFILER != 0) {
+            Profiler::GetFrameRing().Snapshot(_snapshot);
+            if (_snapshot.frames.empty()) {
+                _rows.clear();
+                _windowFrames = 0;
+                return;
+            }
+            const uint64_t newest = _snapshot.frames.back().index;
+            const uint64_t first = newest >= kZoneWindowFrames - 1 ? newest - (kZoneWindowFrames - 1) : 0;
+            ComputeZoneStats(_snapshot, first, newest, _rows);
+            _windowFrames = static_cast<uint32_t>(eastl::min<size_t>(_snapshot.frames.size(), kZoneWindowFrames));
+        }
+    }
+
+    void ProfilerOverlayWidget::EmitLines(const FrameStats& last, FunctionRef<void(StringView)> emit) const {
+        FormatOverlayLinesTo(last, AllocTracker::GetTotals(), AllocTracker::kEnabled, emit);
+        if constexpr (BE_PROFILER != 0) {
+            char title[kOverlayLineCapacity];
+            const FormatResult written = FormatToN(title, kOverlayLineCapacity, "Top zones by self time (per frame, last {})", kZoneWindowFrames);
+            emit(StringView(title, eastl::min(written.size, kOverlayLineCapacity)));
+            FormatTopZoneLinesTo(_rows, _windowFrames, kTopZoneCount, kProfilerOverlayZone, emit);
+        }
+    }
+
     void ProfilerOverlayWidget::DrawOverlay(IRenderer& renderer) {
         const FrameStats* last = CoreManager::GetFrameStats().GetLast();
         if (last == nullptr) {
@@ -78,6 +128,13 @@ namespace BECore {
         // The overlay's own draws and allocations (text, layout, lines) are not what the frame statistics should show
         const ScopedAllocCountersPause allocPause;
         const ScopedRenderCountersPause pause(renderer);
+        // The one zone of the overlay's cost that the ring records; what runs inside it (text layout, the glyph atlas, the zone statistics)
+        // is paused, so it is a block on the timeline and not many small zones in the numbers the overlay prints
+        BE_PROFILE_SCOPE(kProfilerOverlayZone);
+        const ScopedRingPause ringPause;
+        if (_ringRequested && ++_framesSinceRefresh >= kZoneRefreshFrames) {
+            RefreshZones();
+        }
         // Output pixels: the scene leaves its own view transform behind
         const ViewTransform sceneView = renderer.GetViewTransform();
         renderer.SetViewTransform(ViewTransform{});
@@ -85,7 +142,7 @@ namespace BECore {
         const ScratchScope scratch;
         ArenaString text;
         text.reserve(kTextCapacity);
-        FormatOverlayLinesTo(*last, AllocTracker::GetTotals(), AllocTracker::kEnabled, [&text](StringView line) {
+        EmitLines(*last, [&text](StringView line) {
             text.append(line.data(), line.size());
             text.push_back('\n');
         });

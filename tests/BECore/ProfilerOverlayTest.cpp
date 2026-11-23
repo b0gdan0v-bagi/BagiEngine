@@ -2,13 +2,16 @@
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/FrameStats/FrameStatsText.h>
+#include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/ProfilerToggle.h>
 #include <BECore/Renderer/RendererManager.h>
 #include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/ProfilerTestSupport.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/TestText.h>
 #include <Widgets/ProfilerOverlayWidget.h>
+#include <chrono>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -23,6 +26,30 @@ namespace BECore::Tests {
         uint64_t g_clockNanoseconds = 0;
         uint64_t SteadyClock() {
             return g_clockNanoseconds;
+        }
+
+        constexpr ProfileSite kBusySite{"Overlay test busy zone", "Test", "ProfilerOverlayTest.cpp", 1, 0};
+        constexpr ProfileSite kQuickSite{"Overlay test quick zone", "Test", "ProfilerOverlayTest.cpp", 2, 0};
+        constexpr std::chrono::milliseconds kBusyTime{20};  // far above a zone that does nothing, so the order holds on a loaded machine
+
+        void SpinFor(std::chrono::milliseconds duration) {
+            const auto until = std::chrono::steady_clock::now() + duration;
+            while (std::chrono::steady_clock::now() < until) {
+            }
+        }
+
+        /// Frames of the process's ring with one busy and one quick zone each; each frame ends with a mark
+        void FeedRing(int frames) {
+            for (int i = 0; i < frames; ++i) {
+                {
+                    const ProfileZone busy(kBusySite);
+                    SpinFor(kBusyTime);
+                }
+                {
+                    const ProfileZone quick(kQuickSite);
+                }
+                Profiler::FrameMark();
+            }
         }
 
         FrameStats SampleFrame() {
@@ -161,7 +188,7 @@ namespace BECore::Tests {
         ProfilerOverlayWidget overlay;
         overlay.SetVisible(true);
         const uint64_t before = AllocTracker::GetThreadCounters().count;
-        for (int frame = 0; frame < 4; ++frame) {
+        for (uint32_t frame = 0; frame < ProfilerOverlayWidget::kZoneRefreshFrames + 2; ++frame) {  // a refresh of the zones included
             overlay.DrawScreen();
         }
         EXPECT_GT(_renderer->calls.size(), 0u);
@@ -209,6 +236,110 @@ namespace BECore::Tests {
         overlay.DrawScreen();
         collector.SetClock(nullptr);
         EXPECT_EQ(_renderer->calls.size(), firstCount);
+    }
+
+    TEST_F(ProfilerOverlayWidgetTest, TheRingRunsOnlyWhileTheOverlayIsVisible) {
+        if constexpr (BE_PROFILER == 0) {
+            GTEST_SKIP() << "the ring is the overlay's zone source only in a build with the profiler";
+        }
+        const ProfilerStateGuard guard;
+        {
+            ProfilerOverlayWidget overlay;
+            EXPECT_FALSE(Profiler::IsRingEnabled());
+            overlay.SetVisible(true);
+            EXPECT_TRUE(Profiler::IsRingEnabled());
+            overlay.SetVisible(false);
+            EXPECT_FALSE(Profiler::IsRingEnabled());
+            overlay.SetVisible(true);
+            EXPECT_TRUE(Profiler::IsRingEnabled());
+        }
+        EXPECT_FALSE(Profiler::IsRingEnabled());  // destroyed while visible
+    }
+
+    TEST_F(ProfilerOverlayWidgetTest, TheTopZonesAreInSelfTimeOrderAndLeaveOutTheOverlaysOwnZone) {
+        if constexpr (BE_PROFILER == 0) {
+            GTEST_SKIP() << "the overlay has no zones without the profiler";
+        }
+        const ProfilerStateGuard guard;
+        ProfilerOverlayWidget overlay;
+        overlay.SetVisible(true);
+        FeedRing(3);
+        overlay.DrawScreen();  // its zone is in the ring once the frame is marked
+        Profiler::FrameMark();
+        overlay.RefreshZones();
+
+        size_t overlayZones = 0;
+        for (const RingThread& thread : Profiler::GetFrameRing().Snapshot().threads) {
+            for (const ZoneRecord& zone : thread.zones) {
+                overlayZones += StringView(zone.site->name) == kProfilerOverlayZone ? 1 : 0;
+            }
+        }
+        ASSERT_GT(overlayZones, 0u);
+
+        Vector<String> lines;
+        overlay.EmitLines(*CoreManager::GetFrameStats().GetLast(), [&lines](StringView line) { lines.push_back(String(line.data(), line.size())); });
+        const auto indexOf = [&lines](StringView part) {
+            for (size_t i = 0; i < lines.size(); ++i) {
+                if (Contains(lines[i], part)) {
+                    return i;
+                }
+            }
+            return lines.size();
+        };
+        EXPECT_NE(indexOf("Top zones by self time"), lines.size());
+        const size_t busy = indexOf("Overlay test busy zone");
+        const size_t quick = indexOf("Overlay test quick zone");
+        ASSERT_NE(busy, lines.size());
+        ASSERT_NE(quick, lines.size());
+        EXPECT_LT(busy, quick);
+        EXPECT_EQ(indexOf(kProfilerOverlayZone), lines.size());
+    }
+
+    TEST_F(ProfilerOverlayWidgetTest, ADrawLeavesTheOuterZoneInTheRingAndNoneOfTheZonesInsideIt) {
+        if constexpr (BE_PROFILER == 0) {
+            GTEST_SKIP() << "the ring has no zones without the profiler";
+        }
+        const ProfilerStateGuard guard;
+        ProfilerOverlayWidget overlay;
+        overlay.SetVisible(true);
+        overlay.DrawScreen();  // the first draw loads the font and builds the atlas: zones that must not be recorded
+
+        size_t overlayZones = 0;
+        for (const RingThread& thread : Profiler::GetFrameRing().Snapshot().threads) {
+            for (const ZoneRecord& outer : thread.zones) {
+                if (StringView(outer.site->name) != kProfilerOverlayZone) {
+                    continue;
+                }
+                ++overlayZones;
+                for (const ZoneRecord& zone : thread.zones) {
+                    const bool inside = zone.beginTicks >= outer.beginTicks && zone.endTicks <= outer.endTicks && &zone != &outer;
+                    EXPECT_FALSE(inside) << zone.site->name << " was recorded inside the overlay zone";
+                }
+            }
+        }
+        EXPECT_EQ(overlayZones, 1u);
+    }
+
+    TEST_F(ProfilerOverlayWidgetTest, TheZonesAreReadOnceInKZoneRefreshFrames) {
+        if constexpr (BE_PROFILER == 0) {
+            GTEST_SKIP() << "the overlay has no zones without the profiler";
+        }
+        const ProfilerStateGuard guard;
+        ProfilerOverlayWidget overlay;
+        overlay.SetVisible(true);
+        overlay.DrawScreen();  // reads the (empty) ring at once
+        FeedRing(2);
+        const auto zoneLines = [&overlay] {
+            size_t count = 0;
+            overlay.EmitLines(*CoreManager::GetFrameStats().GetLast(), [&count](StringView line) { count += Contains(line, "Overlay test") ? 1 : 0; });
+            return count;
+        };
+        for (uint32_t frame = 1; frame < ProfilerOverlayWidget::kZoneRefreshFrames; ++frame) {
+            overlay.DrawScreen();
+            ASSERT_EQ(zoneLines(), 0u) << "frame " << frame << " read the ring before its time";
+        }
+        overlay.DrawScreen();
+        EXPECT_EQ(zoneLines(), 2u);
     }
 
     TEST_F(ProfilerOverlayWidgetTest, AHiddenOverlayDrawsNothing) {
