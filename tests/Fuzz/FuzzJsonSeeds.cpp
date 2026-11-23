@@ -1,5 +1,6 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Control/JsonSerializer.h>
+#include <BECore/Reflection/ReaderLimits.h>
 #include <Fuzz/FuzzProbeAccess.h>
 #include <Fuzz/FuzzSeeds.h>
 
@@ -14,6 +15,9 @@ namespace BECore::Fuzz {
 
         /// Depth of the nesting seed that the target refuses before it parses
         constexpr size_t kTooDeepLevels = 400;
+
+        /// Levels of a tree whose JSON is exactly as deep as the tape accepts (ReaderLimits::kMaxJsonNesting): deeper than the DOM path takes
+        constexpr size_t kLevelsAtTheTapeLimit = (ReaderLimits::kMaxJsonNesting - 2) / 2;
 
         template <typename T>
         Json SavedJson(const T& value) {
@@ -81,6 +85,24 @@ namespace BECore::Fuzz {
             seeds.push_back({kJsonFolder, name, TextBytes(DumpJson(document))});
         }
 
+        /// A document written by hand: the tape reads text the DOM would write differently (escapes, key order, repeated keys, numbers past the types)
+        void AddText(Vector<FuzzSeedFile>& seeds, const char* name, StringView text) {
+            seeds.push_back({kJsonFolder, name, TextBytes(text)});
+        }
+
+        /// A tree of ProbeNode @p levels levels deep, written as text: two levels of JSON for each, and an empty list at the bottom
+        String NestedTreeText(size_t levels) {
+            String text;
+            for (size_t level = 0; level < levels; ++level) {
+                text += R"({"id":1,"children":[)";
+            }
+            text += R"({"id":1,"children":[]})";
+            for (size_t level = 0; level < levels; ++level) {
+                text += "]}";
+            }
+            return text;
+        }
+
     }  // namespace
 
     void AddJsonSeeds(Vector<FuzzSeedFile>& seeds) {
@@ -104,6 +126,20 @@ namespace BECore::Fuzz {
         String tooDeep(kTooDeepLevels + 1, '[');
         tooDeep.append(kTooDeepLevels + 1, ']');
         seeds.push_back({kJsonFolder, "too-deep.json", TextBytes(tooDeep)});
+
+        AddText(seeds, "text-escapes.json", R"({"text":"a\"b\\c\/\b\f\n\r\t\u00e9\u0000z","name":"x\u0041y","fl\u0061g":true,"i\u0033\u0032":7})");
+        AddText(seeds, "text-surrogate-pair.json", R"({"text":"\ud83d\ude00 \u20ac","words":["\ud83d\ude00"]})");
+        AddText(seeds, "text-lone-surrogate.json", R"({"text":"\ud83d","words":["\ude00"]})");
+        AddText(seeds, "text-big-numbers.json", R"({"i64":9223372036854775808,"u64":18446744073709551616,"i32":123456789012345678901234567890,"f32":-1e-999,"f64":1.5e300,"u8":-0})");
+        AddText(seeds, "text-overflowing-number.json", R"({"f64":1e999,"leaf":{"weight":-1e400}})");
+        AddText(seeds, "text-empty-containers.json", R"({"leaf":{},"leaves":[],"numbers":[],"words":[],"tree":{"children":[]}})");
+        AddText(
+            seeds, "text-key-order.json",
+            R"({"words":["b","a"],"tree":{"id":2,"children":[]},"text":"x","numbers":[3,2,1],"name":"n","mode":"Off","leaves":[{"label":"l","id":5}],"leaf":{"weight":0.5,"id":1},"i32":-1,"flag":true})");
+        AddText(seeds, "text-repeated-key.json", R"({"i32":1,"i32":2,"leaf":{"id":1},"leaf":{"id":2},"flg":true})");
+        AddText(seeds, "text-byte-order-mark.json", "\xEF\xBB\xBF{\"flag\":true}");
+        AddText(seeds, "text-nul-after-document.json", String("{\"flag\":true}\0garbage", 21));
+        seeds.push_back({kJsonFolder, "nest-at-the-tape-limit.json", TextBytes(NestedTreeText(kLevelsAtTheTapeLimit))});
 
         Add(seeds, "call-scalars.json", ScalarsArguments());
         Add(seeds, "call-echo.json", Json::object({{"text", "hello"}, {"mode", "Auto"}}));
