@@ -22,7 +22,7 @@ namespace BECore {
         return false;
     }
 
-    const Vector<IntrusivePtr<SceneNode>>& SceneNode::GetChildren() const {
+    const SceneNode::ChildList& SceneNode::GetChildren() const {
         return _children;
     }
 
@@ -142,7 +142,7 @@ namespace BECore {
         return _entity;
     }
 
-    const Vector<IntrusivePtr<IComponent>>& SceneNode::GetComponents() const {
+    const SceneNode::ComponentList& SceneNode::GetComponents() const {
         return _components;
     }
 
