@@ -1102,6 +1102,36 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonInt((Require(FindJsonMember(state, "sets")))[0], "accepted"), Optional<int64_t>(3));
     }
 
+    TEST_F(ArtGenSetSessionTest, ASetOfAGameWhoseRootHasANonAsciiNameKeepsRelativeFilesAndAcceptsAll) {
+        const std::filesystem::path parent = _root;
+        _root = parent / "caf\xC3\xA9 game";
+        session.SetGameRoot(PathText(_root));
+        ASSERT_TRUE(Enqueue("pieces", "rook: a rook\nknight: a knight").has_value());
+        ASSERT_TRUE(std::filesystem::exists(_root / "artgen" / "out" / "pieces" / "manifest.json"));
+
+        RunAndPickAll("pieces");
+        {
+            const ArtGenSet disk = OnDisk("pieces");
+            ASSERT_EQ(disk.jobs[0].variants.size(), 2u);
+            EXPECT_EQ(disk.jobs[0].variants[1].file, "rook/rook_41.png") << "relative to the set folder, whatever the root's name";
+            EXPECT_EQ(disk.jobs[0].variants[1].provenance, "rook/rook_41.artgen.json");
+        }
+
+        ASSERT_NO_FATAL_FAILURE(MakeFiles("pieces"));
+        Json params = Json::object();
+        params["set"] = "pieces";
+        const Json answer = Result(Call("artgen_accept_set", params));
+        const Json* accepted = FindJsonMember(answer, "accepted");
+        ASSERT_NE(accepted, nullptr) << DumpJson(answer).c_str();
+        EXPECT_EQ(accepted->size(), 2u);
+        ASSERT_EQ(gAccepted.size(), 2u);
+        EXPECT_EQ(gAccepted[0].path, Format("{}/artgen/out/pieces/rook/rook_41.png", PathText(_root)));
+
+        ReloadFromDisk();
+        EXPECT_NE(session.FindSet("pieces"), nullptr);
+        std::filesystem::remove_all(parent);
+    }
+
     TEST_F(ArtGenSetSessionTest, AcceptAllRefusesASetThatIsNotReadyAndChangesNothing) {
         ASSERT_TRUE(Enqueue("gaps", "a\nb\nc\nd").has_value());
         Json params = Json::object();

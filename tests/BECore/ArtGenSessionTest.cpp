@@ -605,6 +605,25 @@ namespace BECore::Tests {
         std::filesystem::remove_all(root);
     }
 
+    TEST_F(ArtGenSessionTest, SaveIntoAGameWhoseRootHasANonAsciiNameWritesTheFile) {
+        const std::filesystem::path parent = TestTempDirectory("artgen_save_utf8");
+        std::filesystem::remove_all(parent);
+        const std::filesystem::path root = parent / "caf\xC3\xA9 game";
+        const std::string rootText = root.generic_string();  //-NoStd: std::filesystem gives a std::string
+        session.SetGameRoot(FromStd(rootText));
+        Call("artgen_poll", CatalogPoll());
+
+        Json params = Object();
+        params["name"] = "mine";
+        params["preset"] = DraftPreset();
+        const Json saved = Call("artgen_save_preset", params);
+        const auto path = GetJsonString(Result(saved), "path");
+        ASSERT_TRUE(path.has_value()) << DumpJson(saved).c_str();
+        EXPECT_EQ(*path, Format("{}/artgen/presets/mine.json", FromStd(rootText)));
+        EXPECT_TRUE(ReadTextFile(*path).has_value());
+        std::filesystem::remove_all(parent);
+    }
+
     TEST_F(ArtGenSessionTest, SaveRefusesABadNameOrAShapeThatIsNotAPreset) {
         EXPECT_FALSE(session.SavePreset("../escape", DraftPreset()).has_value());
         EXPECT_FALSE(session.SavePreset("", DraftPreset()).has_value());
