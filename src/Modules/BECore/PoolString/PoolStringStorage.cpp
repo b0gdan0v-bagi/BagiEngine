@@ -338,6 +338,9 @@ namespace BECore::Details {
             if (entryBytes > remaining) {
                 return std::unexpected(PoolAdoptError::TruncatedEntry);
             }
+            if (size > options.maxTextBytes) {
+                return std::unexpected(PoolAdoptError::TextTooLong);
+            }
             if (base[offset + kHeaderBytes + size] != '\0') {
                 return std::unexpected(PoolAdoptError::MissingNul);
             }

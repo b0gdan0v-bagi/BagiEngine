@@ -59,6 +59,11 @@ namespace BECore {
         /// Check `hash == StringUtils::GetHash(text)` of every entry. Turn it off only for bytes that were checked before
         /// (a cook's output the build verified): a wrong hash puts the text where a lookup of it never looks.
         bool verifyHashes = true;
+
+        /// The longest text an entry may have; an entry above it refuses the whole block (`PoolAdoptError::TextTooLong`)
+        /// before anything is linked. A loader of untrusted bytes passes its own limit, so a size field cannot put a huge
+        /// string in a pool that never frees. The default has no limit.
+        size_t maxTextBytes = SIZE_MAX;
     };
 
     /// Why `PoolString::AdoptBlock` refused a block; the enumerators and `EnumUtils` are in `PoolBlock.h` (a `CORE_ENUM`
