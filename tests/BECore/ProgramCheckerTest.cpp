@@ -12,10 +12,13 @@
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <BECore/Values/ValueTables.h>
 #include <Common/Printers.h>
+#include <Common/ScratchScopeFixture.h>
 #include <Common/TestText.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
+
+    using ProgramCheckerTest = ScratchScopeFixture;
 
     using namespace ValueTestData;
 
@@ -163,7 +166,7 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(ProgramCheckerTest, ATypedTreeIsInPostOrderWithTheSlotsAndConstantsOfTheFormula) {
+    TEST_F(ProgramCheckerTest, ATypedTreeIsInPostOrderWithTheSlotsAndConstantsOfTheFormula) {
         const CheckerContext context;
         const TypedExpr expr = Accepted(context.declaration, "caster.attack * (100 + cast.level * 10) / 100", ProgramType::Int32);
         // The operands that read the context are checked first, so `cast.level * 10` comes before the `100` beside it
@@ -189,7 +192,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ProgramCheckerTest, ASlotIsLinkedLikeLinkSlotLinksIt) {
+    TEST_F(ProgramCheckerTest, ASlotIsLinkedLikeLinkSlotLinksIt) {
         const CheckerContext context;
         const TypedExpr expr = Accepted(context.declaration, "caster.span.low", ProgramType::Int32);
         ASSERT_EQ(expr.nodes.size(), 1U);
@@ -207,7 +210,7 @@ namespace BECore::Tests {
 
     // Literals
 
-    TEST(ProgramCheckerTest, AnIntegerLiteralTakesTheTypeOfTheOperandBesideIt) {
+    TEST_F(ProgramCheckerTest, AnIntegerLiteralTakesTheTypeOfTheOperandBesideIt) {
         const CheckerContext context;
         for (const TypeRow& row : kTypeRows) {
             if (row.type == ProgramType::Bool) {
@@ -236,7 +239,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ConstantOf<float>(left[1]), 12.0f) << "the side the literal is on does not matter";
     }
 
-    TEST(ProgramCheckerTest, AFloatLiteralIsFloatOrDoubleAndRefusedBesideAnInteger) {
+    TEST_F(ProgramCheckerTest, AFloatLiteralIsFloatOrDoubleAndRefusedBesideAnInteger) {
         const CheckerContext context;
         EXPECT_EQ(ConstantOf<float>(Accepted(context.declaration, "caster.speed + 1.5", ProgramType::Float)[1]), 1.5f);
         EXPECT_EQ(ConstantOf<double>(Accepted(context.declaration, "caster.precise + 1.5", ProgramType::Double)[1]), 1.5);
@@ -248,7 +251,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "1e999", ProgramType::Double, 1, {"out of the range of a double"});
     }
 
-    TEST(ProgramCheckerTest, ALiteralAloneTakesTheExpectedType) {
+    TEST_F(ProgramCheckerTest, ALiteralAloneTakesTheExpectedType) {
         const CheckerContext context;
         EXPECT_EQ(ConstantOf<int32_t>(Accepted(context.declaration, "5", ProgramType::Int32)[0]), 5);
         EXPECT_EQ(ConstantOf<int64_t>(Accepted(context.declaration, "5", ProgramType::Int64)[0]), 5);
@@ -267,7 +270,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ConstantOf<double>(Accepted(context.declaration, "3000000000", ProgramType::Double)[0]), 3000000000.0);
     }
 
-    TEST(ProgramCheckerTest, AnIntegerLiteralWithoutAnyTypeIsInt32UnlessItDoesNotFit) {
+    TEST_F(ProgramCheckerTest, AnIntegerLiteralWithoutAnyTypeIsInt32UnlessItDoesNotFit) {
         const CheckerContext context;
         // `1 < 2` has no operand that says a type and no expected number: the literals are what they spell
         const TypedExpr small = Accepted(context.declaration, "2147483647 < 2147483647", ProgramType::Bool);
@@ -281,7 +284,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ConstantOf<float>(floats[1]), 2.5f);
     }
 
-    TEST(ProgramCheckerTest, TheRangesOfIntegerLiteralsAreChecked) {
+    TEST_F(ProgramCheckerTest, TheRangesOfIntegerLiteralsAreChecked) {
         const CheckerContext context;
         EXPECT_EQ(ConstantOf<int32_t>(Accepted(context.declaration, "-2147483648", ProgramType::Int32)[0]), std::numeric_limits<int32_t>::min());
         EXPECT_EQ(ConstantOf<int32_t>(Accepted(context.declaration, "2147483647", ProgramType::Int32)[0]), std::numeric_limits<int32_t>::max());
@@ -293,7 +296,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "99999999999999999999", ProgramType::Int64, 1, {"does not fit an int64"});
     }
 
-    TEST(ProgramCheckerTest, ASignedLiteralIsOneConstant) {
+    TEST_F(ProgramCheckerTest, ASignedLiteralIsOneConstant) {
         const CheckerContext context;
         const TypedExpr negative = Accepted(context.declaration, "-5", ProgramType::Int32);
         ASSERT_EQ(negative.nodes.size(), 1U);
@@ -304,7 +307,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ConstantOf<float>(beside[1]), -2.0f);
     }
 
-    TEST(ProgramCheckerTest, AConstantSubtreeFollowsTheOperandThatReadsTheContext) {
+    TEST_F(ProgramCheckerTest, AConstantSubtreeFollowsTheOperandThatReadsTheContext) {
         const CheckerContext context;
         const TypedExpr expr = Accepted(context.declaration, "(2 * 3) * caster.speed", ProgramType::Float);
         EXPECT_EQ(expr[0].kind, TypedNodeKind::Slot);
@@ -319,7 +322,7 @@ namespace BECore::Tests {
 
     // Operators and functions
 
-    TEST(ProgramCheckerTest, EveryBinaryOperatorIsAcceptedForTheTypesThatHaveItAndRefusedForTheOthers) {
+    TEST_F(ProgramCheckerTest, EveryBinaryOperatorIsAcceptedForTheTypesThatHaveItAndRefusedForTheOthers) {
         const CheckerContext context;
         for (const ProgramOperation operation :
              {ProgramOperation::Add, ProgramOperation::Sub, ProgramOperation::Mul, ProgramOperation::Div, ProgramOperation::Mod, ProgramOperation::Eq, ProgramOperation::Ne, ProgramOperation::Lt,
@@ -342,7 +345,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ProgramCheckerTest, ARefusedOperatorListsTheTypesThatHaveIt) {
+    TEST_F(ProgramCheckerTest, ARefusedOperatorListsTheTypesThatHaveIt) {
         const CheckerContext context;
         Refused(context.declaration, "caster.speed % 2", ProgramType::Float, 14, {"'%'", "not defined for float", "int or int64"});
         Refused(context.declaration, "caster.alive + caster.alive", ProgramType::Bool, 14, {"'+'", "not defined for bool", "int, int64, float, double, vec2, vec3, vec4 or ivec2"});
@@ -350,7 +353,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "-caster.alive", ProgramType::Bool, 1, {"'-'", "not defined for bool"});
     }
 
-    TEST(ProgramCheckerTest, UnaryMinusAndNotTakeTheirOperandTypes) {
+    TEST_F(ProgramCheckerTest, UnaryMinusAndNotTakeTheirOperandTypes) {
         const CheckerContext context;
         for (const TypeRow& row : kTypeRows) {
             const String negated = Format("-{}", row.field);
@@ -368,7 +371,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ProgramCheckerTest, EveryFunctionIsAcceptedForTheTypesThatHaveItAndRefusedForTheOthers) {
+    TEST_F(ProgramCheckerTest, EveryFunctionIsAcceptedForTheTypesThatHaveItAndRefusedForTheOthers) {
         const CheckerContext context;
         for (const ExprFunction& function : kExprFunctions) {
             if (function.shape != ExprFunctionShape::SameType) {
@@ -392,7 +395,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ProgramCheckerTest, SelectTakesABoolAndTwoValuesOfOneType) {
+    TEST_F(ProgramCheckerTest, SelectTakesABoolAndTwoValuesOfOneType) {
         const CheckerContext context;
         for (const TypeRow& row : kTypeRows) {
             const String text = Format("select(caster.alive, {}, {})", row.field, row.field);
@@ -409,7 +412,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "select(caster.alive, caster.alive, 1)", ProgramType::Bool, 36, {"bool and int"});
     }
 
-    TEST(ProgramCheckerTest, AConversionIsAFunctionAndTheSameTypeIsNoOperation) {
+    TEST_F(ProgramCheckerTest, AConversionIsAFunctionAndTheSameTypeIsNoOperation) {
         const CheckerContext context;
         struct Row {
             StringView name;
@@ -433,7 +436,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ProgramCheckerTest, TheLiteralInAConversionIsReadAsWhatItSpells) {
+    TEST_F(ProgramCheckerTest, TheLiteralInAConversionIsReadAsWhatItSpells) {
         const CheckerContext context;
         const TypedExpr exact = Accepted(context.declaration, "float(0.1)", ProgramType::Float);
         EXPECT_EQ(Root(exact).opcode, Opcode::DoubleToFloat);
@@ -449,7 +452,7 @@ namespace BECore::Tests {
         Accepted(context.declaration, "caster.attack * int(caster.speed)", ProgramType::Int32);
     }
 
-    TEST(ProgramCheckerTest, TwoTypesAreAnErrorThatNamesBothAndSaysHowToConvert) {
+    TEST_F(ProgramCheckerTest, TwoTypesAreAnErrorThatNamesBothAndSaysHowToConvert) {
         const CheckerContext context;
         const String text = "caster.attack * caster.speed";
         const ProgramError error = Refused(context.declaration, text, ProgramType::Float, ColumnOf(text, "caster.speed"), {"'*'", "int and float", "no implicit conversion", "float(x)", "int(x)"});
@@ -461,7 +464,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "clamp(caster.speed, 0, caster.precise)", ProgramType::Float, 24, {"'clamp'", "float and double"});
     }
 
-    TEST(ProgramCheckerTest, TheResultMustBeExactlyTheExpectedType) {
+    TEST_F(ProgramCheckerTest, TheResultMustBeExactlyTheExpectedType) {
         const CheckerContext context;
         Refused(context.declaration, "caster.attack", ProgramType::Float, 1, {"the formula is an int", "value of float is asked for", "float(x)"});
         Refused(context.declaration, "caster.speed * 2", ProgramType::Double, 14, {"the formula is a float", "double"});
@@ -469,7 +472,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "caster.attack", ProgramType::Bool, 1, {"the formula is an int", "bool"});
     }
 
-    TEST(ProgramCheckerTest, AnExpectedTypeOutsideTheProgramTypesListsThem) {
+    TEST_F(ProgramCheckerTest, AnExpectedTypeOutsideTheProgramTypesListsThem) {
         const CheckerContext context;
         const auto parsed = ParseExpression("1");
         ASSERT_TRUE(parsed.has_value());
@@ -486,7 +489,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(CheckExpression(*parsed, context.declaration, DescribeType<Vector<int32_t>>()).has_value());
     }
 
-    TEST(ProgramCheckerTest, EveryProgramTypeAndEveryEnumIsAnExpectedType) {
+    TEST_F(ProgramCheckerTest, EveryProgramTypeAndEveryEnumIsAnExpectedType) {
         const TypeDesc* const descriptors[] = {&DescribeType<bool>(),  &DescribeType<int32_t>(),    &DescribeType<int64_t>(),      &DescribeType<float>(),        &DescribeType<double>(),
                                                &DescribeType<Vec2>(),  &DescribeType<Vec3>(),       &DescribeType<Vec4>(),         &DescribeType<IVec2>(),        &DescribeType<Quat>(),
                                                &DescribeType<Color>(), &DescribeType<PoolString>(), &DescribeType<ValueElement>(), &DescribeType<ValueWideEnum>()};
@@ -500,7 +503,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(CheckExpectedType(DescribeType<String>()).has_value()) << "a String is not a PoolString";
     }
 
-    TEST(ProgramCheckerTest, LogicNeedsBoolsOnBothSides) {
+    TEST_F(ProgramCheckerTest, LogicNeedsBoolsOnBothSides) {
         const CheckerContext context;
         Accepted(context.declaration, "caster.alive && cast.level > 2", ProgramType::Bool);
         Accepted(context.declaration, "caster.alive || !caster.alive", ProgramType::Bool);
@@ -511,7 +514,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "caster.speed && 1.5", ProgramType::Bool, 1, {"left one is a float"});
     }
 
-    TEST(ProgramCheckerTest, ADivisionOrModuloByALiteralZeroIsAnError) {
+    TEST_F(ProgramCheckerTest, ADivisionOrModuloByALiteralZeroIsAnError) {
         const CheckerContext context;
         Refused(context.declaration, "caster.attack / 0", ProgramType::Int32, 17, {"division by a literal zero"});
         Refused(context.declaration, "caster.attack % 0", ProgramType::Int32, 17, {"modulo by a literal zero"});
@@ -523,7 +526,7 @@ namespace BECore::Tests {
         Accepted(context.declaration, "caster.attack / cast.level", ProgramType::Int32);
     }
 
-    TEST(ProgramCheckerTest, ACallNeedsAKnownFunctionAndItsArguments) {
+    TEST_F(ProgramCheckerTest, ACallNeedsAKnownFunctionAndItsArguments) {
         const CheckerContext context;
         Refused(context.declaration, "min(caster.attack)", ProgramType::Int32, 1, {"'min' takes 2 arguments", "1 is given"});
         Refused(context.declaration, "abs(1, 2)", ProgramType::Int32, 1, {"'abs' takes 1 argument,", "2 are given"});
@@ -535,7 +538,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "caster.attack(1)", ProgramType::Int32, 1, {"unknown function 'caster.attack'"});
     }
 
-    TEST(ProgramCheckerTest, ANameThatIsNeitherALevelNorAFunctionIsUnknownAndListsWhatIsDeclared) {
+    TEST_F(ProgramCheckerTest, ANameThatIsNeitherALevelNorAFunctionIsUnknownAndListsWhatIsDeclared) {
         const CheckerContext context;
         Refused(context.declaration, "frob", ProgramType::Int32, 1, {"unknown name 'frob'", "declared levels are: caster, cast, behind", "functions are"});
         Refused(context.declaration, "1 + castr", ProgramType::Int32, 5, {"unknown name 'castr'", "did you mean 'caster'"});
@@ -547,7 +550,7 @@ namespace BECore::Tests {
         Refused(empty, "x", ProgramType::Int32, 1, {"declared levels are: none"});
     }
 
-    TEST(ProgramCheckerTest, APathThatLinkSlotRefusesKeepsItsMessageAndThePositionOfTheName) {
+    TEST_F(ProgramCheckerTest, APathThatLinkSlotRefusesKeepsItsMessageAndThePositionOfTheName) {
         const CheckerContext context;
         const String text = "1 + caster.attak";
         const ProgramError missing =
@@ -559,7 +562,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "behind.maybe", ProgramType::Int32, 1, {"behind.maybe", "optional"});
     }
 
-    TEST(ProgramCheckerTest, AFieldOfAnotherTypeIsNamedWithItsTypeAndWhatAFormulaReads) {
+    TEST_F(ProgramCheckerTest, AFieldOfAnotherTypeIsNamedWithItsTypeAndWhatAFormulaReads) {
         const CheckerContext context;
         Refused(context.declaration, "caster.count", ProgramType::Int32, 1, {"caster.count", "uint32", "int, int64, float, double, vec2, vec3, vec4, ivec2, quat, color, enum"});
         Refused(context.declaration, "caster.spawn.x + 1", ProgramType::Float, 1, {"caster.spawn.x"});
@@ -570,7 +573,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "behind.table", ProgramType::Int32, 1, {"map"});
     }
 
-    TEST(ProgramCheckerTest, AFieldOfAnyProgramTypeIsASlotTypedWithItAlone) {
+    TEST_F(ProgramCheckerTest, AFieldOfAnyProgramTypeIsASlotTypedWithItAlone) {
         const CheckerContext context;
         struct Row {
             ProgramType type;
@@ -583,7 +586,7 @@ namespace BECore::Tests {
             const TypedExpr expr = Accepted(context.declaration, row.path, row.type);
             ASSERT_EQ(expr.nodes.size(), 1U) << String(row.path).c_str();
             EXPECT_EQ(Root(expr).kind, TypedNodeKind::Slot);
-            EXPECT_EQ(Root(expr).path, String(row.path));
+            EXPECT_EQ(StringView(Root(expr).path), row.path);
             const auto linked = LinkSlot(context.declaration, row.path, DescriptorOf(row.type));
             ASSERT_TRUE(linked.has_value()) << String(row.path).c_str();
             EXPECT_EQ(Root(expr).slot.level, linked->level);
@@ -595,7 +598,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ProgramCheckerTest, AnEnumFieldIsASlotTypedWithItsOwnEnum) {
+    TEST_F(ProgramCheckerTest, AnEnumFieldIsASlotTypedWithItsOwnEnum) {
         const CheckerContext context;
         const TypedExpr element = AcceptedAs(context.declaration, "caster.element", DescribeType<ValueElement>());
         ASSERT_EQ(element.nodes.size(), 1U);
@@ -614,7 +617,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "caster.element", ProgramType::Int32, 1, {"the formula is an enum {Fire, Water, Earth}", "int"});
     }
 
-    TEST(ProgramCheckerTest, EqualityWorksForEveryTypeAndOrderingAndArithmeticOnlyWhereTheTypeHasThem) {
+    TEST_F(ProgramCheckerTest, EqualityWorksForEveryTypeAndOrderingAndArithmeticOnlyWhereTheTypeHasThem) {
         const CheckerContext context;
         const StringView fields[] = {"caster.position", "caster.cell", "caster.velocity", "caster.plane", "caster.facing", "caster.tint", "caster.title", "caster.element"};
         for (const StringView field : fields) {
@@ -643,7 +646,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "min(caster.position, caster.position)", ProgramType::Vec2, 1, {"'min'", "not defined for vec2"});
     }
 
-    TEST(ProgramCheckerTest, TwoTypesInOneOperatorAreNamedWithTheTypeOfTheEnumsToo) {
+    TEST_F(ProgramCheckerTest, TwoTypesInOneOperatorAreNamedWithTheTypeOfTheEnumsToo) {
         const CheckerContext context;
         Refused(context.declaration, "caster.velocity == caster.position", ProgramType::Bool, 20, {"vec3 and vec2", "no implicit conversion"});
         Refused(context.declaration, "caster.title == caster.element", ProgramType::Bool, 17, {"string and enum {Fire, Water, Earth}"});
@@ -654,7 +657,7 @@ namespace BECore::Tests {
         Accepted(context.declaration, "widths.narrow == widths.narrow", ProgramType::Bool);
     }
 
-    TEST(ProgramCheckerTest, ANameBesideAnEnumIsItsEnumerator) {
+    TEST_F(ProgramCheckerTest, ANameBesideAnEnumIsItsEnumerator) {
         const CheckerContext context;
         for (const StringView text : {"caster.element == Fire", "Fire == caster.element", "caster.element != Earth", "Water != caster.element"}) {
             const TypedExpr expr = Accepted(context.declaration, text, ProgramType::Bool);
@@ -683,7 +686,7 @@ namespace BECore::Tests {
         AcceptedAs(context.declaration, "select(caster.alive, Fire, caster.element) == Water", DescribeType<bool>());
     }
 
-    TEST(ProgramCheckerTest, AnEnumeratorThatIsNotThereListsTheEnumeratorsAndTheNearestName) {
+    TEST_F(ProgramCheckerTest, AnEnumeratorThatIsNotThereListsTheEnumeratorsAndTheNearestName) {
         const CheckerContext context;
         const String text = "caster.element == Fyre";
         Refused(context.declaration, text, ProgramType::Bool, ColumnOf(text, "Fyre"), {"unknown name 'Fyre'", "did you mean 'Fire'", "no enumerator of enum {Fire, Water, Earth}"});
@@ -692,7 +695,7 @@ namespace BECore::Tests {
         RefusedAs(context.declaration, "Cold", DescribeType<ValueElement>(), 1, {"'Cold'", "{Fire, Water, Earth}"});
     }
 
-    TEST(ProgramCheckerTest, ANameWithNoEnumBesideItKeepsTheUnknownNameErrorAndSaysWhatAnEnumeratorNeeds) {
+    TEST_F(ProgramCheckerTest, ANameWithNoEnumBesideItKeepsTheUnknownNameErrorAndSaysWhatAnEnumeratorNeeds) {
         const CheckerContext context;
         Refused(context.declaration, "Fire == Water", ProgramType::Bool, 1, {"unknown name 'Fire'", "declared levels are: caster, cast, behind, widths", "needs an enum beside it"});
         Refused(context.declaration, "caster.attack == Fire", ProgramType::Bool, 18, {"unknown name 'Fire'", "needs an enum beside it"});
@@ -700,7 +703,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "select(caster.alive, Fire, Water)", ProgramType::Int32, 22, {"unknown name 'Fire'"});
     }
 
-    TEST(ProgramCheckerTest, ALevelOrAFunctionWinsOverAnEnumeratorOfTheSameName) {
+    TEST_F(ProgramCheckerTest, ALevelOrAFunctionWinsOverAnEnumeratorOfTheSameName) {
         ContextDecl declaration;
         ASSERT_TRUE(declaration.Add<ValueUnitStats>("caster").has_value());
         ASSERT_TRUE(declaration.Add<ValueCastInfo>("Fire").has_value());
@@ -709,7 +712,7 @@ namespace BECore::Tests {
         Accepted(declaration, "Fire.level > 1", ProgramType::Bool);
     }
 
-    TEST(ProgramCheckerTest, AStringLiteralIsAStringConstantOfThePool) {
+    TEST_F(ProgramCheckerTest, AStringLiteralIsAStringConstantOfThePool) {
         const CheckerContext context;
         const TypedExpr alone = Accepted(context.declaration, "'burn'", ProgramType::String);
         ASSERT_EQ(alone.nodes.size(), 1U);
@@ -734,7 +737,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "float('a')", ProgramType::Float, 7, {"'float' converts a number", "a string"});
     }
 
-    TEST(ProgramCheckerTest, AFloatLiteralOfAFloatIsReadAsAFloatAndNotRoundedTwice) {
+    TEST_F(ProgramCheckerTest, AFloatLiteralOfAFloatIsReadAsAFloatAndNotRoundedTwice) {
         const CheckerContext context;
         // Just above the middle of 1.0f and the next float: through a double it lands on the middle and then rounds to even, down
         const TypedExpr expr = Accepted(context.declaration, "caster.speed + 1.00000005960464477539062501", ProgramType::Float);
@@ -745,13 +748,13 @@ namespace BECore::Tests {
         EXPECT_EQ(ConstantOf<double>(Accepted(context.declaration, "caster.precise + 1.00000005960464477539062501", ProgramType::Double)[1]), 1.00000005960464477539062501);
     }
 
-    TEST(ProgramCheckerTest, MembersOfNonVectorsAreRefused) {
+    TEST_F(ProgramCheckerTest, MembersOfNonVectorsAreRefused) {
         const CheckerContext context;
         Refused(context.declaration, "(caster.attack).x", ProgramType::Int32, 16, {"'.x'", "an int has no components"});
         Refused(context.declaration, "min(caster.attack, 1).y + 1", ProgramType::Int32, 22, {"'.y'"});
     }
 
-    TEST(ProgramCheckerTest, AnErrorColumnPointsAtTheNodeThatIsWrong) {
+    TEST_F(ProgramCheckerTest, AnErrorColumnPointsAtTheNodeThatIsWrong) {
         const CheckerContext context;
         const String sum = "caster.attack + (cast.level * caster.speed)";
         Refused(context.declaration, sum, ProgramType::Int32, ColumnOf(sum, "caster.speed"), {"int and float"});
@@ -794,7 +797,7 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(ProgramCheckerTest, AComponentOfAFieldIsASlotAtTheComponentsOffsetAndAColorChannelAnExtract) {
+    TEST_F(ProgramCheckerTest, AComponentOfAFieldIsASlotAtTheComponentsOffsetAndAColorChannelAnExtract) {
         const CheckerContext context;
         for (const ComponentRow& row : kComponentRows) {
             const auto whole = LinkSlot(context.declaration, row.path, DescriptorOf(row.type));
@@ -815,7 +818,7 @@ namespace BECore::Tests {
                 }
                 ASSERT_EQ(expr.nodes.size(), 1U) << text.c_str();
                 EXPECT_EQ(Root(expr).kind, TypedNodeKind::Slot) << text.c_str();
-                EXPECT_EQ(Root(expr).path, text) << "the path stays as written";
+                EXPECT_EQ(StringView(Root(expr).path), StringView(text)) << "the path stays as written";
                 EXPECT_EQ(Root(expr).slot.level, whole->level);
                 EXPECT_EQ(Root(expr).slot.offset, whole->offset + ByteOffsetOfComponent(row.type, i)) << text.c_str();
             }
@@ -832,7 +835,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Root(Accepted(context.declaration, "caster.span.offset.y", ProgramType::Float)).slot.offset, offset->offset + offsetof(Vec2, y));
     }
 
-    TEST(ProgramCheckerTest, AComponentOfAnExpressionIsAnExtractWithItsIndex) {
+    TEST_F(ProgramCheckerTest, AComponentOfAnExpressionIsAnExtractWithItsIndex) {
         const CheckerContext context;
         for (const ComponentRow& row : kComponentRows) {
             for (uint32_t i = 0; i < row.count; ++i) {
@@ -854,7 +857,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Root(product).opcode, Opcode::MulFloat);
     }
 
-    TEST(ProgramCheckerTest, ANameThatIsNotAComponentSaysWhatTheTypeHas) {
+    TEST_F(ProgramCheckerTest, ANameThatIsNotAComponentSaysWhatTheTypeHas) {
         const CheckerContext context;
         Refused(context.declaration, "caster.velocity.q", ProgramType::Float, 1, {"'.q' is not a component of vec3", "it has x, y, z"});
         Refused(context.declaration, "caster.plane.v", ProgramType::Float, 1, {"not a component of vec4", "x, y, z, w"});
@@ -874,7 +877,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "behind.spans.x", ProgramType::Float, 1, {"behind.spans.x"});
     }
 
-    TEST(ProgramCheckerTest, EveryPackBuildsItsTypeFromTheComponentsInOrder) {
+    TEST_F(ProgramCheckerTest, EveryPackBuildsItsTypeFromTheComponentsInOrder) {
         const CheckerContext context;
         struct Row {
             StringView text;
@@ -902,7 +905,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Root(Accepted(context.declaration, "vec3(1, 2, 3).y", ProgramType::Float)).opcode, Opcode::ExtractVec3);
     }
 
-    TEST(ProgramCheckerTest, APackWithTheWrongArgumentsSaysWhatItNeeds) {
+    TEST_F(ProgramCheckerTest, APackWithTheWrongArgumentsSaysWhatItNeeds) {
         const CheckerContext context;
         Refused(context.declaration, "vec3(1, 2)", ProgramType::Vec3, 1, {"'vec3' takes 3 arguments", "2 are given"});
         Refused(context.declaration, "quat(1, 2, 3, 4, 5)", ProgramType::Quat, 1, {"'quat' takes 4 arguments", "5 are given"});
@@ -917,7 +920,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "vec3", ProgramType::Vec3, 1, {"'vec3' is a function"});
     }
 
-    TEST(ProgramCheckerTest, TwoTypesOfAMixedPairUseItsRow) {
+    TEST_F(ProgramCheckerTest, TwoTypesOfAMixedPairUseItsRow) {
         const CheckerContext context;
         struct Row {
             StringView text;
@@ -943,7 +946,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Root(Accepted(context.declaration, "caster.velocity + cast.target", ProgramType::Vec3)).opcode, Opcode::AddVec3);
     }
 
-    TEST(ProgramCheckerTest, ALiteralBesideAVectorTakesTheScalarOfThePair) {
+    TEST_F(ProgramCheckerTest, ALiteralBesideAVectorTakesTheScalarOfThePair) {
         const CheckerContext context;
         struct Row {
             StringView text;
@@ -972,7 +975,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "caster.cell * 2.5", ProgramType::IVec2, 15, {"2.5", "float literal", "an int is needed"});
     }
 
-    TEST(ProgramCheckerTest, APairWithoutARowIsRefusedAndListsTheMixedPairs) {
+    TEST_F(ProgramCheckerTest, APairWithoutARowIsRefusedAndListsTheMixedPairs) {
         const CheckerContext context;
         const String vectorByInt = "caster.velocity * caster.attack";
         Refused(context.declaration, vectorByInt, ProgramType::Vec3, ColumnOf(vectorByInt, "caster.attack"),
@@ -994,7 +997,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "caster.tint * 2", ProgramType::Color, 13, {"'*'", "not defined for color"});
     }
 
-    TEST(ProgramCheckerTest, DotLengthAndNormalizeTakeTheResultTypeFromTheirRow) {
+    TEST_F(ProgramCheckerTest, DotLengthAndNormalizeTakeTheResultTypeFromTheirRow) {
         const CheckerContext context;
         const TypedExpr dot = Accepted(context.declaration, "dot(caster.velocity, cast.target)", ProgramType::Float);
         EXPECT_EQ(Root(dot).opcode, Opcode::DotVec3);
@@ -1020,7 +1023,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "dot(caster.velocity)", ProgramType::Float, 1, {"'dot' takes 2 arguments", "1 is given"});
     }
 
-    TEST(ProgramCheckerTest, LerpTakesAWeightThatIsAFloatForAVectorAndTheTypeForAScalar) {
+    TEST_F(ProgramCheckerTest, LerpTakesAWeightThatIsAFloatForAVectorAndTheTypeForAScalar) {
         const CheckerContext context;
         struct Row {
             StringView text;
@@ -1053,7 +1056,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "lerp(caster.velocity, caster.position, 0.5)", ProgramType::Vec3, 23, {"'lerp'", "vec3 and vec2"});
     }
 
-    TEST(ProgramCheckerTest, EveryOperatorAndFunctionIsAcceptedExactlyForTheTypesThatHaveARow) {
+    TEST_F(ProgramCheckerTest, EveryOperatorAndFunctionIsAcceptedExactlyForTheTypesThatHaveARow) {
         const CheckerContext context;
         struct Field {
             ProgramType type;
@@ -1174,7 +1177,7 @@ namespace BECore::Tests {
 
     /// The checker, the lowering and the printer recurse by the height of the tree, which the parser bounds by `ExprLimits::kMaxTreeHeight` for every shape of it: the highest trees
     /// that limit allows (a chain of operators, calls over a chain, unary operators over a chain, the deepest parentheses) must fit the stack of a secondary thread
-    TEST(ProgramCheckerTest, TheHighestTreesTheLimitAllowsFitTheStackOfAThread) {
+    TEST_F(ProgramCheckerTest, TheHighestTreesTheLimitAllowsFitTheStackOfAThread) {
         constexpr size_t kLevels = ExprLimits::kMaxTreeHeight;
         const auto chain = [](size_t operators) { return Format("caster.attack{}", Repeated(" + caster.attack", operators)); };
         const String texts[] = {
@@ -1195,7 +1198,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ProgramCheckerTest, AnInlineTableIsTypedByItsEntriesAndTakesAnIntIndex) {
+    TEST_F(ProgramCheckerTest, AnInlineTableIsTypedByItsEntriesAndTakesAnIntIndex) {
         const CheckerContext context;
         const TypedExpr plain = Accepted(context.declaration, "at(cast.level, 10, 20, 30)", ProgramType::Int32);
         EXPECT_EQ(Root(plain).opcode, Opcode::LoadTable);
@@ -1215,7 +1218,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Root(Accepted(context.declaration, "caster.element == at(cast.level, Fire, Water)", ProgramType::Bool)).type, ExprType(ProgramType::Bool));
     }
 
-    TEST(ProgramCheckerTest, AnInlineTableThatIsNotWellFormedIsRefusedAtTheNodeThatIsWrong) {
+    TEST_F(ProgramCheckerTest, AnInlineTableThatIsNotWellFormedIsRefusedAtTheNodeThatIsWrong) {
         const CheckerContext context;
         Refused(context.declaration, "at(cast.level)", ProgramType::Int32, 1, {"'at'", "an index and at least one entry", "1 argument is given"});
         Refused(context.declaration, "at()", ProgramType::Int32, 1, {"'at'", "an index and at least one entry", "0 arguments are given"});
@@ -1232,7 +1235,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "at(cast.level, 1, 2) + 1.5", ProgramType::Int32, 24, {"float literal"});
     }
 
-    TEST(ProgramCheckerTest, ATableOverTheLimitIsRefusedAndOneAtTheLimitIsNot) {
+    TEST_F(ProgramCheckerTest, ATableOverTheLimitIsRefusedAndOneAtTheLimitIsNot) {
         const CheckerContext context;
         const auto table = [](size_t entries) {
             ExprAst ast;
@@ -1268,7 +1271,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(over.error().message, Format("at most {}", kMaxTableEntries))) << over.error().message.c_str();
     }
 
-    TEST(ProgramCheckerTest, ANamedTableIsCopiedIntoConstantEntriesOfTheTypeBesideIt) {
+    TEST_F(ProgramCheckerTest, ANamedTableIsCopiedIntoConstantEntriesOfTheTypeBesideIt) {
         const CheckerContext context;
         ValueTableSet tables;
         tables.Add("Damage", {10.0, 20.0, 30.0});

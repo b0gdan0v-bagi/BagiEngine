@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Profiler/Profile.h>
 #include <BECore/RefCounted/New.h>
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/Mutex.h>
@@ -127,19 +128,23 @@ namespace BECore {
 
         /// Queues a text frame; false when the connection takes no more frames
         bool QueueText(StringView text) {
+            BE_PROFILE_SCOPE("WS encode");
             return QueueFrame(EncodeTextFrame(text), /*isClose=*/false);
         }
 
         bool QueuePing(Span<const uint8_t> payload = {}) {
+            BE_PROFILE_SCOPE("WS encode");
             return QueueFrame(EncodeFrame(WebSocketOpcode::kPing, payload), /*isClose=*/false);
         }
 
         bool QueuePong(Span<const uint8_t> payload) {
+            BE_PROFILE_SCOPE("WS encode");
             return QueueFrame(EncodeFrame(WebSocketOpcode::kPong, payload), /*isClose=*/false);
         }
 
         /// Queues the close frame; the connection ends after it was sent
         bool QueueClose(uint16_t code, StringView reason) {
+            BE_PROFILE_SCOPE("WS encode");
             return QueueFrame(EncodeCloseFrame(code, reason), /*isClose=*/true);
         }
 

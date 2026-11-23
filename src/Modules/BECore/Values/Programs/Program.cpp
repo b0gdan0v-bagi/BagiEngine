@@ -1,5 +1,6 @@
 #include "Program.h"
 
+#include <BECore/Memory/Immortal.h>
 #include <BECore/Values/Programs/Domain/ProgramDomain.h>
 #include <BECore/Values/Programs/Lists/ListImage.h>
 #include <BECore/Values/Programs/Native/NativePrograms.h>
@@ -48,6 +49,9 @@ namespace BECore {
             return (hash ^ word) * kHashPrime;
         }
 
+        /// A content load is a few hundred small programs; a larger one takes a chunk of its own
+        constexpr size_t kArenaChunkBytes = 32 * 1024;
+
         constexpr size_t kChunkSize = 256;
         constexpr size_t kMaxChunks = ProgramPool::kMaxPrograms / kChunkSize;
         constexpr size_t kExpectedProgramsPerHash = 1;
@@ -76,7 +80,7 @@ namespace BECore {
                 return storage;
             }
 
-            InternOutcome Intern(Program program, NativeLookup lookup) {
+            InternOutcome Intern(Program program, NativeLookup lookup, PassKey<ProgramPool> key) {
                 const uint64_t hash = program.CodeHash();
                 LockGuard lock(_mutex);
                 auto bucket = _byHash.find(hash);
@@ -92,6 +96,8 @@ namespace BECore {
                     return InternOutcome{};
                 }
                 const auto id = static_cast<ProgramId>(count);
+                // After the duplicate check, so loading the same content again adds nothing to the arena
+                program.Rehome(_arena.value, std::move(key));
                 const size_t chunkIndex = count / kChunkSize;
                 if (_chunks[chunkIndex].load(std::memory_order_relaxed) == nullptr) {
                     _owned.push_back(MakeUnique<Chunk>());
@@ -152,6 +158,9 @@ namespace BECore {
             }
 
             Mutex _mutex{BE_LOCK_SITE("ProgramPool")};
+            /// Under `_mutex` (an arena is not thread-safe). Immortal: a program is never freed and `Get` hands out views that a static destructor of another object may still read.
+            /// `Get` reads only bytes written before the release store of `_count`
+            Immortal<LinearArena> _arena{"ProgramPool", kArenaChunkBytes};
             Array<std::atomic<Chunk*>, kMaxChunks> _chunks{};
             Vector<UniquePtr<Chunk>> _owned;
             HashMap<uint64_t, SmallVector<ProgramId, kExpectedProgramsPerHash>> _byHash;
@@ -163,6 +172,98 @@ namespace BECore {
     bool ProgramCodeView::operator==(const ProgramCodeView& other) const {
         return resultType == other.resultType && resultRegister == other.resultRegister && registerCount == other.registerCount && reads == other.reads &&
                std::equal(code.begin(), code.end(), other.code.begin(), other.code.end()) && std::equal(constants.begin(), constants.end(), other.constants.begin(), other.constants.end());
+    }
+
+    Program::Program(const Program& other) {
+        CopyFrom(other);
+    }
+
+    Program::Program(Program&& other) noexcept {
+        MoveFrom(other);
+    }
+
+    Program& Program::operator=(const Program& other) {
+        if (this != &other) {
+            CopyFrom(other);
+        }
+        return *this;
+    }
+
+    Program& Program::operator=(Program&& other) noexcept {
+        if (this != &other) {
+            MoveFrom(other);
+        }
+        return *this;
+    }
+
+    void Program::CopyFrom(const Program& other) {
+        _resultType = other._resultType;
+        _resultRegister = other._resultRegister;
+        _registerCount = other._registerCount;
+        _reads = other._reads;
+        _source = other._source;
+        _owning = other._owning;
+        if (_owning) {
+            _ownedCode = other._ownedCode;
+            _ownedConstants = other._ownedConstants;
+            ViewOwned();
+        } else {
+            _ownedCode.clear();
+            _ownedConstants.clear();
+            _code = other._code;
+            _constants = other._constants;
+        }
+    }
+
+    void Program::MoveFrom(Program& other) {
+        _resultType = other._resultType;
+        _resultRegister = other._resultRegister;
+        _registerCount = other._registerCount;
+        _reads = other._reads;
+        _source = other._source;
+        _owning = other._owning;
+        if (_owning) {
+            _ownedCode = std::move(other._ownedCode);
+            _ownedConstants = std::move(other._ownedConstants);
+            ViewOwned();
+            // The source's vectors are empty now, so its views must be too
+            other._ownedCode.clear();
+            other._ownedConstants.clear();
+            other.ViewOwned();
+        } else {
+            _ownedCode.clear();
+            _ownedConstants.clear();
+            _code = other._code;
+            _constants = other._constants;
+        }
+    }
+
+    void Program::ViewOwned() {
+        _code = Span<const Instruction>(_ownedCode.data(), _ownedCode.size());
+        _constants = Span<const RegisterImage>(_ownedConstants.data(), _ownedConstants.size());
+    }
+
+    void Program::Rehome(LinearArena& arena, PassKey<ProgramPool>) {
+        if (!_owning) {
+            return;
+        }
+        // An empty range stays an empty view: the arena would hand out a distinct address for nothing
+        Instruction* code = nullptr;
+        if (!_ownedCode.empty()) {
+            code = arena.Allocate<Instruction>(_ownedCode.size());
+            std::uninitialized_copy(_ownedCode.begin(), _ownedCode.end(), code);
+        }
+        RegisterImage* constants = nullptr;
+        if (!_ownedConstants.empty()) {
+            constants = arena.Allocate<RegisterImage>(_ownedConstants.size());
+            std::uninitialized_copy(_ownedConstants.begin(), _ownedConstants.end(), constants);
+        }
+        _code = Span<const Instruction>(code, _ownedCode.size());
+        _constants = Span<const RegisterImage>(constants, _ownedConstants.size());
+        // Swapping with empty vectors gives the heap blocks back; `clear` would keep the capacity
+        Vector<Instruction>().swap(_ownedCode);
+        Vector<RegisterImage>().swap(_ownedConstants);
+        _owning = false;
     }
 
     bool Program::SameCode(const Program& other) const {
@@ -224,7 +325,7 @@ namespace BECore {
     }
 
     Optional<ProgramId> ProgramPool::Intern(Program program) {
-        const InternOutcome outcome = Storage::Instance().Intern(std::move(program), [](const Program& candidate) { return NativePrograms::Find(candidate); });
+        const InternOutcome outcome = Storage::Instance().Intern(std::move(program), [](const Program& candidate) { return NativePrograms::Find(candidate); }, PassKey<ProgramPool>());
         if (outcome.nativeMissed) {
             NativePrograms::ReportMiss(outcome.source);
         }

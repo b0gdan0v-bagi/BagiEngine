@@ -1,4 +1,8 @@
+#include <BECore/Control/Json.h>
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/Profiler/Backends/ChromeTraceBackend.h>
+#include <BECore/Profiler/Profiler.h>
 #include <BECore/Rooms/FakeSeatedGame.h>
 #include <BECore/Rooms/ManualClock.h>
 #include <BECore/Rooms/RoomTableDriver.h>
@@ -940,5 +944,141 @@ namespace BECore::Tests {
         EXPECT_GE(first - before, 5s);
         EXPECT_GE(now(), first);
     }
+
+#if BE_PROFILER
+
+    namespace {
+
+        /// Records into a recorder of its own while the server runs; the server is stopped (its threads joined) before the backend goes, since a zone ends on the backend it began on
+        class RoomServerZonesTest : public RoomWebSocketServerTest {
+        protected:
+            void SetUp() override {
+                RoomWebSocketServerTest::SetUp();
+                _previous = Profiler::GetPrimaryBackend();
+                AllocTracker::ResetZoneStats();
+                Profiler::SetBackend(&recorder);
+            }
+
+            void TearDown() override {
+                RoomWebSocketServerTest::TearDown();
+                Profiler::SetBackend(_previous);
+            }
+
+            /// The zone names that began on a thread of each name (a connection has a `Room reader` and a `Room writer` thread of its own)
+            using ZoneThreads = Map<String, Set<String>>;
+
+            /// Checks that every thread's B and E events pair up, and returns where each zone ran
+            ZoneThreads ReadTrace() const {
+                const auto parsed = ParseJson(recorder.WriteJson());
+                const Json* events = parsed ? FindJsonMember(*parsed, "traceEvents") : nullptr;
+                EXPECT_NE(events, nullptr);
+                ZoneThreads result;
+                if (events == nullptr) {
+                    return result;
+                }
+                Map<int64_t, String> threadNames;
+                for (const Json& event : *events) {
+                    const Json* args = FindJsonMember(event, "args");
+                    if (GetJsonString(event, "name") == "thread_name" && args != nullptr) {
+                        threadNames[GetJsonInt(event, "tid").value_or(-1)] = GetJsonString(*args, "name").value_or("");
+                    }
+                }
+                Map<int64_t, int> depth;
+                for (const Json& event : *events) {
+                    const String phase = GetJsonString(event, "ph").value_or("");
+                    const int64_t tid = GetJsonInt(event, "tid").value_or(-1);
+                    if (phase == "B") {
+                        ++depth[tid];
+                        result[GetJsonString(event, "name").value_or("")].insert(threadNames[tid]);
+                    } else if (phase == "E") {
+                        EXPECT_GT(depth[tid]--, 0) << "an E without its B on thread " << tid;
+                    }
+                }
+                for (const auto& [tid, open] : depth) {
+                    EXPECT_EQ(open, 0) << "zones left open on thread " << tid;
+                }
+                return result;
+            }
+
+            ChromeTraceBackend recorder;
+
+        private:
+            IProfilerBackend* _previous = nullptr;
+        };
+
+        /// The threads a zone began on, comma-separated in name order; empty when the zone is not in the trace
+        String ThreadsOf(const Map<String, Set<String>>& zones, const char* zone) {
+            String joined;
+            if (const auto found = zones.find(String(zone)); found != zones.end()) {
+                for (const String& thread : found->second) {
+                    if (!joined.empty()) {
+                        joined += ',';
+                    }
+                    joined += thread;
+                }
+            }
+            return joined;
+        }
+
+        /// True when @p zone began on a thread the profiler gave no name (past Profiler::kMaxThreads, which earlier cases of the executable can use up)
+        bool BeganOnUnnamedThread(const Map<String, Set<String>>& zones, const char* zone) {
+            const auto found = zones.find(String(zone));
+            return found != zones.end() && found->second.count(String()) != 0;
+        }
+
+        constexpr const char* kZonesByThread[] = {"Room open", "Room message", "Room close", "Room tick", "Room send", "WS read", "WS dispatch", "WS write", "WS encode"};
+
+    }  // namespace
+
+    TEST_F(RoomServerZonesTest, AHandPlayedOverTheWireIsInTheZonesOfTheThreadsThatDidTheWork) {
+        const uint16_t port = StartServer();
+        auto host = MakeHost(port);
+        ASSERT_TRUE(host.has_value());
+        {
+            auto guest = RoomSocketClient::Connect(port);
+            ASSERT_TRUE(guest.has_value());
+            guest->JoinByName(host->roomCode, "Guest");
+            ASSERT_TRUE(guest->WaitFor(RoomMessageTypes::kLobby).has_value());
+            guest->Send(PingMessage{});
+            ASSERT_TRUE(guest->WaitFor(RoomMessageTypes::kPong).has_value());
+        }
+        // The guest's socket is gone: the host hears of it from the lobby that lists one human, which the hub sends after its Closed event
+        bool guestGone = false;
+        for (int lobbies = 0; lobbies < 8 && !guestGone; ++lobbies) {
+            const auto lobby = host->WaitFor(RoomMessageTypes::kLobby);
+            ASSERT_TRUE(lobby.has_value());
+            guestGone = CountHumans(*lobby) == 1 && lobbies > 0;
+        }
+        EXPECT_TRUE(guestGone);
+        server->Stop();
+
+        const auto zones = ReadTrace();
+#if BE_PROFILER_ALLOC
+        // Rows are per zone, not per thread: "(no zone)" holds the allocations of every thread (the test's own sockets too), so
+        // "the hub allocates nothing outside its zones" cannot be asked of them; what is charged to the named zones can
+        Map<String, uint64_t> allocationsOf;
+        for (const AllocSiteStats& row : AllocTracker::GetNameStats()) {
+            allocationsOf[row.ZoneLabel()] += row.count;
+        }
+        for (const char* zone : {"Room message", "WS read", "WS dispatch", "WS encode"}) {
+            EXPECT_GT(allocationsOf[zone], 0u) << zone;
+        }
+#endif
+        for (const char* zone : kZonesByThread) {
+            if (BeganOnUnnamedThread(zones, zone)) {
+                GTEST_SKIP() << zone << " began on a thread past the profiler's name cap: which thread did the work cannot be read from the trace";
+            }
+        }
+        for (const char* hubZone : {"Room open", "Room message", "Room close", "Room tick", "Room send"}) {
+            EXPECT_EQ(ThreadsOf(zones, hubZone), "Room hub") << hubZone;
+        }
+        EXPECT_EQ(ThreadsOf(zones, "WS read"), "Room reader");
+        EXPECT_EQ(ThreadsOf(zones, "WS dispatch"), "Room reader");
+        EXPECT_EQ(ThreadsOf(zones, "WS write"), "Room writer");
+        // The hub encodes what it sends; a reader may encode a pong or a close frame too
+        EXPECT_NE(ThreadsOf(zones, "WS encode").find("Room hub"), String::npos);
+    }
+
+#endif
 
 }  // namespace BECore::Tests

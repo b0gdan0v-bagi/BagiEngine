@@ -31,18 +31,18 @@ namespace BECore {
                 switch (node.kind) {
                     case ExprNodeKind::Number:
                     case ExprNodeKind::Name:
-                        out += node.text;
+                        AppendView(out, node.text);
                         return;
                     case ExprNodeKind::Bool:
                         out += node.boolValue ? "true" : "false";
                         return;
                     case ExprNodeKind::String:
                         out += '\'';
-                        out += node.text;
+                        AppendView(out, node.text);
                         out += '\'';
                         return;
                     case ExprNodeKind::Call:
-                        out += node.text;
+                        AppendView(out, node.text);
                         out += '(';
                         for (uint32_t i = 0; i < node.argumentCount; ++i) {
                             out += i == 0 ? "" : ", ";
@@ -53,7 +53,7 @@ namespace BECore {
                     case ExprNodeKind::Member:
                         Wrapped(node.first, NeedsParenthesesAsBase(_ast[node.first]), out);
                         out += '.';
-                        out += node.text;
+                        AppendView(out, node.text);
                         return;
                     case ExprNodeKind::Index:
                         Wrapped(node.first, NeedsParenthesesAsIndexBase(_ast[node.first]), out);

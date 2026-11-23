@@ -12,6 +12,7 @@ namespace BECore {
         constexpr StringView kToggle = "toggle";
 
         constexpr uint32_t kQuotesAroundString = 2;
+        constexpr size_t kMinTokensPerItem = 2;
 
         using Failure = std::unexpected<ProgramError>;
         using StatementResult = std::expected<ScriptStatementId, ProgramError>;
@@ -29,10 +30,16 @@ namespace BECore {
 
         class ScriptParser {
         public:
-            explicit ScriptParser(Vector<ExprToken> tokens) : _tokens(std::move(tokens)) {}
+            explicit ScriptParser(ArenaVector<ExprToken> tokens) : _tokens(std::move(tokens)) {
+                // Every statement and every argument takes at least two tokens (`x++;`, `emit A(b);`), and the arena gives no memory back on growth
+                const size_t bound = _tokens.size() / kMinTokensPerItem;
+                _ast.statements.reserve(std::min<size_t>(bound, ScriptLimits::kMaxStatements));
+                _ast.order.reserve(std::min<size_t>(bound, ScriptLimits::kMaxStatements));
+                _ast.arguments.reserve(bound);
+            }
 
             std::expected<ScriptAst, ProgramError> Run() {
-                Vector<ScriptStatementId> top;
+                ArenaVector<ScriptStatementId> top;
                 while (Peek().kind != ExprTokenKind::End) {
                     const StatementResult statement = ParseStatement(0);
                     if (!statement.has_value()) {
@@ -67,7 +74,7 @@ namespace BECore {
             }
 
             /// A block's statements are stored together, so the list is appended once its children (which append their own) are all parsed
-            ScriptBlock Append(const Vector<ScriptStatementId>& ids) {
+            ScriptBlock Append(const ArenaVector<ScriptStatementId>& ids) {
                 const ScriptBlock block{static_cast<uint32_t>(_ast.order.size()), static_cast<uint32_t>(ids.size())};
                 _ast.order.insert(_ast.order.end(), ids.begin(), ids.end());
                 return block;
@@ -122,12 +129,13 @@ namespace BECore {
             }
 
             /// `name` or `a.b.c`: a whole dotted path, the target of a write
-            std::expected<String, ProgramError> ParsePath(StringView what) {
+            std::expected<ArenaString, ProgramError> ParsePath(StringView what) {
                 const ExprToken& first = Peek();
                 if (first.kind != ExprTokenKind::Name) {
                     return FailAt(first.column, Format("{} needs a field path, found {}", what, DescribeToken(first)));
                 }
-                String path(Take().text);
+                const StringView head = Take().text;
+                ArenaString path(head.data(), head.size());
                 while (Peek().kind == ExprTokenKind::Dot) {
                     Take();
                     const ExprToken& name = Peek();
@@ -241,11 +249,13 @@ namespace BECore {
                     return FailAt(name.column, Format("expected a command name after 'emit', found {}", DescribeToken(name)));
                 }
                 statement.targetColumn = name.column;
-                statement.target = String(name.text);
+                statement.target.assign(name.text.data(), name.text.size());
                 Take();
-                if (const auto open = Expect(ExprTokenKind::LeftParen, "(", Format("after the command name '{}'", statement.target), false); !open.has_value()) {
-                    return std::unexpected(open.error());
+                // Not through `Expect`: its context is a ready text, and a message built here would cost a heap string on every good `emit`
+                if (Peek().kind != ExprTokenKind::LeftParen) {
+                    return FailAt(Peek().column, Format("expected '(' after the command name '{}', found {}", statement.target, DescribeToken(Peek())));
                 }
+                Take();
                 statement.firstArgument = static_cast<uint32_t>(_ast.arguments.size());
                 if (Peek().kind != ExprTokenKind::RightParen) {
                     while (true) {
@@ -281,7 +291,7 @@ namespace BECore {
                 }
                 const uint32_t openColumn = open.column;
                 Take();
-                Vector<ScriptStatementId> ids;
+                ArenaVector<ScriptStatementId> ids;
                 while (Peek().kind != ExprTokenKind::RightBrace) {
                     if (Peek().kind == ExprTokenKind::End) {
                         return FailAt(openColumn, "the '{' is not closed: expected '}' before the end of the text");
@@ -349,7 +359,7 @@ namespace BECore {
                 return *first;
             }
 
-            Vector<ExprToken> _tokens;
+            ArenaVector<ExprToken> _tokens;
             size_t _index = 0;
             ScriptAst _ast;
         };

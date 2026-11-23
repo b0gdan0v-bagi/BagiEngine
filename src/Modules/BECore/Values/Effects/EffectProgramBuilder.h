@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Values/Effects/EffectProgram.h>
 #include <expected>
 
@@ -10,9 +11,18 @@ namespace BECore {
      *
      * A step is added with its own call and gets the index of the next one. A forward jump is added unpatched and `PatchJump` points it at a step (the end when the script is
      * finished) once that is known, which is what `if` / `else` need. `Finish` checks the whole script.
+     *
+     * The steps are on the thread's scratch arena (`Memory/CLAUDE.md`, "Scratch arena and scopes"): a builder belongs to the `ScratchScope` that is alive when it is made and must not
+     * outlive it, be a member of a longer-lived object or cross threads. The `EffectProgram` that `Finish` returns copies them, so it may outlive the builder. A builder made with no
+     * scope open (a test) only keeps its memory until its thread ends.
      */
     class EffectProgramBuilder {
     public:
+        /// Makes room for @p steps, so that adding them takes no new block of the arena (it gives nothing back on growth)
+        void Reserve(size_t steps) {
+            _steps.reserve(steps);
+        }
+
         /// Writes @p value, a value of @p type, into the field at @p target. @p bytes as in `EffectFieldBytes`
         uint32_t AddStore(SlotRef target, ProgramType type, uint8_t bytes, const EffectOperand& value);
 
@@ -36,7 +46,7 @@ namespace BECore {
         [[nodiscard]] std::expected<IntrusivePtr<const EffectProgram>, ProgramError> Finish(String source = {}) const;
 
     private:
-        Vector<EffectStep> _steps;
+        ArenaVector<EffectStep> _steps;
     };
 
 }  // namespace BECore

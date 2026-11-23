@@ -28,17 +28,24 @@ class Zone:
     threads: set = field(default_factory=set)
 
 
-def load_events(path: str) -> list[dict]:
+def load_trace(path: str) -> tuple[list[dict], dict]:
+    """The events and `otherData` (empty for a bare event list) from one read of the file."""
     with open(path, encoding="utf-8") as handle:
         data = json.load(handle)
-    return data["traceEvents"] if isinstance(data, dict) else data
+    if isinstance(data, dict):
+        return data["traceEvents"], data.get("otherData", {})
+    return data, {}
+
+
+def load_events(path: str) -> list[dict]:
+    return load_trace(path)[0]
 
 
 def percentile(ordered: list[float], fraction: float) -> float:
     return ordered[min(len(ordered) - 1, int(fraction * len(ordered)))] if ordered else 0.0
 
 
-def summarize(events: list[dict]) -> dict:
+def summarize(events: list[dict], other_data: dict | None = None) -> dict:
     zones: dict[str, Zone] = {}
     thread_names: dict[int, str] = {}
     stacks: dict[int, list[list]] = {}  # tid -> [name, start, child time]
@@ -76,7 +83,7 @@ def summarize(events: list[dict]) -> dict:
     frame_marks.sort()
     frames = sorted((b - a) * MS_PER_US for a, b in zip(frame_marks, frame_marks[1:]))
     span = max((e["ts"] for e in events if "ts" in e), default=0.0) - min((e["ts"] for e in events if "ts" in e), default=0.0)
-    return {
+    summary = {
         "spanMs": span * MS_PER_US,
         "unclosedZones": unclosed,
         "threads": {str(tid): name for tid, name in thread_names.items()},
@@ -103,6 +110,11 @@ def summarize(events: list[dict]) -> dict:
         ],
         "counters": {name: {"samples": len(values), "mean": sum(values) / len(values), "max": max(values)} for name, values in counters.items()},
     }
+    # Only a profile build with ENGINE_PROFILER_ALLOC writes these; the keys are absent otherwise.
+    for key in ("allocNames", "allocSizes"):
+        if other_data and other_data.get(key):
+            summary[key] = other_data[key]
+    return summary
 
 
 def format_text(summary: dict, top: int) -> str:
@@ -123,6 +135,15 @@ def format_text(summary: dict, top: int) -> str:
                 f"{zone['name'][:40]:<40} {zone['calls']:>8} {zone['selfMs']:>10.2f} {zone['totalMs']:>10.2f} {zone['meanUs']:>10.2f} "
                 f"{zone['allocs']:>9} {zone['bytes']:>11}"
             )
+    if summary.get("allocNames"):
+        lines += ["", "allocations by name", f"{'zone':<32} {'name':<28} {'allocs':>9} {'bytes':>12}"]
+        for row in summary["allocNames"][:top]:
+            lines.append(f"{row['zone'][:32]:<32} {(row['name'] or '(operator new)')[:28]:<28} {row['allocs']:>9} {row['bytes']:>12}")
+    if summary.get("allocSizes"):
+        lines += ["", "allocation sizes (allocs per bucket, upTo bytes; 0 = open)", f"{'zone':<32} {'allocs':>9}  buckets"]
+        for row in summary["allocSizes"][:top]:
+            buckets = " ".join(f"<={b['upTo']}:{b['allocs']}" if b["upTo"] else f">:{b['allocs']}" for b in row["buckets"])
+            lines.append(f"{row['zone'][:32]:<32} {row['allocs']:>9}  {buckets}")
     if summary["counters"]:
         lines += ["", f"{'counter':<40} {'samples':>8} {'mean':>12} {'max':>12}"]
         for name, counter in sorted(summary["counters"].items()):
@@ -136,7 +157,7 @@ def main() -> int:
     parser.add_argument("--top", type=int, default=25)
     parser.add_argument("--json", action="store_true", help="the whole summary as JSON")
     args = parser.parse_args()
-    summary = summarize(load_events(args.trace))
+    summary = summarize(*load_trace(args.trace))
     print(json.dumps(summary, indent=2) if args.json else format_text(summary, args.top))
     return 0
 

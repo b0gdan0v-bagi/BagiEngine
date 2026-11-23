@@ -90,6 +90,9 @@ namespace BECore {
 
         [[nodiscard]] static AllocTotals GetTotals();
         [[nodiscard]] static AllocSourceTotals GetSourceTotals(AllocSource source);
+        /// The allocation name a block of @p source gets in GetNameStats() when EASTL named none (a literal: "pugixml", "SDL", ...);
+        /// nullptr for GlobalNew, whose unnamed blocks stay under the null name
+        [[nodiscard]] static const char* GetSourceName(AllocSource source);
         [[nodiscard]] static ThreadCounters GetThreadCounters();
         [[nodiscard]] static AllocTagTotals GetTagTotals(MemTag tag);
         /// Every tag, in the order of the enum; no allocation
@@ -99,7 +102,7 @@ namespace BECore {
         static void AddZone(const ProfileSite& site, uint64_t count, uint64_t bytes);
         /// The zones with statistics, the most bytes first
         [[nodiscard]] static Vector<ZoneAllocStats> GetZoneStats();
-        /// Zeroes the zone statistics and the name table (the totals stay)
+        /// Zeroes the zone statistics, the name table and the size histogram (the totals stay)
         static void ResetZoneStats();
 
         /// The next allocation of the calling thread carries @p name (EASTL's allocation name, from Utils/EASTLOperators.cpp). The pointer is
@@ -110,6 +113,9 @@ namespace BECore {
         static const ProfileSite* ExchangeCurrentZone(const ProfileSite* zone);
         /// The allocations per innermost zone x name, the most bytes first; empty without ENGINE_PROFILER_ALLOC. Allocates
         [[nodiscard]] static Vector<AllocSiteStats> GetNameStats();
+        /// The allocation sizes per innermost zone, in power-of-two buckets (AllocSiteTable.h), the most allocations first; empty without
+        /// ENGINE_PROFILER_ALLOC. Allocates
+        [[nodiscard]] static Vector<AllocSizeStats> GetSizeStats();
         /// Allocations the name table dropped because it was full, since the last ResetZoneStats
         [[nodiscard]] static uint64_t GetNameOverflow();
 

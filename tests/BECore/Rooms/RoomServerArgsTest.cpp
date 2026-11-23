@@ -20,6 +20,16 @@ namespace BECore::Tests {
             return parsed ? String() : parsed.error();
         }
 
+        constexpr ProfilerBuild kChromeBuild{.profiler = true, .tracy = false};
+        constexpr ProfilerBuild kTracyBuild{.profiler = true, .tracy = true};
+        constexpr ProfilerBuild kNoProfilerBuild{};
+
+        std::expected<RoomServerArgs, String> ParseIn(ProfilerBuild build, std::initializer_list<const char*> arguments) {
+            Vector<const char*> argv = {"BagiRoomServer"};
+            argv.insert(argv.end(), arguments.begin(), arguments.end());
+            return ParseRoomServerArgs(static_cast<int>(argv.size()), argv.data(), {}, build);
+        }
+
         using Environment = Map<String, String>;
 
         std::expected<RoomServerArgs, String> ReadEnvironment(const Environment& environment) {
@@ -172,7 +182,7 @@ namespace BECore::Tests {
 
         const String usage = GetRoomServerUsage().c_str();
         for (const char* flag : {"--port", "--bind", "--origin", "--max-connections", "--max-per-address", "--computer-delay-ms", "--reconnect-grace-ms", "--ping-interval-ms", "--stats-interval-ms",
-                                 "--shutdown-grace-ms", "--test-games", "--help"}) {
+                                 "--shutdown-grace-ms", "--trace=", "--profiler=", "--test-games", "--help"}) {
             EXPECT_NE(usage.find(flag), String::npos) << flag;
         }
     }
@@ -445,6 +455,47 @@ namespace BECore::Tests {
               "--trusted-proxy-hops", "BAGI_ROOMS_MAX_ROOMS_PER_ADDRESS", "BAGI_ROOMS_LOBBY_TIMEOUT_MS", "BAGI_ROOMS_TRUSTED_PROXY_HOPS"}) {
             EXPECT_NE(usage.find(name), String::npos) << name;
         }
+    }
+
+    TEST(RoomServerArgsTest, TraceFlagRecordsAChromeTraceToTheFile) {
+        const auto args = ParseIn(kChromeBuild, {"--trace=/tmp/server.json"});
+        ASSERT_TRUE(args.has_value());
+        EXPECT_EQ(args->profiler.backend, ProfilerBackendKind::ChromeTrace);
+        EXPECT_EQ(args->profiler.tracePath, "/tmp/server.json");
+    }
+
+    TEST(RoomServerArgsTest, ProfilerChromeAloneRecordsWithoutAFile) {
+        const auto args = ParseIn(kChromeBuild, {"--profiler=chrome"});
+        ASSERT_TRUE(args.has_value());
+        EXPECT_EQ(args->profiler.backend, ProfilerBackendKind::ChromeTrace);
+        EXPECT_TRUE(args->profiler.tracePath.empty());
+    }
+
+    TEST(RoomServerArgsTest, NoProfilerFlagGivesTheBuildsDefault) {
+        const auto chrome = ParseIn(kChromeBuild, {"--port", "0"});
+        ASSERT_TRUE(chrome.has_value());
+        EXPECT_EQ(chrome->profiler.backend, ProfilerBackendKind::None);
+        const auto tracy = ParseIn(kTracyBuild, {});
+        ASSERT_TRUE(tracy.has_value());
+        EXPECT_EQ(tracy->profiler.backend, ProfilerBackendKind::Tracy);
+        const auto plain = ParseIn(kNoProfilerBuild, {});
+        ASSERT_TRUE(plain.has_value());
+        EXPECT_EQ(plain->profiler.backend, ProfilerBackendKind::None);
+    }
+
+    TEST(RoomServerArgsTest, ProfilerFlagsThatCannotBeHonouredAreErrorsNamingTheFlag) {
+        const auto error = [](ProfilerBuild build, std::initializer_list<const char*> arguments) {
+            const auto parsed = ParseIn(build, arguments);
+            return parsed ? String() : parsed.error();
+        };
+        EXPECT_NE(error(kChromeBuild, {"--trace=x.json", "--profiler=none"}).find("--trace="), String::npos);
+        EXPECT_NE(error(kChromeBuild, {"--trace="}).find("--trace="), String::npos);
+        EXPECT_NE(error(kChromeBuild, {"--profiler=nope"}).find("--profiler=nope"), String::npos);
+        EXPECT_NE(error(kChromeBuild, {"--profiler=tracy"}).find("tracy"), String::npos);
+        // a build without the profiler refuses the flag instead of recording nothing
+        EXPECT_NE(error(kNoProfilerBuild, {"--trace=x.json"}).find("profiler"), String::npos);
+        EXPECT_NE(error(kNoProfilerBuild, {"--profiler=none"}).find("profiler"), String::npos);
+        EXPECT_EQ(error(kNoProfilerBuild, {"--port", "0"}), "");
     }
 
     TEST(RoomServerArgsTest, DefaultArgsGiveTheDefaultSettings) {

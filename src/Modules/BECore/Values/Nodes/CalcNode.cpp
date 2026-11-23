@@ -38,6 +38,7 @@ namespace BECore {
     }
 
     std::expected<String, ProgramError> BuildFormulaText(const CalcNode& root) {
+        const ScratchScope scratch;
         ExprAst ast;
         CalcBuildState state;
         const auto id = root.Append(ast, state);

@@ -210,7 +210,7 @@ namespace BECore {
 
     void Scene::PrepareForSave() {
         if (_rootNode) {
-            _nodes = _rootNode->_children;
+            _nodes.assign(_rootNode->_children.begin(), _rootNode->_children.end());
         }
     }
 

@@ -265,6 +265,95 @@ namespace BECore::Tests {
         });
     }
 
+    TEST_F(UITextComponentTest, AChangedVariableOrLanguageAllocatesNothingAfterWarmUp) {
+        UIStrings& strings = CoreManager::GetUIStrings();
+        strings.Set("en"_intern, "k", "Hello");
+        strings.Set("ru"_intern, "k", "World");
+        UIVars& vars = CoreManager::GetUIVars();
+        UITextComponent& caption = CaptionOf("Cap");
+        // Longer than the inline buffer of a String, so a heap buffer that is thrown away would show
+        caption.text = "{#k}: {score} points scored in this round";
+        // Preformatted views: the arithmetic Set() makes a Format() String per call
+        constexpr StringView kScores[] = {"1000000", "22", "333", "4444", "55"};
+        vars.Set("score"_intern, kScores[0]);
+        ASSERT_EQ(caption.GetDisplayText(), "Hello: 1000000 points scored in this round");
+
+        ExpectNoAllocations([&] {
+            for (int round = 0; round < 10; ++round) {
+                for (const StringView score : kScores) {
+                    vars.Set("score"_intern, score);
+                    static_cast<void>(caption.GetDisplayText());
+                }
+                strings.SetLanguage(round % 2 == 0 ? PoolString("ru"_intern) : PoolString("en"_intern));
+                static_cast<void>(caption.GetDisplayText());
+            }
+        });
+        EXPECT_EQ(caption.GetDisplayText(), "Hello: 55 points scored in this round");
+    }
+
+    TEST_F(UITextComponentTest, MeasuringAndCheckingAChangedVariableAllocateNothingAfterWarmUp) {
+        UIVars& vars = CoreManager::GetUIVars();
+        UITextComponent& caption = CaptionOf("Cap");
+        const UIElement& cap = El("Cap");
+        caption.text = "Score: {score} points in this round";
+        constexpr StringView kScores[] = {"1000000", "22", "333", "4444", "55"};
+        // The warm-up shows every text once: a different text may wrap into more lines, and the result grows to the most it has held
+        for (const StringView score : kScores) {
+            vars.Set("score"_intern, score);
+            static_cast<void>(caption.MeasureText(cap, 200.0f, 1.0f));
+            static_cast<void>(caption.CheckContent(cap, 200.0f, 30.0f, 1.0f));
+        }
+
+        ExpectNoAllocations([&] {
+            for (int round = 0; round < 10; ++round) {
+                for (const StringView score : kScores) {
+                    vars.Set("score"_intern, score);
+                    static_cast<void>(caption.MeasureText(cap, 200.0f, 1.0f));
+                    static_cast<void>(caption.CheckContent(cap, 200.0f, 30.0f, 1.0f));
+                }
+            }
+        });
+    }
+
+    TEST_F(UITextComponentTest, AChangedTextDrawsWithNoMoreAllocationsThanAnUnchangedOne) {
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+        // Before the display text was built in place, each changed label allocated one String of its text's length here: the one `UIVars::Expand` returned and the
+        // Derived result took over (36 B for this text; the `UICanvas::OnDraw` strings of the allocation report), and `UIStrings::Resolve` a second one for a `{#key}`
+        UIVars& vars = CoreManager::GetUIVars();
+        UITextComponent& caption = CaptionOf("Cap");
+        caption.text = "Score: {score} points in this round";
+        constexpr StringView kScores[] = {"1111111", "2222222", "3333333"};
+        constexpr size_t kScoreCount = sizeof(kScores) / sizeof(kScores[0]);
+        constexpr int kFrames = 20;
+        for (const StringView score : kScores) {
+            vars.Set("score"_intern, score);
+            Draw();
+        }
+
+        // The recording renderer allocates for what it records, so the changed draws are compared with unchanged ones of the same frame
+        uint64_t unchanged = 0;
+        uint64_t unchangedBytes = 0;
+        for (int frame = 0; frame < kFrames; ++frame) {
+            const AllocCount count = CountAllocations([&] { Draw(); });
+            unchanged += count.count;
+            unchangedBytes += count.bytes;
+        }
+        const uint32_t laidOut = caption.GetLayoutCount();
+        uint64_t changed = 0;
+        uint64_t changedBytes = 0;
+        for (int frame = 0; frame < kFrames; ++frame) {
+            vars.Set("score"_intern, kScores[static_cast<size_t>(frame) % kScoreCount]);
+            const AllocCount count = CountAllocations([&] { Draw(); });
+            changed += count.count;
+            changedBytes += count.bytes;
+        }
+        EXPECT_EQ(caption.GetLayoutCount(), laidOut + kFrames) << "every draw showed a new text";
+        EXPECT_LE(changed, unchanged) << "a changed variable allocated " << changed << " times (" << changedBytes << " B) over " << kFrames << " draws, an unchanged text " << unchanged << " times ("
+                                      << unchangedBytes << " B)";
+    }
+
     TEST_F(UITextComponentTest, AnUnchangedTextIsLaidOutOnce) {
         UITextComponent& caption = CaptionOf("Cap");
         caption.text = "Score: {score}";

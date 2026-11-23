@@ -45,6 +45,7 @@ namespace BECore {
 
         /// @p text must lex as exactly one number
         LeafCheck CheckNumber(StringView text) {
+            const ScratchScope scratch;
             const auto tokens = LexExpression(text);
             if (!tokens.has_value()) {
                 return {false, false, tokens.error().message};
@@ -57,11 +58,12 @@ namespace BECore {
 
         /// @p text must lex as a name: one identifier, or identifiers joined by dots when @p dotted; `true` and `false` are literals, not names
         LeafCheck CheckName(StringView text, bool dotted) {
+            const ScratchScope scratch;
             const auto tokens = LexExpression(text);
             if (!tokens.has_value()) {
                 return {false, false, tokens.error().message};
             }
-            const Vector<ExprToken>& list = *tokens;
+            const ArenaVector<ExprToken>& list = *tokens;
             const StringView reason = dotted ? "is not a name or a dotted path" : "is not one name";
             // The last token is `End`, so a dot always has a token after it
             size_t at = 0;
@@ -99,7 +101,7 @@ namespace BECore {
         BuildResult AddString(ExprAst& ast, const CalcBuildState& state, StringView text) {
             ExprNode node;
             node.kind = ExprNodeKind::String;
-            node.text = String(text);
+            node.text.assign(text.data(), text.size());
             return state.Add(ast, std::move(node));
         }
 
@@ -113,7 +115,7 @@ namespace BECore {
         ExprNode node;
         node.kind = ExprNodeKind::Number;
         node.isFloat = check.isFloat;
-        node.text = text;
+        node.text.assign(text.data(), text.size());
         return state.Add(ast, std::move(node));
     }
 
@@ -138,7 +140,7 @@ namespace BECore {
         }
         ExprNode node;
         node.kind = ExprNodeKind::Name;
-        node.text = path;
+        node.text.assign(path.data(), path.size());
         return state.Add(ast, std::move(node));
     }
 
@@ -195,7 +197,7 @@ namespace BECore {
         // The arguments go to the list together, as the parser does, so those of a nested call do not interleave with these
         ExprNode node;
         node.kind = ExprNodeKind::Call;
-        node.text = function;
+        node.text.assign(function.data(), function.size());
         node.firstArgument = static_cast<uint32_t>(ast.arguments.size());
         node.argumentCount = static_cast<uint32_t>(built.size());
         ast.arguments.insert(ast.arguments.end(), built.begin(), built.end());
@@ -214,7 +216,7 @@ namespace BECore {
         ExprNode node;
         node.kind = ExprNodeKind::Member;
         node.first = *first;
-        node.text = name;
+        node.text.assign(name.data(), name.size());
         return state.Add(ast, std::move(node));
     }
 
@@ -232,7 +234,7 @@ namespace BECore {
         }
         ExprNode node;
         node.kind = ExprNodeKind::Call;
-        node.text = String(kNamedTableFunction);
+        node.text.assign(kNamedTableFunction.data(), kNamedTableFunction.size());
         node.firstArgument = static_cast<uint32_t>(ast.arguments.size());
         node.argumentCount = 2;
         ast.arguments.push_back(*tableName);
