@@ -128,6 +128,58 @@ def test_scan_dirs_do_report(run_cli, tmp_path, source, include_gen):
 
 
 # ---------------------------------------------------------------------------
+# a changed header of a scan-only or reference-only folder
+# ---------------------------------------------------------------------------
+
+def reflected_structs(*names):
+    return "".join(f"struct {name} {{\n    BE_CLASS({name})\n}};\n" for name in names)
+
+
+def test_changed_scan_dir_header_is_parsed_again_and_regenerated(run_cli, tmp_path, source, include_gen):
+    include_gen(source, 'Game')
+    (source / "Game.h").write_text(FIXED, encoding="utf-8")
+    scan = tmp_path / "scan"
+    scan.mkdir()
+    (scan / "Derived.h").write_text(reflected_structs("Old"), encoding="utf-8")
+    run_cli(source, "--scan-dir", str(scan))
+    generated = tmp_path / "out" / "Derived.gen.hpp"
+    assert "New" not in generated.read_text(encoding="utf-8")
+
+    (scan / "Derived.h").write_text(reflected_structs("Old", "New"), encoding="utf-8")
+    code, _, _ = run_cli(source, "--scan-dir", str(scan))
+    assert code == 0
+    assert "New" in generated.read_text(encoding="utf-8")
+
+
+def test_unchanged_scan_dir_header_is_not_generated_again(run_cli, tmp_path, source, include_gen):
+    include_gen(source, 'Game')
+    (source / "Game.h").write_text(FIXED, encoding="utf-8")
+    scan = tmp_path / "scan"
+    scan.mkdir()
+    (scan / "Derived.h").write_text(reflected_structs("Old"), encoding="utf-8")
+    run_cli(source, "--scan-dir", str(scan))
+    generated = tmp_path / "out" / "Derived.gen.hpp"
+    generated.write_text("// marker", encoding="utf-8")
+
+    run_cli(source, "--scan-dir", str(scan))
+    assert generated.read_text(encoding="utf-8") == "// marker"
+
+
+def test_changed_reference_dir_header_generates_nothing(run_cli, tmp_path, source, include_gen):
+    include_gen(source, 'Game')
+    (source / "Game.h").write_text(FIXED, encoding="utf-8")
+    reference = tmp_path / "reference"
+    reference.mkdir()
+    (reference / "Engine.h").write_text(reflected_structs("Old"), encoding="utf-8")
+    run_cli(source, "--reference-dir", str(reference))
+
+    (reference / "Engine.h").write_text(reflected_structs("Old", "New"), encoding="utf-8")
+    code, _, _ = run_cli(source, "--reference-dir", str(reference))
+    assert code == 0
+    assert not (tmp_path / "out" / "Engine.gen.hpp").exists()
+
+
+# ---------------------------------------------------------------------------
 # --quiet and --warnings-as-errors
 # ---------------------------------------------------------------------------
 
