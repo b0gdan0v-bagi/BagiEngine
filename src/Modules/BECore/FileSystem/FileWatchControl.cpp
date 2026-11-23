@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
+#include <BECore/FileSystem/FileWatchAnswers.h>
 #include <BECore/FileSystem/FileWatcher.h>
 
 namespace BECore {
@@ -11,25 +12,23 @@ namespace BECore {
 
         constexpr StringView kNotWatching = "not_watching";
 
-        StringView KindKey(FileChangeKind kind) {
+        struct KindNames {
+            static constexpr auto changed = "changed"_intern;
+            static constexpr auto added = "added"_intern;
+            static constexpr auto removed = "removed"_intern;
+        };
+
+        PoolString KindKey(FileChangeKind kind) {
             // No default: a new kind is a -Wswitch warning here, not a kind that shows as "changed"
             switch (kind) {
                 case FileChangeKind::Changed:
-                    return "changed";
+                    return KindNames::changed;
                 case FileChangeKind::Added:
-                    return "added";
+                    return KindNames::added;
                 case FileChangeKind::Removed:
-                    return "removed";
+                    return KindNames::removed;
             }
-            return "changed";
-        }
-
-        Json ConsumersJson(const Vector<PoolString>& consumers) {
-            Json result = Json::array();
-            for (const PoolString consumer : consumers) {
-                result.push_back(MakeJsonString(consumer.ToStringView()));
-            }
-            return result;
+            return KindNames::changed;
         }
 
         /// The `paths` of a request into @p paths; false when it is not a list of strings. @p present tells whether it was given
@@ -56,17 +55,15 @@ namespace BECore {
                 call.Fail(kNotWatching, "the file watcher is not running (the fileWatch setting)");
                 return;
             }
-            Json changes = Json::array();
+            FileWatchRescanAnswer answer;
             for (const PendingFileChange& change : watcher.Rescan()) {
-                Json item = Json::object();
-                item["path"] = MakeJsonString(change.virtualPath.ToStringView());
-                item["kind"] = MakeJsonString(KindKey(change.kind));
-                item["consumers"] = ConsumersJson(change.consumers);
-                changes.push_back(std::move(item));
+                FileWatchRescanChange item;
+                item.consumers = change.consumers;
+                item.kind = KindKey(change.kind);
+                item.path = change.virtualPath;
+                answer.changes.push_back(std::move(item));
             }
-            Json result = Json::object();
-            result["changes"] = std::move(changes);
-            call.Reply(std::move(result));
+            call.ReplyObject(answer);
         }
 
         void HandleApply(ControlCall& call, FileWatcher& watcher) {
@@ -86,21 +83,19 @@ namespace BECore {
             }
             const Vector<AppliedFileChange> applied = hasPaths ? watcher.Apply(Span<const StringView>(views.data(), views.size())) : watcher.Apply();
 
-            Json items = Json::array();
+            FileWatchApplyAnswer answer;
             for (const AppliedFileChange& change : applied) {
-                Json item = Json::object();
-                item["path"] = MakeJsonString(change.virtualPath.ToStringView());
-                item["consumers"] = ConsumersJson(change.consumers);
-                item["ok"] = change.ok;
+                FileWatchAppliedChange item;
+                item.consumers = change.consumers;
+                item.ok = change.ok;
+                item.path = change.virtualPath;
                 if (!change.ok) {
-                    item["error"] = MakeJsonString(change.error);
+                    item.error = change.error;
                 }
-                items.push_back(std::move(item));
+                answer.applied.push_back(std::move(item));
             }
-            Json result = Json::object();
-            result["applied"] = std::move(items);
             // The consumers announce what they took with events, which run in the frame: the answer waits for one, with the manual clock too
-            call.DeferFrames(1, 0.0, [result = std::move(result)](ControlCall& done) mutable { done.Reply(std::move(result)); });
+            call.DeferFrames(1, 0.0, [answer = std::move(answer)](ControlCall& done) { done.ReplyObject(answer); });
         }
 
     }  // namespace

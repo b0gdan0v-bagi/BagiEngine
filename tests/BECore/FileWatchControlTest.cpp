@@ -109,10 +109,9 @@ namespace BECore::Tests {
         StartWatching();
         const Json response = Call("files_rescan");
         ASSERT_TRUE(IsOk(response));
-        const Json* changes = FindJsonMember(*FindJsonMember(response, "result"), "changes");
-        ASSERT_NE(changes, nullptr);
-        EXPECT_TRUE(changes->is_array());
-        EXPECT_TRUE(changes->empty());
+        const Json* result = FindJsonMember(response, "result");
+        ASSERT_NE(result, nullptr);
+        EXPECT_EQ(DumpJson(*result), "{\"changes\":[]}");
     }
 
     TEST_F(FileWatchControlTest, AClientEditsAConfigOnDiskLooksAtItAppliesItAndSeesTheNewValue) {

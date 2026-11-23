@@ -44,18 +44,14 @@ namespace BECore::Tests {
 
         const Json* state = Call("audio_state");
         ASSERT_NE(state, nullptr) << lastError.c_str();
-        const Json* backend = FindJsonMember(*state, "backend");
-        ASSERT_NE(backend, nullptr);
-        EXPECT_TRUE(backend->is_null());
+        EXPECT_EQ(FindJsonMember(*state, "backend"), nullptr) << "no backend: no member";
         EXPECT_EQ(NumberOf(state, "voices"), 0.0);
         EXPECT_EQ(NumberOf(state, "started"), 0.0);
         EXPECT_EQ(NumberOf(state, "requested"), 1.0);
 
         const Json* music = FindJsonMember(*state, "music");
         ASSERT_NE(music, nullptr);
-        const Json* musicClip = FindJsonMember(*music, "clip");
-        ASSERT_NE(musicClip, nullptr);
-        EXPECT_TRUE(musicClip->is_null());
+        EXPECT_EQ(FindJsonMember(*music, "clip"), nullptr) << "no music: no member";
         EXPECT_EQ(BoolOf(music, "playing"), Optional<bool>(false));
         EXPECT_EQ(BoolOf(music, "fading"), Optional<bool>(false));
 
@@ -69,6 +65,18 @@ namespace BECore::Tests {
         EXPECT_EQ(StringOf(&first, "bus"), "sfx");
         EXPECT_EQ(NumberOf(&first, "volume"), 0.5);
         EXPECT_EQ(BoolOf(&first, "played"), Optional<bool>(false));
+    }
+
+    TEST_F(AudioControlTest, AFloatVolumeIsAnsweredAsTheDoubleItWidensTo) {
+        manager.Play(*MakeTestClip("sfx/quiet.wav"_intern), AudioBus::Sfx, 0.1f);
+
+        const Json* state = Call("audio_state");
+        ASSERT_NE(state, nullptr) << lastError.c_str();
+        const Json* recent = FindJsonMember(*state, "recent");
+        ASSERT_NE(recent, nullptr);
+        ASSERT_EQ(recent->size(), 1u);
+        EXPECT_EQ(NumberOf(&(*recent)[0], "volume"), static_cast<double>(0.1f));
+        EXPECT_NE(NumberOf(&(*recent)[0], "volume"), 0.1);
     }
 
     TEST_F(AudioControlTest, TheStateShowsTheBackendTheLevelsAndWhatPlays) {

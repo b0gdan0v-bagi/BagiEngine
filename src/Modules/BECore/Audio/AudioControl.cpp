@@ -1,5 +1,6 @@
 #include "AudioControl.h"
 
+#include <BECore/Audio/AudioControlAnswers.h>
 #include <BECore/Audio/AudioManager.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
@@ -10,79 +11,78 @@ namespace BECore {
 
     namespace {
 
+        /// The request-side name of the master level
         constexpr StringView kMasterKey = "master";
 
+        /// The wire names of the buses
+        struct BusNames {
+            static constexpr auto sfx = "sfx"_intern;
+            static constexpr auto music = "music"_intern;
+            static constexpr auto ui = "ui"_intern;
+        };
+
         /// The wire name of a bus: lower case, as the keys of `levels`
-        StringView BusKey(AudioBus bus) {
+        PoolString BusKey(AudioBus bus) {
             // No default: a new bus is a -Wswitch warning here, not a bus that shows as "sfx"
             switch (bus) {
                 case AudioBus::Sfx:
-                    return "sfx";
+                    return BusNames::sfx;
                 case AudioBus::Music:
-                    return "music";
+                    return BusNames::music;
                 case AudioBus::Ui:
-                    return "ui";
+                    return BusNames::ui;
             }
-            return "sfx";
+            return BusNames::sfx;
         }
 
-        Json LevelJson(const AudioLevel& level) {
-            Json result = Json::object();
-            result["volume"] = level._volume;
-            result["muted"] = level._muted;
-            return result;
+        AudioLevelAnswer LevelAnswer(const AudioLevel& level) {
+            AudioLevelAnswer answer;
+            answer.muted = level._muted;
+            answer.volume = static_cast<double>(level._volume);
+            return answer;
         }
 
-        Json LevelsJson(const AudioSettings& settings) {
-            Json result = Json::object();
-            result[ToStd(kMasterKey)] = LevelJson(settings._master);
-            for (const AudioBus bus : {AudioBus::Sfx, AudioBus::Music, AudioBus::Ui}) {
-                result[ToStd(BusKey(bus))] = LevelJson(settings.LevelOf(bus));
-            }
-            return result;
+        AudioLevelsAnswer LevelsAnswer(const AudioSettings& settings) {
+            AudioLevelsAnswer answer;
+            answer.master = LevelAnswer(settings._master);
+            answer.music = LevelAnswer(settings.LevelOf(AudioBus::Music));
+            answer.sfx = LevelAnswer(settings.LevelOf(AudioBus::Sfx));
+            answer.ui = LevelAnswer(settings.LevelOf(AudioBus::Ui));
+            return answer;
         }
 
         void HandleState(ControlCall& call, const AudioManager& manager) {
-            Json result = Json::object();
+            AudioStateAnswer answer;
             if (const auto& backend = manager.GetBackend()) {
-                result["backend"] = MakeJsonString(backend->GetTypeMeta().typeName);
-                result["voices"] = manager.GetEffectVoiceCount();
-            } else {
-                result["backend"] = nullptr;
-                result["voices"] = 0;
+                answer.backend = PoolString::Intern(backend->GetTypeMeta().typeName);
+                answer.voices = manager.GetEffectVoiceCount();
             }
-            result["playing"] = manager.GetPlayingCount();
-            result["started"] = manager.GetStartedCount();
-            result["requested"] = manager.GetRequestCount();
-            result["levels"] = LevelsJson(manager.GetSettings());
+            answer.playing = manager.GetPlayingCount();
+            answer.started = manager.GetStartedCount();
+            answer.requested = manager.GetRequestCount();
+            answer.levels = LevelsAnswer(manager.GetSettings());
 
             const AudioMusicState music = manager.GetMusicState();
-            Json musicJson = Json::object();
-            if (music.clip.Empty()) {
-                musicJson["clip"] = nullptr;
-            } else {
-                musicJson["clip"] = MakeJsonString(music.clip.ToStringView());
+            if (!music.clip.Empty()) {
+                answer.music.clip = music.clip;
             }
-            musicJson["playing"] = music.playing;
-            musicJson["loop"] = music.loop;
-            musicJson["volume"] = music.volume;
-            musicJson["fading"] = music.fading;
-            result["music"] = std::move(musicJson);
+            answer.music.playing = music.playing;
+            answer.music.loop = music.loop;
+            answer.music.volume = static_cast<double>(music.volume);
+            answer.music.fading = music.fading;
 
             Vector<AudioPlayRecord> records;
             manager.GetRecentPlays(records);
-            Json recent = Json::array();
             for (const AudioPlayRecord& record : records) {
-                Json item = Json::object();
-                item["index"] = record.index;
-                item["clip"] = MakeJsonString(record.clip.ToStringView());
-                item["bus"] = MakeJsonString(BusKey(record.bus));
-                item["volume"] = record.volume;
-                item["played"] = record.played;
-                recent.push_back(std::move(item));
+                AudioRecentPlay item;
+                item.bus = BusKey(record.bus);
+                item.clip = record.clip;
+                item.index = record.index;
+                item.played = record.played;
+                item.volume = static_cast<double>(record.volume);
+                answer.recent.push_back(item);
             }
-            result["recent"] = std::move(recent);
-            call.Reply(std::move(result));
+            call.ReplyObject(answer);
         }
 
         void HandleSet(ControlCall& call, AudioManager& manager) {
@@ -94,7 +94,7 @@ namespace BECore {
                 master = true;
             } else if (busName) {
                 for (const AudioBus candidate : {AudioBus::Sfx, AudioBus::Music, AudioBus::Ui}) {
-                    if (StringView(*busName) == BusKey(candidate)) {
+                    if (StringView(*busName) == BusKey(candidate).ToStringView()) {
                         bus = candidate;
                     }
                 }
@@ -129,7 +129,7 @@ namespace BECore {
                     manager.SetBusMuted(*bus, *muted);
                 }
             }
-            call.Reply(LevelsJson(manager.GetSettings()));
+            call.ReplyObject(LevelsAnswer(manager.GetSettings()));
         }
 
     }  // namespace
