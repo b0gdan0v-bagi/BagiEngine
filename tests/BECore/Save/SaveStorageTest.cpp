@@ -140,7 +140,7 @@ namespace BECore::Tests {
 
 #ifndef __EMSCRIPTEN__
     TEST_F(SaveStorageTest, DesktopHasNoPersistentDirectoryAndNoState) {
-        EXPECT_TRUE(PersistentSaveDirectory().empty());
+        EXPECT_TRUE(PersistentSaveDirectory().Empty());
         EXPECT_EQ(GetSaveStorageState(), SaveStorageState::NotApplicable);
     }
 #endif

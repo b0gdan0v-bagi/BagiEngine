@@ -1,5 +1,6 @@
 #pragma once
 #include <BECore/File/File.h>
+#include <BECore/File/Path.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/PoolString/StaticPoolString.h>
@@ -11,7 +12,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
-#include <filesystem>
 
 namespace BECore {
 
@@ -80,14 +80,14 @@ namespace BECore {
          *
          * @return false if the path is a file or the folder cannot be made
          */
-        bool Initialize(const std::filesystem::path& directory);
+        bool Initialize(const Path& directory);
 
         [[nodiscard]] bool IsInitialized() const {
             return _initialized;
         }
 
         /// The folder of the saves, as mounted; empty before Initialize()
-        [[nodiscard]] const std::filesystem::path& GetDirectory() const {
+        [[nodiscard]] const Path& GetDirectory() const {
             return _directory;
         }
 
@@ -169,16 +169,16 @@ namespace BECore {
 
     private:
         /// The file of @p slot for a read: NotInitialized, InvalidSlotName or NotFound as ReadSlot answers them
-        [[nodiscard]] std::expected<std::filesystem::path, SaveError> FindSlotFile(StringView slot) const;
+        [[nodiscard]] std::expected<Path, SaveError> FindSlotFile(StringView slot) const;
 
         /// The real path of the save file of a valid slot, or an empty path when there is none in the save folder
-        [[nodiscard]] std::filesystem::path ResolveSlot(StringView slot) const;
+        [[nodiscard]] Path ResolveSlot(StringView slot) const;
 
         /// The file need not exist
-        [[nodiscard]] std::filesystem::path MakePath(StringView slot, StringView suffix) const;
+        [[nodiscard]] Path MakePath(StringView slot, StringView suffix) const;
 
         FileSystem& _fileSystem;
-        std::filesystem::path _directory;
+        Path _directory;
         bool _initialized = false;
     };
 

@@ -259,6 +259,46 @@ namespace BECore::Tests {
         EXPECT_TRUE(std::filesystem::equivalent(service.GetDirectory(), nested));
     }
 
+    TEST_F(SaveGameFilesTest, ANonAsciiFolderRoundTripsASlot) {
+        const std::filesystem::path folder = _base / "caf\xC3\xA9" / "sauvegardes";
+        SaveGameService service(_fileSystem);
+        ASSERT_TRUE(service.Initialize(folder));
+
+        ASSERT_TRUE(service.WriteSlot("slot1", Bytes({4, 5, 6})).has_value());
+        EXPECT_TRUE(service.Exists("slot1"));
+        EXPECT_TRUE(std::filesystem::is_regular_file(folder / "slot1.save"));
+
+        const auto read = service.ReadSlot("slot1");
+        ASSERT_TRUE(read.has_value());
+        EXPECT_EQ(*read, Bytes({4, 5, 6}));
+        EXPECT_EQ(Names(service.List()), Vector<String>{"slot1"});
+
+        EXPECT_TRUE(service.Delete("slot1"));
+        EXPECT_FALSE(service.Exists("slot1"));
+        EXPECT_FALSE(std::filesystem::exists(folder / "slot1.save"));
+    }
+
+    TEST_F(SaveGameFilesTest, ARelativeFolderIsStoredAbsoluteAndNormal) {
+        SaveGameService service(_fileSystem);
+
+        // The working folder is switched for this call only (the test is single threaded), as FileOfTheWorkingDirectoryIsNotASave does
+        const std::filesystem::path previous = std::filesystem::current_path();
+        std::filesystem::current_path(_base);
+        const bool initialized = service.Initialize(Path("x/../rel/./saves"));
+        std::filesystem::current_path(previous);
+        ASSERT_TRUE(initialized);
+
+        const Path directory = service.GetDirectory();
+        EXPECT_TRUE(directory.IsAbsolute());
+        EXPECT_EQ(directory, directory.LexicallyNormal());
+        EXPECT_EQ(directory.View().find(".."), StringView::npos);
+        EXPECT_EQ(directory.Filename(), Path("saves"));
+        EXPECT_TRUE(std::filesystem::is_directory(_base / "rel" / "saves"));
+
+        ASSERT_TRUE(service.WriteSlot("slot", Bytes({1})).has_value());
+        EXPECT_TRUE(std::filesystem::is_regular_file(_base / "rel" / "saves" / "slot.save"));
+    }
+
     TEST_F(SaveGameFilesTest, InitializeOnAFileIsFalse) {
         const std::filesystem::path file = _base / "not_a_folder";
         WriteFile(file, "x");

@@ -1,10 +1,10 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <cstdint>
-#include <filesystem>
 
 namespace BECore {
 
@@ -25,7 +25,7 @@ namespace BECore {
      *
      * kWebSaveDirectory in a browser build, an empty path elsewhere (the game keeps its own real folder there).
      */
-    [[nodiscard]] std::filesystem::path PersistentSaveDirectory();
+    [[nodiscard]] Path PersistentSaveDirectory();
 
     /**
      * @brief Whether the saves are remembered. Read after the game started: the page settles it before the start.
