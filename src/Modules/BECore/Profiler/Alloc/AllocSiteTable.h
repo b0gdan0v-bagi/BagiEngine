@@ -46,6 +46,11 @@ namespace BECore {
         const ProfileSite* zone = nullptr;  // nullptr: made outside every zone
         uint64_t allocs = 0;                // the sum of buckets
         uint64_t buckets[kSizeBuckets]{};
+
+        /// The label of the zone for a report, as AllocSiteStats::ZoneLabel()
+        [[nodiscard]] const char* ZoneLabel() const {
+            return zone != nullptr ? zone->name : AllocSiteStats::kNoZone;
+        }
     };
 
     /**

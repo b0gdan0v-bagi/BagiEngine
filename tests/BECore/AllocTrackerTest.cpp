@@ -471,6 +471,59 @@ namespace BECore::Tests {
         EXPECT_TRUE(found);
     }
 
+    TEST(AllocTrackerTest, TheChromeTraceCarriesTheSizeHistogramOfTheTrackerRows) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("TraceSizesZone");
+            Vector<char> small;
+            small.reserve(kBlock / 10);
+            Vector<char> big;
+            big.reserve(kBlock);
+            Vector<char> bigger;
+            bigger.reserve(kBlock);
+        }
+        ChromeTraceBackend recorder;
+        const auto parsed = ParseJson(recorder.WriteJson());
+        ASSERT_TRUE(parsed.has_value());
+        const Json* other = FindJsonMember(*parsed, "otherData");
+        ASSERT_NE(other, nullptr);
+        const Json* rows = FindJsonMember(*other, "allocSizes");
+        ASSERT_NE(rows, nullptr);
+        const Json* traced = nullptr;
+        for (const Json& row : *rows) {
+            if (GetJsonString(row, "zone") == String("TraceSizesZone")) {
+                traced = &row;
+            }
+        }
+        ASSERT_NE(traced, nullptr);
+
+        const AllocSizeStats* expected = nullptr;
+        const Vector<AllocSizeStats> sizes = AllocTracker::GetSizeStats();
+        for (const AllocSizeStats& stats : sizes) {
+            if (stats.zone != nullptr && std::strcmp(stats.zone->name, "TraceSizesZone") == 0) {
+                expected = &stats;
+            }
+        }
+        ASSERT_NE(expected, nullptr);
+        EXPECT_EQ(GetJsonInt(*traced, "allocs"), static_cast<int64_t>(expected->allocs));
+        EXPECT_EQ(expected->allocs, 3u);
+        const Json* buckets = FindJsonMember(*traced, "buckets");
+        ASSERT_NE(buckets, nullptr);
+        size_t nonEmpty = 0;
+        for (uint32_t bucket = 0; bucket < kSizeBuckets; ++bucket) {
+            nonEmpty += expected->buckets[bucket] != 0 ? 1 : 0;
+        }
+        ASSERT_EQ(buckets->size(), nonEmpty);
+        size_t index = 0;
+        for (uint32_t bucket = 0; bucket < kSizeBuckets; ++bucket) {
+            if (expected->buckets[bucket] != 0) {
+                EXPECT_EQ(GetJsonInt((*buckets)[index], "upTo"), static_cast<int64_t>(SizeBucketBound(bucket)));
+                EXPECT_EQ(GetJsonInt((*buckets)[index], "allocs"), static_cast<int64_t>(expected->buckets[bucket]));
+                ++index;
+            }
+        }
+    }
+
     namespace {
 
         /// The blocks the zone `Trace write` allocated while a recorder with @p events frame marks was written to a file; the writing thread is in

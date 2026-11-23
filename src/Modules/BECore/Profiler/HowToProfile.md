@@ -57,6 +57,8 @@ _cells.get_allocator().set_name("Board cells");  // a literal: the table keys th
 
 The name has to be a string literal (or live as long as the program). An allocation with an empty `name` came through a plain `operator new`, not an EASTL container; a block of a vendored library that EASTL did not name carries the library's own name (`pugixml`, `ImGui`, `SDL`, `stb`, `dr_libs`). A trace written during the run (`--trace`) carries the same table in `otherData.allocNames`.
 
+`sizes` (`otherData.allocSizes` in a trace) is the histogram of what each zone allocates by size: per zone the non-empty power-of-two buckets, `upTo` the largest size of the bucket in bytes (`0`: the open last bucket, above 16 MiB). Read it when judging a pool: a zone whose allocations all sit in one or two small buckets (many 32-byte nodes) is a candidate for a block pool or an arena of that size; a few large buckets are buffers a pool does not help. Like `names` it counts the innermost zone only.
+
 ## Tracy
 
 For a live view (zones, frames, plots, allocations with call stacks, while the game runs):

@@ -22,6 +22,22 @@ namespace BECore {
 
         constexpr double kNanosecondsPerMicrosecond = 1000.0;
         constexpr size_t kMaxAllocNames = 100;
+        constexpr size_t kMaxAllocSizeZones = 100;
+
+        /// One zone's size histogram as an `allocSizes` row: the shape of the `sizes` rows of the control method zone_allocs
+        void AppendAllocSizeRow(String& out, const AllocSizeStats& stats) {
+            out.append("{\"zone\":");
+            AppendJsonString(out, stats.ZoneLabel());
+            AppendFormat(out, ",\"allocs\":{},\"buckets\":[", stats.allocs);
+            bool first = true;
+            for (uint32_t bucket = 0; bucket < kSizeBuckets; ++bucket) {
+                if (stats.buckets[bucket] != 0) {
+                    AppendFormat(out, "{}{{\"upTo\":{},\"allocs\":{}}}", first ? "" : ",", SizeBucketBound(bucket), stats.buckets[bucket]);
+                    first = false;
+                }
+            }
+            out.append("]}");
+        }
 
     }  // namespace
 
@@ -247,6 +263,16 @@ namespace BECore {
                 out.append(",\"name\":");
                 AppendJsonString(out, stats.name != nullptr ? stats.name : "");
                 AppendFormat(out, ",\"allocs\":{},\"bytes\":{}}}", stats.count, stats.bytes);
+            }
+            out.append("],\"allocSizes\":[");
+            written = 0;
+            for (const AllocSizeStats& stats : AllocTracker::GetSizeStats()) {
+                if (written == kMaxAllocSizeZones) {
+                    break;
+                }
+                checkpoint(out);
+                out.append(written++ == 0 ? "\n" : ",\n");
+                AppendAllocSizeRow(out, stats);
             }
             out.append("]");
         }

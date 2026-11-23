@@ -60,6 +60,7 @@ The tracker counts what goes through the global `operator new` and what the vend
 - **Self-charged** to the innermost zone like `names`, not inclusive like `zones`; an allocation outside every zone is the row with a null zone. An inclusive histogram would need per-thread bucket copies read at both ends of every zone.
 - **Fixed BSS**, `kZonePointers + 1` rows indexed by the interned zone index (row 0 the null zone), 64-bit counters, about 210 KB; `Add` still never allocates, locks or logs. Counted whenever the zone fits the zone pointer table, even when the name or the pair table is full; a full zone table drops the allocation into `GetNameOverflow()`.
 - `ResetZoneStats` zeroes it with the names. Empty without `ENGINE_PROFILER_ALLOC`.
+- Reported as `zone_allocs` `sizes` and `otherData.allocSizes` of the Chrome trace: per zone only the non-empty buckets, `upTo` the bucket's largest size in bytes and `0` for the open last one.
 
 ## Invisible
 
