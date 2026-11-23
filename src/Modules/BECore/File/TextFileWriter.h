@@ -141,7 +141,7 @@ namespace BECore {
             _used = 0;
             auto closed = _file.Close();
             if (_error) {
-                return std::unexpected(TakeErrorText());
+                return std::unexpected(std::move(*TakeError()));
             }
             return closed;
         }
@@ -178,12 +178,6 @@ namespace BECore {
             }
             _error = std::move(result.error());
             return false;
-        }
-
-        String TakeErrorText() {
-            String text = std::move(*_error);
-            _error.reset();
-            return text;
         }
 
         File _file;

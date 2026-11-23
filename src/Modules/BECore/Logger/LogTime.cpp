@@ -1,6 +1,5 @@
 #include "LogTime.h"
 
-
 namespace BECore {
 
     namespace {
@@ -64,7 +63,7 @@ namespace BECore {
     }
 
     void InitLogClock() {
-        (void)GetLogUtcOffset();
+        static_cast<void>(GetLogUtcOffset());
     }
 
     LocalLogTime MakeLocalLogTime(std::chrono::system_clock::time_point moment, std::chrono::seconds utcOffset) {

@@ -2,6 +2,7 @@
 
 #include <BECore/Logger/ILogSink.h>
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/Logger/LogRingBuffer.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
 
