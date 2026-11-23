@@ -1,9 +1,9 @@
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <SDL3/SDL.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenImage.h>
 #include <Widgets/TextureEditor/SpriteImage.h>
-#include <fstream>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -32,11 +32,7 @@ namespace BECore::Tests {
         }
 
         Vector<uint8_t> ReadBytes(const std::filesystem::path& file) {
-            std::ifstream stream(file, std::ios::binary | std::ios::ate);  //-NoStd: a test reads the file back
-            Vector<uint8_t> bytes(static_cast<size_t>(std::max<std::streamoff>(stream.tellg(), 0)));
-            stream.seekg(0);
-            stream.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-            return bytes;
+            return ReadFileBytes(file);
         }
 
         /// A test file under the system temp folder that is removed with the object
@@ -118,10 +114,7 @@ namespace BECore::Tests {
 
     TEST(SpriteImage, AFileOfTextIsNotAnImage) {
         TempFile file(".txt");
-        {
-            std::ofstream stream(file.Path(), std::ios::binary);  //-NoStd: a test writes the file
-            stream << "this is not a picture";
-        }
+        WriteFile(file.Path(), "this is not a picture");
         const auto loaded = LoadRgbaImage(file.Path());
         ASSERT_FALSE(loaded.has_value());
         EXPECT_FALSE(loaded.error().empty());
@@ -251,10 +244,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(SaveRgbaPng(whole.Path(), MakeImage(16, 16)).has_value());
         const auto bytes = ReadBytes(whole.Path());
         TempFile cut;
-        {
-            std::ofstream stream(cut.Path(), std::ios::binary);  //-NoStd: a test writes the file
-            stream.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size() / 2));
-        }
+        WriteFile(cut.Path(), StringView(reinterpret_cast<const char*>(bytes.data()), bytes.size() / 2));
         const auto loaded = LoadRgbaImage(cut.Path());
         ASSERT_FALSE(loaded.has_value());
         EXPECT_FALSE(loaded.error().empty());

@@ -6,6 +6,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -743,11 +744,7 @@ namespace BECore::Tests {
 
             const std::filesystem::path path = TestTempPath("TextureLibraryTest_Saved.xml");
             EXPECT_TRUE(document.SaveToFile(path));
-            std::ifstream in(path, std::ios::in | std::ios::binary);  //-NoStd: the test reads its own temporary file byte for byte
-            String bytes;
-            bytes.resize(static_cast<size_t>(std::filesystem::file_size(path)));
-            in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-            in.close();
+            String bytes = ReadFile(path);
             std::error_code error;
             std::filesystem::remove(path, error);
             return bytes;
@@ -834,10 +831,7 @@ namespace BECore::Tests {
         template <typename Edit>
         String AcceptedOnDisk(Edit edit) {
             const std::filesystem::path path = TestTempPath("TextureLibraryTest_HandLaid.xml");
-            {
-                std::ofstream out(path, std::ios::out | std::ios::binary);  //-NoStd: the test writes its own temporary file byte for byte
-                out.write(kHandLaidFile.data(), static_cast<std::streamsize>(kHandLaidFile.size()));
-            }
+            WriteFile(path, kHandLaidFile);
 
             XmlDocument document;
             EXPECT_TRUE(document.LoadFromFile(path));
@@ -849,11 +843,7 @@ namespace BECore::Tests {
             EXPECT_TRUE(library.WriteInto(document.GetRoot().GetPugiNode()));
             EXPECT_TRUE(document.SaveToFile(path));
 
-            std::ifstream in(path, std::ios::in | std::ios::binary);  //-NoStd: the test reads its own temporary file byte for byte
-            String bytes;
-            bytes.resize(static_cast<size_t>(std::filesystem::file_size(path)));
-            in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-            in.close();
+            String bytes = ReadFile(path);
             std::error_code error;
             std::filesystem::remove(path, error);
             return bytes;
