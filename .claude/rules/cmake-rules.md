@@ -114,7 +114,7 @@ Each engine module has its own `CMakeLists.txt`:
 
 | Option | Default | Effect |
 |--------|---------|--------|
-| `ENGINE_NO_EXCEPTIONS` | `ON` | `-fno-exceptions` / `/EHs-c-`, `ENGINE_NO_EXCEPTIONS=1`, `EASTL_EXCEPTIONS_ENABLED=0` |
+| `ENGINE_NO_EXCEPTIONS` | `ON` | `-fno-exceptions` / `/EHs-c-`, `ENGINE_NO_EXCEPTIONS=1`, `EASTL_EXCEPTIONS_ENABLED=0`, `FMT_EXCEPTIONS=0` (fmt would read `_HAS_EXCEPTIONS` of the MSVC library, 1 whatever the flags, and use `try` with Clang on Windows) |
 | `ENGINE_ENABLE_ASSERTS` | `ON` | `ASSERT` / `FATALERROR`; compiled out when `OFF` |
 | `ENGINE_ENABLE_EXPECTS` | `ON` | `EXPECT`; compiled out when `OFF` |
 | `ENGINE_BUILD_TESTS` | `ON` | GoogleTest, `BagiEngineTestSupport`, `BagiEngineTests` and the game test executables |
