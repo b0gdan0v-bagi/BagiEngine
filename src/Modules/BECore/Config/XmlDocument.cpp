@@ -4,6 +4,7 @@
 #include <BECore/Config/XmlLayoutMerge.h>
 #include <BECore/File/File.h>
 #include <BECore/File/FilePath.h>
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Reflection/ReaderLimits.h>
 
 namespace BECore {
@@ -18,6 +19,10 @@ namespace BECore {
 
         constexpr const char* kIndent = "  ";
 
+        /// An on-disk config bigger than this is read into a heap block: the chunks of a scratch arena stay allocated after the scope, and a
+        /// thread must not keep one the size of the biggest file it ever saved over (ConfigManager's bound for its reads)
+        constexpr size_t kMaxScratchSaveBytes = 256 * 1024;
+
         constexpr StringView kByteOrderMark = "\xEF\xBB\xBF";
 
         bool StartsWithByteOrderMark(StringView text) {
@@ -29,8 +34,8 @@ namespace BECore {
         }
 
         /// The canonical text of @p document, the one every save without a layout to keep writes
-        String SerializeCanonical(const pugi::xml_document& document, bool withByteOrderMark) {
-            StringXmlWriter writer;
+        String SerializeCanonical(const pugi::xml_document& document, bool withByteOrderMark, size_t sizeHint = 0) {
+            StringXmlWriter writer(sizeHint);
             document.save(writer, kIndent, kWriteFlags | (withByteOrderMark ? pugi::format_write_bom : 0u), pugi::encoding_utf8);
             return eastl::move(writer.text);
         }
@@ -44,14 +49,15 @@ namespace BECore {
             if (!diskDocument.load_buffer(onDisk.data(), onDisk.size(), kParseFlags, pugi::encoding_utf8)) {
                 return std::nullopt;
             }
-            const String baseline = SerializeCanonical(diskDocument, false);
+            // The canonical text of a hand-laid file is about its size: one reserve instead of growth by doubling
+            const String baseline = SerializeCanonical(diskDocument, false, onDisk.size());
             Optional<String> merged = MergeXmlLayout(onDisk, baseline, updated);
             if (!merged) {
                 return std::nullopt;
             }
 
             pugi::xml_document mergedDocument;
-            if (!mergedDocument.load_buffer(merged->data(), merged->size(), kParseFlags, pugi::encoding_utf8) || SerializeCanonical(mergedDocument, false) != updated) {
+            if (!mergedDocument.load_buffer(merged->data(), merged->size(), kParseFlags, pugi::encoding_utf8) || SerializeCanonical(mergedDocument, false, updated.size()) != updated) {
                 LOG_DEBUG("XmlDocument: the merged layout does not give the document, the canonical text is written");
                 return std::nullopt;
             }
@@ -119,19 +125,29 @@ namespace BECore {
             return false;
         }
 
-        // The text is built before the file is opened, which truncates it
-        String text = Serialize();
+        // The text stays on the heap: Write takes it and it is what the caller's file ends up holding. It is built before the file is opened, which
+        // truncates it, and reserved like the file that is there: a hand-laid file is about as long as its canonical text, so a save grows it rarely
+        String text;
 
-        // The DOM wins over the file: what is on disk only lends its layout (blank lines, indentation)
-        if (const Optional<String> onDisk = ReadFileBytes(filepath)) {
-            const StringView updatedBody = WithoutByteOrderMark(text);
-            const size_t markSize = text.size() - updatedBody.size();
-            if (const Optional<String> laidOut = LayOutLikeFile(WithoutByteOrderMark(*onDisk), updatedBody)) {
-                text.resize(markSize);
-                text.append(laidOut->data(), laidOut->size());
-            }
-            if (*onDisk == text) {
-                return true;
+        // The DOM wins over the file: what is on disk only lends its layout (blank lines, indentation). The scope ends before the file is opened
+        // for writing, so the bytes it holds are never alive across the truncation. LayOutLikeFile keeps its two pugixml documents and its
+        // canonical texts on the heap (pugixml's allocator, and Strings the comparison with the DOM needs)
+        {
+            ScratchScope scratch;
+            const auto read = ReadFileBytesScratch(PathToUtf8(filepath), scratch.GetArena(), kMaxScratchSaveBytes, ReaderLimits::kMaxXmlDocumentBytes);
+            const Span<const uint8_t> bytes = read ? read->Bytes() : Span<const uint8_t>{};
+            const StringView onDisk(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+            text = SerializeCanonical(_doc, _hasByteOrderMark, onDisk.size());
+            if (read) {
+                const StringView updatedBody = WithoutByteOrderMark(text);
+                const size_t markSize = text.size() - updatedBody.size();
+                if (const Optional<String> laidOut = LayOutLikeFile(WithoutByteOrderMark(onDisk), updatedBody)) {
+                    text.resize(markSize);
+                    text.append(laidOut->data(), laidOut->size());
+                }
+                if (onDisk == StringView(text)) {
+                    return true;
+                }
             }
         }
 

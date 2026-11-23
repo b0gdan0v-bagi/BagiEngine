@@ -1,6 +1,8 @@
 // The heap cost of the listings and the editor save: what a call allocates for its working lists now that they live on the scratch arena.
 
+#include <BECore/Config/XmlDocument.h>
 #include <BECore/Config/XmlLayoutMerge.h>
+#include <BECore/Config/XmlNode.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/Memory/ScratchArena.h>
 #include <Common/AllocCheck.h>
@@ -22,6 +24,9 @@ namespace BECore::Tests {
         /// The merged text is the only heap block of a merge of a config that fits the stack chunk of its working memory; the line lists, the map, the
         /// diff and the hunks made 88 more before they moved there
         constexpr uint64_t kMergeHeapBlocks = 1;
+        /// What a save of a 300-line config over its file still allocates: the file layer's paths, the two pugixml documents, the canonical
+        /// texts and the result. The old text, its line lists and the diff made 5 more (44 before, 39 after)
+        constexpr uint64_t kSaveHeapBlocks = 42;
 
         /// A config of @p lines rows with a hand-laid blank line after every tenth one, and its canonical text (the blank lines dropped)
         struct LaidOutConfig {
@@ -125,6 +130,31 @@ namespace BECore::Tests {
         EXPECT_EQ(ScratchArena::Get().GetBytesUsed(), usedBefore);
         // A scratch arena keeps its chunks after a scope: the diff of a pathological edit count must not have grown it
         EXPECT_EQ(ScratchArena::Get().GetCapacity(), capacityBefore);
+    }
+
+    TEST(ListingScratchTest, SavingAnEditedConfigOverItsFileKeepsItsLayoutAndReadsTheOldTextFromScratch) {
+        TestTempFolder folder("BagiListingScratchSave");
+        const std::filesystem::path path = ToStdString(folder.PathOf("config.xml"));
+        const LaidOutConfig config = MakeConfig(kConfigLines);
+        WriteFile(path, config.original);
+
+        XmlDocument document;
+        ASSERT_TRUE(document.LoadFromFile(path));
+        pugi::xml_node row = document.GetRoot().GetPugiNode().first_child();
+        row.attribute("x").set_value("edited");
+
+        bool saved = false;
+        const AllocCount counts = CountAllocations([&] { saved = document.SaveToFile(path); });
+
+        ASSERT_TRUE(saved);
+        String expected = config.original;
+        const size_t at = expected.find("x=\"0\"");
+        ASSERT_NE(at, String::npos);
+        expected.replace(at, 5, "x=\"edited\"");
+        EXPECT_EQ(ReadFile(path), expected);
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_LE(counts.count, kSaveHeapBlocks);
+        }
     }
 
 }  // namespace BECore::Tests
