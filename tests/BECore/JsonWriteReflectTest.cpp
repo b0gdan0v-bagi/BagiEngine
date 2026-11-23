@@ -977,6 +977,9 @@ namespace BECore::Tests {
             }
             value.maybeWords.emplace();
             value.maybeWords->push_back(ArenaText(kLongWord));
+            value.pools.reserve(2);
+            value.pools.push_back("ArenaPoolOne"_intern);
+            value.pools.push_back("ArenaPoolTwo"_intern);
             return value;
         }
 
@@ -992,6 +995,7 @@ namespace BECore::Tests {
                 item.rank = index;
             }
             value.maybeWords = Vector<String>{String(kLongWord.data(), kLongWord.size())};
+            value.pools = {"ArenaPoolOne"_intern, "ArenaPoolTwo"_intern};
             return value;
         }
 
@@ -1033,6 +1037,7 @@ namespace BECore::Tests {
         EXPECT_EQ(read.items[1].rank, 1);
         ASSERT_TRUE(read.maybeWords.has_value());
         EXPECT_EQ(*read.maybeWords, *original.maybeWords);
+        EXPECT_EQ(read.pools, original.pools);
         ExpectRoundTrip(original);
     }
 
@@ -1064,6 +1069,8 @@ namespace BECore::Tests {
             value.words.reserve(2);
             value.words.push_back(TextView(kViewedText));
             value.words.push_back(TextView(kViewedWord));
+            value.maybeWords.emplace();
+            value.maybeWords->push_back(TextView(kViewedText));
             return value;
         }
 
@@ -1072,6 +1079,7 @@ namespace BECore::Tests {
             value.text = String(kViewedText.data(), kViewedText.size());
             value.maybeText = String(kViewedWord.data(), kViewedWord.size());
             value.words = {String(kViewedText.data(), kViewedText.size()), String(kViewedWord.data(), kViewedWord.size())};
+            value.maybeWords = Vector<String>{String(kViewedText.data(), kViewedText.size())};
             return value;
         }
 
@@ -1091,6 +1099,7 @@ namespace BECore::Tests {
         const ViewTwin empty;
         const String text = Written(empty, JsonWriter::kCompact);
         EXPECT_EQ(text.find("maybeText"), String::npos);
+        EXPECT_EQ(text.find("maybeWords"), String::npos);
         EXPECT_EQ(text, Written(ViewHeapTwin{}, JsonWriter::kCompact));
     }
 

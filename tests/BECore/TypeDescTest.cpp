@@ -204,6 +204,7 @@ namespace BECore::Tests {
         EXPECT_TRUE((SameAs<ArenaVector<uint32_t>, Vector<uint32_t>>()));
         EXPECT_TRUE((SameAs<Optional<ArenaString>, Optional<String>>()));
         EXPECT_TRUE((SameAs<Optional<ArenaVector<ArenaString>>, Optional<Vector<String>>>()));
+        EXPECT_TRUE((SameAs<ArenaVector<PoolString>, Vector<PoolString>>()));
         EXPECT_FALSE((SameAs<ArenaVector<ArenaString>, Vector<int32_t>>()));
         EXPECT_EQ(DescribeType<ArenaString>().kind, TypeKind::String);
         EXPECT_EQ(DescribeType<ArenaVector<uint32_t>>().kind, TypeKind::List);
@@ -214,6 +215,7 @@ namespace BECore::Tests {
         EXPECT_EQ(DescribeType<TextView>().kind, TypeKind::String);
         EXPECT_EQ(DescribeType<ArenaVector<TextView>>().element->kind, TypeKind::String);
         EXPECT_TRUE(Ser::HasDataAccessor<TextView>);
+        EXPECT_TRUE((SameAs<Optional<ArenaVector<TextView>>, Optional<Vector<String>>>()));
     }
 
     TEST(TypeDescTest, EnumIdentityIsItsNamesAndItsSize) {

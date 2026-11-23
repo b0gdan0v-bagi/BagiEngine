@@ -340,6 +340,7 @@ namespace BECore {
             BE_REFLECT_FIELD ArenaVector<uint32_t> numbers;
             BE_REFLECT_FIELD ArenaVector<ArenaItem> items;
             BE_REFLECT_FIELD Optional<ArenaVector<ArenaString>> maybeWords;
+            BE_REFLECT_FIELD ArenaVector<PoolString> pools;
         };
 
         struct HeapTwin {
@@ -351,6 +352,7 @@ namespace BECore {
             BE_REFLECT_FIELD Vector<uint32_t> numbers;
             BE_REFLECT_FIELD Vector<HeapItem> items;
             BE_REFLECT_FIELD Optional<Vector<String>> maybeWords;
+            BE_REFLECT_FIELD Vector<PoolString> pools;
         };
 
         /// An answer of views of text kept elsewhere and its heap twin with the same field names
@@ -360,6 +362,7 @@ namespace BECore {
             BE_REFLECT_FIELD TextView text;
             BE_REFLECT_FIELD Optional<TextView> maybeText;
             BE_REFLECT_FIELD ArenaVector<TextView> words;
+            BE_REFLECT_FIELD Optional<ArenaVector<TextView>> maybeWords;
         };
 
         struct ViewHeapTwin {
@@ -368,6 +371,7 @@ namespace BECore {
             BE_REFLECT_FIELD String text;
             BE_REFLECT_FIELD Optional<String> maybeText;
             BE_REFLECT_FIELD Vector<String> words;
+            BE_REFLECT_FIELD Optional<Vector<String>> maybeWords;
         };
 
         struct JsonWriteEvent {

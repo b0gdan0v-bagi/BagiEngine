@@ -1,8 +1,10 @@
 #pragma once
 
 #include <BECore/Math/Rect.h>
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Reflection/TextView.h>
 #include <BECore/Types/Types.h>
 #include <BECore/UI/UIBoxMesh.h>
 #include <BECore/UI/UICanvasScaler.h>
@@ -11,7 +13,8 @@
 
 namespace BECore {
 
-    // The answers of `ui_tree` and `ui_click` (`UIControl.cpp`). A float of the engine is a double here, so the text of the widened float stays (`0.1f` is `0.10000000149011612`)
+    // The answers of `ui_tree` and `ui_click` (`UIControl.cpp`). A float of the engine is a double here, so the text of the widened float stays (`0.1f` is `0.10000000149011612`).
+    // Text the handler formats or an element may rebuild is an `ArenaString`; a `TextView` looks at text the element, the variable table or the handler holds until the answer is written
 
     /// A region the game published for a canvas, in canvas units
     struct UIRegionAnswer {
@@ -43,7 +46,7 @@ namespace BECore {
     struct UIBoxGradientAnswer {
         BE_CLASS(UIBoxGradientAnswer)
 
-        BE_REFLECT_FIELD String color;
+        BE_REFLECT_FIELD ArenaString color;
         BE_REFLECT_FIELD UIGradientDirection direction = UIGradientDirection::None;
     };
 
@@ -52,7 +55,7 @@ namespace BECore {
         BE_CLASS(UIShadowAnswer)
 
         BE_REFLECT_FIELD double blur = 0.0;
-        BE_REFLECT_FIELD String color;
+        BE_REFLECT_FIELD ArenaString color;
         BE_REFLECT_FIELD double offsetX = 0.0;
         BE_REFLECT_FIELD double offsetY = 0.0;
         BE_REFLECT_FIELD double spread = 0.0;
@@ -62,13 +65,13 @@ namespace BECore {
     struct UIBoxAnswer {
         BE_CLASS(UIBoxAnswer)
 
-        BE_REFLECT_FIELD Optional<String> borderColor;
+        BE_REFLECT_FIELD Optional<ArenaString> borderColor;
         BE_REFLECT_FIELD Optional<double> borderWidth;
         /// Top left, top right, bottom right, bottom left
-        BE_REFLECT_FIELD Optional<Vector<double>> cornerRadius;
+        BE_REFLECT_FIELD Optional<ArenaVector<double>> cornerRadius;
         BE_REFLECT_FIELD Optional<UIShadowAnswer> glow;
         BE_REFLECT_FIELD Optional<UIBoxGradientAnswer> gradient;
-        BE_REFLECT_FIELD Optional<String> highlight;
+        BE_REFLECT_FIELD Optional<ArenaString> highlight;
         BE_REFLECT_FIELD Optional<UIShadowAnswer> shadow;
     };
 
@@ -86,8 +89,8 @@ namespace BECore {
         BE_REFLECT_FIELD bool blocksInput = false;
         BE_REFLECT_FIELD Optional<UIBoxAnswer> box;
         BE_REFLECT_FIELD Optional<bool> checked;
-        BE_REFLECT_FIELD Vector<UITreeElement> children;
-        BE_REFLECT_FIELD Optional<Vector<String>> components;
+        BE_REFLECT_FIELD ArenaVector<UITreeElement> children;
+        BE_REFLECT_FIELD Optional<ArenaVector<TextView>> components;
         BE_REFLECT_FIELD Optional<bool> disabled;
         BE_REFLECT_FIELD Optional<double> fraction;
         BE_REFLECT_FIELD bool hovered = false;
@@ -104,14 +107,14 @@ namespace BECore {
         BE_REFLECT_FIELD Optional<Rect> rect;
         BE_REFLECT_FIELD Optional<PoolString> region;
         BE_REFLECT_FIELD Optional<bool> selected;
-        BE_REFLECT_FIELD Optional<String> selectedValue;
+        BE_REFLECT_FIELD Optional<TextView> selectedValue;
         BE_REFLECT_FIELD Optional<double> sliderValue;
         BE_REFLECT_FIELD Optional<double> step;
-        BE_REFLECT_FIELD Optional<String> text;
-        BE_REFLECT_FIELD Optional<String> tooltip;
+        BE_REFLECT_FIELD Optional<ArenaString> text;
+        BE_REFLECT_FIELD Optional<TextView> tooltip;
         /// The element is at `kMaxElementDepth` and has children: they are left out
         BE_REFLECT_FIELD Optional<bool> truncated;
-        BE_REFLECT_FIELD String type;
+        BE_REFLECT_FIELD TextView type;
         BE_REFLECT_FIELD Optional<PoolString> value;
         BE_REFLECT_FIELD Optional<bool> visible;
     };
@@ -122,14 +125,14 @@ namespace BECore {
 
         BE_REFLECT_FIELD Optional<Rect> bounds;
         BE_REFLECT_FIELD Optional<Rect> contentBounds;
-        BE_REFLECT_FIELD Vector<UITreeElement> elements;
+        BE_REFLECT_FIELD ArenaVector<UITreeElement> elements;
         BE_REFLECT_FIELD bool inputEnabled = false;
         BE_REFLECT_FIELD int32_t inputOrder = 0;
-        BE_REFLECT_FIELD Vector<UILayoutIssueAnswer> issues;
+        BE_REFLECT_FIELD ArenaVector<UILayoutIssueAnswer> issues;
         BE_REFLECT_FIELD bool laidOut = false;
         BE_REFLECT_FIELD bool modal = false;
         BE_REFLECT_FIELD PoolString node;
-        BE_REFLECT_FIELD Vector<UIRegionAnswer> regions;
+        BE_REFLECT_FIELD ArenaVector<UIRegionAnswer> regions;
         BE_REFLECT_FIELD Optional<Rect> safeBounds;
         BE_REFLECT_FIELD Optional<double> scale;
         BE_REFLECT_FIELD CanvasSpace space = CanvasSpace::Screen;
@@ -142,7 +145,7 @@ namespace BECore {
     struct UITreeAnswer {
         BE_CLASS(UITreeAnswer)
 
-        BE_REFLECT_FIELD Vector<UICanvasAnswer> canvases;
+        BE_REFLECT_FIELD ArenaVector<UICanvasAnswer> canvases;
         BE_REFLECT_FIELD PoolString scene;
     };
 
@@ -152,7 +155,7 @@ namespace BECore {
 
         BE_REFLECT_FIELD Optional<PoolString> action;
         BE_REFLECT_FIELD PoolString canvas;
-        BE_REFLECT_FIELD String clicked;
+        BE_REFLECT_FIELD TextView clicked;
         BE_REFLECT_FIELD bool consumed = false;
         /// `none`, `element` or `target`
         BE_REFLECT_FIELD PoolString takenBy;
