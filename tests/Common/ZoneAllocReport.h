@@ -57,7 +57,7 @@ namespace BECore::Tests {
     /**
      * Joins the three per-zone views of the allocation tracker (`GetZoneStats`, `GetSizeStats`, `GetNameStats`) by zone pointer, the
      * zones with the most bytes first. Empty without `AllocTracker::kEnabled`. It reads and allocates: call it after the measure,
-     * never inside a zone that is measured.
+     * never inside a zone that is measured; what it allocates itself lands in the `(no zone)` row.
      */
     inline Vector<ZoneReportRow> CollectZoneReport() {
         Vector<ZoneReportRow> rows;

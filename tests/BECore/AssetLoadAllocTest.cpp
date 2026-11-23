@@ -1,6 +1,7 @@
 #include <BECore/Config/ContentVersion.h>
 #include <BECore/PoolString/PoolStringEntry.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/Profiler/Profile.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/SchemaHash.h>
@@ -15,6 +16,7 @@
 #include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
+#include <Common/ZoneAllocReport.h>
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
@@ -135,6 +137,37 @@ namespace BECore::Tests {
                 return false;
             }
             library.Load(deserializer);
+            return !deserializer.HasErrors();
+        }
+
+        /// `LoadFile` with a zone around each phase, for the zone pass. Not the measured path: the medians carry no zone cost, so the two
+        /// repeat the few lines of the phase split instead of sharing them.
+        bool LoadFileByZone(const AssetFile& file, TextureLibrary& library) {
+            if (file.format == FileFormat::Xml) {
+                XmlDeserializer deserializer;
+                {
+                    BE_PROFILE_SCOPE("Text parse");
+                    if (!deserializer.LoadFromString(file.xml)) {
+                        return false;
+                    }
+                }
+                {
+                    BE_PROFILE_SCOPE("Library load");
+                    library.Load(deserializer);
+                }
+                return !deserializer.HasErrors();
+            }
+            BinaryDeserializer deserializer;
+            {
+                BE_PROFILE_SCOPE("Stream open");
+                if (!deserializer.LoadFromBuffer(file.binary)) {
+                    return false;
+                }
+            }
+            {
+                BE_PROFILE_SCOPE("Library load");
+                library.Load(deserializer);
+            }
             return !deserializer.HasErrors();
         }
 
@@ -321,6 +354,36 @@ namespace BECore::Tests {
                 return false;
             }
             ReadWide(deserializer, items);
+            return !deserializer.HasErrors();
+        }
+
+        /// `LoadWideFile` with a zone around each phase, as `LoadFileByZone`
+        bool LoadWideFileByZone(const AssetFile& file, Vector<WideItem>& items) {
+            if (file.format == FileFormat::Xml) {
+                XmlDeserializer deserializer;
+                {
+                    BE_PROFILE_SCOPE("Text parse");
+                    if (!deserializer.LoadFromString(file.xml)) {
+                        return false;
+                    }
+                }
+                {
+                    BE_PROFILE_SCOPE("Wide load");
+                    ReadWide(deserializer, items);
+                }
+                return !deserializer.HasErrors();
+            }
+            BinaryDeserializer deserializer;
+            {
+                BE_PROFILE_SCOPE("Stream open");
+                if (!deserializer.LoadFromBuffer(file.binary)) {
+                    return false;
+                }
+            }
+            {
+                BE_PROFILE_SCOPE("Wide load");
+                ReadWide(deserializer, items);
+            }
             return !deserializer.HasErrors();
         }
 
@@ -567,6 +630,32 @@ namespace BECore::Tests {
                 return LoadSceneManagerFromBinary(reader);
             }
 
+            /// `LoadFromXml` with a zone around the parse and around the build, for the zone pass
+            IntrusivePtrAtomic<SceneManager> LoadFromXmlByZone() const {
+                pugi::xml_document document;
+                {
+                    BE_PROFILE_SCOPE("Scene parse");
+                    if (!document.load_buffer(_text.data(), _text.size())) {
+                        return {};
+                    }
+                }
+                BE_PROFILE_SCOPE("Scene build");
+                return LoadSceneManager(XmlNode{document.document_element()}, MakeDirectoryNodeLoader(_dir));
+            }
+
+            /// `LoadFromBinary` with a zone around the stream check and around the build, for the zone pass
+            IntrusivePtrAtomic<SceneManager> LoadFromBinaryByZone() const {
+                BinaryDeserializer reader;
+                {
+                    BE_PROFILE_SCOPE("Scene stream open");
+                    if (!reader.LoadFromView(_binary.data(), _binary.size())) {
+                        return {};
+                    }
+                }
+                BE_PROFILE_SCOPE("Scene build cooked");
+                return LoadSceneManagerFromBinary(reader);
+            }
+
         private:
             std::filesystem::path _dir;
             String _text;
@@ -598,6 +687,47 @@ namespace BECore::Tests {
             }
             std::sort(runs.begin(), runs.end(), [](const LoadMeasure& a, const LoadMeasure& b) { return a.loadMs < b.loadMs; });
             return runs[runs.size() / 2];
+        }
+
+        constexpr size_t kZoneReportNames = 4;
+
+        /**
+         * One zone pass: @p load is a load of a file made before the call, its phases in zones. The zone statistics are reset right
+         * before it and read right after, so they hold this load and nothing else. False when the load failed (nothing is printed).
+         */
+        bool PrintZonePass(StringView caseName, FunctionRef<bool()> load) {
+            AllocTracker::ResetZoneStats();
+            const bool loaded = load();
+            if (!loaded) {
+                ADD_FAILURE() << "the zone pass " << caseName.data() << " did not load";
+                return false;
+            }
+            PrintZoneReport(std::cout, caseName, kZoneReportNames);
+            return true;
+        }
+
+        String ZoneCaseName(StringView stem, FileFormat format) {
+            return Format("{}-{}", stem, FormatName(format));
+        }
+
+        void RunLibraryZonePass(FileFormat format) {
+            const AssetFile file = MakeFile(format, NextSalt(), kSpriteCount);
+            TextureLibrary library;
+            PrintZonePass(ZoneCaseName("library", format), [&] { return LoadFileByZone(file, library) && library.GetAll().size() == kSpriteCount; });
+        }
+
+        void RunWideZonePass(FileFormat format) {
+            const AssetFile file = MakeWideFile(format, NextSalt(), kWideObjects);
+            Vector<WideItem> items;
+            PrintZonePass(ZoneCaseName("wide", format), [&] { return LoadWideFileByZone(file, items) && items.size() == kWideObjects; });
+        }
+
+        void RunSceneZonePass(const SceneFixture& fixture, FileFormat format) {
+            IntrusivePtrAtomic<SceneManager> manager;
+            PrintZonePass(ZoneCaseName("scene", format), [&] {
+                manager = format == FileFormat::Xml ? fixture.LoadFromXmlByZone() : fixture.LoadFromBinaryByZone();
+                return manager != nullptr;
+            });
         }
 
     }  // namespace
@@ -709,6 +839,32 @@ namespace BECore::Tests {
         EXPECT_EQ(PrintedScenes(*fromBinary), expected);
     }
 
+    TEST(AssetLoadAllocTest, TheZoneVersionsOfTheLoadsLoadWhatTheMeasuredOnesLoad) {
+        EngineEnvironment::EnsureCoreServices();
+        for (const FileFormat format : {FileFormat::Xml, FileFormat::Binary}) {
+            const uint32_t salt = NextSalt();
+            TextureLibrary library;
+            ASSERT_TRUE(LoadFileByZone(MakeFile(format, salt, kSpriteCount), library)) << FormatName(format);
+            ASSERT_NO_FATAL_FAILURE(ExpectLoaded(library, salt, kSpriteCount));
+
+            const uint32_t wideSalt = NextSalt();
+            Vector<WideItem> items;
+            ASSERT_TRUE(LoadWideFileByZone(MakeWideFile(format, wideSalt, kWideObjects), items)) << FormatName(format);
+            ASSERT_NO_FATAL_FAILURE(ExpectWideLoaded(items, wideSalt, kWideObjects));
+        }
+
+        const SceneFixture fixture;
+        const auto plain = fixture.LoadFromXml();
+        const auto fromXml = fixture.LoadFromXmlByZone();
+        const auto fromBinary = fixture.LoadFromBinaryByZone();
+        ASSERT_NE(plain, nullptr);
+        ASSERT_NE(fromXml, nullptr);
+        ASSERT_NE(fromBinary, nullptr);
+        const String expected = PrintedScenes(*plain);
+        EXPECT_EQ(PrintedScenes(*fromXml), expected);
+        EXPECT_EQ(PrintedScenes(*fromBinary), expected);
+    }
+
     /// A benchmark, not a check: the set of .claude/rules/perf-project.md runs it (the counts are zero without the profile
     /// preset, `kNoAllocTracker`)
     TEST(AssetLoadAllocBenchTest, DISABLED_LoadOfFreshNames) {
@@ -741,6 +897,22 @@ namespace BECore::Tests {
                 std::cout << "AssetLoadScene format=" << FormatName(format) << " groups=" << kSceneGroups << " allocs=" << median.allocs << " bytes=" << median.bytes << " loadMs=" << median.loadMs
                           << "\n";
             }
+        }
+    }
+
+    /// The zone pass of the benchmark: one more load of a file of fresh names per case, its phases in zones, and the allocations per
+    /// zone (HowToProfile.md, "The asset load by zone"). A separate run, so the medians of `DISABLED_LoadOfFreshNames` carry no zone cost.
+    TEST(AssetLoadAllocBenchTest, DISABLED_LoadByZone) {
+        for (const FileFormat format : {FileFormat::Xml, FileFormat::Binary}) {
+            RunLibraryZonePass(format);
+        }
+        for (const FileFormat format : {FileFormat::Xml, FileFormat::Binary}) {
+            RunWideZonePass(format);
+        }
+        EngineEnvironment::EnsureCoreServices();
+        const SceneFixture fixture;
+        for (const FileFormat format : {FileFormat::Xml, FileFormat::Binary}) {
+            RunSceneZonePass(fixture, format);
         }
     }
 
