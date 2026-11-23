@@ -163,6 +163,27 @@ namespace BECore::Tests {
         EXPECT_TRUE(loaded->pixels == MakeImage(3, 3).pixels);
     }
 
+    TEST(SpriteImage, ASaveAndAReplaceUnderANonAsciiFolderAndNameRoundTrip) {
+        TestTempFolder folder("SpriteImageUtf8");
+        const std::filesystem::path target = std::filesystem::path(ToStd(folder.PathOf("caf\xC3\xA9"))) / "pi\xC3\xA8"
+                                                                                                          "ce.png";
+        std::filesystem::create_directories(target.parent_path());
+        const RgbaImage image = MakeImage(4, 3);
+
+        ASSERT_TRUE(SaveRgbaPng(target, image).has_value());
+        auto loaded = LoadRgbaImage(target);
+        ASSERT_TRUE(loaded.has_value()) << loaded.error().c_str();
+        EXPECT_TRUE(loaded->pixels == image.pixels);
+
+        const RgbaImage other = MakeImage(5, 5);
+        const auto replaced = ReplaceRgbaPng(target, other);
+        ASSERT_TRUE(replaced.has_value()) << replaced.error().c_str();
+        loaded = LoadRgbaImage(target);
+        ASSERT_TRUE(loaded.has_value()) << loaded.error().c_str();
+        EXPECT_TRUE(loaded->pixels == other.pixels);
+        EXPECT_FALSE(std::filesystem::exists(std::filesystem::path(target) += ".tmp"));
+    }
+
     TEST(SpriteImage, ReplaceIntoAFolderThatDoesNotExistIsAnError) {
         TempFile folder(".dir");
         const std::filesystem::path target = folder.Path() / "atlas.png";

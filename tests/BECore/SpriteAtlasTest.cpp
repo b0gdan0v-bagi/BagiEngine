@@ -477,6 +477,19 @@ namespace BECore::Tests {
         EXPECT_EQ(built->entries[0].srcRect.w, 4.0f);
     }
 
+    TEST(SpriteAtlas, WriteMakesTheAssetsFolderUnderANonAsciiPathThatDoesNotExistYet) {
+        TempGame game;
+        SaveSources(game);
+        TextureLibrary library;
+        FillLibrary(library);
+        const std::filesystem::path assetsDir = game.Resolve("caf\xC3\xA9") / "assets";
+        const auto resolve = [&game](StringView virtualPath) { return Path(game.Resolve(virtualPath)); };
+
+        const auto written = WriteAtlas(library, "ui", PackSettings{}, AtlasIo{assetsDir, resolve});
+        ASSERT_TRUE(written.has_value()) << written.error().c_str();
+        EXPECT_TRUE(LoadRgbaImage(assetsDir / "atlases" / "ui.png").has_value());
+    }
+
     TEST(SpriteAtlas, WriteMakesTheFileAndRewritesTheEntriesInPlace) {
         TempGame game;
         SaveSources(game);

@@ -95,8 +95,8 @@ namespace BECore {
     std::expected<ArtGenAtlasAnswer, ControlError> PackAtlasForControl(StringView group) {
         auto fail = [](const String& message) { return std::unexpected(ControlError{String("artgen_accept_failed"), message}); };
         auto& files = CoreManager::GetFileSystem();
-        const std::filesystem::path assetsDir = files.GetMountedPath(MountPoints::assets);
-        if (assetsDir.empty()) {
+        const Path assetsDir = files.GetMountedPath(MountPoints::assets);
+        if (assetsDir.Empty()) {
             return fail(String("the game has no assets folder"));
         }
         auto& library = CoreManager::GetTextureLibrary();
