@@ -336,7 +336,7 @@ namespace BECore {
 
     CookReport VerifyCooked(const FileSystem& sourceFs, const std::filesystem::path& cookedDir, const ContentCookRegistry& registry) {
         CookReport report;
-        const Vector<std::filesystem::path> layers = sourceFs.GetMountLayers(MountPoints::config);
+        const Vector<Path> layers = sourceFs.GetMountLayers(MountPoints::config);
         if (layers.empty()) {
             Fail(report, 0, "", "the file system has no 'config' layer");
             return report;

@@ -386,7 +386,7 @@ namespace BECore {
                 error = "not a valid reference";
                 return false;
             }
-            const Vector<std::filesystem::path> layers = fs.GetMountLayers(MountPoints::config);
+            const Vector<Path> layers = fs.GetMountLayers(MountPoints::config);
             for (auto layer = layers.rbegin(); layer != layers.rend(); ++layer) {
                 const NodeFileInLayer found = FindInLayer(*layer, ref);
                 if (!found.xml.empty() && !found.binary.empty()) {

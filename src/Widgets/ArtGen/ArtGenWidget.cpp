@@ -138,8 +138,7 @@ namespace BECore {
         Subscribe<SceneSelectionChangedEvent, &ArtGenWidget::OnSelectionChanged>(this);
         Subscribe<ArtGenVariantDropEvent, &ArtGenWidget::OnVariantDropped>(this);
         auto& session = ArtGenSession::GetInstance();
-        const std::string root = CoreManager::GetFileSystem().GetRootPath().generic_string();  //-NoStd: std::filesystem gives a std::string
-        session.SetGameRoot(StringView(root.data(), root.size()));
+        session.SetGameRoot(CoreManager::GetFileSystem().GetRootPath().View());
         session.SetAcceptor(&AcceptForControl);
         session.SetSoundAcceptor(&AcceptSoundForControl);
         session.SetKeeper(&KeepForControl);
@@ -238,7 +237,9 @@ namespace BECore {
 
     void ArtGenWidget::StartBridge(uint16_t port) {
         _bridgeError.clear();
-        const auto script = FindArtGenBridge(CoreManager::GetFileSystem().GetMountLayers(MountPoints::config));
+        const Vector<Path> layers = CoreManager::GetFileSystem().GetMountLayers(MountPoints::config);
+        const Vector<std::filesystem::path> hostLayers(layers.begin(), layers.end());  // transitional: ArtGenLaunch moves to Path in stage 4
+        const auto script = FindArtGenBridge(hostLayers);
         if (!script) {
             _bridgeError = Format("no {} under the content roots (a packaged build?)", kArtGenBridgeScript);
             return;

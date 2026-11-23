@@ -33,7 +33,7 @@ namespace BECore {
         /// The real path of a virtual @p path, or the sentence for the log when it does not resolve
         std::expected<String, String> ResolveAudioPath(PoolString path) {
             const auto realPath = CoreManager::GetFileSystem().ResolvePath(path.ToStringView());
-            if (realPath.empty()) {
+            if (realPath.Empty()) {
                 return std::unexpected(Format("cannot open '{}'", path.ToStringView()));
             }
             return PathToUtf8(realPath);

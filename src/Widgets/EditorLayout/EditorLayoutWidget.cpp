@@ -26,8 +26,8 @@ namespace BECore {
         /// content), else the working directory
         std::filesystem::path BranchSearchStart() {
             const auto layers = CoreManager::GetFileSystem().GetMountLayers(MountPoints::config);
-            if (!layers.empty() && layers.front().has_parent_path()) {
-                return layers.front().parent_path();
+            if (!layers.empty() && !layers.front().Parent().Empty()) {
+                return layers.front().Parent();
             }
             std::error_code error;
             return std::filesystem::current_path(error);

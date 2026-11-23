@@ -2,6 +2,7 @@
 
 #include <BECore/Config/ContentVersion.h>
 #include <BECore/Config/XmlDocument.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/SchemaHash.h>
@@ -318,23 +319,23 @@ namespace BECore {
 
     CookReport CookContent(const FileSystem& fs, const std::filesystem::path& outDir, const ContentCookRegistry& registry) {
         CookReport report;
-        const Vector<std::filesystem::path> layers = fs.GetMountLayers(MountPoints::config);
+        const Vector<Path> layers = fs.GetMountLayers(MountPoints::config);
         if (layers.empty()) {
             Fail(report, 0, "", "the file system has no 'config' layer");
             return report;
         }
 
-        Vector<std::filesystem::path> guarded = layers;
-        for (const std::filesystem::path& layer : fs.GetMountLayers(MountPoints::assets)) {
+        Vector<Path> guarded = layers;
+        for (const Path& layer : fs.GetMountLayers(MountPoints::assets)) {
             guarded.push_back(layer);
         }
-        for (const std::filesystem::path& layer : guarded) {
+        for (const Path& layer : guarded) {
             if (IsInside(outDir, layer)) {
-                Fail(report, 0, "", Format("the output folder '{}' is inside the content folder '{}': it would be scanned as content", outDir.string(), layer.string()));
+                Fail(report, 0, "", Format("the output folder '{}' is inside the content folder '{}': it would be scanned as content", outDir.string(), PathToUtf8(layer)));
                 return report;
             }
             if (IsInside(layer, outDir)) {
-                Fail(report, 0, "", Format("the content folder '{}' is inside the output folder '{}': the cook removes what it finds there", layer.string(), outDir.string()));
+                Fail(report, 0, "", Format("the content folder '{}' is inside the output folder '{}': the cook removes what it finds there", PathToUtf8(layer), outDir.string()));
                 return report;
             }
         }

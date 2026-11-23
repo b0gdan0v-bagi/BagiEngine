@@ -25,7 +25,7 @@ namespace BECore {
         bool ReadFontFile(const char* virtualPath, Vector<uint8_t>& bytes) {
             bytes.clear();
             const auto realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
-            if (realPath.empty()) {
+            if (realPath.Empty()) {
                 LOG_ERROR("ImGuiFonts: cannot open '{}'", virtualPath);
                 return false;
             }

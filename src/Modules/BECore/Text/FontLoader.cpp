@@ -26,7 +26,7 @@ namespace BECore {
     IntrusivePtr<Font> FontLoader::LoadInternal(PoolString path) {
         BE_PROFILE_SCOPE("FontLoader::Load");
         const auto realPath = CoreManager::GetFileSystem().ResolvePath(path.ToStringView());
-        if (realPath.empty()) {
+        if (realPath.Empty()) {
             LOG_ERROR("FontLoader: cannot open '{}'", path.ToStringView());
             return Font::CreateFromMemory(path, {});
         }

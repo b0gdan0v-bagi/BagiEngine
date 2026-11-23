@@ -43,7 +43,7 @@ namespace BECore {
 
     bool XmlDeserializer::LoadFromVirtualPath(StringView virtualPath) {
         auto realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
-        if (realPath.empty()) {
+        if (realPath.Empty()) {
             AddError("", "Failed to resolve virtual path", 0);
             return false;
         }
