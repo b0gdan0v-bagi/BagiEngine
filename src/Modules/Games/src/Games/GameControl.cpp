@@ -453,8 +453,13 @@ namespace BECore {
 
             if (state->kind == RunUntilKind::Event) {
                 // Added now and kept by the state: an event of the first frame counts, and no way out of the wait leaves it behind
-                state->observer = service.AddPublishObserver([raw = state.get()](StringView event, const Json& data) {
-                    if (event == StringView(raw->eventName) && HasMembers(data, raw->eventEqual)) {
+                state->observer = service.AddPublishObserver([raw = state.get()](StringView event, JsonView data) {
+                    if (event != StringView(raw->eventName)) {
+                        return;
+                    }
+                    // `eventEqual` is a DOM, so the pushed data is parsed to compare with it
+                    const auto parsed = ParseJson(data.Raw());
+                    if (parsed && HasMembers(*parsed, raw->eventEqual)) {
                         raw->eventSeen = true;
                     }
                 });

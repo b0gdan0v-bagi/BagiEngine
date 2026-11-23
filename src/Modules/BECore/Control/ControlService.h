@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonFwd.h>
+#include <BECore/Control/JsonView.h>
 #include <BECore/Control/RequestBuffers.h>
 #include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Threading/ConditionVariable.h>
@@ -44,7 +45,7 @@ namespace BECore {
         using Handler = MoveOnlyFunction<void(ControlCall&)>;
         using EventSink = MoveOnlyFunction<void(const String&)>;
         using FrameEndHook = MoveOnlyFunction<void()>;
-        using PublishObserver = MoveOnlyFunction<void(StringView event, const Json& data)>;
+        using PublishObserver = MoveOnlyFunction<void(StringView event, JsonView data)>;
         using PublishObserverId = uint64_t;
 
         /// What AddPublishObserver() never returns; RemovePublishObserver() of it does nothing
@@ -111,18 +112,17 @@ namespace BECore {
         /**
          * @brief Publish() with the data written by @p writeData: the same bytes as the `Json` form, no `Json` built.
          *
-         * Neither a sink nor an observer: returns at once and does not call @p writeData. An observer gets a `Json` parsed back from the written data
-         * (so the text is written to a local String first); with a sink alone the data is written in place into the publish buffer, and a second push
-         * allocates nothing. @p writeData writes exactly one value; one that does not, or whose writer recorded a failure (JsonWriter::Fail), is not sent. It must not Publish itself (the nested push
-         * reaches only the observers).
+         * Neither a sink nor an observer: returns at once and does not call @p writeData. An observer gets a view of the written data, tokenized once (so the text is written to a local String first);
+         * with a sink alone the data is written in place into the publish buffer, and a second push allocates nothing. @p writeData writes exactly one value; one that does not, or whose writer
+         * recorded a failure (JsonWriter::Fail), is not sent. It must not Publish itself (the nested push reaches only the observers).
          */
         void Publish(StringView event, FunctionRef<void(JsonWriter&)> writeData);
 
         /**
          * @brief Calls @p observer with the name and the data of every Publish() from now on, whether or not an event sink is set.
          *
-         * For a module that waits for an event of its own process (`run_until`). Main thread. An observer runs before the sink and may remove itself or add
-         * others (an added one sees the next Publish); a Publish from inside an observer reaches the sink but no observer. Returns the id for RemovePublishObserver().
+         * For a module that waits for an event of its own process (`run_until`). Main thread. The `data` view is valid for the observer's call only. An observer runs before the sink and may remove
+         * itself or add others (an added one sees the next Publish); a Publish from inside an observer reaches the sink but no observer. Returns the id for RemovePublishObserver().
          */
         [[nodiscard]] PublishObserverId AddPublishObserver(PublishObserver observer);
 
@@ -145,7 +145,8 @@ namespace BECore {
          *
          * The nested call runs as a posted one would: the table lookup, the generation handling of the handler, an unknown method or a handler that
          * answers nothing is an error answer. It does not wait for the barrier: it is part of @p outer, which is the one that is pending. Main thread,
-         * and @p outer must be unanswered and not deferred yet.
+         * and @p outer must be unanswered and not deferred yet. @p params is a view that stays valid while the nested call lives, which is until @p outer is
+         * answered when it defers: the tape of @p outer's own request is the usual owner.
          *
          * Returns the answer when the nested call has given it. Returns nullopt when the nested call deferred (`step`, `screenshot`, ...): its frames
          * are now those of @p outer, so the handler of @p outer has to return without answering, and when the frames have passed @p onAnswer gets the
@@ -153,7 +154,7 @@ namespace BECore {
          * returns nullopt and is called once then, not at all when Shutdown() answers @p outer first; when an answer is returned the caller still has it. What @p onAnswer needs later it holds in its
          * own capture: the handler of @p outer has returned by then.
          */
-        [[nodiscard]] Optional<ControlAnswer> RunNested(ControlCall& outer, StringView method, Json params, NestedContinuation&& onAnswer);
+        [[nodiscard]] Optional<ControlAnswer> RunNested(ControlCall& outer, StringView method, JsonView params, NestedContinuation&& onAnswer);
 
         /**
          * @brief Defers @p call by @p frames frames in which the game advances by @p seconds each, on whichever clock runs.
@@ -253,7 +254,7 @@ namespace BECore {
         Optional<ControlAnswer> AwaitNested(ControlCall& outer, UniquePtr<ControlCall>& nested, NestedContinuation& onAnswer);
         void Settle(UniquePtr<ControlCall> call);
         void PrunePublishObservers();
-        void NotifyPublishObservers(StringView event, const Json& data);
+        void NotifyPublishObservers(StringView event, JsonView data);
 
         // Declared before everything that can hold a request or a call, so one still alive when the service dies gives its buffers back to a live list
         Mutex _buffersMutex{BE_LOCK_SITE("Control request buffers")};
@@ -285,6 +286,7 @@ namespace BECore {
         uint64_t _eventSinkGeneration = 0;  // the registration of the current sink; a running sink goes back only if no other was set
         String _replyScratch;               // the text of the response being sent on the main thread; a reply from the posting thread (Post) uses a local String
         bool _replyScratchBusy = false;
+        JsonTape _observedTape;  // the data of the event the observers are called with; one is enough, a Publish from inside an observer reaches no observer
         String _publishScratch;  // the text of the event being published, apart from the replies: a sink may answer a request
         bool _publishScratchBusy = false;
         Vector<HookEntry> _frameEndHooks;

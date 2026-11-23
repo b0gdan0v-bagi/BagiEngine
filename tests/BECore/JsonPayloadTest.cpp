@@ -268,7 +268,7 @@ namespace BECore::Tests {
         Optional<ControlAnswer> nested;
         service.RegisterHandler("inner", [&answer](ControlCall& call) { call.ReplyObject(answer); });
         service.RegisterHandler("outer", [&](ControlCall& call) {
-            nested = service.RunNested(call, "inner", Json::object(), [](ControlCall&, ControlAnswer) {});
+            nested = service.RunNested(call, "inner", EmptyParamsView(), [](ControlCall&, ControlAnswer) {});
             call.Reply(Json::object());
         });
         service.Post(MakeRequest(1, "outer"), [](const String&) {});
@@ -296,7 +296,7 @@ namespace BECore::Tests {
                 last = text;
             });
             if (observed) {
-                static_cast<void>(service.AddPublishObserver([&](StringView, const Json&) { ++observations; }));
+                static_cast<void>(service.AddPublishObserver([&](StringView, JsonView) { ++observations; }));
             }
 
             service.Publish("event", [&failing](JsonWriter& writer) { failing.WriteJson(writer); });

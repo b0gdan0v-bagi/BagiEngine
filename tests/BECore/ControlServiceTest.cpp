@@ -1,6 +1,7 @@
 #include <BECore/Clipboard/ClipboardControl.h>
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Profiler/ProfilerControl.h>
@@ -943,7 +944,7 @@ namespace BECore::Tests {
 
     TEST_F(ControlServiceTest, PublishObserverSeesEventsWithoutASink) {
         Vector<String> seen;
-        const auto id = service.AddPublishObserver([&seen](StringView event, const Json& data) { seen.push_back(Format("{}:{}", event, GetJsonInt(data, "n").value_or(-1))); });
+        const auto id = service.AddPublishObserver([&seen](StringView event, JsonView data) { seen.push_back(Format("{}:{}", event, GetParamInt(data, "n").value_or(-1))); });
 
         Json data = Json::object();
         data["n"] = 4;
@@ -957,7 +958,7 @@ namespace BECore::Tests {
         int sunk = 0;
         int seen = 0;
         service.SetEventSink([&sunk](const String&) { ++sunk; });
-        const auto id = service.AddPublishObserver([&seen](StringView, const Json&) { ++seen; });
+        const auto id = service.AddPublishObserver([&seen](StringView, JsonView) { ++seen; });
 
         service.Publish("a", Json::object());
         service.RemovePublishObserver(id);
@@ -968,8 +969,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(ControlServiceTest, PublishObserversAreCalledInTheOrderTheyWereAdded) {
-        (void)service.AddPublishObserver([this](StringView, const Json&) { order.push_back("first"); });
-        (void)service.AddPublishObserver([this](StringView, const Json&) { order.push_back("second"); });
+        (void)service.AddPublishObserver([this](StringView, JsonView) { order.push_back("first"); });
+        (void)service.AddPublishObserver([this](StringView, JsonView) { order.push_back("second"); });
 
         service.Publish("a", Json::object());
 
@@ -981,12 +982,12 @@ namespace BECore::Tests {
         int destroyedAfterRemoving = -1;
         int calls = 0;
         ControlService::PublishObserverId id = ControlService::kNoPublishObserver;
-        id = service.AddPublishObserver([this, &id, owner = DestroyTally(destroyed), &destroyed, &destroyedAfterRemoving, &calls](StringView, const Json&) {
+        id = service.AddPublishObserver([this, &id, owner = DestroyTally(destroyed), &destroyed, &destroyedAfterRemoving, &calls](StringView, JsonView) {
             ++calls;
             service.RemovePublishObserver(id);
             destroyedAfterRemoving = destroyed;
         });
-        (void)service.AddPublishObserver([this](StringView, const Json&) { order.push_back("other"); });
+        (void)service.AddPublishObserver([this](StringView, JsonView) { order.push_back("other"); });
 
         service.Publish("a", Json::object());
         service.Publish("b", Json::object());
@@ -999,11 +1000,11 @@ namespace BECore::Tests {
 
     TEST_F(ControlServiceTest, PublishObserverMayRemoveAnotherThatHasNotRunYet) {
         ControlService::PublishObserverId second = ControlService::kNoPublishObserver;
-        (void)service.AddPublishObserver([this, &second](StringView, const Json&) {
+        (void)service.AddPublishObserver([this, &second](StringView, JsonView) {
             order.push_back("first");
             service.RemovePublishObserver(second);
         });
-        second = service.AddPublishObserver([this](StringView, const Json&) { order.push_back("second"); });
+        second = service.AddPublishObserver([this](StringView, JsonView) { order.push_back("second"); });
 
         service.Publish("a", Json::object());
 
@@ -1012,11 +1013,11 @@ namespace BECore::Tests {
 
     TEST_F(ControlServiceTest, PublishObserverAddedByAnObserverSeesTheNextPublish) {
         bool added = false;
-        (void)service.AddPublishObserver([this, &added](StringView, const Json&) {
+        (void)service.AddPublishObserver([this, &added](StringView, JsonView) {
             order.push_back("outer");
             if (!added) {
                 added = true;
-                (void)service.AddPublishObserver([this](StringView, const Json&) { order.push_back("inner"); });
+                (void)service.AddPublishObserver([this](StringView, JsonView) { order.push_back("inner"); });
             }
         });
 
@@ -1030,7 +1031,7 @@ namespace BECore::Tests {
         int sunk = 0;
         int seen = 0;
         service.SetEventSink([&sunk](const String&) { ++sunk; });
-        (void)service.AddPublishObserver([this, &seen](StringView, const Json&) {
+        (void)service.AddPublishObserver([this, &seen](StringView, JsonView) {
             ++seen;
             service.Publish("again", Json::object());
         });
@@ -1041,9 +1042,38 @@ namespace BECore::Tests {
         EXPECT_EQ(sunk, 2);
     }
 
+    TEST_F(ControlServiceTest, TheViewOfAnObserverStaysTheDataOfItsEventWhileThePublishOfAnObserverReachesTheSinkOnly) {
+        int pushes = 0;
+        service.SetEventSink([&pushes](const String&) { ++pushes; });
+        String before;
+        String after;
+        (void)service.AddPublishObserver([&](StringView event, JsonView data) {
+            if (event != "outer") {
+                return;
+            }
+            before = String(data.Raw());
+            service.Publish("inner", [](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Member("other", true);
+                writer.EndObject();
+            });
+            after = String(data.Raw());
+        });
+
+        service.Publish("outer", [](JsonWriter& writer) {
+            writer.BeginObject();
+            writer.Member("a", 1);
+            writer.EndObject();
+        });
+
+        EXPECT_EQ(before, String(R"({"a":1})"));
+        EXPECT_EQ(after, before);
+        EXPECT_EQ(pushes, 2);
+    }
+
     TEST_F(ControlServiceTest, RemovingAnUnknownPublishObserverIsHarmless) {
         int seen = 0;
-        const auto id = service.AddPublishObserver([&seen](StringView, const Json&) { ++seen; });
+        const auto id = service.AddPublishObserver([&seen](StringView, JsonView) { ++seen; });
 
         service.RemovePublishObserver(id + 100);
         service.RemovePublishObserver(ControlService::kNoPublishObserver);

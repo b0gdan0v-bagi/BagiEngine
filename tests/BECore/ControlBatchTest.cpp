@@ -100,7 +100,7 @@ namespace BECore::Tests {
             void RunPlan(ControlCall& outer) {
                 while (next < plan.size()) {
                     const NestedStep& step = plan[next++];
-                    auto answer = service.RunNested(outer, View(step.method), step.params, [this](ControlCall& again, ControlAnswer later) {
+                    auto answer = service.RunNested(outer, View(step.method), ParamsOf(step), [this](ControlCall& again, ControlAnswer later) {
                         order.push_back("continued");
                         answers.push_back(std::move(later));
                         RunPlan(again);
@@ -113,6 +113,20 @@ namespace BECore::Tests {
                 Json result = Json::object();
                 result["ran"] = static_cast<int64_t>(answers.size());
                 outer.Reply(std::move(result));
+            }
+
+            /// The params of @p step as a view of a tape that lives as long as the test: a nested call that defers keeps its view until the outer call is answered
+            JsonView ParamsOf(const NestedStep& step) {
+                RequestBuffers& buffers = *tapes.emplace_back(MakeUnique<RequestBuffers>());
+                buffers.text = DumpJson(step.params);
+                EXPECT_TRUE(buffers.tape.Parse(buffers.text).has_value());
+                return JsonView(buffers.tape, 0);
+            }
+
+            /// The answer of a nested call as a DOM, null when it is an error or does not parse
+            static Json Parsed(const ControlAnswer& answer) {
+                auto parsed = answer ? ParseJson(*answer) : std::expected<Json, ControlError>(std::unexpected(answer.error()));
+                return parsed ? std::move(*parsed) : Json();
             }
 
             /// The application loop of the manual clock: a frame runs while a step is due. Returns how many ran
@@ -151,6 +165,7 @@ namespace BECore::Tests {
             Vector<String> order;
             Vector<NestedStep> plan;
             Vector<ControlAnswer> answers;
+            Vector<UniquePtr<RequestBuffers>> tapes;
             size_t next = 0;
         };
 
@@ -167,7 +182,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(service.IsStepDue());
         ASSERT_EQ(answers.size(), 2u);
         ASSERT_TRUE(answers[0].has_value());
-        EXPECT_TRUE(GetJsonBool(*answers[0], "pong").value_or(false));
+        EXPECT_TRUE(GetJsonBool(Parsed(answers[0]), "pong").value_or(false));
         EXPECT_EQ(order, (Vector<String>{"outer", "count"}));
     }
 
@@ -187,7 +202,7 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonInt(Require(FindJsonMember(responses[0], "result")), "ran").value_or(-1), 3);
         ASSERT_EQ(answers.size(), 3u);
         ASSERT_TRUE(answers[1].has_value());
-        EXPECT_NE(FindJsonMember(*answers[1], "frame"), nullptr);  // the answer of `step`
+        EXPECT_NE(FindJsonMember(Parsed(answers[1]), "frame"), nullptr);  // the answer of `step`
         EXPECT_EQ(order, (Vector<String>{"outer", "continued", "count"}));
 
         service.Drain();

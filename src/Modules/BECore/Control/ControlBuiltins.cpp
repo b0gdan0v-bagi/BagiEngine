@@ -307,7 +307,7 @@ namespace BECore {
         /// One call of a `batch`, checked before anything runs
         struct BatchEntry {
             String method;
-            Json params;
+            JsonView params;  // into the tape of the batch call itself, which lives until the batch is answered
         };
 
         /// The state of a `batch` that is running. It lives in the continuation of the call that waits for frames, not in the handler, which has returned by then
@@ -333,32 +333,32 @@ namespace BECore {
         };
 
         /// The calls of a batch as the client sent them, or the error to answer with. Nothing is built from a bad shape
-        std::expected<BatchState, ControlError> ReadBatch(const Json& params) {
-            const Json* calls = FindJsonMember(params, "calls");
-            if (calls == nullptr || !calls->is_array() || calls->empty() || calls->size() > kMaxBatchCalls) {
+        std::expected<BatchState, ControlError> ReadBatch(JsonView params) {
+            const Optional<JsonView> calls = FindParam(params, "calls");
+            if (!calls || !calls->IsArray() || calls->Size() == 0 || calls->Size() > kMaxBatchCalls) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'calls' has to be an array of 1 to {} calls", kMaxBatchCalls)));
             }
 
             BatchState state;
-            if (FindJsonMember(params, "continueOnError") != nullptr) {
-                const auto continueOnError = GetJsonBool(params, "continueOnError");
+            if (FindParam(params, "continueOnError")) {
+                const auto continueOnError = GetParamBool(params, "continueOnError");
                 if (!continueOnError) {
                     return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'continueOnError' has to be a boolean"));
                 }
                 state.continueOnError = *continueOnError;
             }
 
-            state.entries.reserve(calls->size());
-            for (const Json& call : *calls) {
-                auto method = GetJsonString(call, "method");
-                if (!call.is_object() || !method || method->empty()) {
+            state.entries.reserve(calls->Size());
+            for (const JsonView call : calls->Items()) {
+                auto method = GetParamString(call, "method");
+                if (!call.IsObject() || !method || method->empty()) {
                     return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "every call of 'calls' has to be an object with a non-empty string 'method'"));
                 }
-                const Json* callParams = FindJsonMember(call, "params");
-                if (callParams != nullptr && !callParams->is_null() && !callParams->is_object()) {
+                const Optional<JsonView> callParams = FindParam(call, "params");
+                if (callParams && !callParams->IsNull() && !callParams->IsObject()) {
                     return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'params' of a call has to be an object"));
                 }
-                state.entries.push_back(BatchEntry{std::move(*method), callParams != nullptr && callParams->is_object() ? *callParams : Json::object()});
+                state.entries.push_back(BatchEntry{std::move(*method), callParams && callParams->IsObject() ? *callParams : EmptyParamsView()});
             }
             return state;
         }
@@ -390,7 +390,7 @@ namespace BECore {
                 ControlBatchResult& row = answer.results.emplace_back();
                 row.ok = done.has_value();
                 if (done) {
-                    row.result = JsonPayload::Borrowed(*done);
+                    row.result = JsonPayload::Text(*done);
                 } else {
                     ControlErrorAnswer error;
                     error.code = TextView(done.error().code);
@@ -405,7 +405,7 @@ namespace BECore {
         }
 
         void HandleBatch(ControlCall& call, ControlService& service) {
-            auto state = ReadBatch(call.Params());
+            auto state = ReadBatch(call.ParamsView());
             if (!state) {
                 call.Fail(state.error());
                 return;
@@ -415,7 +415,7 @@ namespace BECore {
 
         void HandleQuit(ControlCall& call) {
             // The answer first: it is queued for the transport before the application starts to stop
-            call.Reply(Json::object());
+            call.ReplyEmpty();
             ApplicationEvents::QuitEvent::Emit();
         }
 

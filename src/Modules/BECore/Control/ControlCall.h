@@ -17,6 +17,9 @@ namespace BECore {
     /// The id of a response to a request that has none (it could not be read, or the call is nested): the JSON `null`
     inline constexpr StringView kNullId = "null";
 
+    /// The `params` of a call that has none: an empty object, one tape for all of them (a view that is valid for the life of the process)
+    [[nodiscard]] JsonView EmptyParamsView();
+
     /// Appends the response of a successful call, {"id":..,"ok":true,"result":..}, to @p out (never cleared); @p id is the JSON text of the request's id, written as it
     /// is (`kNullId` when there is none); @p writeResult writes the one value of `result`. The keys are in alphabetical order, as a `Json` object keeps them, so the order a client sees does not
     /// depend on the way a response is written. Allocates only for the growth of @p out. False when @p writeResult did not write exactly one complete value: @p out is then back to its length before
@@ -56,9 +59,9 @@ namespace BECore {
         /// @p id is the id's JSON text, a view into @p buffers, which the call owns together with the view @p params of their tape
         ControlCall(PassKey<ControlService>, ControlService& service, String method, RequestBuffersPtr buffers, StringView id, JsonView params, ControlReplyFn reply);
 
-        /// A call that runs inside another one: its answer is kept as a value (ControlService::RunNested) instead of being sent. @p buffers holds the tape of
-        /// @p params when the call has one of its own, else null and the view belongs to the outer call
-        ControlCall(PassKey<ControlService>, String method, JsonView params, RequestBuffersPtr buffers);
+        /// A call that runs inside another one: its answer is kept as a value (ControlService::RunNested) instead of being sent. @p params is a view that
+        /// the caller keeps alive while the call runs
+        ControlCall(PassKey<ControlService>, String method, JsonView params);
 
         ControlCall(const ControlCall&) = delete;
         ControlCall& operator=(const ControlCall&) = delete;
@@ -84,12 +87,15 @@ namespace BECore {
         /// Answers with success; @p result is written as the `result` of the response
         void Reply(Json result);
 
+        /// Answers with an empty object, `{}`
+        void ReplyEmpty();
+
         /**
          * @brief Answers with success, the `result` written by @p writeResult in place: no DOM, and no allocation once the service's reply buffer has grown.
          *
          * @p writeResult runs before this returns and writes exactly one value (`writer` is the open writer of the response: `BeginObject()` ... `EndObject()`,
          * or a scalar). It must not answer or defer the call. The text the transport gets is valid for the reply function's call only (ControlReplyFn).
-         * Inside a nested call (ControlService::RunNested) the written value is read back into a `Json`.
+         * Inside a nested call (ControlService::RunNested) the written text is the answer, kept as it is.
          */
         void Reply(FunctionRef<void(JsonWriter&)> writeResult);
 

@@ -24,17 +24,6 @@ namespace BECore {
         /// How many pairs of request buffers wait for the next request; more than the posting threads of a transport that are ever busy at once
         constexpr size_t kMaxFreeBuffers = 16;
 
-        /// The `params` of a request that has none: an empty object, one tape for every such request (read only after it is made)
-        JsonView EmptyParams() {
-            static const JsonTape tape = [] {
-                JsonTape made;
-                const auto parsed = made.Parse("{}");
-                EXPECT(parsed.has_value(), "ControlService: the empty params did not tokenize");
-                return made;
-            }();
-            return JsonView(tape, 0);
-        }
-
         /// The buffer a message is written into: the service's scratch when it is free, else a local one (a send from inside a send). Marks the scratch busy
         /// for the lease's life, so the text handed to a callback is never overwritten while the callback runs
         class ScratchLease {
@@ -80,7 +69,7 @@ namespace BECore {
         RequestBuffersPtr buffers;  // owns the text that `id` and `params` point into; null when the request was refused before the copy
         String method;
         StringView id = kNullId;  // the id as written, once it is read; null before
-        JsonView params = EmptyParams();
+        JsonView params = EmptyParamsView();
         Optional<ControlError> error;  // found while parsing; answered when the request's turn comes
         ControlReplyFn reply;
     };
@@ -272,7 +261,7 @@ namespace BECore {
         }
     }
 
-    void ControlService::NotifyPublishObservers(StringView event, const Json& data) {
+    void ControlService::NotifyPublishObservers(StringView event, JsonView data) {
         _notifyingObservers = true;
         const size_t count = _publishObservers.size();  // an observer added by an observer waits for the next Publish
         for (size_t i = 0; i < count; ++i) {
@@ -286,29 +275,8 @@ namespace BECore {
     }
 
     void ControlService::Publish(StringView event, const Json& data) {
-        if (!_publishObservers.empty() && !_notifyingObservers) {
-            NotifyPublishObservers(event, data);
-        }
-        if (!_eventSink) {
-            return;
-        }
-
-        // The running sink is moved out like a running handler: it may set another sink, and its capture must live until it returns
-        const uint64_t generation = _eventSinkGeneration;
-        EventSink sink = std::move(_eventSink);
-        {
-            ScratchLease lease(_publishScratch, _publishScratchBusy);
-            ScratchScope scratch;  // the envelope's arena members die with the push
-            JsonWriter writer(lease.Text());
-            ControlPushEnvelope envelope;
-            envelope.data = JsonPayload::Borrowed(data);
-            envelope.event = TextView(event);
-            envelope.WriteJson(writer);
-            sink(lease.Text());
-        }
-        if (_eventSinkGeneration == generation) {
-            _eventSink = std::move(sink);
-        }
+        const auto write = [&data](JsonWriter& writer) { WriteJson(writer, data); };
+        Publish(event, FunctionRef<void(JsonWriter&)>(write));
     }
 
     void ControlService::Publish(StringView event, FunctionRef<void(JsonWriter&)> writeData) {
@@ -325,11 +293,10 @@ namespace BECore {
                 return;  // the data could not be written: a push has no one to answer with the error
             }
             EXPECT(writer.IsComplete(), "ControlService::Publish: the data is not one JSON value");
-            auto parsed = ParseJson(observed);
-            if (!writer.IsComplete() || !parsed) {
+            if (!writer.IsComplete() || !_observedTape.Parse(observed)) {
                 return;
             }
-            NotifyPublishObservers(event, *parsed);
+            NotifyPublishObservers(event, JsonView(_observedTape, 0));
             if (!_eventSink) {
                 return;
             }
@@ -433,7 +400,7 @@ namespace BECore {
         }
     }
 
-    Optional<ControlAnswer> ControlService::RunNested(ControlCall& outer, StringView method, Json params, NestedContinuation&& onAnswer) {
+    Optional<ControlAnswer> ControlService::RunNested(ControlCall& outer, StringView method, JsonView params, NestedContinuation&& onAnswer) {
         EXPECT(!outer.IsAnswered() && outer._deferFrames == 0, "ControlService::RunNested: the outer call is already answered or deferred");
 
         const auto entry = _handlers.find(method);
@@ -446,11 +413,7 @@ namespace BECore {
             return std::unexpected(MakeControlError(ControlErrors::kInternalError, Format("'{}' cannot run inside itself", entry->first)));
         }
 
-        // The nested call reads its params through a tape of its own until RunNested takes a view of the outer call's
-        RequestBuffersPtr buffers = AcquireBuffers();
-        AppendJson(buffers->text, params);
-        const bool tokenized = buffers->tape.Parse(buffers->text).has_value();
-        auto nested = MakeUnique<ControlCall>(PassKey<ControlService>{}, String(method), tokenized ? JsonView(buffers->tape, 0) : EmptyParams(), std::move(buffers));
+        auto nested = MakeUnique<ControlCall>(PassKey<ControlService>{}, String(method), params);
         InvokeHandler(entry->second, *nested);
         return AwaitNested(outer, nested, onAnswer);
     }

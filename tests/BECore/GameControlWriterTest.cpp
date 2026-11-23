@@ -186,12 +186,14 @@ namespace BECore::Tests {
         EXPECT_EQ(StringOf(result, "reason"), String("event"));
     }
 
-    TEST_F(GameControlWriterTest, AnObserverGetsTheStateAsAJson) {
+    TEST_F(GameControlWriterTest, AnObserverGetsTheStateAsAView) {
         Fake().handWritten = true;
         Vector<Json> seen;
-        const auto id = service.AddPublishObserver([&seen](StringView event, const Json& data) {
+        const auto id = service.AddPublishObserver([&seen](StringView event, JsonView data) {
             if (event == GameControlEvents::kStateChanged) {
-                seen.push_back(data);
+                auto parsed = ParseJson(data.Raw());
+                ASSERT_TRUE(parsed.has_value());
+                seen.push_back(std::move(*parsed));
             }
         });
         service.EndFrame();

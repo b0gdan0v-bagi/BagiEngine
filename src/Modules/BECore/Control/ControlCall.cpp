@@ -58,11 +58,20 @@ namespace BECore {
         return text;
     }
 
+    JsonView EmptyParamsView() {
+        static const JsonTape tape = [] {
+            JsonTape made;
+            const auto parsed = made.Parse("{}");
+            EXPECT(parsed.has_value(), "ControlCall: the empty params did not tokenize");
+            return made;
+        }();
+        return JsonView(tape, 0);
+    }
+
     ControlCall::ControlCall(PassKey<ControlService>, ControlService& service, String method, RequestBuffersPtr buffers, StringView id, JsonView params, ControlReplyFn reply)
         : _service(&service), _buffers(std::move(buffers)), _method(std::move(method)), _id(id), _params(params), _reply(std::move(reply)) {}
 
-    ControlCall::ControlCall(PassKey<ControlService>, String method, JsonView params, RequestBuffersPtr buffers)
-        : _buffers(std::move(buffers)), _method(std::move(method)), _params(params), _capturing(true) {}
+    ControlCall::ControlCall(PassKey<ControlService>, String method, JsonView params) : _method(std::move(method)), _params(params), _capturing(true) {}
 
     const Json& ControlCall::ParamsJson() const {
         if (!_paramsJson) {
@@ -79,12 +88,19 @@ namespace BECore {
         }
         _answered = true;
         if (_capturing) {
-            _captured = ControlAnswer(std::move(result));
+            _captured = ControlAnswer(DumpJson(result));
             return;
         }
         _service->SendOk(_reply, _id, [&result](JsonWriter& writer) -> std::expected<void, ControlError> {
             WriteJson(writer, result);
             return {};
+        });
+    }
+
+    void ControlCall::ReplyEmpty() {
+        Reply([](JsonWriter& writer) {
+            writer.BeginObject();
+            writer.EndObject();
         });
     }
 
@@ -106,7 +122,7 @@ namespace BECore {
             return;
         }
 
-        // A nested call keeps its answer as a value, so the written text is read back; the value is the writer's own output, not a client's
+        // A nested call keeps the text the handler wrote as its answer
         String text;
         JsonWriter writer(text);
         const std::expected<void, ControlError> written = writeResult(writer);
@@ -118,9 +134,8 @@ namespace BECore {
             _captured = std::unexpected(*failure);
             return;
         }
-        auto parsed = ParseJson(text);
-        if (writer.IsComplete() && parsed) {
-            _captured = ControlAnswer(std::move(*parsed));
+        if (writer.IsComplete()) {
+            _captured = ControlAnswer(std::move(text));
         } else {
             _captured = std::unexpected(MakeControlError(ControlErrors::kInternalError, "the handler wrote a result that is not one JSON value"));
         }

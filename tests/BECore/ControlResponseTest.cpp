@@ -162,7 +162,7 @@ namespace BECore::Tests {
         EXPECT_EQ(texts[1], String(R"({"id":2,"ok":true,"result":["a",null]})"));
     }
 
-    TEST_F(ControlResponseTest, ANestedCallThatRepliesWithAWriterGivesItsAnswerAsAValue) {
+    TEST_F(ControlResponseTest, ANestedCallThatRepliesWithAWriterGivesItsAnswerAsTheTextItWrote) {
         service.RegisterHandler("inner", [](ControlCall& call) {
             call.Reply([](JsonWriter& writer) {
                 writer.BeginObject();
@@ -171,18 +171,21 @@ namespace BECore::Tests {
                 writer.EndObject();
             });
         });
-        service.RegisterHandler("outer", [this](ControlCall& call) {
-            auto answer = service.RunNested(call, "inner", Json::object(), [](ControlCall&, ControlAnswer) {});
+        String nestedText;
+        service.RegisterHandler("outer", [this, &nestedText](ControlCall& call) {
+            auto answer = service.RunNested(call, "inner", EmptyParamsView(), [](ControlCall&, ControlAnswer) {});
             ASSERT_TRUE(answer.has_value());
             ASSERT_TRUE(answer->has_value());
-            call.Reply(std::move(**answer));
+            nestedText = std::move(**answer);
+            call.ReplyEmpty();
         });
 
         service.Post(MakeRequest(1, "outer"), Raw());
         service.Drain();
 
+        EXPECT_EQ(nestedText, String(R"({"n":5,"s":"t"})"));
         ASSERT_EQ(texts.size(), 1u);
-        EXPECT_EQ(texts[0], String(R"({"id":1,"ok":true,"result":{"n":5,"s":"t"}})"));
+        EXPECT_EQ(texts[0], String(R"({"id":1,"ok":true,"result":{}})"));
     }
 
     TEST_F(ControlResponseTest, TheErrorOfAFailedCallIsWrittenWithTheDomPathsBytes) {
@@ -313,12 +316,14 @@ namespace BECore::Tests {
             });
         });
         service.RegisterHandler("outer", [this](ControlCall& call) {
-            auto good = service.RunNested(call, "good", Json::object(), [](ControlCall&, ControlAnswer) {});
-            auto bad = service.RunNested(call, "bad", Json::object(), [](ControlCall&, ControlAnswer) {});
+            auto good = service.RunNested(call, "good", EmptyParamsView(), [](ControlCall&, ControlAnswer) {});
+            auto bad = service.RunNested(call, "bad", EmptyParamsView(), [](ControlCall&, ControlAnswer) {});
             ASSERT_TRUE(good.has_value() && good->has_value());
             ASSERT_TRUE(bad.has_value() && !bad->has_value());
             Json result = Json::object();
-            result["good"] = std::move(**good);
+            auto goodValue = ParseJson(**good);
+            ASSERT_TRUE(goodValue.has_value());
+            result["good"] = std::move(*goodValue);
             result["bad"] = MakeJsonString(bad->error().code);
             call.Reply(std::move(result));
         });
@@ -356,7 +361,11 @@ namespace BECore::Tests {
     TEST_F(ControlResponseTest, PublishWithAWriterGivesAnObserverTheWrittenDataAndTheSinkTheSameText) {
         service.SetEventSink([this](const String& text) { texts.emplace_back(text.c_str(), text.size()); });
         Vector<Json> seen;
-        const auto id = service.AddPublishObserver([&seen](StringView, const Json& data) { seen.push_back(data); });
+        const auto id = service.AddPublishObserver([&seen](StringView, JsonView data) {
+            auto parsed = ParseJson(data.Raw());
+            ASSERT_TRUE(parsed.has_value());
+            seen.push_back(std::move(*parsed));
+        });
 
         service.Publish("e", [](JsonWriter& writer) { WriteJson(writer, ObjectResult()); });
         service.RemovePublishObserver(id);

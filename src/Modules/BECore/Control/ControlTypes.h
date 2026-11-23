@@ -1,6 +1,5 @@
 #pragma once
 
-#include <BECore/Control/JsonFwd.h>
 #include <BECore/Time/GamePause.h>  // kDefaultStepSeconds
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
@@ -15,8 +14,8 @@ namespace BECore {
         String message;
     };
 
-    /// What a call that ran inside another call answered (ControlService::RunNested): the result, or the error
-    using ControlAnswer = std::expected<Json, ControlError>;
+    /// What a call that ran inside another call answered (ControlService::RunNested): the JSON text of the result (exactly one value), or the error
+    using ControlAnswer = std::expected<String, ControlError>;
 
     class JsonWriter;
 
