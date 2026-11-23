@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonFwd.h>
+#include <BECore/Control/JsonTape.h>
 #include <BECore/Control/JsonWriter.h>
 #include <expected>
 #include <nlohmann/json.hpp>
@@ -16,11 +17,6 @@ namespace BECore {
      * on client data: parse with ParseJson() and read members with the helpers below (Control/CLAUDE.md, "JSON rules").
      * New JSON is not built here: it is written with JsonWriter; a Json is what a client sent or a document that stays a DOM.
      */
-
-    /// True when `[` and `{` outside strings nest deeper than @p maxDepth. A scan that does not recurse and does not judge the syntax (the parser does).
-    /// ParseJson itself accepts any depth, but copying, comparing and dumping the value recurse once per level and can overflow a reader thread's stack,
-    /// so a reader of outside text that keeps or copies the value checks the depth first
-    [[nodiscard]] bool IsJsonNestedDeeperThan(StringView text, size_t maxDepth);
 
     /// Parses @p text. Never throws or aborts: text that is not one complete JSON value is a kParseError.
     [[nodiscard]] std::expected<Json, ControlError> ParseJson(StringView text);

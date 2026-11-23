@@ -74,4 +74,9 @@ namespace BECore {
         Vector<uint32_t> _open;
     };
 
+    /// True when `[` and `{` outside strings nest deeper than @p maxDepth. A scan that does not recurse and does not judge the syntax (the parser does).
+    /// A DOM parse (ParseJson) accepts any depth, but copying, comparing and dumping a DOM recurse once per level and can overflow a reader thread's stack,
+    /// so a reader of outside text that keeps or copies it as a DOM checks the depth first
+    [[nodiscard]] bool IsJsonNestedDeeperThan(StringView text, size_t maxDepth);
+
 }  // namespace BECore

@@ -1,30 +1,8 @@
 #include "Json.h"
 
-namespace BECore {
+#include <BECore/Control/JsonPointerSyntax.h>
 
-    bool IsJsonNestedDeeperThan(StringView text, size_t maxDepth) {
-        size_t depth = 0;
-        bool inString = false;
-        for (size_t i = 0; i < text.size(); ++i) {
-            const char c = text[i];
-            if (inString) {
-                if (c == '\\') {
-                    ++i;
-                } else if (c == '"') {
-                    inString = false;
-                }
-            } else if (c == '"') {
-                inString = true;
-            } else if (c == '[' || c == '{') {
-                if (++depth > maxDepth) {
-                    return true;
-                }
-            } else if ((c == ']' || c == '}') && depth > 0) {
-                --depth;
-            }
-        }
-        return false;
-    }
+namespace BECore {
 
     std::expected<Json, ControlError> ParseJson(StringView text) {
         // allow_exceptions = false: bad input gives a discarded value instead of a throw (an abort in this build)
@@ -186,80 +164,14 @@ namespace BECore {
         return member->get<bool>();
     }
 
-    namespace {
-
-        constexpr char kPointerSeparator = '/';
-        constexpr char kPointerEscape = '~';
-
-        ControlError BadPointer(StringView why) {
-            return MakeControlError(ControlErrors::kInvalidParams, Format("bad JSON pointer: {}", why));
-        }
-
-        /// Checks every `~` of @p pointer, which is not empty and starts with `/`
-        Optional<ControlError> CheckPointerEscapes(StringView pointer) {
-            for (size_t i = 0; i < pointer.size(); ++i) {
-                if (pointer[i] != kPointerEscape) {
-                    continue;
-                }
-                const bool valid = i + 1 < pointer.size() && (pointer[i + 1] == '0' || pointer[i + 1] == '1');
-                if (!valid) {
-                    return BadPointer("`~` must be followed by 0 or 1");
-                }
-                ++i;
-            }
-            return std::nullopt;
-        }
-
-        /// The key a token names: `~1` is `/`, `~0` is `~`. @p storage holds the text when there is something to unescape
-        StringView UnescapeToken(StringView token, String& storage) {
-            if (token.find(kPointerEscape) == StringView::npos) {
-                return token;
-            }
-            storage.clear();
-            for (size_t i = 0; i < token.size(); ++i) {
-                if (token[i] == kPointerEscape) {
-                    ++i;
-                    storage.push_back(token[i] == '0' ? kPointerEscape : kPointerSeparator);
-                } else {
-                    storage.push_back(token[i]);
-                }
-            }
-            return StringView(storage.c_str(), storage.size());
-        }
-
-        /// The index a token names in an array of @p size elements; nullopt when it is past the end. An error when the token is not an array index
-        std::expected<Optional<size_t>, ControlError> ParseArrayIndex(StringView token, size_t size) {
-            if (token == "-") {
-                return std::unexpected(BadPointer("`-` names the element after the last one, which cannot be read"));
-            }
-            if (token.empty() || (token.size() > 1 && token[0] == '0')) {
-                return std::unexpected(BadPointer("an array index is 0 or digits without a leading zero"));
-            }
-            size_t index = 0;
-            bool pastEnd = false;
-            for (const char c : token) {
-                if (c < '0' || c > '9') {
-                    return std::unexpected(BadPointer("an array index is 0 or digits without a leading zero"));
-                }
-                // Digits keep being checked after the index left the array, so a bad token is an error whatever its length
-                if (!pastEnd) {
-                    index = index * 10 + static_cast<size_t>(c - '0');
-                    pastEnd = index >= size;
-                }
-            }
-            return pastEnd ? Optional<size_t>() : Optional<size_t>(index);
-        }
-
-    }  // namespace
-
     std::expected<const Json*, ControlError> FindJsonPointer(const Json& document, StringView pointer) {
         if (pointer.empty()) {
             return &document;
         }
-        if (pointer[0] != kPointerSeparator) {
-            return std::unexpected(BadPointer("it must be empty or start with `/`"));
+        if (pointer[0] != Detail::kPointerSeparator) {
+            return std::unexpected(Detail::BadPointer("it must be empty or start with `/`"));
         }
-        if (const auto bad = CheckPointerEscapes(pointer)) {
+        if (const auto bad = Detail::CheckPointerEscapes(pointer)) {
             return std::unexpected(*bad);
         }
 
@@ -268,7 +180,7 @@ namespace BECore {
         size_t start = 1;
         bool absent = false;  // the path left the document; the rest is still checked
         while (start <= pointer.size()) {
-            size_t end = pointer.find(kPointerSeparator, start);
+            size_t end = pointer.find(Detail::kPointerSeparator, start);
             if (end == StringView::npos) {
                 end = pointer.size();
             }
@@ -278,10 +190,10 @@ namespace BECore {
             if (absent || current->is_primitive()) {
                 absent = true;
             } else if (current->is_object()) {
-                current = FindJsonMember(*current, UnescapeToken(token, unescaped));
+                current = FindJsonMember(*current, Detail::UnescapePointerToken(token, unescaped));
                 absent = current == nullptr;
             } else {
-                const auto index = ParseArrayIndex(token, current->size());
+                const auto index = Detail::ParseArrayIndex(token, current->size());
                 if (!index) {
                     return std::unexpected(index.error());
                 }
