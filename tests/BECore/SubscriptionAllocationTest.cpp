@@ -43,7 +43,7 @@ namespace BECore::Tests {
     }  // namespace
 
     // The channel keeps its list across a disconnect, so a listener that came and went leaves the room the case below needs
-    TEST(SubscriptionAllocationTest, DISABLED_TheFirstTwoSubscriptionsOfAHolderAllocateNothing) {
+    TEST(SubscriptionAllocationTest, TheFirstTwoSubscriptionsOfAHolderAllocateNothing) {
         {
             Listener warmUp;
             warmUp.SubscribeToBoth();
