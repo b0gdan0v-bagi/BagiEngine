@@ -108,6 +108,11 @@ namespace BECore {
             return (IsArray() || IsObject()) ? Token().count : 0;
         }
 
+        /// The tape this view reads, nullptr for a view that is not valid: what a reader that is handed a sub-document needs to walk it
+        [[nodiscard]] const JsonTape* Tape() const noexcept {
+            return _tape;
+        }
+
         /// The token this view is on, and the index after its subtree: what a reader that walks the tape itself keeps as a cursor
         [[nodiscard]] uint32_t Index() const noexcept {
             return _index;

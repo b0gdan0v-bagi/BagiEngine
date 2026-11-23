@@ -53,6 +53,14 @@ namespace BECore {
         /// The same over a tape the caller parsed and keeps alive and unchanged; it may be read by many readers
         bool Load(const JsonTape& tape);
 
+        /**
+         * @brief The same over one value of a tape the caller keeps alive and unchanged: the arguments of a call, a sub-object of a request
+         *
+         * @p root is the document's root, any kind of value; one that is not an object fails every read, as for a document that is not one. A view
+         * that is not valid returns false and reads as an empty document. Resets exactly as Load(const JsonTape&) does.
+         */
+        bool Load(JsonView root);
+
         bool Read(StringView name, bool& outValue) override;
         bool Read(StringView name, int8_t& outValue) override;
         bool Read(StringView name, uint8_t& outValue) override;
@@ -167,7 +175,7 @@ namespace BECore {
         bool ReadPoolString(StringView name, PoolString& outValue);
 
         /// Starts a document: closes every scope and forgets the errors, the findings and the asked names, then opens the root
-        void Reset(const JsonTape& tape);
+        void Reset(const JsonTape& tape, JsonView rootView);
 
         /// Checks the innermost scope, pops it and gives its names back
         void CloseScope();

@@ -45,7 +45,7 @@ namespace BECore {
     }  // namespace
 
     JsonDeserializer::JsonDeserializer() {
-        Reset(_ownTape);
+        Reset(_ownTape, JsonView());
     }
 
     JsonDeserializer::JsonDeserializer(const Json& document) {
@@ -55,7 +55,7 @@ namespace BECore {
 
     JsonDeserializer::~JsonDeserializer() = default;
 
-    void JsonDeserializer::Reset(const JsonTape& tape) {
+    void JsonDeserializer::Reset(const JsonTape& tape, JsonView rootView) {
         _tape = &tape;
         // The scopes hold lists made in the arena: they go before the arena's memory does
         _scopes.clear();
@@ -66,7 +66,7 @@ namespace BECore {
         _errors.clear();
         ClearWarnings();
         Scope root;
-        root.node = tape.Empty() ? JsonView() : JsonView(tape, 0);
+        root.node = rootView;
         root.kind = ScopeKind::Object;
         // The root is checked at FinishLoad, whenever the mode was set: it was open for the whole load
         root.tracking = true;
@@ -75,7 +75,7 @@ namespace BECore {
 
     bool JsonDeserializer::Load(StringView text) {
         const std::expected<void, JsonParseError> parsed = _ownTape.Parse(text);
-        Reset(_ownTape);
+        Reset(_ownTape, JsonView(_ownTape, 0));
         if (!parsed) {
             ReportError({}, Format("Invalid JSON: {} at offset {}", parsed.error().message, parsed.error().offset));
             return false;
@@ -84,8 +84,14 @@ namespace BECore {
     }
 
     bool JsonDeserializer::Load(const JsonTape& tape) {
-        Reset(tape);
+        Reset(tape, JsonView(tape, 0));
         return !tape.Empty();
+    }
+
+    bool JsonDeserializer::Load(JsonView root) {
+        // A view that is not valid has no tape: the reader falls back to its own, and every read fails as for an empty document
+        Reset(root.IsValid() ? *root.Tape() : _ownTape, root);
+        return root.IsValid();
     }
 
     LinearArena& JsonDeserializer::GetNamesArena() const {

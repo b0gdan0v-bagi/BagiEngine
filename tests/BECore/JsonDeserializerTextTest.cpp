@@ -6,6 +6,7 @@
 #include <BECore/Control/JsonDeserializer.h>
 #include <BECore/Control/JsonSerializer.h>
 #include <BECore/Control/JsonTape.h>
+#include <BECore/Control/JsonView.h>
 #include <BECore/FactoryInitializeTest.h>
 #include <BECore/FuzzProbe.h>
 #include <BECore/Reflection/ReaderLimits.h>
@@ -385,6 +386,119 @@ namespace BECore::Tests {
     TEST(JsonDeserializerTextTest, TheSecondLoadOfAShorterMessageAllocatesNothing) {
         for (const DiagnosticsMode mode : {DiagnosticsMode::Off, DiagnosticsMode::Warn}) {
             ExpectSecondLoadAllocatesNothing(kMessage, kShorterMessage, mode);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Load(JsonView): the root is a value inside a tape the caller keeps
+    // -------------------------------------------------------------------------
+
+    namespace {
+
+        constexpr StringView kEnvelope = R"({"id":1,"params":{"id":9,"weight":2.5,"label":"in"},"other":[1,2]})";
+
+        /// The leaf at "params" of @p tape, read by the view of that member; the errors as lines
+        String ReadLeafThroughView(JsonDeserializer& reader, const JsonTape& tape, ProbeLeaf& leaf) {
+            const Optional<JsonView> params = JsonView(tape, 0).Find("params");
+            if (!params || !reader.Load(*params)) {
+                return "no params";
+            }
+            leaf.Deserialize(reader);
+            reader.FinishLoad();
+            return Lines(reader.GetErrors());
+        }
+
+    }  // namespace
+
+    TEST(JsonDeserializerTextTest, ALoadOfANestedViewReadsWhatALoadOfItsTextReads) {
+        JsonTape tape;
+        ASSERT_TRUE(tape.Parse(kEnvelope));
+        JsonDeserializer viewReader;
+        ProbeLeaf viaView;
+        EXPECT_EQ(ReadLeafThroughView(viewReader, tape, viaView), "");
+
+        JsonDeserializer textReader;
+        ProbeLeaf viaText;
+        ASSERT_TRUE(textReader.Load(R"({"id":9,"weight":2.5,"label":"in"})"));
+        viaText.Deserialize(textReader);
+
+        EXPECT_EQ(viaView.id, 9);
+        EXPECT_EQ(viaView.label, "in");
+        EXPECT_EQ(viaView.id, viaText.id);
+        EXPECT_EQ(viaView.weight, viaText.weight);
+        EXPECT_EQ(viaView.label, viaText.label);
+    }
+
+    TEST(JsonDeserializerTextTest, ALoadOfAViewDoesNotSeeTheMembersAroundIt) {
+        JsonTape tape;
+        ASSERT_TRUE(tape.Parse(R"({"id":5,"params":{"label":"x"}})"));
+        JsonDeserializer reader;
+        ProbeLeaf leaf;
+        leaf.id = 77;
+        ASSERT_TRUE(reader.Load(*JsonView(tape, 0).Find("params")));
+        leaf.Deserialize(reader);
+
+        EXPECT_EQ(leaf.id, 77);
+        EXPECT_EQ(leaf.label, "x");
+    }
+
+    TEST(JsonDeserializerTextTest, ALoadOfAViewThatIsNotAnObjectOrNotValidFailsEveryRead) {
+        JsonTape tape;
+        ASSERT_TRUE(tape.Parse(R"({"list":[1,2],"id":4})"));
+        JsonDeserializer reader;
+
+        ProbeLeaf leaf;
+        EXPECT_TRUE(reader.Load(*JsonView(tape, 0).Find("list")));
+        leaf.Deserialize(reader);
+        EXPECT_TRUE(reader.HasErrors());
+        EXPECT_EQ(leaf.id, 0);
+
+        EXPECT_FALSE(reader.Load(JsonView()));
+        EXPECT_FALSE(reader.HasErrors());
+        leaf.Deserialize(reader);
+        EXPECT_TRUE(reader.HasErrors());
+    }
+
+    TEST(JsonDeserializerTextTest, ALoadOfAViewForgetsTheErrorsAndFindingsOfTheLastDocument) {
+        JsonTape tape;
+        ASSERT_TRUE(tape.Parse(R"({"bad":{"id":"x","extra":1},"good":{"id":3}})"));
+        JsonDeserializer reader;
+        reader.SetDiagnostics(DiagnosticsMode::Warn);
+        ProbeLeaf leaf;
+        ASSERT_TRUE(reader.Load(*JsonView(tape, 0).Find("bad")));
+        leaf.Deserialize(reader);
+        reader.FinishLoad();
+        ASSERT_TRUE(reader.HasErrors());
+        ASSERT_FALSE(reader.GetWarnings().empty());
+
+        ASSERT_TRUE(reader.Load(*JsonView(tape, 0).Find("good")));
+        leaf.Deserialize(reader);
+        reader.FinishLoad();
+        EXPECT_FALSE(reader.HasErrors());
+        EXPECT_TRUE(reader.GetWarnings().empty());
+        EXPECT_EQ(leaf.id, 3);
+    }
+
+    TEST(JsonDeserializerTextTest, TheSecondLoadOfAViewAllocatesNothing) {
+        JsonTape tape;
+        ASSERT_TRUE(tape.Parse(kEnvelope));
+        const JsonView params = *JsonView(tape, 0).Find("params");
+        for (const DiagnosticsMode mode : {DiagnosticsMode::Off, DiagnosticsMode::Warn, DiagnosticsMode::Error}) {
+            JsonDeserializer reader;
+            reader.SetDiagnostics(mode);
+            ProbeLeaf leaf;
+            ASSERT_TRUE(reader.Load(params));
+            leaf.Deserialize(reader);
+            reader.FinishLoad();
+            ASSERT_FALSE(reader.HasErrors());
+
+            ExpectNoAllocations([&] {
+                reader.Load(params);
+                leaf.Deserialize(reader);
+                reader.FinishLoad();
+            });
+            EXPECT_FALSE(reader.HasErrors());
+            EXPECT_EQ(leaf.id, 9);
         }
     }
 

@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlBuiltinAnswers.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlLog.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlWindow.h>
 #include <BECore/Control/ControlWindowStatus.h>
@@ -15,26 +16,45 @@
 
 namespace BECore {
 
+    namespace {
+
+        /// The one body of both overloads: @p present tells an absent key (the fallback) from a present one of the wrong type
+        std::expected<uint32_t, ControlError> CheckFrames(bool present, Optional<int64_t> frames, StringView key, uint32_t fallback) {
+            if (!present) {
+                return fallback;
+            }
+            if (!frames || *frames < 1 || *frames > kMaxStepFrames) {
+                return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'{}' has to be an integer from 1 to {}", key, kMaxStepFrames)));
+            }
+            return static_cast<uint32_t>(*frames);
+        }
+
+        std::expected<double, ControlError> CheckFrameSeconds(bool present, Optional<double> seconds) {
+            if (!present) {
+                return kDefaultStepSeconds;
+            }
+            if (!seconds || !(*seconds >= 0.0 && *seconds <= Time::kMaxFrameTime)) {  // written so that NaN fails too
+                return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'dt' has to be a number of seconds from 0 to {}", Time::kMaxFrameTime)));
+            }
+            return *seconds;
+        }
+
+    }  // namespace
+
     std::expected<uint32_t, ControlError> ReadControlFrames(const Json& params, StringView key, uint32_t fallback) {
-        if (FindJsonMember(params, key) == nullptr) {
-            return fallback;
-        }
-        const auto frames = GetJsonInt(params, key);
-        if (!frames || *frames < 1 || *frames > kMaxStepFrames) {
-            return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'{}' has to be an integer from 1 to {}", key, kMaxStepFrames)));
-        }
-        return static_cast<uint32_t>(*frames);
+        return CheckFrames(FindJsonMember(params, key) != nullptr, GetJsonInt(params, key), key, fallback);
+    }
+
+    std::expected<uint32_t, ControlError> ReadControlFrames(JsonView params, StringView key, uint32_t fallback) {
+        return CheckFrames(FindParam(params, key).has_value(), GetParamInt(params, key), key, fallback);
     }
 
     std::expected<double, ControlError> ReadControlFrameSeconds(const Json& params) {
-        if (FindJsonMember(params, "dt") == nullptr) {
-            return kDefaultStepSeconds;
-        }
-        const auto seconds = GetJsonNumber(params, "dt");
-        if (!seconds || !(*seconds >= 0.0 && *seconds <= Time::kMaxFrameTime)) {  // written so that NaN fails too
-            return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'dt' has to be a number of seconds from 0 to {}", Time::kMaxFrameTime)));
-        }
-        return *seconds;
+        return CheckFrameSeconds(FindJsonMember(params, "dt") != nullptr, GetJsonNumber(params, "dt"));
+    }
+
+    std::expected<double, ControlError> ReadControlFrameSeconds(JsonView params) {
+        return CheckFrameSeconds(FindParam(params, "dt").has_value(), GetParamNumber(params, "dt"));
     }
 
     namespace {
