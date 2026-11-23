@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/ControlClock.h>
+#include <BECore/Control/ControlEnvelope.h>
 #include <BECore/Control/ControlWindowStatus.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
@@ -83,6 +84,32 @@ namespace BECore {
         BE_CLASS(ControlMethodsAnswer)
 
         BE_REFLECT_FIELD Vector<ControlListedMethod> methods;
+    };
+
+    /// One call of a `batch`: `ok` and its `result` (the call's own document, borrowed from the batch), or the `error` of a failed one
+    struct ControlBatchResult {
+        BE_CLASS(ControlBatchResult)
+
+        BE_REFLECT_FIELD Optional<ControlErrorAnswer> error;
+        BE_REFLECT_FIELD bool ok = false;
+        BE_REFLECT_FIELD Optional<JsonPayload> result;
+    };
+
+    /// `batch`: the answers in call order; `stopped` is the index of the call that ended the batch. A local of the handler: the results are views of the batch's answers
+    struct ControlBatchAnswer {
+        BE_CLASS(ControlBatchAnswer)
+
+        BE_REFLECT_FIELD Vector<ControlBatchResult> results;
+        BE_REFLECT_FIELD Optional<uint64_t> stopped;
+    };
+
+    /// `call_method`: `result` is what the method's own serializer wrote, absent for a method that returns nothing. `method` and `root` are the client's text, copied
+    struct ReflectionMethodAnswer {
+        BE_CLASS(ReflectionMethodAnswer)
+
+        BE_REFLECT_FIELD String method;
+        BE_REFLECT_FIELD Optional<JsonPayload> result;
+        BE_REFLECT_FIELD String root;
     };
 
 }  // namespace BECore

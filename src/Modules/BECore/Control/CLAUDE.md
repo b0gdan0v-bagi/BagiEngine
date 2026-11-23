@@ -13,7 +13,7 @@ The core of the external control API: a program or a model sends commands, the e
 | `ReflectionControl` | `RegisterReflectionControl()`: the by-name methods, called by `RegisterControlBuiltins` |
 | `SchemaExport` | The type registry as JSON; pure over a `TypeRegistry`; its rules: `Reflection/CLAUDE.md`, "Schema export" |
 | `ControlBuiltins` | `RegisterControlBuiltins()`: `ping`, `status`, `step`, `pause`, `resume`, `list_methods`, `log_mark`, `log_since`, `log_subscribe`, `batch`, `quit` |
-| `ControlBuiltinAnswers.h` | The reflected answers of `ControlBuiltins` (`ControlStatusAnswer : ControlClock`, `ControlMethodsAnswer`, ...); `ControlListedParam` mirrors `ControlParamInfo`, which stays an aggregate (`BE_CLASS` adds a virtual) |
+| `ControlBuiltinAnswers.h` | The reflected answers of `ControlBuiltins` (`ControlStatusAnswer : ControlClock`, `ControlMethodsAnswer`, `ControlBatchAnswer`, `ReflectionMethodAnswer`, ...); `ControlListedParam` mirrors `ControlParamInfo`, which stays an aggregate (`BE_CLASS` adds a virtual) |
 | `ControlClock` | Reflected clock (`frame`, `totalTime`, `deltaTime`, `fixedDeltaTime`, `Read()`); the parent of every answer that carries the clock |
 | `ControlSettings` | `ResolveControlSettings(args, ApplicationConfigLoad)`: the start-up flags and the settings of the reflected `ApplicationConfig` (`Application/ApplicationConfig.h`), the manual clock included, a pure function |
 | `ControlTypes.h` | `ControlError`, `ControlErrors::k*` (error codes), `ControlReplyFn`, `ControlServerStatus` (listening, port, clients), `ControlParamInfo` / `ControlMethodInfo` (what a module says about a method) and `ControlMethodListing` (what `GetMethods()` returns) |
