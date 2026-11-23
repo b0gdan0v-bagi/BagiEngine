@@ -59,6 +59,10 @@ The name has to be a string literal (or live as long as the program). An allocat
 
 `sizes` (`otherData.allocSizes` in a trace) is the histogram of what each zone allocates by size: per zone the non-empty power-of-two buckets, `upTo` the largest size of the bucket in bytes (`0`: the open last bucket, above 16 MiB). Read it when judging a pool: a zone whose allocations all sit in one or two small buckets (many 32-byte nodes) is a candidate for a block pool or an arena of that size; a few large buckets are buffers a pool does not help. Like `names` it counts the innermost zone only.
 
+## The room server and its probe
+
+`BagiRoomServer` and `BagiRoomClientProbe` take `--trace=FILE` (profile build only; the file is written at SIGTERM, after the threads are joined). `python3 tools/rooms/load.py --preset macos-profile --clients 16 --messages 200` runs both with traces, one probe process of N clients against a server without the per-address limits, and prints `trace_summary.py` of each: the zones `Room *`, `WS *` and `Client *` by time and, with `ENGINE_PROFILER_ALLOC`, their allocation names and sizes. Those numbers rank `websocket-frame-buffers`.
+
 ## Tracy
 
 For a live view (zones, frames, plots, allocations with call stacks, while the game runs):
