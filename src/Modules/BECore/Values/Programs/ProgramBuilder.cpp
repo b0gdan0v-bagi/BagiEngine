@@ -21,7 +21,7 @@ namespace BECore {
          */
         class ListChecker {
         public:
-            ListChecker(const Vector<Instruction>& code, const Vector<RegisterImage>& constants, uint8_t registerCount) : _code(code), _constants(constants), _registerCount(registerCount) {}
+            ListChecker(const ArenaVector<Instruction>& code, const ArenaVector<RegisterImage>& constants, uint8_t registerCount) : _code(code), _constants(constants), _registerCount(registerCount) {}
 
             /// The reason instruction @p i is no valid list or loop instruction, or nothing; @p reads gets the level a `ListSlot` reads
             [[nodiscard]] Optional<String> Check(size_t i, LevelMask& reads) {
@@ -164,10 +164,10 @@ namespace BECore {
                 return std::nullopt;
             }
 
-            const Vector<Instruction>& _code;
-            const Vector<RegisterImage>& _constants;
+            const ArenaVector<Instruction>& _code;
+            const ArenaVector<RegisterImage>& _constants;
             uint8_t _registerCount;
-            Vector<size_t> _open;
+            ArenaVector<size_t> _open;
         };
 
     }  // namespace
@@ -341,8 +341,8 @@ namespace BECore {
         program._resultRegister = resultRegister;
         program._registerCount = _highWater;
         program._reads = reads;
-        program._code = _code;
-        program._constants = _constants;
+        program._code.assign(_code.begin(), _code.end());
+        program._constants.assign(_constants.begin(), _constants.end());
         program._source = source;
         return program;
     }

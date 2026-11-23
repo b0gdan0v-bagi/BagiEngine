@@ -328,12 +328,12 @@ namespace BECore {
 
         /// A loop variable in scope: the body of its fold only
         struct LoopScope {
-            String name;
+            ArenaString name;
             uint32_t loop = 0;
             const TypeDesc* list = nullptr;
             const TypeInfo* element = nullptr;
-            /// The list as the source wrote it, for the message of a name that is taken
-            String source;
+            /// The node of the list as the source wrote it, described only for the message of a name that is taken
+            ExprNodeId source = 0;
         };
 
         class Checker {
@@ -341,9 +341,10 @@ namespace BECore {
             Checker(const ExprAst& ast, const ContextDecl& declaration, const CompileOptions& options) : _ast(ast), _declaration(declaration), _options(options) {
                 // The children of a node come before it, so one pass in order sees the children's answers
                 _hasName.resize(ast.nodes.size(), false);
+                _out.nodes.reserve(ast.nodes.size());
                 // A loop variable is read from the list, so a bare name that is one gives its operand a type as a path does (`c * 2` over a list of `int`). The variable comes after the
                 // body in the node order, so the names are collected first; a bare name of the same text that is no variable counts too, which only makes it checked earlier
-                Vector<StringView> variables;
+                ArenaVector<StringView> variables;
                 for (const ExprNode& node : ast.nodes) {
                     const ExprListFunction* function = node.kind == ExprNodeKind::Call ? FindListFunction(node.text) : nullptr;
                     if (function != nullptr && function->isFold && node.argumentCount == function->arity && ast[ast.arguments[node.firstArgument + 1]].kind == ExprNodeKind::Name) {
@@ -660,7 +661,7 @@ namespace BECore {
                 switch (node.kind) {
                     case ExprNodeKind::Name:
                     case ExprNodeKind::Number:
-                        return String(StringView(node.text));
+                        return String(node.text.data(), node.text.size());
                     case ExprNodeKind::Member:
                         return Format("{}.{}", Describe(node.first), node.text);
                     case ExprNodeKind::Index: {
@@ -708,7 +709,7 @@ namespace BECore {
                 typed.kind = TypedNodeKind::Slot;
                 typed.type = type;
                 typed.slot = slot;
-                typed.path = String(path);
+                typed.path.assign(path.data(), path.size());
                 typed.column = column;
                 return Emit(std::move(typed));
             }
@@ -737,7 +738,7 @@ namespace BECore {
 
             /// A component of an expression (`lerp(a, b, t).y`) or a field of an element: the members after a base are read together, `list[i].a.b` is one path through the element's type
             ReferenceResult ResolveMember(ExprNodeId id) {
-                Vector<const ExprNode*> members;
+                ArenaVector<const ExprNode*> members;
                 ExprNodeId bottom = id;
                 while (_ast[bottom].kind == ExprNodeKind::Member) {
                     members.push_back(&_ast[bottom]);
@@ -749,7 +750,7 @@ namespace BECore {
                     return base;
                 }
                 if (_out.nodes[base->id].kind == TypedNodeKind::Element) {
-                    String path;
+                    ArenaString path;
                     for (const ExprNode* member : members) {
                         path += path.empty() ? "" : ".";
                         path.append(member->text.data(), member->text.size());
@@ -801,7 +802,7 @@ namespace BECore {
                 TypedNode node;
                 node.kind = TypedNodeKind::List;
                 node.slot = slot;
-                node.path = String(path);
+                node.path.assign(path.data(), path.size());
                 node.list = *layout;
                 node.column = column;
                 if (owner.has_value()) {
@@ -1010,7 +1011,6 @@ namespace BECore {
             /// A name beside an enum is an enumerator of it (case-sensitive; a level of the same name was taken first)
             TypedResult CheckEnumerator(const ExprNode& node, const ExprType& type) {
                 const TypeDesc& enumeration = *type.enumeration;
-                Vector<String> known;
                 for (size_t i = 0; i < enumeration.names.size(); ++i) {
                     if (enumeration.names[i] == node.text) {
                         TypedNode constant;
@@ -1019,7 +1019,10 @@ namespace BECore {
                         constant.column = node.column;
                         return Emit(std::move(constant));
                     }
-                    known.push_back(String(enumeration.names[i]));
+                }
+                Vector<String> known;
+                for (const auto& enumerator : enumeration.names) {
+                    known.push_back(String(enumerator));
                 }
                 for (const ContextLevel& level : _declaration.Levels()) {
                     known.push_back(level.name);
@@ -1046,9 +1049,9 @@ namespace BECore {
              * The operands that read the context come first, then the other typed ones, then the subtrees of numbers alone, so a literal beside any of them takes its type; a
              * constant subtree beside no typed operand takes the hint, or float when it holds a float literal.
              */
-            std::expected<Vector<TypedNodeId>, ProgramError> CheckOperands(const Vector<ExprNodeId>& operands, Optional<ExprType> hint, bool scalarBesideVector) {
+            std::expected<ArenaVector<TypedNodeId>, ProgramError> CheckOperands(const ArenaVector<ExprNodeId>& operands, Optional<ExprType> hint, bool scalarBesideVector) {
                 constexpr int kPasses = 3;
-                Vector<TypedNodeId> typed(operands.size(), 0);
+                ArenaVector<TypedNodeId> typed(operands.size(), 0);
                 Optional<ExprType> common;
                 Optional<ExprType> anchor = hint;
                 bool allConstant = true;
@@ -1082,7 +1085,7 @@ namespace BECore {
             }
 
             /// The error at the first operand whose type is not the first one's
-            std::expected<void, ProgramError> RequireSameType(const Vector<ExprNodeId>& operands, const Vector<TypedNodeId>& typed, const String& subject) const {
+            std::expected<void, ProgramError> RequireSameType(const ArenaVector<ExprNodeId>& operands, const ArenaVector<TypedNodeId>& typed, const String& subject) const {
                 for (size_t i = 1; i < operands.size(); ++i) {
                     if (TypeOf(typed[i]) != TypeOf(typed[0])) {
                         return Refuse(_ast[operands[i]].column, Format("{} needs operands of one type, but they are {} and {}: there is no implicit conversion between types{}", subject,
@@ -1093,7 +1096,7 @@ namespace BECore {
             }
 
             /// Operands that must have one type: @p subject names the operator or function in a message
-            std::expected<Vector<TypedNodeId>, ProgramError> CheckSameType(const Vector<ExprNodeId>& operands, Optional<ExprType> hint, const String& subject) {
+            std::expected<ArenaVector<TypedNodeId>, ProgramError> CheckSameType(const ArenaVector<ExprNodeId>& operands, Optional<ExprType> hint, const String& subject) {
                 auto typed = CheckOperands(operands, hint, false);
                 if (!typed.has_value()) {
                     return typed;
@@ -1195,7 +1198,7 @@ namespace BECore {
             /// `+ - * / %`: two operands of one type, or a pair of `BE_PROGRAM_MIXED_ROWS` (`vec3 * float`), whose literal side is the scalar of the vector
             TypedResult CheckArithmetic(const ExprNode& node, Optional<ExprType> hint, const String& subject) {
                 const ProgramOperation operation = node.operation;
-                const Vector<ExprNodeId> sources{node.first, node.second};
+                const ArenaVector<ExprNodeId> sources{node.first, node.second};
                 const auto operands = CheckOperands(sources, hint, operation == ProgramOperation::Mul || operation == ProgramOperation::Div);
                 if (!operands.has_value()) {
                     return std::unexpected(operands.error());
@@ -1260,7 +1263,8 @@ namespace BECore {
                 if (node.argumentCount != function->arity) {
                     return Refuse(node.column, ArityMessage(node, function->arity));
                 }
-                Vector<ExprNodeId> arguments;
+                ArenaVector<ExprNodeId> arguments;
+                arguments.reserve(node.argumentCount);
                 for (uint32_t i = 0; i < node.argumentCount; ++i) {
                     arguments.push_back(_ast.arguments[node.firstArgument + i]);
                 }
@@ -1326,7 +1330,7 @@ namespace BECore {
                     return Refuse(node.column, Format("'{}' takes {} argument{}, but {} {} given; the signatures are: {}", node.text, JoinWithOr(words),
                                                       counts.size() == 1 && counts[0] == 1 ? "" : "s", node.argumentCount, node.argumentCount == 1 ? "is" : "are", SignaturesOf(overloads)));
                 }
-                Vector<TypedNodeId> typed;
+                ArenaVector<TypedNodeId> typed;
                 String found;
                 for (uint32_t i = 0; i < node.argumentCount; ++i) {
                     const ExprType first = ExprType::Of(ProgramDomain::Operation(candidates[0]).parameters[i]);
@@ -1402,7 +1406,7 @@ namespace BECore {
                     return Format("'{}' is the name of a type", name);
                 }
                 if (const LoopScope* outer = FindScope(name)) {
-                    return Format("'{}' is already the element of the enclosing loop over '{}'", name, outer->source);
+                    return Format("'{}' is already the element of the enclosing loop over '{}'", name, Describe(outer->source));
                 }
                 return {};
             }
@@ -1430,7 +1434,7 @@ namespace BECore {
                     return Refuse(nameColumn, Format("{} names the element in its second argument, but {}: use a name of its own, for example v", subject, problem));
                 }
                 const uint32_t loop = _loopCount++;
-                _scopes.push_back(LoopScope{String(StringView(nameNode.text)), loop, list->list, list->element, Describe(listSource)});
+                _scopes.push_back(LoopScope{nameNode.text, loop, list->list, list->element, listSource});
                 const bool isNumberFold = function.fold == FoldKind::Sum || function.fold == FoldKind::Min || function.fold == FoldKind::Max;
                 const Optional<ExprType> bodyHint = isNumberFold ? (hint.has_value() && IsNumberType(hint->program) ? hint : std::nullopt) : Optional<ExprType>(ProgramType::Bool);
                 const TypedResult body = Check(bodySource, bodyHint);
@@ -1507,7 +1511,8 @@ namespace BECore {
                 if (!index.has_value()) {
                     return index;
                 }
-                Vector<ExprNodeId> sources;
+                ArenaVector<ExprNodeId> sources;
+                sources.reserve(entryCount);
                 for (size_t i = 0; i < entryCount; ++i) {
                     sources.push_back(_ast.arguments[node.firstArgument + 1 + i]);
                 }
@@ -1568,7 +1573,7 @@ namespace BECore {
                 if (_ast[nameSource].kind != ExprNodeKind::String) {
                     return Refuse(_ast[nameSource].column, Format("{} needs the name of the table as a 'text' literal, as {}('Name', i)", subject, kNamedTableFunction));
                 }
-                const String name(StringView(_ast[nameSource].text));
+                const String name(_ast[nameSource].text.data(), _ast[nameSource].text.size());
                 if (hint.has_value() && !IsNumberType(hint->program)) {
                     return Refuse(node.column, Format("{} gives a number, but {} is needed here: a named table holds numbers, use at(i, ...) for other types", subject, Typed(*hint)));
                 }
@@ -1600,6 +1605,7 @@ namespace BECore {
                 table.opcode = Opcode::LoadTable;
                 table.column = node.column;
                 table.operands[table.operandCount++] = *index;
+                table.entries.reserve(found->size());
                 for (size_t i = 0; i < found->size(); ++i) {
                     const auto image = NamedTableEntry(name, i, (*found)[i], type);
                     if (!image.has_value()) {
@@ -1615,7 +1621,7 @@ namespace BECore {
             }
 
             /// `vec3(a, b, c)`: one argument per component, each of the component's type; a literal takes it
-            TypedResult CheckPack(const ExprNode& node, const ExprFunction& function, const Vector<ExprNodeId>& arguments, const String& subject) {
+            TypedResult CheckPack(const ExprNode& node, const ExprFunction& function, const ArenaVector<ExprNodeId>& arguments, const String& subject) {
                 const ExprType componentType = ComponentsOf(function.target).type;
                 TypedNode result;
                 result.kind = TypedNodeKind::Operation;
@@ -1638,7 +1644,7 @@ namespace BECore {
             }
 
             /// `lerp(a, b, t)`: two values of one type and the weight, a float (the type itself for a float or a double); `t` is not clamped, a `quat` is blended by `Slerp`
-            TypedResult CheckBlend(const ExprNode& node, const Vector<ExprNodeId>& arguments, Optional<ExprType> hint, const String& subject) {
+            TypedResult CheckBlend(const ExprNode& node, const ArenaVector<ExprNodeId>& arguments, Optional<ExprType> hint, const String& subject) {
                 const bool pairIsUntyped = IsUntypedNumber(arguments[0]) && IsUntypedNumber(arguments[1]);
                 Optional<ExprType> pairHint = hint;
                 Optional<TypedNodeId> weight;
@@ -1684,7 +1690,7 @@ namespace BECore {
                 return EmitOperation(opcode, type, node.column, {(*pair)[0], (*pair)[1], *weight});
             }
 
-            TypedResult CheckSelect(const ExprNode& node, const Vector<ExprNodeId>& arguments, Optional<ExprType> hint, const String& subject) {
+            TypedResult CheckSelect(const ExprNode& node, const ArenaVector<ExprNodeId>& arguments, Optional<ExprType> hint, const String& subject) {
                 const TypedResult condition = Check(arguments[0], ProgramType::Bool);
                 if (!condition.has_value()) {
                     return condition;
@@ -1726,8 +1732,8 @@ namespace BECore {
             const ExprAst& _ast;
             const ContextDecl& _declaration;
             const CompileOptions& _options;
-            Vector<bool> _hasName;
-            Vector<LoopScope> _scopes;
+            ArenaVector<bool> _hasName;
+            ArenaVector<LoopScope> _scopes;
             uint32_t _loopCount = 0;
             TypedExpr _out;
         };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Assert/AssertMacros.h>
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Values/Programs/Domain/ProgramDomain.h>
 #include <BECore/Values/Programs/Lists/ListImage.h>
 #include <BECore/Values/Programs/Program.h>
@@ -17,9 +18,19 @@ namespace BECore {
      * The lowering of a formula and the tests of the interpreter both use it. Registers are a stack: `AcquireRegister` gives the next one and
      * `ReleaseRegister` takes back the last one given, which is what a post-order walk of a tree needs (the operands of a node are the two
      * top registers, the result replaces the first). `Finish` checks the code and works out `Reads` from the `LoadSlot` instructions.
+     *
+     * The code and the constants are on the thread's scratch arena (`Memory/CLAUDE.md`, "Scratch arena and scopes"): a builder belongs to the `ScratchScope` that is alive when it is made and must
+     * not outlive it, be a member of a longer-lived object or cross threads. The `Program` that `Finish` returns copies them to engine vectors, so it may outlive the builder. A builder made
+     * with no scope open (a test, a generated set) only keeps its memory until its thread ends. The arena never gives memory back on growth: `Reserve` what is known.
      */
     class ProgramBuilder {
     public:
+        /// Makes room for @p instructions and @p constants, so that adding them takes no new block of the arena
+        void Reserve(size_t instructions, size_t constants) {
+            _code.reserve(instructions);
+            _constants.reserve(constants);
+        }
+
         /// The next free register; an error when a program needs more than `kMaxProgramRegisters` at once
         [[nodiscard]] std::expected<uint8_t, ProgramError> AcquireRegister();
 
@@ -128,8 +139,8 @@ namespace BECore {
         }
 
     private:
-        Vector<Instruction> _code;
-        Vector<RegisterImage> _constants;
+        ArenaVector<Instruction> _code;
+        ArenaVector<RegisterImage> _constants;
         uint8_t _live = 0;
         uint8_t _highWater = 0;
     };

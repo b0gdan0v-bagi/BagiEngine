@@ -24,6 +24,9 @@ namespace BECore::Tests {
         constexpr uint32_t kSaltStride = 100000;
         constexpr char kCopyMark = '$';
         constexpr int kRepetitions = 5;
+        /// The heap allocations a second compile of the formula of the budget case may make. What remains is the linking of the five paths of the formula (the reflection's path
+        /// compile, `Reflection/`) and the output: the `Program` handed to the pool (found there, so dropped) and the result's path
+        constexpr uint64_t kCompileAllocBudget = 112;
 
         struct FormulaShape {
             StringView text;
@@ -181,6 +184,20 @@ namespace BECore::Tests {
             const ScratchScope scratch;
             EXPECT_TRUE(ParseExpression(kFormula).has_value());
         });
+    }
+
+    TEST(CompileScratchTest, ASecondCompileOfAFormulaStaysWithinTheAllocationBudget) {
+        constexpr StringView kFormula = "select(caster.alive, caster.speed * 3, cast.power) + lerp(caster.speed, cast.power, 0.25)";
+        const ValueWorld world;
+        const TypeDesc& type = DescribeType<float>();
+        // The first compile adds the program to the pool and takes the arena's first chunk
+        ASSERT_TRUE(CompileExpression(kFormula, world.declaration, type).has_value());
+        const AllocCount second = CountAllocations([&] { EXPECT_TRUE(CompileExpression(kFormula, world.declaration, type).has_value()); });
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_LE(second.count, kCompileAllocBudget);
+        } else {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
     }
 
     /// A benchmark, not a check: the counts are zero without the profile preset (`kNoAllocTracker`)

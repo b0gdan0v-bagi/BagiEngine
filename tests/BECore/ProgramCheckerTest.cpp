@@ -586,7 +586,7 @@ namespace BECore::Tests {
             const TypedExpr expr = Accepted(context.declaration, row.path, row.type);
             ASSERT_EQ(expr.nodes.size(), 1U) << String(row.path).c_str();
             EXPECT_EQ(Root(expr).kind, TypedNodeKind::Slot);
-            EXPECT_EQ(Root(expr).path, String(row.path));
+            EXPECT_EQ(StringView(Root(expr).path), row.path);
             const auto linked = LinkSlot(context.declaration, row.path, DescriptorOf(row.type));
             ASSERT_TRUE(linked.has_value()) << String(row.path).c_str();
             EXPECT_EQ(Root(expr).slot.level, linked->level);
@@ -818,7 +818,7 @@ namespace BECore::Tests {
                 }
                 ASSERT_EQ(expr.nodes.size(), 1U) << text.c_str();
                 EXPECT_EQ(Root(expr).kind, TypedNodeKind::Slot) << text.c_str();
-                EXPECT_EQ(Root(expr).path, text) << "the path stays as written";
+                EXPECT_EQ(StringView(Root(expr).path), StringView(text)) << "the path stays as written";
                 EXPECT_EQ(Root(expr).slot.level, whole->level);
                 EXPECT_EQ(Root(expr).slot.offset, whole->offset + ByteOffsetOfComponent(row.type, i)) << text.c_str();
             }
