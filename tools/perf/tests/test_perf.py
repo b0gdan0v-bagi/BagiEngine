@@ -144,6 +144,33 @@ def test_the_trace_summary_gives_self_time_allocations_and_frames():
     assert "Outer" in trace_summary.format_text(summary, 5)
 
 
+def test_a_ring_trace_counts_its_frame_instants_and_never_a_frozen_frame():
+    """The shape of WriteRingTraceJson: a `Frame` instant at each frame's begin, nested B/E, a thread name; frozen frames are not frames"""
+
+    def begin_of(name, ts):
+        return {"name": name, "ph": "B", "pid": 1, "tid": 1, "ts": ts}
+
+    def end_at(ts):
+        return {"ph": "E", "pid": 1, "tid": 1, "ts": ts}
+
+    events = [{"name": "thread_name", "ph": "M", "pid": 1, "tid": 1, "args": {"name": "Main"}}]
+    for k in range(3):
+        begin = k * 16000.0
+        events.append({"name": "Frame", "ph": "i", "s": "g", "pid": 1, "tid": 0, "ts": begin, "args": {"frame": k, "ms": 16.0}})
+        events += [begin_of("Outer", begin + 1000), begin_of("Inner", begin + 2000), end_at(begin + 5000), end_at(begin + 10000)]
+    events.append({"name": "Frozen frame", "ph": "i", "s": "g", "pid": 1, "tid": 0, "ts": 99000.0, "args": {"frame": 9, "ms": 80.0}})
+
+    summary = trace_summary.summarize(events, {"ringFrames": 3, "dropped": 0, "build": "stats"})
+    assert summary["frames"]["count"] == 2  # three marks: two gaps
+    assert summary["frames"]["maxMs"] == pytest.approx(16.0)
+    assert summary["unclosedZones"] == 0 and summary["threads"] == {"1": "Main"}
+    zones = {z["name"]: z for z in summary["zones"]}
+    assert zones["Outer"]["calls"] == 3 and zones["Outer"]["totalMs"] == pytest.approx(27.0)
+    assert zones["Outer"]["selfMs"] == pytest.approx(18.0)  # 9 ms of each call minus the 3 ms of Inner
+    assert zones["Inner"]["selfMs"] == pytest.approx(9.0)
+    assert "Frozen frame" not in zones
+
+
 def test_the_trace_summary_prints_allocation_names_and_sizes_only_when_the_trace_has_them(tmp_path):
     events = [{"name": "Z", "ph": "B", "tid": 1, "ts": 0.0}, {"ph": "E", "tid": 1, "ts": 10.0, "args": {"allocs": 1, "bytes": 8}}]
     other = {
