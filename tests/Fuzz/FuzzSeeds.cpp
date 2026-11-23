@@ -263,6 +263,11 @@ namespace BECore::Fuzz {
             return FuzzBytes(bytes.begin(), bytes.end());
         }
 
+        FuzzBytes Version3Bytes(const Vector<BinaryStreams::Entry>& root, const BinaryStreams::Options& options = {}) {
+            const Vector<uint8_t> bytes = BinaryStreams::Build(root, options);
+            return FuzzBytes(bytes.begin(), bytes.end());
+        }
+
         FuzzBytes Version2Bytes(const Vector<BinaryStreams::Entry>& root, const Vector<String>& table = {}) {
             BinaryStreams::Options options;
             options.version = BinaryFormat::TabledVersion;
@@ -476,6 +481,36 @@ namespace BECore::Fuzz {
         FuzzBytes badPooled = Version2Bytes({Pooled("p", "text")});
         StoreWord(badPooled, FirstPayloadAt(badPooled), 2);
         seeds.push_back({kBinaryFolder, "pool-string-index-out-of-range.bin", badPooled});
+
+        // The same documents in version 3, and the damage its pool section allows: an order and a repeat nothing checks, a count the bytes cannot hold,
+        // an index past the section, a hash that is stale and a hash function that is not this one's (the reader ignores both hashes: the seeds pin that)
+        seeds.push_back({kBinaryFolder, "version3-pool-string-values.bin", Version3Bytes(pooled)});
+
+        FuzzBytes badPooledV3 = Version3Bytes({Pooled("p", "text")});
+        StoreWord(badPooledV3, FirstPayloadAt(badPooledV3), 2);
+        seeds.push_back({kBinaryFolder, "version3-pool-index-out-of-range.bin", badPooledV3});
+
+        Options unsortedPool;
+        unsortedPool.pool = {"shared", "other", ""};
+        seeds.push_back({kBinaryFolder, "version3-pool-unsorted.bin", Version3Bytes(pooled, unsortedPool)});
+
+        Options repeatedPool;
+        repeatedPool.pool = {"", "other", "other", "shared"};
+        seeds.push_back({kBinaryFolder, "version3-pool-repeated-text.bin", Version3Bytes(pooled, repeatedPool)});
+
+        FuzzBytes hugePool = Version3Bytes(pooled);
+        StoreWord(hugePool, LayoutOf(hugePool).entriesOffset, kHugeLength);
+        seeds.push_back({kBinaryFolder, "version3-pool-count-ffffffff.bin", hugePool});
+
+        constexpr uint64_t kStaleHash = 0x0123456789ABCDEFull;
+        Options staleHash;
+        staleHash.hashOverrides.push_back({String("shared"), kStaleHash});
+        staleHash.hashOverrides.push_back({String("other"), kStaleHash});
+        seeds.push_back({kBinaryFolder, "version3-stale-hash.bin", Version3Bytes(pooled, staleHash)});
+
+        Options otherHashFunction;
+        otherHashFunction.hashFunction = Details::PoolHashFunctionId() + 1;
+        seeds.push_back({kBinaryFolder, "version3-wrong-hash-function.bin", Version3Bytes(pooled, otherHashFunction)});
 
         seeds.push_back({kBinaryFolder, "content-stamp.bin", MakeContentStampStream()});
 

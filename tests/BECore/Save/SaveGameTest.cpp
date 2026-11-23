@@ -226,7 +226,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SaveGameTest, ASaveOfEitherLayoutLoadsAndPeeks) {
-        for (const uint16_t layout : {BinaryFormat::LegacyVersion, BinaryFormat::TabledVersion}) {
+        for (const uint16_t layout : {BinaryFormat::LegacyVersion, BinaryFormat::TabledVersion, BinaryFormat::PooledVersion}) {
             SCOPED_TRACE(layout);
             ASSERT_TRUE(Service().WriteSlot("slot", SmallSaveBytes(layout, 2)).has_value());
 
@@ -275,6 +275,71 @@ namespace BECore::Tests {
         ASSERT_TRUE(peeked.has_value());
         EXPECT_EQ(peeked->game, "G");
         EXPECT_EQ(peeked->version, 1u);
+    }
+
+    TEST_F(SaveGameTest, AVersion2SaveKeptAsBytesStillLoads) {
+        // The save of a small game as the engine of version 2 wrote it, byte by byte: one table of names and PoolString texts
+        // clang-format off
+        const Vector<uint8_t> bytes = {
+            'B', 'E', 'B', 'N', 0x02, 0x00,                                                 // magic, version 2
+            0x78, 0x00, 0x00, 0x00,                                                         // payload size: 120
+            0x07, 0x00, 0x00, 0x00,  0x1D, 0x00, 0x00, 0x00,                                // table: 7 texts, 29 bytes
+            0x04, 0x00, 0x00, 0x00,  0x08, 0x00, 0x00, 0x00,  0x0C, 0x00, 0x00, 0x00,       //   ends: Hero, game, hero
+            0x0D, 0x00, 0x00, 0x00,  0x11, 0x00, 0x00, 0x00,  0x16, 0x00, 0x00, 0x00,       //   n, save, state
+            0x1D, 0x00, 0x00, 0x00,                                                         //   version
+            'H', 'e', 'r', 'o', 'g', 'a', 'm', 'e', 'h', 'e', 'r', 'o', 'n',                //   the characters
+            's', 'a', 'v', 'e', 's', 't', 'a', 't', 'e', 'v', 'e', 'r', 's', 'i', 'o', 'n',
+            0x0D, 0x04, 0x00, 0x00, 0x00, 0x2E, 0x00, 0x00, 0x00,                           // Object "save", size 46
+            0x0C, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 'G',                      //   String "game" = "G"
+            0x07, 0x06, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,                           //   UInt32 "version" = 1
+            0x0D, 0x05, 0x00, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00,                           //   Object "state", size 18
+            0x06, 0x03, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00,                           //     Int32 "n" = 5
+            0x0F, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,                           //     PoolString "hero" = table[0], "Hero"
+        };
+        // clang-format on
+
+        using namespace BinaryStreams;
+        const Vector<Entry> tree = {Object("save", {Text("game", "G"), Number<uint32_t>("version", 1), Object("state", {Number<int32_t>("n", 5), Pooled("hero", "Hero")})})};
+        BinaryStreams::Options tabled;
+        tabled.version = BinaryFormat::TabledVersion;
+        ASSERT_EQ(Build(tree, tabled), bytes) << "the literal and the builder describe the same file";
+
+        ASSERT_TRUE(Service().WriteSlot("old", bytes).has_value());
+        int32_t n = 0;
+        PoolString hero;
+        const auto info = Service().Load("old", SaveSchema{"G", 1, 1}, [&](IDeserializer& deserializer) {
+            deserializer.Read("n", n);
+            deserializer.Read("hero", hero);
+        });
+        ASSERT_TRUE(info.has_value()) << info.error().detail.c_str();
+        EXPECT_EQ(info->version, 1u);
+        EXPECT_EQ(n, 5);
+        EXPECT_EQ(hero, "Hero"_intern);
+    }
+
+    TEST_F(SaveGameTest, AVersion3SaveWithStaleHashesLoadsTheRightPoolStrings) {
+        // A save never trusts a hash it holds: a stale hash, or the hashes of another hash function, change nothing
+        constexpr uint64_t kStaleHash = 0x0123456789ABCDEFull;
+        for (const bool otherFunction : {false, true}) {
+            SCOPED_TRACE(otherFunction);
+            const String text = FreshText("save_stale_hash");  // not in the pool yet: a trusted hash would file it under the wrong key
+            using namespace BinaryStreams;
+            const Vector<Entry> tree = {Object("save", {Text("game", kGame), Number<uint32_t>("version", 2), Object("state", {Pooled("hero", text)})})};
+            BinaryStreams::Options options;
+            options.hashOverrides.push_back({text, kStaleHash});
+            if (otherFunction) {
+                options.hashFunction = Details::PoolHashFunctionId() + 1;
+            }
+            ASSERT_TRUE(Service().WriteSlot("slot", Build(tree, options)).has_value());
+
+            PoolString hero;
+            const auto info = Service().Load("slot", kSchema, [&hero](IDeserializer& deserializer) { deserializer.Read("hero", hero); });
+            ASSERT_TRUE(info.has_value()) << info.error().detail.c_str();
+            const Optional<PoolString> found = PoolString::Find(StringView(text));
+            ASSERT_TRUE(found.has_value()) << "the lookup uses the hash of the text, not the stale one";
+            EXPECT_EQ(hero, *found);
+            EXPECT_EQ(hero.ToStringView(), StringView(text));
+        }
     }
 
     TEST_F(SaveGameTest, ASaveIsWrittenAsVersion3AndReplacesAVersion1Slot) {
