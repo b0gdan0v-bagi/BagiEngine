@@ -2,6 +2,7 @@
 
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -86,6 +87,21 @@ namespace BECore {
 
     /// Replaces @p to when it is a file; fails when it is a folder
     [[nodiscard]] std::expected<void, String> RenameFile(StringView from, StringView to);
+
+    /// Whether WalkDirectory lists only the entries of the folder or every entry below it
+    CORE_ENUM(WalkMode, uint8_t, Folder, Tree)
+
+    /**
+     * Calls @p visit for each entry of @p folder (and, in Tree mode, of every folder below it) with its path below @p folder, `/` between
+     * the names, and its kind (a symbolic link shows the kind of what it points at; one that points nowhere is Other). The text is valid
+     * only during the call. @p visit returns false to stop, which is a success. The order is the OS's, not sorted: a caller that needs
+     * one sorts what it collected. The folder itself is not reported.
+     *
+     * The top folder that cannot be read is the error. A subfolder that cannot be read is skipped, like std's `skip_permission_denied`.
+     * A symbolic link to a folder is reported but not entered in Tree mode (std's default, and it cannot loop); a depth over
+     * the bound of the call (64 folders) is not entered either. @p visit must not change the folder it is listing.
+     */
+    [[nodiscard]] std::expected<void, String> WalkDirectory(StringView folder, WalkMode mode, FunctionRef<bool(StringView relativePath, FileKind kind)> visit);
 
     /// The largest file ReadFileBytes and ReadTextFile read whole unless the caller passes a tighter bound: nothing in the engine reads more at once
     inline constexpr size_t kDefaultMaxFileBytes = size_t{256} * 1024 * 1024;

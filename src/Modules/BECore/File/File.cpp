@@ -4,6 +4,19 @@
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_iostream.h>
+#include <SDL3/SDL_stdinc.h>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <sys/stat.h>
+#endif
 
 namespace BECore {
 
@@ -150,6 +163,88 @@ namespace BECore {
             return {};
         }
 
+        /// The deepest folder WalkDirectory enters: a bound for a tree that loops without a symbolic link (a bind mount), and for the open
+        /// folder handles, one per level
+        constexpr size_t kMaxWalkDepth = 64;
+
+        bool IsSeparator(char c) {
+#ifdef _WIN32
+            return c == '/' || c == '\\';
+#else
+            return c == '/';
+#endif
+        }
+
+        String ToString(StringView text) {
+            return String(text.data(), text.size());
+        }
+
+#ifdef _WIN32
+        /// A path as UTF-16 with a terminating zero, which the wide Windows calls need
+        class WidePath {
+        public:
+            explicit WidePath(StringView path) {
+                const int length = path.empty() ? 0 : MultiByteToWideChar(CP_UTF8, 0, path.data(), static_cast<int>(path.size()), nullptr, 0);
+                _chars.resize(static_cast<size_t>(length) + 1, L'\0');
+                if (length > 0) {
+                    MultiByteToWideChar(CP_UTF8, 0, path.data(), static_cast<int>(path.size()), _chars.data(), length);
+                }
+            }
+
+            const wchar_t* Get() const {
+                return _chars.data();
+            }
+
+        private:
+            SmallVector<wchar_t, kInlinePathBytes + 1> _chars;
+        };
+
+#endif
+
+        /// Whether @p path is itself a symbolic link (or a Windows reparse point such as a junction), which SDL_GetPathInfo cannot tell: it follows links
+        bool IsSymbolicLink(const char* path) {
+#ifdef _WIN32
+            const DWORD attributes = GetFileAttributesW(WidePath(path).Get());
+            return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+#else
+            struct stat info;
+            return lstat(path, &info) == 0 && S_ISLNK(info.st_mode);
+#endif
+        }
+
+        /// The state of one WalkDirectory call; `path` is the folder being listed and always ends in a separator while SDL lists it
+        struct Walker {
+            WalkMode mode = WalkMode::Folder;
+            FunctionRef<bool(StringView, FileKind)> visit;
+            String path;
+            size_t rootLength = 0;
+            size_t depth = 0;
+            bool stopped = false;
+        };
+
+        SDL_EnumerationResult SDLCALL WalkEntry(void* userdata, const char* /*folder*/, const char* name) {
+            Walker& walker = *static_cast<Walker*>(userdata);
+            const size_t folderLength = walker.path.size();
+            walker.path.append(name);
+
+            const Optional<FileInfo> info = GetFileInfo(walker.path);
+            const FileKind kind = info ? info->kind : FileKind::Other;
+            if (!walker.visit(StringView(walker.path.data() + walker.rootLength, walker.path.size() - walker.rootLength), kind)) {
+                walker.stopped = true;
+                return SDL_ENUM_SUCCESS;
+            }
+
+            if (walker.mode == WalkMode::Tree && kind == FileKind::Directory && walker.depth < kMaxWalkDepth && !IsSymbolicLink(walker.path.c_str())) {
+                walker.path.push_back('/');
+                ++walker.depth;
+                // A subfolder that cannot be read is skipped: the result of the call is not looked at
+                static_cast<void>(SDL_EnumerateDirectory(walker.path.c_str(), &WalkEntry, &walker));
+                --walker.depth;
+            }
+            walker.path.resize(folderLength);
+            return walker.stopped ? SDL_ENUM_SUCCESS : SDL_ENUM_CONTINUE;
+        }
+
     }  // namespace
 
     File::~File() {
@@ -283,6 +378,19 @@ namespace BECore {
         const CPath cTo{to};
         if (!SDL_RenamePath(cFrom.Get(), cTo.Get())) {
             return std::unexpected(Format("Cannot rename '{}' to '{}': {}", from, to, SDL_GetError()));
+        }
+        return {};
+    }
+
+    std::expected<void, String> WalkDirectory(StringView folder, WalkMode mode, FunctionRef<bool(StringView, FileKind)> visit) {
+        Walker walker{mode, visit, ToString(folder)};
+        if (walker.path.empty() || !IsSeparator(walker.path.back())) {
+            walker.path.push_back('/');
+        }
+        walker.rootLength = walker.path.size();
+        // The result is false for the folder that cannot be opened, and the callback never fails: a stop is a success
+        if (!SDL_EnumerateDirectory(walker.path.c_str(), &WalkEntry, &walker)) {
+            return std::unexpected(Failure("list", folder));
         }
         return {};
     }
