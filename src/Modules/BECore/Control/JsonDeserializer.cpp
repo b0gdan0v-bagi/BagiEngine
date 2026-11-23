@@ -44,16 +44,49 @@ namespace BECore {
 
     }  // namespace
 
+    JsonDeserializer::JsonDeserializer() {
+        Reset(_ownTape);
+    }
+
     JsonDeserializer::JsonDeserializer(const Json& document) {
+        AppendJson(_bridgeText, document);
+        Load(StringView(_bridgeText));
+    }
+
+    JsonDeserializer::~JsonDeserializer() = default;
+
+    void JsonDeserializer::Reset(const JsonTape& tape) {
+        _tape = &tape;
+        // The scopes hold lists made in the arena: they go before the arena's memory does
+        _scopes.clear();
+        if (_namesArena) {
+            _namesArena->Reset();
+        }
+        ClearPathSegments();
+        _errors.clear();
+        ClearWarnings();
         Scope root;
-        root.node = &document;
+        root.node = tape.Empty() ? JsonView() : JsonView(tape, 0);
         root.kind = ScopeKind::Object;
         // The root is checked at FinishLoad, whenever the mode was set: it was open for the whole load
         root.tracking = true;
         _scopes.push_back(eastl::move(root));
     }
 
-    JsonDeserializer::~JsonDeserializer() = default;
+    bool JsonDeserializer::Load(StringView text) {
+        const std::expected<void, JsonParseError> parsed = _ownTape.Parse(text);
+        Reset(_ownTape);
+        if (!parsed) {
+            ReportError({}, Format("Invalid JSON: {} at offset {}", parsed.error().message, parsed.error().offset));
+            return false;
+        }
+        return true;
+    }
+
+    bool JsonDeserializer::Load(const JsonTape& tape) {
+        Reset(tape);
+        return !tape.Empty();
+    }
 
     LinearArena& JsonDeserializer::GetNamesArena() const {
         if (!_namesArena) {
@@ -72,15 +105,19 @@ namespace BECore {
     // Lookup
     // =============================================================================
 
-    const Json* JsonDeserializer::FindMember(StringView name) const {
-        const Scope& scope = _scopes.back();
-        if (scope.node->is_object()) {
-            return FindJsonMember(*scope.node, name);
+    Optional<JsonView> JsonDeserializer::FindMember(StringView name, bool advance) const {
+        Scope& scope = _scopes.back();
+        if (scope.node.IsObject()) {
+            if (advance) {
+                return scope.node.Find(name, scope.cursor);
+            }
+            uint32_t cursor = scope.cursor;
+            return scope.node.Find(name, cursor);
         }
         if (scope.kind == ScopeKind::Element && name == kElementValueKey) {
             return scope.node;
         }
-        return nullptr;
+        return std::nullopt;
     }
 
     void JsonDeserializer::NoteAsked(StringView name) const {
@@ -102,24 +139,24 @@ namespace BECore {
         scope.asked->push_back(StringView(text, name.size()));
     }
 
-    const Json* JsonDeserializer::FindForRead(StringView name) {
+    Optional<JsonView> JsonDeserializer::FindForRead(StringView name) {
         NoteAsked(name);
-        if (_scopes.size() == 1 && !_scopes.front().node->is_object()) {
+        if (_scopes.size() == 1 && !_scopes.front().node.IsObject()) {
             ReportError(name, "Document root is not an object");
-            return nullptr;
+            return std::nullopt;
         }
-        return FindMember(name);
+        return FindMember(name, true);
     }
 
     bool JsonDeserializer::HasKey(StringView name) const {
         NoteAsked(name);
-        return FindMember(name) != nullptr;
+        return FindMember(name, false).has_value();
     }
 
     bool JsonDeserializer::IsScalarMember(StringView name) const {
         NoteAsked(name);
-        const Json* member = FindMember(name);
-        return member != nullptr && !member->is_object() && !member->is_array();
+        const Optional<JsonView> member = FindMember(name, false);
+        return member && !member->IsObject() && !member->IsArray();
     }
 
     void JsonDeserializer::NoteKnownKey(StringView name) {
@@ -130,23 +167,34 @@ namespace BECore {
         _scopes.back().checked = true;
     }
 
-    void JsonDeserializer::RejectValue(StringView name, StringView kind, const Json& value, bool outOfRange) {
+    void JsonDeserializer::RejectValue(StringView name, StringView kind, JsonView value, bool outOfRange) {
         String shown;
-        if (value.is_string()) {
-            //-NoStd: nlohmann's string
-            const std::string& text = value.get_ref<const std::string&>();
-            const StringView content = CutText(StringView(text.c_str(), text.size()), ReaderLimits::kMaxQuotedValueBytes);
-            shown = Printable(content);
-            if (content.size() < text.size()) {
-                shown += "...";
+        switch (value.Kind()) {
+            case JsonKind::Object:
+                shown = "<object>";
+                break;
+            case JsonKind::Array:
+                shown = "<array>";
+                break;
+            case JsonKind::String: {
+                value.ReadText(_decoded);
+                const StringView content = CutText(StringView(_decoded), ReaderLimits::kMaxQuotedValueBytes);
+                shown = Printable(content);
+                if (content.size() < _decoded.size()) {
+                    shown += "...";
+                }
+                break;
             }
-        } else if (value.is_object()) {
-            shown = "<object>";
-        } else if (value.is_array()) {
-            shown = "<array>";
-        } else {
-            // A number, a bool or null: a short text, and nothing nested to walk
-            shown = DumpJson(value);
+            default: {
+                // A number, a bool or null, as the document wrote it
+                const StringView text = value.Raw();
+                const StringView content = CutText(text, ReaderLimits::kMaxQuotedValueBytes);
+                shown = Printable(content);
+                if (content.size() < text.size()) {
+                    shown += "...";
+                }
+                break;
+            }
         }
         ReportError(name, Format("Invalid {} value '{}'{}", kind, shown, outOfRange ? " (out of range)" : ""));
     }
@@ -156,88 +204,111 @@ namespace BECore {
     // =============================================================================
 
     bool JsonDeserializer::ReadBool(StringView name, bool& outValue) {
-        const Json* value = FindForRead(name);
-        if (value == nullptr) {
+        const Optional<JsonView> value = FindForRead(name);
+        if (!value) {
             return false;
         }
-        if (!value->is_boolean()) {
+        const Optional<bool> flag = value->AsBool();
+        if (!flag) {
             RejectValue(name, "boolean", *value, false);
             return false;
         }
-        outValue = value->get<bool>();
+        outValue = *flag;
         return true;
     }
 
     template <typename T>
     bool JsonDeserializer::ReadInteger(StringView name, T& outValue) {
-        const Json* value = FindForRead(name);
-        if (value == nullptr) {
+        const Optional<JsonView> value = FindForRead(name);
+        if (!value) {
             return false;
         }
         // Only a JSON integer: 3.0 and 1.5 are numbers of another kind
-        if (!value->is_number_integer()) {
+        if (!value->IsInteger()) {
             RejectValue(name, "integer", *value, false);
             return false;
         }
-        if (value->is_number_unsigned()) {
-            const uint64_t number = value->get<uint64_t>();
-            if (number > static_cast<uint64_t>(std::numeric_limits<T>::max())) {
+        if (const Optional<int64_t> number = value->AsInt64()) {
+            if constexpr (std::is_unsigned_v<T>) {
+                if (*number < 0) {
+                    RejectValue(name, "integer", *value, false);
+                    return false;
+                }
+                if (static_cast<uint64_t>(*number) > std::numeric_limits<T>::max()) {
+                    RejectValue(name, "integer", *value, true);
+                    return false;
+                }
+            } else if (*number < std::numeric_limits<T>::min() || *number > std::numeric_limits<T>::max()) {
                 RejectValue(name, "integer", *value, true);
                 return false;
             }
-            outValue = static_cast<T>(number);
+            outValue = static_cast<T>(*number);
             return true;
         }
-        const int64_t number = value->get<int64_t>();
-        if constexpr (std::is_unsigned_v<T>) {
-            if (number < 0) {
-                RejectValue(name, "integer", *value, false);
-                return false;
-            }
-            if (static_cast<uint64_t>(number) > std::numeric_limits<T>::max()) {
-                RejectValue(name, "integer", *value, true);
-                return false;
-            }
-        } else if (number < std::numeric_limits<T>::min() || number > std::numeric_limits<T>::max()) {
+        // Past int64: only a positive number that fits uint64 can still be a value
+        const Optional<uint64_t> big = value->AsUint64();
+        if (!big || *big > static_cast<uint64_t>(std::numeric_limits<T>::max())) {
             RejectValue(name, "integer", *value, true);
             return false;
         }
-        outValue = static_cast<T>(number);
+        outValue = static_cast<T>(*big);
         return true;
     }
 
     template <typename T>
     bool JsonDeserializer::ReadFloating(StringView name, T& outValue) {
-        const Json* value = FindForRead(name);
-        if (value == nullptr) {
+        const Optional<JsonView> value = FindForRead(name);
+        if (!value) {
             return false;
         }
-        if (!value->is_number()) {
+        if (!value->IsNumber()) {
             RejectValue(name, "number", *value, false);
             return false;
         }
-        const double number = value->get<double>();
+        const Optional<double> number = value->AsDouble();
         // A number that is infinite, or beyond the target's type, has no value to keep; the check comes before the cast, which is undefined for a value out of range
-        if (!std::isfinite(number) || std::fabs(number) > static_cast<double>(std::numeric_limits<T>::max())) {
+        if (!number || !std::isfinite(*number) || std::fabs(*number) > static_cast<double>(std::numeric_limits<T>::max())) {
             RejectValue(name, "number", *value, true);
             return false;
         }
-        outValue = static_cast<T>(number);
+        outValue = static_cast<T>(*number);
         return true;
     }
 
     bool JsonDeserializer::ReadText(StringView name, String& outValue) {
-        const Json* value = FindForRead(name);
-        if (value == nullptr) {
+        const Optional<JsonView> value = FindForRead(name);
+        if (!value) {
             return false;
         }
-        if (!value->is_string()) {
+        if (!value->ReadText(outValue)) {
             RejectValue(name, "string", *value, false);
             return false;
         }
-        //-NoStd: nlohmann's string
-        const std::string& text = value->get_ref<const std::string&>();
-        outValue = String(text.c_str(), text.size());
+        return true;
+    }
+
+    bool JsonDeserializer::ReadPoolString(StringView name, PoolString& outValue) {
+        const Optional<JsonView> value = FindForRead(name);
+        if (!value) {
+            return false;
+        }
+        if (!value->IsString()) {
+            RejectValue(name, "string", *value, false);
+            return false;
+        }
+        // A string with no escape is interned from the text itself; one with escapes is decoded into the buffer the reader keeps
+        StringView text;
+        if (const Optional<StringView> plain = value->Text()) {
+            text = *plain;
+        } else {
+            value->ReadText(_decoded);
+            text = StringView(_decoded);
+        }
+        if (!AcceptPoolStringLength(name, text.size())) {
+            return false;
+        }
+        // The one intern of a read: the value is what the field holds
+        outValue = PoolString::Intern(text);
         return true;
     }
 
@@ -290,16 +361,7 @@ namespace BECore {
     }
 
     bool JsonDeserializer::ReadAttribute(StringView name, PoolString& outValue) {
-        String text;
-        if (!ReadText(name, text)) {
-            return false;
-        }
-        if (!AcceptPoolStringLength(name, text.size())) {
-            return false;
-        }
-        // The one intern of a read: the value is what the field holds
-        outValue = PoolString::Intern(StringView(text));
-        return true;
+        return ReadPoolString(name, outValue);
     }
 
     bool JsonDeserializer::Read(StringView name, bool& outValue) {
@@ -367,11 +429,11 @@ namespace BECore {
     }
 
     bool JsonDeserializer::BeginObject(StringView name) {
-        const Json* member = FindForRead(name);
-        if (member == nullptr) {
+        const Optional<JsonView> member = FindForRead(name);
+        if (!member) {
             return false;
         }
-        if (!member->is_object()) {
+        if (!member->IsObject()) {
             RejectValue(name, "object", *member, false);
             return false;
         }
@@ -379,7 +441,7 @@ namespace BECore {
             return false;
         }
         Scope scope;
-        scope.node = member;
+        scope.node = *member;
         scope.kind = ScopeKind::Object;
         scope.tracking = GetDiagnostics() != DiagnosticsMode::Off;
         MarkScope(scope);
@@ -396,27 +458,28 @@ namespace BECore {
     }
 
     bool JsonDeserializer::BeginArray(StringView name, StringView /*elementName*/, size_t& count) {
-        const Json* member = FindForRead(name);
-        if (member == nullptr) {
+        const Optional<JsonView> member = FindForRead(name);
+        if (!member) {
             return false;
         }
-        if (!member->is_array()) {
+        if (!member->IsArray()) {
             RejectValue(name, "array", *member, false);
             return false;
         }
         if (IsNestedTooDeep(name)) {
             return false;
         }
-        if (member->size() > ReaderLimits::kMaxArrayElements) {
+        if (member->Size() > ReaderLimits::kMaxArrayElements) {
             ReportError(name, "Array has more elements than the limit");
             return false;
         }
         Scope scope;
-        scope.node = member;
+        scope.node = *member;
         scope.kind = ScopeKind::Array;
+        scope.cursor = member->Index() + 1;
         _scopes.push_back(eastl::move(scope));
         PushPathSegment(name);
-        count = member->size();
+        count = member->Size();
         return true;
     }
 
@@ -429,12 +492,14 @@ namespace BECore {
 
     bool JsonDeserializer::BeginArrayElement() {
         Scope& array = _scopes.back();
-        if (array.kind != ScopeKind::Array || array.nextElement >= array.node->size() || IsNestedTooDeep("")) {
+        if (array.kind != ScopeKind::Array || array.cursor >= array.node.End() || IsNestedTooDeep("")) {
             return false;
         }
-        const size_t index = array.nextElement++;
+        const JsonView item(*_tape, array.cursor);
+        array.cursor = item.End();
+        const size_t index = array.nextOrdinal++;
         Scope element;
-        element.node = &(*array.node)[index];
+        element.node = item;
         element.kind = ScopeKind::Element;
         element.tracking = GetDiagnostics() != DiagnosticsMode::Off;
         MarkScope(element);
@@ -481,17 +546,22 @@ namespace BECore {
             return;
         }
         scope.checked = true;
-        if (GetDiagnostics() == DiagnosticsMode::Off || !scope.tracking || scope.kind == ScopeKind::Array || !scope.node->is_object()) {
+        if (GetDiagnostics() == DiagnosticsMode::Off || !scope.tracking || scope.kind == ScopeKind::Array || !scope.node.IsObject()) {
             return;
         }
 
-        for (auto member = scope.node->begin(); member != scope.node->end(); ++member) {
+        for (const JsonMember member : scope.node.Members()) {
             if (FindingsFull()) {
                 return;
             }
-            //-NoStd: nlohmann's key
-            const std::string& key = member.key();
-            const StringView name(key.c_str(), key.size());
+            // A key with an escape is decoded for the comparison and the message
+            StringView name;
+            if (const Optional<StringView> plain = member.key.Text()) {
+                name = *plain;
+            } else {
+                member.key.ReadText(_decoded);
+                name = StringView(_decoded);
+            }
             if (Contains(scope.asked, name)) {
                 continue;
             }

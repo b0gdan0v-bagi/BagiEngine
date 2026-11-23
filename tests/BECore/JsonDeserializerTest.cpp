@@ -314,15 +314,15 @@ namespace BECore::Tests {
         ExpectRefused<double>("[1]", 2.0, "Invalid number value '<array>'");
     }
 
-    TEST(JsonDeserializerTest, ANonFiniteNumberOfABuiltDocumentIsRefused) {
-        Json document = Json::object();
-        document["k"] = std::numeric_limits<double>::infinity();
-        JsonDeserializer reader(document);
+    TEST(JsonDeserializerTest, ANumberBeyondTheDoubleRangeIsRefused) {
+        // The text can say what a DOM cannot hold: a built document's infinity is written as null
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(R"({"k":1e400})"));
         double value = 2.0;
 
         EXPECT_FALSE(reader.ReadAttribute("k", value));
 
-        EXPECT_EQ(ErrorsText(reader), "k: Invalid number value 'null' (out of range)\n");
+        EXPECT_EQ(ErrorsText(reader), "k: Invalid number value '1e400' (out of range)\n");
         EXPECT_EQ(value, 2.0);
     }
 
