@@ -1,5 +1,7 @@
 #include "FuzzSeeds.h"
 
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/Reflection/BinaryFormat.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/SchemaHash.h>
@@ -496,14 +498,7 @@ namespace BECore::Fuzz {
     bool WriteGeneratedSeeds(const std::filesystem::path& corpusRoot) {
         for (const FuzzSeedFile& seed : MakeGeneratedSeeds()) {
             const std::filesystem::path folder = corpusRoot / seed.folder;
-            std::error_code error;
-            std::filesystem::create_directories(folder, error);
-            if (error) {
-                return false;
-            }
-            std::ofstream file(folder / ToStd(seed.name), std::ios::binary | std::ios::trunc);
-            file.write(reinterpret_cast<const char*>(seed.bytes.data()), static_cast<std::streamsize>(seed.bytes.size()));
-            if (!file) {
+            if (!WriteFileAtomically(PathToUtf8(folder / ToStd(seed.name)), Span<const uint8_t>(seed.bytes.data(), seed.bytes.size()))) {
                 return false;
             }
         }

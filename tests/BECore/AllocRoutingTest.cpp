@@ -5,6 +5,7 @@
 #include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Common/TextTestSupport.h>
 #include <CoreSDL/ImageFile.h>
 #include <SDL3/SDL_pixels.h>
@@ -12,7 +13,6 @@
 #include <SDL3/SDL_surface.h>
 #include <SDL3_image/SDL_image.h>
 #include <cstring>
-#include <fstream>
 #include <gtest/gtest.h>
 #include <imgui.h>
 #include <pugixml.hpp>
@@ -28,11 +28,7 @@ namespace BECore::Tests {
 
         Vector<uint8_t> ReadFixture(const char* name) {
             const std::filesystem::path path = AudioFixtureFolder() / name;
-            std::ifstream file(path, std::ios::binary | std::ios::ate);  //-NoStd: the test reads its fixture from the source tree
-            Vector<uint8_t> bytes(file ? static_cast<size_t>(file.tellg()) : 0);
-            file.seekg(0);
-            file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-            return bytes;
+            return ReadFileBytes(path);
         }
 
         /// The allocations the name table holds under the name of @p source, summed over the zones

@@ -6,7 +6,7 @@
 #include <atomic>
 #include <gtest/gtest.h>
 #include <new>
-#include <sstream>
+#include <sstream>  //-NoStd: PrintZoneReport writes to a std::ostream (gtest's printer)
 
 namespace BECore::Tests {
 
@@ -36,7 +36,7 @@ namespace BECore::Tests {
         }
 
         String Printed(StringView caseName, size_t topNames) {
-            std::ostringstream out;
+            std::ostringstream out;  //-NoStd: PrintZoneReport takes a std::ostream
             PrintZoneReport(out, caseName, topNames);
             return String(out.str().c_str());
         }

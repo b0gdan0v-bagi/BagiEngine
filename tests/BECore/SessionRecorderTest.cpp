@@ -7,14 +7,13 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Games/GameControl.h>
 #include <Games/GameManager.h>
 #include <Games/ReplayFile.h>
 #include <Games/SessionRecorder.h>
 #include <filesystem>
-#include <fstream>  //-NoStd: the test reads the file the recorder wrote
 #include <gtest/gtest.h>
-#include <sstream>  //-NoStd: the test reads the file the recorder wrote
 
 namespace BECore::Tests {
 
@@ -62,10 +61,7 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] String ReadRecording() const {
-                std::ifstream file(_path, std::ios::binary);  //-NoStd: see the include
-                std::ostringstream text;                      //-NoStd: see the include
-                text << file.rdbuf();
-                return FromStdString(text.str());
+                return ReadFile(_path);
             }
 
             [[nodiscard]] ParsedReplay ParseRecording() const {

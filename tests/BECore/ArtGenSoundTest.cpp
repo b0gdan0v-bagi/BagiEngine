@@ -1,12 +1,13 @@
 #include <BECore/Audio/AudioDecode.h>
 #include <BECore/AudioTestSupport.h>
 #include <BECore/Control/Json.h>
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
-#include <Widgets/EditorLayout/UserFileIo.h>
 #include <cmath>
 #include <cstdio>
 #include <gtest/gtest.h>
@@ -157,7 +158,7 @@ namespace BECore::Tests {
             std::filesystem::remove_all(_root);
             std::filesystem::create_directories(_root / "assets" / "sounds");
             _provenance = _root / "pawn_4.artgen.json";
-            ASSERT_TRUE(WriteTextFileAtomically(_provenance, "{\"preset\": \"knock\", \"seed\": 4}").has_value());
+            ASSERT_TRUE(WriteFileAtomically(PathToUtf8(_provenance), "{\"preset\": \"knock\", \"seed\": 4}").has_value());
         }
 
         void TearDown() override {
@@ -178,7 +179,7 @@ namespace BECore::Tests {
         EXPECT_EQ(written->format, (AudioFormat{22050, 1}));
         EXPECT_NEAR(written->peakDb, -1.0f, 0.01f);
 
-        const auto text = ReadTextFile(written->provenanceFile);
+        const auto text = ReadTextFile(PathToUtf8(written->provenanceFile));
         ASSERT_TRUE(text.has_value()) << text.error().c_str();
         const auto provenance = ParseJson(*text);
         ASSERT_TRUE(provenance.has_value());
@@ -192,7 +193,7 @@ namespace BECore::Tests {
     TEST_F(ArtGenSoundAcceptTest, AClipOfTheGameIsReplacedAndTheWavDecodes) {
         ArtGenSoundTarget target;
         target.clip = "assets/sounds/move.wav";
-        ASSERT_TRUE(WriteTextFileAtomically(_root / "assets" / "sounds" / "move.wav", "the old clip").has_value());
+        ASSERT_TRUE(WriteFileAtomically(PathToUtf8(_root / "assets" / "sounds" / "move.wav"), "the old clip").has_value());
         ArtGenSoundSettings settings;
         settings.sampleRate = 11025;
         const auto written = WriteSoundIntoAssets(Fixture("mono-24bit.flac"), _provenance, _root / "assets", target, settings);

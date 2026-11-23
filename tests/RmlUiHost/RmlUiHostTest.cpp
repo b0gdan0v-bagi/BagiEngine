@@ -1,3 +1,5 @@
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/UIInput.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -266,9 +268,11 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
 
         /// Writes a file and moves its time two seconds on, so an edit is seen whatever the resolution of the file system's clock
         static void Write(const std::filesystem::path& path, const char* text) {
-            {
-                std::ofstream(path, std::ios::binary | std::ios::trunc) << text;
-            }
+            // In place, not atomically: the watcher of the folder must see one changed file, not a temporary and its rename
+            auto file = File::Open(PathToUtf8(path), FileMode::Write);
+            ASSERT_TRUE(file.has_value()) << "could not open " << path.string();
+            ASSERT_TRUE(file->Write(StringView(text)).has_value()) << "could not write " << path.string();
+            ASSERT_TRUE(file->Close().has_value()) << "could not write " << path.string();
             std::error_code error;
             std::filesystem::last_write_time(path, std::filesystem::file_time_type::clock::now() + std::chrono::seconds(++_edits * 2), error);
         }

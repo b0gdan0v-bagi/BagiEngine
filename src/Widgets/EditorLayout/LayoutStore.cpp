@@ -1,6 +1,7 @@
 #include "LayoutStore.h"
 
-#include <Widgets/EditorLayout/UserFileIo.h>
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 
 namespace BECore {
 
@@ -71,7 +72,7 @@ namespace BECore {
         if (text.empty()) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::EmptyText, "A layout with no text would not load back"));
         }
-        const std::expected<void, String> written = WriteTextFileAtomically(PathOf(name), text);
+        const std::expected<void, String> written = WriteFileAtomically(PathToUtf8(PathOf(name)), text);
         if (!written) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::WriteFailed, written.error()));
         }
@@ -87,7 +88,7 @@ namespace BECore {
         if (!std::filesystem::exists(path, ec)) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::NotFound, Format("There is no layout '{}'", name)));
         }
-        std::expected<String, String> text = ReadTextFile(path);
+        std::expected<String, String> text = ReadTextFile(PathToUtf8(path));
         if (!text) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::ReadFailed, text.error()));
         }

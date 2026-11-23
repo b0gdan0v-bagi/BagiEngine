@@ -1,8 +1,8 @@
 #include <BECore/Resource/TextureLibrary.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Widgets/TextureEditor/SpriteAtlas.h>
-#include <fstream>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -157,11 +157,7 @@ namespace BECore::Tests {
         };
 
         Vector<uint8_t> ReadBytes(const std::filesystem::path& file) {
-            std::ifstream stream(file, std::ios::binary | std::ios::ate);  //-NoStd: a test reads the file back
-            Vector<uint8_t> bytes(static_cast<size_t>(std::max<std::streamoff>(stream.tellg(), 0)));
-            stream.seekg(0);
-            stream.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-            return bytes;
+            return ReadFileBytes(file);
         }
 
         /// A folder of the test with `assets/` in it, removed with the object; virtual paths resolve into it

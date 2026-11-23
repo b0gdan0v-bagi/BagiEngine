@@ -1,3 +1,4 @@
+#include <BECore/Config/StringXmlWriter.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/SceneView.h>
@@ -124,12 +125,9 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(first.attribute("height").as_float(), 1280.0f);
         EXPECT_FALSE(list.last_child().attribute("name"));
 
-        String text;
-        {
-            std::ostringstream stream;
-            serializer.GetRootNode().print(stream);
-            text = stream.str().c_str();
-        }
+        StringXmlWriter writer;
+        serializer.GetRootNode().print(writer);
+        const String& text = writer.text;
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(text.c_str()));
         Vector<SceneViewVariant> loaded;

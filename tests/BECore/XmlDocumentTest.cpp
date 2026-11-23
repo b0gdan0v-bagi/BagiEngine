@@ -1,5 +1,6 @@
 #include <BECore/Config/XmlDocument.h>
 #include <BECore/Config/XmlNode.h>
+#include <BECore/Reflection/ReaderLimits.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <gtest/gtest.h>
@@ -90,6 +91,34 @@ namespace BECore::Tests {
         ASSERT_TRUE(document.LoadFromString("<root />"));
         ASSERT_TRUE(document.SaveToFile(_path));
         EXPECT_EQ(ReadFile(_path).find(kByteOrderMark.data()), String::npos);
+    }
+
+    TEST_F(XmlDocumentTest, AFileLoadedFromDiskKeepsItsByteOrderMarkAndGetsItBackOnSave) {
+        const String withMark = String(kByteOrderMark) + "<root>\n  <a />\n</root>\n";
+        WriteFile(_path, withMark);
+
+        XmlDocument document;
+        ASSERT_TRUE(document.LoadFromFile(_path));
+        EXPECT_EQ(document.GetRoot().Name(), "root");
+
+        const std::filesystem::path copy = PathOf("copy.xml");
+        ASSERT_TRUE(document.SaveToFile(copy));
+        EXPECT_EQ(ReadFile(copy), withMark);
+    }
+
+    TEST_F(XmlDocumentTest, AFileThatCannotBeReadWholeDoesNotLoad) {
+        const std::filesystem::path folder = PathOf("folder");
+        MakeDirectory(folder);
+        WriteFile(PathOf("empty.xml"), "");
+        String tooBig = "<root><!--";
+        tooBig.append(ReaderLimits::kMaxXmlDocumentBytes, 'a');
+        tooBig += "--></root>";
+        WriteFile(PathOf("big.xml"), tooBig);
+
+        for (const char* name : {"missing.xml", "folder", "empty.xml", "big.xml"}) {
+            XmlDocument document;
+            EXPECT_FALSE(document.LoadFromFile(PathOf(name))) << name;
+        }
     }
 
     TEST_F(XmlDocumentTest, ASaveCreatesTheMissingFoldersAndFailsOnAFolder) {

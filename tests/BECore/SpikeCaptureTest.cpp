@@ -5,6 +5,7 @@
 #include <Common/AllocCheck.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -366,11 +367,7 @@ namespace BECore::Tests {
         const std::filesystem::path path = TestTempPath("frozen_trace").replace_extension(".json");
         const auto written = WriteFrozenTraceFile(StringView(path.string().c_str()), capture.GetSpikes());
         ASSERT_TRUE(written.has_value());
-        std::ifstream in(path, std::ios::binary);
-        std::stringstream content;
-        content << in.rdbuf();
-        EXPECT_EQ(FromStdString(content.str()), WriteFrozenTraceJson(capture.GetSpikes()));
-        in.close();
+        EXPECT_EQ(ReadFile(path), WriteFrozenTraceJson(capture.GetSpikes()));
         std::filesystem::remove(path);
 
         const auto refused = WriteFrozenTraceFile(StringView((path / "no" / "such" / "dir.json").string().c_str()), capture.GetSpikes());

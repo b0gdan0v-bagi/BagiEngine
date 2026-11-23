@@ -4,6 +4,7 @@
 
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/TestFiles.h>
 #include <Fuzz/FuzzChecks.h>
 #include <Fuzz/FuzzMutator.h>
 #include <Fuzz/FuzzSeeds.h>
@@ -63,11 +64,9 @@ namespace BECore::Tests {
                 if (!entry.is_regular_file()) {
                     continue;
                 }
-                std::ifstream stream(entry.path(), std::ios::binary);
-                std::string content((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());  //-NoStd: an eastl::string cannot be built from an istreambuf_iterator
                 CorpusFile file;
                 file.name = FromStdString(entry.path().filename().string());
-                file.bytes.assign(reinterpret_cast<const uint8_t*>(content.data()), reinterpret_cast<const uint8_t*>(content.data()) + content.size());
+                file.bytes = ReadFileBytes(entry.path());
                 files.push_back(std::move(file));
             }
             std::sort(files.begin(), files.end(), [](const CorpusFile& a, const CorpusFile& b) { return a.name < b.name; });
@@ -87,7 +86,7 @@ namespace BECore::Tests {
         String name;
     };
 
-    void PrintTo(const FuzzCase& fuzzCase, std::ostream* stream) {
+    void PrintTo(const FuzzCase& fuzzCase, std::ostream* stream) {  //-NoStd: gtest's PrintTo signature
         *stream << fuzzCase.name;
     }
 

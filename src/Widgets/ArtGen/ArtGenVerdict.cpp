@@ -1,7 +1,8 @@
 #include "ArtGenVerdict.h"
 
 #include <BECore/Control/Json.h>
-#include <Widgets/EditorLayout/UserFileIo.h>
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 
 namespace BECore {
 
@@ -128,7 +129,7 @@ namespace BECore {
         if (provenanceFile.empty()) {
             return {};
         }
-        const auto text = ReadTextFile(provenanceFile);
+        const auto text = ReadTextFile(PathToUtf8(provenanceFile));
         if (!text) {
             return {};
         }

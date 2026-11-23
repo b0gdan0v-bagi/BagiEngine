@@ -2,13 +2,14 @@
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNode.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenSessionControl.h>
-#include <Widgets/EditorLayout/UserFileIo.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
 #include <chrono>
 
@@ -328,7 +329,7 @@ namespace BECore {
             return std::unexpected(Format("cannot make {}: {}", FromStd(folder.generic_string()), FromStd(error.message())));
         }
         const std::filesystem::path path = folder / (ToStdString(name) + ".json");
-        if (auto written = WriteTextFileAtomically(path, FormatArtGenPresetFile(preset)); !written) {
+        if (auto written = WriteFileAtomically(PathToUtf8(path), FormatArtGenPresetFile(preset)); !written) {
             return std::unexpected(written.error());
         }
         // Shown at once as the game's own; the service checks it at the look the next poll asks for

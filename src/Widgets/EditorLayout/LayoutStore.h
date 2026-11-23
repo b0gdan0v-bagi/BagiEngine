@@ -36,7 +36,7 @@ namespace BECore {
      * A file holds the text of ImGui::SaveIniSettingsToMemory, which ImGui::LoadIniSettingsFromMemory reads back. The
      * store only moves text, so it needs no ImGui context. Names are case-insensitive where the file system is
      * (Windows, a default macOS volume): `Wide` and `wide` are one layout there, and List() gives the case on disk.
-     * Writes are atomic (UserFileIo.h). Main thread only.
+     * Writes are atomic (`WriteFileAtomically`, `File/File.h`). Main thread only.
      */
     class LayoutStore {
     public:

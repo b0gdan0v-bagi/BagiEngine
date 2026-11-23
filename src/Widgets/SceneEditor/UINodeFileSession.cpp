@@ -1,12 +1,13 @@
 #include "UINodeFileSession.h"
 
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/Scene/SceneNodeFiles.h>
 #include <BECore/UI/UIElement.h>
-#include <Widgets/EditorLayout/UserFileIo.h>
 
 namespace BECore {
 
@@ -40,7 +41,7 @@ namespace BECore {
     UINodeFileReport UINodeFileSession::Save(Scene& scene) {
         // Named, because the FunctionRefs of `io` only point at them
         const auto read = [](StringView ref, String& text, String& error) {
-            auto content = ReadTextFile(NodeFilePath(ref));
+            auto content = ReadTextFile(PathToUtf8(NodeFilePath(ref)));
             if (!content) {
                 error = content.error();
                 return false;
@@ -49,7 +50,7 @@ namespace BECore {
             return true;
         };
         const auto write = [](StringView ref, StringView text, String& error) {
-            const auto written = WriteTextFileAtomically(NodeFilePath(ref), text);
+            const auto written = WriteFileAtomically(PathToUtf8(NodeFilePath(ref)), text);
             if (!written) {
                 error = written.error();
                 return false;

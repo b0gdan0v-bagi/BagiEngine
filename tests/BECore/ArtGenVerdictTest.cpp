@@ -1,10 +1,11 @@
 #include <BECore/Control/Json.h>
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/Format/Format.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Widgets/ArtGen/ArtGenVerdict.h>
-#include <Widgets/EditorLayout/UserFileIo.h>
 #include <filesystem>
 #include <gtest/gtest.h>
 
@@ -171,7 +172,7 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenVerdictFileTest, ReadsARealRecord) {
         const std::filesystem::path file = _root / "pawn_42.artgen.json";
-        ASSERT_TRUE(WriteTextFileAtomically(file, kRealRecord).has_value());
+        ASSERT_TRUE(WriteFileAtomically(PathToUtf8(file), kRealRecord).has_value());
         const ArtGenVerdict verdict = ReadArtGenVerdict(file);
         EXPECT_EQ(verdict.kind, ArtGenVerdictKind::Failed);
         EXPECT_TRUE(Contains(verdict.tip, "touches the edge"));
@@ -181,7 +182,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ReadArtGenVerdict(_root / "gone.artgen.json").kind, ArtGenVerdictKind::None);
         EXPECT_EQ(ReadArtGenVerdict({}).kind, ArtGenVerdictKind::None);
         const std::filesystem::path broken = _root / "broken.artgen.json";
-        ASSERT_TRUE(WriteTextFileAtomically(broken, R"({"checks": {"passed": tr)").has_value());
+        ASSERT_TRUE(WriteFileAtomically(PathToUtf8(broken), R"({"checks": {"passed": tr)").has_value());
         EXPECT_EQ(ReadArtGenVerdict(broken).kind, ArtGenVerdictKind::None);
     }
 

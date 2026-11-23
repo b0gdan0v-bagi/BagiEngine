@@ -45,7 +45,7 @@ namespace BECore {
 
     private:
         struct OpenFile {
-            Vector<char> bytes;
+            Vector<uint8_t> bytes;
             size_t position = 0;
         };
 

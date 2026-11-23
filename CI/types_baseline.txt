@@ -3,40 +3,12 @@
 # --update-baseline` rewrites the file after it. A diff that adds a line or raises a count is a finding: fix the new hit with the alias of
 # BECore/Types, or mark a real boundary `//-NoStd: <why>`; never baseline it.
 # Who removes which lines:
-#   fstream, include-stream, getline   engine-file-layer (files and text go through the file layer)
-#   directory-iterator                 engine-file-layer, engine-path-type
+#   directory-iterator                 engine-path-type (the file layer has no directory listing)
 # Whoever empties a rule deletes its lines here.
 src/Modules/BECore/Config/ConfigManager.cpp directory-iterator 1
-src/Modules/BECore/Config/XmlDocument.cpp fstream 2
 src/Modules/BECore/FileSystem/FileSystem.cpp directory-iterator 2
-src/Modules/BECore/Logger/FileSink.h fstream 1
-src/Modules/BECore/Logger/FileSink.h include-stream 1
-src/Modules/BECore/Reflection/BinarySerializer.cpp fstream 1
-src/Modules/BECore/Save/SaveGame.cpp fstream 2
-src/Modules/BECore/Text/FontLoader.cpp fstream 1
-src/Modules/BECore/UI/UIWebDocumentLoader.cpp fstream 1
-src/Modules/RmlUiHost/src/RmlUiHost/RmlUiFileInterface.cpp fstream 1
 src/Widgets/EditorLayout/LayoutStore.cpp directory-iterator 1
-src/Widgets/EditorLayout/UserFileIo.cpp fstream 2
-src/Widgets/ImGuiFonts.cpp fstream 1
-tests/BECore/ConfigDeserializerTest.cpp fstream 3
-tests/BECore/EditorSettingsTest.cpp fstream 1
-tests/BECore/FileSinkTest.cpp fstream 1
-tests/BECore/FileSinkTest.cpp getline 1
 tests/BECore/FuzzCorpusTest.cpp directory-iterator 1
-tests/BECore/FuzzCorpusTest.cpp fstream 1
-tests/BECore/IconTableTest.cpp fstream 1
-tests/BECore/IconTableTest.cpp getline 1
-tests/BECore/ParticleCaptureTest.cpp fstream 1
-tests/BECore/ProfilerTest.cpp fstream 1
-tests/BECore/ReaderLimitsTest.cpp fstream 1
-tests/BECore/ReflectionTest.cpp fstream 1
 tests/BECore/Save/SaveGameFilesTest.cpp directory-iterator 1
-tests/BECore/Save/SaveGameFilesTest.cpp fstream 7
-tests/BECore/Save/SaveStorageTest.cpp fstream 1
-tests/BECore/SpikeCaptureTest.cpp fstream 1
-tests/BECore/Tls/TlsLocalEndpointTest.cpp fstream 1
 tests/Common/ContentFilesCheck.h directory-iterator 1
 tests/Common/MigrationTwin.h directory-iterator 1
-tests/Fuzz/FuzzSeeds.cpp fstream 1
-tests/RmlUiHost/RmlUiHostTest.cpp fstream 1

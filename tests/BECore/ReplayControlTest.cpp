@@ -66,10 +66,7 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] String ReadRecording() const {
-                std::ifstream file(_path, std::ios::binary);  //-NoStd: see the include
-                std::ostringstream text;                      //-NoStd: see the include
-                text << file.rdbuf();
-                return FromStdString(text.str());
+                return ReadFile(_path);
             }
 
             [[nodiscard]] ParsedReplay ParseRecording() const {
@@ -495,6 +492,22 @@ namespace BECore::Tests {
         const Json* error = FindJsonMember(_responses[3], "error");
         ASSERT_NE(error, nullptr);
         EXPECT_NE(GetJsonString(*error, "message").value_or(String()).find("line 2"), String::npos);
+    }
+
+    TEST_F(ReplayPlayControlTest, AFileOverTheLimitIsRefusedByItsSizeBeforeItIsRead) {
+        constexpr uintmax_t kOverTheLimit = uintmax_t{64} * 1024 * 1024 + 1;
+        WriteFile("");
+        std::error_code error;
+        std::filesystem::resize_file(_path, kOverTheLimit, error);  // sparse: nothing of it is written
+        ASSERT_FALSE(error) << error.message();
+        PostReplay(1, PathParams());
+        _service.Drain();
+
+        ASSERT_EQ(_responses.size(), 1u);
+        EXPECT_EQ(ErrorCode(_responses[0]), "invalid_params");
+        const Json* errorObject = FindJsonMember(_responses[0], "error");
+        ASSERT_NE(errorObject, nullptr);
+        EXPECT_NE(GetJsonString(*errorObject, "message").value_or(String()).find("is larger than"), String::npos);
     }
 
     TEST_F(ReplayPlayControlTest, AReplayIsRefusedWhileARecordingRunsAndForAGameThatIsNotReplayable) {

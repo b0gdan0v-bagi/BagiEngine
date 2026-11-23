@@ -1,5 +1,7 @@
 #include "RmlUiFileInterface.h"
 
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 
@@ -58,17 +60,12 @@ namespace BECore {
                 _recorded.push_back(RmlUiFileStamp::Of(realPath));
             }
         }
-        std::ifstream file(realPath, std::ios::binary | std::ios::ate);
-        if (!file) {
+        auto bytes = ReadFileBytes(PathToUtf8(realPath));
+        if (!bytes) {
             return 0;
         }
         OpenFile opened;
-        opened.bytes.resize(static_cast<size_t>(file.tellg()));
-        file.seekg(0);
-        file.read(opened.bytes.data(), static_cast<std::streamsize>(opened.bytes.size()));
-        if (!file) {
-            return 0;
-        }
+        opened.bytes = std::move(*bytes);
         const Rml::FileHandle handle = _nextHandle++;
         _files.emplace(handle, std::move(opened));
         return handle;

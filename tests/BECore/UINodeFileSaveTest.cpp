@@ -1,3 +1,4 @@
+#include <BECore/Config/StringXmlWriter.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneLoader.h>
@@ -98,9 +99,9 @@ namespace BECore::Tests {
         }
 
         String Printed(pugi::xml_node node) {
-            std::ostringstream out;
-            node.print(out, "", pugi::format_raw);
-            return String(out.str().c_str());
+            StringXmlWriter writer;
+            node.print(writer, "", pugi::format_raw);
+            return eastl::move(writer.text);
         }
 
         bool Mentions(const Vector<String>& notes, StringView text) {

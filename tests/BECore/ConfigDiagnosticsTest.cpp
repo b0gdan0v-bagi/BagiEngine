@@ -9,6 +9,7 @@
 #include <Common/LogRecorder.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 
 namespace BECore::Tests {
 
@@ -221,7 +222,7 @@ namespace BECore::Tests {
         const std::filesystem::path dir = TestTempDirectory("BagiConfigDiagnostics");
         std::filesystem::remove_all(dir);
         std::filesystem::create_directories(dir);
-        std::ofstream(dir / "probe.xml") << "<root/>";  //-NoStd: writes a probe file, as ConfigDeserializerTest does
+        WriteFile(dir / "probe.xml", "<root/>");
         const PoolString mount = "BagiConfigDiagnosticsTest"_intern;
         ASSERT_TRUE(CoreManager::GetFileSystem().Mount(mount, dir));
 

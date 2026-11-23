@@ -24,20 +24,20 @@ namespace BECore {
             return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'path' is empty"));
         }
 
-        _file.open(ToStd(path), std::ios::binary | std::ios::trunc);
-        if (!_file) {
-            _file.clear();
+        auto file = File::Open(path, FileMode::Write);
+        if (!file) {
             return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("cannot write '{}'", path)));
         }
 
+        _file = std::move(*file);
         _recording = true;
         _started = false;
         _warnedDropped = false;
         _entryCount = 0;
         const ReplayHeader header{String(game.GetName().ToStringView()), String(kEngineVersion), String(title)};
-        _file << ToStd(FormatReplayHeader(header)) << '\n';
-        _file.flush();
-        if (!_file) {
+        _line = FormatReplayHeader(header);
+        _line.push_back('\n');
+        if (!WriteLineAndFlush()) {
             Fail("the header");
             return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("cannot write '{}'", path)));
         }
@@ -47,8 +47,7 @@ namespace BECore {
     size_t SessionRecorder::Stop() {
         if (_recording) {
             _recording = false;
-            _file.close();
-            _file.clear();
+            Close();
         }
         return _entryCount;
     }
@@ -102,9 +101,7 @@ namespace BECore {
         _line.clear();
         AppendReplayEntry(_line, entry);
         _line.push_back('\n');
-        _file.write(_line.c_str(), static_cast<std::streamsize>(_line.size()));
-        _file.flush();
-        if (!_file) {
+        if (!WriteLineAndFlush()) {
             Fail("an entry");
             return;
         }
@@ -117,8 +114,16 @@ namespace BECore {
     void SessionRecorder::Fail(StringView what) {
         LOG_ERROR("SessionRecorder: cannot write {} to the replay file, the recording stops", what);
         _recording = false;
-        _file.close();
-        _file.clear();
+        Close();
+    }
+
+    bool SessionRecorder::WriteLineAndFlush() {
+        return _file.Write(_line) && _file.Flush();
+    }
+
+    void SessionRecorder::Close() {
+        // Nothing more can be done about a failed close: the entries were flushed one by one
+        static_cast<void>(_file.Close());
     }
 
 }  // namespace BECore

@@ -1,6 +1,7 @@
 #include <BECore/Audio/AudioDecode.h>
 #include <BECore/AudioTestSupport.h>
 #include <Common/Printers.h>
+#include <Common/TestFiles.h>
 #include <cmath>
 #include <gtest/gtest.h>
 
@@ -104,11 +105,7 @@ namespace BECore::Tests {
 
         Vector<uint8_t> ReadFixture(const char* name) {
             const std::filesystem::path path = AudioFixtureFolder() / name;
-            std::ifstream file(path, std::ios::binary | std::ios::ate);  //-NoStd: the test reads its fixture from the source tree
-            Vector<uint8_t> bytes(file ? static_cast<size_t>(file.tellg()) : 0);
-            file.seekg(0);
-            file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-            return bytes;
+            return ReadFileBytes(path);
         }
 
         String ErrorOf(const AudioDecodeResult& result) {
