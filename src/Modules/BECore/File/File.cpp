@@ -49,6 +49,96 @@ namespace BECore {
             return Format("Cannot {}: {}", action, SDL_GetError());
         }
 
+        /// An open file and the size to read from it, once the size passed the limit
+        struct WholeFile {
+            File file;
+            size_t size = 0;
+        };
+
+        std::expected<WholeFile, String> OpenForWholeRead(StringView path, size_t maxBytes) {
+            auto file = File::Open(path, FileMode::Read);
+            if (!file) {
+                return std::unexpected(std::move(file.error()));
+            }
+            const auto size = file->Size();
+            if (!size) {
+                return std::unexpected(Format("Cannot read '{}': {}", path, size.error()));
+            }
+            if (*size > maxBytes) {
+                return std::unexpected(Format("Cannot read '{}': it is {} bytes and the limit is {}", path, *size, maxBytes));
+            }
+            return WholeFile{std::move(*file), static_cast<size_t>(*size)};
+        }
+
+        /// A short read of a file whose size was just taken means it shrank or the medium failed: the caller must not see a half file
+        std::expected<void, String> ReadToTheEnd(File& file, void* data, size_t size, StringView path) {
+            if (size == 0) {
+                return {};
+            }
+            const auto count = file.Read(data, size);
+            if (!count) {
+                return std::unexpected(Format("Cannot read '{}': {}", path, count.error()));
+            }
+            if (*count != size) {
+                return std::unexpected(Format("Cannot read '{}' to the end", path));
+            }
+            return {};
+        }
+
+        /// The folder part of @p path without the separator; empty for a name with no folder (or one directly under the root)
+        StringView FolderOf(StringView path) {
+            const size_t separator = path.find_last_of("/\\");
+            return separator == StringView::npos ? StringView{} : path.substr(0, separator);
+        }
+
+        std::expected<void, String> WriteAndClose(File& file, const void* data, size_t size, StringView tempPath) {
+            auto added = [&](String error) { return std::unexpected(Format("{} ('{}')", error, tempPath)); };
+            if (size != 0) {
+                if (auto written = file.Write(data, size); !written) {
+                    return added(std::move(written.error()));
+                }
+            }
+            if (auto flushed = file.Flush(); !flushed) {
+                return added(std::move(flushed.error()));
+            }
+            if (auto closed = file.Close(); !closed) {
+                return added(std::move(closed.error()));
+            }
+            return {};
+        }
+
+        std::expected<void, String> WriteAtomically(StringView path, const void* data, size_t size) {
+            if (const StringView folder = FolderOf(path); !folder.empty()) {
+                if (auto made = CreateDirectories(folder); !made) {
+                    return made;
+                }
+            }
+
+            const String tempPath = Format("{}{}", path, kAtomicTempSuffix);
+            auto file = File::Open(tempPath, FileMode::Write);
+            if (!file) {
+                // Nothing was created, so nothing is removed: the temp name may be somebody else's folder
+                return std::unexpected(std::move(file.error()));
+            }
+
+            // The temp file is closed before it is removed: Windows refuses to delete an open file
+            auto written = WriteAndClose(*file, data, size, tempPath);
+            *file = File{};
+            if (!written) {
+                static_cast<void>(RemoveFile(tempPath));
+                return written;
+            }
+
+            const CPath cTemp{tempPath};
+            const CPath cPath{path};
+            if (!SDL_RenamePath(cTemp.Get(), cPath.Get())) {
+                String error = Failure("replace", path);
+                static_cast<void>(RemoveFile(tempPath));
+                return std::unexpected(std::move(error));
+            }
+            return {};
+        }
+
     }  // namespace
 
     File::~File() {
@@ -184,6 +274,38 @@ namespace BECore {
             return std::unexpected(Format("Cannot rename '{}' to '{}': {}", from, to, SDL_GetError()));
         }
         return {};
+    }
+
+    std::expected<Vector<uint8_t>, String> ReadFileBytes(StringView path, size_t maxBytes) {
+        auto whole = OpenForWholeRead(path, maxBytes);
+        if (!whole) {
+            return std::unexpected(std::move(whole.error()));
+        }
+        Vector<uint8_t> bytes(whole->size);
+        if (auto read = ReadToTheEnd(whole->file, bytes.data(), bytes.size(), path); !read) {
+            return std::unexpected(std::move(read.error()));
+        }
+        return bytes;
+    }
+
+    std::expected<String, String> ReadTextFile(StringView path, size_t maxBytes) {
+        auto whole = OpenForWholeRead(path, maxBytes);
+        if (!whole) {
+            return std::unexpected(std::move(whole.error()));
+        }
+        String text(whole->size, '\0');
+        if (auto read = ReadToTheEnd(whole->file, text.data(), text.size(), path); !read) {
+            return std::unexpected(std::move(read.error()));
+        }
+        return text;
+    }
+
+    std::expected<void, String> WriteFileAtomically(StringView path, Span<const uint8_t> bytes) {
+        return WriteAtomically(path, bytes.data(), bytes.size());
+    }
+
+    std::expected<void, String> WriteFileAtomically(StringView path, StringView text) {
+        return WriteAtomically(path, text.data(), text.size());
     }
 
 }  // namespace BECore

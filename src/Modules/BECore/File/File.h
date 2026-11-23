@@ -84,4 +84,28 @@ namespace BECore {
     /// Replaces @p to when it is a file; fails when it is a folder
     [[nodiscard]] std::expected<void, String> RenameFile(StringView from, StringView to);
 
+    /// The largest file ReadFileBytes and ReadTextFile read whole unless the caller passes a tighter bound: nothing in the engine reads more at once
+    inline constexpr size_t kDefaultMaxFileBytes = size_t{256} * 1024 * 1024;
+
+    /// Appended to the path for the file WriteFileAtomically writes before it renames it over the target
+    inline constexpr StringView kAtomicTempSuffix = ".tmp";
+
+    /**
+     * The whole file in one allocation. The size comes from the open stream and is checked against @p maxBytes before anything is
+     * allocated, so a file of an untrusted size cannot ask for memory the caller did not allow. An empty file is an empty result.
+     */
+    [[nodiscard]] std::expected<Vector<uint8_t>, String> ReadFileBytes(StringView path, size_t maxBytes = kDefaultMaxFileBytes);
+
+    /// ReadFileBytes into a String: the bytes as they are, no encoding or line-end change
+    [[nodiscard]] std::expected<String, String> ReadTextFile(StringView path, size_t maxBytes = kDefaultMaxFileBytes);
+
+    /**
+     * Writes @p path so a reader sees the old file or the new one: the folder above is made, the bytes go to "<path>.tmp"
+     * (kAtomicTempSuffix), which is flushed, closed and renamed over the target. On a failure after the temp file was opened it is
+     * removed and the first error is returned; the old target is untouched until the rename succeeds. There is no fsync: a power loss
+     * can still lose the new file (and keep the old one); this is about a failed write, not about durability.
+     */
+    [[nodiscard]] std::expected<void, String> WriteFileAtomically(StringView path, Span<const uint8_t> bytes);
+    [[nodiscard]] std::expected<void, String> WriteFileAtomically(StringView path, StringView text);
+
 }  // namespace BECore
