@@ -315,6 +315,45 @@ namespace BECore::Tests {
         });
     }
 
+    TEST_F(UITextComponentTest, AChangedTextDrawsWithNoMoreAllocationsThanAnUnchangedOne) {
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+        // Before the display text was built in place, each changed label allocated one String of its text's length here: the one `UIVars::Expand` returned and the
+        // Derived result took over (36 B for this text; the `UICanvas::OnDraw` strings of the allocation report), and `UIStrings::Resolve` a second one for a `{#key}`
+        UIVars& vars = CoreManager::GetUIVars();
+        UITextComponent& caption = CaptionOf("Cap");
+        caption.text = "Score: {score} points in this round";
+        constexpr StringView kScores[] = {"1111111", "2222222", "3333333"};
+        constexpr size_t kScoreCount = sizeof(kScores) / sizeof(kScores[0]);
+        constexpr int kFrames = 20;
+        for (const StringView score : kScores) {
+            vars.Set("score"_intern, score);
+            Draw();
+        }
+
+        // The recording renderer allocates for what it records, so the changed draws are compared with unchanged ones of the same frame
+        uint64_t unchanged = 0;
+        uint64_t unchangedBytes = 0;
+        for (int frame = 0; frame < kFrames; ++frame) {
+            const AllocCount count = CountAllocations([&] { Draw(); });
+            unchanged += count.count;
+            unchangedBytes += count.bytes;
+        }
+        const uint32_t laidOut = caption.GetLayoutCount();
+        uint64_t changed = 0;
+        uint64_t changedBytes = 0;
+        for (int frame = 0; frame < kFrames; ++frame) {
+            vars.Set("score"_intern, kScores[static_cast<size_t>(frame) % kScoreCount]);
+            const AllocCount count = CountAllocations([&] { Draw(); });
+            changed += count.count;
+            changedBytes += count.bytes;
+        }
+        EXPECT_EQ(caption.GetLayoutCount(), laidOut + kFrames) << "every draw showed a new text";
+        EXPECT_LE(changed, unchanged) << "a changed variable allocated " << changed << " times (" << changedBytes << " B) over " << kFrames << " draws, an unchanged text " << unchanged << " times ("
+                                      << unchangedBytes << " B)";
+    }
+
     TEST_F(UITextComponentTest, AnUnchangedTextIsLaidOutOnce) {
         UITextComponent& caption = CaptionOf("Cap");
         caption.text = "Score: {score}";
