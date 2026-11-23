@@ -116,6 +116,14 @@ namespace BECore {
         return it == object.end() ? nullptr : &*it;
     }
 
+    Json* FindJsonMember(Json& object, StringView key) {
+        if (!object.is_object()) {
+            return nullptr;
+        }
+        const auto it = object.find(ToStd(key));
+        return it == object.end() ? nullptr : &*it;
+    }
+
     Optional<String> GetJsonString(const Json& object, StringView key) {
         const Json* member = FindJsonMember(object, key);
         if (member == nullptr || !member->is_string()) {

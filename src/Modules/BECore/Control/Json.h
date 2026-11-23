@@ -44,6 +44,9 @@ namespace BECore {
     /// The member @p key of @p object, or nullptr when @p object is not an object or has no such member
     [[nodiscard]] const Json* FindJsonMember(const Json& object, StringView key);
 
+    /// The same for a document the caller owns and may take a member out of (a large `params` is moved, not copied)
+    [[nodiscard]] Json* FindJsonMember(Json& object, StringView key);
+
     /// A string member; nullopt when it is absent or not a string
     [[nodiscard]] Optional<String> GetJsonString(const Json& object, StringView key);
 

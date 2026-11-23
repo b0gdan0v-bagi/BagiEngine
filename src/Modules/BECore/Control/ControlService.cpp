@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlLog.h>
 #include <BECore/Control/ControlRoots.h>
+#include <BECore/Memory/Pooled.h>
 #include <EASTL/sort.h>
 
 namespace BECore {
@@ -55,6 +56,8 @@ namespace BECore {
     }  // namespace
 
     struct ControlService::Request {
+        BE_POOLED(ControlService::Request)  // made on a reader thread, freed on the main one
+
         String method;
         Json id;
         Json params = Json::object();
@@ -71,7 +74,7 @@ namespace BECore {
             return;
         }
 
-        // Before the parse: a deep value is copied below (and again when it is handled), and that recurses on the stack of the posting thread
+        // Before the parse: copying a deep value recurses on the stack of the posting thread, and so does the destructor of the document
         if (IsJsonNestedDeeperThan(text, kMaxRequestDepth)) {
             request.error = MakeControlError(ControlErrors::kInvalidRequest, Format("the request nests deeper than {} levels", kMaxRequestDepth));
             return;
@@ -82,19 +85,19 @@ namespace BECore {
             request.error = std::move(parsed.error());
             return;
         }
-        const Json& message = *parsed;
+        Json& message = *parsed;
         if (!message.is_object()) {
             request.error = MakeControlError(ControlErrors::kInvalidRequest, "the request has to be a JSON object");
             return;
         }
 
         // The id comes first so that every later error can be answered with it
-        const Json* id = FindJsonMember(message, "id");
+        Json* id = FindJsonMember(message, "id");
         if (id == nullptr || !(id->is_string() || id->is_number_integer())) {
             request.error = MakeControlError(ControlErrors::kInvalidRequest, "'id' has to be an integer or a string");
             return;
         }
-        request.id = *id;
+        request.id = std::move(*id);
 
         auto method = GetJsonString(message, "method");
         if (!method || method->empty()) {
@@ -103,7 +106,7 @@ namespace BECore {
         }
         request.method = std::move(*method);
 
-        const Json* params = FindJsonMember(message, "params");
+        Json* params = FindJsonMember(message, "params");
         if (params == nullptr || params->is_null()) {
             return;
         }
@@ -111,7 +114,7 @@ namespace BECore {
             request.error = MakeControlError(ControlErrors::kInvalidParams, "'params' has to be an object");
             return;
         }
-        request.params = *params;
+        request.params = std::move(*params);
     }
 
     void ControlService::Post(StringView requestText, ControlReplyFn reply) {
@@ -313,13 +316,15 @@ namespace BECore {
             }
         }
 
-        for (auto it = _inbox.begin(); it != _inbox.end();) {
-            if (_pending && !BypassesBarrier(**it)) {
-                ++it;  // held back; the requests that bypass the barrier may still follow
+        // One pass over what was waiting when it began: a held request goes to the back, so after the pass the held ones are in their old order. A request
+        // that Process() makes wait (a deferred call sets _pending) is checked against the barrier like the others behind it
+        for (size_t left = _inbox.size(); left > 0; --left) {
+            UniquePtr<Request> request = std::move(_inbox.front());
+            _inbox.pop_front();
+            if (_pending && !BypassesBarrier(*request)) {
+                _inbox.push_back(std::move(request));  // held back; the requests that bypass the barrier may still follow
                 continue;
             }
-            UniquePtr<Request> request = std::move(*it);
-            it = _inbox.erase(it);
             Process(*request);
         }
     }

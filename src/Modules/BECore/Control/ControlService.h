@@ -5,8 +5,8 @@
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/LockSite.h>
 #include <BECore/Threading/Mutex.h>
+#include <BECore/Types/Fifo.h>
 #include <BECore/Utils/FunctionRef.h>
-#include <EASTL/deque.h>
 #include <chrono>
 
 namespace BECore {
@@ -242,12 +242,12 @@ namespace BECore {
         void NotifyPublishObservers(StringView event, const Json& data);
 
         Mutex _mutex{BE_LOCK_SITE("Control queue")};
-        ConditionVariable _posted;                // notified by Post(); WaitForRequests() waits on it
-        eastl::deque<UniquePtr<Request>> _queue;  // posted, not yet seen by the main thread; guarded by _mutex
-        bool _stopped = false;                    // guarded by _mutex
+        ConditionVariable _posted;        // notified by Post(); WaitForRequests() waits on it
+        Fifo<UniquePtr<Request>> _queue;  // posted, not yet seen by the main thread; guarded by _mutex
+        bool _stopped = false;            // guarded by _mutex
 
         // Main thread only
-        eastl::deque<UniquePtr<Request>> _inbox;  // taken from _queue, in order, waiting for the barrier
+        Fifo<UniquePtr<Request>> _inbox;  // taken from _queue, in order, waiting for the barrier
         HashMap<String, HandlerEntry> _handlers;
         UniquePtr<ControlRoots> _roots;                    // behind a pointer so this header does not pull in the reflection registry
         UniquePtr<ControlLog> _log;                        // behind a pointer so this header does not pull in the logger

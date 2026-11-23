@@ -566,6 +566,53 @@ namespace BECore::Tests {
         EXPECT_TRUE(IsOk(responses[1]));
     }
 
+    TEST_F(ControlServiceTest, HeldRequestsKeepTheirOrderAcrossDrains) {
+        RegisterDeferring("hold", 2);
+        RegisterRecording("a");
+        RegisterRecording("b");
+        RegisterRecording("c");
+        RegisterRecording("d");
+
+        Post(MakeRequest(1, "hold"));
+        Post(MakeRequest(2, "a"));
+        Post(MakeRequest(3, "b"));
+        service.Drain();
+        Post(MakeRequest(4, "c"));
+        service.Drain();
+        service.EndFrame();
+        Post(MakeRequest(5, "d"));
+        service.Drain();
+        EXPECT_EQ(order, (Vector<String>{"hold"}));
+
+        service.EndFrame();
+        service.Drain();
+
+        EXPECT_EQ(order, (Vector<String>{"hold", "hold-done", "a", "b", "c", "d"}));
+    }
+
+    TEST_F(ControlServiceTest, LargeParamsReachTheHandlerIntact) {
+        const size_t blobBytes = ControlService::kMaxRequestBytes - 1024;
+        String blob(blobBytes, 'x');
+        blob[0] = 'a';
+        blob[blobBytes - 1] = 'z';
+        Json params = Json::object();
+        params["blob"] = MakeJsonString(blob);
+
+        bool intact = false;
+        service.RegisterHandler("big", [&](ControlCall& call) {
+            const auto received = GetJsonString(call.Params(), "blob");
+            intact = received && *received == blob;
+            call.Reply(Json::object());
+        });
+
+        Post(MakeRequest(1, "big", params));
+        service.Drain();
+
+        EXPECT_TRUE(intact);
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_TRUE(IsOk(responses[0]));
+    }
+
     TEST_F(ControlServiceTest, InvalidRequestBehindADeferredCallKeepsItsPlace) {
         RegisterDeferring("hold", 1);
 
