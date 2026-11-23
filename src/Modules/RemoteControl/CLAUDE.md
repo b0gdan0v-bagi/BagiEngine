@@ -17,7 +17,7 @@ Built only with `ENGINE_WITH_REMOTE_CONTROL` (default ON, OFF on the web); witho
 | `WebSocketUrl` | `ParseWebSocketUrl()` (IPv6 refused), `GetHostHeader()` |
 | `WebSocketClientHandshake` | client side of the handshake |
 | `WebSocketHttpHead` | `ReadHttpHead()`: reads an HTTP head under one deadline, for both sides of the handshake |
-| `WebSocketFrame` | `EncodeFrame()` / `AppendFrame()` (one reserve and one copy of the payload, into a new vector or the caller's), `WebSocketFrameParser` (masked client frames by default; `WebSocketPeer::Server` reads a server's) |
+| `WebSocketFrame` | `EncodeFrame()` / `AppendFrame()` (one reserve and one copy of the payload, into a new vector or the caller's), `WebSocketFrameParser` (masked client frames by default; `WebSocketPeer::Server` reads a server's); `PopView()` hands out a `WebSocketMessageView` into the parser's own buffers (unmasked in place, valid until the next `Feed()` / `Pop()` / `PopView()`), `Pop()` is the same plus a copy |
 | `Socket` | move-only IPv4 TCP socket, POSIX or Winsock behind one interface; `Listen` on every address (`SocketBind::AnyAddress`) uses a larger backlog than on the loopback; `Connect` does a blocking `getaddrinfo`, then connects in `kWakeInterval` slices that watch `cancel` and the deadline |
 | `WebSocketConnection` | one client: socket, capped send queue, handshake, id, addresses |
 | `WebSocketListener` | accept and refusal threads, connections and their limits, reader loop (ping, pong, close, binary and protocol errors handled here); a `WebSocketHandler` (`onOpen`, `onMessage`, `onClosed`) gets the rest |
