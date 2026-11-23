@@ -455,6 +455,7 @@ class SelftestPageTest(unittest.TestCase):
             with self.subTest(fault), tempfile.TemporaryDirectory() as temp:
                 page = web_smoke.selftest_page(fault)
                 body = page.split("<script>", 1)[1].split("</script>", 1)[0]
+                body += page.split(f'<script id="{web_smoke.STATS_SCRIPT_ID}">', 1)[1].split("</script>", 1)[0]  # an own scope in the page, but the check is of syntax
                 script = Path(temp) / "page.js"
                 script.write_text(body, encoding="utf-8")
                 result = subprocess.run([NODE, "--check", str(script)], capture_output=True, text=True)
@@ -904,6 +905,287 @@ class SavesRunTest(unittest.TestCase):
             code = web_smoke.run_smoke(options(), SimpleNamespace(sync_playwright=fake.sync_playwright))
         self.assertEqual(code, 0, out.getvalue())
         self.assertIn("skip: (8)", out.getvalue())
+
+
+class StatsCheckTest(unittest.TestCase):
+    """Check 9 on the text of a trace and on what a browser run showed (no browser)."""
+
+    @staticmethod
+    def trace(frames=12, build="stats", zones=True, extra=()):
+        events = []
+        for index in range(frames):
+            if zones:
+                events.append({"name": "Zone", "ph": "B", "pid": 1, "tid": 1, "ts": index * 1000})
+                events.append({"name": "Zone", "ph": "E", "pid": 1, "tid": 1, "ts": index * 1000 + 500})
+            events.append({"name": "Frame", "ph": "i", "s": "g", "pid": 1, "tid": 0, "ts": index * 1000 + 900})
+        return json.dumps({"traceEvents": [*events, *extra], "otherData": {"build": build}})
+
+    def test_a_good_trace_passes_and_is_summarised(self):
+        self.assertEqual(web_smoke.check_stats_trace(self.trace()), [])
+        self.assertEqual(web_smoke.summarize_stats_trace(self.trace()), "12 Frame instants, 12 zones")
+        self.assertEqual(web_smoke.summarize_stats_trace("not json"), "")
+
+    def test_each_broken_trace_is_one_reason(self):
+        late_end = {"name": "Zone", "ph": "E", "pid": 1, "tid": 1, "ts": 99999}
+        other_thread_end = {"name": "Zone", "ph": "E", "pid": 1, "tid": 2, "ts": 99999}
+        open_begin = {"name": "Zone", "ph": "B", "pid": 1, "tid": 1, "ts": 99999}
+        cases = {
+            "not JSON": ("{not json", "is not JSON"),
+            "no events": ('{"otherData": {"build": "stats"}}', "no `traceEvents` list"),
+            "no frames": (self.trace(frames=0, extra=[{"name": "Zone", "ph": "B", "pid": 1, "tid": 1, "ts": 1},
+                                                      {"name": "Zone", "ph": "E", "pid": 1, "tid": 1, "ts": 2}]), "0 `Frame` instants"),
+            "too few frames": (self.trace(frames=web_smoke.STATS_MIN_FRAMES - 1), "fewer than"),
+            "an end that closes nothing": (self.trace(extra=[late_end]), "closes no zone"),
+            "an end of another thread": (self.trace(extra=[other_thread_end]), "closes no zone"),
+            "a zone that never ends": (self.trace(extra=[open_begin]), "never end"),
+            "no zones": (self.trace(zones=False), "no zone events"),
+            "another build": (self.trace(build="release"), "otherData.build 'release'"),
+        }
+        for name, (text, reason) in cases.items():
+            with self.subTest(name):
+                problems = web_smoke.check_stats_trace(text)
+                self.assertTrue(any(reason in problem for problem in problems), problems)
+                self.assertTrue(all(problem.startswith("(9) ") for problem in problems), problems)
+
+    def test_frames_are_counted_by_name_not_by_any_instant(self):
+        marks = [{"name": "Frozen frame", "ph": "i", "pid": 1, "tid": 0, "ts": index} for index in range(20)]
+        problems = web_smoke.check_stats_trace(self.trace(frames=0, extra=[
+            {"name": "Zone", "ph": "B", "pid": 1, "tid": 1, "ts": 0}, {"name": "Zone", "ph": "E", "pid": 1, "tid": 1, "ts": 1}, *marks]))
+        self.assertTrue(any("0 `Frame` instants" in problem for problem in problems), problems)
+
+    def good_run(self, **changes):
+        values = dict(started=True, overlay_drawn=True, download_name=web_smoke.STATS_DOWNLOAD_NAME, trace_text=self.trace())
+        values.update(changes)
+        return web_smoke.StatsRun(**values)
+
+    def test_a_run_that_drew_the_overlay_and_saved_a_good_trace_passes(self):
+        self.assertEqual(web_smoke.check_stats(self.good_run()), [])
+
+    def test_each_step_that_can_fail_is_one_reason_and_stops_the_next(self):
+        cases = {
+            "no console line": (dict(started=False, overlay_drawn=False, download_name=None, trace_text=None), "no console message matched"),
+            "overlay not drawn": (dict(overlay_drawn=False, download_name=None, trace_text=None), "the overlay was not drawn"),
+            "wrong file name": (dict(download_name="download"), "'download', not 'profiler-trace.json'"),
+            "page not driven": (dict(error="no download"), "no download"),
+            "bad trace": (dict(trace_text=self.trace(frames=2)), "fewer than"),
+        }
+        for name, (changes, text) in cases.items():
+            with self.subTest(name):
+                problems = web_smoke.check_stats(self.good_run(**changes))
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn(text, problems[0])
+
+    def test_console_errors_count_and_the_allow_list_applies(self):
+        run = self.good_run(console=[ConsoleEntry("error", "export failed")], page_errors=["boom"])
+        self.assertEqual(len(web_smoke.check_stats(run)), 2)
+        self.assertEqual(web_smoke.check_stats(run, ["export failed"]), ["(9) uncaught error in the page: boom"])
+
+    def test_the_problems_reach_the_verdict_of_a_run_and_a_run_without_the_check_passes(self):
+        self.assertEqual(web_smoke.evaluate(good_run(stats_problems=["(9) boom"])), ["(9) boom"])
+        self.assertEqual(web_smoke.evaluate(good_run(stats_problems=[])), [])
+        self.assertEqual(web_smoke.evaluate(good_run()), [])
+
+    def test_the_flag_is_off_by_default_and_a_stats_fault_needs_it(self):
+        self.assertFalse(web_smoke.parse_options(["--selftest"]).stats)
+        self.assertTrue(web_smoke.parse_options(["--selftest", "--stats"]).stats)
+        for fault in web_smoke.SELFTEST_STATS_FAULTS:
+            with self.subTest(fault), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+                web_smoke.parse_options(["--selftest", "--selftest-fault", fault])
+            self.assertEqual(caught.exception.code, 2)
+            self.assertTrue(web_smoke.parse_options(["--selftest", "--stats", "--selftest-fault", fault]).stats)
+
+
+class StatsSelftestScriptTest(unittest.TestCase):
+    """The imitation of the overlay on the selftest page, run under node with a minimal window: what it downloads is what
+    check_stats_trace expects, and each fault takes away one step."""
+
+    HARNESS = """
+const listeners = [];
+const downloads = [];
+global.window = {addEventListener: (name, listener) => listeners.push(listener)};
+global.document = {createElement: () => ({click() { downloads.push({name: this.download, text: this.href}); }, remove() {}}),
+                   body: {appendChild() {}}};
+global.Blob = class { constructor(parts) { this.text = parts.join(""); } };
+global.URL = {createObjectURL: (blob) => blob.text};
+var statsOverlay = false;
+%s
+const press = (code, extra) => listeners.forEach((listener) => listener({ctrlKey: true, shiftKey: true, repeat: false, code, ...extra}));
+press("KeyT");
+const beforeOverlay = downloads.length;
+press("KeyP", {repeat: true});
+const afterRepeat = statsOverlay;
+press("KeyP");
+const afterOverlay = statsOverlay;
+press("KeyT");
+console.log(JSON.stringify({beforeOverlay, afterRepeat, afterOverlay, downloads}));
+"""
+
+    def run_script(self, fault):
+        script = web_smoke.SELFTEST_STATS_SCRIPT.replace("__FAULT__", fault)
+        with tempfile.TemporaryDirectory() as scratch:
+            path = Path(scratch) / "stats.js"
+            path.write_text(self.HARNESS % script, encoding="utf-8")
+            result = subprocess.run([NODE, str(path)], capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout.strip().splitlines()[-1])
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_the_overlay_shows_on_the_chord_only_and_the_export_needs_the_overlay(self):
+        seen = self.run_script("")
+        self.assertEqual(seen["beforeOverlay"], 0)
+        self.assertFalse(seen["afterRepeat"])
+        self.assertTrue(seen["afterOverlay"])
+        self.assertEqual([item["name"] for item in seen["downloads"]], [web_smoke.STATS_DOWNLOAD_NAME])
+        self.assertEqual(web_smoke.check_stats_trace(seen["downloads"][0]["text"]), [])
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_each_fault_takes_away_one_step(self):
+        self.assertFalse(self.run_script("stats-no-overlay")["afterOverlay"])
+        self.assertEqual(self.run_script("stats-no-download")["downloads"], [])
+        bad = self.run_script("stats-bad-trace")["downloads"][0]["text"]
+        self.assertTrue(any("fewer than" in problem for problem in web_smoke.check_stats_trace(bad)))
+
+
+class FakeStatsCanvas:
+    def __init__(self, page):
+        self.page = page
+
+    @property
+    def first(self):
+        return self
+
+    def wait_for(self, state, timeout):
+        pass
+
+    def screenshot(self):
+        return OTHER_STRIPES if self.page.overlay else STRIPES
+
+
+class FakeStatsPage:
+    """A page for check 9: the chords change what the fake shows and what a download holds, as the world of the test says.
+    `traces` are the texts of the successive downloads (the last one repeats)."""
+
+    def __init__(self, world, folder):
+        self.world = world
+        self.folder = folder
+        self.overlay = False
+        self.exports = 0
+        self.presses = []
+        self.canvas = FakeStatsCanvas(self)
+        self.keyboard = SimpleNamespace(press=self._press)
+        self.handlers = {}
+        self.pending = None
+
+    def on(self, name, handler):
+        self.handlers[name] = handler
+
+    def goto(self, url, wait_until, timeout):
+        if self.world.get("console", True):
+            self.handlers["console"](SimpleNamespace(type="log", text="Profiler: stats build (zones)", location={"url": ""}))
+
+    def locator(self, selector):
+        return self.canvas
+
+    def wait_for_timeout(self, milliseconds):
+        pass
+
+    def _press(self, key):
+        self.presses.append(key)
+        if key == web_smoke.STATS_OVERLAY_KEY and self.world.get("overlay", True):
+            self.overlay = True
+        elif key == web_smoke.STATS_EXPORT_KEY and self.overlay and self.world.get("download", True):
+            traces = self.world["traces"]
+            path = Path(self.folder) / f"download{self.exports}.json"
+            path.write_text(traces[min(self.exports, len(traces) - 1)], encoding="utf-8")
+            self.exports += 1
+            self.pending = SimpleNamespace(suggested_filename=self.world.get("name", web_smoke.STATS_DOWNLOAD_NAME), path=lambda: str(path))
+
+    @contextlib.contextmanager
+    def expect_download(self, timeout):
+        info = SimpleNamespace(value=None)
+        self.pending = None
+        yield info
+        if self.pending is None:
+            raise TimeoutError("Timeout exceeded.\nwaiting for download")
+        info.value = self.pending
+
+
+class StatsRunTest(unittest.TestCase):
+    """run_stats_checks against a fake browser: the order of the keys, the retries and what is judged."""
+
+    def setUp(self):
+        patcher = mock.patch.object(web_smoke, "POLL_INTERVAL_SECONDS", 0.0)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+
+    def run_checks(self, **world):
+        world.setdefault("traces", [StatsCheckTest.trace()])
+        page = FakeStatsPage(world, self.folder.name)
+        closed = []
+
+        def new_context(viewport, **kwargs):
+            return SimpleNamespace(new_page=lambda: page)
+
+        browser = SimpleNamespace(new_context=new_context, close=lambda: closed.append(True))
+        playwright = SimpleNamespace(chromium=SimpleNamespace(launch=lambda headless, args, **kwargs: browser,
+                                                              executable_path=str(Path(__file__))))
+        api = SimpleNamespace(sync_playwright=lambda: contextlib.nullcontext(playwright))
+        problems, summary = web_smoke.run_stats_checks(api, "http://h/", options(timeout=0.05, stats=True))
+        return problems, summary, page, closed
+
+    def test_a_page_that_shows_the_overlay_and_saves_a_good_trace_passes_with_one_export(self):
+        problems, summary, page, closed = self.run_checks()
+        self.assertEqual(problems, [])
+        self.assertEqual(summary, "12 Frame instants, 12 zones")
+        self.assertEqual(page.presses, [web_smoke.STATS_OVERLAY_KEY, web_smoke.STATS_EXPORT_KEY])
+        self.assertEqual(closed, [True])
+
+    def test_an_export_before_the_ring_has_frames_is_tried_again(self):
+        problems, _, page, _ = self.run_checks(traces=[StatsCheckTest.trace(frames=2), StatsCheckTest.trace()])
+        self.assertEqual(problems, [])
+        self.assertEqual(page.exports, 2)
+
+    def test_a_ring_that_never_fills_ends_after_the_attempts_with_the_frame_reason(self):
+        problems, _, page, _ = self.run_checks(traces=[StatsCheckTest.trace(frames=2)])
+        self.assertEqual(page.exports, web_smoke.STATS_EXPORT_ATTEMPTS)
+        self.assertTrue(any("fewer than" in problem for problem in problems), problems)
+
+    def test_each_missing_step_is_its_own_reason_and_later_keys_are_not_pressed(self):
+        problems, _, page, _ = self.run_checks(console=False)
+        self.assertIn("no console message matched", problems[0])
+        self.assertEqual(page.presses, [])
+        problems, _, page, _ = self.run_checks(overlay=False)
+        self.assertIn("the overlay was not drawn", problems[0])
+        self.assertEqual(page.presses, [web_smoke.STATS_OVERLAY_KEY])
+        problems, _, page, _ = self.run_checks(download=False)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("gave no readable download", problems[0])
+        self.assertEqual(page.exports, 0)
+        problems, _, _, _ = self.run_checks(name="trace.json")
+        self.assertIn("'trace.json', not 'profiler-trace.json'", problems[0])
+
+    def test_run_smoke_runs_check_9_after_the_others_and_prints_what_it_saw(self):
+        world = {"traces": [StatsCheckTest.trace()]}
+        stats_page = FakeStatsPage(world, self.folder.name)
+        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES], after_click=[OTHER_STRIPES])))
+        launched = []  # the first browser is the one of the checks 1 to 7, the next one is that of check 9
+
+        def launch(headless, args, **kwargs):
+            launched.append(1)
+            if len(launched) == 1:
+                return fake._launch(headless, args, **kwargs)
+            return SimpleNamespace(new_context=lambda viewport, **kw: SimpleNamespace(new_page=lambda: stats_page), close=lambda: None)
+
+        fake.chromium.launch = launch
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), mock.patch.object(web_smoke, "CLICK_TIMEOUT_SECONDS", 0.05):
+            code = web_smoke.run_smoke(options(stats=True), SimpleNamespace(sync_playwright=fake.sync_playwright))
+        self.assertEqual(code, 0, out.getvalue())
+        self.assertIn("ok: (9)", out.getvalue())
+        self.assertIn("12 Frame instants", out.getvalue())
+        self.assertEqual(len(launched), 2)
 
 
 class FakeCanvas:
@@ -1482,9 +1764,22 @@ class RealBrowserTest(unittest.TestCase):
         self.assertEqual(code, 1, output)
         self.assertIn("FAIL: (4) no console message matched", output)
 
+    def test_the_stats_page_passes_and_each_stats_fault_is_found(self):
+        code, output = self.run_selftest("--stats")
+        self.assertEqual(code, 0, output)
+        self.assertIn("ok: (9)", output)
+        expected = {"stats-no-overlay": "the overlay was not drawn", "stats-no-download": "no readable download",
+                    "stats-bad-trace": "fewer than"}
+        for fault, reason in expected.items():
+            with self.subTest(fault):
+                code, output = self.run_selftest("--stats", "--selftest-fault", fault, "--timeout", "3")
+                self.assertEqual(code, 1, output)
+                self.assertIn("FAIL: (9)", output)
+                self.assertIn(reason, output)
+
     def test_each_fault_is_found(self):
         expected = {"flat": "(2)", "console-error": "(4)", "page-error": "(1)", "deaf": "(3)", "moving": "(3) cannot judge",
-                    "upload": "(7)"}
+                    "upload": "(7)"}  # the stats-* faults need --stats: test_the_stats_page_passes_and_each_stats_fault_is_found
         for fault, check in expected.items():
             with self.subTest(fault):
                 code, output = self.run_selftest("--selftest-fault", fault, "--timeout", "3")
