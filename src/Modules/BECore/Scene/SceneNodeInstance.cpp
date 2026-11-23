@@ -1,5 +1,6 @@
 #include "SceneNodeInstance.h"
 
+#include <BECore/Config/StringXmlWriter.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -15,16 +16,8 @@ namespace BECore {
             pugi::xml_document fields;  // the document element holds the attributes and child elements of the fields
         };
 
-        struct StringWriter : pugi::xml_writer {
-            String text;
-
-            void write(const void* data, size_t size) override {
-                text.append(static_cast<const char*>(data), size);
-            }
-        };
-
         String Printed(pugi::xml_node node) {
-            StringWriter writer;
+            StringXmlWriter writer;
             node.print(writer, "", pugi::format_raw);
             return writer.text;
         }

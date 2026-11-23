@@ -1,5 +1,8 @@
 #include "AssetParts.h"
 
+#include <BECore/Config/StringXmlWriter.h>
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/OpenDeserializer.h>
@@ -64,10 +67,9 @@ namespace BECore {
         String ToText(const pugi::xml_node& part) {
             pugi::xml_document document;
             document.append_copy(part);
-            std::ostringstream stream;  //-NoStd: pugixml saves into an std::ostream
-            document.save(stream, "  ", pugi::format_default | pugi::format_no_declaration);
-            const std::string text = stream.str();  //-NoStd: the text of an std::ostringstream
-            return String(text.c_str(), text.size());
+            StringXmlWriter writer;
+            document.save(writer, "  ", pugi::format_default | pugi::format_no_declaration);
+            return eastl::move(writer.text);
         }
 
         std::expected<AssetPartTexts, String> SplitDocument(const pugi::xml_document& document) {
@@ -119,9 +121,9 @@ namespace BECore {
         }
 
         bool WriteText(const std::filesystem::path& file, const String& text) {
-            std::ofstream out(file, std::ios::binary | std::ios::trunc);  //-NoStd: the split files are plain text beside the source
-            out.write(text.data(), static_cast<std::streamsize>(text.size()));
-            return out.good();
+            // In place, not atomic: the split files sit beside the source and a half-written one is rewritten by the next split
+            auto out = File::Open(PathToUtf8(file), FileMode::Write);
+            return out && out->Write(StringView(text)) && out->Close().has_value();
         }
 
     }  // namespace
