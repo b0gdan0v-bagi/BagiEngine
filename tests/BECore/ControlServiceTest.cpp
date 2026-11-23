@@ -195,6 +195,56 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString(responses[1], "id").value_or("").c_str(), String("req-1"));
     }
 
+    TEST_F(ControlServiceTest, TheIdIsEchoedAsTheClientWroteIt) {
+        service.RegisterHandler("ok", [](ControlCall& call) { call.Reply([](JsonWriter& writer) { writer.Value(true); }); });
+        Vector<String> texts;
+        const auto collect = [&texts] { return [&texts](const String& text) { texts.emplace_back(text.c_str(), text.size()); }; };
+
+        service.Post(R"({"id":"a\"b\u00e9 \u00c3\u00a9 \u00e9","method":"ok"})", collect());
+        service.Post(R"({"id":-0,"method":"ok"})", collect());
+        service.Post(R"({"id":18446744073709551615,"method":"ok"})", collect());
+        service.Drain();
+
+        ASSERT_EQ(texts.size(), 3u);
+        EXPECT_EQ(texts[0], String(R"({"id":"a\"b\u00e9 \u00c3\u00a9 \u00e9","ok":true,"result":true})"));
+        EXPECT_EQ(texts[1], String(R"({"id":-0,"ok":true,"result":true})"));
+        EXPECT_EQ(texts[2], String(R"({"id":18446744073709551615,"ok":true,"result":true})"));
+    }
+
+    TEST_F(ControlServiceTest, AnIdThatIsNotAStringOrAnIntegerOf64BitsIsAnInvalidRequestWithNoId) {
+        RegisterRecording("ping");
+        const char* const texts[] = {
+            R"({"id":1.5,"method":"ping"})",
+            R"({"id":true,"method":"ping"})",
+            R"({"id":null,"method":"ping"})",
+            R"({"id":18446744073709551616,"method":"ping"})",
+            R"({"id":-9223372036854775809,"method":"ping"})",
+        };
+
+        for (const char* text : texts) {
+            Post(text);
+        }
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), std::size(texts));
+        for (size_t i = 0; i < responses.size(); ++i) {
+            EXPECT_EQ(ErrorCode(responses[i]), "invalid_request") << texts[i];
+            const Json* id = FindJsonMember(responses[i], "id");
+            ASSERT_NE(id, nullptr) << texts[i];
+            EXPECT_TRUE(id->is_null()) << texts[i];
+        }
+        EXPECT_TRUE(order.empty());
+    }
+
+    TEST_F(ControlServiceTest, ATextWithAByteOrderMarkIsAParseError) {
+        Post("\xEF\xBB\xBF{\"id\":1,\"method\":\"ping\"}");
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_EQ(ErrorCode(responses[0]), "parse_error");
+        EXPECT_TRUE(FindJsonMember(responses[0], "id")->is_null());
+    }
+
     TEST_F(ControlServiceTest, UnknownMethodIsAnError) {
         Post(MakeRequest(3, "no_such_method"));
         service.Drain();
@@ -808,6 +858,15 @@ namespace BECore::Tests {
         EXPECT_EQ(ErrorCode(responses[0]), "shutting_down");
         EXPECT_EQ(IdOf(responses[0]), 9);
         EXPECT_TRUE(order.empty());
+    }
+
+    TEST_F(ControlServiceTest, ARequestPostedAfterShutdownIsAnsweredWithItsIdAsWritten) {
+        String text;
+        service.Shutdown();
+
+        service.Post(R"({"id":"x\u00e9","method":"late"})", [&text](const String& reply) { text = reply; });
+
+        EXPECT_EQ(text, String(R"({"error":{"code":"shutting_down","message":"the application is shutting down"},"id":"x\u00e9","ok":false})"));
     }
 
     TEST_F(ControlServiceTest, PublishSendsAnEventToTheSink) {

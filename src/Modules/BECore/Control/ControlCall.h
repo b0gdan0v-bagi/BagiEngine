@@ -1,7 +1,9 @@
 #pragma once
 
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonView.h>
 #include <BECore/Control/JsonWriter.h>
+#include <BECore/Control/RequestBuffers.h>
 #include <BECore/Memory/Pooled.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
@@ -12,30 +14,35 @@ namespace BECore {
 
     class ControlService;
 
-    /// Appends the response of a successful call, {"id":..,"ok":true,"result":..}, to @p out (never cleared); @p writeResult writes the one value
-    /// of `result`. The keys are in alphabetical order, as a `Json` object keeps them, so the order a client sees does not depend on the way a response is written. Allocates only for the growth of @p
-    /// out. False when @p writeResult did not write exactly one complete value: @p out is then back to its length before the call, with nothing appended
-    bool AppendOkResponse(String& out, const Json& id, FunctionRef<void(JsonWriter&)> writeResult);
+    /// The id of a response to a request that has none (it could not be read, or the call is nested): the JSON `null`
+    inline constexpr StringView kNullId = "null";
+
+    /// Appends the response of a successful call, {"id":..,"ok":true,"result":..}, to @p out (never cleared); @p id is the JSON text of the request's id, written as it
+    /// is (`kNullId` when there is none); @p writeResult writes the one value of `result`. The keys are in alphabetical order, as a `Json` object keeps them, so the order a client sees does not
+    /// depend on the way a response is written. Allocates only for the growth of @p out. False when @p writeResult did not write exactly one complete value: @p out is then back to its length before
+    /// the call, with nothing appended
+    bool AppendOkResponse(String& out, StringView id, FunctionRef<void(JsonWriter&)> writeResult);
 
     /// AppendOkResponse for a writer that may fail (a different name: two FunctionRef parameters would make a lambda ambiguous): its error, or `internal_error` when it wrote no complete value, leaves
     /// @p out as it was (nothing appended)
-    [[nodiscard]] std::expected<void, ControlError> TryAppendOkResponse(String& out, const Json& id, WriteResultFn writeResult);
+    [[nodiscard]] std::expected<void, ControlError> TryAppendOkResponse(String& out, StringView id, WriteResultFn writeResult);
 
     /// Appends the response of a failed call, {"error":{"code":..,"message":..},"id":..,"ok":false}, to @p out (never cleared)
-    void AppendErrorResponse(String& out, const Json& id, const ControlError& error);
+    void AppendErrorResponse(String& out, StringView id, const ControlError& error);
 
     /// The response text of a successful call (AppendOkResponse with a `Json` result)
-    [[nodiscard]] String MakeOkResponse(const Json& id, Json result);
+    [[nodiscard]] String MakeOkResponse(StringView id, Json result);
 
     /// The response text of a failed call (AppendErrorResponse)
-    [[nodiscard]] String MakeErrorResponse(const Json& id, const ControlError& error);
+    [[nodiscard]] String MakeErrorResponse(StringView id, const ControlError& error);
 
     /**
      * @brief One request being handled: its parameters and the way to answer it.
      *
      * ControlService hands a call to the registered handler on the main thread. The handler has to end in exactly one
      * of Reply(), Fail() or DeferFrames(); a handler that does none of them is answered with an internal_error.
-     * Params() is always a JSON object, but its members come from a client: read them with the helpers of Json.h.
+     * The parameters are always a JSON object, but its members come from a client: read them with the checked helpers (`ControlParams.h` over ParamsView(),
+     * `Json.h` over Params()).
      *
      * The handler and every `done` of DeferFrames() run inside a `ScratchScope` of the service, so an answer struct whose strings and lists are
      * `ArenaString` / `ArenaVector` is a local of the handler (or of `done`) and is given back right after the reply is written.
@@ -46,10 +53,12 @@ namespace BECore {
 
         using DoneFn = MoveOnlyFunction<void(ControlCall&)>;
 
-        ControlCall(PassKey<ControlService>, ControlService& service, String method, Json id, Json params, ControlReplyFn reply);
+        /// @p id is the id's JSON text, a view into @p buffers, which the call owns together with the view @p params of their tape
+        ControlCall(PassKey<ControlService>, ControlService& service, String method, RequestBuffersPtr buffers, StringView id, JsonView params, ControlReplyFn reply);
 
-        /// A call that runs inside another one: its answer is kept as a value (ControlService::RunNested) instead of being sent
-        ControlCall(PassKey<ControlService>, String method, Json params);
+        /// A call that runs inside another one: its answer is kept as a value (ControlService::RunNested) instead of being sent. @p buffers holds the tape of
+        /// @p params when the call has one of its own, else null and the view belongs to the outer call
+        ControlCall(PassKey<ControlService>, String method, JsonView params, RequestBuffersPtr buffers);
 
         ControlCall(const ControlCall&) = delete;
         ControlCall& operator=(const ControlCall&) = delete;
@@ -59,9 +68,17 @@ namespace BECore {
             return _method;
         }
 
-        /// The request parameters; an empty object when the request had none
-        [[nodiscard]] const Json& Params() const {
+        /// The request parameters; an empty object when the request had none. Valid while the call lives
+        [[nodiscard]] JsonView ParamsView() const {
             return _params;
+        }
+
+        /// The request parameters as a DOM, parsed from ParamsView() on first use: for the handlers that are not moved to the view yet
+        [[nodiscard]] const Json& ParamsJson() const;
+
+        /// ParamsJson() under its old name
+        [[nodiscard]] const Json& Params() const {
+            return ParamsJson();
         }
 
         /// Answers with success; @p result is written as the `result` of the response
@@ -127,9 +144,11 @@ namespace BECore {
         friend class ControlService;
 
         ControlService* _service = nullptr;  // null for a nested call, which sends nothing
+        RequestBuffersPtr _buffers;          // the text that _id and _params point into
         String _method;
-        Json _id;
-        Json _params;
+        StringView _id = kNullId;
+        JsonView _params;
+        mutable Optional<Json> _paramsJson;  // ParamsJson(), made on first use
         ControlReplyFn _reply;
         DoneFn _done;
         uint32_t _deferFrames = 0;

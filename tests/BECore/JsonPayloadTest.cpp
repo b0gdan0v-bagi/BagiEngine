@@ -214,7 +214,7 @@ namespace BECore::Tests {
             return replies;
         }
 
-        const String kFailureReply = MakeErrorResponse(Json(4), kFailure);
+        const String kFailureReply = MakeErrorResponse("4", kFailure);
 
     }  // namespace
 
@@ -257,7 +257,7 @@ namespace BECore::Tests {
         ControlService service;
         const Vector<String> replies = AnswerOnce(service, answer);
         ASSERT_EQ(replies.size(), 1u);
-        EXPECT_EQ(replies[0], MakeErrorResponse(Json(4), MakeControlError("first", "one")));
+        EXPECT_EQ(replies[0], MakeErrorResponse("4", MakeControlError("first", "one")));
     }
 
     TEST(JsonPayloadTest, ANestedCallKeepsTheErrorOfAFailedPayload) {
@@ -349,7 +349,7 @@ namespace BECore::Tests {
         const String text = R"({"k":[1,2]})";
         PayloadBetween answer;
         answer.middle = JsonPayload::Text(text);
-        const Json id(4);
+        const StringView id = "4";
         String out;
         const auto respond = [&] {
             out.clear();

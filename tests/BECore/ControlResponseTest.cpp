@@ -59,22 +59,24 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST_F(ControlResponseTest, OkResponseBytesAreTheDomPathsForEveryKindOfIdAndResult) {
-        const Vector<Json> ids = {Json(7), MakeJsonString("req-\"1\""), Json()};
+        const Vector<StringView> ids = {"7", R"("req-\"1\"")", kNullId};
         const Vector<Json> results = {ObjectResult(), Json::array({1, MakeJsonString("two"), Json::object()}), Json(42), MakeJsonString("text"), Json(), Json(false)};
 
-        for (const Json& id : ids) {
+        for (const StringView id : ids) {
+            const auto idValue = ParseJson(id);
+            ASSERT_TRUE(idValue.has_value());
             for (const Json& result : results) {
-                EXPECT_EQ(MakeOkResponse(id, result), DomOkResponse(id, result));
+                EXPECT_EQ(MakeOkResponse(id, result), DomOkResponse(*idValue, result));
             }
         }
     }
 
     TEST_F(ControlResponseTest, OkResponseHasItsKeysInAlphabeticalOrder) {
-        EXPECT_EQ(MakeOkResponse(Json(1), Json::object()), R"({"id":1,"ok":true,"result":{}})");
+        EXPECT_EQ(MakeOkResponse("1", Json::object()), R"({"id":1,"ok":true,"result":{}})");
 
         Json result = Json::object();
         result["a"] = 1;
-        EXPECT_EQ(MakeOkResponse(MakeJsonString("x"), result), R"({"id":"x","ok":true,"result":{"a":1}})");
+        EXPECT_EQ(MakeOkResponse(R"("x")", result), R"({"id":"x","ok":true,"result":{"a":1}})");
     }
 
     TEST_F(ControlResponseTest, AResultNestedPastTheWritersLimitIsCutNotAMisuse) {
@@ -83,7 +85,7 @@ namespace BECore::Tests {
             deep = Json::array({std::move(deep)});
         }
 
-        const String text = MakeOkResponse(Json(1), std::move(deep));  // the envelope's own object counts as a level; an EXPECT of the writer would fail the case
+        const String text = MakeOkResponse("1", std::move(deep));  // the envelope's own object counts as a level; an EXPECT of the writer would fail the case
 
         const auto parsed = ParseJson(text);
         ASSERT_TRUE(parsed.has_value());
@@ -93,14 +95,14 @@ namespace BECore::Tests {
     TEST_F(ControlResponseTest, ErrorResponseBytesAreTheDomPathsAndThePinnedText) {
         const ControlError error = MakeControlError(ControlErrors::kInvalidParams, "bad \"x\"\n\xFF");
 
-        EXPECT_EQ(MakeErrorResponse(Json(5), error), DomErrorResponse(Json(5), error));
-        EXPECT_EQ(MakeErrorResponse(Json(), MakeControlError("c", "m")), R"({"error":{"code":"c","message":"m"},"id":null,"ok":false})");
+        EXPECT_EQ(MakeErrorResponse("5", error), DomErrorResponse(Json(5), error));
+        EXPECT_EQ(MakeErrorResponse(kNullId, MakeControlError("c", "m")), R"({"error":{"code":"c","message":"m"},"id":null,"ok":false})");
     }
 
     TEST_F(ControlResponseTest, AppendingKeepsWhatIsAlreadyInTheString) {
         String out("prefix ");
-        AppendOkResponse(out, Json(1), [](JsonWriter& writer) { writer.Value(true); });
-        AppendErrorResponse(out, Json(2), MakeControlError("c", "m"));
+        AppendOkResponse(out, "1", [](JsonWriter& writer) { writer.Value(true); });
+        AppendErrorResponse(out, "2", MakeControlError("c", "m"));
 
         EXPECT_EQ(out, String(R"(prefix {"id":1,"ok":true,"result":true}{"error":{"code":"c","message":"m"},"id":2,"ok":false})"));
     }
@@ -109,7 +111,7 @@ namespace BECore::Tests {
         String out;
         const auto write = [&out] {
             out.clear();
-            AppendOkResponse(out, Json(7), [](JsonWriter& writer) {
+            AppendOkResponse(out, "7", [](JsonWriter& writer) {
                 writer.BeginObject();
                 writer.Member("frame", 12);
                 writer.Member("paused", false);
@@ -240,13 +242,13 @@ namespace BECore::Tests {
         service.Drain();
 
         ASSERT_EQ(texts.size(), 2u);
-        EXPECT_EQ(texts[0], MakeErrorResponse(Json(3), error));
+        EXPECT_EQ(texts[0], MakeErrorResponse("3", error));
         EXPECT_EQ(texts[1], String(R"({"id":4,"ok":true,"result":"intact"})"));
     }
 
     TEST_F(ControlResponseTest, AWriterThatDoesNotWriteOneValueIsAnInternalErrorForBothForms) {
         AssertBridge::Capture capture([](const AssertEvent&) {});  // the writer's own EXPECT of a misuse (compiled out in a profile build)
-        const String expected = MakeErrorResponse(Json(1), MakeControlError(ControlErrors::kInternalError, "the handler wrote a result that is not one JSON value"));
+        const String expected = MakeErrorResponse("1", MakeControlError(ControlErrors::kInternalError, "the handler wrote a result that is not one JSON value"));
 
         const auto nothing = [](JsonWriter&) {};
         const auto two = [](JsonWriter& writer) {

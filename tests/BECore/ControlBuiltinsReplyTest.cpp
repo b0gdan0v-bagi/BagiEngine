@@ -90,13 +90,13 @@ namespace BECore::Tests {
             GTEST_SKIP() << "the reference describes a service with no main window";
         }
 
-        EXPECT_EQ(Ask(1, "status"), MakeOkResponse(Json(1), DomStatus(false, false)));
+        EXPECT_EQ(Ask(1, "status"), MakeOkResponse("1", DomStatus(false, false)));
 
         pause.SetPaused(true);
-        EXPECT_EQ(Ask(2, "status"), MakeOkResponse(Json(2), DomStatus(false, true)));
+        EXPECT_EQ(Ask(2, "status"), MakeOkResponse("2", DomStatus(false, true)));
 
         service.SetManualClock(true);
-        EXPECT_EQ(Ask(3, "status"), MakeOkResponse(Json(3), DomStatus(true, true)));
+        EXPECT_EQ(Ask(3, "status"), MakeOkResponse("3", DomStatus(true, true)));
     }
 
     TEST_F(ControlBuiltinsReplyTest, StatusWithoutAPauseReportsNotPaused) {
@@ -122,7 +122,7 @@ namespace BECore::Tests {
             service.EndFrame();
         }
 
-        EXPECT_EQ(text, MakeOkResponse(Json(5), DomClock()));
+        EXPECT_EQ(text, MakeOkResponse("5", DomClock()));
         const auto parsed = ParseJson(text);
         ASSERT_TRUE(parsed.has_value());
         const Json* result = FindJsonMember(*parsed, "result");

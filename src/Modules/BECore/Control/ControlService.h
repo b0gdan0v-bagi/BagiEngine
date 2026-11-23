@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonFwd.h>
+#include <BECore/Control/RequestBuffers.h>
 #include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/LockSite.h>
@@ -58,7 +59,7 @@ namespace BECore {
         /**
          * @brief Queues a request. Thread-safe.
          *
-         * @p requestText is parsed here, on the posting thread; a request that is not valid is answered with an error
+         * @p requestText is copied and tokenized here, on the posting thread (`JsonTape`: no DOM); a request that is not valid is answered with an error
          * when its turn comes, so the order of the answers stays the order of the requests. @p reply gets the response
          * on the main thread. After Shutdown() the request is answered at once, on the calling thread.
          */
@@ -214,6 +215,7 @@ namespace BECore {
 
     private:
         friend class ControlCall;
+        friend struct RequestBuffersDeleter;
 
         struct Request;
         struct HandlerEntry {
@@ -231,13 +233,19 @@ namespace BECore {
             uint64_t generation = 0;
         };
 
-        static void ParseRequest(StringView text, Request& request);
+        void ParseRequest(StringView text, Request& request);
+
+        /// Buffers for one request: a recycled pair when the free list has one, else new. Any thread
+        [[nodiscard]] RequestBuffersPtr AcquireBuffers();
+
+        /// Puts the buffers of a request that ended on the free list, or frees them when the list is full or they grew large. Any thread
+        void RecycleBuffers(UniquePtr<RequestBuffers> buffers);
 
         /// Write a response into the reply buffer and give it to @p reply (main thread: ControlCall and the answers of Process and Shutdown). The buffer
         /// keeps its capacity between replies; a reply sent from inside a reply function gets a local String, never the busy buffer. SendOk sends the error
         /// response in place of the result when @p writeResult fails or does not write one value
-        void SendOk(ControlReplyFn& reply, const Json& id, WriteResultFn writeResult);
-        void SendError(ControlReplyFn& reply, const Json& id, const ControlError& error);
+        void SendOk(ControlReplyFn& reply, StringView id, WriteResultFn writeResult);
+        void SendError(ControlReplyFn& reply, StringView id, const ControlError& error);
 
         [[nodiscard]] bool BypassesBarrier(const Request& request) const;
         void Process(Request& request);
@@ -246,6 +254,10 @@ namespace BECore {
         void Settle(UniquePtr<ControlCall> call);
         void PrunePublishObservers();
         void NotifyPublishObservers(StringView event, const Json& data);
+
+        // Declared before everything that can hold a request or a call, so one still alive when the service dies gives its buffers back to a live list
+        Mutex _buffersMutex{BE_LOCK_SITE("Control request buffers")};
+        Vector<UniquePtr<RequestBuffers>> _freeBuffers;  // guarded by _buffersMutex
 
         Mutex _mutex{BE_LOCK_SITE("Control queue")};
         ConditionVariable _posted;        // notified by Post(); WaitForRequests() waits on it

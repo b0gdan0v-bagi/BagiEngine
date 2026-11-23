@@ -155,7 +155,7 @@ namespace BECore::Tests {
         template <typename TWriteResult>
         Measure MeasureWriterPath(TWriteResult&& writeResult) {
             String sent;
-            const Json id = 7;
+            const StringView id = "7";
             const Measure measure = MeasureReply([&] {
                 sent.clear();
                 AppendOkResponse(sent, id, writeResult);

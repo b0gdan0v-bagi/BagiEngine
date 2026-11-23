@@ -65,7 +65,7 @@ namespace BECore::Tests {
         service.Post(MakeRequest(4, "clock"), [&text](const String& reply) { text = reply; });
         service.Drain();
 
-        EXPECT_EQ(text, MakeOkResponse(Json(4), DomClock()));
+        EXPECT_EQ(text, MakeOkResponse("4", DomClock()));
     }
 
 }  // namespace BECore::Tests

@@ -373,7 +373,7 @@ namespace BECore::Stress::Tests {
             result["game"] = ToStdString(game.GetName().ToStringView());
             result[member] = document;
             result["version"] = control.GetStateVersion();
-            EXPECT_EQ(Ask(method), MakeOkResponse(Json(1), std::move(result))) << method.data();
+            EXPECT_EQ(Ask(method), MakeOkResponse("1", std::move(result))) << method.data();
         };
         expectSame("get_state", "state", *control.GetState());
         expectSame("list_actions", "actions", *control.GetActions());

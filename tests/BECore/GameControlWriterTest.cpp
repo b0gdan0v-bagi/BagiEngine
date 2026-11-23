@@ -67,7 +67,7 @@ namespace BECore::Tests {
                 result["game"] = "FakeControllable";
                 result[member] = value;
                 result["version"] = Fake().version;
-                return MakeOkResponse(Json(kRequestId), std::move(result));
+                return MakeOkResponse(ToString(kRequestId), std::move(result));
             }
 
             static String ReferencePush(const Json& data) {
@@ -113,8 +113,8 @@ namespace BECore::Tests {
     TEST_F(GameControlWriterTest, AnErrorFromTheWritingFormIsTheErrorReplyWithNothingOfWhatWasWritten) {
         Fake().failWrites = true;
 
-        EXPECT_EQ(Ask("get_state"), MakeErrorResponse(Json(kRequestId), MakeControlError("write_failed", "the state cannot be written")));
-        EXPECT_EQ(Ask("list_actions"), MakeErrorResponse(Json(kRequestId), MakeControlError("write_failed", "the actions cannot be written")));
+        EXPECT_EQ(Ask("get_state"), MakeErrorResponse(ToString(kRequestId), MakeControlError("write_failed", "the state cannot be written")));
+        EXPECT_EQ(Ask("list_actions"), MakeErrorResponse(ToString(kRequestId), MakeControlError("write_failed", "the actions cannot be written")));
 
         Fake().failWrites = false;  // the scratch of the service is intact after the rollbacks
         EXPECT_EQ(Ask("get_state"), ReferenceReply("state", *Fake().GetState()));
