@@ -85,6 +85,9 @@ namespace BECore {
             Value(std::forward<T>(value));
         }
 
+        /// A bug of the caller that the writer cannot see itself (a payload whose callback failed): an `EXPECT`, and IsValid() goes false
+        bool Fail(const char* why);
+
         /// How many containers are open now (a writer of a nested value cuts it before kMaxDepth, counting the containers its caller opened)
         [[nodiscard]] size_t GetDepth() const {
             return _depth;
@@ -115,7 +118,6 @@ namespace BECore {
         void WriteSigned(int64_t value);
         void WriteUnsigned(uint64_t value);
         void WriteDouble(double value);
-        bool Fail(const char* why);
 
         [[nodiscard]] bool InObject() const;
         [[nodiscard]] bool GetFlag(const Array<uint64_t, kFlagWords>& flags, size_t level) const;
