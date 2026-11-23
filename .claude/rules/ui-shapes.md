@@ -36,6 +36,28 @@ Only non-default values are saved. A malformed value is reported and the default
 - A `UIPanel` draws its sprite over the rounded fill; the sprite is not clipped to the corners.
 - A box that has an effect draws nothing for an empty rect; the default style draws nothing for a colour with no alpha.
 
+## Cost on the software renderer
+
+Measured by `UIBoxRasterCostTest` (`DISABLED_` benches: `bin/BagiEngineTests --gtest_also_run_disabled_tests --gtest_filter='UIBoxRasterCost*'`, Release; the lines are `UIBoxRasterCost part=... present_ms=...`) on an Apple M4 Pro, `macos-release`, at the commit of WP 1 (`5c773021`) with the core/rim and texture-floor benches of WP 2, with other loops running (two runs agreed within 3 %). The screen is 23 skinned boxes in 1920x1080 output pixels (a 1200x800 panel with 12 buttons on it, three mid panels, seven tiles; vertical gradient, border, shadow, glow, highlight); each part row is the whole screen with that part only (`present_ms` is the median `Present()` of 30 frames). SDL blends **every** triangle of a `DrawGeometry` call through a temporary surface of its bounding box (the draw blend mode, not the vertex alpha), so `bbox_px` is the cost for all triangles and `blended_px` only says how much of it is translucent.
+
+| Part (scale 1) | triangles | bbox_px | ms | of the screen | core ms / rim ms |
+|----------------|-----------|---------|----|---------------|------------------|
+| shadow | 10234 | 4.04 M | 5.6 | 31 % | 2.1 / 3.5 |
+| glow | 9390 | 3.62 M | 4.7 | 26 % | 2.4 / 2.4 |
+| fill, flat | 4050 | 3.33 M | 3.2 | (18 %) | 2.8 / 0.5 |
+| fill, gradient | 4050 | 3.33 M | 6.5 | 36 % | 6.0 / 0.5 |
+| border | 7824 | 0.24 M | 1.1 | 6 % | 0.4 / 0.8 |
+| highlight | 2046 | 0.03 M | 0.3 | 2 % | 0.1 / 0.3 |
+| **screen** (all parts, gradient) | 33544 | 11.2 M | **17.9** | 100 % | |
+| the big panel alone | 2032 | 6.3 M | 8.1 | | |
+
+At scale 2 (the same 1920x1080 output, the skin in units so every ring and radius is twice as many pixels) the screen is 46036 triangles, 13.6 M bbox pixels, **24.0 ms**; shadow 8.7, glow 6.4, fill 6.9 (gradient), border 1.5, highlight 0.4. The core is the plateau at the strongest alpha of a part (the quad of the arc centres, the corner fans and the side strips of the cut core), the rim the rest.
+
+- **A triangle costs about 82 ns on its own and a blended pixel about 1.1 ns** (flat colour; 2 ns with a per-pixel gradient colour): 5000 tiny triangles over 400x400 pixels take 0.78 ms, two triangles over the same area 0.37 ms. So the 33.5 k triangles of the screen are about 2.8 ms of its 17.9; the rest is bounding-box area, 11.2 M pixels.
+- **A box drawn as one stretched, blended texture** over the area its shadow covers (2.3 M pixels for the whole screen) costs **2.2 ms**, 12 % of the screen: the floor of route B (`texture_floor`).
+
+**Route: B.** What route A can remove is the cores of the shadow and glow under an opaque fill: 2.1 + 2.4 = 4.5 ms of 17.9 (25 %; with a flat fill the opaque core of the fill as `DrawFilledRect` would add 2.8, but a gradient fill, the common skin, cannot). The visible blended area (the soft rims 6.4 ms, the gradient core 6.0, the border and the highlight 1.4) is 13.8 ms, 77 %: no trimming of triangles gets below a third (6.0 ms; 8.0 at scale 2). A cached texture pays each visible pixel once (0.9 ns) where the triangles pay shadow, glow and fill each over the box. Route A stays the fallback: when the nine-slice misses the target, WP 3 and WP 4 are done after it.
+
 ## Button states (`UIStateLook`: `UIDropdown::GetCurrentBox` and the box of any element with a `UIInputClicker` call it)
 
 Hover lightens the fill (both gradient ends) and the border; pressed darkens, halves the shadow offset, cuts the blur by a third and drops the highlight; selected raises the border to `textColor` and adds a faint glow of it when the style has none, and the 4-unit bar stays inside the rounded bottom corners; disabled drops shadow and glow and fades fill, border and highlight. An explicit state colour replaces the start colour and the gradient end keeps its offset. A button with the default style is drawn exactly as before.

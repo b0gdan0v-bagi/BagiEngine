@@ -222,6 +222,42 @@ namespace BECore::Tests {
                             cost.blendedPixels, presentMs);
             }
 
+            /// Splits the triangles of one part at scale 1 into its core (every vertex at the strongest alpha of its call: the plateau a fill or a blur hides or shows whole) and the
+            /// rest (the soft rim), prints a line for each and draws each alone
+            void PrintCoreAndRim(const char* part, const Vector<BoxSpec>& boxes, const Parts& parts) {
+                ReducedRecorder recorder;
+                recorder.width = kScreenWidth;
+                recorder.height = kScreenHeight;
+                for (const auto& element : MakeElements(boxes, 1.0f, parts)) {
+                    element->DrawSelf(recorder);
+                }
+                Vector<GeometryVertex> vertices[2];
+                Vector<int> indices[2];  // [0] the core, [1] the rim
+                for (const DrawCall& call : recorder.calls) {
+                    unsigned char strongest = 0;
+                    for (const GeometryVertex& vertex : call.vertices) {
+                        strongest = std::max(strongest, vertex.color.a);
+                    }
+                    for (size_t i = 0; i + 3 <= call.indices.size(); i += 3) {
+                        const GeometryVertex* corners[3] = {&call.vertices[static_cast<size_t>(call.indices[i])], &call.vertices[static_cast<size_t>(call.indices[i + 1])],
+                                                            &call.vertices[static_cast<size_t>(call.indices[i + 2])]};
+                        const size_t kind = corners[0]->color.a == strongest && corners[1]->color.a == strongest && corners[2]->color.a == strongest ? 0 : 1;
+                        for (const GeometryVertex* corner : corners) {
+                            indices[kind].push_back(static_cast<int>(vertices[kind].size()));
+                            vertices[kind].push_back(*corner);
+                        }
+                    }
+                }
+                const Rect output{0.0f, 0.0f, kScreenWidth, kScreenHeight};
+                const char* const names[2] = {"core", "rim"};
+                for (size_t kind = 0; kind < 2; ++kind) {
+                    const SoftwareRasterCost cost = MeasureRasterCost(vertices[kind], indices[kind], 1.0f, output);
+                    const double presentMs = MedianPresentMs([&] { renderer->DrawGeometry(nullptr, vertices[kind], indices[kind], 0.0f, 0.0f); });
+                    std::printf("UIBoxRasterCost part=%s_%s scale=1 triangles=%zu bbox_px=%.0f blended_px=%.0f present_ms=%.3f\n", part, names[kind], cost.triangles, cost.bboxPixels,
+                                cost.blendedPixels, presentMs);
+                }
+            }
+
             IntrusivePtr<SDLMainWindow> window;
             IntrusivePtr<SDLRendererBackend> renderer;
         };
@@ -287,6 +323,36 @@ namespace BECore::Tests {
                 PrintCase(partCase.name, scale, boxes, partCase.parts);
             }
         }
+    }
+
+    TEST_F(UIBoxRasterCostTest, DISABLED_CoresAndRims) {
+        const Vector<BoxSpec> boxes = BenchmarkScreen();
+        for (const PartCase& partCase : kPartCases) {
+            PrintCoreAndRim(partCase.name, boxes, partCase.parts);
+        }
+    }
+
+    TEST_F(UIBoxRasterCostTest, DISABLED_TextureFloor) {
+        // The floor of a box drawn as a texture: one blended, stretched blit of a translucent texture over the area the box and its shadow cover (the rect grown by twice the
+        // blur of its shadow on every side), which is what a cached box costs at best whatever the nine-slice does with the edges
+        constexpr uint32_t kTextureSide = 16;
+        constexpr unsigned char kTexelAlpha = 200;
+        const Vector<uint8_t> texels(static_cast<size_t>(kTextureSide) * kTextureSide * 4, kTexelAlpha);
+        const IntrusivePtr<ITexture> texture = renderer->CreateTexture(texels.data(), kTextureSide, kTextureSide);
+        ASSERT_TRUE(texture);
+        const Vector<BoxSpec> boxes = BenchmarkScreen();
+        double pixels = 0.0;
+        for (const BoxSpec& spec : boxes) {
+            const float grow = spec.style.shadow.blur * 2.0f;
+            pixels += static_cast<double>(spec.rect.w + 2.0f * grow) * static_cast<double>(spec.rect.h + 2.0f * grow);
+        }
+        const double presentMs = MedianPresentMs([&] {
+            for (const BoxSpec& spec : boxes) {
+                const float grow = spec.style.shadow.blur * 2.0f;
+                renderer->DrawTexture(*texture, nullptr, spec.rect.x - grow, spec.rect.y - grow, spec.rect.w + 2.0f * grow, spec.rect.h + 2.0f * grow);
+            }
+        });
+        std::printf("UIBoxRasterCost part=texture_floor scale=1 triangles=0 bbox_px=%.0f blended_px=%.0f present_ms=%.3f\n", pixels, pixels, presentMs);
     }
 
     TEST_F(UIBoxRasterCostTest, DISABLED_Box) {
