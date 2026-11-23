@@ -142,7 +142,9 @@ namespace BECore {
     /// two accepts of one name within it would tie). An empty or unparsable @p latestOther changes nothing
     [[nodiscard]] String ArtGenAcceptDate(std::chrono::system_clock::time_point now, StringView latestOther);
 
-    /// The manifest of @p set (Sets/CLAUDE.md, "The manifest")
+    /// The manifest of @p set (Sets/CLAUDE.md, "The manifest"). A document by hand, and so is `artgen_set` that answers it: it is a file that holds
+    /// `presetData`, a `Json` payload, and writes `null` for "none", which `ArtGenSetFromJson` reads back. A reflected leaf type for a `Json`
+    /// payload (the owner's question of control-json-by-reflection, stage 6) would let both go
     [[nodiscard]] Json ArtGenSetToJson(const ArtGenSet& set);
 
     /// A set from a manifest. Checked reads: a wrong type, an unknown `manifest` number, a bad name, a pick that is not a variant are an error

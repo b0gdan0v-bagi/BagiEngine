@@ -121,21 +121,14 @@ namespace BECore {
         }
 
         /// The line a successful More variants leaves: what was queued, and the rows left out with the reason
-        String DescribeMore(const Json& reply) {
-            const Optional<int64_t> count = GetJsonInt(reply, "count");
-            const Optional<int64_t> seed = GetJsonInt(reply, "seed");
-            String message = Format("Queued {} more per row on seed {}", count ? *count : 0, seed ? *seed : 0);
-            const Json* skipped = FindJsonMember(reply, "skipped");
-            if (skipped == nullptr || !skipped->is_array() || skipped->empty()) {
+        String DescribeMore(const ArtGenMoreAnswer& reply) {
+            String message = Format("Queued {} more per row on seed {}", reply.count, reply.seed);
+            if (reply.skipped.empty()) {
                 return message;
             }
             String left;
-            for (const Json& row : *skipped) {
-                const Optional<String> job = GetJsonString(row, "job");
-                const Optional<String> reason = GetJsonString(row, "reason");
-                if (job && reason) {
-                    left.append(left.empty() ? "" : ", ").append(Format("{} ({})", *job, *reason));
-                }
+            for (const ArtGenMoreSkippedAnswer& row : reply.skipped) {
+                left.append(left.empty() ? "" : ", ").append(Format("{} ({})", row.job, row.reason));
             }
             return Format("{}; left out: {}", message, left);
         }
@@ -928,7 +921,7 @@ namespace BECore {
         if (IconTextButton(ICON_LC_LOCK, "Keep all", keepBlocker != nullptr ? keepBlocker : kKeepAllTip)) {
             auto result = session.KeepSet(StringView(set.name));
             _acceptFailed = !result.has_value();
-            _acceptMessage = result ? Format("Kept {} row(s)", keepable) : result.error().message;
+            _acceptMessage = result ? Format("Kept {} row(s)", result->kept.size()) : result.error().message;
         }
         ImGui::EndDisabled();
         if (set.kind != kKindAudio) {

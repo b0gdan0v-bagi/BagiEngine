@@ -272,7 +272,8 @@ namespace BECore {
     [[nodiscard]] std::filesystem::path ProvenanceFileOf(const std::filesystem::path& mediaFile);
 
     /// Adds `"kept": {"seed", "date"}` to the provenance file @p file (replacing an earlier one), the rest of it as it was, written atomically;
-    /// a missing or unreadable file is an error that names it
+    /// a missing or unreadable file is an error that names it. The provenance records of an accept are by hand too: they merge into the
+    /// document the service wrote, whose other keys stay as they are
     std::expected<void, String> MarkProvenanceKept(const std::filesystem::path& file, int64_t seed, StringView date);
 
     /**

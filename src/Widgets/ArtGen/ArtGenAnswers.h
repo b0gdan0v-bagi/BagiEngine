@@ -158,6 +158,60 @@ namespace BECore {
         BE_REFLECT_FIELD Optional<ArtGenAcceptAnswer> switched;
     };
 
+    /// `artgen_enqueue`: the set that was queued, its jobs in order and the first seed they share
+    struct ArtGenEnqueueAnswer {
+        BE_CLASS(ArtGenEnqueueAnswer)
+
+        BE_REFLECT_FIELD Vector<String> jobs;
+        BE_REFLECT_FIELD int64_t seed = 0;
+        BE_REFLECT_FIELD String set;
+        BE_REFLECT_FIELD bool serviceConnected = false;
+    };
+
+    /// A row `artgen_more` left out and why: `failed`, `cancelled`, `kept` or `full`
+    struct ArtGenMoreSkippedAnswer {
+        BE_CLASS(ArtGenMoreSkippedAnswer)
+
+        BE_REFLECT_FIELD String job;
+        BE_REFLECT_FIELD String reason;
+    };
+
+    /// `artgen_more`: the rows that were queued for `count` more variants on the fresh `seed`, and the rows left out
+    struct ArtGenMoreAnswer {
+        BE_CLASS(ArtGenMoreAnswer)
+
+        BE_REFLECT_FIELD int32_t count = 0;
+        BE_REFLECT_FIELD Vector<String> jobs;
+        BE_REFLECT_FIELD int64_t seed = 0;
+        BE_REFLECT_FIELD String set;
+        BE_REFLECT_FIELD Vector<ArtGenMoreSkippedAnswer> skipped;
+    };
+
+    /// `artgen_retry`: how many jobs went back to pending
+    struct ArtGenRetryAnswer {
+        BE_CLASS(ArtGenRetryAnswer)
+
+        BE_REFLECT_FIELD int32_t retried = 0;
+        BE_REFLECT_FIELD String set;
+    };
+
+    /// A row `artgen_keep` of a whole set left alone because another set accepted its name later
+    struct ArtGenKeepReplacedAnswer {
+        BE_CLASS(ArtGenKeepReplacedAnswer)
+
+        BE_REFLECT_FIELD String by;
+        BE_REFLECT_FIELD String job;
+    };
+
+    /// `artgen_keep`: the rows kept; `replaced` is there only when a row was left alone
+    struct ArtGenKeepAnswer {
+        BE_CLASS(ArtGenKeepAnswer)
+
+        BE_REFLECT_FIELD Vector<String> kept;
+        BE_REFLECT_FIELD Optional<Vector<ArtGenKeepReplacedAnswer>> replaced;
+        BE_REFLECT_FIELD String set;
+    };
+
     /// A preset of the catalog the service sent; a broken one has its `error`
     struct ArtGenPresetRowAnswer {
         BE_CLASS(ArtGenPresetRowAnswer)

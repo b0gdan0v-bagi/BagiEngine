@@ -780,6 +780,7 @@ namespace BECore::Tests {
         ASSERT_NE(FindJsonMember(first, "jobs"), nullptr);
         EXPECT_EQ(Require(FindJsonMember(first, "jobs")), (Json::array({"rook", "white_knight"})));
         EXPECT_EQ(GetJsonBool(first, "serviceConnected"), Optional<bool>(false));
+        EXPECT_EQ(KeysOf(first), (Vector<String>{"jobs", "seed", "serviceConnected", "set"}));
         EXPECT_EQ(OnDisk("from_lines").count, 3);
 
         Json list = Json::object();
@@ -938,6 +939,7 @@ namespace BECore::Tests {
         retry["set"] = "edit";
         retry["job"] = "b";
         EXPECT_EQ(GetJsonInt(Result(Call("artgen_retry", retry)), "retried"), Optional<int64_t>(1));
+        EXPECT_EQ(KeysOf(Result(Call("artgen_retry", retry))), (Vector<String>{"retried", "set"}));
         EXPECT_EQ(StateOf(OnDisk("edit"), 1), ArtGenSetJobState::Pending);
         EXPECT_EQ(StateOf(OnDisk("edit"), 2), ArtGenSetJobState::Cancelled);
         retry.erase("job");
@@ -1564,6 +1566,7 @@ namespace BECore::Tests {
         ASSERT_NE(kept, nullptr) << DumpJson(answer).c_str();
         ASSERT_EQ(kept->size(), 1u);
         EXPECT_EQ((*kept)[0], "a");
+        EXPECT_EQ(KeysOf(answer), (Vector<String>{"kept", "set"})) << "no `replaced` when no row was left alone";
 
         ASSERT_EQ(gKept.size(), 1u);
         EXPECT_EQ(gKept[0].kind, "image");
@@ -1868,6 +1871,8 @@ namespace BECore::Tests {
         ASSERT_EQ(replaced->size(), 1u);
         EXPECT_EQ(GetJsonString((*replaced)[0], "job"), Optional<String>("a"));
         EXPECT_EQ(GetJsonString((*replaced)[0], "by"), Optional<String>("second"));
+        EXPECT_EQ(KeysOf(answer), (Vector<String>{"kept", "replaced", "set"}));
+        EXPECT_EQ(KeysOf((*replaced)[0]), (Vector<String>{"by", "job"}));
         ASSERT_EQ(gKept.size(), 1u);
         EXPECT_EQ(gKept[0].name, "b");
 
@@ -2975,6 +2980,8 @@ namespace BECore::Tests {
         ASSERT_EQ(skipped->size(), 1u);
         EXPECT_EQ(GetJsonString((*skipped)[0], "job"), Optional<String>("a"));
         EXPECT_EQ(GetJsonString((*skipped)[0], "reason"), Optional<String>("kept"));
+        EXPECT_EQ(KeysOf(answer), (Vector<String>{"count", "jobs", "seed", "set", "skipped"}));
+        EXPECT_EQ(KeysOf((*skipped)[0]), (Vector<String>{"job", "reason"}));
         const ArtGenSetJob* kept = FindJob(Require(session.FindSet("m")), "a");
         EXPECT_EQ(kept->state, ArtGenSetJobState::Done);
         EXPECT_FALSE(kept->more.has_value());

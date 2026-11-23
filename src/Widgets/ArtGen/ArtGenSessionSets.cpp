@@ -571,7 +571,7 @@ namespace BECore {
         return ArtGenSetEdit::Ok;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::MoreVariants(StringView setName, int32_t count, Optional<int64_t> seed, const Vector<String>& jobNames) {
+    std::expected<ArtGenMoreAnswer, ControlError> ArtGenSession::MoreVariants(StringView setName, int32_t count, Optional<int64_t> seed, const Vector<String>& jobNames) {
         ArtGenSet* set = MutableSet(setName);
         if (set == nullptr) {
             return std::unexpected(MakeError(kNoSetCode, Format("no set named '{}'", setName)));
@@ -592,16 +592,16 @@ namespace BECore {
         }
 
         Vector<ArtGenSetJob*> rows;
-        Json skipped = Json::array();
+        Vector<ArtGenMoreSkippedAnswer> skipped;
         Vector<String> skippedText;
         for (ArtGenSetJob& job : set->jobs) {
             if (!jobNames.empty() && std::none_of(jobNames.begin(), jobNames.end(), [&](const String& name) { return name == job.name; })) {
                 continue;
             }
             if (const char* reason = ArtGenMoreSkipReason(job, count)) {
-                Json item = Json::object();
-                item["job"] = ToJsonString(job.name);
-                item["reason"] = reason;
+                ArtGenMoreSkippedAnswer item;
+                item.job = job.name;
+                item.reason = String(reason);
                 skipped.push_back(std::move(item));
                 skippedText.push_back(Format("{} ({})", job.name, reason));
                 continue;
@@ -634,22 +634,20 @@ namespace BECore {
             }
         }
 
-        Json names = Json::array();
+        ArtGenMoreAnswer reply;
         for (ArtGenSetJob* row : rows) {
             row->state = ArtGenSetJobState::Pending;
             row->error.clear();
             row->more = ArtGenSetMore{first, count};
-            names.push_back(ToJsonString(row->name));
+            reply.jobs.push_back(row->name);
         }
         QueueSet(set->name);
         SaveSet(*set);
         ++_version;
-        Json reply = Json::object();
-        reply["set"] = ToJsonString(set->name);
-        reply["seed"] = first;
-        reply["count"] = count;
-        reply["jobs"] = std::move(names);
-        reply["skipped"] = std::move(skipped);
+        reply.set = set->name;
+        reply.seed = first;
+        reply.count = count;
+        reply.skipped = std::move(skipped);
         return reply;
     }
 
@@ -804,7 +802,7 @@ namespace BECore {
                                ControlParamInfo{"jobs", "array", false, "only these rows (names); an unknown name is artgen_no_set"}}});
     }
 
-    std::expected<Json, ControlError> ArtGenSession::HandleEnqueue(const Json& params) {
+    std::expected<ArtGenEnqueueAnswer, ControlError> ArtGenSession::HandleEnqueue(const Json& params) {
         ArtGenSetRequest request;
         const Json* preset = FindJsonMember(params, "preset");
         if (preset != nullptr && preset->is_string()) {
@@ -867,15 +865,13 @@ namespace BECore {
             return std::unexpected(InvalidParams(name.error()));
         }
         const ArtGenSet* set = FindSet(*name);
-        Json jobs = Json::array();
+        ArtGenEnqueueAnswer reply;
+        reply.set = *name;
         for (const ArtGenSetJob& job : set->jobs) {
-            jobs.push_back(ToJsonString(job.name));
+            reply.jobs.push_back(job.name);
         }
-        Json reply = Json::object();
-        reply["set"] = ToJsonString(*name);
-        reply["jobs"] = std::move(jobs);
-        reply["seed"] = set->seed;
-        reply["serviceConnected"] = IsServiceConnected();
+        reply.seed = set->seed;
+        reply.serviceConnected = IsServiceConnected();
         return reply;
     }
 
@@ -925,7 +921,7 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::HandleRetry(const Json& params) {
+    std::expected<ArtGenRetryAnswer, ControlError> ArtGenSession::HandleRetry(const Json& params) {
         const auto set = GetJsonString(params, "set");
         if (!set) {
             return std::unexpected(InvalidParams("'set' (string) is required"));
@@ -939,9 +935,9 @@ namespace BECore {
         if (RetryJobs(*set, StringView(job)) == ArtGenSetEdit::NoSet) {
             return std::unexpected(MakeError(kNoSetCode, job.empty() ? Format("no set named '{}'", *set) : Format("no job '{}' in a set named '{}'", job, *set)));
         }
-        Json reply = Json::object();
-        reply["set"] = ToJsonString(*set);
-        reply["retried"] = CountJobs(*known, ArtGenSetJobState::Pending) - pendingBefore;
+        ArtGenRetryAnswer reply;
+        reply.set = *set;
+        reply.retried = CountJobs(*known, ArtGenSetJobState::Pending) - pendingBefore;
         return reply;
     }
 
@@ -1196,7 +1192,7 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::KeepSet(StringView setName, StringView jobName) {
+    std::expected<ArtGenKeepAnswer, ControlError> ArtGenSession::KeepSet(StringView setName, StringView jobName) {
         ArtGenSet* set = MutableSet(setName);
         if (set == nullptr) {
             return std::unexpected(MakeError(kNoSetCode, Format("no set named '{}'", setName)));
@@ -1209,7 +1205,7 @@ namespace BECore {
             return std::unexpected(MakeError(kNoSetCode, Format("no job '{}' in a set named '{}'", jobName, setName)));
         }
         Vector<ArtGenSetJob*> rows;
-        Json replaced = Json::array();
+        Vector<ArtGenKeepReplacedAnswer> replaced;
         Vector<String> replacedNames;
         for (ArtGenSetJob& job : set->jobs) {
             if (!IsLive(job) || (!jobName.empty() && StringView(job.name) != jobName)) {
@@ -1220,9 +1216,9 @@ namespace BECore {
                 if (!jobName.empty()) {
                     return std::unexpected(InvalidParams(Format("the job '{}' is replaced: the set '{}' accepted '{}' later; keep it there", job.name, newer->name, job.accepted->as)));
                 }
-                Json item = Json::object();
-                item["job"] = ToJsonString(job.name);
-                item["by"] = ToJsonString(newer->name);
+                ArtGenKeepReplacedAnswer item;
+                item.job = job.name;
+                item.by = newer->name;
                 replaced.push_back(std::move(item));
                 replacedNames.push_back(Format("{} (by {})", job.name, newer->name));
                 continue;
@@ -1257,20 +1253,16 @@ namespace BECore {
             SaveSet(*set);
             ++_version;
         }
-        Json names = Json::array();
-        for (const String& name : kept) {
-            names.push_back(ToJsonString(name));
-        }
-        Json reply = Json::object();
-        reply["set"] = ToJsonString(set->name);
-        reply["kept"] = std::move(names);
+        ArtGenKeepAnswer reply;
+        reply.set = set->name;
+        reply.kept = std::move(kept);
         if (!replaced.empty()) {
-            reply["replaced"] = std::move(replaced);
+            reply.replaced = std::move(replaced);
         }
         return reply;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::HandleKeep(const Json& params) {
+    std::expected<ArtGenKeepAnswer, ControlError> ArtGenSession::HandleKeep(const Json& params) {
         const auto set = GetJsonString(params, "set");
         if (!set) {
             return std::unexpected(InvalidParams("'set' (string) is required"));
@@ -1282,7 +1274,7 @@ namespace BECore {
         return KeepSet(*set, StringView(job));
     }
 
-    std::expected<Json, ControlError> ArtGenSession::HandleMore(const Json& params) {
+    std::expected<ArtGenMoreAnswer, ControlError> ArtGenSession::HandleMore(const Json& params) {
         const auto set = GetJsonString(params, "set");
         if (!set) {
             return std::unexpected(InvalidParams("'set' (string) is required"));

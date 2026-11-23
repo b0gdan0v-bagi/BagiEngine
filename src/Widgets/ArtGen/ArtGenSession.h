@@ -304,7 +304,7 @@ namespace BECore {
          * are left out and listed in the answer. Everything is checked first and a refusal changes nothing: `artgen_no_set`, `artgen_busy` (the set is
          * active), `invalid_params` (a bad count or seed, a seed that meets a variant of a row that would run, nothing to run)
          */
-        std::expected<Json, ControlError> MoreVariants(StringView set, int32_t count, Optional<int64_t> seed = {}, const Vector<String>& jobs = {});
+        std::expected<ArtGenMoreAnswer, ControlError> MoreVariants(StringView set, int32_t count, Optional<int64_t> seed = {}, const Vector<String>& jobs = {});
         /// Picks the variant @p seed of a job (saved in the manifest). On a **live** row (accepted, not kept) it switches: the variant is
         /// written into the game under the name the row was accepted as, and only then are the pick and the date changed; a failed write
         /// (also a row that another set replaced, FindNewerOwner) is `WriteFailed` and changes nothing. A kept row takes no other pick
@@ -329,7 +329,7 @@ namespace BECore {
         /// kept (its other variants leave the manifest) and the manifest written. Final; nothing live to keep is `invalid_params`, and so is a named
         /// row that another set replaced (the whole-set call skips such rows and lists them). The answer
         /// names the rows kept; a failure halfway names the row and the rows done
-        std::expected<Json, ControlError> KeepSet(StringView name, StringView job = {});
+        std::expected<ArtGenKeepAnswer, ControlError> KeepSet(StringView name, StringView job = {});
         /// The other set that accepted a row under the same name and kind of @p job later, so the game's file is its variant now (null when
         /// @p job owns it, or was never accepted). A new accept's date is strictly later than the others' (`NewAcceptDate`), so a tie
         /// (the set later in the list is the newer) is left only for manifests written before that rule
@@ -346,7 +346,10 @@ namespace BECore {
             return _pollCount;
         }
 
-        /// The handlers, public for the tests: each takes the params of the call and answers like the method
+        /// The handlers, public for the tests: each takes the params of the call and answers like the method. `HandlePoll` and `HandleSet` answer a
+        /// `Json` document by hand: `request.preset` of the poll is a preset's name or an inline draft (two types under one key, a payload in the
+        /// middle), and `artgen_set` is the manifest file (`ArtGenSetToJson`). A reflected leaf type for a `Json` payload (the owner's question of
+        /// control-json-by-reflection, stage 6) would let them go
         std::expected<Json, ControlError> HandlePoll(const Json& params);
         std::expected<ArtGenStaleAnswer, ControlError> HandleProgress(const Json& params);
         std::expected<ArtGenStaleAnswer, ControlError> HandleImage(const Json& params);
@@ -357,13 +360,13 @@ namespace BECore {
         std::expected<ArtGenStaleAnswer, ControlError> HandleSetupReport(const Json& params);
         std::expected<ArtGenSetupQueuedAnswer, ControlError> HandleSetup(const Json& params);
         std::expected<ArtGenSavedAnswer, ControlError> HandleSavePreset(const Json& params);
-        std::expected<Json, ControlError> HandleEnqueue(const Json& params);
+        std::expected<ArtGenEnqueueAnswer, ControlError> HandleEnqueue(const Json& params);
         std::expected<Json, ControlError> HandleSet(const Json& params);
         std::expected<ArtGenPickAnswer, ControlError> HandlePick(const Json& params);
-        std::expected<Json, ControlError> HandleRetry(const Json& params);
+        std::expected<ArtGenRetryAnswer, ControlError> HandleRetry(const Json& params);
         std::expected<ArtGenAcceptSetAnswer, ControlError> HandleAcceptSet(const Json& params);
-        std::expected<Json, ControlError> HandleKeep(const Json& params);
-        std::expected<Json, ControlError> HandleMore(const Json& params);
+        std::expected<ArtGenKeepAnswer, ControlError> HandleKeep(const Json& params);
+        std::expected<ArtGenMoreAnswer, ControlError> HandleMore(const Json& params);
         [[nodiscard]] ArtGenStateAnswer BuildState() const;
 
     private:
