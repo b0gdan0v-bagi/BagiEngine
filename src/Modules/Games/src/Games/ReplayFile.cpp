@@ -1,6 +1,7 @@
 #include "ReplayFile.h"
 
 #include <BECore/Control/ControlService.h>
+#include <BECore/Control/JsonViewOps.h>
 #include <BECore/Control/JsonWriter.h>
 #include <cmath>
 
@@ -28,51 +29,54 @@ namespace BECore {
         }
 
         /// The first member of @p object that is not in @p known, as text for an error, or an empty string
-        String FindUnknownMember(const Json& object, std::initializer_list<StringView> known) {
-            for (const auto& member : object.items()) {
-                const StringView key(member.key().c_str(), member.key().size());
+        String FindUnknownMember(JsonView object, std::initializer_list<StringView> known) {
+            for (const JsonMember member : object.Members()) {
                 bool found = false;
                 for (const StringView name : known) {
-                    found = found || name == key;
+                    found = found || member.key.TextEquals(name);
                 }
                 if (!found) {
-                    return String(key);
+                    String key;
+                    member.key.ReadText(key);
+                    return key;
                 }
             }
             return {};
         }
 
-        /// One line as a JSON object: within the size and depth limits of a request, which bound what a copy of the value costs
-        std::expected<Json, ReplayError> ParseLineObject(StringView text, size_t line) {
+        /// One line as a JSON object, taped into @p tape: within the size and depth limits of a request, which bound what a copy of the value costs
+        std::expected<JsonView, ReplayError> ParseLineObject(StringView text, size_t line, JsonTape& tape) {
             if (text.size() > ControlService::kMaxRequestBytes) {
                 return std::unexpected(MakeError(line, Format("the line is {} bytes, the limit is {}", text.size(), ControlService::kMaxRequestBytes)));
             }
             if (IsJsonNestedDeeperThan(text, ControlService::kMaxRequestDepth)) {
                 return std::unexpected(MakeError(line, Format("the line nests deeper than {} levels", ControlService::kMaxRequestDepth)));
             }
-            auto parsed = ParseJson(text);
-            if (!parsed) {
+            if (const auto parsed = tape.Parse(text); !parsed) {
                 return std::unexpected(MakeError(line, Format("not JSON: {}", parsed.error().message)));
             }
-            if (!parsed->is_object()) {
+            const JsonView root(tape, 0);
+            if (!root.IsObject()) {
                 return std::unexpected(MakeError(line, "the line has to be a JSON object"));
             }
-            return std::move(*parsed);
+            return root;
         }
 
-        std::expected<String, ReplayError> ReadString(const Json& object, StringView key, size_t line) {
-            const auto value = GetJsonString(object, key);
-            if (!value) {
+        std::expected<String, ReplayError> ReadString(JsonView object, StringView key, size_t line) {
+            String value;
+            const Optional<JsonView> member = object.Find(key);
+            if (!member || !member->ReadText(value)) {
                 return std::unexpected(MakeError(line, Format("'{}' is missing or not a string", key)));
             }
-            return String(value->c_str(), value->size());
+            return value;
         }
 
-        std::expected<ReplayHeader, ReplayError> ReadHeader(const Json& object, size_t line) {
-            if (FindJsonMember(object, kKeyReplay) == nullptr) {
+        std::expected<ReplayHeader, ReplayError> ReadHeader(JsonView object, size_t line) {
+            const Optional<JsonView> versionMember = object.Find(kKeyReplay);
+            if (!versionMember) {
                 return std::unexpected(MakeError(line, "the first line has to be the header with 'replay' (the format version)"));
             }
-            const auto version = GetJsonInt(object, kKeyReplay);
+            const Optional<int64_t> version = versionMember->AsInt64();
             if (!version) {
                 return std::unexpected(MakeError(line, "'replay' has to be an integer"));
             }
@@ -94,7 +98,7 @@ namespace BECore {
             }
             header.game = std::move(*game);
             header.engine = std::move(*engine);
-            if (FindJsonMember(object, kKeyTitle) != nullptr) {
+            if (object.Find(kKeyTitle)) {
                 auto title = ReadString(object, kKeyTitle, line);
                 if (!title) {
                     return std::unexpected(title.error());
@@ -104,22 +108,24 @@ namespace BECore {
             return header;
         }
 
-        std::expected<ReplayGap, ReplayError> ReadGap(const Json& entry, size_t line) {
-            const Json* gap = FindJsonMember(entry, kKeyGap);
-            if (gap == nullptr || !gap->is_object()) {
+        std::expected<ReplayGap, ReplayError> ReadGap(JsonView entry, size_t line) {
+            const Optional<JsonView> gap = entry.Find(kKeyGap);
+            if (!gap || !gap->IsObject()) {
                 return std::unexpected(MakeError(line, "'gap' is missing or not an object"));
             }
             if (const String unknown = FindUnknownMember(*gap, {kKeyFrames, kKeySeconds}); !unknown.empty()) {
                 return std::unexpected(MakeError(line, Format("'gap' has no member '{}'", unknown)));
             }
-            const auto frames = GetJsonInt(*gap, kKeyFrames);
+            const Optional<JsonView> framesMember = gap->Find(kKeyFrames);
+            const Optional<int64_t> frames = framesMember ? framesMember->AsInt64() : std::nullopt;
             if (!frames) {
                 return std::unexpected(MakeError(line, "'gap.frames' is missing or not an integer"));
             }
             if (*frames < 0) {
                 return std::unexpected(MakeError(line, Format("'gap.frames' is negative ({})", *frames)));
             }
-            const auto seconds = GetJsonNumber(*gap, kKeySeconds);
+            const Optional<JsonView> secondsMember = gap->Find(kKeySeconds);
+            const Optional<double> seconds = secondsMember ? secondsMember->AsDouble() : std::nullopt;
             if (!seconds) {
                 return std::unexpected(MakeError(line, "'gap.seconds' is missing or not a number"));
             }
@@ -132,20 +138,29 @@ namespace BECore {
             return ReplayGap{static_cast<uint64_t>(*frames), *seconds};
         }
 
-        std::expected<ReplayEntry, ReplayError> ReadEntry(const Json& object, size_t line) {
+        /// @p value as compact JSON text
+        String CompactText(JsonView value) {
+            String text;
+            JsonWriter writer(text);
+            WriteJson(writer, value);
+            return text;
+        }
+
+        std::expected<ReplayEntry, ReplayError> ReadEntry(JsonView object, size_t line) {
             if (const String unknown = FindUnknownMember(object, {kKeyOp, kKeyParams, kKeyOutcome, kKeyGap}); !unknown.empty()) {
                 return std::unexpected(MakeError(line, Format("an entry has no member '{}'", unknown)));
             }
-            const auto opName = GetJsonString(object, kKeyOp);
-            if (!opName) {
+            String opName;
+            const Optional<JsonView> opMember = object.Find(kKeyOp);
+            if (!opMember || !opMember->ReadText(opName)) {
                 return std::unexpected(MakeError(line, "'op' is missing or not a string"));
             }
-            const Optional<ReplayOp> op = FindReplayOp(StringView(opName->c_str(), opName->size()));
+            const Optional<ReplayOp> op = FindReplayOp(StringView(opName.c_str(), opName.size()));
             if (!op) {
-                return std::unexpected(MakeError(line, Format("unknown op '{}' (it has to be reset, action or state)", *opName)));
+                return std::unexpected(MakeError(line, Format("unknown op '{}' (it has to be reset, action or state)", opName)));
             }
-            const Json* params = FindJsonMember(object, kKeyParams);
-            if (params == nullptr || !params->is_object()) {
+            const Optional<JsonView> params = object.Find(kKeyParams);
+            if (!params || !params->IsObject()) {
                 return std::unexpected(MakeError(line, "'params' is missing or not an object"));
             }
             auto gap = ReadGap(object, line);
@@ -155,9 +170,9 @@ namespace BECore {
 
             ReplayEntry entry;
             entry.op = *op;
-            entry.params = *params;
-            if (const Json* outcome = FindJsonMember(object, kKeyOutcome)) {
-                entry.outcome = *outcome;
+            entry.params = CompactText(*params);
+            if (const Optional<JsonView> outcome = object.Find(kKeyOutcome)) {
+                entry.outcome = CompactText(*outcome);
             }
             entry.gap = *gap;
             entry.line = line;
@@ -174,6 +189,14 @@ namespace BECore {
 
         bool IsBlank(StringView text) {
             return text.find_first_not_of(" \t") == StringView::npos;
+        }
+
+        void WriteGap(JsonWriter& writer, const ReplayGap& gap) {
+            writer.Key(kKeyGap);
+            writer.BeginObject();
+            writer.Member(kKeyFrames, gap.frames);
+            writer.Member(kKeySeconds, gap.seconds);
+            writer.EndObject();
         }
 
     }  // namespace
@@ -223,16 +246,31 @@ namespace BECore {
         writer.BeginObject();
         writer.Member(kKeyOp, ReplayOpName(entry.op));
         writer.Key(kKeyParams);
-        WriteJson(writer, entry.params);
+        writer.Raw(StringView(entry.params.c_str(), entry.params.size()));
         if (entry.outcome) {
             writer.Key(kKeyOutcome);
-            WriteJson(writer, *entry.outcome);
+            writer.Raw(StringView(entry.outcome->c_str(), entry.outcome->size()));
         }
-        writer.Key(kKeyGap);
-        writer.BeginObject();
-        writer.Member(kKeyFrames, entry.gap.frames);
-        writer.Member(kKeySeconds, entry.gap.seconds);
+        WriteGap(writer, entry.gap);
         writer.EndObject();
+    }
+
+    void AppendReplayEntry(String& out, ReplayOp op, JsonView params, Optional<StringView> outcomeText, const ReplayGap& gap) {
+        JsonWriter writer(out);
+        writer.BeginObject();
+        writer.Member(kKeyOp, ReplayOpName(op));
+        writer.Key(kKeyParams);
+        if (params.IsObject()) {
+            WriteJson(writer, params);
+        } else {
+            writer.BeginObject();
+            writer.EndObject();
+        }
+        if (outcomeText) {
+            writer.Key(kKeyOutcome);
+            writer.Raw(*outcomeText);
+        }
+        WriteGap(writer, gap);
         writer.EndObject();
     }
 
@@ -244,6 +282,7 @@ namespace BECore {
 
     std::expected<ParsedReplay, ReplayError> ParseReplay(StringView text) {
         ParsedReplay result;
+        JsonTape tape;  // one for every line: the buffers keep their size
         bool haveHeader = false;
         size_t lineNumber = 0;
 
@@ -257,7 +296,7 @@ namespace BECore {
                 continue;
             }
 
-            auto object = ParseLineObject(line, lineNumber);
+            auto object = ParseLineObject(line, lineNumber, tape);
             if (!object) {
                 return std::unexpected(object.error());
             }

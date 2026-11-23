@@ -1,9 +1,11 @@
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/ReplayTestGame.h>
 #include <BECore/Time/Time.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
@@ -66,16 +68,16 @@ namespace BECore::Tests {
             /// reset, roll, arm, a wait of the lock, roll, set_state, roll: the arm / timer gap is in the file (6 entries)
             String RecordSession() {
                 EXPECT_TRUE(SessionRecorder::GetInstance().Start(FromStdString(_path.string()), *GameManager::GetInstance().GetActive(), "session").has_value());
-                EXPECT_TRUE(ControlledReset(Game(), Params(R"({"seed":21})")).has_value());
+                EXPECT_TRUE(ControlledReset(Game(), JsonDoc(R"({"seed":21})")).has_value());
                 Frame();
-                EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"roll"})")).has_value());
-                EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"arm"})")).has_value());
+                EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
+                EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"arm"})")).has_value());
                 for (int i = 0; i < kLockFrames; ++i) {
                     Frame();
                 }
-                EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"roll"})")).has_value());
-                EXPECT_TRUE(ControlledSetState(Game(), Params(R"({"rolls":[6,6]})")).has_value());
-                EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"roll"})")).has_value());
+                EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
+                EXPECT_TRUE(ControlledSetState(Game(), JsonDoc(R"({"rolls":[6,6]})")).has_value());
+                EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
                 SessionRecorder::GetInstance().Stop();
                 return ReadRecording();
             }
@@ -114,7 +116,7 @@ namespace BECore::Tests {
         ReplayTestGame fresh;
         const ReplayStep result = Play(player, fresh);
 
-        EXPECT_TRUE(result.has_value()) << (result ? "" : DumpJson(ReplayMismatchJson(result.error())).c_str());
+        EXPECT_TRUE(result.has_value()) << (result ? "" : ReplayMismatchText(result.error()).c_str());
         EXPECT_TRUE(player.IsDone());
         EXPECT_EQ(*fresh.GetState(), recordedState);
     }
@@ -156,8 +158,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(parsed.has_value());
         ReplayEntry& roll = parsed->entries.at(1);
         ASSERT_TRUE(roll.outcome.has_value());
-        const int value = static_cast<int>(GetJsonInt(*roll.outcome, "value").value_or(0));
-        (*roll.outcome)["value"] = value % 6 + 1;
+        const JsonDoc original(StringView(roll.outcome->c_str(), roll.outcome->size()));
+        const int value = static_cast<int>(GetParamInt(original.Root(), "value").value_or(0));
+        roll.outcome = Format("{{\"value\":{}}}", value % 6 + 1);
         String edited = Format("{}\n", FormatReplayHeader(parsed->header));
         for (const ReplayEntry& entry : parsed->entries) {
             AppendFormat(edited, "{}\n", FormatReplayEntry(entry));
@@ -176,7 +179,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(mismatch.expected.has_value());
         ASSERT_TRUE(mismatch.actual.has_value());
         EXPECT_EQ(*mismatch.expected, *roll.outcome);
-        EXPECT_EQ(GetJsonInt(*mismatch.actual, "value"), value);
+        const JsonDoc actual(StringView(mismatch.actual->c_str(), mismatch.actual->size()));
+        EXPECT_EQ(GetParamInt(actual.Root(), "value"), value);
         EXPECT_FALSE(mismatch.error.has_value());
     }
 
@@ -216,7 +220,7 @@ namespace BECore::Tests {
         EXPECT_EQ(mismatch.entry.line, 2u);
         ASSERT_TRUE(mismatch.expected.has_value());
         ASSERT_TRUE(mismatch.actual.has_value());
-        EXPECT_EQ(*mismatch.expected, Params(R"({"seed":21})"));
+        EXPECT_EQ(*mismatch.expected, R"({"seed":21})");
         EXPECT_NE(*mismatch.actual, *mismatch.expected);
     }
 
@@ -272,7 +276,9 @@ namespace BECore::Tests {
         const ReplayStep result = Play(player, fresh, false);
         ASSERT_FALSE(result.has_value());
 
-        const Json answer = ReplayMismatchJson(result.error());
+        const auto parsed = ParseJson(ReplayMismatchText(result.error()));
+        ASSERT_TRUE(parsed.has_value());
+        const Json& answer = *parsed;
 
         EXPECT_EQ(GetJsonInt(answer, "index"), 3);
         EXPECT_EQ(GetJsonInt(answer, "line"), 5);

@@ -1,4 +1,4 @@
-// The mismatch of `replay` is a reflected struct (ReplayAnswers.h); the DOM of `ReplayMismatchJson` stays for the tests that read it. Their bytes must be one.
+// The mismatch of `replay` is a reflected struct (ReplayAnswers.h); its bytes are pinned here, `ReplayMismatchText` writes the same document.
 
 #include <BECore/Control/Json.h>
 #include <BECore/Control/JsonWriteReflect.h>
@@ -12,15 +12,17 @@ namespace BECore::Tests {
 
     namespace {
 
+        /// The mismatch of an action entry at line 5; the entry text is what the player makes once
         ReplayMismatch MakeMismatch(ReplayMismatchKind kind) {
             ReplayMismatch mismatch;
             mismatch.index = 3;
             mismatch.kind = kind;
             mismatch.entry.op = ReplayOp::Action;
-            mismatch.entry.params = Json::parse(R"({"type":"roll","z":[1,2]})");
-            mismatch.entry.outcome = Json::parse(R"({"value":4})");
+            mismatch.entry.params = R"({"type":"roll","z":[1,2]})";
+            mismatch.entry.outcome = String(R"({"value":4})");
             mismatch.entry.gap = ReplayGap{2, 0.5};
             mismatch.entry.line = 5;
+            mismatch.entryText = FormatReplayEntry(mismatch.entry);
             return mismatch;
         }
 
@@ -32,57 +34,48 @@ namespace BECore::Tests {
             return out;
         }
 
-        String AnswerText(const ReplayMismatch& mismatch) {
-            ReplayMismatchAnswer answer;
-            FillReplayMismatchAnswer(answer, mismatch);
-            return Written(answer);
-        }
-
     }  // namespace
 
-    TEST(ReplayWireTest, ARefusedEntryIsTheBytesOfTheDomWithTheError) {
+    TEST(ReplayWireTest, ARefusedEntryIsTheEntryAsALineAndTheError) {
         ReplayMismatch mismatch = MakeMismatch(ReplayMismatchKind::Refused);
         mismatch.error = MakeControlError("illegal_action", "the lock \"arm\" is not over");
 
-        EXPECT_EQ(AnswerText(mismatch), DumpJson(ReplayMismatchJson(mismatch)));
+        EXPECT_EQ(ReplayMismatchText(mismatch), R"({"entry":{"op":"action","params":{"type":"roll","z":[1,2]},"outcome":{"value":4},"gap":{"frames":2,"seconds":0.5}},)"
+                                                R"("error":{"code":"illegal_action","message":"the lock \"arm\" is not over"},"index":3,"kind":"refused","line":5})");
     }
 
-    TEST(ReplayWireTest, ADifferingOutcomeIsTheBytesOfTheDomWithExpectedAndActual) {
+    TEST(ReplayWireTest, ADifferingOutcomeCarriesExpectedAndActualAsTheyAre) {
         ReplayMismatch mismatch = MakeMismatch(ReplayMismatchKind::OutcomeDiffers);
-        mismatch.expected = Json::parse(R"({"value":4})");
-        mismatch.actual = Json::parse(R"({"value":5,"a":null})");
+        mismatch.expected = String(R"({"value":4})");
+        mismatch.actual = String(R"({"a":null,"value":5})");
 
-        EXPECT_EQ(AnswerText(mismatch), DumpJson(ReplayMismatchJson(mismatch)));
+        EXPECT_EQ(ReplayMismatchText(mismatch), R"({"actual":{"a":null,"value":5},"entry":{"op":"action","params":{"type":"roll","z":[1,2]},"outcome":{"value":4},"gap":{"frames":2,"seconds":0.5}},)"
+                                                R"("expected":{"value":4},"index":3,"kind":"outcome_differs","line":5})");
     }
 
-    TEST(ReplayWireTest, ADifferingStartIsTheBytesOfTheDomWithTheParamsOfTheEntryAndTheStart) {
+    TEST(ReplayWireTest, ADifferingStartCarriesTheParamsOfTheEntryAndTheStart) {
         ReplayMismatch mismatch = MakeMismatch(ReplayMismatchKind::StartDiffers);
         mismatch.entry.op = ReplayOp::Reset;
         mismatch.entry.outcome.reset();
-        mismatch.expected = Json::parse(R"({"seed":21})");
-        mismatch.actual = Json::parse(R"({"seed":1})");
+        mismatch.entryText = FormatReplayEntry(mismatch.entry);
+        mismatch.expected = String(R"({"seed":21})");
+        mismatch.actual = String(R"({"seed":1})");
 
-        EXPECT_EQ(AnswerText(mismatch), DumpJson(ReplayMismatchJson(mismatch)));
+        EXPECT_EQ(ReplayMismatchText(mismatch), R"({"actual":{"seed":1},"entry":{"op":"reset","params":{"type":"roll","z":[1,2]},"gap":{"frames":2,"seconds":0.5}},)"
+                                                R"("expected":{"seed":21},"index":3,"kind":"start_differs","line":5})");
     }
 
     TEST(ReplayWireTest, TheMismatchSitsUnderItsKeyInTheAnswerAndOnlyWhenThereIsOne) {
         ReplayMismatch mismatch = MakeMismatch(ReplayMismatchKind::OutcomeDiffers);
-        mismatch.expected = Json::parse(R"({"value":4})");
-        mismatch.actual = Json::parse(R"({"value":5})");
+        mismatch.expected = String(R"({"value":4})");
+        mismatch.actual = String(R"({"value":5})");
         ReplayAnswer failed;
         failed.entries = 3;
         FillReplayMismatchAnswer(failed.mismatch.emplace(), mismatch);
         const ReplayAnswer played;
 
-        const auto failedJson = ParseJson(Written(failed));
-        const auto playedJson = ParseJson(Written(played));
-
-        ASSERT_TRUE(failedJson.has_value());
-        ASSERT_TRUE(playedJson.has_value());
-        const Json* inAnswer = FindJsonMember(*failedJson, "mismatch");
-        ASSERT_NE(inAnswer, nullptr);
-        EXPECT_EQ(*inAnswer, ReplayMismatchJson(mismatch));
-        EXPECT_EQ(FindJsonMember(*playedJson, "mismatch"), nullptr);
+        EXPECT_NE(Written(failed).find(Format("\"mismatch\":{}", ReplayMismatchText(mismatch))), String::npos);
+        EXPECT_EQ(Written(played).find("mismatch"), String::npos);
     }
 
 }  // namespace BECore::Tests

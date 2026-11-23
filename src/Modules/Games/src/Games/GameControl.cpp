@@ -165,7 +165,7 @@ namespace BECore {
                 return;
             }
 
-            if (auto reset = ControlledReset(*control, call.ParamsJson()); !reset) {
+            if (auto reset = ControlledReset(*control, call.Params()); !reset) {
                 call.Fail(reset.error());
                 return;
             }
@@ -206,7 +206,7 @@ namespace BECore {
                 call.Fail(active.error());
                 return;
             }
-            const auto outcome = ControlledAction(*active->control, call.ParamsJson());
+            const auto outcome = ControlledAction(*active->control, call.Params());
             if (!outcome) {
                 call.Fail(outcome.error());
                 return;
@@ -224,7 +224,7 @@ namespace BECore {
                 call.Fail(active.error());
                 return;
             }
-            if (auto loaded = ControlledSetState(*active->control, call.ParamsJson()); !loaded) {
+            if (auto loaded = ControlledSetState(*active->control, call.Params()); !loaded) {
                 call.Fail(loaded.error());
                 return;
             }
@@ -474,26 +474,32 @@ namespace BECore {
             AdvanceRunUntil(service, call, std::move(state));
         }
 
+        /// The view as a DOM for the adapter that still takes one; the DOM refuses a number past a double that the tape took, and that reads as `{}`
+        Json ToDom(JsonView value) {
+            auto parsed = ParseJson(value.Raw());
+            return parsed ? std::move(*parsed) : Json::object();
+        }
+
     }  // namespace
 
-    std::expected<void, ControlError> ControlledReset(IControllableGame& game, const Json& options) {
-        auto reset = game.Reset(options);
+    std::expected<void, ControlError> ControlledReset(IControllableGame& game, JsonView options) {
+        auto reset = game.Reset(ToDom(options));
         if (reset && SessionRecorder::GetInstance().IsRecording()) {
-            SessionRecorder::GetInstance().ReportReset(game.GetReplayStart());
+            SessionRecorder::GetInstance().ReportReset(DumpJson(game.GetReplayStart()));
         }
         return reset;
     }
 
-    std::expected<Json, ControlError> ControlledAction(IControllableGame& game, const Json& action) {
-        auto outcome = game.PerformAction(action);
-        if (outcome) {
-            SessionRecorder::GetInstance().ReportAction(action, *outcome);
+    std::expected<Json, ControlError> ControlledAction(IControllableGame& game, JsonView action) {
+        auto outcome = game.PerformAction(ToDom(action));
+        if (outcome && SessionRecorder::GetInstance().IsRecording()) {
+            SessionRecorder::GetInstance().ReportAction(action, DumpJson(*outcome));
         }
         return outcome;
     }
 
-    std::expected<void, ControlError> ControlledSetState(IControllableGame& game, const Json& state) {
-        auto loaded = game.SetState(state);
+    std::expected<void, ControlError> ControlledSetState(IControllableGame& game, JsonView state) {
+        auto loaded = game.SetState(ToDom(state));
         if (loaded) {
             SessionRecorder::GetInstance().ReportSetState(state);
         }

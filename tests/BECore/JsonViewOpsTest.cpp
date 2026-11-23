@@ -4,6 +4,7 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Control/JsonViewOps.h>
 #include <Common/AllocCheck.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
 
@@ -11,30 +12,15 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// A tape over @p text that stays alive with the fixture
-        struct Doc {
-            explicit Doc(StringView source) : text(source.data(), source.size()) {
-                parsed = tape.Parse(text).has_value();
-            }
-
-            JsonView Root() const {
-                return JsonView(tape, 0);
-            }
-
-            String text;
-            JsonTape tape;
-            bool parsed = false;
-        };
-
         StringView View(const String& text) {
             return StringView(text.c_str(), text.size());
         }
 
         bool Equal(StringView a, StringView b) {
-            const Doc left(a);
-            const Doc right(b);
-            EXPECT_TRUE(left.parsed) << "not JSON: " << String(a.data(), a.size()).c_str();
-            EXPECT_TRUE(right.parsed) << "not JSON: " << String(b.data(), b.size()).c_str();
+            const JsonDoc left(a);
+            const JsonDoc right(b);
+            EXPECT_TRUE(left.IsParsed()) << "not JSON: " << String(a.data(), a.size()).c_str();
+            EXPECT_TRUE(right.IsParsed()) << "not JSON: " << String(b.data(), b.size()).c_str();
             const bool equal = JsonEquals(left.Root(), right.Root());
             EXPECT_EQ(JsonEquals(right.Root(), left.Root()), equal) << "equality is not symmetric";
             return equal;
@@ -60,8 +46,8 @@ namespace BECore::Tests {
             return out;
         }
 
-        Doc PointerDocument() {
-            return Doc(R"({"":3,"0":"zero","a":{"b":[10,{"c":"deep"},20]},"a/b":1,"e\u0041":"escaped key","list":[1,2,3],"m~n":2,"s":"text"})");
+        JsonDoc PointerDocument() {
+            return JsonDoc(R"({"":3,"0":"zero","a":{"b":[10,{"c":"deep"},20]},"a/b":1,"e\u0041":"escaped key","list":[1,2,3],"m~n":2,"s":"text"})");
         }
 
         /// The value at @p pointer by the view overload as JSON text; "absent" or "error: <message>"
@@ -152,7 +138,7 @@ namespace BECore::Tests {
     }
 
     TEST(JsonViewOpsTest, ViewsThatAreNotValidAreEqualOnlyToEachOther) {
-        const Doc doc("null");
+        const JsonDoc doc("null");
 
         EXPECT_TRUE(JsonEquals(JsonView(), JsonView()));
         EXPECT_FALSE(JsonEquals(JsonView(), doc.Root()));
@@ -160,8 +146,8 @@ namespace BECore::Tests {
     }
 
     TEST(JsonViewOpsTest, OfTwoEqualKeysTheFirstCounts) {
-        const Doc left(R"({"a":1,"a":1})");
-        const Doc right(R"({"a":1,"a":2})");
+        const JsonDoc left(R"({"a":1,"a":1})");
+        const JsonDoc right(R"({"a":1,"a":2})");
 
         EXPECT_TRUE(JsonEquals(left.Root(), right.Root()));
         EXPECT_FALSE(JsonEquals(right.Root(), left.Root()));
@@ -200,8 +186,8 @@ namespace BECore::Tests {
         };
 
         for (const String& text : corpus) {
-            const Doc doc(View(text));
-            ASSERT_TRUE(doc.parsed) << text.c_str();
+            const JsonDoc doc(View(text));
+            ASSERT_TRUE(doc.IsParsed()) << text.c_str();
             const auto dom = ParseJson(View(text));
             ASSERT_TRUE(dom.has_value()) << text.c_str();
             EXPECT_EQ(Written(doc.Root()), DumpJson(*dom)) << text.c_str();
@@ -209,7 +195,7 @@ namespace BECore::Tests {
     }
 
     TEST(JsonViewOpsTest, WriteJsonKeepsTheOrderOfTheDocument) {
-        const Doc doc(R"({ "b" : 1 , "a" : [ 2 , 3 ] })");
+        const JsonDoc doc(R"({ "b" : 1 , "a" : [ 2 , 3 ] })");
 
         EXPECT_EQ(Written(doc.Root()), R"({"b":1,"a":[2,3]})");
     }
@@ -219,7 +205,7 @@ namespace BECore::Tests {
     }
 
     TEST(JsonViewOpsTest, WriteJsonWritesASubValueInsideAnOpenContainer) {
-        const Doc doc(R"({"x":[1,{"y":2}]})");
+        const JsonDoc doc(R"({"x":[1,{"y":2}]})");
         String out;
         JsonWriter writer(out);
 
@@ -241,8 +227,8 @@ namespace BECore::Tests {
         for (size_t i = 0; i < depth; ++i) {
             text += ']';
         }
-        const Doc doc(View(text));
-        ASSERT_TRUE(doc.parsed);
+        const JsonDoc doc(View(text));
+        ASSERT_TRUE(doc.IsParsed());
         String out;
         JsonWriter writer(out);
 
@@ -255,8 +241,8 @@ namespace BECore::Tests {
     }
 
     TEST(JsonViewOpsTest, PointerAnswersAsTheDomOverloadDoes) {
-        const Doc document = PointerDocument();
-        const auto dom = ParseJson(document.text);
+        const JsonDoc document = PointerDocument();
+        const auto dom = ParseJson(document.Text());
         ASSERT_TRUE(dom.has_value());
         const Vector<String> pointers = {
             "",         "/",         "/a",       "/a/b/0",   "/a/b/1/c",    "/a~1b",      "/m~0n",     "/0", "/list/2", "/missing", "/a/missing/x", "/list/3", "/list/99999999999999999999999999",
@@ -270,7 +256,7 @@ namespace BECore::Tests {
     }
 
     TEST(JsonViewOpsTest, PointerNamesTheDocumentItselfWhenEmpty) {
-        const Doc document = PointerDocument();
+        const JsonDoc document = PointerDocument();
         const auto found = FindJsonPointer(document.Root(), "");
 
         ASSERT_TRUE(found.has_value());
@@ -279,7 +265,7 @@ namespace BECore::Tests {
     }
 
     TEST(JsonViewOpsTest, PointerOfAnyLengthIsHandled) {
-        const Doc document = PointerDocument();
+        const JsonDoc document = PointerDocument();
         String deep;
         for (int i = 0; i < 100000; ++i) {
             deep += "/a";
@@ -318,8 +304,8 @@ namespace BECore::Tests {
     }
 
     TEST(JsonViewOpsTest, EqualityAndWritingOfAShapeAllocateNothingOnceWarm) {
-        const Doc left(R"({"a":[1,2.5,"text",true,null],"b":{"c":"d","e":-7},"f":18446744073709551615})");
-        const Doc right(R"({"f":18446744073709551615,"b":{"e":-7,"c":"d"},"a":[1,2.5,"text",true,null]})");
+        const JsonDoc left(R"({"a":[1,2.5,"text",true,null],"b":{"c":"d","e":-7},"f":18446744073709551615})");
+        const JsonDoc right(R"({"f":18446744073709551615,"b":{"e":-7,"c":"d"},"a":[1,2.5,"text",true,null]})");
         String out;
         out.reserve(256);
         bool equal = false;

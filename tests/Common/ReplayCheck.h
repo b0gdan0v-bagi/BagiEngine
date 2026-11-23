@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonViewOps.h>
 #include <BECore/File/File.h>
 #include <BECore/File/FilePath.h>
 #include <BECore/Format/Format.h>
@@ -68,18 +69,18 @@ namespace BECore::Tests {
             if (const ReplayStep applied = player.Apply(game); !applied) {
                 const ReplayMismatch& mismatch = applied.error();
                 return std::unexpected(ReplayCheckFailure{
-                    Format("'{}': entry {} (line {}) {}: {}", path.string(), mismatch.index, mismatch.entry.line, ReplayMismatchKindName(mismatch.kind), DumpJson(ReplayMismatchJson(mismatch))),
-                    mismatch});
+                    Format("'{}': entry {} (line {}) {}: {}", path.string(), mismatch.index, mismatch.entry.line, ReplayMismatchKindName(mismatch.kind), ReplayMismatchText(mismatch)), mismatch});
             }
         }
         return {};
     }
 
     /**
-     * Plays the replay file into @p game and fails the test unless it plays through and ends in @p expectedState (`GetState()` compares equal).
-     * A failure names the entry, its line in the file and what differed. Use through EXPECT_REPLAY_FINAL_STATE.
+     * Plays the replay file into @p game and fails the test unless it plays through and ends in @p expectedStateJson (the JSON text of the state:
+     * `GetState()` and it are equal as values, whatever the key order). A failure names the entry, its line in the file and what differed.
+     * Use through EXPECT_REPLAY_FINAL_STATE.
      */
-    inline void ExpectReplayFinalState(IGame& game, const std::filesystem::path& path, const Json& expectedState, ReplayStepFn step = StepReplayFrame) {
+    inline void ExpectReplayFinalState(IGame& game, const std::filesystem::path& path, StringView expectedStateJson, ReplayStepFn step = StepReplayFrame) {
         IControllableGame* control = game.AsControllable();
         if (control == nullptr) {
             ADD_FAILURE() << Format("the game '{}' cannot be controlled from outside", game.GetName().ToStringView()).c_str();
@@ -94,11 +95,19 @@ namespace BECore::Tests {
             ADD_FAILURE() << "GetState failed after the replay: " << state.error().message.c_str();
             return;
         }
-        EXPECT_EQ(*state, expectedState) << "the state after '" << path.string() << "'";
+        const String actualText = DumpJson(*state);
+        JsonTape actualTape;
+        JsonTape expectedTape;
+        if (!actualTape.Parse(StringView(actualText.c_str(), actualText.size())) || !expectedTape.Parse(expectedStateJson)) {
+            ADD_FAILURE() << "the expected state is not JSON: " << String(expectedStateJson.data(), expectedStateJson.size()).c_str();
+            return;
+        }
+        EXPECT_TRUE(JsonEquals(JsonView(actualTape, 0), JsonView(expectedTape, 0)))
+            << "the state after '" << path.string() << "'\n actual:   " << actualText.c_str() << "\n expected: " << String(expectedStateJson.data(), expectedStateJson.size()).c_str();
     }
 
 }  // namespace BECore::Tests
 
-/// Plays the replay file @p path into the `IGame` @p game and compares `GetState()` with the `Json` @p expectedState; an optional fourth
+/// Plays the replay file @p path into the `IGame` @p game and compares `GetState()` with the JSON text @p expectedState; an optional fourth
 /// argument is the `ReplayStepFn` of a game that has more to advance than the clock and the scene.
 #define EXPECT_REPLAY_FINAL_STATE(game, path, expectedState, ...) ::BECore::Tests::ExpectReplayFinalState(game, path, expectedState __VA_OPT__(, ) __VA_ARGS__)

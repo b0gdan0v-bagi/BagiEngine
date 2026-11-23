@@ -1,6 +1,7 @@
 #include <BECore/Control/ControlService.h>
 #include <Common/AllocCheck.h>
 #include <Common/ControlTestSupport.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Games/ReplayFile.h>
 #include <gtest/gtest.h>
@@ -30,9 +31,9 @@ namespace BECore::Tests {
         ReplayEntry MakeEntry(ReplayOp op, StringView params, Optional<StringView> outcome, uint64_t frames, double seconds) {
             ReplayEntry entry;
             entry.op = op;
-            entry.params = *ParseJson(params);
+            entry.params = String(params);
             if (outcome) {
-                entry.outcome = *ParseJson(*outcome);
+                entry.outcome = String(*outcome);
             }
             entry.gap = ReplayGap{frames, seconds};
             return entry;
@@ -70,7 +71,7 @@ namespace BECore::Tests {
     }
 
     TEST(ReplayFileTest, LinesAreWrittenInAFixedOrderWithoutANewline) {
-        const ReplayEntry entry = MakeEntry(ReplayOp::Action, R"({"type":"roll","a":1})", StringView(R"({"value":4})"), 3, 0.5);
+        const ReplayEntry entry = MakeEntry(ReplayOp::Action, R"({"a":1,"type":"roll"})", StringView(R"({"value":4})"), 3, 0.5);
 
         EXPECT_EQ(FormatReplayEntry(entry), R"({"op":"action","params":{"a":1,"type":"roll"},"outcome":{"value":4},"gap":{"frames":3,"seconds":0.5}})");
         EXPECT_EQ(FormatReplayHeader(ReplayHeader{"Dice", "0.1.5", ""}), kHeaderLine);
@@ -79,7 +80,7 @@ namespace BECore::Tests {
 
     TEST(ReplayFileTest, EveryShapeOfALineIsTheBytesTheFormatHasAlwaysHad) {
         const ReplayHeader titled{"Di\"ce", "0.1.5", "caf\xC3\xA9 \\ \xFF end\n"};
-        const ReplayEntry nested = MakeEntry(ReplayOp::Action, R"({"z":[1,2.5,{"b":null,"a":"x\ty"}],"type":"roll"})", StringView(R"({"value":-4,"big":9223372036854775808})"), 120, 2.0);
+        const ReplayEntry nested = MakeEntry(ReplayOp::Action, R"({"type":"roll","z":[1,2.5,{"a":"x\ty","b":null}]})", StringView(R"({"big":9223372036854775808,"value":-4})"), 120, 2.0);
 
         const Vector<String> lines = {FormatReplayHeader(titled), FormatReplayEntry(MakeEntry(ReplayOp::Reset, R"({"seed":8})", std::nullopt, 0, 0.0)),
                                       FormatReplayEntry(MakeEntry(ReplayOp::State, R"({})", std::nullopt, 7, 0.1)),
@@ -101,6 +102,20 @@ namespace BECore::Tests {
 
         ExpectNoAllocations([&] { AppendReplayEntry(scratch, entry); });
 
+        EXPECT_EQ(scratch, first);
+    }
+
+    TEST(ReplayFileTest, TheLineWrittenFromAViewIsTheLineOfTheTexts) {
+        const JsonDoc params(R"({"type":"roll","a":[1,2]})");
+        const ReplayEntry entry = MakeEntry(ReplayOp::Action, R"({"type":"roll","a":[1,2]})", StringView(R"({"value":4})"), 3, 0.5);
+        String scratch;
+        AppendReplayEntry(scratch, ReplayOp::Action, params.Root(), StringView(R"({"value":4})"), entry.gap);  // grows the scratch
+        const String first = scratch;
+        scratch.clear();
+
+        ExpectNoAllocations([&] { AppendReplayEntry(scratch, ReplayOp::Action, params.Root(), StringView(R"({"value":4})"), entry.gap); });
+
+        EXPECT_EQ(first, FormatReplayEntry(entry));
         EXPECT_EQ(scratch, first);
     }
 
@@ -169,6 +184,42 @@ namespace BECore::Tests {
         EXPECT_EQ(Refused(Lines({kHeaderLine, "7"})).line, 2u);
         EXPECT_EQ(Refused(Lines({kHeaderLine, kResetLine, "{not json"})).line, 3u);
         EXPECT_EQ(Refused(Lines({"[]"})).line, 1u);
+    }
+
+    TEST(ReplayFileTest, ATextThatIsNotJsonCarriesTheMessageOfTheTape) {
+        const ReplayError error = Refused(Lines({kHeaderLine, kResetLine, "{not json"}));
+
+        EXPECT_EQ(error.line, 3u);
+        EXPECT_EQ(error.message.find("not JSON: "), 0u) << error.message.c_str();
+    }
+
+    TEST(ReplayFileTest, ALineWithBlanksReadsAndIsWrittenBackCompact) {
+        constexpr StringView kSpaced = R"( { "op" : "action" , "params" : { "type" : "roll" , "n" : [ 1 , 2 ] } , "outcome" : { "v" : 4 } , "gap" : { "frames" : 3 , "seconds" : 0.5 } } )";
+
+        const auto parsed = ParseReplay(Lines({kHeaderLine, kResetLine, kSpaced}));
+
+        ASSERT_TRUE(parsed.has_value()) << DescribeReplayError(parsed.error()).c_str();
+        const ReplayEntry& entry = parsed->entries[1];
+        EXPECT_EQ(entry.params, R"({"type":"roll","n":[1,2]})");
+        EXPECT_EQ(entry.outcome, String(R"({"v":4})"));
+        EXPECT_EQ(FormatReplayEntry(entry), R"({"op":"action","params":{"type":"roll","n":[1,2]},"outcome":{"v":4},"gap":{"frames":3,"seconds":0.5}})");
+    }
+
+    TEST(ReplayFileTest, OfTwoEqualKeysTheFirstCountsWhenTheParamsAreRead) {
+        const auto parsed = ParseReplay(Lines({kHeaderLine, R"({"op":"reset","params":{"seed":1,"seed":2},"gap":{"frames":0,"seconds":0}})"}));
+
+        ASSERT_TRUE(parsed.has_value()) << DescribeReplayError(parsed.error()).c_str();
+        const JsonDoc params(StringView(parsed->entries[0].params.c_str(), parsed->entries[0].params.size()));
+        const Optional<JsonView> seed = params.Root().Find("seed");
+        ASSERT_TRUE(seed.has_value());
+        EXPECT_EQ(seed->AsInt64(), 1);
+    }
+
+    TEST(ReplayFileTest, AnEscapeInParamsIsWrittenBackAsTheWriterEscapesIt) {
+        const auto parsed = ParseReplay(Lines({kHeaderLine, R"({"op":"reset","params":{"k\u0041":"a\u0062\n"},"gap":{"frames":0,"seconds":0}})"}));
+
+        ASSERT_TRUE(parsed.has_value()) << DescribeReplayError(parsed.error()).c_str();
+        EXPECT_EQ(parsed->entries[0].params, R"({"kA":"ab\n"})");
     }
 
     TEST(ReplayFileTest, AnUnknownOpIsRefusedWithItsName) {

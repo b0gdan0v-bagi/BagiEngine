@@ -620,9 +620,9 @@ namespace BECore::Tests {
         /// A replay entry of the old recorder: the pieces dumped from `Json` and joined with `AppendFormat`
         String FormatReplayEntryDom(const ReplayEntry& entry) {
             String line;
-            AppendFormat(line, "{{\"op\":\"action\",\"params\":{}", DumpJson(entry.params));
+            AppendFormat(line, "{{\"op\":\"action\",\"params\":{}", DumpJson(*ParseJson(entry.params)));
             if (entry.outcome) {
-                AppendFormat(line, ",\"outcome\":{}", DumpJson(*entry.outcome));
+                AppendFormat(line, ",\"outcome\":{}", DumpJson(*ParseJson(*entry.outcome)));
             }
             AppendFormat(line, ",\"gap\":{{\"frames\":{},\"seconds\":{}}}}}", entry.gap.frames, DumpJson(Json(entry.gap.seconds)));
             return line;
@@ -697,8 +697,8 @@ namespace BECore::Tests {
         constexpr const char* kPrefix = "ReplayLine";
         ReplayEntry entry;
         entry.op = ReplayOp::Action;
-        entry.params = *ParseJson(R"({"type":"play","card":3,"seat":1})");
-        entry.outcome = *ParseJson(R"({"legal":true,"points":4,"table":[1,2,3]})");
+        entry.params = R"({"card":3,"seat":1,"type":"play"})";
+        entry.outcome = String(R"({"legal":true,"points":4,"table":[1,2,3]})");
         entry.gap = ReplayGap{3, 0.05};
         EXPECT_EQ(FormatReplayEntryDom(entry), FormatReplayEntry(entry));
         Print(kPrefix, "entry-dom", MeasureRoomDom([&] { return FormatReplayEntryDom(entry); }));

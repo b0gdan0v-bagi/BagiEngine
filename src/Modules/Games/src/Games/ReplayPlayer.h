@@ -1,7 +1,6 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
-#include <BECore/Control/Json.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <Games/ReplayFile.h>
@@ -25,10 +24,11 @@ namespace BECore {
     struct ReplayMismatch {
         size_t index = 0;   ///< 0-based position among the entries of the file
         ReplayEntry entry;  ///< As the file holds it, `line` included
+        String entryText;   ///< The entry as a line of the file (FormatReplayEntry), made once when the mismatch is found
         ReplayMismatchKind kind = ReplayMismatchKind::Refused;
         Optional<ControlError> error;  ///< `Refused`: what the game answered
-        Optional<Json> expected;       ///< `OutcomeDiffers`: the outcome of the file; `StartDiffers`: the params of the entry
-        Optional<Json> actual;         ///< `OutcomeDiffers`: what the game answered; `StartDiffers`: IControllableGame::GetReplayStart()
+        Optional<String> expected;     ///< JSON text; `OutcomeDiffers`: the outcome of the file; `StartDiffers`: the params of the entry
+        Optional<String> actual;       ///< JSON text; `OutcomeDiffers`: what the game answered; `StartDiffers`: the replay start of the game
     };
 
     /// The result of applying one entry: success, or the mismatch that ends the replay
@@ -65,11 +65,11 @@ namespace BECore {
     };
 
     /**
-     * @brief The mismatch as the answer of the control method `replay` carries it.
+     * @brief The mismatch as the answer of the control method `replay` carries it, written to JSON text.
      *
-     * {index, line, kind, entry (as a line of the file holds it), error? ({code, message}), expected?, actual?}. The control method answers the same document from the
-     * reflected `ReplayMismatchAnswer` (ReplayAnswers.h); this DOM is for the tests and helpers that read it, and `ReplayWireTest` keeps the two equal.
+     * {index, line, kind, entry (as a line of the file holds it), error? ({code, message}), expected?, actual?}: the reflected `ReplayMismatchAnswer`
+     * (ReplayAnswers.h) that the control method answers, for the tests and helpers that read the text. Defined in ReplayAnswers.cpp.
      */
-    [[nodiscard]] Json ReplayMismatchJson(const ReplayMismatch& mismatch);
+    [[nodiscard]] String ReplayMismatchText(const ReplayMismatch& mismatch);
 
 }  // namespace BECore

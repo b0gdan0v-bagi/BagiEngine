@@ -4,8 +4,8 @@
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlClock.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/File/File.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Games/GameControl.h>
@@ -23,14 +23,14 @@ namespace BECore {
         constexpr size_t kMaxReplayFileBytes = 64ULL * 1024 * 1024;
 
         void HandleRecordStart(ControlCall& call) {
-            const auto path = GetJsonString(call.ParamsJson(), "path");
+            const auto path = GetParamString(call.Params(), "path");
             if (!path || path->empty()) {
                 call.Fail(ControlErrors::kInvalidParams, "'path' has to be a non-empty string");
                 return;
             }
             String title;
-            if (FindJsonMember(call.ParamsJson(), "title") != nullptr) {
-                const auto requested = GetJsonString(call.ParamsJson(), "title");
+            if (FindParam(call.Params(), "title")) {
+                const auto requested = GetParamString(call.Params(), "title");
                 if (!requested) {
                     call.Fail(ControlErrors::kInvalidParams, "'title' has to be a string");
                     return;
@@ -158,7 +158,7 @@ namespace BECore {
         }
 
         void HandleReplay(ControlCall& call, ControlService& service) {
-            const auto path = GetJsonString(call.ParamsJson(), "path");
+            const auto path = GetParamString(call.Params(), "path");
             if (!path || path->empty()) {
                 call.Fail(ControlErrors::kInvalidParams, "'path' has to be a non-empty string");
                 return;

@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonFwd.h>
+#include <BECore/Control/JsonView.h>
 #include <BECore/Types/Types.h>
 #include <expected>
 
@@ -39,10 +40,11 @@ namespace BECore {
      * They call the adapter and, only when it accepts, report (a refused call is never recorded), before the caller answers. The
      * control methods reset, perform_action and set_state go through them, and so does a person's input that reaches the same
      * adapter calls. ControlledReset reports IControllableGame::GetReplayStart(), not @p options, so a seed the game drew is in the file.
+     * The views are read for the call only. The adapter still takes a `Json` (the bridge parses the view's text), and ControlledAction answers one.
      * A game never reports a call twice: input that came through a control method is already reported.
      */
-    std::expected<void, ControlError> ControlledReset(IControllableGame& game, const Json& options);
-    std::expected<Json, ControlError> ControlledAction(IControllableGame& game, const Json& action);
-    std::expected<void, ControlError> ControlledSetState(IControllableGame& game, const Json& state);
+    std::expected<void, ControlError> ControlledReset(IControllableGame& game, JsonView options);
+    std::expected<Json, ControlError> ControlledAction(IControllableGame& game, JsonView action);
+    std::expected<void, ControlError> ControlledSetState(IControllableGame& game, JsonView state);
 
 }  // namespace BECore

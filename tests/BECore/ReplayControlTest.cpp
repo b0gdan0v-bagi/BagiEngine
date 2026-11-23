@@ -9,6 +9,7 @@
 #include <BECore/Time/Time.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/TempPath.h>
@@ -143,9 +144,9 @@ namespace BECore::Tests {
         const ParsedReplay replay = ParseRecording();
         ASSERT_EQ(replay.entries.size(), 4u);
         EXPECT_EQ(replay.entries[0].op, ReplayOp::Reset);
-        EXPECT_EQ(replay.entries[0].params, Params(R"({"seed":9})"));
+        EXPECT_EQ(replay.entries[0].params, R"({"seed":9})");
         EXPECT_EQ(replay.entries[1].op, ReplayOp::Action);
-        EXPECT_EQ(replay.entries[2].params, Params(R"({"type":"arm"})"));
+        EXPECT_EQ(replay.entries[2].params, R"({"type":"arm"})");
         EXPECT_EQ(replay.entries[3].op, ReplayOp::State);
     }
 
@@ -315,16 +316,16 @@ namespace BECore::Tests {
             /// reset, roll, arm, a wait of the lock, roll, set_state, roll: the arm / timer gap is in the file (6 entries, 3 frames of gaps)
             String RecordSession() {
                 EXPECT_TRUE(SessionRecorder::GetInstance().Start(PathText(), *GameManager::GetInstance().GetActive(), "session").has_value());
-                EXPECT_TRUE(ControlledReset(Game(), Params(R"({"seed":21})")).has_value());
+                EXPECT_TRUE(ControlledReset(Game(), JsonDoc(R"({"seed":21})")).has_value());
                 Frame();
-                EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"roll"})")).has_value());
-                EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"arm"})")).has_value());
+                EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
+                EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"arm"})")).has_value());
                 for (int i = 0; i < kLockFrames; ++i) {
                     Frame();
                 }
-                EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"roll"})")).has_value());
-                EXPECT_TRUE(ControlledSetState(Game(), Params(R"({"rolls":[6,6]})")).has_value());
-                EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"roll"})")).has_value());
+                EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
+                EXPECT_TRUE(ControlledSetState(Game(), JsonDoc(R"({"rolls":[6,6]})")).has_value());
+                EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
                 SessionRecorder::GetInstance().Stop();
                 return ReadRecording();
             }

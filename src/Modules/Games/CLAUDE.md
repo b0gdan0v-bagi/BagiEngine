@@ -47,7 +47,7 @@ Writing the adapter of a game:
 
 ## Record and replay
 
-A recording is JSON lines of the accepted `reset`, `perform_action` and `set_state` calls; a game opts in with `IsReplayable()` and `GetReplayStart()`, and is replayable only when all its randomness comes from the seed and its delayed tasks follow game time. `record_start` and `record_stop` are the reflected structs of `ReplayAnswers.h`; `replay` is a reflected `ReplayAnswer` (counts, clock and the `mismatch`, a `ReplayMismatchAnswer` that borrows the game's own documents; `ReplayMismatchJson` is its DOM twin for tests, `ReplayWireTest` keeps the two equal). The file format, the methods, the mismatch kinds and the adoption steps: `.claude/rules/games-replay.md`.
+A recording is JSON lines of the accepted `reset`, `perform_action` and `set_state` calls; a game opts in with `IsReplayable()` and `GetReplayStart()`, and is replayable only when all its randomness comes from the seed and its delayed tasks follow game time. `record_start` and `record_stop` are the reflected structs of `ReplayAnswers.h`; `replay` is a reflected `ReplayAnswer` (counts, clock and the `mismatch`, a `ReplayMismatchAnswer` of views of the mismatch's own texts; `ReplayMismatchText` writes it for tests, `ReplayWireTest` pins its bytes). The file format, the methods, the mismatch kinds and the adoption steps: `.claude/rules/games-replay.md`.
 
 ## Seats (`ISeatedGame`)
 

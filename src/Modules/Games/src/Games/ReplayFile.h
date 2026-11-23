@@ -1,6 +1,6 @@
 #pragma once
 
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonView.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <cstdint>
@@ -38,8 +38,10 @@ namespace BECore {
     /// One accepted call of the control API
     struct ReplayEntry {
         ReplayOp op = ReplayOp::Reset;
-        Json params = Json::object();  ///< `reset`: IControllableGame::GetReplayStart(); `action`, `state`: what the caller sent
-        Optional<Json> outcome;        ///< What PerformAction answered; only `action` has one
+        /// Compact JSON text of one object: `reset`: IControllableGame::GetReplayStart(); `action`, `state`: what the caller sent
+        String params = "{}";
+        /// Compact JSON text of one value: what PerformAction answered; only `action` has one
+        Optional<String> outcome;
         ReplayGap gap;
         size_t line = 0;  ///< 1-based line of the file the entry was read from; 0 for an entry that was not read from a file
     };
@@ -63,8 +65,13 @@ namespace BECore {
     [[nodiscard]] String FormatReplayHeader(const ReplayHeader& header);
 
     /// Appends an entry to @p out as one line of JSON without a newline; members in the order `op`, `params`, `outcome`, `gap`, so two recordings of one
-    /// session diff cleanly. A caller that keeps @p out (cleared between entries) allocates nothing once it has grown
+    /// session diff cleanly. The two texts are written as they are, so they have to be one JSON value each. A caller that keeps @p out (cleared
+    /// between entries) allocates nothing once it has grown
     void AppendReplayEntry(String& out, const ReplayEntry& entry);
+
+    /// The same line from the parts a recorder holds: @p params is written from the view in the order of its document (a value that is not an
+    /// object is written as `{}`), @p outcomeText is ready JSON of one value, or nullopt for an entry that has none
+    void AppendReplayEntry(String& out, ReplayOp op, JsonView params, Optional<StringView> outcomeText, const ReplayGap& gap);
 
     /// AppendReplayEntry() into a new string
     [[nodiscard]] String FormatReplayEntry(const ReplayEntry& entry);
@@ -73,7 +80,9 @@ namespace BECore {
      * @brief Reads a replay file.
      *
      * The text is untrusted (a person or a model edits these files): the first reason it cannot be used is returned with its
-     * line, and nothing aborts. Blank lines are skipped. The first entry has to be a `reset`: the file is of one game from a start.
+     * line, and nothing aborts. Blank lines are skipped. The first entry has to be a `reset`: the file is of one game from a start. Each line is
+     * read over a JsonTape, never a DOM; `params` and `outcome` are kept as the compact text of their value, so a hand-edited line with blanks reads
+     * as its compact form and of two equal keys the first counts.
      */
     [[nodiscard]] std::expected<ParsedReplay, ReplayError> ParseReplay(StringView text);
 
