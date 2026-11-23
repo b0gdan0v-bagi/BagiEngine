@@ -16,9 +16,12 @@
 #   ENGINE_PROFILER_ALLOC       OFF  The global operator new / delete are replaced to count allocations (BE_PROFILER_ALLOC=1).
 #                                    Needs ENGINE_PROFILER.
 #   ENGINE_PROFILER_TRACY       OFF  The vendored Tracy client and its backend (BE_PROFILER_TRACY=1). Needs ENGINE_PROFILER.
+#   ENGINE_PROFILER_STATS       OFF  The stats build (BE_PROFILER_STATS=1): ON forces ENGINE_PROFILER ON, also on the web, where this is the one way
+#                                    to switch the profiler on (the frame-ring overlay of a shipped page). It adds no allocation counting and no Tracy.
 #
 # The browser (Emscripten) build has no Vulkan, no sockets server and no shared libraries, so on EMSCRIPTEN those three are forced
-# to the values above; the profiler is for the PC, so its three options are forced off there too. Threads are not forced: the default there is OFF like everywhere, which is a threaded page (-pthread and a
+# to the values above; the profiler is for the PC, so ENGINE_PROFILER follows ENGINE_PROFILER_STATS there (off unless the stats build is asked for) and
+# ENGINE_PROFILER_ALLOC and ENGINE_PROFILER_TRACY are forced off. Threads are not forced: the default there is OFF like everywhere, which is a threaded page (-pthread and a
 # pool of Web Workers, the page then needs cross-origin isolation); ENGINE_SINGLE_THREAD=ON is the single-thread page (the presets
 # web-*-single-thread). ENGINE_TARGET_WEB mirrors EMSCRIPTEN for the other cmake files. A desktop build can switch the options one
 # by one to check the web configuration without an Emscripten SDK (cmake/CLAUDE.md, "Web-like build on the desktop").
@@ -37,12 +40,19 @@ option(ENGINE_SINGLE_THREAD "Run the task system without worker threads" OFF)
 option(ENGINE_PROFILER "Record the BE_PROFILE_* zones, frames and counters" OFF)
 option(ENGINE_PROFILER_ALLOC "Replace the global operator new / delete to count allocations (needs ENGINE_PROFILER)" OFF)
 option(ENGINE_PROFILER_TRACY "Build the vendored Tracy client and its profiler backend (needs ENGINE_PROFILER)" OFF)
+option(ENGINE_PROFILER_STATS "The stats build: the profiler on, with the frame-ring overlay and the trace export, also on the web" OFF)
+
+# The stats build is the one way to get the profiler on the web, where ENGINE_PROFILER alone is forced off
+if(ENGINE_PROFILER_STATS)
+    set(ENGINE_PROFILER ON CACHE BOOL "Record the BE_PROFILE_* zones, frames and counters" FORCE)
+    message(STATUS "Profiler stats build: ENGINE_PROFILER_STATS=ON (zones into the frame ring, the overlay, the trace export)")
+endif()
 
 if(ENGINE_TARGET_WEB)
     set(ENGINE_WITH_VULKAN OFF CACHE BOOL "Build the Vulkan renderer backend (VulkanModule)" FORCE)
     set(ENGINE_WITH_REMOTE_CONTROL OFF CACHE BOOL "Build the sockets of the engine: RemoteControlModule (the control API server, the WebSocket client) and RoomServer" FORCE)
     set(ENGINE_STATIC_SDL ON CACHE BOOL "Build SDL3 and SDL3_image as static libraries" FORCE)
-    set(ENGINE_PROFILER OFF CACHE BOOL "Record the BE_PROFILE_* zones, frames and counters" FORCE)
+    set(ENGINE_PROFILER ${ENGINE_PROFILER_STATS} CACHE BOOL "Record the BE_PROFILE_* zones, frames and counters" FORCE)
     set(ENGINE_PROFILER_ALLOC OFF CACHE BOOL "Replace the global operator new / delete to count allocations (needs ENGINE_PROFILER)" FORCE)
     set(ENGINE_PROFILER_TRACY OFF CACHE BOOL "Build the vendored Tracy client and its profiler backend (needs ENGINE_PROFILER)" FORCE)
     add_compile_definitions(PLATFORM_WEB)
@@ -58,7 +68,7 @@ if(ENGINE_TARGET_WEB)
     # EASTL's debug break for ARM is inline assembly ("BKPT 10") that wasm cannot assemble (assert.cpp: "invalid instruction"); a trap is
     # what the web has (the same as ENGINE_DEBUG_BREAK in BECore/Assert/PlatformDebug.h)
     add_compile_definitions(EASTL_DEBUG_BREAK_OVERRIDE=__builtin_trap)
-    message(STATUS "Target: web (Emscripten), Vulkan, remote control, shared SDL and the profiler are forced off")
+    message(STATUS "Target: web (Emscripten), Vulkan, remote control and shared SDL are forced off, the profiler unless ENGINE_PROFILER_STATS is ON")
 endif()
 
 if(ENGINE_WITH_VULKAN)
@@ -127,5 +137,10 @@ if(ENGINE_PROFILER_TRACY)
     add_compile_definitions(BE_PROFILER_TRACY=1)
 else()
     add_compile_definitions(BE_PROFILER_TRACY=0)
+endif()
+if(ENGINE_PROFILER_STATS)
+    add_compile_definitions(BE_PROFILER_STATS=1)
+else()
+    add_compile_definitions(BE_PROFILER_STATS=0)
 endif()
 message(STATUS "Profiler: ${ENGINE_PROFILER} (allocations ${ENGINE_PROFILER_ALLOC}, Tracy ${ENGINE_PROFILER_TRACY})")

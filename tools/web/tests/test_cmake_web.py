@@ -18,8 +18,9 @@ from pathlib import Path
 ENGINE_DIR = Path(__file__).resolve().parents[3]
 PRESETS_FILE = ENGINE_DIR / "CMakePresets.json"
 CHECK_SCRIPT = Path(__file__).resolve().parent / "check_bagi_web.cmake"
-THREADED_PRESETS = ("web-debug", "web-release")
-SINGLE_THREAD_PRESETS = ("web-debug-single-thread", "web-release-single-thread")
+THREADED_PRESETS = ("web-debug", "web-release", "web-release-stats")
+SINGLE_THREAD_PRESETS = ("web-debug-single-thread", "web-release-single-thread", "web-release-single-thread-stats")
+STATS_PRESETS = ("web-release-stats", "web-release-single-thread-stats")
 WEB_PRESETS = THREADED_PRESETS + SINGLE_THREAD_PRESETS
 CMAKE = shutil.which("cmake")
 
@@ -92,6 +93,18 @@ class WebPresetsTest(unittest.TestCase):
         for name in SINGLE_THREAD_PRESETS:
             with self.subTest(name):
                 self.assertEqual(resolve_configure_preset(self.presets, name)["cacheVariables"]["ENGINE_SINGLE_THREAD"], "ON")
+
+    def test_the_stats_presets_switch_the_profiler_on_and_the_others_do_not(self):
+        for name in WEB_PRESETS:
+            with self.subTest(name):
+                variables = resolve_configure_preset(self.presets, name)["cacheVariables"]
+                if name in STATS_PRESETS:
+                    self.assertEqual(variables["ENGINE_PROFILER_STATS"], "ON")
+                    # Allocation counting and Tracy stay off the web; the options file forces them, the presets do not ask
+                    self.assertNotIn("ENGINE_PROFILER_ALLOC", variables)
+                    self.assertNotIn("ENGINE_PROFILER_TRACY", variables)
+                else:
+                    self.assertNotIn("ENGINE_PROFILER_STATS", variables)
 
     def test_each_preset_builds_in_a_folder_of_its_own(self):
         folders = {resolve_configure_preset(self.presets, name)["binaryDir"].replace("${presetName}", name) for name in WEB_PRESETS}
@@ -193,6 +206,15 @@ class WebThreadsTextTest(unittest.TestCase):
         text = self.cmake_text("BagiPlatformOptions.cmake")
         self.assertNotRegex(text, r"set\(ENGINE_SINGLE_THREAD [^)]*FORCE\)")
         self.assertIn('option(ENGINE_SINGLE_THREAD "Run the task system without worker threads" OFF)', text)
+
+    def test_the_profiler_follows_the_stats_option_on_the_web_and_alloc_and_tracy_stay_forced_off(self):
+        text = self.cmake_text("BagiPlatformOptions.cmake")
+        self.assertRegex(text, r"set\(ENGINE_PROFILER \$\{ENGINE_PROFILER_STATS\} CACHE BOOL .*FORCE\)")
+        self.assertNotRegex(text, r"set\(ENGINE_PROFILER OFF CACHE BOOL .*FORCE\)")
+        for option in ("ENGINE_PROFILER_ALLOC", "ENGINE_PROFILER_TRACY"):
+            self.assertRegex(text, rf"set\({option} OFF CACHE BOOL .*FORCE\)")
+        self.assertIn("add_compile_definitions(BE_PROFILER_STATS=1)", text)
+        self.assertIn("add_compile_definitions(BE_PROFILER_STATS=0)", text)
 
     def test_pthread_reaches_every_compile_and_the_link_before_the_first_subdirectory(self):
         text = self.cmake_text("BagiPlatformOptions.cmake")
