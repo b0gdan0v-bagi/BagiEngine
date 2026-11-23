@@ -22,6 +22,24 @@ if(ENGINE_UI_RMLUI)
     list(APPEND TESTS_SOURCES ${RMLUI_TESTS_SOURCES})
 endif()
 
+# A wrong LOG_X format must not compile: each case of CompileFail/LogFormat.cpp is an object target outside "all", and the ctest builds them
+# one after the other (CheckCompileFail.cmake; the control case must build, the others must fail). One test, because two concurrent
+# `cmake --build` of one build folder race on the ninja log.
+set(LOG_FORMAT_CASES ok error error error)
+set(LOG_FORMAT_CASE_TARGETS)
+foreach(CASE_INDEX RANGE 0 3)
+    list(GET LOG_FORMAT_CASES ${CASE_INDEX} CASE_EXPECTED)
+    set(CASE_TARGET BagiLogFormatCase${CASE_INDEX})
+    add_library(${CASE_TARGET} OBJECT EXCLUDE_FROM_ALL CompileFail/LogFormat.cpp)
+    target_compile_definitions(${CASE_TARGET} PRIVATE LOG_FORMAT_CASE=${CASE_INDEX})
+    target_link_libraries(${CASE_TARGET} PRIVATE BECoreModule)
+    list(APPEND LOG_FORMAT_CASE_TARGETS "${CASE_TARGET}:${CASE_EXPECTED}")
+endforeach()
+add_test(NAME BagiLogFormatCompileFail
+    COMMAND ${CMAKE_COMMAND} -DBUILD_DIR=${CMAKE_BINARY_DIR} "-DCASE_TARGETS=${LOG_FORMAT_CASE_TARGETS}"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/CompileFail/CheckCompileFail.cmake)
+set_tests_properties(BagiLogFormatCompileFail PROPERTIES RUN_SERIAL TRUE TIMEOUT 300)
+
 # The fuzz targets: a library of its own, because the libFuzzer executables (cmake/BagiFuzz.cmake) link the same functions
 add_subdirectory(Fuzz)
 
