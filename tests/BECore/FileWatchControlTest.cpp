@@ -75,6 +75,20 @@ namespace BECore::Tests {
             return response;
         }
 
+        /// Like Call, with the params as the text written, which a `Json` cannot hold (an escaped path)
+        Json CallText(StringView method, StringView paramsText, int frames) {
+            Json response;
+            _service.Post(Format(R"({{"id":1,"method":"{}","params":{}}})", method, paramsText), [&response](String text) {
+                auto parsed = ParseJson(text);
+                response = parsed ? std::move(*parsed) : Json();
+            });
+            _service.Drain();
+            for (int i = 0; i < frames; ++i) {
+                _service.EndFrame();
+            }
+            return response;
+        }
+
         String HotValue() const {
             const auto value = _manager.GetConfig(kHot).ParseAttribute<StringView>("value");
             return value ? String(value->data(), value->size()) : String();
@@ -104,6 +118,17 @@ namespace BECore::Tests {
             ASSERT_TRUE(params.has_value());
             EXPECT_EQ(ErrorCode(Call("files_apply", *params)), "invalid_params") << text;
         }
+    }
+
+    TEST_F(FileWatchControlTest, AnEscapedPathIsDecodedBeforeItIsApplied) {
+        StartWatching();
+        EditHot("<HotConfig value=\"two\"/>\n");
+        ASSERT_TRUE(IsOk(Call("files_rescan")));
+
+        const Json applied = CallText("files_apply", R"({"paths":["config\/HotConfig.xml"]})", 1);
+
+        ASSERT_TRUE(IsOk(applied));
+        EXPECT_EQ(HotValue(), "two");
     }
 
     TEST_F(FileWatchControlTest, ARescanOfAnUntouchedFolderListsNothing) {

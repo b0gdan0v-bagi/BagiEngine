@@ -1,6 +1,7 @@
 #include "ProfilerControl.h"
 
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
@@ -67,11 +68,11 @@ namespace BECore {
         }
 
         /// A positive integer member of at most @p max, or @p fallback when absent
-        std::expected<int64_t, ControlError> ReadCount(const Json& params, StringView key, int64_t fallback, int64_t max) {
-            if (FindJsonMember(params, key) == nullptr) {
+        std::expected<int64_t, ControlError> ReadCount(JsonView params, StringView key, int64_t fallback, int64_t max) {
+            if (!FindParam(params, key)) {
                 return fallback;
             }
-            const auto value = GetJsonInt(params, key);
+            const auto value = GetParamInt(params, key);
             if (!value || *value < 1 || *value > max) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'{}' has to be an integer from 1 to {}", key, max)));
             }
@@ -108,7 +109,7 @@ namespace BECore {
         /// The rows of `arenas`, `pools` and `tags` are reflected structs written one at a time: a `Vector` of them would allocate, and the answer allocates nothing
         /// beyond the stats it reads. `allocTracking` is one flag of the same object, written beside the streamed `frames`
         void HandleFrameStats(ControlCall& call) {
-            const auto frames = ReadCount(call.Params(), "frames", 1, static_cast<int64_t>(FrameStatsCollector::kFrameHistory));
+            const auto frames = ReadCount(call.ParamsView(), "frames", 1, static_cast<int64_t>(FrameStatsCollector::kFrameHistory));
             if (!frames) {
                 call.Fail(frames.error());
                 return;
@@ -155,8 +156,9 @@ namespace BECore {
 
         void HandleProfilerDump(ControlCall& call) {
             String path(kDefaultTracePath.data(), kDefaultTracePath.size());
-            if (FindJsonMember(call.Params(), "path") != nullptr) {
-                const auto given = GetJsonString(call.Params(), "path");
+            const JsonView params = call.ParamsView();
+            if (FindParam(params, "path")) {
+                const auto given = GetParamString(params, "path");
                 if (!given || !IsSafeRelativePath(*given)) {
                     call.Fail(ControlErrors::kInvalidParams, "'path' has to be a relative file name without '..'");
                     return;
@@ -181,14 +183,14 @@ namespace BECore {
         }
 
         void HandleZoneAllocs(ControlCall& call) {
-            const auto top = ReadCount(call.Params(), "top", kDefaultTopZones, kMaxTopZones);
+            const auto top = ReadCount(call.ParamsView(), "top", kDefaultTopZones, kMaxTopZones);
             if (!top) {
                 call.Fail(top.error());
                 return;
             }
             bool reset = false;
-            if (FindJsonMember(call.Params(), "reset") != nullptr) {
-                const auto value = GetJsonBool(call.Params(), "reset");
+            if (FindParam(call.ParamsView(), "reset")) {
+                const auto value = GetParamBool(call.ParamsView(), "reset");
                 if (!value) {
                     call.Fail(ControlErrors::kInvalidParams, "'reset' has to be a boolean");
                     return;

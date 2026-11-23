@@ -1,6 +1,7 @@
 #include "SDLScreenshot.h"
 
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
@@ -49,8 +50,8 @@ namespace BECore {
 
         void HandleScreenshot(ControlCall& call) {
             uint32_t maxSize = kDefaultScreenshotSize;
-            if (FindJsonMember(call.Params(), "maxSize") != nullptr) {
-                const auto requested = GetJsonInt(call.Params(), "maxSize");
+            if (FindParam(call.ParamsView(), "maxSize")) {
+                const auto requested = GetParamInt(call.ParamsView(), "maxSize");
                 if (!requested || *requested < kMinScreenshotSize || *requested > kMaxScreenshotSize) {
                     call.Fail(ControlErrors::kInvalidParams, Format("'maxSize' has to be an integer from {} to {}", kMinScreenshotSize, kMaxScreenshotSize));
                     return;

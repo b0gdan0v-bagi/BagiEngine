@@ -1135,6 +1135,19 @@ namespace BECore::Tests {
         EXPECT_FALSE(service.IsStepDue());
     }
 
+    TEST_F(ScreenshotControlTest, AMaxSizePastADoubleIsInvalidParamsNotAParseError) {
+        service.SetManualClock(true);
+        service.Post(R"({"id":1,"method":"screenshot","params":{"maxSize":1e999}})", [this](String text) {
+            auto parsed = ParseJson(text);
+            responses.push_back(parsed ? std::move(*parsed) : Json());
+        });
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_EQ(ErrorCode(responses[0]), "invalid_params");
+        EXPECT_FALSE(service.IsStepDue());
+    }
+
     TEST_F(ScreenshotControlTest, TheLargestAndSmallestSizesAreAccepted) {
         for (const uint32_t size : {kMinScreenshotSize, kMaxScreenshotSize}) {
             DrawFrame();

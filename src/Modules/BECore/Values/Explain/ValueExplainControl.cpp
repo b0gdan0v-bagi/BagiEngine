@@ -1,6 +1,7 @@
 #include "ValueExplainControl.h"
 
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
@@ -38,8 +39,8 @@ namespace BECore {
         }
 
         /// A mistake of the request: a name that is not text
-        std::expected<String, ControlError> ReadText(const Json& params, StringView key) {
-            Optional<String> text = GetJsonString(params, key);
+        std::expected<String, ControlError> ReadText(JsonView params, StringView key) {
+            Optional<String> text = GetParamString(params, key);
             if (!text.has_value()) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'{}' has to be a string", key)));
             }
@@ -129,7 +130,7 @@ namespace BECore {
         }
 
         void HandleExplainValue(ControlCall& call, const ControlService& service) {
-            const Json& params = call.Params();
+            const JsonView params = call.ParamsView();
             const auto rootName = ReadText(params, "root");
             if (!rootName) {
                 call.Fail(rootName.error());
@@ -141,7 +142,7 @@ namespace BECore {
                 return;
             }
             Optional<String> contextName;
-            if (FindJsonMember(params, "context") != nullptr) {
+            if (FindParam(params, "context")) {
                 const auto named = ReadText(params, "context");
                 if (!named) {
                     call.Fail(named.error());
