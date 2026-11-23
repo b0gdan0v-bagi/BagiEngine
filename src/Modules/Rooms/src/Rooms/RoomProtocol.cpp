@@ -2,6 +2,7 @@
 
 #include <Rooms/RoomCode.h>
 #include <Rooms/RoomErrors.h>
+#include <Rooms/RoomWire.h>
 
 namespace BECore {
 
@@ -684,15 +685,14 @@ namespace BECore {
     }
 
     void AppendJoinedMessage(String& out, StringView room, PlayerId player, StringView token, int seat, bool host) {
+        RoomWireJoined wire;
+        wire.host = host;
+        wire.player = player;
+        wire.room = String(room.data(), room.size());
+        wire.seat = seat;
+        wire.token = String(token.data(), token.size());
         JsonWriter writer(out);
-        writer.BeginObject();
-        writer.Member("host", host);
-        writer.Member("player", player);
-        writer.Member("room", room);
-        writer.Member("seat", seat);
-        writer.Member("token", token);
-        WriteTypeAndVersion(writer, RoomMessageTypes::kJoined);
-        writer.EndObject();
+        wire.WriteJson(writer);
         EXPECT(writer.IsComplete());
     }
 
@@ -788,15 +788,14 @@ namespace BECore {
     }
 
     void AppendErrorMessage(String& out, StringView code, StringView message, StringView ref) {
-        JsonWriter writer(out);
-        writer.BeginObject();
-        writer.Member("code", code);
-        writer.Member("message", message);
+        RoomWireError wire;
+        wire.code = String(code.data(), code.size());
+        wire.message = String(message.data(), message.size());
         if (!ref.empty()) {
-            writer.Member("ref", ref);
+            wire.ref = String(ref.data(), ref.size());
         }
-        WriteTypeAndVersion(writer, RoomMessageTypes::kError);
-        writer.EndObject();
+        JsonWriter writer(out);
+        wire.WriteJson(writer);
         EXPECT(writer.IsComplete());
     }
 
@@ -807,11 +806,10 @@ namespace BECore {
     }
 
     void AppendLeftMessage(String& out, StringView reason) {
+        RoomWireLeft wire;
+        wire.reason = String(reason.data(), reason.size());
         JsonWriter writer(out);
-        writer.BeginObject();
-        writer.Member("reason", reason);
-        WriteTypeAndVersion(writer, RoomMessageTypes::kLeft);
-        writer.EndObject();
+        wire.WriteJson(writer);
         EXPECT(writer.IsComplete());
     }
 
@@ -822,10 +820,9 @@ namespace BECore {
     }
 
     void AppendPongMessage(String& out) {
+        const RoomWirePong wire;
         JsonWriter writer(out);
-        writer.BeginObject();
-        WriteTypeAndVersion(writer, RoomMessageTypes::kPong);
-        writer.EndObject();
+        wire.WriteJson(writer);
         EXPECT(writer.IsComplete());
     }
 

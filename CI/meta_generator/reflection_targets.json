@@ -21,6 +21,7 @@
       "src/Modules/BECore/Text",
       "src/Modules/BECore/UI",
       "src/Modules/BECore/Values/Nodes",
+      "src/Modules/Rooms/src/Rooms",
       "src/Widgets/ArtGen",
       "tests/BECore"
     ],
@@ -49,8 +50,9 @@
       "src/Modules/SDL/src/CoreSDL",
       "src/Modules/Vulkan/src/CoreVulkan",
       "src/Modules/Games/src/Games",
+      "src/Modules/Rooms/src/Rooms",
       "tests/BECore"
     ],
-    "include_dirs": ["src/Modules", "src", "src/Modules/Games/src", "tests"]
+    "include_dirs": ["src/Modules", "src", "src/Modules/Games/src", "src/Modules/Rooms/src", "tests"]
   }
 }
