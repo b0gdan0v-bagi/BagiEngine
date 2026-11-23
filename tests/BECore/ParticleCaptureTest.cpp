@@ -8,6 +8,7 @@
 #include <BECore/Time/Time.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/TestFiles.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <CoreSDL/SDLRendererBackend.h>
 #include <CoreSDL/SDLScreenshot.h>
@@ -227,11 +228,9 @@ namespace BECore::Tests {
 
     TEST_F(ParticleCaptureTest, TheExampleEffectIsTheOneTheDocQuotes) {
         const std::filesystem::path path = CoreManager::GetFileSystem().ResolvePath(kParticlesDoc);
-        std::ifstream file(path, std::ios::binary);
-        ASSERT_TRUE(!path.empty() && file.good()) << kParticlesDoc;
-        std::stringstream text;
-        text << file.rdbuf();
-        EXPECT_NE(text.str().find(kExampleEffect), String::npos) << "Particles/CLAUDE.md must quote the example effect of ParticleCaptureTest verbatim";
+        ASSERT_FALSE(path.empty()) << kParticlesDoc;
+        const String text = ReadFile(path);
+        EXPECT_NE(text.find(kExampleEffect), String::npos) << "Particles/CLAUDE.md must quote the example effect of ParticleCaptureTest verbatim";
     }
 
     TEST_F(ParticleCaptureTest, TheBackgroundIsAloneBeforeAnythingIsEmitted) {

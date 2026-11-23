@@ -36,7 +36,8 @@ namespace BECore {
          */
         const Vector<uint8_t>& GetData() const;
 
-        /// Writes the bytes to a file; false if it cannot be written.
+        /// Writes the bytes to a file through WriteFileAtomically: the folder is made and a reader sees the old file or the whole new one,
+        /// never a half file. False if it cannot be written.
         bool SaveToFile(const std::filesystem::path& path) const;
 
         void Write(StringView name, bool value) override;

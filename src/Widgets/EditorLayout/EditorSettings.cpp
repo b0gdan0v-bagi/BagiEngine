@@ -1,7 +1,8 @@
 #include "EditorSettings.h"
 
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <SDL3/SDL_filesystem.h>
-#include <Widgets/EditorLayout/UserFileIo.h>
 
 namespace BECore {
 
@@ -54,7 +55,7 @@ namespace BECore {
                 return false;
             }
             unreadable = true;
-            const std::expected<String, String> text = ReadTextFile(path);
+            const std::expected<String, String> text = ReadTextFile(PathToUtf8(path));
             if (!text) {
                 LOG_WARNING("Editor settings: {}; using the defaults", text.error());
                 return false;
@@ -483,7 +484,7 @@ namespace BECore {
         String text;
         AppendJson(text, content, kJsonIndent);
         text.push_back('\n');
-        const std::expected<void, String> written = WriteTextFileAtomically(path, text);
+        const std::expected<void, String> written = WriteFileAtomically(PathToUtf8(path), text);
         if (!written) {
             _lastSaveError = written.error();
             LOG_ERROR("Editor settings: {}", _lastSaveError);

@@ -1,5 +1,7 @@
 #include "SaveGame.h"
 
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Save/SaveStorage.h>
@@ -125,30 +127,9 @@ namespace BECore {
         }
 
         const std::filesystem::path target = MakePath(slot, kSaveExtension);
-        const std::filesystem::path temp = MakePath(slot, Format("{}{}", kSaveExtension, kSaveTempExtension));
-
-        auto fail = [&](String detail) {
-            std::error_code ignored;
-            std::filesystem::remove(temp, ignored);
-            return MakeError(SaveErrorKind::WriteFailed, std::move(detail));
-        };
-
-        {
-            std::ofstream file(temp, std::ios::binary | std::ios::trunc);
-            if (!file) {
-                return fail(Format("Cannot create '{}'", temp.string()));
-            }
-            file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-            file.close();
-            if (file.fail()) {
-                return fail(Format("Cannot write '{}'", temp.string()));
-            }
-        }
-
-        std::error_code ec;
-        std::filesystem::rename(temp, target, ec);
-        if (ec) {
-            return fail(Format("Cannot replace '{}': {}", target.string(), ec.message()));
+        auto written = WriteFileAtomically(PathToUtf8(target), Span<const uint8_t>(bytes.data(), bytes.size()));
+        if (!written) {
+            return MakeError(SaveErrorKind::WriteFailed, std::move(written.error()));
         }
         NotifySaveChanged();
         return {};
@@ -167,29 +148,11 @@ namespace BECore {
             return MakeError(SaveErrorKind::NotFound, Format("No save in slot '{}'", slot));
         }
 
-        std::error_code ec;
-        if (!std::filesystem::is_regular_file(path, ec)) {
-            return MakeError(SaveErrorKind::ReadFailed, Format("'{}' is not a file", path.string()));
+        auto bytes = ReadFileBytes(PathToUtf8(path), ReaderLimits::kMaxBinaryStreamBytes);
+        if (!bytes) {
+            return MakeError(SaveErrorKind::ReadFailed, std::move(bytes.error()));
         }
-        const uintmax_t size = std::filesystem::file_size(path, ec);
-        if (ec) {
-            return MakeError(SaveErrorKind::ReadFailed, Format("Cannot get the size of '{}': {}", path.string(), ec.message()));
-        }
-        if (size > ReaderLimits::kMaxBinaryStreamBytes) {
-            return MakeError(SaveErrorKind::ReadFailed, Format("'{}' is larger than the limit of {} bytes for a save", path.string(), ReaderLimits::kMaxBinaryStreamBytes));
-        }
-
-        std::ifstream file(path, std::ios::binary);
-        if (!file) {
-            return MakeError(SaveErrorKind::ReadFailed, Format("Cannot open '{}'", path.string()));
-        }
-
-        Vector<uint8_t> bytes(static_cast<size_t>(size));
-        file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-        if (file.gcount() != static_cast<std::streamsize>(bytes.size())) {
-            return MakeError(SaveErrorKind::ReadFailed, Format("Cannot read '{}' to the end", path.string()));
-        }
-        return bytes;
+        return std::move(*bytes);
     }
 
     std::expected<void, SaveError> SaveGameService::Save(StringView slot, const SaveSchema& schema, FunctionRef<void(ISerializer&)> writeState) {

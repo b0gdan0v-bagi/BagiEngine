@@ -66,13 +66,6 @@ namespace BECore::Tests {
                 Game().Update(kFrameSeconds);
             }
 
-            static String ReadFile(const std::filesystem::path& path) {
-                std::ifstream file(path, std::ios::binary);  //-NoStd: see the include
-                std::ostringstream text;                     //-NoStd: see the include
-                text << file.rdbuf();
-                return FromStdString(text.str());
-            }
-
             void WriteFile(StringView text) const {
                 Tests::WriteFile(_path, text);
             }

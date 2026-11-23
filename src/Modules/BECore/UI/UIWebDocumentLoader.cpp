@@ -1,5 +1,7 @@
 #include "UIWebDocumentLoader.h"
 
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/UI/UIDocument.h>
@@ -19,20 +21,11 @@ namespace BECore {
             if (resolved.empty()) {
                 return std::nullopt;
             }
-            std::ifstream stream(resolved, std::ios::binary);
-            if (!stream) {
+            auto text = ReadTextFile(PathToUtf8(resolved));
+            if (!text) {
                 return std::nullopt;
             }
-            std::error_code error;
-            const auto size = std::filesystem::file_size(resolved, error);
-            if (error) {
-                return std::nullopt;
-            }
-            String text(static_cast<size_t>(size), '\0');
-            if (!stream.read(text.data(), static_cast<std::streamsize>(size))) {
-                return std::nullopt;
-            }
-            return text;
+            return std::move(*text);
         }
 
         /// The path of @p href next to the document at @p documentPath

@@ -2,6 +2,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/ConsoleSink.h>
+#include <BECore/Logger/LogTime.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <EASTL/sort.h>
 #include <Generated/LoggerManager.gen.hpp>
@@ -12,6 +13,9 @@ namespace BECore {
         if (_initialized) {
             return;
         }
+
+        // Before any sink: the first zone lookup of a process allocates, and a sink that writes a line must not be the one to pay for it
+        InitLogClock();
 
         if (_sinks.empty()) {
             LOG_WARNING("LoggerConfig yields no sinks, falling back to a ConsoleSink");

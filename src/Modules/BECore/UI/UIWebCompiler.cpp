@@ -1,5 +1,6 @@
 #include "UIWebCompiler.h"
 
+#include <BECore/Config/StringXmlWriter.h>
 #include <BECore/UI/UICssParser.h>
 #include <BECore/UI/UIHtmlParser.h>
 #include <BECore/UI/UISwitchComponent.h>
@@ -2672,12 +2673,7 @@ namespace BECore {
                     }
                 }
 
-                struct StringWriter : pugi::xml_writer {
-                    String text;
-                    void write(const void* data, size_t size) override {
-                        text.append(static_cast<const char*>(data), size);
-                    }
-                } writer;
+                StringXmlWriter writer;
                 document.save(writer, "  ", pugi::format_default | pugi::format_no_declaration);
                 return writer.text;
             }

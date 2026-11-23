@@ -1,6 +1,8 @@
 #include <BECore/ArtGenAnswerText.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
@@ -8,7 +10,6 @@
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenAnswers.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
-#include <Widgets/EditorLayout/UserFileIo.h>
 #include <gtest/gtest.h>
 #include <initializer_list>
 
@@ -588,7 +589,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(path.has_value()) << DumpJson(saved).c_str();
         const std::filesystem::path file = root / "artgen" / "presets" / "sprite.json";
         EXPECT_EQ(*path, String(FromStd(file.generic_string())));
-        const auto text = ReadTextFile(file);
+        const auto text = ReadTextFile(PathToUtf8(file));
         ASSERT_TRUE(text.has_value()) << text.error().c_str();
         EXPECT_EQ(text->find("{\n  \"preset\": 1,\n  \"title\": \"Mine\",\n  \"workflow\": \"sdxl_basic\""), 0u) << text->c_str();
         const auto reread = ParseJson(*text);

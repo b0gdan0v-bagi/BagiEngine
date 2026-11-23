@@ -1,10 +1,11 @@
 #include <BECore/Control/Json.h>
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/Utils/ScopeGuard.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Widgets/EditorLayout/EditorSettings.h>
-#include <Widgets/EditorLayout/UserFileIo.h>
 
 namespace BECore::Tests {
 
@@ -36,10 +37,7 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] String ReadFile(const char* name) const {
-                std::ifstream file(_directory / name, std::ios::binary);
-                std::ostringstream content;
-                content << file.rdbuf();
-                return FromStdString(content.str());
+                return Tests::ReadFile(_directory / name);
             }
 
             [[nodiscard]] bool Exists(const char* name) const {
@@ -596,13 +594,13 @@ namespace BECore::Tests {
         EXPECT_FALSE(Exists("hotkeys.json.tmp"));
 
         const std::filesystem::path path = _directory / "note.txt";
-        ASSERT_TRUE(WriteTextFileAtomically(path, "first").has_value());
-        ASSERT_TRUE(WriteTextFileAtomically(path, "second").has_value());
-        const auto text = ReadTextFile(path);
+        ASSERT_TRUE(WriteFileAtomically(PathToUtf8(path), "first").has_value());
+        ASSERT_TRUE(WriteFileAtomically(PathToUtf8(path), "second").has_value());
+        const auto text = ReadTextFile(PathToUtf8(path));
         ASSERT_TRUE(text.has_value());
         EXPECT_EQ(*text, "second");
         EXPECT_FALSE(std::filesystem::exists(_directory / "note.txt.tmp"));
-        EXPECT_FALSE(ReadTextFile(_directory / "missing.txt").has_value());
+        EXPECT_FALSE(ReadTextFile(PathToUtf8(_directory / "missing.txt")).has_value());
     }
 
     TEST_F(EditorSettingsTest, SaveMakesTheFolder) {

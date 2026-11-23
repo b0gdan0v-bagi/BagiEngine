@@ -27,8 +27,8 @@ Event-based logging. `Logger` pushes entries into a lock-free ring buffer, `LogE
 | Sink | Output | Options |
 |------|--------|---------|
 | `ConsoleSink` | stdout/stderr with ANSI colors (only when that stream is a terminal) | `colorEnabled` |
-| `FileSink` | Thread-safe file logging | `filename`, `append` |
-| `OutputSink` | Platform debug output (`OutputDebugString` on Windows, stderr on macOS; nothing on the web) | none |
+| `FileSink` | Thread-safe file logging through a `TextFileWriter` (a line is formatted into its buffer, no `String` per line; written out when the buffer is full, at `FlushLogsEvent` once per frame, and at destruction; a file that cannot be opened is one `LOG_WARNING`, the sink then writes nothing; a write error stops it quietly) | `filename`, `append` |
+| `OutputSink` | Platform debug output (`OutputDebugString` on Windows, stderr on macOS; nothing on the web); a line is built on the stack by `FormatOutputLine` (cut at `kOutputLineSize`, NUL-terminated) | none |
 | `LogHistorySink` | Keeps the last lines in a `LogHistory` for the editor's Console panel | `capacity` (default 2048, clamped to 64..65536 when `Initialize()` builds the history) |
 
 ## Sink Configuration
@@ -57,7 +57,7 @@ A `type` that is not registered in the factory is logged as an error by `MakeFro
 - `LOG_ERROR("Failed to load {}", path)`: the format string is checked at compile time and formatted into a stack buffer of one ring cell (`LogEntry::MaxMessageSize - 1`, cut like a plain line), so it allocates on no thread. A wrong placeholder count or a type with no formatter does not compile (an extra argument is ignored by {fmt}); ctest `BagiLogFormatCompileFail`. `LOG_ERROR(text)` with one argument is logged raw, no parsing: a `{` in data is safe, and `LOG_ERROR("x {}")` prints `{}`. The line is formatted before the ring claim, so a slow `Formatter` never holds up the consumer. Never `LOG_ERROR(Format(...))` / `LOG_ERROR("..."_format(...))`: it still compiles but builds a heap `String` per line (`Format(...)` is checked at compile time, `"..."_format` only at run time), and the extended ctest `BagiLogCalls` fails on it (`tools/codemod/codemod.py --family log` rewrites it). Tests: `tests/BECore/LoggerFormatTest.cpp`.
 - Pick the level deliberately; `Fatal` is for unrecoverable errors.
 - Sinks receive `StringView`.
-- The sinks get the time of a line from `LogTime.h` (`GetLocalLogTime()`; `FormatLogTimeNow` of `LogHistory.h` makes the `HH:MM:SS.mmm` text) and write it as `{:02}:{:02}:{:02}` of `tm_hour`, `tm_min`, `tm_sec` (`FileSink` also the date), not `{:%H:%M:%S}` of `<fmt/chrono.h>`: the Clang of Emscripten refuses the `FMT_STRING` that header uses inside, and nothing else needs the header. Do not bring it back.
+- The sinks get the time of a line from `LogTime.h` (`GetLocalLogTime()`: the system clock plus the UTC offset that `InitLogClock()` reads once, which `LoggerManager::Initialize` calls before the sinks, because the first `localtime_r` of a process allocates; a change of the zone or a DST switch during a run shows from the next start; `FormatLogTimeNow` of `LogHistory.h` makes the `HH:MM:SS.mmm` text) and write it as `{:02}:{:02}:{:02}` of `tm_hour`, `tm_min`, `tm_sec` (`FileSink` also the date), not `{:%H:%M:%S}` of `<fmt/chrono.h>`: the Clang of Emscripten refuses the `FMT_STRING` that header uses inside, and nothing else needs the header. Do not bring it back.
 
 ## Don't
 

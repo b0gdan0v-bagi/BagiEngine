@@ -888,10 +888,7 @@ namespace BECore::Tests {
 
         // What UINodeFileSession does, over the temporary folder
         const auto read = [&](StringView ref, String& text, String&) {
-            std::ifstream stream(_dir / Format("{}.xml", ref).c_str(), std::ios::binary);  //-NoStd: the test reads its own temporary node file
-            std::ostringstream content;
-            content << stream.rdbuf();
-            text = FromStdString(content.str());
+            text = ReadFile(_dir / Format("{}.xml", ref).c_str());
             return true;
         };
         const auto write = [&](StringView ref, StringView text, String&) {
@@ -975,10 +972,7 @@ namespace BECore::Tests {
         EXPECT_EQ(title->style.rect.x, UILength::Px(33.0f));
 
         const auto read = [&](StringView ref, String& text, String&) {
-            std::ifstream stream(_dir / Format("{}.xml", ref).c_str(), std::ios::binary);  //-NoStd: the test reads its own temporary node file
-            std::ostringstream content;
-            content << stream.rdbuf();
-            text = FromStdString(content.str());
+            text = ReadFile(_dir / Format("{}.xml", ref).c_str());
             return true;
         };
         const auto write = [&](StringView ref, StringView text, String&) {

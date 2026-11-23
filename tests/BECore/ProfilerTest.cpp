@@ -399,11 +399,7 @@ namespace BECore::Tests {
             EXPECT_EQ(EarlyReturn(false), 2);
         }
         EXPECT_EQ(Profiler::GetBackend(), nullptr);
-        std::ifstream stream(file);
-        String text;
-        for (char symbol = 0; stream.get(symbol);) {
-            text.push_back(symbol);
-        }
+        const String text = ReadFile(file);
         const Json events = ParseEvents(text);
         // The function and `Late`, and the zone of the write itself, which is open inside its own file
         EXPECT_EQ(CountPhase(events, "B"), 3u);

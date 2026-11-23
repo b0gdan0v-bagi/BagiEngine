@@ -38,6 +38,7 @@ Without the macros (a target not built through `be_add_game_executable`) the gam
 - Never build asset or config paths by concatenating strings or `std::filesystem` calls in engine or game code; pass the virtual path to `FileSystem`, `ResourceManager` or `ConfigManager`.
 - Use `PoolString` for mount-point names; the engine's own are `MountPoints::assets` / `config` (`MountPoints.h`), a literal is `"name"_intern`.
 - Writing files (saves, config edits) goes through the resolved real path; do not assume the working directory is the root. An edited engine default is written back into the engine checkout (the layer where it was found), not copied into the game.
+- Reading or writing a resolved real path goes through `BECore/File/` (`File/CLAUDE.md`), not a stream; `BECore/pch.h` holds no stream header. A test reaches a host path (a `std::filesystem::path` from `TempPath.h`) through `tests/Common/TestFiles.h` or `PathToUtf8` and the layer.
 - Saves are written into a mounted folder (`saves`) by `SaveGameService` (`Save/CLAUDE.md`), not by hand.
 - A new file for a game belongs in the `config/` or `assets/` of the game's repository; a game file with the name of an engine file replaces it as a whole (configs are not merged).
 

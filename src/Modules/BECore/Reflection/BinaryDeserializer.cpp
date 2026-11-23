@@ -1,3 +1,5 @@
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
@@ -256,27 +258,24 @@ namespace BECore {
     }
 
     std::expected<void, StringView> ReadBinaryDocumentFile(const std::filesystem::path& path, Vector<uint8_t>& out) {
-        std::error_code error;
-        if (!std::filesystem::is_regular_file(path, error)) {
-            // A folder, a pipe or a device has no size to read (tellg() of it is -1)
-            return std::unexpected(std::filesystem::exists(path, error) ? StringView("Binary path is not a regular file") : StringView("Failed to open binary file"));
+        const String utf8Path = PathToUtf8(path);
+        auto bytes = ReadFileBytes(utf8Path, ReaderLimits::kMaxBinaryStreamBytes);
+        if (bytes) {
+            out = std::move(*bytes);
+            return {};
         }
-        const uintmax_t fileSize = std::filesystem::file_size(path, error);
-        if (error || fileSize > ReaderLimits::kMaxBinaryStreamBytes) {
-            return std::unexpected(error ? StringView("Failed to read the size of the binary file") : StringView("Binary file is larger than the limit"));
-        }
-
-        std::ifstream file(path, std::ios::binary);  //-NoStd: a content file, read byte for byte
-        if (!file) {
+        // The layer's error is a sentence for the log; the reader keeps its fixed messages, which say which limit or kind of path it was
+        const Optional<FileInfo> info = GetFileInfo(utf8Path);
+        if (!info) {
             return std::unexpected(StringView("Failed to open binary file"));
         }
-
-        out.resize(static_cast<size_t>(fileSize));
-        if (!file.read(reinterpret_cast<char*>(out.data()), static_cast<std::streamsize>(fileSize))) {
-            out.clear();
-            return std::unexpected(StringView("Failed to read binary file"));
+        if (info->kind != FileKind::File) {
+            return std::unexpected(StringView("Binary path is not a regular file"));
         }
-        return {};
+        if (info->size > ReaderLimits::kMaxBinaryStreamBytes) {
+            return std::unexpected(StringView("Binary file is larger than the limit"));
+        }
+        return std::unexpected(StringView("Failed to read binary file"));
     }
 
     bool BinaryDeserializer::LoadFromFile(const std::filesystem::path& path) {

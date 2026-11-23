@@ -1,19 +1,18 @@
 #pragma once
 
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/Format/Format.h>
 #include <BECore/Types/Types.h>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 
 namespace BECore::Tests {
 
     /// The text of config/@p name of the engine, read from the source tree; empty when there is none
     inline String ReadShippedConfig(StringView name) {
         const std::filesystem::path file = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "config" / std::string(name.data(), name.size());  //-NoStd: a path
-        std::ifstream stream(file);                                                                          //-NoStd: reads the shipped file as text
-        const std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());  //-NoStd: the text of the shipped file
-        return String(text.data(), text.size());
+        auto text = ReadTextFile(PathToUtf8(file));
+        return text ? std::move(*text) : String();
     }
 
     /**

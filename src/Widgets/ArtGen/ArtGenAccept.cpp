@@ -1,6 +1,8 @@
 #include "ArtGenAccept.h"
 
 #include <BECore/Audio/AudioSourceComponent.h>
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -13,7 +15,6 @@
 #include <Widgets/ArtGen/ArtGenAtlasAccept.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
-#include <Widgets/EditorLayout/UserFileIo.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
 #include <Widgets/TextureEditor/SpriteAtlas.h>
 #include <cstdio>
@@ -93,7 +94,7 @@ namespace BECore {
             String text;
             AppendJson(text, record, kProvenanceIndent);
             text.push_back('\n');
-            return WriteTextFileAtomically(file, text);
+            return WriteFileAtomically(PathToUtf8(file), text);
         }
 
         bool IsClipPart(StringView part) {
@@ -261,7 +262,7 @@ namespace BECore {
 
         // The generation's record, and what Accept did to the sound, so the clip can be made again
         Json record = Json::object();
-        if (auto text = ReadTextFile(provenance); text) {
+        if (auto text = ReadTextFile(PathToUtf8(provenance)); text) {
             if (auto parsed = ParseJson(*text); parsed && parsed->is_object()) {
                 record = std::move(*parsed);
             }
@@ -353,7 +354,7 @@ namespace BECore {
         std::expected<void, String> WriteImageProvenance(const std::filesystem::path& source, const std::filesystem::path& provenance, StringView sprite, const ArtGenCopied& copied) {
             Json record = Json::object();
             if (!provenance.empty()) {
-                if (auto text = ReadTextFile(provenance); text) {
+                if (auto text = ReadTextFile(PathToUtf8(provenance)); text) {
                     if (auto parsed = ParseJson(*text); parsed && parsed->is_object()) {
                         record = std::move(*parsed);
                     }
@@ -737,7 +738,7 @@ namespace BECore {
     }
 
     std::expected<void, String> MarkProvenanceKept(const std::filesystem::path& file, int64_t seed, StringView date) {
-        auto text = ReadTextFile(file);
+        auto text = ReadTextFile(PathToUtf8(file));
         if (!text) {
             return std::unexpected(Format("cannot read '{}': {}", file.generic_string(), text.error()));
         }

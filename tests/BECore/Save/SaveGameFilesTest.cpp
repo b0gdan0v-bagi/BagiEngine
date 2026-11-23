@@ -2,6 +2,7 @@
 #include <BECore/Save/SaveTestSupport.h>
 #include <Common/FreshText.h>
 #include <Common/Printers.h>
+#include <Common/TestFiles.h>
 
 namespace BECore::Tests {
 
@@ -131,11 +132,10 @@ namespace BECore::Tests {
         ASSERT_TRUE(service.WriteSlot("a-b", Bytes({1})).has_value());
 
         // Not saves: a leftover temporary file, another extension, a name that is not a slot name, a file in a subfolder
-        std::ofstream(_saves / "leftover.save.tmp") << "x";
-        std::ofstream(_saves / "notes.txt") << "x";
-        std::ofstream(_saves / "bad name.save") << "x";
-        std::filesystem::create_directories(_saves / "sub");
-        std::ofstream(_saves / "sub" / "deep.save") << "x";
+        WriteFile(_saves / "leftover.save.tmp", "x");
+        WriteFile(_saves / "notes.txt", "x");
+        WriteFile(_saves / "bad name.save", "x");
+        WriteFile(_saves / "sub" / "deep.save", "x");
 
         const Vector<String> expected = {"Gamma_2", "a-b", "alpha", "beta"};
         EXPECT_EQ(Names(service.List()), expected);
@@ -184,8 +184,7 @@ namespace BECore::Tests {
         // ResolvePath falls back to paths relative to the working directory; "saves/stray.save" there is not in the save folder
         SaveGameService service(_fileSystem);
         ASSERT_TRUE(service.Initialize(_base / "other"));
-        std::filesystem::create_directories(_base / "saves");
-        std::ofstream(_base / "saves" / "stray.save") << "x";
+        WriteFile(_base / "saves" / "stray.save", "x");
 
         // Changing the working directory is safe here: nothing else in this process uses a relative path meanwhile (the
         // test is single threaded), and the old directory is restored before any check
@@ -262,7 +261,7 @@ namespace BECore::Tests {
 
     TEST_F(SaveGameFilesTest, InitializeOnAFileIsFalse) {
         const std::filesystem::path file = _base / "not_a_folder";
-        std::ofstream(file) << "x";
+        WriteFile(file, "x");
 
         SaveGameService service(_fileSystem);
         EXPECT_FALSE(service.Initialize(file));
@@ -301,7 +300,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(service.WriteSlot("keep", Bytes({7})).has_value());
 
         const std::filesystem::path file = _base / "not_a_folder";
-        std::ofstream(file) << "x";
+        WriteFile(file, "x");
         EXPECT_FALSE(service.Initialize(file));
 
         EXPECT_TRUE(service.IsInitialized());

@@ -7,6 +7,7 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/Control/JsonSerializer.h>
+#include <BECore/File/File.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Games/GameControl.h>
 #include <Games/GameManager.h>
@@ -20,7 +21,7 @@ namespace BECore {
     namespace {
 
         /// A replay file is client data: the ones that follow a person's session are far below this
-        constexpr uintmax_t kMaxReplayFileBytes = 64ULL * 1024 * 1024;
+        constexpr size_t kMaxReplayFileBytes = 64ULL * 1024 * 1024;
 
         void HandleRecordStart(ControlCall& call) {
             const auto path = GetJsonString(call.Params(), "path");
@@ -146,22 +147,19 @@ namespace BECore {
         }
 
         std::expected<String, ControlError> ReadReplayFile(StringView path) {
-            const std::filesystem::path hostPath = ToStd(path);
-            std::error_code error;
-            const uintmax_t size = std::filesystem::file_size(hostPath, error);
-            if (error) {
+            // The size is checked before the read so the refusal names the limit; ReadTextFile checks it again against a file that grew in between
+            const Optional<FileInfo> info = GetFileInfo(path);
+            if (!info || info->kind != FileKind::File) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("cannot read '{}'", path)));
             }
-            if (size > kMaxReplayFileBytes) {
+            if (info->size > kMaxReplayFileBytes) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'{}' is larger than {} bytes", path, kMaxReplayFileBytes)));
             }
-            std::ifstream file(hostPath, std::ios::binary);  //-NoStd: the file layer has no read of a host path (FileSystem/CLAUDE.md)
-            std::ostringstream text;                         //-NoStd: the file layer has no read of a host path (FileSystem/CLAUDE.md)
-            text << file.rdbuf();
-            if (!file && size > 0) {
+            auto text = ReadTextFile(path, kMaxReplayFileBytes);
+            if (!text) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("cannot read '{}'", path)));
             }
-            return FromStdString(text.str());
+            return std::move(*text);
         }
 
         void HandleReplay(ControlCall& call, ControlService& service) {

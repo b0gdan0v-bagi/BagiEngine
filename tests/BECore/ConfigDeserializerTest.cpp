@@ -10,6 +10,7 @@
 #include <BECore/Resource/ResourceManager.h>
 #include <Common/MountedFolderTest.h>
 #include <Common/Printers.h>
+#include <Common/TestFiles.h>
 #include <Generated/ConfigDeserializerTest.gen.hpp>
 
 namespace BECore::Tests {
@@ -62,7 +63,7 @@ namespace BECore::Tests {
             ASSERT_TRUE(serializer.BeginObject(ReflectionTraits<DeserializerProbe>::name));
             MakeProbe().Serialize(serializer);
             serializer.EndObject();
-            std::ofstream(_dir / fileName) << serializer.SaveToString().c_str();
+            WriteFile(_dir / fileName, serializer.SaveToString());
         }
 
         void WriteProbeBinary(const char* fileName) const {
@@ -127,7 +128,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ConfigDeserializerTest, OpenDeserializerRejectsUnknownExtension) {
-        std::ofstream(_dir / "probe.json") << "{}";
+        WriteFile(_dir / "probe.json", "{}");
 
         auto opened = OpenDeserializer(VirtualPath("probe.json"));
         ASSERT_FALSE(opened.has_value());
@@ -140,7 +141,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ConfigDeserializerTest, OpenDeserializerReportsCorruptBinary) {
-        std::ofstream(_dir / "corrupt.bin") << "not a binary stream";
+        WriteFile(_dir / "corrupt.bin", "not a binary stream");
 
         EXPECT_FALSE(OpenDeserializer(VirtualPath("corrupt.bin")).has_value());
     }

@@ -1,3 +1,6 @@
+#include <BECore/Config/StringXmlWriter.h>
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/Reflection/XmlSerializer.h>
 
 namespace BECore {
@@ -49,17 +52,16 @@ namespace BECore {
     }
 
     bool XmlSerializer::SaveToFile(const std::filesystem::path& path) const {
-        return _document.save_file(path.c_str(), "  ");
+        // In place like pugi::save_file did; the path goes in as UTF-8, which save_file(const char*) is not on Windows
+        auto file = File::Open(PathToUtf8(path), FileMode::Write);
+        if (!file || !file->Write(SaveToString())) {
+            return false;
+        }
+        return file->Close().has_value();
     }
 
     String XmlSerializer::SaveToString() const {
-        struct StringWriter final : pugi::xml_writer {
-            String text;
-            void write(const void* data, size_t size) override {
-                text.append(static_cast<const char*>(data), size);
-            }
-        };
-        StringWriter writer;
+        StringXmlWriter writer;
         _document.save(writer, "  ");
         return eastl::move(writer.text);
     }

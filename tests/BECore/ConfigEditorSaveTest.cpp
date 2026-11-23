@@ -296,10 +296,7 @@ namespace BECore::Tests {
 
     TEST_F(ConfigEditorSaveTest, SavingOverTheFileOfAPersonChangesTheEditedLineOnly) {
         const String original = TemplateText();
-        {
-            std::ofstream out(SavedPath(), std::ios::out | std::ios::binary);  //-NoStd: the test writes its own temporary file byte for byte
-            out.write(original.data(), static_cast<std::streamsize>(original.size()));
-        }
+        WriteFile(SavedPath(), original);
 
         XmlDocument document;
         ASSERT_TRUE(document.LoadFromFile(SavedPath()));
@@ -310,10 +307,7 @@ namespace BECore::Tests {
         staged.ApplyTo(document.GetRoot().GetPugiNode());
         ASSERT_TRUE(document.SaveToFile(SavedPath()));
 
-        std::ifstream in(SavedPath(), std::ios::in | std::ios::binary);  //-NoStd: the test reads its own temporary file byte for byte
-        String saved;
-        saved.resize(static_cast<size_t>(std::filesystem::file_size(SavedPath())));
-        in.read(saved.data(), static_cast<std::streamsize>(saved.size()));
+        const String saved = ReadFile(SavedPath());
 
         // The comments, the four-space indent and the blank lines of the file are the ones it had: one line differs
         String expected = original;

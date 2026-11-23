@@ -1,11 +1,12 @@
 #include "AudioClipLoader.h"
 
 #include <BECore/Audio/AudioClip.h>
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Generated/AudioClipLoader.gen.hpp>
 #include <TaskSystem/Awaitables.h>
-#include <fstream>  //-NoStd: file layer (engine-file-layer)
 
 namespace BECore {
 
@@ -24,18 +25,14 @@ namespace BECore {
 
     std::expected<Vector<uint8_t>, String> ReadAudioFile(PoolString path) {
         const auto realPath = CoreManager::GetFileSystem().ResolvePath(path.ToStringView());
-        std::ifstream file(realPath, std::ios::binary | std::ios::ate);  //-NoStd: file layer (engine-file-layer)
-        if (realPath.empty() || !file) {
+        if (realPath.empty()) {
             return std::unexpected(Format("cannot open '{}'", path.ToStringView()));
         }
-        const auto size = static_cast<size_t>(file.tellg());
-        Vector<uint8_t> bytes(size);
-        file.seekg(0);
-        file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
-        if (!file) {
-            return std::unexpected(Format("cannot read '{}'", path.ToStringView()));
+        auto bytes = ReadFileBytes(PathToUtf8(realPath));
+        if (!bytes) {
+            return std::unexpected(Format("cannot read '{}': {}", path.ToStringView(), bytes.error()));
         }
-        return bytes;
+        return std::move(*bytes);
     }
 
     IntrusivePtr<AudioClip> AudioClipLoader::LoadInternal(PoolString path) {

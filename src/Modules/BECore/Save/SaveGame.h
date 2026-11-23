@@ -1,4 +1,5 @@
 #pragma once
+#include <BECore/File/File.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/PoolString/StaticPoolString.h>
@@ -23,8 +24,8 @@ namespace BECore {
 
     inline constexpr StringView kSaveExtension = ".save";
 
-    /// Added to the file name while it is written; the file is renamed over the save when whole
-    inline constexpr StringView kSaveTempExtension = ".tmp";
+    /// Added to the file name while WriteFileAtomically writes it; the file is renamed over the save when whole
+    inline constexpr StringView kSaveTempExtension = kAtomicTempSuffix;
 
     inline constexpr size_t kMaxSlotNameLength = 64;
 
