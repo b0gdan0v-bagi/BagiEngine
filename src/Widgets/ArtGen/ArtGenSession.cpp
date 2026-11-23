@@ -139,7 +139,7 @@ namespace BECore {
         Register<&ArtGenSession::HandleAccept>(service, *this, "artgen_accept");
         Register<&ArtGenSession::HandleSetupReport>(service, *this, "artgen_setup_report");
         Register<&ArtGenSession::HandleSetup>(service, *this, "artgen_setup");
-        service.RegisterHandler("artgen_state", [this](ControlCall& call) { call.Reply(StateJson()); });
+        service.RegisterHandler("artgen_state", [this](ControlCall& call) { call.ReplyObject(BuildState()); });
         RegisterSetControl(service);
 
         service.DescribeMethod("artgen_generate",
@@ -795,95 +795,86 @@ namespace BECore {
         return ArtGenCancelAnswer{};
     }
 
-    Json ArtGenSession::StateJson() const {
-        Json service = Json::object();
-        service["connected"] = IsServiceConnected();
-        service["polls"] = _pollCount;
-        service["state"] = ToJsonString(_status.state);
-        service["reason"] = ToJsonString(_status.reason);
-        service["generator"] = ToJsonString(_status.generator);
-        service["startedHere"] = _status.startedHere;
-        Json presets = Json::array();
+    ArtGenStateAnswer ArtGenSession::BuildState() const {
+        ArtGenStateAnswer state;
+        ArtGenServiceAnswer& service = state.service;
+        service.connected = IsServiceConnected();
+        service.polls = _pollCount;
+        service.state = _status.state;
+        service.reason = _status.reason;
+        service.generator = _status.generator;
+        service.startedHere = _status.startedHere;
         for (const auto& preset : _status.presets) {
-            Json item = Json::object();
-            item["name"] = ToJsonString(preset.name);
-            item["title"] = ToJsonString(preset.title);
-            item["source"] = ToJsonString(preset.source);
-            item["kind"] = ToJsonString(preset.kind);
+            ArtGenPresetRowAnswer row;
+            row.name = preset.name;
+            row.title = preset.title;
+            row.source = preset.source;
+            row.kind = preset.kind;
             if (!preset.error.empty()) {
-                item["error"] = ToJsonString(preset.error);
+                row.error = preset.error;
             }
-            presets.push_back(std::move(item));
+            service.presets.push_back(std::move(row));
         }
-        service["presets"] = std::move(presets);
-        Json workflows = Json::array();
         for (const auto& workflow : _status.workflows) {
-            Json item = Json::object();
-            item["name"] = ToJsonString(workflow.name);
-            item["source"] = ToJsonString(workflow.source);
-            item["kind"] = ToJsonString(workflow.kind);
+            ArtGenWorkflowRowAnswer row;
+            row.name = workflow.name;
+            row.source = workflow.source;
+            row.kind = workflow.kind;
             if (!workflow.error.empty()) {
-                item["error"] = ToJsonString(workflow.error);
+                row.error = workflow.error;
             }
-            workflows.push_back(std::move(item));
+            service.workflows.push_back(std::move(row));
         }
-        service["workflows"] = std::move(workflows);
 
-        Json run = Json::object();
-        run["id"] = _run.id;
-        run["state"] = ToStdString(EnumUtils<ArtGenRunState>::ToString(_run.state));
-        run["preset"] = ToJsonString(_run.preset);
-        run["draft"] = !_run.presetData.is_null();
-        run["subject"] = ToJsonString(_run.subject);
-        run["count"] = _run.count;
-        run["seed"] = _run.seed ? Json(*_run.seed) : Json();
-        run["reference"] = _run.reference ? ArtGenReferenceToJson(*_run.reference) : Json();
-        run["image"] = _run.image;
-        run["step"] = _run.step;
-        run["steps"] = _run.steps;
-        run["error"] = ToJsonString(_run.error);
-        run["cancelRequested"] = _run.cancelRequested;
-        Json variants = Json::array();
+        ArtGenRunAnswer& run = state.run;
+        run.id = _run.id;
+        run.state = String(EnumUtils<ArtGenRunState>::ToString(_run.state));
+        run.preset = _run.preset;
+        run.draft = !_run.presetData.is_null();
+        run.subject = _run.subject;
+        run.count = _run.count;
+        run.seed = _run.seed;
+        if (_run.reference) {
+            run.reference = MakeArtGenReferenceAnswer(*_run.reference);
+        }
+        run.image = _run.image;
+        run.step = _run.step;
+        run.steps = _run.steps;
+        run.error = _run.error;
+        run.cancelRequested = _run.cancelRequested;
         for (const auto& variant : _run.variants) {
-            Json item = Json::object();
-            item["seed"] = variant.seed;
-            item["path"] = ToJsonString(variant.path);
-            item["provenance"] = ToJsonString(variant.provenancePath);
-            item["kind"] = ToJsonString(variant.kind);
-            variants.push_back(std::move(item));
+            ArtGenVariantAnswer item;
+            item.seed = variant.seed;
+            item.path = variant.path;
+            item.provenance = variant.provenancePath;
+            item.kind = variant.kind;
+            run.variants.push_back(std::move(item));
         }
-        run["variants"] = std::move(variants);
 
-        Json setup = Json::object();
-        setup["id"] = _setup.id;
-        setup["action"] = ToStdString(EnumUtils<ArtGenSetupAction>::ToString(_setup.action));
-        setup["state"] = ToStdString(EnumUtils<ArtGenSetupState>::ToString(_setup.state));
-        setup["platform"] = ToJsonString(_setup.platform);
-        setup["root"] = ToJsonString(_setup.root);
-        setup["downloadBytes"] = _setup.downloadBytes;
-        Json plan = Json::array();
+        ArtGenSetupAnswer& setup = state.setup;
+        setup.id = _setup.id;
+        setup.action = String(EnumUtils<ArtGenSetupAction>::ToString(_setup.action));
+        setup.state = String(EnumUtils<ArtGenSetupState>::ToString(_setup.state));
+        setup.platform = _setup.platform;
+        setup.root = _setup.root;
+        setup.downloadBytes = _setup.downloadBytes;
         for (const auto& step : _setup.plan) {
-            Json item = Json::object();
-            item["what"] = ToJsonString(step.what);
-            item["state"] = ToJsonString(step.state);
-            item["size"] = step.size;
-            item["licence"] = ToJsonString(step.licence);
-            plan.push_back(std::move(item));
+            ArtGenSetupStepAnswer item;
+            item.what = step.what;
+            item.state = step.state;
+            item.size = step.size;
+            item.licence = step.licence;
+            setup.plan.push_back(std::move(item));
         }
-        setup["plan"] = std::move(plan);
-        setup["current"] = ToJsonString(_setup.current);
-        setup["done"] = _setup.done;
-        setup["total"] = _setup.total;
-        setup["log"] = ToJsonString(_setup.log);
-        setup["error"] = ToJsonString(_setup.error);
-        setup["cancelRequested"] = _setup.cancelRequested;
+        setup.current = _setup.current;
+        setup.done = _setup.done;
+        setup.total = _setup.total;
+        setup.log = _setup.log;
+        setup.error = _setup.error;
+        setup.cancelRequested = _setup.cancelRequested;
 
-        Json state = Json::object();
-        state["service"] = std::move(service);
-        state["run"] = std::move(run);
-        state["setup"] = std::move(setup);
-        state["sets"] = SetsJson();
-        state["gameRoot"] = ToJsonString(_gameRoot);
+        state.sets = BuildSetSummaries();
+        state.gameRoot = _gameRoot;
         return state;
     }
 

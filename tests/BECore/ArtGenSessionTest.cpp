@@ -916,7 +916,24 @@ namespace BECore::Tests {
         ASSERT_NE(request, nullptr);
         EXPECT_EQ(FindJsonMember(*request, "reference"), nullptr);
         const Json state = Call("artgen_state");
-        EXPECT_TRUE(FindJsonMember(*FindJsonMember(Result(state), "run"), "reference")->is_null());
+        const Json& run = *FindJsonMember(Result(state), "run");
+        EXPECT_EQ(FindJsonMember(run, "reference"), nullptr) << "none is no member, not null";
+    }
+
+    TEST_F(ArtGenSessionTest, TheReferenceOfAnAnswerIsWrittenAsTheFileWritesIt) {
+        const ArtGenReference withWeight{"style", "assets/artgen/pawn.png", Optional<double>(0.8)};
+        const ArtGenReference withoutWeight{"init", "sketches/rook.png", Optional<double>()};
+        EXPECT_EQ(AnswerText(MakeArtGenReferenceAnswer(withWeight)), ArtGenReferenceToJson(withWeight));
+        EXPECT_EQ(AnswerText(MakeArtGenReferenceAnswer(withoutWeight)), ArtGenReferenceToJson(withoutWeight));
+    }
+
+    TEST_F(ArtGenSessionTest, TheStateOfARunHasItsSeedOnlyWhenTheRequestNamedOne) {
+        Call("artgen_poll", ReadyPoll());
+        Require(session.Request("wood", "rook", 1, Optional<int64_t>(5)));
+        EXPECT_EQ(GetJsonInt(*FindJsonMember(Result(Call("artgen_state")), "run"), "seed"), Optional<int64_t>(5));
+        session.Cancel();
+        Require(session.Request("wood", "rook", 1, Optional<int64_t>()));
+        EXPECT_EQ(FindJsonMember(*FindJsonMember(Result(Call("artgen_state")), "run"), "seed"), nullptr);
     }
 
     TEST_F(ArtGenSessionTest, ADraftTakesAReferenceToo) {

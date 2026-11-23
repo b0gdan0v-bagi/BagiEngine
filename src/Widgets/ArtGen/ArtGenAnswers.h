@@ -2,6 +2,7 @@
 
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
+#include <Widgets/ArtGen/Reference/ArtGenReference.h>
 #include <cstdint>
 
 namespace BECore {
@@ -46,6 +47,153 @@ namespace BECore {
         BE_REFLECT_FIELD Optional<String> job;
         BE_REFLECT_FIELD Optional<String> set;
         BE_REFLECT_FIELD Optional<String> state;
+    };
+
+    /// The reference picture of a run or a set: the same keys and values as `ArtGenReferenceToJson` writes into a preset or a manifest file (a test holds them equal);
+    /// the file keeps its own writer because it must read back what it wrote and keeps `null` where this answer leaves a member out
+    struct ArtGenReferenceAnswer {
+        BE_CLASS(ArtGenReferenceAnswer)
+
+        BE_REFLECT_FIELD String image;
+        BE_REFLECT_FIELD String mode;
+        BE_REFLECT_FIELD Optional<double> weight;
+    };
+
+    [[nodiscard]] ArtGenReferenceAnswer MakeArtGenReferenceAnswer(const ArtGenReference& reference);
+
+    /// A preset of the catalog the service sent; a broken one has its `error`
+    struct ArtGenPresetRowAnswer {
+        BE_CLASS(ArtGenPresetRowAnswer)
+
+        BE_REFLECT_FIELD Optional<String> error;
+        BE_REFLECT_FIELD String kind;
+        BE_REFLECT_FIELD String name;
+        BE_REFLECT_FIELD String source;
+        BE_REFLECT_FIELD String title;
+    };
+
+    /// A workflow of the catalog; a broken one has its `error`
+    struct ArtGenWorkflowRowAnswer {
+        BE_CLASS(ArtGenWorkflowRowAnswer)
+
+        BE_REFLECT_FIELD Optional<String> error;
+        BE_REFLECT_FIELD String kind;
+        BE_REFLECT_FIELD String name;
+        BE_REFLECT_FIELD String source;
+    };
+
+    /// The `service` of `artgen_state`: what the generation service last said in a poll
+    struct ArtGenServiceAnswer {
+        BE_CLASS(ArtGenServiceAnswer)
+
+        BE_REFLECT_FIELD bool connected = false;
+        BE_REFLECT_FIELD String generator;
+        BE_REFLECT_FIELD uint64_t polls = 0;
+        BE_REFLECT_FIELD Vector<ArtGenPresetRowAnswer> presets;
+        BE_REFLECT_FIELD String reason;
+        BE_REFLECT_FIELD bool startedHere = false;
+        BE_REFLECT_FIELD String state;
+        BE_REFLECT_FIELD Vector<ArtGenWorkflowRowAnswer> workflows;
+    };
+
+    /// An image or a sound of the run in work
+    struct ArtGenVariantAnswer {
+        BE_CLASS(ArtGenVariantAnswer)
+
+        BE_REFLECT_FIELD String kind;
+        BE_REFLECT_FIELD String path;
+        BE_REFLECT_FIELD String provenance;
+        BE_REFLECT_FIELD int64_t seed = 0;
+    };
+
+    /// The `run` of `artgen_state`: no `seed` when the request drew none, no `reference` without one
+    struct ArtGenRunAnswer {
+        BE_CLASS(ArtGenRunAnswer)
+
+        BE_REFLECT_FIELD bool cancelRequested = false;
+        BE_REFLECT_FIELD int32_t count = 0;
+        BE_REFLECT_FIELD bool draft = false;
+        BE_REFLECT_FIELD String error;
+        BE_REFLECT_FIELD uint32_t id = 0;
+        BE_REFLECT_FIELD int32_t image = 0;
+        BE_REFLECT_FIELD String preset;
+        BE_REFLECT_FIELD Optional<ArtGenReferenceAnswer> reference;
+        BE_REFLECT_FIELD Optional<int64_t> seed;
+        BE_REFLECT_FIELD String state;
+        BE_REFLECT_FIELD int32_t step = 0;
+        BE_REFLECT_FIELD int32_t steps = 0;
+        BE_REFLECT_FIELD String subject;
+        BE_REFLECT_FIELD Vector<ArtGenVariantAnswer> variants;
+    };
+
+    /// A step of the plan of a setup action
+    struct ArtGenSetupStepAnswer {
+        BE_CLASS(ArtGenSetupStepAnswer)
+
+        BE_REFLECT_FIELD String licence;
+        BE_REFLECT_FIELD int64_t size = 0;
+        BE_REFLECT_FIELD String state;
+        BE_REFLECT_FIELD String what;
+    };
+
+    /// The `setup` of `artgen_state`: the last setup action of the generator and what the service reported for it
+    struct ArtGenSetupAnswer {
+        BE_CLASS(ArtGenSetupAnswer)
+
+        BE_REFLECT_FIELD String action;
+        BE_REFLECT_FIELD bool cancelRequested = false;
+        BE_REFLECT_FIELD String current;
+        BE_REFLECT_FIELD int64_t done = 0;
+        BE_REFLECT_FIELD int64_t downloadBytes = 0;
+        BE_REFLECT_FIELD String error;
+        BE_REFLECT_FIELD uint32_t id = 0;
+        BE_REFLECT_FIELD String log;
+        BE_REFLECT_FIELD Vector<ArtGenSetupStepAnswer> plan;
+        BE_REFLECT_FIELD String platform;
+        BE_REFLECT_FIELD String root;
+        BE_REFLECT_FIELD String state;
+        BE_REFLECT_FIELD int64_t total = 0;
+    };
+
+    /// The jobs of a set by state
+    struct ArtGenJobCountsAnswer {
+        BE_CLASS(ArtGenJobCountsAnswer)
+
+        BE_REFLECT_FIELD int32_t cancelled = 0;
+        BE_REFLECT_FIELD int32_t done = 0;
+        BE_REFLECT_FIELD int32_t failed = 0;
+        BE_REFLECT_FIELD int32_t pending = 0;
+        BE_REFLECT_FIELD int32_t running = 0;
+    };
+
+    /// A set of `artgen_state`: no `reference` without one, no `atlas` for loose PNGs
+    struct ArtGenSetSummaryAnswer {
+        BE_CLASS(ArtGenSetSummaryAnswer)
+
+        BE_REFLECT_FIELD int32_t accepted = 0;
+        BE_REFLECT_FIELD Optional<String> atlas;
+        BE_REFLECT_FIELD int32_t count = 0;
+        BE_REFLECT_FIELD ArtGenJobCountsAnswer jobs;
+        BE_REFLECT_FIELD int32_t kept = 0;
+        BE_REFLECT_FIELD String kind;
+        BE_REFLECT_FIELD int32_t live = 0;
+        BE_REFLECT_FIELD String name;
+        BE_REFLECT_FIELD int32_t picked = 0;
+        BE_REFLECT_FIELD String preset;
+        BE_REFLECT_FIELD Optional<ArtGenReferenceAnswer> reference;
+        BE_REFLECT_FIELD int64_t seed = 0;
+        BE_REFLECT_FIELD String state;
+    };
+
+    /// `artgen_state`: the art generation service as the editor sees it, the run in work, the setup action and a summary of each set
+    struct ArtGenStateAnswer {
+        BE_CLASS(ArtGenStateAnswer)
+
+        BE_REFLECT_FIELD String gameRoot;
+        BE_REFLECT_FIELD ArtGenRunAnswer run;
+        BE_REFLECT_FIELD ArtGenServiceAnswer service;
+        BE_REFLECT_FIELD Vector<ArtGenSetSummaryAnswer> sets;
+        BE_REFLECT_FIELD ArtGenSetupAnswer setup;
     };
 
 }  // namespace BECore

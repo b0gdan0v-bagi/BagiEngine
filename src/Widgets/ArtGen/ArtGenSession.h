@@ -364,7 +364,7 @@ namespace BECore {
         std::expected<Json, ControlError> HandleAcceptSet(const Json& params);
         std::expected<Json, ControlError> HandleKeep(const Json& params);
         std::expected<Json, ControlError> HandleMore(const Json& params);
-        [[nodiscard]] Json StateJson() const;
+        [[nodiscard]] ArtGenStateAnswer BuildState() const;
 
     private:
         /// The run a report of the service is about, or null when it is about an older one (a late message after a new request)
@@ -396,7 +396,7 @@ namespace BECore {
         void RegisterSetControl(ControlService& service);
         /// `artgen_cancel` with `job` or `set`: the one job, or the whole set
         std::expected<ArtGenCancelAnswer, ControlError> CancelFromParams(const Json& params);
-        [[nodiscard]] Json SetsJson() const;
+        [[nodiscard]] Vector<ArtGenSetSummaryAnswer> BuildSetSummaries() const;
 
         Clock _clock;
         Acceptor _acceptor = nullptr;

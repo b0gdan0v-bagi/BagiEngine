@@ -2062,7 +2062,7 @@ namespace BECore::Tests {
 
         ASSERT_EQ(ErrorCode(Call("artgen_enqueue", EnqueueParams("plain"))), "");
         EXPECT_TRUE(session.FindSet("plain")->atlas.empty());
-        EXPECT_TRUE(FindJsonMember((*FindJsonMember(Result(Call("artgen_state")), "sets"))[1], "atlas")->is_null());
+        EXPECT_EQ(FindJsonMember((*FindJsonMember(Result(Call("artgen_state")), "sets"))[1], "atlas"), nullptr);
         ReloadFromDisk();
         EXPECT_EQ(session.FindSet("grouped")->atlas, "pieces") << "a reload of the sets keeps it";
     }
@@ -2819,7 +2819,7 @@ namespace BECore::Tests {
         const Json first = Poll();
         ASSERT_NE(RequestOf(first), nullptr);
         EXPECT_EQ(FindJsonMember(*RequestOf(first), "reference"), nullptr);
-        EXPECT_TRUE(FindJsonMember((*FindJsonMember(Result(Call("artgen_state")), "sets"))[0], "reference")->is_null());
+        EXPECT_EQ(FindJsonMember((*FindJsonMember(Result(Call("artgen_state")), "sets"))[0], "reference"), nullptr);
         const Json manifest = ParseJson(ReadTextFile(ManifestPath(_root, "plain")).value()).value();
         EXPECT_TRUE(FindJsonMember(manifest, "reference")->is_null());
     }

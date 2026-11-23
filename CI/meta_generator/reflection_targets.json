@@ -21,6 +21,7 @@
       "src/Modules/BECore/Text",
       "src/Modules/BECore/UI",
       "src/Modules/BECore/Values/Nodes",
+      "src/Widgets/ArtGen",
       "tests/BECore"
     ],
     "scan_dirs": [

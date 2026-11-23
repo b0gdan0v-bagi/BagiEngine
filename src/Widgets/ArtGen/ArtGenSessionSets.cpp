@@ -1337,29 +1337,31 @@ namespace BECore {
         return AcceptSet(*set);
     }
 
-    Json ArtGenSession::SetsJson() const {
-        Json sets = Json::array();
+    Vector<ArtGenSetSummaryAnswer> ArtGenSession::BuildSetSummaries() const {
+        Vector<ArtGenSetSummaryAnswer> sets;
         for (const ArtGenSet& set : _sets) {
-            Json jobs = Json::object();
-            jobs["pending"] = CountJobs(set, ArtGenSetJobState::Pending);
-            jobs["running"] = CountJobs(set, ArtGenSetJobState::Running);
-            jobs["done"] = CountJobs(set, ArtGenSetJobState::Done);
-            jobs["failed"] = CountJobs(set, ArtGenSetJobState::Failed);
-            jobs["cancelled"] = CountJobs(set, ArtGenSetJobState::Cancelled);
-            Json item = Json::object();
-            item["name"] = ToJsonString(set.name);
-            item["preset"] = ToJsonString(set.preset);
-            item["kind"] = ToJsonString(set.kind);
-            item["count"] = set.count;
-            item["seed"] = set.seed;
-            item["state"] = ToJsonString(String(StateNameOf(set)));
-            item["jobs"] = std::move(jobs);
-            item["picked"] = PickedCount(set);
-            item["accepted"] = AcceptedCount(set);
-            item["live"] = CountLive(set);
-            item["kept"] = CountKept(set);
-            item["reference"] = set.reference ? ArtGenReferenceToJson(*set.reference) : Json();
-            item["atlas"] = set.atlas.empty() ? Json() : ToJsonString(set.atlas);
+            ArtGenSetSummaryAnswer item;
+            item.jobs.pending = CountJobs(set, ArtGenSetJobState::Pending);
+            item.jobs.running = CountJobs(set, ArtGenSetJobState::Running);
+            item.jobs.done = CountJobs(set, ArtGenSetJobState::Done);
+            item.jobs.failed = CountJobs(set, ArtGenSetJobState::Failed);
+            item.jobs.cancelled = CountJobs(set, ArtGenSetJobState::Cancelled);
+            item.name = set.name;
+            item.preset = set.preset;
+            item.kind = set.kind;
+            item.count = set.count;
+            item.seed = set.seed;
+            item.state = String(StateNameOf(set));
+            item.picked = PickedCount(set);
+            item.accepted = AcceptedCount(set);
+            item.live = CountLive(set);
+            item.kept = CountKept(set);
+            if (set.reference) {
+                item.reference = MakeArtGenReferenceAnswer(*set.reference);
+            }
+            if (!set.atlas.empty()) {
+                item.atlas = set.atlas;
+            }
             sets.push_back(std::move(item));
         }
         return sets;
