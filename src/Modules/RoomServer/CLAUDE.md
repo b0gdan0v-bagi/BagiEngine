@@ -21,6 +21,8 @@ A game's own server is a `main` that fills a `SeatedGameRegistry` and calls `Run
 
 Run: `build/<preset>/bin/BagiRoomServer --test-games --port 0`.
 
+**Profiling:** `RunRoomServer` names its thread `Main` and starts the profiler (`args.profiler`, resolved by `ParseRoomServerArgs` through `ResolveProfilerSettings`, `BECore/Profiler/CLAUDE.md`) before anything listens; the trace is written at SIGTERM, after `Stop()` has joined every thread, and a file that cannot be written makes a clean run exit 1. A build without the profiler refuses either flag (exit 1, the message on stderr). There are no environment variables for it: a hosting platform profiles nothing.
+
 | Flag | Meaning (default) |
 |------|-------------------|
 | `--port N` | 0..65535, 0 picks a free port (8080) |
@@ -35,6 +37,8 @@ Run: `build/<preset>/bin/BagiRoomServer --test-games --port 0`.
 | `--ping-interval-ms N` | liveness pings, 0 is off (20000) |
 | `--stats-interval-ms N` | the connections-and-rooms log line at most this often, 0 is off (30000) |
 | `--shutdown-grace-ms N` | on SIGTERM how long to wait for the clients to end after close 1001, 0..60000, 0 sends no close frame (1000; `RoomServerSettings` itself has 0 so tests do not wait) |
+| `--trace=FILE` | record with the Chrome trace profiler and write FILE at the end (profile build only) |
+| `--profiler=none\|chrome\|tracy` | the profiler backend; `chrome` without `--trace` records for nothing (none; Tracy in a Tracy build) |
 | `--test-games`, `--help` | |
 
 **Environment** (a hosting platform sets no flags): `PORT` and `BAGI_ROOMS_BIND`, `_ORIGINS` (comma-separated, items trimmed, empty ones skipped), `_MAX_CONNECTIONS`, `_MAX_PER_ADDRESS`, `_MAX_ROOMS_PER_ADDRESS`, `_LOBBY_TIMEOUT_MS`, `_TRUSTED_PROXY_HOPS`, `_COMPUTER_DELAY_MS`, `_RECONNECT_GRACE_MS`, `_PING_INTERVAL_MS`, `_STATS_INTERVAL_MS`, `_SHUTDOWN_GRACE_MS` and `_TEST_GAMES` (`1|0|true|false`; the first live check of the demo server only), each with the range of its flag. The order is default, then variable, then flag (`--origin` on the command line replaces the list of the variable); an empty variable is unset. `ReadRoomServerEnvironment` takes the lookup as a function so a test needs no real environment.
