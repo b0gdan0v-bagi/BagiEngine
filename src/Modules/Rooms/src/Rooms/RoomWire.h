@@ -8,7 +8,7 @@
 
 namespace BECore {
 
-    // The messages of the room protocol that carry no `Json` payload, written by the generated `WriteJson` (`Reflection/CLAUDE.md`, "The generated writer").
+    // The messages of the room protocol that carry no `Json` payload, written by the generated `WriteJson` (`Reflection/CLAUDE.md`, the paragraph "The generated writer").
     // Wire structs, not the plain structs of `RoomProtocol.h`: those are aggregates that clients and the fuzz seeds brace-initialise and that the readers fill after
     // checking untrusted input, while a `BE_CLASS` has a virtual and the wire names differ (`kind` is lower case text, `name` and `connected` only for a human).
     // A message with a `Json` payload in the middle of the object (`view`, `action`, `create_room`, `lobby`, `rooms`) stays hand-written in `RoomProtocol.cpp`.
@@ -18,12 +18,9 @@ namespace BECore {
         BE_CLASS(RoomWireEnvelope)
 
         BE_REFLECT_FIELD String type;
-        // `_v`, key `v`: a field named `v` clashes with the visitor parameter of the generated `AcceptPropertyVisitor`
-        BE_REFLECT_FIELD int64_t _v = kRoomProtocolVersion;
+        BE_REFLECT_FIELD int64_t v = kRoomProtocolVersion;
 
     protected:
-        // The registry makes a default object of every reflected type, so the type text is set by the derived constructor
-        RoomWireEnvelope() = default;
         explicit RoomWireEnvelope(StringView messageType) : type(messageType.data(), messageType.size()) {}
     };
 

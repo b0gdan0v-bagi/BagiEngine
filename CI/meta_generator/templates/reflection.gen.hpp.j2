@@ -349,15 +349,15 @@ void {{ cls.full_qualified_name }}::Deserialize(::BECore::IDeserializer& d) {
 
 // {{ cls.full_qualified_name }}::AcceptPropertyVisitor() - auto-generated from BE_REFLECT_FIELD markers
 // Visits all reflected fields for in-place editing (e.g. ImGui inspector)
-bool {{ cls.full_qualified_name }}::AcceptPropertyVisitor(::BECore::IPropertyVisitor& v) {
+bool {{ cls.full_qualified_name }}::AcceptPropertyVisitor(::BECore::IPropertyVisitor& propertyVisitor) {
 {% if cls.parent_has_be_class %}
-    {{ cls.parent_full_qualified_name }}::AcceptPropertyVisitor(v);
+    {{ cls.parent_full_qualified_name }}::AcceptPropertyVisitor(propertyVisitor);
 {% endif %}
     bool changed = false;
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
-    changed |= ::BECore::PropVisit::VisitField(v, std::get<{{ loop.index0 }}>(::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields).attributes,
-        [&] { return ::BECore::PropVisit::Visit(v, {{ field.name }}, "{{ xml_name }}"); });
+    changed |= ::BECore::PropVisit::VisitField(propertyVisitor, std::get<{{ loop.index0 }}>(::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields).attributes,
+        [&] { return ::BECore::PropVisit::Visit(propertyVisitor, {{ field.name }}, "{{ xml_name }}"); });
 {% endfor %}
     return changed;
 }

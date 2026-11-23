@@ -608,8 +608,7 @@ namespace BECore {
         JsonWriter writer(out);
         std::visit(overload{
                        // `create_room` and `action` carry a game's own `Json` (`options`, `action`) in the middle of the object, between keys of the wire struct a
-                       // reflected message would need. They stay by hand until the owner decides on a reflected leaf type for a `Json` payload (entry
-                       // `control-json-by-reflection`, last stage).
+                       // reflected message would need. They stay by hand: a reflected leaf type for a `Json` payload does not exist.
                        [&](const CreateRoomMessage& m) {
                            writer.BeginObject();
                            writer.Member("game", m.game);
@@ -712,8 +711,8 @@ namespace BECore {
     }
 
     // The public `options` are an object under names the game chose (a map keyed by chosen names, not a struct), and sit in the middle of the object between
-    // `host` and `phase`, so `lobby` stays by hand; its seats are wire structs. A reflected leaf type for a `Json` payload would let it go (entry
-    // `control-json-by-reflection`, last stage).
+    // `host` and `phase`, so `lobby` stays by hand; its seats are wire structs. A reflected leaf type for a `Json` payload does not exist, so it
+    // cannot be a struct.
     void AppendLobbyMessage(String& out, const LobbySnapshot& lobby) {
         JsonWriter writer(out);
         writer.BeginObject();
@@ -777,8 +776,8 @@ namespace BECore {
         return out;
     }
 
-    // `actions` and `view` are the game's own `Json` (`ISeatedGame` returns it) and sit between the other keys, so `view` stays by hand until a reflected leaf
-    // type for a `Json` payload exists (entry `control-json-by-reflection`, last stage)
+    // `actions` and `view` are the game's own `Json` (`ISeatedGame` returns it) and sit between the other keys, so `view` stays by hand: a reflected leaf
+    // type for a `Json` payload does not exist
     void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions) {
         JsonWriter writer(out);
         writer.BeginObject();
