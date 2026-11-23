@@ -21,7 +21,7 @@ The core of the external control API: a program or a model sends commands, the e
 | `JsonWriter` | Streaming JSON writer that appends to a caller's `String`: no DOM, no temporary, no allocation beyond the growth of that `String`; compact or indented, byte-identical to nlohmann's `dump` |
 | `JsonPayload` | The reflected leaf of a foreign JSON value in an answer (`Borrowed`, `Streamed`, `Text`, `Owned`; written by `WriteJson`, a `JsonWriter` failure carries a streamed callback's error); the schema says `any` |
 | `JsonSerializer` | `ISerializer` into a `Json` (`Take()`); DOM-backed, not the fast path for writing: a reflected value has its generated `WriteJson` (`JsonWriteReflect.h`) |
-| `JsonDeserializer` | `IDeserializer` over a `const Json&` the caller keeps alive; always strict, with findings; interim, like the writer (entry `json-deserializer`). The keys asked of a scope sit in an arena the reader owns (made by the first key noted, so diagnostics off holds none; not a scratch scope, the reader outlives every call), rewound with the scope when it closes; a scope's list is made with that arena's allocator, never default-constructed (it would bind to the thread's scratch arena) |
+| `JsonDeserializer` | `IDeserializer` over a `const Json&` the caller keeps alive; always strict, with findings; interim, like the writer (entry `json-deserializer`). The keys asked of a scope sit in an arena the reader owns, rewound when the scope closes; traps in `JsonDeserializer.h` |
 | `Json.h`, `JsonFwd.h` | nlohmann/json behind checked helpers (see "JSON rules"); `DumpJson` / `AppendJson` write a `Json` through `JsonWriter` |
 | `Utils/Base64.h` (one level up) | Base64 for the screenshot and the WebSocket handshake |
 
