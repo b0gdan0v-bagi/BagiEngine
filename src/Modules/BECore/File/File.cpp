@@ -170,27 +170,6 @@ namespace BECore {
         /// folder handles, one per level
         constexpr size_t kMaxWalkDepth = 64;
 
-        bool IsSeparator(char c) {
-#ifdef _WIN32
-            return c == '/' || c == '\\';
-#else
-            return c == '/';
-#endif
-        }
-
-        /// The text with `/` between the names, as Path keeps it: on Windows the system's `\` becomes `/`
-        void ToGenericSeparators(String& text) {
-#ifdef _WIN32
-            for (char& c : text) {
-                if (c == '\\') {
-                    c = '/';
-                }
-            }
-#else
-            static_cast<void>(text);
-#endif
-        }
-
         String ToString(StringView text) {
             return String(text.data(), text.size());
         }
@@ -495,7 +474,7 @@ namespace BECore {
 
     std::expected<void, String> WalkDirectory(StringView folder, WalkMode mode, FunctionRef<bool(StringView, FileKind)> visit) {
         Walker walker{mode, visit, ToString(folder)};
-        if (walker.path.empty() || !IsSeparator(walker.path.back())) {
+        if (walker.path.empty() || !PathIsSeparator(walker.path.back())) {
             walker.path.push_back('/');
         }
         walker.rootLength = walker.path.size();
@@ -545,7 +524,7 @@ namespace BECore {
         }
         String text(current);
         SDL_free(current);
-        ToGenericSeparators(text);
+        PathToGenericSeparators(text);
         // SDL ends the path with a separator; Path joins with its own, and a root keeps the one it is made of
         size_t rootLength = 1;
 #ifdef _WIN32
@@ -596,7 +575,7 @@ namespace BECore {
         } else if (startsWith(kExtendedPrefix)) {
             text.erase(0, kExtendedPrefix.size());
         }
-        ToGenericSeparators(text);
+        PathToGenericSeparators(text);
         return text;
 #else
         const CPath cPath{path};
@@ -631,7 +610,7 @@ namespace BECore {
             return canonical;
         }
         StringView rest = text.substr(existing.size());
-        while (!rest.empty() && IsSeparator(rest.front())) {
+        while (!rest.empty() && PathIsSeparator(rest.front())) {
             rest.remove_prefix(1);
         }
         if (rest.empty()) {

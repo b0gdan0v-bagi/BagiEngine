@@ -23,6 +23,12 @@ namespace BECore {
     [[nodiscard]] StringView PathStem(StringView path);
     [[nodiscard]] StringView PathExtension(StringView path);
 
+    /// A separator of `std::filesystem::path`: `/`, and a backslash only on Windows.
+    [[nodiscard]] bool PathIsSeparator(char ch);
+
+    /// On Windows each `\` of @p text becomes `/`, as `Path`'s constructor does; elsewhere the text stays.
+    void PathToGenericSeparators(String& text);
+
     /// A drive path `C:/a` or a UNC path counts on Windows; on the other systems the text starts with `/`.
     [[nodiscard]] bool PathIsAbsolute(StringView path);
 
@@ -113,7 +119,12 @@ namespace BECore {
          * `Path`'s constructor (a template, so no two conversions compete for a `const char*`).
          */
         Path& operator/=(const Path& other) {
-            Append(other.View());
+            if (&other == this) {
+                const Path copy = other;  // Append grows _text, which the right side views
+                Append(copy.View());
+            } else {
+                Append(other.View());
+            }
             return *this;
         }
         Path& operator/=(StringView other);

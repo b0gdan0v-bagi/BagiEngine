@@ -36,6 +36,9 @@ namespace BECore::Tests {
                 {"..", "", "..", "..", "", "..", false},
                 {"/..", "/", "..", "..", "", "/", true},
                 {"../..", "..", "..", "..", "", "../..", false},
+                {"../", "..", "", "", "", "..", false},
+                {"../a/..", "../a", "..", "..", "", "..", false},
+                {"../../", "../..", "", "", "", "../..", false},
                 {"a/b/", "a/b", "", "", "", "a/b/", false},
                 {".hidden", "", ".hidden", ".hidden", "", ".hidden", false},
                 {"dir/.hidden.txt", "dir", ".hidden.txt", ".hidden", ".txt", "dir/.hidden.txt", false},
@@ -238,6 +241,13 @@ namespace BECore::Tests {
         accumulated /= text;
         accumulated /= view;
         EXPECT_EQ(accumulated.View(), "root/lit/s/v");
+    }
+
+    TEST(PathTest, JoinOfAPathWithItselfDoublesIt) {
+        Path path("a/b");
+        path /= path;
+
+        EXPECT_EQ(path.View(), "a/b/a/b");
     }
 
     namespace {

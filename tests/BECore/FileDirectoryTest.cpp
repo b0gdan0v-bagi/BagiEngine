@@ -298,7 +298,7 @@ namespace BECore::Tests {
         const auto current = CurrentDirectory();
         ASSERT_TRUE(current.has_value());
 
-        const auto absolute = AbsolutePath("x/../" + String(kNonAsciiFile));
+        const auto absolute = AbsolutePath(Format("x/../{}", kNonAsciiFile));
 
         ASSERT_TRUE(absolute.has_value());
         EXPECT_EQ(*absolute, String((Path(*current) / kNonAsciiFile).LexicallyNormal().View()));

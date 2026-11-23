@@ -17,15 +17,6 @@ namespace BECore {
         constexpr size_t kHashShiftLeft = 6;
         constexpr size_t kHashShiftRight = 2;
 
-        /// A separator of std::filesystem::path: a backslash is one only where the OS says so (a POSIX name may hold it)
-        bool IsSeparator(char ch) {
-#ifdef _WIN32
-            return ch == '/' || ch == '\\';
-#else
-            return ch == '/';
-#endif
-        }
-
         /// The length of the root name: a drive `C:` or the `//host` of a UNC path on Windows, nothing elsewhere
         size_t RootNameLength([[maybe_unused]] StringView text) {
 #ifdef _WIN32
@@ -33,9 +24,9 @@ namespace BECore {
             if (text.size() >= 2 && isAsciiLetter(text[0]) && text[1] == ':') {
                 return 2;
             }
-            if (text.size() >= 3 && IsSeparator(text[0]) && IsSeparator(text[1]) && !IsSeparator(text[2])) {
+            if (text.size() >= 3 && PathIsSeparator(text[0]) && PathIsSeparator(text[1]) && !PathIsSeparator(text[2])) {
                 size_t end = 2;
-                while (end < text.size() && !IsSeparator(text[end])) {
+                while (end < text.size() && !PathIsSeparator(text[end])) {
                     ++end;
                 }
                 return end;
@@ -55,10 +46,10 @@ namespace BECore {
         Parts Split(StringView text) {
             Parts parts;
             parts.rootNameEnd = RootNameLength(text);
-            parts.hasRootDirectory = parts.rootNameEnd < text.size() && IsSeparator(text[parts.rootNameEnd]);
+            parts.hasRootDirectory = parts.rootNameEnd < text.size() && PathIsSeparator(text[parts.rootNameEnd]);
             parts.relativeBegin = parts.rootNameEnd;
             if (parts.hasRootDirectory) {
-                while (parts.relativeBegin < text.size() && IsSeparator(text[parts.relativeBegin])) {
+                while (parts.relativeBegin < text.size() && PathIsSeparator(text[parts.relativeBegin])) {
                     ++parts.relativeBegin;
                 }
             }
@@ -78,12 +69,12 @@ namespace BECore {
                     return trailing;
                 }
                 const size_t start = _pos;
-                while (_pos < _text.size() && !IsSeparator(_text[_pos])) {
+                while (_pos < _text.size() && !PathIsSeparator(_text[_pos])) {
                     ++_pos;
                 }
                 name = _text.substr(start, _pos - start);
                 const size_t nameEnd = _pos;
-                while (_pos < _text.size() && IsSeparator(_text[_pos])) {
+                while (_pos < _text.size() && PathIsSeparator(_text[_pos])) {
                     ++_pos;
                 }
                 _emitTrailing = _pos > nameEnd && _pos >= _text.size();
@@ -121,14 +112,33 @@ namespace BECore {
 
     }  // namespace
 
+    /// A backslash is a separator only where the OS says so (a POSIX name may hold it)
+    bool PathIsSeparator(char ch) {
+#ifdef _WIN32
+        return ch == '/' || ch == '\\';
+#else
+        return ch == '/';
+#endif
+    }
+
+    void PathToGenericSeparators([[maybe_unused]] String& text) {
+#ifdef _WIN32
+        for (char& ch : text) {
+            if (ch == '\\') {
+                ch = kSeparator;
+            }
+        }
+#endif
+    }
+
     StringView PathFilename(StringView path) {
         const Parts parts = Split(path);
         const StringView relative = path.substr(parts.relativeBegin);
-        if (relative.empty() || IsSeparator(relative.back())) {
+        if (relative.empty() || PathIsSeparator(relative.back())) {
             return path.substr(path.size());
         }
         size_t start = relative.size();
-        while (start > 0 && !IsSeparator(relative[start - 1])) {
+        while (start > 0 && !PathIsSeparator(relative[start - 1])) {
             --start;
         }
         return relative.substr(start);
@@ -141,7 +151,7 @@ namespace BECore {
         }
         const size_t rootEnd = parts.rootNameEnd + (parts.hasRootDirectory ? 1 : 0);
         size_t end = path.size() - PathFilename(path).size();
-        while (end > rootEnd && IsSeparator(path[end - 1])) {
+        while (end > rootEnd && PathIsSeparator(path[end - 1])) {
             --end;
         }
         return path.substr(0, end);
@@ -179,11 +189,11 @@ namespace BECore {
             return {};
         }
         size_t start = base.size();
-        const bool baseEndsInSeparator = !base.empty() && IsSeparator(base.back());
-        if (!baseEndsInSeparator && !IsSeparator(path[start])) {
+        const bool baseEndsInSeparator = !base.empty() && PathIsSeparator(base.back());
+        if (!baseEndsInSeparator && !PathIsSeparator(path[start])) {
             return {};  // "<base>x/y" is a sibling folder of the base
         }
-        while (start < path.size() && IsSeparator(path[start])) {
+        while (start < path.size() && PathIsSeparator(path[start])) {
             ++start;
         }
         return path.substr(start);
@@ -234,13 +244,7 @@ namespace BECore {
     }
 
     void Path::ToGenericSeparators() {
-#ifdef _WIN32
-        for (char& ch : _text) {
-            if (ch == '\\') {
-                ch = kSeparator;
-            }
-        }
-#endif
+        PathToGenericSeparators(_text);
     }
 
     void Path::Append(StringView other) {
@@ -261,7 +265,11 @@ namespace BECore {
     }
 
     Path& Path::operator/=(StringView other) {
+#ifdef _WIN32
         Append(Path(other).View());
+#else
+        Append(other);
+#endif
         return *this;
     }
 
@@ -316,7 +324,7 @@ namespace BECore {
             }
             result._text.append(kept[i].data(), kept[i].size());
         }
-        if (trailingSeparator && !kept.empty()) {
+        if (trailingSeparator && !kept.empty() && kept.back() != kDotDot) {
             result._text.push_back(kSeparator);
         }
         if (result._text.empty()) {
