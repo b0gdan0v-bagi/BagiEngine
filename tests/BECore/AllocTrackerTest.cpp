@@ -4,6 +4,7 @@
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
 #include <Common/Require.h>
+#include <Common/TempPath.h>
 #include <chrono>
 #include <cstdio>
 #include <gtest/gtest.h>
@@ -468,6 +469,49 @@ namespace BECore::Tests {
             }
         }
         EXPECT_TRUE(found);
+    }
+
+    namespace {
+
+        /// The blocks the zone `Trace write` allocated while a recorder with @p events frame marks was written to a file; the writing thread is in
+        /// no other zone, and the rows of the name table that no zone owns are counted into @p outsideZones
+        uint64_t AllocsOfWritingATrace(uint32_t events, uint64_t& outsideZones) {
+            ChromeTraceBackend recorder;
+            for (uint32_t i = 0; i < events; ++i) {
+                recorder.FrameMark();
+            }
+            const TestTempFolder folder("alloc_trace_write");
+            const String path = folder.PathOf("trace.json");
+            AllocTracker::ResetZoneStats();
+            EXPECT_TRUE(recorder.WriteFile(path).has_value());
+            Vector<AllocSiteStats> rows;
+            {
+                BE_PROFILE_SCOPE("Trace reader");  // the reader's own vector is not a write's
+                rows = AllocTracker::GetNameStats();
+            }
+            outsideZones = 0;
+            for (const AllocSiteStats& row : rows) {
+                if (row.zone == nullptr) {
+                    outsideZones += row.count;
+                }
+            }
+            return StatsOf("Trace write").count;
+        }
+
+    }  // namespace
+
+    TEST(AllocTrackerTest, WritingATraceFileAllocatesTheSameWhateverItsSizeAndNamesItsZone) {
+        constexpr uint32_t kFewEvents = 1000;
+        constexpr uint32_t kManyEvents = 20000;
+        constexpr uint64_t kSlack = 4;
+        uint64_t outsideFew = 0;
+        uint64_t outsideMany = 0;
+        const uint64_t few = AllocsOfWritingATrace(kFewEvents, outsideFew);
+        const uint64_t many = AllocsOfWritingATrace(kManyEvents, outsideMany);
+        EXPECT_GT(few, 0u);
+        EXPECT_LT(many, few + kSlack);
+        EXPECT_EQ(outsideFew, 0u);
+        EXPECT_EQ(outsideMany, 0u);
     }
 
     namespace {
