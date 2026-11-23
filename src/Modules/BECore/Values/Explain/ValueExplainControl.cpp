@@ -83,6 +83,9 @@ namespace BECore {
             return ValueTarget{static_cast<const char*>(object.ConstAddress()) + compiled->offset, explain};
         }
 
+        // By hand on purpose: the tree of a long loop nests deeper than `JsonWriter::kMaxDepth`, which a reflected node (the generated writer
+        // asserts there) cannot take; the DOM cuts such a branch to `null`. A bound on the depth would change the answer, so it stays a DOM.
+
         /// The tree as nested `{source, label, value, type, children}`; @p budget counts the nodes still allowed, and a cut sets @p cut
         Json NodeJson(const ProgramTrace& trace, uint32_t index, uint32_t& budget, bool& cut) {
             const TraceNode& node = trace.nodes[index];

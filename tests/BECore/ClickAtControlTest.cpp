@@ -196,6 +196,16 @@ namespace BECore::Tests {
         EXPECT_EQ(recorder.downs, 1);
     }
 
+    TEST_F(ClickAtControlTest, TheAnswerEchoesAFloatCoordinateAsTheDoubleItWidensTo) {
+        Show("Plain");
+
+        const Json response = Call(At(0.1, 0.1));
+
+        ASSERT_TRUE(IsOk(response));
+        EXPECT_EQ(Number(Result(response), "x"), static_cast<double>(0.1f));
+        EXPECT_EQ(Number(Result(response), "outputY"), static_cast<double>(0.1f));
+    }
+
     TEST_F(ClickAtControlTest, ASceneUnitClickIsMappedThroughTheViewFitOfTheLastDraw) {
         Show("Fitted");
         Recorder recorder;

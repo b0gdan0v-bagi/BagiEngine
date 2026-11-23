@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/InputAnswers.h>
 #include <BECore/Input/UIInput.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
@@ -114,13 +115,13 @@ namespace BECore {
 
             const PointClick click = ClickOutputPoint(CoreManager::GetUIInput(), outputX, outputY, *button, *which);
 
-            Json result = Json::object();
-            result["x"] = *x;
-            result["y"] = *y;
-            result["outputX"] = outputX;
-            result["outputY"] = outputY;
-            result["consumed"] = click.consumed;
-            call.Reply(std::move(result));
+            InputClickAnswer answer;
+            answer.consumed = click.consumed;
+            answer.outputX = static_cast<double>(outputX);
+            answer.outputY = static_cast<double>(outputY);
+            answer.x = static_cast<double>(*x);
+            answer.y = static_cast<double>(*y);
+            call.ReplyObject(answer);
         }
 
     }  // namespace
