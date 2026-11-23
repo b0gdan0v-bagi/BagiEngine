@@ -25,8 +25,9 @@ namespace BECore {
     /**
      * @brief Binary deserializer (reader) for the format written by BinarySerializer
      *
-     * Reads version 1 (names inline) and version 2 (a sorted string table; names and PoolString values are indices into it).
-     * The whole buffer is validated when it is loaded (header, the table, sizes, tags, indices, nesting), so reading from
+     * Reads version 1 (names inline), version 2 (a sorted string table; names and PoolString values are indices into it) and
+     * version 3 (a name table and a pool section of the PoolString texts, each entry with a hash that this reader never uses).
+     * The whole buffer is validated when it is loaded (header, the tables, sizes, tags, indices, nesting), so reading from
      * a truncated or corrupt buffer fails in the Load*() call and never reads out of bounds afterwards.
      * Strings are interned only when asked for: names and String values never, a PoolString value on the first Read of one
      * (see Read(StringView, PoolString&)), so a file that is only peeked at grows no pool.
@@ -103,8 +104,9 @@ namespace BECore {
         /**
          * @brief Takes a String or a PoolString entry
          *
-         * The first call after a load of version 2 interns, in one PoolString::InternBatch, every distinct text that a
-         * PoolString entry of the file refers to; later calls take the result. A text over ReaderLimits::kMaxPoolStringBytes
+         * The first call after a load of version 2 or 3 interns, in one PoolString::InternBatch, every distinct text that a
+         * PoolString entry of the file refers to (version 3: every entry of the pool section, hashed here, never trusted from
+         * the file); later calls take the result. A text over ReaderLimits::kMaxPoolStringBytes
          * is not in the batch and is the error of AcceptPoolStringLength. A String entry (and any entry of version 1) is
          * interned when it is read, one text at a time.
          */
@@ -149,7 +151,8 @@ namespace BECore {
         /// What Validate() found out; Open() keeps it
         struct Checked {
             uint16_t version = 0;
-            BinaryFormat::StringTable table;  ///< Over the bytes that were validated; empty for version 1
+            BinaryFormat::StringTable table;  ///< Over the bytes that were validated (version 3: the name table); empty for version 1
+            BinaryFormat::PoolSection pool;   ///< Version 3 only
             size_t rootBegin = 0;             ///< The first entry of the document
             bool hasDuplicateNames = false;
             /// One bit per table string that a PoolString entry refers to; empty when the file has none
@@ -181,7 +184,7 @@ namespace BECore {
          * name that is not there costs one pass over the scope. That order says nothing about which entry wins when a name
          * repeats, so a file in which any scope holds one name twice in one kind of entry (scalar, object, array) is marked
          * by validation (_hasDuplicateNames) and always scans the whole scope forward, which keeps the last one.
-         * In version 2 the name is looked up once in the string table (not there: not found, no scan) and the entries are
+         * In versions 2 and 3 the name is looked up once in the string table (not there: not found, no scan) and the entries are
          * compared by name index.
          *
          * @param moveCursor false for a question that is not a read (HasKey): the read that follows it would otherwise
@@ -198,11 +201,17 @@ namespace BECore {
         /// Find a scalar entry and check its tag. Reports "Type mismatch" for another one.
         bool FindScalar(StringView name, uint8_t expectedTag, bool reportMissing, BinaryFormat::EntryView& outEntry);
 
-        /// Find a String or PoolString entry and give its text (inline, or from the string table)
+        /// Find a String or PoolString entry and give its text (inline, or from the string table or the pool section)
         bool FindText(StringView name, bool reportMissing, BinaryFormat::EntryView& outEntry, StringView& outText);
 
-        /// Interns the distinct strings of the file that PoolString entries refer to, once per load
+        /// Interns the strings of the file that PoolString entries refer to, once per load
         void InternTableStrings();
+
+        /// Version 3: builds _poolOffsets by one walk of the section the first time it is needed
+        void EnsurePoolOffsets();
+
+        /// Version 3: the text of entry @p index of the pool section, a view over the stream; @p index must be below the section's count
+        StringView PoolEntryText(size_t index);
 
         bool ReadPoolString(StringView name, bool reportMissing, PoolString& outValue);
 
@@ -224,12 +233,17 @@ namespace BECore {
         Vector<uint8_t> _owned;
         /// Set by Validate(): some scope of the stream holds a name twice in one kind of entry (see FindEntry)
         bool _hasDuplicateNames = false;
-        /// Version 2: the entries name strings of _table by index
+        uint16_t _version = 0;
+        /// Versions 2 and 3: the entries name strings of _table by index
         bool _tabled = false;
         BinaryFormat::StringTable _table;
+        /// Version 3: the pool section, and where each of its entries starts in the stream (built lazily, by EnsurePoolOffsets())
+        BinaryFormat::PoolSection _pool;
+        Vector<uint32_t> _poolOffsets;
         /// Bits of the table strings that PoolString entries refer to, from Validate(); consumed by InternTableStrings()
         Vector<uint64_t> _poolBits;
-        /// The strings that InternTableStrings() interned: _pooled[i] is the text of table string _pooledIndices[i] (ascending)
+        /// The strings that InternTableStrings() interned: _pooled[i] is the text of table string _pooledIndices[i] (ascending);
+        /// version 3 interns the whole section, so _pooled[i] is entry i and _pooledIndices stays empty
         Vector<uint32_t> _pooledIndices;
         Vector<PoolString> _pooled;
         bool _pooledReady = false;

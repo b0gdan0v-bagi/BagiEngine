@@ -1,6 +1,6 @@
 #pragma once
 
-// The writer of test streams of both versions, with no gtest: the unit tests and the fuzz seeds share it (BinaryStreams.h adds the reader)
+// The writer of test streams of the three versions, with no gtest: the unit tests and the fuzz seeds share it (BinaryStreams.h adds the reader)
 
 #include <BECore/Reflection/BinaryFormat.h>
 #include <BECore/Types/Types.h>
@@ -45,7 +45,7 @@ namespace BECore::Tests::BinaryStreams {
         return entry;
     }
 
-    /// A value written with `Write(name, const PoolString&)`: a table index in version 2, inline in version 1
+    /// A value written with `Write(name, const PoolString&)`: a table index in version 2, a pool section index in version 3, inline in version 1
     inline Entry Pooled(StringView name, StringView text) {
         Entry entry = Text(name, text);
         entry.tag = BinaryFormat::Tag::PoolString;
@@ -76,8 +76,17 @@ namespace BECore::Tests::BinaryStreams {
     struct Options {
         uint16_t version = BinaryFormat::TabledVersion;
         /// Version 2: the strings of the table, in this order, as given (so a test can make it unsorted or repeat a text); every name and
-        /// every PoolString text of the document must be in it. Empty: the distinct texts, sorted
+        /// every PoolString text of the document must be in it. Version 3: the same for the name table, which holds names only.
+        /// Empty: the distinct texts, sorted
         Vector<String> table;
+        /// Version 3: the texts of the pool section, in this order, as given (so a test can make it unsorted or repeat a text); every PoolString
+        /// text of the document must be in it. Empty: the distinct texts, sorted
+        Vector<String> pool;
+        /// Version 3: the hash written for the entry with this text instead of its real one (every other entry keeps the real one)
+        Vector<Pair<String, uint64_t>> hashOverrides;
+        /// Version 3: written instead of `Details::PoolHashFunctionId()`, and instead of the checksum of the entries as they are written
+        Optional<uint32_t> hashFunction;
+        Optional<uint64_t> checksum;
     };
 
     namespace Detail {
@@ -93,36 +102,51 @@ namespace BECore::Tests::BinaryStreams {
             out.insert(out.end(), reinterpret_cast<const uint8_t*>(text.data()), reinterpret_cast<const uint8_t*>(text.data()) + text.size());
         }
 
-        inline void CollectTexts(const Vector<Entry>& entries, Vector<String>& texts) {
+        /// The names go to @p names; the PoolString texts go to @p pool, or to @p names too when @p pool is null (version 2)
+        inline void CollectTexts(const Vector<Entry>& entries, Vector<String>& names, Vector<String>* pool) {
             for (const Entry& entry : entries) {
-                texts.push_back(entry.name);
+                names.push_back(entry.name);
                 if (entry.tag == BinaryFormat::Tag::PoolString) {
-                    texts.push_back(entry.text);
+                    (pool != nullptr ? *pool : names).push_back(entry.text);
                 }
                 if (entry.tag == BinaryFormat::Tag::Array) {
                     // An element has no name in the stream
                     for (const Entry& element : entry.children) {
-                        CollectTexts(element.children, texts);
+                        CollectTexts(element.children, names, pool);
                     }
                 } else {
-                    CollectTexts(entry.children, texts);
+                    CollectTexts(entry.children, names, pool);
                 }
             }
+        }
+
+        inline void SortDistinct(Vector<String>& texts) {
+            eastl::sort(texts.begin(), texts.end(), [](const String& a, const String& b) { return BinaryFormat::CompareStrings(StringView(a), StringView(b)) < 0; });
+            texts.erase(eastl::unique(texts.begin(), texts.end()), texts.end());
+        }
+
+        inline uint32_t IndexIn(const Vector<String>& list, StringView text) {
+            for (size_t i = 0; i < list.size(); ++i) {
+                if (StringView(list[i]) == text) {
+                    return static_cast<uint32_t>(i);
+                }
+            }
+            // A mistake of the test that builds the stream, and the header has no gtest to report it to (the fuzz seeds use it too)
+            std::fprintf(stderr, "the table given to BinaryStreams::Build has no \"%.*s\"\n", static_cast<int>(text.size()), text.data());
+            std::abort();
         }
 
         struct Context {
             uint16_t version = 0;
             const Vector<String>* table = nullptr;
+            const Vector<String>* pool = nullptr;  ///< Version 3
 
             uint32_t IndexOf(StringView text) const {
-                for (size_t i = 0; i < table->size(); ++i) {
-                    if (StringView((*table)[i]) == text) {
-                        return static_cast<uint32_t>(i);
-                    }
-                }
-                // A mistake of the test that builds the stream, and the header has no gtest to report it to (the fuzz seeds use it too)
-                std::fprintf(stderr, "the table given to BinaryStreams::Build has no \"%.*s\"\n", static_cast<int>(text.size()), text.data());
-                std::abort();
+                return IndexIn(*table, text);
+            }
+
+            uint32_t PoolIndexOf(StringView text) const {
+                return IndexIn(*pool, text);
             }
         };
 
@@ -141,7 +165,7 @@ namespace BECore::Tests::BinaryStreams {
 
             if (const size_t fixed = BinaryFormat::FixedPayloadSize(tag); fixed != 0) {
                 if (tag == BinaryFormat::Tag::PoolString) {
-                    Put<uint32_t>(out, context.IndexOf(entry.text));
+                    Put<uint32_t>(out, context.version == BinaryFormat::PooledVersion ? context.PoolIndexOf(entry.text) : context.IndexOf(entry.text));
                 } else {
                     const size_t at = out.size();
                     out.resize(at + fixed);
@@ -194,6 +218,32 @@ namespace BECore::Tests::BinaryStreams {
             }
         }
 
+        inline void EmitPool(Vector<uint8_t>& out, const Vector<String>& pool, const Options& options) {
+            size_t entryBytes = 0;
+            for (const String& text : pool) {
+                entryBytes += Details::PoolEntryBytes(text.size());
+            }
+            // The entries are built in a block of their own: ConstructPoolEntry wants 8-aligned memory and the section starts at any offset of the stream
+            Vector<uint8_t> entries(entryBytes, 0);
+            size_t at = 0;
+            for (const String& text : pool) {
+                uint64_t hash = StringUtils::GetHash(text);
+                for (const Pair<String, uint64_t>& override : options.hashOverrides) {
+                    if (StringView(override.first) == StringView(text)) {
+                        hash = override.second;
+                    }
+                }
+                Details::ConstructPoolEntry(entries.data() + at, hash, text);
+                at += Details::PoolEntryBytes(text.size());
+            }
+            Put<uint32_t>(out, static_cast<uint32_t>(pool.size()));
+            Put<uint32_t>(out, static_cast<uint32_t>(entryBytes));
+            Put<uint32_t>(out, options.hashFunction.value_or(Details::PoolHashFunctionId()));
+            Put<uint32_t>(out, 0);
+            Put<uint64_t>(out, options.checksum.value_or(BinaryFormat::PoolSectionChecksum(entries.data(), entryBytes)));
+            out.insert(out.end(), entries.begin(), entries.end());
+        }
+
     }  // namespace Detail
 
     /// The bytes of a stream of the version in @p options with the entries of @p root in the scope of the document
@@ -203,19 +253,34 @@ namespace BECore::Tests::BinaryStreams {
         Detail::Put<uint16_t>(out, options.version);
         Detail::Put<uint32_t>(out, 0);
 
+        const bool tabled = options.version != BinaryFormat::LegacyVersion;
+        const bool pooled = options.version == BinaryFormat::PooledVersion;
         Vector<String> table = options.table;
-        if (options.version == BinaryFormat::TabledVersion && table.empty()) {
-            Detail::CollectTexts(root, table);
-            eastl::sort(table.begin(), table.end(), [](const String& a, const String& b) { return BinaryFormat::CompareStrings(StringView(a), StringView(b)) < 0; });
-            table.erase(eastl::unique(table.begin(), table.end()), table.end());
+        Vector<String> pool = options.pool;
+        if (tabled && (table.empty() || (pooled && pool.empty()))) {
+            Vector<String> names;
+            Vector<String> texts;
+            Detail::CollectTexts(root, names, pooled ? &texts : nullptr);
+            if (table.empty()) {
+                table = eastl::move(names);
+                Detail::SortDistinct(table);
+            }
+            if (pooled && pool.empty()) {
+                pool = eastl::move(texts);
+                Detail::SortDistinct(pool);
+            }
         }
-        if (options.version == BinaryFormat::TabledVersion) {
+        if (tabled) {
             Detail::EmitTable(out, table);
+        }
+        if (pooled) {
+            Detail::EmitPool(out, pool, options);
         }
 
         Detail::Context context;
         context.version = options.version;
         context.table = &table;
+        context.pool = &pool;
         Detail::EmitEntries(out, root, context);
         BinaryFormat::Store<uint32_t>(out.data() + BinaryFormat::PayloadSizeOffset, static_cast<uint32_t>(out.size() - BinaryFormat::HeaderSize));
         return out;

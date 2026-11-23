@@ -263,13 +263,30 @@ namespace BECore::Tests {
             bool tabled = false;
             BinaryFormat::StringTable table;
             size_t rootBegin = BinaryFormat::HeaderSize;
+            bool pooled = false;
+            Vector<String> pool;  ///< The texts of the pool section of version 3
         };
 
         Doc DocOf(const Vector<uint8_t>& bytes) {
             Doc doc{bytes};
-            doc.tabled = BinaryFormat::Load<uint16_t>(bytes.data() + sizeof(BinaryFormat::Magic)) == BinaryFormat::TabledVersion;
+            const uint16_t version = BinaryFormat::Load<uint16_t>(bytes.data() + sizeof(BinaryFormat::Magic));
+            doc.tabled = version != BinaryFormat::LegacyVersion;
+            doc.pooled = version == BinaryFormat::PooledVersion;
             if (doc.tabled && !BinaryFormat::ParseStringTable(bytes.data(), BinaryFormat::HeaderSize, bytes.size(), doc.table, doc.rootBegin)) {
                 ADD_FAILURE() << "the string table is not well formed";
+            }
+            if (doc.pooled) {
+                BinaryFormat::PoolSection section;
+                if (!BinaryFormat::ParsePoolSection(bytes.data(), doc.rootBegin, bytes.size(), section, doc.rootBegin)) {
+                    ADD_FAILURE() << "the pool section is not well formed";
+                    return doc;
+                }
+                size_t at = section.entriesOffset;
+                for (uint32_t i = 0; i < section.count; ++i) {
+                    const size_t size = BinaryFormat::Load<uint32_t>(bytes.data() + at + offsetof(Details::PoolStringEntry, size));
+                    doc.pool.emplace_back(reinterpret_cast<const char*>(bytes.data() + at + offsetof(Details::PoolStringEntry, data)), size);
+                    at += Details::PoolEntryBytes(size);
+                }
             }
             return doc;
         }
@@ -279,8 +296,14 @@ namespace BECore::Tests {
             size_t position = range.begin;
             while (position < range.end) {
                 BinaryFormat::EntryView entry;
-                const bool parsed =
-                    doc.tabled ? BinaryFormat::ParseEntryV2(doc.bytes.data(), position, range.end, doc.table, entry) : BinaryFormat::ParseEntry(doc.bytes.data(), position, range.end, entry);
+                bool parsed = false;
+                if (doc.pooled) {
+                    parsed = BinaryFormat::ParseEntryV3(doc.bytes.data(), position, range.end, doc.table, doc.pool.size(), entry);
+                } else if (doc.tabled) {
+                    parsed = BinaryFormat::ParseEntryV2(doc.bytes.data(), position, range.end, doc.table, entry);
+                } else {
+                    parsed = BinaryFormat::ParseEntry(doc.bytes.data(), position, range.end, entry);
+                }
                 if (!parsed) {
                     ADD_FAILURE() << "the document is not well formed";
                     break;
@@ -398,8 +421,10 @@ namespace BECore::Tests {
                     String text;
                     ASSERT_TRUE(reader.ReadAttribute(entry.name, text)) << where.c_str();
                     const size_t length = BinaryFormat::Load<uint32_t>(data + entry.payloadBegin);
-                    const StringView expected =
-                        entry.tag == BinaryFormat::Tag::PoolString ? doc.table.Get(length) : StringView(reinterpret_cast<const char*>(data + entry.payloadBegin + sizeof(uint32_t)), length);
+                    StringView expected = StringView(reinterpret_cast<const char*>(data + entry.payloadBegin + sizeof(uint32_t)), length);
+                    if (entry.tag == BinaryFormat::Tag::PoolString) {
+                        expected = doc.pooled ? StringView(doc.pool[length]) : doc.table.Get(length);
+                    }
                     EXPECT_EQ(StringView(text), expected) << where.c_str();
                 }
             }
@@ -483,11 +508,15 @@ namespace BECore::Tests {
             }
         }
 
-        /// The document as it is, and the same entries written again as version 2 (the stream of a writer is version 1 until the writer moves): both must read as the scan says
+        /// The document as it is, and the same entries written again as versions 2 and 3: each must read as the scan says
         void ExpectLookupMatchesScan(const Vector<uint8_t>& bytes, bool expectDuplicateFlag, const char* what) {
             ExpectLookupMatchesStream(bytes, expectDuplicateFlag, what);
-            const Vector<uint8_t> tabled = BinaryStreams::Build(BinaryStreams::ReadTree(bytes));
-            ExpectLookupMatchesStream(tabled, expectDuplicateFlag, Format("{} (version 2)", what).c_str());
+            const Vector<BinaryStreams::Entry> tree = BinaryStreams::ReadTree(bytes);
+            for (const uint16_t version : {BinaryFormat::TabledVersion, BinaryFormat::PooledVersion}) {
+                BinaryStreams::Options options;
+                options.version = version;
+                ExpectLookupMatchesStream(BinaryStreams::Build(tree, options), expectDuplicateFlag, Format("{} (version {})", what, version).c_str());
+            }
         }
 
         void WriteElementFields(BinarySerializer& writer, int32_t id) {
@@ -898,6 +927,9 @@ namespace BECore::Tests {
             return options;
         }
 
+        /// The versions with a string table: a case about behaviour runs over each
+        constexpr uint16_t kTabledVersions[] = {BinaryFormat::TabledVersion, BinaryFormat::PooledVersion};
+
         /// A stream whose payload size is right for its length, so the load reaches the check under test
         Vector<uint8_t> Resized(Vector<uint8_t> bytes, size_t size) {
             bytes.resize(size);
@@ -924,9 +956,9 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(BinaryDeserializerTest, ADocumentReadsEqualInBothVersions) {
+    TEST(BinaryDeserializerTest, ADocumentReadsEqualInEveryVersion) {
         const Vector<BinaryStreams::Entry> tree = SampleTree();
-        for (const uint16_t version : {BinaryFormat::LegacyVersion, BinaryFormat::TabledVersion}) {
+        for (const uint16_t version : {BinaryFormat::LegacyVersion, BinaryFormat::TabledVersion, BinaryFormat::PooledVersion}) {
             const Vector<uint8_t> bytes = BinaryStreams::Build(tree, Version(version));
             BinaryDeserializer reader;
             ASSERT_TRUE(reader.LoadFromBuffer(bytes)) << version;
@@ -936,73 +968,82 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(BinaryDeserializerTest, AVersion2StreamLoadsFromAViewABufferAndAFile) {
-        const Vector<BinaryStreams::Entry> tree = SampleTree();
-        const Vector<uint8_t> bytes = BinaryStreams::Build(tree);
+    TEST(BinaryDeserializerTest, ATabledStreamLoadsFromAViewABufferAndAFile) {
+        for (const uint16_t version : kTabledVersions) {
+            SCOPED_TRACE(Format("version {}", version).c_str());
+            const Vector<BinaryStreams::Entry> tree = SampleTree();
+            const Vector<uint8_t> bytes = BinaryStreams::Build(tree, Version(version));
 
-        BinaryDeserializer fromView;
-        ASSERT_TRUE(fromView.LoadFromView(bytes.data(), bytes.size()));
-        ExpectReadsEntries(fromView, tree, "view");
+            BinaryDeserializer fromView;
+            ASSERT_TRUE(fromView.LoadFromView(bytes.data(), bytes.size()));
+            ExpectReadsEntries(fromView, tree, "view");
 
-        BinaryDeserializer fromBuffer;
-        ASSERT_TRUE(fromBuffer.LoadFromBuffer(bytes));
-        ExpectReadsEntries(fromBuffer, tree, "buffer");
+            BinaryDeserializer fromBuffer;
+            ASSERT_TRUE(fromBuffer.LoadFromBuffer(bytes));
+            ExpectReadsEntries(fromBuffer, tree, "buffer");
 
-        const std::filesystem::path path = TestTempPath("binary_deserializer_v2_file");
-        WriteFile(path, StringView(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
-        BinaryDeserializer fromFile;
-        const bool opened = fromFile.LoadFromFile(path);
-        std::error_code ignored;
-        std::filesystem::remove(path, ignored);
-        ASSERT_TRUE(opened);
-        ExpectReadsEntries(fromFile, tree, "file");
+            const std::filesystem::path path = TestTempPath(Format("binary_deserializer_v{}_file", version));
+            WriteFile(path, StringView(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+            BinaryDeserializer fromFile;
+            const bool opened = fromFile.LoadFromFile(path);
+            std::error_code ignored;
+            std::filesystem::remove(path, ignored);
+            ASSERT_TRUE(opened);
+            ExpectReadsEntries(fromFile, tree, "file");
+        }
     }
 
-    TEST(BinaryDeserializerTest, AMovedReaderOfVersion2StillReads) {
-        const Vector<BinaryStreams::Entry> tree = SampleTree();
-        const Vector<uint8_t> bytes = BinaryStreams::Build(tree);
+    TEST(BinaryDeserializerTest, AMovedReaderOfATabledStreamStillReads) {
+        for (const uint16_t version : kTabledVersions) {
+            SCOPED_TRACE(Format("version {}", version).c_str());
+            const Vector<BinaryStreams::Entry> tree = SampleTree();
+            const Vector<uint8_t> bytes = BinaryStreams::Build(tree, Version(version));
 
-        BinaryDeserializer owning;
-        ASSERT_TRUE(owning.LoadFromBuffer(bytes));
-        BinaryDeserializer movedOwning(eastl::move(owning));
-        ExpectReadsEntries(movedOwning, tree, "moved owning reader");
+            BinaryDeserializer owning;
+            ASSERT_TRUE(owning.LoadFromBuffer(bytes));
+            BinaryDeserializer movedOwning(eastl::move(owning));
+            ExpectReadsEntries(movedOwning, tree, "moved owning reader");
 
-        BinaryDeserializer viewing;
-        ASSERT_TRUE(viewing.LoadFromView(bytes.data(), bytes.size()));
-        BinaryDeserializer movedViewing;
-        movedViewing = eastl::move(viewing);
-        ExpectReadsEntries(movedViewing, tree, "moved view");
+            BinaryDeserializer viewing;
+            ASSERT_TRUE(viewing.LoadFromView(bytes.data(), bytes.size()));
+            BinaryDeserializer movedViewing;
+            movedViewing = eastl::move(viewing);
+            ExpectReadsEntries(movedViewing, tree, "moved view");
 
-        // The moved reader keeps the strings it interned for the first PoolString read
-        BinaryDeserializer first;
-        ASSERT_TRUE(first.LoadFromBuffer(bytes));
-        PoolString kind;
-        ASSERT_TRUE(first.Read("square", kind));
-        BinaryDeserializer movedAfterRead(eastl::move(first));
-        ExpectReadsEntries(movedAfterRead, tree, "moved after a PoolString read");
+            // The moved reader keeps the strings it interned for the first PoolString read
+            BinaryDeserializer first;
+            ASSERT_TRUE(first.LoadFromBuffer(bytes));
+            PoolString kind;
+            ASSERT_TRUE(first.Read("square", kind));
+            BinaryDeserializer movedAfterRead(eastl::move(first));
+            ExpectReadsEntries(movedAfterRead, tree, "moved after a PoolString read");
+        }
     }
 
     TEST(BinaryDeserializerTest, ANameThatIsNotInTheTableIsNotFound) {
-        const Vector<uint8_t> bytes = BinaryStreams::Build({Number("a", 1), BinaryStreams::Object("o", {Number("b", 2)})});
-        BinaryDeserializer reader;
-        ASSERT_TRUE(reader.LoadFromView(bytes.data(), bytes.size()));
+        for (const uint16_t version : kTabledVersions) {
+            SCOPED_TRACE(Format("version {}", version).c_str());
+            const Vector<uint8_t> bytes = BinaryStreams::Build({Number("a", 1), BinaryStreams::Object("o", {Number("b", 2)})}, Version(version));
+            BinaryDeserializer reader;
+            ASSERT_TRUE(reader.LoadFromView(bytes.data(), bytes.size()));
 
-        int32_t value = 5;
-        EXPECT_FALSE(reader.HasKey("zzz"));
-        EXPECT_FALSE(reader.ReadAttribute("zzz", value));
-        EXPECT_FALSE(reader.HasErrors());
-        EXPECT_FALSE(reader.Read("zzz", value));
-        EXPECT_EQ(LastError(reader), "Element not found");
-        EXPECT_EQ(value, 5);
+            int32_t value = 5;
+            EXPECT_FALSE(reader.HasKey("zzz"));
+            EXPECT_FALSE(reader.ReadAttribute("zzz", value));
+            EXPECT_FALSE(reader.HasErrors());
+            EXPECT_FALSE(reader.Read("zzz", value));
+            EXPECT_EQ(LastError(reader), "Element not found");
+            EXPECT_EQ(value, 5);
 
-        // In the table, but not in this scope
-        reader.ClearErrors();
-        ASSERT_TRUE(reader.BeginObject("o"));
-        EXPECT_FALSE(reader.HasKey("a"));
-        EXPECT_FALSE(reader.ReadAttribute("a", value));
-        EXPECT_FALSE(reader.HasErrors());
-        EXPECT_TRUE(reader.Read("b", value));
-        EXPECT_EQ(value, 2);
+            // In the table, but not in this scope
+            reader.ClearErrors();
+            ASSERT_TRUE(reader.BeginObject("o"));
+            EXPECT_FALSE(reader.HasKey("a"));
+            EXPECT_FALSE(reader.ReadAttribute("a", value));
+            EXPECT_FALSE(reader.HasErrors());
+            EXPECT_TRUE(reader.Read("b", value));
+            EXPECT_EQ(value, 2);
+        }
     }
 
     TEST(BinaryDeserializerTest, ACorruptStringTableIsRefusedAndNothingIsReadable) {
@@ -1059,9 +1100,9 @@ namespace BECore::Tests {
         ExpectRefused(Resized(good, BinaryFormat::HeaderSize), "header only: no table");
         ExpectRefused(Resized(good, BinaryFormat::HeaderSize + sizeof(uint32_t)), "half a table header");
 
-        Vector<uint8_t> version3 = good;
-        BinaryFormat::Store<uint16_t>(version3.data() + sizeof(BinaryFormat::Magic), 3);
-        ExpectRefused(version3, "version 3");
+        Vector<uint8_t> unknownVersion = good;
+        BinaryFormat::Store<uint16_t>(unknownVersion.data() + sizeof(BinaryFormat::Magic), BinaryFormat::PooledVersion + 1);
+        ExpectRefused(unknownVersion, "a version above the newest");
 
         Vector<uint8_t> tagInVersion1 = BinaryStreams::Build({Text("a", "x")}, Version(BinaryFormat::LegacyVersion));
         ASSERT_EQ(tagInVersion1[BinaryFormat::HeaderSize], BinaryFormat::Tag::String);
@@ -1070,31 +1111,38 @@ namespace BECore::Tests {
     }
 
     TEST(BinaryDeserializerTest, AnEmptyTableIsALoadableDocument) {
-        const Vector<uint8_t> bytes = BinaryStreams::Build({});
-        ASSERT_EQ(bytes.size(), BinaryFormat::HeaderSize + 2 * sizeof(uint32_t));
-        BinaryDeserializer reader;
-        ASSERT_TRUE(reader.LoadFromView(bytes.data(), bytes.size()));
-        EXPECT_FALSE(reader.HasKey("a"));
-        EXPECT_FALSE(reader.HasErrors());
+        for (const uint16_t version : kTabledVersions) {
+            SCOPED_TRACE(Format("version {}", version).c_str());
+            const Vector<uint8_t> bytes = BinaryStreams::Build({}, Version(version));
+            const size_t sectionBytes = version == BinaryFormat::PooledVersion ? BinaryFormat::PoolSectionHeadSize : 0;
+            ASSERT_EQ(bytes.size(), BinaryFormat::HeaderSize + 2 * sizeof(uint32_t) + sectionBytes);
+            BinaryDeserializer reader;
+            ASSERT_TRUE(reader.LoadFromView(bytes.data(), bytes.size()));
+            EXPECT_FALSE(reader.HasKey("a"));
+            EXPECT_FALSE(reader.HasErrors());
+        }
     }
 
     TEST(BinaryDeserializerTest, ATableThatIsNotSortedByBytesIsRefusedWhateverTheCharSignedness) {
-        // 0x80 is below 'a' as a signed char and above it as the unsigned byte the format orders by
-        const String high = "\x80";
-        BinaryStreams::Options options;
-        options.table = {"a", high};
-        EXPECT_TRUE(BinaryFormat::CompareStrings("a", high) < 0);
-        const Vector<BinaryStreams::Entry> tree = {Number("a", 1), Number(high, 2)};
-        BinaryDeserializer reader;
-        const Vector<uint8_t> ordered = BinaryStreams::Build(tree, options);
-        ASSERT_TRUE(reader.LoadFromView(ordered.data(), ordered.size()));
-        int32_t value = 0;
-        ASSERT_TRUE(reader.Read(high, value));
-        EXPECT_EQ(value, 2);
+        for (const uint16_t version : kTabledVersions) {
+            SCOPED_TRACE(Format("version {}", version).c_str());
+            // 0x80 is below 'a' as a signed char and above it as the unsigned byte the format orders by
+            const String high = "\x80";
+            BinaryStreams::Options options = Version(version);
+            options.table = {"a", high};
+            EXPECT_TRUE(BinaryFormat::CompareStrings("a", high) < 0);
+            const Vector<BinaryStreams::Entry> tree = {Number("a", 1), Number(high, 2)};
+            BinaryDeserializer reader;
+            const Vector<uint8_t> ordered = BinaryStreams::Build(tree, options);
+            ASSERT_TRUE(reader.LoadFromView(ordered.data(), ordered.size()));
+            int32_t value = 0;
+            ASSERT_TRUE(reader.Read(high, value));
+            EXPECT_EQ(value, 2);
 
-        options.table = {high, "a"};
-        const Vector<uint8_t> reversed = BinaryStreams::Build(tree, options);
-        ExpectRefused(reversed, "high byte first");
+            options.table = {high, "a"};
+            const Vector<uint8_t> reversed = BinaryStreams::Build(tree, options);
+            ExpectRefused(reversed, "high byte first");
+        }
     }
 
     // =============================================================================
@@ -1102,65 +1150,71 @@ namespace BECore::Tests {
     // =============================================================================
 
     TEST(BinaryDeserializerTest, OnlyAPoolStringValueIsInternedNotANameNorAStringValue) {
-        const String name = FreshText("bin_name");
-        const String stringName = FreshText("bin_string_name");
-        const String stringValue = FreshText("bin_string_value");
-        const String poolName = FreshText("bin_pool_name");
-        const String poolValue = FreshText("bin_pool_value");
-        const Vector<uint8_t> bytes = BinaryStreams::Build({Number(name, 1), Text(stringName, stringValue), Pooled(poolName, poolValue)});
+        for (const uint16_t version : kTabledVersions) {
+            SCOPED_TRACE(Format("version {}", version).c_str());
+            const String name = FreshText("bin_name");
+            const String stringName = FreshText("bin_string_name");
+            const String stringValue = FreshText("bin_string_value");
+            const String poolName = FreshText("bin_pool_name");
+            const String poolValue = FreshText("bin_pool_value");
+            const Vector<uint8_t> bytes = BinaryStreams::Build({Number(name, 1), Text(stringName, stringValue), Pooled(poolName, poolValue)}, Version(version));
 
-        BinaryDeserializer reader;
-        ASSERT_TRUE(reader.LoadFromBuffer(bytes));
-        int32_t number = 0;
-        String text;
-        PoolString pooled;
-        ASSERT_TRUE(reader.Read(name, number));
-        ASSERT_TRUE(reader.Read(stringName, text));
-        EXPECT_EQ(text, stringValue);
-        ASSERT_TRUE(reader.Read(poolName, pooled));
+            BinaryDeserializer reader;
+            ASSERT_TRUE(reader.LoadFromBuffer(bytes));
+            int32_t number = 0;
+            String text;
+            PoolString pooled;
+            ASSERT_TRUE(reader.Read(name, number));
+            ASSERT_TRUE(reader.Read(stringName, text));
+            EXPECT_EQ(text, stringValue);
+            ASSERT_TRUE(reader.Read(poolName, pooled));
 
-        EXPECT_FALSE(PoolString::Find(StringView(name)).has_value());
-        EXPECT_FALSE(PoolString::Find(StringView(stringName)).has_value());
-        EXPECT_FALSE(PoolString::Find(StringView(stringValue)).has_value());
-        EXPECT_FALSE(PoolString::Find(StringView(poolName)).has_value());
-        ASSERT_TRUE(PoolString::Find(StringView(poolValue)).has_value());
-        EXPECT_EQ(*PoolString::Find(StringView(poolValue)), pooled);
+            EXPECT_FALSE(PoolString::Find(StringView(name)).has_value());
+            EXPECT_FALSE(PoolString::Find(StringView(stringName)).has_value());
+            EXPECT_FALSE(PoolString::Find(StringView(stringValue)).has_value());
+            EXPECT_FALSE(PoolString::Find(StringView(poolName)).has_value());
+            ASSERT_TRUE(PoolString::Find(StringView(poolValue)).has_value());
+            EXPECT_EQ(*PoolString::Find(StringView(poolValue)), pooled);
+        }
     }
 
     TEST(BinaryDeserializerTest, ThePoolStringsOfAFileAreInternedInOneBatchAtTheFirstPoolStringRead) {
-        Vector<BinaryStreams::Entry> tree;
-        Vector<String> values;
-        for (size_t i = 0; i < 20; ++i) {
-            values.push_back(FreshText("bin_batch_value"));
-        }
-        // The first five entries share one text, so the table holds fewer PoolStrings than the file has entries
-        const auto valueOf = [&](size_t i) -> const String& { return i < 5 ? values[0] : values[i]; };
-        for (size_t i = 0; i < values.size(); ++i) {
-            tree.push_back(Pooled(Format("p{}", i), valueOf(i)));
-        }
-        tree.push_back(Number("n", 7));
-        tree.push_back(Text("s", "some text"));
-        const Vector<uint8_t> bytes = BinaryStreams::Build(tree);
+        for (const uint16_t version : kTabledVersions) {
+            SCOPED_TRACE(Format("version {}", version).c_str());
+            Vector<BinaryStreams::Entry> tree;
+            Vector<String> values;
+            for (size_t i = 0; i < 20; ++i) {
+                values.push_back(FreshText("bin_batch_value"));
+            }
+            // The first five entries share one text, so the table holds fewer PoolStrings than the file has entries
+            const auto valueOf = [&](size_t i) -> const String& { return i < 5 ? values[0] : values[i]; };
+            for (size_t i = 0; i < values.size(); ++i) {
+                tree.push_back(Pooled(Format("p{}", i), valueOf(i)));
+            }
+            tree.push_back(Number("n", 7));
+            tree.push_back(Text("s", "some text"));
+            const Vector<uint8_t> bytes = BinaryStreams::Build(tree, Version(version));
 
-        const uint64_t before = PoolString::GetStats().batchCalls;
-        BinaryDeserializer reader;
-        ASSERT_TRUE(reader.LoadFromView(bytes.data(), bytes.size()));
-        int32_t number = 0;
-        String text;
-        ASSERT_TRUE(reader.Read("n", number));
-        ASSERT_TRUE(reader.Read("s", text));
-        EXPECT_EQ(PoolString::GetStats().batchCalls, before) << "a load and the other fields intern nothing";
+            const uint64_t before = PoolString::GetStats().batchCalls;
+            BinaryDeserializer reader;
+            ASSERT_TRUE(reader.LoadFromView(bytes.data(), bytes.size()));
+            int32_t number = 0;
+            String text;
+            ASSERT_TRUE(reader.Read("n", number));
+            ASSERT_TRUE(reader.Read("s", text));
+            EXPECT_EQ(PoolString::GetStats().batchCalls, before) << "a load and the other fields intern nothing";
 
-        PoolString first;
-        ASSERT_TRUE(reader.Read("p0", first));
-        EXPECT_EQ(PoolString::GetStats().batchCalls, before + 1);
-        for (size_t i = 0; i < values.size(); ++i) {
-            PoolString value;
-            ASSERT_TRUE(i % 2 == 0 ? reader.Read(Format("p{}", i), value) : reader.ReadAttribute(Format("p{}", i), value));
-            EXPECT_EQ(String(value.ToStringView()), valueOf(i));
-            EXPECT_EQ(value, *PoolString::Find(StringView(valueOf(i))));
+            PoolString first;
+            ASSERT_TRUE(reader.Read("p0", first));
+            EXPECT_EQ(PoolString::GetStats().batchCalls, before + 1);
+            for (size_t i = 0; i < values.size(); ++i) {
+                PoolString value;
+                ASSERT_TRUE(i % 2 == 0 ? reader.Read(Format("p{}", i), value) : reader.ReadAttribute(Format("p{}", i), value));
+                EXPECT_EQ(String(value.ToStringView()), valueOf(i));
+                EXPECT_EQ(value, *PoolString::Find(StringView(valueOf(i))));
+            }
+            EXPECT_EQ(PoolString::GetStats().batchCalls, before + 1) << "later reads take the result of the batch";
         }
-        EXPECT_EQ(PoolString::GetStats().batchCalls, before + 1) << "later reads take the result of the batch";
     }
 
     TEST(BinaryDeserializerTest, AFileOfVersion1InternsEachPoolStringWhenItIsRead) {
@@ -1178,6 +1232,7 @@ namespace BECore::Tests {
         EXPECT_EQ(PoolString::GetStats().batchCalls, before);
     }
 
+    // A version 3 pool section never holds a text over the limit (the writer puts it inline): ReaderLimitsTest has that case
     TEST(BinaryDeserializerTest, APoolStringOverTheLimitIsAnErrorAndStaysOutOfThePool) {
         const String tooLong = FreshText("bin_long") + String(ReaderLimits::kMaxPoolStringBytes, 'x');
         const String fine = FreshText("bin_fine");
@@ -1205,27 +1260,205 @@ namespace BECore::Tests {
     }
 
     TEST(BinaryDeserializerTest, StringAndPoolStringEntriesReadAsEitherAndOtherTypesMismatch) {
-        const Vector<uint8_t> bytes = BinaryStreams::Build({Pooled("pooled", "from the table"), Text("inline", "from the entry"), Number("number", 3)});
+        for (const uint16_t version : kTabledVersions) {
+            SCOPED_TRACE(Format("version {}", version).c_str());
+            const Vector<uint8_t> bytes = BinaryStreams::Build({Pooled("pooled", "from the table"), Text("inline", "from the entry"), Number("number", 3)}, Version(version));
+            BinaryDeserializer reader;
+            ASSERT_TRUE(reader.LoadFromView(bytes.data(), bytes.size()));
+
+            String asString;
+            ASSERT_TRUE(reader.Read("pooled", asString));
+            EXPECT_EQ(asString, "from the table");
+            PoolString asPool;
+            ASSERT_TRUE(reader.Read("inline", asPool));
+            EXPECT_EQ(String(asPool.ToStringView()), "from the entry");
+
+            EXPECT_FALSE(reader.Read("number", asString));
+            EXPECT_EQ(LastError(reader), "Type mismatch");
+            reader.ClearErrors();
+            EXPECT_FALSE(reader.ReadAttribute("number", asPool));
+            EXPECT_EQ(LastError(reader), "Type mismatch");
+            reader.ClearErrors();
+            int32_t number = 0;
+            EXPECT_FALSE(reader.Read("pooled", number));
+            EXPECT_EQ(LastError(reader), "Type mismatch");
+            EXPECT_TRUE(reader.Read("number", number));
+        }
+    }
+
+    // =============================================================================
+    // Version 3: the pool section
+    // =============================================================================
+
+    namespace {
+
+        /// A version 3 stream and where its parts start, found with the format helpers
+        struct PooledStream {
+            Vector<uint8_t> bytes;
+            BinaryFormat::PoolSection section;
+            size_t sectionEnd = 0;  ///< Where the first entry of the document starts
+        };
+
+        PooledStream BuildPooled(const Vector<BinaryStreams::Entry>& tree, const BinaryStreams::Options& options = Version(BinaryFormat::PooledVersion)) {
+            PooledStream built;
+            built.bytes = BinaryStreams::Build(tree, options);
+            BinaryFormat::StringTable names;
+            size_t namesEnd = 0;
+            if (!BinaryFormat::ParseStringTable(built.bytes.data(), BinaryFormat::HeaderSize, built.bytes.size(), names, namesEnd) ||
+                !BinaryFormat::ParsePoolSection(built.bytes.data(), namesEnd, built.bytes.size(), built.section, built.sectionEnd)) {
+                ADD_FAILURE() << "the stream built for the test has no good pool section";
+            }
+            return built;
+        }
+
+        constexpr const char* kPoolSectionMessage = "Binary pool section is truncated or corrupt";
+
+        void ExpectPoolSectionRefused(const Vector<uint8_t>& bytes, const char* what) {
+            BinaryDeserializer reader;
+            EXPECT_FALSE(reader.LoadFromView(bytes.data(), bytes.size())) << what;
+            EXPECT_EQ(LastError(reader), kPoolSectionMessage) << what;
+            EXPECT_FALSE(reader.HasKey("a")) << what;
+        }
+
+    }  // namespace
+
+    TEST(BinaryDeserializerTest, AStaleOrWrongHashAndChecksumInTheSectionStillReadTheRightPoolStrings) {
+        const String stale = FreshText("bin_stale");
+        const String other = FreshText("bin_other");
+        BinaryStreams::Options options = Version(BinaryFormat::PooledVersion);
+        options.hashOverrides = {{stale, StringUtils::GetHash(stale) ^ 0x5555}, {other, 7}};
+        options.hashFunction = 0x7777;
+        options.checksum = 1;
+        const PooledStream built = BuildPooled({Pooled("a", stale), Pooled("b", other), Pooled("c", stale)}, options);
+
         BinaryDeserializer reader;
-        ASSERT_TRUE(reader.LoadFromView(bytes.data(), bytes.size()));
+        ASSERT_TRUE(reader.LoadFromView(built.bytes.data(), built.bytes.size()));
+        PoolString a;
+        PoolString b;
+        PoolString c;
+        ASSERT_TRUE(reader.Read("a", a));
+        ASSERT_TRUE(reader.Read("b", b));
+        ASSERT_TRUE(reader.Read("c", c));
+        EXPECT_EQ(a, c);
+        // A text put where its wrong hash points would not be found by the hash of the text
+        EXPECT_EQ(PoolString::Find(StringView(stale)), a);
+        EXPECT_EQ(PoolString::Find(StringView(other)), b);
+        EXPECT_EQ(String(a.ToStringView()), stale);
+        EXPECT_EQ(a.HashValue(), StringUtils::GetHash(stale));
+        EXPECT_EQ(b.HashValue(), StringUtils::GetHash(other));
+    }
 
-        String asString;
-        ASSERT_TRUE(reader.Read("pooled", asString));
-        EXPECT_EQ(asString, "from the table");
-        PoolString asPool;
-        ASSERT_TRUE(reader.Read("inline", asPool));
-        EXPECT_EQ(String(asPool.ToStringView()), "from the entry");
+    TEST(BinaryDeserializerTest, ARepeatedTextAndAnUnsortedSectionReadRight) {
+        const String first = FreshText("bin_first");
+        const String second = FreshText("bin_second");
+        BinaryStreams::Options options = Version(BinaryFormat::PooledVersion);
+        options.pool = {second, first, second, ""};
+        const PooledStream built = BuildPooled({Pooled("a", first), Pooled("b", second), Pooled("e", "")}, options);
+        ASSERT_EQ(built.section.count, 4u);
 
-        EXPECT_FALSE(reader.Read("number", asString));
-        EXPECT_EQ(LastError(reader), "Type mismatch");
-        reader.ClearErrors();
-        EXPECT_FALSE(reader.ReadAttribute("number", asPool));
-        EXPECT_EQ(LastError(reader), "Type mismatch");
-        reader.ClearErrors();
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromView(built.bytes.data(), built.bytes.size()));
+        PoolString a;
+        PoolString b;
+        PoolString empty = PoolString::Intern(StringView(FreshText("bin_not_empty")));
+        ASSERT_TRUE(reader.Read("a", a));
+        ASSERT_TRUE(reader.Read("b", b));
+        ASSERT_TRUE(reader.Read("e", empty));
+        EXPECT_EQ(String(a.ToStringView()), first);
+        EXPECT_EQ(String(b.ToStringView()), second);
+        EXPECT_EQ(empty, PoolString());
+        EXPECT_EQ(PoolString::Find(StringView(second)), b);
+    }
+
+    TEST(BinaryDeserializerTest, APoolStringReadIntoAStringInternsNothing) {
+        const String value = FreshText("bin_to_string");
+        const PooledStream built = BuildPooled({Pooled("p", value), Number("n", 3)});
+
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromView(built.bytes.data(), built.bytes.size()));
+        const uint64_t strings = PoolString::GetStats().stringCount;
         int32_t number = 0;
-        EXPECT_FALSE(reader.Read("pooled", number));
-        EXPECT_EQ(LastError(reader), "Type mismatch");
-        EXPECT_TRUE(reader.Read("number", number));
+        ASSERT_TRUE(reader.Read("n", number));
+        EXPECT_TRUE(reader.HasKey("p"));
+        String text;
+        ASSERT_TRUE(reader.Read("p", text));
+        ASSERT_TRUE(reader.ReadAttribute("p", text));
+        EXPECT_EQ(text, value);
+        EXPECT_EQ(PoolString::GetStats().stringCount, strings);
+        EXPECT_FALSE(PoolString::Find(StringView(value)).has_value());
+    }
+
+    TEST(BinaryDeserializerTest, ACorruptPoolSectionIsRefusedWithOneMessage) {
+        const Vector<BinaryStreams::Entry> tree = {Pooled("a", "first text"), Pooled("b", "second")};
+        const PooledStream built = BuildPooled(tree);
+        const Vector<uint8_t>& good = built.bytes;
+        const size_t head = built.section.headOffset;
+        const size_t firstEntry = built.section.entriesOffset;
+        ASSERT_EQ(built.section.count, 2u);
+
+        Vector<uint8_t> reserved = good;
+        BinaryFormat::Store<uint32_t>(reserved.data() + head + 3 * sizeof(uint32_t), 1);
+        ExpectPoolSectionRefused(reserved, "reserved is not 0");
+
+        Vector<uint8_t> unaligned = good;
+        BinaryFormat::Store<uint32_t>(unaligned.data() + head + sizeof(uint32_t), built.section.bytes - 1);
+        ExpectPoolSectionRefused(unaligned, "bytes is not a multiple of 8");
+
+        Vector<uint8_t> tooMany = good;
+        BinaryFormat::Store<uint32_t>(tooMany.data() + head + sizeof(uint32_t), 0x7FFFFFF8u);
+        ExpectPoolSectionRefused(tooMany, "bytes past the stream");
+
+        Vector<uint8_t> wrongCount = good;
+        BinaryFormat::Store<uint32_t>(wrongCount.data() + head, 3);
+        ExpectPoolSectionRefused(wrongCount, "count of three");
+
+        Vector<uint8_t> sizeRuns = good;
+        BinaryFormat::Store<uint32_t>(sizeRuns.data() + firstEntry + offsetof(Details::PoolStringEntry, size), 4000);
+        ExpectPoolSectionRefused(sizeRuns, "a size past the section");
+
+        Vector<uint8_t> noNul = good;
+        noNul[firstEntry + offsetof(Details::PoolStringEntry, data) + 10] = 'x';  // "first text" is ten bytes
+        ExpectPoolSectionRefused(noNul, "no NUL after the text");
+
+        BinaryStreams::Options tooLong = Version(BinaryFormat::PooledVersion);
+        tooLong.pool = {String(ReaderLimits::kMaxPoolStringBytes + 1, 'x'), "first text", "second"};
+        ExpectPoolSectionRefused(BinaryStreams::Build(tree, tooLong), "a text over the limit");
+
+        ExpectPoolSectionRefused(Resized(good, built.section.headOffset + BinaryFormat::PoolSectionHeadSize - 1), "a stream cut inside the head");
+        ExpectPoolSectionRefused(Resized(good, firstEntry + 20), "a stream cut inside the entries");
+    }
+
+    TEST(BinaryDeserializerTest, APoolStringIndexAtOrPastTheSectionCountIsRefused) {
+        const PooledStream built = BuildPooled({Pooled("a", "one"), Pooled("b", "two")});
+        Vector<uint8_t> atCount = built.bytes;
+        // The first entry of the document: tag, name index, string index
+        BinaryFormat::Store<uint32_t>(atCount.data() + built.sectionEnd + sizeof(uint8_t) + sizeof(uint32_t), built.section.count);
+        BinaryDeserializer reader;
+        EXPECT_FALSE(reader.LoadFromView(atCount.data(), atCount.size()));
+        EXPECT_TRUE(reader.HasErrors());
+        EXPECT_FALSE(reader.HasKey("a"));
+    }
+
+    TEST(BinaryDeserializerTest, ASectionOfVersion3IsInternedByOneBatchAtTheFirstPoolStringRead) {
+        const String value = FreshText("bin_v3_batch");
+        const String unreferenced = FreshText("bin_v3_unreferenced");
+        BinaryStreams::Options options = Version(BinaryFormat::PooledVersion);
+        options.pool = {value, unreferenced};
+        const PooledStream built = BuildPooled({Pooled("p", value), Number("n", 1)}, options);
+
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromView(built.bytes.data(), built.bytes.size()));
+        int32_t number = 0;
+        ASSERT_TRUE(reader.Read("n", number));
+        EXPECT_FALSE(PoolString::Find(StringView(value)).has_value()) << "a load and the other fields intern nothing";
+
+        const uint64_t batches = PoolString::GetStats().batchCalls;
+        PoolString pooled;
+        ASSERT_TRUE(reader.Read("p", pooled));
+        EXPECT_EQ(PoolString::GetStats().batchCalls, batches + 1);
+        ASSERT_TRUE(reader.Read("p", pooled));
+        EXPECT_EQ(PoolString::GetStats().batchCalls, batches + 1);
+        EXPECT_EQ(PoolString::Find(StringView(value)), pooled);
     }
 
 }  // namespace BECore::Tests
