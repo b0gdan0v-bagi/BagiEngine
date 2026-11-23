@@ -268,4 +268,64 @@ namespace BECore::Tests {
         EXPECT_EQ(segments[+ExclusiveStage::OtherStage], 2.0);
     }
 
+    TEST(ExclusiveStageMsTest, WaitIsTheLastSegmentAndOtherLosesIt) {
+        FrameStats frame;
+        frame.cpuMs = 20.0;
+        frame.stageMs[+FrameStage::Update] = 4.0;
+        frame.stageMs[+FrameStage::Render] = 3.0;
+        frame.stageMs[+FrameStage::Present] = 2.0;
+        frame.stageMs[+FrameStage::Wait] = 8.0;
+        const auto segments = ExclusiveStageMs(frame);
+        EXPECT_EQ(+ExclusiveStage::WaitStage, kExclusiveStageCount - 1);
+        EXPECT_NEAR(segments[+ExclusiveStage::WaitStage], 8.0, kTolerance);
+        EXPECT_NEAR(segments[+ExclusiveStage::OtherStage], 3.0, kTolerance);
+        double sum = 0.0;
+        for (const double segment : segments) {
+            sum += segment;
+        }
+        EXPECT_NEAR(sum, frame.cpuMs, kTolerance);
+    }
+
+    TEST(ExclusiveStageMsTest, AWaitLongerThanCpuMsClampsOtherToZero) {
+        FrameStats frame;
+        frame.cpuMs = 5.0;
+        frame.stageMs[+FrameStage::Wait] = 9.0;
+        const auto segments = ExclusiveStageMs(frame);
+        EXPECT_EQ(segments[+ExclusiveStage::OtherStage], 0.0);
+        EXPECT_NEAR(segments[+ExclusiveStage::WaitStage], 9.0, kTolerance);
+    }
+
+    TEST(FrameWorkMsTest, IsCpuMsWithoutTheWaitAndNeverNegative) {
+        FrameStats frame;
+        frame.cpuMs = 12.0;
+        frame.stageMs[+FrameStage::Wait] = 8.0;
+        EXPECT_NEAR(FrameWorkMs(frame), 4.0, kTolerance);
+        frame.stageMs[+FrameStage::Wait] = 20.0;
+        EXPECT_EQ(FrameWorkMs(frame), 0.0);
+    }
+
+    TEST(SummarizeWorkWaitTest, AveragesTheFramesThatAreNotPaused) {
+        Vector<FrameStats> history(3);
+        history[0].cpuMs = 10.0;
+        history[0].stageMs[+FrameStage::Wait] = 8.0;
+        history[1].cpuMs = 20.0;
+        history[1].stageMs[+FrameStage::Wait] = 4.0;
+        history[2].paused = true;
+        history[2].cpuMs = 500.0;
+        history[2].stageMs[+FrameStage::Wait] = 400.0;
+        const WorkWaitMean mean = SummarizeWorkWait(history);
+        EXPECT_NEAR(mean.workMs, 9.0, kTolerance);
+        EXPECT_NEAR(mean.waitMs, 6.0, kTolerance);
+    }
+
+    TEST(SummarizeWorkWaitTest, AnEmptyOrAllPausedHistoryIsZeros) {
+        Vector<FrameStats> history;
+        EXPECT_EQ(SummarizeWorkWait(history).workMs, 0.0);
+        EXPECT_EQ(SummarizeWorkWait(history).waitMs, 0.0);
+        history.resize(1);
+        history[0].paused = true;
+        history[0].cpuMs = 3.0;
+        EXPECT_EQ(SummarizeWorkWait(history).workMs, 0.0);
+    }
+
 }  // namespace BECore::Tests

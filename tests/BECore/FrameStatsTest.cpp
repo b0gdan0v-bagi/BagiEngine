@@ -187,6 +187,27 @@ namespace BECore::Tests {
         EXPECT_TRUE(collector.GetLast()->counters.empty());
     }
 
+    TEST(FrameStatsCollectorTest, TheWaitStageAccumulatesOverTheScopesOfAFrame) {
+        FrameStatsCollector collector;
+        collector.SetClock(FakeNow);
+        g_fakeNow = 0;
+
+        collector.BeginFrame();
+        {
+            FrameStatsCollector::StageScope scope(collector, FrameStage::Wait);
+            AdvanceMs(3);
+        }
+        AdvanceMs(1);
+        {
+            FrameStatsCollector::StageScope scope(collector, FrameStage::Wait);
+            AdvanceMs(2);
+        }
+        collector.EndFrame({}, AllocTotals{});
+
+        EXPECT_DOUBLE_EQ(collector.GetLast()->GetStageMs(FrameStage::Wait), 5.0);
+        EXPECT_DOUBLE_EQ(collector.GetLast()->cpuMs, 6.0);
+    }
+
     TEST(FrameStatsCollectorTest, TheAllocationsOfAFrameAreTheDifference) {
         FrameStatsCollector collector;
         collector.SetClock(FakeNow);

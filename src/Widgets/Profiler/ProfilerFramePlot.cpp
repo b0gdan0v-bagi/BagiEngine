@@ -37,9 +37,9 @@ namespace BECore {
         constexpr ImU32 kMarkerColor = IM_COL32(255, 255, 255, 200);
 
         // One fixed color per segment of ExclusiveStage
-        constexpr Array<ImU32, kExclusiveStageCount> kStageColors{IM_COL32(90, 140, 220, 255), IM_COL32(60, 200, 210, 255),  IM_COL32(220, 130, 60, 255),
-                                                                  IM_COL32(230, 200, 70, 255), IM_COL32(170, 100, 210, 255), IM_COL32(130, 130, 130, 255)};
-        constexpr Array<const char*, kExclusiveStageCount> kStageNames{"Update", "Scene update", "Render", "Scene draw", "Present", "Other"};
+        constexpr Array<ImU32, kExclusiveStageCount> kStageColors{IM_COL32(90, 140, 220, 255),  IM_COL32(60, 200, 210, 255),  IM_COL32(220, 130, 60, 255), IM_COL32(230, 200, 70, 255),
+                                                                  IM_COL32(170, 100, 210, 255), IM_COL32(130, 130, 130, 255), IM_COL32(190, 205, 225, 255)};
+        constexpr Array<const char*, kExclusiveStageCount> kStageNames{"Update", "Scene update", "Render", "Scene draw", "Present", "Other", "Wait"};
 
         const char* const kBarModeLabels = "Frame time\0"
                                            "Stage split\0";
