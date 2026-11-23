@@ -37,10 +37,7 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] String ReadFile(const char* name) const {
-                std::ifstream file(_directory / name, std::ios::binary);
-                std::ostringstream content;
-                content << file.rdbuf();
-                return FromStdString(content.str());
+                return Tests::ReadFile(_directory / name);
             }
 
             [[nodiscard]] bool Exists(const char* name) const {

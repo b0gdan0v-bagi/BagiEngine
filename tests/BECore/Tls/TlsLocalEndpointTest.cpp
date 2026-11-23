@@ -1,10 +1,10 @@
 #include <BECore/WebSocketTestClient.h>
 #include <Common/Require.h>
+#include <Common/TestFiles.h>
 #include <Common/TestText.h>
 #include <RemoteControl/Tls/TlsStream.h>
 #include <RemoteControl/WebSocketClient.h>
 #include <gtest/gtest.h>
-#include <iterator>
 #include <thread>
 
 // The real backend of this platform against real TLS servers that tls_local_check.py starts (it puts their ports and the test CA in
@@ -31,10 +31,7 @@ namespace BECore::Tests {
         }
 
         [[nodiscard]] Vector<uint8_t> ReadFile(const String& path) {
-            std::ifstream file(path.c_str(), std::ios::binary);
-            //-NoStd: the bytes arrive through a std::istreambuf_iterator, an input iterator that eastl::vector does not take
-            const std::vector<char> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-            return Vector<uint8_t>(reinterpret_cast<const uint8_t*>(bytes.data()), reinterpret_cast<const uint8_t*>(bytes.data()) + bytes.size());
+            return ReadFileBytes(std::filesystem::path(path.c_str()));
         }
 
         class TlsLocalEndpointTest : public ::testing::Test {

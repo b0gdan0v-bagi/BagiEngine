@@ -1,3 +1,6 @@
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
+#include <BECore/File/TextReader.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/ClassMeta.h>
@@ -42,13 +45,14 @@ namespace BECore::Tests {
         }
 
         bool ReadWholeFile(const std::filesystem::path& path, String& text) {
-            std::ifstream file(path, std::ios::binary);
-            if (path.empty() || !file) {
+            if (path.empty()) {
                 return false;
             }
-            std::ostringstream content;
-            content << file.rdbuf();
-            text = FromStdString(content.str());
+            auto content = ReadTextFile(PathToUtf8(path));
+            if (!content) {
+                return false;
+            }
+            text = std::move(*content);
             return true;
         }
 
@@ -60,10 +64,9 @@ namespace BECore::Tests {
                 return codepoints;
             }
             const String definePrefix = Format("#define {}", kIconTokenPrefix);
-            std::istringstream lines(ToStdString(text));
-            std::string stdLine;  //-NoStd: std::getline fills a std::string
-            while (std::getline(lines, stdLine)) {
-                const String line = FromStdString(stdLine);
+            TextReader lines(text);
+            while (const Optional<StringView> view = lines.ReadLine()) {
+                const String line(view->data(), view->size());
                 if (line.rfind(definePrefix, 0) != 0) {
                     continue;
                 }
