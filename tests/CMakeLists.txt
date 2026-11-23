@@ -36,8 +36,9 @@ foreach(CASE_INDEX RANGE 0 3)
     list(APPEND LOG_FORMAT_CASE_TARGETS "${CASE_TARGET}:${CASE_EXPECTED}")
 endforeach()
 add_test(NAME BagiLogFormatCompileFail
-    COMMAND ${CMAKE_COMMAND} -DBUILD_DIR=${CMAKE_BINARY_DIR} "-DCASE_TARGETS=${LOG_FORMAT_CASE_TARGETS}"
+    COMMAND ${CMAKE_COMMAND} -DBUILD_DIR=${CMAKE_BINARY_DIR} -DCONFIG=$<CONFIG> "-DCASE_TARGETS=${LOG_FORMAT_CASE_TARGETS}"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/CompileFail/CheckCompileFail.cmake)
+# RUN_SERIAL: with a stale tree the build relinks BECoreModule and its dependants in the folder whose executables the other tests are running.
 set_tests_properties(BagiLogFormatCompileFail PROPERTIES RUN_SERIAL TRUE TIMEOUT 300)
 
 # The fuzz targets: a library of its own, because the libFuzzer executables (cmake/BagiFuzz.cmake) link the same functions

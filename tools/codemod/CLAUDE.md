@@ -1,6 +1,6 @@
 # tools/codemod
 
-Moves the `eastl::` and `std::` type names of C++ sources to the BECore type layer (`src/Modules/BECore/Types/CLAUDE.md`), and (family `log`) the `LOG_X(Format(...))` calls to the Logger's formatted form. Standard library only, Python 3.10+; the engine does not use it, a game runs it after `Update engine`. A rename done by hand over thousands of uses would be slow and would miss some; the tool does the text, the compiler finds what the text cannot know.
+Moves the `eastl::` and `std::` type names of C++ sources to the BECore type layer (`src/Modules/BECore/Types/CLAUDE.md`), and (family `log`) the `LOG_X(Format(...))` calls to the Logger's formatted form. Standard library only, Python 3.10+; the engine runs the family `log` as its extended ctest `BagiLogCalls`, a game runs the tool after `Update engine`. A rename done by hand over thousands of uses would be slow and would miss some; the tool does the text, the compiler finds what the text cannot know.
 
 ```
 python3 engine/tools/codemod/codemod.py --root src --family optionals|views|strings|containers|maps|utility|fmt|log|all [--dry-run] [--fail-on-change] [--report]

@@ -77,7 +77,9 @@ namespace BECore::Tests {
         LogRecorder recorder;
         const String body(2000, 'x');
         LOG_INFO("LoggerFormatTest cut {}", body);
-        LOG_INFO(String("LoggerFormatTest plain ") + body);
+        String plainLine = "LoggerFormatTest plain ";
+        plainLine += body;
+        LOG_INFO(plainLine);
         LogEvent::Flush();
 
         const Vector<String> formatted = recorder.Messages(LogLevel::Info, {"LoggerFormatTest cut "});
