@@ -22,6 +22,7 @@
       "src/Modules/BECore/UI",
       "src/Modules/BECore/Values/Nodes",
       "src/Modules/Rooms/src/Rooms",
+      "src/Modules/SDL/src/CoreSDL",
       "src/Widgets/ArtGen",
       "tests/BECore"
     ],

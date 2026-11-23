@@ -49,7 +49,7 @@ On the web (Emscripten) there is no Vulkan: the window config and the renderer c
 
 `IRenderer::RequestCapture(callback)` is how pixels leave a renderer: `SDLRendererBackend` serves the request in `PresentFrame()` just before `SDL_RenderPresent` (`SDL_RenderReadPixels`, converted to RGBA8; after the present the back buffer is undefined) and hands a `PixelBuffer` to the callback. A newer request replaces an unserved one, whose callback gets an error. The headless run and the windowed SDL renderer support it; `VulkanRendererBackend` does not (the default of `IRenderer` answers with an error).
 
-The `screenshot` method (`RegisterScreenshotControl`, registered by `SDL3ApplicationFabric::Create`) asks for the capture and answers one frame of zero seconds later: on the manual clock a frame of its own in which nothing moves, on the real clock the frame being run. It answers `{width, height, png_base64}`; `maxSize` (16 to 4096, default 1024) cuts the longer side, the proportions are kept and a picture is never enlarged. Tests: `tests/BECore/SDLCaptureTest.cpp`.
+The `screenshot` method (`RegisterScreenshotControl`, registered by `SDL3ApplicationFabric::Create`) asks for the capture and answers one frame of zero seconds later: on the manual clock a frame of its own in which nothing moves, on the real clock the frame being run. It answers a reflected `ScreenshotAnswer` (`{height, png_base64, width}`, the base64 string moved in, not copied into a DOM); `maxSize` (16 to 4096, default 1024) cuts the longer side, the proportions are kept and a picture is never enlarged. Tests: `tests/BECore/SDLCaptureTest.cpp`.
 
 ## Input and window metrics
 

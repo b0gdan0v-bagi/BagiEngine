@@ -6,6 +6,7 @@
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Utils/Base64.h>
 #include <BECore/Utils/ScopeGuard.h>
+#include <Generated/SDLScreenshot.gen.hpp>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 
@@ -86,11 +87,11 @@ namespace BECore {
                     return;
                 }
 
-                Json result = Json::object();
-                result["width"] = png->width;
-                result["height"] = png->height;
-                result["png_base64"] = MakeJsonString(Base64Encode(Span<const uint8_t>(png->bytes.data(), png->bytes.size())));
-                done.Reply(std::move(result));
+                ScreenshotAnswer answer;
+                answer.height = png->height;
+                answer.png_base64 = Base64Encode(Span<const uint8_t>(png->bytes.data(), png->bytes.size()));
+                answer.width = png->width;
+                done.ReplyObject(answer);
             });
         }
 
