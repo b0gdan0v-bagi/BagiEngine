@@ -341,8 +341,9 @@ namespace BECore {
         program._resultRegister = resultRegister;
         program._registerCount = _highWater;
         program._reads = reads;
-        program._code.assign(_code.begin(), _code.end());
-        program._constants.assign(_constants.begin(), _constants.end());
+        program._ownedCode.assign(_code.begin(), _code.end());
+        program._ownedConstants.assign(_constants.begin(), _constants.end());
+        program.ViewOwned();
         program._source = source;
         return program;
     }
