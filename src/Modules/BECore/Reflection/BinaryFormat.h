@@ -432,17 +432,15 @@ namespace BECore::BinaryFormat {
     };
 
     /**
-     * @brief Parse and check the pool section that starts at @p position inside [position, limit)
+     * @brief Parse and check the head of the pool section that starts at @p position inside [position, limit)
      *
-     * Checks the head (it fits, `reserved` is 0, `bytes` is a multiple of 8 and fits) and walks the entries once: every
-     * header and padded size fits, no text is over ReaderLimits::kMaxPoolStringBytes, every NUL is there and the walk ends
-     * exactly at `bytes` after `count` entries. It looks at no hash and no checksum, allocates nothing and reads only the
-     * section's own bytes, so it is safe on untrusted data.
+     * Checks that the 24-byte head fits, `reserved` is 0, `bytes` is a multiple of 8 and fits in [head end, limit). It reads only
+     * the head, so @p data may hold nothing else: a loader that has not read the entries yet passes the size the whole stream
+     * will have as @p limit. The entries are not looked at (ParsePoolEntries walks them).
      *
-     * @param outSectionEnd one past the last byte of the section
-     * @return false if the section is truncated or broken; the outputs are then unspecified
+     * @return false if the head is truncated or broken; @p outSection is then unspecified
      */
-    inline bool ParsePoolSection(const uint8_t* data, size_t position, size_t limit, PoolSection& outSection, size_t& outSectionEnd) {
+    inline bool ParsePoolSectionHead(const uint8_t* data, size_t position, size_t limit, PoolSection& outSection) {
         if (data == nullptr || position > limit || limit - position < PoolSectionHeadSize) {
             return false;
         }
@@ -459,15 +457,30 @@ namespace BECore::BinaryFormat {
             return false;
         }
 
+        outSection = section;
+        return true;
+    }
+
+    /**
+     * @brief Walk @p bytes of pool entries and check them: the structural half of ParsePoolSection, also used by a loader that holds the entries in a block
+     *
+     * Every header and padded size fits, no text is over ReaderLimits::kMaxPoolStringBytes, every NUL is there and the walk ends
+     * exactly at @p bytes after @p count entries. It looks at no hash, allocates nothing and reads only [data, data + bytes), so it is
+     * safe on untrusted data. After a true result a caller may step through the entries with Details::PoolEntryBytes(size) unchecked.
+     *
+     * @param data the first entry, 8-aligned
+     * @param bytes a multiple of 8
+     */
+    inline bool ParsePoolEntries(const uint8_t* data, size_t bytes, size_t count) {
         constexpr size_t entryHeaderBytes = offsetof(Details::PoolStringEntry, data);
         size_t walked = 0;
         size_t entries = 0;
-        while (walked < section.bytes) {
-            const size_t remaining = section.bytes - walked;
+        while (walked < bytes) {
+            const size_t remaining = bytes - walked;
             if (remaining < entryHeaderBytes + 1) {
                 return false;
             }
-            const uint8_t* entry = data + section.entriesOffset + walked;
+            const uint8_t* entry = data + walked;
             const size_t size = Load<uint32_t>(entry + offsetof(Details::PoolStringEntry, size));
             if (size > ReaderLimits::kMaxPoolStringBytes) {
                 return false;
@@ -479,7 +492,20 @@ namespace BECore::BinaryFormat {
             walked += entryBytes;
             ++entries;
         }
-        if (entries != section.count) {
+        return entries == count;
+    }
+
+    /**
+     * @brief Parse and check the pool section that starts at @p position inside [position, limit)
+     *
+     * ParsePoolSectionHead, then ParsePoolEntries over the section's own bytes. It looks at no hash and no checksum.
+     *
+     * @param outSectionEnd one past the last byte of the section
+     * @return false if the section is truncated or broken; the outputs are then unspecified
+     */
+    inline bool ParsePoolSection(const uint8_t* data, size_t position, size_t limit, PoolSection& outSection, size_t& outSectionEnd) {
+        PoolSection section;
+        if (!ParsePoolSectionHead(data, position, limit, section) || !ParsePoolEntries(data + section.entriesOffset, section.bytes, section.count)) {
             return false;
         }
 
