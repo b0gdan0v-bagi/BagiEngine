@@ -136,9 +136,21 @@ namespace BECore::Tests {
             }
         };
 
-        /// The cost of the geometry the elements draw at @p scale, counted on the recorded output pixels
-        SoftwareRasterCost MeasureElements(const Vector<IntrusivePtr<UIElement>>& elements, float scale, GeometryDetail detail) {
-            SoftwareRasterCost total;
+        /// What the elements ask of the software rasterizer at @p scale: the mesh triangles and the texture blits (a blit is a blended quad) counted on the recorded output pixels
+        struct ScreenCost {
+            SoftwareRasterCost mesh;
+            size_t blits = 0;
+            double blitPixels = 0.0;
+
+            [[nodiscard]] SoftwareRasterCost Total() const {
+                SoftwareRasterCost total = mesh;
+                total += SoftwareRasterCost{blits * kQuadTriangles, blitPixels, blitPixels};
+                return total;
+            }
+        };
+
+        ScreenCost MeasureElements(const Vector<IntrusivePtr<UIElement>>& elements, float scale, GeometryDetail detail) {
+            ScreenCost total;
             const auto measure = [&](RecordingRenderer& recorder) {
                 recorder.width = kScreenWidth;
                 recorder.height = kScreenHeight;
@@ -149,11 +161,10 @@ namespace BECore::Tests {
                 const Rect output{0.0f, 0.0f, kScreenWidth, kScreenHeight};
                 for (const DrawCall& call : recorder.calls) {
                     if (call.kind == DrawKind::Geometry) {
-                        total += MeasureRasterCost(call.vertices, call.indices, 1.0f, output);
+                        total.mesh += MeasureRasterCost(call.vertices, call.indices, 1.0f, output);
                     } else if (call.kind == DrawKind::Texture) {
-                        // A blit of a box texture is a quad that the software renderer blends over its destination
-                        const double pixels = static_cast<double>(call.rect.w) * static_cast<double>(call.rect.h);
-                        total += SoftwareRasterCost{kQuadTriangles, pixels, pixels};
+                        ++total.blits;
+                        total.blitPixels += static_cast<double>(call.rect.w) * static_cast<double>(call.rect.h);
                     }
                 }
             };
@@ -164,6 +175,7 @@ namespace BECore::Tests {
                 RecordingRenderer recorder;
                 measure(recorder);
             }
+            CoreManager::GetUIBoxTextureCache().Clear();  // the textures are the recorder's
             return total;
         }
 
@@ -219,7 +231,7 @@ namespace BECore::Tests {
             /// Prints the line of one case: what the rasterizer is asked for (counted at the same scale on the recorder) and what the software present costs
             void PrintCase(const char* part, float scale, const Vector<BoxSpec>& boxes, const Parts& parts) {
                 const Vector<IntrusivePtr<UIElement>> elements = MakeElements(boxes, scale, parts);
-                const SoftwareRasterCost cost = MeasureElements(elements, scale, renderer->GetGeometryDetail());
+                const SoftwareRasterCost cost = MeasureElements(elements, scale, renderer->GetGeometryDetail()).Total();
                 const double presentMs = MedianPresentMs([&] {
                     renderer->SetViewTransform({scale, 0.0f, 0.0f});
                     for (const auto& element : elements) {
@@ -319,6 +331,37 @@ namespace BECore::Tests {
             EXPECT_GE(spec.rect.y, 0.0f);
             EXPECT_LE(spec.rect.x + spec.rect.w, kScreenWidth);
             EXPECT_LE(spec.rect.y + spec.rect.h, kScreenHeight);
+        }
+    }
+
+    // The cost of the benchmark screen on the software renderer, counted on the draw calls (no window, no clock), so that it cannot come back unseen in ctest. The numbers are
+    // what the screen costs now plus about 10 %; `.claude/rules/ui-shapes.md` ("Cost on the software renderer") holds the table they come from.
+    class UIBoxRasterBudgetTest : public ::testing::Test {
+    protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
+    };
+
+    TEST_F(UIBoxRasterBudgetTest, TheScreenAtReducedIsTextureBlitsAndNoMeshTriangles) {
+        constexpr size_t kBlitBudget = 76;
+        constexpr double kBlitPixelBudgets[] = {2.16e6, 2.57e6};  // blended pixels: every blit is translucent
+        const Vector<BoxSpec> boxes = BenchmarkScreen();
+        for (size_t i = 0; i < std::size(kScales); ++i) {
+            const ScreenCost cost = MeasureElements(MakeElements(boxes, kScales[i], kAllParts), kScales[i], GeometryDetail::Reduced);
+            EXPECT_EQ(cost.mesh.triangles, 0u) << "scale " << kScales[i] << ": a box fell back to the mesh";
+            EXPECT_LE(cost.blits, kBlitBudget) << "scale " << kScales[i];
+            EXPECT_LE(cost.blitPixels, kBlitPixelBudgets[i]) << "scale " << kScales[i];
+        }
+    }
+
+    TEST_F(UIBoxRasterBudgetTest, TheScreenAtFullIsTheMeshAsItWas) {
+        constexpr size_t kTriangles[] = {70780, 96776};
+        const Vector<BoxSpec> boxes = BenchmarkScreen();
+        for (size_t i = 0; i < std::size(kScales); ++i) {
+            const ScreenCost cost = MeasureElements(MakeElements(boxes, kScales[i], kAllParts), kScales[i], GeometryDetail::Full);
+            EXPECT_EQ(cost.blits, 0u) << "scale " << kScales[i] << ": the GPU path never reaches the texture cache";
+            EXPECT_EQ(cost.mesh.triangles, kTriangles[i]) << "scale " << kScales[i];
         }
     }
 
