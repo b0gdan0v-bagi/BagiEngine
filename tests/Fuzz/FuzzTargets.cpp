@@ -9,6 +9,7 @@ namespace BECore::Fuzz {
     Span<const FuzzTarget> FuzzTargetList() {
         static const FuzzTarget targets[] = {
             {"BinaryDeserializer", &FuzzBinaryDeserializer, "binary", 1},
+            {"BinaryContent", &FuzzBinaryContent, "binary_content", 1},
             {"XmlDeserializer", &FuzzXmlDeserializer, "xml", 2},
             {"JsonDeserializer", &FuzzJsonDeserializer, "json", 2},
             {"SaveEnvelope", &FuzzSaveEnvelope, "save", 10},

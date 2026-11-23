@@ -46,6 +46,9 @@ namespace BECore::Fuzz {
     /// BinaryDeserializer::LoadFromBuffer, then every read over the whole document, then the same buffer again
     void FuzzBinaryDeserializer(const uint8_t* data, size_t size);
 
+    /// LoadContentBytes (the loader that trusts the hashes of a cooked file) with and without the hash check, then LoadFromContent against the reader of the whole stream
+    void FuzzBinaryContent(const uint8_t* data, size_t size);
+
     /// XmlDeserializer::LoadFromString, lenient and strict: every read over the whole document, strict refusals against a grammar of the values, a reflected probe type
     void FuzzXmlDeserializer(const uint8_t* data, size_t size);
 

@@ -4,6 +4,7 @@
 #include <BECore/File/FilePath.h>
 #include <BECore/Reflection/BinaryFormat.h>
 #include <BECore/Reflection/BinarySerializer.h>
+#include <BECore/Reflection/ReaderLimits.h>
 #include <BECore/Reflection/SchemaHash.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <Common/BinaryStreamBuilder.h>
@@ -20,6 +21,7 @@ namespace BECore::Fuzz {
         namespace BinaryStreams = Tests::BinaryStreams;
 
         constexpr const char* kBinaryFolder = "binary";
+        constexpr const char* kBinaryContentFolder = "binary_content";
         constexpr const char* kXmlFolder = "xml";
         constexpr const char* kSaveFolder = "save";
         constexpr const char* kSceneFolder = "scene";
@@ -429,6 +431,50 @@ namespace BECore::Fuzz {
 
     }  // namespace
 
+    namespace {
+
+        /// The seeds of the content loader: cooked files and the one damage each of its refusals is for. They are small on purpose: the loader adopts
+        /// every accepted input into the pool, which never frees (tests/Fuzz/CLAUDE.md, "What the targets cannot show")
+        void AddBinaryContentSeeds(Vector<FuzzSeedFile>& seeds, const Vector<BinaryStreams::Entry>& pooled) {
+            using namespace BinaryStreams;
+            constexpr uint64_t kStaleHash = 0x0123456789ABCDEFull;
+            constexpr uint64_t kWrongChecksum = 0x1234;
+            constexpr size_t kReservedAt = 3 * sizeof(uint32_t);
+
+            seeds.push_back({kBinaryContentFolder, "good.bin", Version3Bytes(pooled)});
+            seeds.push_back({kBinaryContentFolder, "empty-section.bin", Version3Bytes({Number("number", static_cast<int32_t>(7))})});
+
+            Options staleHash;
+            staleHash.hashOverrides.push_back({String("shared"), kStaleHash});
+            seeds.push_back({kBinaryContentFolder, "wrong-hash.bin", Version3Bytes(pooled, staleHash)});
+
+            Options otherHashFunction = staleHash;
+            otherHashFunction.hashFunction = Details::PoolHashFunctionId() + 1;
+            seeds.push_back({kBinaryContentFolder, "other-hash-function.bin", Version3Bytes(pooled, otherHashFunction)});
+
+            Options wrongChecksum;
+            wrongChecksum.checksum = kWrongChecksum;
+            seeds.push_back({kBinaryContentFolder, "bad-checksum.bin", Version3Bytes(pooled, wrongChecksum)});
+
+            const String overLong(ReaderLimits::kMaxPoolStringBytes + 1, 'x');
+            seeds.push_back({kBinaryContentFolder, "text-over-limit.bin", Version3Bytes({Pooled("long", overLong)})});
+
+            FuzzBytes countOffByOne = Version3Bytes(pooled);
+            const size_t head = LayoutOf(countOffByOne).entriesOffset;
+            StoreWord(countOffByOne, head, BinaryFormat::Load<uint32_t>(countOffByOne.data() + head) + 1);
+            seeds.push_back({kBinaryContentFolder, "count-off-by-one.bin", countOffByOne});
+
+            FuzzBytes reserved = Version3Bytes(pooled);
+            StoreWord(reserved, LayoutOf(reserved).entriesOffset + kReservedAt, 1);
+            seeds.push_back({kBinaryContentFolder, "reserved-not-zero.bin", reserved});
+
+            seeds.push_back({kBinaryContentFolder, "version2.bin", Version2Bytes(pooled)});
+            seeds.push_back({kBinaryContentFolder, "version1.bin", Version1Bytes(MakeVersion1DuplicateNamesTree())});
+            seeds.push_back({kBinaryContentFolder, "stamped-config.bin", MakeContentStampStream()});
+        }
+
+    }  // namespace
+
     Vector<FuzzSeedFile> MakeGeneratedSeeds() {
         Vector<FuzzSeedFile> seeds;
 
@@ -513,6 +559,8 @@ namespace BECore::Fuzz {
         seeds.push_back({kBinaryFolder, "version3-wrong-hash-function.bin", Version3Bytes(pooled, otherHashFunction)});
 
         seeds.push_back({kBinaryFolder, "content-stamp.bin", MakeContentStampStream()});
+
+        AddBinaryContentSeeds(seeds, pooled);
 
         seeds.push_back({kXmlFolder, "probe-filled.xml", MakeProbeXml()});
 
