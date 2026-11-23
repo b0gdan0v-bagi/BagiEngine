@@ -23,7 +23,7 @@ How to use it (flags, Perfetto, sampling profilers, measured costs): `HowToProfi
 | `ProfilerClock` | `mach_absolute_time` on macOS (measurably cheaper than `steady_clock`), `steady_clock` elsewhere; ticks converted only when written |
 | `ChromeTraceBackend` | per-thread chunked buffers, no lock on the recording path; writes Chrome trace JSON (below) |
 | `FrameRingBackend`, `FanOutBackend` | the ring of recent zones (below) and the immutable (primary, ring) pair that runs it beside any other backend |
-| `Ring/` analysis | pure, in every build: `RingSnapshot` (plain copy of the ring), `ZoneStats` (per site: calls, total, self, p95, allocations; `ExclusiveStageMs`: segments without double counting, `Other` the rest of `cpuMs`, `WaitStage` last so "work only" is all but the last; `FrameWorkMs`, `SummarizeWorkWait`), `SpikeCapture` (frozen slow frames), `FrozenTrace` (frozen frames as a Chrome trace), `TimelineView` (zoom, lanes, hit test) |
+| `Ring/` analysis | pure, in every build: `RingSnapshot` (plain copy of the ring), `ZoneStats` (per site: calls, total, self, p95, allocations; `ComputeZoneStats(..., rows)` refills in place from the scratch arena, allocation-free once grown; `ExclusiveStageMs`: segments without double counting, `Other` the rest of `cpuMs`, `WaitStage` last so "work only" is all but the last; `FrameWorkMs`, `SummarizeWorkWait`), `SpikeCapture` (frozen slow frames), `FrozenTrace` (frozen frames as a Chrome trace), `TimelineView` (zoom, lanes, hit test) |
 | `ProfilerSettings` | `ResolveProfilerSettings(args)`: `--trace=<file>`, `--profiler=none\|chrome\|tracy` (table in the header) |
 | `ScopedTrace` | RAII trace of one scope for tools: installs the recorder, marks the start, writes the file and restores the old backend at the end |
 
@@ -81,4 +81,4 @@ Zones sit in `Application::RunFrame` (`Frame`, `Idle` for a manual-clock pass, `
 
 ## Tests
 
-Tests are in `tests/BECore/` (`ProfilerTest`, `TaskSystemProfileTest`, `AllocTrackerTest`, `AllocSiteTableTest`, `AllocRoutingTest`, `EastlAlignedAllocTest`, `TracyBackendTest`, `FrameRingTest`, `ZoneStatsTest`, `SpikeCaptureTest`, `TimelineViewTest`, `ProfilerOverlayTest`, `FrameStatsTest`, `ProfilerControlTest`). Traps: `AllocTrackerTest` calls `::operator new` explicitly so the optimizer keeps the calls; `EastlAlignedAllocTest` runs under the Debug CRT's heap checks on Windows (a report ends the process) and is skipped under ASan; `ProfilerCostTest` is disabled and `HowToProfile.md` quotes it.
+Tests are in `tests/BECore/` (`Profiler*`, `Alloc*`, `FrameRing`, `ZoneStats`, `SpikeCapture`, `TimelineView`, `FrameStats*`). Traps: `AllocTrackerTest` calls `::operator new` explicitly so the optimizer keeps the calls; `EastlAlignedAllocTest` runs under the Debug CRT's heap checks on Windows (a report ends the process) and is skipped under ASan; `ProfilerCostTest` is disabled and `HowToProfile.md` quotes it.
