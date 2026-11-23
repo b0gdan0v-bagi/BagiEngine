@@ -261,7 +261,7 @@ namespace BECore {
 
     }  // namespace
 
-    IntrusivePtrAtomic<IFileWatchBackend> MakeInotifyFileWatchBackend() {
+    IntrusivePtr<IFileWatchBackend> MakeInotifyFileWatchBackend() {
         return New<InotifyFileWatchBackend>();
     }
 

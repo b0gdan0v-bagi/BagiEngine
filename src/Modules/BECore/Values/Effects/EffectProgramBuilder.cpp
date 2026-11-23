@@ -160,7 +160,7 @@ namespace BECore {
             }
             reads |= check.reads;
         }
-        auto program = MakeIntrusive<EffectProgram>(PassKey<EffectProgramBuilder>{});
+        auto program = New<EffectProgram>(PassKey<EffectProgramBuilder>{});
         program->_steps.assign(_steps.begin(), _steps.end());
         program->_reads = reads;
         program->_writes = writes;

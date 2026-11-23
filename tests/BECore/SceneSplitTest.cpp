@@ -230,7 +230,7 @@ namespace BECore::Tests {
         }
 
         /// Loads a SceneConfig text through LoadSceneManager with the node files of the temp folder; the document is kept alive in @p doc
-        IntrusivePtrAtomic<SceneManager> Load(const String& text, pugi::xml_document& doc) {
+        IntrusivePtr<SceneManager> Load(const String& text, pugi::xml_document& doc) {
             const pugi::xml_parse_result parsed = doc.load_string(text.c_str());
             EXPECT_TRUE(parsed) << parsed.description();
             auto manager = LoadSceneManager(XmlNode{doc.document_element()}, MakeDirectoryNodeLoader(_dir));
@@ -238,14 +238,14 @@ namespace BECore::Tests {
             return manager;
         }
 
-        static Scene& Main(const IntrusivePtrAtomic<SceneManager>& manager) {
+        static Scene& Main(const IntrusivePtr<SceneManager>& manager) {
             Scene* scene = manager->GetSceneByName("Main"_intern);
             EXPECT_NE(scene, nullptr);
             return Require(scene);
         }
 
         /// The `ui_tree` answer of the active scene "Main" after a draw, as text
-        String UiTree(const IntrusivePtrAtomic<SceneManager>& manager) {
+        String UiTree(const IntrusivePtr<SceneManager>& manager) {
             EngineEnvironment::UseSceneManager(manager);
             manager->SetActiveScene("Main"_intern);
             _renderer->ClearCalls();
@@ -262,7 +262,7 @@ namespace BECore::Tests {
         }
 
         /// What the validator finds on the matrix for every canvas of "Main", as one text
-        static String ValidatorFindings(const IntrusivePtrAtomic<SceneManager>& manager) {
+        static String ValidatorFindings(const IntrusivePtr<SceneManager>& manager) {
             String all;
             UILayoutValidatorOptions options;
             options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;

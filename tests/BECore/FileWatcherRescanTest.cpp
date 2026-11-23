@@ -33,7 +33,7 @@ namespace BECore::Tests {
             MakeEmptyDirectory(_lower);
             MakeEmptyDirectory(_upper);
             _fake = New<FakeFileWatchBackend>();
-            _watcher.Start(IntrusivePtrAtomic<IFileWatchBackend>(_fake));
+            _watcher.Start(IntrusivePtr<IFileWatchBackend>(_fake));
         }
 
         void TearDown() override {
@@ -80,7 +80,7 @@ namespace BECore::Tests {
         std::filesystem::path _upper;
         FileSystem _fileSystem;
         FileWatcher _watcher{_fileSystem};
-        IntrusivePtrAtomic<FakeFileWatchBackend> _fake;
+        IntrusivePtr<FakeFileWatchBackend> _fake;
         FileWatchHandle _handle;
         Vector<String> _seen;
         String _failure;

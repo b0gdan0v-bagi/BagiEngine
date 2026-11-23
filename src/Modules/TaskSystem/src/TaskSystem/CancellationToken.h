@@ -74,12 +74,12 @@ namespace BECore {
         struct State : RefCountedAtomic {
             BE_POOLED(CancellationToken::State)
             std::atomic<bool> cancelled{false};
-            IntrusivePtrAtomic<State> parent;
+            IntrusivePtr<State> parent;
         };
 
-        explicit CancellationToken(IntrusivePtrAtomic<State> state) : _state(std::move(state)) {}
+        explicit CancellationToken(IntrusivePtr<State> state) : _state(std::move(state)) {}
 
-        IntrusivePtrAtomic<State> _state;
+        IntrusivePtr<State> _state;
     };
 
 }  // namespace BECore

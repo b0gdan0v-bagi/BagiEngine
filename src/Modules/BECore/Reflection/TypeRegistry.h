@@ -124,7 +124,7 @@ namespace BECore {
          * the chain, so it is right when `Base` is not the first thing in the object. `Base` itself must be registered.
          */
         template <typename Base>
-        [[nodiscard]] typename GetIntrusivePtrType<Base>::type CreateAs(StringView name) const {
+        [[nodiscard]] IntrusivePtr<Base> CreateAs(StringView name) const {
             const TypeInfo* info = Find(name);
             const TypeInfo* base = Find(Base::GetStaticTypeMeta().typeHash);
             if (info == nullptr || base == nullptr) {
@@ -140,7 +140,7 @@ namespace BECore {
             }
             // The made object lives at the derived address and its `Base` part at the chain's offset: char arithmetic on the address of a live object
             Base* typed = reinterpret_cast<Base*>(static_cast<char*>(owned.Get()) + *offset);
-            typename GetIntrusivePtrType<Base>::type result(typed);
+            IntrusivePtr<Base> result(typed);
             owned.Reset();
             return result;
         }

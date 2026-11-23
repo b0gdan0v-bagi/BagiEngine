@@ -275,12 +275,12 @@ namespace BECore {
 
             void ScenesText(StringView stem, const XmlNode& root, String& sourceText, String& cookedText, Vector<String>& messages) {
                 const NodeFileLoader loader = MakeFileSystemNodeLoader(_sourceFs);
-                const IntrusivePtrAtomic<SceneManager> fromXml = LoadSceneManager(root, loader, stem);
+                const IntrusivePtr<SceneManager> fromXml = LoadSceneManager(root, loader, stem);
                 sourceText = SerializedText(*fromXml);
 
                 const UniquePtr<IDeserializer> reader = _cooked->Configs().CreateDeserializer(stem);
                 SceneLoadFindings cookedFindings;
-                const IntrusivePtrAtomic<SceneManager> fromBinary = LoadSceneManagerFromBinary(*reader, stem, &cookedFindings);
+                const IntrusivePtr<SceneManager> fromBinary = LoadSceneManagerFromBinary(*reader, stem, &cookedFindings);
                 cookedText = SerializedText(*fromBinary);
                 AppendFindings(cookedFindings.errors, messages);
             }

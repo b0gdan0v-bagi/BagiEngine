@@ -144,7 +144,7 @@ namespace BECore {
     void UIElement::DrawComponents(IRenderer& renderer) {
         // By index and with a copy of the pointer: a component that changes the list while it draws does not invalidate the loop
         for (size_t i = 0; i < components.size(); ++i) {
-            const IntrusivePtrNonAtomic<UIComponent> component = components[i];
+            const IntrusivePtr<UIComponent> component = components[i];
             component->DrawSelf(renderer, *this);
         }
     }
@@ -171,21 +171,21 @@ namespace BECore {
 
     void UIElement::OnClick() {
         for (size_t i = 0; i < components.size(); ++i) {
-            const IntrusivePtrNonAtomic<UIComponent> component = components[i];
+            const IntrusivePtr<UIComponent> component = components[i];
             component->OnClick(*this);
         }
     }
 
     void UIElement::OnPress(float x, float y) {
         for (size_t i = 0; i < components.size(); ++i) {
-            const IntrusivePtrNonAtomic<UIComponent> component = components[i];
+            const IntrusivePtr<UIComponent> component = components[i];
             component->OnPress(*this, x, y);
         }
     }
 
     void UIElement::OnDrag(float x, float y) {
         for (size_t i = 0; i < components.size(); ++i) {
-            const IntrusivePtrNonAtomic<UIComponent> component = components[i];
+            const IntrusivePtr<UIComponent> component = components[i];
             component->OnDrag(*this, x, y);
         }
     }

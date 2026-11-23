@@ -17,11 +17,17 @@ namespace BECore {
         constexpr uint8_t kWhite = 255;
         constexpr float kPackingSlack = 1.25f;  // the area of a page is this much more than the area of its glyphs
 
-        uint32_t PaddedWidth(const GlyphBitmap& bitmap) {
-            return bitmap.width + 2 * FontAtlas::kPadding;
+        uint32_t PaddedWidth(const GlyphBox& box) {
+            return box.width + 2 * FontAtlas::kPadding;
         }
-        uint32_t PaddedHeight(const GlyphBitmap& bitmap) {
-            return bitmap.height + 2 * FontAtlas::kPadding;
+        uint32_t PaddedHeight(const GlyphBox& box) {
+            return box.height + 2 * FontAtlas::kPadding;
+        }
+
+        /// The box of the outline picture of a glyph with @p ink: @p radius pixels more on every side
+        GlyphBox Grown(const GlyphBox& ink, int radius) {
+            const auto grow = static_cast<uint32_t>(radius);
+            return {ink.width + 2 * grow, ink.height + 2 * grow, ink.offsetX - radius, ink.offsetY - radius};
         }
 
         uint32_t NextPowerOfTwo(uint32_t value) {
@@ -50,7 +56,13 @@ namespace BECore {
     }
 
     bool FontAtlas::PrepareCodePoints(IRenderer& renderer, Span<const GlyphRange> ranges) {
-        Vector<uint32_t> glyphs;
+        const ScratchScope scratch;
+        size_t count = 0;
+        for (const GlyphRange& range : ranges) {
+            count += range.last >= range.first ? static_cast<size_t>(range.last - range.first) + 1 : 0;
+        }
+        ArenaVector<uint32_t> glyphs;
+        glyphs.reserve(count);
         for (const GlyphRange& range : ranges) {
             for (char32_t codePoint = range.first; codePoint <= range.last; ++codePoint) {
                 if (const uint32_t glyph = _font->FindGlyph(codePoint); glyph != 0) {
@@ -58,13 +70,16 @@ namespace BECore {
                 }
             }
         }
-        return Prepare(renderer, glyphs);
+        return Prepare(renderer, Span<const uint32_t>(glyphs.data(), glyphs.size()));
     }
 
     bool FontAtlas::Prepare(IRenderer& renderer, Span<const uint32_t> glyphs) {
         BE_PROFILE_SCOPE("FontAtlas::Prepare");
         BE_MEM_TAG(Text);
-        Vector<uint32_t> missing;
+        // The scope comes first, so the containers below die before it
+        const ScratchScope scratch;
+        ArenaVector<uint32_t> missing;
+        missing.reserve(glyphs.size());
         for (const uint32_t glyph : glyphs) {
             if (_glyphs.find(glyph) == _glyphs.end()) {
                 missing.push_back(glyph);
@@ -75,51 +90,59 @@ namespace BECore {
         }
         eastl::sort(missing.begin(), missing.end());
         missing.erase(eastl::unique(missing.begin(), missing.end()), missing.end());
+        _glyphs.reserve(_glyphs.size() + missing.size());
 
         bool ok = true;
-        Vector<Pending> pending;
+        const auto fontSize = static_cast<float>(_pixelSize);
+        ArenaVector<Pending> pending;
+        pending.reserve(missing.size());
         for (const uint32_t glyph : missing) {
-            GlyphBitmap bitmap = _font->RasterizeGlyph(glyph, static_cast<float>(_pixelSize));
-            if (_outlinePixels > 0) {
-                bitmap = GlyphOutline::Dilate(bitmap, _outlinePixels);
-            }
-            if (bitmap.width == 0 || bitmap.height == 0) {
+            const GlyphBox ink = _font->GetGlyphBox(glyph, fontSize);
+            if (ink.Empty()) {
                 _glyphs[glyph] = AtlasGlyph{};  // no ink: remembered, so it is not drawn again
-            } else if (PaddedWidth(bitmap) > _pageSize || PaddedHeight(bitmap) > _pageSize) {
-                LOG_ERROR("FontAtlas: a glyph of '{}' at {} px is {}x{}, larger than a {} px page"_format(_font->GetPath().ToStringView(), _pixelSize, bitmap.width, bitmap.height, _pageSize));
+                continue;
+            }
+            const GlyphBox picture = _outlinePixels > 0 ? Grown(ink, _outlinePixels) : ink;
+            if (PaddedWidth(picture) > _pageSize || PaddedHeight(picture) > _pageSize) {
+                LOG_ERROR("FontAtlas: a glyph of '{}' at {} px is {}x{}, larger than a {} px page"_format(_font->GetPath().ToStringView(), _pixelSize, picture.width, picture.height, _pageSize));
                 _glyphs[glyph] = AtlasGlyph{};
                 ok = false;
             } else {
-                pending.push_back({glyph, std::move(bitmap)});
+                pending.push_back({glyph, ink, picture});
             }
         }
 
         // Tall glyphs first: shelves come out tight
-        eastl::sort(pending.begin(), pending.end(), [](const Pending& a, const Pending& b) { return a.bitmap.height > b.bitmap.height; });
-        BuildPages(renderer, pending, ok);
+        eastl::sort(pending.begin(), pending.end(), [](const Pending& a, const Pending& b) { return a.picture.height > b.picture.height; });
+        const GlyphOutline::Kernel kernel(_outlinePixels);
+        BuildPages(renderer, pending, kernel, ok);
         return ok;
     }
 
-    void FontAtlas::BuildPages(IRenderer& renderer, Vector<Pending>& pending, bool& ok) {
+    void FontAtlas::BuildPages(IRenderer& renderer, ArenaVector<Pending>& pending, const GlyphOutline::Kernel& kernel, bool& ok) {
         BE_PROFILE_SCOPE("FontAtlas::BuildPages");
         BE_MEM_TAG(Text);
+        const auto fontSize = static_cast<float>(_pixelSize);
         while (!pending.empty()) {
+            const ScratchScope pageScope;
             // Aim at a page just big enough; grow it while the glyphs do not fit and it is smaller than a full page
             uint64_t area = 0;
             for (const Pending& item : pending) {
-                area += static_cast<uint64_t>(PaddedWidth(item.bitmap)) * PaddedHeight(item.bitmap);
+                area += static_cast<uint64_t>(PaddedWidth(item.picture)) * PaddedHeight(item.picture);
             }
             const auto wanted = static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<double>(area) * kPackingSlack)));
             uint32_t side = std::min(NextPowerOfTwo(wanted), _pageSize);
 
-            Vector<Placed> placed;
-            Vector<size_t> left;
+            ArenaVector<Placed> placed;
+            ArenaVector<size_t> left;
+            placed.reserve(pending.size());
+            left.reserve(pending.size());
             while (true) {
                 placed.clear();
                 left.clear();
                 ShelfPacker packer(side, side);
                 for (size_t i = 0; i < pending.size(); ++i) {
-                    if (auto slot = packer.Pack(PaddedWidth(pending[i].bitmap), PaddedHeight(pending[i].bitmap))) {
+                    if (auto slot = packer.Pack(PaddedWidth(pending[i].picture), PaddedHeight(pending[i].picture))) {
                         placed.push_back({i, slot->x, slot->y});
                     } else {
                         left.push_back(i);
@@ -138,11 +161,21 @@ namespace BECore {
                 pixels[i] = 0;  // white, fully transparent: a border that never tints its neighbour
             }
             for (const Placed& place : placed) {
-                const GlyphBitmap& bitmap = pending[place.pending].bitmap;
-                for (uint32_t row = 0; row < bitmap.height; ++row) {
-                    for (uint32_t column = 0; column < bitmap.width; ++column) {
+                const Pending& item = pending[place.pending];
+                // One glyph at a time: the scratch arena never holds more than the pictures of one
+                ScratchScope glyphScope;
+                uint8_t* ink = glyphScope.Allocate<uint8_t>(item.ink.PixelCount());
+                _font->RasterizeGlyphInto(item.glyph, fontSize, item.ink, Span<uint8_t>(ink, item.ink.PixelCount()));
+                const uint8_t* coverage = ink;
+                if (_outlinePixels > 0) {
+                    uint8_t* grown = glyphScope.Allocate<uint8_t>(item.picture.PixelCount());
+                    GlyphOutline::Dilate(Span<const uint8_t>(ink, item.ink.PixelCount()), item.ink.width, item.ink.height, kernel, Span<uint8_t>(grown, item.picture.PixelCount()));
+                    coverage = grown;
+                }
+                for (uint32_t row = 0; row < item.picture.height; ++row) {
+                    for (uint32_t column = 0; column < item.picture.width; ++column) {
                         const size_t target = (static_cast<size_t>(place.y + kPadding + row) * width + place.x + kPadding + column) * kBytesPerPixel;
-                        pixels[target + 3] = bitmap.coverage[static_cast<size_t>(row) * bitmap.width + column];
+                        pixels[target + 3] = coverage[static_cast<size_t>(row) * item.picture.width + column];
                     }
                 }
             }
@@ -161,18 +194,19 @@ namespace BECore {
                 AtlasGlyph glyph;  // without a page when the upload failed: the glyph stays blank and is not retried
                 if (uploaded) {
                     glyph.page = pageIndex;
-                    glyph.source = Rect{static_cast<float>(place.x + kPadding), static_cast<float>(place.y + kPadding), static_cast<float>(item.bitmap.width), static_cast<float>(item.bitmap.height)};
-                    glyph.offsetX = static_cast<float>(item.bitmap.offsetX);
-                    glyph.offsetY = static_cast<float>(item.bitmap.offsetY);
+                    glyph.source =
+                        Rect{static_cast<float>(place.x + kPadding), static_cast<float>(place.y + kPadding), static_cast<float>(item.picture.width), static_cast<float>(item.picture.height)};
+                    glyph.offsetX = static_cast<float>(item.picture.offsetX);
+                    glyph.offsetY = static_cast<float>(item.picture.offsetY);
                 }
                 _glyphs[item.glyph] = glyph;
             }
 
-            Vector<Pending> remainder;
-            for (const size_t index : left) {
-                remainder.push_back(std::move(pending[index]));
+            // The glyphs that did not fit wait for the next page, in their order; an index is never below its new place
+            for (size_t i = 0; i < left.size(); ++i) {
+                pending[i] = pending[left[i]];
             }
-            pending = std::move(remainder);
+            pending.resize(left.size());
         }
     }
 

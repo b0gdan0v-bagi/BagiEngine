@@ -19,7 +19,7 @@ namespace BECore {
         constexpr StringView kNameAttribute = "name";
         constexpr const char* kScratchName = "e";
 
-        bool FindPath(const UIElement& target, const Vector<IntrusivePtrNonAtomic<UIElement>>& list, Vector<uint32_t>& path) {
+        bool FindPath(const UIElement& target, const Vector<IntrusivePtr<UIElement>>& list, Vector<uint32_t>& path) {
             for (size_t i = 0; i < list.size(); ++i) {
                 path.push_back(static_cast<uint32_t>(i));
                 if (list[i].Get() == &target || FindPath(target, list[i]->children, path)) {

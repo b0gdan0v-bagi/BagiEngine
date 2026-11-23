@@ -429,7 +429,7 @@ namespace BECore::Tests {
     <component type="ClickableComponent" actionName="ProviderPad"/>
   </components></node>
 </nodes></scene></scenes></SceneManager>)"));
-        IntrusivePtrAtomic<SceneManager> manager = New<SceneManager>();
+        IntrusivePtr<SceneManager> manager = New<SceneManager>();
         manager->Deserialize(deserializer);
         ASSERT_FALSE(deserializer.HasErrors());
         manager->Initialize();

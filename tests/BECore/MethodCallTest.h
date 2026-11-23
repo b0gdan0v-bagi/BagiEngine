@@ -177,9 +177,9 @@ namespace BECore::MethodCallData {
         BE_FUNCTION McCounter* Self();
 
         /// An object cannot be made from a call's arguments nor handed back through one, so a pointer anywhere in the signature is not callable
-        BE_FUNCTION void Adopt(IntrusivePtrNonAtomic<McBase> object);
+        BE_FUNCTION void Adopt(IntrusivePtr<McBase> object);
 
-        BE_FUNCTION Vector<IntrusivePtrNonAtomic<McBase>> Held() const;
+        BE_FUNCTION Vector<IntrusivePtr<McBase>> Held() const;
     };
 
 }  // namespace BECore::MethodCallData

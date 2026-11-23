@@ -185,7 +185,12 @@ namespace BECore {
                 _outboxBytes -= frame.bytes.size();
             }
 
-            if (!_socket.SendAll(Span<const uint8_t>(frame.bytes.data(), frame.bytes.size()))) {
+            bool sent = false;
+            {
+                BE_PROFILE_SCOPE("WS write");
+                sent = _socket.SendAll(Span<const uint8_t>(frame.bytes.data(), frame.bytes.size()));
+            }
+            if (!sent) {
                 Abort();
                 return;
             }

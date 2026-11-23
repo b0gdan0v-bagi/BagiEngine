@@ -4,6 +4,7 @@
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
 #include <Common/Require.h>
+#include <Common/TempPath.h>
 #include <chrono>
 #include <cstdio>
 #include <gtest/gtest.h>
@@ -470,6 +471,102 @@ namespace BECore::Tests {
         EXPECT_TRUE(found);
     }
 
+    TEST(AllocTrackerTest, TheChromeTraceCarriesTheSizeHistogramOfTheTrackerRows) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("TraceSizesZone");
+            Vector<char> small;
+            small.reserve(kBlock / 10);
+            Vector<char> big;
+            big.reserve(kBlock);
+            Vector<char> bigger;
+            bigger.reserve(kBlock);
+        }
+        ChromeTraceBackend recorder;
+        const auto parsed = ParseJson(recorder.WriteJson());
+        ASSERT_TRUE(parsed.has_value());
+        const Json* other = FindJsonMember(*parsed, "otherData");
+        ASSERT_NE(other, nullptr);
+        const Json* rows = FindJsonMember(*other, "allocSizes");
+        ASSERT_NE(rows, nullptr);
+        const Json* traced = nullptr;
+        for (const Json& row : *rows) {
+            if (GetJsonString(row, "zone") == String("TraceSizesZone")) {
+                traced = &row;
+            }
+        }
+        ASSERT_NE(traced, nullptr);
+
+        const AllocSizeStats* expected = nullptr;
+        const Vector<AllocSizeStats> sizes = AllocTracker::GetSizeStats();
+        for (const AllocSizeStats& stats : sizes) {
+            if (stats.zone != nullptr && std::strcmp(stats.zone->name, "TraceSizesZone") == 0) {
+                expected = &stats;
+            }
+        }
+        ASSERT_NE(expected, nullptr);
+        EXPECT_EQ(GetJsonInt(*traced, "allocs"), static_cast<int64_t>(expected->allocs));
+        EXPECT_EQ(expected->allocs, 3u);
+        const Json* buckets = FindJsonMember(*traced, "buckets");
+        ASSERT_NE(buckets, nullptr);
+        size_t nonEmpty = 0;
+        for (uint32_t bucket = 0; bucket < kSizeBuckets; ++bucket) {
+            nonEmpty += expected->buckets[bucket] != 0 ? 1 : 0;
+        }
+        ASSERT_EQ(buckets->size(), nonEmpty);
+        size_t index = 0;
+        for (uint32_t bucket = 0; bucket < kSizeBuckets; ++bucket) {
+            if (expected->buckets[bucket] != 0) {
+                EXPECT_EQ(GetJsonInt((*buckets)[index], "upTo"), static_cast<int64_t>(SizeBucketBound(bucket)));
+                EXPECT_EQ(GetJsonInt((*buckets)[index], "allocs"), static_cast<int64_t>(expected->buckets[bucket]));
+                ++index;
+            }
+        }
+    }
+
+    namespace {
+
+        /// The blocks the zone `Trace write` allocated while a recorder with @p events frame marks was written to a file; the writing thread is in
+        /// no other zone, and the rows of the name table that no zone owns are counted into @p outsideZones
+        uint64_t AllocsOfWritingATrace(uint32_t events, uint64_t& outsideZones) {
+            ChromeTraceBackend recorder;
+            for (uint32_t i = 0; i < events; ++i) {
+                recorder.FrameMark();
+            }
+            const TestTempFolder folder("alloc_trace_write");
+            const String path = folder.PathOf("trace.json");
+            AllocTracker::ResetZoneStats();
+            EXPECT_TRUE(recorder.WriteFile(path).has_value());
+            Vector<AllocSiteStats> rows;
+            {
+                BE_PROFILE_SCOPE("Trace reader");  // the reader's own vector is not a write's
+                rows = AllocTracker::GetNameStats();
+            }
+            outsideZones = 0;
+            for (const AllocSiteStats& row : rows) {
+                if (row.zone == nullptr) {
+                    outsideZones += row.count;
+                }
+            }
+            return StatsOf("Trace write").count;
+        }
+
+    }  // namespace
+
+    TEST(AllocTrackerTest, WritingATraceFileAllocatesTheSameWhateverItsSizeAndNamesItsZone) {
+        constexpr uint32_t kFewEvents = 1000;
+        constexpr uint32_t kManyEvents = 20000;
+        constexpr uint64_t kSlack = 4;
+        uint64_t outsideFew = 0;
+        uint64_t outsideMany = 0;
+        const uint64_t few = AllocsOfWritingATrace(kFewEvents, outsideFew);
+        const uint64_t many = AllocsOfWritingATrace(kManyEvents, outsideMany);
+        EXPECT_GT(few, 0u);
+        EXPECT_LT(many, few + kSlack);
+        EXPECT_EQ(outsideFew, 0u);
+        EXPECT_EQ(outsideMany, 0u);
+    }
+
     namespace {
 
         /// The name row of the zone called @p zone (nullptr: outside every zone) and the allocation name @p name (nullptr: unnamed)
@@ -556,6 +653,42 @@ namespace BECore::Tests {
         EXPECT_EQ(NameRow("StickyZone", nullptr).count, 1u);
     }
 
+    TEST(AllocTrackerTest, APlainOperatorNewStaysUnnamedAndEveryLibraryHasItsOwnName) {
+        EXPECT_EQ(AllocTracker::GetSourceName(AllocSource::GlobalNew), nullptr);
+        for (const AllocSource source : {AllocSource::Pugixml, AllocSource::ImGui, AllocSource::SDL, AllocSource::Stb, AllocSource::DrLibs}) {
+            ASSERT_NE(AllocTracker::GetSourceName(source), nullptr);
+            for (const AllocSource other : {AllocSource::Pugixml, AllocSource::ImGui, AllocSource::SDL, AllocSource::Stb, AllocSource::DrLibs}) {
+                EXPECT_EQ(source == other, AllocTracker::GetSourceName(source) == AllocTracker::GetSourceName(other));
+            }
+        }
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("PlainNewZone");
+            ::operator delete(::operator new(kBlock));
+        }
+        EXPECT_EQ(NameRow("PlainNewZone", nullptr).count, 1u);
+    }
+
+    TEST(AllocTrackerTest, AnEastlNameWinsOverTheLibraryNameAndBelongsToOneAllocation) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("RoutedNameZone");
+            Vector<int> values;
+            values.get_allocator().set_name("NamedBeforeRouted");
+            values.reserve(kInts);
+            void* routed = AllocRouting::Malloc(AllocSource::Stb, kBlock);
+            AllocRouting::Free(AllocSource::Stb, routed);
+        }
+        EXPECT_EQ(NameRow("RoutedNameZone", "NamedBeforeRouted").count, 1u);
+        EXPECT_EQ(NameRow("RoutedNameZone", AllocTracker::GetSourceName(AllocSource::Stb)).count, 1u);
+
+        // A name set for an allocation that a library makes instead is spent on that one
+        AllocTracker::SetNextName("NamedForRouted");
+        void* routed = AllocRouting::Malloc(AllocSource::SDL, kBlock);
+        AllocRouting::Free(AllocSource::SDL, routed);
+        EXPECT_GE(NameRow(nullptr, "NamedForRouted").count, 1u);
+    }
+
     TEST(AllocTrackerTest, AnotherThreadsAllocationIsNotChargedToThisThreadsZone) {
         AllocTracker::ResetZoneStats();
         {
@@ -579,6 +712,53 @@ namespace BECore::Tests {
         EXPECT_EQ(NameRow("ResetNameZone", nullptr).count, 1u);
         AllocTracker::ResetZoneStats();
         EXPECT_EQ(NameRow("ResetNameZone", nullptr).count, 0u);
+    }
+
+    namespace {
+
+        /// The size row of the zone called @p zone (nullptr: outside every zone)
+        AllocSizeStats SizeRow(const char* zone) {
+            for (const AllocSizeStats& row : AllocTracker::GetSizeStats()) {
+                if (zone == nullptr ? row.zone == nullptr : (row.zone != nullptr && std::strcmp(row.zone->name, zone) == 0)) {
+                    return row;
+                }
+            }
+            return {};
+        }
+
+    }  // namespace
+
+    TEST(AllocTrackerTest, SizesLandInTheBucketsOfTheirInnermostZoneOnly) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("SizeOuter");
+            ::operator delete(::operator new(kBlock));  // 513..1024
+            {
+                BE_PROFILE_SCOPE("SizeInner");
+                ::operator delete(::operator new(kBlock));
+                ::operator delete(::operator new(kBlock * 3));  // 2049..4096
+                ::operator delete(::operator new(1));
+            }
+        }
+        const AllocSizeStats outer = SizeRow("SizeOuter");
+        EXPECT_EQ(outer.allocs, 1u);
+        EXPECT_EQ(outer.buckets[SizeBucket(kBlock)], 1u);
+        const AllocSizeStats inner = SizeRow("SizeInner");
+        EXPECT_EQ(inner.allocs, 3u);
+        EXPECT_EQ(inner.buckets[SizeBucket(kBlock)], 1u);
+        EXPECT_EQ(inner.buckets[SizeBucket(kBlock * 3)], 1u);
+        EXPECT_EQ(inner.buckets[0], 1u);
+        EXPECT_NE(SizeBucket(kBlock), SizeBucket(kBlock * 3));
+    }
+
+    TEST(AllocTrackerTest, ResettingTheZoneStatisticsClearsTheSizes) {
+        {
+            BE_PROFILE_SCOPE("ResetSizeZone");
+            ::operator delete(::operator new(kBlock));
+        }
+        EXPECT_EQ(SizeRow("ResetSizeZone").allocs, 1u);
+        AllocTracker::ResetZoneStats();
+        EXPECT_EQ(SizeRow("ResetSizeZone").allocs, 0u);
     }
 
     TEST(AllocTrackerTest, TheChromeTraceCarriesTheAllocationNames) {
@@ -619,6 +799,7 @@ namespace BECore::Tests {
         EXPECT_EQ(totals.liveBytes, 0u);
         EXPECT_TRUE(AllocTracker::GetZoneStats().empty());
         EXPECT_TRUE(AllocTracker::GetNameStats().empty());
+        EXPECT_TRUE(AllocTracker::GetSizeStats().empty());
     }
 
 #endif

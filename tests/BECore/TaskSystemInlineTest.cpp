@@ -191,7 +191,7 @@ namespace BECore::Tests {
 
     TEST_F(TaskSystemInlineTest, CoroutineSwitchingToBackgroundCompletesDuringStart) {
         HopLog log;
-        auto handle = MakeIntrusive<TaskHandle<void>>(HoppingTask(_scheduler, log));
+        auto handle = New<TaskHandle<void>>(HoppingTask(_scheduler, log));
 
         StartInBackground(_scheduler, handle);
 
@@ -208,8 +208,8 @@ namespace BECore::Tests {
         HopLog first;
         HopLog second;
         TaskGroup group;
-        auto a = MakeIntrusive<TaskHandle<void>>(HoppingTask(_scheduler, first));
-        auto b = MakeIntrusive<TaskHandle<void>>(HoppingTask(_scheduler, second));
+        auto a = New<TaskHandle<void>>(HoppingTask(_scheduler, first));
+        auto b = New<TaskHandle<void>>(HoppingTask(_scheduler, second));
         group.Add(a);
         group.Add(b);
 

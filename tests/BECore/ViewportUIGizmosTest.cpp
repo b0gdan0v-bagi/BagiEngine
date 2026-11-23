@@ -141,7 +141,7 @@ namespace BECore::Tests {
         }
 
         IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
         SceneNode* _hud = nullptr;
         IntrusivePtr<UICanvasComponent> _canvas;
         IntrusivePtr<UIElement> _panel;

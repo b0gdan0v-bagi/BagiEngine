@@ -120,7 +120,7 @@ namespace BECore {
 
     private:
         struct ConfigEntry {
-            IntrusivePtrAtomic<XmlDocument> doc;  ///< null for a `.bin`
+            IntrusivePtr<XmlDocument> doc;  ///< null for a `.bin`
             std::filesystem::path filePath;
             uint64_t fileHash = 0;  ///< of the file text the document reflects: set at load, SaveConfig and ReloadConfig
             Vector<uint8_t> bytes;  ///< a `.bin`: the validated file, never replaced; a deserializer borrows it (a `Vector`'s block stays when the entry is moved)

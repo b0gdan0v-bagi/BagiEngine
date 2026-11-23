@@ -34,6 +34,21 @@ namespace BECore {
         return answer;
     }
 
+    ProfilerAllocSizes ProfilerAllocSizes::Read(const AllocSizeStats& stats) {
+        ProfilerAllocSizes answer;
+        answer.allocs = stats.allocs;
+        for (uint32_t bucket = 0; bucket < kSizeBuckets; ++bucket) {
+            if (stats.buckets[bucket] != 0) {
+                ProfilerAllocSizeBucket row;
+                row.allocs = stats.buckets[bucket];
+                row.upTo = SizeBucketBound(bucket);
+                answer.buckets.push_back(row);
+            }
+        }
+        answer.zone = TextOf(stats.ZoneLabel());
+        return answer;
+    }
+
     ProfilerAllocZone ProfilerAllocZone::Read(const ZoneAllocStats& stats) {
         ProfilerAllocZone answer;
         answer.allocs = stats.count;

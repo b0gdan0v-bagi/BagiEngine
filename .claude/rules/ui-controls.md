@@ -64,7 +64,7 @@ The elements and variants are reflected fields of `UICanvasComponent`, so a scre
 - Edge anchors: a side panel is `<element type="UIPanel" name="Side" anchorMin="0.65,0" anchorMax="1,1" margin="8"/>` (no `x`, `width`), a bar pinned to the bottom edge and 80% wide is `anchorMin="10%,1" anchorMax="90%,1" pivot="0.5,1" y="-16" height="56"`; a portrait variant moves it with `<set element="Side" anchorMin="0,0.6"/>` (`ui-layout.md`, "Edge anchors").
 - A variant's `when` is `name:value;...` (`orientation`, `minAspect`, `maxAspect`, `minWidth`, ...). An override can set `visible`, `anchor`, `anchorMin`, `anchorMax`, `pivot`, `x`, `y`, `width`, `height`, `margin`, `region`, `direction`, `fontSize`, and is written even when equal to the default.
 - `source="assets/ui/hud.ui.xml"` loads a `UIDocument` (`<ui><elements/><variants/></ui>`); its elements come first, the inline ones on top; only the inline part is saved back.
-- Attribute names of style and control fields share one `<element>` and must not clash. Do not save UI with a skip-defaults serializer (fields whose default is not `T{}` would be lost). Factory fields are declared `IntrusivePtrNonAtomic<UIElement>`: the generator finds them by that name.
+- Attribute names of style and control fields share one `<element>` and must not clash. Do not save UI with a skip-defaults serializer (fields whose default is not `T{}` would be lost). Factory fields are declared `IntrusivePtr<UIElement>`.
 
 ## Controls
 

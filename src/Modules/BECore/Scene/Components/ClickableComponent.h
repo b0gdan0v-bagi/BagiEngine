@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/Pooled.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Scene/Components/PointerTargetComponent.h>
@@ -25,6 +26,8 @@ namespace BECore {
     class ClickableComponent : public PointerTargetComponent {
         BE_CLASS(ClickableComponent, ICON = mouse - pointer - click)
     public:
+        BE_POOLED_SINGLE_THREAD(ClickableComponent)
+
         ClickableComponent() = default;
         ~ClickableComponent() override = default;
 

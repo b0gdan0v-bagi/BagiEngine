@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Math/Color.h>
+#include <BECore/Memory/Pooled.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Renderer/BlendMode.h>
 #include <BECore/Scene/IComponent.h>
@@ -11,6 +12,8 @@ namespace BECore {
     class QuadRendererComponent : public IComponent {
         BE_CLASS(QuadRendererComponent, ICON = square)
     public:
+        BE_POOLED_SINGLE_THREAD(QuadRendererComponent)
+
         QuadRendererComponent() = default;
         ~QuadRendererComponent() override = default;
 

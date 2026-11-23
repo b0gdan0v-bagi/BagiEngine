@@ -46,6 +46,25 @@ namespace BECore {
         [[nodiscard]] static ProfilerAllocName Read(const AllocSiteStats& stats);
     };
 
+    /// One non-empty bucket of a zone's size histogram in `zone_allocs`: `upTo` is the bucket's largest size in bytes, 0 for the open last bucket
+    struct ProfilerAllocSizeBucket {
+        BE_CLASS(ProfilerAllocSizeBucket)
+
+        BE_REFLECT_FIELD uint64_t allocs = 0;
+        BE_REFLECT_FIELD uint64_t upTo = 0;
+    };
+
+    /// One zone's size histogram in `zone_allocs` (Alloc/CLAUDE.md, "Sizes"): the non-empty buckets only
+    struct ProfilerAllocSizes {
+        BE_CLASS(ProfilerAllocSizes)
+
+        BE_REFLECT_FIELD uint64_t allocs = 0;
+        BE_REFLECT_FIELD Vector<ProfilerAllocSizeBucket> buckets;
+        BE_REFLECT_FIELD String zone;
+
+        [[nodiscard]] static ProfilerAllocSizes Read(const AllocSizeStats& stats);
+    };
+
     /// One zone row of `zone_allocs`
     struct ProfilerAllocZone {
         BE_CLASS(ProfilerAllocZone)
@@ -66,6 +85,7 @@ namespace BECore {
 
         BE_REFLECT_FIELD bool enabled = false;
         BE_REFLECT_FIELD Vector<ProfilerAllocName> names;
+        BE_REFLECT_FIELD Vector<ProfilerAllocSizes> sizes;
         BE_REFLECT_FIELD ProfilerAllocTotals totals;
         BE_REFLECT_FIELD Vector<ProfilerAllocZone> zones;
     };

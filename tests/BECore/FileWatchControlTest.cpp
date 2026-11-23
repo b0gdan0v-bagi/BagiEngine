@@ -49,7 +49,7 @@ namespace BECore::Tests {
         }
 
         void StartWatching() {
-            _watcher.Start(IntrusivePtrAtomic<IFileWatchBackend>(New<FakeFileWatchBackend>()));
+            _watcher.Start(IntrusivePtr<IFileWatchBackend>(New<FakeFileWatchBackend>()));
             _manager.StartWatching(_watcher);
         }
 

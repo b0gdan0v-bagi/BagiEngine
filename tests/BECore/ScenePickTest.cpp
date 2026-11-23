@@ -170,7 +170,7 @@ namespace BECore::Tests {
         Vector<SceneNode*> _picked;
 
         IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
         IntrusivePtr<UICanvasComponent> _hud;
         IntrusivePtr<UIElement> _panel;
         IntrusivePtr<UIElement> _bare;

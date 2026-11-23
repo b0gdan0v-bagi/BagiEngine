@@ -26,6 +26,22 @@ namespace BECore {
         Vector<uint8_t> coverage;
     };
 
+    /// The pixels a glyph covers at one size, without drawing it: the size of the bitmap that RasterizeGlyphInto() fills and the offset of its top-left
+    /// corner from the pen position (as in GlyphBitmap). A zero width or height is a glyph with no ink.
+    struct GlyphBox {
+        uint32_t width = 0;
+        uint32_t height = 0;
+        int32_t offsetX = 0;
+        int32_t offsetY = 0;
+
+        [[nodiscard]] bool Empty() const {
+            return width == 0 || height == 0;
+        }
+        [[nodiscard]] size_t PixelCount() const {
+            return static_cast<size_t>(width) * height;
+        }
+    };
+
     /**
      * @brief A TrueType or OpenType font file: the bytes, parsed on the CPU.
      *
@@ -67,6 +83,16 @@ namespace BECore {
 
         /// Draws one glyph. An empty bitmap (width or height 0) is a glyph with no ink, such as a space.
         [[nodiscard]] GlyphBitmap RasterizeGlyph(uint32_t glyph, float fontSize) const;
+
+        /// The box that RasterizeGlyph() would draw into, without drawing. Allocates nothing on the heap (the parser's temporaries are in the thread's scratch arena)
+        [[nodiscard]] GlyphBox GetGlyphBox(uint32_t glyph, float fontSize) const;
+
+        /**
+         * @brief RasterizeGlyph() into a buffer of the caller, with no heap allocation (the parser's temporaries are in the thread's scratch arena
+         * and given back before the call returns).
+         * @p box must be GetGlyphBox() of the same glyph and size; @p coverage is `box.PixelCount()` bytes (Debug asserts it) and is overwritten, row after row, with no gap.
+         */
+        void RasterizeGlyphInto(uint32_t glyph, float fontSize, const GlyphBox& box, Span<uint8_t> coverage) const;
 
     private:
         struct Impl;

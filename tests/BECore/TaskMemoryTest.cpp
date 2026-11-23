@@ -157,7 +157,7 @@ namespace BECore::Tests {
         {
             Vector<IntrusivePtr<TaskHandle<int>>> handles;
             for (size_t i = 0; i < kTasks; ++i) {
-                handles.push_back(MakeIntrusive<TaskHandle<int>>(AwaitsAChild()));
+                handles.push_back(New<TaskHandle<int>>(AwaitsAChild()));
             }
             EXPECT_GE(LiveBlocks() - before, 2 * kTasks) << "a handle and a frame each";
             for (auto& handle : handles) {
@@ -174,7 +174,7 @@ namespace BECore::Tests {
         {
             Vector<IntrusivePtr<TaskHandle<void>>> handles;
             for (size_t i = 0; i < kTasks; ++i) {
-                handles.push_back(MakeIntrusive<TaskHandle<void>>(Parks()));
+                handles.push_back(New<TaskHandle<void>>(Parks()));
                 handles.back()->Start();  // parks and keeps itself alive
             }
             handles.clear();
@@ -188,7 +188,7 @@ namespace BECore::Tests {
         std::atomic<int> destroyed{0};
         const size_t before = LiveBlocks();
         {
-            auto handle = MakeIntrusive<TaskHandle<void>>(GuardedTask(CountedGuard(destroyed)));
+            auto handle = New<TaskHandle<void>>(GuardedTask(CountedGuard(destroyed)));
             EXPECT_EQ(destroyed.load(), 0);
         }
         EXPECT_EQ(destroyed.load(), 1);
@@ -215,7 +215,7 @@ namespace BECore::Tests {
         TaskScheduler scheduler;
         scheduler.Initialize(&pool);
 
-        auto handle = MakeIntrusive<TaskHandle<void>>(GuardedTask(CountedGuard(destroyed)));
+        auto handle = New<TaskHandle<void>>(GuardedTask(CountedGuard(destroyed)));
         scheduler.ScheduleDelayed([handle = std::move(handle)]() mutable { handle->Start(); }, std::chrono::hours(1), TaskPriority::Normal, ThreadType::Background);
         EXPECT_GT(LiveBlocks(), before);
         EXPECT_EQ(destroyed.load(), 0);
@@ -229,7 +229,7 @@ namespace BECore::Tests {
     TEST(TaskMemoryTest, AFrameAboveTheLastClassWorksAndTakesNoBlockOfAClass) {
         const size_t before = LiveBlocks();
         {
-            auto handle = MakeIntrusive<TaskHandle<void>>(BigFrame());
+            auto handle = New<TaskHandle<void>>(BigFrame());
             EXPECT_EQ(LiveBlocks() - before, 1u) << "the handle only: the frame is on the heap";
             handle->Start();
             EXPECT_FALSE(handle->IsDone());

@@ -17,7 +17,7 @@ namespace BECore::Tests {
     struct TestList : RefCounted {
         BE_CLASS(TestList)
 
-        BE_REFLECT_FIELD Vector<IntrusivePtrAtomic<ITest>> tests;
+        BE_REFLECT_FIELD Vector<IntrusivePtr<ITest>> tests;
     };
 
 }  // namespace BECore::Tests

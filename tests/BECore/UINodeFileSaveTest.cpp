@@ -211,7 +211,7 @@ namespace BECore::Tests {
         NodeFileLoader _loader;
         pugi::xml_document _doc;
         pugi::xml_document _out;
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
         Scene* _scene = nullptr;
         int _reads = 0;
         int _writes = 0;

@@ -198,12 +198,16 @@ namespace BECore {
 
             const Vector<ZoneAllocStats> zones = AllocTracker::GetZoneStats();
             const Vector<AllocSiteStats> names = AllocTracker::GetNameStats();
+            const Vector<AllocSizeStats> sizes = AllocTracker::GetSizeStats();
             const AllocTotals totals = AllocTracker::GetTotals();
             ZoneAllocsAnswer answer;
             answer.enabled = AllocTracker::kEnabled;
             const size_t limit = static_cast<size_t>(*top);
             for (size_t i = 0; i < names.size() && i < limit; ++i) {
                 answer.names.push_back(ProfilerAllocName::Read(names[i]));
+            }
+            for (size_t i = 0; i < sizes.size() && i < limit; ++i) {
+                answer.sizes.push_back(ProfilerAllocSizes::Read(sizes[i]));
             }
             answer.totals = ProfilerAllocTotals::Read(totals);
             for (size_t i = 0; i < zones.size() && i < limit; ++i) {
@@ -227,9 +231,9 @@ namespace BECore {
                                                {{"frames", "integer", false, Format("How many frames, 1 to {} (default 1)", FrameStatsCollector::kFrameHistory)}}});
         service.DescribeMethod("profiler_dump", {"Writes the Chrome trace of the run (the game has to record one)",
                                                  {{"path", "string", false, Format("A relative file name without '..' (default {})", kDefaultTracePath)}}});
-        service.DescribeMethod("zone_allocs", {"Allocations per profiler zone, per zone and allocation name (names) and the totals",
-                                               {{"top", "integer", false, Format("How many zones and how many names, 1 to {} (default {})", kMaxTopZones, kDefaultTopZones)},
-                                                {"reset", "boolean", false, "Clear the per-zone and per-name counts after answering"}}});
+        service.DescribeMethod("zone_allocs", {"Allocations per profiler zone, per zone and allocation name (names), per zone and size bucket (sizes) and the totals",
+                                               {{"top", "integer", false, Format("How many zones, names and size histograms, 1 to {} (default {})", kMaxTopZones, kDefaultTopZones)},
+                                                {"reset", "boolean", false, "Clear the per-zone, per-name and per-size counts after answering"}}});
     }
 
 }  // namespace BECore

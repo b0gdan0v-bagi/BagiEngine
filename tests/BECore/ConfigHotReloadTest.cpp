@@ -72,7 +72,7 @@ namespace BECore::Tests {
 
         void StartOnFake() {
             _fake = New<FakeFileWatchBackend>();
-            _watcher.Start(IntrusivePtrAtomic<IFileWatchBackend>(_fake));
+            _watcher.Start(IntrusivePtr<IFileWatchBackend>(_fake));
             _manager.StartWatching(_watcher);
         }
 
@@ -97,7 +97,7 @@ namespace BECore::Tests {
         FileSystem _fileSystem;
         ConfigManager _manager{_fileSystem};
         FileWatcher _watcher{_fileSystem};
-        IntrusivePtrAtomic<FakeFileWatchBackend> _fake;
+        IntrusivePtr<FakeFileWatchBackend> _fake;
         double _now = 0.0;
     };
 
@@ -221,7 +221,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ConfigHotReloadTest, TheStatPollingBackendReloadsARealWrite) {
-        _watcher.Start(IntrusivePtrAtomic<IFileWatchBackend>(New<PollingFileWatchBackend>()));
+        _watcher.Start(IntrusivePtr<IFileWatchBackend>(New<PollingFileWatchBackend>()));
         _manager.StartWatching(_watcher);
         ChangeRecorder recorder;
         _watcher.Update(_now);

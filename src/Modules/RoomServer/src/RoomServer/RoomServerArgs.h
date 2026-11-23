@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Profiler/ProfilerSettings.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
 #include <RoomServer/RoomServerSettings.h>
@@ -54,13 +55,18 @@ namespace BECore {
         /// Registers the demo games `cards` and `cards-leaky` (the negative control); the executable has no game without it
         bool testGames = false;
 
+        /// What `--trace=` and `--profiler=` asked for, or the build's default (none, Tracy in a Tracy build); RunRoomServer starts it before the server listens
+        /// and writes the trace after every thread has been joined
+        ProfilerSettings profiler;
+
         /// `--help` was given: print GetRoomServerUsage() and exit
         bool help = false;
     };
 
     /// Reads `argv[1..argc)` over @p base (the defaults, or what ReadRoomServerEnvironment() gave: a flag wins over it; `--origin` replaces the list of @p base).
-    /// The error is a message for the user (an unknown flag, a missing value, a number that is not one or out of range)
-    [[nodiscard]] std::expected<RoomServerArgs, String> ParseRoomServerArgs(int argc, const char* const* argv, RoomServerArgs base = {});
+    /// The profiler flags are resolved by ResolveProfilerSettings() against @p profilerBuild (a test passes another one); `profiler` is only ever set by them.
+    /// The error is a message for the user (an unknown flag, a missing value, a number that is not one or out of range, a profiler flag the build cannot honour)
+    [[nodiscard]] std::expected<RoomServerArgs, String> ParseRoomServerArgs(int argc, const char* const* argv, RoomServerArgs base = {}, ProfilerBuild profilerBuild = kProfilerBuild);
 
     /// Looks a variable up: its text, or null when it is not set (`std::getenv`, or a table in a test). Called only during the read, so a view is enough
     using RoomServerEnvironmentLookup = FunctionRef<const char*(const char*)>;

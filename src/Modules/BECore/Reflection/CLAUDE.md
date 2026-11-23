@@ -53,7 +53,7 @@ The surface of the control API over this module (`Control/ReflectionControl`, re
 - `XmlDeserializer` allocates nothing per element in the default diagnostics mode: per array it takes the element list (counted first, reserved once) and its own stacks. The `Warn` mode keeps a scope per opened node and was not measured. The DOM of pugixml is the text's own cost.
 - `BinaryDeserializer` allocates nothing per array or per field (an array is a cursor into the validated bytes); `LoadFromView` also nothing for the stream itself, `LoadFromBuffer` and `LoadFromFile` one block of its size. A version 2 file with `PoolString` values also keeps one small bitmap of the table strings they use, and the first `PoolString` read interns them in one batch (the new strings and the batch's own lists are the allocations; a file with none, or a `Peek`, allocates none). A version 1 file interns each `PoolString` read one by one.
 - A reader does not know the totals (new `PoolString`s, string bytes), and `PoolString::Reserve` alone removes only table growth, not the unique lock each new string takes. So no reader carries a size hint: one `PoolString::Reserve` of the exact totals saves no allocations (the `AssetLoadReserved` line of `AssetLoadAllocBenchTest`).
-- Figures: `AssetLoadAllocBenchTest` (the perf benchmark `asset-load`; counts need the profile preset). None are kept in the docs.
+- Figures: `AssetLoadAllocBenchTest` (benchmark `asset-load`; profile preset): the load by zone, a particle scene. None kept here.
 
 ## Layout hash
 

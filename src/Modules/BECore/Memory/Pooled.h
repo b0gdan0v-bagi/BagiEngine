@@ -31,7 +31,7 @@
 
 /**
  * Opts the class @p T in to a pool of its own, for any thread: write it in the **public** section of the class body, once (the macro changes no access label; in a
- * private one `new T` does not compile). `New<T>`, `MakeIntrusive<T>`, `new T` and the `delete this` of the RefCounted bases then reach the pool, with no change at a call site.
+ * private one `new T` does not compile). `New<T>`, `new T` and the `delete this` of the RefCounted bases then reach the pool, with no change at a call site.
  *
  * - `T::PooledPool()` is the pool (counters, tests). Its name in `GetPoolStats()` is the text of the argument.
  * - A class derived from T has another size and uses the heap, told apart by the size both operators get: opting the derived class in gives it a pool of its own.

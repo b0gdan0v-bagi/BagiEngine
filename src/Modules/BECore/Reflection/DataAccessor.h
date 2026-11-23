@@ -28,12 +28,7 @@ namespace BECore {
         struct IntrusivePtrPointeeType {};
 
         template <typename T>
-        struct IntrusivePtrPointeeType<IntrusivePtrAtomic<T>> {
-            using type = T;
-        };
-
-        template <typename T>
-        struct IntrusivePtrPointeeType<IntrusivePtrNonAtomic<T>> {
+        struct IntrusivePtrPointeeType<IntrusivePtr<T>> {
             using type = T;
         };
 

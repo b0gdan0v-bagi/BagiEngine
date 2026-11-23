@@ -451,6 +451,9 @@ namespace BECore::Tests {
         const Json* names = FindJsonMember(*result, "names");
         ASSERT_NE(names, nullptr);
         EXPECT_TRUE(names->is_array());
+        const Json* sizes = FindJsonMember(*result, "sizes");
+        ASSERT_NE(sizes, nullptr);
+        EXPECT_TRUE(sizes->is_array());
         const Json* totals = FindJsonMember(*result, "totals");
         ASSERT_NE(totals, nullptr);
         for (const char* key : {"count", "bytes", "frees", "liveBytes", "peakLiveBytes", "largest", "noAllocViolations"}) {
@@ -478,7 +481,114 @@ namespace BECore::Tests {
             return nullptr;
         }
 
+        /// The `sizes` row of the zone @p zone in the answer of zone_allocs, or nullptr
+        const Json* FindSizeRow(const Json& result, const char* zone) {
+            const Json* sizes = FindJsonMember(result, "sizes");
+            if (sizes == nullptr) {
+                return nullptr;
+            }
+            for (const Json& row : *sizes) {
+                if (GetJsonString(row, "zone") == String(zone)) {
+                    return &row;
+                }
+            }
+            return nullptr;
+        }
+
+        /// Allocates @p bytes in a container, so the optimizer keeps the call
+        void AllocateBytes(size_t bytes) {
+            Vector<char> block;
+            block.reserve(bytes);
+        }
+
+        constexpr size_t kSmallBlock = 100;
+        constexpr size_t kBigBlock = 1000;
+
     }  // namespace
+
+    TEST_F(ProfilerControlTest, ZoneAllocsGivesTheSizeHistogramOfTheInnermostZone) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("ControlSizesOuter");
+            AllocateBytes(kSmallBlock);
+            {
+                BE_PROFILE_SCOPE("ControlSizesInner");
+                AllocateBytes(kBigBlock);
+                AllocateBytes(kBigBlock);
+            }
+        }
+        const Json response = Call("zone_allocs");
+        const Json* result = FindJsonMember(response, "result");
+        ASSERT_NE(result, nullptr);
+
+        const Json* outer = FindSizeRow(*result, "ControlSizesOuter");
+        ASSERT_NE(outer, nullptr);
+        EXPECT_EQ(GetJsonInt(*outer, "allocs"), 1);
+        const Json* outerBuckets = FindJsonMember(*outer, "buckets");
+        ASSERT_NE(outerBuckets, nullptr);
+        ASSERT_EQ(outerBuckets->size(), 1u);
+        EXPECT_EQ(GetJsonInt((*outerBuckets)[0], "upTo"), static_cast<int64_t>(SizeBucketBound(SizeBucket(kSmallBlock))));
+        EXPECT_EQ(GetJsonInt((*outerBuckets)[0], "allocs"), 1);
+
+        const Json* inner = FindSizeRow(*result, "ControlSizesInner");
+        ASSERT_NE(inner, nullptr);
+        EXPECT_EQ(GetJsonInt(*inner, "allocs"), 2);
+        const Json* innerBuckets = FindJsonMember(*inner, "buckets");
+        ASSERT_NE(innerBuckets, nullptr);
+        ASSERT_EQ(innerBuckets->size(), 1u);
+        EXPECT_EQ(GetJsonInt((*innerBuckets)[0], "upTo"), static_cast<int64_t>(SizeBucketBound(SizeBucket(kBigBlock))));
+        EXPECT_EQ(GetJsonInt((*innerBuckets)[0], "allocs"), 2);
+    }
+
+    TEST_F(ProfilerControlTest, ZoneAllocsTopLimitsTheSizesAndResetEmptiesThem) {
+        AllocTracker::ResetZoneStats();
+        {
+            BE_PROFILE_SCOPE("ControlSizesMany");
+            AllocateBytes(kSmallBlock);
+            AllocateBytes(kBigBlock);
+        }
+        {
+            BE_PROFILE_SCOPE("ControlSizesFew");
+            AllocateBytes(kSmallBlock);
+        }
+        Json limited = Json::object();
+        limited["top"] = 1;
+        const Json first = Call("zone_allocs", limited);
+        const Json* limitedResult = FindJsonMember(first, "result");
+        ASSERT_NE(limitedResult, nullptr);
+        const Json* limitedSizes = FindJsonMember(*limitedResult, "sizes");
+        ASSERT_NE(limitedSizes, nullptr);
+        ASSERT_EQ(limitedSizes->size(), 1u);
+
+        // The most allocations first (the test's own work outside every zone may lead, so the order is read between its two zones)
+        const Json all = Call("zone_allocs");
+        const Json* allResult = FindJsonMember(all, "result");
+        ASSERT_NE(allResult, nullptr);
+        const Json* allSizes = FindJsonMember(*allResult, "sizes");
+        ASSERT_NE(allSizes, nullptr);
+        size_t manyAt = allSizes->size();
+        size_t fewAt = allSizes->size();
+        for (size_t i = 0; i < allSizes->size(); ++i) {
+            const Optional<String> zone = GetJsonString((*allSizes)[i], "zone");
+            manyAt = zone == String("ControlSizesMany") ? i : manyAt;
+            fewAt = zone == String("ControlSizesFew") ? i : fewAt;
+        }
+        ASSERT_LT(manyAt, allSizes->size());
+        EXPECT_LT(manyAt, fewAt);
+
+        Json clearing = Json::object();
+        clearing["reset"] = true;
+        const Json before = Call("zone_allocs", clearing);
+        const Json* beforeResult = FindJsonMember(before, "result");
+        ASSERT_NE(beforeResult, nullptr);
+        EXPECT_NE(FindSizeRow(*beforeResult, "ControlSizesFew"), nullptr);
+
+        const Json after = Call("zone_allocs");
+        const Json* afterResult = FindJsonMember(after, "result");
+        ASSERT_NE(afterResult, nullptr);
+        EXPECT_EQ(FindSizeRow(*afterResult, "ControlSizesFew"), nullptr);
+        EXPECT_EQ(FindSizeRow(*afterResult, "ControlSizesMany"), nullptr);
+    }
 
     TEST_F(ProfilerControlTest, ZoneAllocsNamesTheContainerThatAllocated) {
         AllocTracker::ResetZoneStats();
@@ -540,6 +650,9 @@ namespace BECore::Tests {
         const Json* names = FindJsonMember(*result, "names");
         ASSERT_NE(names, nullptr);
         EXPECT_TRUE(names->empty());
+        const Json* sizes = FindJsonMember(*result, "sizes");
+        ASSERT_NE(sizes, nullptr);
+        EXPECT_TRUE(sizes->empty());
     }
 
 #endif
