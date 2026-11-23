@@ -7,21 +7,54 @@ namespace BECore {
         constexpr float kEdgeReach = 0.5f;  // a source pixel still reaches the pixel this far beyond the radius, at a fraction of its coverage
         constexpr float kFullCoverage = 255.0f;
 
-        /// The weight of a source pixel at an offset from the target pixel, for every offset in the square of the radius
-        Vector<float> MakeKernel(int radius) {
-            const int side = 2 * radius + 1;
-            Vector<float> kernel(static_cast<size_t>(side) * static_cast<size_t>(side), 0.0f);
-            for (int dy = -radius; dy <= radius; ++dy) {
-                for (int dx = -radius; dx <= radius; ++dx) {
-                    const float distance = std::sqrt(static_cast<float>(dx * dx + dy * dy));
-                    kernel[static_cast<size_t>(dy + radius) * static_cast<size_t>(side) + static_cast<size_t>(dx + radius)] =
-                        std::clamp(static_cast<float>(radius) + kEdgeReach - distance, 0.0f, 1.0f);
+    }  // namespace
+
+    GlyphOutline::Kernel::Kernel(int radius) : _radius(std::clamp(radius, 0, kMaxOutlinePixels)) {
+        const auto side = static_cast<size_t>(2 * _radius + 1);
+        _weights.resize(side * side, 0.0f);
+        for (int dy = -_radius; dy <= _radius; ++dy) {
+            for (int dx = -_radius; dx <= _radius; ++dx) {
+                const float distance = std::sqrt(static_cast<float>(dx * dx + dy * dy));
+                _weights[static_cast<size_t>(dy + _radius) * side + static_cast<size_t>(dx + _radius)] = std::clamp(static_cast<float>(_radius) + kEdgeReach - distance, 0.0f, 1.0f);
+            }
+        }
+    }
+
+    void GlyphOutline::Dilate(Span<const uint8_t> source, uint32_t width, uint32_t height, const Kernel& kernel, Span<uint8_t> target) {
+        const auto radius = static_cast<uint32_t>(kernel.GetRadius());
+        const uint32_t targetWidth = width + 2 * radius;
+        const uint32_t targetHeight = height + 2 * radius;
+        ASSERT(source.size() == static_cast<size_t>(width) * height, "the source is width * height bytes");
+        ASSERT(target.size() == static_cast<size_t>(targetWidth) * targetHeight, "the target is the source grown by the radius on every side");
+        if (radius == 0) {
+            std::copy(source.begin(), source.end(), target.begin());
+            return;
+        }
+        std::fill(target.begin(), target.end(), uint8_t{0});
+
+        const Span<const float> weights = kernel.GetWeights();
+        const size_t side = 2 * static_cast<size_t>(radius) + 1;
+        for (uint32_t row = 0; row < height; ++row) {
+            for (uint32_t column = 0; column < width; ++column) {
+                const uint8_t coverage = source[static_cast<size_t>(row) * width + column];
+                if (coverage == 0) {
+                    continue;
+                }
+                // The source pixel (column, row) is the pixel (column + radius, row + radius) of the target; it reaches a square around it
+                for (size_t ky = 0; ky < side; ++ky) {
+                    uint8_t* line = &target[(static_cast<size_t>(row) + ky) * targetWidth + column];
+                    for (size_t kx = 0; kx < side; ++kx) {
+                        const float weight = weights[ky * side + kx];
+                        if (weight <= 0.0f) {
+                            continue;
+                        }
+                        const auto value = static_cast<uint8_t>(std::min(std::lround(static_cast<float>(coverage) * weight), std::lround(kFullCoverage)));
+                        line[kx] = std::max(line[kx], value);
+                    }
                 }
             }
-            return kernel;
         }
-
-    }  // namespace
+    }
 
     GlyphBitmap GlyphOutline::Dilate(const GlyphBitmap& glyph, int radius) {
         radius = std::min(radius, kMaxOutlinePixels);
@@ -35,30 +68,11 @@ namespace BECore {
         result.height = glyph.height + 2 * grow;
         result.offsetX = glyph.offsetX - radius;
         result.offsetY = glyph.offsetY - radius;
-        result.coverage.assign(static_cast<size_t>(result.width) * result.height, 0);
+        result.coverage.resize(static_cast<size_t>(result.width) * result.height);
 
-        const Vector<float> kernel = MakeKernel(radius);
-        const size_t side = 2 * static_cast<size_t>(radius) + 1;
-        for (uint32_t row = 0; row < glyph.height; ++row) {
-            for (uint32_t column = 0; column < glyph.width; ++column) {
-                const uint8_t source = glyph.coverage[static_cast<size_t>(row) * glyph.width + column];
-                if (source == 0) {
-                    continue;
-                }
-                // The source pixel (column, row) is the pixel (column + radius, row + radius) of the result; it reaches a square around it
-                for (size_t ky = 0; ky < side; ++ky) {
-                    uint8_t* target = &result.coverage[(static_cast<size_t>(row) + ky) * result.width + column];
-                    for (size_t kx = 0; kx < side; ++kx) {
-                        const float weight = kernel[ky * side + kx];
-                        if (weight <= 0.0f) {
-                            continue;
-                        }
-                        const auto value = static_cast<uint8_t>(std::min(std::lround(static_cast<float>(source) * weight), std::lround(kFullCoverage)));
-                        target[kx] = std::max(target[kx], value);
-                    }
-                }
-            }
-        }
+        const ScratchScope scratch;
+        const Kernel kernel(radius);
+        Dilate(Span<const uint8_t>(glyph.coverage.data(), glyph.coverage.size()), glyph.width, glyph.height, kernel, Span<uint8_t>(result.coverage.data(), result.coverage.size()));
         return result;
     }
 

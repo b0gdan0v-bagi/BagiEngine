@@ -1,3 +1,4 @@
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Text/GlyphOutline.h>
 #include <gtest/gtest.h>
 
@@ -55,6 +56,32 @@ namespace BECore::Tests {
         EXPECT_EQ(At(grown, 0, 3), 128);    // two pixels off an edge
         EXPECT_EQ(At(grown, 0, 1), 67);     // sqrt(5) from the corner: 255 * (2.5 - sqrt(5))
         EXPECT_EQ(At(grown, 0, 0), 0);      // 2 * sqrt(2) from the corner: out of reach
+    }
+
+    // The target of a buffer form is the caller's and may hold anything: every byte of it is written
+    TEST(GlyphOutlineTest, TheBufferFormOverwritesAnyTargetWithTheBitmapOfTheHeapForm) {
+        GlyphBitmap glyph = Block(4, 3);
+        glyph.coverage[1] = 90;
+        glyph.coverage[6] = 0;
+        const GlyphBitmap expected = GlyphOutline::Dilate(glyph, 3);
+        Vector<uint8_t> target(expected.coverage.size(), 0xEE);
+
+        const ScratchScope scratch;
+        const GlyphOutline::Kernel kernel(3);
+        GlyphOutline::Dilate(Span<const uint8_t>(glyph.coverage.data(), glyph.coverage.size()), glyph.width, glyph.height, kernel, Span<uint8_t>(target.data(), target.size()));
+
+        EXPECT_EQ(target, expected.coverage);
+    }
+
+    TEST(GlyphOutlineTest, TheBufferFormOfRadiusZeroCopiesTheSource) {
+        const GlyphBitmap glyph = Block(3, 2, 77);
+        Vector<uint8_t> target(glyph.coverage.size(), 0);
+
+        const ScratchScope scratch;
+        const GlyphOutline::Kernel kernel(0);
+        GlyphOutline::Dilate(Span<const uint8_t>(glyph.coverage.data(), glyph.coverage.size()), glyph.width, glyph.height, kernel, Span<uint8_t>(target.data(), target.size()));
+
+        EXPECT_EQ(target, glyph.coverage);
     }
 
     TEST(GlyphOutlineTest, ASoftPixelKeepsItsCoverageUnderTheWeight) {
