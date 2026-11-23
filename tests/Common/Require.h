@@ -19,7 +19,7 @@ namespace BECore::Tests {
         template <typename T>
         struct StandIn final : IStandIn {
             static constexpr bool kRefCounted = std::is_base_of_v<RefCountedAtomic, T> || std::is_base_of_v<RefCountedNonAtomic, T>;
-            std::conditional_t<kRefCounted, typename GetIntrusivePtrType<T>::type, UniquePtr<T>> object;
+            std::conditional_t<kRefCounted, IntrusivePtr<T>, UniquePtr<T>> object;
 
             StandIn() {
                 if constexpr (kRefCounted) {
@@ -89,12 +89,7 @@ namespace BECore::Tests {
     }
 
     template <typename T>
-    T& Require(const IntrusivePtrAtomic<T>& found, std::source_location where = std::source_location::current()) {
-        return Require(found.Get(), where);
-    }
-
-    template <typename T>
-    T& Require(const IntrusivePtrNonAtomic<T>& found, std::source_location where = std::source_location::current()) {
+    T& Require(const IntrusivePtr<T>& found, std::source_location where = std::source_location::current()) {
         return Require(found.Get(), where);
     }
 

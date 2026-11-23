@@ -247,7 +247,7 @@ namespace BECore::Tests {
         }
 
         IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
         IntrusivePtr<UICanvasComponent> _canvas;
 
     private:
@@ -263,8 +263,8 @@ namespace BECore::Tests {
             return object;
         }
 
-        mutable Vector<IntrusivePtrNonAtomic<UIElement>> _standIns;
-        mutable Vector<IntrusivePtrNonAtomic<UIComponent>> _standInComponents;
+        mutable Vector<IntrusivePtr<UIElement>> _standIns;
+        mutable Vector<IntrusivePtr<UIComponent>> _standInComponents;
     };
 
 }  // namespace BECore::Tests

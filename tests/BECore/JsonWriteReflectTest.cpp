@@ -805,7 +805,7 @@ namespace BECore::Tests {
     namespace {
 
         template <typename T>
-        JsonWritePtrHolder MakeHolder(IntrusivePtrNonAtomic<T> factory) {
+        JsonWritePtrHolder MakeHolder(IntrusivePtr<T> factory) {
             JsonWritePtrHolder value;
             factory->label = "lbl";
             value.factory = factory;

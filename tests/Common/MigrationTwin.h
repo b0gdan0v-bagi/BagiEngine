@@ -327,7 +327,7 @@ namespace BECore::Tests::MigrationTwin {
         ControlService _service;
         IntrusivePtr<RecordingRenderer> _renderer;
         IntrusivePtr<ITexture> _icon;
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
         int64_t _nextId = 0;
     };
 

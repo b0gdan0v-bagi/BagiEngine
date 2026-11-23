@@ -4,7 +4,7 @@
 
 namespace BECore {
 
-    IntrusivePtrAtomic<IFileWatchBackend> MakePlatformFileWatchBackend() {
+    IntrusivePtr<IFileWatchBackend> MakePlatformFileWatchBackend() {
 #if defined(__EMSCRIPTEN__)
         return {};
 #elif defined(__APPLE__)

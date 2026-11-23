@@ -112,7 +112,7 @@ namespace BECore::Tests {
             auto panel = New<UIPanel>();
             auto child = panel->AddChild("InPanel"_intern);
             EXPECT_EQ(elements.Added(), 1u) << "the plain child is pooled, the panel is not";
-            IntrusivePtrNonAtomic<UIElement> asBase = panel;
+            IntrusivePtr<UIElement> asBase = panel;
             panel = nullptr;
             EXPECT_EQ(asBase->children.size(), 1u);
         }

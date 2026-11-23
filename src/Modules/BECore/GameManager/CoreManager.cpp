@@ -110,7 +110,7 @@ namespace BECore {
         TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});
     }
 
-    void CoreManager::SetSceneManagerForTest(IntrusivePtrAtomic<SceneManager> manager, PassKey<Tests::EngineEnvironment>) {
+    void CoreManager::SetSceneManagerForTest(IntrusivePtr<SceneManager> manager, PassKey<Tests::EngineEnvironment>) {
         _sceneManager = std::move(manager);
     }
 

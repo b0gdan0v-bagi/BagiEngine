@@ -115,8 +115,8 @@ namespace BECore {
         Scene* _scene = nullptr;
         SceneNode* _parent = nullptr;
         EditorFlags _editorFlags = EditorFlags::None;
-        BE_REFLECT_FIELD ComponentList _components;
-        BE_REFLECT_FIELD ChildList _children;
+        BE_REFLECT_FIELD BE_FIELD_ATTRS(no_factory) ComponentList _components;
+        BE_REFLECT_FIELD BE_FIELD_ATTRS(no_factory) ChildList _children;
     };
 
 }  // namespace BECore

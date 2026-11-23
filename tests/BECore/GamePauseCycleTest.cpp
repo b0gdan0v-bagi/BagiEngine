@@ -121,7 +121,7 @@ namespace BECore::Tests {
             return frame.kind;
         }
 
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
         IntrusivePtr<SpeedProbe> _probe;
         IntrusivePtr<TweenHandle> _tween;
         float _tweenValue = 0.0f;

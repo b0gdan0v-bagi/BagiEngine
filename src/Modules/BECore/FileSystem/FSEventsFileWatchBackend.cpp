@@ -251,7 +251,7 @@ namespace BECore {
 
     }  // namespace
 
-    IntrusivePtrAtomic<IFileWatchBackend> MakeFSEventsFileWatchBackend() {
+    IntrusivePtr<IFileWatchBackend> MakeFSEventsFileWatchBackend() {
         return New<FSEventsFileWatchBackend>();
     }
 

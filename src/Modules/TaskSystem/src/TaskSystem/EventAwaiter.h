@@ -155,7 +155,7 @@ namespace BECore {
         Duration _timeout;
         std::coroutine_handle<> _handle;
         Optional<EventType> _receivedEvent;
-        IntrusivePtrAtomic<TimerLink> _timer;
+        IntrusivePtr<TimerLink> _timer;
     };
 
     /**

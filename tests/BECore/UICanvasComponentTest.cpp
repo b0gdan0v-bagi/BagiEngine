@@ -233,7 +233,7 @@ namespace BECore::Tests {
         }
 
         IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
     };
 
     // ---- the fields -------------------------------------------------------------------------------------------------------
@@ -1035,7 +1035,7 @@ namespace BECore::Tests {
                     return element;
                 }
             }
-            return IntrusivePtrNonAtomic<UIElement>{};
+            return IntrusivePtr<UIElement>{};
         };
         ExpectRect(find("Side")->rect, 520.0f, 10.0f, 280.0f, 580.0f);  // 0.65 of 800 to the right edge, the margin only on the stretched axis' ends
         ExpectRect(find("Bar")->rect, 80.0f, 550.0f, 640.0f, 40.0f);    // stretched X, a point Y at the bottom edge: pivot 1, then 10 up

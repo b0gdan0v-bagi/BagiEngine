@@ -69,7 +69,7 @@ namespace BECore::Tests {
             return TreeOf(_scene->GetRootNode());
         }
 
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
         Scene* _scene = nullptr;
     };
 

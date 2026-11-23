@@ -16,7 +16,7 @@ namespace BECore {
         return static_cast<ExprNodeId>(ast.nodes.size() - 1);
     }
 
-    std::expected<ExprNodeId, ProgramError> CalcBuildState::Build(ExprAst& ast, const IntrusivePtrNonAtomic<CalcNode>& child, StringView owner, StringView key) {
+    std::expected<ExprNodeId, ProgramError> CalcBuildState::Build(ExprAst& ast, const IntrusivePtr<CalcNode>& child, StringView owner, StringView key) {
         // The path is the owner's: the message names the missing child by its key
         if (!child) {
             return Fail(Format("{}: '{}' is missing", owner, key));

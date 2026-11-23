@@ -269,8 +269,8 @@ namespace BECore::Tests {
         }
 
         XmlDocument _document;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtrAtomic<SceneManager> _reloaded;
+        IntrusivePtr<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _reloaded;
         std::filesystem::path _dir;
     };
 

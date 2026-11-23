@@ -33,7 +33,7 @@ namespace BECore::Tests {
         g_coreServicesUp = true;
     }
 
-    void EngineEnvironment::UseSceneManager(IntrusivePtrAtomic<SceneManager> manager) {
+    void EngineEnvironment::UseSceneManager(IntrusivePtr<SceneManager> manager) {
         CoreManager::GetInstance().SetSceneManagerForTest(std::move(manager), PassKey<EngineEnvironment>{});
     }
 

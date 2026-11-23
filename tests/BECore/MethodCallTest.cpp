@@ -30,9 +30,9 @@ namespace BECore::MethodCallData {
         return this;
     }
 
-    void McCounter::Adopt(IntrusivePtrNonAtomic<McBase> /*object*/) {}
+    void McCounter::Adopt(IntrusivePtr<McBase> /*object*/) {}
 
-    Vector<IntrusivePtrNonAtomic<McBase>> McCounter::Held() const {
+    Vector<IntrusivePtr<McBase>> McCounter::Held() const {
         return {};
     }
 

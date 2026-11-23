@@ -61,6 +61,9 @@ def test_alias_type_and_name(parse, declaration, expected, primitive):
     ("Vector<IntrusivePtrAtomic<ILogSink>>", "ILogSink"),
     ("SmallVector<IntrusivePtrNonAtomic<Tests::ITest>, 4>", "Tests::ITest"),
     ("Optional<IntrusivePtrNonAtomic<Tests::ITest>>", "Tests::ITest"),
+    ("Vector<IntrusivePtr<ILogSink>>", "ILogSink"),
+    ("Optional<IntrusivePtr<Tests::ITest>>", "Tests::ITest"),
+    ("Vector<MyIntrusivePtr<ILogSink>>", None),
     ("Vector<int32_t>", None),
 ])
 def test_factory_base_is_found_in_a_container_of_pointers(type_name, inner):

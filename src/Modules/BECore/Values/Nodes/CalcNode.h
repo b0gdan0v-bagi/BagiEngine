@@ -45,7 +45,7 @@ namespace BECore {
         [[nodiscard]] std::expected<ExprNodeId, ProgramError> Add(ExprAst& ast, ExprNode node) const;
 
         /// Builds the child @p child of the node of type @p owner under the name @p key (`left`, `args[2]`): a null one is the error `<owner>: '<key>' is missing`
-        [[nodiscard]] std::expected<ExprNodeId, ProgramError> Build(ExprAst& ast, const IntrusivePtrNonAtomic<CalcNode>& child, StringView owner, StringView key);
+        [[nodiscard]] std::expected<ExprNodeId, ProgramError> Build(ExprAst& ast, const IntrusivePtr<CalcNode>& child, StringView owner, StringView key);
 
         /// The path of the node being built
         [[nodiscard]] const String& Path() const {

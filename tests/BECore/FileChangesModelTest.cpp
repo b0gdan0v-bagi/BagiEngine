@@ -20,7 +20,7 @@ namespace BECore::Tests {
             ASSERT_TRUE(_fileSystem.Mount("fcmtest"_intern, _dir));
             Write(_dir / "a.xml", "one");
             Write(_dir / "b.xml", "two");
-            _watcher.Start(IntrusivePtrAtomic<IFileWatchBackend>(New<FakeFileWatchBackend>()));
+            _watcher.Start(IntrusivePtr<IFileWatchBackend>(New<FakeFileWatchBackend>()));
             _handle = _watcher.WatchFolder("fcmtest", [this](FileChange& change) { _delivered.push_back(String(change.virtualPath.ToStringView())); }, "Test");
         }
 

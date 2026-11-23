@@ -626,7 +626,7 @@ namespace BECore::Tests {
             SceneFixture& operator=(const SceneFixture&) = delete;
 
             /// Parse, expansion of the references and deserialize
-            IntrusivePtrAtomic<SceneManager> LoadFromXml() const {
+            IntrusivePtr<SceneManager> LoadFromXml() const {
                 pugi::xml_document document;
                 if (!document.load_buffer(_text.data(), _text.size())) {
                     return {};
@@ -634,7 +634,7 @@ namespace BECore::Tests {
                 return LoadSceneManager(XmlNode{document.document_element()}, MakeDirectoryNodeLoader(_dir));
             }
 
-            IntrusivePtrAtomic<SceneManager> LoadFromBinary() const {
+            IntrusivePtr<SceneManager> LoadFromBinary() const {
                 BinaryDeserializer reader;
                 if (!reader.LoadFromView(_binary.data(), _binary.size())) {
                     return {};
@@ -643,7 +643,7 @@ namespace BECore::Tests {
             }
 
             /// `LoadFromXml` with a zone around the parse and around the build, for the zone pass
-            IntrusivePtrAtomic<SceneManager> LoadFromXmlByZone() const {
+            IntrusivePtr<SceneManager> LoadFromXmlByZone() const {
                 pugi::xml_document document;
                 {
                     BE_PROFILE_SCOPE("Scene parse");
@@ -656,7 +656,7 @@ namespace BECore::Tests {
             }
 
             /// `LoadFromBinary` with a zone around the stream check and around the build, for the zone pass
-            IntrusivePtrAtomic<SceneManager> LoadFromBinaryByZone() const {
+            IntrusivePtr<SceneManager> LoadFromBinaryByZone() const {
                 BinaryDeserializer reader;
                 {
                     BE_PROFILE_SCOPE("Scene stream open");
@@ -675,7 +675,7 @@ namespace BECore::Tests {
         };
 
         LoadMeasure MeasureSceneLoad(const SceneFixture& fixture, FileFormat format) {
-            IntrusivePtrAtomic<SceneManager> manager;
+            IntrusivePtr<SceneManager> manager;
             bool loaded = false;
             const LoadMeasure measure = MeasureCall(
                 [&] {
@@ -874,7 +874,7 @@ namespace BECore::Tests {
         }
 
         void RunSceneZonePass(const SceneFixture& fixture, FileFormat format, StringView stem = "scene") {
-            IntrusivePtrAtomic<SceneManager> manager;
+            IntrusivePtr<SceneManager> manager;
             PrintZonePass(ZoneCaseName(stem, format), [&] {
                 manager = format == FileFormat::Xml ? fixture.LoadFromXmlByZone() : fixture.LoadFromBinaryByZone();
                 return manager != nullptr;

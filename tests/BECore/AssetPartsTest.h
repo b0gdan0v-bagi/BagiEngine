@@ -68,7 +68,7 @@ namespace BECore::Tests {
 
             BE_REFLECT_FIELD PartSimProbe simPart;
             BE_REFLECT_FIELD HiddenVisualProbe visualPart;
-            BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<PartAssetBase>> elements;
+            BE_REFLECT_FIELD Vector<IntrusivePtr<PartAssetBase>> elements;
         };
 
     }  // namespace AssetPartsTestTypes

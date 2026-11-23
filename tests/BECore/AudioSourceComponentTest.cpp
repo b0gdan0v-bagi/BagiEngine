@@ -91,7 +91,7 @@ namespace BECore::Tests {
         }
 
         IntrusivePtr<FakeAudioBackend> backend;
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
     };
 
     TEST_F(AudioSourceComponentTest, ASceneFileSetsTheFieldsAndTheClipLoadsAtAttach) {

@@ -249,7 +249,7 @@ namespace BECore::Tests {
         }
 
         /// The scenes of the XML config: inline nodes with children and components, and a node file with an override
-        IntrusivePtrAtomic<SceneManager> LoadFromXml() {
+        IntrusivePtr<SceneManager> LoadFromXml() {
             const String text = SceneConfigText(R"(<node name="A" layer="3"><components><component type="TransformComponent" x="5" y="6"/></components><children><node name="A1"/></children></node>
 <node ref="nodes/Hud" name="Panel"/>)",
                                                 kMainSceneView800x600);

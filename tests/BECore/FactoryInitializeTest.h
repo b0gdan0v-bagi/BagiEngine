@@ -102,13 +102,13 @@ namespace BECore::Tests {
     struct InitProbeList : RefCounted {
         BE_CLASS(InitProbeList)
 
-        BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<InitProbe>> probes;
+        BE_REFLECT_FIELD Vector<IntrusivePtr<InitProbe>> probes;
     };
 
     struct NoHookProbeList : RefCounted {
         BE_CLASS(NoHookProbeList)
 
-        BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<NoHookProbe>> items;
+        BE_REFLECT_FIELD Vector<IntrusivePtr<NoHookProbe>> items;
     };
 
 }  // namespace BECore::Tests

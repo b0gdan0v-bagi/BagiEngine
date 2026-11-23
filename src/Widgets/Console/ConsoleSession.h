@@ -114,7 +114,7 @@ namespace BECore {
         }
 
     private:
-        IntrusivePtrAtomic<ConsoleOutput> _output;
+        IntrusivePtr<ConsoleOutput> _output;
         ConsoleCommandHistory _history;
         int64_t _nextId = 1;
     };

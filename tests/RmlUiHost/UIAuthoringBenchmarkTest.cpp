@@ -167,7 +167,7 @@ button { width: 56dp; height: 24dp; font-size: 14dp; background-color: rgb(40, 9
             CoreManager::GetRendererManager().SetRenderer({});
         }
 
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
     };
 
     TEST_F(UIAuthoringBenchmarkTest, DISABLED_OneScreenOfAThousandElementsInThreeFormats) {

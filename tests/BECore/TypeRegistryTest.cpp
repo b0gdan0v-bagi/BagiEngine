@@ -153,7 +153,7 @@ namespace BECore::Tests {
         EXPECT_TRUE((FieldIs<Optional<int32_t>>(info, "maybe")));
         EXPECT_TRUE((FieldIs<Pair<int32_t, String>>(info, "entry")));
         EXPECT_TRUE((FieldIs<Variant<int32_t, String>>(info, "choice")));
-        EXPECT_TRUE((FieldIs<IntrusivePtrNonAtomic<RegNode>>(info, "node")));
+        EXPECT_TRUE((FieldIs<IntrusivePtr<RegNode>>(info, "node")));
         EXPECT_TRUE((FieldIs<Vector<RegInner>>(info, "inners")));
         EXPECT_FALSE((FieldIs<float>(info, "count")));
     }

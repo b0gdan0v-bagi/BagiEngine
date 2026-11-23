@@ -29,7 +29,7 @@ namespace BECore::Tests {
         constexpr int32_t kLastExtra = 44;
 
         /// Loads the XML into a fresh InitProbeList; the deserializer stays with the caller to read its errors
-        IntrusivePtrNonAtomic<InitProbeList> Load(XmlDeserializer& deserializer, const char* xml) {
+        IntrusivePtr<InitProbeList> Load(XmlDeserializer& deserializer, const char* xml) {
             EXPECT_TRUE(deserializer.LoadFromString(xml));
             auto list = New<InitProbeList>();
             list->Deserialize(deserializer);
@@ -163,7 +163,7 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST_F(FactoryInitializeTest, MoreFactoryItemsThanAFixedVectorHoldsAreCutAndReportedFromXml) {
-        FixedVector<IntrusivePtrNonAtomic<InitProbe>, 2> probes;
+        FixedVector<IntrusivePtr<InitProbe>, 2> probes;
         XmlDeserializer deserializer;
         LoadXmlField(deserializer,
                      "<root><State><value><probe type=\"InitProbePlain\" id=\"1\"/><probe type=\"InitProbePlain\" id=\"2\"/>"
@@ -175,11 +175,11 @@ namespace BECore::Tests {
     }
 
     TEST_F(FactoryInitializeTest, MoreFactoryItemsThanAFixedVectorHoldsAreCutAndReportedFromBinary) {
-        Vector<IntrusivePtrNonAtomic<InitProbe>> roomy;
+        Vector<IntrusivePtr<InitProbe>> roomy;
         for (int32_t i = 0; i < 4; ++i) {
             roomy.push_back(New<InitProbePlain>());
         }
-        FixedVector<IntrusivePtrNonAtomic<InitProbe>, 2> probes;
+        FixedVector<IntrusivePtr<InitProbe>, 2> probes;
         BinaryDeserializer deserializer;
         LoadBinaryField(deserializer, SaveBinaryField(roomy), probes);
         ASSERT_EQ(probes.size(), 2u);

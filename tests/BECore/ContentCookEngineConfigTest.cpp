@@ -55,7 +55,7 @@ namespace BECore::Tests {
         }
 
         template <typename T>
-        IntrusivePtrAtomic<T> ReadAs(ConfigManager& configs, StringView stem) {
+        IntrusivePtr<T> ReadAs(ConfigManager& configs, StringView stem) {
             const auto reader = configs.CreateDeserializer(stem);
             EXPECT_NE(reader, nullptr) << String(stem).c_str();
             auto object = New<T>();

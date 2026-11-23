@@ -32,7 +32,7 @@ namespace BECore {
     template <typename BaseType>
     class AbstractFactory {
     public:
-        using BasePtr = typename GetIntrusivePtrType<BaseType>::type;
+        using BasePtr = IntrusivePtr<BaseType>;
         using CreatorFunc = BasePtr (*)();
 
         static AbstractFactory& GetInstance() {
