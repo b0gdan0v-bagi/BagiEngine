@@ -180,6 +180,64 @@ def test_changed_reference_dir_header_generates_nothing(run_cli, tmp_path, sourc
 
 
 # ---------------------------------------------------------------------------
+# a missing output, --force and a header of both lists
+# ---------------------------------------------------------------------------
+
+def test_deleted_output_is_generated_again_without_force(run_cli, tmp_path, source, include_gen):
+    include_gen(source, 'Game', 'Derived')
+    (source / "Game.h").write_text(FIXED, encoding="utf-8")
+    scan = tmp_path / "scan"
+    scan.mkdir()
+    (scan / "Derived.h").write_text(reflected_structs("Old"), encoding="utf-8")
+    run_cli(source, "--scan-dir", str(scan))
+    outputs = [tmp_path / "out" / "Game.gen.hpp", tmp_path / "out" / "Derived.gen.hpp"]
+    assert all(path.exists() for path in outputs)
+
+    for path in outputs:
+        path.unlink()
+    code, _, _ = run_cli(source, "--scan-dir", str(scan))
+    assert code == 0
+    assert all(path.exists() for path in outputs)
+
+
+def test_header_without_reflected_content_is_not_parsed_again(run_cli, tmp_path, source):
+    (source / "Plain.h").write_text("struct Plain {};\n", encoding="utf-8")
+    run_cli(source)
+    _, out, _ = run_cli(source, "--verbose")
+    assert "Parsing: Plain.h" not in out
+
+
+def test_force_regenerates_a_scan_only_header(run_cli, tmp_path, source, include_gen):
+    include_gen(source, 'Game')
+    (source / "Game.h").write_text(FIXED, encoding="utf-8")
+    scan = tmp_path / "scan"
+    scan.mkdir()
+    (scan / "Derived.h").write_text(reflected_structs("Old"), encoding="utf-8")
+    run_cli(source, "--scan-dir", str(scan))
+    generated = tmp_path / "out" / "Derived.gen.hpp"
+    generated.write_text("// marker", encoding="utf-8")
+
+    run_cli(source, "--scan-dir", str(scan), "--force")
+    assert "Old" in generated.read_text(encoding="utf-8")
+
+
+def test_force_does_not_generate_a_reference_header(run_cli, tmp_path, source, include_gen):
+    include_gen(source, 'Game')
+    (source / "Game.h").write_text(FIXED, encoding="utf-8")
+    reference = tmp_path / "reference"
+    reference.mkdir()
+    (reference / "Engine.h").write_text(reflected_structs("Old"), encoding="utf-8")
+    run_cli(source, "--reference-dir", str(reference), "--force")
+    assert not (tmp_path / "out" / "Engine.gen.hpp").exists()
+
+
+def test_header_in_source_and_scan_dirs_that_fails_to_parse_is_reported_once(run_cli, source):
+    (source / "Broken.h").write_bytes(b"struct \xff\xfe { BE_CLASS(X) };\n")
+    _, _, err = run_cli(source, "--scan-dir", str(source))
+    assert err.count("Error processing") == 1
+
+
+# ---------------------------------------------------------------------------
 # --quiet and --warnings-as-errors
 # ---------------------------------------------------------------------------
 
