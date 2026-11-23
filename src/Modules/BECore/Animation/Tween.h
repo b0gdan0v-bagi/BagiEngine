@@ -140,6 +140,8 @@ namespace BECore {
             std::coroutine_handle<> continuation;
         };
 
+        static constexpr size_t kInlineWaiters = 1;
+
         friend class TweenManager;
 
         TweenManager* _manager = nullptr;  // null once the tween is finished
@@ -152,7 +154,9 @@ namespace BECore {
         TweenApply _apply;  // the setter of the typed Start
         MoveOnlyFunction<void()> _onComplete;
         MoveOnlyFunction<void()> _onCancel;
-        Vector<Waiter> _waiters;  // in registration order; resumed (and removed one by one) by the manager when the tween finishes
+        // In registration order; resumed (and removed one by one) by the manager when the tween finishes. One inline: the usual waiter is
+        // the one coroutine that awaits the tween, so awaiting allocates nothing; a second waiter overflows to the heap.
+        SmallVector<Waiter, kInlineWaiters> _waiters;
     };
 
 }  // namespace BECore

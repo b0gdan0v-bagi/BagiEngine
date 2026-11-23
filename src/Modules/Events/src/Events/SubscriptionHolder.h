@@ -36,7 +36,11 @@ namespace BECore {
         }
 
     private:
-        Vector<EventConnection> _connections;
+        /// Connections held inside the object, so the first subscriptions of a component, widget or awaiter allocate nothing. Every holder
+        /// carries this much, whether it subscribes or not: a holder with more connections overflows to the heap once
+        static constexpr size_t kInlineConnections = 2;
+
+        SmallVector<EventConnection, kInlineConnections> _connections;
     };
 
 }  // namespace BECore
