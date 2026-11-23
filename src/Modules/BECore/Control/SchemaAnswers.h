@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
@@ -17,18 +18,19 @@ namespace BECore {
      *
      * Reference counted because the type recurses (`element`, `key`, `alternatives`) and a member cannot hold its own type by value; a null pointer writes no key.
      * Every other `TypeSchema` struct holds a type through such a pointer too, which is never null in an answer the builders made.
+     * The node is a heap object but its text and lists are on the scratch arena like the rest of the answer: it must die inside the scope of the answer (never cached).
      */
     struct TypeSchemaDesc : RefCounted {
         BE_CLASS(TypeSchemaDesc)
 
-        BE_REFLECT_FIELD Optional<Vector<IntrusivePtr<TypeSchemaDesc>>> alternatives;
+        BE_REFLECT_FIELD Optional<ArenaVector<IntrusivePtr<TypeSchemaDesc>>> alternatives;
         BE_REFLECT_FIELD Optional<uint64_t> capacity;
         BE_REFLECT_FIELD IntrusivePtr<TypeSchemaDesc> element;
         BE_REFLECT_FIELD IntrusivePtr<TypeSchemaDesc> key;
-        BE_REFLECT_FIELD String kind;
-        BE_REFLECT_FIELD Optional<String> object;
+        BE_REFLECT_FIELD ArenaString kind;
+        BE_REFLECT_FIELD Optional<ArenaString> object;
         BE_REFLECT_FIELD Optional<bool> resizable;
-        BE_REFLECT_FIELD Optional<Vector<String>> values;
+        BE_REFLECT_FIELD Optional<ArenaVector<ArenaString>> values;
     };
 
     /// The attributes a field sets; every member is absent when it is not set, so a field with none writes `{}`
@@ -37,18 +39,18 @@ namespace BECore {
 
         BE_REFLECT_FIELD Optional<bool> hidden;
         /// `[min, max]`
-        BE_REFLECT_FIELD Optional<Vector<double>> range;
+        BE_REFLECT_FIELD Optional<ArenaVector<double>> range;
         BE_REFLECT_FIELD Optional<bool> readonly;
         BE_REFLECT_FIELD Optional<bool> required;
         BE_REFLECT_FIELD Optional<double> step;
-        BE_REFLECT_FIELD Optional<String> tooltip;
+        BE_REFLECT_FIELD Optional<ArenaString> tooltip;
     };
 
     struct TypeSchemaField {
         BE_CLASS(TypeSchemaField)
 
         BE_REFLECT_FIELD TypeSchemaAttributes attributes;
-        BE_REFLECT_FIELD String name;
+        BE_REFLECT_FIELD ArenaString name;
         BE_REFLECT_FIELD IntrusivePtr<TypeSchemaDesc> type;
     };
 
@@ -56,13 +58,13 @@ namespace BECore {
     struct TypeSchemaOwnedField : TypeSchemaField {
         BE_CLASS(TypeSchemaOwnedField)
 
-        BE_REFLECT_FIELD String owner;
+        BE_REFLECT_FIELD ArenaString owner;
     };
 
     struct TypeSchemaParam {
         BE_CLASS(TypeSchemaParam)
 
-        BE_REFLECT_FIELD String name;
+        BE_REFLECT_FIELD ArenaString name;
         BE_REFLECT_FIELD IntrusivePtr<TypeSchemaDesc> type;
     };
 
@@ -72,8 +74,8 @@ namespace BECore {
 
         BE_REFLECT_FIELD bool callable = false;
         BE_REFLECT_FIELD bool isConst = false;
-        BE_REFLECT_FIELD String name;
-        BE_REFLECT_FIELD Vector<TypeSchemaParam> params;
+        BE_REFLECT_FIELD ArenaString name;
+        BE_REFLECT_FIELD ArenaVector<TypeSchemaParam> params;
         BE_REFLECT_FIELD IntrusivePtr<TypeSchemaDesc> result;
     };
 
@@ -83,10 +85,10 @@ namespace BECore {
 
         BE_REFLECT_FIELD bool abstract = false;
         BE_REFLECT_FIELD bool creatable = false;
-        BE_REFLECT_FIELD String icon;
-        BE_REFLECT_FIELD String name;
-        BE_REFLECT_FIELD Optional<String> parent;
-        BE_REFLECT_FIELD String purpose;
+        BE_REFLECT_FIELD ArenaString icon;
+        BE_REFLECT_FIELD ArenaString name;
+        BE_REFLECT_FIELD Optional<ArenaString> parent;
+        BE_REFLECT_FIELD ArenaString purpose;
     };
 
     /// A row of `list_types`: `fields` and `methods` are the numbers of the type's own
@@ -101,51 +103,51 @@ namespace BECore {
     struct TypeSchemaEntry : TypeSchemaHead {
         BE_CLASS(TypeSchemaEntry)
 
-        BE_REFLECT_FIELD Optional<String> factoryBase;
-        BE_REFLECT_FIELD Vector<TypeSchemaField> fields;
-        BE_REFLECT_FIELD Vector<TypeSchemaMethod> methods;
+        BE_REFLECT_FIELD Optional<ArenaString> factoryBase;
+        BE_REFLECT_FIELD ArenaVector<TypeSchemaField> fields;
+        BE_REFLECT_FIELD ArenaVector<TypeSchemaMethod> methods;
     };
 
     /// `describe_type`: the entry plus the chain's fields, the bases (nearest first) and the direct derived types
     struct TypeSchemaDescribed : TypeSchemaEntry {
         BE_CLASS(TypeSchemaDescribed)
 
-        BE_REFLECT_FIELD Vector<TypeSchemaOwnedField> allFields;
-        BE_REFLECT_FIELD Vector<String> bases;
-        BE_REFLECT_FIELD Vector<String> derived;
+        BE_REFLECT_FIELD ArenaVector<TypeSchemaOwnedField> allFields;
+        BE_REFLECT_FIELD ArenaVector<ArenaString> bases;
+        BE_REFLECT_FIELD ArenaVector<ArenaString> derived;
     };
 
     /// A factory base with its derived types; `elementName` is absent for a base no reflected field holds
     struct TypeSchemaFactory {
         BE_CLASS(TypeSchemaFactory)
 
-        BE_REFLECT_FIELD String base;
-        BE_REFLECT_FIELD Vector<String> derived;
-        BE_REFLECT_FIELD Optional<String> elementName;
+        BE_REFLECT_FIELD ArenaString base;
+        BE_REFLECT_FIELD ArenaVector<ArenaString> derived;
+        BE_REFLECT_FIELD Optional<ArenaString> elementName;
     };
 
     /// A root of the control service; `type` is the type of the object it resolves to now, absent when it resolves to none
     struct TypeSchemaRoot {
         BE_CLASS(TypeSchemaRoot)
 
-        BE_REFLECT_FIELD String name;
-        BE_REFLECT_FIELD Optional<String> type;
+        BE_REFLECT_FIELD ArenaString name;
+        BE_REFLECT_FIELD Optional<ArenaString> type;
     };
 
     /// `list_types`
     struct ListTypesAnswer {
         BE_CLASS(ListTypesAnswer)
 
-        BE_REFLECT_FIELD Vector<TypeSchemaListed> types;
+        BE_REFLECT_FIELD ArenaVector<TypeSchemaListed> types;
     };
 
     /// `schema`
     struct SchemaAnswer {
         BE_CLASS(SchemaAnswer)
 
-        BE_REFLECT_FIELD Vector<TypeSchemaFactory> factories;
-        BE_REFLECT_FIELD Vector<TypeSchemaRoot> roots;
-        BE_REFLECT_FIELD Vector<TypeSchemaEntry> types;
+        BE_REFLECT_FIELD ArenaVector<TypeSchemaFactory> factories;
+        BE_REFLECT_FIELD ArenaVector<TypeSchemaRoot> roots;
+        BE_REFLECT_FIELD ArenaVector<TypeSchemaEntry> types;
         BE_REFLECT_FIELD int32_t version = 0;
     };
 

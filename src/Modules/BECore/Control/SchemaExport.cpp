@@ -9,14 +9,14 @@ namespace BECore {
 
     namespace {
 
-        String ToText(StringView view) {
-            return String(view.data(), view.size());
+        ArenaString ToText(StringView view) {
+            return ArenaString(view.data(), view.size());
         }
 
         TypeSchemaAttributes MakeAttributes(const FieldAttributes& attributes) {
             TypeSchemaAttributes result;
             if (attributes.hasRange) {
-                result.range = Vector<double>{attributes.rangeMin, attributes.rangeMax};
+                result.range = ArenaVector<double>{attributes.rangeMin, attributes.rangeMax};
             }
             if (attributes.step != 0.0) {
                 result.step = attributes.step;
@@ -54,6 +54,7 @@ namespace BECore {
             result.name = ToText(method.name);
             result.isConst = method.isConst;
             result.callable = method.callable;
+            result.params.reserve(method.params.size());
             for (const ParamDesc& param : method.params) {
                 TypeSchemaParam& entry = result.params.emplace_back();
                 entry.name = ToText(param.name);
@@ -80,14 +81,16 @@ namespace BECore {
             head.icon = ToText(info.meta.icon);
         }
 
-        Vector<const TypeInfo*> SortedByName(const Vector<const TypeInfo*>& infos) {
-            Vector<const TypeInfo*> sorted = infos;
+        template <typename TInfoList>
+        ArenaVector<const TypeInfo*> SortedByName(const TInfoList& infos) {
+            ArenaVector<const TypeInfo*> sorted(infos.begin(), infos.end());
             eastl::sort(sorted.begin(), sorted.end(), [](const TypeInfo* a, const TypeInfo* b) { return a->Name() < b->Name(); });
             return sorted;
         }
 
-        Vector<String> NamesOf(const Vector<const TypeInfo*>& infos) {
-            Vector<String> names;
+        template <typename TInfoList>
+        ArenaVector<ArenaString> NamesOf(const TInfoList& infos) {
+            ArenaVector<ArenaString> names;
             names.reserve(infos.size());
             for (const TypeInfo* info : infos) {
                 names.push_back(ToText(info->Name()));
@@ -95,10 +98,11 @@ namespace BECore {
             return names;
         }
 
-        Vector<TypeSchemaFactory> MakeFactories(const TypeRegistry& registry) {
-            Vector<TypeSchemaFactory> factories;
+        ArenaVector<TypeSchemaFactory> MakeFactories(const TypeRegistry& registry) {
+            ArenaVector<TypeSchemaFactory> factories;
+            factories.reserve(registry.FactoryBases().size());
             for (const TypeInfo* base : registry.FactoryBases()) {
-                Vector<const TypeInfo*> members;
+                ArenaVector<const TypeInfo*> members;
                 for (const TypeInfo* info : registry.All()) {
                     if (info->factoryBase == base->Hash()) {
                         members.push_back(info);
@@ -115,11 +119,13 @@ namespace BECore {
             return factories;
         }
 
-        Vector<TypeSchemaRoot> MakeRoots(const ControlRoots& roots) {
-            Vector<TypeSchemaRoot> result;
-            for (const String& name : roots.Names()) {
+        ArenaVector<TypeSchemaRoot> MakeRoots(const ControlRoots& roots) {
+            const Vector<String> names = roots.Names();
+            ArenaVector<TypeSchemaRoot> result;
+            result.reserve(names.size());
+            for (const String& name : names) {
                 TypeSchemaRoot& entry = result.emplace_back();
-                entry.name = name;
+                entry.name = ArenaString(name.data(), name.size());
                 const TypedRef object = roots.Resolve(name);
                 if (object) {
                     entry.type = ToText(object.type->Name());
@@ -136,9 +142,11 @@ namespace BECore {
                     entry.factoryBase = ToText(base->Name());
                 }
             }
+            entry.fields.reserve(info.fields.size());
             for (const FieldDesc& field : info.fields) {
                 entry.fields.push_back(MakeField(field));
             }
+            entry.methods.reserve(info.methods.size());
             for (const MethodDesc& method : info.methods) {
                 entry.methods.push_back(MakeMethod(method));
             }
@@ -160,7 +168,8 @@ namespace BECore {
                 }
                 break;
             case TypeKind::Enum: {
-                Vector<String> values;
+                ArenaVector<ArenaString> values;
+                values.reserve(desc.names.size());
                 for (const StringView name : desc.names) {
                     values.push_back(ToText(name));
                 }
@@ -172,7 +181,8 @@ namespace BECore {
                 result->resizable = desc.resizable;
                 break;
             case TypeKind::Variant: {
-                Vector<IntrusivePtr<TypeSchemaDesc>> alternatives;
+                ArenaVector<IntrusivePtr<TypeSchemaDesc>> alternatives;
+                alternatives.reserve(desc.alternatives.size());
                 for (const TypeDesc* alternative : desc.alternatives) {
                     alternatives.push_back(MakeTypeSchemaDesc(*alternative));
                 }
@@ -203,11 +213,15 @@ namespace BECore {
     TypeSchemaDescribed DescribeTypeSchema(const TypeInfo& info, const TypeRegistry& registry) {
         TypeSchemaDescribed described;
         FillEntry(described, info, registry);
-        for (const TypeInfo* base : registry.Bases(info)) {
+        const Vector<const TypeInfo*> bases = registry.Bases(info);
+        described.bases.reserve(bases.size());
+        for (const TypeInfo* base : bases) {
             described.bases.push_back(ToText(base->Name()));
         }
         described.derived = NamesOf(registry.Derived(info, false));
-        for (const FieldRef& ref : registry.AllFields(info)) {
+        const Vector<FieldRef> allFields = registry.AllFields(info);
+        described.allFields.reserve(allFields.size());
+        for (const FieldRef& ref : allFields) {
             TypeSchemaOwnedField& entry = described.allFields.emplace_back();
             static_cast<TypeSchemaField&>(entry) = MakeField(*ref.field);
             entry.owner = ToText(ref.owner->Name());
@@ -219,7 +233,9 @@ namespace BECore {
         const Vector<const TypeInfo*>& source = filter.base != nullptr ? registry.Derived(*filter.base, filter.recursive) : registry.All();
 
         ListTypesAnswer answer;
-        for (const TypeInfo* info : SortedByName(source)) {
+        const ArenaVector<const TypeInfo*> sorted = SortedByName(source);
+        answer.types.reserve(sorted.size());
+        for (const TypeInfo* info : sorted) {
             if (filter.creatableOnly && !IsCreatable(*info)) {
                 continue;
             }
@@ -234,7 +250,9 @@ namespace BECore {
     SchemaAnswer MakeSchemaAnswer(const TypeRegistry& registry, const ControlRoots& roots) {
         SchemaAnswer answer;
         answer.version = kSchemaVersion;
-        for (const TypeInfo* info : SortedByName(registry.All())) {
+        const ArenaVector<const TypeInfo*> sorted = SortedByName(registry.All());
+        answer.types.reserve(sorted.size());
+        for (const TypeInfo* info : sorted) {
             answer.types.push_back(MakeTypeSchemaEntry(*info, registry));
         }
         answer.factories = MakeFactories(registry);
