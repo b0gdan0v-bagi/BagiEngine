@@ -1,3 +1,4 @@
+#include <BECore/ArtGenAnswerText.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <Common/ControlTestSupport.h>
@@ -5,6 +6,7 @@
 #include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/ArtGen/ArtGenAnswers.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/EditorLayout/UserFileIo.h>
 #include <gtest/gtest.h>
@@ -254,6 +256,14 @@ namespace BECore::Tests {
         Call("artgen_cancel");
         EXPECT_EQ(session.GetRun().state, ArtGenRunState::Cancelled);
         EXPECT_EQ(FindJsonMember(Result(Call("artgen_poll", ReadyPoll())), "request"), nullptr);
+    }
+
+    TEST_F(ArtGenSessionTest, CancelOfTheRunAnswersAnEmptyObject) {
+        Require(session.Request("wood", "a", 1, 1));
+        const Json response = Call("artgen_cancel");
+        ASSERT_TRUE(Result(response).is_object());
+        EXPECT_TRUE(Result(response).empty());
+        EXPECT_EQ(AnswerText(ArtGenCancelAnswer{}), Json::object()) << "an answer of Optionals only writes {}";
     }
 
     TEST_F(ArtGenSessionTest, CancelOfARunningRequestGoesToTheServiceOnTheNextPoll) {

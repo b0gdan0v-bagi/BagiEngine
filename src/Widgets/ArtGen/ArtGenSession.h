@@ -7,6 +7,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <BECore/Utils/Singleton.h>
+#include <Widgets/ArtGen/ArtGenAnswers.h>
 #include <Widgets/ArtGen/ArtGenImage.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
@@ -347,15 +348,15 @@ namespace BECore {
 
         /// The handlers, public for the tests: each takes the params of the call and answers like the method
         std::expected<Json, ControlError> HandlePoll(const Json& params);
-        std::expected<Json, ControlError> HandleProgress(const Json& params);
-        std::expected<Json, ControlError> HandleImage(const Json& params);
-        std::expected<Json, ControlError> HandleDone(const Json& params);
-        std::expected<Json, ControlError> HandleGenerate(const Json& params);
-        std::expected<Json, ControlError> HandleCancel(const Json& params);
+        std::expected<ArtGenStaleAnswer, ControlError> HandleProgress(const Json& params);
+        std::expected<ArtGenStaleAnswer, ControlError> HandleImage(const Json& params);
+        std::expected<ArtGenStaleAnswer, ControlError> HandleDone(const Json& params);
+        std::expected<ArtGenQueuedAnswer, ControlError> HandleGenerate(const Json& params);
+        std::expected<ArtGenCancelAnswer, ControlError> HandleCancel(const Json& params);
         std::expected<Json, ControlError> HandleAccept(const Json& params);
-        std::expected<Json, ControlError> HandleSetupReport(const Json& params);
-        std::expected<Json, ControlError> HandleSetup(const Json& params);
-        std::expected<Json, ControlError> HandleSavePreset(const Json& params);
+        std::expected<ArtGenStaleAnswer, ControlError> HandleSetupReport(const Json& params);
+        std::expected<ArtGenSetupQueuedAnswer, ControlError> HandleSetup(const Json& params);
+        std::expected<ArtGenSavedAnswer, ControlError> HandleSavePreset(const Json& params);
         std::expected<Json, ControlError> HandleEnqueue(const Json& params);
         std::expected<Json, ControlError> HandleSet(const Json& params);
         std::expected<Json, ControlError> HandlePick(const Json& params);
@@ -394,7 +395,7 @@ namespace BECore {
         /// The methods of the sets (ArtGenSessionSets.cpp): the handlers and their descriptions
         void RegisterSetControl(ControlService& service);
         /// `artgen_cancel` with `job` or `set`: the one job, or the whole set
-        std::expected<Json, ControlError> CancelFromParams(const Json& params);
+        std::expected<ArtGenCancelAnswer, ControlError> CancelFromParams(const Json& params);
         [[nodiscard]] Json SetsJson() const;
 
         Clock _clock;

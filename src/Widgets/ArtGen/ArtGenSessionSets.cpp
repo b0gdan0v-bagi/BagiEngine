@@ -947,7 +947,7 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::CancelFromParams(const Json& params) {
+    std::expected<ArtGenCancelAnswer, ControlError> ArtGenSession::CancelFromParams(const Json& params) {
         if (IsGiven(params, "job") && !GetJsonString(params, "job")) {
             return std::unexpected(InvalidParams("'job' must be a string"));
         }
@@ -986,19 +986,19 @@ namespace BECore {
             if (CancelJob(*setName, *job) == ArtGenSetEdit::NoSet) {
                 return std::unexpected(MakeError(kNoSetCode, Format("no job '{}' in a set named '{}'", *job, *setName)));
             }
-            Json reply = Json::object();
-            reply["set"] = ToJsonString(*setName);
-            reply["job"] = ToJsonString(*job);
-            reply["state"] = ToStdString(EnumUtils<ArtGenSetJobState>::ToString(FindJob(*MutableSet(*setName), *job)->state));
+            ArtGenCancelAnswer reply;
+            reply.job = *job;
+            reply.set = *setName;
+            reply.state = String(EnumUtils<ArtGenSetJobState>::ToString(FindJob(*MutableSet(*setName), *job)->state));
             return reply;
         }
         if (setName && all) {
             if (CancelSet(*setName) == ArtGenSetEdit::NoSet) {
                 return std::unexpected(MakeError(kNoSetCode, Format("no set named '{}'", *setName)));
             }
-            Json reply = Json::object();
-            reply["set"] = ToJsonString(*setName);
-            reply["state"] = ToJsonString(String(StateNameOf(*FindSet(*setName))));
+            ArtGenCancelAnswer reply;
+            reply.set = *setName;
+            reply.state = String(StateNameOf(*FindSet(*setName)));
             return reply;
         }
         return std::unexpected(InvalidParams("cancel a job with 'job' (and 'set' when two sets have it), or a whole set with 'set' and 'all': true"));

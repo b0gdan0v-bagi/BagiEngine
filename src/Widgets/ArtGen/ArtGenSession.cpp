@@ -534,10 +534,10 @@ namespace BECore {
         return nullptr;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::HandleProgress(const Json& params) {
-        Json reply = Json::object();
+    std::expected<ArtGenStaleAnswer, ControlError> ArtGenSession::HandleProgress(const Json& params) {
         ArtGenRun* run = RunOf(params);
-        reply["stale"] = run == nullptr;
+        ArtGenStaleAnswer reply;
+        reply.stale = run == nullptr;
         if (run != nullptr) {
             run->image = static_cast<int32_t>(GetJsonInt(params, "image").value_or(run->image));
             run->step = static_cast<int32_t>(GetJsonInt(params, "step").value_or(0));
@@ -547,10 +547,10 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::HandleImage(const Json& params) {
-        Json reply = Json::object();
+    std::expected<ArtGenStaleAnswer, ControlError> ArtGenSession::HandleImage(const Json& params) {
         ArtGenRun* run = RunOf(params);
-        reply["stale"] = run == nullptr;
+        ArtGenStaleAnswer reply;
+        reply.stale = run == nullptr;
         if (run == nullptr) {
             return reply;
         }
@@ -571,10 +571,10 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::HandleDone(const Json& params) {
-        Json reply = Json::object();
+    std::expected<ArtGenStaleAnswer, ControlError> ArtGenSession::HandleDone(const Json& params) {
         ArtGenRun* run = RunOf(params);
-        reply["stale"] = run == nullptr;
+        ArtGenStaleAnswer reply;
+        reply.stale = run == nullptr;
         if (run == nullptr) {
             return reply;
         }
@@ -596,7 +596,7 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::HandleGenerate(const Json& params) {
+    std::expected<ArtGenQueuedAnswer, ControlError> ArtGenSession::HandleGenerate(const Json& params) {
         const Json* presetJson = FindJsonMember(params, "preset");
         const auto preset = GetJsonString(params, "preset");
         const auto subject = GetJsonString(params, "subject");
@@ -631,9 +631,9 @@ namespace BECore {
             const StringView code = IsBusy() ? kBusyCode : ControlErrors::kInvalidParams;
             return std::unexpected(ControlError{String(code), id.error()});
         }
-        Json reply = Json::object();
-        reply["id"] = *id;
-        reply["serviceConnected"] = IsServiceConnected();
+        ArtGenQueuedAnswer reply;
+        reply.id = *id;
+        reply.serviceConnected = IsServiceConnected();
         return reply;
     }
 
@@ -689,11 +689,11 @@ namespace BECore {
         return Accept(*seed, *sprite, useOnSelected, &settings, &atlas);
     }
 
-    std::expected<Json, ControlError> ArtGenSession::HandleSetupReport(const Json& params) {
-        Json reply = Json::object();
+    std::expected<ArtGenStaleAnswer, ControlError> ArtGenSession::HandleSetupReport(const Json& params) {
         const auto id = GetJsonInt(params, "id");
         const bool current = id && _setup.state == ArtGenSetupState::Running && *id == static_cast<int64_t>(_setup.id);
-        reply["stale"] = !current;
+        ArtGenStaleAnswer reply;
+        reply.stale = !current;
         if (!current) {
             return reply;
         }
@@ -743,7 +743,7 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::HandleSetup(const Json& params) {
+    std::expected<ArtGenSetupQueuedAnswer, ControlError> ArtGenSession::HandleSetup(const Json& params) {
         const auto name = GetJsonString(params, "action");
         if (!name) {
             return std::unexpected(InvalidParams("'action' must be a string"));
@@ -753,7 +753,7 @@ namespace BECore {
                 return std::unexpected(ControlError{String(kNoSetupCode), String("no setup action in work")});
             }
             CancelSetup();
-            return Json::object();
+            return ArtGenSetupQueuedAnswer{};
         }
         const auto action = EnumUtils<ArtGenSetupAction>::Cast(StringView(name->data(), name->size()));
         if (!action || *action == ArtGenSetupAction::None) {
@@ -763,13 +763,13 @@ namespace BECore {
         if (!id) {
             return std::unexpected(ControlError{String(kBusyCode), id.error()});
         }
-        Json reply = Json::object();
-        reply["id"] = *id;
-        reply["serviceConnected"] = IsServiceConnected();
+        ArtGenSetupQueuedAnswer reply;
+        reply.id = *id;
+        reply.serviceConnected = IsServiceConnected();
         return reply;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::HandleSavePreset(const Json& params) {
+    std::expected<ArtGenSavedAnswer, ControlError> ArtGenSession::HandleSavePreset(const Json& params) {
         const auto name = GetJsonString(params, "name");
         const Json* preset = FindJsonMember(params, "preset");
         if (!name || preset == nullptr) {
@@ -779,12 +779,12 @@ namespace BECore {
         if (!saved) {
             return std::unexpected(InvalidParams(saved.error()));
         }
-        Json reply = Json::object();
-        reply["path"] = ToJsonString(*saved);
+        ArtGenSavedAnswer reply;
+        reply.path = *saved;
         return reply;
     }
 
-    std::expected<Json, ControlError> ArtGenSession::HandleCancel(const Json& params) {
+    std::expected<ArtGenCancelAnswer, ControlError> ArtGenSession::HandleCancel(const Json& params) {
         if (IsGiven(params, "job") || IsGiven(params, "set") || IsGiven(params, "all")) {
             return CancelFromParams(params);
         }
@@ -792,7 +792,7 @@ namespace BECore {
             return std::unexpected(MakeError(kNoRunCode, String("no run in work")));
         }
         Cancel();
-        return Json::object();
+        return ArtGenCancelAnswer{};
     }
 
     Json ArtGenSession::StateJson() const {

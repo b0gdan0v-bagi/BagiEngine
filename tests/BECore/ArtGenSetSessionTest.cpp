@@ -955,8 +955,7 @@ namespace BECore::Tests {
         Json alone = Json::object();
         alone["job"] = "c";
         const Json cancelled = Result(Call("artgen_cancel", alone));
-        EXPECT_EQ(GetJsonString(cancelled, "set"), Optional<String>("one"));
-        EXPECT_EQ(GetJsonString(cancelled, "state"), Optional<String>("Cancelled"));
+        EXPECT_EQ(cancelled, (Json{{"job", "c"}, {"set", "one"}, {"state", "Cancelled"}}));
         EXPECT_EQ(StateOf(OnDisk("one"), 2), ArtGenSetJobState::Cancelled);
         EXPECT_EQ(ErrorCode(Call("artgen_cancel", alone)), "artgen_no_set") << "no longer in work";
 
@@ -992,7 +991,7 @@ namespace BECore::Tests {
         Json all = Json::object();
         all["set"] = "two";
         all["all"] = true;
-        EXPECT_EQ(GetJsonString(Result(Call("artgen_cancel", all)), "state"), Optional<String>("Complete"));
+        EXPECT_EQ(Result(Call("artgen_cancel", all)), (Json{{"set", "two"}, {"state", "Complete"}}));
         EXPECT_EQ(CountJobs(OnDisk("two"), ArtGenSetJobState::Cancelled), 2);
         all["set"] = "nothing";
         EXPECT_EQ(ErrorCode(Call("artgen_cancel", all)), "artgen_no_set");
