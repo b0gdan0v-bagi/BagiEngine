@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Assert/AssertMacros.h>
 #include <BECore/Memory/EngineAllocator.h>
 #include <cstddef>
 #include <new>
@@ -66,15 +67,18 @@ namespace BECore {
         }
 
         [[nodiscard]] T& front() {
+            ASSERT(_size > 0, "front() of an empty Fifo");
             return _data[_head];
         }
 
         [[nodiscard]] const T& front() const {
+            ASSERT(_size > 0, "front() of an empty Fifo");
             return _data[_head];
         }
 
         /// Destroys the front element; the queue must not be empty
         void pop_front() {
+            ASSERT(_size > 0, "pop_front() of an empty Fifo");
             _data[_head].~T();
             _head = Wrap(_head + 1);
             --_size;
@@ -82,10 +86,12 @@ namespace BECore {
 
         /// The i-th element from the front
         [[nodiscard]] T& operator[](size_t index) {
+            ASSERT(index < _size, "Fifo index out of range");
             return _data[Wrap(_head + index)];
         }
 
         [[nodiscard]] const T& operator[](size_t index) const {
+            ASSERT(index < _size, "Fifo index out of range");
             return _data[Wrap(_head + index)];
         }
 

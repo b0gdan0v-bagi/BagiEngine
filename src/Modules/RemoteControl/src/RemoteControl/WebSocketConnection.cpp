@@ -146,6 +146,7 @@ namespace BECore {
 
     IntrusivePtr<WebSocketSharedFrame> WebSocketSharedFrame::MakeText(StringView text) {
         BE_MEM_TAG(Network);
+        BE_PROFILE_SCOPE("WS encode");
         Vector<uint8_t> bytes;
         AppendFrame(bytes, WebSocketOpcode::kText, Span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size()));
         return New<WebSocketSharedFrame>(std::move(bytes));
@@ -158,6 +159,7 @@ namespace BECore {
 
     bool WebSocketConnection::QueueShared(const IntrusivePtr<WebSocketSharedFrame>& frame) {
         BE_MEM_TAG(Network);
+        BE_PROFILE_SCOPE("WS encode");
         return Enqueue(OutgoingFrame{{}, frame, false});
     }
 

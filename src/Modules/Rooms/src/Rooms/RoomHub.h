@@ -179,8 +179,8 @@ namespace BECore {
         Vector<ConnectionId> _flushIds;
         // The connections a Flush or a CloseRoom sends one text to; separate from _flushIds, which the pass over the room still reads
         Vector<ConnectionId> _broadcastIds;
-        // Output buffers, kept so that a steady send allocates nothing. Two on purpose: a Flush sends the shared lobby text to several
-        // members and ResendView writes a `view` between those sends, so one buffer would be overwritten.
+        // Output buffers, kept so that a steady send allocates nothing: _lobbyText is the lobby text of one Flush, _sendScratch the
+        // text of every other send
         String _sendScratch;
         String _lobbyText;
     };

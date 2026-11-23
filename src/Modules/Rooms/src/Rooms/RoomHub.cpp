@@ -502,8 +502,7 @@ namespace BECore {
         const bool started = room.GetPhase() != RoomPhase::Lobby;
         // Two passes, so the connections behind on the lobby get one text in one sink call. Per connection the order is still lobby,
         // then view: pass 1 finishes before pass 2 starts, and a connection gets its `view` only in pass 2. Written once, and only
-        // when a connection is behind: a room in which nothing changed costs no snapshot on every tick. Not _sendScratch:
-        // ResendView writes a `view` there.
+        // when a connection is behind: a room in which nothing changed costs no snapshot on every tick.
         _lobbyText.clear();
         _broadcastIds.clear();
         // Copy: a sink is not allowed to call back, but the loop must not depend on that
