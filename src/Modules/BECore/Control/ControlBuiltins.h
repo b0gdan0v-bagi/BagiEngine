@@ -60,7 +60,7 @@ namespace BECore {
      * `batch` runs the calls in order inside the one request and an error ends it (`stopped` is its index) unless `continueOnError`; `batch` and `quit` are refused per call, and a call that waits
      * for frames (`step`) makes the whole batch wait.
      *
-     * `status` also answers `window` (WriteWindowStatus). It also registers the by-name methods (`RegisterReflectionControl`) and `set_window` (`RegisterWindowControl`).
+     * `status` also answers `window` (ControlWindowStatus). It also registers the by-name methods (`RegisterReflectionControl`) and `set_window` (`RegisterWindowControl`).
      *
      * `step` is a barrier; what it means on the real and the manual clock: Control/CLAUDE.md, "Manual clock and `step`".
      *

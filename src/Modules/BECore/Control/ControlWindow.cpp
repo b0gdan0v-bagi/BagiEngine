@@ -2,39 +2,18 @@
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/Control/ControlWindowStatus.h>
 #include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
-#include <BECore/Renderer/IRenderer.h>
 #include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UISettings.h>
-#include <cmath>
 
 namespace BECore {
 
     namespace {
 
         constexpr StringView kSetWindowMethod = "set_window";
-
-        /// The insets of @p safe inside a window of @p width by @p height window units; rounding never makes one negative
-        WindowInsets InsetsOf(const Rect& safe, int width, int height) {
-            WindowInsets insets;
-            insets.left = std::max(0.0f, safe.x);
-            insets.top = std::max(0.0f, safe.y);
-            insets.right = std::max(0.0f, static_cast<float>(width) - (safe.x + safe.w));
-            insets.bottom = std::max(0.0f, static_cast<float>(height) - (safe.y + safe.h));
-            return insets;
-        }
-
-        /// The floats are widened to double, which is what the `Json` DOM stored and so the text clients have always seen
-        void WriteInsets(JsonWriter& writer, const WindowInsets& insets) {
-            writer.BeginObject();
-            writer.Member("bottom", static_cast<double>(insets.bottom));
-            writer.Member("left", static_cast<double>(insets.left));
-            writer.Member("right", static_cast<double>(insets.right));
-            writer.Member("top", static_cast<double>(insets.top));
-            writer.EndObject();
-        }
 
         ControlError InvalidParams(String message) {
             return MakeControlError(ControlErrors::kInvalidParams, std::move(message));
@@ -121,7 +100,7 @@ namespace BECore {
             }
             request.userScale = *userScale;
 
-            const auto safeArea = ReadSafeArea(params, InsetsOf(window.GetSafeArea(), window.GetWidth(), window.GetHeight()));
+            const auto safeArea = ReadSafeArea(params, SafeAreaInsets(window.GetSafeArea(), window.GetWidth(), window.GetHeight()));
             if (!safeArea) {
                 return std::unexpected(safeArea.error());
             }
@@ -170,30 +149,10 @@ namespace BECore {
             CoreManager::GetUIEnvironment().SetUserScale(request->userScale);
 
             // One frame lays the scene out for the new size, so what the client asks next is of it
-            call.DeferFrames(1, 0.0, [](ControlCall& done) { done.Reply(WriteWindowStatus); });
+            call.DeferFrames(1, 0.0, [](ControlCall& done) { done.ReplyObject(ControlWindowStatus::Read()); });
         }
 
     }  // namespace
-
-    void WriteWindowStatus(JsonWriter& writer) {
-        const IntrusivePtr<IMainWindow>& window = CoreManager::GetMainWindow();
-        const IntrusivePtr<IRenderer>& renderer = CoreManager::GetRenderer();
-
-        const int width = window ? window->GetWidth() : 0;
-        const int height = window ? window->GetHeight() : 0;
-        writer.BeginObject();
-        writer.Member("density", static_cast<double>(window ? window->GetPixelDensity() : 1.0f));
-        writer.Member("displayScale", static_cast<double>(window ? window->GetDisplayScale() : 1.0f));
-        writer.Member("headless", window && window->IsHeadless());
-        writer.Member("height", height);
-        writer.Member("outputHeight", renderer ? static_cast<int>(std::lround(renderer->GetOutputHeight())) : 0);
-        writer.Member("outputWidth", renderer ? static_cast<int>(std::lround(renderer->GetOutputWidth())) : 0);
-        writer.Key("safeArea");
-        WriteInsets(writer, window ? InsetsOf(window->GetSafeArea(), width, height) : WindowInsets{});
-        writer.Member("userScale", static_cast<double>(CoreManager::GetUIEnvironment().GetSettings().userScale));
-        writer.Member("width", width);
-        writer.EndObject();
-    }
 
     void RegisterWindowControl(ControlService& service) {
         service.RegisterHandler(kSetWindowMethod, HandleSetWindow);

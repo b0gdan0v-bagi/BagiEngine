@@ -4,6 +4,7 @@
 #include <BECore/Control/ControlLog.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlWindow.h>
+#include <BECore/Control/ControlWindowStatus.h>
 #include <BECore/Control/ReflectionControl.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
@@ -108,7 +109,7 @@ namespace BECore {
                     },
                     [](JsonWriter& members) {
                         members.Key("window");
-                        WriteWindowStatus(members);
+                        ControlWindowStatus::Read().WriteJson(members);
                     });
             });
         }
