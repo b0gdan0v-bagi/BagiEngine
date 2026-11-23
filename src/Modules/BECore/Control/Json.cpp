@@ -148,19 +148,26 @@ namespace BECore {
         return String(text->data(), text->size());
     }
 
-    Optional<int64_t> GetJsonInt(const Json& object, StringView key) {
-        const Json* member = FindJsonMember(object, key);
-        if (member == nullptr || !member->is_number_integer()) {
+    Optional<int64_t> GetJsonIntValue(const Json& value) {
+        if (!value.is_number_integer()) {
             return std::nullopt;
         }
-        if (member->is_number_unsigned()) {
-            const uint64_t value = member->get<uint64_t>();
-            if (value > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+        if (value.is_number_unsigned()) {
+            const uint64_t number = value.get<uint64_t>();
+            if (number > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
                 return std::nullopt;
             }
-            return static_cast<int64_t>(value);
+            return static_cast<int64_t>(number);
         }
-        return member->get<int64_t>();
+        return value.get<int64_t>();
+    }
+
+    Optional<int64_t> GetJsonInt(const Json& object, StringView key) {
+        const Json* member = FindJsonMember(object, key);
+        if (member == nullptr) {
+            return std::nullopt;
+        }
+        return GetJsonIntValue(*member);
     }
 
     Optional<double> GetJsonNumber(const Json& object, StringView key) {
