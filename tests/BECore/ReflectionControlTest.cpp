@@ -791,7 +791,7 @@ namespace BECore::Tests {
         const TypeRegistry& registry = TypeRegistry::GetInstance();
         const TypeInfo* info = registry.Find("RcTool");
         ASSERT_NE(info, nullptr);
-        EXPECT_EQ(*result, DescribeTypeJson(*info, registry));
+        EXPECT_EQ(*result, ToJson(DescribeTypeSchema(*info, registry)));
     }
 
     TEST_F(ReflectionControlTest, DescribeTypeRefusesAnUnknownTypeAndBadParams) {
@@ -814,7 +814,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(IsOk(response)) << ErrorMessage(response).c_str();
         const Json* result = FindJsonMember(response, "result");
         ASSERT_NE(result, nullptr);
-        EXPECT_EQ(*result, BuildSchemaJson(TypeRegistry::GetInstance(), service.Roots()));
+        EXPECT_EQ(*result, ToJson(MakeSchemaAnswer(TypeRegistry::GetInstance(), service.Roots())));
 
         const Json* roots = FindJsonMember(*result, "roots");
         ASSERT_TRUE(roots != nullptr && roots->is_array());

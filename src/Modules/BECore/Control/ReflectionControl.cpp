@@ -341,7 +341,7 @@ namespace BECore {
             }
             filter.recursive = *recursive;
             filter.creatableOnly = *creatable;
-            call.Reply(ListTypesJson(registry, filter));
+            call.ReplyObject(MakeListTypesAnswer(registry, filter));
         }
 
         void HandleDescribeType(ControlCall& call) {
@@ -356,11 +356,11 @@ namespace BECore {
                 call.Fail(info.error());
                 return;
             }
-            call.Reply(DescribeTypeJson(**info, registry));
+            call.ReplyObject(DescribeTypeSchema(**info, registry));
         }
 
         void HandleSchema(ControlCall& call, const ControlService& service) {
-            call.Reply(BuildSchemaJson(TypeRegistry::GetInstance(), service.Roots()));
+            call.ReplyObject(MakeSchemaAnswer(TypeRegistry::GetInstance(), service.Roots()));
         }
 
     }  // namespace

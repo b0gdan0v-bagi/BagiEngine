@@ -6,6 +6,7 @@
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Widgets/IWidget.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/Require.h>
 #include <Generated/SchemaExportTest.gen.hpp>
 #include <gtest/gtest.h>
@@ -115,7 +116,7 @@ namespace BECore::Tests {
         protected:
             void SetUp() override {
                 Fill(registry, false);
-                schema = BuildSchemaJson(registry, roots);
+                schema = ToJson(MakeSchemaAnswer(registry, roots));
             }
 
             const Json& Types() const {
@@ -290,7 +291,7 @@ namespace BECore::Tests {
         const Json* add = EntryNamed(*methods, "Add");
         ASSERT_NE(add, nullptr);
         EXPECT_EQ(GetJsonBool(*add, "callable"), true);
-        EXPECT_EQ(GetJsonBool(*add, "const"), false);
+        EXPECT_EQ(GetJsonBool(*add, "isConst"), false);
         EXPECT_EQ(KindOf(*Member(*add, "result")), "int32");
         const Json* params = Member(*add, "params");
         ASSERT_TRUE(params != nullptr && params->is_array());
@@ -306,7 +307,7 @@ namespace BECore::Tests {
 
         const Json* isEmpty = EntryNamed(*methods, "IsEmpty");
         ASSERT_NE(isEmpty, nullptr);
-        EXPECT_EQ(GetJsonBool(*isEmpty, "const"), true);
+        EXPECT_EQ(GetJsonBool(*isEmpty, "isConst"), true);
 
         const Json* initialize = EntryNamed(*methods, "Initialize");
         ASSERT_NE(initialize, nullptr);
@@ -329,7 +330,7 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString(Entry("SchemaSquare"), "purpose"), String("visual"));
 
         const Json& shape = Entry("SchemaShape");
-        EXPECT_TRUE(Member(shape, "parent")->is_null());
+        EXPECT_EQ(FindJsonMember(shape, "parent"), nullptr) << "a type with no parent has no parent key";
         EXPECT_EQ(GetJsonBool(shape, "abstract"), true);
         EXPECT_EQ(GetJsonBool(shape, "creatable"), false);
         EXPECT_EQ(FindJsonMember(shape, "factoryBase"), nullptr);
@@ -359,7 +360,7 @@ namespace BECore::Tests {
         roots.Register("zeta", ControlRoot{[&leaf, this] { return TypedRef{&leaf, &Info("SchemaLeaf")}; }});
         roots.Register("alpha", ControlRoot{});
 
-        const Json built = BuildSchemaJson(registry, roots);
+        const Json built = ToJson(MakeSchemaAnswer(registry, roots));
         const Json* list = Member(built, "roots");
         ASSERT_TRUE(list != nullptr && list->is_array());
         ASSERT_EQ(list->size(), 2U);
@@ -370,7 +371,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SchemaExportTest, DescribeTypeAddsTheChainsAndTheOwnersOfFields) {
-        const Json described = DescribeTypeJson(Info("SchemaDisc"), registry);
+        const Json described = ToJson(DescribeTypeSchema(Info("SchemaDisc"), registry));
         EXPECT_EQ(GetJsonString(described, "name"), String("SchemaDisc"));
 
         const Json* bases = Member(described, "bases");
@@ -388,7 +389,7 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString((*allFields)[1], "name"), String("filled"));
         EXPECT_EQ(GetJsonString((*allFields)[1], "owner"), String("SchemaDisc"));
 
-        const Json shape = DescribeTypeJson(Info("SchemaShape"), registry);
+        const Json shape = ToJson(DescribeTypeSchema(Info("SchemaShape"), registry));
         const Json* direct = Member(shape, "derived");
         ASSERT_TRUE(direct != nullptr && direct->is_array());
         ASSERT_EQ(direct->size(), 2U) << "the direct children only, by name";
@@ -408,27 +409,27 @@ namespace BECore::Tests {
             return result;
         };
 
-        EXPECT_EQ(names(ListTypesJson(registry, {})).size(), registry.All().size());
+        EXPECT_EQ(names(ToJson(MakeListTypesAnswer(registry, {}))).size(), registry.All().size());
 
         ListTypesFilter below;
         below.base = &Info("SchemaShape");
-        const Vector<String> all = names(ListTypesJson(registry, below));
+        const Vector<String> all = names(ToJson(MakeListTypesAnswer(registry, below)));
         ASSERT_EQ(all.size(), 3U);
         EXPECT_EQ(all[0], "SchemaCircle");
         EXPECT_EQ(all[1], "SchemaDisc");
         EXPECT_EQ(all[2], "SchemaSquare");
 
         below.recursive = false;
-        EXPECT_EQ(names(ListTypesJson(registry, below)).size(), 2U);
+        EXPECT_EQ(names(ToJson(MakeListTypesAnswer(registry, below))).size(), 2U);
 
         ListTypesFilter creatable;
         creatable.creatableOnly = true;
-        const Vector<String> made = names(ListTypesJson(registry, creatable));
+        const Vector<String> made = names(ToJson(MakeListTypesAnswer(registry, creatable)));
         ASSERT_EQ(made.size(), 3U) << "only the types of a factory, and not the abstract base";
         EXPECT_EQ(made[0], "SchemaCircle");
         EXPECT_EQ(made[2], "SchemaSquare");
 
-        const Json listed = ListTypesJson(registry, below);
+        const Json listed = ToJson(MakeListTypesAnswer(registry, below));
         const Json* circle = EntryNamed(*Member(listed, "types"), "SchemaCircle");
         ASSERT_NE(circle, nullptr);
         EXPECT_EQ(GetJsonInt(*circle, "fields"), 1);
@@ -444,22 +445,22 @@ namespace BECore::Tests {
         Fill(backward, true);
         const ControlRoots roots;
 
-        EXPECT_EQ(DumpJson(BuildSchemaJson(forward, roots)), DumpJson(BuildSchemaJson(backward, roots)));
-        EXPECT_EQ(DumpJson(ListTypesJson(forward, {})), DumpJson(ListTypesJson(backward, {})));
-        EXPECT_EQ(DumpJson(DescribeTypeJson(Require(forward.Find("SchemaShape")), forward)), DumpJson(DescribeTypeJson(Require(backward.Find("SchemaShape")), backward)));
+        EXPECT_EQ(DumpJson(ToJson(MakeSchemaAnswer(forward, roots))), DumpJson(ToJson(MakeSchemaAnswer(backward, roots))));
+        EXPECT_EQ(DumpJson(ToJson(MakeListTypesAnswer(forward, {}))), DumpJson(ToJson(MakeListTypesAnswer(backward, {}))));
+        EXPECT_EQ(DumpJson(ToJson(DescribeTypeSchema(Require(forward.Find("SchemaShape")), forward))), DumpJson(ToJson(DescribeTypeSchema(Require(backward.Find("SchemaShape")), backward))));
     }
 
     TEST(SchemaExportEmptyTest, AnEmptyRegistryGivesAnEmptyDocument) {
         const TypeRegistry empty;
-        const Json schema = BuildSchemaJson(empty, ControlRoots());
+        const Json schema = ToJson(MakeSchemaAnswer(empty, ControlRoots()));
         EXPECT_TRUE(Member(schema, "types")->empty());
         EXPECT_TRUE(Member(schema, "factories")->empty());
         EXPECT_TRUE(Member(schema, "roots")->empty());
-        EXPECT_TRUE(Member(ListTypesJson(empty, {}), "types")->empty());
+        EXPECT_TRUE(Member(ToJson(MakeListTypesAnswer(empty, {})), "types")->empty());
     }
 
     TEST(SchemaExportEngineTest, TheRealRegistryHasTheWidgetFactoryAndNoHash) {
-        const Json schema = BuildSchemaJson(TypeRegistry::GetInstance(), ControlRoots());
+        const Json schema = ToJson(MakeSchemaAnswer(TypeRegistry::GetInstance(), ControlRoots()));
         EXPECT_GT(DumpJson(schema).size(), 0U);
         EXPECT_FALSE(HasKeyNamed(schema, "hash") || HasKeyNamed(schema, "typeHash")) << "a hash is never exported";
 
