@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonPayload.h>
 #include <BECore/Control/SchemaExport.h>
 #include <BECore/Reflection/TypeRegistry.h>
 #include <EASTL/sort.h>
@@ -131,6 +132,9 @@ namespace BECore::Tests {
     Json ReferenceTypeDescJson(const TypeDesc& desc) {
         Json json = Json::object();
         json["kind"] = MakeJsonString(TypeKindName(desc.kind));
+        if (desc.kind == TypeKind::Opaque && desc.opaqueHash == DescribeType<JsonPayload>().opaqueHash) {
+            json["kind"] = "any";
+        }
         switch (desc.kind) {
             case TypeKind::Object:
             case TypeKind::Pointer:

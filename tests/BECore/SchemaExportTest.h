@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Control/JsonPayload.h>
 #include <BECore/Math/Vec3.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
@@ -129,6 +130,15 @@ namespace BECore::SchemaTestData {
         BE_REFLECT_FIELD Value<bool> alive;
         BE_REFLECT_FIELD Value<Vec3> position;
         BE_REFLECT_FIELD BE_FIELD_ATTRS(range(0, 100)) Value<int32_t> percent;
+    };
+
+    /// A foreign JSON value of an answer, required and optional: the schema says `any` for it
+    struct SchemaPayloadFields {
+        BE_CLASS(SchemaPayloadFields)
+
+        BE_REFLECT_FIELD JsonPayload body;
+        BE_REFLECT_FIELD Optional<JsonPayload> maybeBody;
+        BE_REFLECT_FIELD Vec3 position;
     };
 
     /// A method that can be called by name and some that cannot
