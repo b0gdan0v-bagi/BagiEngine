@@ -259,7 +259,7 @@ namespace BECore::Tests {
                     _connections.push_back(connection);
                     ++_opened;
                 };
-                handler.onMessage = [this](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessage message) {
+                handler.onMessage = [this](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessageView message) {
                     connection->QueueText(message.GetText());
                     return true;
                 };
@@ -354,6 +354,42 @@ namespace BECore::Tests {
             EXPECT_EQ(texts[static_cast<size_t>(i)], Format("message {}", i));
         }
         EXPECT_GT(session.client.GetBytesReceived(), 0u);
+    }
+
+    TEST(WebSocketClientTest, AMegabyteAfterSmallMessagesArrivesIntactAndInOrder) {
+        constexpr size_t kBig = 1024 * 1024;
+        constexpr size_t kLimit = 4 * kBig;  // room for the frame and the echo of the big message
+        WebSocketListenerSettings serverSettings;
+        serverSettings.maxMessageBytes = kLimit;
+        serverSettings.maxOutboxBytes = kLimit;
+        EchoServer server(std::move(serverSettings));
+        Session session;
+        WebSocketClientSettings settings = QuickSettings();
+        settings.maxMessageBytes = kLimit;
+        settings.maxOutboxBytes = kLimit;
+        ASSERT_TRUE(session.client.Open(server.Url().c_str(), std::move(settings)).has_value());
+        ASSERT_TRUE(session.WaitForOpened());
+
+        // The writer's buffer grows for the big frame and is reused after it: the frames before and after must not leak into each other
+        constexpr int kSmall = 100;
+        for (int i = 0; i < kSmall; ++i) {
+            ASSERT_TRUE(session.client.SendText(Format("small {}", i)));
+        }
+        String big(kBig, 'a');
+        for (size_t i = 0; i < big.size(); ++i) {
+            big[i] = static_cast<char>('a' + i % 26);
+        }
+        ASSERT_TRUE(session.client.SendText(big));
+        ASSERT_TRUE(session.client.SendText("last"));
+        ASSERT_TRUE(session.WaitForCount(WebSocketClientEventKind::Text, kSmall + 2));
+
+        const Vector<String> texts = session.Texts();
+        ASSERT_EQ(texts.size(), static_cast<size_t>(kSmall) + 2);
+        for (int i = 0; i < kSmall; ++i) {
+            EXPECT_EQ(texts[static_cast<size_t>(i)], Format("small {}", i));
+        }
+        EXPECT_TRUE(texts[kSmall] == big) << "the 1 MiB message was changed on the way";
+        EXPECT_EQ(texts[kSmall + 1], "last");
     }
 
     TEST(WebSocketClientTest, TheRequestHasTheRightFormAndNoOriginByDefault) {

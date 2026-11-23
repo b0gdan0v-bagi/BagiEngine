@@ -185,6 +185,7 @@ namespace BECore {
     }
 
     void WebSocketClient::ReaderMain() {
+        BE_MEM_TAG(Network);
         Vector<uint8_t> pendingBytes;
         if (Connect() && Handshake(pendingBytes)) {
             ReadMessages(std::move(pendingBytes));
@@ -322,7 +323,7 @@ namespace BECore {
         };
         const auto pop = [&parser] {
             BE_PROFILE_SCOPE("WS read");
-            return parser.Pop();
+            return parser.PopView();
         };
         feed(Span<const uint8_t>(pendingBytes.data(), pendingBytes.size()));
 
@@ -339,7 +340,7 @@ namespace BECore {
                 if (!popped->has_value()) {
                     break;
                 }
-                if (!HandleMessage(std::move(**popped))) {
+                if (!HandleMessage(**popped)) {
                     return;
                 }
             }
@@ -356,7 +357,7 @@ namespace BECore {
         }
     }
 
-    bool WebSocketClient::HandleMessage(WebSocketMessage message) {
+    bool WebSocketClient::HandleMessage(const WebSocketMessageView& message) {
         BE_PROFILE_SCOPE("WS dispatch");
         switch (message.kind) {
             case WebSocketMessageKind::Text:
@@ -368,7 +369,7 @@ namespace BECore {
                 return false;
             }
             case WebSocketMessageKind::Ping:
-                QueueFrame(WebSocketOpcode::kPong, std::move(message.payload), /*isClose=*/false);
+                QueueFrame(WebSocketOpcode::kPong, Vector<uint8_t>(message.payload.begin(), message.payload.end()), /*isClose=*/false);
                 return true;
             case WebSocketMessageKind::Pong:
                 return true;
@@ -381,7 +382,7 @@ namespace BECore {
         return false;
     }
 
-    bool WebSocketClient::PushText(WebSocketMessage& message) {
+    bool WebSocketClient::PushText(const WebSocketMessageView& message) {
         WebSocketClientEvent event;
         event.kind = WebSocketClientEventKind::Text;
         event.text.assign(message.GetText().data(), message.GetText().size());
@@ -398,6 +399,7 @@ namespace BECore {
     }
 
     void WebSocketClient::WriterMain() {
+        BE_MEM_TAG(Network);
         for (;;) {
             OutgoingFrame frame;
             {
@@ -417,11 +419,12 @@ namespace BECore {
             for (size_t i = 0; i < kMaskSize; ++i) {
                 mask[i] = static_cast<uint8_t>((random >> (kBitsPerByte * i)) & kByteMask);
             }
-            const Vector<uint8_t> bytes = EncodeFrame(frame.opcode, Span<const uint8_t>(frame.payload.data(), frame.payload.size()), mask);
+            _frameScratch.clear();
+            AppendFrame(_frameScratch, frame.opcode, Span<const uint8_t>(frame.payload.data(), frame.payload.size()), mask);
             bool sent = false;
             {
                 BE_PROFILE_SCOPE("WS write");
-                sent = _stream.SendAll(Span<const uint8_t>(bytes.data(), bytes.size()));
+                sent = _stream.SendAll(Span<const uint8_t>(_frameScratch.data(), _frameScratch.size()));
             }
             if (!sent) {
                 AbortConnection(WebSocketCloseCode::kAbnormalClosure, WithStreamError("sending to the server failed"));

@@ -144,22 +144,42 @@ namespace BECore {
         Abort();
     }
 
+    IntrusivePtr<WebSocketSharedFrame> WebSocketSharedFrame::MakeText(StringView text) {
+        BE_MEM_TAG(Network);
+        BE_PROFILE_SCOPE("WS encode");
+        Vector<uint8_t> bytes;
+        AppendFrame(bytes, WebSocketOpcode::kText, Span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size()));
+        return New<WebSocketSharedFrame>(std::move(bytes));
+    }
+
     bool WebSocketConnection::QueueFrame(Vector<uint8_t> bytes, bool isClose) {
+        BE_MEM_TAG(Network);
+        return Enqueue(OutgoingFrame{std::move(bytes), {}, isClose});
+    }
+
+    bool WebSocketConnection::QueueShared(const IntrusivePtr<WebSocketSharedFrame>& frame) {
+        BE_MEM_TAG(Network);
+        BE_PROFILE_SCOPE("WS encode");
+        return Enqueue(OutgoingFrame{{}, frame, false});
+    }
+
+    bool WebSocketConnection::Enqueue(OutgoingFrame frame) {
+        const size_t size = frame.Bytes().size();
         bool overflow = false;
         {
             LockGuard lock(_mutex);
             if (!_open || _closing || _aborted) {
                 return false;
             }
-            if (_outboxBytes + bytes.size() > _settings.maxOutboxBytes) {
+            if (_outboxBytes + size > _settings.maxOutboxBytes) {
                 overflow = true;
             } else {
-                _outboxBytes += bytes.size();
-                _closing = isClose;
-                if (isClose) {
+                _outboxBytes += size;
+                _closing = frame.isClose;
+                if (frame.isClose) {
                     _closeDeadline = std::chrono::steady_clock::now() + _settings.closeTimeout;
                 }
-                _outbox.push_back(OutgoingFrame{std::move(bytes), isClose});
+                _outbox.push_back(std::move(frame));
             }
         }
         if (overflow) {
@@ -172,6 +192,7 @@ namespace BECore {
     }
 
     void WebSocketConnection::WriterLoop() {
+        BE_MEM_TAG(Network);
         for (;;) {
             OutgoingFrame frame;
             {
@@ -182,13 +203,13 @@ namespace BECore {
                 }
                 frame = std::move(_outbox.front());
                 _outbox.pop_front();
-                _outboxBytes -= frame.bytes.size();
+                _outboxBytes -= frame.Bytes().size();
             }
 
             bool sent = false;
             {
                 BE_PROFILE_SCOPE("WS write");
-                sent = _socket.SendAll(Span<const uint8_t>(frame.bytes.data(), frame.bytes.size()));
+                sent = _socket.SendAll(frame.Bytes());
             }
             if (!sent) {
                 Abort();

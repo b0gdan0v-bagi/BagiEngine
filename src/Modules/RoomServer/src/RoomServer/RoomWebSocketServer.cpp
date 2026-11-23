@@ -68,7 +68,7 @@ namespace BECore {
             }
             PushEvent(EventKind::Opened, connection->GetId(), _passAddress ? connection->GetClientAddress() : String());
         };
-        handler.onMessage = [this](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessage message) {
+        handler.onMessage = [this](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessageView message) {
             return PushEvent(EventKind::Message, connection->GetId(), String(message.GetText()));
         };
         handler.onClosed = [this](const WebSocketHandler::ConnectionPtr& connection) {
@@ -187,11 +187,13 @@ namespace BECore {
     }
 
     void RoomWebSocketServer::RunHub() {
+        BE_MEM_TAG(Network);
         // The hub lives here and nowhere else: only this thread can reach it
         RoomHub hub(
             _registry, _settings.hub, [this] { return _random(); },
             HubSink{
                 .send = [this](ConnectionId connection, const String& text) { SendTo(connection, text); },
+                .broadcast = [this](Span<const ConnectionId> ids, const String& text) { BroadcastTo(ids, text); },
                 .close = [this](ConnectionId connection, String reason) { CloseConnection(connection, reason); },
             });
 
@@ -199,7 +201,7 @@ namespace BECore {
         RoomServerStats lastLoggedStats;
         RoomTime lastStatsLoggedAt = Now();
         auto nextTick = std::chrono::steady_clock::now() + _settings.tickInterval;
-        eastl::deque<Event> batch;
+        Fifo<Event> batch;
         for (;;) {
             {
                 UniqueLock lock(_queueMutex);
@@ -212,7 +214,8 @@ namespace BECore {
             }
             _notFull.notify_all();
 
-            for (const Event& event : batch) {
+            for (size_t i = 0; i < batch.size(); ++i) {
+                const Event& event = batch[i];
                 switch (event.kind) {
                     case EventKind::Opened: {
                         BE_PROFILE_SCOPE("Room open");
@@ -236,6 +239,7 @@ namespace BECore {
                     }
                 }
             }
+            // Keeps the capacity: the swap above hands it to the queue and takes the queue's back
             batch.clear();
 
             if (std::chrono::steady_clock::now() >= nextTick) {
@@ -296,6 +300,28 @@ namespace BECore {
         if (const auto target = FindConnection(connection)) {
             target->QueueText(text);  // a connection that is closing or dropped takes nothing: the hub learns it from the Closed event
         }
+    }
+
+    void RoomWebSocketServer::BroadcastTo(Span<const ConnectionId> ids, const String& text) {
+        BE_PROFILE_SCOPE("Room send");
+        _broadcastTargets.clear();
+        {
+            LockGuard lock(_connectionsMutex);
+            for (const ConnectionId id : ids) {
+                if (const auto found = _connections.find(id); found != _connections.end()) {
+                    _broadcastTargets.push_back(found->second);
+                }
+            }
+        }
+        if (!_broadcastTargets.empty()) {
+            // The bytes are encoded once and shared by the outboxes, so they outlive this call: unlike `text`, which the hub reuses
+            const auto frame = WebSocketSharedFrame::MakeText(text);
+            for (const auto& target : _broadcastTargets) {
+                target->QueueShared(frame);
+            }
+        }
+        // The connections are not held longer than the call
+        _broadcastTargets.clear();
     }
 
     void RoomWebSocketServer::CloseConnection(ConnectionId connection, const String& reason) {

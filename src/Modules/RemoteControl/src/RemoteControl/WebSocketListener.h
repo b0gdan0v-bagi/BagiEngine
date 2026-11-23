@@ -4,6 +4,7 @@
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/Thread.h>
+#include <BECore/Types/Fifo.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
@@ -75,8 +76,9 @@ namespace BECore {
         MoveOnlyFunction<void(const ConnectionPtr&)> onOpen;
 
         /// A text message of the client (a ping, a pong, a close, binary data and protocol errors are the listener's). False ends the
-        /// connection: queue a close frame first if the client is to hear why
-        MoveOnlyFunction<bool(const ConnectionPtr&, WebSocketMessage)> onMessage;
+        /// connection: queue a close frame first if the client is to hear why. The message is a view into the connection's parser: it is
+        /// valid for the call only, so a handler that keeps the text (or hands it to another thread) copies it
+        MoveOnlyFunction<bool(const ConnectionPtr&, WebSocketMessageView)> onMessage;
 
         MoveOnlyFunction<void(const ConnectionPtr&)> onClosed;
     };
@@ -115,6 +117,12 @@ namespace BECore {
         /// Calls @p visit for every connection whose handshake is done and that is still open. The list is a copy: @p visit may queue frames, but it must not call Stop()
         void ForEachOpenConnection(FunctionRef<void(WebSocketConnection&)> visit);
 
+        /// Sends @p text as one message to every connection whose handshake is done: it is encoded once and the same bytes are queued on
+        /// each connection (WebSocketSharedFrame). The list is walked under the listener's lock, without a copy; that is safe because
+        /// QueueShared() takes only the connection's own mutex and never waits for the network (the order, the listener's lock and then
+        /// a connection's, is the one AdmitByClientAddress() has). A connection over its cap is dropped, the others are not affected
+        void BroadcastText(StringView text);
+
     private:
         using ConnectionPtr = WebSocketHandler::ConnectionPtr;
 
@@ -129,7 +137,7 @@ namespace BECore {
         void ReadMessages(const ConnectionPtr& connection, Vector<uint8_t> pendingBytes);
 
         /// Acts on one message of a client; false when the connection has to end
-        bool HandleMessage(const ConnectionPtr& connection, WebSocketMessage message);
+        bool HandleMessage(const ConnectionPtr& connection, WebSocketMessageView message);
 
         const WebSocketListenerSettings _settings;
         const WebSocketHandler _handler;
@@ -145,7 +153,7 @@ namespace BECore {
 
         Mutex _refusalsMutex{BE_LOCK_SITE("WebSocket refusals")};
         ConditionVariable _refusalWake;
-        eastl::deque<Socket> _refusals;  // guarded by _refusalsMutex
+        Fifo<Socket> _refusals;  // guarded by _refusalsMutex
     };
 
 }  // namespace BECore

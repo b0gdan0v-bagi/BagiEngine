@@ -39,6 +39,20 @@ namespace BECore {
         }
     }
 
+    void RoomHub::SendTextToMany(Span<const ConnectionId> ids, const String& text) {
+        if (ids.empty()) {
+            return;
+        }
+        // One recipient: a shared frame would cost more than the copy `send` makes
+        if (_sink.broadcast && ids.size() > 1) {
+            _sink.broadcast(ids, text);
+            return;
+        }
+        for (const ConnectionId id : ids) {
+            SendText(id, text);
+        }
+    }
+
     void RoomHub::SendError(ConnectionId id, StringView code, StringView message, StringView ref) {
         _sendScratch.clear();
         AppendErrorMessage(_sendScratch, code, message, ref);
@@ -486,31 +500,37 @@ namespace BECore {
         }
         const uint64_t revision = room.GetLobbyRevision();
         const bool started = room.GetPhase() != RoomPhase::Lobby;
-        // Written for the first connection that is behind: a room in which nothing changed costs no snapshot on every tick. Not
-        // _sendScratch: ResendView writes a `view` there between two sends of this text.
-        bool lobbyWritten = false;
+        // Two passes, so the connections behind on the lobby get one text in one sink call. Per connection the order is still lobby,
+        // then view: pass 1 finishes before pass 2 starts, and a connection gets its `view` only in pass 2. Written once, and only
+        // when a connection is behind: a room in which nothing changed costs no snapshot on every tick.
         _lobbyText.clear();
+        _broadcastIds.clear();
         // Copy: a sink is not allowed to call back, but the loop must not depend on that
         _flushIds = entry.connections;
+        for (const ConnectionId id : _flushIds) {
+            const auto found = _connections.find(id);
+            if (found == _connections.end() || found->second.sentLobbyRevision == revision) {
+                continue;
+            }
+            found->second.sentLobbyRevision = revision;
+            _broadcastIds.push_back(id);
+        }
+        if (!_broadcastIds.empty()) {
+            AppendLobbyMessage(_lobbyText, room.GetLobbySnapshot());
+            SendTextToMany(_broadcastIds, _lobbyText);
+        }
+        if (!started) {
+            return;
+        }
         for (const ConnectionId id : _flushIds) {
             const auto found = _connections.find(id);
             if (found == _connections.end()) {
                 continue;
             }
             Connection& connection = found->second;
-            if (connection.sentLobbyRevision != revision) {
-                connection.sentLobbyRevision = revision;
-                if (!lobbyWritten) {
-                    AppendLobbyMessage(_lobbyText, room.GetLobbySnapshot());
-                    lobbyWritten = true;
-                }
-                SendText(id, _lobbyText);
-            }
-            if (started) {
-                const Optional<int> seat = room.GetSeatOf(connection.player);
-                if (seat && (!connection.sentView || connection.sentGameVersion != room.GetGameVersion() || connection.sentSeat != *seat)) {
-                    ResendView(id, connection, entry);
-                }
+            const Optional<int> seat = room.GetSeatOf(connection.player);
+            if (seat && (!connection.sentView || connection.sentGameVersion != room.GetGameVersion() || connection.sentSeat != *seat)) {
+                ResendView(id, connection, entry);
             }
         }
     }
@@ -521,15 +541,18 @@ namespace BECore {
             return;
         }
         const Vector<ConnectionId> ids = found->second->connections;
-        // The same text for every member; no other send runs inside the loop, so the scratch stays intact
+        _broadcastIds.clear();
+        for (const ConnectionId id : ids) {
+            if (_connections.find(id) != _connections.end()) {
+                _broadcastIds.push_back(id);
+            }
+        }
+        // The same text for every member; no other send runs in between, so the scratch stays intact
         _sendScratch.clear();
         AppendLeftMessage(_sendScratch, reason);
-        for (const ConnectionId id : ids) {
+        SendTextToMany(_broadcastIds, _sendScratch);
+        for (const ConnectionId id : _broadcastIds) {
             const auto connection = _connections.find(id);
-            if (connection == _connections.end()) {
-                continue;
-            }
-            SendText(id, _sendScratch);
             connection->second.roomCode.clear();
             connection->second.player = 0;
             connection->second.sentLobbyRevision = 0;

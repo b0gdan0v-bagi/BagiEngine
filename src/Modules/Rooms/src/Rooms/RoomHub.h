@@ -16,6 +16,10 @@ namespace BECore {
         /// A text message for a connection. The text is valid for the call only: the hub reuses its buffer for the next message, so a
         /// sink that keeps it copies it.
         MoveOnlyFunction<void(ConnectionId, const String&)> send;
+        /// Optional: one text for several connections, so a transport encodes it once. Same lifetime rule as `send`; the ids are
+        /// valid for the call only. Empty means the hub calls `send` for each id, in the order of the ids. Per connection the
+        /// messages arrive in the order the hub produced them with either form.
+        MoveOnlyFunction<void(Span<const ConnectionId>, const String&)> broadcast;
         /// The hub is done with the connection: the transport closes it (and need not report it with OnDisconnected, which would be
         /// ignored). The reason is one of RoomCloseReasons: the transport sends it as the close reason and picks the close code by it.
         MoveOnlyFunction<void(ConnectionId, String)> close;
@@ -127,6 +131,8 @@ namespace BECore {
         void SendError(ConnectionId id, const ControlError& error, StringView ref);
         void SendError(ConnectionId id, StringView code, StringView message, StringView ref);
         void SendText(ConnectionId id, const String& text);
+        /// One text for @p ids: one `broadcast` call when the sink has it and there are several, else `send` per id
+        void SendTextToMany(Span<const ConnectionId> ids, const String& text);
         /// Sends `error` for a failed join, counts it and closes the connection when the limit is reached. @p spendBudget takes a
         /// token of the failed-join budgets (false for the answer that an empty budget gave).
         void FailJoin(ConnectionId id, Connection& connection, const ControlError& error, RoomTime now, bool spendBudget = true);
@@ -171,8 +177,10 @@ namespace BECore {
         Vector<ConnectionId> _tickIdle;
         Vector<String> _tickCodes;
         Vector<ConnectionId> _flushIds;
-        // Output buffers, kept so that a steady send allocates nothing. Two on purpose: a Flush sends the shared lobby text to several
-        // members and ResendView writes a `view` between those sends, so one buffer would be overwritten.
+        // The connections a Flush or a CloseRoom sends one text to; separate from _flushIds, which the pass over the room still reads
+        Vector<ConnectionId> _broadcastIds;
+        // Output buffers, kept so that a steady send allocates nothing: _lobbyText is the lobby text of one Flush, _sendScratch the
+        // text of every other send
         String _sendScratch;
         String _lobbyText;
     };

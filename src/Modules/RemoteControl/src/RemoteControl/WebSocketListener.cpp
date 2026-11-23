@@ -98,7 +98,17 @@ namespace BECore {
         }
     }
 
+    void WebSocketListener::BroadcastText(StringView text) {
+        const IntrusivePtr<WebSocketSharedFrame> frame = WebSocketSharedFrame::MakeText(text);
+        LockGuard lock(_connectionsMutex);
+        for (const auto& connection : _connections) {
+            // Refuses a connection that has not finished its handshake or is closing
+            connection->QueueShared(frame);
+        }
+    }
+
     void WebSocketListener::AcceptLoop() {
+        BE_MEM_TAG(Network);
         while (!_stopping) {
             String peerAddress;
             auto accepted = _listener.Accept(kAcceptPollInterval, &peerAddress);
@@ -137,6 +147,7 @@ namespace BECore {
     }
 
     void WebSocketListener::RefusalLoop() {
+        BE_MEM_TAG(Network);
         for (;;) {
             Socket socket;
             {
@@ -227,6 +238,7 @@ namespace BECore {
     }
 
     void WebSocketListener::RunConnection(const ConnectionPtr& connection) {
+        BE_MEM_TAG(Network);
         Vector<uint8_t> pendingBytes;
         const auto admitByAddress = [this, &connection](const String& clientAddress) { return AdmitByClientAddress(*connection, clientAddress); };
         Optional<AdmitClientFn> admit;
@@ -260,7 +272,7 @@ namespace BECore {
         };
         const auto pop = [&parser] {
             BE_PROFILE_SCOPE("WS read");
-            return parser.Pop();
+            return parser.PopView();
         };
         feed(Span<const uint8_t>(pendingBytes.data(), pendingBytes.size()));
 
@@ -276,7 +288,7 @@ namespace BECore {
                 if (!popped->has_value()) {
                     break;
                 }
-                if (!HandleMessage(connection, std::move(**popped))) {
+                if (!HandleMessage(connection, **popped)) {
                     return;
                 }
             }
@@ -289,16 +301,16 @@ namespace BECore {
         }
     }
 
-    bool WebSocketListener::HandleMessage(const ConnectionPtr& connection, WebSocketMessage message) {
+    bool WebSocketListener::HandleMessage(const ConnectionPtr& connection, WebSocketMessageView message) {
         BE_PROFILE_SCOPE("WS dispatch");
         switch (message.kind) {
             case WebSocketMessageKind::Text:
-                return _handler.onMessage ? _handler.onMessage(connection, std::move(message)) : true;
+                return _handler.onMessage ? _handler.onMessage(connection, message) : true;
             case WebSocketMessageKind::Binary:
                 connection->QueueClose(WebSocketCloseCode::kUnsupportedData, "binary messages are not supported");
                 return false;
             case WebSocketMessageKind::Ping:
-                connection->QueuePong(Span<const uint8_t>(message.payload.data(), message.payload.size()));
+                connection->QueuePong(message.payload);
                 return true;
             case WebSocketMessageKind::Pong:
                 return true;

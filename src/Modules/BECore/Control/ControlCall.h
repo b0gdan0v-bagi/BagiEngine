@@ -2,6 +2,7 @@
 
 #include <BECore/Control/Json.h>
 #include <BECore/Control/JsonWriter.h>
+#include <BECore/Memory/Pooled.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
@@ -38,6 +39,8 @@ namespace BECore {
      */
     class ControlCall {
     public:
+        BE_POOLED(ControlCall)  // one per handled request, a nested call too
+
         using DoneFn = MoveOnlyFunction<void(ControlCall&)>;
 
         ControlCall(PassKey<ControlService>, ControlService& service, String method, Json id, Json params, ControlReplyFn reply);

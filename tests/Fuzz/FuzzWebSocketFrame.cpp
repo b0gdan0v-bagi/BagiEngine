@@ -21,10 +21,26 @@ namespace BECore::Fuzz {
             Optional<WebSocketProtocolError> error;
         };
 
-        /// Takes every message that is ready; stops at "more bytes" or at the error (and remembers the first one only)
-        void Collect(WebSocketFrameParser& parser, Outcome& outcome) {
+        /// What Pop() makes of a message that PopView() returned: the view is copied before the next call, as its contract asks
+        std::expected<Optional<WebSocketMessage>, WebSocketProtocolError> PopThroughView(WebSocketFrameParser& parser) {
+            const auto view = parser.PopView();
+            if (!view.has_value()) {
+                return std::unexpected(view.error());
+            }
+            if (!view->has_value()) {
+                return Optional<WebSocketMessage>();
+            }
+            WebSocketMessage message;
+            message.kind = (*view)->kind;
+            message.closeCode = (*view)->closeCode;
+            message.payload.assign((*view)->payload.begin(), (*view)->payload.end());
+            return Optional<WebSocketMessage>(std::move(message));
+        }
+
+        /// Takes every message that is ready (by Pop() or by PopView()); stops at "more bytes" or at the error (and remembers the first one only)
+        void Collect(WebSocketFrameParser& parser, Outcome& outcome, bool byView) {
             for (;;) {
-                auto result = parser.Pop();
+                auto result = byView ? PopThroughView(parser) : parser.Pop();
                 if (!result.has_value()) {
                     if (!outcome.error) {
                         outcome.error = result.error();
@@ -49,19 +65,19 @@ namespace BECore::Fuzz {
             return 1 + step;
         }
 
-        Outcome Parse(Span<const uint8_t> stream, size_t limit, WebSocketPeer sender, uint8_t pattern) {
+        Outcome Parse(Span<const uint8_t> stream, size_t limit, WebSocketPeer sender, uint8_t pattern, bool byView = false) {
             WebSocketFrameParser parser(limit, sender);
             Outcome outcome;
             if (pattern == 0) {
                 parser.Feed(stream);
-                Collect(parser, outcome);
+                Collect(parser, outcome, byView);
             } else {
                 size_t position = 0;
                 for (size_t index = 0; position < stream.size(); ++index) {
                     const size_t count = std::min(ChunkSize(pattern, index), stream.size() - position);
                     parser.Feed(stream.subspan(position, count));
                     position += count;
-                    Collect(parser, outcome);
+                    Collect(parser, outcome, byView);
                 }
             }
             // After an error the parser stays in it, whatever is fed or asked
@@ -69,7 +85,7 @@ namespace BECore::Fuzz {
                 const uint8_t more[] = {0x81, 0x00};
                 parser.Feed(Span<const uint8_t>(more, sizeof(more)));
                 for (size_t i = 0; i < kRepeatedPops; ++i) {
-                    Collect(parser, outcome);
+                    Collect(parser, outcome, byView);
                 }
             }
             return outcome;
@@ -135,6 +151,20 @@ namespace BECore::Fuzz {
             FUZZ_CHECK(whole.error->closeCode == chunked.error->closeCode);
             FUZZ_CHECK(whole.error->reason == chunked.error->reason);
             FUZZ_CHECK(!whole.error->reason.empty());
+        }
+
+        // PopView() gives what Pop() gave, whole or in chunks
+        for (const bool chunkedFeed : {false, true}) {
+            const Outcome viewed = Parse(stream, limit, sender, chunkedFeed ? (pattern == 0 ? 1 : pattern) : 0, true);
+            FUZZ_CHECK(viewed.messages.size() == whole.messages.size());
+            for (size_t i = 0; i < whole.messages.size(); ++i) {
+                FUZZ_CHECK(SameMessage(whole.messages[i], viewed.messages[i]));
+            }
+            FUZZ_CHECK(viewed.error.has_value() == whole.error.has_value());
+            if (whole.error) {
+                FUZZ_CHECK(viewed.error->closeCode == whole.error->closeCode);
+                FUZZ_CHECK(viewed.error->reason == whole.error->reason);
+            }
         }
 
         for (const WebSocketMessage& message : whole.messages) {

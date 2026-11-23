@@ -40,11 +40,15 @@ namespace BECore {
     using WebSocketMask = Array<uint8_t, 4>;
 
     /**
-     * @brief Encodes one frame.
+     * @brief Appends one frame to @p out: one `reserve` for the header and the payload, then one copy of the payload (masked or not).
      *
-     * A server sends its frames unmasked. @p mask is for clients and tests: a frame with a key is masked, as a
-     * client's frames have to be. @p fin false starts or continues a fragmented message.
+     * `reserve` asks for exactly what this frame needs, so a caller that appends many frames to one vector reserves their sum first.
+     * A server sends its frames unmasked. @p mask is for clients and tests: a frame with a key is masked, as a client's frames have to
+     * be. @p fin false starts or continues a fragmented message.
      */
+    void AppendFrame(Vector<uint8_t>& out, uint8_t opcode, Span<const uint8_t> payload, Optional<WebSocketMask> mask = std::nullopt, bool fin = true);
+
+    /// Encodes one frame into a new vector (`AppendFrame` on an empty one)
     [[nodiscard]] Vector<uint8_t> EncodeFrame(uint8_t opcode, Span<const uint8_t> payload, Optional<WebSocketMask> mask = std::nullopt, bool fin = true);
 
     /// A text frame holding @p text
@@ -70,6 +74,20 @@ namespace BECore {
         }
     };
 
+    /// A message of the peer that is still inside the parser: an unfragmented one in the parser's input buffer, a fragmented one in its fragment
+    /// buffer. Valid until the next `Feed()`, `Pop()` or `PopView()` of the parser that returned it; a holder that needs it longer copies it
+    /// (`WebSocketFrameParser::Pop()` does).
+    struct WebSocketMessageView {
+        WebSocketMessageKind kind = WebSocketMessageKind::Text;
+        Span<const uint8_t> payload;                                 // Close: the reason, without the code
+        uint16_t closeCode = WebSocketCloseCode::kNoStatusReceived;  // Close only
+
+        /// The payload as text (Text, Ping, Pong and the reason of a Close)
+        [[nodiscard]] StringView GetText() const {
+            return StringView(reinterpret_cast<const char*>(payload.data()), payload.size());
+        }
+    };
+
     /// Who sends the frames a parser reads: the frames of a client are masked, those of a server are not (RFC 6455, section 5.1)
     CORE_ENUM(WebSocketPeer, uint8_t, Client, Server)
 
@@ -82,7 +100,7 @@ namespace BECore {
     /**
      * @brief Turns the bytes that a client sends into messages (RFC 6455, section 5).
      *
-     * Feed() takes bytes in pieces of any size; Pop() returns the messages that are complete. A client's frames have to be
+     * Feed() takes bytes in pieces of any size; PopView() and Pop() return the messages that are complete. A client's frames have to be
      * masked, RSV bits zero, control frames at most 125 bytes and not fragmented; a message may not exceed the limit: the
      * length in the frame header is checked before the payload is stored, so a client cannot make the server buffer more.
      *
@@ -94,6 +112,10 @@ namespace BECore {
      * connection closes costs no memory.
      * The parser does not check that text is UTF-8 (RFC 6455 section 5.6 asks for it): the control API answers text
      * that is not valid JSON with a parse_error, which is enough for a development tool.
+     *
+     * PopView() copies nothing: it unmasks the payload where it lies in the input buffer, and a fragmented message is put together in
+     * a buffer that keeps its capacity. The view dies at the next Feed(), Pop() or PopView(). Pop() is PopView() plus one copy into an
+     * owning WebSocketMessage, for callers that keep the message.
      */
     class WebSocketFrameParser {
     public:
@@ -102,13 +124,16 @@ namespace BECore {
 
         void Feed(Span<const uint8_t> bytes);
 
-        /// The next complete message, nullopt when more bytes are needed
+        /// The next complete message, nullopt when more bytes are needed; the errors are those of Pop(). Valid until the next Feed(), Pop() or PopView()
+        [[nodiscard]] std::expected<Optional<WebSocketMessageView>, WebSocketProtocolError> PopView();
+
+        /// PopView() with the payload copied: the message stays valid when the parser goes on
         [[nodiscard]] std::expected<Optional<WebSocketMessage>, WebSocketProtocolError> Pop();
 
         /// The bytes the parser holds for a frame or a message that is not complete: the unread part of what was fed plus the fragments so far. At most
         /// the limit and one frame header once Pop() has returned nullopt
         [[nodiscard]] size_t BufferedBytes() const {
-            return (_buffer.size() - _readPosition) + _fragments.size();
+            return (_buffer.size() - _readPosition) + (_fragmentsDelivered ? 0 : _fragments.size());
         }
 
     private:
@@ -122,8 +147,9 @@ namespace BECore {
 
         /// Reads the header at the read position: nullopt when it is not complete yet, an error when it is not valid
         [[nodiscard]] std::expected<Optional<FrameHeader>, WebSocketProtocolError> ReadHeader() const;
-        [[nodiscard]] std::expected<Optional<WebSocketMessage>, WebSocketProtocolError> Accept(const FrameHeader& header, Vector<uint8_t> payload);
-        [[nodiscard]] std::expected<Optional<WebSocketMessage>, WebSocketProtocolError> Fail(uint16_t closeCode, String reason);
+        /// @p payload is the unmasked payload of the frame, inside _buffer
+        [[nodiscard]] std::expected<Optional<WebSocketMessageView>, WebSocketProtocolError> Accept(const FrameHeader& header, Span<const uint8_t> payload);
+        [[nodiscard]] std::expected<Optional<WebSocketMessageView>, WebSocketProtocolError> Fail(uint16_t closeCode, String reason);
 
         size_t _maxMessageBytes;
         WebSocketPeer _sender;
@@ -134,6 +160,7 @@ namespace BECore {
         bool _inFragmentedMessage = false;
         WebSocketMessageKind _fragmentKind = WebSocketMessageKind::Text;
         Vector<uint8_t> _fragments;
+        bool _fragmentsDelivered = false;  // _fragments holds the message PopView() returned last; the next call empties it
     };
 
 }  // namespace BECore

@@ -114,6 +114,32 @@ namespace BECore::Tests {
         EXPECT_EQ(frame65536[9], 0x00);
     }
 
+    TEST(WebSocketFrameTest, AFrameOfOneMebibyteIsOneAllocation) {
+        constexpr size_t kPayloadSize = 1024 * 1024;
+        const Vector<uint8_t> payload(kPayloadSize, 0x5A);
+
+        const Vector<uint8_t> plain = EncodeFrame(WebSocketOpcode::kBinary, AsSpan(payload));
+        EXPECT_EQ(plain.size(), kPayloadSize + 10);
+        EXPECT_EQ(plain.capacity(), plain.size());
+
+        const Vector<uint8_t> masked = EncodeFrame(WebSocketOpcode::kBinary, AsSpan(payload), kMask);
+        EXPECT_EQ(masked.size(), kPayloadSize + 14);
+        EXPECT_EQ(masked.capacity(), masked.size());
+        EXPECT_EQ(masked[14 + 1], static_cast<uint8_t>(0x5A ^ kMask[1]));
+    }
+
+    TEST(WebSocketFrameTest, AppendFrameKeepsTheBytesBeforeIt) {
+        Vector<uint8_t> out = Bytes({0xAA, 0xBB});
+        AppendFrame(out, WebSocketOpcode::kText, TextBytes("Hello"));
+        AppendFrame(out, WebSocketOpcode::kText, TextBytes("Hello"), kMask);
+
+        Vector<uint8_t> expected = Bytes({0xAA, 0xBB, 0x81, 0x05, 0x48, 0x65, 0x6C, 0x6C, 0x6F});
+        for (const int byte : {0x81, 0x85, 0x37, 0xFA, 0x21, 0x3D, 0x7F, 0x9F, 0x4D, 0x51, 0x58}) {
+            expected.push_back(static_cast<uint8_t>(byte));
+        }
+        EXPECT_EQ(out, expected);
+    }
+
     TEST(WebSocketFrameTest, MessagesOfEveryLengthFormRoundTrip) {
         for (const size_t length : {0u, 1u, 125u, 126u, 127u, 65535u, 65536u, 100000u}) {
             const String payload(length, 'x');
@@ -531,6 +557,144 @@ namespace BECore::Tests {
         }
         parser.Feed(AsSpan(Bytes({frame.back()})));
         EXPECT_EQ(PopMessage(parser).payload.size(), kLimit);
+    }
+
+    namespace {
+
+        using ViewResult = std::expected<Optional<WebSocketMessageView>, WebSocketProtocolError>;
+
+        /// A view of the next message, which the test expects to be there
+        WebSocketMessageView PopMessageView(WebSocketFrameParser& parser) {
+            const ViewResult result = parser.PopView();
+            EXPECT_TRUE(result.has_value()) << (result.has_value() ? "" : result.error().reason.c_str());
+            if (!result.has_value() || !result->has_value()) {
+                ADD_FAILURE() << "no message was ready";
+                return {};
+            }
+            return **result;
+        }
+
+        String TextOf(const WebSocketMessageView& view) {
+            return String(view.GetText().data(), view.GetText().size());
+        }
+
+        /// Messages, fragments and control frames mixed: one frame of every shape the parser unmasks or collects
+        Vector<uint8_t> MixedClientStream() {
+            Vector<uint8_t> stream;
+            const auto add = [&](const Vector<uint8_t>& frame) { stream.insert(stream.end(), frame.begin(), frame.end()); };
+            add(EncodeTextFrame("first", kMask));
+            add(EncodeFrame(WebSocketOpcode::kText, TextBytes("frag"), kMask, false));
+            add(EncodeFrame(WebSocketOpcode::kPing, TextBytes("p"), kMask));
+            add(EncodeFrame(WebSocketOpcode::kContinuation, TextBytes("men"), kMask, false));
+            add(EncodeFrame(WebSocketOpcode::kContinuation, TextBytes("ted"), kMask));
+            add(EncodeFrame(WebSocketOpcode::kBinary, TextBytes(String(300, 'b')), kMask));
+            add(EncodeCloseFrame(WebSocketCloseCode::kGoingAway, "bye", kMask));
+            add(EncodeFrame(WebSocketOpcode::kClose, {}, kMask));
+            return stream;
+        }
+
+        /// Pops everything from @p viewing with PopView() and from @p owning with Pop(); both have to give the same messages
+        void ExpectViewsEqualOwned(Span<const uint8_t> stream, size_t chunk) {
+            WebSocketFrameParser viewing;
+            WebSocketFrameParser owning;
+            size_t count = 0;
+            for (size_t position = 0; position < stream.size(); position += chunk) {
+                const Span<const uint8_t> piece = stream.subspan(position, std::min(chunk, stream.size() - position));
+                viewing.Feed(piece);
+                owning.Feed(piece);
+                for (;;) {
+                    const ViewResult view = viewing.PopView();
+                    const PopResult owned = owning.Pop();
+                    ASSERT_TRUE(view.has_value());
+                    ASSERT_TRUE(owned.has_value());
+                    ASSERT_EQ(view->has_value(), owned->has_value());
+                    if (!view->has_value()) {
+                        break;
+                    }
+                    EXPECT_EQ((*view)->kind, (*owned)->kind);
+                    EXPECT_EQ((*view)->closeCode, (*owned)->closeCode);
+                    EXPECT_EQ(String((*view)->GetText().data(), (*view)->GetText().size()), TextOf(**owned));
+                    EXPECT_EQ(viewing.BufferedBytes(), owning.BufferedBytes());
+                    ++count;
+                }
+            }
+            EXPECT_EQ(count, 6u);  // the mixed stream: text, ping, the fragmented text, binary and 2 close frames
+            EXPECT_EQ(viewing.BufferedBytes(), 0u);
+        }
+
+    }  // namespace
+
+    TEST(WebSocketFrameTest, ViewsEqualOwnedMessagesWhateverTheChunking) {
+        const Vector<uint8_t> stream = MixedClientStream();
+        ExpectViewsEqualOwned(AsSpan(stream), stream.size());
+        ExpectViewsEqualOwned(AsSpan(stream), 1);
+        ExpectViewsEqualOwned(AsSpan(stream), 7);
+    }
+
+    TEST(WebSocketFrameTest, EachViewIsReadableBeforeTheNextCall) {
+        WebSocketFrameParser parser;
+        const Vector<uint8_t> stream = MixedClientStream();
+        parser.Feed(AsSpan(stream));
+
+        EXPECT_EQ(TextOf(PopMessageView(parser)), "first");
+        const WebSocketMessageView ping = PopMessageView(parser);  // came between two fragments
+        EXPECT_EQ(ping.kind, WebSocketMessageKind::Ping);
+        EXPECT_EQ(TextOf(ping), "p");
+        const WebSocketMessageView fragmented = PopMessageView(parser);
+        EXPECT_EQ(fragmented.kind, WebSocketMessageKind::Text);
+        EXPECT_EQ(TextOf(fragmented), "fragmented");
+        const WebSocketMessageView binary = PopMessageView(parser);
+        EXPECT_EQ(binary.kind, WebSocketMessageKind::Binary);
+        EXPECT_EQ(binary.payload.size(), 300u);
+        EXPECT_EQ(binary.payload[299], 'b');
+
+        const WebSocketMessageView close = PopMessageView(parser);
+        EXPECT_EQ(close.closeCode, WebSocketCloseCode::kGoingAway);
+        EXPECT_EQ(TextOf(close), "bye");  // the reason without the code
+        const WebSocketMessageView bare = PopMessageView(parser);
+        EXPECT_EQ(bare.closeCode, WebSocketCloseCode::kNoStatusReceived);
+        EXPECT_TRUE(bare.payload.empty());
+    }
+
+    TEST(WebSocketFrameTest, AFragmentedMessageDoesNotLeakIntoTheNextOne) {
+        WebSocketFrameParser parser;
+        parser.Feed(AsSpan(EncodeFrame(WebSocketOpcode::kText, TextBytes("long first"), kMask, false)));
+        parser.Feed(AsSpan(EncodeFrame(WebSocketOpcode::kContinuation, TextBytes(" message"), kMask)));
+        EXPECT_EQ(TextOf(PopMessageView(parser)), "long first message");
+
+        parser.Feed(AsSpan(EncodeFrame(WebSocketOpcode::kText, TextBytes("a"), kMask, false)));
+        parser.Feed(AsSpan(EncodeFrame(WebSocketOpcode::kContinuation, TextBytes("b"), kMask)));
+        EXPECT_EQ(TextOf(PopMessageView(parser)), "ab");
+        EXPECT_EQ(parser.BufferedBytes(), 0u);
+    }
+
+    TEST(WebSocketFrameTest, ViewsReadAServersUnmaskedFrames) {
+        WebSocketFrameParser parser(ControlService::kMaxRequestBytes, WebSocketPeer::Server);
+        parser.Feed(AsSpan(EncodeTextFrame("from the server")));
+        EXPECT_EQ(TextOf(PopMessageView(parser)), "from the server");
+    }
+
+    TEST(WebSocketFrameTest, ViewsReportTheSameErrorsAsPop) {
+        const Vector<uint8_t> unmasked = EncodeTextFrame("x");
+        const Vector<uint8_t> tooBig = EncodeTextFrame(String(10, 'x'), kMask);
+        const Vector<uint8_t> badClose = EncodeFrame(WebSocketOpcode::kClose, Span<const uint8_t>(Bytes({0x03, 0xED}).data(), 2), kMask);
+        const Vector<uint8_t> strayContinuation = EncodeFrame(WebSocketOpcode::kContinuation, TextBytes("x"), kMask);
+        const Vector<uint8_t>* const streams[] = {&unmasked, &tooBig, &badClose, &strayContinuation};
+        for (const Vector<uint8_t>* stream : streams) {
+            WebSocketFrameParser viewing(5);
+            WebSocketFrameParser owning(5);
+            viewing.Feed(AsSpan(*stream));
+            owning.Feed(AsSpan(*stream));
+            for (int attempt = 0; attempt < 2; ++attempt) {  // the error stays
+                const ViewResult view = viewing.PopView();
+                const PopResult owned = owning.Pop();
+                ASSERT_FALSE(view.has_value());
+                ASSERT_FALSE(owned.has_value());
+                EXPECT_EQ(view.error().closeCode, owned.error().closeCode);
+                EXPECT_EQ(view.error().reason, owned.error().reason);
+            }
+            EXPECT_EQ(viewing.BufferedBytes(), 0u);
+        }
     }
 
 }  // namespace BECore::Tests

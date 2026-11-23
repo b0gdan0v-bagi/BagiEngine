@@ -44,6 +44,9 @@ namespace BECore {
     /// The member @p key of @p object, or nullptr when @p object is not an object or has no such member
     [[nodiscard]] const Json* FindJsonMember(const Json& object, StringView key);
 
+    /// The same for a document the caller owns and may take a member out of (a large `params` is moved, not copied)
+    [[nodiscard]] Json* FindJsonMember(Json& object, StringView key);
+
     /// The text of @p value without a copy; nullopt when it is not a string. Points into @p value: valid while that Json lives and is not changed.
     /// Holds embedded NULs (the view is sized), so do not hand `data()` to a C function
     [[nodiscard]] Optional<StringView> JsonStringView(const Json& value);
