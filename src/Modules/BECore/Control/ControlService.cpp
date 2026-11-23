@@ -5,6 +5,7 @@
 #include <BECore/Control/ControlLog.h>
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Memory/Pooled.h>
+#include <BECore/Memory/ScratchArena.h>
 #include <EASTL/sort.h>
 
 namespace BECore {
@@ -232,6 +233,7 @@ namespace BECore {
         EventSink sink = std::move(_eventSink);
         {
             ScratchLease lease(_publishScratch, _publishScratchBusy);
+            ScratchScope scratch;  // the envelope's arena members die with the push
             JsonWriter writer(lease.Text());
             ControlPushEnvelope envelope;
             envelope.data = JsonPayload::Borrowed(data);
@@ -272,6 +274,7 @@ namespace BECore {
         EventSink sink = std::move(_eventSink);
         {
             ScratchLease lease(_publishScratch, _publishScratchBusy);
+            ScratchScope scratch;  // the envelope's arena members die with the push
             JsonWriter writer(lease.Text());
             const auto write = [&writeData](JsonWriter& out) -> std::expected<void, ControlError> {
                 writeData(out);
@@ -353,7 +356,11 @@ namespace BECore {
         // The running handler is moved out of the table: it may register handlers, which replaces entries (its own too, and its capture dies with the replaced handler)
         const uint64_t generation = entry.generation;
         Handler handler = std::move(entry.handler);
-        handler(call);
+        {
+            // The answer struct a handler builds on the scratch arena is written into the reply inside the call and dies here, on this thread
+            ScratchScope scratch;
+            handler(call);
+        }
 
         const auto current = _handlers.find(call.GetMethod());
         if (current != _handlers.end() && current->second.generation == generation) {
@@ -469,7 +476,10 @@ namespace BECore {
         const ControlCall::DoneFn done = std::move(call->_done);
         if (done) {
             _inFrameEnd = true;
-            done(*call);
+            {
+                ScratchScope scratch;  // as in InvokeHandler: the answer struct of `done` dies with the reply; the continuation of a nested call runs here too
+                done(*call);
+            }
             _inFrameEnd = false;
         }
         Settle(std::move(call));  // answered by done, deferred again, or an internal_error
