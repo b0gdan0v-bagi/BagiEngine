@@ -50,7 +50,7 @@ The control API over this module (`Control/ReflectionControl`, registered by `Re
 
 - An array loader reserves from the `count` of `BeginArray` (`DataAccessor.h`): an upper bound for a factory array, never past a fixed container's capacity. A hand-written loop reserves too (`TextureLibrary::Load`).
 - `XmlDeserializer` allocates nothing per element or name in any diagnostics mode: names compare as views, an array is a counted cursor over the DOM (`count` an upper bound, comments skipped), and `ReadAttributeView` hands out an attribute's text uncopied until the next load (the default copies into a reused member; the factory `type` is read so). `Warn` keeps its scopes' asked names in an arena the deserializer owns: a name is copied once (a caller's may be a temporary), `CloseScope` rewinds to its mark, a load resets it. The pugixml DOM is the text's own cost.
-- `BinaryDeserializer` allocates nothing per array or field (a cursor into the validated bytes); what a load copies and interns: "Binary Format" of the rules file.
+- `BinaryDeserializer` allocates nothing per array or field (a cursor into the validated bytes); what a load copies and interns: "Binary Format" of the rules file. The validation's key spill and the list of texts to intern are `ArenaVector`s on a `ScratchScope` of their call; `poolBits` stays on the heap because the reader keeps it past `Validate` until the first `PoolString` read.
 - No reader carries a size hint: it does not know the totals, and `PoolString::Reserve` removes only table growth, not the lock per new string (the `AssetLoadReserved` line of `AssetLoadAllocBenchTest`).
 
 ## Layout hash
