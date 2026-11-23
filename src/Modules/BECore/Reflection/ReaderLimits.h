@@ -22,6 +22,12 @@ namespace BECore::ReaderLimits {
     /// Entries on the stack of open XML objects, arrays and array elements (a recursive type such as a UI tree recurses once per two entries)
     inline constexpr size_t kMaxXmlNesting = 256;
 
+    /// A JSON text, in bytes; the tokenizer keeps offsets as `uint32_t`
+    inline constexpr size_t kMaxJsonDocumentBytes = 64 * 1024 * 1024;
+
+    /// Open JSON arrays and objects at once, the depth the reader's scopes allow anyway; a deeper text is refused by the tokenizer
+    inline constexpr size_t kMaxJsonNesting = 256;
+
     /// Errors one deserializer keeps; the last place of the list says that the rest were dropped
     inline constexpr size_t kMaxRecordedErrors = 64;
 
