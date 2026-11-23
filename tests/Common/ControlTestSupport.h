@@ -3,6 +3,8 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/Control/JsonWriter.h>
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Time/Time.h>
 #include <BECore/Types/Types.h>
 #include <Common/Require.h>
 #include <gtest/gtest.h>
@@ -30,6 +32,17 @@ namespace BECore::Tests {
         });
         service.Drain();
         return response;
+    }
+
+    /// The clock of `CoreManager::GetTime()` as a hand-built DOM: the oracle of every answer that carries `ControlClock`
+    inline Json DomClock() {
+        const Time& time = CoreManager::GetTime();
+        Json clock = Json::object();
+        clock["frame"] = time.GetFrameCount();
+        clock["totalTime"] = time.GetTotalTime();
+        clock["deltaTime"] = time.GetDeltaTime();
+        clock["fixedDeltaTime"] = time.GetFixedDeltaTime();
+        return clock;
     }
 
     /// The text the generated writer makes of a reflected @p answer

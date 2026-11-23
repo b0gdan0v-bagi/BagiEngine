@@ -39,17 +39,6 @@ namespace BECore::Tests {
             return window;
         }
 
-        /// The clock of `CoreManager::GetTime()` as a hand-built DOM: the oracle of `step` and `status`
-        Json DomClock() {
-            const Time& time = CoreManager::GetTime();
-            Json clock = Json::object();
-            clock["frame"] = time.GetFrameCount();
-            clock["totalTime"] = time.GetTotalTime();
-            clock["deltaTime"] = time.GetDeltaTime();
-            clock["fixedDeltaTime"] = time.GetFixedDeltaTime();
-            return clock;
-        }
-
         Json DomStatus(bool manualClock, bool paused) {
             Json totals = Json::object();
             totals["warnings"] = 0;

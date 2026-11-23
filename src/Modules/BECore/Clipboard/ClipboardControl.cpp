@@ -13,6 +13,28 @@ namespace BECore {
 
         constexpr StringView kTimeoutCode = "clipboard_timeout";
 
+        /// The words of `ToString(ClipboardStatus)` as interned constants
+        struct StatusWords {
+            static constexpr auto ok = "ok"_intern;
+            static constexpr auto empty = "empty"_intern;
+            static constexpr auto refused = "refused"_intern;
+            static constexpr auto unavailable = "unavailable"_intern;
+        };
+
+        PoolString StatusWord(ClipboardStatus status) {
+            switch (status) {
+                case ClipboardStatus::Ok:
+                    return StatusWords::ok;
+                case ClipboardStatus::Empty:
+                    return StatusWords::empty;
+                case ClipboardStatus::Refused:
+                    return StatusWords::refused;
+                case ClipboardStatus::Unavailable:
+                    break;
+            }
+            return StatusWords::unavailable;
+        }
+
         /// A call that waits, frame by frame, for the clipboard: @c isDone is asked at the end of each frame, @c finish answers
         struct Waiting {
             MoveOnlyFunction<bool()> isDone;
@@ -63,7 +85,7 @@ namespace BECore {
             waiting->isDone = [answer]() { return answer->arrived; };
             waiting->finish = [answer](ControlCall& done) {
                 ClipboardGetAnswer reply;
-                reply.status = PoolString::Intern(ToString(answer->text.status));
+                reply.status = StatusWord(answer->text.status);
                 reply.text = answer->text.text;
                 done.ReplyObject(reply);
             };

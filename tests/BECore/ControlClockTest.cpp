@@ -18,17 +18,6 @@ namespace BECore::Tests {
 
         constexpr double kFrameSeconds = 0.125;
 
-        /// What the `Json` DOM wrote for the clock before the answers were structs: the oracle of the text
-        Json DomClock() {
-            const Time& time = CoreManager::GetTime();
-            Json clock = Json::object();
-            clock["frame"] = time.GetFrameCount();
-            clock["totalTime"] = time.GetTotalTime();
-            clock["deltaTime"] = time.GetDeltaTime();
-            clock["fixedDeltaTime"] = time.GetFixedDeltaTime();
-            return clock;
-        }
-
         template <typename T>
         String Written(const T& value) {
             String text;

@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/InputControl.h>
 #include <BECore/Input/UIInput.h>
@@ -149,10 +150,12 @@ namespace BECore {
             }
         }
 
-        /// A tree deeper than this is cut: `JsonWriter::kMaxDepth` is 256 containers and an element takes two (its object and its `children`), so the generated writer would fail
-        /// the whole answer on a tree of about 120 levels where the DOM wrote `null`. A real screen is far from it (`UIHtmlParser::kMaxDepth` is 64); the cap only keeps a hostile or
-        /// broken file from failing the answer. An element at the cap has no children and `truncated`
+        /// A deeper tree is cut at this depth: the generated writer fails the whole answer past `JsonWriter::kMaxDepth`, and a real screen is far from the cap, so it only
+        /// protects against a hostile or broken file. An element with children at the cap has none left in the answer and `truncated`
         constexpr size_t kMaxElementDepth = 100;
+        /// Containers an element's object and its `children` take, and the ones above the elements (the answer, `canvases`, a canvas, `elements`): a margin, not a count
+        constexpr size_t kContainersAboveElements = 8;
+        static_assert(2 * kMaxElementDepth + kContainersAboveElements < JsonWriter::kMaxDepth, "the cap must leave the writer's depth to the answer around the tree");
 
         /// Fills @p out from @p element and its subtree; @p depth is 1 for an element of the canvas
         void BuildElement(UIElement& element, const UICanvasResolved* resolved, size_t depth, UITreeElement& out) {
@@ -218,7 +221,9 @@ namespace BECore {
                 out.disabled = element.IsDisabled();
             }
             if (depth >= kMaxElementDepth) {
-                out.truncated = true;
+                if (!element.children.empty()) {
+                    out.truncated = true;
+                }
                 return;
             }
             out.children.reserve(element.children.size());

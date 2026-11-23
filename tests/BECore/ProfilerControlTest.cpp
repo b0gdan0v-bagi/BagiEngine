@@ -230,6 +230,7 @@ namespace BECore::Tests {
         EXPECT_EQ(RowAround(text, "\"name\":\"GoldenBothSmall\""), "");
         const String after = Ask(service, "zone_allocs");
         EXPECT_EQ(RowAround(after, "\"name\":\"GoldenBothBig\""), "");
+        EXPECT_EQ(RowAround(after, "\"name\":\"GoldenBothSmall\""), "");
     }
 
     TEST_F(ProfilerControlGoldenTest, ProfilerDumpAnswersThePathAndTheDroppedCount) {

@@ -109,7 +109,7 @@ namespace BECore {
         BE_REFLECT_FIELD Optional<double> step;
         BE_REFLECT_FIELD Optional<String> text;
         BE_REFLECT_FIELD Optional<String> tooltip;
-        /// The element is deeper than `kMaxElementDepth`: its children are left out
+        /// The element is at `kMaxElementDepth` and has children: they are left out
         BE_REFLECT_FIELD Optional<bool> truncated;
         BE_REFLECT_FIELD String type;
         BE_REFLECT_FIELD Optional<PoolString> value;

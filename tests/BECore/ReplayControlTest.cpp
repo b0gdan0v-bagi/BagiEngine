@@ -112,7 +112,7 @@ namespace BECore::Tests {
             return FindJsonMember(response, "result");
         }
 
-        /// The member names of an object, in the order a client reads them
+        /// The member names of an object, sorted: the DOM sorts them, and the generated writer does the same by design
         Vector<String> KeysOf(const Json& object) {
             Vector<String> keys;
             for (const auto& member : object.items()) {

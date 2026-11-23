@@ -1159,9 +1159,29 @@ namespace BECore::Tests {
             current = &(*children)[0];
             ++depth;
         }
-        EXPECT_LT(depth, kLevels) << "the tree is cut before its end";
+        EXPECT_EQ(StringMember(*current, "name"), "Deep100") << "the tree is cut at the cap, not before or after it";
         EXPECT_TRUE(BoolMember(*current, "truncated"));
         EXPECT_EQ(Member(*first, "truncated"), nullptr);
+    }
+
+    TEST_F(UIControlApiTest, ALeafAtTheCapIsNotTruncated) {
+        constexpr int kLevels = 100;
+        auto hudCanvas = Canvas("Main", "Hud");
+        IntrusivePtr<UIElement> parent = hudCanvas->GetLayout().root;
+        for (int level = 1; level <= kLevels; ++level) {
+            parent = parent->AddChild(PoolString::Intern(Format("Deep{}", level)));
+        }
+        hudCanvas->Invalidate();
+        Show("Main");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* hud = FindCanvas(Require(Member(response, "result")), "Hud");
+        ASSERT_NE(hud, nullptr);
+        const Json* leaf = FindElement(*hud, "Deep100");
+        ASSERT_NE(leaf, nullptr);
+        EXPECT_EQ(Member(*leaf, "truncated"), nullptr);
     }
 
     TEST_F(UIControlApiTest, TheRegionsOfACanvasThatWasNeverDrawnAreAlreadyListed) {

@@ -6,7 +6,7 @@
 
 namespace BECore {
 
-    /// An answer that derives the clock; the keys sort before, between and after the clock's own, and `deltaTime` is in both (the child's wins)
+    /// An answer that derives the clock; the keys sort before, between and after the clock's own
     struct ControlClockTestAnswer : ControlClock {
         BE_CLASS(ControlClockTestAnswer)
 
