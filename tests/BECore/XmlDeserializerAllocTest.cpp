@@ -4,6 +4,7 @@
 #include "XmlDeserializerAllocTest.h"
 
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Reflection/XmlSerializer.h>
 #include <Common/AllocCheck.h>
 #include <Common/Printers.h>
 #include <Generated/XmlDeserializerAllocTest.gen.hpp>
@@ -234,6 +235,39 @@ namespace BECore::Tests {
                 EXPECT_LE(allocs.count, kThings + kFirstUseSlack) << "mode " << static_cast<int>(mode);
             }
         }
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+    }
+
+    TEST(XmlDeserializerAllocTest, TheSerializerCopiesNeitherNamesNorValues) {
+        constexpr size_t kFields = 400;
+        constexpr StringView kLongValue = "a value that is well over the twenty-three bytes a small string keeps";
+        Vector<String> names;
+        for (size_t i = 0; i < kFields; ++i) {
+            names.push_back(Format("a_field_whose_name_is_over_the_small_string_{}", i));
+        }
+
+        XmlSerializer writer;
+        const AllocCount allocs = CountAllocations([&] {
+            for (const String& name : names) {
+                writer.WriteAttribute(name, kLongValue);
+                writer.Write(name, kLongValue);
+            }
+        });
+        if constexpr (AllocTracker::kEnabled) {
+            // The DOM takes pages for what it stores, never a block per name or per value
+            EXPECT_LT(allocs.count, kFields / 4);
+        }
+
+        XmlDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromString(writer.SaveToString()));
+        String first;
+        String last;
+        EXPECT_TRUE(reader.ReadAttribute(names.front(), first));
+        EXPECT_TRUE(reader.Read(names.back(), last));
+        EXPECT_EQ(first, String(kLongValue));
+        EXPECT_EQ(last, String(kLongValue));
         if constexpr (!AllocTracker::kEnabled) {
             GTEST_SKIP() << kNoAllocTracker;
         }
