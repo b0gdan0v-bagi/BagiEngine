@@ -1,7 +1,9 @@
 #pragma once
 
+#include <BECore/Memory/LinearArena.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/PassKey.h>
 #include <BECore/Values/Context.h>
 #include <BECore/Values/Programs/Instruction.h>
 #include <BECore/Values/Programs/Opcode.h>
@@ -11,6 +13,7 @@
 namespace BECore {
 
     class NativePrograms;
+    class ProgramPool;
 
     /// A function generated from a program (`Native/NativePrograms.h`): it reads the context like `Run` and writes the result, `ProgramTypeSize(ResultType())` bytes, to the second argument
     using NativeProgramFn = void (*)(const Context&, void* result);
@@ -43,9 +46,28 @@ namespace BECore {
      *
      * Built by `ProgramBuilder` and kept in the `ProgramPool`; immutable after that. A program is pure and total: it reads the context and writes
      * nothing, and `Run` allocates nothing (`Interpreter.h`). Two programs with equal code are one program to the pool whatever text they came from.
+     *
+     * **Owning or viewing.** A program assembled by hand (the result of `ProgramBuilder::Finish`) owns its instructions and constants in two vectors, and a copy of
+     * it owns its own copies. The pool copies them into an arena it owns when it takes the program, so a program in the pool owns nothing and reads the arena; a copy
+     * of such a program is a view of the same arena bytes, valid for the life of the process. `Code()` and `Constants()` read the same way for both.
      */
     class Program {
     public:
+        Program() = default;
+        Program(const Program& other);
+        Program(Program&& other) noexcept;
+        Program& operator=(const Program& other);
+        Program& operator=(Program&& other) noexcept;
+        ~Program() = default;
+
+        /// Copies the code and constants of an owning program into @p arena and views them there, freeing the vectors; a viewing program stays as it is. The pool's, after its duplicate check
+        void Rehome(LinearArena& arena, PassKey<ProgramPool>);
+
+        /// Whether the program holds its own code and constants; false for one `ProgramPool` interned and for a copy of it
+        [[nodiscard]] bool Owns() const {
+            return _owning;
+        }
+
         [[nodiscard]] ProgramType ResultType() const {
             return _resultType;
         }
@@ -66,11 +88,11 @@ namespace BECore {
         }
 
         [[nodiscard]] Span<const Instruction> Code() const {
-            return Span<const Instruction>(_code.data(), _code.size());
+            return _code;
         }
 
         [[nodiscard]] Span<const RegisterImage> Constants() const {
-            return Span<const RegisterImage>(_constants.data(), _constants.size());
+            return _constants;
         }
 
         /// The text the program came from, of the first formula the pool saw with this code; empty for a program assembled by hand
@@ -95,12 +117,22 @@ namespace BECore {
     private:
         friend class ProgramBuilder;
 
+        /// Points the views at the owned vectors: after they were filled, copied or moved
+        void ViewOwned();
+
+        void CopyFrom(const Program& other);
+        void MoveFrom(Program& other);
+
         ProgramType _resultType = ProgramType::Int32;
         uint8_t _resultRegister = 0;
         uint8_t _registerCount = 0;
         LevelMask _reads = 0;
-        Vector<Instruction> _code;
-        Vector<RegisterImage> _constants;
+        /// What `Code()` and `Constants()` read: the owned vectors while `_owning`, the pool's arena after `Rehome`
+        Span<const Instruction> _code;
+        Span<const RegisterImage> _constants;
+        bool _owning = true;
+        Vector<Instruction> _ownedCode;
+        Vector<RegisterImage> _ownedConstants;
         PoolString _source;
     };
 
@@ -112,6 +144,9 @@ namespace BECore {
      *
      * Like `PoolString` it never shrinks and an entry never moves, so a `Value` keeps only the id and `Get` is a lookup with no lock. One entry per
      * distinct program: loading the same content again adds nothing. Thread-safe.
+     *
+     * The pool owns the instructions and constants of its programs: `Intern` copies them into an arena of its own (after the duplicate check) and a pooled program holds
+     * no vector. The address of `Code()` and `Constants()` of a pooled program is stable for the life of the process.
      */
     class ProgramPool {
     public:

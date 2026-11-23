@@ -5,10 +5,13 @@
 #include <BECore/Values/Programs/ExprChecker.h>
 #include <BECore/Values/Programs/ExprParser.h>
 #include <Common/Printers.h>
+#include <Common/ScratchScopeFixture.h>
 #include <Common/TestText.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
+
+    using ProgramListCheckerTest = ScratchScopeFixture;
 
     using namespace ProgramListData;
 
@@ -90,7 +93,7 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(ProgramListCheckerTest, SizeReadsTheListOfALevelOfEveryContainer) {
+    TEST_F(ProgramListCheckerTest, SizeReadsTheListOfALevelOfEveryContainer) {
         const ListChecker context;
         const ProgramListHand hand{};
         const TypedExpr tiles = Accepted(context.declaration, "size(hand.tiles)", DescribeType<int32_t>());
@@ -127,7 +130,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Operand(nested, Root(nested), 0).list.offset, OffsetIn(refused, refused.set.tiles));
     }
 
-    TEST(ProgramListCheckerTest, ASizeIsAnIntThatTakesAPartInArithmetic) {
+    TEST_F(ProgramListCheckerTest, ASizeIsAnIntThatTakesAPartInArithmetic) {
         const ListChecker context;
         const TypedExpr expr = Accepted(context.declaration, "size(hand.sets) * 2 + hand.before", DescribeType<int32_t>());
         EXPECT_EQ(Root(expr).opcode, OpcodeOf(ProgramOperation::Add, ProgramType::Int32));
@@ -136,7 +139,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ConstantOf<float>(Operand(product, Root(product), 1)), 2.0f);
     }
 
-    TEST(ProgramListCheckerTest, AnElementOfAListOfObjectsIsReadFieldByField) {
+    TEST_F(ProgramListCheckerTest, AnElementOfAListOfObjectsIsReadFieldByField) {
         const ListChecker context;
         const ProgramListTile tile{};
         const TypedExpr suit = Accepted(context.declaration, "hand.tiles[3].suit", DescribeType<ProgramListSuit>());
@@ -166,7 +169,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ProgramListCheckerTest, ComponentsAndEmbeddedObjectsOfAnElementAreOnePath) {
+    TEST_F(ProgramListCheckerTest, ComponentsAndEmbeddedObjectsOfAnElementAreOnePath) {
         const ListChecker context;
         const ProgramListTile tile{};
         const ProgramListCrate crate{};
@@ -182,7 +185,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Operand(scalarZ, Root(scalarZ), 0).opcode, Opcode::LoadElemVec3);
     }
 
-    TEST(ProgramListCheckerTest, AnElementOfTheListOfAnElementIsReachedThroughItsOwner) {
+    TEST_F(ProgramListCheckerTest, AnElementOfTheListOfAnElementIsReachedThroughItsOwner) {
         const ListChecker context;
         const ProgramListTile tile{};
         const ProgramListSet set{};
@@ -203,7 +206,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Operand(expr, outer, 0).slot.level, kHand);
     }
 
-    TEST(ProgramListCheckerTest, AListOfScalarsGivesTheValueAndTheIndexIsAnyInt) {
+    TEST_F(ProgramListCheckerTest, AListOfScalarsGivesTheValueAndTheIndexIsAnyInt) {
         const ListChecker context;
         const TypedExpr counts = Accepted(context.declaration, "hand.counts[1]", DescribeType<int32_t>());
         EXPECT_EQ(Root(counts).opcode, Opcode::LoadElemInt32);
@@ -221,7 +224,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Operand(names, Root(names), 0).opcode, Opcode::LoadElemString);
     }
 
-    TEST(ProgramListCheckerTest, AListUsedAsAValueSaysHowToReadIt) {
+    TEST_F(ProgramListCheckerTest, AListUsedAsAValueSaysHowToReadIt) {
         const ListChecker context;
         const TypeDesc& integer = DescribeType<int32_t>();
         Refused(context.declaration, "hand.tiles", integer, "hand.tiles", {"'hand.tiles' is a list of ProgramListTile", "size(hand.tiles)", "hand.tiles[i]"});
@@ -230,7 +233,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "hand.sets[0].tiles", integer, ".tiles", {"'hand.sets[0].tiles' is a list of ProgramListTile"});
     }
 
-    TEST(ProgramListCheckerTest, AnElementUsedAsAValueSaysWhichFieldToRead) {
+    TEST_F(ProgramListCheckerTest, AnElementUsedAsAValueSaysWhichFieldToRead) {
         const ListChecker context;
         const TypeDesc& integer = DescribeType<int32_t>();
         // The column of an element is its `[`
@@ -239,7 +242,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "stock.crates[0] == 1", DescribeType<bool>(), "[0]", {"ProgramListCrate", "stock.crates[0].tile"});
     }
 
-    TEST(ProgramListCheckerTest, AnIndexIsAnIntAndOnlyAListHasElements) {
+    TEST_F(ProgramListCheckerTest, AnIndexIsAnIntAndOnlyAListHasElements) {
         const ListChecker context;
         const TypeDesc& integer = DescribeType<int32_t>();
         Refused(context.declaration, "hand.counts[hand.weights[0]]", integer, "[0]", {"the list 'hand.counts'", "an int as its index", "a float", "int(x)"});
@@ -251,7 +254,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "size(hand.tiles)[0]", integer, "[0]", {"'size(...)' is an int"});
     }
 
-    TEST(ProgramListCheckerTest, AFieldThatIsMissingOrNoValueNamesWhatIsThere) {
+    TEST_F(ProgramListCheckerTest, AFieldThatIsMissingOrNoValueNamesWhatIsThere) {
         const ListChecker context;
         const TypeDesc& integer = DescribeType<int32_t>();
         Refused(context.declaration, "hand.tiles[0].rnk", integer, ".rnk", {"'ProgramListTile'", "no field 'rnk'", "did you mean 'rank'", "its fields are: suit, terminal, rank"});
@@ -263,7 +266,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "hand.sets[0].tiles.suit", integer, ".tiles.suit", {"needs the live object"});
     }
 
-    TEST(ProgramListCheckerTest, ALevelThatDoesNotHoldTheListIsRefusedWithTheLevels) {
+    TEST_F(ProgramListCheckerTest, ALevelThatDoesNotHoldTheListIsRefusedWithTheLevels) {
         const ListChecker context;
         const TypeDesc& integer = DescribeType<int32_t>();
         Refused(context.declaration, "size(caster.tiles)", integer, "caster.tiles", {"unknown level 'caster'", "hand, refused, stock"});
@@ -272,7 +275,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "size(hand.tiles[0].rank.x)", integer, ".rank.x", {"an int has no components"});
     }
 
-    TEST(ProgramListCheckerTest, SizeNeedsOneListAndSaysWhatItGotInstead) {
+    TEST_F(ProgramListCheckerTest, SizeNeedsOneListAndSaysWhatItGotInstead) {
         const ListChecker context;
         const TypeDesc& integer = DescribeType<int32_t>();
         Refused(context.declaration, "size(5)", integer, "5", {"the function 'size' needs a list as its first argument", "'5' is an int"});
@@ -285,12 +288,12 @@ namespace BECore::Tests {
         Refused(context.declaration, "size(hand.tiles)", DescribeType<float>(), "size", {"the formula is an int", "float"});
     }
 
-    TEST(ProgramListCheckerTest, TheListFunctionsAreInTheMessageOfAnUnknownFunction) {
+    TEST_F(ProgramListCheckerTest, TheListFunctionsAreInTheMessageOfAnUnknownFunction) {
         const ListChecker context;
         Refused(context.declaration, "frobnicate(1)", DescribeType<int32_t>(), "frobnicate", {"unknown function 'frobnicate'", "size", "count", "any", "all", "sum"});
     }
 
-    TEST(ProgramListCheckerTest, EachFoldHasItsResultType) {
+    TEST_F(ProgramListCheckerTest, EachFoldHasItsResultType) {
         const ListChecker context;
         const struct {
             StringView text;
@@ -318,7 +321,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ProgramListCheckerTest, TheBodyReadsTheElementThroughTheVariable) {
+    TEST_F(ProgramListCheckerTest, TheBodyReadsTheElementThroughTheVariable) {
         const ListChecker context;
         const ProgramListTile tile{};
         const TypedExpr expr = Accepted(context.declaration, "sum(hand.tiles, t, t.rank)", DescribeType<int32_t>());
@@ -348,7 +351,7 @@ namespace BECore::Tests {
         EXPECT_EQ(position[Root(position).body].immediate, OffsetIn(tile, tile.position) + 2 * sizeof(float));
     }
 
-    TEST(ProgramListCheckerTest, ALiteralBodyTakesTheExpectedTypeElseInt) {
+    TEST_F(ProgramListCheckerTest, ALiteralBodyTakesTheExpectedTypeElseInt) {
         const ListChecker context;
         const TypedExpr plain = Accepted(context.declaration, "sum(hand.counts, c, 1)", DescribeType<int32_t>());
         EXPECT_EQ(ConstantOf<int32_t>(plain[Root(plain).body]), 1);
@@ -362,7 +365,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ConstantOf<int32_t>(Operand(compared, Root(compared), 1)), 3);
     }
 
-    TEST(ProgramListCheckerTest, ALiteralBesideTheVariableTakesItsType) {
+    TEST_F(ProgramListCheckerTest, ALiteralBesideTheVariableTakesItsType) {
         const ListChecker context;
         const TypedExpr product = Accepted(context.declaration, "sum(hand.weights, w, w * 2)", DescribeType<float>());
         EXPECT_EQ(ConstantOf<float>(Operand(product, product[Root(product).body], 1)), 2.0f);
@@ -373,7 +376,7 @@ namespace BECore::Tests {
         EXPECT_EQ(table[Root(table).body].opcode, OpcodeOf(ProgramOperation::Gt, ProgramType::Float));
     }
 
-    TEST(ProgramListCheckerTest, LoopsNestAndNumberThemselvesInTheOrderTheyAreMet) {
+    TEST_F(ProgramListCheckerTest, LoopsNestAndNumberThemselvesInTheOrderTheyAreMet) {
         const ListChecker context;
         const TypedExpr expr = Accepted(context.declaration, "count(hand.sets, s, count(s.tiles, t, t.rank > 3 && s.pung) > 1)", DescribeType<int32_t>());
         ASSERT_EQ(Root(expr).kind, TypedNodeKind::Fold);
@@ -400,7 +403,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Operand(siblings, Root(siblings), 1).loop, 1U);
     }
 
-    TEST(ProgramListCheckerTest, AnElementNameIsOneThingAndAFoldTakesAPlainOne) {
+    TEST_F(ProgramListCheckerTest, AnElementNameIsOneThingAndAFoldTakesAPlainOne) {
         const ListChecker context;
         const TypeDesc& integer = DescribeType<int32_t>();
         Refused(context.declaration, "count(hand.sets, s, count(s.tiles, s, s.terminal) > 1)", integer, "s, s.terminal", {"'s' is already the element of the enclosing loop over 'hand.sets'"});
@@ -418,7 +421,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "count(t.tiles, t, true)", integer, "t.tiles", {"unknown level 't'"});
     }
 
-    TEST(ProgramListCheckerTest, TheBodyOfAFoldHasTheTypeItNeeds) {
+    TEST_F(ProgramListCheckerTest, TheBodyOfAFoldHasTheTypeItNeeds) {
         const ListChecker context;
         const TypeDesc& integer = DescribeType<int32_t>();
         Refused(context.declaration, "any(hand.tiles, t, t.rank)", DescribeType<bool>(), "t.rank", {"the function 'any' needs a bool body", "an int", "compare it"});
@@ -433,7 +436,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "count(hand.tiles, t, t.terminal) + sum(hand.tiles, t, t.weight)", integer, "sum", {"one type", "int and float"});
     }
 
-    TEST(ProgramListCheckerTest, AListOrAnElementIsNoBodyAndNoOperand) {
+    TEST_F(ProgramListCheckerTest, AListOrAnElementIsNoBodyAndNoOperand) {
         const ListChecker context;
         const TypeDesc& integer = DescribeType<int32_t>();
         Refused(context.declaration, "sum(hand.sets, s, s.tiles)", integer, "s.tiles)", {"'s.tiles' is a list of ProgramListTile"});
@@ -444,7 +447,7 @@ namespace BECore::Tests {
         Refused(context.declaration, "count(hand.sets, s, s.tiles.suit == 0)", integer, "s.tiles.suit", {"needs the live object"});
     }
 
-    TEST(ProgramListCheckerTest, TheArityDecidesBetweenTheRowAndTheFold) {
+    TEST_F(ProgramListCheckerTest, TheArityDecidesBetweenTheRowAndTheFold) {
         const ListChecker context;
         const TypeDesc& integer = DescribeType<int32_t>();
         const TypedExpr row = Accepted(context.declaration, "min(hand.before, 2)", integer);

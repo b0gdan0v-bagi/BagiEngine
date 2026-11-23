@@ -6,11 +6,14 @@
 #include <BECore/Values/Programs/ExprParser.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
+#include <Common/ScratchScopeFixture.h>
 #include <Common/TestText.h>
 #include <cstring>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
+
+    using ProgramDomainCheckerTest = ScratchScopeFixture;
 
     using namespace ProgramDomainData;
 
@@ -113,7 +116,7 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(ProgramDomainCheckerTest, AFieldOfARegisteredTypeIsASlotOfTypeDomainAndAFormulaMayHaveThatType) {
+    TEST_F(ProgramDomainCheckerTest, AFieldOfARegisteredTypeIsASlotOfTypeDomainAndAFormulaMayHaveThatType) {
         const DomainCheckerContext context;
         const TypedExpr expr = Accepted(context, "board.walls", MaskType());
         EXPECT_EQ(Root(expr).kind, TypedNodeKind::Slot);
@@ -126,7 +129,7 @@ namespace BECore::Tests {
         Refused(context, "board.score", MaskType(), 1, {"a pair", "mask"});
     }
 
-    TEST(ProgramDomainCheckerTest, ACallOfAnOperationIsACallDomainNodeOfTheTypeOfItsResult) {
+    TEST_F(ProgramDomainCheckerTest, ACallOfAnOperationIsACallDomainNodeOfTheTypeOfItsResult) {
         const DomainCheckerContext context;
         const TypedExpr count = Accepted(context, "popcount(and_mask(board.walls, shift(board.walls, East))) > 3", DescribeType<bool>());
         ASSERT_EQ(Root(count).operandCount, 2U);
@@ -146,7 +149,7 @@ namespace BECore::Tests {
         EXPECT_EQ(none[Root(none).operands[0]].operandCount, 0U);
     }
 
-    TEST(ProgramDomainCheckerTest, EqualityAndSelectOfARegisteredTypeUseTheRowsOfTheDomainType) {
+    TEST_F(ProgramDomainCheckerTest, EqualityAndSelectOfARegisteredTypeUseTheRowsOfTheDomainType) {
         const DomainCheckerContext context;
         const TypedExpr equal = Accepted(context, "and_mask(board.walls, board.walls) == board.walls", DescribeType<bool>());
         EXPECT_EQ(Root(equal).opcode, OpcodeOf(ProgramOperation::Eq, ProgramType::Domain));
@@ -157,7 +160,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Root(chosen).type, context.Mask());
     }
 
-    TEST(ProgramDomainCheckerTest, AParameterTypeIsTheHintOfItsArgument) {
+    TEST_F(ProgramDomainCheckerTest, AParameterTypeIsTheHintOfItsArgument) {
         const DomainCheckerContext context;
         // `pair_of` takes two int64: a literal beside no name takes the type of its parameter
         const TypedExpr pair = Accepted(context, "pair_of(1, 2)", DescribeType<DomainPair>());
@@ -174,7 +177,7 @@ namespace BECore::Tests {
         Refused(context, "shift(board.walls, Up)", MaskType(), 20, {"Up", "enumerator"});
     }
 
-    TEST(ProgramDomainCheckerTest, TheArgumentTypesPickAmongTheOverloadsOfOneCount) {
+    TEST_F(ProgramDomainCheckerTest, TheArgumentTypesPickAmongTheOverloadsOfOneCount) {
         const DomainCheckerContext context;
         const TypedExpr withInt = Accepted(context, "chk_merge(board.walls, 3)", DescribeType<int32_t>());
         EXPECT_EQ(Root(withInt).immediate, context.more.mergeWithInt);
@@ -186,13 +189,13 @@ namespace BECore::Tests {
         EXPECT_NE(Root(Accepted(context, "chk_count(board.walls)", DescribeType<int32_t>())).immediate, Root(Accepted(context, "chk_count(board.walls, 1)", DescribeType<int32_t>())).immediate);
     }
 
-    TEST(ProgramDomainCheckerTest, AnUnknownOperationListsTheFunctionsAndTheRegisteredOperations) {
+    TEST_F(ProgramDomainCheckerTest, AnUnknownOperationListsTheFunctionsAndTheRegisteredOperations) {
         const DomainCheckerContext context;
         Refused(context, "bits(board.walls)", DescribeType<int32_t>(), 1, {"unknown function 'bits'", "popcount", "shift", "lerp", "select"});
         Refused(context, "popcount", DescribeType<int32_t>(), 1, {"'popcount' is a function"});
     }
 
-    TEST(ProgramDomainCheckerTest, AWrongCountOrArgumentTypeNamesTheCallTheTypesFoundAndEverySignature) {
+    TEST_F(ProgramDomainCheckerTest, AWrongCountOrArgumentTypeNamesTheCallTheTypesFoundAndEverySignature) {
         const DomainCheckerContext context;
         Refused(context, "popcount(board.walls, board.walls)", DescribeType<int32_t>(), 1, {"'popcount' takes 1 argument", "2 are given", "popcount(mask) -> int"});
         Refused(context, "chk_count()", DescribeType<int32_t>(), 1, {"'chk_count' takes 1 or 2 arguments", "0 are given"});
@@ -200,7 +203,7 @@ namespace BECore::Tests {
         Refused(context, "chk_merge(board.turn, 3)", DescribeType<int32_t>(), 1, {"no overload of 'chk_merge' takes (int, int)", "chk_merge(mask, int) -> int", "chk_merge(mask, mask) -> mask"});
     }
 
-    TEST(ProgramDomainCheckerTest, ARegisteredTypeHasNoArithmeticOrOrderingAndTheMessageSaysWhatItHas) {
+    TEST_F(ProgramDomainCheckerTest, ARegisteredTypeHasNoArithmeticOrOrderingAndTheMessageSaysWhatItHas) {
         const DomainCheckerContext context;
         Refused(context, "board.walls + board.walls", MaskType(), 13, {"'+' is not defined for mask", "has:", "and_mask", "popcount", "=="});
         Refused(context, "board.walls < board.walls", DescribeType<bool>(), 13, {"'<' is not defined for mask"});
@@ -211,7 +214,7 @@ namespace BECore::Tests {
         Refused(context, "board.walls + 1", MaskType(), 13, {"mask"});
     }
 
-    TEST(ProgramDomainCheckerTest, ATypeWithoutBitwiseEqualityHasNoEqualityOrSelect) {
+    TEST_F(ProgramDomainCheckerTest, ATypeWithoutBitwiseEqualityHasNoEqualityOrSelect) {
         const DomainCheckerContext context;
         ASSERT_EQ(ProgramDomain::Type(context.toys.weighted).equality, DomainEquality::None);
         Refused(context, "chk_weighted(1) == chk_weighted(2)", DescribeType<bool>(), 17, {"'==' is not defined for weighted", "weight_count"});
@@ -221,20 +224,20 @@ namespace BECore::Tests {
         Accepted(context, "weight_count(chk_weighted(4))", DescribeType<int32_t>());
     }
 
-    TEST(ProgramDomainCheckerTest, AResultOfTheWrongTypeNamesBothTypes) {
+    TEST_F(ProgramDomainCheckerTest, AResultOfTheWrongTypeNamesBothTypes) {
         const DomainCheckerContext context;
         Refused(context, "and_mask(board.walls, board.walls)", DescribeType<int32_t>(), 1, {"a mask", "int"});
         Refused(context, "board.turn", MaskType(), 1, {"an int", "mask"});
         Refused(context, "popcount(board.walls)", MaskType(), 1, {"an int", "mask"});
     }
 
-    TEST(ProgramDomainCheckerTest, ATypeNameIsNoFunctionAndNoValue) {
+    TEST_F(ProgramDomainCheckerTest, ATypeNameIsNoFunctionAndNoValue) {
         const DomainCheckerContext context;
         Refused(context, "mask(board.walls)", MaskType(), 1, {"'mask' is a type, not a function"});
         Refused(context, "popcount(mask)", DescribeType<int32_t>(), 10, {"'mask' is a type, not a value"});
     }
 
-    TEST(ProgramDomainCheckerTest, ATypeNobodyRegisteredIsNoTypeOfAFormulaAndTheMessageListsTheRegisteredOnes) {
+    TEST_F(ProgramDomainCheckerTest, ATypeNobodyRegisteredIsNoTypeOfAFormulaAndTheMessageListsTheRegisteredOnes) {
         const DomainCheckerContext context;
         const auto expected = CheckExpectedType(DescribeType<DomainUnregistered>());
         ASSERT_FALSE(expected.has_value());

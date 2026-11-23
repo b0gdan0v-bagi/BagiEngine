@@ -11,6 +11,7 @@
 #include <BECore/Values/ValueTables.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
+#include <Common/ScratchScopeFixture.h>
 #include <Generated/ProgramFusionTest.gen.hpp>
 #include <bit>
 #include <cmath>
@@ -19,6 +20,8 @@
 namespace BECore::Tests {
 
     using namespace ProgramFusionData;
+
+    using ProgramFusionTest = ScratchScopeFixture;
 
     namespace {
 
@@ -177,36 +180,36 @@ namespace BECore::Tests {
         }
 
         /// The code the lowering writes for `slot * k + b` over the register pair r0, r1, with the load, the two constants and the result in r0
-        Vector<Instruction> MulAddCode(Opcode load, Opcode mul, Opcode add, uint8_t level = 0, uint32_t offset = 4) {
+        ArenaVector<Instruction> MulAddCode(Opcode load, Opcode mul, Opcode add, uint8_t level = 0, uint32_t offset = 4) {
             return {Instruction{load, 0, level, 0, 0, offset}, Instruction{Opcode::LoadConst, 1, 0, 0, 0, 0}, Instruction{mul, 0, 0, 1, 0, 0}, Instruction{Opcode::LoadConst, 1, 0, 0, 0, 1},
                     Instruction{add, 0, 0, 1, 0, 0}};
         }
 
-        Vector<Instruction> Int32MulAddCode() {
+        ArenaVector<Instruction> Int32MulAddCode() {
             return MulAddCode(Opcode::LoadSlotInt32, Opcode::MulInt32, Opcode::AddInt32);
         }
 
         /// `lerp(a-field, b-field, t)` as the lowering writes it when the weight is one constant: loads into r0 and r1, the weight in r2
-        Vector<Instruction> LerpCode(Opcode load = Opcode::LoadSlotFloat, Opcode lerp = Opcode::LerpFloat) {
+        ArenaVector<Instruction> LerpCode(Opcode load = Opcode::LoadSlotFloat, Opcode lerp = Opcode::LerpFloat) {
             return {Instruction{load, 0, 0, 0, 0, 4}, Instruction{load, 1, 1, 0, 0, 8}, Instruction{Opcode::LoadConst, 2, 0, 0, 0, 0}, Instruction{lerp, 0, 0, 1, 2, 0}};
         }
 
         /// A table over a field as the lowering writes it: the index into r0, the table of @p count constants from constant 3 over it
-        Vector<Instruction> TableCode(uint32_t first = 3, uint32_t count = 5) {
+        ArenaVector<Instruction> TableCode(uint32_t first = 3, uint32_t count = 5) {
             Instruction table{Opcode::LoadTable, 0, 0, 0, 0, first};
             SetTableEntryCount(table, count);
             return {Instruction{Opcode::LoadSlotInt32, 0, 1, 0, 0, 8}, table};
         }
 
-        void ExpectUnchanged(Vector<Instruction> code, uint8_t resultRegister) {
-            const Vector<Instruction> before = code;
+        void ExpectUnchanged(ArenaVector<Instruction> code, uint8_t resultRegister) {
+            const ArenaVector<Instruction> before = code;
             Fuse(code, resultRegister);
             EXPECT_EQ(code, before);
         }
 
     }  // namespace
 
-    TEST(ProgramFusionTest, MulAddOverEachNumberTypeIsOneInstructionWithTheSameBits) {
+    TEST_F(ProgramFusionTest, MulAddOverEachNumberTypeIsOneInstructionWithTheSameBits) {
         ExpectSameBits<int32_t>("a.i32 * 3 + 7", Opcode::MulAddSlotInt32);
         ExpectSameBits<int32_t>("b.i32b * -2147483647 + 2147483647", Opcode::MulAddSlotInt32);
         ExpectSameBits<int64_t>("a.i64 * 3 + 7", Opcode::MulAddSlotInt64);
@@ -217,7 +220,7 @@ namespace BECore::Tests {
         ExpectSameBits<double>("b.f64b * 1e300 + 1e-300", Opcode::MulAddSlotDouble);
     }
 
-    TEST(ProgramFusionTest, TheProductIsRoundedBeforeTheSumLikeTwoInstructions) {
+    TEST_F(ProgramFusionTest, TheProductIsRoundedBeforeTheSumLikeTwoInstructions) {
         // (1 + 2^-23)^2 does not fit a float: rounded it is 1 + 2^-22, which `-(1 + 2^-22)` cancels exactly; a fused multiply-add keeps the 2^-46 and does not
         FusionWorld world;
         const Program* fusedFloat = Compile(world, "a.f32 * 1.0000001 + -1.0000002", ProgramType::Float, true, DescribeType<float>());
@@ -233,7 +236,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Run<double>(*fusedDouble, world.context), 0.0);
     }
 
-    TEST(ProgramFusionTest, TheIntegersWrapAsTheInstructionsDo) {
+    TEST_F(ProgramFusionTest, TheIntegersWrapAsTheInstructionsDo) {
         FusionWorld world;
         const Program* program = Compile(world, "a.i32 * 2 + 5", ProgramType::Int32, true, DescribeType<int32_t>());
         ASSERT_NE(program, nullptr);
@@ -244,14 +247,14 @@ namespace BECore::Tests {
         EXPECT_EQ(Run<int32_t>(*program, world.context), 5);
     }
 
-    TEST(ProgramFusionTest, MulAddOverAVec3IsOneInstructionWithTheSameBits) {
+    TEST_F(ProgramFusionTest, MulAddOverAVec3IsOneInstructionWithTheSameBits) {
         ExpectSameBits<Vec3>("a.dir * 2 + vec3(1, 2, 3)", Opcode::MulAddSlotVec3);
         ExpectSameBits<Vec3>("b.dirb * 0.1 + vec3(0.2, -0.0, 1e30)", Opcode::MulAddSlotVec3);
         ExpectSameBits<Vec3>("a.dir * 1e30 + vec3(-1e30, 1e-30, 0)", Opcode::MulAddSlotVec3);
         ExpectSameBits<Vec3>("b.dir * 0 + vec3(0, 0, 0)", Opcode::MulAddSlotVec3);
     }
 
-    TEST(ProgramFusionTest, TheVec3ProductIsRoundedBeforeTheSumLikeTwoInstructions) {
+    TEST_F(ProgramFusionTest, TheVec3ProductIsRoundedBeforeTheSumLikeTwoInstructions) {
         // The same (1 + 2^-23)^2 cancellation as the scalar case, componentwise: a fused multiply-add of any component would leave 2^-46
         FusionWorld world;
         const Program* program = Compile(world, "a.dir * 1.0000001 + vec3(-1.0000002, -1.0000002, -1.0000002)", ProgramType::Vec3, true, DescribeType<Vec3>());
@@ -262,7 +265,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Run<Vec3>(*program, world.context), (Vec3{0.0f, 0.0f, 0.0f}));
     }
 
-    TEST(ProgramFusionTest, AVec3MulAddFusesInsideALargerFormulaAndTheOtherPartsStayAsTheyWere) {
+    TEST_F(ProgramFusionTest, AVec3MulAddFusesInsideALargerFormulaAndTheOtherPartsStayAsTheyWere) {
         ExpectSameBits<Vec3>("(a.dir * 2 + vec3(1, 2, 3)) - b.dirb", Opcode::MulAddSlotVec3);
         ExpectSameBits<float>("length(b.dir * 0.5 + vec3(1, 2, 3)) + a.f32", Opcode::MulAddSlotVec3);
 
@@ -273,7 +276,7 @@ namespace BECore::Tests {
         EXPECT_EQ(CountOf(*program, Opcode::LoadSlotVec3), 1U);
     }
 
-    TEST(ProgramFusionTest, AVec3ShapeThatIsNotSlotTimesFloatPlusConstantStaysUnfused) {
+    TEST_F(ProgramFusionTest, AVec3ShapeThatIsNotSlotTimesFloatPlusConstantStaysUnfused) {
         FusionWorld world;
         // A slot as the addend, the scalar on the left (`MulFloatVec3`), a slot as the factor's own product and a formula as the factor are other shapes
         for (const StringView text :
@@ -284,7 +287,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ProgramFusionTest, TheVec3MulAddReadsTheLevelOfItsSlotAndIsPrinted) {
+    TEST_F(ProgramFusionTest, TheVec3MulAddReadsTheLevelOfItsSlotAndIsPrinted) {
         FusionWorld world;
         const Program* fused = Compile(world, "b.dir * 2 + vec3(1, 2, 3)", ProgramType::Vec3, true, DescribeType<Vec3>());
         const Program* plain = Compile(world, "b.dir * 2 + vec3(1, 2, 3)", ProgramType::Vec3, false, DescribeType<Vec3>());
@@ -297,7 +300,7 @@ namespace BECore::Tests {
         EXPECT_NE(text.find("MulAddSlotVec3"), String::npos) << text.c_str();
     }
 
-    TEST(ProgramFusionTest, ItFusesInsideALargerFormulaAndTheOtherPartsStayAsTheyWere) {
+    TEST_F(ProgramFusionTest, ItFusesInsideALargerFormulaAndTheOtherPartsStayAsTheyWere) {
         ExpectSameBits<int32_t>("min(a.i32 * 3 + 7, b.i32)", Opcode::MulAddSlotInt32);
         ExpectSameBits<float>("max(a.f32b, b.f32 * 0.5 + 1.0) + a.f32", Opcode::MulAddSlotFloat);
 
@@ -308,14 +311,14 @@ namespace BECore::Tests {
         EXPECT_EQ(CountOf(*program, Opcode::LoadSlotInt32), 1U);
     }
 
-    TEST(ProgramFusionTest, ASlotAsTheAddendStaysUnfused) {
+    TEST_F(ProgramFusionTest, ASlotAsTheAddendStaysUnfused) {
         FusionWorld world;
         const Program* program = Compile(world, "a.i32 * 3 + a.i32b", ProgramType::Int32, true, DescribeType<int32_t>());
         ASSERT_NE(program, nullptr);
         EXPECT_EQ(CountFused(*program), 0U) << program->Disassemble().c_str();
     }
 
-    TEST(ProgramFusionTest, TwoFormulasAreTwoProgramsAndTheFusedAndTheUnfusedAreTwoEntries) {
+    TEST_F(ProgramFusionTest, TwoFormulasAreTwoProgramsAndTheFusedAndTheUnfusedAreTwoEntries) {
         FusionWorld world;
         const Program* fused = Compile(world, "a.i32 * 3 + 7", ProgramType::Int32, true, DescribeType<int32_t>());
         const Program* plain = Compile(world, "a.i32 * 3 + 7", ProgramType::Int32, false, DescribeType<int32_t>());
@@ -327,7 +330,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(fused->SameCode(*plain));
     }
 
-    TEST(ProgramFusionTest, TheFusedProgramReadsTheLevelOfItsSlot) {
+    TEST_F(ProgramFusionTest, TheFusedProgramReadsTheLevelOfItsSlot) {
         FusionWorld world;
         const Program* fused = Compile(world, "b.i32 * 2 + 1", ProgramType::Int32, true, DescribeType<int32_t>());
         const Program* plain = Compile(world, "b.i32 * 2 + 1", ProgramType::Int32, false, DescribeType<int32_t>());
@@ -337,7 +340,7 @@ namespace BECore::Tests {
         EXPECT_EQ(fused->Reads(), plain->Reads());
     }
 
-    TEST(ProgramFusionTest, TheFusedInstructionIsPrintedWithItsFieldAndConstants) {
+    TEST_F(ProgramFusionTest, TheFusedInstructionIsPrintedWithItsFieldAndConstants) {
         FusionWorld world;
         const Program* program = Compile(world, "a.i32 * 3 + 7", ProgramType::Int32, true, DescribeType<int32_t>());
         ASSERT_NE(program, nullptr);
@@ -348,22 +351,22 @@ namespace BECore::Tests {
 
     // The sequences below are written by hand: the lowering never writes most of them, and `Fuse` reads only the code
 
-    TEST(ProgramFusionTest, TheCanonicalSequenceBecomesOneInstruction) {
-        Vector<Instruction> code = Int32MulAddCode();
+    TEST_F(ProgramFusionTest, TheCanonicalSequenceBecomesOneInstruction) {
+        ArenaVector<Instruction> code = Int32MulAddCode();
         Fuse(code, 0);
         ASSERT_EQ(code.size(), 1U);
         EXPECT_EQ(code[0], (Instruction{Opcode::MulAddSlotInt32, 0, 0, 0, 1, 4}));
     }
 
-    TEST(ProgramFusionTest, AConstantIndexOverAByteLeavesTheSequenceAlone) {
-        Vector<Instruction> code = Int32MulAddCode();
+    TEST_F(ProgramFusionTest, AConstantIndexOverAByteLeavesTheSequenceAlone) {
+        ArenaVector<Instruction> code = Int32MulAddCode();
         code[1].imm = kMaxFusedConstantIndex;
-        Vector<Instruction> fits = code;
+        ArenaVector<Instruction> fits = code;
         Fuse(fits, 0);
         EXPECT_EQ(fits.size(), 1U);
 
         code[1].imm = kMaxFusedConstantIndex + 1;
-        Vector<Instruction> unchanged = code;
+        ArenaVector<Instruction> unchanged = code;
         Fuse(unchanged, 0);
         EXPECT_EQ(unchanged, code);
 
@@ -374,16 +377,16 @@ namespace BECore::Tests {
         EXPECT_EQ(unchanged, code);
     }
 
-    TEST(ProgramFusionTest, ADroppedTemporaryThatIsReadLaterKeepsTheSequence) {
+    TEST_F(ProgramFusionTest, ADroppedTemporaryThatIsReadLaterKeepsTheSequence) {
         // r1 held the addend; a later instruction reads it, so dropping its write would change that instruction's operand
-        Vector<Instruction> code = Int32MulAddCode();
+        ArenaVector<Instruction> code = Int32MulAddCode();
         code.push_back(Instruction{Opcode::AddInt32, 2, 0, 1, 0, 0});
-        Vector<Instruction> unchanged = code;
+        ArenaVector<Instruction> unchanged = code;
         Fuse(unchanged, 2);
         EXPECT_EQ(unchanged, code);
 
         // The same register written again before it is read is dead at the end of the sequence
-        Vector<Instruction> rewritten = Int32MulAddCode();
+        ArenaVector<Instruction> rewritten = Int32MulAddCode();
         rewritten.push_back(Instruction{Opcode::LoadConst, 1, 0, 0, 0, 0});
         rewritten.push_back(Instruction{Opcode::AddInt32, 2, 0, 1, 0, 0});
         Fuse(rewritten, 2);
@@ -391,30 +394,30 @@ namespace BECore::Tests {
         EXPECT_EQ(rewritten[0].op, Opcode::MulAddSlotInt32);
     }
 
-    TEST(ProgramFusionTest, ADroppedTemporaryThatIsTheResultKeepsTheSequence) {
-        Vector<Instruction> code = Int32MulAddCode();
-        Vector<Instruction> unchanged = code;
+    TEST_F(ProgramFusionTest, ADroppedTemporaryThatIsTheResultKeepsTheSequence) {
+        ArenaVector<Instruction> code = Int32MulAddCode();
+        ArenaVector<Instruction> unchanged = code;
         Fuse(unchanged, 1);
         EXPECT_EQ(unchanged, code);
 
-        Vector<Instruction> fused = code;
+        ArenaVector<Instruction> fused = code;
         Fuse(fused, 0);
         EXPECT_EQ(fused.size(), 1U);
     }
 
-    TEST(ProgramFusionTest, ARegisterRangeThatAPackReadsCountsAsRead) {
+    TEST_F(ProgramFusionTest, ARegisterRangeThatAPackReadsCountsAsRead) {
         // `Pack` of a `Vec3` reads r1, r2 and r3 though only `a` names it
-        Vector<Instruction> code = MulAddCode(Opcode::LoadSlotFloat, Opcode::MulFloat, Opcode::AddFloat);
+        ArenaVector<Instruction> code = MulAddCode(Opcode::LoadSlotFloat, Opcode::MulFloat, Opcode::AddFloat);
         code.push_back(Instruction{Opcode::LoadConst, 2, 0, 0, 0, 0});
         code.push_back(Instruction{Opcode::LoadConst, 3, 0, 0, 0, 0});
         code.push_back(Instruction{Opcode::PackVec3, 4, 1, 0, 0, 0});
-        Vector<Instruction> unchanged = code;
+        ArenaVector<Instruction> unchanged = code;
         Fuse(unchanged, 4);
         EXPECT_EQ(unchanged, code);
     }
 
-    TEST(ProgramFusionTest, TheVec3SequenceByHandBecomesOneInstructionOnlyWithItsOwnOpcodes) {
-        Vector<Instruction> code = MulAddCode(Opcode::LoadSlotVec3, Opcode::MulVec3Float, Opcode::AddVec3);
+    TEST_F(ProgramFusionTest, TheVec3SequenceByHandBecomesOneInstructionOnlyWithItsOwnOpcodes) {
+        ArenaVector<Instruction> code = MulAddCode(Opcode::LoadSlotVec3, Opcode::MulVec3Float, Opcode::AddVec3);
         Fuse(code, 0);
         ASSERT_EQ(code.size(), 1U);
         EXPECT_EQ(code[0], (Instruction{Opcode::MulAddSlotVec3, 0, 0, 0, 1, 4}));
@@ -425,16 +428,16 @@ namespace BECore::Tests {
         ExpectUnchanged(MulAddCode(Opcode::LoadSlotVec4, Opcode::MulVec3Float, Opcode::AddVec3), 0);
 
         // The factor register is read later: the write the fusion drops is not dead
-        Vector<Instruction> later = MulAddCode(Opcode::LoadSlotVec3, Opcode::MulVec3Float, Opcode::AddVec3);
+        ArenaVector<Instruction> later = MulAddCode(Opcode::LoadSlotVec3, Opcode::MulVec3Float, Opcode::AddVec3);
         later.push_back(Instruction{Opcode::AddVec3, 2, 0, 1, 0, 0});
         ExpectUnchanged(later, 2);
     }
 
-    TEST(ProgramFusionTest, ASequenceWhoseRegistersDoNotChainIsLeftAlone) {
+    TEST_F(ProgramFusionTest, ASequenceWhoseRegistersDoNotChainIsLeftAlone) {
         // The addition reads r2, not the product in r0: the shape is the same, the meaning is not
-        Vector<Instruction> code = Int32MulAddCode();
+        ArenaVector<Instruction> code = Int32MulAddCode();
         code[4].a = 2;
-        Vector<Instruction> unchanged = code;
+        ArenaVector<Instruction> unchanged = code;
         Fuse(unchanged, 0);
         EXPECT_EQ(unchanged, code);
 
@@ -454,9 +457,9 @@ namespace BECore::Tests {
         EXPECT_EQ(unchanged, code);
     }
 
-    TEST(ProgramFusionTest, ATypeMismatchBetweenTheInstructionsIsNotFused) {
-        Vector<Instruction> code = MulAddCode(Opcode::LoadSlotInt32, Opcode::MulInt32, Opcode::AddInt64);
-        Vector<Instruction> unchanged = code;
+    TEST_F(ProgramFusionTest, ATypeMismatchBetweenTheInstructionsIsNotFused) {
+        ArenaVector<Instruction> code = MulAddCode(Opcode::LoadSlotInt32, Opcode::MulInt32, Opcode::AddInt64);
+        ArenaVector<Instruction> unchanged = code;
         Fuse(unchanged, 0);
         EXPECT_EQ(unchanged, code);
 
@@ -466,9 +469,9 @@ namespace BECore::Tests {
         EXPECT_EQ(unchanged, code);
     }
 
-    TEST(ProgramFusionTest, TwoSequencesInARowAreBothFused) {
-        Vector<Instruction> first = Int32MulAddCode();
-        Vector<Instruction> second = MulAddCode(Opcode::LoadSlotInt32, Opcode::MulInt32, Opcode::AddInt32, 1, 8);
+    TEST_F(ProgramFusionTest, TwoSequencesInARowAreBothFused) {
+        ArenaVector<Instruction> first = Int32MulAddCode();
+        ArenaVector<Instruction> second = MulAddCode(Opcode::LoadSlotInt32, Opcode::MulInt32, Opcode::AddInt32, 1, 8);
         for (Instruction& ins : second) {
             if (ins.dst == 0) {
                 ins.dst = 2;
@@ -483,7 +486,7 @@ namespace BECore::Tests {
                 ins.b = 3;
             }
         }
-        Vector<Instruction> code = first;
+        ArenaVector<Instruction> code = first;
         code.insert(code.end(), second.begin(), second.end());
         code.push_back(Instruction{Opcode::AddInt32, 0, 0, 2, 0, 0});
         Fuse(code, 0);
@@ -493,7 +496,7 @@ namespace BECore::Tests {
         EXPECT_EQ(code[1].dst, 2U);
     }
 
-    TEST(ProgramFusionTest, AFinishedProgramOfFusedCodeIsRefusedWhenItsFieldsAreNot) {
+    TEST_F(ProgramFusionTest, AFinishedProgramOfFusedCodeIsRefusedWhenItsFieldsAreNot) {
         ProgramBuilder builder;
         const uint8_t reg = Require(builder.AcquireRegister());
         const uint32_t k = builder.AddConstant(int32_t{3});
@@ -516,7 +519,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(tooHigh.Finish(ProgramType::Int32, high).has_value());
     }
 
-    TEST(ProgramFusionTest, AFinishedProgramOfVec3FusedCodeIsRefusedWhenItsConstantsAreNot) {
+    TEST_F(ProgramFusionTest, AFinishedProgramOfVec3FusedCodeIsRefusedWhenItsConstantsAreNot) {
         ProgramBuilder builder;
         const uint8_t reg = Require(builder.AcquireRegister());
         const uint32_t k = builder.AddConstant(1.0f);
@@ -533,7 +536,7 @@ namespace BECore::Tests {
         EXPECT_EQ(program->Reads(), LevelBit(1));
     }
 
-    TEST(ProgramFusionTest, ALerpOfTwoSlotsIsOneInstructionWithTheSameBits) {
+    TEST_F(ProgramFusionTest, ALerpOfTwoSlotsIsOneInstructionWithTheSameBits) {
         ExpectSameBits<float>("lerp(a.f32, b.f32b, a.f32b)", Opcode::LerpSlotsFloat);
         ExpectSameBits<float>("lerp(b.f32, b.f32b, 0.25)", Opcode::LerpSlotsFloat);
         ExpectSameBits<double>("lerp(a.f64, b.f64b, a.f64b)", Opcode::LerpSlotsDouble);
@@ -542,7 +545,7 @@ namespace BECore::Tests {
         ExpectSameBits<float>("lerp(a.f32, b.f32b, b.f32 * 0.5 + 0.25)", Opcode::LerpSlotsFloat);
     }
 
-    TEST(ProgramFusionTest, ALerpInsideTheWeightOfAnotherIsFusedToo) {
+    TEST_F(ProgramFusionTest, ALerpInsideTheWeightOfAnotherIsFusedToo) {
         FusionWorld world;
         const StringView text = "lerp(a.f64, b.f64b, lerp(a.f64b, b.f64, b.f64b))";
         const Program* fused = Compile(world, text, ProgramType::Double, true, DescribeType<double>());
@@ -560,7 +563,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(ProgramFusionTest, ALerpIsExactAtTheEndsAndDoesNotClampTheWeight) {
+    TEST_F(ProgramFusionTest, ALerpIsExactAtTheEndsAndDoesNotClampTheWeight) {
         FusionWorld world;
         const Program* program = Compile(world, "lerp(a.f32, b.f32, a.f32b)", ProgramType::Float, true, DescribeType<float>());
         ASSERT_NE(program, nullptr);
@@ -575,7 +578,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Run<float>(*program, world.context), std::lerp(0.1f, 7.0f, 2.0f));
     }
 
-    TEST(ProgramFusionTest, ALerpWithOneSlotOrOfAVectorStaysUnfused) {
+    TEST_F(ProgramFusionTest, ALerpWithOneSlotOrOfAVectorStaysUnfused) {
         FusionWorld world;
         const Program* oneSlot = Compile(world, "lerp(a.f32, 5.0, a.f32b)", ProgramType::Float, true, DescribeType<float>());
         ASSERT_NE(oneSlot, nullptr);
@@ -588,7 +591,7 @@ namespace BECore::Tests {
         EXPECT_EQ(CountFused(*vectors), 0U) << vectors->Disassemble().c_str();
     }
 
-    TEST(ProgramFusionTest, ALerpReadsTheLevelOfBothSlots) {
+    TEST_F(ProgramFusionTest, ALerpReadsTheLevelOfBothSlots) {
         FusionWorld world;
         const Program* fused = Compile(world, "lerp(a.f32, b.f32b, 0.25)", ProgramType::Float, true, DescribeType<float>());
         const Program* plain = Compile(world, "lerp(a.f32, b.f32b, 0.25)", ProgramType::Float, false, DescribeType<float>());
@@ -602,60 +605,60 @@ namespace BECore::Tests {
         EXPECT_EQ(second->Reads(), LevelBit(1));
     }
 
-    TEST(ProgramFusionTest, TheLerpSequenceByHandKeepsTheCodeOfTheWeightWhereItIs) {
-        Vector<Instruction> code = LerpCode();
+    TEST_F(ProgramFusionTest, TheLerpSequenceByHandKeepsTheCodeOfTheWeightWhereItIs) {
+        ArenaVector<Instruction> code = LerpCode();
         Fuse(code, 0);
         ASSERT_EQ(code.size(), 2U);
         EXPECT_EQ(code[0].op, Opcode::LoadConst);
         EXPECT_EQ(code[1], (Instruction{Opcode::LerpSlotsFloat, 0, 0, 1, 2, PackHalves(4, 8)}));
     }
 
-    TEST(ProgramFusionTest, TheWeightThatTouchesAFusedRegisterKeepsTheLerp) {
+    TEST_F(ProgramFusionTest, TheWeightThatTouchesAFusedRegisterKeepsTheLerp) {
         // The weight reads r1, which the fusion no longer fills
-        Vector<Instruction> reads = LerpCode();
+        ArenaVector<Instruction> reads = LerpCode();
         reads[2] = Instruction{Opcode::Copy, 2, 1, 0, 0, 0};
         ExpectUnchanged(reads, 0);
         // The weight overwrites r0, which the `Lerp` reads as its first operand
-        Vector<Instruction> writes = LerpCode();
+        ArenaVector<Instruction> writes = LerpCode();
         writes[2] = Instruction{Opcode::LoadConst, 0, 0, 0, 0, 0};
         writes[3].c = 0;
         writes[3].a = 0;
         ExpectUnchanged(writes, 0);
         // The weight is one of the two slots
-        Vector<Instruction> weight = LerpCode();
+        ArenaVector<Instruction> weight = LerpCode();
         weight[3].c = 1;
         ExpectUnchanged(weight, 0);
     }
 
-    TEST(ProgramFusionTest, ASlotRegisterThatIsReadLaterOrIsTheResultKeepsTheLerp) {
-        Vector<Instruction> later = LerpCode();
+    TEST_F(ProgramFusionTest, ASlotRegisterThatIsReadLaterOrIsTheResultKeepsTheLerp) {
+        ArenaVector<Instruction> later = LerpCode();
         later.push_back(Instruction{Opcode::AddFloat, 3, 0, 1, 0, 0});
         ExpectUnchanged(later, 3);
 
-        Vector<Instruction> rewritten = LerpCode();
+        ArenaVector<Instruction> rewritten = LerpCode();
         rewritten.push_back(Instruction{Opcode::LoadConst, 1, 0, 0, 0, 0});
         rewritten.push_back(Instruction{Opcode::AddFloat, 3, 0, 1, 0, 0});
         Fuse(rewritten, 3);
         EXPECT_EQ(rewritten.size(), 4U);
         EXPECT_EQ(rewritten[1].op, Opcode::LerpSlotsFloat);
 
-        Vector<Instruction> result = LerpCode();
+        ArenaVector<Instruction> result = LerpCode();
         ExpectUnchanged(result, 1);
     }
 
-    TEST(ProgramFusionTest, AnOffsetThatDoesNotFitAHalfLeavesTheLerpAndTheTable) {
-        Vector<Instruction> fits = LerpCode();
+    TEST_F(ProgramFusionTest, AnOffsetThatDoesNotFitAHalfLeavesTheLerpAndTheTable) {
+        ArenaVector<Instruction> fits = LerpCode();
         fits[0].imm = kMaxFusedHalf;
         fits[1].imm = kMaxFusedHalf;
         Fuse(fits, 0);
         EXPECT_EQ(fits.size(), 2U);
         EXPECT_EQ(fits[1], (Instruction{Opcode::LerpSlotsFloat, 0, 0, 1, 2, PackHalves(kMaxFusedHalf, kMaxFusedHalf)}));
 
-        Vector<Instruction> tooFar = LerpCode();
+        ArenaVector<Instruction> tooFar = LerpCode();
         tooFar[1].imm = kMaxFusedHalf + 1;
         ExpectUnchanged(tooFar, 0);
 
-        Vector<Instruction> table = TableCode();
+        ArenaVector<Instruction> table = TableCode();
         table[0].imm = kMaxFusedHalf + 1;
         ExpectUnchanged(table, 0);
         table = TableCode(kMaxFusedHalf + 1);
@@ -665,15 +668,16 @@ namespace BECore::Tests {
         EXPECT_EQ(table.size(), 1U);
     }
 
-    TEST(ProgramFusionTest, ALerpOfAnotherTypeOrInsideAnotherLerpFusesOnlyWhatItMatches) {
+    TEST_F(ProgramFusionTest, ALerpOfAnotherTypeOrInsideAnotherLerpFusesOnlyWhatItMatches) {
         ExpectUnchanged(LerpCode(Opcode::LoadSlotVec3, Opcode::LerpVec3), 0);
         ExpectUnchanged(LerpCode(Opcode::LoadSlotInt32, Opcode::LerpFloat), 0);
 
         // lerp(a, b, lerp(c, d, e)): r0 r1 outside, r2 r3 inside, the weight of the inner in r4
-        const Vector<Instruction> code = {Instruction{Opcode::LoadSlotFloat, 0, 0, 0, 0, 0},  Instruction{Opcode::LoadSlotFloat, 1, 0, 0, 0, 4},  Instruction{Opcode::LoadSlotFloat, 2, 0, 0, 0, 8},
-                                          Instruction{Opcode::LoadSlotFloat, 3, 0, 0, 0, 12}, Instruction{Opcode::LoadSlotFloat, 4, 0, 0, 0, 16}, Instruction{Opcode::LerpFloat, 2, 2, 3, 4, 0},
-                                          Instruction{Opcode::LerpFloat, 0, 0, 1, 2, 0}};
-        Vector<Instruction> fused = code;
+        const ArenaVector<Instruction> code = {Instruction{Opcode::LoadSlotFloat, 0, 0, 0, 0, 0},  Instruction{Opcode::LoadSlotFloat, 1, 0, 0, 0, 4},
+                                               Instruction{Opcode::LoadSlotFloat, 2, 0, 0, 0, 8},  Instruction{Opcode::LoadSlotFloat, 3, 0, 0, 0, 12},
+                                               Instruction{Opcode::LoadSlotFloat, 4, 0, 0, 0, 16}, Instruction{Opcode::LerpFloat, 2, 2, 3, 4, 0},
+                                               Instruction{Opcode::LerpFloat, 0, 0, 1, 2, 0}};
+        ArenaVector<Instruction> fused = code;
         Fuse(fused, 0);
         ASSERT_EQ(fused.size(), 3U);
         EXPECT_EQ(fused[0].op, Opcode::LoadSlotFloat);
@@ -681,7 +685,7 @@ namespace BECore::Tests {
         EXPECT_EQ(fused[2], (Instruction{Opcode::LerpSlotsFloat, 0, 0, 0, 2, PackHalves(0, 4)}));
     }
 
-    TEST(ProgramFusionTest, ATableIndexedByASlotIsOneInstructionWithTheSameBits) {
+    TEST_F(ProgramFusionTest, ATableIndexedByASlotIsOneInstructionWithTheSameBits) {
         ValueTableSet tables;
         tables.Add("Damage", {10.0, 20.0, 30.0, 45.0});
         tables.Add("Rates", {0.5, 0.25});
@@ -695,7 +699,7 @@ namespace BECore::Tests {
         ExpectSameBits<Vec3>("at(a.i32, vec3(1, 0, 0), vec3(0, 1, 0))", Opcode::LoadTableSlot);
     }
 
-    TEST(ProgramFusionTest, TableCountsAndConstantIndexesAreNoRegistersInTheFusedFields) {
+    TEST_F(ProgramFusionTest, TableCountsAndConstantIndexesAreNoRegistersInTheFusedFields) {
         // The count of a table and the constant indexes of a MulAddSlot sit in b and c: values above the 32 registers are valid there
         String entries;
         for (int32_t i = 1; i <= 40; ++i) {
@@ -714,7 +718,7 @@ namespace BECore::Tests {
         ExpectSameBits<double>("ByLevel('Big', a.i32) + (b.f64b * 3 + 7)", Opcode::MulAddSlotDouble, &tables, 200);
     }
 
-    TEST(ProgramFusionTest, ATableOverASlotClampsTheIndexToTheEnds) {
+    TEST_F(ProgramFusionTest, ATableOverASlotClampsTheIndexToTheEnds) {
         ValueTableSet tables;
         tables.Add("Damage", {10.0, 20.0, 30.0});
         FusionWorld world;
@@ -729,8 +733,8 @@ namespace BECore::Tests {
         EXPECT_EQ(program->Reads(), LevelBit(0));
     }
 
-    TEST(ProgramFusionTest, ATableSequenceByHandAndWhatKeepsItUnfused) {
-        Vector<Instruction> code = TableCode();
+    TEST_F(ProgramFusionTest, ATableSequenceByHandAndWhatKeepsItUnfused) {
+        ArenaVector<Instruction> code = TableCode();
         Fuse(code, 0);
         ASSERT_EQ(code.size(), 1U);
         Instruction expected{Opcode::LoadTableSlot, 0, 1, 0, 0, PackHalves(8, 3)};
@@ -738,21 +742,21 @@ namespace BECore::Tests {
         EXPECT_EQ(code[0], expected);
 
         // The index register is read after the table instruction: its load must stay
-        Vector<Instruction> later = TableCode();
+        ArenaVector<Instruction> later = TableCode();
         later[1].dst = 1;
         later.push_back(Instruction{Opcode::AddInt32, 2, 0, 1, 0, 0});
         ExpectUnchanged(later, 2);
 
         // Another type of index, and a table whose index is not the loaded register
-        Vector<Instruction> wide = TableCode();
+        ArenaVector<Instruction> wide = TableCode();
         wide[0].op = Opcode::LoadSlotInt64;
         ExpectUnchanged(wide, 0);
-        Vector<Instruction> other = TableCode();
+        ArenaVector<Instruction> other = TableCode();
         other[1].a = 2;
         ExpectUnchanged(other, 0);
     }
 
-    TEST(ProgramFusionTest, FinishCountsAndChecksTheFieldsOfTheNewInstructions) {
+    TEST_F(ProgramFusionTest, FinishCountsAndChecksTheFieldsOfTheNewInstructions) {
         ProgramBuilder builder;
         const uint8_t reg = Require(builder.AcquireRegister());
         const uint8_t weight = Require(builder.AcquireRegister());

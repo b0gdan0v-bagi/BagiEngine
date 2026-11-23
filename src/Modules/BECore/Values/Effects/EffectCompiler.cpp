@@ -1,5 +1,6 @@
 #include "EffectCompiler.h"
 
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Values/Effects/EffectProgramBuilder.h>
 #include <BECore/Values/Effects/ScriptParser.h>
@@ -16,6 +17,14 @@ namespace BECore {
         using Failure = std::unexpected<ProgramError>;
         using Status = std::expected<void, ProgramError>;
 
+        /// `Format` into the scratch arena, for the text a statement makes and drops once it is compiled
+        template <typename... Args>
+        ArenaString ArenaFormat(FormatString<Args...> format, Args&&... args) {
+            ArenaString text;
+            FormatTo(std::back_inserter(text), format, std::forward<Args>(args)...);
+            return text;
+        }
+
         Failure Refuse(uint32_t column, String message) {
             return std::unexpected(ProgramError{std::move(message), column});
         }
@@ -25,7 +34,7 @@ namespace BECore {
          * wrote (`target + (` and `)`), or nothing of the user's at all (`target + 1`)
          */
         struct FormulaText {
-            String text;
+            ArenaString text;
             uint32_t prefix = 0;
             uint32_t length = 0;
             uint32_t suffix = 0;
@@ -40,7 +49,8 @@ namespace BECore {
 
             [[nodiscard]] static FormulaText Around(StringView script, ScriptRange range, StringView before, StringView after, uint32_t fallback) {
                 FormulaText formula;
-                formula.text = String(before);
+                formula.text.reserve(before.size() + (range.end - range.begin) + after.size());
+                formula.text.append(before.data(), before.size());
                 formula.text.append(script.data() + range.begin, range.end - range.begin);
                 formula.text.append(after.data(), after.size());
                 formula.prefix = static_cast<uint32_t>(before.size());
@@ -52,7 +62,7 @@ namespace BECore {
             }
 
             /// Text the compiler wrote entirely: every error is the statement's
-            [[nodiscard]] static FormulaText Written(String text, uint32_t fallback) {
+            [[nodiscard]] static FormulaText Written(ArenaString text, uint32_t fallback) {
                 FormulaText formula;
                 formula.text = std::move(text);
                 formula.fallback = fallback;
@@ -60,7 +70,7 @@ namespace BECore {
             }
 
             [[nodiscard]] StringView Slice() const {
-                return StringView(text).substr(prefix, length);
+                return StringView(text.data(), text.size()).substr(prefix, length);
             }
 
             /// A column of the slice alone (1-based, `length + 1` is the end of it) as a column of the script
@@ -137,27 +147,29 @@ namespace BECore {
             return text;
         }
 
-        String Label(const ScriptStatement& statement) {
+        ArenaString Label(const ScriptStatement& statement) {
             switch (statement.kind) {
                 case ScriptStatementKind::Assign:
-                    return Format("assignment to '{}'", statement.target);
+                    return ArenaFormat("assignment to '{}'", statement.target);
                 case ScriptStatementKind::AddAssign:
-                    return Format("'+=' on '{}'", statement.target);
+                    return ArenaFormat("'+=' on '{}'", statement.target);
                 case ScriptStatementKind::SubAssign:
-                    return Format("'-=' on '{}'", statement.target);
+                    return ArenaFormat("'-=' on '{}'", statement.target);
                 case ScriptStatementKind::Increment:
-                    return Format("'++' on '{}'", statement.target);
+                    return ArenaFormat("'++' on '{}'", statement.target);
                 case ScriptStatementKind::Decrement:
-                    return Format("'--' on '{}'", statement.target);
+                    return ArenaFormat("'--' on '{}'", statement.target);
                 case ScriptStatementKind::Toggle:
-                    return Format("'toggle' of '{}'", statement.target);
+                    return ArenaFormat("'toggle' of '{}'", statement.target);
                 case ScriptStatementKind::If:
-                    return "'if' condition";
+                    return ArenaString("'if' condition");
                 case ScriptStatementKind::Emit:
-                    return Format("'emit {}'", statement.target);
+                    return ArenaFormat("'emit {}'", statement.target);
             }
             return {};
         }
+
+        constexpr size_t kMaxStepsPerStatement = 2;
 
         /// A field a script writes: where it is, its type and the width a store needs
         struct WriteTarget {
@@ -175,6 +187,8 @@ namespace BECore {
                 : _script(script), _ast(ast), _declaration(declaration), _options(options), _commit(commit) {
                 _compile.tables = options.tables;
                 _compile.fuse = options.fuse;
+                // A statement makes up to two steps (`if` with `else`: a jump on the condition and a jump over the else block)
+                _builder.Reserve(ast.statements.size() * kMaxStepsPerStatement);
             }
 
             Status Run() {
@@ -209,7 +223,7 @@ namespace BECore {
 
             /// `target = e`, and the four statements that are the assignment of an expression the compiler writes
             Status Assignment(const ScriptStatement& statement) {
-                const String label = Label(statement);
+                const ArenaString label = Label(statement);
                 const auto target = ResolveTarget(statement, label);
                 if (!target.has_value()) {
                     return std::unexpected(target.error());
@@ -221,19 +235,19 @@ namespace BECore {
                         formula = FormulaText::Slice(_script, statement.expression, statement.column);
                         break;
                     case ScriptStatementKind::AddAssign:
-                        formula = FormulaText::Around(_script, statement.expression, Format("{} + (", path), ")", statement.column);
+                        formula = FormulaText::Around(_script, statement.expression, ArenaFormat("{} + (", path), ")", statement.column);
                         break;
                     case ScriptStatementKind::SubAssign:
-                        formula = FormulaText::Around(_script, statement.expression, Format("{} - (", path), ")", statement.column);
+                        formula = FormulaText::Around(_script, statement.expression, ArenaFormat("{} - (", path), ")", statement.column);
                         break;
                     case ScriptStatementKind::Increment:
-                        formula = FormulaText::Written(Format("{} + 1", path), statement.column);
+                        formula = FormulaText::Written(ArenaFormat("{} + 1", path), statement.column);
                         break;
                     case ScriptStatementKind::Decrement:
-                        formula = FormulaText::Written(Format("{} - 1", path), statement.column);
+                        formula = FormulaText::Written(ArenaFormat("{} - 1", path), statement.column);
                         break;
                     default:
-                        formula = FormulaText::Written(Format("!{}", path), statement.column);
+                        formula = FormulaText::Written(ArenaFormat("!{}", path), statement.column);
                         break;
                 }
                 const auto value = Formula(formula, *target->type, target->bytes, label);
@@ -246,7 +260,7 @@ namespace BECore {
 
             /// `if (c) {...} else if (c) {...} else {...}`: an else block that is one `if` goes on in this loop, so a long chain does not nest the compiler
             Status If(ScriptStatementId first) {
-                Vector<uint32_t> exits;
+                ArenaVector<uint32_t> exits;
                 ScriptStatementId current = first;
                 while (true) {
                     const ScriptStatement& statement = _ast[current];
@@ -281,7 +295,7 @@ namespace BECore {
             }
 
             Status Emit(const ScriptStatement& statement) {
-                const String label = Label(statement);
+                const ArenaString label = Label(statement);
                 const Optional<CommandId> id = EffectCommands::Find(statement.target);
                 if (!id.has_value()) {
                     return UnknownCommand(statement, label);
@@ -365,6 +379,8 @@ namespace BECore {
 
             /// One expression of the script. @p expected is the type of its place; a failure is mapped back to the script's columns
             std::expected<EffectOperand, ProgramError> Formula(const FormulaText& formula, const TypeDesc& expected, uint8_t bytes, StringView label) {
+                // The trees of one expression are dropped when it is done, so the statements of a script (up to `ScriptLimits::kMaxStatements`) reuse one region of the arena
+                const ScratchScope scratch;
                 // The user's bytes alone first: a text the compiler wrapped in `target + (` and `)` would hide an unbalanced parenthesis in them
                 if (formula.prefix > 0 || formula.suffix > 0) {
                     if (const auto alone = ParseExpression(formula.Slice()); !alone.has_value()) {
@@ -400,6 +416,7 @@ namespace BECore {
     }  // namespace
 
     std::expected<EffectScript, ProgramError> CompileEffects(StringView text, const ContextDecl& declaration, const EffectOptions& options) {
+        const ScratchScope scratch;
         const auto ast = ParseScript(text);
         if (!ast.has_value()) {
             return std::unexpected(ast.error());

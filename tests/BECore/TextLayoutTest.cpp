@@ -3,6 +3,7 @@
 #include <BECore/Text/Font.h>
 #include <BECore/Text/TextLayout.h>
 #include <BECore/Threading/Thread.h>
+#include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
@@ -35,6 +36,30 @@ namespace BECore::Tests {
                 codes.push_back(*text);
             }
             return codes;
+        }
+
+        void ExpectSameLayout(const TextLayoutResult& actual, const TextLayoutResult& expected) {
+            ASSERT_EQ(actual.glyphs.size(), expected.glyphs.size());
+            ASSERT_EQ(actual.lines.size(), expected.lines.size());
+            for (size_t i = 0; i < expected.glyphs.size(); ++i) {
+                EXPECT_EQ(actual.glyphs[i].codePoint, expected.glyphs[i].codePoint);
+                EXPECT_EQ(actual.glyphs[i].glyph, expected.glyphs[i].glyph);
+                EXPECT_FLOAT_EQ(actual.glyphs[i].x, expected.glyphs[i].x);
+                EXPECT_FLOAT_EQ(actual.glyphs[i].y, expected.glyphs[i].y);
+            }
+            for (size_t i = 0; i < expected.lines.size(); ++i) {
+                EXPECT_EQ(actual.lines[i].firstGlyph, expected.lines[i].firstGlyph);
+                EXPECT_EQ(actual.lines[i].glyphCount, expected.lines[i].glyphCount);
+                EXPECT_FLOAT_EQ(actual.lines[i].x, expected.lines[i].x);
+                EXPECT_FLOAT_EQ(actual.lines[i].width, expected.lines[i].width);
+                EXPECT_FLOAT_EQ(actual.lines[i].baseline, expected.lines[i].baseline);
+            }
+            EXPECT_FLOAT_EQ(actual.width, expected.width);
+            EXPECT_FLOAT_EQ(actual.height, expected.height);
+            EXPECT_FLOAT_EQ(actual.fontSize, expected.fontSize);
+            EXPECT_FLOAT_EQ(actual.lineHeight, expected.lineHeight);
+            EXPECT_EQ(actual.truncated, expected.truncated);
+            EXPECT_EQ(actual.overflowed, expected.overflowed);
         }
 
     }  // namespace
@@ -481,6 +506,72 @@ namespace BECore::Tests {
             EXPECT_FLOAT_EQ(there.glyphs[i].x, here.glyphs[i].x);
             EXPECT_FLOAT_EQ(there.glyphs[i].y, here.glyphs[i].y);
         }
+    }
+
+    // A result that already holds another layout, with leftovers in every field, must come out as a fresh one
+    TEST_F(TextLayoutTest, LayingOutIntoAResultEqualsTheByValueForm) {
+        struct Case {
+            StringView text;
+            float maxWidth;
+            float maxHeight;
+            TextOverflow overflow;
+        };
+        const Case cases[] = {
+            {"Hello", 0.0f, 0.0f, TextOverflow::Clip},
+            {"A line that has to wrap into several short lines", 120.0f, 0.0f, TextOverflow::Clip},
+            {"A line that is far too long for the box it is in", 90.0f, 0.0f, TextOverflow::Ellipsis},
+            {"A text that has to shrink to fit the box it is in", 100.0f, 50.0f, TextOverflow::AutoFit},
+            {"", 0.0f, 0.0f, TextOverflow::Clip},
+        };
+        TextLayoutResult into;
+        for (const Case& c : cases) {
+            options.maxWidth = c.maxWidth;
+            options.maxHeight = c.maxHeight;
+            options.overflow = c.overflow;
+            options.wrap = c.maxWidth > 0.0f && c.overflow != TextOverflow::Ellipsis;
+
+            TextLayout::Layout(*font, c.text, options, into);
+
+            ExpectSameLayout(into, Layout(c.text));
+        }
+    }
+
+    TEST_F(TextLayoutTest, AFontThatDidNotLoadLeavesTheResultEmpty) {
+        auto broken = Font::CreateFromMemory("broken"_intern, Vector<uint8_t>(32, 0x41));
+        ASSERT_TRUE(broken);
+        TextLayoutResult into = Layout("Something that was laid out before");
+        ASSERT_FALSE(into.glyphs.empty());
+
+        TextLayout::Layout(*broken, "Hello", options, into);
+
+        ExpectSameLayout(into, TextLayoutResult{});
+    }
+
+    TEST_F(TextLayoutTest, AShortTextLeavesNothingOfALongOneInTheResult) {
+        TextLayoutResult into;
+        TextLayout::Layout(*font, "One\nTwo\nThree\nFour", options, into);
+        ASSERT_EQ(into.lines.size(), 4u);
+
+        TextLayout::Layout(*font, "Hi", options, into);
+
+        EXPECT_EQ(into.glyphs.size(), 2u);
+        EXPECT_EQ(into.lines.size(), 1u);
+    }
+
+    TEST_F(TextLayoutTest, ARepeatedLayoutIntoAWarmedResultAllocatesNothing) {
+        options.maxWidth = 160.0f;
+        options.wrap = true;
+        const StringView texts[] = {"Score: 1000 and a long caption line", "Score: 7 and a caption", "Score: 42", "Score: 100000 and a long caption line"};
+        TextLayoutResult into;
+        TextLayout::Layout(*font, texts[3], options, into);  // the longest text warms the capacity up
+
+        ExpectNoAllocations([&] {
+            for (int round = 0; round < 10; ++round) {
+                for (const StringView text : texts) {
+                    TextLayout::Layout(*font, text, options, into);
+                }
+            }
+        });
     }
 
 }  // namespace BECore::Tests

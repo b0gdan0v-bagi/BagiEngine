@@ -52,11 +52,20 @@ namespace BECore {
             }
         }
 
+        /// The room a call's argument list starts with; a longer one grows
+        constexpr size_t kTypicalArguments = 4;
+
         using NodeResult = std::expected<ExprNodeId, ProgramError>;
 
         class Parser {
         public:
-            explicit Parser(Vector<ExprToken> tokens) : _tokens(std::move(tokens)) {}
+            explicit Parser(ArenaVector<ExprToken> tokens) : _tokens(std::move(tokens)) {
+                // Every node takes at least one token, so the token count bounds the nodes (and the arguments, one id per argument node)
+                const size_t nodes = std::min(_tokens.size(), ExprLimits::kMaxNodes);
+                _ast.nodes.reserve(nodes);
+                _ast.arguments.reserve(nodes);
+                _heights.reserve(nodes);
+            }
 
             std::expected<ExprAst, ProgramError> Run() {
                 if (_tokens.front().kind == ExprTokenKind::End) {
@@ -204,7 +213,7 @@ namespace BECore {
                 member.kind = ExprNodeKind::Member;
                 member.column = dot.column;
                 member.first = base;
-                member.text = String(name.text);
+                member.text.assign(name.text.data(), name.text.size());
                 return Add(std::move(member));
             }
 
@@ -236,7 +245,7 @@ namespace BECore {
                         node.kind = ExprNodeKind::Number;
                         node.column = token.column;
                         node.isFloat = token.isFloat;
-                        node.text = String(token.text);
+                        node.text.assign(token.text.data(), token.text.size());
                         return Add(std::move(node));
                     }
                     case ExprTokenKind::String: {
@@ -244,7 +253,7 @@ namespace BECore {
                         ExprNode node;
                         node.kind = ExprNodeKind::String;
                         node.column = token.column;
-                        node.text = String(token.text);
+                        node.text.assign(token.text.data(), token.text.size());
                         return Add(std::move(node));
                     }
                     case ExprTokenKind::Name:
@@ -277,7 +286,7 @@ namespace BECore {
                     node.boolValue = first.text == "true";
                     return Add(std::move(node));
                 }
-                String path(first.text);
+                ArenaString path(first.text.data(), first.text.size());
                 while (Peek().kind == ExprTokenKind::Dot) {
                     const ExprToken& next = Peek(1);
                     if (next.kind != ExprTokenKind::Name) {
@@ -295,7 +304,8 @@ namespace BECore {
                 }
                 const ExprToken& open = Take();
                 node.kind = ExprNodeKind::Call;
-                Vector<ExprNodeId> arguments;
+                ArenaVector<ExprNodeId> arguments;
+                arguments.reserve(kTypicalArguments);
                 if (Peek().kind != ExprTokenKind::RightParen) {
                     while (true) {
                         const NodeResult argument = ParseBinary(kPrecedenceOr);
@@ -321,11 +331,11 @@ namespace BECore {
                 return Add(std::move(node));
             }
 
-            Vector<ExprToken> _tokens;
+            ArenaVector<ExprToken> _tokens;
             size_t _index = 0;
             size_t _depth = 0;
             /// `HeightOf` of each node of `_ast`
-            Vector<uint32_t> _heights;
+            ArenaVector<uint32_t> _heights;
             ExprAst _ast;
         };
 

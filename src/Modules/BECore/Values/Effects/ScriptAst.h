@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <cstddef>
@@ -36,14 +37,15 @@ namespace BECore {
      * @brief One statement of a script
      *
      * `target` is the dotted path written to (`Assign` to `Toggle`) or the command name (`Emit`), at `targetColumn`; `column` is the one an error of the statement points at: the operator
-     * of an assignment, the keyword of the others. `expression` is the right side of `Assign`, `AddAssign` and `SubAssign` and the condition of `If`; `Emit` has its arguments in
-     * `ScriptAst::arguments[firstArgument, firstArgument + argumentCount)`. An `else if` is an `elseBlock` of the one `If` statement. Columns are 1-based bytes of the whole text.
+     * of an assignment, the keyword of the others. `target` is an `ArenaString` and not a view of the text because the parser joins the segments of a dotted path (`a . b` is `a.b`). `expression` is
+     * the right side of `Assign`, `AddAssign` and `SubAssign` and the condition of `If`; `Emit` has its arguments in `ScriptAst::arguments[firstArgument, firstArgument + argumentCount)`. An `else if`
+     * is an `elseBlock` of the one `If` statement. Columns are 1-based bytes of the whole text.
      */
     struct ScriptStatement {
         ScriptStatementKind kind = ScriptStatementKind::Assign;
         uint32_t column = 0;
         uint32_t targetColumn = 0;
-        String target;
+        ArenaString target;
         ScriptRange expression;
         uint32_t firstArgument = 0;
         uint32_t argumentCount = 0;
@@ -52,11 +54,16 @@ namespace BECore {
         ScriptBlock elseBlock;
     };
 
-    /// The arena of a parsed script: statements by id, the blocks as lists of ids, the arguments of emits in one list
+    /**
+     * @brief The statements of a parsed script: by id, the blocks as lists of ids, the arguments of emits in one list
+     *
+     * Every container is on the thread's scratch arena, so a tree belongs to the `ScratchScope` that is alive when it is made and must not outlive it, be stored in a longer-lived
+     * object or cross threads (`Memory/CLAUDE.md`, "Scratch arena and scopes").
+     */
     struct ScriptAst {
-        Vector<ScriptStatement> statements;
-        Vector<ScriptStatementId> order;
-        Vector<ScriptRange> arguments;
+        ArenaVector<ScriptStatement> statements;
+        ArenaVector<ScriptStatementId> order;
+        ArenaVector<ScriptRange> arguments;
         ScriptBlock root;
 
         [[nodiscard]] const ScriptStatement& operator[](ScriptStatementId id) const {
