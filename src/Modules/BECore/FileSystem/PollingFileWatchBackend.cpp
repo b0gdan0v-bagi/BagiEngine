@@ -58,6 +58,7 @@ namespace BECore {
 
     void PollingFileWatchBackend::Poll(Watched& watched) {
         bool listAgain = false;
+        const std::filesystem::file_time_type unsettledSince = watched.listedAt - kFolderStampUnsettledSeconds;
         for (Entry& entry : watched.entries) {
             const std::filesystem::file_time_type lastTime = entry.writeTime;
             const uintmax_t lastSize = entry.size;
@@ -75,7 +76,7 @@ namespace BECore {
                 entry.present = true;  // the watched folder itself came back
                 listAgain = true;
             } else if (entry.directory) {
-                listAgain = listAgain || entry.writeTime != lastTime;
+                listAgain = listAgain || entry.writeTime != lastTime || entry.writeTime >= unsettledSince;
             } else if (entry.writeTime != lastTime || entry.size != lastSize) {
                 Report(entry.path);
             }
@@ -86,6 +87,7 @@ namespace BECore {
     }
 
     void PollingFileWatchBackend::Rescan(Watched& watched, bool reportNewFiles) {
+        watched.listedAt = std::filesystem::file_time_type::clock::now();
         Vector<Entry> fresh;
         Entry& root = fresh.emplace_back();
         root.path = watched.root;

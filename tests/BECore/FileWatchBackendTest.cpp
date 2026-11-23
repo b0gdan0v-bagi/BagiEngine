@@ -436,6 +436,10 @@ namespace BECore::Tests {
         H().Write(H().Dir() / "a.xml", "one");
         MakeDirectory(H().Dir() / "sub");
         H().Write(H().Dir() / "sub" / "b.xml", "two");
+        // A folder stamped just now is still listed at every poll (kFolderStampUnsettledSeconds): the case is about a quiet folder
+        const auto anHourAgo = std::filesystem::file_time_type::clock::now() - std::chrono::hours(1);
+        std::filesystem::last_write_time(H().Dir() / "sub", anHourAgo);
+        std::filesystem::last_write_time(H().Dir(), anHourAgo);
         H().Backend().AddDirectory(H().Dir(), true);
         H().Backend().Tick(0.0);
         ExpectNoAllocations([this] {
