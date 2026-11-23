@@ -7,7 +7,6 @@
 #   directory-iterator                 engine-file-layer, engine-path-type
 # Whoever empties a rule deletes its lines here.
 src/Modules/BECore/Config/ConfigManager.cpp directory-iterator 1
-src/Modules/BECore/Config/XmlDocument.cpp fstream 2
 src/Modules/BECore/FileSystem/FileSystem.cpp directory-iterator 2
 src/Widgets/EditorLayout/LayoutStore.cpp directory-iterator 1
 src/Widgets/EditorLayout/UserFileIo.cpp fstream 2

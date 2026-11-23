@@ -1,6 +1,9 @@
 #include "XmlDocument.h"
 
+#include <BECore/Config/StringXmlWriter.h>
 #include <BECore/Config/XmlLayoutMerge.h>
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/Reflection/ReaderLimits.h>
 
 namespace BECore {
@@ -17,18 +20,6 @@ namespace BECore {
 
         constexpr StringView kByteOrderMark = "\xEF\xBB\xBF";
 
-        class StringWriter final : public pugi::xml_writer {
-        public:
-            explicit StringWriter(String& out) : _out(out) {}
-
-            void write(const void* data, size_t size) override {
-                _out.append(static_cast<const char*>(data), size);
-            }
-
-        private:
-            String& _out;
-        };
-
         bool StartsWithByteOrderMark(StringView text) {
             return text.size() >= kByteOrderMark.size() && text.substr(0, kByteOrderMark.size()) == kByteOrderMark;
         }
@@ -39,10 +30,9 @@ namespace BECore {
 
         /// The canonical text of @p document, the one every save without a layout to keep writes
         String SerializeCanonical(const pugi::xml_document& document, bool withByteOrderMark) {
-            String text;
-            StringWriter writer(text);
+            StringXmlWriter writer;
             document.save(writer, kIndent, kWriteFlags | (withByteOrderMark ? pugi::format_write_bom : 0u), pugi::encoding_utf8);
-            return text;
+            return eastl::move(writer.text);
         }
 
         /// @p updated laid out like @p onDisk, or nothing when that is not possible or does not give the same document
@@ -68,76 +58,43 @@ namespace BECore {
             return merged;
         }
 
-        /// The size of the regular file at @p path, nothing when it is not one, cannot be measured or is bigger than @p maxBytes
-        Optional<size_t> RegularFileSize(const std::filesystem::path& path, size_t maxBytes) {
-            std::error_code error;
-            if (!std::filesystem::is_regular_file(path, error)) {
-                return std::nullopt;
-            }
-            const uintmax_t size = std::filesystem::file_size(path, error);
-            if (error || size > maxBytes) {
-                return std::nullopt;
-            }
-            return static_cast<size_t>(size);
-        }
-
-        /// Reads exactly @p size bytes of the file into @p destination; false when it cannot be opened or ends early
-        bool ReadExactly(const std::filesystem::path& path, char* destination, size_t size) {
-            std::ifstream in(path, std::ios::in | std::ios::binary);  //-NoStd: the document's own file, read byte for byte
-            if (!in.is_open()) {
-                return false;
-            }
-            in.read(destination, static_cast<std::streamsize>(size));
-            return in.gcount() == static_cast<std::streamsize>(size);
-        }
-
     }  // namespace
 
     Optional<String> XmlDocument::ReadFileBytes(const std::filesystem::path& path) {
-        const Optional<size_t> size = RegularFileSize(path, ReaderLimits::kMaxXmlDocumentBytes);
-        if (!size) {
+        auto text = ReadTextFile(PathToUtf8(path), ReaderLimits::kMaxXmlDocumentBytes);
+        if (!text) {
             return std::nullopt;
         }
-        String bytes;
-        bytes.resize(*size);
-        if (!ReadExactly(path, bytes.data(), bytes.size())) {
-            return std::nullopt;
-        }
-        return bytes;
+        return eastl::move(*text);
     }
 
     Optional<StringView> XmlDocument::ReadFileInto(const std::filesystem::path& path, LinearArena& arena, size_t maxBytes) {
-        const Optional<size_t> size = RegularFileSize(path, std::min(maxBytes, ReaderLimits::kMaxXmlDocumentBytes));
-        if (!size) {
+        auto file = File::Open(PathToUtf8(path), FileMode::Read);
+        if (!file) {
             return std::nullopt;
         }
-        char* bytes = arena.Allocate<char>(*size);
-        if (!ReadExactly(path, bytes, *size)) {
+        const auto size = file->Size();
+        // The size of a file is untrusted: it is checked before the arena is asked for it
+        if (!size || *size > std::min<uint64_t>(maxBytes, ReaderLimits::kMaxXmlDocumentBytes)) {
             return std::nullopt;
         }
-        return StringView{bytes, *size};
+        char* bytes = arena.Allocate<char>(static_cast<size_t>(*size));
+        const auto read = file->Read(bytes, static_cast<size_t>(*size));
+        if (!read || *read != *size) {
+            return std::nullopt;
+        }
+        return StringView{bytes, static_cast<size_t>(*size)};
     }
 
     bool XmlDocument::LoadFromFile(const std::filesystem::path& filepath) {
-        if (!std::filesystem::exists(filepath)) {
+        // One read: the file that cannot be opened (missing, a folder) or is over the limit does not load, and the byte-order
+        // mark comes from the same bytes the parser sees
+        const Optional<String> bytes = ReadFileBytes(filepath);
+        if (!bytes) {
             return false;
         }
-
-        if (!std::filesystem::is_regular_file(filepath)) {
-            return false;
-        }
-
-        std::ifstream testStream(filepath, std::ios::in | std::ios::binary);
-        if (!testStream.is_open()) {
-            return false;
-        }
-        char head[3] = {};
-        testStream.read(head, sizeof(head));
-        const bool hasByteOrderMark = testStream.gcount() == sizeof(head) && StartsWithByteOrderMark(StringView(head, sizeof(head)));
-        testStream.close();
-
-        pugi::xml_parse_result result = _doc.load_file(filepath.string().c_str(), kParseFlags);
-        _hasByteOrderMark = result && hasByteOrderMark;
+        const pugi::xml_parse_result result = _doc.load_buffer(bytes->data(), bytes->size(), kParseFlags, pugi::encoding_auto);
+        _hasByteOrderMark = result && StartsWithByteOrderMark(*bytes);
         return result;
     }
 
@@ -157,14 +114,9 @@ namespace BECore {
     }
 
     bool XmlDocument::SaveToFile(const std::filesystem::path& filepath) const {
-        auto parentPath = filepath.parent_path();
-        if (!parentPath.empty()) {
-            if (!std::filesystem::exists(parentPath)) {
-                std::error_code ec;
-                if (!std::filesystem::create_directories(parentPath, ec)) {
-                    return false;
-                }
-            }
+        const auto parentPath = filepath.parent_path();
+        if (!parentPath.empty() && !CreateDirectories(PathToUtf8(parentPath))) {
+            return false;
         }
 
         // The text is built before the file is opened, which truncates it
@@ -183,14 +135,9 @@ namespace BECore {
             }
         }
 
-        // Binary: a text-mode stream on Windows would turn every '\n' into "\r\n"
-        std::ofstream out(filepath, std::ios::out | std::ios::binary | std::ios::trunc);
-        if (!out.is_open()) {
-            return false;
-        }
-        out.write(text.data(), static_cast<std::streamsize>(text.size()));
-        out.close();
-        return !out.fail();
+        // In place: a watcher of the folder sees one change of the file, not a temp file and a rename. Every File mode is binary
+        auto out = File::Open(PathToUtf8(filepath), FileMode::Write);
+        return out && out->Write(StringView(text)) && out->Close().has_value();
     }
 
     XmlNode XmlDocument::GetRoot() const {
