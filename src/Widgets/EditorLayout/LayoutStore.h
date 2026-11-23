@@ -1,11 +1,11 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
-#include <filesystem>
 
 namespace BECore {
 
@@ -41,7 +41,7 @@ namespace BECore {
     class LayoutStore {
     public:
         /// @p userDirectory is the editor folder (EditorUserDirectory()); the store makes `layouts` inside it on the first Save
-        explicit LayoutStore(std::filesystem::path userDirectory);
+        explicit LayoutStore(Path userDirectory);
 
         /// Writes @p text under @p name, replacing a layout of the same name. Refuses a bad name and an empty text.
         std::expected<void, LayoutError> Save(StringView name, StringView text);
@@ -58,9 +58,9 @@ namespace BECore {
         [[nodiscard]] Vector<String> List() const;
 
     private:
-        [[nodiscard]] std::filesystem::path PathOf(StringView name) const;
+        [[nodiscard]] Path PathOf(StringView name) const;
 
-        std::filesystem::path _folder;
+        Path _folder;
     };
 
     /**

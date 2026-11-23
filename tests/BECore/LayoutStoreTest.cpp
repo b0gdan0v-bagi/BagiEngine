@@ -137,6 +137,26 @@ namespace BECore::Tests {
         EXPECT_TRUE(store.List().empty());
     }
 
+    TEST_F(LayoutStoreTest, ANonAsciiUserFolderSavesListsLoadsAndDeletes) {
+        LayoutStore store(_directory / "caf\xC3\xA9");
+        ASSERT_TRUE(store.Save("Wide", "[Docking][Data]\n").has_value());
+        EXPECT_EQ(Joined(store.List()), "Wide");
+        EXPECT_EQ(*store.Load("Wide"), "[Docking][Data]\n");
+        EXPECT_TRUE(store.Exists("Wide"));
+        ASSERT_TRUE(store.Delete("Wide").has_value());
+        EXPECT_TRUE(store.List().empty());
+        EXPECT_EQ(store.Delete("Wide").error().kind, LayoutErrorKind::NotFound);
+    }
+
+    TEST_F(LayoutStoreTest, AFolderNamedLikeALayoutCannotBeDeleted) {
+        LayoutStore store(_directory);
+        MakeDirectory(_directory / "layouts" / "dir.ini");
+        const auto removed = store.Delete("dir");
+        ASSERT_FALSE(removed.has_value());
+        EXPECT_EQ(removed.error().kind, LayoutErrorKind::WriteFailed);
+        EXPECT_TRUE(std::filesystem::exists(_directory / "layouts" / "dir.ini"));
+    }
+
     TEST_F(LayoutStoreTest, NameCacheReadsTheFolderOnceUntilInvalidated) {
         LayoutStore store(_directory);
         ASSERT_TRUE(store.Save("Alpha", "x").has_value());
