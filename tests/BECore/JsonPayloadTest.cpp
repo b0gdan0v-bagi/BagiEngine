@@ -363,4 +363,23 @@ namespace BECore::Tests {
         EXPECT_EQ(out, R"({"id":4,"ok":true,"result":{"alpha":"","middle":{"k":[1,2]},"zulu":""}})");
     }
 
+    TEST(JsonPayloadTest, ASecondPushIntoTheKeptScratchAllocatesNothingInBothForms) {
+        const Json data = Json::parse(R"({"n":[1,2]})");
+        PayloadBetween answer;
+        const String text = R"({"k":1})";
+        answer.middle = JsonPayload::Text(text);
+        ControlService service;
+        String last;
+        service.SetEventSink([&last](const String& pushed) { last = pushed; });
+        const auto pushDocument = [&] { service.Publish("state_changed", data); };
+        const auto pushWriter = [&] { service.Publish("state_changed", [&answer](JsonWriter& writer) { answer.WriteJson(writer); }); };
+        pushDocument();
+        pushWriter();
+
+        ExpectNoAllocations(pushDocument);
+        EXPECT_EQ(last, R"({"data":{"n":[1,2]},"event":"state_changed"})");
+        ExpectNoAllocations(pushWriter);
+        EXPECT_EQ(last, R"({"data":{"alpha":"","middle":{"k":1},"zulu":""},"event":"state_changed"})");
+    }
+
 }  // namespace BECore::Tests

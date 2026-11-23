@@ -1,6 +1,7 @@
 #include "ControlService.h"
 
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlEnvelope.h>
 #include <BECore/Control/ControlLog.h>
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Memory/Pooled.h>
@@ -218,8 +219,6 @@ namespace BECore {
         PrunePublishObservers();
     }
 
-    // The push envelope is written by hand in both overloads: `data` is the caller's own document (a `Json` or a writer callback of the game or a module),
-    // which no struct of the engine can type.
     void ControlService::Publish(StringView event, const Json& data) {
         if (!_publishObservers.empty() && !_notifyingObservers) {
             NotifyPublishObservers(event, data);
@@ -234,11 +233,10 @@ namespace BECore {
         {
             ScratchLease lease(_publishScratch, _publishScratchBusy);
             JsonWriter writer(lease.Text());
-            writer.BeginObject();
-            writer.Key("data");
-            WriteJson(writer, data);
-            writer.Member("event", event);
-            writer.EndObject();
+            ControlPushEnvelope envelope;
+            envelope.data = JsonPayload::Borrowed(data);
+            envelope.event = event;
+            envelope.WriteJson(writer);
             sink(lease.Text());
         }
         if (_eventSinkGeneration == generation) {
@@ -275,15 +273,14 @@ namespace BECore {
         {
             ScratchLease lease(_publishScratch, _publishScratchBusy);
             JsonWriter writer(lease.Text());
-            writer.BeginObject();
-            writer.Key("data");
-            if (hasObservers) {
-                writer.Raw(observed);
-            } else {
-                writeData(writer);
-            }
-            writer.Member("event", event);
-            writer.EndObject();
+            const auto write = [&writeData](JsonWriter& out) -> std::expected<void, ControlError> {
+                writeData(out);
+                return {};
+            };
+            ControlPushEnvelope envelope;
+            envelope.data = hasObservers ? JsonPayload::Text(observed) : JsonPayload::Streamed(write);
+            envelope.event = event;
+            envelope.WriteJson(writer);
             if (writer.IsComplete()) {
                 sink(lease.Text());
             } else {
