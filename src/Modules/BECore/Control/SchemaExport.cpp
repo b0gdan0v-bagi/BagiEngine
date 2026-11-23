@@ -3,14 +3,16 @@
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/JsonPayload.h>
 #include <BECore/Reflection/TypeRegistry.h>
+#include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 
 namespace BECore {
 
     namespace {
 
-        ArenaString ToText(StringView view) {
-            return ArenaString(view.data(), view.size());
+        /// The texts of a schema answer are the registry's own (names of the program, literals), which outlive the answer
+        TextView ToText(StringView view) {
+            return TextView(view);
         }
 
         TypeSchemaAttributes MakeAttributes(const FieldAttributes& attributes) {
@@ -89,8 +91,8 @@ namespace BECore {
         }
 
         template <typename TInfoList>
-        ArenaVector<ArenaString> NamesOf(const TInfoList& infos) {
-            ArenaVector<ArenaString> names;
+        ArenaVector<TextView> NamesOf(const TInfoList& infos) {
+            ArenaVector<TextView> names;
             names.reserve(infos.size());
             for (const TypeInfo* info : infos) {
                 names.push_back(ToText(info->Name()));
@@ -102,9 +104,12 @@ namespace BECore {
             ArenaVector<TypeSchemaFactory> factories;
             factories.reserve(registry.FactoryBases().size());
             for (const TypeInfo* base : registry.FactoryBases()) {
+                const auto isMember = [&base](const TypeInfo* info) { return info->factoryBase == base->Hash(); };
+                // Counted first: a doubling vector leaves every old block in the arena until the scope of the answer ends
                 ArenaVector<const TypeInfo*> members;
+                members.reserve(static_cast<size_t>(eastl::count_if(registry.All().begin(), registry.All().end(), isMember)));
                 for (const TypeInfo* info : registry.All()) {
-                    if (info->factoryBase == base->Hash()) {
+                    if (isMember(info)) {
                         members.push_back(info);
                     }
                 }
@@ -158,7 +163,7 @@ namespace BECore {
         IntrusivePtr<TypeSchemaDesc> result = New<TypeSchemaDesc>();
         result->kind = ToText(TypeKindName(desc.kind));
         if (desc.kind == TypeKind::Opaque && desc.opaqueHash == DescribeType<JsonPayload>().opaqueHash) {
-            result->kind = "any";  // a foreign JSON value: no kind of its own in TypeKind, which the layout hash and the `Values/` switches would all have to learn
+            result->kind = TextView("any");  // a foreign JSON value: no kind of its own in TypeKind, which the layout hash and the `Values/` switches would all have to learn
         }
         switch (desc.kind) {
             case TypeKind::Object:
@@ -168,7 +173,7 @@ namespace BECore {
                 }
                 break;
             case TypeKind::Enum: {
-                ArenaVector<ArenaString> values;
+                ArenaVector<TextView> values;
                 values.reserve(desc.names.size());
                 for (const StringView name : desc.names) {
                     values.push_back(ToText(name));

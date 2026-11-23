@@ -107,18 +107,18 @@ namespace BECore {
             answer.methods.reserve(methods.size());
             for (const ControlMethodView& listing : methods) {
                 ControlListedMethod& method = answer.methods.emplace_back();
-                method.name = ArenaString(listing.name.data(), listing.name.size());
+                method.name = TextView(listing.name);
                 if (listing.info == nullptr) {
                     continue;
                 }
-                method.summary = ArenaString(listing.info->summary.data(), listing.info->summary.size());
+                method.summary = TextView(listing.info->summary);
                 method.params.reserve(listing.info->params.size());
                 for (const ControlParamInfo& param : listing.info->params) {
                     ControlListedParam& entry = method.params.emplace_back();
-                    entry.description = ArenaString(param.description.data(), param.description.size());
-                    entry.name = ArenaString(param.name.data(), param.name.size());
+                    entry.description = TextView(param.description);
+                    entry.name = TextView(param.name);
                     entry.required = param.required;
-                    entry.type = ArenaString(param.type.data(), param.type.size());
+                    entry.type = TextView(param.type);
                 }
             }
             call.ReplyObject(answer);
@@ -373,8 +373,8 @@ namespace BECore {
                     row.result = JsonPayload::Borrowed(*done);
                 } else {
                     ControlErrorAnswer error;
-                    error.code = ArenaString(done.error().code.data(), done.error().code.size());
-                    error.message = ArenaString(done.error().message.data(), done.error().message.size());
+                    error.code = TextView(done.error().code);
+                    error.message = TextView(done.error().message);
                     row.error = std::move(error);
                 }
             }

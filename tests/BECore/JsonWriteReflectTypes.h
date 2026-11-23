@@ -12,6 +12,7 @@
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Reflection/TextView.h>
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
@@ -350,6 +351,23 @@ namespace BECore {
             BE_REFLECT_FIELD Vector<uint32_t> numbers;
             BE_REFLECT_FIELD Vector<HeapItem> items;
             BE_REFLECT_FIELD Optional<Vector<String>> maybeWords;
+        };
+
+        /// An answer of views of text kept elsewhere and its heap twin with the same field names
+        struct ViewTwin {
+            BE_CLASS(ViewTwin)
+
+            BE_REFLECT_FIELD TextView text;
+            BE_REFLECT_FIELD Optional<TextView> maybeText;
+            BE_REFLECT_FIELD ArenaVector<TextView> words;
+        };
+
+        struct ViewHeapTwin {
+            BE_CLASS(ViewHeapTwin)
+
+            BE_REFLECT_FIELD String text;
+            BE_REFLECT_FIELD Optional<String> maybeText;
+            BE_REFLECT_FIELD Vector<String> words;
         };
 
         struct JsonWriteEvent {

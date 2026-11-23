@@ -5,6 +5,7 @@
 #include <BECore/Math/Vec4.h>
 #include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Reflection/DataAccessor.h>
+#include <BECore/Reflection/TextView.h>
 #include <BECore/Reflection/TypeDesc.h>
 #include <BECore/TypeRegistryTest.h>
 #include <BECore/Values/Context.h>
@@ -207,6 +208,12 @@ namespace BECore::Tests {
         EXPECT_EQ(DescribeType<ArenaString>().kind, TypeKind::String);
         EXPECT_EQ(DescribeType<ArenaVector<uint32_t>>().kind, TypeKind::List);
         EXPECT_TRUE(DescribeType<ArenaVector<uint32_t>>().resizable);
+    }
+
+    TEST(TypeDescTest, ATextViewIsDescribedAsAString) {
+        EXPECT_EQ(DescribeType<TextView>().kind, TypeKind::String);
+        EXPECT_EQ(DescribeType<ArenaVector<TextView>>().element->kind, TypeKind::String);
+        EXPECT_TRUE(Ser::HasDataAccessor<TextView>);
     }
 
     TEST(TypeDescTest, EnumIdentityIsItsNamesAndItsSize) {

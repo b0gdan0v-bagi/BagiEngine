@@ -6,6 +6,7 @@
 #include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Reflection/TextView.h>
 #include <BECore/Types/Types.h>
 #include <cstdint>
 
@@ -65,19 +66,19 @@ namespace BECore {
     struct ControlListedParam {
         BE_CLASS(ControlListedParam)
 
-        BE_REFLECT_FIELD ArenaString description;
-        BE_REFLECT_FIELD ArenaString name;
+        BE_REFLECT_FIELD TextView description;
+        BE_REFLECT_FIELD TextView name;
         BE_REFLECT_FIELD bool required = false;
-        BE_REFLECT_FIELD ArenaString type;
+        BE_REFLECT_FIELD TextView type;
     };
 
     /// One method of `list_methods`; a method nobody described has an empty `summary` and no `params`
     struct ControlListedMethod {
         BE_CLASS(ControlListedMethod)
 
-        BE_REFLECT_FIELD ArenaString name;
+        BE_REFLECT_FIELD TextView name;
         BE_REFLECT_FIELD ArenaVector<ControlListedParam> params;
-        BE_REFLECT_FIELD ArenaString summary;
+        BE_REFLECT_FIELD TextView summary;
     };
 
     /// `list_methods`
@@ -104,13 +105,13 @@ namespace BECore {
         BE_REFLECT_FIELD Optional<uint64_t> stopped;
     };
 
-    /// `call_method`: `result` is what the method's own serializer wrote, absent for a method that returns nothing. `method` and `root` are the client's text, copied
+    /// `call_method`: `result` is what the method's own serializer wrote, absent for a method that returns nothing. `method` and `root` are views of the client's text, which the handler holds
     struct ReflectionMethodAnswer {
         BE_CLASS(ReflectionMethodAnswer)
 
-        BE_REFLECT_FIELD ArenaString method;
+        BE_REFLECT_FIELD TextView method;
         BE_REFLECT_FIELD Optional<JsonPayload> result;
-        BE_REFLECT_FIELD ArenaString root;
+        BE_REFLECT_FIELD TextView root;
     };
 
 }  // namespace BECore

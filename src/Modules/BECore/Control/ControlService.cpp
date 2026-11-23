@@ -248,7 +248,7 @@ namespace BECore {
             JsonWriter writer(lease.Text());
             ControlPushEnvelope envelope;
             envelope.data = JsonPayload::Borrowed(data);
-            envelope.event = ArenaString(event.data(), event.size());
+            envelope.event = TextView(event);
             envelope.WriteJson(writer);
             sink(lease.Text());
         }
@@ -293,7 +293,7 @@ namespace BECore {
             };
             ControlPushEnvelope envelope;
             envelope.data = hasObservers ? JsonPayload::Text(observed) : JsonPayload::Streamed(write);
-            envelope.event = ArenaString(event.data(), event.size());
+            envelope.event = TextView(event);
             envelope.WriteJson(writer);
             if (writer.IsComplete()) {
                 sink(lease.Text());

@@ -3,7 +3,6 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Control/JsonWriteReflect.h>
 #include <BECore/Control/JsonWriter.h>
-#include <BECore/Memory/ScratchArena.h>
 #include <Common/Printers.h>
 #include <Games/ReplayAnswers.h>
 #include <Games/ReplayPlayer.h>
@@ -34,7 +33,6 @@ namespace BECore::Tests {
         }
 
         String AnswerText(const ReplayMismatch& mismatch) {
-            ScratchScope scratch;  // the error of the answer is on the scratch arena
             ReplayMismatchAnswer answer;
             FillReplayMismatchAnswer(answer, mismatch);
             return Written(answer);
@@ -71,7 +69,6 @@ namespace BECore::Tests {
         ReplayMismatch mismatch = MakeMismatch(ReplayMismatchKind::OutcomeDiffers);
         mismatch.expected = Json::parse(R"({"value":4})");
         mismatch.actual = Json::parse(R"({"value":5})");
-        ScratchScope scratch;  // the error of the mismatch is on the scratch arena
         ReplayAnswer failed;
         failed.entries = 3;
         FillReplayMismatchAnswer(failed.mismatch.emplace(), mismatch);

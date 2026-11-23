@@ -3,21 +3,21 @@
 #include <BECore/Control/JsonPayload.h>
 #include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Reflection/TextView.h>
 #include <BECore/Types/Types.h>
 
 namespace BECore {
 
     // The three envelopes of the wire as reflected structs: the generated `WriteJson` writes the keys in alphabetical order, as a `Json` object keeps them.
-    // They are locals of the writer: every `JsonPayload` in them is a view of the client's `id` or of the handler's callback, and the strings are on the scratch arena
-    // of the scope the writer opened.
+    // They are locals of the writer: every `JsonPayload` in them is a view of the client's `id` or of the handler's callback, and the texts are views of the error or the event name of the writer.
 
-    /// The error of a failed call: `error` of the error envelope, and the `error` of a failed entry of `batch`. On the scratch arena like every answer
-    /// struct (`Reflection/CLAUDE.md`, "Answers on the scratch arena"): a local of the code that writes it, filled with `ArenaString(text.data(), text.size())`
+    /// The error of a failed call: `error` of the error envelope, and the `error` of a failed entry of `batch`. A view of the `ControlError` it was made
+    /// from, which the code that writes it holds (`TextView`: a local of that code)
     struct ControlErrorAnswer {
         BE_CLASS(ControlErrorAnswer)
 
-        BE_REFLECT_FIELD ArenaString code;
-        BE_REFLECT_FIELD ArenaString message;
+        BE_REFLECT_FIELD TextView code;
+        BE_REFLECT_FIELD TextView message;
     };
 
     /// The response of a successful call, `{"id":..,"ok":true,"result":..}`
@@ -43,7 +43,7 @@ namespace BECore {
         BE_CLASS(ControlPushEnvelope)
 
         BE_REFLECT_FIELD JsonPayload data;
-        BE_REFLECT_FIELD ArenaString event;
+        BE_REFLECT_FIELD TextView event;
     };
 
 }  // namespace BECore

@@ -4,6 +4,7 @@
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Reflection/TextView.h>
 #include <BECore/Types/Types.h>
 #include <cstdint>
 
@@ -18,7 +19,7 @@ namespace BECore {
      *
      * Reference counted because the type recurses (`element`, `key`, `alternatives`) and a member cannot hold its own type by value; a null pointer writes no key.
      * Every other `TypeSchema` struct holds a type through such a pointer too, which is never null in an answer the builders made.
-     * The node is a heap object but its text and lists are on the scratch arena like the rest of the answer: it must die inside the scope of the answer (never cached).
+     * The node is a heap object; its lists are on the scratch arena and its texts are views of the registry (names of the program), so it must die inside the scope of the answer (never cached).
      */
     struct TypeSchemaDesc : RefCounted {
         BE_CLASS(TypeSchemaDesc)
@@ -27,10 +28,10 @@ namespace BECore {
         BE_REFLECT_FIELD Optional<uint64_t> capacity;
         BE_REFLECT_FIELD IntrusivePtr<TypeSchemaDesc> element;
         BE_REFLECT_FIELD IntrusivePtr<TypeSchemaDesc> key;
-        BE_REFLECT_FIELD ArenaString kind;
-        BE_REFLECT_FIELD Optional<ArenaString> object;
+        BE_REFLECT_FIELD TextView kind;
+        BE_REFLECT_FIELD Optional<TextView> object;
         BE_REFLECT_FIELD Optional<bool> resizable;
-        BE_REFLECT_FIELD Optional<ArenaVector<ArenaString>> values;
+        BE_REFLECT_FIELD Optional<ArenaVector<TextView>> values;
     };
 
     /// The attributes a field sets; every member is absent when it is not set, so a field with none writes `{}`
@@ -43,14 +44,14 @@ namespace BECore {
         BE_REFLECT_FIELD Optional<bool> readonly;
         BE_REFLECT_FIELD Optional<bool> required;
         BE_REFLECT_FIELD Optional<double> step;
-        BE_REFLECT_FIELD Optional<ArenaString> tooltip;
+        BE_REFLECT_FIELD Optional<TextView> tooltip;
     };
 
     struct TypeSchemaField {
         BE_CLASS(TypeSchemaField)
 
         BE_REFLECT_FIELD TypeSchemaAttributes attributes;
-        BE_REFLECT_FIELD ArenaString name;
+        BE_REFLECT_FIELD TextView name;
         BE_REFLECT_FIELD IntrusivePtr<TypeSchemaDesc> type;
     };
 
@@ -58,13 +59,13 @@ namespace BECore {
     struct TypeSchemaOwnedField : TypeSchemaField {
         BE_CLASS(TypeSchemaOwnedField)
 
-        BE_REFLECT_FIELD ArenaString owner;
+        BE_REFLECT_FIELD TextView owner;
     };
 
     struct TypeSchemaParam {
         BE_CLASS(TypeSchemaParam)
 
-        BE_REFLECT_FIELD ArenaString name;
+        BE_REFLECT_FIELD TextView name;
         BE_REFLECT_FIELD IntrusivePtr<TypeSchemaDesc> type;
     };
 
@@ -74,7 +75,7 @@ namespace BECore {
 
         BE_REFLECT_FIELD bool callable = false;
         BE_REFLECT_FIELD bool isConst = false;
-        BE_REFLECT_FIELD ArenaString name;
+        BE_REFLECT_FIELD TextView name;
         BE_REFLECT_FIELD ArenaVector<TypeSchemaParam> params;
         BE_REFLECT_FIELD IntrusivePtr<TypeSchemaDesc> result;
     };
@@ -85,10 +86,10 @@ namespace BECore {
 
         BE_REFLECT_FIELD bool abstract = false;
         BE_REFLECT_FIELD bool creatable = false;
-        BE_REFLECT_FIELD ArenaString icon;
-        BE_REFLECT_FIELD ArenaString name;
-        BE_REFLECT_FIELD Optional<ArenaString> parent;
-        BE_REFLECT_FIELD ArenaString purpose;
+        BE_REFLECT_FIELD TextView icon;
+        BE_REFLECT_FIELD TextView name;
+        BE_REFLECT_FIELD Optional<TextView> parent;
+        BE_REFLECT_FIELD TextView purpose;
     };
 
     /// A row of `list_types`: `fields` and `methods` are the numbers of the type's own
@@ -103,7 +104,7 @@ namespace BECore {
     struct TypeSchemaEntry : TypeSchemaHead {
         BE_CLASS(TypeSchemaEntry)
 
-        BE_REFLECT_FIELD Optional<ArenaString> factoryBase;
+        BE_REFLECT_FIELD Optional<TextView> factoryBase;
         BE_REFLECT_FIELD ArenaVector<TypeSchemaField> fields;
         BE_REFLECT_FIELD ArenaVector<TypeSchemaMethod> methods;
     };
@@ -113,25 +114,25 @@ namespace BECore {
         BE_CLASS(TypeSchemaDescribed)
 
         BE_REFLECT_FIELD ArenaVector<TypeSchemaOwnedField> allFields;
-        BE_REFLECT_FIELD ArenaVector<ArenaString> bases;
-        BE_REFLECT_FIELD ArenaVector<ArenaString> derived;
+        BE_REFLECT_FIELD ArenaVector<TextView> bases;
+        BE_REFLECT_FIELD ArenaVector<TextView> derived;
     };
 
     /// A factory base with its derived types; `elementName` is absent for a base no reflected field holds
     struct TypeSchemaFactory {
         BE_CLASS(TypeSchemaFactory)
 
-        BE_REFLECT_FIELD ArenaString base;
-        BE_REFLECT_FIELD ArenaVector<ArenaString> derived;
-        BE_REFLECT_FIELD Optional<ArenaString> elementName;
+        BE_REFLECT_FIELD TextView base;
+        BE_REFLECT_FIELD ArenaVector<TextView> derived;
+        BE_REFLECT_FIELD Optional<TextView> elementName;
     };
 
     /// A root of the control service; `type` is the type of the object it resolves to now, absent when it resolves to none
     struct TypeSchemaRoot {
         BE_CLASS(TypeSchemaRoot)
 
-        BE_REFLECT_FIELD ArenaString name;
-        BE_REFLECT_FIELD Optional<ArenaString> type;
+        BE_REFLECT_FIELD ArenaString name;  // a copy: the builder's list of names is a local of its own
+        BE_REFLECT_FIELD Optional<TextView> type;
     };
 
     /// `list_types`

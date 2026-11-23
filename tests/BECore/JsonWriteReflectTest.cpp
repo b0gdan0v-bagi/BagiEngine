@@ -8,6 +8,7 @@
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/JsonWriteReflectTypes.h>
 #include <BECore/Math/Vec2.h>
+#include <BECore/Reflection/TextView.h>
 #include <Common/AllocCheck.h>
 #include <Common/Require.h>
 #include <Common/ScratchScopeFixture.h>
@@ -460,6 +461,8 @@ namespace BECore::Tests {
         using JsonWriteTestData::JsonWritePtrPlainChild;
         using JsonWriteTestData::JsonWritePtrSame;
         using JsonWriteTestData::JsonWriteScalars;
+        using JsonWriteTestData::ViewHeapTwin;
+        using JsonWriteTestData::ViewTwin;
 
         constexpr float kAwkwardFloat = 0.1f;
 
@@ -1043,6 +1046,76 @@ namespace BECore::Tests {
 
     TEST_F(JsonWriteArenaTest, TheSecondWriteOfTheArenaShapeAllocatesNothing) {
         ExpectSecondWriteAllocatesNothing(MakeArenaTwin());
+    }
+
+    // =========================================================================
+    // Views of text kept elsewhere (TextView) next to their heap twin
+    // =========================================================================
+
+    namespace {
+
+        constexpr StringView kViewedText = "a text kept elsewhere, longer than the small-string buffer";
+        constexpr StringView kViewedWord = "q\"uote\n";
+
+        ViewTwin MakeViewTwin() {
+            ViewTwin value;
+            value.text = TextView(kViewedText);
+            value.maybeText = TextView(kViewedWord);
+            value.words.reserve(2);
+            value.words.push_back(TextView(kViewedText));
+            value.words.push_back(TextView(kViewedWord));
+            return value;
+        }
+
+        ViewHeapTwin MakeViewHeapTwin() {
+            ViewHeapTwin value;
+            value.text = String(kViewedText.data(), kViewedText.size());
+            value.maybeText = String(kViewedWord.data(), kViewedWord.size());
+            value.words = {String(kViewedText.data(), kViewedText.size()), String(kViewedWord.data(), kViewedWord.size())};
+            return value;
+        }
+
+    }  // namespace
+
+    class JsonWriteViewTest : public ScratchScopeFixture {};
+
+    TEST_F(JsonWriteViewTest, TheViewShapeWritesTheBytesOfItsHeapTwin) {
+        const ViewTwin views = MakeViewTwin();
+        const ViewHeapTwin heap = MakeViewHeapTwin();
+        for (const int indent : kIndents) {
+            EXPECT_EQ(Written(views, indent), Written(heap, indent)) << "indent " << indent;
+        }
+    }
+
+    TEST_F(JsonWriteViewTest, AnEmptyViewIsAnEmptyStringAndAnEmptyOptionalLeavesItsMemberOut) {
+        const ViewTwin empty;
+        const String text = Written(empty, JsonWriter::kCompact);
+        EXPECT_EQ(text.find("maybeText"), String::npos);
+        EXPECT_EQ(text, Written(ViewHeapTwin{}, JsonWriter::kCompact));
+    }
+
+    TEST_F(JsonWriteViewTest, TheViewShapeSerializesTheBytesOfItsHeapTwin) {
+        const ViewTwin views = MakeViewTwin();
+        const ViewHeapTwin heap = MakeViewHeapTwin();
+        for (const int indent : kIndents) {
+            EXPECT_EQ(Reference(views, indent), Reference(heap, indent)) << "indent " << indent;
+        }
+    }
+
+    TEST_F(JsonWriteViewTest, TheViewShapeWrittenByTheGeneratedWriterEqualsTheDomPath) {
+        ExpectSameAsDom(MakeViewTwin());
+        ExpectSameAsDom(ViewTwin{});
+    }
+
+    TEST_F(JsonWriteViewTest, ReadingLeavesTheViewsAlone) {
+        const ViewTwin original = MakeViewTwin();
+        const ViewTwin read = ReadBack(original);
+        EXPECT_TRUE(read.text.View().empty());
+        EXPECT_FALSE(read.maybeText.has_value());
+    }
+
+    TEST_F(JsonWriteViewTest, TheSecondWriteOfTheViewShapeAllocatesNothing) {
+        ExpectSecondWriteAllocatesNothing(MakeViewTwin());
     }
 
 }  // namespace BECore::Tests

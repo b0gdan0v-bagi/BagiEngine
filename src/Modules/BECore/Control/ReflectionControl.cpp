@@ -282,11 +282,11 @@ namespace BECore {
             const Json written = writer.Take();
             const auto result = written.find("result");
             ReflectionMethodAnswer answer;
-            answer.method = ArenaString(method->data(), method->size());
+            answer.method = TextView(*method);
             if (result != written.end()) {
                 answer.result = JsonPayload::Borrowed(*result);
             }
-            answer.root = ArenaString(rootName->data(), rootName->size());
+            answer.root = TextView(*rootName);
             call.ReplyObject(answer);
         }
 

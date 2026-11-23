@@ -39,8 +39,8 @@ namespace BECore {
         ScratchScope scratch;  // as in TryAppendOkResponse
         JsonWriter writer(out);
         ControlErrorEnvelope envelope;
-        envelope.error.code = ArenaString(error.code.data(), error.code.size());
-        envelope.error.message = ArenaString(error.message.data(), error.message.size());
+        envelope.error.code = TextView(error.code);
+        envelope.error.message = TextView(error.message);
         envelope.id = JsonPayload::Borrowed(id);
         envelope.WriteJson(writer);
     }
