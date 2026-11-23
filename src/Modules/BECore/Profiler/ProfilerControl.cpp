@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/File/Path.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
@@ -138,17 +139,29 @@ namespace BECore {
 
         /// @p text as a trace path the game may write: relative and inside the working folder
         bool IsSafeRelativePath(StringView text) {
-            if (text.empty()) {
+            // Through Path so that a backslash is a separator on Windows, as it is for the file that gets written
+            const Path path(text);
+            const StringView view = path.View();
+            if (view.empty() || PathIsAbsolute(view) || PathIsSeparator(view.front())) {
                 return false;
             }
-            const std::filesystem::path path(ToStdString(text));
-            if (path.is_absolute() || path.has_root_name() || path.has_root_directory()) {
+#ifdef _WIN32
+            // `C:file` is not absolute but names the working folder of another drive
+            constexpr size_t kDriveColon = 1;
+            if (view.size() > kDriveColon && view[kDriveColon] == ':') {
                 return false;
             }
-            for (const std::filesystem::path& part : path) {
-                if (part == "..") {
+#endif
+            constexpr StringView kParentName = "..";
+            for (size_t begin = 0; begin <= view.size();) {
+                size_t end = begin;
+                while (end < view.size() && !PathIsSeparator(view[end])) {
+                    ++end;
+                }
+                if (view.substr(begin, end - begin) == kParentName) {
                     return false;
                 }
+                begin = end + 1;
             }
             return true;
         }

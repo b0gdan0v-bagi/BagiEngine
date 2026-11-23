@@ -257,6 +257,31 @@ namespace BECore::Tests {
         EXPECT_EQ(MaskIntegers(shown), R"json({"id":N,"ok":true,"result":{"dropped":N,"path":"FILE"}})json");
     }
 
+    TEST_F(ProfilerControlGoldenTest, ProfilerDumpRefusesAPathOutsideTheWorkingFolderBeforeItLooksAtTheBackend) {
+        if (Profiler::GetPrimaryBackend() == &Profiler::GetChromeTrace()) {
+            GTEST_SKIP() << "an accepted path would write a file";
+        }
+        static constexpr const char* kRefused = "has to be a relative file name";
+        const auto refused = [this](const String& path) {
+            Json params = Json::object();
+            params["path"] = path.c_str();
+            return Ask(service, "profiler_dump", params).find(kRefused) != String::npos;
+        };
+
+        // An accepted path goes on to the backend check, which answers that nothing is recording
+        for (const char* accepted : {"trace.json", "sub/trace.json", "caf\xC3\xA9.json", "with space.json", "a/..b", "a../b", "a/.b/c"}) {
+            EXPECT_FALSE(refused(accepted)) << accepted;
+        }
+        for (const char* unsafe : {"", "/abs/trace.json", "..", "../trace.json", "a/../b", "a/..", "a//..", "./../x"}) {
+            EXPECT_TRUE(refused(unsafe)) << unsafe;
+        }
+#ifdef _WIN32
+        for (const char* unsafe : {"C:x", "C:\\x", "\\\\server\\share\\x", "\\x", "a\\..\\b"}) {
+            EXPECT_TRUE(refused(unsafe)) << unsafe;
+        }
+#endif
+    }
+
     TEST_F(ProfilerControlGoldenTest, FrameStatsAllocatesNothingBeyondTheStatsItReads) {
         // The stats are returned as Vectors, which allocate whoever asks: a method that reads the same three and answers `{}` is the measure of the rest
         service.RegisterHandler("reads_only", [](ControlCall& call) {
