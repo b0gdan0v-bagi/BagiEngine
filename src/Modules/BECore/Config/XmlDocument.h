@@ -1,9 +1,9 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/Memory/LinearArena.h>
 #include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Types/Types.h>
-#include <filesystem>
 #include <pugixml.hpp>
 
 namespace BECore {
@@ -19,7 +19,7 @@ namespace BECore {
         ~XmlDocument() = default;
 
         /// The bytes of the file at @p path, or nothing when it is not a regular file, is bigger than the limit of an XML document or cannot be read
-        static Optional<String> ReadFileBytes(const std::filesystem::path& path);
+        static Optional<String> ReadFileBytes(const Path& path);
 
         /**
          * @brief ReadFileBytes into @p arena: a view of the file's bytes (valid until the arena is rewound or reset), no heap block
@@ -27,10 +27,10 @@ namespace BECore {
          * The same checks, and nothing when the file is bigger than @p maxBytes (at most the limit of an XML document): a caller that
          * reads in a scratch scope keeps its big files out of the arena, whose chunks stay allocated after a rewind.
          */
-        static Optional<StringView> ReadFileInto(const std::filesystem::path& path, LinearArena& arena, size_t maxBytes);
+        static Optional<StringView> ReadFileInto(const Path& path, LinearArena& arena, size_t maxBytes);
 
         /// @return false when the file is missing, is not a regular file or does not parse
-        bool LoadFromFile(const std::filesystem::path& filepath);
+        bool LoadFromFile(const Path& filepath);
 
         /// @return false for an empty string or one that does not parse
         bool LoadFromString(StringView xmlContent);
@@ -49,7 +49,7 @@ namespace BECore {
          * wins over the document: a change made to the file after the load is overwritten.
          * @return false when the file cannot be opened for writing
          */
-        bool SaveToFile(const std::filesystem::path& filepath) const;
+        bool SaveToFile(const Path& filepath) const;
 
         /// The root element of the document (the comments and the declaration before it are not the root), or an empty node
         XmlNode GetRoot() const;

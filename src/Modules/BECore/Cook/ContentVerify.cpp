@@ -243,7 +243,7 @@ namespace BECore {
                 std::error_code ec;
                 if (!configs.IsBinaryConfig(stem) || !std::filesystem::equivalent(configs.GetConfigFilePath(PoolString::Intern(stem)), cookedFile, ec)) {
                     messages.push_back(Format("the stem '{}' is read from {}: another file of the cooked layer has the same stem and ConfigManager keeps that one", stem,
-                                              configs.GetConfigFilePath(PoolString::Intern(stem)).string()));
+                                              configs.GetConfigFilePath(PoolString::Intern(stem)).View()));
                     return false;
                 }
                 return true;

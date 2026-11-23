@@ -133,6 +133,17 @@ namespace BECore::Tests {
         EXPECT_FALSE(document.SaveToFile(folder));
     }
 
+    TEST_F(XmlDocumentTest, ASaveMakesAMissingFolderWithANonAsciiName) {
+        XmlDocument document;
+        ASSERT_TRUE(document.LoadFromString("<root />"));
+        const Path file = Path(PathOf("caf\xC3\xA9")) / "Conf\xC3\xA9.xml";
+        ASSERT_TRUE(document.SaveToFile(file));
+
+        XmlDocument loaded;
+        ASSERT_TRUE(loaded.LoadFromFile(file));
+        EXPECT_TRUE(static_cast<bool>(loaded.GetRoot()));
+    }
+
     namespace {
 
         /// The shape of a hand-written TextureLibrary.xml: a blank line between the rows

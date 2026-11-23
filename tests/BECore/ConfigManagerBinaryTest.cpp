@@ -135,7 +135,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(_manager.IsBinaryConfig(kConfig));
         EXPECT_TRUE(_manager.IsBinaryConfig("BinaryProbe"));
         EXPECT_EQ(_manager.GetConfigCount(), 1u);
-        EXPECT_EQ(_manager.GetConfigFilePath(kConfig), _lower / "BinaryProbe.bin");
+        EXPECT_EQ(_manager.GetConfigFilePath(kConfig), Path(_lower / "BinaryProbe.bin"));
         EXPECT_EQ(_manager.GetAllConfigNames().size(), 1u);
         EXPECT_TRUE(_manager.GetConfig(kConfig).IsEmpty()) << "GetConfig serves XML only";
         EXPECT_EQ(ToXml(Read()), ToXml(MakeRoot()));
@@ -175,7 +175,19 @@ namespace BECore::Tests {
         EXPECT_EQ(Read().id, 21);
         EXPECT_FALSE(_manager.IsBinaryConfig("Other"));
         EXPECT_FALSE(_manager.GetConfig("Other").IsEmpty());
-        EXPECT_EQ(_manager.GetConfigFilePath("Other"_intern), _upper / "Other.xml");
+        EXPECT_EQ(_manager.GetConfigFilePath("Other"_intern), Path(_upper / "Other.xml"));
+    }
+
+    TEST_F(ConfigManagerBinaryTest, ALayerFolderAndFilesWithNonAsciiNamesAreScannedAndLoaded) {
+        const std::filesystem::path folder = _lower / "caf\xC3\xA9";
+        WriteFile(folder / "Conf\xC3\xA9.xml", "<Conf/>\n");
+        WriteContentBin(folder / "Bin\xC3\xA9.bin", kRootName, MakeRoot());
+        Start();
+
+        EXPECT_TRUE(_manager.HasConfig("Conf\xC3\xA9"_intern));
+        EXPECT_EQ(_manager.GetConfigFilePath("Conf\xC3\xA9"_intern), Path(folder / "Conf\xC3\xA9.xml"));
+        EXPECT_TRUE(_manager.IsBinaryConfig("Bin\xC3\xA9"));
+        EXPECT_EQ(_manager.GetConfigFilePath("Bin\xC3\xA9"_intern), Path(folder / "Bin\xC3\xA9.bin"));
     }
 
     TEST_F(ConfigManagerBinaryTest, AnXmlAndABinOfOneStemInOneLayerLeaveTheConfigAbsent) {

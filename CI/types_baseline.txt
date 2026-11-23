@@ -5,7 +5,6 @@
 # Who removes which lines:
 #   directory-iterator                 engine-path-type (the file layer has no directory listing)
 # Whoever empties a rule deletes its lines here.
-src/Modules/BECore/Config/ConfigManager.cpp directory-iterator 1
 src/Widgets/EditorLayout/LayoutStore.cpp directory-iterator 1
 tests/BECore/FuzzCorpusTest.cpp directory-iterator 1
 tests/BECore/Save/SaveGameFilesTest.cpp directory-iterator 1
