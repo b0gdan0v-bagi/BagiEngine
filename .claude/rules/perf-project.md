@@ -237,6 +237,18 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
       }
     },
     {
+      "name": "ui-box-raster",
+      "about": "The skinned UI boxes of a 1920x1080 screen on the SDL software renderer (UIBoxRasterCostTest, headless window): 23 boxes (a 1200x800 panel with 12 buttons on it, three mid panels, seven tiles; vertical gradient, border, shadow, glow, highlight) drawn through UIElement::DrawBoxIn, the median Present() of 30 frames at scale 1 and 2 (the skin in UI units, the output the same). Before the cached box texture the screen cost 17.9 ms at 1x and 24.0 ms at 2x (33.5 k and 46.0 k mesh triangles, 11.2 M and 13.6 M bounding-box pixels); with it 1.6 ms and 1.7 ms as 69 blits over 2.0 M and 2.3 M pixels (`triangles` counts a blit as its two triangles). The cost is also pinned in ctest by UIBoxRasterBudgetTest (blits, blended pixels, the Full mesh), so triangles and bbox_px only show the size of a change; present_ms_1x is the gate (about 1.6 ms, runs agree within 2 %, so 10 % is a real change)",
+      "fast": true,
+      "command": ["{bin}/BagiEngineTests", "--gtest_also_run_disabled_tests", "--gtest_filter=UIBoxRasterCostTest.DISABLED_Screen*"],
+      "metrics": {
+        "present_ms_1x": {"source": "regex", "pattern": "^UIBoxRasterCost part=screen scale=1 .* present_ms=([0-9.]+)", "unit": "ms", "better": "lower", "thresholdPercent": 10},
+        "present_ms_2x": {"source": "regex", "pattern": "^UIBoxRasterCost part=screen scale=2 .* present_ms=([0-9.]+)", "unit": "ms", "better": "lower", "gate": false},
+        "triangles": {"source": "regex", "pattern": "^UIBoxRasterCost part=screen scale=1 triangles=([0-9]+)", "unit": "triangles", "better": "lower", "gate": false},
+        "bbox_px": {"source": "regex", "pattern": "^UIBoxRasterCost part=screen scale=1 triangles=[0-9]+ bbox_px=([0-9]+)", "unit": "px", "better": "lower", "gate": false}
+      }
+    },
+    {
       "name": "engine-tests",
       "about": "BagiEngineTests in one process (it waits on threads and sockets, so wall time, not CPU)",
       "command": ["{bin}/BagiEngineTests", "--gtest_brief=1"],

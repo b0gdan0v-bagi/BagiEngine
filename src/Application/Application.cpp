@@ -23,6 +23,7 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Time/GamePause.h>
 #include <BECore/Time/Time.h>
+#include <BECore/UI/UIBoxTextureCache.h>
 #include <BECore/Utils/EngineVersion.h>
 #include <BECore/Widgets/WidgetManager.h>
 #include <CoreSDL/SDLEvents.h>
@@ -354,10 +355,11 @@ namespace BECore {
         }
 #endif
         GameManager::GetInstance().Shutdown();
-        // The glyph pages and the widgets own GPU objects (a texture, the viewport's target, ImGui's descriptors): they go before
+        // The glyph pages, the box textures and the widgets own GPU objects (a texture, the viewport's target, ImGui's descriptors): they go before
         // the renderer's own cleanup destroys the device. Direct calls, not handlers of ApplicationCleanUpEvent: EnTT calls the
         // handlers in the reverse order of the subscription, so the renderer's Destroy would run first
         CoreManager::GetFontAtlasLibrary().Clear();
+        CoreManager::GetUIBoxTextureCache().Clear();
         CoreManager::GetWidgetManager().DestroyAll();
         ApplicationEvents::ApplicationCleanUpEvent::Emit();
         CoreManager::GetInstance().OnApplicationDeinit({});

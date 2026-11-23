@@ -30,6 +30,7 @@ namespace BECore {
     class SceneManager;
     class TaskManager;
     class TestManager;
+    class UIBoxTextureCache;
     class TextureLibrary;
     class Time;
     class TweenManager;
@@ -116,6 +117,10 @@ namespace BECore {
 
         static FontAtlasLibrary& GetFontAtlasLibrary() {
             return *GetInstance()._fontAtlasLibrary;
+        }
+
+        static UIBoxTextureCache& GetUIBoxTextureCache() {
+            return *GetInstance()._uiBoxTextureCache;
         }
 
         static Time& GetTime() {
@@ -248,6 +253,7 @@ namespace BECore {
         IntrusivePtr<SceneManager> _sceneManager;
         UniquePtr<TextureLibrary> _textureLibrary;
         UniquePtr<FontAtlasLibrary> _fontAtlasLibrary;
+        UniquePtr<UIBoxTextureCache> _uiBoxTextureCache;
         UniquePtr<Time> _time;
         UniquePtr<GamePause> _pause;
         // A setter may point into a scene: OnApplicationDeinit and OnTestEnvironmentDeinit Clear() it first. Declared after _sceneManager on purpose: the

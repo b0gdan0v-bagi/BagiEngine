@@ -4,6 +4,7 @@
 #include <BECore/Memory/FrameAllocator.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Time/Time.h>
+#include <BECore/UI/UIBoxTextureCache.h>
 #include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UISettings.h>
@@ -205,8 +206,12 @@ namespace BECore {
             return;
         }
 
-        const float pixelsPerUnit = renderer.GetViewTransform().scale;
         const GeometryDetail detail = renderer.GetGeometryDetail();
+        // A renderer that pays for every triangle draws the box as blits of a cached texture; what cannot be one is the mesh below
+        if (detail == GeometryDetail::Reduced && CoreManager::GetUIBoxTextureCache().Draw(renderer, area, boxStyle, fill, gradientEnd)) {
+            return;
+        }
+        const float pixelsPerUnit = renderer.GetViewTransform().scale;
         FrameVector<GeometryVertex> vertices;
         FrameVector<int> indices;
         {
