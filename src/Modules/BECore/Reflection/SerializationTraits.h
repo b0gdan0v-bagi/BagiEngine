@@ -80,17 +80,9 @@ namespace BECore {
     };
 
     template <typename T>
-    struct DefaultChecker<IntrusivePtrAtomic<T>> {
+    struct DefaultChecker<IntrusivePtr<T>> {
         static constexpr bool AlwaysFalse = false;
-        static bool IsDefault(const IntrusivePtrAtomic<T>& v) {
-            return !v;
-        }
-    };
-
-    template <typename T>
-    struct DefaultChecker<IntrusivePtrNonAtomic<T>> {
-        static constexpr bool AlwaysFalse = false;
-        static bool IsDefault(const IntrusivePtrNonAtomic<T>& v) {
+        static bool IsDefault(const IntrusivePtr<T>& v) {
             return !v;
         }
     };
@@ -170,17 +162,9 @@ namespace BECore {
     };
 
     template <typename T>
-    struct DefaultMaker<IntrusivePtrAtomic<T>> {
+    struct DefaultMaker<IntrusivePtr<T>> {
         static constexpr bool HasMakeDefault = true;
-        static void MakeDefault(IntrusivePtrAtomic<T>& v) {
-            v.Reset();
-        }
-    };
-
-    template <typename T>
-    struct DefaultMaker<IntrusivePtrNonAtomic<T>> {
-        static constexpr bool HasMakeDefault = true;
-        static void MakeDefault(IntrusivePtrNonAtomic<T>& v) {
+        static void MakeDefault(IntrusivePtr<T>& v) {
             v.Reset();
         }
     };

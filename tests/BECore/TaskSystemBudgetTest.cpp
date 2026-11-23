@@ -136,7 +136,7 @@ namespace BECore::Tests {
         }
 
         Handle MakeHandle(Task<void> task) {
-            return MakeIntrusive<TaskHandle<void>>(std::move(task));
+            return New<TaskHandle<void>>(std::move(task));
         }
 
         /// A scheduler of its own over an inline pool, with a fake clock for the budget.

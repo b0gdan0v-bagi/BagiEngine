@@ -85,11 +85,11 @@ namespace BECore::Tests {
         EXPECT_EQ(again.Get(), address);
     }
 
-    TEST(PooledTest, AnAtomicObjectMadeWithMakeIntrusiveUsesThePoolToo) {
+    TEST(PooledTest, AnAtomicObjectMadeWithNewUsesThePoolToo) {
         const size_t before = PooledAtomic::PooledPool().GetLiveCount();
         const PooledAtomic* address = nullptr;
         {
-            auto object = MakeIntrusiveAtomic<PooledAtomic>(3);
+            auto object = New<PooledAtomic>(3);
             address = object.Get();
             EXPECT_EQ(PooledAtomic::PooledPool().GetLiveCount(), before + 1);
         }

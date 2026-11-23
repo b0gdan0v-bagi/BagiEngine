@@ -1,194 +1,141 @@
 #pragma once
 
-#include <BECore/Types/Types.h>
-#include <cassert>
+#include <BECore/Assert/AssertMacros.h>
+#include <EASTL/functional.h>
+#include <compare>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <tuple>
-#include <type_traits>
+#include <functional>
 #include <utility>
 
 namespace BECore {
 
-    template <typename T>
-    class IntrusivePtrAtomic;
+    /// Tag of the adopting constructor of IntrusivePtr: the pointer already holds a count that the new owner takes over.
+    struct AdoptRef {};
+    inline constexpr AdoptRef kAdoptRef{};
 
+    /**
+     * Owner of one count of an object that carries its own counter (RefCountedNonAtomic or RefCountedAtomic, `RefCounted.h`).
+     *
+     * One class for both counters: the object's counter decides whether a count is atomic, not the pointer. Make the first owner with
+     * `New<T>` (`New.h`). A conversion to a base is implicit; a downcast does not compile, use StaticPointerCast or DynamicPointerCast.
+     *
+     * Every release moves the pointer out first and drops the count afterwards, so a destructor that reaches back into the pointer
+     * that held the object sees it empty.
+     */
     template <typename T>
-    class IntrusivePtrNonAtomic {
+    class IntrusivePtr {
         template <typename U>
-        friend class IntrusivePtrNonAtomic;
+        friend class IntrusivePtr;
 
     public:
-        IntrusivePtrNonAtomic() = default;
+        IntrusivePtr() noexcept = default;
 
-        explicit IntrusivePtrNonAtomic(T* ptr) : _ptr(ptr) {
+        /// Takes a new count of @p ptr (null is allowed). For a pointer whose count is already owned by this pointer, use the AdoptRef form.
+        explicit IntrusivePtr(T* ptr) noexcept : _ptr(ptr) {
             if (_ptr != nullptr) {
                 _ptr->AddRef();
             }
         }
 
-        IntrusivePtrNonAtomic(const IntrusivePtrNonAtomic& other) : _ptr(other._ptr) {
+        /// Takes over a count that @p ptr already holds, with no AddRef: the pair of Detach(), nothing else should make one.
+        IntrusivePtr(T* ptr, AdoptRef) noexcept : _ptr(ptr) {}
+
+        IntrusivePtr(const IntrusivePtr& other) noexcept : _ptr(other._ptr) {
             if (_ptr != nullptr) {
                 _ptr->AddRef();
             }
         }
 
-        IntrusivePtrNonAtomic(IntrusivePtrNonAtomic&& other) noexcept : _ptr(other._ptr) {
-            other._ptr = nullptr;
-        }
+        IntrusivePtr(IntrusivePtr&& other) noexcept : _ptr(std::exchange(other._ptr, nullptr)) {}
 
         template <typename U>
-        IntrusivePtrNonAtomic(const IntrusivePtrNonAtomic<U>& other) : _ptr(static_cast<T*>(other._ptr)) {
-            if (_ptr != nullptr) {
-                _ptr->AddRef();
-            }
-        }
-
-        template <typename U>
-        IntrusivePtrNonAtomic(IntrusivePtrNonAtomic<U>&& other) noexcept : _ptr(other._ptr) {
-            static_assert(std::is_base_of_v<T, U>, "U must be derived from T");
-            other._ptr = nullptr;
-        }
-
-        // The counter of the object decides whether a count is atomic, not the pointer, so an object New<T> hands out
-        // as IntrusivePtrAtomic can be held here without losing that.
-        template <typename U>
-        requires std::is_convertible_v<U*, T*> IntrusivePtrNonAtomic(const IntrusivePtrAtomic<U>& other) : _ptr(other.Get()) {
+        requires std::convertible_to<U*, T*> IntrusivePtr(const IntrusivePtr<U>& other) noexcept : _ptr(other._ptr) {
             if (_ptr != nullptr) {
                 _ptr->AddRef();
             }
         }
 
         template <typename U>
-        requires std::is_convertible_v<U*, T*> IntrusivePtrNonAtomic(IntrusivePtrAtomic<U>&& other) noexcept : _ptr(other._ptr) {
-            other._ptr = nullptr;
-        }
+        requires std::convertible_to<U*, T*> IntrusivePtr(IntrusivePtr<U>&& other) noexcept : _ptr(std::exchange(other._ptr, nullptr)) {}
 
-        ~IntrusivePtrNonAtomic() {
+        ~IntrusivePtr() noexcept {
             Reset();
         }
 
-        bool operator!() const {
-            return _ptr == nullptr;
-        }
-
-        IntrusivePtrNonAtomic& operator=(const IntrusivePtrNonAtomic& other) {
-            if (this != &other) {
-                if (other._ptr != nullptr) {
-                    other._ptr->AddRef();
-                }
-                if (_ptr != nullptr) {
-                    _ptr->ReleaseRef();
-                }
-                _ptr = other._ptr;
-            }
+        IntrusivePtr& operator=(const IntrusivePtr& other) noexcept {
+            IntrusivePtr(other).swap(*this);
             return *this;
         }
 
-        IntrusivePtrNonAtomic& operator=(IntrusivePtrNonAtomic&& other) noexcept {
-            if (this != &other) {
-                if (_ptr != nullptr) {
-                    _ptr->ReleaseRef();
-                }
-                _ptr = other._ptr;
-                other._ptr = nullptr;
-            }
-            return *this;
-        }
-
-        IntrusivePtrNonAtomic& operator=(T* ptr) {
-            if (ptr != nullptr) {
-                ptr->AddRef();
-            }
-            if (_ptr != nullptr) {
-                _ptr->ReleaseRef();
-            }
-            _ptr = ptr;
+        IntrusivePtr& operator=(IntrusivePtr&& other) noexcept {
+            IntrusivePtr(std::move(other)).swap(*this);
             return *this;
         }
 
         template <typename U>
-        IntrusivePtrNonAtomic& operator=(const IntrusivePtrNonAtomic<U>& other) {
-            static_assert(std::is_base_of_v<T, U> || std::is_same_v<T, U>, "T must be base of U or same as U");
-            T* ptr = static_cast<T*>(other._ptr);
-            if (ptr != nullptr) {
-                ptr->AddRef();
-            }
-            if (_ptr != nullptr) {
-                _ptr->ReleaseRef();
-            }
-            _ptr = ptr;
+        requires std::convertible_to<U*, T*> IntrusivePtr& operator=(const IntrusivePtr<U>& other) noexcept {
+            IntrusivePtr(other).swap(*this);
             return *this;
         }
 
         template <typename U>
-        IntrusivePtrNonAtomic& operator=(IntrusivePtrNonAtomic<U>&& other) noexcept {
-            static_assert(std::is_base_of_v<T, U>, "U must be derived from T");
-            if (_ptr != nullptr) {
-                _ptr->ReleaseRef();
-            }
-            _ptr = other._ptr;
-            other._ptr = nullptr;
+        requires std::convertible_to<U*, T*> IntrusivePtr& operator=(IntrusivePtr<U>&& other) noexcept {
+            IntrusivePtr(std::move(other)).swap(*this);
+            return *this;
+        }
+
+        /// Takes a new count of @p ptr; `ptr = nullptr` empties the pointer.
+        IntrusivePtr& operator=(T* ptr) noexcept {
+            IntrusivePtr(ptr).swap(*this);
             return *this;
         }
 
         T& operator*() const {
-            assert(_ptr != nullptr);
+            ASSERT(_ptr != nullptr);
             return *_ptr;
         }
 
         T* operator->() const {
-            assert(_ptr != nullptr);
+            ASSERT(_ptr != nullptr);
             return _ptr;
         }
 
-        T* Get() const {
+        T* Get() const noexcept {
             return _ptr;
         }
 
-        bool IsValid() const {
+        bool IsValid() const noexcept {
             return _ptr != nullptr;
         }
 
-        explicit operator bool() const {
+        explicit operator bool() const noexcept {
             return _ptr != nullptr;
         }
 
-        void Reset() {
-            if (_ptr != nullptr) {
-                _ptr->ReleaseRef();
-                _ptr = nullptr;
+        void Reset() noexcept {
+            if (T* old = std::exchange(_ptr, nullptr); old != nullptr) {
+                old->ReleaseRef();
             }
         }
 
-        void Reset(T* ptr) {
-            if (ptr != nullptr) {
-                ptr->AddRef();
-            }
-            if (_ptr != nullptr) {
-                _ptr->ReleaseRef();
-            }
-            _ptr = ptr;
+        void Reset(T* ptr) noexcept {
+            IntrusivePtr(ptr).swap(*this);
         }
 
-        int32_t GetRefCount() const {
+        /// Gives the pointer up without dropping its count: the pointer is empty afterwards and the caller owns the count (give it back with the AdoptRef constructor).
+        [[nodiscard]] T* Detach() noexcept {
+            return std::exchange(_ptr, nullptr);
+        }
+
+        void swap(IntrusivePtr& other) noexcept {
+            std::swap(_ptr, other._ptr);
+        }
+
+        /// The count of the pointee, 0 for an empty pointer; a snapshot (`RefCounted.h`).
+        int32_t GetRefCount() const noexcept {
             return _ptr != nullptr ? _ptr->GetRefCount() : 0;
-        }
-
-        bool operator==(const IntrusivePtrNonAtomic& other) const {
-            return _ptr == other._ptr;
-        }
-
-        bool operator!=(const IntrusivePtrNonAtomic& other) const {
-            return _ptr != other._ptr;
-        }
-
-        bool operator==(std::nullptr_t) const {
-            return _ptr == nullptr;
-        }
-
-        bool operator!=(std::nullptr_t) const {
-            return _ptr != nullptr;
         }
 
     private:
@@ -196,196 +143,100 @@ namespace BECore {
     };
 
     template <typename T>
-    class IntrusivePtrAtomic {
-        template <typename U>
-        friend class IntrusivePtrAtomic;
-        template <typename U>
-        friend class IntrusivePtrNonAtomic;
-
-    public:
-        IntrusivePtrAtomic() = default;
-
-        explicit IntrusivePtrAtomic(T* ptr) : _ptr(ptr) {
-            if (_ptr != nullptr) {
-                _ptr->AddRef();
-            }
-        }
-
-        IntrusivePtrAtomic(const IntrusivePtrAtomic& other) : _ptr(other._ptr) {
-            if (_ptr != nullptr) {
-                _ptr->AddRef();
-            }
-        }
-
-        IntrusivePtrAtomic(IntrusivePtrAtomic&& other) noexcept : _ptr(other._ptr) {
-            other._ptr = nullptr;
-        }
-
-        template <typename U>
-        IntrusivePtrAtomic(const IntrusivePtrAtomic<U>& other) : _ptr(other.Get()) {
-            if (_ptr != nullptr) {
-                _ptr->AddRef();
-            }
-        }
-
-        template <typename U>
-        IntrusivePtrAtomic(IntrusivePtrAtomic<U>&& other) noexcept : _ptr(other._ptr) {
-            other._ptr = nullptr;
-        }
-
-        ~IntrusivePtrAtomic() {
-            Reset();
-        }
-
-        IntrusivePtrAtomic& operator=(const IntrusivePtrAtomic& other) {
-            if (this != &other) {
-                if (other._ptr != nullptr) {
-                    other._ptr->AddRef();
-                }
-                if (_ptr != nullptr) {
-                    _ptr->ReleaseRef();
-                }
-                _ptr = other._ptr;
-            }
-            return *this;
-        }
-
-        IntrusivePtrAtomic& operator=(IntrusivePtrAtomic&& other) noexcept {
-            if (this != &other) {
-                if (_ptr != nullptr) {
-                    _ptr->ReleaseRef();
-                }
-                _ptr = other._ptr;
-                other._ptr = nullptr;
-            }
-            return *this;
-        }
-
-        IntrusivePtrAtomic& operator=(T* ptr) {
-            if (ptr != nullptr) {
-                ptr->AddRef();
-            }
-            if (_ptr != nullptr) {
-                _ptr->ReleaseRef();
-            }
-            _ptr = ptr;
-            return *this;
-        }
-
-        template <typename U>
-        IntrusivePtrAtomic& operator=(const IntrusivePtrAtomic<U>& other) {
-            if (other.Get() != nullptr) {
-                other.Get()->AddRef();
-            }
-            if (_ptr != nullptr) {
-                _ptr->ReleaseRef();
-            }
-            _ptr = other.Get();
-            return *this;
-        }
-
-        template <typename U>
-        IntrusivePtrAtomic& operator=(IntrusivePtrAtomic<U>&& other) noexcept {
-            if (_ptr != nullptr) {
-                _ptr->ReleaseRef();
-            }
-            _ptr = other._ptr;
-            other._ptr = nullptr;
-            return *this;
-        }
-
-        T& operator*() const {
-            assert(_ptr != nullptr);
-            return *_ptr;
-        }
-
-        T* operator->() const {
-            assert(_ptr != nullptr);
-            return _ptr;
-        }
-
-        T* Get() const {
-            return _ptr;
-        }
-
-        bool IsValid() const {
-            return _ptr != nullptr;
-        }
-
-        explicit operator bool() const {
-            return _ptr != nullptr;
-        }
-
-        void Reset() {
-            if (_ptr != nullptr) {
-                _ptr->ReleaseRef();
-                _ptr = nullptr;
-            }
-        }
-
-        void Reset(T* ptr) {
-            if (ptr != nullptr) {
-                ptr->AddRef();
-            }
-            if (_ptr != nullptr) {
-                _ptr->ReleaseRef();
-            }
-            _ptr = ptr;
-        }
-
-        int32_t GetRefCount() const {
-            return _ptr != nullptr ? _ptr->GetRefCount() : 0;
-        }
-
-        bool operator==(const IntrusivePtrAtomic& other) const {
-            return _ptr == other._ptr;
-        }
-
-        bool operator!=(const IntrusivePtrAtomic& other) const {
-            return _ptr != other._ptr;
-        }
-
-        bool operator==(std::nullptr_t) const {
-            return _ptr == nullptr;
-        }
-        bool operator!=(std::nullptr_t) const {
-            return _ptr != nullptr;
-        }
-
-    private:
-        T* _ptr = nullptr;
-    };
-
-    template <typename T>
-    IntrusivePtrNonAtomic<T> MakeIntrusiveNonAtomic(T* ptr) {
-        return IntrusivePtrNonAtomic<T>(ptr);
+    void swap(IntrusivePtr<T>& left, IntrusivePtr<T>& right) noexcept {
+        left.swap(right);
     }
 
-    template <typename T, typename... Args>
-    std::enable_if_t<sizeof...(Args) != 1 || !std::is_same_v<std::decay_t<std::tuple_element_t<0, Tuple<Args...>>>, T*>, IntrusivePtrNonAtomic<T>> MakeIntrusiveNonAtomic(Args&&... args) {
-        return IntrusivePtrNonAtomic<T>(new T(std::forward<Args>(args)...));
+    /// The pointer as a `U`, by `static_cast` (the caller knows the type); the source keeps its count.
+    template <typename U, typename T>
+    IntrusivePtr<U> StaticPointerCast(const IntrusivePtr<T>& ptr) noexcept {
+        return IntrusivePtr<U>(static_cast<U*>(ptr.Get()));
+    }
+
+    /// The same cast taking the source's count over: the source is empty afterwards.
+    template <typename U, typename T>
+    IntrusivePtr<U> StaticPointerCast(IntrusivePtr<T>&& ptr) noexcept {
+        return IntrusivePtr<U>(static_cast<U*>(ptr.Detach()), kAdoptRef);
+    }
+
+    /// The pointer as a `U` by `dynamic_cast`; empty when the object is no `U`. The source keeps its count.
+    template <typename U, typename T>
+    IntrusivePtr<U> DynamicPointerCast(const IntrusivePtr<T>& ptr) noexcept {
+        return IntrusivePtr<U>(dynamic_cast<U*>(ptr.Get()));
+    }
+
+    /// The same cast taking the source's count over only when it succeeds; a failed cast leaves the source as it was.
+    template <typename U, typename T>
+    IntrusivePtr<U> DynamicPointerCast(IntrusivePtr<T>&& ptr) noexcept {
+        U* casted = dynamic_cast<U*>(ptr.Get());
+        if (casted == nullptr) {
+            return {};
+        }
+        static_cast<void>(ptr.Detach());
+        return IntrusivePtr<U>(casted, kAdoptRef);
+    }
+
+    // The comparisons are the ordering of the addresses; != and the reversed forms come from C++20 rewriting, there is none by hand.
+    // clang-format off: the formatter of this repository is set to C++17 and splits `operator<=>`
+    template <typename T, typename U>
+    bool operator==(const IntrusivePtr<T>& left, const IntrusivePtr<U>& right) noexcept {
+        return left.Get() == right.Get();
+    }
+
+    template <typename T, typename U>
+    std::strong_ordering operator<=>(const IntrusivePtr<T>& left, const IntrusivePtr<U>& right) noexcept {
+        return std::compare_three_way{}(left.Get(), right.Get());
     }
 
     template <typename T>
-    IntrusivePtrAtomic<T> MakeIntrusiveAtomic(T* ptr) {
-        return IntrusivePtrAtomic<T>(ptr);
-    }
-
-    template <typename T, typename... Args>
-    std::enable_if_t<sizeof...(Args) != 1 || !std::is_same_v<std::decay_t<std::tuple_element_t<0, Tuple<Args...>>>, T*>, IntrusivePtrAtomic<T>> MakeIntrusiveAtomic(Args&&... args) {
-        return IntrusivePtrAtomic<T>(new T(std::forward<Args>(args)...));
+    bool operator==(const IntrusivePtr<T>& left, std::nullptr_t) noexcept {
+        return left.Get() == nullptr;
     }
 
     template <typename T>
-    using IntrusivePtr = IntrusivePtrNonAtomic<T>;
+    std::strong_ordering operator<=>(const IntrusivePtr<T>& left, std::nullptr_t) noexcept {
+        return std::compare_three_way{}(left.Get(), static_cast<T*>(nullptr));
+    }
 
+    template <typename T, typename U>
+    bool operator==(const IntrusivePtr<T>& left, U* right) noexcept {
+        return left.Get() == right;
+    }
+
+    template <typename T, typename U>
+    std::strong_ordering operator<=>(const IntrusivePtr<T>& left, U* right) noexcept {
+        return std::compare_three_way{}(left.Get(), right);
+    }
+    // clang-format on
+
+    /// Kept for one merge so that a game follows; use IntrusivePtr.
     template <typename T>
-    IntrusivePtr<T> MakeIntrusive(T* ptr) {
-        return IntrusivePtr<T>(ptr);
-    }
+    using IntrusivePtrAtomic = IntrusivePtr<T>;
 
-    template <typename T, typename... Args>
-    std::enable_if_t<sizeof...(Args) != 1 || !std::is_same_v<std::decay_t<std::tuple_element_t<0, Tuple<Args...>>>, T*>, IntrusivePtr<T>> MakeIntrusive(Args&&... args) {
-        return IntrusivePtr<T>(new T(std::forward<Args>(args)...));
-    }
+    /// Kept for one merge so that a game follows; use IntrusivePtr.
+    template <typename T>
+    using IntrusivePtrNonAtomic = IntrusivePtr<T>;
+
 }  // namespace BECore
+
+namespace std {  //-NoStd: the specialization of std::hash is the only way to make the pointer a key of a standard container
+
+    template <typename T>
+    struct hash<::BECore::IntrusivePtr<T>> {
+        size_t operator()(const ::BECore::IntrusivePtr<T>& ptr) const noexcept {
+            return hash<T*>{}(ptr.Get());
+        }
+    };
+
+}  // namespace std
+
+namespace eastl {
+
+    template <typename T>
+    struct hash<::BECore::IntrusivePtr<T>> {
+        size_t operator()(const ::BECore::IntrusivePtr<T>& ptr) const noexcept {
+            return hash<T*>{}(ptr.Get());
+        }
+    };
+
+}  // namespace eastl
