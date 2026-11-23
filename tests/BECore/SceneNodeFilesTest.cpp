@@ -467,6 +467,43 @@ namespace BECore::Tests {
         EXPECT_FALSE(doc.document_element());
     }
 
+    TEST_F(SceneNodeFilesTest, ANodeFileAndASceneFileInANonAsciiFolderAreExpanded) {
+        const auto folder = _dir / "caf\xC3\xA9";
+        WriteFile(folder / "nodes" / "Hud.xml", kHudNode);
+        WriteFile(folder / "Sc\xC3\xA8ne.xml", SceneConfigText(R"(<node name="A"/><node ref="nodes/Hud"/>)"));
+
+        pugi::xml_document doc;
+        const auto result = LoadSceneDocument(folder / "Sc\xC3\xA8ne.xml", doc);
+
+        EXPECT_TRUE(result.Ok());
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (Vector<String>{"A", "Hud"}));
+    }
+
+    TEST_F(SceneNodeFilesTest, ASceneFileThatIsAFolderCannotBeRead) {
+        pugi::xml_document doc;
+        const auto result = LoadSceneDocument(_dir / "nodes", doc);
+
+        EXPECT_FALSE(result.Ok());
+        ASSERT_EQ(result.errors.size(), 1u);
+        EXPECT_TRUE(Mentions(result.errors[0], "cannot be read")) << result.errors[0].c_str();
+    }
+
+    TEST_F(SceneNodeFilesTest, AnXmlAndABinOfOneReferenceInOneLayerAreRefusedWithBothNames) {
+        const auto root = _dir / "root";
+        WriteFile(root / "config" / "nodes" / "Twice.xml", CurrentNode("Twice"));
+        WriteFile(root / "config" / "nodes" / "Twice.bin", "not read: the refusal comes first");
+        FileSystem fs;
+        fs.AddContentRoot(root);
+        fs.Initialize();
+
+        pugi::xml_document doc;
+        String error;
+        EXPECT_FALSE(MakeFileSystemNodeLoader(fs)("nodes/Twice", doc, error));
+        EXPECT_TRUE(Mentions(error, "Twice.xml")) << error.c_str();
+        EXPECT_TRUE(Mentions(error, "Twice.bin")) << error.c_str();
+        EXPECT_TRUE(Mentions(error, "keep one")) << error.c_str();
+    }
+
     // ---- content version --------------------------------------------------------------------------------------------------
 
     /// The file-system loader checks the content version of the node file it reads: the reason names the file and the versions

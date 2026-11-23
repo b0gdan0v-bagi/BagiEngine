@@ -1,11 +1,11 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <cstddef>
-#include <filesystem>
 #include <pugixml.hpp>
 
 namespace BECore {
@@ -146,7 +146,7 @@ namespace BECore {
      * Checks IsValidNodeRef and that the document element is `node` without a `ref` attribute. It does **not** check the
      * content version (`BECore/Config/ContentVersion.h`): tools and tests with a folder read files of any version.
      */
-    NodeFileLoader MakeDirectoryNodeLoader(std::filesystem::path baseDirectory);
+    NodeFileLoader MakeDirectoryNodeLoader(Path baseDirectory);
 
     /**
      * @brief Loader that finds `config/<ref>.xml` or `config/<ref>.bin` through the content layers
@@ -170,6 +170,6 @@ namespace BECore {
      * What a test or a tool that reads the file calls instead of `pugi::xml_document::load_file`. A file that does not
      * exist or does not parse is an error in the result and leaves @p out empty.
      */
-    NodeExpansion LoadSceneDocument(const std::filesystem::path& sceneConfigFile, pugi::xml_document& out);
+    NodeExpansion LoadSceneDocument(const Path& sceneConfigFile, pugi::xml_document& out);
 
 }  // namespace BECore
