@@ -7,6 +7,8 @@
 
 namespace BECore {
 
+    struct BinaryContent;
+
     namespace Tests {
         struct BinaryDeserializerAccess;
     }
@@ -27,6 +29,8 @@ namespace BECore {
      *
      * Reads version 1 (names inline), version 2 (a sorted string table; names and PoolString values are indices into it) and
      * version 3 (a name table and a pool section of the PoolString texts, each entry with a hash that this reader never uses).
+     * LoadFromContent() is the one load that takes the PoolStrings ready-made (content mode: a cooked file the content loader
+     * adopted into the pool); every other load hashes and interns the texts itself.
      * The whole buffer is validated when it is loaded (header, the tables, sizes, tags, indices, nesting), so reading from
      * a truncated or corrupt buffer fails in the Load*() call and never reads out of bounds afterwards.
      * Strings are interned only when asked for: names and String values never, a PoolString value on the first Read of one
@@ -73,6 +77,21 @@ namespace BECore {
         bool LoadFromBuffer(const Vector<uint8_t>& data);
 
         /**
+         * @brief Load a cooked content file that LoadContentFile / LoadContentBytes has read (content mode)
+         *
+         * Validates the compact stream as the other loads validate a full one (the size the header promises less the pool section's
+         * entries, the name table, the head of the section, every entry; a PoolString index must be below `content.strings.size()`,
+         * which must be the head's `count`) and reads a PoolString entry as `content.strings[index]`: nothing is interned, hashed or
+         * copied. A content of version 1 or 2 has no ready strings and loads as LoadFromView() over its bytes.
+         *
+         * Borrows like LoadFromView(): `content.bytes` and `content.strings` must stay alive and unchanged until the next load,
+         * a failed load or the destruction of the reader (moving the BinaryContent keeps both, the vectors' blocks move with it).
+         *
+         * @return true if the content is valid. On failure an error is recorded and every later read fails.
+         */
+        bool LoadFromContent(const BinaryContent& content);
+
+        /**
          * @brief Load a file written by BinarySerializer::SaveToFile
          *
          * Reads the file straight into the buffer the reader keeps (one allocation of the file's size, no second copy)
@@ -104,7 +123,8 @@ namespace BECore {
         /**
          * @brief Takes a String or a PoolString entry
          *
-         * The first call after a load of version 2 or 3 interns, in one PoolString::InternBatch, every distinct text that a
+         * In content mode (LoadFromContent) the value is `content.strings[index]`: no intern happens. Otherwise the
+         * first call after a load of version 2 or 3 interns, in one PoolString::InternBatch, every distinct text that a
          * PoolString entry of the file refers to (version 3: every entry of the pool section, hashed here, never trusted from
          * the file); later calls take the result. A text over ReaderLimits::kMaxPoolStringBytes
          * is not in the batch and is the error of AcceptPoolStringLength. A String entry (and any entry of version 1) is
@@ -219,7 +239,7 @@ namespace BECore {
         bool ReadScalar(StringView name, T& outValue, bool reportMissing);
 
         /// The checks of every load, on bytes that are not kept yet. Records the error and returns false on a refusal.
-        bool Validate(const uint8_t* data, size_t size, Checked& outChecked);
+        bool Validate(const uint8_t* data, size_t size, Checked& outChecked, const BinaryContent* content = nullptr);
 
         /// Makes @p data the stream that is read and opens the root scope; @p data holds the bytes @p checked was made from
         void Open(const uint8_t* data, size_t size, Checked&& checked);
@@ -247,6 +267,10 @@ namespace BECore {
         Vector<uint32_t> _pooledIndices;
         Vector<PoolString> _pooled;
         bool _pooledReady = false;
+        /// Content mode (LoadFromContent): the stream has the head of the pool section and no entries; they are the ready PoolStrings of
+        /// the BinaryContent, borrowed. `_contentStrings` may be null when the section is empty, so the mode is its own flag
+        bool _contentMode = false;
+        const PoolString* _contentStrings = nullptr;
         Vector<Scope> _scopeStack;
         Vector<ArrayContext> _arrayStack;
         Vector<DeserializeError> _errors;

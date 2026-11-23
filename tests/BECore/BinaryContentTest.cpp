@@ -3,6 +3,8 @@
 
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/BinaryContent.h>
+#include <BECore/Reflection/BinaryDeserializer.h>
+#include <BECore/Reflection/SchemaHash.h>
 #include <Common/BinaryStreams.h>
 #include <Common/FreshText.h>
 #include <Common/Printers.h>
@@ -108,6 +110,75 @@ namespace BECore::Tests {
             for (const String& text : texts) {
                 EXPECT_FALSE(PoolString::Find(StringView(text)).has_value()) << text.c_str();
             }
+        }
+
+        constexpr StringView kStampRoot = "StampRoot";
+        constexpr StringView kStampSource = "config/Content.bin";
+
+        /// A document with every kind of entry: scalars, a String, PoolStrings (one read as a String), an object, an array of objects and a repeated name
+        Vector<Streams::Entry> DocumentOf(const Vector<String>& texts) {
+            return {Streams::Number("count", uint32_t{7}),
+                    Streams::Text("label", "hello"),
+                    Streams::Pooled("kind", texts[0]),
+                    Streams::Pooled("kindAsString", texts[1]),
+                    Streams::Object("inner", {Streams::Number("a", int32_t{-3}), Streams::Pooled("p", texts[0])}),
+                    Streams::Array("items", {Streams::Element({Streams::Number("id", int32_t{1}), Streams::Pooled("tag", texts[2])}),
+                                             Streams::Element({Streams::Number("id", int32_t{2}), Streams::Pooled("tag", texts[0])})}),
+                    Streams::Number("dup", int32_t{1}),
+                    Streams::Number("dup", int32_t{2})};
+        }
+
+        /// What a reader says about DocumentOf: one line, so two readers over the same document compare as two strings
+        String Digest(BinaryDeserializer& reader) {
+            uint32_t count = 0;
+            String label;
+            PoolString kind;
+            String kindAsString;
+            int32_t dup = 0;
+            const bool hasDup = reader.HasKey("dup");
+            reader.Read("count", count);
+            reader.Read("label", label);
+            reader.Read("kind", kind);
+            reader.Read("kindAsString", kindAsString);
+            reader.Read("dup", dup);
+            String inner;
+            if (reader.BeginObject("inner")) {
+                int32_t a = 0;
+                PoolString p;
+                reader.Read("a", a);
+                reader.Read("p", p);
+                inner = Format("{}/{}", a, p.ToStringView());
+                reader.EndObject();
+            }
+            String items;
+            size_t elements = 0;
+            if (reader.BeginArray("items", "item", elements)) {
+                for (size_t i = 0; i < elements; ++i) {
+                    if (reader.BeginArrayElement()) {
+                        int32_t id = 0;
+                        PoolString tag;
+                        reader.Read("id", id);
+                        reader.Read("tag", tag);
+                        items += Format("[{}:{}]", id, tag.ToStringView());
+                        reader.EndArrayElement();
+                    }
+                }
+                reader.EndArray();
+            }
+            EXPECT_FALSE(reader.HasErrors());
+            return Format("{} {} {} {} {} {} {} {}", count, label, kind.ToStringView(), kindAsString, dup, hasDup, inner, items);
+        }
+
+        String DigestOfStream(const Vector<uint8_t>& stream) {
+            BinaryDeserializer reader;
+            EXPECT_TRUE(reader.LoadFromView(stream.data(), stream.size()));
+            return Digest(reader);
+        }
+
+        String DigestOfContent(const BinaryContent& content) {
+            BinaryDeserializer reader;
+            EXPECT_TRUE(reader.LoadFromContent(content));
+            return Digest(reader);
         }
 
     }  // namespace
@@ -391,6 +462,147 @@ namespace BECore::Tests {
             EXPECT_TRUE(loaded->strings.empty());
             EXPECT_EQ(PoolString::GetStats().blockCount, before.blockCount);
         }
+    }
+
+    TEST(BinaryContentTest, AContentReadsLikeTheFullStream) {
+        const Vector<String> texts = Fresh(3);
+        Streams::Options options;
+        options.pool = texts;
+        const Vector<uint8_t> stream = Streams::Build(DocumentOf(texts), options);
+        const auto content = LoadContentBytes(View(stream), Verify(true));
+        ASSERT_TRUE(content.has_value()) << content.error().c_str();
+
+        const String fromContent = DigestOfContent(*content);
+        EXPECT_EQ(fromContent, DigestOfStream(stream));
+        EXPECT_TRUE(Contains(fromContent, texts[2])) << fromContent.c_str();
+    }
+
+    TEST(BinaryContentTest, APoolStringReadFromAContentInternsNothingAndIsTheAdoptedEntry) {
+        const Vector<String> texts = Fresh(3);
+        Streams::Options options;
+        options.pool = texts;
+        const auto content = LoadContentBytes(View(Streams::Build(DocumentOf(texts), options)), Verify(true));
+        ASSERT_TRUE(content.has_value());
+
+        BinaryDeserializer reader;
+        const PoolStringStats before = PoolString::GetStats();
+        ASSERT_TRUE(reader.LoadFromContent(*content));
+        EXPECT_TRUE(reader.HasKey("kind"));
+        const PoolStringStats peeked = PoolString::GetStats();
+        EXPECT_EQ(peeked.stringCount, before.stringCount);
+        EXPECT_EQ(peeked.batchCalls, before.batchCalls);
+
+        PoolString kind;
+        String asString;
+        ASSERT_TRUE(reader.Read("kind", kind));
+        ASSERT_TRUE(reader.Read("kindAsString", asString));
+        const PoolStringStats after = PoolString::GetStats();
+        EXPECT_EQ(after.stringCount, before.stringCount);
+        EXPECT_EQ(after.internCalls, before.internCalls);
+        EXPECT_EQ(after.batchCalls, before.batchCalls);
+        EXPECT_EQ(kind, content->strings[0]);
+        EXPECT_EQ(asString, texts[1]);
+    }
+
+    TEST(BinaryContentTest, ACompactStreamThatDoesNotAddUpIsRefused) {
+        const Vector<String> texts = Fresh(2);
+        Streams::Options options;
+        options.pool = texts;
+        const Vector<uint8_t> stream = Streams::Build({Streams::Pooled("k", texts[0]), Streams::Pooled("m", texts[1])}, options);
+        const auto good = LoadContentBytes(View(stream), Verify(true));
+        ASSERT_TRUE(good.has_value());
+
+        const auto refused = [](const BinaryContent& content) {
+            BinaryDeserializer reader;
+            const bool loaded = reader.LoadFromContent(content);
+            EXPECT_EQ(loaded, !reader.HasErrors());
+            return !loaded;
+        };
+        EXPECT_FALSE(refused(*good));
+
+        BinaryContent shorter = *good;
+        shorter.bytes.pop_back();
+        EXPECT_TRUE(refused(shorter));
+
+        BinaryContent longer = *good;
+        longer.bytes.push_back(0);
+        EXPECT_TRUE(refused(longer));
+
+        BinaryContent otherSection = *good;
+        otherSection.section.bytes += 8;
+        EXPECT_TRUE(refused(otherSection));
+
+        BinaryContent fewerStrings = *good;
+        fewerStrings.strings.pop_back();
+        EXPECT_TRUE(refused(fewerStrings));
+
+        BinaryContent otherCount = *good;
+        otherCount.section.count += 1;
+        EXPECT_TRUE(refused(otherCount));
+
+        // The first root entry is the PoolString "k": u8 tag, u32 name index, u32 string index
+        BinaryContent outOfRange = *good;
+        BF::Store<uint32_t>(outOfRange.bytes.data() + good->section.entriesOffset + sizeof(uint8_t) + sizeof(uint32_t), static_cast<uint32_t>(good->strings.size()));
+        EXPECT_TRUE(refused(outOfRange));
+
+        BinaryContent cutNameTable = *good;
+        BF::Store<uint32_t>(cutNameTable.bytes.data() + BF::HeaderSize + sizeof(uint32_t), 0);
+        EXPECT_TRUE(refused(cutNameTable));
+    }
+
+    TEST(BinaryContentTest, TheContentStampIsCheckedOverAContent) {
+        const Vector<String> texts = Fresh(1);
+        const uint64_t layout = ComputeLayoutHash(kStampRoot).value_or(0);
+        Streams::Options options;
+        options.pool = texts;
+        const auto stamped = [&](uint64_t hash) { return Streams::Object(BF::ContentStampName, {Streams::Text("root", kStampRoot), Streams::Number("layout", hash)}); };
+
+        const auto content = LoadContentBytes(View(Streams::Build({stamped(layout), Streams::Pooled("kind", texts[0])}, options)), Verify(true));
+        ASSERT_TRUE(content.has_value());
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromContent(*content));
+        const auto stamp = CheckContentStamp(reader, kStampSource);
+        ASSERT_TRUE(stamp.has_value()) << String(stamp.error()).c_str();
+        EXPECT_EQ(stamp->layout, layout);
+        PoolString kind;
+        EXPECT_TRUE(reader.Read("kind", kind));
+        EXPECT_EQ(kind.ToStringView(), StringView(texts[0]));
+
+        const auto other = LoadContentBytes(View(Streams::Build({stamped(layout + 1), Streams::Pooled("kind", texts[0])}, options)), Verify(true));
+        ASSERT_TRUE(other.has_value());
+        BinaryDeserializer otherReader;
+        ASSERT_TRUE(otherReader.LoadFromContent(*other));
+        const auto refused = CheckContentStamp(otherReader, kStampSource);
+        ASSERT_FALSE(refused.has_value());
+        EXPECT_TRUE(Contains(refused.error(), "cook"));
+    }
+
+    TEST(BinaryContentTest, AContentOfVersionTwoReadsLikeItsStream) {
+        const Vector<String> texts = Fresh(3);
+        Streams::Options options;
+        options.version = BF::TabledVersion;
+        const Vector<uint8_t> stream = Streams::Build(DocumentOf(texts), options);
+        const auto content = LoadContentBytes(View(stream), Verify(true));
+        ASSERT_TRUE(content.has_value());
+        EXPECT_EQ(DigestOfContent(*content), DigestOfStream(stream));
+    }
+
+    TEST(BinaryContentTest, ASaveWithStaleHashesStillLoadsThroughTheHashingLoads) {
+        const Vector<String> texts = Fresh(3);
+        Streams::Options options;
+        options.pool = texts;
+        for (const String& text : texts) {
+            options.hashOverrides.push_back({text, kWrongHash});
+        }
+        const Vector<uint8_t> save = Streams::Build(DocumentOf(texts), options);
+
+        BinaryDeserializer reader;
+        ASSERT_TRUE(reader.LoadFromBuffer(save));
+        PoolString kind;
+        ASSERT_TRUE(reader.Read("kind", kind));
+        const Optional<PoolString> found = PoolString::Find(StringView(texts[0]));
+        ASSERT_TRUE(found.has_value()) << "the reader hashed the text itself";
+        EXPECT_EQ(kind, *found);
     }
 
 }  // namespace BECore::Tests
