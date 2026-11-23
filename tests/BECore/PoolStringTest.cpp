@@ -259,8 +259,9 @@ namespace BECore::Tests {
     TEST(PoolStringStatsTest, AnEntryThatDoesNotFitTheRestOfTheBlockStartsAStandardBlock) {
         ASSERT_NO_FATAL_FAILURE(StartFreshBlock());
         const PoolStringStats before = PoolString::GetStats();
-        // Fits a standard block but not what is left of the current one: a new standard block, not one of its own
-        static_cast<void>(PoolString::Intern(StringView{FreshBlockText(PoolString::kBlockBytes - kEntryHeaderBytes - 1 - 32, 'k')}));
+        // Fits a standard block but not what is left of the current one: a new standard block, not one of its own. The margin
+        // is the smallest entry: the length of the fill name that opened the current block depends on the cases that ran before
+        static_cast<void>(PoolString::Intern(StringView{FreshBlockText(PoolString::kBlockBytes - kEntryHeaderBytes - 1 - 8, 'k')}));
         const PoolStringStats afterBig = PoolString::GetStats();
         EXPECT_EQ(afterBig.blockCount, before.blockCount + 1);
         EXPECT_EQ(afterBig.blockBytes, before.blockBytes + PoolString::kBlockBytes);

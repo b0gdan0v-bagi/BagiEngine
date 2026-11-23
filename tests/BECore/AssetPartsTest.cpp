@@ -318,6 +318,25 @@ namespace BECore::Tests {
         EXPECT_FALSE(Load<PartVisualProbe>("gem.asset.xml", AssetPurpose::Visual).has_value());
     }
 
+    TEST_F(AssetPartsTest, ASplitInANonAsciiFolderServesWhileFreshAndNotWhenTheWholeFileIsNewer) {
+        const char* const folder = "caf\xC3\xA9";
+        const String whole = Format("{}/gem.asset.xml", folder);
+        WriteFile(whole.c_str(), kWholeXml);
+
+        ASSERT_TRUE(SplitAssetFile(VirtualPath(whole.c_str())));
+        EXPECT_TRUE(FileExists(Format("{}/gem.sim.xml", folder).c_str()));
+        EXPECT_TRUE(FileExists(Format("{}/gem.visual.xml", folder).c_str()));
+        EXPECT_TRUE(FileExists(Format("{}/gem.editor.xml", folder).c_str()));
+
+        // A split file that is not older than the whole file wins over it
+        WriteFile(Format("{}/gem.sim.xml", folder).c_str(), kSplitSimXml);
+        EXPECT_EQ(Require(Load<PartSimProbe>(whole.c_str(), AssetPurpose::Sim)).value, kSplitValue);
+
+        // A whole file that is newer than its split files serves instead
+        Age(Format("{}/gem.sim.xml", folder).c_str(), kOlder);
+        EXPECT_EQ(Require(Load<PartSimProbe>(whole.c_str(), AssetPurpose::Sim)).value, kSimValue);
+    }
+
     TEST_F(AssetPartsTest, AResplitRemovesTheFileOfAPartThatIsGone) {
         WriteFile("gem.asset.xml", kWholeXml);
         ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml")));

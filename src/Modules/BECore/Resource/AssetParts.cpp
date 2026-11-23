@@ -2,7 +2,6 @@
 
 #include <BECore/Config/StringXmlWriter.h>
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/OpenDeserializer.h>
@@ -20,14 +19,10 @@ namespace BECore {
         }
 
         /// The split file serves only when it is not older than the whole file; a time that cannot be read counts as older.
-        bool IsFresh(const std::filesystem::path& splitFile, const std::filesystem::path& wholeFile) {
-            std::error_code error;
-            const auto splitTime = std::filesystem::last_write_time(splitFile, error);
-            if (error) {
-                return false;
-            }
-            const auto wholeTime = std::filesystem::last_write_time(wholeFile, error);
-            return !error && splitTime >= wholeTime;
+        bool IsFresh(const Path& splitFile, const Path& wholeFile) {
+            const Optional<FileInfo> split = GetFileInfo(splitFile);
+            const Optional<FileInfo> whole = GetFileInfo(wholeFile);
+            return split && whole && split->modifyTimeNs >= whole->modifyTimeNs;
         }
 
         /// The virtual path of the split file that serves @p part of @p assetPath, empty when there is none
@@ -37,12 +32,12 @@ namespace BECore {
                 return {};
             }
             const FileSystem& fileSystem = CoreManager::GetFileSystem();
-            const std::filesystem::path splitReal = fileSystem.ResolvePath(splitPath);
-            if (splitReal.empty()) {
+            const Path splitReal = fileSystem.ResolvePath(splitPath);
+            if (splitReal.Empty()) {
                 return {};
             }
-            const std::filesystem::path wholeReal = fileSystem.ResolvePath(assetPath);
-            if (!wholeReal.empty() && !IsFresh(splitReal, wholeReal)) {
+            const Path wholeReal = fileSystem.ResolvePath(assetPath);
+            if (!wholeReal.Empty() && !IsFresh(splitReal, wholeReal)) {
                 return {};
             }
             return splitPath;
@@ -99,30 +94,28 @@ namespace BECore {
         }
 
         /// The real folder for the split files: an existing virtual folder, else the folder inside its mount point
-        std::filesystem::path ResolveOutputFolder(StringView virtualFolder) {
+        Path ResolveOutputFolder(StringView virtualFolder) {
             const FileSystem& fileSystem = CoreManager::GetFileSystem();
-            std::filesystem::path folder = fileSystem.ResolvePath(virtualFolder);
-            if (!folder.empty()) {
+            Path folder = fileSystem.ResolvePath(virtualFolder);
+            if (!folder.Empty()) {
                 return folder;
             }
             const size_t slash = virtualFolder.find('/');
             const StringView mountPoint = virtualFolder.substr(0, slash);
-            const std::filesystem::path mounted = fileSystem.GetMountedPath(PoolString::Intern(mountPoint));
-            if (mounted.empty()) {
+            const Path mounted = fileSystem.GetMountedPath(PoolString::Intern(mountPoint));
+            if (mounted.Empty()) {
                 return {};
             }
             folder = mounted;
             if (slash != StringView::npos) {
-                folder /= std::filesystem::path(String(virtualFolder.substr(slash + 1)).c_str());
+                folder /= virtualFolder.substr(slash + 1);
             }
-            std::error_code error;
-            std::filesystem::create_directories(folder, error);
-            return error ? std::filesystem::path{} : folder;
+            return CreateDirectories(folder) ? folder : Path{};
         }
 
-        bool WriteText(const std::filesystem::path& file, const String& text) {
+        bool WriteText(const Path& file, const String& text) {
             // In place, not atomic: the split files sit beside the source and a half-written one is rewritten by the next split
-            auto out = File::Open(PathToUtf8(file), FileMode::Write);
+            auto out = File::Open(file, FileMode::Write);
             return out && out->Write(StringView(text)) && out->Close().has_value();
         }
 
@@ -176,15 +169,20 @@ namespace BECore {
             LOG_ERROR("SplitAssetFile: '{}' is no .asset.xml file", virtualAssetPath);
             return false;
         }
-        const std::filesystem::path source = CoreManager::GetFileSystem().ResolvePath(virtualAssetPath);
-        std::error_code error;
-        const auto size = source.empty() ? 0 : std::filesystem::file_size(source, error);
-        if (source.empty() || error || size > ReaderLimits::kMaxXmlDocumentBytes) {
+        const Path source = CoreManager::GetFileSystem().ResolvePath(virtualAssetPath);
+        const Optional<FileInfo> info = source.Empty() ? Optional<FileInfo>{} : GetFileInfo(source);
+        if (!info || info->kind != FileKind::File || info->size > ReaderLimits::kMaxXmlDocumentBytes) {
+            LOG_ERROR("SplitAssetFile: cannot read '{}'", virtualAssetPath);
+            return false;
+        }
+        // load_file(const char*) is the ANSI code page on Windows, which a UTF-8 path is not
+        const std::expected<Vector<uint8_t>, String> bytes = ReadFileBytes(source, ReaderLimits::kMaxXmlDocumentBytes);
+        if (!bytes) {
             LOG_ERROR("SplitAssetFile: cannot read '{}'", virtualAssetPath);
             return false;
         }
         pugi::xml_document document;
-        const pugi::xml_parse_result parsed = document.load_file(source.c_str(), pugi::parse_default, kEncoding);
+        const pugi::xml_parse_result parsed = document.load_buffer(bytes->data(), bytes->size(), pugi::parse_default, kEncoding);
         if (!parsed) {
             LOG_ERROR("SplitAssetFile: '{}' does not parse: {}", virtualAssetPath, parsed.description());
             return false;
@@ -195,8 +193,8 @@ namespace BECore {
             return false;
         }
 
-        const std::filesystem::path folder = outputVirtualFolder.empty() ? source.parent_path() : ResolveOutputFolder(outputVirtualFolder);
-        if (folder.empty()) {
+        const Path folder = outputVirtualFolder.empty() ? source.Parent() : ResolveOutputFolder(outputVirtualFolder);
+        if (folder.Empty()) {
             LOG_ERROR("SplitAssetFile: no output folder '{}'", outputVirtualFolder);
             return false;
         }
@@ -204,12 +202,12 @@ namespace BECore {
         bool written = true;
         for (const AssetPurpose part : kParts) {
             const String splitPath = SplitPartPath(virtualAssetPath, part);
-            const std::filesystem::path file = folder / std::filesystem::path(splitPath.c_str()).filename();
+            const Path file = folder / PathFilename(splitPath);
             const Optional<String>& text = texts->Get(part);
             if (!text) {
-                std::filesystem::remove(file, error);
+                (void)RemoveFile(file);  // a part that never was there is not an error
             } else if (!WriteText(file, *text)) {
-                LOG_ERROR("SplitAssetFile: cannot write '{}'", file.string());
+                LOG_ERROR("SplitAssetFile: cannot write '{}'", file.View());
                 written = false;
             }
         }
