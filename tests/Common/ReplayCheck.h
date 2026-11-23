@@ -1,6 +1,8 @@
 #pragma once
 
 #include <BECore/Control/Json.h>
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/Format/Format.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Scene/SceneManager.h>
@@ -13,9 +15,7 @@
 #include <Games/ReplayPlayer.h>
 #include <expected>
 #include <filesystem>
-#include <fstream>  //-NoStd: the file layer has no read of a host path (FileSystem/CLAUDE.md)
 #include <gtest/gtest.h>
-#include <sstream>  //-NoStd: the file layer has no read of a host path (FileSystem/CLAUDE.md)
 
 namespace BECore::Tests {
 
@@ -48,15 +48,13 @@ namespace BECore::Tests {
      * `__FILE__`. @p game has to be in the state a fresh start has: the file begins with a `reset`.
      */
     inline std::expected<void, ReplayCheckFailure> PlayReplayFile(IControllableGame& game, StringView gameName, const std::filesystem::path& path, ReplayStepFn step = StepReplayFrame) {
-        std::ifstream file(path, std::ios::binary);  //-NoStd: see the include
-        if (!file) {
-            return std::unexpected(ReplayCheckFailure{Format("cannot read the replay file '{}'", path.string()), std::nullopt});
+        const auto text = ReadTextFile(PathToUtf8(path));
+        if (!text) {
+            return std::unexpected(ReplayCheckFailure{Format("cannot read the replay file '{}': {}", path.string(), text.error()), std::nullopt});
         }
-        std::ostringstream text;  //-NoStd: see the include
-        text << file.rdbuf();
 
         ReplayPlayer player;
-        if (const auto loaded = player.Load(FromStdString(text.str()), gameName); !loaded) {
+        if (const auto loaded = player.Load(*text, gameName); !loaded) {
             return std::unexpected(ReplayCheckFailure{Format("'{}': {}", path.string(), DescribeReplayError(loaded.error())), std::nullopt});
         }
         while (!player.IsDone()) {
