@@ -1,5 +1,6 @@
 #include "ProgramCompiler.h"
 
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Values/Programs/ExprChecker.h>
 #include <BECore/Values/Programs/ExprParser.h>
 #include <BECore/Values/Programs/Interpreter.h>
@@ -433,6 +434,7 @@ namespace BECore {
         if (!wanted.has_value()) {
             return std::unexpected(wanted.error());
         }
+        const ScratchScope scratch;
         const auto ast = ParseExpression(text);
         if (!ast.has_value()) {
             return std::unexpected(ast.error());

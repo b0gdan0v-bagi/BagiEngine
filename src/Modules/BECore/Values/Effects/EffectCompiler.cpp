@@ -1,5 +1,6 @@
 #include "EffectCompiler.h"
 
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Values/Effects/EffectProgramBuilder.h>
 #include <BECore/Values/Effects/ScriptParser.h>
@@ -400,6 +401,7 @@ namespace BECore {
     }  // namespace
 
     std::expected<EffectScript, ProgramError> CompileEffects(StringView text, const ContextDecl& declaration, const EffectOptions& options) {
+        const ScratchScope scratch;
         const auto ast = ParseScript(text);
         if (!ast.has_value()) {
             return std::unexpected(ast.error());
