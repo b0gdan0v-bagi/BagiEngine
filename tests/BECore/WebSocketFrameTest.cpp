@@ -114,6 +114,32 @@ namespace BECore::Tests {
         EXPECT_EQ(frame65536[9], 0x00);
     }
 
+    TEST(WebSocketFrameTest, AFrameOfOneMebibyteIsOneAllocation) {
+        constexpr size_t kPayloadSize = 1024 * 1024;
+        const Vector<uint8_t> payload(kPayloadSize, 0x5A);
+
+        const Vector<uint8_t> plain = EncodeFrame(WebSocketOpcode::kBinary, AsSpan(payload));
+        EXPECT_EQ(plain.size(), kPayloadSize + 10);
+        EXPECT_EQ(plain.capacity(), plain.size());
+
+        const Vector<uint8_t> masked = EncodeFrame(WebSocketOpcode::kBinary, AsSpan(payload), kMask);
+        EXPECT_EQ(masked.size(), kPayloadSize + 14);
+        EXPECT_EQ(masked.capacity(), masked.size());
+        EXPECT_EQ(masked[14 + 1], static_cast<uint8_t>(0x5A ^ kMask[1]));
+    }
+
+    TEST(WebSocketFrameTest, AppendFrameKeepsTheBytesBeforeIt) {
+        Vector<uint8_t> out = Bytes({0xAA, 0xBB});
+        AppendFrame(out, WebSocketOpcode::kText, TextBytes("Hello"));
+        AppendFrame(out, WebSocketOpcode::kText, TextBytes("Hello"), kMask);
+
+        Vector<uint8_t> expected = Bytes({0xAA, 0xBB, 0x81, 0x05, 0x48, 0x65, 0x6C, 0x6C, 0x6F});
+        for (const int byte : {0x81, 0x85, 0x37, 0xFA, 0x21, 0x3D, 0x7F, 0x9F, 0x4D, 0x51, 0x58}) {
+            expected.push_back(static_cast<uint8_t>(byte));
+        }
+        EXPECT_EQ(out, expected);
+    }
+
     TEST(WebSocketFrameTest, MessagesOfEveryLengthFormRoundTrip) {
         for (const size_t length : {0u, 1u, 125u, 126u, 127u, 65535u, 65536u, 100000u}) {
             const String payload(length, 'x');

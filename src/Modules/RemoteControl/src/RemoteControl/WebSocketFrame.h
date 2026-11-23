@@ -40,11 +40,15 @@ namespace BECore {
     using WebSocketMask = Array<uint8_t, 4>;
 
     /**
-     * @brief Encodes one frame.
+     * @brief Appends one frame to @p out: one `reserve` for the header and the payload, then one copy of the payload (masked or not).
      *
-     * A server sends its frames unmasked. @p mask is for clients and tests: a frame with a key is masked, as a
-     * client's frames have to be. @p fin false starts or continues a fragmented message.
+     * `reserve` asks for exactly what this frame needs, so a caller that appends many frames to one vector reserves their sum first.
+     * A server sends its frames unmasked. @p mask is for clients and tests: a frame with a key is masked, as a client's frames have to
+     * be. @p fin false starts or continues a fragmented message.
      */
+    void AppendFrame(Vector<uint8_t>& out, uint8_t opcode, Span<const uint8_t> payload, Optional<WebSocketMask> mask = std::nullopt, bool fin = true);
+
+    /// Encodes one frame into a new vector (`AppendFrame` on an empty one)
     [[nodiscard]] Vector<uint8_t> EncodeFrame(uint8_t opcode, Span<const uint8_t> payload, Optional<WebSocketMask> mask = std::nullopt, bool fin = true);
 
     /// A text frame holding @p text

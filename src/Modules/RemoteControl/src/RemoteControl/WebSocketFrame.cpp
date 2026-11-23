@@ -13,6 +13,7 @@ namespace BECore {
         constexpr uint8_t kLength64Marker = 127;  // the length is in the next 8 bytes
         constexpr size_t kMaskSize = 4;
         constexpr size_t kCloseCodeSize = 2;
+        constexpr size_t kMaxHeaderSize = 1 + 1 + 8 + kMaskSize;  // flags, length marker, 64-bit length, masking key
         constexpr uint8_t kFirstControlOpcode = 0x8;
 
         bool IsControlOpcode(uint8_t opcode) {
@@ -35,6 +36,14 @@ namespace BECore {
             }
         }
 
+        /// Writes the low @p byteCount bytes of @p value, most significant first; returns @p byteCount
+        size_t WriteBigEndian(uint8_t* target, uint64_t value, size_t byteCount) {
+            for (size_t i = 0; i < byteCount; ++i) {
+                target[i] = static_cast<uint8_t>(value >> (8 * (byteCount - 1 - i)));
+            }
+            return byteCount;
+        }
+
         uint64_t ReadBigEndian(const uint8_t* bytes, size_t byteCount) {
             uint64_t value = 0;
             for (size_t i = 0; i < byteCount; ++i) {
@@ -49,28 +58,45 @@ namespace BECore {
 
     }  // namespace
 
-    Vector<uint8_t> EncodeFrame(uint8_t opcode, Span<const uint8_t> payload, Optional<WebSocketMask> mask, bool fin) {
-        Vector<uint8_t> frame;
-        frame.push_back(static_cast<uint8_t>((fin ? kFinBit : 0) | (opcode & kOpcodeMask)));
+    void AppendFrame(Vector<uint8_t>& out, uint8_t opcode, Span<const uint8_t> payload, Optional<WebSocketMask> mask, bool fin) {
+        Array<uint8_t, kMaxHeaderSize> header{};
+        size_t headerSize = 0;
+        header[headerSize++] = static_cast<uint8_t>((fin ? kFinBit : 0) | (opcode & kOpcodeMask));
 
         const uint8_t maskBit = mask ? kMaskBit : 0;
         if (payload.size() < kLength16Marker) {
-            frame.push_back(static_cast<uint8_t>(maskBit | payload.size()));
+            header[headerSize++] = static_cast<uint8_t>(maskBit | payload.size());
         } else if (payload.size() <= std::numeric_limits<uint16_t>::max()) {
-            frame.push_back(static_cast<uint8_t>(maskBit | kLength16Marker));
-            AppendBigEndian(frame, payload.size(), 2);
+            header[headerSize++] = static_cast<uint8_t>(maskBit | kLength16Marker);
+            headerSize += WriteBigEndian(header.data() + headerSize, payload.size(), 2);
         } else {
-            frame.push_back(static_cast<uint8_t>(maskBit | kLength64Marker));
-            AppendBigEndian(frame, payload.size(), 8);
+            header[headerSize++] = static_cast<uint8_t>(maskBit | kLength64Marker);
+            headerSize += WriteBigEndian(header.data() + headerSize, payload.size(), 8);
+        }
+        if (mask) {
+            for (size_t i = 0; i < kMaskSize; ++i) {
+                header[headerSize++] = (*mask)[i];
+            }
         }
 
-        if (mask) {
-            // Plain pointers: an Array iterator is a pointer in EASTL, and its insert does not take MSVC's class iterator of a std:: container
-            frame.insert(frame.end(), mask->data(), mask->data() + mask->size());
+        out.reserve(out.size() + headerSize + payload.size());
+        // Plain pointers: an Array iterator is a pointer in EASTL, and its insert does not take MSVC's class iterator of a std:: container
+        out.insert(out.end(), header.data(), header.data() + headerSize);
+        if (!mask) {
+            out.insert(out.end(), payload.data(), payload.data() + payload.size());
+            return;
         }
+        const size_t payloadStart = out.size();
+        out.resize(payloadStart + payload.size());
+        uint8_t* target = out.data() + payloadStart;
         for (size_t i = 0; i < payload.size(); ++i) {
-            frame.push_back(mask ? static_cast<uint8_t>(payload[i] ^ (*mask)[i % kMaskSize]) : payload[i]);
+            target[i] = static_cast<uint8_t>(payload[i] ^ (*mask)[i % kMaskSize]);
         }
+    }
+
+    Vector<uint8_t> EncodeFrame(uint8_t opcode, Span<const uint8_t> payload, Optional<WebSocketMask> mask, bool fin) {
+        Vector<uint8_t> frame;
+        AppendFrame(frame, opcode, payload, mask, fin);
         return frame;
     }
 
