@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlClock.h>
 #include <BECore/Control/ControlEnvelope.h>
 #include <BECore/Control/ControlWindowStatus.h>
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
@@ -64,26 +65,26 @@ namespace BECore {
     struct ControlListedParam {
         BE_CLASS(ControlListedParam)
 
-        BE_REFLECT_FIELD String description;
-        BE_REFLECT_FIELD String name;
+        BE_REFLECT_FIELD ArenaString description;
+        BE_REFLECT_FIELD ArenaString name;
         BE_REFLECT_FIELD bool required = false;
-        BE_REFLECT_FIELD String type;
+        BE_REFLECT_FIELD ArenaString type;
     };
 
     /// One method of `list_methods`; a method nobody described has an empty `summary` and no `params`
     struct ControlListedMethod {
         BE_CLASS(ControlListedMethod)
 
-        BE_REFLECT_FIELD String name;
-        BE_REFLECT_FIELD Vector<ControlListedParam> params;
-        BE_REFLECT_FIELD String summary;
+        BE_REFLECT_FIELD ArenaString name;
+        BE_REFLECT_FIELD ArenaVector<ControlListedParam> params;
+        BE_REFLECT_FIELD ArenaString summary;
     };
 
     /// `list_methods`
     struct ControlMethodsAnswer {
         BE_CLASS(ControlMethodsAnswer)
 
-        BE_REFLECT_FIELD Vector<ControlListedMethod> methods;
+        BE_REFLECT_FIELD ArenaVector<ControlListedMethod> methods;
     };
 
     /// One call of a `batch`: `ok` and its `result` (the call's own document, borrowed from the batch), or the `error` of a failed one
@@ -99,7 +100,7 @@ namespace BECore {
     struct ControlBatchAnswer {
         BE_CLASS(ControlBatchAnswer)
 
-        BE_REFLECT_FIELD Vector<ControlBatchResult> results;
+        BE_REFLECT_FIELD ArenaVector<ControlBatchResult> results;
         BE_REFLECT_FIELD Optional<uint64_t> stopped;
     };
 
@@ -107,9 +108,9 @@ namespace BECore {
     struct ReflectionMethodAnswer {
         BE_CLASS(ReflectionMethodAnswer)
 
-        BE_REFLECT_FIELD String method;
+        BE_REFLECT_FIELD ArenaString method;
         BE_REFLECT_FIELD Optional<JsonPayload> result;
-        BE_REFLECT_FIELD String root;
+        BE_REFLECT_FIELD ArenaString root;
     };
 
 }  // namespace BECore

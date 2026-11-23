@@ -16,8 +16,8 @@ namespace BECore {
         }
         if (mismatch.error) {
             ControlErrorAnswer error;
-            error.code = mismatch.error->code;
-            error.message = mismatch.error->message;
+            error.code = ArenaString(mismatch.error->code.data(), mismatch.error->code.size());
+            error.message = ArenaString(mismatch.error->message.data(), mismatch.error->message.size());
             answer.error = std::move(error);
         }
         if (mismatch.expected) {

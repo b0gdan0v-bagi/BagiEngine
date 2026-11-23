@@ -164,14 +164,25 @@ namespace BECore {
         ++_methodsVersion;
     }
 
-    Vector<ControlMethodListing> ControlService::GetMethods() const {
-        Vector<ControlMethodListing> methods;
+    ArenaVector<ControlMethodView> ControlService::GetMethodViews() const {
+        ArenaVector<ControlMethodView> methods;
         methods.reserve(_handlers.size());
         for (const auto& handler : _handlers) {
             const auto description = _descriptions.find(handler.first);
-            methods.push_back(ControlMethodListing{handler.first, description != _descriptions.end() ? &description->second : nullptr});
+            methods.push_back(ControlMethodView{handler.first, description != _descriptions.end() ? &description->second : nullptr});
         }
-        eastl::sort(methods.begin(), methods.end(), [](const ControlMethodListing& a, const ControlMethodListing& b) { return a.name < b.name; });
+        eastl::sort(methods.begin(), methods.end(), [](const ControlMethodView& a, const ControlMethodView& b) { return a.name < b.name; });
+        return methods;
+    }
+
+    Vector<ControlMethodListing> ControlService::GetMethods() const {
+        ScratchScope scratch;  // the views are copied out before it ends
+        const ArenaVector<ControlMethodView> views = GetMethodViews();
+        Vector<ControlMethodListing> methods;
+        methods.reserve(views.size());
+        for (const ControlMethodView& view : views) {
+            methods.push_back(ControlMethodListing{String(view.name), view.info});
+        }
         return methods;
     }
 
@@ -237,7 +248,7 @@ namespace BECore {
             JsonWriter writer(lease.Text());
             ControlPushEnvelope envelope;
             envelope.data = JsonPayload::Borrowed(data);
-            envelope.event = event;
+            envelope.event = ArenaString(event.data(), event.size());
             envelope.WriteJson(writer);
             sink(lease.Text());
         }
@@ -282,7 +293,7 @@ namespace BECore {
             };
             ControlPushEnvelope envelope;
             envelope.data = hasObservers ? JsonPayload::Text(observed) : JsonPayload::Streamed(write);
-            envelope.event = event;
+            envelope.event = ArenaString(event.data(), event.size());
             envelope.WriteJson(writer);
             if (writer.IsComplete()) {
                 sink(lease.Text());

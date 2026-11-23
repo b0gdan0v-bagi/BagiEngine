@@ -102,20 +102,23 @@ namespace BECore {
 
         /// `list_methods`: every method of the service with the description its module gave it. The answer is built from the table only, no client data is read
         void HandleListMethods(ControlCall& call, const ControlService& service) {
+            const ArenaVector<ControlMethodView> methods = service.GetMethodViews();
             ControlMethodsAnswer answer;
-            for (const ControlMethodListing& listing : service.GetMethods()) {
+            answer.methods.reserve(methods.size());
+            for (const ControlMethodView& listing : methods) {
                 ControlListedMethod& method = answer.methods.emplace_back();
-                method.name = listing.name;
+                method.name = ArenaString(listing.name.data(), listing.name.size());
                 if (listing.info == nullptr) {
                     continue;
                 }
-                method.summary = listing.info->summary;
+                method.summary = ArenaString(listing.info->summary.data(), listing.info->summary.size());
+                method.params.reserve(listing.info->params.size());
                 for (const ControlParamInfo& param : listing.info->params) {
                     ControlListedParam& entry = method.params.emplace_back();
-                    entry.description = param.description;
-                    entry.name = param.name;
+                    entry.description = ArenaString(param.description.data(), param.description.size());
+                    entry.name = ArenaString(param.name.data(), param.name.size());
                     entry.required = param.required;
-                    entry.type = param.type;
+                    entry.type = ArenaString(param.type.data(), param.type.size());
                 }
             }
             call.ReplyObject(answer);
@@ -370,8 +373,8 @@ namespace BECore {
                     row.result = JsonPayload::Borrowed(*done);
                 } else {
                     ControlErrorAnswer error;
-                    error.code = done.error().code;
-                    error.message = done.error().message;
+                    error.code = ArenaString(done.error().code.data(), done.error().code.size());
+                    error.message = ArenaString(done.error().message.data(), done.error().message.size());
                     row.error = std::move(error);
                 }
             }

@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonFwd.h>
+#include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/LockSite.h>
 #include <BECore/Threading/Mutex.h>
@@ -90,6 +91,10 @@ namespace BECore {
 
         /// Every registered method, sorted by name. The info pointers stay valid until the next DescribeMethod. Main thread
         [[nodiscard]] Vector<ControlMethodListing> GetMethods() const;
+
+        /// GetMethods() for an answer written at once: the list is on the scratch arena (the caller's scope owns it) and the names are views of the table,
+        /// so it allocates nothing on the heap. Main thread
+        [[nodiscard]] ArenaVector<ControlMethodView> GetMethodViews() const;
 
         /// Grows when a method is registered under a new name or described, so a widget rebuilds its copy of GetMethods() only on a change
         [[nodiscard]] uint64_t GetMethodsVersion() const {
