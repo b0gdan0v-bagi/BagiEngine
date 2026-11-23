@@ -35,15 +35,6 @@ namespace BECore::Tests {
             }
         }
 
-        const ZoneReportRow* FindZone(const Vector<ZoneReportRow>& rows, const char* zone) {
-            for (const ZoneReportRow& row : rows) {
-                if (row.zone == zone) {
-                    return &row;
-                }
-            }
-            return nullptr;
-        }
-
         String Printed(StringView caseName, size_t topNames) {
             std::ostringstream out;
             PrintZoneReport(out, caseName, topNames);
@@ -66,8 +57,8 @@ namespace BECore::Tests {
         }
         AllocateInZones();
         const Vector<ZoneReportRow> rows = CollectZoneReport();
-        const ZoneReportRow& outer = Require(FindZone(rows, kOuterZone));
-        const ZoneReportRow& inner = Require(FindZone(rows, kInnerZone));
+        const ZoneReportRow& outer = Require(FindZoneRow(rows, kOuterZone));
+        const ZoneReportRow& inner = Require(FindZoneRow(rows, kInnerZone));
 
         EXPECT_EQ(outer.calls, 1u);
         EXPECT_EQ(outer.allocs, 2u);
@@ -104,7 +95,7 @@ namespace BECore::Tests {
         Vector<char> outside;
         outside.reserve(kOuterBlock);
         const Vector<ZoneReportRow> outsideRows = CollectZoneReport();
-        const ZoneReportRow& none = Require(FindZone(outsideRows, AllocSiteStats::kNoZone));
+        const ZoneReportRow& none = Require(FindZoneRow(outsideRows, AllocSiteStats::kNoZone));
         EXPECT_EQ(none.calls, 0u);
         EXPECT_GE(none.bytes, kOuterBlock);
     }
@@ -115,12 +106,14 @@ namespace BECore::Tests {
         }
         AllocateInZones();
         const Vector<ZoneReportRow> rows = CollectZoneReport();
-        const ZoneReportRow& outer = Require(FindZone(rows, kOuterZone));
+        const ZoneReportRow& outer = Require(FindZoneRow(rows, kOuterZone));
 
+        ASSERT_EQ(outer.sizes.size(), 1u);
+        ASSERT_EQ(outer.names.size(), 1u);
         const String printed = Printed("probe", 1);
         const String zoneLine = Format("AssetLoadZone case=probe zone=\"Report outer\" calls={} allocs={} bytes={} selfAllocs={}\n", outer.calls, outer.allocs, outer.bytes, outer.selfAllocs);
-        const String sizesLine = Format("AssetLoadZoneSizes case=probe zone=\"Report outer\" sizes={}:{}\n", outer.sizes[0].upTo, outer.sizes[0].count);
-        const String namesLine = Format("AssetLoadZoneNames case=probe zone=\"Report outer\" name=\"Report blocks\" allocs={} bytes={}\n", outer.names[0].allocs, outer.names[0].bytes);
+        const String sizesLine = Format("AssetLoadZoneSizes case=probe zone=\"Report outer\" sizes={}:{}\n", At(outer.sizes, 0).upTo, At(outer.sizes, 0).count);
+        const String namesLine = Format("AssetLoadZoneNames case=probe zone=\"Report outer\" name=\"Report blocks\" allocs={} bytes={}\n", At(outer.names, 0).allocs, At(outer.names, 0).bytes);
         EXPECT_NE(printed.find(zoneLine), String::npos) << printed.c_str();
         EXPECT_NE(printed.find(sizesLine), String::npos) << printed.c_str();
         EXPECT_NE(printed.find(namesLine), String::npos) << printed.c_str();

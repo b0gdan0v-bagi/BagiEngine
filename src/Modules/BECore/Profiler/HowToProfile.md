@@ -65,7 +65,7 @@ The name has to be a string literal (or live as long as the program). An allocat
 
 Three line kinds per zone, each with `case=<c> zone="<name>"`: `AssetLoadZone` (`calls`, `allocs`, `bytes` inclusive of the zones inside, `selfAllocs`), `AssetLoadZoneSizes` (`sizes=<upTo>:<n>,...`, `upTo` the largest size of the bucket, `inf` the open one) and `AssetLoadZoneNames` (the first allocation names of the zone: `pugixml` for the parser's blocks, `(unnamed)` for a plain `operator new`). Sizes and names are self, as in `zone_allocs`. The phase zones of a case hold the load's allocations, so their `bytes` come near the `AssetLoad*` totals of the case, not to the byte: the file of the pass has fresh names, but the pool and the allocator are in another state than in the median run. `(no zone)` is what the case allocates outside a zone (the scratch of the report itself included).
 
-The numbers rank `xml-load-scratch`: what `pugixml` and the global `new` allocate during an XML load, and in which sizes. `AssetLoadParticlesRun` is the particle scene (100 emitters, half looping) after its warm-up frames: per frame the allocations and bytes of the update and of the draw, each in a zone, and the report `case=particles-run`; the draw figure includes the test double `RecordingRenderer` when it shows any.
+The numbers rank `xml-load-scratch`: what `pugixml` and the global `new` allocate during an XML load, and in which sizes. `AssetLoadParticlesRun` is the particle scene (looping and burst emitters) after its warm-up frames: per frame the allocations and bytes of the update and of the draw, each in a zone, and the report `case=particles-run`; the draw figure includes the test double `RecordingRenderer` when it shows any.
 
 ## The room server and its probe
 

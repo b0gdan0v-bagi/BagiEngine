@@ -711,8 +711,8 @@ namespace BECore::Tests {
         /// More than the longest life (a second), so the looping emitters hold their steady number of particles and the bursts are over
         constexpr int kWarmupFrames = 64;
         constexpr int kRunFrames = 64;
-        constexpr StringView kParticleUpdateZone = "Particles update";
-        constexpr StringView kParticleDrawZone = "Particles draw";
+        constexpr const char* kParticleUpdateZone = "Particles update";
+        constexpr const char* kParticleDrawZone = "Particles draw";
 
         /// `kParticleEmitters` nodes of a transform and an emitter without a sprite (no texture library entry is needed): the even ones
         /// loop, the odd ones fire a burst at the first update and are over; the seeds differ by node
@@ -741,6 +741,7 @@ namespace BECore::Tests {
             }
             ~RendererGuard() {
                 CoreManager::GetRendererManager().SetRenderer({});
+                CoreManager::GetTime().Reset();
             }
             RendererGuard(const RendererGuard&) = delete;
             RendererGuard& operator=(const RendererGuard&) = delete;
@@ -751,6 +752,8 @@ namespace BECore::Tests {
             size_t emitters = 0;
             size_t live = 0;
             size_t geometryCalls = 0;  ///< of the last frame
+            uint64_t updateCalls = 0;  ///< of the zones; zero without the tracker
+            uint64_t drawCalls = 0;
             double updateAllocsPerFrame = 0.0;
             double drawAllocsPerFrame = 0.0;
             double updateBytesPerFrame = 0.0;
@@ -771,16 +774,6 @@ namespace BECore::Tests {
                 }
             }
             return live;
-        }
-
-        /// The row of the zone @p name in @p rows, or an empty one
-        ZoneReportRow RowOfZone(const Vector<ZoneReportRow>& rows, StringView name) {
-            for (const ZoneReportRow& row : rows) {
-                if (row.zone == name) {
-                    return row;
-                }
-            }
-            return {};
         }
 
         /**
@@ -812,12 +805,12 @@ namespace BECore::Tests {
             for (int frame = 0; frame < kRunFrames; ++frame) {
                 CoreManager::GetTime().Advance(kParticleFrame);
                 {
-                    BE_PROFILE_SCOPE("Particles update");
+                    BE_PROFILE_SCOPE(kParticleUpdateZone);
                     manager->UpdateAll();
                 }
                 renderer->ClearCalls();
                 {
-                    BE_PROFILE_SCOPE("Particles draw");
+                    BE_PROFILE_SCOPE(kParticleDrawZone);
                     manager->DrawAll();
                 }
             }
@@ -828,8 +821,13 @@ namespace BECore::Tests {
                 run.geometryCalls += call.kind == DrawKind::Geometry ? 1 : 0;
             }
             const Vector<ZoneReportRow> rows = CollectZoneReport();
-            const ZoneReportRow update = RowOfZone(rows, kParticleUpdateZone);
-            const ZoneReportRow draw = RowOfZone(rows, kParticleDrawZone);
+            const ZoneReportRow* updateRow = FindZoneRow(rows, kParticleUpdateZone);
+            const ZoneReportRow* drawRow = FindZoneRow(rows, kParticleDrawZone);
+            const ZoneReportRow none;  // no tracker, no rows
+            const ZoneReportRow& update = updateRow != nullptr ? *updateRow : none;
+            const ZoneReportRow& draw = drawRow != nullptr ? *drawRow : none;
+            run.updateCalls = update.calls;
+            run.drawCalls = draw.calls;
             constexpr double kFrames = kRunFrames;
             run.updateAllocsPerFrame = static_cast<double>(update.allocs) / kFrames;
             run.drawAllocsPerFrame = static_cast<double>(draw.allocs) / kFrames;
@@ -1015,6 +1013,10 @@ namespace BECore::Tests {
         EXPECT_EQ(run.emitters, kParticleEmitters);
         EXPECT_GT(run.live, 0u);
         EXPECT_GT(run.geometryCalls, 0u);
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_EQ(run.updateCalls, static_cast<uint64_t>(kRunFrames)) << "the zone name of the lookup is the one of the scope";
+            EXPECT_EQ(run.drawCalls, static_cast<uint64_t>(kRunFrames));
+        }
         EXPECT_EQ(CoreManager::GetRendererManager().GetRenderer(), nullptr) << "the renderer is given back";
     }
 

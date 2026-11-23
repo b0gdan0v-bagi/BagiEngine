@@ -1,9 +1,9 @@
 #pragma once
 
+#include <BECore/Format/Format.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Types/Types.h>
 #include <algorithm>
-#include <cstring>
 #include <ostream>
 
 namespace BECore::Tests {
@@ -96,6 +96,16 @@ namespace BECore::Tests {
         }
         std::sort(rows.begin(), rows.end(), [](const ZoneReportRow& a, const ZoneReportRow& b) { return a.bytes != b.bytes ? a.bytes > b.bytes : a.zone < b.zone; });
         return rows;
+    }
+
+    /// The row of the zone @p zone in @p rows, or null
+    inline const ZoneReportRow* FindZoneRow(const Vector<ZoneReportRow>& rows, StringView zone) {
+        for (const ZoneReportRow& row : rows) {
+            if (row.zone == zone) {
+                return &row;
+            }
+        }
+        return nullptr;
     }
 
     /**
