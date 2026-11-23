@@ -75,11 +75,11 @@ namespace BECore::Tests {
     protected:
         void SetUp() override {
             String error;
-            for (const std::filesystem::path& file : ListContentFiles(EngineConfig(), error)) {
-                const String stem = FromStdString(file.stem().string());
+            for (const Path& file : ListContentFiles(EngineConfig(), error)) {
+                const String stem(PathStem(file.View()));
                 _shipped.push_back(stem);
                 if (!IsListed(kApplicationOnly, stem)) {
-                    _tree.Write(0, Generic(file), ReadFile(EngineConfig() / file));
+                    _tree.Write(0, file.View(), ReadFile(EngineConfig() / ToStd(file.View())));
                 }
             }
             ASSERT_TRUE(error.empty()) << error.c_str();
@@ -88,10 +88,6 @@ namespace BECore::Tests {
 
         bool IsShipped(StringView stem) const {
             return std::find(_shipped.begin(), _shipped.end(), String(stem)) != _shipped.end();
-        }
-
-        static String Generic(const std::filesystem::path& path) {
-            return FromStdString(path.generic_string());
         }
 
         CookTestTree _tree;

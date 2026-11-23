@@ -255,6 +255,128 @@ namespace BECore::Tests {
         EXPECT_EQ(ReadFile(_tree.Out() / "keep.txt"), "mine");
     }
 
+    TEST_F(ContentCookTest, LayersAndAnOutputFolderWithNonAsciiNamesAreCooked) {
+        const std::filesystem::path layer = _tree.Root() / "caf\xC3\xA9" / "conf\xC3\xA9";
+        const std::filesystem::path out = _tree.Root() / "sorti\xC3\xA9";
+        WriteFile(layer / "Probe.xml", kProbeXml);
+        WriteFile(layer / "dossier\xC3\xA9" / "note\xC3\xA9.txt", "text");
+        FileSystem files;
+        ASSERT_TRUE(files.Mount(MountPoints::config, layer));
+
+        const CookReport report = CookContent(files, out, _registry);
+        ASSERT_TRUE(report.Ok()) << report.ToText().c_str();
+        EXPECT_TRUE(std::filesystem::is_regular_file(out / "layer0" / "config" / "Probe.bin"));
+        EXPECT_EQ(ReadFile(out / "layer0" / "config" / "dossier\xC3\xA9" / "note\xC3\xA9.txt"), "text");
+        ASSERT_NE(FindRow(report, 0, "dossier\xC3\xA9/note\xC3\xA9.txt"), nullptr);
+        EXPECT_EQ(FindRow(report, 0, "dossier\xC3\xA9/note\xC3\xA9.txt")->outcome, CookOutcome::Copied);
+    }
+
+    TEST_F(ContentCookTest, AnOutputFolderEqualToAContentFolderIsRefusedAndTheContentStays) {
+        _tree.Write(1, "Probe.xml", kProbeXml);
+
+        const CookReport report = CookContent(_tree.Sources(), _tree.SourceConfig(1), _registry);
+        EXPECT_FALSE(report.Ok());
+        EXPECT_TRUE(std::filesystem::is_regular_file(_tree.SourceConfig(1) / "Probe.xml"));
+        EXPECT_FALSE(std::filesystem::exists(_tree.SourceConfig(1) / "layer0"));
+    }
+
+    TEST_F(ContentCookTest, AnOutputFolderBelowAContentFolderThroughDotDotIsRefused) {
+        _tree.Write(0, "Probe.xml", kProbeXml);
+        const std::filesystem::path sneaky = _tree.SourceConfig(0) / "sub" / ".." / "cooked";
+
+        EXPECT_FALSE(CookContent(_tree.Sources(), sneaky, _registry).Ok());
+        EXPECT_FALSE(std::filesystem::exists(_tree.SourceConfig(0) / "cooked"));
+        EXPECT_FALSE(std::filesystem::exists(_tree.SourceConfig(0) / "sub"));
+    }
+
+    TEST_F(ContentCookTest, AFolderThatOnlySharesATextPrefixWithTheOtherIsNotInsideIt) {
+        const std::filesystem::path data = _tree.Root() / "data";
+
+        // the output `data/b` is a text prefix of the content folder `data/bc/config`
+        const std::filesystem::path longerLayer = data / "bc" / "config";
+        WriteFile(longerLayer / "Probe.xml", kProbeXml);
+        FileSystem longer;
+        ASSERT_TRUE(longer.Mount(MountPoints::config, longerLayer));
+        const CookReport outShorter = CookContent(longer, data / "b", _registry);
+        EXPECT_TRUE(outShorter.Ok()) << outShorter.ToText().c_str();
+        EXPECT_TRUE(std::filesystem::is_regular_file(data / "b" / "layer0" / "config" / "Probe.bin"));
+        EXPECT_TRUE(std::filesystem::is_regular_file(longerLayer / "Probe.xml"));
+
+        // and the content folder `data/b` of the other cook is a text prefix of the output `data/bc`
+        const std::filesystem::path shorterLayer = data / "b" / "content";
+        WriteFile(shorterLayer / "Probe.xml", kProbeXml);
+        FileSystem shorter;
+        ASSERT_TRUE(shorter.Mount(MountPoints::config, shorterLayer));
+        const CookReport outLonger = CookContent(shorter, data / "bc" / "contentout", _registry);
+        EXPECT_TRUE(outLonger.Ok()) << outLonger.ToText().c_str();
+        EXPECT_TRUE(std::filesystem::is_regular_file(shorterLayer / "Probe.xml"));
+    }
+
+    TEST_F(ContentCookTest, OnlyTheLayerFoldersOfAnEarlierCookAreRemovedFromTheOutputFolder) {
+        _tree.Write(0, "Probe.xml", kProbeXml);
+        const std::filesystem::path out = _tree.Out();
+        WriteFile(out / "layer3" / "old.bin", "old");
+        WriteFile(out / "layer12" / "old.bin", "old");
+        WriteFile(out / "notes" / "keep.txt", "mine");
+        WriteFile(out / "layer" / "keep.txt", "mine");
+        WriteFile(out / "layerx" / "keep.txt", "mine");
+        WriteFile(out / "layer7", "a file, not a folder");
+
+        ASSERT_TRUE(Cook().Ok());
+        EXPECT_FALSE(std::filesystem::exists(out / "layer3"));
+        EXPECT_FALSE(std::filesystem::exists(out / "layer12"));
+        EXPECT_EQ(ReadFile(out / "notes" / "keep.txt"), "mine");
+        EXPECT_EQ(ReadFile(out / "layer" / "keep.txt"), "mine");
+        EXPECT_EQ(ReadFile(out / "layerx" / "keep.txt"), "mine");
+        EXPECT_EQ(ReadFile(out / "layer7"), "a file, not a folder");
+    }
+
+#ifndef _WIN32
+    TEST_F(ContentCookTest, ALinkNamedLikeALayerFolderIsRemovedAsALinkAndItsTargetStays) {
+        _tree.Write(0, "Probe.xml", kProbeXml);
+        const std::filesystem::path target = _tree.Root() / "elsewhere";
+        WriteFile(target / "keep.txt", "mine");
+        MakeDirectory(_tree.Out());
+        std::error_code error;                                                             //-NoStd: makes a symbolic link, which the file layer has no call for
+        std::filesystem::create_directory_symlink(target, _tree.Out() / "layer3", error);  //-NoStd: same
+        ASSERT_FALSE(error) << error.message();                                            //-NoStd: same
+
+        ASSERT_TRUE(Cook().Ok());
+        EXPECT_FALSE(std::filesystem::is_symlink(_tree.Out() / "layer3"));  //-NoStd: same
+        EXPECT_EQ(ReadFile(target / "keep.txt"), "mine");
+    }
+#endif
+
+    TEST_F(ContentCookTest, TheContentFilesAreListedInTheByteOrderOfTheirTextWithoutDotFilesAndTheEditorLayout) {
+        const std::filesystem::path layer = _tree.SourceConfig(0);
+        WriteFile(layer / "a.xml", "<A/>");
+        WriteFile(layer / "a-b.xml", "<A/>");
+        WriteFile(layer / "a" / "b.xml", "<A/>");
+        WriteFile(layer / ".DS_Store", "x");
+        WriteFile(layer / "imgui.ini", "x");
+        WriteFile(layer / "sub" / "imgui.ini", "x");
+        WriteFile(layer / ".hidden" / "inside.txt", "x");
+        WriteFile(layer / "caf\xC3\xA9.txt", "x");
+
+        String error;
+        const Vector<Path> files = ListContentFiles(layer, error);
+        EXPECT_TRUE(error.empty()) << error.c_str();
+        ASSERT_EQ(files.size(), 5u);
+        EXPECT_EQ(files[0].View(), ".hidden/inside.txt") << "only the name of the file decides, a file in a dot folder is content";
+        EXPECT_EQ(files[1].View(), "a-b.xml") << "'-' sorts before '.', which sorts before '/': `Path` order would put a/b.xml first";
+        EXPECT_EQ(files[2].View(), "a.xml");
+        EXPECT_EQ(files[3].View(), "a/b.xml");
+        EXPECT_EQ(files[4].View(), "caf\xC3\xA9.txt");
+    }
+
+    TEST_F(ContentCookTest, AMissingLayerFolderIsTheReasonOfListing) {
+        String error;
+        const Vector<Path> files = ListContentFiles(_tree.Root() / "missing", error);
+        EXPECT_TRUE(files.empty());
+        EXPECT_NE(error.find("the layer '"), String::npos) << error.c_str();
+        EXPECT_NE(error.find("cannot be listed"), String::npos) << error.c_str();
+    }
+
     TEST_F(ContentCookTest, ASceneWithInlineNodesAndAReferenceCooksAndLoadsLikeItsXml) {
         _tree.Write(0, "nodes/Hud.xml", HudNodeText("Hud"));
         _tree.Write(1, "SceneConfig.xml", SceneText(R"(<node name="A" layer="3"><components><component type="TransformComponent" x="5"/></components></node>

@@ -140,8 +140,8 @@ namespace BECore {
 
             void Run() {
                 String error;
-                const Vector<std::filesystem::path> sourceFiles = ListContentFiles(_sourceLayer, error);
-                const Vector<std::filesystem::path> cookedFiles = error.empty() ? ListContentFiles(_cookedLayer, error) : Vector<std::filesystem::path>{};
+                const Vector<Path> sourceFiles = ListContentFiles(_sourceLayer, error);
+                const Vector<Path> cookedFiles = error.empty() ? ListContentFiles(_cookedLayer, error) : Vector<Path>{};
                 if (!error.empty()) {
                     Fail(_report, _layerIndex, "", eastl::move(error));
                     return;

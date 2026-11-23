@@ -50,7 +50,7 @@ namespace BECore {
     }
 
     int RunCookCommand(const CookRequest& request, const FileSystem& fs) {
-        const std::filesystem::path outDir(ToStd(StringView(request.outDir.data(), request.outDir.size())));
+        const Path outDir(request.outDir);
         const ContentCookRegistry& registry = ContentCookRegistry::GetInstance();
 
         const CookReport cooked = CookContent(fs, outDir, registry);
