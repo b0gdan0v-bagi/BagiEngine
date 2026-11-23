@@ -124,9 +124,8 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<RgbaImage, String> ReadImageFile(const std::filesystem::path& file, uint32_t maxSide) {
-        const auto utf8 = file.u8string();  //-NoStd: SDL takes the path as UTF-8 chars
-        const char* path = reinterpret_cast<const char*>(utf8.c_str());
+    std::expected<RgbaImage, String> ReadImageFile(const Path& file, uint32_t maxSide) {
+        const char* path = file.CStr();
 
         size_t size = 0;
         void* bytes = SDL_LoadFile(path, &size);

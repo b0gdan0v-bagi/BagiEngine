@@ -17,7 +17,7 @@ The engine's own file layer over SDL3 (`SDL_IOStream`, `SDL_GetPathInfo`, `SDL_R
 | `ReadFileBytesScratch(path, arena, maxScratchBytes)` | `ReadFileBytes` into the caller's `LinearArena` (a `ScratchScope`) when the file is at most `maxScratchBytes`, else into a heap block the `ScratchFileBytes` owns; `Bytes()` is the span either way |
 | `WriteFileAtomically` | folder made, `<path>.tmp` written, flushed, closed, renamed over the target |
 | `PathToUtf8(path)` (`FilePath.h`) | the UTF-8 `String` of a `std::filesystem::path`: the one `u8string()` call, so `File.h` stays free of `<filesystem>` |
-| `Path` (`Path.h`) | a UTF-8 path over `String` and the view helpers it copies (`PathParent`, `PathFilename`, `PathStem`, `PathExtension`, `PathIsAbsolute`, `PathRelativeTo`, `PathCompare`, `PathHash`); `operator/`, `LexicallyNormal`, `ReplaceExtension` |
+| `Path` (`Path.h`) | a UTF-8 path over `String` and the view helpers it copies (`PathParent`, `PathFilename`, `PathStem`, `PathExtension`, `PathIsAbsolute`, `PathRelativeTo`, `PathCompare`, `PathHash`); `operator/`, `LexicallyNormal`, `ReplaceExtension`, `CStr` (NUL-terminated UTF-8 for a C API) |
 | `TextFileWriter<N>` (`TextFileWriter.h`) | text into an inline buffer of `N` bytes over a `File`, for a writer with nowhere to return an error (a log sink): `Append`, `AppendFormat` (cut at `N`, never allocated), `Flush`, `Close`; the first write error is kept (`HasError`, `TakeError`) and later calls do nothing; no allocation after `Open` |
 | `TextReader` (`TextReader.h`) | lines (`\n` or `\r\n`), white-space tokens and whole-token numbers (`ReadInt<T>`, `ReadFloat<T>` through `std::from_chars`) over a `StringView` it does not own; nothing allocates, a bad or out-of-range token leaves the position |
 

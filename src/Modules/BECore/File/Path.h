@@ -81,6 +81,10 @@ namespace BECore {
         operator StringView() const {
             return View();
         }
+        /// The text NUL-terminated at `View().size()`, for a C API that takes UTF-8 `char*` (the engine `String` always ends in a zero)
+        [[nodiscard]] const char* CStr() const {
+            return _text.c_str();
+        }
 
         [[nodiscard]] bool Empty() const {
             return _text.empty();

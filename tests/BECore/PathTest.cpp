@@ -308,6 +308,14 @@ namespace BECore::Tests {
         }
     }
 
+    TEST(PathTest, CStrIsTheTextEndedByAZero) {
+        const Path path("caf\xC3\xA9/a b.png");
+        ASSERT_NE(path.CStr(), nullptr);
+        EXPECT_EQ(StringView(path.CStr()), path.View());
+        EXPECT_EQ(path.CStr()[path.View().size()], '\0');
+        EXPECT_EQ(*Path().CStr(), '\0');
+    }
+
     TEST(PathTest, StoresTheTextAsGivenAndClearsAndImplicitlyViews) {
         Path path("a//./b");
         EXPECT_EQ(path.View(), "a//./b");
