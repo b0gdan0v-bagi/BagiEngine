@@ -35,6 +35,7 @@ namespace BECore::Tests {
         // "Main": output 800 x 600, every canvas in window pixels (scale 1).
         //   Hud (layer 10): Plate (10, 10, 200 x 100) holds Title (a label with a variable) and Ok (a button, 122, 62, 80 x 40); Off (300, 200, 80 x 40) is a disabled
         //   button; Under (500, 300, 80 x 40) is a button with Cover (490, 290, 100 x 60) drawn over it; Note (300, 300, 80 x 40) is a label.
+        //   Hotspot (600, 400, 77 x 40) is an interactive element with no clicker.
         //   Debug (layer 5): Tiny (400, 10, 20 x 20) is a button below the touch size, and a second Ok (500, 100, 80 x 40) with another action.
         //   Menu (layer 20): a modal canvas, hidden at first.
         // "Fit": 400 x 300 units, shown in a 1000 x 600 output: scale 2, offset (100, 0). View is a SceneView canvas with the button Go (10, 10, 50 x 40) and the slider Slide (10, 100, 200 x 40,
@@ -99,6 +100,7 @@ namespace BECore::Tests {
             </components>
           </element>
           <element type="UIPanel" name="Cover" x="490" y="290" width="100" height="60" blocksInput="true"/>
+          <element type="UIElement" name="Hotspot" x="600" y="400" width="77" height="40" interactive="true"/>
         </elements>
       </component>
     </components></node>
@@ -1920,6 +1922,29 @@ namespace BECore::Tests {
         EXPECT_NEAR(NumberMember(result, "x"), 170.0, kTolerance);  // (10 + 25) * 2 + 100
         EXPECT_NEAR(NumberMember(result, "y"), 60.0, kTolerance);   // (10 + 20) * 2
         EXPECT_EQ(recorder.Count("UIControlApiGo"), 1);
+    }
+
+    TEST_F(UIControlApiTest, AnAnswerHasExactlyTheKeysOfItsKindAndAddsActionAndValueOnlyForAClicker) {
+        Show("Main");
+
+        Json plainParams = Click("Hotspot");
+        plainParams["at"] = 0.1;  // a point that a float cannot hold exactly
+        const Json plain = Call("ui_click", plainParams);
+        const Json button = Call("ui_click", Click("Ok"));
+
+        ASSERT_TRUE(IsOk(plain)) << ErrorMessage(plain);
+        ASSERT_TRUE(IsOk(button)) << ErrorMessage(button);
+        const auto keysOf = [](const Json& response) {
+            Vector<String> keys;
+            for (const auto& item : Require(Member(response, "result")).items()) {
+                keys.push_back(String(item.key().c_str()));
+            }
+            return keys;
+        };
+        EXPECT_EQ(keysOf(plain), (Vector<String>{"canvas", "clicked", "consumed", "takenBy", "x", "y"}));
+        EXPECT_EQ(keysOf(button), (Vector<String>{"action", "canvas", "clicked", "consumed", "takenBy", "value", "x", "y"}));
+        const double x = NumberMember(Require(Member(plain, "result")), "x");
+        EXPECT_EQ(x, static_cast<double>(static_cast<float>(x))) << "a coordinate is a float widened, as the answer of click_at";
     }
 
     TEST_F(UIControlApiTest, TheClickAndTheOutputRectFollowTheViewTheSceneSwitchedTo) {

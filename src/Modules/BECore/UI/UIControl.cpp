@@ -10,6 +10,7 @@
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIChoice.h>
+#include <BECore/UI/UIControlAnswers.h>
 #include <BECore/UI/UIDropdown.h>
 #include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UIImageComponent.h>
@@ -443,9 +444,12 @@ namespace BECore {
             return Format("'{}' cannot be clicked", text);
         }
 
-        constexpr StringView kTakenByNone = "none";
-        constexpr StringView kTakenByElement = "element";
-        constexpr StringView kTakenByTarget = "target";
+        /// The words of `takenBy`: lower case, so not the names of a reflected enum
+        struct TakenBy {
+            static constexpr auto none = "none"_intern;
+            static constexpr auto element = "element"_intern;
+            static constexpr auto target = "target"_intern;
+        };
 
         void HandleUIClick(ControlCall& call) {
             const auto nameText = GetJsonString(call.Params(), "name");
@@ -519,34 +523,34 @@ namespace BECore {
                 // A handler above the element (a scene target, a modal canvas) that took the press left the element nothing to emit
                 const bool takenAbove = consumed && click.taker != canvasHandler;
 
-                Json result = Json::object();
-                result["clicked"] = MakeJsonString(StringView(nameText->c_str(), nameText->size()));
-                result["canvas"] = MakeJsonString(canvasNode.ToStringView());
-                result["x"] = outputX;
-                result["y"] = outputY;
-                result["consumed"] = consumed;
-                result["takenBy"] = MakeJsonString(!consumed ? kTakenByNone : takenAbove ? kTakenByTarget : kTakenByElement);
+                UIClickAnswer answer;
+                answer.clicked = String(nameText->c_str(), nameText->size());
+                answer.canvas = canvasNode;
+                answer.x = outputX;
+                answer.y = outputY;
+                answer.consumed = consumed;
+                answer.takenBy = !consumed ? PoolString(TakenBy::none) : takenAbove ? PoolString(TakenBy::target) : PoolString(TakenBy::element);
                 if (owner != nullptr) {
-                    result["action"] = MakeJsonString(optionAction.ToStringView());
-                    result["value"] = MakeJsonString(optionValue.ToStringView());
+                    answer.action = optionAction;
+                    answer.value = optionValue;
                 } else if (toggleComponent != nullptr) {
-                    result["action"] = MakeJsonString(toggleAction.ToStringView());
-                    result["value"] = MakeJsonString(toggleValue.ToStringView());
+                    answer.action = toggleAction;
+                    answer.value = toggleValue;
                 } else if (sliderComponent != nullptr) {
                     const PoolString emitted = sliderCanEmit ? sliderComponent->GetLastEmittedValue() : PoolString{};
-                    result["action"] = MakeJsonString(emitted.Empty() ? StringView{} : sliderComponent->action.ToStringView());
-                    result["value"] = MakeJsonString(emitted.ToStringView());
+                    answer.action = emitted.Empty() ? PoolString{} : sliderComponent->action;
+                    answer.value = emitted;
                 } else if (clicker != nullptr) {
                     // After the toggle and the slider: their clicker has no action of its own, and must not shadow them
-                    result["action"] = MakeJsonString(clickerAction.ToStringView());
-                    result["value"] = MakeJsonString(clickerValue.ToStringView());
+                    answer.action = clickerAction;
+                    answer.value = clickerValue;
                 }
-                if ((onlyClosesList || takenAbove) && result.contains("action")) {
+                if ((onlyClosesList || takenAbove) && answer.action) {
                     // The press only closed the open list, or a handler above took it: the element emitted nothing
-                    result["action"] = MakeJsonString(StringView{});
-                    result["value"] = MakeJsonString(StringView{});
+                    answer.action = PoolString{};
+                    answer.value = PoolString{};
                 }
-                call.Reply(std::move(result));
+                call.ReplyObject(answer);
                 return;
             }
             if (!anyNamed) {
