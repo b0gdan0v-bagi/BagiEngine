@@ -34,7 +34,7 @@ A program or a model plays a game through `IControllableGame` (`Games/IControlla
 
 `IControllableGame`: `GetState()`, `GetActions()` (a JSON array; every element is accepted by `PerformAction` as is), `WriteState()` / `WriteActions()` (what `get_state`, `list_actions` and the push call: the default writes `GetState()` / `GetActions()`, an override skips the `Json` and keeps the two equal), `PerformAction(action)`, `Reset(options)`, `SetState(state)` (default: `unsupported`), `GetStateVersion()`. Errors are `std::expected<.., ControlError>`: `GameControlErrors` (codes in `IControllableGame.h`), a bad parameter is `ControlErrors::kInvalidParams`.
 
-The engine writes the clock, window, status and every plain answer through reflected structs; a game's own answers (`GetState`, `ListActions`, `PerformAction`, its control methods) may keep returning `Json`. A game that wants the same writes a `BE_CLASS` answer and `call.ReplyObject(answer)` in its control method; `ISeatedGame` still returns `Json`. A game's tool that reads `schema` follows `isConst` (the old `const`) and a type with no `parent` has no `parent` member.
+The engine writes the clock, window, status and every plain answer through reflected structs; a game's own answers (`GetState`, `GetActions`, `PerformAction`, its control methods) may keep returning `Json`. A game that wants the same writes a `BE_CLASS` answer and `call.ReplyObject(answer)` in its control method; `ISeatedGame` still returns `Json`. A game's tool that reads `schema` follows `isConst` (the old `const`) and a type with no `parent` has no `parent` member.
 
 Writing the adapter of a game:
 

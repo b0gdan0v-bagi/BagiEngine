@@ -16,7 +16,6 @@
     },
     {
       "name": "Point",
-      "parent": null,
       "abstract": false,
       "creatable": false,
       "purpose": "Common",
@@ -30,7 +29,6 @@
     },
     {
       "name": "Stats",
-      "parent": null,
       "abstract": false,
       "creatable": false,
       "purpose": "Common",
@@ -48,7 +46,6 @@
     },
     {
       "name": "Widget",
-      "parent": null,
       "abstract": true,
       "creatable": false,
       "purpose": "Common",

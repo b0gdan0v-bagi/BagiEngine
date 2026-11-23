@@ -348,8 +348,8 @@ namespace BECore {
 
         /// The handlers, public for the tests: each takes the params of the call and answers like the method. `HandlePoll` and `HandleSet` answer a
         /// `Json` document by hand: `request.preset` of the poll is a preset's name or an inline draft (two types under one key, a payload in the
-        /// middle), and `artgen_set` is the manifest file (`ArtGenSetToJson`). A reflected leaf type for a `Json` payload (the owner's question of
-        /// control-json-by-reflection, stage 6) would let them go
+        /// middle), and `artgen_set` is the manifest file (`ArtGenSetToJson`). A reflected leaf type for a `Json` payload does not
+        /// exist; one would let them go
         std::expected<Json, ControlError> HandlePoll(const Json& params);
         std::expected<ArtGenStaleAnswer, ControlError> HandleProgress(const Json& params);
         std::expected<ArtGenStaleAnswer, ControlError> HandleImage(const Json& params);

@@ -33,7 +33,6 @@
     },
     {
       "name": "Leaf",
-      "parent": null,
       "abstract": false,
       "creatable": true,
       "purpose": "Common",
@@ -47,7 +46,6 @@
     },
     {
       "name": "Point",
-      "parent": null,
       "abstract": false,
       "creatable": false,
       "purpose": "Common",
@@ -60,7 +58,6 @@
     },
     {
       "name": "Settings",
-      "parent": null,
       "abstract": false,
       "creatable": false,
       "purpose": "Common",
@@ -89,7 +86,6 @@
     },
     {
       "name": "Widget",
-      "parent": null,
       "abstract": true,
       "creatable": false,
       "purpose": "Common",

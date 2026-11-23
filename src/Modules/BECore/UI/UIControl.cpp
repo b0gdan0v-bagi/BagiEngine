@@ -153,7 +153,7 @@ namespace BECore {
         /// A deeper tree is cut at this depth: the generated writer fails the whole answer past `JsonWriter::kMaxDepth`, and a real screen is far from the cap, so it only
         /// protects against a hostile or broken file. An element with children at the cap has none left in the answer and `truncated`
         constexpr size_t kMaxElementDepth = 100;
-        /// Containers an element's object and its `children` take, and the ones above the elements (the answer, `canvases`, a canvas, `elements`): a margin, not a count
+        /// The containers above the elements (the answer, `canvases`, a canvas, `elements`): a margin, not a count
         constexpr size_t kContainersAboveElements = 8;
         static_assert(2 * kMaxElementDepth + kContainersAboveElements < JsonWriter::kMaxDepth, "the cap must leave the writer's depth to the answer around the tree");
 

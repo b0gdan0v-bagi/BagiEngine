@@ -24,7 +24,8 @@ namespace BECore {
     // The reflection registry as the answer structs of `SchemaAnswers.h`: what `list_types`, `describe_type` and `schema` answer, and what `tools/schema` turns into XSD.
     //
     // Pure over a registry, so a test builds its own and no control service is needed. Every list is sorted by name (fields and
-    // parameters keep their declaration order), so the same registry gives the same text whatever order its types were registered in. The answers are reflected structs, so the generated writer writes them (`isConst`; a root type has no `parent`).
+    // parameters keep their declaration order), so the same registry gives the same text whatever order its types were registered in.
+    // The answers are reflected structs, so the generated writer writes them (`isConst`; a root type has no `parent`).
     // A hash is never written: a JSON number above 2^53 is not safe in a client. The shapes are in Reflection/CLAUDE.md, "Schema export".
 
     /// The value type @p desc; a member that does not apply to the kind is absent
