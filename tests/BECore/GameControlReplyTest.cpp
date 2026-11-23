@@ -111,12 +111,12 @@ namespace BECore::Tests {
             << text.c_str();
     }
 
-    TEST_F(GameControlReplyTest, ListGamesWithoutAnActiveGameSaysNull) {
+    TEST_F(GameControlReplyTest, ListGamesWithoutAnActiveGameLeavesActiveOut) {
         GameManager::GetInstance().Shutdown();
 
         const String text = Ask("list_games");
 
-        EXPECT_TRUE(Same(text, R"json({"id":1,"ok":true,"result":{"active":null,"games":[]}})json")) << text.c_str();
+        EXPECT_TRUE(Same(text, R"json({"id":1,"ok":true,"result":{"games":[]}})json")) << text.c_str();
     }
 
     TEST_F(GameControlReplyTest, SwitchGameAnswersTheNewActiveGame) {

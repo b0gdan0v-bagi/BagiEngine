@@ -284,15 +284,13 @@ namespace BECore::Tests {
         EXPECT_EQ(plain, 1);
     }
 
-    TEST_F(GameControlTest, ListGamesWithoutAnActiveGameSaysNull) {
+    TEST_F(GameControlTest, ListGamesWithoutAnActiveGameLeavesActiveOut) {
         GameManager::GetInstance().Shutdown();
 
         const Json response = Call("list_games");
 
         ASSERT_TRUE(Succeeded(response));
-        const Json* active = FindJsonMember(Require(Result(response)), "active");
-        ASSERT_NE(active, nullptr);
-        EXPECT_TRUE(active->is_null());
+        EXPECT_EQ(FindJsonMember(Require(Result(response)), "active"), nullptr);
     }
 
     TEST_F(GameControlTest, SwitchGameActivatesTheNamedGame) {

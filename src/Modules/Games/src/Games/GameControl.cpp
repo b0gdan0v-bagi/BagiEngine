@@ -5,6 +5,7 @@
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Time/Time.h>
+#include <Games/GameControlAnswers.h>
 #include <Games/GameManager.h>
 #include <Games/IControllableGame.h>
 #include <Games/ReplayControl.h>
@@ -32,12 +33,12 @@ namespace BECore {
             return ActiveGame{game, control};
         }
 
-        /// {"game": name, "version": state version}: the answer of a call that changed the active game and says nothing else
-        void WriteGame(JsonWriter& writer, const ActiveGame& active) {
-            writer.BeginObject();
-            writer.Member("game", active.game->GetName().ToStringView());
-            writer.Member("version", active.control->GetStateVersion());
-            writer.EndObject();
+        /// The answer of a call that changed the active game and says nothing else
+        GameVersionAnswer MakeVersionAnswer(const ActiveGame& active) {
+            GameVersionAnswer answer;
+            answer.game = active.game->GetName();
+            answer.version = active.control->GetStateVersion();
+            return answer;
         }
 
         /**
@@ -67,6 +68,7 @@ namespace BECore {
                     return;
                 }
 
+                // By hand, not a reflected struct: the game's own document (`state`) sits between the keys `game` and `version`, and only the game's writer can write it.
                 // The state is written first, apart: a state that fails leaves `state` out of the push, and a writer cannot be rewound after a partial write
                 _state.clear();
                 JsonWriter stateWriter(_state);
@@ -111,26 +113,17 @@ namespace BECore {
         void HandleListGames(ControlCall& call) {
             const GameManager& manager = GameManager::GetInstance();
             const IGame* active = manager.GetActive();
-            call.Reply([&](JsonWriter& writer) {
-                writer.BeginObject();
-                writer.Key("active");
-                if (active != nullptr) {
-                    writer.Value(active->GetName().ToStringView());
-                } else {
-                    writer.Null();
-                }
-                writer.Key("games");
-                writer.BeginArray();
-                for (const IntrusivePtr<IGame>& game : manager.GetAll()) {
-                    writer.BeginObject();
-                    writer.Member("controllable", game->AsControllable() != nullptr);
-                    writer.Member("name", game->GetName().ToStringView());
-                    writer.Member("scene", game->GetSceneName().ToStringView());
-                    writer.EndObject();
-                }
-                writer.EndArray();
-                writer.EndObject();
-            });
+            GameListAnswer answer;
+            if (active != nullptr) {
+                answer.active = active->GetName();
+            }
+            for (const IntrusivePtr<IGame>& game : manager.GetAll()) {
+                GameListedGame& listed = answer.games.emplace_back();
+                listed.controllable = game->AsControllable() != nullptr;
+                listed.name = game->GetName();
+                listed.scene = game->GetSceneName();
+            }
+            call.ReplyObject(answer);
         }
 
         void HandleSwitchGame(ControlCall& call) {
@@ -150,11 +143,9 @@ namespace BECore {
                         SessionRecorder::GetInstance().Stop();
                     }
                     manager.SwitchTo(game->GetName());
-                    call.Reply([&](JsonWriter& writer) {
-                        writer.BeginObject();
-                        writer.Member("active", game->GetName().ToStringView());
-                        writer.EndObject();
-                    });
+                    GameSwitchAnswer answer;
+                    answer.active = game->GetName();
+                    call.ReplyObject(answer);
                     return;
                 }
             }
@@ -171,11 +162,9 @@ namespace BECore {
             IControllableGame* control = game->AsControllable();
             if (control == nullptr) {
                 GameManager::GetInstance().ResetActive();
-                call.Reply([&](JsonWriter& writer) {
-                    writer.BeginObject();
-                    writer.Member("game", game->GetName().ToStringView());
-                    writer.EndObject();
-                });
+                GameVersionAnswer answer;
+                answer.game = game->GetName();
+                call.ReplyObject(answer);
                 return;
             }
 
@@ -183,7 +172,7 @@ namespace BECore {
                 call.Fail(reset.error());
                 return;
             }
-            call.Reply([&](JsonWriter& writer) { WriteGame(writer, ActiveGame{game, control}); });
+            call.ReplyObject(MakeVersionAnswer(ActiveGame{game, control}));
         }
 
         void HandleGetState(ControlCall& call) {
@@ -193,6 +182,7 @@ namespace BECore {
                 return;
             }
             const uint64_t version = active->control->GetStateVersion();
+            // By hand, not a reflected struct: the game's own document (`state`) sits between the keys `game` and `version`
             call.TryReply([&](JsonWriter& writer) -> std::expected<void, ControlError> {
                 writer.BeginObject();
                 writer.Member("game", active->game->GetName().ToStringView());
@@ -213,6 +203,7 @@ namespace BECore {
                 return;
             }
             const uint64_t version = active->control->GetStateVersion();
+            // By hand, not a reflected struct: the game's own list (`actions`) sits before the keys `game` and `version`
             call.TryReply([&](JsonWriter& writer) -> std::expected<void, ControlError> {
                 writer.BeginObject();
                 writer.Key("actions");
@@ -237,7 +228,7 @@ namespace BECore {
                 call.Fail(outcome.error());
                 return;
             }
-            // The version is read inside the writer, after the action
+            // By hand, not a reflected struct: the game's own `outcome` sits between the keys `game` and `version`, and the version is read inside the writer, after the action
             call.Reply([&](JsonWriter& writer) {
                 writer.BeginObject();
                 writer.Member("game", active->game->GetName().ToStringView());
@@ -258,16 +249,20 @@ namespace BECore {
                 call.Fail(loaded.error());
                 return;
             }
-            call.Reply([&](JsonWriter& writer) { WriteGame(writer, *active); });
+            call.ReplyObject(MakeVersionAnswer(*active));
         }
 
         constexpr uint32_t kDefaultRunUntilFrames = 600;
-        constexpr StringView kRunUntilPointer = "pointer";
-        constexpr StringView kRunUntilEquals = "equals";
-        constexpr StringView kRunUntilVersionMoved = "versionMoved";
-        constexpr StringView kRunUntilEvent = "event";
-        constexpr StringView kRunUntilEventName = "name";
-        constexpr StringView kRunUntilEventEqual = "equal";
+
+        /// The member names of a `condition`; `pointer`, `versionMoved` and `event` are also the `reason` of a met wait
+        struct RunUntilNames {
+            static constexpr auto pointer = "pointer"_intern;
+            static constexpr auto equals = "equals"_intern;
+            static constexpr auto versionMoved = "versionMoved"_intern;
+            static constexpr auto event = "event"_intern;
+            static constexpr auto eventName = "name"_intern;
+            static constexpr auto eventEqual = "equal"_intern;
+        };
 
         /// What a `run_until` waits for: the three condition keys, one at a time
         CORE_ENUM(RunUntilKind, uint8_t, Pointer, VersionMoved, Event)
@@ -316,11 +311,11 @@ namespace BECore {
         }
 
         std::expected<void, ControlError> ReadRunUntilPointer(const Json& condition, RunUntilState& state) {
-            const auto pointer = GetJsonString(condition, kRunUntilPointer);
+            const auto pointer = GetJsonString(condition, RunUntilNames::pointer.View());
             if (!pointer) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'pointer' has to be a string"));
             }
-            const Json* equals = FindJsonMember(condition, kRunUntilEquals);
+            const Json* equals = FindJsonMember(condition, RunUntilNames::equals.View());
             if (equals == nullptr) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "a 'pointer' condition needs 'equals'"));
             }
@@ -335,18 +330,18 @@ namespace BECore {
         }
 
         std::expected<void, ControlError> ReadRunUntilEvent(const Json& condition, RunUntilState& state) {
-            const Json* event = FindJsonMember(condition, kRunUntilEvent);
-            const auto name = event != nullptr ? GetJsonString(*event, kRunUntilEventName) : Optional<String>();
+            const Json* event = FindJsonMember(condition, RunUntilNames::event.View());
+            const auto name = event != nullptr ? GetJsonString(*event, RunUntilNames::eventName.View()) : Optional<String>();
             if (event == nullptr || !event->is_object() || !name || name->empty()) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'event' has to be an object with a non-empty string 'name'"));
             }
             for (const auto& member : event->items()) {
                 const StringView key(member.key().c_str(), member.key().size());
-                if (key != kRunUntilEventName && key != kRunUntilEventEqual) {
+                if (key != RunUntilNames::eventName.View() && key != RunUntilNames::eventEqual.View()) {
                     return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'event' has no member '{}' (it has 'name' and 'equal')", key)));
                 }
             }
-            const Json* equal = FindJsonMember(*event, kRunUntilEventEqual);
+            const Json* equal = FindJsonMember(*event, RunUntilNames::eventEqual.View());
             if (equal != nullptr && !equal->is_object()) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'equal' has to be an object"));
             }
@@ -365,15 +360,16 @@ namespace BECore {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'condition' has to be an object"));
             }
 
-            const bool hasPointer = FindJsonMember(*condition, kRunUntilPointer) != nullptr;
-            const bool hasVersionMoved = FindJsonMember(*condition, kRunUntilVersionMoved) != nullptr;
-            const bool hasEvent = FindJsonMember(*condition, kRunUntilEvent) != nullptr;
+            const bool hasPointer = FindJsonMember(*condition, RunUntilNames::pointer.View()) != nullptr;
+            const bool hasVersionMoved = FindJsonMember(*condition, RunUntilNames::versionMoved.View()) != nullptr;
+            const bool hasEvent = FindJsonMember(*condition, RunUntilNames::event.View()) != nullptr;
             if (static_cast<int>(hasPointer) + static_cast<int>(hasVersionMoved) + static_cast<int>(hasEvent) != 1) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'condition' has to have exactly one of 'pointer' (with 'equals'), 'versionMoved' and 'event'"));
             }
             for (const auto& member : condition->items()) {
                 const StringView key(member.key().c_str(), member.key().size());
-                const bool known = key == kRunUntilPointer || key == kRunUntilVersionMoved || key == kRunUntilEvent || (hasPointer && key == kRunUntilEquals);
+                const bool known =
+                    key == RunUntilNames::pointer.View() || key == RunUntilNames::versionMoved.View() || key == RunUntilNames::event.View() || (hasPointer && key == RunUntilNames::equals.View());
                 if (!known) {
                     return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'condition' has no member '{}' here", key)));
                 }
@@ -385,7 +381,7 @@ namespace BECore {
             if (hasEvent) {
                 return ReadRunUntilEvent(*condition, state);
             }
-            if (GetJsonBool(*condition, kRunUntilVersionMoved) != true) {
+            if (GetJsonBool(*condition, RunUntilNames::versionMoved.View()) != true) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'versionMoved' has to be true"));
             }
             state.kind = RunUntilKind::VersionMoved;
@@ -393,9 +389,9 @@ namespace BECore {
         }
 
         /// The reason a condition is met, or nullopt while it is not; an error when the game cannot be read any more
-        std::expected<Optional<StringView>, ControlError> EvaluateRunUntil(RunUntilState& state) {
+        std::expected<Optional<PoolString>, ControlError> EvaluateRunUntil(RunUntilState& state) {
             if (state.kind == RunUntilKind::Event) {
-                return state.eventSeen ? Optional<StringView>(kRunUntilEvent) : Optional<StringView>();
+                return state.eventSeen ? Optional<PoolString>(RunUntilNames::event) : Optional<PoolString>();
             }
 
             const auto active = FindActiveControllable();
@@ -404,7 +400,7 @@ namespace BECore {
             }
             const uint64_t version = active->control->GetStateVersion();
             if (state.kind == RunUntilKind::VersionMoved) {
-                return version != state.startVersion ? Optional<StringView>(kRunUntilVersionMoved) : Optional<StringView>();
+                return version != state.startVersion ? Optional<PoolString>(RunUntilNames::versionMoved) : Optional<PoolString>();
             }
 
             const StringView game = active->game->GetName().ToStringView();
@@ -421,29 +417,21 @@ namespace BECore {
             if (!found) {
                 return std::unexpected(found.error());
             }
-            return *found != nullptr && **found == state.equals ? Optional<StringView>(kRunUntilPointer) : Optional<StringView>();
+            return *found != nullptr && **found == state.equals ? Optional<PoolString>(RunUntilNames::pointer) : Optional<PoolString>();
         }
 
-        /// {met, frames, reason?, game?, version?} and the clock of `step`; the game is left out when none can be read (an `event` wait needs none)
-        void WriteRunUntil(JsonWriter& writer, const RunUntilState& state, Optional<StringView> reason) {
-            const auto active = FindActiveControllable();
-            WriteControlClockWith(
-                writer,
-                [&](JsonWriter& members) {
-                    members.Member("frames", state.frames);
-                    if (active) {
-                        members.Member("game", active->game->GetName().ToStringView());
-                    }
-                    members.Member("met", reason.has_value());
-                    if (reason) {
-                        members.Member("reason", *reason);
-                    }
-                },
-                [&](JsonWriter& members) {
-                    if (active) {
-                        members.Member("version", active->control->GetStateVersion());
-                    }
-                });
+        /// The answer of a `run_until` that ended: the clock of `step`; the game is left out when none can be read (an `event` wait needs none)
+        GameRunUntilAnswer MakeRunUntilAnswer(const RunUntilState& state, Optional<PoolString> reason) {
+            GameRunUntilAnswer answer;
+            static_cast<ControlClock&>(answer) = ControlClock::Read();
+            answer.frames = state.frames;
+            answer.met = reason.has_value();
+            answer.reason = reason;
+            if (const auto active = FindActiveControllable()) {
+                answer.game = active->game->GetName();
+                answer.version = active->control->GetStateVersion();
+            }
+            return answer;
         }
 
         /// Checks the condition, then answers or waits for one more frame; every frame is a barrier frame of its own, like a `step`
@@ -454,7 +442,7 @@ namespace BECore {
                 return;
             }
             if (*met || state->frames >= state->maxFrames) {
-                call.Reply([&](JsonWriter& writer) { WriteRunUntil(writer, *state, *met); });
+                call.ReplyObject(MakeRunUntilAnswer(*state, *met));
                 return;
             }
 

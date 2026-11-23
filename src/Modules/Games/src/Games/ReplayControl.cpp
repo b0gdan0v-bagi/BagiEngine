@@ -3,8 +3,10 @@
 #include <BECore/Application/CommandLine.h>
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlClock.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonSerializer.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Games/GameControl.h>
 #include <Games/GameManager.h>
@@ -76,9 +78,12 @@ namespace BECore {
             size_t applied = 0;            ///< Entries applied so far
         };
 
-        /// {ok, entries, frames, mismatch?} and the clock of `step`
+        /// {ok, entries, frames, mismatch?} and the clock of `step`. A DOM for now: the mismatch is one (`ReplayMismatchJson`); the clock goes through a `JsonSerializer`
+        /// of `ControlClock` until the replay answer is a struct that derives it
         Json DescribeReplay(const ReplayRunState& state, const ReplayMismatch* mismatch) {
-            Json result = DescribeControlClock();
+            JsonSerializer clock;
+            ControlClock::Read().Serialize(clock);
+            Json result = clock.Take();
             result["ok"] = mismatch == nullptr;
             result["entries"] = state.applied;
             result["frames"] = state.frames;
