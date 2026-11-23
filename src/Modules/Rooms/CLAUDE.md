@@ -2,7 +2,7 @@
 
 ## Overview
 
-Online play in rooms by code, with an authoritative server . The server owns the game (`ISeatedGame`, `Games/CLAUDE.md`, "Seats"); every client is a seat and sees only what the game says that seat may see. This module is **pure code**: JSON text in, JSON text out, no sockets, no clock, no randomness of its own. A transport feeds it: `RoomServer` (`RoomServer/CLAUDE.md`) on WebSocket. Namespace `BECore`; no static initializers, so it is an ordinary static library (`RoomsModule`).
+Online play in rooms by code, with an authoritative server . The server owns the game (`ISeatedGame`, `Games/CLAUDE.md`, "Seats"); every client is a seat and sees only what the game says that seat may see. This module is **pure code**: JSON text in, JSON text out, no sockets, no clock, no randomness of its own. A transport feeds it: `RoomServer` (`RoomServer/CLAUDE.md`) on WebSocket. Namespace `BECore`; an ordinary static library (`RoomsModule`): the wire structs of `RoomWire.cpp` register their `TypeInfo` at start-up, and `RoomProtocol.cpp` uses them, so that object file is always linked.
 
 The client is `RoomClient/CLAUDE.md`.
 
@@ -13,6 +13,7 @@ The client is `RoomClient/CLAUDE.md`.
 | `RoomTypes.h/.cpp` | `ConnectionId`, `PlayerId`, `RoomTime` (`steady_clock::time_point`, always passed in), `RandomFn` (`MoveOnlyFunction<uint64_t()>`, injected), `MakeSecureRandom()` (`std::random_device`, held through a `UniquePtr`: the device cannot be moved), `RoomPhase` (`Lobby`, `Playing`, `Finished`), `SeatKind` (`Human`, `Computer`, `Empty`) and their wire names |
 | `RoomLimits.h` | `RoomLimits::k*` (the constants of the table below), `RoomTimings` (grace, abandoned timeout, computer delay) and `RoomHubSettings` (the same values as defaults, so a test overrides them; the three times are its member `timings`, handed to every room) |
 | `RoomErrors.h` | `RoomErrors::k*`, the stable error codes |
+| `RoomWire.h/.cpp` | The reflected wire structs (`RoomWireEnvelope` and one struct per message without a `Json` payload, `RoomWireSeat`); the generated `WriteJson` writes them. The envelope is their reflected parent: the generator merges its `type` and `v` into the sorted keys. Plain data structs of `RoomProtocol.h` stay plain (aggregates that clients and the fuzz seeds brace-initialise) |
 | `RoomProtocol.h/.cpp` | `ClientMessage` (the eight client messages), `ParseClientMessage`, `SerializeClientMessage`, `SanitizePlayerName`, `Append*Message` writers of the server messages, `LobbySnapshot`, `ParseServerMessage` (their inverse, for clients; an unknown `type` is ignorable) |
 | `RoomCode.h/.cpp` | `GenerateRoomCode`, `NormalizeRoomCode`, `GenerateToken`, `IsWellFormedToken` |
 | `RateLimiter.h/.cpp` | a token bucket over `RoomTime` |
@@ -47,6 +48,8 @@ JSON text, one message per WebSocket text message, `{"v":1,"type":"...", ...}` (
 | `left` | `reason` | the receiver is no longer in the room |
 | `pong` | | answer to `ping` |
 | `rooms` | `game`, `rooms: [{room, host, taken, seats, started, options?}]`, `more` | answer to `list_rooms`. `room` is the code (public by the host's choice), `host` the host's name, `taken` the humans, `seats` the game's seat count, `options` as in `lobby`. At most 20 entries, oldest room first; `more` says it was cut. A reader refuses more entries, a code `NormalizeRoomCode` would change, `seats` outside 1..64, `taken` outside 0..`seats`, and options that are not booleans and integers (the `lobby` reader drops those instead) |
+
+**How the messages are written.** `joined`, `error`, `left`, `pong`, the seats of `lobby` and every client message but two go through the wire structs of `RoomWire.h` (`Append*Message` keep their signatures and bytes; the readers stay hand-checked on purpose). `view`, `action`, `create_room`, `lobby` and `rooms` stay by hand with `JsonWriter`: each carries a game's own `Json` (or `options`, a map keyed by names the game chose) between its other keys, so a struct could only reach it through the DOM. `RoomServer`'s `DemoCardGame` builds `Json` for the same reason (`ISeatedGame` returns it).
 
 `ParseClientMessage(text, maxBytes)` never throws, aborts or asserts, whatever the bytes. Order of checks: the size (`message_too_large`), no raw NUL byte (the JSON lexer would ignore what follows it), a JSON object, `v`, `type`, then the fields. Only the checked helpers of `BECore/Control/Json.h` (nlohmann aborts on a bad access in this build); a client string is never interned into `PoolString`.
 
