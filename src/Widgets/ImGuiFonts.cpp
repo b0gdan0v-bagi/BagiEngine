@@ -1,5 +1,7 @@
 #include "ImGuiFonts.h"
 
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Widgets/Icons/IconsLucide.h>
@@ -23,20 +25,16 @@ namespace BECore {
         bool ReadFontFile(const char* virtualPath, Vector<uint8_t>& bytes) {
             bytes.clear();
             const auto realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
-            std::ifstream file(realPath, std::ios::binary | std::ios::ate);
-            if (realPath.empty() || !file) {
+            if (realPath.empty()) {
                 LOG_ERROR("ImGuiFonts: cannot open '{}'", virtualPath);
                 return false;
             }
-            const auto size = static_cast<size_t>(file.tellg());
-            bytes.resize(size);
-            file.seekg(0);
-            file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
-            if (!file || size == 0) {
+            auto read = ReadFileBytes(PathToUtf8(realPath));
+            if (!read || read->empty()) {
                 LOG_ERROR("ImGuiFonts: cannot read '{}'", virtualPath);
-                bytes.clear();
                 return false;
             }
+            bytes = std::move(*read);
             return true;
         }
 

@@ -1,5 +1,7 @@
 #include "FontLoader.h"
 
+#include <BECore/File/File.h>
+#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Text/Font.h>
@@ -24,21 +26,17 @@ namespace BECore {
     IntrusivePtr<Font> FontLoader::LoadInternal(PoolString path) {
         BE_PROFILE_SCOPE("FontLoader::Load");
         const auto realPath = CoreManager::GetFileSystem().ResolvePath(path.ToStringView());
-        std::ifstream file(realPath, std::ios::binary | std::ios::ate);
-        if (realPath.empty() || !file) {
+        if (realPath.empty()) {
             LOG_ERROR("FontLoader: cannot open '{}'", path.ToStringView());
             return Font::CreateFromMemory(path, {});
         }
-        const auto size = static_cast<size_t>(file.tellg());
-        Vector<uint8_t> bytes(size);
-        file.seekg(0);
-        file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
-        if (!file) {
-            LOG_ERROR("FontLoader: cannot read '{}'", path.ToStringView());
+        auto bytes = ReadFileBytes(PathToUtf8(realPath));
+        if (!bytes) {
+            LOG_ERROR("FontLoader: cannot read '{}': {}", path.ToStringView(), bytes.error());
             return Font::CreateFromMemory(path, {});
         }
 
-        auto font = Font::CreateFromMemory(path, std::move(bytes));
+        auto font = Font::CreateFromMemory(path, std::move(*bytes));
         if (font->GetState() != ResourceState::Loaded) {
             LOG_ERROR("FontLoader: '{}' is not a font file that stb_truetype can read", path.ToStringView());
             return font;
