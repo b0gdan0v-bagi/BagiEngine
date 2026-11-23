@@ -42,7 +42,7 @@ namespace BECore::Tests {
         /// The heap blocks the pool may keep per interned program: one node of its hash table, the code and the constants being in its arena
         constexpr uint64_t kHeldBlocksPerProgram = 1;
         /// The blocks that do not grow with the number of programs: the arena's chunks, the growth of the pool's tables
-        constexpr uint64_t kHeldBlocksSlack = 48;
+        constexpr uint64_t kHeldBlocksSlack = 16;
 
         struct FormulaShape {
             StringView text;
@@ -183,6 +183,16 @@ namespace BECore::Tests {
             return runs[runs.size() / 2];
         }
 
+        /// The bytes the pool's arena has given out so far; 0 until its first program
+        uint64_t PoolArenaUsed() {
+            for (const ArenaStatsEntry& entry : GetArenaStats()) {
+                if (StringView(entry.name) == kPoolArenaName) {
+                    return entry.used;
+                }
+            }
+            return 0;
+        }
+
         /// What the pool holds after @p programs distinct programs were interned
         struct PoolCounts {
             uint32_t programs = 0;
@@ -199,6 +209,7 @@ namespace BECore::Tests {
         /// iteration are freed by its end, so the difference of the live blocks is what the pool holds
         PoolCounts MeasurePool(uint32_t count) {
             const int32_t base = static_cast<int32_t>(NextSalt() * kSaltStride);
+            const uint64_t arenaBefore = PoolArenaUsed();
             const AllocTotals before = AllocTracker::GetTotals();
             for (uint32_t i = 0; i < count; ++i) {
                 ProgramBuilder builder;
@@ -215,11 +226,7 @@ namespace BECore::Tests {
             counts.programs = count;
             counts.heldBlocks = LiveBlocks(after) - LiveBlocks(before);
             counts.heldBytes = static_cast<int64_t>(after.liveBytes) - static_cast<int64_t>(before.liveBytes);
-            for (const ArenaStatsEntry& entry : GetArenaStats()) {
-                if (StringView(entry.name) == kPoolArenaName) {
-                    counts.arenaBytes = entry.used;
-                }
-            }
+            counts.arenaBytes = PoolArenaUsed() - arenaBefore;
             return counts;
         }
 

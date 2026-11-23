@@ -29,7 +29,7 @@ Memory an arena took back (`Reset`, `Rewind`) and fresh chunks are marked in one
 
 `ScratchScope` takes a mark and rewinds in its destructor; scopes nest like locals. **Rules:** memory of a scope must not outlive it (not returned, not stored in a longer-lived container) and must not cross to another thread; a scope ends on the thread that made it (Debug asserts). Nothing from the arena is destroyed on rewind (`LinearArena`, "No destructors").
 
-**In use:** the front end of the formula and script compilers (`Values/Programs/CLAUDE.md`, "Compiling"; `Values/Effects/CLAUDE.md`), whose caller holds the scope the returned trees live in.
+**In use:** the front end of the formula and script compilers (`Values/Programs/CLAUDE.md`, "Compiling"; `Values/Effects/CLAUDE.md`), whose caller holds the scope the returned trees live in. The program pool (`Values/Programs/CLAUDE.md`, "The frame and the pool") keeps the code of its programs in an immortal `LinearArena` named `ProgramPool`, touched only under the pool's lock.
 
 ## ArenaAllocator (`ArenaAllocator.h`)
 
