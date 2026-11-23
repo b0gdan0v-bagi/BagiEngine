@@ -114,7 +114,6 @@ namespace BECore {
     }
 
     ProbeStep ProbeClient::Step(RoomTime now) {
-        _hadActivity = false;
         _client.Poll(now);
         _events.clear();
         _client.DrainEvents(_events);

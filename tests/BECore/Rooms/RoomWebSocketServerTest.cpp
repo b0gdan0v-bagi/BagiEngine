@@ -1011,12 +1011,22 @@ namespace BECore::Tests {
             String joined;
             if (const auto found = zones.find(String(zone)); found != zones.end()) {
                 for (const String& thread : found->second) {
-                    joined += joined.empty() ? "" : ",";
+                    if (!joined.empty()) {
+                        joined += ',';
+                    }
                     joined += thread;
                 }
             }
             return joined;
         }
+
+        /// True when @p zone began on a thread the profiler gave no name (past Profiler::kMaxThreads, which earlier cases of the executable can use up)
+        bool BeganOnUnnamedThread(const Map<String, Set<String>>& zones, const char* zone) {
+            const auto found = zones.find(String(zone));
+            return found != zones.end() && found->second.count(String()) != 0;
+        }
+
+        constexpr const char* kZonesByThread[] = {"Room open", "Room message", "Room close", "Room tick", "Room send", "WS read", "WS dispatch", "WS write", "WS encode"};
 
     }  // namespace
 
@@ -1043,17 +1053,9 @@ namespace BECore::Tests {
         server->Stop();
 
         const auto zones = ReadTrace();
-        for (const char* hubZone : {"Room open", "Room message", "Room close", "Room tick", "Room send"}) {
-            EXPECT_EQ(ThreadsOf(zones, hubZone), "Room hub") << hubZone;
-        }
-        EXPECT_EQ(ThreadsOf(zones, "WS read"), "Room reader");
-        EXPECT_EQ(ThreadsOf(zones, "WS dispatch"), "Room reader");
-        EXPECT_EQ(ThreadsOf(zones, "WS write"), "Room writer");
-        // The hub encodes what it sends; a reader may encode a pong or a close frame too
-        EXPECT_NE(ThreadsOf(zones, "WS encode").find("Room hub"), String::npos);
-
 #if BE_PROFILER_ALLOC
-        // What the exchange allocated is charged to named zones: the hub's handling, the reader's parse and dispatch, the encode
+        // Rows are per zone, not per thread: "(no zone)" holds the allocations of every thread (the test's own sockets too), so
+        // "the hub allocates nothing outside its zones" cannot be asked of them; what is charged to the named zones can
         Map<String, uint64_t> allocationsOf;
         for (const AllocSiteStats& row : AllocTracker::GetNameStats()) {
             allocationsOf[row.ZoneLabel()] += row.count;
@@ -1062,6 +1064,19 @@ namespace BECore::Tests {
             EXPECT_GT(allocationsOf[zone], 0u) << zone;
         }
 #endif
+        for (const char* zone : kZonesByThread) {
+            if (BeganOnUnnamedThread(zones, zone)) {
+                GTEST_SKIP() << zone << " began on a thread past the profiler's name cap: which thread did the work cannot be read from the trace";
+            }
+        }
+        for (const char* hubZone : {"Room open", "Room message", "Room close", "Room tick", "Room send"}) {
+            EXPECT_EQ(ThreadsOf(zones, hubZone), "Room hub") << hubZone;
+        }
+        EXPECT_EQ(ThreadsOf(zones, "WS read"), "Room reader");
+        EXPECT_EQ(ThreadsOf(zones, "WS dispatch"), "Room reader");
+        EXPECT_EQ(ThreadsOf(zones, "WS write"), "Room writer");
+        // The hub encodes what it sends; a reader may encode a pong or a close frame too
+        EXPECT_NE(ThreadsOf(zones, "WS encode").find("Room hub"), String::npos);
     }
 
 #endif

@@ -4,8 +4,8 @@
     python3 tools/rooms/load.py --preset macos-profile [--clients 4] [--messages 40] [--out DIR] [--top 25]
 
 Starts `BagiRoomServer --test-games --port 0 --bind loopback --max-per-address 0 --computer-delay-ms 0 --trace=<out>/server.json`, runs
-`BagiRoomClientProbe --clients N --messages M --trace=<out>/probe.json` against its port (N clients in one process, M actions each, about 4 actions
-a second per client), ends the server with SIGTERM (it has to exit 0 within 10 s) and prints `tools/perf/trace_summary.py` of both traces: the
+`BagiRoomClientProbe --clients N --messages M --trace=<out>/probe.json` against its port (N clients in one process, M actions each, paced below the
+hub's rate bucket), ends the server with SIGTERM (it has to exit 0 within 10 s) and prints `tools/perf/trace_summary.py` of both traces: the
 zones by self and total time and, in a build with ENGINE_PROFILER_ALLOC, the allocation names and sizes. The traces stay in --out (default
 build/rooms-load/<time>/). The server's traces rank the work of `websocket-frame-buffers`; the probe's show the client's side.
 
@@ -20,7 +20,8 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from smoke import (  # noqa: E402
+# smoke goes first: importing it puts tools/control and tools/perf on sys.path, which game_process and trace_summary need
+from smoke import (
     EXIT_FAILED,
     EXIT_PASSED,
     EXIT_SKIPPED,
