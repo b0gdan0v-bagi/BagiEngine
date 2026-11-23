@@ -31,14 +31,14 @@ How the serializers and the generator work: `.claude/rules/reflection-module.md`
 The control API over this module (`Control/ReflectionControl`, registered by `RegisterControlBuiltins` in every `ControlService`). It reaches only objects under a **root** (`ControlRoots`; `game` is the active `IGame`, resolved per call), never a service, a widget or the renderer; `root`, `path` and `method` are looked up as text and never interned.
 
 - `get_property {root, path}` and `set_property {root, path, value}` answer `{root, path, value}` (a write: the value read back). `value` is a bool, an integer (`uint64_t` above `INT64_MAX`), a finite number or a string; anything else is `invalid_params`. A write is `SetProperty` with `SetOptions{root.allowInterning}`.
-- `call_method {root, method, arguments?}` answers `{root, method, result?}`; `arguments` (absent is empty) is read strictly by `CallMethod`.
+- `call_method {root, method, arguments?}` answers `{root, method, result?}`; `arguments` (absent is empty) is read strictly by `CallMethod` straight from the request's tape, and `result` is written by `JsonStreamSerializer`, so an object's members come in declaration order (the DOM `JsonSerializer` sorted them).
 - `list_types {base?, recursive? (default true), creatable?}`, `describe_type {name}` and `schema` need no root and answer the structs of `Control/SchemaAnswers.h` ("Schema export"); an unknown name is `unknown_type`, a wrong parameter type `invalid_params`.
 - **Interning:** `allowInterning` of a root is off by default, so a client cannot grow the pool: a write to a `PoolString` field is `interning`, and so is a call of a method with a `PoolString` anywhere in its parameters (`MethodInterns` walks elements, keys, alternatives and object fields, each type once), decided before the arguments are read.
 - **Codes:** `invalid_params`, `unknown_root`, `no_object` (the root has none now), `unknown_type`, the `PropertyErrorCode` names (`invalid_path` past a limit), and for a call `unknown_function` (`CallStatus::unknown_method`, renamed so it is not read as the control method of that name), `not_callable`, `const_object`, `bad_arguments`, `interning`. The message is the library's, which cuts client text.
 
 ## JSON shapes of the reflection pair
 
-`JsonSerializer` and `JsonDeserializer` (`Control/`) are one format, used by `call_method` (`Control/CLAUDE.md`).
+`JsonSerializer` (DOM), `JsonStreamSerializer` (into a `JsonWriter`, the `call_method` result) and `JsonDeserializer` (`Control/`) are one format (`Control/CLAUDE.md`).
 
 - An attribute and a child are one member. An array is a member array of element objects; an element that holds only `value` is that scalar (`[1,2,3]`), and the reader takes both. A map is `[{key, value}]`, a variant `{index, value}` (`monostate`: the index alone). A factory element carries `type` and `enabled` when the base has `FactoryTraits` or the derived type registered in the base's `AbstractFactory` (`IComponent`), so a `SceneNode` round-trips and a cooked node file keeps its component types.
 - Integers are exact (`uint64_t` too), a `float` is the shortest text that reads back, a non-finite number is `null`, which the reader refuses.

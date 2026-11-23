@@ -7,7 +7,7 @@ paths:
 
 # Reading JSON without a DOM: `JsonTape`, `JsonView`, `JsonDeserializer::Load`
 
-The module: `src/Modules/BECore/Control/CLAUDE.md`; what the reflected reader accepts: `Reflection/CLAUDE.md`, "JSON shapes of the reflection pair". This is the first slice of the entry `json-deserializer`: the callers of `Json` (control service, handlers, rooms, widgets) move to the tape in the later slices, and the last one removes nlohmann.
+The module: `src/Modules/BECore/Control/CLAUDE.md`; what the reflected reader accepts: `Reflection/CLAUDE.md`, "JSON shapes of the reflection pair". The callers of `Json` (control service, handlers, rooms, widgets) move to the tape slice by slice, and the last one removes nlohmann; the control service and the handlers of `BECore` and `SDL` are over already ("The request path").
 
 ## `JsonTape` (`Control/JsonTape.h`)
 
@@ -17,7 +17,7 @@ The module: `src/Modules/BECore/Control/CLAUDE.md`; what the reflected reader ac
 - It never aborts or throws: a bad text is a `JsonParseError` (a literal message, the byte offset) and the tape is empty.
 
 **Differences from `ParseJson`** (the fuzz target `FuzzJsonDeserializer` compares both and excludes exactly these):
-- The nesting is at most `ReaderLimits::kMaxJsonNesting` (256) open containers and the text `kMaxJsonDocumentBytes` (64 MiB; offsets are `uint32_t`); `ParseJson` takes any depth and the transports keep their own smaller limits (`kMaxRequestBytes`, `kMaxRequestDepth`), so no `IsJsonNestedDeeperThan` is needed in front of the tape.
+- The nesting is at most `ReaderLimits::kMaxJsonNesting` (256) open containers and the text `kMaxJsonDocumentBytes` (64 MiB; offsets are `uint32_t`); `ParseJson` takes any depth and the transports keep their own smaller limits (`kMaxRequestBytes`, `kMaxRequestDepth`; `ControlService::Post` still scans for `kMaxRequestDepth` first, so a nest over 128 stays `invalid_request`).
 - A UTF-8 byte order mark is refused (the DOM skips it).
 - A NUL byte outside a string is an error (nlohmann's lexer takes it for the end of the input, so `{}` + NUL + anything is a document to it).
 - A number beyond a double (`1e999`) is a valid `Number` (the DOM refuses the document: "number overflow"); `JsonView::AsDouble()` gives infinity, and a reader of a `float` / `double` refuses a non-finite value as before.
@@ -36,3 +36,9 @@ The same `IDeserializer` rules as before (strict values, the messages, findings,
 - A rejected number quotes its token's text as written; an integer token past 64 bits is `Invalid integer value '<text>' (out of range)` for an integer target and a number for a `float` / `double`.
 - **Zero allocations in a steady state:** a second `Load` of a message of the same shape into the same target allocates nothing in `Off`, `Warn` and `Error` (clean documents; a finding or an error allocates), provided the target's containers kept their capacity, its strings fit what they held and the field names fit a string's inline buffer. `JsonDeserializerTextTest` pins it; `JsonReadBenchTest` (disabled, run by hand in `macos-profile`) prints allocations and time per read against the DOM path.
 - `JsonDeserializer(const Json&)` is the **interim bridge** (it writes the DOM as text into a member `String` and loads that, so the DOM's own number text is what a message quotes); it exists so `ReflectionControl`, `GamePanelModel` and the tests compile until their slices move, and the last slice deletes it.
+
+## The request path of the control API
+
+`ControlService::Post` copies the request text into a pooled `RequestBuffers` (text and tape, recycled through the service's free list) and tapes it on the posting thread; `ControlCall::Params()` is a `JsonView` into that tape and `id` the raw text of the request's id, echoed as written (a string with an escape or non-ASCII comes back as sent). A handler reads with `Control/ControlParams.h`; `ParamsJson()` is a DOM made on first use for the readers not moved yet. `JsonDeserializer::Load(JsonView)` reads any value of a tape the caller keeps (the `arguments` of `call_method`). A second `Post` and `Drain` of a message of a shape seen before allocates nothing (`ControlRequestAllocationTest`, `macos-profile`).
+
+What a client of the control API sees differently from the DOM: a BOM, a NUL outside a string and a document the tape refuses are `parse_error` with the tape's message and offset; of two equal keys the first wins; `1e999` parses, and a reader that needs a finite number (`GetParamNumber`) refuses it with `invalid_params`; `-0` is accepted as an id and echoed as written.
