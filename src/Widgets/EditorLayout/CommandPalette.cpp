@@ -11,6 +11,8 @@ namespace BECore {
         constexpr float kPaletteWidth = 480.0f;
         constexpr float kPaletteListHeight = 240.0f;
         constexpr float kPaletteTopFraction = 0.2f;  // of the viewport height: the popup sits in the upper part, like a search box
+        // Longer titles are cut in the list: EditorCommand::title is not null-terminated, ImGui needs a C string
+        constexpr size_t kMaxTitleLength = 127;
         constexpr StringView kFixedSuffix = " (fixed)";
 
         // Up and Down in a single-line field would otherwise move ImGui's navigation out of it
@@ -62,7 +64,14 @@ namespace BECore {
             _selected = 0;
         }
 
-        const Vector<const EditorCommand*> matches = FilterCommands(_query, GetEditorCommands());
+        const Span<const EditorCommand> table = GetEditorCommands();
+        if (_matches.Update(_query, table)) {
+            _chordTexts.clear();
+            for (const EditorCommand* match : _matches.GetMatches()) {
+                _chordTexts.push_back(ChordText(*match, hotkeys));
+            }
+        }
+        const Vector<const EditorCommand*>& matches = _matches.GetMatches();
         const int count = static_cast<int>(matches.size());
         _selected = MoveSelection(_selected, move, count);
 
@@ -80,9 +89,12 @@ namespace BECore {
             for (int row = 0; row < count; ++row) {
                 const EditorCommand& command = *matches[static_cast<size_t>(row)];
                 const ImVec2 rowStart = ImGui::GetCursorScreenPos();
-                const String title(command.title.data(), command.title.size());
+                char title[kMaxTitleLength + 1];
+                const size_t titleLength = std::min(command.title.size(), kMaxTitleLength);
+                std::memcpy(title, command.title.data(), titleLength);
+                title[titleLength] = '\0';
                 ImGui::PushID(row);
-                if (ImGui::Selectable(title.c_str(), row == _selected)) {
+                if (ImGui::Selectable(title, row == _selected)) {
                     chosen = command.id;
                 }
                 ImGui::PopID();
@@ -90,7 +102,7 @@ namespace BECore {
                     ImGui::SetScrollHereY();
                 }
 
-                const String chordText = ChordText(command, hotkeys);
+                const String& chordText = _chordTexts[static_cast<size_t>(row)];
                 if (!chordText.empty()) {
                     const float textWidth = ImGui::CalcTextSize(chordText.c_str()).x;
                     const ImVec2 textPos(rowStart.x + rowWidth - textWidth - ImGui::GetStyle().ItemSpacing.x, rowStart.y);
