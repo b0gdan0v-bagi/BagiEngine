@@ -1,4 +1,5 @@
 #include <BECore/Config/ContentVersion.h>
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/PoolString/PoolStringEntry.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Profile.h>
@@ -7,12 +8,17 @@
 #include <BECore/Reflection/SchemaHash.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Resource/TextureLibrary.h>
+#include <BECore/Scene/Components/ParticleEmitterComponent.h>
 #include <BECore/Scene/SceneLoader.h>
+#include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNodeFiles.h>
+#include <BECore/Time/Time.h>
 #include <Common/AllocCheck.h>
 #include <Common/BinaryStreams.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/RecordingRenderer.h>
 #include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
@@ -591,12 +597,18 @@ namespace BECore::Tests {
             return serializer.SaveToString();
         }
 
-        /// The scene's XML text, its node file in a temp folder and the bytes the cook writes for it
+        /// The scene's XML text, its node file in a temp folder and the bytes the cook writes for it. The default one is the scene of
+        /// groups; another scene brings its text and its own folder prefix (two fixtures of one case would share a folder otherwise).
         class SceneFixture {
         public:
-            SceneFixture() : _dir(TestTempDirectory("BagiAssetLoadScene")), _text(SceneText()) {
+            SceneFixture() : SceneFixture("BagiAssetLoadScene", SceneText(), SceneHudFile()) {}
+
+            /// @p hudFile is the node file `kSceneHudRef` names; empty for a scene with no reference
+            SceneFixture(const String& dirPrefix, String text, StringView hudFile) : _dir(TestTempDirectory(dirPrefix)), _text(eastl::move(text)) {
                 std::filesystem::remove_all(_dir);
-                WriteFile(_dir / "nodes" / "AssetLoadHud.xml", SceneHudFile());
+                if (!hudFile.empty()) {
+                    WriteFile(_dir / "nodes" / "AssetLoadHud.xml", hudFile);
+                }
                 const auto manager = LoadFromXml();
                 BinarySerializer writer;
                 if (manager != nullptr && WriteContentStamp(writer, kSceneManagerRootType)) {
@@ -690,6 +702,147 @@ namespace BECore::Tests {
         }
 
         constexpr size_t kZoneReportNames = 4;
+        constexpr size_t kParticleEmitters = 100;
+        constexpr size_t kLoopingRate = 120;
+        constexpr size_t kLoopingMaxParticles = 256;
+        constexpr size_t kBurstCount = 64;
+        constexpr size_t kBurstMaxParticles = 128;
+        constexpr double kParticleFrame = 1.0 / 32.0;  // a power of two, so the sums of frames are exact
+        /// More than the longest life (a second), so the looping emitters hold their steady number of particles and the bursts are over
+        constexpr int kWarmupFrames = 64;
+        constexpr int kRunFrames = 64;
+        constexpr StringView kParticleUpdateZone = "Particles update";
+        constexpr StringView kParticleDrawZone = "Particles draw";
+
+        /// `kParticleEmitters` nodes of a transform and an emitter without a sprite (no texture library entry is needed): the even ones
+        /// loop, the odd ones fire a burst at the first update and are over; the seeds differ by node
+        String ParticleSceneText() {
+            String nodes;
+            for (size_t i = 0; i < kParticleEmitters; ++i) {
+                const String effect = i % 2 == 0
+                                          ? Format(R"(<effect looping="true" rate="{}" maxParticles="{}" lifetimeMin="1" lifetimeMax="1" seed="{}"/>)", kLoopingRate, kLoopingMaxParticles, i + 1)
+                                          : Format(R"(<effect burstCount="{}" maxParticles="{}" lifetimeMin="0.5" lifetimeMax="0.5" seed="{}"/>)", kBurstCount, kBurstMaxParticles, i + 1);
+                nodes.append(Format(R"(<node name="Emitter{0}"><components><component type="TransformComponent" x="{0}" y="6" width="4" height="4"/>)"
+                                    R"(<component type="ParticleEmitterComponent">{1}</component></components></node>)",
+                                    i, effect));
+            }
+            return SceneConfigText(nodes, kMainSceneView800x600);
+        }
+
+        SceneFixture MakeParticleFixture() {
+            return SceneFixture("BagiAssetLoadParticles", ParticleSceneText(), {});
+        }
+
+        /// Gives the renderer back on every exit, a failed check included
+        class RendererGuard {
+        public:
+            explicit RendererGuard(IntrusivePtr<IRenderer> renderer) {
+                CoreManager::GetRendererManager().SetRenderer(eastl::move(renderer));
+            }
+            ~RendererGuard() {
+                CoreManager::GetRendererManager().SetRenderer({});
+            }
+            RendererGuard(const RendererGuard&) = delete;
+            RendererGuard& operator=(const RendererGuard&) = delete;
+        };
+
+        struct ParticleRun {
+            bool ran = false;
+            size_t emitters = 0;
+            size_t live = 0;
+            size_t geometryCalls = 0;  ///< of the last frame
+            double updateAllocsPerFrame = 0.0;
+            double drawAllocsPerFrame = 0.0;
+            double updateBytesPerFrame = 0.0;
+            double drawBytesPerFrame = 0.0;
+        };
+
+        size_t CountLive(SceneManager& manager, size_t& emitters) {
+            size_t live = 0;
+            emitters = 0;
+            Scene* scene = manager.GetSceneByName("Main"_intern);
+            if (scene == nullptr) {
+                return 0;
+            }
+            for (const auto& node : scene->GetRootNode().GetChildren()) {
+                if (const auto emitter = node->GetComponent<ParticleEmitterComponent>()) {
+                    ++emitters;
+                    live += emitter->GetLiveCount();
+                }
+            }
+            return live;
+        }
+
+        /// The row of the zone @p name in @p rows, or an empty one
+        ZoneReportRow RowOfZone(const Vector<ZoneReportRow>& rows, StringView name) {
+            for (const ZoneReportRow& row : rows) {
+                if (row.zone == name) {
+                    return row;
+                }
+            }
+            return {};
+        }
+
+        /**
+         * Loads the scene from XML, runs `kWarmupFrames` frames so the pools are full, then `kRunFrames` frames with the update and the
+         * draw each in a zone and the recorder's `ClearCalls` outside both. The figures are per frame, zero without the profile preset.
+         * With @p print the tracker's report of the frames follows the `AssetLoadParticlesRun` line.
+         *
+         * `RecordingRenderer` copies the vertices of every draw call: when it keeps no spare storage between frames the draw figure
+         * includes the test double, so the update figure is the one that counts.
+         */
+        ParticleRun RunParticleFrames(const SceneFixture& fixture, bool print) {
+            ParticleRun run;
+            const auto manager = fixture.LoadFromXml();
+            if (manager == nullptr) {
+                return run;
+            }
+            auto renderer = New<RecordingRenderer>();
+            const RendererGuard guard(renderer);
+            manager->Initialize();
+
+            for (int frame = 0; frame < kWarmupFrames; ++frame) {
+                CoreManager::GetTime().Advance(kParticleFrame);
+                manager->UpdateAll();
+                renderer->ClearCalls();
+                manager->DrawAll();
+            }
+
+            AllocTracker::ResetZoneStats();
+            for (int frame = 0; frame < kRunFrames; ++frame) {
+                CoreManager::GetTime().Advance(kParticleFrame);
+                {
+                    BE_PROFILE_SCOPE("Particles update");
+                    manager->UpdateAll();
+                }
+                renderer->ClearCalls();
+                {
+                    BE_PROFILE_SCOPE("Particles draw");
+                    manager->DrawAll();
+                }
+            }
+
+            run.ran = true;
+            run.live = CountLive(*manager, run.emitters);
+            for (const DrawCall& call : renderer->calls) {
+                run.geometryCalls += call.kind == DrawKind::Geometry ? 1 : 0;
+            }
+            const Vector<ZoneReportRow> rows = CollectZoneReport();
+            const ZoneReportRow update = RowOfZone(rows, kParticleUpdateZone);
+            const ZoneReportRow draw = RowOfZone(rows, kParticleDrawZone);
+            constexpr double kFrames = kRunFrames;
+            run.updateAllocsPerFrame = static_cast<double>(update.allocs) / kFrames;
+            run.drawAllocsPerFrame = static_cast<double>(draw.allocs) / kFrames;
+            run.updateBytesPerFrame = static_cast<double>(update.bytes) / kFrames;
+            run.drawBytesPerFrame = static_cast<double>(draw.bytes) / kFrames;
+            if (print) {
+                std::cout << Format("AssetLoadParticlesRun emitters={} live={} frames={} updateAllocsPerFrame={:.2f} drawAllocsPerFrame={:.2f} updateBytesPerFrame={:.1f} drawBytesPerFrame={:.1f}\n",
+                                    run.emitters, run.live, kRunFrames, run.updateAllocsPerFrame, run.drawAllocsPerFrame, run.updateBytesPerFrame, run.drawBytesPerFrame)
+                                 .c_str();
+                PrintZoneReport(std::cout, "particles-run", kZoneReportNames);
+            }
+            return run;
+        }
 
         /**
          * One zone pass: @p load is a load of a file made before the call, its phases in zones. The zone statistics are reset right
@@ -722,9 +875,9 @@ namespace BECore::Tests {
             PrintZonePass(ZoneCaseName("wide", format), [&] { return LoadWideFileByZone(file, items) && items.size() == kWideObjects; });
         }
 
-        void RunSceneZonePass(const SceneFixture& fixture, FileFormat format) {
+        void RunSceneZonePass(const SceneFixture& fixture, FileFormat format, StringView stem = "scene") {
             IntrusivePtrAtomic<SceneManager> manager;
-            PrintZonePass(ZoneCaseName("scene", format), [&] {
+            PrintZonePass(ZoneCaseName(stem, format), [&] {
                 manager = format == FileFormat::Xml ? fixture.LoadFromXmlByZone() : fixture.LoadFromBinaryByZone();
                 return manager != nullptr;
             });
@@ -839,6 +992,32 @@ namespace BECore::Tests {
         EXPECT_EQ(PrintedScenes(*fromBinary), expected);
     }
 
+    TEST(AssetLoadAllocTest, TheParticleSceneLoadsTheSameFromXmlAndFromItsCookedBytes) {
+        EngineEnvironment::EnsureCoreServices();
+        const SceneFixture fixture = MakeParticleFixture();
+        const auto fromXml = fixture.LoadFromXml();
+        const auto fromBinary = fixture.LoadFromBinary();
+        ASSERT_NE(fromXml, nullptr);
+        ASSERT_NE(fromBinary, nullptr);
+        const String expected = PrintedScenes(*fromXml);
+        EXPECT_NE(expected.find(Format("Emitter{}", kParticleEmitters - 1)), String::npos);
+        EXPECT_EQ(PrintedScenes(*fromBinary), expected);
+        size_t emitters = 0;
+        CountLive(*fromBinary, emitters);
+        EXPECT_EQ(emitters, kParticleEmitters);
+    }
+
+    TEST(AssetLoadAllocTest, TheParticleSceneRunsParticles) {
+        EngineEnvironment::EnsureCoreServices();
+        const SceneFixture fixture = MakeParticleFixture();
+        const ParticleRun run = RunParticleFrames(fixture, false);
+        ASSERT_TRUE(run.ran);
+        EXPECT_EQ(run.emitters, kParticleEmitters);
+        EXPECT_GT(run.live, 0u);
+        EXPECT_GT(run.geometryCalls, 0u);
+        EXPECT_EQ(CoreManager::GetRendererManager().GetRenderer(), nullptr) << "the renderer is given back";
+    }
+
     TEST(AssetLoadAllocTest, TheZoneVersionsOfTheLoadsLoadWhatTheMeasuredOnesLoad) {
         EngineEnvironment::EnsureCoreServices();
         for (const FileFormat format : {FileFormat::Xml, FileFormat::Binary}) {
@@ -897,6 +1076,12 @@ namespace BECore::Tests {
                 std::cout << "AssetLoadScene format=" << FormatName(format) << " groups=" << kSceneGroups << " allocs=" << median.allocs << " bytes=" << median.bytes << " loadMs=" << median.loadMs
                           << "\n";
             }
+            const SceneFixture particles = MakeParticleFixture();
+            for (const FileFormat format : {FileFormat::Xml, FileFormat::Binary}) {
+                const LoadMeasure median = MedianOf([&] { return MeasureSceneLoad(particles, format); });
+                std::cout << "AssetLoadParticles format=" << FormatName(format) << " emitters=" << kParticleEmitters << " allocs=" << median.allocs << " bytes=" << median.bytes
+                          << " loadMs=" << median.loadMs << "\n";
+            }
         }
     }
 
@@ -913,6 +1098,13 @@ namespace BECore::Tests {
         const SceneFixture fixture;
         for (const FileFormat format : {FileFormat::Xml, FileFormat::Binary}) {
             RunSceneZonePass(fixture, format);
+        }
+        const SceneFixture particles = MakeParticleFixture();
+        for (const FileFormat format : {FileFormat::Xml, FileFormat::Binary}) {
+            RunSceneZonePass(particles, format, "particles");
+        }
+        if (!RunParticleFrames(particles, true).ran) {
+            ADD_FAILURE() << "the particle scene did not load";
         }
     }
 
