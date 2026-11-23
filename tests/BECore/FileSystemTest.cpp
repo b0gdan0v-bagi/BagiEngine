@@ -187,6 +187,28 @@ namespace BECore::Tests {
         EXPECT_EQ(after.writeLocks - before.writeLocks, 1u);
     }
 
+    TEST_F(FileSystemTest, EnumerateFilesOrdersByPathComponentsNotByText) {
+        // As text "a.txt" comes before "a/b.txt" ('.' is below '/'); as a path the component "a" is below "a-b.txt" and "a.txt", so the folder's files come first
+        Touch(_engine / "assets" / "a.txt");
+        Touch(_engine / "assets" / "a" / "b.txt");
+        Touch(_game / "assets" / "a" / "a.txt");
+        Touch(_game / "assets" / "a-b.txt");
+
+        FileSystem fs;
+        fs.AddContentRoot(_engine);
+        fs.AddContentRoot(_game);
+        fs.Initialize();
+
+        const StringView extensions[] = {".txt"};
+        const auto files = fs.EnumerateFiles("assets"_intern, Span<const StringView>(extensions));
+
+        ASSERT_EQ(files.size(), 4u);
+        EXPECT_EQ(files[0].ToStringView(), "assets/a/a.txt");
+        EXPECT_EQ(files[1].ToStringView(), "assets/a/b.txt");
+        EXPECT_EQ(files[2].ToStringView(), "assets/a-b.txt");
+        EXPECT_EQ(files[3].ToStringView(), "assets/a.txt");
+    }
+
 #ifndef _WIN32
     TEST_F(FileSystemTest, EnumerateFilesTurnsABackslashInAFileNameIntoASlash) {
         // A POSIX file name may hold a backslash; the virtual path has only slashes

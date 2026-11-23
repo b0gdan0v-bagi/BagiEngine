@@ -7,6 +7,14 @@
 
 namespace BECore {
 
+    namespace {
+        // Sized for a save or a config of a few hundred entries; a bigger document takes more chunks, a request over a chunk its own
+        constexpr size_t kArenaChunkBytes = 16 * 1024;
+        constexpr size_t kBufferReserveBytes = 256;
+        constexpr size_t kScopeReserve = 16;
+        constexpr size_t kTextReserve = 64;
+    }  // namespace
+
     bool BinarySerializer::SaveToFile(const std::filesystem::path& path) const {
         const Vector<uint8_t>& image = GetData();
         return WriteFileAtomically(PathToUtf8(path), Span<const uint8_t>(image.data(), image.size())).has_value();
@@ -17,19 +25,20 @@ namespace BECore {
             return _image;
         }
 
+        const ScratchScope scratch;
         const size_t count = _texts.size();
-        Vector<const String*> textOf(count, nullptr);
+        ArenaVector<StringView> textOf(count);
         size_t charBytes = 0;
         for (const auto& [text, firstUse] : _texts) {
-            textOf[firstUse] = &text;
+            textOf[firstUse] = text;
             charBytes += text.size();
         }
 
         // order[i] is the first-use index of the text that sorts i-th; finalIndex is its inverse
-        Vector<uint32_t> order(count);
+        ArenaVector<uint32_t> order(count);
         eastl::iota(order.begin(), order.end(), uint32_t{0});
-        eastl::sort(order.begin(), order.end(), [&textOf](uint32_t a, uint32_t b) { return BinaryFormat::CompareStrings(StringView(*textOf[a]), StringView(*textOf[b])) < 0; });
-        Vector<uint32_t> finalIndex(count);
+        eastl::sort(order.begin(), order.end(), [&textOf](uint32_t a, uint32_t b) { return BinaryFormat::CompareStrings(textOf[a], textOf[b]) < 0; });
+        ArenaVector<uint32_t> finalIndex(count);
         for (size_t i = 0; i < count; ++i) {
             finalIndex[order[i]] = static_cast<uint32_t>(i);
         }
@@ -50,7 +59,7 @@ namespace BECore {
 
         size_t end = 0;
         for (size_t i = 0; i < count; ++i) {
-            const String& text = *textOf[order[i]];
+            const StringView text = textOf[order[i]];
             std::memcpy(out + charsOffset + end, text.data(), text.size());
             end += text.size();
             BinaryFormat::Store<uint32_t>(out + endsOffset + i * sizeof(uint32_t), static_cast<uint32_t>(end));
@@ -91,8 +100,11 @@ namespace BECore {
         _imageIsStale = true;
     }
 
-    BinarySerializer::BinarySerializer() {
-        _buffer.reserve(256);
+    BinarySerializer::BinarySerializer() : _arena("BinarySerializer", kArenaChunkBytes), _scopes(ArenaAllocator(_arena)), _texts(ArenaAllocator(_arena)), _indexOffsets(ArenaAllocator(_arena)) {
+        _buffer.reserve(kBufferReserveBytes);
+        _scopes.reserve(kScopeReserve);
+        _texts.reserve(kTextReserve);
+        _indexOffsets.reserve(kTextReserve);
     }
 
     void BinarySerializer::AppendTextIndex(StringView text) {
@@ -102,7 +114,11 @@ namespace BECore {
         } else {
             ASSERT(_texts.size() < std::numeric_limits<uint32_t>::max(), "Binary string table is full");
             index = static_cast<uint32_t>(_texts.size());
-            _texts.emplace(String(text), index);
+            char* copy = _arena.Allocate<char>(text.size());
+            if (!text.empty()) {
+                std::memcpy(copy, text.data(), text.size());
+            }
+            _texts.emplace(StringView(copy, text.size()), index);
         }
         _indexOffsets.push_back(_buffer.size());
         AppendValue<uint32_t>(index);

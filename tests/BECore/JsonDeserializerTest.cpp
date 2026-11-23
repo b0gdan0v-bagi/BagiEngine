@@ -503,6 +503,35 @@ namespace BECore::Tests {
         EXPECT_EQ(state.i32, 3);
     }
 
+    TEST(JsonDeserializerTest, AClosedScopeTakesNoNameOfItsParentAndAReopenedOneStartsEmpty) {
+        const Json document = Parse(R"({"alpha":1,"alpa":2,"first":{"inner":1,"inne":2},"beta":3,"bta":4,"second":{"other":1,"othr":2},"first2":{"inner":1,"innr":2}})");
+        JsonDeserializer reader(document);
+        reader.SetDiagnostics(DiagnosticsMode::Warn);
+
+        int32_t value = 0;
+        EXPECT_TRUE(reader.Read("alpha", value));
+        ASSERT_TRUE(reader.BeginObject("first"));
+        EXPECT_TRUE(reader.Read("inner", value));
+        reader.EndObject();
+        // The parent keeps asking after a child came and went; its older names must still be there
+        EXPECT_TRUE(reader.Read("beta", value));
+        ASSERT_TRUE(reader.BeginObject("second"));
+        EXPECT_TRUE(reader.Read("other", value));
+        reader.EndObject();
+        ASSERT_TRUE(reader.BeginObject("first2"));
+        EXPECT_TRUE(reader.Read("inner", value));
+        reader.EndObject();
+        reader.FinishLoad();
+
+        const String warnings = WarningsText(reader);
+        EXPECT_TRUE(Contains(warnings, "alpa: Unknown key 'alpa', did you mean 'alpha'?\n")) << warnings.c_str();
+        EXPECT_TRUE(Contains(warnings, "bta: Unknown key 'bta', did you mean 'beta'?\n")) << warnings.c_str();
+        EXPECT_TRUE(Contains(warnings, "first.inne: Unknown key 'inne', did you mean 'inner'?\n")) << warnings.c_str();
+        EXPECT_TRUE(Contains(warnings, "second.othr: Unknown key 'othr', did you mean 'other'?\n")) << warnings.c_str();
+        EXPECT_TRUE(Contains(warnings, "first2.innr: Unknown key 'innr', did you mean 'inner'?\n")) << warnings.c_str();
+        EXPECT_EQ(reader.GetWarnings().size(), 5u) << warnings.c_str();
+    }
+
     TEST(JsonDeserializerTest, UnknownKeysAreErrorsUnderErrorAndNothingUnderOff) {
         const Json document = Parse(R"({"flg":true})");
 

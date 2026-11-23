@@ -214,6 +214,28 @@ namespace BECore::Tests {
         EXPECT_EQ(LinesOf(ReadFile(_path)), expected);
     }
 
+    TEST_F(XmlDocumentTest, AFileBiggerThanTheScratchReadIsLaidOutLikeASmallOne) {
+        // Blank lines of spaces between two rows, enough bytes to be read to the heap and few enough lines to stay under the merge's line limit
+        constexpr size_t kPaddingLines = 17000;
+        constexpr StringView kBlankLine = "               \n";
+        String text = "<root>\n  <a x=\"1\" />\n";
+        for (size_t i = 0; i < kPaddingLines; ++i) {
+            text.append(kBlankLine.data(), kBlankLine.size());
+        }
+        text += "  <b x=\"2\" />\n</root>\n";
+        WriteFile(_path, text);
+        ASSERT_GT(text.size(), size_t{256} * 1024);
+
+        XmlDocument document;
+        ASSERT_TRUE(document.LoadFromFile(_path));
+        document.GetRoot().GetPugiNode().first_child().attribute("x").set_value("9");
+        ASSERT_TRUE(document.SaveToFile(_path));
+
+        String expected = text;
+        expected.replace(expected.find("x=\"1\""), 5, "x=\"9\"");
+        EXPECT_EQ(ReadFile(_path), expected);
+    }
+
     TEST_F(XmlDocumentTest, ANewElementKeepsTheBlankLinesAndTheIndentOfTheFile) {
         WriteFile(_path, kFourSpaceConfig);
         XmlDocument document;

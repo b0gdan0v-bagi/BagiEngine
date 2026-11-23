@@ -30,8 +30,7 @@ namespace BECore::Tests {
         constexpr StringView kText = "AAAA";
 
         /// A document `doc { number, text, items[count] { id, label } }`, the shape of a library file
-        BinarySerializer BuildDocument(size_t elements, StringView text = kText) {
-            BinarySerializer serializer;
+        void BuildDocument(BinarySerializer& serializer, size_t elements, StringView text = kText) {
             serializer.BeginObject("doc");
             serializer.Write("number", kNumber);
             serializer.Write("text", text);
@@ -45,11 +44,12 @@ namespace BECore::Tests {
             }
             serializer.EndArray();
             serializer.EndObject();
-            return serializer;
         }
 
         Vector<uint8_t> MakeStream(size_t elements, StringView text = kText) {
-            return BuildDocument(elements, text).GetData();
+            BinarySerializer serializer;
+            BuildDocument(serializer, elements, text);
+            return serializer.GetData();
         }
 
         /// Reads `doc` the way MakeStream wrote it and checks every value; the first failure fails the case
@@ -121,7 +121,9 @@ namespace BECore::Tests {
 
     TEST(BinaryDeserializerTest, AFileReadsTheSameAsTheBufferOfTheSameBytes) {
         const std::filesystem::path path = TestTempPath("binary_deserializer_file");
-        const bool saved = BuildDocument(50).SaveToFile(path);
+        BinarySerializer document;
+        BuildDocument(document, 50);
+        const bool saved = document.SaveToFile(path);
 
         BinaryDeserializer fromFile;
         const bool fileOpened = saved && fromFile.LoadFromFile(path);
@@ -170,7 +172,9 @@ namespace BECore::Tests {
         const Vector<uint8_t> second = MakeStream(5, "BBBB");
         const Vector<uint8_t> third = MakeStream(1, "CCCC");
         const std::filesystem::path path = TestTempPath("binary_deserializer_replace");
-        const bool saved = BuildDocument(0, "DDDD").SaveToFile(path);
+        BinarySerializer document;
+        BuildDocument(document, 0, "DDDD");
+        const bool saved = document.SaveToFile(path);
 
         BinaryDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromView(first.data(), first.size()));

@@ -1,5 +1,8 @@
 #include "XmlLayoutMerge.h"
 
+#include <BECore/Memory/ArenaAllocator.h>
+#include <BECore/Memory/LinearArena.h>
+
 namespace BECore {
 
     namespace {
@@ -12,13 +15,21 @@ namespace BECore {
 
         constexpr char kLineBreak = '\n';
 
+        /// The first chunk of the merge's working memory, on the stack: the line lists, the map and the diff of a config of 300 lines with a
+        /// handful of edits fits, so the usual save allocates nothing for them. The thread's scratch arena would keep the chunks a big file or a
+        /// pathological diff takes (the trace grows with the square of the edit count); this arena frees them on return
+        constexpr size_t kStackBytes = 48 * 1024;
+
         struct Lines {
-            Vector<StringView> lines;
+            explicit Lines(LinearArena& arena) : lines(ArenaAllocator(arena)) {}
+
+            ArenaVector<StringView> lines;
             bool endsWithLineBreak = false;
         };
 
-        Lines SplitLines(StringView text) {
-            Lines result;
+        Lines SplitLines(StringView text, LinearArena& arena) {
+            Lines result(arena);
+            result.lines.reserve(static_cast<size_t>(eastl::count(text.begin(), text.end(), kLineBreak)) + 1);
             size_t begin = 0;
             while (begin < text.size()) {
                 const size_t end = text.find(kLineBreak, begin);
@@ -47,8 +58,9 @@ namespace BECore {
         }
 
         /// The indexes of the lines that are not blank
-        Vector<size_t> NonBlankIndexes(const Vector<StringView>& lines) {
-            Vector<size_t> indexes;
+        ArenaVector<size_t> NonBlankIndexes(const ArenaVector<StringView>& lines, LinearArena& arena) {
+            ArenaVector<size_t> indexes{ArenaAllocator(arena)};
+            indexes.reserve(lines.size());
             for (size_t i = 0; i < lines.size(); ++i) {
                 if (!IsBlank(lines[i])) {
                     indexes.push_back(i);
@@ -58,8 +70,9 @@ namespace BECore {
         }
 
         /// Blank lines before the first non-blank line, between each two and after the last: a gap per non-blank line plus one
-        Vector<size_t> BlankRunLengths(const Vector<StringView>& lines, const Vector<size_t>& nonBlank) {
-            Vector<size_t> runs;
+        ArenaVector<size_t> BlankRunLengths(const ArenaVector<StringView>& lines, const ArenaVector<size_t>& nonBlank, LinearArena& arena) {
+            ArenaVector<size_t> runs{ArenaAllocator(arena)};
+            runs.reserve(nonBlank.size() + 1);
             size_t previous = 0;
             for (const size_t index : nonBlank) {
                 runs.push_back(index - previous);
@@ -73,9 +86,9 @@ namespace BECore {
         ///
         /// Blank lines of @p baseline are those inside a comment or a text: the original has the same number of them in the
         /// same place, and the blank lines the person added between elements are the ones @p baseline lacks.
-        Optional<Vector<size_t>> MapBaselineToOriginal(const Vector<StringView>& original, const Vector<StringView>& baseline) {
-            const Vector<size_t> originalNonBlank = NonBlankIndexes(original);
-            const Vector<size_t> baselineNonBlank = NonBlankIndexes(baseline);
+        Optional<ArenaVector<size_t>> MapBaselineToOriginal(const ArenaVector<StringView>& original, const ArenaVector<StringView>& baseline, LinearArena& arena) {
+            const ArenaVector<size_t> originalNonBlank = NonBlankIndexes(original, arena);
+            const ArenaVector<size_t> baselineNonBlank = NonBlankIndexes(baseline, arena);
             if (originalNonBlank.empty() || originalNonBlank.size() != baselineNonBlank.size()) {
                 return std::nullopt;
             }
@@ -85,15 +98,15 @@ namespace BECore {
                 }
             }
 
-            const Vector<size_t> originalRuns = BlankRunLengths(original, originalNonBlank);
-            const Vector<size_t> baselineRuns = BlankRunLengths(baseline, baselineNonBlank);
+            const ArenaVector<size_t> originalRuns = BlankRunLengths(original, originalNonBlank, arena);
+            const ArenaVector<size_t> baselineRuns = BlankRunLengths(baseline, baselineNonBlank, arena);
             for (size_t i = 0; i < baselineRuns.size(); ++i) {
                 if (baselineRuns[i] != 0 && baselineRuns[i] != originalRuns[i]) {
                     return std::nullopt;
                 }
             }
 
-            Vector<size_t> map;
+            ArenaVector<size_t> map{ArenaAllocator(arena)};
             map.reserve(baseline.size());
             size_t nonBlankSeen = 0;
             size_t cursor = 0;
@@ -117,16 +130,16 @@ namespace BECore {
         };
 
         /// Myers' shortest edit script between two line lists, as hunks in order; nothing when it needs too many edits
-        Optional<Vector<Hunk>> DiffLines(const Vector<StringView>& a, const Vector<StringView>& b) {
+        Optional<ArenaVector<Hunk>> DiffLines(const ArenaVector<StringView>& a, const ArenaVector<StringView>& b, LinearArena& arena) {
             const int n = static_cast<int>(a.size());
             const int m = static_cast<int>(b.size());
             const int maxEdits = std::min(n + m, kMaxEditCount);
 
             // furthest[k + offset] is the largest x reached on diagonal k; the diagonals k = 1 and k = -1 are read at d = 0
             const int offset = maxEdits + 1;
-            Vector<int> furthest(static_cast<size_t>(2 * offset + 1), 0);
-            // trace[d] holds furthest after round d, for k in [-d, d]
-            Vector<Vector<int>> trace;
+            ArenaVector<int> furthest(static_cast<size_t>(2 * offset + 1), 0, ArenaAllocator(arena));
+            // trace[d] holds furthest after round d, for k in [-d, d]; each snapshot is sized once, as a grown arena vector leaves its old block behind
+            ArenaVector<ArenaVector<int>> trace{ArenaAllocator(arena)};
 
             int editCount = -1;
             for (int d = 0; d <= maxEdits && editCount < 0; ++d) {
@@ -148,7 +161,7 @@ namespace BECore {
                         break;
                     }
                 }
-                Vector<int>& snapshot = trace.emplace_back();
+                ArenaVector<int>& snapshot = trace.emplace_back(ArenaAllocator(arena));
                 snapshot.resize(static_cast<size_t>(2 * d + 1));
                 for (int k = -d; k <= d; k += 2) {
                     snapshot[static_cast<size_t>(k + d)] = furthest[static_cast<size_t>(offset + k)];
@@ -158,12 +171,12 @@ namespace BECore {
                 return std::nullopt;
             }
 
-            Vector<bool> deleted(a.size(), false);
-            Vector<bool> inserted(b.size(), false);
+            ArenaVector<bool> deleted(a.size(), false, ArenaAllocator(arena));
+            ArenaVector<bool> inserted(b.size(), false, ArenaAllocator(arena));
             int x = n;
             int y = m;
             for (int d = editCount; d > 0; --d) {
-                const Vector<int>& before = trace[static_cast<size_t>(d - 1)];
+                const ArenaVector<int>& before = trace[static_cast<size_t>(d - 1)];
                 const auto valueAt = [&before, d](int k) { return before[static_cast<size_t>(k + d - 1)]; };
                 const int k = x - y;
                 const bool fromInsertion = (k == -d) || (k != d && valueAt(k - 1) < valueAt(k + 1));
@@ -183,7 +196,7 @@ namespace BECore {
                 y = previousY;
             }
 
-            Vector<Hunk> hunks;
+            ArenaVector<Hunk> hunks{ArenaAllocator(arena)};
             size_t i = 0;
             size_t j = 0;
             while (i < a.size() || j < b.size()) {
@@ -236,21 +249,23 @@ namespace BECore {
         if (original.empty() || original.find('\r') != StringView::npos || baseline.find('\r') != StringView::npos || updated.find('\r') != StringView::npos) {
             return std::nullopt;
         }
-        const Lines originalLines = SplitLines(original);
-        const Lines baselineLines = SplitLines(baseline);
-        const Lines updatedLines = SplitLines(updated);
+        alignas(LinearArena::kDefaultAlignment) std::byte stack[kStackBytes];
+        LinearArena arena("XmlLayoutMerge", stack, sizeof(stack));
+        const Lines originalLines = SplitLines(original, arena);
+        const Lines baselineLines = SplitLines(baseline, arena);
+        const Lines updatedLines = SplitLines(updated, arena);
         if (originalLines.lines.size() > kMaxLines || baselineLines.lines.size() > kMaxLines || updatedLines.lines.size() > kMaxLines) {
             return std::nullopt;
         }
 
-        const Optional<Vector<size_t>> map = MapBaselineToOriginal(originalLines.lines, baselineLines.lines);
+        const Optional<ArenaVector<size_t>> map = MapBaselineToOriginal(originalLines.lines, baselineLines.lines, arena);
         if (!map) {
             return std::nullopt;
         }
         if (baseline == updated) {
             return String(original);
         }
-        const Optional<Vector<Hunk>> hunks = DiffLines(baselineLines.lines, updatedLines.lines);
+        const Optional<ArenaVector<Hunk>> hunks = DiffLines(baselineLines.lines, updatedLines.lines, arena);
         if (!hunks) {
             return std::nullopt;
         }

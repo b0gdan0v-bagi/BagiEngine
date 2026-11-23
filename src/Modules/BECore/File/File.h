@@ -10,6 +10,8 @@ struct SDL_IOStream;
 
 namespace BECore {
 
+    class LinearArena;
+
     /**
      * How File::Open treats the file. Write, Append and CreateNew do not make the folder above the file (CreateDirectories does).
      * Every mode is binary: no line-end translation on any platform.
@@ -99,6 +101,39 @@ namespace BECore {
 
     /// ReadFileBytes into a String: the bytes as they are, no encoding or line-end change
     [[nodiscard]] std::expected<String, String> ReadTextFile(StringView path, size_t maxBytes = kDefaultMaxFileBytes);
+
+    /**
+     * The bytes of ReadFileBytesScratch: in the caller's arena or, for a big file, in a heap block this object owns. A copy of the heap form copies the block; a copy of the arena form only views the
+     * arena memory. Bytes() is valid while the arena memory is (the scratch scope of the call that read the file) and, on the heap path, while this object lives.
+     */
+    class ScratchFileBytes {
+    public:
+        ScratchFileBytes() noexcept = default;
+
+        [[nodiscard]] Span<const uint8_t> Bytes() const noexcept {
+            return _onHeap ? Span<const uint8_t>{_heap.data(), _heap.size()} : _inArena;
+        }
+
+        /// Whether the file was over the scratch bound and went to the heap
+        [[nodiscard]] bool IsOnHeap() const noexcept {
+            return _onHeap;
+        }
+
+    private:
+        friend std::expected<ScratchFileBytes, String> ReadFileBytesScratch(StringView path, LinearArena& arena, size_t maxScratchBytes, size_t maxBytes);
+
+        Span<const uint8_t> _inArena;
+        Vector<uint8_t> _heap;
+        bool _onHeap = false;
+    };
+
+    /**
+     * The whole file like ReadFileBytes, but a file of at most @p maxScratchBytes lands in @p arena (the caller's ScratchScope) and allocates
+     * nothing on the heap; a bigger one goes to the heap, because the chunks of a scratch arena stay allocated after the scope ends and one big
+     * file would be kept by the thread for good. The size comes from the open stream and @p maxBytes is checked first: a file of an untrusted
+     * size never asks the arena for memory. The arena memory dies with the scope, so no `co_await` may sit between the call and the end of the use.
+     */
+    [[nodiscard]] std::expected<ScratchFileBytes, String> ReadFileBytesScratch(StringView path, LinearArena& arena, size_t maxScratchBytes, size_t maxBytes = kDefaultMaxFileBytes);
 
     /**
      * Writes @p path so a reader sees the old file or the new one: the folder above is made, the bytes go to "<path>.tmp"

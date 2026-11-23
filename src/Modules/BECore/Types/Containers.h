@@ -27,14 +27,16 @@
 // with its default allocator.
 namespace BECore {
 
-    /// The hash, equality and order a key gets by default: those of the key, except for String, whose map looks up by StringView
-    /// and const char* without making a String (StringHash, StringEqual, StringLess).
+    /// The hash, equality and order a key gets by default: those of the key, except for String and StringView, whose map looks up by
+    /// StringView and const char* without making a String (StringHash, StringEqual, StringLess).
     template <typename Key>
-    using DefaultHash = std::conditional_t<std::is_same_v<Key, String>, StringHash, eastl::hash<Key>>;
+    inline constexpr bool kIsTextKey = std::is_same_v<Key, String> || std::is_same_v<Key, StringView>;
     template <typename Key>
-    using DefaultEqual = std::conditional_t<std::is_same_v<Key, String>, StringEqual, eastl::equal_to<Key>>;
+    using DefaultHash = std::conditional_t<kIsTextKey<Key>, StringHash, eastl::hash<Key>>;
     template <typename Key>
-    using DefaultLess = std::conditional_t<std::is_same_v<Key, String>, StringLess, eastl::less<Key>>;
+    using DefaultEqual = std::conditional_t<kIsTextKey<Key>, StringEqual, eastl::equal_to<Key>>;
+    template <typename Key>
+    using DefaultLess = std::conditional_t<kIsTextKey<Key>, StringLess, eastl::less<Key>>;
 
     template <typename T>
     using Vector = eastl::vector<T, EngineAllocator>;
@@ -70,6 +72,12 @@ namespace BECore {
     /// `contains`, `count` and `at` take a StringView or a literal without making a String.
     template <typename Key, typename T, typename Hash = DefaultHash<Key>, typename Equal = DefaultEqual<Key>>
     using HashMap = eastl::hash_map<Key, T, Hash, Equal, EngineAllocator>;
+
+    /// A hash map whose buckets and nodes come from an arena (Memory/CLAUDE.md, "ArenaAllocator"); include <BECore/Memory/ArenaAllocator.h> to use it.
+    /// Nodes are never freed one by one and a rehash leaves the old bucket array in the arena, so `reserve` first. A StringView key must
+    /// point into memory that lives as long as the map (the arena itself, or a text that outlives it).
+    template <typename Key, typename T, typename Hash = DefaultHash<Key>, typename Equal = DefaultEqual<Key>>
+    using ArenaHashMap = eastl::hash_map<Key, T, Hash, Equal, ArenaAllocator>;
 
     /// The ordered map (a red-black tree); a String key compares by StringView as HashMap's does.
     template <typename Key, typename T, typename Compare = DefaultLess<Key>>

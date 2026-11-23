@@ -143,6 +143,15 @@ namespace BECore {
         void ApplyTheme(UIThemes& themes) override;
 
     private:
+        /// Where the list sits: its column and whether it is over the header
+        struct PopupPlacement {
+            Rect list;
+            bool above = false;
+        };
+
+        /// The rule of `GetPopupGeometry` over a span and a caller's storage, so the layout pass can place the options without a heap list; @p optionRects has one slot per option
+        [[nodiscard]] static PopupPlacement PlacePopup(const Rect& header, Span<const OptionSize> options, const Rect& bounds, Span<Rect> optionRects);
+
         bool _open = false;  // runtime UI state, not reflected
     };
 

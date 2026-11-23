@@ -1,7 +1,10 @@
 #include <BECore/File/File.h>
+#include <BECore/Memory/ScratchArena.h>
 #include <Common/AllocCheck.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <array>
+#include <cstring>
 
 namespace BECore::Tests {
 
@@ -9,6 +12,7 @@ namespace BECore::Tests {
 
         constexpr StringView kRawBytes{"a\0b\r\n\xFF\r", 7};
         constexpr size_t kBigFileBytes = 64 * 1024;
+        constexpr size_t kScratchBound = 4096;
 
         Span<const uint8_t> AsBytes(StringView text) {
             return {reinterpret_cast<const uint8_t*>(text.data()), text.size()};
@@ -167,6 +171,76 @@ namespace BECore::Tests {
         ASSERT_TRUE(text.has_value());
         EXPECT_LT(forBytes.bytes, 2 * kBigFileBytes);
         EXPECT_LT(forText.bytes, 2 * kBigFileBytes);
+    }
+
+    TEST_F(FileReadWriteTest, ScratchReadGivesTheBytesOfTheHeapReadInArenaOrOnHeap) {
+        const String small = _folder.PathOf("small.bin");
+        const String empty = _folder.PathOf("empty.bin");
+        const String exact = _folder.PathOf("exact.bin");
+        const String over = _folder.PathOf("over.bin");
+        const String exactContent(kScratchBound, 'a');
+        const String overContent(kScratchBound + 1, 'b');
+        ASSERT_TRUE(WriteFileAtomically(small, AsBytes(kRawBytes)).has_value());
+        ASSERT_TRUE(WriteFileAtomically(empty, AsBytes({})).has_value());
+        ASSERT_TRUE(WriteFileAtomically(exact, StringView{exactContent}).has_value());
+        ASSERT_TRUE(WriteFileAtomically(over, StringView{overContent}).has_value());
+
+        ScratchScope scratch;
+        for (const auto& [path, onHeap] : {Pair<String, bool>{small, false}, {empty, false}, {exact, false}, {over, true}}) {
+            const auto expected = BECore::ReadFileBytes(path);
+            const auto scratchRead = ReadFileBytesScratch(path, scratch.GetArena(), kScratchBound);
+            ASSERT_TRUE(expected.has_value() && scratchRead.has_value()) << path;
+            EXPECT_EQ(scratchRead->IsOnHeap(), onHeap) << path;
+            const Span<const uint8_t> bytes = scratchRead->Bytes();
+            ASSERT_EQ(bytes.size(), expected->size()) << path;
+            EXPECT_TRUE(bytes.empty() || std::memcmp(bytes.data(), expected->data(), bytes.size()) == 0) << path;
+        }
+    }
+
+    TEST_F(FileReadWriteTest, ScratchReadOfAMissingFileNamesThePathAndOverTheLimitIsRefusedBeforeTheArenaIsAsked) {
+        const String missing = _folder.PathOf("missing.bin");
+        const String big = _folder.PathOf("big.bin");
+        ASSERT_TRUE(WriteFileAtomically(big, StringView{String(kScratchBound, 'x')}).has_value());
+
+        ScratchScope scratch;
+        const size_t usedBefore = scratch.GetArena().GetBytesUsed();
+        const auto none = ReadFileBytesScratch(missing, scratch.GetArena(), kScratchBound);
+        ASSERT_FALSE(none.has_value());
+        EXPECT_NE(none.error().find("missing.bin"), String::npos) << none.error();
+
+        const auto refused = ReadFileBytesScratch(big, scratch.GetArena(), kScratchBound, kScratchBound - 1);
+        ASSERT_FALSE(refused.has_value());
+        EXPECT_NE(refused.error().find("big.bin"), String::npos) << refused.error();
+        EXPECT_EQ(scratch.GetArena().GetBytesUsed(), usedBefore);
+    }
+
+    TEST_F(FileReadWriteTest, ScratchReadOfASmallFileAllocatesNothingOnceTheArenaHasItsChunk) {
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+        const String path = _folder.PathOf("small.bin");
+        ASSERT_TRUE(WriteFileAtomically(path, AsBytes(kRawBytes)).has_value());
+        {
+            ScratchScope warm;  // the first chunk of the thread's arena is the arena's cost, not the read's
+            static_cast<void>(ReadFileBytesScratch(path, warm.GetArena(), kScratchBound));
+        }
+
+        // SDL allocates the stream itself (counted by the tracker), so the bound is a read into a stack buffer: the bytes cost nothing more
+        const AllocCount forStream = CountAllocations([&] {
+            auto file = File::Open(path, FileMode::Read);
+            ASSERT_TRUE(file.has_value());
+            Array<uint8_t, kRawBytes.size()> buffer{};
+            ASSERT_TRUE(file->Read(buffer.data(), buffer.size()).has_value());
+        });
+        AllocCount forScratch;
+        {
+            ScratchScope scratch;
+            std::expected<ScratchFileBytes, String> read;
+            forScratch = CountAllocations([&] { read = ReadFileBytesScratch(path, scratch.GetArena(), kScratchBound); });
+            ASSERT_TRUE(read.has_value());
+        }
+        EXPECT_EQ(forScratch.count, forStream.count);
+        EXPECT_EQ(forScratch.bytes, forStream.bytes);
     }
 
 }  // namespace BECore::Tests

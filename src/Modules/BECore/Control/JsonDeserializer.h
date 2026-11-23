@@ -1,6 +1,8 @@
 #pragma once
 
 #include <BECore/Control/JsonFwd.h>
+#include <BECore/Memory/ArenaAllocator.h>
+#include <BECore/Memory/LinearArena.h>
 #include <BECore/Reflection/IDeserializer.h>
 
 namespace BECore {
@@ -97,8 +99,17 @@ namespace BECore {
             /// Whether the keys asked here are recorded: a scope opened while the diagnostics were off has no complete list
             bool tracking = false;
             bool checked = false;
-            Vector<String> asked;
+            /// The keys asked here, views into the deserializer's arena. Empty until the first key: a list made with the default
+            /// allocator would bind to the thread's scratch arena, so it is made with the arena's allocator when it is needed
+            Optional<ArenaVector<StringView>> asked;
+            /// The arena as it was when the scope opened, to give the scope's names back at its end; empty when the arena did not exist
+            /// yet, which also means no outer scope holds a name
+            Optional<LinearArena::Mark> mark;
         };
+
+        /// The arena of the asked names, made by the first name noted: a deserializer that never runs with diagnostics holds none. Held by
+        /// pointer and owned by the reader (not a scratch scope) because the reader lives across many calls of the loader
+        LinearArena& GetNamesArena() const;
 
         /// The member the current scope has under @p name, or null; no error, no note of the key
         const Json* FindMember(StringView name) const;
@@ -107,6 +118,9 @@ namespace BECore {
         const Json* FindForRead(StringView name);
 
         void NoteAsked(StringView name) const;
+
+        /// Notes the mark of the names arena in @p scope, which is about to be pushed
+        void MarkScope(Scope& scope) const;
         bool IsNestedTooDeep(StringView name);
 
         /// Reports `Invalid <kind> value '<text>'` under @p name; the text is the value cut and cleaned of control characters
@@ -121,11 +135,13 @@ namespace BECore {
         bool ReadBool(StringView name, bool& outValue);
         bool ReadText(StringView name, String& outValue);
 
+        /// Checks the innermost scope, pops it and gives its names back
         void CloseScope();
         void CheckScope(Scope& scope);
         bool FindingsFull() const;
 
         mutable Vector<Scope> _scopes;
+        mutable UniquePtr<LinearArena> _namesArena;
         Vector<DeserializeError> _errors;
     };
 

@@ -1,5 +1,6 @@
 #include "AudioDecode.h"
 
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Profiler/Alloc/AllocRouting.h>
 #include <climits>
 #include <cmath>
@@ -247,31 +248,65 @@ namespace BECore {
         return decoded;
     }
 
-    AudioDecodeResult DecodeOgg(Span<const uint8_t> bytes) {
+    namespace {
+
+        /// Frames pulled from the decoder and converted at a time
+        constexpr size_t kOggChunkFrames = 4096;
+
+        /// The decoder opened on @p arena memory; when the clip needs more, on the heap (the routed malloc). nullptr when the bytes are no Ogg Vorbis file
+        stb_vorbis* OpenOggOnScratch(Span<const uint8_t> bytes, LinearArena& arena, size_t scratchBytes) {
+            const stb_vorbis_alloc alloc{static_cast<char*>(arena.Allocate(scratchBytes)), static_cast<int>(scratchBytes)};
+            int error = 0;
+            stb_vorbis* decoder = stb_vorbis_open_memory(bytes.data(), static_cast<int>(bytes.size()), &error, &alloc);
+            if (decoder == nullptr && error == VORBIS_outofmem) {
+                decoder = stb_vorbis_open_memory(bytes.data(), static_cast<int>(bytes.size()), &error, nullptr);
+            }
+            return decoder;
+        }
+
+    }  // namespace
+
+    AudioDecodeResult DecodeOgg(Span<const uint8_t> bytes, size_t decoderScratchBytes) {
         if (bytes.size() > static_cast<size_t>(INT_MAX)) {
             return std::unexpected(String("the Ogg file is larger than stb_vorbis can read"));
         }
-        int channels = 0;
-        int sampleRate = 0;
-        short* output = nullptr;
-        const int frames = stb_vorbis_decode_memory(bytes.data(), static_cast<int>(bytes.size()), &channels, &sampleRate, &output);
-        if (frames <= 0 || output == nullptr) {
-            AllocRouting::Free(AllocSource::Stb, output);  // stb_vorbis allocates the output through the routed malloc
+        ScratchScope scratch;
+        stb_vorbis* decoder = OpenOggOnScratch(bytes, scratch.GetArena(), eastl::min<size_t>(decoderScratchBytes, static_cast<size_t>(INT_MAX)));
+        if (decoder == nullptr) {
             return std::unexpected(String("not an Ogg Vorbis file stb_vorbis can decode"));
         }
-        if (channels <= 0 || channels > kMaxAudioChannels || sampleRate < static_cast<int>(kMinAudioSampleRate) || sampleRate > static_cast<int>(kMaxAudioSampleRate)) {
-            AllocRouting::Free(AllocSource::Stb, output);  // stb_vorbis allocates the output through the routed malloc
-            return std::unexpected(Format("{} channels at {} Hz is not a clip the engine plays", channels, sampleRate));
+        const stb_vorbis_info info = stb_vorbis_get_info(decoder);
+        const int channels = info.channels;
+        if (channels <= 0 || channels > kMaxAudioChannels || info.sample_rate < kMinAudioSampleRate || info.sample_rate > kMaxAudioSampleRate) {
+            stb_vorbis_close(decoder);
+            return std::unexpected(Format("{} channels at {} Hz is not a clip the engine plays", channels, info.sample_rate));
         }
 
         DecodedAudio decoded;
-        decoded.format = AudioFormat{static_cast<uint32_t>(sampleRate), static_cast<uint8_t>(channels)};
-        const size_t count = static_cast<size_t>(frames) * static_cast<size_t>(channels);
-        decoded.samples.resize(count);
-        for (size_t i = 0; i < count; ++i) {
-            decoded.samples[i] = static_cast<float>(output[i]) / kScale16;
+        decoded.format = AudioFormat{info.sample_rate, static_cast<uint8_t>(channels)};
+        // stb_vorbis trusts the length of the file, so the hint is capped; the loop below ends on the decoder's own 0
+        const size_t hintSamples = eastl::min<size_t>(size_t{stb_vorbis_stream_length_in_samples(decoder)} * static_cast<size_t>(channels), kMaxFlacClipFrames);
+        decoded.samples.reserve(hintSamples);
+
+        // The short pull and `/ kScale16` are what stb_vorbis_decode_memory did: every sample stays the same bit for bit (the float pull rounds differently)
+        short* chunk = scratch.Allocate<short>(kOggChunkFrames * static_cast<size_t>(channels));
+        const int chunkShorts = static_cast<int>(kOggChunkFrames) * channels;
+        for (;;) {
+            const int frames = stb_vorbis_get_samples_short_interleaved(decoder, channels, chunk, chunkShorts);
+            if (frames <= 0) {
+                break;
+            }
+            const size_t first = decoded.samples.size();
+            const size_t count = static_cast<size_t>(frames) * static_cast<size_t>(channels);
+            decoded.samples.resize(first + count);
+            for (size_t i = 0; i < count; ++i) {
+                decoded.samples[first + i] = static_cast<float>(chunk[i]) / kScale16;
+            }
         }
-        AllocRouting::Free(AllocSource::Stb, output);  // stb_vorbis allocates the output through the routed malloc
+        stb_vorbis_close(decoder);
+        if (decoded.samples.empty()) {
+            return std::unexpected(String("not an Ogg Vorbis file stb_vorbis can decode"));
+        }
         return decoded;
     }
 
