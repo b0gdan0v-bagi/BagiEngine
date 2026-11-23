@@ -2,11 +2,11 @@
 
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonFwd.h>
+#include <BECore/File/File.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/Singleton.h>
 #include <Games/ReplayFile.h>
 #include <expected>
-#include <fstream>  //-NoStd: the file layer has no write call (FileSystem/CLAUDE.md), so the recording is a std::ofstream
 
 namespace BECore {
 
@@ -54,9 +54,11 @@ namespace BECore {
 
         void Write(ReplayOp op, const Json& params, const Json* outcome);
         void Fail(StringView what);
+        bool WriteLineAndFlush();
+        void Close();
 
-        std::ofstream _file;  //-NoStd: see the include
-        String _line;         // the entry being written; keeps its capacity
+        File _file;
+        String _line;  // the entry being written; keeps its capacity
         bool _recording = false;
         bool _started = false;  ///< A reset has been written: the file has a state to act on
         bool _warnedDropped = false;
