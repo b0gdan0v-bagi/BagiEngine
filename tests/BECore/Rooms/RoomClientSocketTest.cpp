@@ -385,7 +385,9 @@ namespace BECore::Tests {
         EXPECT_EQ(host.Count(Kind::Resumed), 0u);
         ASSERT_EQ(host.Count(Kind::Closed), 1u);
         EXPECT_EQ(Require(host.Find(Kind::Closed)).code, RoomClientCloseReasons::kGaveUp);
-        EXPECT_GE(host.tap.connections, 3u) << "it should have tried again, not only once";
+        // The first connection and at least one retry after the stop. How many more fit into the give-up time is the platform's: Windows
+        // answers a connect to a closed loopback port after about 2 s of its own retries, where macOS and Linux refuse at once
+        EXPECT_GE(host.tap.connections, 2u) << "it should have tried again after the server stopped";
         EXPECT_FALSE(host.client->GetSession().IsValid());
     }
 
