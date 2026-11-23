@@ -8,7 +8,7 @@ namespace BECore {
 
     namespace {
 
-        /// Bytes of an ordinary path that stay inside the object: a call with a path allocates nothing
+        /// Bytes of a path that CPath keeps inside the object; a longer path moves to the heap
         constexpr size_t kInlinePathBytes = 512;
 
         /// A path with a terminating zero, which SDL needs and a StringView does not have

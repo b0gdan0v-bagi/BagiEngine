@@ -73,7 +73,7 @@ namespace BECore {
     };
 
     /// The kind, size and modification time of @p path; nullopt for a path that is missing or cannot be read.
-    /// Allocates nothing on POSIX; on Windows SDL converts the path to UTF-16 with one allocation.
+    /// Allocates nothing on POSIX; on Windows SDL's UTF-16 conversion of the path allocates.
     [[nodiscard]] Optional<FileInfo> GetFileInfo(StringView path);
 
     /// Makes @p path and the folders above it; a folder that exists is success
