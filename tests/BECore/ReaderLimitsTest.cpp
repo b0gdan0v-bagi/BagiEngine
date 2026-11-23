@@ -7,6 +7,7 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Fuzz/FuzzProbeAccess.h>
 
 namespace BECore::Tests {
@@ -63,10 +64,7 @@ namespace BECore::Tests {
 
         std::filesystem::path SparseFileOfSize(const char* stem, uintmax_t size) {
             const std::filesystem::path path = TestTempPath(stem);
-            {
-                std::ofstream file(path, std::ios::binary | std::ios::trunc);
-                file << "x";
-            }
+            WriteFile(path, "x");
             std::error_code ec;
             std::filesystem::resize_file(path, size, ec);
             EXPECT_FALSE(ec) << ec.message();

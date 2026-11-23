@@ -1199,10 +1199,7 @@ namespace BECore::Tests {
 
         // A file that is not a binary stream is rejected like a corrupt buffer
         const std::filesystem::path garbage = TestTempPath("BagiEngineTests_Garbage");
-        {
-            std::ofstream file(garbage, std::ios::binary | std::ios::trunc);
-            file << "this is definitely not a BagiEngine binary stream";
-        }
+        WriteFile(garbage, "this is definitely not a BagiEngine binary stream");
         BinaryDeserializer fromGarbage;
         const bool loaded = fromGarbage.LoadFromFile(garbage);
         std::filesystem::remove(garbage, ignored);
