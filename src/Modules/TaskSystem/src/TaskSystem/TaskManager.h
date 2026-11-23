@@ -68,7 +68,7 @@ namespace BECore {
          */
         template <typename T>
         IntrusivePtr<TaskHandle<T>> Run(Task<T> task, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background, TaskLabel label = {}) {
-            auto handle = MakeIntrusive<TaskHandle<T>>(std::move(task));
+            IntrusivePtr<TaskHandle<T>> handle = New<TaskHandle<T>>(std::move(task));
 
             _scheduler.Schedule(MakeStartTask(handle, label), priority, threadType);
 
@@ -78,7 +78,7 @@ namespace BECore {
         /** Like Run, started after a wall-clock @p delay. */
         template <typename T>
         IntrusivePtr<TaskHandle<T>> RunDelayed(Task<T> task, Duration delay, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background, TaskLabel label = {}) {
-            auto handle = MakeIntrusive<TaskHandle<T>>(std::move(task));
+            IntrusivePtr<TaskHandle<T>> handle = New<TaskHandle<T>>(std::move(task));
 
             _scheduler.ScheduleDelayed(MakeStartTask(handle, label), delay, priority, threadType);
 
@@ -94,7 +94,7 @@ namespace BECore {
         template <typename T>
         IntrusivePtr<TaskHandle<T>> RunDelayedGameTime(Task<T> task, Duration delay, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::MainThread,
                                                        TaskLabel label = {}) {
-            auto handle = MakeIntrusive<TaskHandle<T>>(std::move(task));
+            IntrusivePtr<TaskHandle<T>> handle = New<TaskHandle<T>>(std::move(task));
 
             _scheduler.ScheduleDelayed(MakeStartTask(handle, label), delay, priority, threadType, DelayClock::GameTime);
 

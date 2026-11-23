@@ -77,7 +77,7 @@ namespace BECore {
     class TaskHandle : public TaskHandleBase {
     public:
         // From TaskMemory like the frames; a derived class has another size and gets the class that fits. The placement form is declared because a
-        // class-scope operator new hides the global one (MakeIntrusive, New)
+        // class-scope operator new hides the global one (New)
         static void* operator new(size_t size) {
             return Detail::TaskMemory::Allocate(size);
         }
