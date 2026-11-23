@@ -213,6 +213,25 @@ namespace BECore::Tests {
         AllocTracker::ResetZoneStats();
     }
 
+    TEST_F(ProfilerControlGoldenTest, ZoneAllocsTopAndResetTogetherCutTheTextAndThenClear) {
+        static constexpr ProfileSite kBig{"GoldenBothBig", "f", "a.cpp", 1, 0};
+        static constexpr ProfileSite kSmall{"GoldenBothSmall", "f", "a.cpp", 2, 0};
+        AllocTracker::ResetZoneStats();
+        AllocTracker::AddZone(kSmall, 1, 10);
+        AllocTracker::AddZone(kBig, 1, 1000);
+        Json params = Json::object();
+        params["top"] = 1;
+        params["reset"] = true;
+
+        const String text = Ask(service, "zone_allocs", params);
+
+        ExpectCanonical(text);
+        EXPECT_EQ(RowAround(text, "\"name\":\"GoldenBothBig\""), R"json({"allocs":1,"bytes":1000,"calls":1,"file":"a.cpp","line":1,"name":"GoldenBothBig"})json");
+        EXPECT_EQ(RowAround(text, "\"name\":\"GoldenBothSmall\""), "");
+        const String after = Ask(service, "zone_allocs");
+        EXPECT_EQ(RowAround(after, "\"name\":\"GoldenBothBig\""), "");
+    }
+
     TEST_F(ProfilerControlGoldenTest, ProfilerDumpAnswersThePathAndTheDroppedCount) {
         IProfilerBackend* const previous = Profiler::GetPrimaryBackend();
         Profiler::SetBackend(&Profiler::GetChromeTrace());
