@@ -24,13 +24,13 @@ namespace BECore {
 
         auto config = XmlConfig::Create();
         if (!config.LoadFromVirtualPath(path.ToStringView())) {
-            LOG_ERROR("UIDocumentLoader: cannot load '{}'"_format(path.ToStringView()));
+            LOG_ERROR("UIDocumentLoader: cannot load '{}'", path.ToStringView());
             document->SetFailed(path);
             return document;
         }
 
         document->SetLoaded(path, std::move(config));
-        LOG_INFO("UIDocumentLoader: loaded '{}'"_format(path.ToStringView()));
+        LOG_INFO("UIDocumentLoader: loaded '{}'", path.ToStringView());
         return document;
     }
 

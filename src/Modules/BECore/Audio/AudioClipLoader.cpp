@@ -42,13 +42,13 @@ namespace BECore {
         BE_PROFILE_SCOPE("AudioClipLoader::Load");
         auto bytes = ReadAudioFile(path);
         if (!bytes) {
-            LOG_ERROR("AudioClipLoader: {}"_format(bytes.error()));
+            LOG_ERROR("AudioClipLoader: {}", bytes.error());
             return AudioClip::CreateFailed(path);
         }
 
         auto decoded = DecodeAudio(*bytes);
         if (!decoded) {
-            LOG_ERROR("AudioClipLoader: '{}': {}"_format(path.ToStringView(), decoded.error()));
+            LOG_ERROR("AudioClipLoader: '{}': {}", path.ToStringView(), decoded.error());
             return AudioClip::CreateFailed(path);
         }
         return AudioClip::Create(path, std::move(*decoded));

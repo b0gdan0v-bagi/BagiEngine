@@ -15,7 +15,7 @@ namespace BECore {
         if (found != _byHash.end()) {
             if (found->second != &info) {
                 ++_refused;
-                LOG_ERROR(Format("Reflection: type '{}' has the same hash as the registered type '{}'; it is not registered", info.Name(), found->second->Name()));
+                LOG_ERROR("Reflection: type '{}' has the same hash as the registered type '{}'; it is not registered", info.Name(), found->second->Name());
             }
             return false;
         }

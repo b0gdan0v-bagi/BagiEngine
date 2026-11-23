@@ -18,7 +18,7 @@ namespace BECore {
             }
         }
 
-        LOG_INFO(Format("ResourceManager initialized with {} loaders", _loaders.size()));
+        LOG_INFO("ResourceManager initialized with {} loaders", _loaders.size());
     }
 
     void ResourceManager::RegisterLoader(IntrusivePtr<IResourceLoader> loader) {
@@ -31,7 +31,7 @@ namespace BECore {
     }
 
     void ResourceManager::ClearCache() {
-        LOG_INFO(Format("Clearing resource cache ({} resources)", _cache.GetCount()));
+        LOG_INFO("Clearing resource cache ({} resources)", _cache.GetCount());
         _cache.Clear();
     }
 

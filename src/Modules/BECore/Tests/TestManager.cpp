@@ -19,18 +19,18 @@ namespace BECore {
         int failed = 0;
 
         for (const auto& test : tests) {
-            LOG_INFO("[TestManager] Running: {}"_format(test->GetName()));
+            LOG_INFO("[TestManager] Running: {}", test->GetName());
 
             if (test->Run()) {
                 ++passed;
-                LOG_INFO("[TestManager] PASSED: {}"_format(test->GetName()));
+                LOG_INFO("[TestManager] PASSED: {}", test->GetName());
             } else {
                 ++failed;
-                LOG_ERROR("[TestManager] FAILED: {}"_format(test->GetName()));
+                LOG_ERROR("[TestManager] FAILED: {}", test->GetName());
             }
         }
 
-        LOG_INFO("[TestManager] Results: {} passed, {} failed"_format(passed, failed));
+        LOG_INFO("[TestManager] Results: {} passed, {} failed", passed, failed);
     }
 
 }  // namespace BECore

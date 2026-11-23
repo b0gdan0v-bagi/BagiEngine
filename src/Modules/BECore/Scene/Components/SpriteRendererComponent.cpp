@@ -14,7 +14,7 @@ namespace BECore {
             }
             const auto* entry = CoreManager::GetTextureLibrary().GetSprite(spriteId);
             if (!entry) {
-                LOG_ERROR(Format("SpriteRendererComponent: sprite '{}' not found in TextureLibrary", spriteId.ToStringView()).c_str());
+                LOG_ERROR("SpriteRendererComponent: sprite '{}' not found in TextureLibrary", spriteId.ToStringView());
                 return;
             }
             texturePath = entry->texturePath;
@@ -30,7 +30,7 @@ namespace BECore {
         }
         _texture = CoreManager::GetResourceManager().Load<ITexture>(_texturePath.ToStringView());
         if (!_texture) {
-            LOG_ERROR(Format("SpriteRendererComponent: failed to load texture '{}'", _texturePath.ToStringView()).c_str());
+            LOG_ERROR("SpriteRendererComponent: failed to load texture '{}'", _texturePath.ToStringView());
         }
     }
 
@@ -45,7 +45,7 @@ namespace BECore {
 
         _texture = CoreManager::GetResourceManager().Load<ITexture>(_texturePath.ToStringView());
         if (!_texture) {
-            LOG_ERROR(Format("SpriteRendererComponent: failed to reload texture '{}'", _texturePath.ToStringView()).c_str());
+            LOG_ERROR("SpriteRendererComponent: failed to reload texture '{}'", _texturePath.ToStringView());
         }
     }
 

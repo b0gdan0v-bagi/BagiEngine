@@ -57,13 +57,13 @@ namespace BECore {
                 const auto weight = face.ParseAttribute<int>("weight");
                 const auto path = face.ParseAttribute<StringView>("path");
                 if (!weight || *weight < 1 || *weight > kMaxFaceWeight || !path || path->empty()) {
-                    LOG_WARNING("TextConfig: a face of the family '{}' needs a weight of 1..1000 and a path, ignoring it"_format(*name));
+                    LOG_WARNING("TextConfig: a face of the family '{}' needs a weight of 1..1000 and a path, ignoring it", *name);
                     continue;
                 }
                 family.faces.push_back({*weight, PoolString::Intern(*path)});
             }
             if (family.faces.empty()) {
-                LOG_WARNING("TextConfig: the family '{}' has no valid face, ignoring it"_format(*name));
+                LOG_WARNING("TextConfig: the family '{}' has no valid face, ignoring it", *name);
                 family.name = PoolString{};
             }
             return family;

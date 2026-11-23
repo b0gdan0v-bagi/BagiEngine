@@ -63,7 +63,7 @@ namespace BECore {
             strings.Resolve(source, resolved);
             const auto& missing = strings.GetMissing();
             for (size_t i = missingBefore; i < missing.size(); ++i) {
-                LOG_WARNING("UIText: no string '{}' in the language '{}' or the default one"_format(missing[i].key.c_str(), missing[i].language.ToStringView()));
+                LOG_WARNING("UIText: no string '{}' in the language '{}' or the default one", missing[i].key, missing[i].language.ToStringView());
             }
             variables.Expand(StringView(resolved.data(), resolved.size()), out);
         };
@@ -77,7 +77,7 @@ namespace BECore {
         if (request != _fontRequest) {
             _fontRequest = request;
             if (!known) {
-                LOG_WARNING("UIText: no font family '{}' in TextConfig.xml, using the default font"_format(params.fontFamily.ToStringView()));
+                LOG_WARNING("UIText: no font family '{}' in TextConfig.xml, using the default font", params.fontFamily.ToStringView());
             }
         }
         if (path != _fontPath) {
@@ -86,7 +86,7 @@ namespace BECore {
             ResetLayouts();  // a font loaded again can sit at the address of the old one
             _fontHandle = CoreManager::GetResourceManager().Load<Font>(path.ToStringView());
             if (!_fontHandle || _fontHandle->GetState() != ResourceState::Loaded) {
-                LOG_ERROR("UIText: cannot load the font '{}'"_format(path.ToStringView()));
+                LOG_ERROR("UIText: cannot load the font '{}'", path.ToStringView());
                 _fontHandle.Reset();
             }
         }

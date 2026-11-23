@@ -13,7 +13,7 @@ namespace BECore::Tests {
             if (CoreManager::GetConfigManager().HasConfig(name)) {
                 return true;
             }
-            LOG_ERROR("[EngineSmokeTest] Config '{}' was not loaded"_format(name.ToStringView()));
+            LOG_ERROR("[EngineSmokeTest] Config '{}' was not loaded", name.ToStringView());
             return false;
         };
 

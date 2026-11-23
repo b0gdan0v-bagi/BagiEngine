@@ -85,7 +85,7 @@ SaveGameService service(CoreManager::GetFileSystem());  // a CoreManager getter 
 service.Initialize(saveFolder);
 
 if (auto saved = service.Save("slot1", kSchema, state); !saved) {
-    LOG_ERROR(saved.error().detail.c_str());
+    LOG_ERROR(saved.error().detail);
 }
 
 MyState loaded;  // a temporary: the live state is replaced only after a success
@@ -95,7 +95,7 @@ if (auto info = service.Load("slot1", kSchema, loaded)) {
 } else if (info.error().kind == SaveErrorKind::NotFound) {
     // no save yet
 } else {
-    LOG_ERROR(info.error().detail.c_str());
+    LOG_ERROR(info.error().detail);
 }
 ```
 

@@ -67,10 +67,10 @@ namespace BECore {
             return Format("Config '{}': {}{}{}", configName, path, message.errorMessage, line);
         };
         for (const DeserializeError& error : errors) {
-            LOG_ERROR(text(error).c_str());
+            LOG_ERROR(text(error));
         }
         for (const DeserializeError& warning : warnings) {
-            LOG_WARNING(text(warning).c_str());
+            LOG_WARNING(text(warning));
         }
     }
 

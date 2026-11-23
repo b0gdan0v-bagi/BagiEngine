@@ -42,7 +42,7 @@ namespace BECore {
             return;
         }
         for (const String& problem : LoadFromXml(configs.GetConfig(ConfigName))) {
-            LOG_WARNING("UIStrings: {}"_format(problem.c_str()));
+            LOG_WARNING("UIStrings: {}", problem);
         }
     }
 

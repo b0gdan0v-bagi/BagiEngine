@@ -140,13 +140,13 @@ namespace BECore {
 
         auto* loader = FindLoaderForPath(path);
         if (!loader) {
-            LOG_ERROR(Format("No loader found for: {}", path).c_str());
+            LOG_ERROR("No loader found for: {}", path);
             co_return ResourceHandle<T>();
         }
 
         auto resourceResult = co_await loader->LoadAsync(pathKey);
         if (!resourceResult.has_value() || !resourceResult.value()) {
-            LOG_ERROR(Format("Failed to load resource: {}", path).c_str());
+            LOG_ERROR("Failed to load resource: {}", path);
             co_return ResourceHandle<T>();
         }
 
@@ -158,7 +158,7 @@ namespace BECore {
             co_return ResourceHandle<T>(IntrusivePtr<T>(typed));
         }
 
-        LOG_ERROR(Format("Resource type mismatch: {}", path).c_str());
+        LOG_ERROR("Resource type mismatch: {}", path);
         co_return ResourceHandle<T>();
     }
 
@@ -175,13 +175,13 @@ namespace BECore {
 
         auto* loader = FindLoaderForPath(path);
         if (!loader) {
-            LOG_ERROR(Format("No loader found for: {}", path).c_str());
+            LOG_ERROR("No loader found for: {}", path);
             return ResourceHandle<T>();
         }
 
         auto resource = loader->LoadSync(pathKey);
         if (!resource) {
-            LOG_ERROR(Format("Failed to load resource: {}", path).c_str());
+            LOG_ERROR("Failed to load resource: {}", path);
             return ResourceHandle<T>();
         }
 
@@ -191,7 +191,7 @@ namespace BECore {
             return ResourceHandle<T>(IntrusivePtr<T>(typed));
         }
 
-        LOG_ERROR(Format("Resource type mismatch: {}", path).c_str());
+        LOG_ERROR("Resource type mismatch: {}", path);
         return ResourceHandle<T>();
     }
 
@@ -201,7 +201,7 @@ namespace BECore {
 
         auto opened = OpenDeserializer(path);
         if (!opened) {
-            LOG_ERROR(Format("Failed to load file for deserialization: {}", opened.error()).c_str());
+            LOG_ERROR("Failed to load file for deserialization: {}", opened.error());
             co_return T{};
         }
         IDeserializer& deserializer = **opened;
@@ -220,7 +220,7 @@ namespace BECore {
     T ResourceManager::LoadSerialized(StringView path) {
         auto opened = OpenDeserializer(path);
         if (!opened) {
-            LOG_ERROR(Format("Failed to load file for deserialization: {}", opened.error()).c_str());
+            LOG_ERROR("Failed to load file for deserialization: {}", opened.error());
             return T{};
         }
         IDeserializer& deserializer = **opened;
@@ -239,7 +239,7 @@ namespace BECore {
     Optional<T> ResourceManager::ReadPartObject(StringView path, AssetPurpose part) {
         auto opened = OpenAssetPart(path, part);
         if (!opened) {
-            LOG_ERROR(Format("Failed to load file for deserialization: {}", opened.error()).c_str());
+            LOG_ERROR("Failed to load file for deserialization: {}", opened.error());
             return {};
         }
         if (!*opened) {

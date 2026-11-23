@@ -131,7 +131,7 @@ namespace BECore {
             for (auto& layerFile : layerFiles) {
                 auto existing = eastl::find_if(filesToLoad.begin(), filesToLoad.end(), [&](const auto& loaded) { return loaded.second == layerFile.second; });
                 if (existing != filesToLoad.end()) {
-                    LOG_INFO(Format("[ConfigManager] Config '{}' from {} overrides {}", layerFile.second.ToStringView(), layerFile.first.string(), existing->first.string()).c_str());
+                    LOG_INFO("[ConfigManager] Config '{}' from {} overrides {}", layerFile.second.ToStringView(), layerFile.first.string(), existing->first.string());
                     *existing = eastl::move(layerFile);
                 } else {
                     filesToLoad.push_back(eastl::move(layerFile));
@@ -150,7 +150,7 @@ namespace BECore {
             return;
         }
 
-        LOG_INFO(Format("[ConfigManager] Found {} config files", filesToLoad.size()).c_str());
+        LOG_INFO("[ConfigManager] Found {} config files", filesToLoad.size());
 
         TaskGroup group;
         for (const auto& [path, name] : filesToLoad) {
@@ -163,7 +163,7 @@ namespace BECore {
         auto loadedCount = _configs.size();
         _initialized.store(true, std::memory_order_release);
 
-        LOG_INFO(Format("[ConfigManager] Loaded {} configs", loadedCount).c_str());
+        LOG_INFO("[ConfigManager] Loaded {} configs", loadedCount);
     }
 
     XmlNode ConfigManager::GetConfig(PoolString name) const {
@@ -289,25 +289,25 @@ namespace BECore {
             LockGuard lock(_writeMutex);
             auto it = _configs.find(name);
             if (it != _configs.end() && it->second.binary) {
-                LOG_ERROR(Format("[ConfigManager] SaveConfig: config '{}' is a binary file and cannot be saved", name.ToStringView()).c_str());
+                LOG_ERROR("[ConfigManager] SaveConfig: config '{}' is a binary file and cannot be saved", name.ToStringView());
                 return false;
             }
             if (it == _configs.end() || !it->second.doc) {
-                LOG_ERROR(Format("[ConfigManager] SaveConfig: config '{}' not found", name.ToStringView()).c_str());
+                LOG_ERROR("[ConfigManager] SaveConfig: config '{}' not found", name.ToStringView());
                 return false;
             }
             auto& entry = it->second;
             if (entry.filePath.empty()) {
-                LOG_ERROR(Format("[ConfigManager] SaveConfig: no file path for config '{}'", name.ToStringView()).c_str());
+                LOG_ERROR("[ConfigManager] SaveConfig: no file path for config '{}'", name.ToStringView());
                 return false;
             }
             ok = entry.doc->SaveToFile(entry.filePath);
             if (ok) {
                 // The file keeps the layout of what was there, so its text is read back: the hash must be the one the watcher will see
                 entry.fileHash = HashFileOnDisk(entry.filePath);
-                LOG_INFO(Format("[ConfigManager] Saved config '{}' to {}", name.ToStringView(), entry.filePath.string()).c_str());
+                LOG_INFO("[ConfigManager] Saved config '{}' to {}", name.ToStringView(), entry.filePath.string());
             } else {
-                LOG_ERROR(Format("[ConfigManager] Failed to save config '{}' to {}", name.ToStringView(), entry.filePath.string()).c_str());
+                LOG_ERROR("[ConfigManager] Failed to save config '{}' to {}", name.ToStringView(), entry.filePath.string());
             }
         }
         if (ok) {
@@ -333,15 +333,15 @@ namespace BECore {
             LockGuard lock(_writeMutex);
             auto it = _configs.find(name);
             if (it == _configs.end()) {
-                LOG_ERROR(Format("[ConfigManager] ReloadConfig: config '{}' not found", name.ToStringView()).c_str());
+                LOG_ERROR("[ConfigManager] ReloadConfig: config '{}' not found", name.ToStringView());
                 return false;
             }
             if (it->second.binary) {
                 // Hot reload of a cooked file is not built: the bytes of an entry never change, a deserializer may hold them
                 if (skipIfSame) {
-                    LOG_DEBUG(Format("[ConfigManager] Config '{}': {} changed, binary configs are not reloaded", name.ToStringView(), it->second.filePath.string()).c_str());
+                    LOG_DEBUG("[ConfigManager] Config '{}': {} changed, binary configs are not reloaded", name.ToStringView(), it->second.filePath.string());
                 } else {
-                    LOG_ERROR(Format("[ConfigManager] ReloadConfig: config '{}' is a binary file and cannot be reloaded", name.ToStringView()).c_str());
+                    LOG_ERROR("[ConfigManager] ReloadConfig: config '{}' is a binary file and cannot be reloaded", name.ToStringView());
                 }
                 return false;
             }
@@ -365,9 +365,9 @@ namespace BECore {
                 *failure = Format("the file is gone or unreadable, the loaded '{}' is kept", name.ToStringView());
             }
             if (skipIfSame) {
-                LOG_DEBUG(Format("[ConfigManager] Config '{}': {} is gone or unreadable, keeping the loaded document", name.ToStringView(), filePath.string()).c_str());
+                LOG_DEBUG("[ConfigManager] Config '{}': {} is gone or unreadable, keeping the loaded document", name.ToStringView(), filePath.string());
             } else {
-                LOG_ERROR(Format("[ConfigManager] ReloadConfig: failed to reload '{}' from {}", name.ToStringView(), filePath.string()).c_str());
+                LOG_ERROR("[ConfigManager] ReloadConfig: failed to reload '{}' from {}", name.ToStringView(), filePath.string());
             }
             return false;
         }
@@ -379,7 +379,7 @@ namespace BECore {
             if (failure != nullptr) {
                 *failure = Format("the file does not parse, the old '{}' is kept", name.ToStringView());
             }
-            LOG_ERROR(Format("[ConfigManager] ReloadConfig: failed to reload '{}' from {}", name.ToStringView(), filePath.string()).c_str());
+            LOG_ERROR("[ConfigManager] ReloadConfig: failed to reload '{}' from {}", name.ToStringView(), filePath.string());
             return false;
         }
 
@@ -392,7 +392,7 @@ namespace BECore {
             }
         }
 
-        LOG_INFO(Format("[ConfigManager] Reloaded config '{}'", name.ToStringView()).c_str());
+        LOG_INFO("[ConfigManager] Reloaded config '{}'", name.ToStringView());
         return true;
     }
 
@@ -432,7 +432,7 @@ namespace BECore {
         const PoolString name = FindConfigByVirtualPath(change.virtualPath.ToStringView());
         if (name.Empty()) {
             // A new file, a removed one or a file of a layer that does not win: nothing owns it (the `hot-reload` entry builds on this)
-            LOG_DEBUG(Format("[ConfigManager] {} changed, no loaded config owns it", change.virtualPath.ToStringView()).c_str());
+            LOG_DEBUG("[ConfigManager] {} changed, no loaded config owns it", change.virtualPath.ToStringView());
             return;
         }
         String failure;
@@ -453,7 +453,7 @@ namespace BECore {
                 paths.push_back(entry.path());
                 stems.push_back(String(stemStr.c_str(), stemStr.length()));
 
-                LOG_DEBUG(Format("[ConfigManager] Found config: {} -> {}", stemStr, entry.path().string()).c_str());
+                LOG_DEBUG("[ConfigManager] Found config: {} -> {}", stemStr, entry.path().string());
             }
         }
 
@@ -481,9 +481,8 @@ namespace BECore {
             const StemFiles& files = seen[names[i]];
             if (files.xml != nullptr && files.binary != nullptr) {
                 if (eastl::find(conflicted.begin(), conflicted.end(), names[i]) == conflicted.end()) {
-                    LOG_ERROR(Format("[ConfigManager] Config '{}' has both {} and {} in one layer, it is not loaded; remove one of them", names[i].ToStringView(), files.xml->string(),
-                                     files.binary->string())
-                                  .c_str());
+                    LOG_ERROR("[ConfigManager] Config '{}' has both {} and {} in one layer, it is not loaded; remove one of them", names[i].ToStringView(), files.xml->string(),
+                              files.binary->string());
                     conflicted.push_back(names[i]);
                 }
                 continue;
@@ -493,13 +492,13 @@ namespace BECore {
     }
 
     Task<void> ConfigManager::LoadConfigAsync(std::filesystem::path path, PoolString name) {
-        LOG_DEBUG(Format("[ConfigManager] Loading config: {}", name.ToStringView()).c_str());
+        LOG_DEBUG("[ConfigManager] Loading config: {}", name.ToStringView());
 
         // The same stem twice in one layer: the first task to get the lock wins
         {
             LockGuard lock(_writeMutex);
             if (_configs.find(name) != _configs.end()) {
-                LOG_WARNING(Format("[ConfigManager] Config {} already loaded, skipping duplicate", name.ToStringView()).c_str());
+                LOG_WARNING("[ConfigManager] Config {} already loaded, skipping duplicate", name.ToStringView());
                 co_return;
             }
         }
@@ -507,12 +506,12 @@ namespace BECore {
         if (IsBinaryPath(path)) {
             auto bytes = LoadCheckedBinary(path);
             if (!bytes) {
-                LOG_ERROR(Format("[ConfigManager] Failed to load config: {} from {}: {}", name.ToStringView(), path.string(), bytes.error()).c_str());
+                LOG_ERROR("[ConfigManager] Failed to load config: {} from {}: {}", name.ToStringView(), path.string(), bytes.error());
                 co_return;
             }
             LockGuard lock(_writeMutex);
             if (_configs.find(name) != _configs.end()) {
-                LOG_WARNING(Format("[ConfigManager] Config {} was loaded by another thread, discarding duplicate", name.ToStringView()).c_str());
+                LOG_WARNING("[ConfigManager] Config {} was loaded by another thread, discarding duplicate", name.ToStringView());
                 co_return;
             }
             ConfigEntry entry;
@@ -531,7 +530,7 @@ namespace BECore {
             hash = HashFileText(text);
         });
         if (!doc) {
-            LOG_ERROR(Format("[ConfigManager] Failed to load config: {} from {}", name.ToStringView(), path.string()).c_str());
+            LOG_ERROR("[ConfigManager] Failed to load config: {} from {}", name.ToStringView(), path.string());
             co_return;
         }
 
@@ -539,13 +538,13 @@ namespace BECore {
             LockGuard lock(_writeMutex);
             // The file was parsed outside the lock, so another task may have added the name meanwhile
             if (_configs.find(name) != _configs.end()) {
-                LOG_WARNING(Format("[ConfigManager] Config {} was loaded by another thread, discarding duplicate", name.ToStringView()).c_str());
+                LOG_WARNING("[ConfigManager] Config {} was loaded by another thread, discarding duplicate", name.ToStringView());
                 co_return;
             }
             _configs[name] = ConfigEntry{doc, path, hash, {}, false};
         }
 
-        LOG_DEBUG(Format("[ConfigManager] Config loaded: {}", name.ToStringView()).c_str());
+        LOG_DEBUG("[ConfigManager] Config loaded: {}", name.ToStringView());
     }
 
 }  // namespace BECore

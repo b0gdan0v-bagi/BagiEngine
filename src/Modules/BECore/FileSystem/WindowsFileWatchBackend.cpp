@@ -56,11 +56,11 @@ namespace BECore {
                 dir->handle = CreateFileW(realPath.c_str(), FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
                                           FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, nullptr);
                 if (dir->handle == INVALID_HANDLE_VALUE) {
-                    LOG_WARNING("File watch: cannot open a directory, error {}"_format(static_cast<uint32_t>(GetLastError())));
+                    LOG_WARNING("File watch: cannot open a directory, error {}", static_cast<uint32_t>(GetLastError()));
                     return;
                 }
                 if (CreateIoCompletionPort(dir->handle, _port, reinterpret_cast<ULONG_PTR>(dir.get()), 0) == nullptr || !Issue(*dir)) {
-                    LOG_WARNING("File watch: cannot watch a directory, error {}"_format(static_cast<uint32_t>(GetLastError())));
+                    LOG_WARNING("File watch: cannot watch a directory, error {}", static_cast<uint32_t>(GetLastError()));
                     CloseHandle(dir->handle);
                     return;
                 }
@@ -126,7 +126,7 @@ namespace BECore {
                 }
                 _port = CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, 1);
                 if (_port == nullptr) {
-                    LOG_ERROR("File watch: CreateIoCompletionPort failed, error {}"_format(static_cast<uint32_t>(GetLastError())));
+                    LOG_ERROR("File watch: CreateIoCompletionPort failed, error {}", static_cast<uint32_t>(GetLastError()));
                     return false;
                 }
                 _thread = Thread("FileWatch", [this] { ReadLoop(); });
@@ -176,7 +176,7 @@ namespace BECore {
                         Issue(dir);
                     } else {
                         // The directory was removed or its volume went. Closing the handle lets a pending delete finish
-                        LOG_DEBUG("File watch: a watch ended, error {}"_format(static_cast<uint32_t>(error)));
+                        LOG_DEBUG("File watch: a watch ended, error {}", static_cast<uint32_t>(error));
                         CloseHandle(dir.handle);
                         dir.handle = INVALID_HANDLE_VALUE;
                     }

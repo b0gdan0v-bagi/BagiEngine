@@ -197,13 +197,13 @@ namespace BECore {
         }
         auto bytes = ReadAudioFile(clipPath);
         if (!bytes) {
-            LOG_ERROR("Audio: the music: {}"_format(bytes.error()));
+            LOG_ERROR("Audio: the music: {}", bytes.error());
             Record(clipPath, AudioBus::Music, volume, false);
             return false;
         }
         auto source = OpenAudioStream(std::move(*bytes));
         if (!source) {
-            LOG_ERROR("Audio: the music '{}': {}"_format(clipPath.ToStringView(), source.error()));
+            LOG_ERROR("Audio: the music '{}': {}", clipPath.ToStringView(), source.error());
             Record(clipPath, AudioBus::Music, volume, false);
             return false;
         }
