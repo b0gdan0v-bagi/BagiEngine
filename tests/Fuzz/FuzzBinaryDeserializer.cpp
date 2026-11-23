@@ -42,13 +42,14 @@ namespace BECore::Fuzz {
 
         /// Whether what the reader returned is what the bytes of the entry say
         template <typename T>
-        bool SameAsEntry(const T& value, const BinaryFormat::EntryView& entry, const uint8_t* data, const BinaryFormat::StringTable& table) {
+        bool SameAsEntry(const T& value, const BinaryFormat::EntryView& entry, const uint8_t* data, const BinaryFormat::StringTable& table, const Vector<StringView>* pool) {
             const uint8_t* payload = data + entry.payloadBegin;
             if constexpr (std::is_same_v<T, bool>) {
                 return value == (*payload != 0);
             } else if constexpr (IsTextType<T>) {
                 if (entry.tag == BinaryFormat::Tag::PoolString) {
-                    return TextOf(value) == table.Get(BinaryFormat::Load<uint32_t>(payload));
+                    const uint32_t index = BinaryFormat::Load<uint32_t>(payload);
+                    return TextOf(value) == (pool != nullptr ? (*pool)[index] : table.Get(index));
                 }
                 const size_t length = BinaryFormat::Load<uint32_t>(payload);
                 return TextOf(value) == StringView(reinterpret_cast<const char*>(payload + sizeof(uint32_t)), length);
@@ -77,8 +78,10 @@ namespace BECore::Fuzz {
         /// Reads a loaded document by following the bytes: it needs no type, it asks the reader for what the bytes hold
         class DocumentWalker {
         public:
-            /// @p table is the string table of a version 2 document, null for version 1
-            DocumentWalker(IDeserializer& reader, const uint8_t* data, const BinaryFormat::StringTable* table) : _reader(reader), _data(data), _table(table) {}
+            /// @p table is the string table of a version 2 document or the name table of a version 3 one, null for version 1; @p pool is
+            /// the texts of the pool section of a version 3 document, null for the others
+            DocumentWalker(IDeserializer& reader, const uint8_t* data, const BinaryFormat::StringTable* table, const Vector<StringView>* pool = nullptr)
+                : _reader(reader), _data(data), _table(table), _pool(pool) {}
 
             void WalkScope(size_t begin, size_t end, size_t depth) {
                 FUZZ_CHECK(depth <= BinaryFormat::MaxDepth);
@@ -87,7 +90,15 @@ namespace BECore::Fuzz {
                 HashMap<StringView, LastEntries> last;
                 for (size_t position = begin; position < end;) {
                     BinaryFormat::EntryView entry;
-                    FUZZ_CHECK(_table != nullptr ? BinaryFormat::ParseEntryV2(_data, position, end, *_table, entry) : BinaryFormat::ParseEntry(_data, position, end, entry));
+                    bool parsed = false;
+                    if (_pool != nullptr) {
+                        parsed = BinaryFormat::ParseEntryV3(_data, position, end, *_table, _pool->size(), entry);
+                    } else if (_table != nullptr) {
+                        parsed = BinaryFormat::ParseEntryV2(_data, position, end, *_table, entry);
+                    } else {
+                        parsed = BinaryFormat::ParseEntry(_data, position, end, entry);
+                    }
+                    FUZZ_CHECK(parsed);
                     LastEntries& slot = last[entry.name];
                     const auto index = static_cast<ptrdiff_t>(entries.size());
                     if (BinaryFormat::IsScalarTag(entry.tag)) {
@@ -140,7 +151,7 @@ namespace BECore::Fuzz {
                     FUZZ_CHECK(ok == expected);
                     _digest.Add(ok);
                     if (ok) {
-                        FUZZ_CHECK(SameAsEntry(value, entry, _data, _table != nullptr ? *_table : BinaryFormat::StringTable{}));
+                        FUZZ_CHECK(SameAsEntry(value, entry, _data, _table != nullptr ? *_table : BinaryFormat::StringTable{}, _pool));
                         AddValue(_digest, value);
                     }
                 }
@@ -203,19 +214,37 @@ namespace BECore::Fuzz {
             IDeserializer& _reader;
             const uint8_t* _data;
             const BinaryFormat::StringTable* _table;
+            const Vector<StringView>* _pool;
             FuzzDigest _digest;
             size_t _budget = kWalkEntryBudget;
         };
 
-        /// Walks the entries of a document the reader accepted, by the layout of its version: after the header (version 1) or after the table (version 2)
+        /// Walks the entries of a document the reader accepted, by the layout of its version: after the header (version 1), after the
+        /// table (version 2) or after the name table and the pool section (version 3)
         uint64_t WalkDocument(BinaryDeserializer& reader, const uint8_t* data, size_t size) {
-            if (BinaryFormat::Load<uint16_t>(data + sizeof(BinaryFormat::Magic)) == BinaryFormat::TabledVersion) {
+            const uint16_t version = BinaryFormat::Load<uint16_t>(data + sizeof(BinaryFormat::Magic));
+            if (version == BinaryFormat::TabledVersion || version == BinaryFormat::PooledVersion) {
                 BinaryFormat::StringTable table;
                 size_t tableEnd = 0;
                 // The reader validated the table, so the helper that the reader is built on parses it too
                 FUZZ_CHECK(BinaryFormat::ParseStringTable(data, BinaryFormat::HeaderSize, size, table, tableEnd));
-                DocumentWalker walker(reader, data, &table);
-                walker.WalkScope(tableEnd, size, 0);
+                if (version == BinaryFormat::TabledVersion) {
+                    DocumentWalker walker(reader, data, &table);
+                    walker.WalkScope(tableEnd, size, 0);
+                    return walker.GetDigest().Value();
+                }
+                BinaryFormat::PoolSection section;
+                size_t sectionEnd = 0;
+                FUZZ_CHECK(BinaryFormat::ParsePoolSection(data, tableEnd, size, section, sectionEnd));
+                Vector<StringView> pool;
+                size_t at = section.entriesOffset;
+                for (uint32_t i = 0; i < section.count; ++i) {
+                    const size_t textBytes = BinaryFormat::Load<uint32_t>(data + at + offsetof(Details::PoolStringEntry, size));
+                    pool.emplace_back(reinterpret_cast<const char*>(data + at + offsetof(Details::PoolStringEntry, data)), textBytes);
+                    at += Details::PoolEntryBytes(textBytes);
+                }
+                DocumentWalker walker(reader, data, &table, &pool);
+                walker.WalkScope(sectionEnd, size, 0);
                 return walker.GetDigest().Value();
             }
             DocumentWalker walker(reader, data, nullptr);

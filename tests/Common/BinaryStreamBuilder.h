@@ -74,7 +74,7 @@ namespace BECore::Tests::BinaryStreams {
     }
 
     struct Options {
-        uint16_t version = BinaryFormat::TabledVersion;
+        uint16_t version = BinaryFormat::PooledVersion;
         /// Version 2: the strings of the table, in this order, as given (so a test can make it unsorted or repeat a text); every name and
         /// every PoolString text of the document must be in it. Version 3: the same for the name table, which holds names only.
         /// Empty: the distinct texts, sorted

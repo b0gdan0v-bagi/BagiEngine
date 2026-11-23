@@ -277,7 +277,7 @@ namespace BECore::Tests {
         EXPECT_EQ(peeked->version, 1u);
     }
 
-    TEST_F(SaveGameTest, ASaveIsWrittenAsVersion2AndReplacesAVersion1Slot) {
+    TEST_F(SaveGameTest, ASaveIsWrittenAsVersion3AndReplacesAVersion1Slot) {
         ASSERT_TRUE(Service().WriteSlot("slot", SmallSaveBytes(BinaryFormat::LegacyVersion, 1)).has_value());
         const auto before = Service().ReadSlot("slot");
         ASSERT_TRUE(before.has_value());
@@ -288,7 +288,7 @@ namespace BECore::Tests {
 
         const auto after = Service().ReadSlot("slot");
         ASSERT_TRUE(after.has_value());
-        EXPECT_EQ(BinaryFormat::Load<uint16_t>(after->data() + sizeof(BinaryFormat::Magic)), BinaryFormat::TabledVersion);
+        EXPECT_EQ(BinaryFormat::Load<uint16_t>(after->data() + sizeof(BinaryFormat::Magic)), BinaryFormat::PooledVersion);
         EXPECT_FALSE(std::filesystem::exists(_saves / "slot.save.tmp"));
 
         GameState loaded;
@@ -419,8 +419,8 @@ namespace BECore::Tests {
             garbage.push_back(static_cast<uint8_t>(i * 37 + 11));
         }
 
-        // The same damage in the layout of the writer (version 2) and in the layout of the saves of the first engine (version 1)
-        for (const uint16_t layout : {BinaryFormat::TabledVersion, BinaryFormat::LegacyVersion}) {
+        // The same damage in the layout of the writer (version 3) and in the layout of the saves of the first engine (version 1)
+        for (const uint16_t layout : {BinaryFormat::PooledVersion, BinaryFormat::LegacyVersion}) {
             const auto inLayout = [layout](const Vector<uint8_t>& stream) { return layout == BinaryFormat::LegacyVersion ? AsVersion1(stream) : stream; };
 
             const Vector<uint8_t> valid = inLayout(ValidBytes());
@@ -428,7 +428,7 @@ namespace BECore::Tests {
             Vector<uint8_t> brokenMagic = valid;
             brokenMagic[0] = 'X';
             const Vector<uint8_t> halfFile(valid.begin(), valid.begin() + static_cast<ptrdiff_t>(valid.size() / 2));
-            // Version 2: no string table at all; version 1: a header that promises more than the file has
+            // Version 3: no name table at all; version 1: a header that promises more than the file has
             const Vector<uint8_t> headerOnly(valid.begin(), valid.begin() + static_cast<ptrdiff_t>(BinaryFormat::HeaderSize));
             const Vector<uint8_t> oneByteShort(valid.begin(), valid.end() - 1);
 

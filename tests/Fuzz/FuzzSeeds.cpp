@@ -212,9 +212,13 @@ namespace BECore::Fuzz {
             StoreWord(bytes, BinaryFormat::PayloadSizeOffset, static_cast<uint32_t>(bytes.size() - BinaryFormat::HeaderSize));
         }
 
-        /// Offset of the first entry's payload in a version 2 stream written by BinarySerializer
+        /// Offset of the first entry's payload in a stream of version 2 or 3 (the pool section of a version 3 one is in front of its entries)
         size_t FirstPayloadAt(const FuzzBytes& bytes) {
-            return BinaryStreams::LayoutOf(bytes).entriesOffset + kFirstPayloadOffset;
+            size_t entries = BinaryStreams::LayoutOf(bytes).entriesOffset;
+            if (BinaryFormat::Load<uint16_t>(bytes.data() + sizeof(BinaryFormat::Magic)) == BinaryFormat::PooledVersion) {
+                entries += BinaryFormat::PoolSectionHeadSize + BinaryFormat::Load<uint32_t>(bytes.data() + entries + sizeof(uint32_t));
+            }
+            return entries + kFirstPayloadOffset;
         }
 
         /// The documents of the version 1 seeds, as the entries a version 1 writer produced (BinaryStreams writes them in that layout)
@@ -261,6 +265,7 @@ namespace BECore::Fuzz {
 
         FuzzBytes Version2Bytes(const Vector<BinaryStreams::Entry>& root, const Vector<String>& table = {}) {
             BinaryStreams::Options options;
+            options.version = BinaryFormat::TabledVersion;
             options.table = table;
             const Vector<uint8_t> bytes = BinaryStreams::Build(root, options);
             return FuzzBytes(bytes.begin(), bytes.end());

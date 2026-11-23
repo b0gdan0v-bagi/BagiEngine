@@ -1048,7 +1048,7 @@ namespace BECore::Tests {
 
     TEST(BinaryDeserializerTest, ACorruptStringTableIsRefusedAndNothingIsReadable) {
         const Vector<BinaryStreams::Entry> tree = {Number("a", 1), BinaryStreams::Object("o", {Number("bb", 2)}), Pooled("c", "bb")};
-        const Vector<uint8_t> good = BinaryStreams::Build(tree);
+        const Vector<uint8_t> good = BinaryStreams::Build(tree, Version(BinaryFormat::TabledVersion));
         const BinaryStreams::Layout layout = BinaryStreams::LayoutOf(good);
         ASSERT_EQ(BinaryFormat::Load<uint32_t>(good.data() + layout.countOffset), 4u);  // a, bb, c, o
 
@@ -1232,11 +1232,11 @@ namespace BECore::Tests {
         EXPECT_EQ(PoolString::GetStats().batchCalls, before);
     }
 
-    // A version 3 pool section never holds a text over the limit (the writer puts it inline): ReaderLimitsTest has that case
+    // Version 2 only: a version 3 pool section never holds a text over the limit (the writer puts it inline), and the stream is refused when it does
     TEST(BinaryDeserializerTest, APoolStringOverTheLimitIsAnErrorAndStaysOutOfThePool) {
         const String tooLong = FreshText("bin_long") + String(ReaderLimits::kMaxPoolStringBytes, 'x');
         const String fine = FreshText("bin_fine");
-        const Vector<uint8_t> bytes = BinaryStreams::Build({Pooled("long", tooLong), Pooled("fine", fine), Text("inline", tooLong)});
+        const Vector<uint8_t> bytes = BinaryStreams::Build({Pooled("long", tooLong), Pooled("fine", fine), Text("inline", tooLong)}, Version(BinaryFormat::TabledVersion));
 
         BinaryDeserializer reader;
         ASSERT_TRUE(reader.LoadFromBuffer(bytes));
