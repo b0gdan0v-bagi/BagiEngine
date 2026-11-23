@@ -198,10 +198,10 @@ def check_stress_game_description(client: BagiControlClient) -> None:
     check(state_version["attributes"].get("readonly") is True, f"stateVersion attributes: {state_version['attributes']}")
     check([field["owner"] for field in described["allFields"]] == ["StressGame"] * 2, "allFields of StressGame name another owner")
     set_count = named(described["methods"], "SetObjectCount", "the methods of StressGame")
-    check(set_count["callable"] is True and set_count["const"] is False, f"SetObjectCount: {set_count}")
+    check(set_count["callable"] is True and set_count["isConst"] is False, f"SetObjectCount: {set_count}")
     check([param["name"] for param in set_count["params"]] == ["count"], f"SetObjectCount params: {set_count['params']}")
     describe = named(described["methods"], "Describe", "the methods of StressGame")
-    check(describe["callable"] is True and describe["const"] is True and describe["result"]["kind"] == "string", f"Describe: {describe}")
+    check(describe["callable"] is True and describe["isConst"] is True and describe["result"]["kind"] == "string", f"Describe: {describe}")
 
 
 def check_properties(client: BagiControlClient) -> None:

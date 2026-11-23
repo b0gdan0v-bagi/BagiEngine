@@ -5,6 +5,7 @@
 #include <BECore/Control/SchemaExport.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/TypeRegistry.h>
+#include <BECore/SchemaExportReference.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/Require.h>
@@ -46,6 +47,7 @@ namespace BECore::Tests {
                 &Add<SchemaSquare, SchemaShape, SchemaShape>,
                 &Add<SchemaAllShapes>,
                 &Add<SchemaAttributed>,
+                &Add<SchemaNested>,
                 &Add<SchemaValueFields>,
                 &Add<SchemaMethods>,
             };
@@ -436,6 +438,61 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonInt(*circle, "methods"), 0);
         EXPECT_EQ(GetJsonString(*circle, "parent"), String("SchemaShape"));
         EXPECT_EQ(GetJsonString(*circle, "icon"), String("circle"));
+    }
+
+    TEST_F(SchemaExportTest, AFieldWithNoAttributeWritesAnEmptyObject) {
+        const String text = WrittenText(MakeTypeSchemaEntry(Info("SchemaAttributed"), registry));
+        EXPECT_NE(text.find(R"({"attributes":{},"name":"plain",)"), String::npos) << text.c_str();
+    }
+
+    TEST_F(SchemaExportTest, ATypeInsideATypeNestsAsDeepAsTheFieldIs) {
+        const Json table = TypeOfField(Entry("SchemaNested"), "table");
+        EXPECT_EQ(KindOf(table), "map");
+        EXPECT_EQ(KindOf(*Member(table, "key")), "int32");
+        const Json* choice = Member(table, "element");
+        ASSERT_NE(choice, nullptr);
+        EXPECT_EQ(KindOf(*choice), "variant");
+        const Json* alternatives = Member(*choice, "alternatives");
+        ASSERT_TRUE(alternatives != nullptr && alternatives->is_array());
+        ASSERT_EQ(alternatives->size(), 2U);
+        EXPECT_EQ(KindOf((*alternatives)[1]), "list");
+        EXPECT_EQ(KindOf(*Member((*alternatives)[1], "element")), "string");
+    }
+
+    // The text of the reflected answers equals the DOM they replaced (`SchemaExportReference.h`), whatever order the types were registered in
+    TEST(SchemaExportReferenceTest, TheReflectedTextEqualsTheDomOfTheOldBuilders) {
+        for (const bool reversed : {false, true}) {
+            TypeRegistry registry;
+            Fill(registry, reversed);
+            SchemaLeaf leaf;
+            ControlRoots roots;
+            roots.Register("zeta", ControlRoot{[&leaf, &registry] { return TypedRef{&leaf, &Require(registry.Find("SchemaLeaf"))}; }});
+            roots.Register("alpha", ControlRoot{});
+
+            EXPECT_EQ(WrittenText(MakeSchemaAnswer(registry, roots)), DumpJson(ReferenceBuildSchemaJson(registry, roots))) << "schema, reversed " << reversed;
+
+            for (const TypeInfo* info : registry.All()) {
+                EXPECT_EQ(WrittenText(DescribeTypeSchema(*info, registry)), DumpJson(ReferenceDescribeTypeJson(*info, registry))) << "describe_type " << info->Name().data();
+            }
+
+            ListTypesFilter below;
+            below.base = &Require(registry.Find("SchemaShape"));
+            ListTypesFilter direct = below;
+            direct.recursive = false;
+            ListTypesFilter creatable;
+            creatable.creatableOnly = true;
+            ListTypesFilter creatableBelow = below;
+            creatableBelow.creatableOnly = true;
+            for (const ListTypesFilter& filter : {ListTypesFilter{}, below, direct, creatable, creatableBelow}) {
+                EXPECT_EQ(WrittenText(MakeListTypesAnswer(registry, filter)), DumpJson(ReferenceListTypesJson(registry, filter)));
+            }
+        }
+    }
+
+    TEST(SchemaExportReferenceTest, TheRealRegistryWritesTheSameTextAsTheDom) {
+        const TypeRegistry& registry = TypeRegistry::GetInstance();
+        const ControlRoots roots;
+        EXPECT_TRUE(WrittenText(MakeSchemaAnswer(registry, roots)) == DumpJson(ReferenceBuildSchemaJson(registry, roots)));
     }
 
     TEST(SchemaExportOrderTest, TheOrderOfRegistrationDoesNotShow) {
