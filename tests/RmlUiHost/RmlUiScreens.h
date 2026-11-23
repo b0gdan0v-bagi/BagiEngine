@@ -142,7 +142,7 @@ button { width: 124dp; height: 48dp; font-size: 24dp; line-height: 48dp; text-al
     }
 
     /// The scenes of @p screen put into @p manager, the scene "S" active; the document component of its one node with the RML of the screen in it
-    inline IntrusivePtr<RmlUiDocumentComponent> LoadScreen(IntrusivePtrAtomic<SceneManager>& manager, const Screen& screen) {
+    inline IntrusivePtr<RmlUiDocumentComponent> LoadScreen(IntrusivePtr<SceneManager>& manager, const Screen& screen) {
         XmlDeserializer deserializer;
         EXPECT_TRUE(deserializer.LoadFromString(SceneXml(screen)));
         manager = New<SceneManager>();

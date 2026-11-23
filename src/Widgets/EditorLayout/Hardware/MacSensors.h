@@ -30,7 +30,7 @@ namespace BECore {
         UniquePtr<State> _state;
     };
 
-    using MacSensorsPtr = IntrusivePtrAtomic<MacSensors>;
+    using MacSensorsPtr = IntrusivePtr<MacSensors>;
 
 }  // namespace BECore
 

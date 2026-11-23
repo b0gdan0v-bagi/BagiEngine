@@ -300,17 +300,17 @@ namespace BECore {
         struct JsonWritePtrHolder {
             BE_CLASS(JsonWritePtrHolder)
 
-            BE_REFLECT_FIELD IntrusivePtrNonAtomic<JsonWritePtrBase> factory;
-            BE_REFLECT_FIELD IntrusivePtrNonAtomic<JsonWritePtrBase> none;
-            BE_REFLECT_FIELD IntrusivePtrNonAtomic<JsonWritePtrPlain> plain;
-            BE_REFLECT_FIELD IntrusivePtrNonAtomic<JsonWritePtrPlain> nothing;
+            BE_REFLECT_FIELD IntrusivePtr<JsonWritePtrBase> factory;
+            BE_REFLECT_FIELD IntrusivePtr<JsonWritePtrBase> none;
+            BE_REFLECT_FIELD IntrusivePtr<JsonWritePtrPlain> plain;
+            BE_REFLECT_FIELD IntrusivePtr<JsonWritePtrPlain> nothing;
         };
 
         /// Sequences of pointers stay on the bridge
         struct JsonWritePtrListHolder {
             BE_CLASS(JsonWritePtrListHolder)
 
-            BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<JsonWritePtrBase>> list;
+            BE_REFLECT_FIELD Vector<IntrusivePtr<JsonWritePtrBase>> list;
         };
 
         struct JsonWriteEvent {

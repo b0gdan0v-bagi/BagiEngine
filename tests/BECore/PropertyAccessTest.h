@@ -105,9 +105,9 @@ namespace BECore::PropertyAccessData {
         BE_REFLECT_FIELD Optional<PaItem> maybeItem;
         BE_REFLECT_FIELD Variant<int32_t, String> choice;
         BE_REFLECT_FIELD Pair<int32_t, String> entry;
-        BE_REFLECT_FIELD IntrusivePtrNonAtomic<PaNode> node;
-        BE_REFLECT_FIELD IntrusivePtrNonAtomic<PaNode> emptyNode;
-        BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<PaNode>> nodes;
+        BE_REFLECT_FIELD IntrusivePtr<PaNode> node;
+        BE_REFLECT_FIELD IntrusivePtr<PaNode> emptyNode;
+        BE_REFLECT_FIELD Vector<IntrusivePtr<PaNode>> nodes;
     };
 
     class PaBase : public RefCounted {

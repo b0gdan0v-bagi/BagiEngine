@@ -190,7 +190,7 @@ namespace BECore::Tests {
             _manager->DrawAll();
         }
 
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
     };
 
     TEST_F(SceneEventsTest, OnlyActiveSceneReceivesUpdateAndDraw) {

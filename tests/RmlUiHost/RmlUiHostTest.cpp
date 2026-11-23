@@ -302,8 +302,8 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         }
 
         IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        IntrusivePtrAtomic<SceneManager> _fileManager;
+        IntrusivePtr<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _fileManager;
         UISettings _savedSettings;
         std::filesystem::path _directory;
         static inline int _edits = 0;

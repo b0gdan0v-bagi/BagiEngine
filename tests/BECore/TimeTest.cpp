@@ -254,7 +254,7 @@ namespace BECore::Tests {
             CoreManager::GetTime().Reset();
         }
 
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
         IntrusivePtr<SpeedProbe> _probe;
     };
 

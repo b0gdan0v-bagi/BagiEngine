@@ -198,7 +198,7 @@ namespace BECore::Tests {
 
         IntrusivePtr<SDLMainWindow> window;
         IntrusivePtr<SDLRendererBackend> renderer;
-        IntrusivePtrAtomic<SceneManager> manager;
+        IntrusivePtr<SceneManager> manager;
         IntrusivePtr<UICanvasComponent> canvas;
     };
 

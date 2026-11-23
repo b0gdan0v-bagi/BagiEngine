@@ -15,7 +15,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        using Node = IntrusivePtrNonAtomic<CalcNode>;
+        using Node = IntrusivePtr<CalcNode>;
 
         Node Number(StringView text) {
             auto node = New<CalcNumber>();

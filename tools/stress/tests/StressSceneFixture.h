@@ -89,7 +89,7 @@ namespace BECore::Stress::Tests {
         }
 
         IntrusivePtr<BECore::Tests::RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
     };
 
 }  // namespace BECore::Stress::Tests

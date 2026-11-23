@@ -551,7 +551,7 @@ namespace BECore::Tests {
             SceneFixture& operator=(const SceneFixture&) = delete;
 
             /// Parse, expansion of the references and deserialize
-            IntrusivePtrAtomic<SceneManager> LoadFromXml() const {
+            IntrusivePtr<SceneManager> LoadFromXml() const {
                 pugi::xml_document document;
                 if (!document.load_buffer(_text.data(), _text.size())) {
                     return {};
@@ -559,7 +559,7 @@ namespace BECore::Tests {
                 return LoadSceneManager(XmlNode{document.document_element()}, MakeDirectoryNodeLoader(_dir));
             }
 
-            IntrusivePtrAtomic<SceneManager> LoadFromBinary() const {
+            IntrusivePtr<SceneManager> LoadFromBinary() const {
                 BinaryDeserializer reader;
                 if (!reader.LoadFromView(_binary.data(), _binary.size())) {
                     return {};
@@ -574,7 +574,7 @@ namespace BECore::Tests {
         };
 
         LoadMeasure MeasureSceneLoad(const SceneFixture& fixture, FileFormat format) {
-            IntrusivePtrAtomic<SceneManager> manager;
+            IntrusivePtr<SceneManager> manager;
             bool loaded = false;
             const LoadMeasure measure = MeasureCall(
                 [&] {

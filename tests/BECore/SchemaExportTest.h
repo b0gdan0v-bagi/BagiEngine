@@ -94,7 +94,7 @@ namespace BECore::SchemaTestData {
         BE_REFLECT_FIELD PoolString name;
         BE_REFLECT_FIELD SchemaMode mode = SchemaMode::Off;
         BE_REFLECT_FIELD SchemaLeaf leaf;
-        BE_REFLECT_FIELD IntrusivePtrNonAtomic<SchemaNode> node;
+        BE_REFLECT_FIELD IntrusivePtr<SchemaNode> node;
         BE_REFLECT_FIELD Vector<int32_t> items;
         BE_REFLECT_FIELD FixedVector<int32_t, 3> fixedItems;
         BE_REFLECT_FIELD Map<int32_t, String> ordered;
@@ -102,7 +102,7 @@ namespace BECore::SchemaTestData {
         BE_REFLECT_FIELD Pair<int32_t, String> entry;
         BE_REFLECT_FIELD Variant<int32_t, String> choice;
         BE_REFLECT_FIELD Vector<SchemaLeaf> leaves;
-        BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<SchemaShape>> shapes;
+        BE_REFLECT_FIELD Vector<IntrusivePtr<SchemaShape>> shapes;
     };
 
     /// A field of each kind of attribute, and one with none

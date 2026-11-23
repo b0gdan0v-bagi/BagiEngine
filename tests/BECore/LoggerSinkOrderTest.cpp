@@ -43,7 +43,7 @@ namespace BECore::Tests {
             return xml;
         }
 
-        IntrusivePtrAtomic<LoggerManager> MakeManager(StringView xml = kSinksXml) {
+        IntrusivePtr<LoggerManager> MakeManager(StringView xml = kSinksXml) {
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(xml));
             auto manager = New<LoggerManager>();

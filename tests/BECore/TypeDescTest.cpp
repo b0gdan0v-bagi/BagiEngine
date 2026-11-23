@@ -116,8 +116,8 @@ namespace BECore::Tests {
     // Objects and pointers have their class on the descriptor as a function: the type's own generated code may be elsewhere
     static_assert(DescribeType<RegInner>().kind == TypeKind::Object);
     static_assert(DescribeType<RegInner>().objectMeta != nullptr);
-    static_assert(DescribeType<IntrusivePtrNonAtomic<RegNode>>().kind == TypeKind::Pointer);
-    static_assert(DescribeType<Vector<IntrusivePtrNonAtomic<RegNode>>>().element->kind == TypeKind::Pointer);
+    static_assert(DescribeType<IntrusivePtr<RegNode>>().kind == TypeKind::Pointer);
+    static_assert(DescribeType<Vector<IntrusivePtr<RegNode>>>().element->kind == TypeKind::Pointer);
 
     // A type with a Serialize / Deserialize pair that is no reflected class
     static_assert(DescribeType<Vec2>().kind == TypeKind::Opaque);
@@ -143,8 +143,8 @@ namespace BECore::Tests {
 
         static_assert(AgreeWithAccessor<bool, int8_t, uint64_t, float, double, String, FixedString<8>, FixedString<8, false>, PoolString, RegMode, RegInner, Vec2, AccessorOnly, Vector<int32_t>,
                                         SmallVector<int32_t, 2>, FixedVector<int32_t, 2>, Array<int32_t, 2>, HashMap<String, int32_t>, HashMap<int32_t, String>, FixedHashMap<String, int32_t, 4>,
-                                        Map<String, int32_t>, Optional<int32_t>, Pair<int32_t, String>, Variant<int32_t, float>, std::monostate, IntrusivePtrNonAtomic<RegNode>,
-                                        IntrusivePtrAtomic<RegNode>, Vector<IntrusivePtrNonAtomic<RegNode>>, Value<float>, Value<Vec3>, ContextDecl>());
+                                        Map<String, int32_t>, Optional<int32_t>, Pair<int32_t, String>, Variant<int32_t, float>, std::monostate, IntrusivePtr<RegNode>, Vector<IntrusivePtr<RegNode>>,
+                                        Value<float>, Value<Vec3>, ContextDecl>());
 
         // The aliases ReflectionAliasesTest lists as having no accessor
         static_assert(AgreeWithAccessor<FlatMap<String, int32_t>, FlatSet<int32_t>, Span<int32_t>, UniquePtr<int32_t>, HashSet<int32_t>, Set<int32_t>, Tuple<int32_t, float>, int32_t*, void*>());
@@ -173,10 +173,9 @@ namespace BECore::Tests {
     }
 
     TEST(TypeDescTest, PointerIsNamedByItsPointee) {
-        const TypeDesc& desc = DescribeType<IntrusivePtrNonAtomic<RegNode>>();
+        const TypeDesc& desc = DescribeType<IntrusivePtr<RegNode>>();
         EXPECT_EQ(desc.ObjectName(), "RegNode");
         EXPECT_EQ(desc.ObjectHash(), HashOf("RegNode"));
-        EXPECT_EQ(DescribeType<IntrusivePtrAtomic<RegNode>>().ObjectHash(), desc.ObjectHash());
     }
 
     TEST(TypeDescTest, OpaqueAndScalarsHaveNoClass) {
@@ -195,7 +194,6 @@ namespace BECore::Tests {
         EXPECT_FALSE((SameAs<Map<String, int32_t>, Map<int32_t, int32_t>>()));
         EXPECT_FALSE((SameAs<Variant<int32_t, float>, Variant<float, int32_t>>()));
         EXPECT_FALSE((SameAs<RegInner, RegNode>()));
-        EXPECT_TRUE((SameAs<IntrusivePtrNonAtomic<RegNode>, IntrusivePtrAtomic<RegNode>>()));
     }
 
     TEST(TypeDescTest, EnumIdentityIsItsNamesAndItsSize) {

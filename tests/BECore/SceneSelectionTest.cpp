@@ -63,7 +63,7 @@ namespace BECore::Tests {
             }
         }
 
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
         Scene* _scene = nullptr;
         SceneSelection _selection;
     };

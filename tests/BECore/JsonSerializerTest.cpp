@@ -172,12 +172,12 @@ namespace BECore::Tests {
         RegInner inner;
         inner.value = 3;
         inner.label = "l";
-        IntrusivePtrNonAtomic<RegNode> node = New<RegNode>();
+        IntrusivePtr<RegNode> node = New<RegNode>();
         node->id = 9;
 
         ExpectSaved(inner, R"({"k":{"label":"l","value":3}})");
         ExpectSaved(node, R"({"k":{"id":9}})");
-        ExpectSaved(IntrusivePtrNonAtomic<RegNode>(), R"({})");
+        ExpectSaved(IntrusivePtr<RegNode>(), R"({})");
     }
 
     TEST(JsonSerializerTest, EveryKindOfAClassSavesUnderItsSerializedName) {
@@ -230,7 +230,7 @@ namespace BECore::Tests {
     TEST(JsonSerializerTest, AFactoryElementCarriesItsTypeAndEnabled) {
         NoHookProbeList list;
         for (const int32_t value : {4, 5}) {
-            IntrusivePtrNonAtomic<NoHookProbeImpl> item = New<NoHookProbeImpl>();
+            IntrusivePtr<NoHookProbeImpl> item = New<NoHookProbeImpl>();
             item->value = value;
             list.items.push_back(item);
         }

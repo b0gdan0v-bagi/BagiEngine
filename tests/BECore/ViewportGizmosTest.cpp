@@ -141,7 +141,7 @@ namespace BECore::Tests {
         }
 
         IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtr<SceneManager> _manager;
         Vector<SceneNode*> _nodes;
         Vector<Gizmo::Item> _items;
         EditRecorder _recorder;

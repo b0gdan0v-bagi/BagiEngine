@@ -106,7 +106,7 @@ namespace BECore::Tests {
             BE_REFLECT_FIELD Leaf leaf;
             BE_REFLECT_FIELD Vector<Leaf> leaves;
             BE_REFLECT_FIELD HashMap<int32_t, Leaf> table;
-            BE_REFLECT_FIELD Vector<IntrusivePtrNonAtomic<DiagProbe>> probes;
+            BE_REFLECT_FIELD Vector<IntrusivePtr<DiagProbe>> probes;
         };
 
     }  // namespace XmlDiagnosticsTestData

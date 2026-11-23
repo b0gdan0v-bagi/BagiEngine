@@ -9,7 +9,7 @@ namespace BECore::Tests {
     namespace {
 
         /// A history sink alone: nothing is written to a file, and the other sinks of the shipped config are not built
-        IntrusivePtrAtomic<LoggerManager> MakeManager(StringView attributes) {
+        IntrusivePtr<LoggerManager> MakeManager(StringView attributes) {
             const String xml = Format("<root><sinks><sink type=\"LogHistorySink\" enabled=\"true\" {}/></sinks></root>", attributes);
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(xml));

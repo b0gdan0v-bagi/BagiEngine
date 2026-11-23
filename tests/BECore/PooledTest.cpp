@@ -112,7 +112,7 @@ namespace BECore::Tests {
             auto child = New<BigPooledChild>();
             EXPECT_EQ(child->_value, 9);
             EXPECT_EQ(PooledAtomic::PooledPool().GetLiveCount(), before);
-            IntrusivePtrAtomic<PooledAtomic> asBase = child;
+            IntrusivePtr<PooledAtomic> asBase = child;
             child = nullptr;
             EXPECT_EQ(asBase->_value, 9);
         }
