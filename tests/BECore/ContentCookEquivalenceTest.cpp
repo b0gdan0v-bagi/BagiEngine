@@ -277,6 +277,34 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(extra.ToText(), "no source layer")) << extra.ToText().c_str();
     }
 
+    TEST_F(ContentCookEquivalenceTest, ACookMadeInFoldersWithNonAsciiNamesVerifiesAndNamesTheMissingAndTheExtraLayer) {
+        Cookable("Doc");
+        const std::filesystem::path layer = _tree.Root() / "caf\xC3\xA9" / "conf\xC3\xA9";
+        const std::filesystem::path out = _tree.Root() / "sorti\xC3\xA9";
+        WriteFile(layer / "dossier\xC3\xA9" / "Doc.xml", kDocumentXml);
+        WriteFile(layer / "note\xC3\xA9.txt", "text");
+        FileSystem files;
+        ASSERT_TRUE(files.Mount(MountPoints::config, layer));
+
+        const CookReport missing = VerifyCooked(files, out, _registry);
+        EXPECT_FALSE(missing.Ok());
+        EXPECT_TRUE(Contains(missing.ToText(), "sorti\xC3\xA9/layer0/config' does not exist")) << missing.ToText().c_str();
+
+        const CookReport cooked = CookContent(files, out, _registry);
+        ASSERT_TRUE(cooked.Ok()) << cooked.ToText().c_str();
+        const CookReport verified = VerifyCooked(files, out, _registry);
+        EXPECT_TRUE(verified.Ok()) << verified.ToText().c_str();
+        ASSERT_NE(FindRow(verified, 0, "dossier\xC3\xA9/Doc.xml"), nullptr);
+        EXPECT_EQ(FindRow(verified, 0, "dossier\xC3\xA9/Doc.xml")->outcome, CookOutcome::Cooked);
+        ASSERT_NE(FindRow(verified, 0, "note\xC3\xA9.txt"), nullptr);
+        EXPECT_EQ(FindRow(verified, 0, "note\xC3\xA9.txt")->outcome, CookOutcome::Copied);
+
+        MakeDirectory(out / "layer1" / "config");
+        const CookReport extra = VerifyCooked(files, out, _registry);
+        EXPECT_FALSE(extra.Ok());
+        EXPECT_TRUE(Contains(extra.ToText(), "sorti\xC3\xA9/layer1/config' is a cooked layer that has no source layer")) << extra.ToText().c_str();
+    }
+
     TEST(ContentVerifyDifference, EqualTextsHaveNoDifference) {
         EXPECT_TRUE(DescribeDifference("a\nb\n", "a\nb\n").empty());
         EXPECT_TRUE(DescribeDifference("", "").empty());
