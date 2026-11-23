@@ -24,7 +24,7 @@ namespace BECore {
             return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'path' is empty"));
         }
 
-        _file.open(ToStd(path), std::ios::binary | std::ios::trunc);
+        _file.open(String(path).c_str(), std::ios::binary | std::ios::trunc);
         if (!_file) {
             _file.clear();
             return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("cannot write '{}'", path)));
