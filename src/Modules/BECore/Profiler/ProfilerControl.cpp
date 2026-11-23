@@ -176,7 +176,7 @@ namespace BECore {
             const uint64_t dropped = recorder.GetDroppedCount();
             ProfilerDumpAnswer answer;
             answer.dropped = dropped;
-            answer.path = path;
+            answer.path = TextView(path);
             call.ReplyObject(answer);
         }
 
@@ -203,6 +203,9 @@ namespace BECore {
             ZoneAllocsAnswer answer;
             answer.enabled = AllocTracker::kEnabled;
             const size_t limit = static_cast<size_t>(*top);
+            answer.names.reserve(std::min(names.size(), limit));
+            answer.sizes.reserve(std::min(sizes.size(), limit));
+            answer.zones.reserve(std::min(zones.size(), limit));
             for (size_t i = 0; i < names.size() && i < limit; ++i) {
                 answer.names.push_back(ProfilerAllocName::Read(names[i]));
             }
