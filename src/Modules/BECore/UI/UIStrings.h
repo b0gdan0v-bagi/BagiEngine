@@ -15,8 +15,9 @@ namespace BECore {
      *
      * A text refers to a string with `{#key}`: `text="{#menu.start}"`, or mixed with variables, `"{#score.title}: {score}"`. Resolve() replaces every `{#key}` by the string of
      * the current language, else of the default language, else by the key itself (a missing translation shows in the window and is recorded in GetMissing(), never an empty
-     * label). The result then goes through `UIVars::Expand`, so a translation may contain `{score}`; a string is not resolved again (no recursion). `{{` and `}}` are left
-     * alone here: they are a literal brace for the variable step.
+     * label). The result then goes through `UIVars::Expand`, so a translation may contain `{score}`; a string is not resolved again (no recursion). A label builds both steps into buffers that
+     * keep their capacity (the scratch arena for the resolved text, the label's own `String` for the final one), so a text that changes every frame allocates nothing after the first long one. `{{`
+     * and `}}` are left alone here: they are a literal brace for the variable step.
      *
      * The table is pure data: no scene, no services, no log. It is loaded from `config/UIStrings.xml` by Initialize() (a game ships the file, the engine ships none), and the
      * game picks the language in code with SetLanguage(). Main thread only.
@@ -68,6 +69,10 @@ namespace BECore {
         /// empty `{#}` and a `{{#` stay as written
         [[nodiscard]] String Resolve(StringView text);
 
+        /// The same into @p out (cleared first), a buffer of the caller's scratch arena (`ScratchScope`): the pipeline of a label builds its text without a heap temporary.
+        /// @p text must not point into @p out. Include <BECore/Memory/ArenaAllocator.h> to declare an ArenaString
+        void Resolve(StringView text, ArenaString& out);
+
         /// True when Resolve() could change @p text: a `{#` that is not part of `{{`
         [[nodiscard]] static bool HasReferences(StringView text);
 
@@ -112,6 +117,8 @@ namespace BECore {
         [[nodiscard]] const Language* FindLanguage(PoolString language) const;
         [[nodiscard]] const String* FindString(const Language* language, StringView key) const;
         void RecordMissing(StringView key);
+        template <typename TString>
+        void ResolveInto(StringView text, TString& result);
         void SyncLanguageView();
 
         Vector<Language> _languages;
