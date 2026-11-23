@@ -259,7 +259,7 @@ namespace BECore::Tests {
                     _connections.push_back(connection);
                     ++_opened;
                 };
-                handler.onMessage = [this](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessage message) {
+                handler.onMessage = [this](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessageView message) {
                     connection->QueueText(message.GetText());
                     return true;
                 };

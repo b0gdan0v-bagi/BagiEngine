@@ -456,6 +456,27 @@ namespace BECore::Tests {
         }
     }
 
+    TEST_F(WebSocketServerTest, EventsAndAResponseOfOneConnectionKeepTheOrderTheyWereQueuedIn) {
+        const uint16_t port = StartServer();
+        auto client = Connect(port);
+        ASSERT_TRUE(client.has_value());
+
+        service.Publish("first", Json::object());
+        client->SendText(Request(7, "ping"));
+        service.Publish("second", Json::object());
+
+        // The request is answered only when the main thread drains, which the waiting client does after both events are queued
+        Vector<String> seen;
+        for (int i = 0; i < 3; ++i) {
+            const auto frame = client->WaitForFrame();
+            ASSERT_TRUE(frame.has_value());
+            const auto parsed = ParseJson(frame->payload);
+            ASSERT_TRUE(parsed.has_value());
+            seen.push_back(GetJsonString(*parsed, "event").value_or(Format("response:{}", GetJsonInt(*parsed, "id").value_or(-1))));
+        }
+        EXPECT_EQ(seen, (Vector<String>{"first", "second", "response:7"}));
+    }
+
     TEST_F(WebSocketServerTest, NoEventsAreSentAfterStop) {
         const uint16_t port = StartServer();
         auto client = Connect(port);

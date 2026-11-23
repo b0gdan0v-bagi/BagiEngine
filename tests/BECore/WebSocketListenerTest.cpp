@@ -77,7 +77,7 @@ namespace BECore::Tests {
                     recorder.AddConnection(connection);
                     recorder.Add(Format("open:{}", connection->GetId()));
                 };
-                handler.onMessage = [this](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessage message) {
+                handler.onMessage = [this](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessageView message) {
                     const String text(message.GetText().data(), message.GetText().size());
                     recorder.Add(Format("text:{}:{}", connection->GetId(), text));
                     if (text == "quit") {
@@ -704,6 +704,26 @@ namespace BECore::Tests {
         EXPECT_TRUE(connectionB->IsOpen());
     }
 
+    TEST_F(WebSocketListenerTest, BroadcastTextReachesOpenConnectionsOnlyAndIsHarmlessWithoutAny) {
+        const uint16_t port = Start();
+        listener->BroadcastText("nobody listens");
+
+        auto first = Connect(port);
+        auto second = Connect(port);
+        auto unfinished = WebSocketTestClient::Open(port);
+        ASSERT_TRUE(first && second && unfinished);
+        unfinished->Send(String("GET / HTT"));
+        ASSERT_TRUE(WaitForEvents("open:", 2));
+
+        listener->BroadcastText("hello all");
+        for (WebSocketTestClient* client : {&*first, &*second}) {
+            const auto frame = client->WaitForFrame();
+            ASSERT_TRUE(frame.has_value());
+            EXPECT_EQ(frame->payload, "hello all");
+        }
+        EXPECT_FALSE(unfinished->TryReadFrame().has_value()) << "a connection in its handshake gets no frame";
+    }
+
     TEST_F(WebSocketListenerTest, AHandlerThatOwnsAMoveOnlyCaptureRunsForAConnectionAndIsDestroyedOnceWithTheListener) {
         struct Sentinel {
             explicit Sentinel(std::atomic<int>& target) : destroyed(target) {}
@@ -716,7 +736,7 @@ namespace BECore::Tests {
         std::atomic<int> destroyed{0};
         {
             WebSocketHandler handler;
-            handler.onMessage = [owned = MakeUnique<Sentinel>(destroyed)](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessage message) {
+            handler.onMessage = [owned = MakeUnique<Sentinel>(destroyed)](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessageView message) {
                 owned->messages.fetch_add(1);
                 connection->QueueText(message.GetText());
                 return true;

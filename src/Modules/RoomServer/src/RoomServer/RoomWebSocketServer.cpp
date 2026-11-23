@@ -68,7 +68,7 @@ namespace BECore {
             }
             PushEvent(EventKind::Opened, connection->GetId(), _passAddress ? connection->GetClientAddress() : String());
         };
-        handler.onMessage = [this](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessage message) {
+        handler.onMessage = [this](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessageView message) {
             return PushEvent(EventKind::Message, connection->GetId(), String(message.GetText()));
         };
         handler.onClosed = [this](const WebSocketHandler::ConnectionPtr& connection) {
