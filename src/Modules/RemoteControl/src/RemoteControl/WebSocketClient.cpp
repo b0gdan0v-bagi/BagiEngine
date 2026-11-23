@@ -69,6 +69,7 @@ namespace BECore {
     }
 
     bool WebSocketClient::SendText(StringView text) {
+        BE_PROFILE_SCOPE("WS encode");
         return QueueFrame(WebSocketOpcode::kText, Vector<uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), reinterpret_cast<const uint8_t*>(text.data()) + text.size()),
                           /*isClose=*/false);
     }
@@ -314,12 +315,21 @@ namespace BECore {
 
     void WebSocketClient::ReadMessages(Vector<uint8_t> pendingBytes) {
         WebSocketFrameParser parser(_settings.maxMessageBytes, WebSocketPeer::Server);
-        parser.Feed(Span<const uint8_t>(pendingBytes.data(), pendingBytes.size()));
+        // The zone ends before the handler runs, so the parse is not counted with the dispatch; the blocking Receive is outside both
+        const auto feed = [&parser](Span<const uint8_t> bytes) {
+            BE_PROFILE_SCOPE("WS read");
+            parser.Feed(bytes);
+        };
+        const auto pop = [&parser] {
+            BE_PROFILE_SCOPE("WS read");
+            return parser.Pop();
+        };
+        feed(Span<const uint8_t>(pendingBytes.data(), pendingBytes.size()));
 
         Array<uint8_t, kReadChunkSize> chunk;
         for (;;) {
             for (;;) {
-                auto popped = parser.Pop();
+                auto popped = pop();
                 if (!popped) {
                     LOG_WARNING("{}: the server broke the protocol: {}"_format(_settings.logName, popped.error().reason));
                     SetEnd(popped.error().closeCode, popped.error().reason);
@@ -342,11 +352,12 @@ namespace BECore {
                 return;
             }
             _bytesReceived.fetch_add(*received, std::memory_order_relaxed);
-            parser.Feed(Span<const uint8_t>(chunk.data(), *received));
+            feed(Span<const uint8_t>(chunk.data(), *received));
         }
     }
 
     bool WebSocketClient::HandleMessage(WebSocketMessage message) {
+        BE_PROFILE_SCOPE("WS dispatch");
         switch (message.kind) {
             case WebSocketMessageKind::Text:
                 return PushText(message);
@@ -407,7 +418,12 @@ namespace BECore {
                 mask[i] = static_cast<uint8_t>((random >> (kBitsPerByte * i)) & kByteMask);
             }
             const Vector<uint8_t> bytes = EncodeFrame(frame.opcode, Span<const uint8_t>(frame.payload.data(), frame.payload.size()), mask);
-            if (!_stream.SendAll(Span<const uint8_t>(bytes.data(), bytes.size()))) {
+            bool sent = false;
+            {
+                BE_PROFILE_SCOPE("WS write");
+                sent = _stream.SendAll(Span<const uint8_t>(bytes.data(), bytes.size()));
+            }
+            if (!sent) {
                 AbortConnection(WebSocketCloseCode::kAbnormalClosure, WithStreamError("sending to the server failed"));
                 break;
             }

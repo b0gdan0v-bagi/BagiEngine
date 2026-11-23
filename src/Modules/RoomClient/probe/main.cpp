@@ -4,6 +4,8 @@
 
 #include <BECore/Control/Json.h>
 #include <BECore/Logger/ConsoleSink.h>
+#include <BECore/Profiler/Profiler.h>
+#include <BECore/Profiler/ProfilerSettings.h>
 #include <RoomClient/RoomClient.h>
 #include <chrono>
 #include <cstdio>
@@ -24,19 +26,25 @@ namespace {
         String url;
         String game = "cards";
         String name = "Probe";
+        ProfilerSettings profiler;
     };
 
     void PrintUsage() {
-        std::printf("BagiRoomClientProbe --url ws://host:port [--game cards] [--name Probe]\n");
+        std::printf("BagiRoomClientProbe --url ws://host:port [--game cards] [--name Probe] [--trace=FILE] [--profiler=none|chrome|tracy]\n");
     }
 
     /// Reads the arguments; false (after a message) when they are not usable
     bool ParseArgs(int argc, char* argv[], ProbeArgs& args) {
+        Vector<String> profilerArguments;
         for (int i = 1; i < argc; ++i) {
             const StringView flag = argv[i];
             if (flag == "--help" || flag == "-h") {
                 PrintUsage();
                 return false;
+            }
+            if (flag.starts_with(ProfilerArguments::kTracePrefix) || flag.starts_with(ProfilerArguments::kProfilerPrefix)) {
+                profilerArguments.emplace_back(flag);
+                continue;
             }
             if (i + 1 >= argc || (flag != "--url" && flag != "--game" && flag != "--name")) {
                 std::fprintf(stderr, "BagiRoomClientProbe: unknown argument or a missing value: %s\n", argv[i]);
@@ -55,6 +63,12 @@ namespace {
             std::fprintf(stderr, "BagiRoomClientProbe: --url is required\n");
             return false;
         }
+        const auto profiler = ResolveProfilerSettings(profilerArguments);
+        if (!profiler) {
+            std::fprintf(stderr, "BagiRoomClientProbe: Profiler: %s\n", profiler.error().c_str());
+            return false;
+        }
+        args.profiler = *profiler;
         return true;
     }
 
@@ -62,6 +76,74 @@ namespace {
         std::printf("PROBE FAILED %s\n", message.c_str());
         std::fflush(stdout);
         return kExitFailed;
+    }
+
+    int RunProbe(const ProbeArgs& args) {
+        // A lost connection ends the probe at once: it is a check, not a player, so it does not wait for a reconnect
+        RoomClientSettings settings;
+        settings.reconnect = false;
+        RoomClient client(std::move(settings));
+        if (const auto hosted = client.Host(args.url, args.game, args.name); !hosted) {
+            return Fail(Format("{}: {}", hosted.error().code, hosted.error().message));
+        }
+
+        Vector<RoomClientEvent> events;
+        bool started = false;
+        bool sawView = false;
+        uint64_t actedVersion = 0;
+        const auto deadline = std::chrono::steady_clock::now() + kTimeLimit;
+
+        while (std::chrono::steady_clock::now() < deadline) {
+            client.Poll();
+            LogEvent::Flush();
+            events.clear();
+            client.DrainEvents(events);
+            for (const RoomClientEvent& event : events) {
+                switch (event.kind) {
+                    case RoomClientEventKind::Error:
+                    case RoomClientEventKind::Closed:
+                        return Fail(Format("{} {} {}", EnumUtils<RoomClientEventKind>::ToString(event.kind), event.code, event.message));
+                    case RoomClientEventKind::ConnectionLost:
+                        return Fail(Format("connection lost: {}", event.message));
+                    case RoomClientEventKind::Joined:
+                        if (!started) {
+                            started = true;
+                            if (const auto result = client.Start(); !result) {
+                                return Fail(Format("{}: {}", result.error().code, result.error().message));
+                            }
+                        }
+                        break;
+                    case RoomClientEventKind::ViewChanged:
+                        if (!sawView) {
+                            sawView = true;
+                            // smoke.py waits for this line before it takes the server away
+                            std::printf("PROBE first view version=%llu\n", static_cast<unsigned long long>(client.GetViewVersion()));
+                            std::fflush(stdout);
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            if (client.IsFinished()) {
+                std::printf("PROBE OK finished version=%llu\n", static_cast<unsigned long long>(client.GetViewVersion()));
+                std::fflush(stdout);
+                client.Disconnect();
+                return kExitOk;
+            }
+
+            // Its turn: the view carries actions, and one version is answered once
+            const Json& actions = client.GetActions();
+            if (client.HasView() && actions.is_array() && !actions.empty() && client.GetViewVersion() != actedVersion) {
+                actedVersion = client.GetViewVersion();
+                if (const auto result = client.SendAction(actions.front()); !result) {
+                    return Fail(Format("{}: {}", result.error().code, result.error().message));
+                }
+            }
+            std::this_thread::sleep_for(kPollInterval);
+        }
+        return Fail("no end of the game in 30 s");
     }
 
 }  // namespace
@@ -75,69 +157,19 @@ int main(int argc, char* argv[]) {
     auto console = New<ConsoleSink>();
     console->Initialize();
 
-    // A lost connection ends the probe at once: it is a check, not a player, so it does not wait for a reconnect
-    RoomClientSettings settings;
-    settings.reconnect = false;
-    RoomClient client(std::move(settings));
-    if (const auto hosted = client.Host(args.url, args.game, args.name); !hosted) {
-        return Fail(Format("{}: {}", hosted.error().code, hosted.error().message));
+    // First: the trace covers the whole run, and a profiler flag that cannot be honoured stops the probe before it connects
+    BE_PROFILE_THREAD_ORDER("Main", 0);
+    if (const auto started = Profiler::Start(args.profiler); !started) {
+        std::fprintf(stderr, "BagiRoomClientProbe: Profiler: %s\n", started.error().c_str());
+        return kExitUsage;
     }
 
-    Vector<RoomClientEvent> events;
-    bool started = false;
-    bool sawView = false;
-    uint64_t actedVersion = 0;
-    const auto deadline = std::chrono::steady_clock::now() + kTimeLimit;
+    int code = RunProbe(args);
 
-    while (std::chrono::steady_clock::now() < deadline) {
-        client.Poll();
-        LogEvent::Flush();
-        events.clear();
-        client.DrainEvents(events);
-        for (const RoomClientEvent& event : events) {
-            switch (event.kind) {
-                case RoomClientEventKind::Error:
-                case RoomClientEventKind::Closed:
-                    return Fail(Format("{} {} {}", EnumUtils<RoomClientEventKind>::ToString(event.kind), event.code, event.message));
-                case RoomClientEventKind::ConnectionLost:
-                    return Fail(Format("connection lost: {}", event.message));
-                case RoomClientEventKind::Joined:
-                    if (!started) {
-                        started = true;
-                        if (const auto result = client.Start(); !result) {
-                            return Fail(Format("{}: {}", result.error().code, result.error().message));
-                        }
-                    }
-                    break;
-                case RoomClientEventKind::ViewChanged:
-                    if (!sawView) {
-                        sawView = true;
-                        // smoke.py waits for this line before it takes the server away
-                        std::printf("PROBE first view version=%llu\n", static_cast<unsigned long long>(client.GetViewVersion()));
-                        std::fflush(stdout);
-                    }
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        if (client.IsFinished()) {
-            std::printf("PROBE OK finished version=%llu\n", static_cast<unsigned long long>(client.GetViewVersion()));
-            std::fflush(stdout);
-            client.Disconnect();
-            return kExitOk;
-        }
-
-        // Its turn: the view carries actions, and one version is answered once
-        const Json& actions = client.GetActions();
-        if (client.HasView() && actions.is_array() && !actions.empty() && client.GetViewVersion() != actedVersion) {
-            actedVersion = client.GetViewVersion();
-            if (const auto result = client.SendAction(actions.front()); !result) {
-                return Fail(Format("{}: {}", result.error().code, result.error().message));
-            }
-        }
-        std::this_thread::sleep_for(kPollInterval);
+    // After RunProbe: its client is destroyed, so the reader and the writer threads are joined and every zone is complete in the file
+    if (const auto finished = Profiler::Finish(); !finished) {
+        std::fprintf(stderr, "BagiRoomClientProbe: Profiler: %s\n", finished.error().c_str());
+        code = code == kExitOk ? kExitFailed : code;
     }
-    return Fail("no end of the game in 30 s");
+    return code;
 }
