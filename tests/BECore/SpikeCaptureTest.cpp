@@ -2,6 +2,7 @@
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/Ring/FrozenTrace.h>
 #include <BECore/Profiler/Ring/SpikeCapture.h>
+#include <Common/AllocCheck.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <gtest/gtest.h>
@@ -149,6 +150,18 @@ namespace BECore::Tests {
         capture.Update(snapshot);
         ASSERT_EQ(capture.GetSpikes().size(), 1u);
         EXPECT_EQ(capture.GetSpikes()[0].frameIndex, 102u);
+    }
+
+    TEST(SpikeCaptureTest, AJudgedFrameAllocatesNothingOnceTheBuffersAreWarm) {
+        SpikeCapture capture;
+        capture.SetSettings(MedianSettings(SpikeSettings::kDefaultMedianWindow));
+        const uint64_t warm = SpikeSettings::kDefaultMedianWindow + 10;
+        RingSnapshot snapshot = SteadyFrames(0, warm);
+        capture.Update(snapshot);
+        AddFrame(snapshot, warm, kSteadyFrameTicks);  // the earlier frames are judged already
+        ExpectNoAllocations([&] { capture.Update(snapshot); });
+        EXPECT_TRUE(capture.GetSpikes().empty());
+        EXPECT_NEAR(capture.GetMedianMs(), static_cast<double>(kSteadyFrameTicks), kTolerance);
     }
 
     TEST(SpikeCaptureTest, TheListKeepsTheLastK) {

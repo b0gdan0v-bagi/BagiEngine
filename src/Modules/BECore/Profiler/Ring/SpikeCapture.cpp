@@ -11,8 +11,8 @@ namespace BECore {
             return eastl::min(SpikeCapture::kMinMedianFrames, settings.medianWindow);
         }
 
-        double MedianOf(const Vector<double>& values) {
-            Vector<double> ordered = values;
+        /// Sorts @p ordered in place
+        double MedianOf(Vector<double>& ordered) {
             eastl::sort(ordered.begin(), ordered.end());
             const size_t middle = ordered.size() / 2;
             return ordered.size() % 2 == 1 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) * 0.5;
@@ -22,7 +22,11 @@ namespace BECore {
 
     double SpikeCapture::GetMedianMs() const {
         const size_t needed = eastl::max<size_t>(MinMedianFrames(_settings), 1);
-        return _recentMs.size() >= needed ? MedianOf(_recentMs) : 0.0;
+        if (_recentMs.size() < needed) {
+            return 0.0;
+        }
+        _medianBuffer.assign(_recentMs.begin(), _recentMs.end());
+        return MedianOf(_medianBuffer);
     }
 
     void SpikeCapture::SetSettings(const SpikeSettings& settings) {

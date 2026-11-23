@@ -12,6 +12,7 @@
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
+#include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
 #include <gtest/gtest.h>
@@ -331,6 +332,50 @@ namespace BECore::Tests {
         EXPECT_EQ(lastThree[2].draws.drawCalls, frames - 1);
         EXPECT_EQ(collector.GetHistory(10000).size(), FrameStatsCollector::kFrameHistory);
         EXPECT_EQ(collector.GetHistory(10000).front().frame, frames - FrameStatsCollector::kFrameHistory + 1);
+    }
+
+    TEST(FrameStatsCollectorTest, TheHistoryIntoAndTheVisitorGiveTheFramesOfGetHistory) {
+        FrameStatsCollector collector;
+        collector.SetClock(FakeNow);
+        const size_t counts[] = {0, 3, FrameStatsCollector::kFrameHistory + 10};
+        size_t seen = 0;
+        Vector<FrameStats> into;
+        for (const size_t frames : counts) {
+            for (; seen < frames; ++seen) {
+                collector.BeginFrame();
+                collector.EndFrame(RenderCounters{.drawCalls = static_cast<uint32_t>(seen)}, AllocTotals{});
+            }
+            for (const size_t asked : {size_t{0}, size_t{2}, size_t{5}, FrameStatsCollector::kFrameHistory + 5}) {
+                const Vector<FrameStats> expected = collector.GetHistory(asked);
+                collector.GetHistoryInto(asked, into);
+                ASSERT_EQ(into.size(), expected.size());
+                EXPECT_EQ(collector.RecentCount(asked), expected.size());
+                size_t index = 0;
+                collector.ForEachRecent(asked, [&](const FrameStats& stats) {
+                    ASSERT_LT(index, expected.size());
+                    EXPECT_EQ(stats.frame, expected[index].frame);
+                    EXPECT_EQ(stats.draws.drawCalls, expected[index].draws.drawCalls);
+                    EXPECT_EQ(into[index].frame, expected[index].frame);
+                    ++index;
+                });
+                EXPECT_EQ(index, expected.size());
+            }
+        }
+    }
+
+    TEST(FrameStatsCollectorTest, TheHistoryIntoAReusedVectorAllocatesNothing) {
+        FrameStatsCollector collector;
+        collector.SetClock(FakeNow);
+        for (size_t i = 0; i < FrameStatsCollector::kFrameHistory + 3; ++i) {
+            collector.BeginFrame();
+            collector.EndFrame({}, AllocTotals{});
+        }
+        Vector<FrameStats> history;
+        collector.GetHistoryInto(FrameStatsCollector::kFrameHistory, history);
+        ExpectNoAllocations([&] {
+            collector.GetHistoryInto(FrameStatsCollector::kFrameHistory, history);
+            collector.ForEachRecent(FrameStatsCollector::kFrameHistory, [](const FrameStats&) {});
+        });
     }
 
     TEST(FrameStatsCollectorTest, AHeldFrameIsMarkedPausedAndTheHistoryKeepsIt) {

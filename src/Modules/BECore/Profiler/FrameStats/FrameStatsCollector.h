@@ -6,6 +6,7 @@
 #include <BECore/Renderer/RenderCounters.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <EASTL/array.h>
 #include <cstddef>
 #include <cstdint>
@@ -80,6 +81,12 @@ namespace BECore {
 
         /// The last @p count frames (fewer when fewer were seen), the oldest first
         [[nodiscard]] Vector<FrameStats> GetHistory(size_t count) const;
+        /// GetHistory into @p out, which keeps its capacity: a panel that reads the history every frame allocates once
+        void GetHistoryInto(size_t count, Vector<FrameStats>& out) const;
+        /// How many frames GetHistory(@p count) returns
+        [[nodiscard]] size_t RecentCount(size_t count) const;
+        /// Calls @p fn for the last @p count frames (fewer when fewer were seen), the oldest first, without copying them; @p fn must not call back into the collector
+        void ForEachRecent(size_t count, FunctionRef<void(const FrameStats&)> fn) const;
         /// The last finished frame, nullptr before the first
         [[nodiscard]] const FrameStats* GetLast() const;
         [[nodiscard]] uint64_t GetFrameCount() const {

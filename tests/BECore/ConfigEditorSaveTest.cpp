@@ -323,6 +323,34 @@ namespace BECore::Tests {
         EXPECT_EQ(saved, expected);
     }
 
+    TEST_F(ConfigEditorSaveTest, StagedChangesAreFoundByAViewOfAnyText) {
+        XmlDocument document;
+        const String xml = TemplateText();
+        ASSERT_TRUE(document.LoadFromString(StringView{xml.c_str(), xml.size()}));
+        const Vector<pugi::xml_node> sinks = SinkElements(document);
+        ASSERT_FALSE(sinks.empty());
+
+        StagedChanges staged;
+        staged.Set("sinks/sink[0]@type", sinks.front().attribute("type"), "FileSink");
+
+        // A key that is neither a String nor a whole literal: a part of a longer text
+        const StringView longer = "prefix sinks/sink[0]@type suffix";
+        const StringView key = longer.substr(7, 18);
+        EXPECT_TRUE(staged.Has(key));
+        EXPECT_FALSE(staged.Has(longer));
+        const String* value = staged.Get(key);
+        ASSERT_NE(value, nullptr);
+        EXPECT_EQ(*value, "FileSink");
+        EXPECT_EQ(staged.Get("sinks/sink[0]"), nullptr);
+
+        // Staging the same key again replaces the value and adds no entry
+        staged.Set(key, sinks.front().attribute("type"), "ConsoleSink");
+        size_t entries = 0;
+        staged.ForEach([&](const String&, const String&) { ++entries; });
+        EXPECT_EQ(entries, 1u);
+        EXPECT_EQ(*staged.Get(key), "ConsoleSink");
+    }
+
     TEST_F(ConfigEditorSaveTest, AValueOutsideTheDropdownIsReportedOnReload) {
         const FieldHint offered = OfferedSinkTypes();
         // A name that is not a class name: it is not offered, and the loader cannot resolve it

@@ -73,6 +73,9 @@ namespace BECore {
         SpikeSettings _settings;
         Vector<FrozenFrame> _spikes;
         Vector<double> _recentMs;  // durations of the last medianWindow judged frames, oldest first
+        /// The sorted copy of _recentMs, kept for its capacity so a judged frame allocates nothing; mutable because GetMedianMs is const
+        /// and the class is main thread only (see above), so no two calls share it
+        mutable Vector<double> _medianBuffer;
         uint64_t _lastJudged = 0;
         bool _hasJudged = false;
     };

@@ -95,8 +95,10 @@ namespace BECore {
          * @param configName Config file name (without extension)
          * @param attrPath Path in format "elementName/@attrName"
          * @param currentValue Current attribute value for heuristic fallback
+         * @return A reference into the registry or to a shared default, valid until the next Register*; it allocates nothing, so the
+         *         editor can ask for every attribute every frame. Copy it to keep it.
          */
-        FieldHint Resolve(PoolString configName, StringView attrPath, StringView currentValue) const;
+        const FieldHint& Resolve(PoolString configName, StringView attrPath, StringView currentValue) const;
 
     private:
         static String MakeKey(PoolString configName, StringView attrPath);

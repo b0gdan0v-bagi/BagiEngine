@@ -15,6 +15,7 @@ namespace BECore {
         constexpr float kBarGap = 1.0f;
         constexpr float kMinLabelWidth = 36.0f;
         constexpr float kLabelPadding = 3.0f;
+        constexpr size_t kThreadTitleCapacity = 32;  // "Thread " and a 32-bit id
         constexpr float kZoomPerNotch = 0.8f;
         constexpr float kRulerLabelSpacing = 110.0f;  // pixels between two labels of the ruler
         constexpr float kRulerTickHeight = 4.0f;
@@ -150,7 +151,7 @@ namespace BECore {
         const float rulerHeight = ImGui::GetTextLineHeight();
         const ImVec2 origin = ImGui::GetCursorScreenPos();
 
-        _lanes = LayoutLanes(snapshot, _view.BeginTicks(), _view.EndTicks());
+        LayoutLanesInto(snapshot, _view.BeginTicks(), _view.EndTicks(), _lanes);
         const float lanesHeight = LaneTop(_lanes, _lanes.size(), rowHeight, headerHeight);
         ImGui::InvisibleButton("##canvas", ImVec2(width, rulerHeight + eastl::max(lanesHeight, 1.0f)), ImGuiButtonFlags_MouseButtonLeft);
         ImGui::SetItemKeyOwner(ImGuiKey_MouseWheelY);
@@ -184,8 +185,14 @@ namespace BECore {
             const RingThread& thread = snapshot.threads[_lanes[laneIndex].threadIndex];
             const float headerTop = lanesTop + LaneTop(_lanes, laneIndex, rowHeight, headerHeight);
             const float laneTop = headerTop + headerHeight;
-            const String title = thread.name.empty() ? Format("Thread {}", thread.threadId) : thread.name;
-            drawList->AddText(ImVec2(origin.x + kLabelPadding, headerTop), kHeaderColor, title.c_str());
+            const ImVec2 titlePos(origin.x + kLabelPadding, headerTop);
+            if (thread.name.empty()) {
+                char title[kThreadTitleCapacity];
+                const FormatResult written = FormatToN(title, kThreadTitleCapacity, "Thread {}", thread.threadId);
+                drawList->AddText(titlePos, kHeaderColor, title, title + eastl::min(written.size, kThreadTitleCapacity));
+            } else {
+                drawList->AddText(titlePos, kHeaderColor, thread.name.data(), thread.name.data() + thread.name.size());
+            }
             for (const ZoneRecord& zone : thread.zones) {
                 if (static_cast<double>(zone.endTicks) < _view.BeginTicks() || static_cast<double>(zone.beginTicks) > _view.EndTicks() || !IsVisible(zone, pixelsPerTick)) {
                     continue;

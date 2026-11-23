@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/PoolString/PoolString.h>
+#include <Widgets/EditorLayout/CommandFilter.h>
 #include <Widgets/EditorLayout/HotkeyMap.h>
 #include <cstddef>
 
@@ -21,6 +22,7 @@ namespace BECore {
     public:
         void Open() {
             _openRequested = true;
+            _matches.Invalidate();
         }
 
         /// Draws the popup; returns the id of the chosen command, or an empty PoolString
@@ -31,6 +33,9 @@ namespace BECore {
         int _selected = 0;
         bool _openRequested = false;
         bool _focusQuery = false;
+        // The filtered rows and, parallel to them, the chord text of each; both change only with the query
+        CommandMatchList _matches;
+        Vector<String> _chordTexts;
     };
 
 }  // namespace BECore

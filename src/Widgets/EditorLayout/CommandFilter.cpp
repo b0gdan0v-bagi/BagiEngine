@@ -1,5 +1,8 @@
 #include "CommandFilter.h"
 
+#include <BECore/Memory/ArenaAllocator.h>
+#include <EASTL/sort.h>
+
 namespace BECore {
 
     namespace {
@@ -39,10 +42,15 @@ namespace BECore {
             if (query.size() > text.size()) {
                 return kNoMatch;
             }
+            const ScratchScope scratch;
             // best[j]: best score with the current query character matched at text[j]
-            Vector<int> best(text.size(), kNoMatch);
+            ArenaVector<int> best;
+            ArenaVector<int> next;
+            best.reserve(text.size());
+            next.reserve(text.size());
+            best.assign(text.size(), kNoMatch);
             for (size_t qi = 0; qi < query.size(); ++qi) {
-                Vector<int> next(text.size(), kNoMatch);
+                next.assign(text.size(), kNoMatch);
                 for (size_t j = 0; j < text.size(); ++j) {
                     if (ToLowerAscii(text[j]) != query[qi]) {
                         continue;
@@ -63,7 +71,7 @@ namespace BECore {
                         next[j] = bestBefore + here;
                     }
                 }
-                best = std::move(next);
+                best.swap(next);
             }
             int result = kNoMatch;
             for (const int score : best) {
@@ -84,35 +92,40 @@ namespace BECore {
             return true;
         }
 
-        String NormalizeQuery(StringView query) {
-            String normalized;
+        void NormalizeQueryInto(StringView query, ArenaString& normalized) {
+            normalized.reserve(query.size());
             for (const char c : query) {
                 if (c != ' ') {
                     normalized.push_back(ToLowerAscii(c));
                 }
             }
-            return normalized;
         }
 
     }  // namespace
 
-    Vector<const EditorCommand*> FilterCommands(StringView query, Span<const EditorCommand> commands) {
-        const String normalized = NormalizeQuery(query);
+    void FilterCommandsInto(StringView query, Span<const EditorCommand> commands, Vector<const EditorCommand*>& out) {
+        out.clear();
+        const ScratchScope scratch;
+        ArenaString normalized;
+        NormalizeQueryInto(query, normalized);
 
-        Vector<const EditorCommand*> result;
         if (normalized.empty()) {
+            out.reserve(commands.size());
             for (const EditorCommand& command : commands) {
-                result.push_back(&command);
+                out.push_back(&command);
             }
-            return result;
+            return;
         }
 
         struct Hit {
             const EditorCommand* command;
             int score;
+            size_t index;
         };
-        Vector<Hit> hits;
+        ArenaVector<Hit> hits;
+        hits.reserve(commands.size());
         const StringView needle(normalized.data(), normalized.size());
+        size_t index = 0;
         for (const EditorCommand& command : commands) {
             int titleScore = ScoreMatch(needle, command.title);
             if (titleScore != kNoMatch && StartsWithNoCase(command.title, needle)) {
@@ -121,15 +134,35 @@ namespace BECore {
             const int idScore = ScoreMatch(needle, command.id.ToStringView());
             const int score = std::max(titleScore == kNoMatch ? kNoMatch : titleScore * kTitleWeight, idScore);
             if (score != kNoMatch) {
-                hits.push_back({&command, score});
+                hits.push_back({&command, score, index});
             }
+            ++index;
         }
-        //-NoStd: equal scores keep the registration order; once per keystroke of the palette, not per frame
-        std::stable_sort(hits.begin(), hits.end(), [](const Hit& lhs, const Hit& rhs) { return lhs.score > rhs.score; });
+        // The registration index breaks ties: an unstable sort that allocates nothing gives the order a stable one would
+        eastl::sort(hits.begin(), hits.end(), [](const Hit& lhs, const Hit& rhs) { return lhs.score != rhs.score ? lhs.score > rhs.score : lhs.index < rhs.index; });
+        out.reserve(hits.size());
         for (const Hit& hit : hits) {
-            result.push_back(hit.command);
+            out.push_back(hit.command);
         }
+    }
+
+    Vector<const EditorCommand*> FilterCommands(StringView query, Span<const EditorCommand> commands) {
+        Vector<const EditorCommand*> result;
+        FilterCommandsInto(query, commands, result);
         return result;
+    }
+
+    bool CommandMatchList::Update(StringView query, Span<const EditorCommand> commands) {
+        const bool same = _valid && _commands == commands.data() && _commandCount == commands.size() && StringView(_query.data(), _query.size()) == query;
+        if (same) {
+            return false;
+        }
+        FilterCommandsInto(query, commands, _matches);
+        _query.assign(query.data(), query.size());
+        _commands = commands.data();
+        _commandCount = commands.size();
+        _valid = true;
+        return true;
     }
 
     int MoveSelection(int selected, int delta, int count) {

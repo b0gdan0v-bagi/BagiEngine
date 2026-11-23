@@ -81,9 +81,9 @@ namespace BECore {
         /**
          * @brief Recursively render an XML node as an ImGui tree with typed field inspectors
          * @param node The pugixml node to render
-         * @param nodePath Unique path string used as key for staged changes
+         * @param nodePath Unique path string used as key for staged changes and as the ImGui id of the tree node; lives on the caller's scratch scope
          */
-        void RenderXmlNode(pugi::xml_node node, const String& nodePath);
+        void RenderXmlNode(pugi::xml_node node, const ArenaString& nodePath);
 
         /**
          * @brief Render the reload confirmation popup

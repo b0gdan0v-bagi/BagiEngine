@@ -1,3 +1,4 @@
+#include <Common/AllocCheck.h>
 #include <Common/Printers.h>
 #include <Widgets/EditorLayout/CommandFilter.h>
 
@@ -96,6 +97,62 @@ namespace BECore::Tests {
         EXPECT_EQ(found[0]->id, PoolString(EditorCommandIds::kViewResetLayout));
         EXPECT_EQ(found[1]->id, PoolString(EditorCommandIds::kViewSaveLayout));
         EXPECT_EQ(FilterCommands("", commands).size(), commands.size());
+    }
+
+    TEST(CommandFilterTest, IntoGivesTheListOfFilterCommands) {
+        const auto commands = MakeCommands();
+        const Span<const EditorCommand> span{commands.data(), commands.size()};
+        Vector<const EditorCommand*> out;
+        for (const StringView query : {"", "  ", "lay", "sla", "resetl", "save", "zzz"}) {
+            FilterCommandsInto(query, span, out);
+            EXPECT_EQ(Titles(out), Titles(FilterCommands(query, span))) << "query: " << String(query.data(), query.size()).c_str();
+        }
+    }
+
+    TEST(CommandFilterTest, EqualScoresKeepRegistrationOrderForManyCommands) {
+        Vector<EditorCommand> commands;
+        Vector<String> titles;
+        titles.reserve(40);
+        for (int i = 0; i < 40; ++i) {
+            titles.push_back(Format("Save {}", i));
+            commands.push_back({"x"_intern, StringView(titles.back().data(), titles.back().size()), std::nullopt, true});
+        }
+        const Span<const EditorCommand> span{commands.data(), commands.size()};
+        const Vector<const EditorCommand*> found = FilterCommands("save", span);
+        ASSERT_EQ(found.size(), commands.size());
+        for (size_t i = 0; i < found.size(); ++i) {
+            EXPECT_EQ(found[i], &commands[i]);
+        }
+    }
+
+    TEST(CommandFilterTest, SecondCallIntoTheSameVectorAllocatesNothing) {
+        const auto commands = MakeCommands();
+        const Span<const EditorCommand> span{commands.data(), commands.size()};
+        Vector<const EditorCommand*> out;
+        FilterCommandsInto("save", span, out);
+        ExpectNoAllocations([&] { FilterCommandsInto("lay", span, out); });
+        EXPECT_EQ(Titles(out), "Reset Layout|Save Layout As");
+    }
+
+    TEST(CommandFilterTest, MatchListRefiltersOnlyWhenTheInputChanges) {
+        const auto commands = MakeCommands();
+        const Span<const EditorCommand> span{commands.data(), commands.size()};
+        CommandMatchList list;
+        EXPECT_TRUE(list.Update("lay", span));
+        const String first = Titles(list.GetMatches());
+        EXPECT_EQ(first, "Reset Layout|Save Layout As");
+
+        EXPECT_FALSE(list.Update("lay", span));
+        EXPECT_EQ(Titles(list.GetMatches()), first);
+
+        EXPECT_TRUE(list.Update("quit", span));
+        EXPECT_EQ(Titles(list.GetMatches()), "Quit");
+
+        list.Invalidate();
+        EXPECT_TRUE(list.Update("quit", span));
+        EXPECT_FALSE(list.Update("quit", span));
+
+        EXPECT_TRUE(list.Update("quit", span.subspan(0, 3)));
     }
 
     TEST(CommandFilterTest, MoveSelectionWrapsAndHandlesEmptyList) {

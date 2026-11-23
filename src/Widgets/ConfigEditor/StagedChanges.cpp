@@ -2,26 +2,33 @@
 
 namespace BECore {
 
-    void StagedChanges::Set(const String& key, pugi::xml_attribute attr, StringView newValue) {
-        auto& entry = _changes[key];
+    StagedChanges::Entry& StagedChanges::EntryFor(StringView key) {
+        if (const auto it = _changes.find(key); it != _changes.end()) {
+            return it->second;
+        }
+        return _changes[String(key.data(), key.size())];
+    }
+
+    void StagedChanges::Set(StringView key, pugi::xml_attribute attr, StringView newValue) {
+        auto& entry = EntryFor(key);
         entry.value.assign(newValue.data(), newValue.size());
         entry.attr = attr;
         entry.textNode = pugi::xml_node{};
     }
 
-    void StagedChanges::SetText(const String& key, pugi::xml_node textNode, StringView newValue) {
-        auto& entry = _changes[key];
+    void StagedChanges::SetText(StringView key, pugi::xml_node textNode, StringView newValue) {
+        auto& entry = EntryFor(key);
         entry.value.assign(newValue.data(), newValue.size());
         entry.attr = pugi::xml_attribute{};
         entry.textNode = textNode;
     }
 
-    const String* StagedChanges::Get(const String& key) const {
+    const String* StagedChanges::Get(StringView key) const {
         const auto it = _changes.find(key);
         return it != _changes.end() ? &it->second.value : nullptr;
     }
 
-    bool StagedChanges::Has(const String& key) const {
+    bool StagedChanges::Has(StringView key) const {
         return _changes.find(key) != _changes.end();
     }
 

@@ -25,12 +25,12 @@ namespace BECore {
      *             "(not a known value)" until the user unchecks it
      * - String -> InputText (confirmed on Enter)
      *
-     * @param widgetId Unique per-attribute string used as ImGui widget ID (## prefix applied internally)
+     * @param widgetId Unique per-attribute string; it goes on the ImGui id stack around the controls, whose own labels are fixed
      * @param currentValue Current attribute value to display
      * @param hint Field type hint with optional enum/flag options
      * @return InspectorResult with changed=true and newValue when the user commits a change
      */
-    InspectorResult RenderFieldInspector(const String& widgetId, StringView currentValue, const FieldHint& hint);
+    InspectorResult RenderFieldInspector(StringView widgetId, StringView currentValue, const FieldHint& hint);
 
     /**
      * @brief Clear persistent InputText buffers used by the String inspector

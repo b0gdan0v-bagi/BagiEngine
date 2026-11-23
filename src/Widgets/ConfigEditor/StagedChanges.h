@@ -23,7 +23,7 @@ namespace BECore {
          * @param attr Pugixml attribute handle (must remain valid until ApplyTo/Clear)
          * @param newValue New string value to apply on save
          */
-        void Set(const String& key, pugi::xml_attribute attr, StringView newValue);
+        void Set(StringView key, pugi::xml_attribute attr, StringView newValue);
 
         /**
          * @brief Stage a new value for an XML text node
@@ -31,17 +31,19 @@ namespace BECore {
          * @param textNode Pugixml text node handle (must remain valid until ApplyTo/Clear)
          * @param newValue New string value to apply on save
          */
-        void SetText(const String& key, pugi::xml_node textNode, StringView newValue);
+        void SetText(StringView key, pugi::xml_node textNode, StringView newValue);
 
         /**
          * @brief Get staged value for a key, or nullptr if not staged
+         *
+         * Get and Has look the key up as a view and allocate nothing: the editor asks them for every attribute every frame.
          */
-        const String* Get(const String& key) const;
+        const String* Get(StringView key) const;
 
         /**
          * @brief Check if a key has a staged change
          */
-        bool Has(const String& key) const;
+        bool Has(StringView key) const;
 
         /**
          * @brief Clear all staged changes (does NOT write to DOM)
@@ -71,6 +73,8 @@ namespace BECore {
             pugi::xml_attribute attr;
             pugi::xml_node textNode;
         };
+
+        Entry& EntryFor(StringView key);
 
         HashMap<String, Entry> _changes;
     };
