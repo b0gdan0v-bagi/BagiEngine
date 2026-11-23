@@ -1,8 +1,12 @@
-// XmlDeserializer: the Warn mode costs nothing per node over the Off mode (its scopes' lists live in an arena the deserializer owns).
+// XmlDeserializer: the Warn mode costs nothing per node over the Off mode (its scopes' lists live in an arena the deserializer owns), and
+// an array costs no list of its elements.
+
+#include "XmlDeserializerAllocTest.h"
 
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/AllocCheck.h>
 #include <Common/Printers.h>
+#include <Generated/XmlDeserializerAllocTest.gen.hpp>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -14,13 +18,13 @@ namespace BECore::Tests {
         constexpr size_t kFewGroups = 100;
         constexpr size_t kItemsPerGroup = 3;
 
-        /// What the Warn mode may allocate beyond the Off mode in a second load by the same deserializer: a few blocks, never one per node
+        /// What a second load by the same deserializer may allocate beyond what the findings and the objects need: a few blocks, never one per node
         constexpr uint64_t kLoadSlack = 8;
 
         String MakeDocument(size_t groups, bool withUnknownKeys) {
             String text = "<root>\n<groups>\n";
             for (size_t i = 0; i < groups; ++i) {
-                AppendFormat(text, "<group id=\"{}\" description=\"a text longer than the small string\"{}>\n", i, withUnknownKeys ? " extraAttribute=\"1\"" : "");
+                AppendFormat(text, "<group id=\"{}\" description=\"short\"{}>\n", i, withUnknownKeys ? " extraAttribute=\"1\"" : "");
                 text += "<child weight=\"2\"/>\n";
                 text += "<items>\n";
                 for (size_t item = 0; item < kItemsPerGroup; ++item) {
@@ -104,10 +108,13 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(XmlDeserializerAllocTest, ACleanLoadInWarnModeAllocatesNoMoreThanOffPerNode) {
-        const uint64_t extra = WarnExtra(MakeDocument(kManyGroups, false));
+    TEST(XmlDeserializerAllocTest, ACleanLoadAllocatesNothingPerNodeInEitherMode) {
+        const String document = MakeDocument(kManyGroups, false);
+        const uint64_t warn = SecondLoadAllocations(document, DiagnosticsMode::Warn).count;
+        const uint64_t off = SecondLoadAllocations(document, DiagnosticsMode::Off).count;
         if constexpr (AllocTracker::kEnabled) {
-            EXPECT_LE(extra, kLoadSlack);
+            EXPECT_LE(warn, kLoadSlack);
+            EXPECT_LE(off, kLoadSlack);
         } else {
             GTEST_SKIP() << kNoAllocTracker;
         }
@@ -161,6 +168,75 @@ namespace BECore::Tests {
 
         const String warnings = Warnings(reader);
         EXPECT_NE(warnings.find("Unknown attribute 'opacitty', did you mean 'opacity'?"), String::npos) << warnings.c_str();
+    }
+
+    TEST(XmlDeserializerAllocTest, ACommentBetweenElementsIsNoElementAndNestedArraysKeepTheirPlace) {
+        XmlDeserializer reader;
+        reader.SetDiagnostics(DiagnosticsMode::Warn);
+        ASSERT_TRUE(reader.LoadFromString(
+            R"(<root><list><!-- first --><row id="1"><cells><c v="10"/><!-- x --><c v="11"/></cells></row><!-- --><row id="2"><cells><c v="20"/></cells></row><!-- end --></list></root>)"));
+
+        size_t rows = 0;
+        ASSERT_TRUE(reader.BeginArray("list", "row", rows));
+        ASSERT_EQ(rows, 2u);
+        Vector<uint32_t> seen;
+        while (reader.BeginArrayElement()) {
+            uint32_t id = 0;
+            reader.ReadAttribute("id", id);
+            seen.push_back(id);
+            size_t cells = 0;
+            ASSERT_TRUE(reader.BeginArray("cells", "c", cells));
+            for (size_t i = 0; i < cells; ++i) {
+                ASSERT_TRUE(reader.BeginArrayElement());
+                uint32_t value = 0;
+                reader.ReadAttribute("v", value);
+                seen.push_back(value);
+                reader.EndArrayElement();
+            }
+            EXPECT_FALSE(reader.BeginArrayElement()) << "the cursor is past the last cell";
+            reader.EndArray();
+            reader.EndArrayElement();
+        }
+        reader.EndArray();
+        reader.FinishLoad();
+
+        const Vector<uint32_t> expected = {1, 10, 11, 2, 20};
+        EXPECT_TRUE(seen == expected);
+        EXPECT_FALSE(reader.HasErrors());
+        EXPECT_TRUE(reader.GetWarnings().empty());
+    }
+
+    TEST(XmlDeserializerAllocTest, AFactoryArrayOfLongTypeNamesAllocatesOneObjectPerElement) {
+        constexpr size_t kThings = 500;
+        // A fresh reader's own first blocks: its stacks, and in the Warn mode its arena and scopes
+        constexpr uint64_t kFirstUseSlack = 16;
+        String document = "<root><things>";
+        for (size_t i = 0; i < kThings; ++i) {
+            AppendFormat(document, "<thing type=\"AThingWithAnExtraLongTypeNameForTheFactory\" value=\"{}\"/>", i);
+        }
+        document += "</things></root>";
+
+        for (const DiagnosticsMode mode : {DiagnosticsMode::Off, DiagnosticsMode::Warn}) {
+            XmlDeserializer reader;
+            reader.SetDiagnostics(mode);
+            ASSERT_TRUE(reader.LoadFromString(document));
+            auto list = New<LongNamedThingList>();
+            const AllocCount allocs = CountAllocations([&] {
+                list->Deserialize(reader);
+                reader.FinishLoad();
+            });
+            ASSERT_EQ(list->things.size(), kThings);
+            EXPECT_EQ(list->things.back()->value, static_cast<int32_t>(kThings - 1));
+            EXPECT_FALSE(reader.HasErrors());
+            EXPECT_TRUE(reader.GetWarnings().empty());
+            if constexpr (AllocTracker::kEnabled) {
+                // The objects themselves and the list's own storage and stacks: no copy of the type name, no list of elements
+                EXPECT_LE(allocs.count, kThings + kFirstUseSlack) << "mode " << static_cast<int>(mode);
+            }
+        }
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
     }
 
 }  // namespace BECore::Tests

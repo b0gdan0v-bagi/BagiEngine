@@ -94,14 +94,50 @@ namespace BECore {
         return true;
     }
 
+    namespace {
+
+        // The lookup of pugixml's child(name) and attribute(name) over a view: an empty name matches nothing there either, and the name needs no NUL
+        pugi::xml_node FindChild(pugi::xml_node parent, StringView name) {
+            if (name.empty()) {
+                return pugi::xml_node();
+            }
+            for (pugi::xml_node child = parent.first_child(); child; child = child.next_sibling()) {
+                if (StringView(child.name()) == name) {
+                    return child;
+                }
+            }
+            return pugi::xml_node();
+        }
+
+        pugi::xml_attribute FindAttribute(pugi::xml_node node, StringView name) {
+            if (name.empty()) {
+                return pugi::xml_attribute();
+            }
+            for (pugi::xml_attribute attribute = node.first_attribute(); attribute; attribute = attribute.next_attribute()) {
+                if (StringView(attribute.name()) == name) {
+                    return attribute;
+                }
+            }
+            return pugi::xml_attribute();
+        }
+
+        /// The first element at or after @p node among its siblings (a comment between elements is no element)
+        pugi::xml_node SkipToElement(pugi::xml_node node) {
+            while (node && node.type() != pugi::node_element) {
+                node = node.next_sibling();
+            }
+            return node;
+        }
+
+    }  // namespace
+
     pugi::xml_node XmlDeserializer::GetChild(StringView name) const {
         if (_nodeStack.empty()) {
             return pugi::xml_node();
         }
 
         NoteAsked(name, false, true);
-        String nameStr(name);
-        return _nodeStack.back().child(nameStr.c_str());
+        return FindChild(_nodeStack.back(), name);
     }
 
     pugi::xml_attribute XmlDeserializer::GetAttribute(StringView name) const {
@@ -110,8 +146,7 @@ namespace BECore {
         }
 
         NoteAsked(name, true, false);
-        String nameStr(name);
-        return _nodeStack.back().attribute(nameStr.c_str());
+        return FindAttribute(_nodeStack.back(), name);
     }
 
     bool XmlDeserializer::HasKey(StringView name) const {
@@ -801,6 +836,15 @@ namespace BECore {
         return true;
     }
 
+    bool XmlDeserializer::ReadAttributeView(StringView name, StringView& outView) {
+        const pugi::xml_attribute attr = GetAttribute(name);
+        if (!attr) {
+            return false;
+        }
+        outView = StringView(attr.as_string());
+        return true;
+    }
+
     bool XmlDeserializer::ReadAttribute(StringView name, PoolString& outValue) {
         pugi::xml_attribute attr = GetAttribute(name);
         if (!attr) {
@@ -851,30 +895,21 @@ namespace BECore {
             return false;
         }
 
-        ArrayContext ctx;
-        ctx.parentNode = node;
-        ctx.currentIndex = 0;
-        // Counted first: a pass over the children costs less than the doublings of a vector that grows to the same size
+        // Counted first, so the count is an upper bound for the caller's reserve and an array over the limit is refused before any element is read
         size_t elementCount = 0;
-        for (pugi::xml_node child : node.children()) {
-            if (child.type() == pugi::node_element && ++elementCount == ReaderLimits::kMaxArrayElements) {
-                break;
-            }
-        }
-        ctx.elements.reserve(elementCount);
-        for (pugi::xml_node child : node.children()) {
-            // A comment between the elements is no element: it would shift every index after it
-            if (child.type() != pugi::node_element) {
-                continue;
-            }
-            if (ctx.elements.size() == ReaderLimits::kMaxArrayElements) {
+        for (pugi::xml_node child = SkipToElement(node.first_child()); child; child = SkipToElement(child.next_sibling())) {
+            if (++elementCount > ReaderLimits::kMaxArrayElements) {
                 ReportError(name, "Array has more elements than the limit");
                 return false;
             }
-            ctx.elements.push_back(child);
         }
-        count = ctx.elements.size();
-        _arrayStack.push_back(eastl::move(ctx));
+
+        ArrayContext ctx;
+        ctx.parentNode = node;
+        ctx.cursor = SkipToElement(node.first_child());
+        ctx.count = elementCount;
+        count = elementCount;
+        _arrayStack.push_back(ctx);
         _nodeStack.push_back(node);
         PushPathSegment(name);
         OpenScope(true);
@@ -897,11 +932,12 @@ namespace BECore {
             return false;
         }
         ArrayContext& ctx = _arrayStack.back();
-        if (ctx.currentIndex >= ctx.elements.size() || IsNestedTooDeep("")) {
+        if (ctx.index >= ctx.count || !ctx.cursor || IsNestedTooDeep("")) {
             return false;
         }
-        PushPathArrayIndex(ctx.currentIndex);
-        _nodeStack.push_back(ctx.elements[ctx.currentIndex++]);
+        PushPathArrayIndex(ctx.index++);
+        _nodeStack.push_back(ctx.cursor);
+        ctx.cursor = SkipToElement(ctx.cursor.next_sibling());
         OpenScope(false);
         return true;
     }

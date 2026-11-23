@@ -93,6 +93,14 @@ namespace BECore {
         return false;
     }
 
+    bool IDeserializer::ReadAttributeView(StringView name, StringView& outView) {
+        if (!ReadAttribute(name, _attributeViewText)) {
+            return false;
+        }
+        outView = StringView(_attributeViewText);
+        return true;
+    }
+
     template <typename List>
     String IDeserializer::BuildDidYouMeanHint(StringView unknown, std::initializer_list<const List*> askedKeys) {
         const StringView cutName = CutText(unknown, kMaxSuggestedNameBytes);

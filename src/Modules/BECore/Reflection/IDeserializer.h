@@ -80,6 +80,15 @@ namespace BECore {
         virtual bool ReadAttribute(StringView name, String& outValue) = 0;
         virtual bool ReadAttribute(StringView name, PoolString& outValue) = 0;
 
+        /**
+         * @brief The text of an attribute as a view, for a caller that only looks at it (the factory `type`)
+         *
+         * The view is valid until the next read or load on this reader. The default reads the attribute into a String the reader keeps and reuses,
+         * so a reader whose text sits in memory it owns (XmlDeserializer) overrides it and copies nothing. A missing attribute is false and
+         * @p outView stays as it was.
+         */
+        virtual bool ReadAttributeView(StringView name, StringView& outView);
+
         // =================================================================
         // Strict values
         // =================================================================
@@ -382,6 +391,7 @@ namespace BECore {
             bool isArrayIndex = false;
         };
         Vector<PathSegment> _pathStack;
+        String _attributeViewText;
         Vector<DeserializeError> _warnings;
         DiagnosticsMode _diagnostics = DiagnosticsMode::Off;
         Optional<AssetPurpose> _purposeFilter;

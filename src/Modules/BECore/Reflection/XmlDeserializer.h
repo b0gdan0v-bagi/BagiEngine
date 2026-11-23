@@ -92,6 +92,9 @@ namespace BECore {
         bool ReadAttribute(StringView name, String& outValue) override;
         bool ReadAttribute(StringView name, PoolString& outValue) override;
 
+        /// The text of the attribute in the DOM, no copy: valid until the next load of this reader
+        bool ReadAttributeView(StringView name, StringView& outView) override;
+
         bool BeginObject(StringView name) override;
         void EndObject() override;
 
@@ -209,8 +212,9 @@ namespace BECore {
 
         struct ArrayContext {
             pugi::xml_node parentNode;
-            Vector<pugi::xml_node> elements;
-            size_t currentIndex = 0;
+            pugi::xml_node cursor;  // the next element to hand out; empty after the last
+            size_t index = 0;
+            size_t count = 0;
         };
         Vector<ArrayContext> _arrayStack;
 
