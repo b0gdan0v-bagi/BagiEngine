@@ -1,4 +1,5 @@
 #include <BECore/Control/Json.h>
+#include <BECore/Profiler/ProfilerToggle.h>
 #include <BECore/Profiler/Ring/RingTraceExport.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
@@ -140,7 +141,7 @@ namespace BECore::Tests {
         ASSERT_NE(other, nullptr);
         EXPECT_EQ(GetJsonInt(*other, "ringFrames"), 4);
         EXPECT_EQ(GetJsonInt(*other, "dropped"), 7);
-        EXPECT_EQ(Member(*other, "build"), "stats");
+        EXPECT_EQ(Member(*other, "build"), kProfilerStatsBuild ? "stats" : "profile");
     }
 
     TEST(RingTraceExportTest, AnEmptySnapshotIsAValidEmptyTrace) {

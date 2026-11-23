@@ -38,11 +38,11 @@ Ctrl+Shift+E to the editor, then Ctrl+Shift+P opens the Profiler panel. Zones ne
 
 ## In the game: the overlay and its trace
 
-In a build with the profiler (or the editor) Ctrl+Shift+P shows the overlay over the game: the last frame, the six zones with the largest self time per frame (over the last 60 frames, refreshed twice a second) and a bar per frame. Ctrl+Shift+T, or a click on the line `Save trace`, saves the last 10 seconds of the ring: a file `profiler-trace.json` in the working folder, in the browser a download. The overlay says `Saved profiler-trace.json (N frames)` under its text. Read the file in Perfetto (ui.perfetto.dev, "Open trace file") or with `python3 tools/perf/trace_summary.py profiler-trace.json`: the file has real `Frame` marks, so the summary gives frame times and the zones by self time. The overlay's own work is one block, `Profiler overlay`, on the timeline.
+In a build with the profiler (or the editor) Ctrl+Shift+P shows the overlay over the game (the zones and the export need the profiler: in an editor-only build the overlay shows the frame lines): the last frame, the six zones with the largest self time per frame (over the last 60 frames, refreshed twice a second) and a bar per frame. Ctrl+Shift+T, or a click on the line `Save trace`, saves the last 10 seconds of the ring: a file `profiler-trace.json` in the working folder, in the browser a download. The overlay says `Saved profiler-trace.json (N frames)` under its text. Read the file in Perfetto (ui.perfetto.dev, "Open trace file") or with `python3 tools/perf/trace_summary.py profiler-trace.json`: the file has real `Frame` marks, so the summary gives frame times and the zones by self time. The overlay's own work is one block, `Profiler overlay`, on the timeline.
 
 ## The stats build: Release and the browser
 
-`ENGINE_PROFILER_STATS=ON` is the profiler a shipped build can carry: the presets `macos-release-stats`, `windows-clang-release-stats`, `web-release-stats` and `web-release-single-thread-stats` are Release (no editor, no allocation counting, no Tracy) with the zones, the frame ring and the overlay. With the overlay closed a mark is one atomic load. The page of a stats build prints `Profiler: stats build ...` to the console once.
+`ENGINE_PROFILER_STATS=ON` is the profiler a shipped build can carry: the presets `macos-release-stats`, `windows-clang-release-stats`, `web-release-stats` and `web-release-single-thread-stats` are Release (no editor, no Tracy) with the zones, the frame ring and the overlay; the two desktop presets count allocations, the two web ones do not until `AllocPlatform` is checked under wasm. With the overlay closed a mark runs the allocation snapshot and one atomic load ("What a zone costs"). The page of a stats build prints `Profiler: stats build ...` to the console once.
 
 ```bash
 cmake --preset macos-release-stats
@@ -127,18 +127,18 @@ A `Mutex` or `SharedMutex` of `BECore/Threading/` (every engine lock) that makes
 
 ## What a zone costs
 
-Measured on an Apple M-series machine (`BagiEngineTests --gtest_also_run_disabled_tests --gtest_filter='ProfilerCost*'`; ns, the lowest of three runs, the machine loaded by other builds; the `macos-profile` column is an older measurement). `ProfileZone` is compiled in every build, so the test measures the same code in `macos-release` and `macos-release-stats`; what differs is whether the marks (`BE_PROFILE_SCOPE`) exist.
+Measured on an Apple M-series machine (`BagiEngineTests --gtest_also_run_disabled_tests --gtest_filter='ProfilerCost*'`; ns, the lowest of three runs, the machine loaded by other builds; the `macos-profile` column is an older measurement). `ProfileZone` is compiled in every build, so the test measures the same code in `macos-release` and `macos-release-stats`; what differs is whether the marks (`BE_PROFILE_SCOPE`) exist and whether allocations are counted.
 
 | What | `macos-release` | `macos-release-stats` | `macos-profile` |
 |------|-----------------|-----------------------|-----------------|
-| `steady_clock::now()` | 12.8 | 13.1 | 13 |
-| `ProfilerClock::Now()` (`mach_absolute_time`) | 4.1 | 4.0 | 4 |
-| a mark, no backend, ring off | 0 (compiled out) | 1.7 (one atomic load) | 4.5 (with the allocation snapshot) |
-| a zone into the frame ring | 19.0 | 18.9 | |
-| a zone recorded into the Chrome trace | 23.3 | 22.9 | 26 |
-| `new` + `delete` of 64 bytes, one thread | 33 (the C++ runtime's) | 33 | 28 (counted) |
+| `steady_clock::now()` | 13.3 | 13.1 | 13 |
+| `ProfilerClock::Now()` (`mach_absolute_time`) | 4.3 | 3.8 | 4 |
+| a zone, no backend, ring off | 1.7 (the mark itself is compiled out) | 6.3 (the allocation snapshot) | 4.5 |
+| a zone into the frame ring | 19.4 | 22.2 | |
+| a zone recorded into the Chrome trace | 24.4 | 27.0 | 26 |
+| `new` + `delete` of 64 bytes, one thread | 33 (the C++ runtime's) | not measured (counted, as in `macos-profile`) | 28 (counted) |
 
-**The stats build with the panel closed** (the ring off, no backend) pays the 1.7 ns of each mark that runs. `BagiStress` entities (`stress_frames.py --scene entities --count 30000 --frames 1000 --warmup 120`, three runs of each build one after the other, load average about 15): `workMsP50` 1.60, 1.60, 1.63 ms in `macos-release-stats` against 1.69, 1.67, 1.94 ms in `macos-release`, so the stats build is within the noise of the release build (the spread inside one build is larger than the gap between the two). The ring costs a zone about 19 ns while the overlay is open, and a frame has some tens of zones.
+**The stats build with the panel closed** (the ring off, no backend) pays about 4.6 ns more per zone that runs than `macos-release` (the allocation snapshot of the zone) and about 2.8 ns more per zone into the ring. `BagiStress` entities (`stress_frames.py --scene entities --count 30000 --frames 1000 --warmup 120`, three runs of each build one after the other, load average 6 to 10): `workMsP50` 1.99, 1.77, 1.72 ms in `macos-release-stats` against 1.91, 1.88, 1.81 ms in `macos-release`: no gap beyond the noise (the spread inside one build is larger), because that scene has few marks per frame. A scene with thousands of zones per frame would show the 4.6 ns. The ring costs a zone about 22 ns while the overlay is open, and a frame has some tens of zones.
 
 Counting allocations costs nothing measurable on one thread (the replacement calls `malloc` directly, the runtime's `operator new` adds its own layer); many threads allocating at once share the atomic totals and pay more. The libraries that allocate with their own malloc (pugixml, ImGui, SDL, stb, dr_flac) are routed through the same counters in the `macos-profile` build and keep malloc in a shipped one (`Alloc/CLAUDE.md`).
 

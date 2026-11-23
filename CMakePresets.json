@@ -76,9 +76,18 @@
         {
             "name": "stats",
             "hidden": true,
-            "description": "The stats build (ENGINE_PROFILER_STATS=ON): the profiler on in a Release build, without allocation counting or Tracy, also on the web (cmake/BagiPlatformOptions.cmake)",
+            "description": "The stats build (ENGINE_PROFILER_STATS=ON): the profiler on in a Release build, also on the web (cmake/BagiPlatformOptions.cmake)",
             "cacheVariables": {
                 "ENGINE_PROFILER_STATS": "ON"
+            }
+        },
+        {
+            "name": "stats-alloc",
+            "hidden": true,
+            "inherits": "stats",
+            "description": "The stats build with allocation counting; the desktop presets only: the web forces ENGINE_PROFILER_ALLOC off until AllocPlatform is checked under wasm",
+            "cacheVariables": {
+                "ENGINE_PROFILER_ALLOC": "ON"
             }
         },
         {
@@ -265,7 +274,7 @@
             "name": "macos-release-stats",
             "displayName": "macOS Clang Release stats (the light profiler)",
             "description": "Release plus the light profiler: zones into the frame ring, the overlay, the trace export",
-            "inherits": ["ninja", "host-macos", "clang", "release", "stats"]
+            "inherits": ["ninja", "host-macos", "clang", "release", "stats-alloc"]
         },
         {
             "name": "macos-asan",
@@ -346,7 +355,7 @@
             "name": "windows-clang-release-stats",
             "displayName": "Windows Clang Ninja Release stats (the light profiler)",
             "description": "Release plus the light profiler: zones into the frame ring, the overlay, the trace export; the Windows twin of macos-release-stats, configured and built through CI/scripts/vs_env.py like windows-clang-debug",
-            "inherits": ["ninja", "host-windows", "vs-env", "clang", "no-module-scan", "release", "stats"]
+            "inherits": ["ninja", "host-windows", "vs-env", "clang", "no-module-scan", "release", "stats-alloc"]
         },
         {
             "name": "windows-vs2022",

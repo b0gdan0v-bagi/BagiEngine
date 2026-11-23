@@ -106,6 +106,14 @@ class WebPresetsTest(unittest.TestCase):
                 else:
                     self.assertNotIn("ENGINE_PROFILER_STATS", variables)
 
+    def test_the_desktop_stats_presets_count_allocations_and_the_web_ones_do_not_ask(self):
+        for name in ("macos-release-stats", "windows-clang-release-stats"):
+            with self.subTest(name):
+                variables = resolve_configure_preset(self.presets, name)["cacheVariables"]
+                self.assertEqual(variables["ENGINE_PROFILER_STATS"], "ON")
+                self.assertEqual(variables["ENGINE_PROFILER_ALLOC"], "ON")
+                self.assertNotIn("ENGINE_PROFILER_TRACY", variables)
+
     def test_each_preset_builds_in_a_folder_of_its_own(self):
         folders = {resolve_configure_preset(self.presets, name)["binaryDir"].replace("${presetName}", name) for name in WEB_PRESETS}
         self.assertEqual(len(folders), len(WEB_PRESETS))

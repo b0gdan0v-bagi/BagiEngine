@@ -1,6 +1,7 @@
 #include "RingTraceExport.h"
 
 #include <BECore/Profiler/Backends/ChromeTraceJson.h>
+#include <BECore/Profiler/ProfilerToggle.h>
 #include <BECore/Profiler/Ring/FrozenTrace.h>
 #include <BECore/Profiler/Ring/SpikeCapture.h>
 
@@ -49,7 +50,9 @@ namespace BECore {
                 }
             }
         }
-        return WriteFramesTraceJson(frames, FramesTraceFormat{.markName = "Frame", .countKey = "ringFrames", .extraDropped = snapshot.dropped, .extraMembers = ",\"build\":\"stats\""});
+        return WriteFramesTraceJson(
+            frames, FramesTraceFormat{
+                        .markName = "Frame", .countKey = "ringFrames", .extraDropped = snapshot.dropped, .extraMembers = kProfilerStatsBuild ? ",\"build\":\"stats\"" : ",\"build\":\"profile\""});
     }
 
     std::expected<void, String> WriteRingTraceFile(StringView path, const RingSnapshot& snapshot, double seconds) {

@@ -72,7 +72,7 @@ namespace BECore {
     }  // namespace
 #endif
 
-    std::expected<void, String> WebDownloadStart(StringView name, StringView content, StringView mimeType) {
+    std::expected<void, String> WebDownloadStart(StringView name, [[maybe_unused]] StringView content, StringView mimeType) {
         if (!IsWebDownloadNameValid(name)) {
             return std::unexpected(String("bad name"));
         }
@@ -91,7 +91,6 @@ namespace BECore {
         DownloadFromPage(name.data(), static_cast<int>(name.size()), content.data(), static_cast<int>(content.size()), type.data(), static_cast<int>(type.size()));
         return {};
 #else
-        static_cast<void>(content);
         return std::unexpected(String("not in the browser"));
 #endif
     }

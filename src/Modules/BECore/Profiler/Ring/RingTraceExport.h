@@ -15,7 +15,7 @@ namespace BECore {
      * The window holds the frames that end within @p seconds before the end of the newest frame; the newest frame is always in, also
      * for @p seconds <= 0. Each frame is cut with FreezeFrame. The frames are consecutive here, so each frame's begin gets an instant
      * event named `Frame` and `trace_summary.py` reads the gaps as frame times (the frozen frames use `Frozen frame` for the opposite
-     * reason). `otherData` holds `ringFrames`, `dropped` (zones the ring or a frame's zone limit left out) and `build` (`stats`).
+     * reason). `otherData` holds `ringFrames`, `dropped` (zones the ring or a frame's zone limit left out) and `build` (`stats` in the stats build, `profile` in any other).
      * An empty snapshot is a valid empty trace. Allocation counts are in the `E` events only with ENGINE_PROFILER_ALLOC.
      */
     [[nodiscard]] String WriteRingTraceJson(const RingSnapshot& snapshot, double seconds);

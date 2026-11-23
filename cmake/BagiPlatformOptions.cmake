@@ -17,11 +17,11 @@
 #                                    Needs ENGINE_PROFILER.
 #   ENGINE_PROFILER_TRACY       OFF  The vendored Tracy client and its backend (BE_PROFILER_TRACY=1). Needs ENGINE_PROFILER.
 #   ENGINE_PROFILER_STATS       OFF  The stats build (BE_PROFILER_STATS=1): ON forces ENGINE_PROFILER ON, also on the web, where this is the one way
-#                                    to switch the profiler on (the frame-ring overlay of a shipped page). It adds no allocation counting and no Tracy.
+#                                    to switch the profiler on (the frame-ring overlay of a shipped page). The option sets neither of the two above: the desktop stats presets turn ENGINE_PROFILER_ALLOC on.
 #
 # The browser (Emscripten) build has no Vulkan, no sockets server and no shared libraries, so on EMSCRIPTEN those three are forced
 # to the values above; the profiler is for the PC, so ENGINE_PROFILER follows ENGINE_PROFILER_STATS there (off unless the stats build is asked for) and
-# ENGINE_PROFILER_ALLOC and ENGINE_PROFILER_TRACY are forced off. Threads are not forced: the default there is OFF like everywhere, which is a threaded page (-pthread and a
+# ENGINE_PROFILER_ALLOC and ENGINE_PROFILER_TRACY are forced off (AllocPlatform is not checked under wasm yet). Threads are not forced: the default there is OFF like everywhere, which is a threaded page (-pthread and a
 # pool of Web Workers, the page then needs cross-origin isolation); ENGINE_SINGLE_THREAD=ON is the single-thread page (the presets
 # web-*-single-thread). ENGINE_TARGET_WEB mirrors EMSCRIPTEN for the other cmake files. A desktop build can switch the options one
 # by one to check the web configuration without an Emscripten SDK (cmake/CLAUDE.md, "Web-like build on the desktop").
