@@ -2,6 +2,7 @@
 // GlyphOutline give, and a benchmark run by hand.
 
 #include <BECore/FontAtlasTestSupport.h>
+#include <BECore/Memory/ScratchArena.h>
 #include <BECore/Text/FontAtlas.h>
 #include <BECore/Text/GlyphOutline.h>
 #include <Common/AllocCheck.h>
@@ -20,6 +21,10 @@ namespace BECore::Tests {
         constexpr int kOutlineRadius = 2;
         constexpr int kRepetitions = 5;
         constexpr uint32_t kBytesPerPixel = 4;
+        /// The heap blocks one page of the recording renderer makes beyond its pixel buffer: the texture object and its copy of the pixels, and the atlas's list of pages growing
+        constexpr uint64_t kBlocksPerPage = 4;
+        /// What a build makes besides its glyphs and pages: the glyph table's bucket array after the one `reserve`, and a rehash
+        constexpr uint64_t kBlocksSlack = 16;
         constexpr uint64_t kFnvOffset = 14695981039346656037ull;
         constexpr uint64_t kFnvPrime = 1099511628211ull;
 
@@ -190,6 +195,41 @@ namespace BECore::Tests {
 
         EXPECT_GT(atlas->GetPageCount(), pagesAfterFirst);
         ExpectPicturesMatchTheFont(*atlas, glyphs);
+    }
+
+    // What remains on the heap is the atlas's own: a node of the glyph table per glyph and the page buffers and textures. The glyph bitmaps, the
+    // stb_truetype blocks and the lists of a build are in the scratch arena, which is given back when the call ends
+    TEST_F(FontAtlasScratchTest, APlainPreloadMakesOnlyTheGlyphTableAndThePagesOnTheHeap) {
+        const IntrusivePtr<FontAtlas> warmUp = New<FontAtlas>(font, kSmallSize, kPageSize);  // the first build of a thread takes its arena chunk
+        warmUp->PrepareCodePoints(*renderer, TextSettings::Default().preload);
+        const IntrusivePtr<FontAtlas> atlas = New<FontAtlas>(font, kBigSize, kPageSize);
+        const size_t usedBefore = ScratchArena::Get().GetBytesUsed();
+
+        const AllocCount counts = CountAllocations([&] { EXPECT_TRUE(atlas->PrepareCodePoints(*renderer, TextSettings::Default().preload)); });
+
+        EXPECT_EQ(ScratchArena::Get().GetBytesUsed(), usedBefore);
+        EXPECT_GT(atlas->GetPageCount(), 1u);
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_LE(counts.count, atlas->GetGlyphCount() + atlas->GetPageCount() * kBlocksPerPage + kBlocksSlack);
+        } else {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+    }
+
+    TEST_F(FontAtlasScratchTest, AnOutlinePreloadMakesOnlyTheGlyphTableAndThePagesOnTheHeap) {
+        const IntrusivePtr<FontAtlas> warmUp = New<FontAtlas>(font, kSmallSize, kPageSize, kOutlineRadius);
+        warmUp->PrepareCodePoints(*renderer, TextSettings::Default().preload);
+        const IntrusivePtr<FontAtlas> atlas = New<FontAtlas>(font, kBigSize, kPageSize, kOutlineRadius);
+        const size_t usedBefore = ScratchArena::Get().GetBytesUsed();
+
+        const AllocCount counts = CountAllocations([&] { EXPECT_TRUE(atlas->PrepareCodePoints(*renderer, TextSettings::Default().preload)); });
+
+        EXPECT_EQ(ScratchArena::Get().GetBytesUsed(), usedBefore);
+        if constexpr (AllocTracker::kEnabled) {
+            EXPECT_LE(counts.count, atlas->GetGlyphCount() + atlas->GetPageCount() * kBlocksPerPage + kBlocksSlack);
+        } else {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
     }
 
     /// A benchmark, not a check: the counts are zero without the profile preset (`kNoAllocTracker`)
