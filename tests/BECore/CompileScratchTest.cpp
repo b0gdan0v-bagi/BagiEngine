@@ -7,8 +7,11 @@
 #include <BECore/Values/Effects/EffectCompiler.h>
 #include <BECore/Values/Effects/ScriptParser.h>
 #include <BECore/Values/Programs/ExprParser.h>
+#include <BECore/Values/Programs/Program.h>
+#include <BECore/Values/Programs/ProgramBuilder.h>
 #include <BECore/Values/Programs/ProgramCompiler.h>
 #include <Common/AllocCheck.h>
+#include <Common/Require.h>
 #include <algorithm>
 #include <chrono>
 #include <gtest/gtest.h>
@@ -31,6 +34,15 @@ namespace BECore::Tests {
         /// The same for a second compile of the script of the budget case. The script is compiled in two passes, so each of its paths is linked twice by the reflection; the rest is the
         /// output (the `EffectProgram`, its source text, a `CompiledExpression::path` per expression)
         constexpr uint64_t kEffectsAllocBudget = 320;
+
+        /// Distinct programs a pool case interns: a content load is a few hundred small programs
+        constexpr uint32_t kPoolPrograms = 300;
+        /// The pool's name in the arena counters; no entry exists while its programs are on the heap
+        constexpr StringView kPoolArenaName = "ProgramPool";
+        /// The heap blocks the pool may keep per interned program: one node of its hash table, the code and the constants being in its arena
+        constexpr uint64_t kHeldBlocksPerProgram = 1;
+        /// The blocks that do not grow with the number of programs: the arena's chunks, the growth of the pool's tables
+        constexpr uint64_t kHeldBlocksSlack = 48;
 
         struct FormulaShape {
             StringView text;
@@ -171,6 +183,50 @@ namespace BECore::Tests {
             return runs[runs.size() / 2];
         }
 
+        /// What the pool holds after @p programs distinct programs were interned
+        struct PoolCounts {
+            uint32_t programs = 0;
+            int64_t heldBlocks = 0;
+            int64_t heldBytes = 0;
+            uint64_t arenaBytes = 0;
+        };
+
+        int64_t LiveBlocks(const AllocTotals& totals) {
+            return static_cast<int64_t>(totals.count) - static_cast<int64_t>(totals.frees);
+        }
+
+        /// Interns @p count programs no earlier run interned (each loads a constant of its own, from a fresh salt) and measures what the pool keeps on the heap: the temporaries of an
+        /// iteration are freed by its end, so the difference of the live blocks is what the pool holds
+        PoolCounts MeasurePool(uint32_t count) {
+            const int32_t base = static_cast<int32_t>(NextSalt() * kSaltStride);
+            const AllocTotals before = AllocTracker::GetTotals();
+            for (uint32_t i = 0; i < count; ++i) {
+                ProgramBuilder builder;
+                const uint8_t dst = Require(builder.AcquireRegister());
+                builder.EmitLoadConst(dst, base + static_cast<int32_t>(i));
+                const auto program = builder.Finish(kProgramTypeOf<int32_t>, dst);
+                EXPECT_TRUE(program.has_value());
+                if (program.has_value()) {
+                    EXPECT_TRUE(ProgramPool::Intern(*program).has_value());
+                }
+            }
+            const AllocTotals after = AllocTracker::GetTotals();
+            PoolCounts counts;
+            counts.programs = count;
+            counts.heldBlocks = LiveBlocks(after) - LiveBlocks(before);
+            counts.heldBytes = static_cast<int64_t>(after.liveBytes) - static_cast<int64_t>(before.liveBytes);
+            for (const ArenaStatsEntry& entry : GetArenaStats()) {
+                if (StringView(entry.name) == kPoolArenaName) {
+                    counts.arenaBytes = entry.used;
+                }
+            }
+            return counts;
+        }
+
+        void PrintPool(const PoolCounts& counts) {
+            std::cout << "CompilePool programs=" << counts.programs << " heldBlocks=" << counts.heldBlocks << " heldBytes=" << counts.heldBytes << " arenaBytes=" << counts.arenaBytes << "\n";
+        }
+
         void Print(const char* name, const CompileCounts& counts) {
             std::cout << name << " formulas=" << counts.texts << " allocs=" << counts.allocs << " bytes=" << counts.bytes << " secondAllocs=" << counts.secondAllocs << " ms=" << counts.ms << "\n";
         }
@@ -228,10 +284,27 @@ namespace BECore::Tests {
         }
     }
 
+    TEST(CompileScratchTest, InterningProgramsLeavesOnlyTheirTableNodesOnTheHeap) {
+        if constexpr (!AllocTracker::kEnabled) {
+            GTEST_SKIP() << kNoAllocTracker;
+        }
+        // The first program takes the pool's first chunks, which a long-lived process has long had
+        (void)MeasurePool(1);
+        const PoolCounts counts = MeasurePool(kPoolPrograms);
+        EXPECT_LE(counts.heldBlocks, static_cast<int64_t>(kPoolPrograms * kHeldBlocksPerProgram + kHeldBlocksSlack)) << "heldBytes=" << counts.heldBytes;
+    }
+
     /// A benchmark, not a check: the counts are zero without the profile preset (`kNoAllocTracker`)
     TEST(CompileScratchBenchTest, DISABLED_CompileOfFormulasAndScripts) {
         Print("CompileScratch", MedianOf([] { return MeasureFormulas(); }));
         Print("CompileScratchEffects", MedianOf([] { return MeasureScripts(); }));
+        (void)MeasurePool(1);
+        Vector<PoolCounts> pools;
+        for (int i = 0; i < kRepetitions; ++i) {
+            pools.push_back(MeasurePool(kPoolPrograms));
+        }
+        std::sort(pools.begin(), pools.end(), [](const PoolCounts& a, const PoolCounts& b) { return a.heldBlocks < b.heldBlocks; });
+        PrintPool(pools[pools.size() / 2]);
         if constexpr (!AllocTracker::kEnabled) {
             GTEST_SKIP() << kNoAllocTracker;
         }
