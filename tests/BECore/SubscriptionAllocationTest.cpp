@@ -134,7 +134,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Detail::TimerLink::PooledPool().GetLiveCount(), linksBefore);
     }
 
-    TEST(SubscriptionAllocationTest, DISABLED_TheFirstWaiterOfATweenHandleAllocatesNothing) {
+    TEST(SubscriptionAllocationTest, TheFirstWaiterOfATweenHandleAllocatesNothing) {
         TweenManager tweens;
         const IntrusivePtr<TweenHandle> handle = tweens.Delay(1.0f);
         const int owner = 0;
