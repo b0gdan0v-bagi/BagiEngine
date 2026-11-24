@@ -19,7 +19,7 @@ namespace BECore {
     Scene::~Scene() = default;
 
     void Scene::Initialize() {
-        _drawRanksValid = false;
+        InvalidateDrawOrder();
         _rootNode = BECore::New<SceneNode>();
         _rootNode->_name = "Root"_intern;
         _rootNode->_scene = this;
@@ -128,7 +128,24 @@ namespace BECore {
     }
 
     void Scene::NodeLayerChanged(PassKey<SceneNode>) {
+        InvalidateDrawOrder();
+    }
+
+    void Scene::ComponentsChanged(PassKey<SceneNode>) {
+        _drawListValid = false;
+    }
+
+    void Scene::EditorFlagsChanged(PassKey<SceneNode>) {
+        _drawListValid = false;
+    }
+
+    bool Scene::IsDrawListValid() const {
+        return _drawListValid;
+    }
+
+    void Scene::InvalidateDrawOrder() {
         _drawRanksValid = false;
+        _drawListValid = false;
     }
 
     void Scene::DrawRanksWritten(PassKey<SceneDrawSystem>) {
@@ -215,7 +232,7 @@ namespace BECore {
     }
 
     IntrusivePtr<SceneNode> Scene::CreateNode(PoolString name, SceneNode* parent) {
-        _drawRanksValid = false;
+        InvalidateDrawOrder();
         auto node = BECore::New<SceneNode>();
         node->_name = name;
         node->_entity = _registry->create();
@@ -252,7 +269,7 @@ namespace BECore {
         }
 
         auto node = DeserializeNode(expanded.document_element(), Format("{} instance of {}", _name.CStr(), ref));
-        _drawRanksValid = false;
+        InvalidateDrawOrder();
         node->WireToScene(this, target);
         const size_t place = eastl::min(index, target->_children.size());
         target->_children.insert(target->_children.begin() + static_cast<ptrdiff_t>(place), node);
@@ -282,7 +299,7 @@ namespace BECore {
             return false;
         }
 
-        _drawRanksValid = false;
+        InvalidateDrawOrder();
         auto& oldSiblings = node._parent->_children;
         const auto it = eastl::find_if(oldSiblings.begin(), oldSiblings.end(), [&node](const IntrusivePtr<SceneNode>& child) { return child.Get() == &node; });
         if (it == oldSiblings.end()) {
@@ -329,7 +346,7 @@ namespace BECore {
         copy->SetName(FreeSiblingName(*parent, Format("{} (copy", node.GetName().CStr()), ")"));
         copy->SetSourceRef(node.GetSourceRef());
 
-        _drawRanksValid = false;
+        InvalidateDrawOrder();
         copy->WireToScene(this, parent);
         const auto at = eastl::find_if(parent->_children.begin(), parent->_children.end(), [&node](const IntrusivePtr<SceneNode>& child) { return child.Get() == &node; });
         parent->_children.insert(at == parent->_children.end() ? at : at + 1, copy);
@@ -350,7 +367,7 @@ namespace BECore {
     }
 
     void Scene::DestroyNodeEntities(SceneNode& node, PassKey<SceneNode>) {
-        _drawRanksValid = false;
+        InvalidateDrawOrder();
         DestroyEntities(node);
     }
 

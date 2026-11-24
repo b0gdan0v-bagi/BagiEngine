@@ -16,6 +16,9 @@ namespace BECore {
 
         SpriteRendererComponent() = default;
         ~SpriteRendererComponent() override = default;
+        bool HasOnDraw() const override {
+            return false;
+        }
 
         BE_REFLECT_FIELD PoolString _spriteId;
         BE_REFLECT_FIELD PoolString _texturePath;

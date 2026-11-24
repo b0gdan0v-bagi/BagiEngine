@@ -29,6 +29,9 @@ namespace BECore {
     public:
         AudioSourceComponent() = default;
         ~AudioSourceComponent() override = default;
+        bool HasOnDraw() const override {
+            return false;
+        }
 
         BE_REFLECT_FIELD PoolString _clip;  ///< the path of a .wav or .ogg
         BE_REFLECT_FIELD AudioBus _bus = AudioBus::Sfx;

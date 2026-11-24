@@ -15,6 +15,9 @@ namespace BECore {
     public:
         ChangeToRandomColorDebugComponent() = default;
         ~ChangeToRandomColorDebugComponent() override = default;
+        bool HasOnDraw() const override {
+            return false;
+        }
 
         BE_REFLECT_FIELD PoolString _actionFilter;
 

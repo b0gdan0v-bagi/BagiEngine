@@ -16,6 +16,9 @@ namespace BECore {
 
         QuadRendererComponent() = default;
         ~QuadRendererComponent() override = default;
+        bool HasOnDraw() const override {
+            return false;
+        }
 
         BE_REFLECT_FIELD Color _color{255, 0, 0, 255};
         BE_REFLECT_FIELD BlendMode _blend = BlendMode::Alpha;  ///< how the quad blends with what is behind it; Alpha is straight alpha

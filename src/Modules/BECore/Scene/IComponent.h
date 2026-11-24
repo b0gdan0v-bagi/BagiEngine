@@ -36,6 +36,16 @@ namespace BECore {
          */
         virtual void OnDraw() {}
 
+        /**
+         * @brief Whether OnDraw() does anything. The draw list asks once per rebuild, never per frame, and a component that says false has no entry in it.
+         *
+         * True is the safe default: a component that overrides OnDraw() needs nothing here. The built-ins that never draw (and the renderers,
+         * which SceneDrawSystem draws itself) say false.
+         */
+        virtual bool HasOnDraw() const {
+            return true;
+        }
+
         Scene& GetScene() const;
         SceneNode& GetNode() const;
 

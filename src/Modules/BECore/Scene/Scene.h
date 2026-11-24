@@ -207,6 +207,15 @@ namespace BECore {
         /// Called by SceneNode::SetLayer() only: the ranks of the last pass no longer hold
         void NodeLayerChanged(PassKey<SceneNode>);
 
+        /// Called by SceneNode::AddComponent() and RemoveComponent() only: the draw list no longer holds, the ranks do
+        void ComponentsChanged(PassKey<SceneNode>);
+
+        /// Called by SceneNode::SetEditorFlags() only, when the flags changed (Hidden hides a subtree from the draw list): the draw list no longer holds, the ranks do
+        void EditorFlagsChanged(PassKey<SceneNode>);
+
+        /// False when the next draw pass has to rebuild the draw list: a node, a component, a layer or the editor flags changed since the last build
+        bool IsDrawListValid() const;
+
         /// Called by SceneDrawSystem::Run() only, once it has written SceneDrawItem::rank of every node
         void DrawRanksWritten(PassKey<SceneDrawSystem>);
 
@@ -214,6 +223,9 @@ namespace BECore {
         bool IsLiveNode(const SceneNode& node) const;
         void DestroyEntities(SceneNode& node);
         void PickView(float outputWidth, float outputHeight);
+
+        /// A node was added, removed, moved or changed its layer: both the ranks and the draw list are stale
+        void InvalidateDrawOrder();
 
         BE_REFLECT_FIELD PoolString _name;
         BE_REFLECT_FIELD float _viewWidth = 0.0f;
@@ -230,6 +242,7 @@ namespace BECore {
         bool _active = false;
         uint32_t _drawPass = 0;
         bool _drawRanksValid = false;  // SceneDrawItem::rank is what the tree says: set by the draw system, cleared by every edit of the tree
+        bool _drawListValid = false;   // what the draw list was built from still holds: cleared by every edit of the tree, of the components of a node and of the editor flags
     };
 
 }  // namespace BECore
