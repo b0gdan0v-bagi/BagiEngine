@@ -24,4 +24,8 @@ Frame counters, set every frame (`RmlUiCounters` in the header; `frame_stats` an
 
 `macos-rmlui-debug`: `build/macos-rmlui-debug/bin/BagiStress --headless --control --manual-clock --stress-scene=rmlui --stress-count=20`, then `set_count`, `set_language`, `wheel_at`, `call_method`, `screenshot`. The tests are `StressRmlUiTest` (`ctest --preset macos-rmlui-debug`; documents, textures, the wheel signs, the reload, a log with no warning) and `RmlUiFieldTest` (every preset).
 
+## Looking at it on Vulkan
+
+The loop's tests are headless (the SDL software renderer), so the Vulkan backend never sees this scene there. `python3 tools/stress/qa/vulkan_look.py --exe build/macos-rmlui-debug/bin/BagiStress --scene rmlui --count 60 --out <dir outside the repository>` runs it in a window with the validation and screenshot layers and prints the validation lines and the `.ppm` it wrote (`src/Modules/Vulkan/CLAUDE.md`, "Looking at the pixels"; tests: `tools/qa/tests/test_stress_vulkan_look.py` for its pure parts; the run needs a display and is not a ctest). It reaches the draw of many contexts, the geometry and the glyph textures on Vulkan, and only partly the texture-lifetime and descriptor-pool paths: the textures stay about a dozen to a few dozen (above), so the growth of the pool past 512 and `ReleaseTexture()` with its GPU wait are not covered.
+
 **Not there:** a benchmark in `tools/perf` (the benchmark set has one preset, without RmlUi), a recorded `tests/scenarios/*.jsonl` (they run in every preset and the scene exists in one), a Vulkan readback for `RequestCapture()`.
