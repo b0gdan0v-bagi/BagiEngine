@@ -3,6 +3,7 @@
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/Control/JsonViewOps.h>
 #include <Common/AllocCheck.h>
 #include <Common/AssertBridge.h>
 #include <Common/ControlTestSupport.h>
@@ -13,37 +14,37 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// What the DOM path wrote for an ok response before the writer: the reference the new text has to equal
-        String DomOkResponse(const Json& id, const Json& result) {
-            Json response = Json::object();
-            response["id"] = id;
-            response["ok"] = true;
-            response["result"] = result;
-            return DumpJson(response);
+        /// A result of every kind of member, written by hand in the byte order of its keys
+        void WriteObjectResult(JsonWriter& writer) {
+            writer.BeginObject();
+            writer.Key("big");
+            writer.Raw("18446744073709551615");
+            writer.Member("count", 3);
+            writer.Key("empty");
+            writer.BeginObject();
+            writer.EndObject();
+            writer.Member("flag", true);
+            writer.Key("list");
+            writer.BeginArray();
+            writer.Value(1);
+            writer.Value(2);
+            writer.BeginArray();
+            writer.EndArray();
+            writer.Value("x");
+            writer.EndArray();
+            writer.Member("name", "a \"quoted\"\n\xC3\xA9 \xFF text");
+            writer.Key("none");
+            writer.Null();
+            writer.Member("ratio", 0.1);
+            writer.EndObject();
         }
 
-        String DomErrorResponse(const Json& id, const ControlError& error) {
-            Json details = Json::object();
-            details["code"] = MakeJsonString(error.code);
-            details["message"] = MakeJsonString(error.message);
-            Json response = Json::object();
-            response["id"] = id;
-            response["ok"] = false;
-            response["error"] = std::move(details);
-            return DumpJson(response);
-        }
+        /// What the DOM dumped for the object above, printed once from it; its invalid byte 0xFF is the U+FFFD of the writer
+        constexpr StringView kObjectResultText = "{\"big\":18446744073709551615,\"count\":3,\"empty\":{},\"flag\":true,\"list\":[1,2,[],\"x\"],"
+                                                 "\"name\":\"a \\\"quoted\\\"\\n\xC3\xA9 \xEF\xBF\xBD text\",\"none\":null,\"ratio\":0.1}";
 
-        Json ObjectResult() {
-            Json result = Json::object();
-            result["name"] = MakeJsonString("a \"quoted\"\n\xC3\xA9 \xFF text");
-            result["count"] = 3;
-            result["big"] = std::numeric_limits<uint64_t>::max();
-            result["ratio"] = 0.1;
-            result["flag"] = true;
-            result["none"] = nullptr;
-            result["empty"] = Json::object();
-            result["list"] = Json::array({1, 2, Json::array(), MakeJsonString("x")});
-            return result;
+        String OkText(StringView id, StringView resultText) {
+            return Format(R"({{"id":{},"ok":true,"result":{}}})", id, resultText);
         }
 
         class ControlResponseTest : public ::testing::Test {
@@ -58,44 +59,78 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST_F(ControlResponseTest, OkResponseBytesAreTheDomPathsForEveryKindOfIdAndResult) {
+    TEST_F(ControlResponseTest, OkResponseBytesAreThePinnedTextForEveryKindOfIdAndResult) {
+        struct ResultCase {
+            FunctionRef<void(JsonWriter&)> write;
+            StringView text;  // what the DOM path dumped for the same value
+        };
+        const auto writeArray = [](JsonWriter& writer) {
+            writer.BeginArray();
+            writer.Value(1);
+            writer.Value("two");
+            writer.BeginObject();
+            writer.EndObject();
+            writer.EndArray();
+        };
+        const auto writeInt = [](JsonWriter& writer) { writer.Value(42); };
+        const auto writeString = [](JsonWriter& writer) { writer.Value("text"); };
+        const auto writeNull = [](JsonWriter& writer) { writer.Null(); };
+        const auto writeFalse = [](JsonWriter& writer) { writer.Value(false); };
+        const Vector<ResultCase> results = {
+            {WriteObjectResult, kObjectResultText}, {writeArray, R"([1,"two",{}])"}, {writeInt, "42"}, {writeString, R"("text")"}, {writeNull, "null"}, {writeFalse, "false"},
+        };
         const Vector<StringView> ids = {"7", R"("req-\"1\"")", kNullId};
-        const Vector<Json> results = {ObjectResult(), Json::array({1, MakeJsonString("two"), Json::object()}), Json(42), MakeJsonString("text"), Json(), Json(false)};
 
         for (const StringView id : ids) {
-            const auto idValue = ParseJson(id);
-            ASSERT_TRUE(idValue.has_value());
-            for (const Json& result : results) {
-                EXPECT_EQ(MakeOkResponse(id, result), DomOkResponse(*idValue, result));
+            for (const ResultCase& result : results) {
+                String text;
+                AppendOkResponse(text, id, result.write);
+                EXPECT_EQ(text, OkText(id, result.text));
             }
         }
     }
 
     TEST_F(ControlResponseTest, OkResponseHasItsKeysInAlphabeticalOrder) {
-        EXPECT_EQ(MakeOkResponse("1", Json::object()), R"({"id":1,"ok":true,"result":{}})");
+        String empty;
+        AppendOkResponse(empty, "1", [](JsonWriter& writer) {
+            writer.BeginObject();
+            writer.EndObject();
+        });
+        EXPECT_EQ(empty, R"({"id":1,"ok":true,"result":{}})");
 
-        Json result = Json::object();
-        result["a"] = 1;
-        EXPECT_EQ(MakeOkResponse(R"("x")", result), R"({"id":"x","ok":true,"result":{"a":1}})");
+        String one;
+        AppendOkResponse(one, R"("x")", [](JsonWriter& writer) {
+            writer.BeginObject();
+            writer.Member("a", 1);
+            writer.EndObject();
+        });
+        EXPECT_EQ(one, R"({"id":"x","ok":true,"result":{"a":1}})");
     }
 
     TEST_F(ControlResponseTest, AResultNestedPastTheWritersLimitIsCutNotAMisuse) {
-        Json deep = Json::array();
-        for (size_t level = 0; level < JsonWriter::kMaxDepth + 10; ++level) {
-            deep = Json::array({std::move(deep)});
+        String deepText;
+        for (size_t level = 0; level < JsonWriter::kMaxDepth; ++level) {
+            deepText += '[';
         }
+        for (size_t level = 0; level < JsonWriter::kMaxDepth; ++level) {
+            deepText += ']';
+        }
+        const JsonDoc deep(StringView(deepText.c_str(), deepText.size()));
+        ASSERT_TRUE(deep.IsParsed());
 
-        const String text = MakeOkResponse("1", std::move(deep));  // the envelope's own object counts as a level; an EXPECT of the writer would fail the case
+        // The envelope's own object counts as a level; an EXPECT of the writer would fail the case
+        String text;
+        AppendOkResponse(text, "1", [&deep](JsonWriter& writer) { WriteJson(writer, deep.Root()); });
 
-        const auto parsed = ParseJson(text);
-        ASSERT_TRUE(parsed.has_value());
-        EXPECT_TRUE(IsOk(*parsed));
+        const ControlReply reply{StringView(text.c_str(), text.size())};
+        ASSERT_TRUE(reply.View().IsValid());
+        EXPECT_TRUE(reply.IsOk());
     }
 
-    TEST_F(ControlResponseTest, ErrorResponseBytesAreTheDomPathsAndThePinnedText) {
+    TEST_F(ControlResponseTest, ErrorResponseBytesAreThePinnedText) {
         const ControlError error = MakeControlError(ControlErrors::kInvalidParams, "bad \"x\"\n\xFF");
 
-        EXPECT_EQ(MakeErrorResponse("5", error), DomErrorResponse(Json(5), error));
+        EXPECT_EQ(MakeErrorResponse("5", error), "{\"error\":{\"code\":\"invalid_params\",\"message\":\"bad \\\"x\\\"\\n\xEF\xBF\xBD\"},\"id\":5,\"ok\":false}");
         EXPECT_EQ(MakeErrorResponse(kNullId, MakeControlError("c", "m")), R"({"error":{"code":"c","message":"m"},"id":null,"ok":false})");
     }
 
@@ -129,17 +164,14 @@ namespace BECore::Tests {
         EXPECT_EQ(out.capacity(), capacity);
     }
 
-    TEST_F(ControlResponseTest, ReplyWithAWriterIsTheSameTextAsReplyWithTheSameJson) {
-        service.RegisterHandler("viaJson", [](ControlCall& call) { call.Reply(ObjectResult()); });
-        service.RegisterHandler("viaWriter", [](ControlCall& call) { call.Reply([](JsonWriter& writer) { WriteJson(writer, ObjectResult()); }); });
+    TEST_F(ControlResponseTest, ReplyWithAWriterWritesTheObjectAsThePinnedText) {
+        service.RegisterHandler("viaWriter", [](ControlCall& call) { call.Reply(WriteObjectResult); });
 
-        service.Post(MakeRequest(4, "viaJson"), Raw());
-        service.Post(MakeRequest(4, "viaWriter"), Raw());
+        service.Post(MakeRequestText(4, "viaWriter"), Raw());
         service.Drain();
 
-        ASSERT_EQ(texts.size(), 2u);
-        EXPECT_EQ(texts[0], texts[1]);
-        EXPECT_EQ(texts[0], DomOkResponse(Json(4), ObjectResult()));
+        ASSERT_EQ(texts.size(), 1u);
+        EXPECT_EQ(texts[0], OkText("4", kObjectResultText));
     }
 
     TEST_F(ControlResponseTest, ReplyWithAWriterWritesAScalarAndAnArray) {
@@ -153,8 +185,8 @@ namespace BECore::Tests {
             });
         });
 
-        service.Post(MakeRequest(1, "scalar"), Raw());
-        service.Post(MakeRequest(2, "array"), Raw());
+        service.Post(MakeRequestText(1, "scalar"), Raw());
+        service.Post(MakeRequestText(2, "array"), Raw());
         service.Drain();
 
         ASSERT_EQ(texts.size(), 2u);
@@ -180,7 +212,7 @@ namespace BECore::Tests {
             call.ReplyEmpty();
         });
 
-        service.Post(MakeRequest(1, "outer"), Raw());
+        service.Post(MakeRequestText(1, "outer"), Raw());
         service.Drain();
 
         EXPECT_EQ(nestedText, String(R"({"n":5,"s":"t"})"));
@@ -188,44 +220,44 @@ namespace BECore::Tests {
         EXPECT_EQ(texts[0], String(R"({"id":1,"ok":true,"result":{}})"));
     }
 
-    TEST_F(ControlResponseTest, TheErrorOfAFailedCallIsWrittenWithTheDomPathsBytes) {
+    TEST_F(ControlResponseTest, TheErrorOfAFailedCallIsWrittenAsThePinnedText) {
         service.RegisterHandler("fail", [](ControlCall& call) { call.Fail(ControlErrors::kInvalidParams, "no \"x\""); });
 
-        service.Post(MakeRequest(8, "fail"), Raw());
+        service.Post(MakeRequestText(8, "fail"), Raw());
         service.Drain();
 
         ASSERT_EQ(texts.size(), 1u);
-        EXPECT_EQ(texts[0], DomErrorResponse(Json(8), MakeControlError(ControlErrors::kInvalidParams, "no \"x\"")));
+        EXPECT_EQ(texts[0], R"({"error":{"code":"invalid_params","message":"no \"x\""},"id":8,"ok":false})");
     }
 
     TEST_F(ControlResponseTest, PushedEventHasItsKeysInAlphabeticalOrder) {
         service.SetEventSink([this](const String& text) { texts.emplace_back(text.c_str(), text.size()); });
 
-        Json data = Json::object();
-        data["version"] = 3;
-        service.Publish("state \"x\"", data);
-        service.Publish("e", Json());
+        service.Publish("state \"x\"", [](JsonWriter& writer) {
+            writer.BeginObject();
+            writer.Member("version", 3);
+            writer.EndObject();
+        });
+        service.Publish("e", [](JsonWriter& writer) { writer.Null(); });
 
         ASSERT_EQ(texts.size(), 2u);
         EXPECT_EQ(texts[0], String(R"({"data":{"version":3},"event":"state \"x\""})"));
         EXPECT_EQ(texts[1], String(R"({"data":null,"event":"e"})"));
     }
 
-    TEST_F(ControlResponseTest, TryReplyWithASuccessIsTheSameTextAsReplyWithTheSameJson) {
-        service.RegisterHandler("viaJson", [](ControlCall& call) { call.Reply(ObjectResult()); });
+    TEST_F(ControlResponseTest, TryReplyWithASuccessWritesTheSameTextAsReply) {
         service.RegisterHandler("viaTry", [](ControlCall& call) {
             call.TryReply([](JsonWriter& writer) -> std::expected<void, ControlError> {
-                WriteJson(writer, ObjectResult());
+                WriteObjectResult(writer);
                 return {};
             });
         });
 
-        service.Post(MakeRequest(4, "viaJson"), Raw());
-        service.Post(MakeRequest(4, "viaTry"), Raw());
+        service.Post(MakeRequestText(4, "viaTry"), Raw());
         service.Drain();
 
-        ASSERT_EQ(texts.size(), 2u);
-        EXPECT_EQ(texts[0], texts[1]);
+        ASSERT_EQ(texts.size(), 1u);
+        EXPECT_EQ(texts[0], OkText("4", kObjectResultText));
     }
 
     TEST_F(ControlResponseTest, TryReplyThatFailsAfterHalfAnObjectSendsExactlyTheErrorResponse) {
@@ -240,8 +272,8 @@ namespace BECore::Tests {
         });
         service.RegisterHandler("after", [](ControlCall& call) { call.Reply([](JsonWriter& writer) { writer.Value("intact"); }); });
 
-        service.Post(MakeRequest(3, "fails"), Raw());
-        service.Post(MakeRequest(4, "after"), Raw());
+        service.Post(MakeRequestText(3, "fails"), Raw());
+        service.Post(MakeRequestText(4, "after"), Raw());
         service.Drain();
 
         ASSERT_EQ(texts.size(), 2u);
@@ -272,8 +304,8 @@ namespace BECore::Tests {
                     return {};
                 });
             });
-            service.Post(MakeRequest(1, "plain"), Raw());
-            service.Post(MakeRequest(1, "tried"), Raw());
+            service.Post(MakeRequestText(1, "plain"), Raw());
+            service.Post(MakeRequestText(1, "tried"), Raw());
             service.Drain();
 
             ASSERT_EQ(texts.size(), 2u);
@@ -292,8 +324,8 @@ namespace BECore::Tests {
         });
         service.RegisterHandler("ok", [](ControlCall& call) { call.Reply([](JsonWriter& writer) { writer.Value(1); }); });
 
-        service.Post(MakeRequest(1, "fails"), Raw());
-        service.Post(MakeRequest(2, "ok"), Raw());
+        service.Post(MakeRequestText(1, "fails"), Raw());
+        service.Post(MakeRequestText(2, "ok"), Raw());
         service.Drain();
 
         ASSERT_EQ(texts.size(), 2u);
@@ -320,32 +352,31 @@ namespace BECore::Tests {
             auto bad = service.RunNested(call, "bad", EmptyParamsView(), [](ControlCall&, ControlAnswer) {});
             ASSERT_TRUE(good.has_value() && good->has_value());
             ASSERT_TRUE(bad.has_value() && !bad->has_value());
-            Json result = Json::object();
-            auto goodValue = ParseJson(**good);
-            ASSERT_TRUE(goodValue.has_value());
-            result["good"] = std::move(*goodValue);
-            result["bad"] = MakeJsonString(bad->error().code);
-            call.Reply(std::move(result));
+            call.Reply([&](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Member("bad", bad->error().code);
+                writer.Key("good");
+                writer.Raw(**good);
+                writer.EndObject();
+            });
         });
 
-        service.Post(MakeRequest(1, "outer"), Raw());
+        service.Post(MakeRequestText(1, "outer"), Raw());
         service.Drain();
 
         ASSERT_EQ(texts.size(), 1u);
         EXPECT_EQ(texts[0], String(R"({"id":1,"ok":true,"result":{"bad":"nested_failure","good":{"n":5}}})"));
     }
 
-    TEST_F(ControlResponseTest, PublishWithAWriterIsTheSameBytesAsPublishWithTheJson) {
+    TEST_F(ControlResponseTest, PublishWithAWriterSendsThePinnedText) {
         service.SetEventSink([this](const String& text) { texts.emplace_back(text.c_str(), text.size()); });
 
-        service.Publish("state_changed", ObjectResult());
-        service.Publish("state_changed", [](JsonWriter& writer) { WriteJson(writer, ObjectResult()); });
-        service.Publish("e \"x\"", Json());
+        service.Publish("state_changed", WriteObjectResult);
         service.Publish("e \"x\"", [](JsonWriter& writer) { writer.Null(); });
 
-        ASSERT_EQ(texts.size(), 4u);
-        EXPECT_EQ(texts[0], texts[1]);
-        EXPECT_EQ(texts[2], texts[3]);
+        ASSERT_EQ(texts.size(), 2u);
+        EXPECT_EQ(texts[0], Format(R"({{"data":{},"event":"state_changed"}})", kObjectResultText));
+        EXPECT_EQ(texts[1], String(R"({"data":null,"event":"e \"x\""})"));
     }
 
     TEST_F(ControlResponseTest, PublishWithAWriterDoesNothingWithoutASinkAndAnObserver) {
@@ -360,25 +391,16 @@ namespace BECore::Tests {
 
     TEST_F(ControlResponseTest, PublishWithAWriterGivesAnObserverTheWrittenDataAndTheSinkTheSameText) {
         service.SetEventSink([this](const String& text) { texts.emplace_back(text.c_str(), text.size()); });
-        Vector<Json> seen;
-        const auto id = service.AddPublishObserver([&seen](StringView, JsonView data) {
-            auto parsed = ParseJson(data.Raw());
-            ASSERT_TRUE(parsed.has_value());
-            seen.push_back(std::move(*parsed));
-        });
+        Vector<String> seen;
+        const auto id = service.AddPublishObserver([&seen](StringView, JsonView data) { seen.emplace_back(data.Raw()); });
 
-        service.Publish("e", [](JsonWriter& writer) { WriteJson(writer, ObjectResult()); });
+        service.Publish("e", WriteObjectResult);
         service.RemovePublishObserver(id);
 
         ASSERT_EQ(seen.size(), 1u);
-        const auto expectedData = ParseJson(DumpJson(ObjectResult()));  // the invalid UTF-8 of the sample is replaced by the dump, in the observer's copy too
-        ASSERT_TRUE(expectedData.has_value());
-        EXPECT_TRUE(seen[0] == *expectedData);  // not EXPECT_EQ: a failure would print the Json
+        EXPECT_EQ(seen[0], String(kObjectResultText));  // the invalid UTF-8 of the sample is replaced in the observer's copy too
         ASSERT_EQ(texts.size(), 1u);
-        String reference;
-        service.SetEventSink([&reference](const String& text) { reference = text; });
-        service.Publish("e", ObjectResult());
-        EXPECT_EQ(texts[0], reference);
+        EXPECT_EQ(texts[0], Format(R"({{"data":{},"event":"e"}})", kObjectResultText));
     }
 
     TEST_F(ControlResponseTest, PublishWithAWriterThatWritesNoValueSendsNothing) {
@@ -415,11 +437,11 @@ namespace BECore::Tests {
         String outerAfter;
         service.RegisterHandler("quick", [](ControlCall& call) { call.Reply([](JsonWriter& writer) { writer.Value("outer"); }); }, true);
 
-        service.Post(MakeRequest(1, "wait"), Raw());
+        service.Post(MakeRequestText(1, "wait"), Raw());
         service.Drain();
         ASSERT_TRUE(texts.empty());
 
-        service.Post(MakeRequest(2, "quick"), [&](const String& text) {
+        service.Post(MakeRequestText(2, "quick"), [&](const String& text) {
             outerBefore = text;
             service.EndFrame();
             outerAfter = text;
@@ -436,7 +458,7 @@ namespace BECore::Tests {
         service.Shutdown();
         String text;
 
-        std::thread poster([&] { service.Post(MakeRequest(6, "late"), [&text](const String& reply) { text = reply; }); });
+        std::thread poster([&] { service.Post(MakeRequestText(6, "late"), [&text](const String& reply) { text = reply; }); });
         poster.join();
 
         EXPECT_EQ(text, String(R"({"error":{"code":"shutting_down","message":"the application is shutting down"},"id":6,"ok":false})"));
