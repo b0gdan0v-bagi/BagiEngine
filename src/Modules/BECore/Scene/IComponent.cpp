@@ -6,8 +6,8 @@
 
 namespace BECore {
 
-    // The scene's update list holds no flag per component, so the class must not grow (a one-byte member makes it 136 bytes).
-    static_assert(sizeof(IComponent) == 128);
+    // The scene's update list holds no flag per component, so the class must not grow by a member; the bound is in pointers, so it holds on 32-bit too.
+    static_assert(sizeof(IComponent) <= 16 * sizeof(void*));
 
     Scene& IComponent::GetScene() const {
         ASSERT(_scene != nullptr);
