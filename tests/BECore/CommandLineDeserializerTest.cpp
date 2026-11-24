@@ -2,6 +2,7 @@
 
 #include <BECore/Application/ApplicationConfig.h>
 #include <BECore/Application/CommandLineDeserializer.h>
+#include <BECore/Control/ControlFlags.h>
 #include <BECore/Reflection/ReaderLimits.h>
 #include <Common/AllocCheck.h>
 #include <Common/Printers.h>
@@ -408,6 +409,56 @@ namespace BECore::Tests {
         const auto read = [&] { reader.ReadAttribute("port", port); };
         read();
         ExpectNoAllocations(read);
+    }
+
+    TEST(CommandLineDeserializerTest, ControlFlagsAreReadFromTheirFlags) {
+        Reading<ControlFlags> reading({"--window=480x360", "--density=2", "--replay=a.jsonl", "--replay-exit"});
+        reading.Load();
+        EXPECT_FALSE(reading.Reader().HasErrors());
+        const ControlFlags& flags = reading.Value();
+        EXPECT_EQ(flags._replay, "a.jsonl");
+        EXPECT_TRUE(flags._replayExit);
+        ASSERT_TRUE(flags._window.has_value());
+        EXPECT_EQ(flags._window->width, 480);
+        EXPECT_EQ(flags._window->height, 360);
+        ASSERT_TRUE(flags._density.has_value());
+        EXPECT_FLOAT_EQ(*flags._density, 2.0f);
+    }
+
+    TEST(CommandLineDeserializerTest, ControlFlagsNotGivenStayEmpty) {
+        Reading<ControlFlags> reading({"--other"});
+        reading.Load();
+        EXPECT_FALSE(reading.Reader().HasErrors());
+        EXPECT_TRUE(reading.Value()._replay.empty());
+        EXPECT_FALSE(reading.Value()._replayExit);
+        EXPECT_FALSE(reading.Value()._window.has_value());
+        EXPECT_FALSE(reading.Value()._density.has_value());
+    }
+
+    TEST(CommandLineDeserializerTest, ABadWindowSizeIsAnErrorNamedByTheFlag) {
+        for (const char* text : {"480", "480x", "x480", "axb", "4x8x9", "", "480X480", " 4x4"}) {
+            Reading<ControlFlags> reading({Format("--window={}", text)});
+            reading.Load();
+            const DeserializeError* error = reading.ErrorAt("--window");
+            ASSERT_NE(error, nullptr) << text;
+            EXPECT_NE(error->errorMessage.find("is not a window size"), String::npos) << text;
+            EXPECT_FALSE(reading.Value()._window.has_value()) << text;
+        }
+    }
+
+    TEST(CommandLineDeserializerTest, ABareWindowFlagNeedsAValue) {
+        Reading<ControlFlags> reading({"--window"});
+        reading.Load();
+        const DeserializeError* error = reading.ErrorAt("--window");
+        ASSERT_NE(error, nullptr);
+        EXPECT_NE(error->errorMessage.find("needs a value"), String::npos);
+    }
+
+    TEST(CommandLineDeserializerTest, ABadDensityIsAnErrorNamedByTheFlag) {
+        Reading<ControlFlags> reading({"--density=abc"});
+        reading.Load();
+        EXPECT_NE(reading.ErrorAt("--density"), nullptr);
+        EXPECT_FALSE(reading.Value()._density.has_value());
     }
 
 }  // namespace BECore::Tests
