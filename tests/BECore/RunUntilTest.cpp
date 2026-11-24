@@ -115,6 +115,14 @@ namespace BECore::Tests {
                 });
             }
 
+            /// Posts a request whose params are the JSON text @p paramsText, for a value a `Json` cannot hold (`1e999`)
+            void PostText(int64_t id, StringView method, StringView paramsText) {
+                service.Post(Format(R"({{"id":{},"method":"{}","params":{}}})", id, method, paramsText), [this](String text) {
+                    auto parsed = ParseJson(text);
+                    responses.push_back(parsed ? std::move(*parsed) : Json());
+                });
+            }
+
             /// The application loop over the pause, as the clock of the test would run it, until @p answers answers are in. Returns the kinds of the frames that ran
             Vector<FrameKind> RunFrames(size_t answers) {
                 constexpr int kGuard = 1000;
@@ -248,6 +256,73 @@ namespace BECore::Tests {
         EXPECT_FALSE(GetJsonBool(*result, "met").value_or(true));
     }
 
+    TEST_P(RunUntilTest, EqualsComparesNumbersByValue) {
+        Fake()->rawState = R"({"n":1.0})";
+
+        const Json* result = RunUntil(RunUntilParams(ConditionPointer("/state/n", 1)));
+
+        ASSERT_NE(result, nullptr);
+        EXPECT_TRUE(GetJsonBool(*result, "met").value_or(false));
+        EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 0);
+    }
+
+    TEST_P(RunUntilTest, ObjectEqualsIgnoresTheOrderOfKeys) {
+        Fake()->rawState = R"({"a":1,"b":{"c":2,"d":[1,2]}})";
+        Json inner = Json::object();
+        inner["d"] = Json::array({1, 2});
+        inner["c"] = 2;
+        Json equals = Json::object();
+        equals["b"] = inner;
+        equals["a"] = 1;
+
+        const Json* result = RunUntil(RunUntilParams(ConditionPointer("/state", equals)));
+
+        ASSERT_NE(result, nullptr);
+        EXPECT_TRUE(GetJsonBool(*result, "met").value_or(false));
+    }
+
+    TEST_P(RunUntilTest, AStringEqualsByItsDecodedText) {
+        Fake()->rawState = R"({"s":"\u0041\n","k\u0041":1})";
+
+        const Json* text = RunUntil(RunUntilParams(ConditionPointer("/state/s", "A\n")));
+        ASSERT_NE(text, nullptr);
+        EXPECT_TRUE(GetJsonBool(*text, "met").value_or(false));
+
+        const Json* key = RunUntil(RunUntilParams(ConditionPointer("/state/kA", 1)));
+        ASSERT_NE(key, nullptr);
+        EXPECT_TRUE(GetJsonBool(*key, "met").value_or(false));
+    }
+
+    TEST_P(RunUntilTest, ANumberPastADoubleInEqualsIsAValueAndNotAnError) {
+        PostText(1, "run_until", R"({"condition":{"pointer":"/state/counter","equals":1e999},"maxFrames":1})");
+        RunFrames(1);
+
+        const Json* result = Result(0);
+        ASSERT_NE(result, nullptr);
+        EXPECT_FALSE(GetJsonBool(*result, "met").value_or(true));
+        EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 1);
+    }
+
+    TEST_P(RunUntilTest, TheDocumentIsWrittenOncePerVersion) {
+        Fake()->handWritten = true;
+
+        const Json* result = RunUntil(RunUntilParams(ConditionPointer("/state/counter", 9), 3));
+
+        ASSERT_NE(result, nullptr);
+        EXPECT_FALSE(GetJsonBool(*result, "met").value_or(true));
+        EXPECT_EQ(Fake()->writeStateCalls, 1);
+    }
+
+    TEST_P(RunUntilTest, AStateThatFailsToWriteFailsThePointerWait) {
+        Fake()->failWrites = true;
+
+        RunUntil(RunUntilParams(ConditionPointer("/state/counter", 0), 2));
+
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_EQ(ErrorCode(responses[0]), "write_failed");
+        EXPECT_EQ(service.GetPublishObserverCount(), 0u);
+    }
+
     TEST_P(RunUntilTest, PointerCanNameTheWholeAnswerOrTheVersion) {
         Json whole = Json::object();
         whole["game"] = "FakeControllable";
@@ -328,6 +403,26 @@ namespace BECore::Tests {
         ASSERT_NE(met, nullptr);
         EXPECT_TRUE(GetJsonBool(*met, "met").value_or(false));
         EXPECT_EQ(GetJsonInt(*met, "frames").value_or(-1), 1);
+    }
+
+    TEST_P(RunUntilTest, EventEqualComparesNestedValuesAndIgnoresOtherMembers) {
+        AtFrame(1, [this] {
+            Json data = Json::object();
+            data["n"] = Json::object();
+            data["n"]["a"] = Json::array({1, 2});
+            data["extra"] = true;
+            service.Publish("ping", data);
+        });
+        Json inner = Json::object();
+        inner["a"] = Json::array({1, 2.0});
+        Json equal = Json::object();
+        equal["n"] = inner;
+
+        const Json* result = RunUntil(RunUntilParams(ConditionEvent("ping", equal), 3));
+
+        ASSERT_NE(result, nullptr);
+        EXPECT_TRUE(GetJsonBool(*result, "met").value_or(false));
+        EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 1);
     }
 
     TEST_P(RunUntilTest, AnEventOfAnotherNameOrBeforeTheCallDoesNotCount) {
@@ -520,6 +615,7 @@ namespace BECore::Tests {
             Json{{"condition", Json{{"pointer", 1}, {"equals", 1}}}},
             Json{{"condition", Json{{"pointer", "a"}, {"equals", 1}}}},
             Json{{"condition", Json{{"pointer", "/a~"}, {"equals", 1}}}},
+            Json{{"condition", Json{{"pointer", "/a~2"}, {"equals", 1}}}},
             Json{{"condition", Json{{"pointer", "/a"}, {"equals", 1}, {"extra", 1}}}},
             Json{{"condition", Json{{"pointer", "/a"}, {"equals", 1}, {"versionMoved", true}}}},
             Json{{"condition", Json{{"versionMoved", false}}}},

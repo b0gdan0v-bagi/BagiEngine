@@ -45,10 +45,14 @@ namespace BECore::Tests {
     }
 
     std::expected<void, ControlError> FakeControllableGame::WriteState(JsonWriter& writer) const {
-        if (!handWritten && !failWrites) {
+        if (!handWritten && !failWrites && rawState.empty()) {
             return IControllableGame::WriteState(writer);
         }
         ++writeStateCalls;
+        if (!rawState.empty()) {
+            writer.Raw(rawState);
+            return {};
+        }
         writer.BeginObject();
         if (failWrites) {
             writer.Member("half", 1);

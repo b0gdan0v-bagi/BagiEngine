@@ -2,8 +2,10 @@
 
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/Control/JsonViewOps.h>
 #include <BECore/Time/Time.h>
 #include <Games/GameControlAnswers.h>
 #include <Games/GameManager.h>
@@ -92,18 +94,22 @@ namespace BECore {
             String _state;  // the text of the state being pushed; keeps its capacity
         };
 
-        /// `get_state` as a value: {"game", "version", "state"}. The one document of the game methods that stays a `Json`: the `pointer` of `run_until` is a
-        /// JSON Pointer that is evaluated against it
-        std::expected<Json, ControlError> DescribeState(const ActiveGame& active) {
-            auto state = active.control->GetState();
-            if (!state) {
-                return std::unexpected(state.error());
+        /// `get_state` as a document, {"game", "state", "version"}, written into @p out (cleared first): what the `pointer` of `run_until` is evaluated against
+        std::expected<void, ControlError> WriteStateDocument(const ActiveGame& active, String& out) {
+            out.clear();
+            JsonWriter writer(out);
+            writer.BeginObject();
+            writer.Member("game", active.game->GetName());
+            writer.Key("state");
+            if (auto written = active.control->WriteState(writer); !written) {
+                return std::unexpected(written.error());
             }
-            Json result = Json::object();
-            result["game"] = MakeJsonString(active.game->GetName().ToStringView());
-            result["state"] = std::move(*state);
-            result["version"] = active.control->GetStateVersion();
-            return result;
+            writer.Member("version", active.control->GetStateVersion());
+            writer.EndObject();
+            if (!writer.IsComplete()) {
+                return std::unexpected(MakeControlError(ControlErrors::kInternalError, "the game wrote no complete state"));
+            }
+            return {};
         }
 
         void HandleListGames(ControlCall& call) {
@@ -124,7 +130,7 @@ namespace BECore {
         }
 
         void HandleSwitchGame(ControlCall& call) {
-            const auto name = GetJsonString(call.ParamsJson(), "name");
+            const auto name = GetParamString(call.Params(), "name");
             if (!name) {
                 call.Fail(ControlErrors::kInvalidParams, "'name' has to be a string");
                 return;
@@ -249,6 +255,9 @@ namespace BECore {
         /**
          * One `run_until` that waits for frames. The continuation of the deferred call holds it (the handler has returned by then), so whatever ends the wait
          * (an answer, an error, the limit, a Shutdown() that drops the call) destroys it, and the destructor gives the observer of `event` back.
+         *
+         * A tape borrows its text, so every text lives next to its tape and the state never moves: it is built in place and held by a `UniquePtr`. The texts
+         * are copies, because the call's own params are gone by the time the wait ends.
          */
         struct RunUntilState {
             explicit RunUntilState(ControlService& owner) : service(owner) {}
@@ -259,12 +268,20 @@ namespace BECore {
                 service.RemovePublishObserver(observer);
             }
 
+            /// Copies @p value into @p text and tapes it there. The text was read once already, so it parses; were it not to, the tape stays empty
+            static void Keep(JsonView value, String& text, JsonTape& tape) {
+                text = String(value.Raw());
+                static_cast<void>(tape.Parse(text));
+            }
+
             ControlService& service;
             RunUntilKind kind = RunUntilKind::Pointer;
             String pointer;
-            Json equals;
+            String equalsText;
+            JsonTape equalsTape;
             String eventName;
-            Json eventEqual = Json::object();
+            String eventEqualText;
+            JsonTape eventEqualTape;  // empty when the event has no `equal`: every event of the name counts
             uint32_t maxFrames = kDefaultRunUntilFrames;
             double seconds = kDefaultStepSeconds;
             uint32_t frames = 0;
@@ -272,84 +289,96 @@ namespace BECore {
             ControlService::PublishObserverId observer = ControlService::kNoPublishObserver;
             bool eventSeen = false;
 
-            // What `get_state` answered the last time, read again only when the game or its state version moved
-            Optional<Json> document;
+            // What `get_state` answers, read again only when the game or its state version moved
+            String documentText;
+            JsonTape documentTape;
+            bool hasDocument = false;
             String documentGame;
             uint64_t documentVersion = 0;
         };
 
         /// True when every member of @p expected is in @p data with an equal value
-        bool HasMembers(const Json& data, const Json& expected) {
-            for (const auto& member : expected.items()) {
-                const Json* found = FindJsonMember(data, StringView(member.key().c_str(), member.key().size()));
-                if (found == nullptr || *found != member.value()) {
+        bool HasMembers(JsonView data, JsonView expected) {
+            String decoded;
+            for (const JsonMember member : expected.Members()) {
+                StringView key;
+                if (const Optional<StringView> plain = member.key.Text()) {
+                    key = *plain;
+                } else {
+                    member.key.ReadText(decoded);
+                    key = decoded;
+                }
+                const Optional<JsonView> found = data.Find(key);
+                if (!found || !JsonEquals(*found, member.value)) {
                     return false;
                 }
             }
             return true;
         }
 
-        std::expected<void, ControlError> ReadRunUntilPointer(const Json& condition, RunUntilState& state) {
-            const auto pointer = GetJsonString(condition, RunUntilNames::pointer.View());
+        std::expected<void, ControlError> ReadRunUntilPointer(JsonView condition, RunUntilState& state) {
+            const auto pointer = GetParamString(condition, RunUntilNames::pointer.View());
             if (!pointer) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'pointer' has to be a string"));
             }
-            const Json* equals = FindJsonMember(condition, RunUntilNames::equals.View());
-            if (equals == nullptr) {
+            const Optional<JsonView> equals = FindParam(condition, RunUntilNames::equals.View());
+            if (!equals) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "a 'pointer' condition needs 'equals'"));
             }
             // Only the syntax can be judged without the document
-            if (const auto checked = FindJsonPointer(Json::object(), *pointer); !checked) {
+            if (const auto checked = CheckJsonPointer(*pointer); !checked) {
                 return std::unexpected(checked.error());
             }
             state.kind = RunUntilKind::Pointer;
             state.pointer = *pointer;
-            state.equals = *equals;
+            RunUntilState::Keep(*equals, state.equalsText, state.equalsTape);
             return {};
         }
 
-        std::expected<void, ControlError> ReadRunUntilEvent(const Json& condition, RunUntilState& state) {
-            const Json* event = FindJsonMember(condition, RunUntilNames::event.View());
-            const auto name = event != nullptr ? GetJsonString(*event, RunUntilNames::eventName.View()) : Optional<String>();
-            if (event == nullptr || !event->is_object() || !name || name->empty()) {
+        std::expected<void, ControlError> ReadRunUntilEvent(JsonView condition, RunUntilState& state) {
+            const Optional<JsonView> event = FindParam(condition, RunUntilNames::event.View());
+            const auto name = event ? GetParamString(*event, RunUntilNames::eventName.View()) : Optional<String>();
+            if (!event || !event->IsObject() || !name || name->empty()) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'event' has to be an object with a non-empty string 'name'"));
             }
-            for (const auto& member : event->items()) {
-                const StringView key(member.key().c_str(), member.key().size());
-                if (key != RunUntilNames::eventName.View() && key != RunUntilNames::eventEqual.View()) {
+            String key;
+            for (const JsonMember member : event->Members()) {
+                if (!member.key.TextEquals(RunUntilNames::eventName.View()) && !member.key.TextEquals(RunUntilNames::eventEqual.View())) {
+                    member.key.ReadText(key);
                     return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'event' has no member '{}' (it has 'name' and 'equal')", key)));
                 }
             }
-            const Json* equal = FindJsonMember(*event, RunUntilNames::eventEqual.View());
-            if (equal != nullptr && !equal->is_object()) {
+            const Optional<JsonView> equal = FindParam(*event, RunUntilNames::eventEqual.View());
+            if (equal && !equal->IsObject()) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'equal' has to be an object"));
             }
             state.kind = RunUntilKind::Event;
             state.eventName = *name;
-            if (equal != nullptr) {
-                state.eventEqual = *equal;
+            if (equal) {
+                RunUntilState::Keep(*equal, state.eventEqualText, state.eventEqualTape);
             }
             return {};
         }
 
         /// The condition of a `run_until`: exactly one of `pointer` (with `equals`), `versionMoved` or `event`, and nothing else
-        std::expected<void, ControlError> ReadRunUntilCondition(const Json& params, RunUntilState& state) {
-            const Json* condition = FindJsonMember(params, "condition");
-            if (condition == nullptr || !condition->is_object()) {
+        std::expected<void, ControlError> ReadRunUntilCondition(JsonView params, RunUntilState& state) {
+            const Optional<JsonView> condition = FindParam(params, "condition");
+            if (!condition || !condition->IsObject()) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'condition' has to be an object"));
             }
 
-            const bool hasPointer = FindJsonMember(*condition, RunUntilNames::pointer.View()) != nullptr;
-            const bool hasVersionMoved = FindJsonMember(*condition, RunUntilNames::versionMoved.View()) != nullptr;
-            const bool hasEvent = FindJsonMember(*condition, RunUntilNames::event.View()) != nullptr;
+            const bool hasPointer = FindParam(*condition, RunUntilNames::pointer.View()).has_value();
+            const bool hasVersionMoved = FindParam(*condition, RunUntilNames::versionMoved.View()).has_value();
+            const bool hasEvent = FindParam(*condition, RunUntilNames::event.View()).has_value();
             if (static_cast<int>(hasPointer) + static_cast<int>(hasVersionMoved) + static_cast<int>(hasEvent) != 1) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'condition' has to have exactly one of 'pointer' (with 'equals'), 'versionMoved' and 'event'"));
             }
-            for (const auto& member : condition->items()) {
-                const StringView key(member.key().c_str(), member.key().size());
-                const bool known =
-                    key == RunUntilNames::pointer.View() || key == RunUntilNames::versionMoved.View() || key == RunUntilNames::event.View() || (hasPointer && key == RunUntilNames::equals.View());
+            String key;
+            for (const JsonMember member : condition->Members()) {
+                const bool known = member.key.TextEquals(RunUntilNames::pointer.View()) || member.key.TextEquals(RunUntilNames::versionMoved.View()) ||
+                                   member.key.TextEquals(RunUntilNames::event.View()) || (hasPointer && member.key.TextEquals(RunUntilNames::equals.View()));
                 if (!known) {
+                    member.key.ReadText(key);
                     return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'condition' has no member '{}' here", key)));
                 }
             }
@@ -360,7 +389,7 @@ namespace BECore {
             if (hasEvent) {
                 return ReadRunUntilEvent(*condition, state);
             }
-            if (GetJsonBool(*condition, RunUntilNames::versionMoved.View()) != true) {
+            if (GetParamBool(*condition, RunUntilNames::versionMoved.View()) != true) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'versionMoved' has to be true"));
             }
             state.kind = RunUntilKind::VersionMoved;
@@ -383,20 +412,24 @@ namespace BECore {
             }
 
             const StringView game = active->game->GetName().ToStringView();
-            if (!state.document || version != state.documentVersion || game != StringView(state.documentGame)) {
-                auto described = DescribeState(*active);
-                if (!described) {
-                    return std::unexpected(described.error());
+            if (!state.hasDocument || version != state.documentVersion || game != StringView(state.documentGame)) {
+                // Not yet marked as read: a document that fails below is written again by the next look
+                state.hasDocument = false;
+                if (auto written = WriteStateDocument(*active, state.documentText); !written) {
+                    return std::unexpected(written.error());
                 }
-                state.document = std::move(*described);
+                if (const auto taped = state.documentTape.Parse(state.documentText); !taped) {
+                    return std::unexpected(MakeControlError(ControlErrors::kInternalError, Format("the state cannot be read as a document: {}", taped.error().message)));
+                }
+                state.hasDocument = true;
                 state.documentGame = String(game);
                 state.documentVersion = version;
             }
-            const auto found = FindJsonPointer(*state.document, state.pointer);
+            const auto found = FindJsonPointer(JsonView(state.documentTape, 0), state.pointer);
             if (!found) {
                 return std::unexpected(found.error());
             }
-            return *found != nullptr && **found == state.equals ? Optional<PoolString>(RunUntilNames::pointer) : Optional<PoolString>();
+            return *found && JsonEquals(**found, JsonView(state.equalsTape, 0)) ? Optional<PoolString>(RunUntilNames::pointer) : Optional<PoolString>();
         }
 
         /// The answer of a `run_until` that ended: the clock of `step`; the game is left out when none can be read (an `event` wait needs none)
@@ -434,7 +467,7 @@ namespace BECore {
 
         void HandleRunUntil(ControlCall& call, ControlService& service) {
             auto state = MakeUnique<RunUntilState>(service);
-            if (auto condition = ReadRunUntilCondition(call.ParamsJson(), *state); !condition) {
+            if (auto condition = ReadRunUntilCondition(call.Params(), *state); !condition) {
                 call.Fail(condition.error());
                 return;
             }
@@ -454,12 +487,7 @@ namespace BECore {
             if (state->kind == RunUntilKind::Event) {
                 // Added now and kept by the state: an event of the first frame counts, and no way out of the wait leaves it behind
                 state->observer = service.AddPublishObserver([raw = state.get()](StringView event, JsonView data) {
-                    if (event != StringView(raw->eventName)) {
-                        return;
-                    }
-                    // `eventEqual` is a DOM, so the pushed data is parsed to compare with it
-                    const auto parsed = ParseJson(data.Raw());
-                    if (parsed && HasMembers(*parsed, raw->eventEqual)) {
+                    if (event == StringView(raw->eventName) && HasMembers(data, JsonView(raw->eventEqualTape, 0))) {
                         raw->eventSeen = true;
                     }
                 });

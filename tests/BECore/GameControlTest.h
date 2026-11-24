@@ -44,6 +44,8 @@ namespace BECore::Tests {
         /// documents by hand and count the calls; with `failWrites` they write half an object and fail (GameControlWriterTest.cpp)
         bool handWritten = false;
         bool failWrites = false;
+        /// When not empty, `WriteState` writes this text as the state (one JSON value): a state with numbers and escapes the counter cannot make
+        String rawState;
         mutable int writeStateCalls = 0;
         mutable int writeActionsCalls = 0;
     };
