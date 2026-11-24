@@ -1,3 +1,4 @@
+#include <BECore/Control/Json.h>
 #include <BECore/Rooms/TestRandom.h>
 #include <Common/JsonDoc.h>
 #include <Common/Printers.h>

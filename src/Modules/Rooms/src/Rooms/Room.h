@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
+#include <BECore/Control/JsonTape.h>
 #include <BECore/Control/JsonView.h>
 #include <Games/SeatedGameRegistry.h>
 #include <Rooms/RoomLimits.h>
@@ -95,7 +96,8 @@ namespace BECore {
          *
          * The delay counts from the start and from the last computer move. The move goes through ISeatedGame::PerformSeatAction, like a
          * person's, and is atomic. A computer choice that the game refuses is logged as an error and not retried in this call (the
-         * call gives false and tries no other seat), so a misbehaving game cannot loop.
+         * call gives false and tries no other seat), so a misbehaving game cannot loop. A seat whose game writes no complete object is logged and
+         * skipped (the next seat is tried).
          *
          * @return whether a move was made
          */
@@ -215,6 +217,10 @@ namespace BECore {
         uint64_t _lobbyRevision = 1;
         /// The public options the lobby shows (SetLobbyOptions): the text of an object, empty when there are none
         String _lobbyOptions;
+        /// The text and the tape of the document the room makes itself (a computer's action, the empty `options`): kept so a move
+        /// reuses their capacity. The tape borrows the text, so they are written and read in one call and never outlive it
+        String _scratchText;
+        JsonTape _scratchTape;
         bool _public = false;
     };
 

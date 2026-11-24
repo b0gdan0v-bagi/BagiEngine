@@ -85,11 +85,11 @@ namespace BECore {
         ~DemoCardGame() override = default;
 
         int GetSeatCount() const override;
-        std::expected<void, ControlError> Start(uint64_t seed, const Json& options) override;
+        std::expected<void, ControlError> Start(uint64_t seed, JsonView options) override;
         std::expected<UniquePtr<SeatedView>, ControlError> GetSeatView(int seat) const override;
         std::expected<UniquePtr<SeatedActions>, ControlError> GetSeatActions(int seat) const override;
-        std::expected<UniquePtr<SeatedOutcome>, ControlError> PerformSeatAction(int seat, const Json& action) override;
-        Optional<Json> ChooseComputerAction(int seat) const override;
+        std::expected<UniquePtr<SeatedOutcome>, ControlError> PerformSeatAction(int seat, JsonView action) override;
+        bool ChooseComputerAction(int seat, JsonWriter& action) const override;
         bool IsFinished() const override;
         uint64_t GetStateVersion() const override;
 

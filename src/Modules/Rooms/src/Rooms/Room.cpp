@@ -11,16 +11,6 @@ namespace BECore {
             return ControlError{String(code), String(message)};
         }
 
-        /// The DOM that the `ISeatedGame` of this tree still takes (its Start and PerformSeatAction); the step that gives the game views removes it.
-        /// A document the DOM refuses (`1e999`) or a view that is not valid is refused as a bad message, as it was before the tape
-        [[nodiscard]] std::expected<Json, ControlError> GameDocument(JsonView view) {
-            auto document = ParseJson(view.Raw());
-            if (!document) {
-                return std::unexpected(MakeError(RoomErrors::kBadMessage, "The document is not valid JSON"));
-            }
-            return std::move(*document);
-        }
-
         /// How many tokens AddMember draws before it gives up (a collision of 128 bits never happens, a constant RandomFn does)
         constexpr int kMaxTokenAttempts = 16;
 
@@ -150,11 +140,14 @@ namespace BECore {
         if (!game || game->GetSeatCount() != _info.seatCount) {
             return std::unexpected(MakeError(RoomErrors::kInternalError, "The game could not be created"));
         }
-        auto document = options.IsValid() ? GameDocument(options) : std::expected<Json, ControlError>(Json::object());
-        if (!document) {
-            return std::unexpected(std::move(document.error()));
+        if (!options.IsValid()) {
+            _scratchText = "{}";
+            if (!_scratchTape.Parse(_scratchText)) {
+                return std::unexpected(MakeError(RoomErrors::kInternalError, "The game could not be created"));
+            }
+            options = JsonView(_scratchTape, 0);
         }
-        if (auto started = game->Start(_random(), *document); !started) {
+        if (auto started = game->Start(_random(), options); !started) {
             return std::unexpected(std::move(started.error()));
         }
         _game = std::move(game);
@@ -190,11 +183,7 @@ namespace BECore {
         if (!member->connected) {
             return std::unexpected(MakeError(RoomErrors::kNotYourTurn, "The player is away"));
         }
-        const auto document = GameDocument(action);
-        if (!document) {
-            return std::unexpected(document.error());
-        }
-        auto outcome = _game->PerformSeatAction(member->seat, *document);
+        auto outcome = _game->PerformSeatAction(member->seat, action);
         if (outcome) {
             FinishIfDone();
         }
@@ -274,11 +263,18 @@ namespace BECore {
             if (!IsSeatComputerControlled(seat, now)) {
                 continue;
             }
-            const Optional<Json> action = _game->ChooseComputerAction(seat);
-            if (!action) {
+            _scratchText.clear();
+            JsonWriter writer(_scratchText);
+            if (!_game->ChooseComputerAction(seat, writer)) {
                 continue;
             }
-            if (auto performed = _game->PerformSeatAction(seat, *action); !performed) {
+            // The text goes through the tape like a person's action, so a game that writes nothing, two values or half an object is
+            // skipped instead of reaching PerformSeatAction
+            if (!writer.IsComplete() || !_scratchTape.Parse(_scratchText)) {
+                LOG_ERROR("Room: the game wrote no complete action for the computer of seat {}", seat);
+                continue;
+            }
+            if (auto performed = _game->PerformSeatAction(seat, JsonView(_scratchTape, 0)); !performed) {
                 // No room code, name or game message in the log: the platform's log is not a place for them
                 LOG_ERROR("Room: the game refused the computer's action for seat {}: {}", seat, performed.error().code);
                 return false;

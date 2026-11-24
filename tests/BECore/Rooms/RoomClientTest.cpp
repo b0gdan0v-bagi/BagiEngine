@@ -1,3 +1,4 @@
+#include <BECore/Control/Json.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Rooms/FakeRoomTransport.h>
 #include <BECore/Rooms/ManualClock.h>

@@ -1,3 +1,4 @@
+#include <BECore/Control/Json.h>
 #include <BECore/Rooms/HubTransport.h>
 #include <BECore/Rooms/RoomClientPlayer.h>
 #include <Common/Printers.h>

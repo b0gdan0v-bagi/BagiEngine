@@ -1,4 +1,5 @@
 #include <BECore/Control/ControlParams.h>
+#include <BECore/Control/Json.h>
 #include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Rooms/RoomErrors.h>
