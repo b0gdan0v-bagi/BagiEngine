@@ -53,7 +53,7 @@ namespace BECore {
          *
          * @param host Must be the host.
          * @param options The game's options (an object, from `create_room`, untrusted), handed to ISeatedGame::Start as they are; a view that
-         *        is not valid is an empty object. A document the game's interface cannot hold yet (`1e999`) is `bad_message`.
+         *        is not valid is an empty object.
          * @return `not_in_room`, `not_host`, `game_started` (already started), `internal_error` (no factory, the factory gave no
          *         game or one with another seat count than the registry said), or the error of ISeatedGame::Start. On an error the
          *         room stays in the lobby, unchanged.
