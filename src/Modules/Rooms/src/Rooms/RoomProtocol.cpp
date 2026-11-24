@@ -1,5 +1,6 @@
 #include "RoomProtocol.h"
 
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Memory/ScratchArena.h>
 #include <Rooms/RoomCode.h>
 #include <Rooms/RoomErrors.h>
@@ -97,16 +98,38 @@ namespace BECore {
             return Fail(RoomErrors::kBadMessage, std::move(message));
         }
 
-        [[nodiscard]] std::expected<String, ControlError> RequireString(const Json& root, StringView key) {
-            auto value = GetJsonString(root, key);
+        /// The checks both parsers share, in their order: the size, no raw NUL byte (its own message), the nesting (a text scan before the tape: the
+        /// limits are the protocol's, the tape's own bound is far deeper), valid JSON, an object at the root
+        [[nodiscard]] std::expected<JsonView, ControlError> TapeMessage(JsonTape& tape, StringView text, size_t maxBytes, size_t maxDepth) {
+            if (text.size() > maxBytes) {
+                return Fail(RoomErrors::kMessageTooLarge, Format("a message is at most {} bytes", maxBytes));
+            }
+            if (text.find('\0') != StringView::npos) {
+                return BadMessage("the message must not contain a NUL byte");
+            }
+            if (IsJsonNestedDeeperThan(text, maxDepth)) {
+                return BadMessage(Format("the message nests deeper than {} levels", maxDepth));
+            }
+            if (!tape.Parse(text)) {
+                return BadMessage("the message is not valid JSON");
+            }
+            const JsonView root(tape, 0);
+            if (!root.IsObject()) {
+                return BadMessage("the message must be a JSON object");
+            }
+            return root;
+        }
+
+        [[nodiscard]] std::expected<String, ControlError> RequireString(JsonView root, StringView key) {
+            auto value = GetParamString(root, key);
             if (!value) {
                 return BadMessage(Format("'{}' must be a string", key));
             }
             return std::move(*value);
         }
 
-        [[nodiscard]] std::expected<String, ControlError> RequireName(const Json& root) {
-            auto raw = GetJsonString(root, "name");
+        [[nodiscard]] std::expected<String, ControlError> RequireName(JsonView root) {
+            auto raw = GetParamString(root, "name");
             if (!raw) {
                 return BadMessage("'name' must be a string");
             }
@@ -118,7 +141,7 @@ namespace BECore {
         }
 
         /// The `game` member of `create_room` and `list_rooms`: a string of 1 to kMaxGameNameBytes bytes
-        [[nodiscard]] std::expected<String, ControlError> RequireGameName(const Json& root) {
+        [[nodiscard]] std::expected<String, ControlError> RequireGameName(JsonView root) {
             auto game = RequireString(root, "game");
             if (!game) {
                 return std::unexpected(game.error());
@@ -129,7 +152,17 @@ namespace BECore {
             return std::move(*game);
         }
 
-        [[nodiscard]] std::expected<ClientMessage, ControlError> ParseCreateRoom(const Json& root) {
+        /// The bridge of the payload members of the messages, which are still a `Json`: removed with the text form of `options`, `action`, `view` and `actions`
+        /// (the following steps of the slice). A document the tape accepted and the DOM refuses (`1e999`) is the same `bad_message` as before the tape
+        [[nodiscard]] std::expected<Json, ControlError> PayloadToJson(JsonView payload) {
+            auto parsed = ParseJson(payload.Raw());
+            if (!parsed) {
+                return BadMessage("the message is not valid JSON");
+            }
+            return std::move(*parsed);
+        }
+
+        [[nodiscard]] std::expected<ClientMessage, ControlError> ParseCreateRoom(JsonView root) {
             auto game = RequireGameName(root);
             if (!game) {
                 return std::unexpected(game.error());
@@ -141,22 +174,26 @@ namespace BECore {
             CreateRoomMessage message;
             message.game = std::move(*game);
             message.name = std::move(*name);
-            if (const Json* options = FindJsonMember(root, "options")) {
-                if (!options->is_object()) {
+            if (const Optional<JsonView> options = FindParam(root, "options")) {
+                if (!options->IsObject()) {
                     return BadMessage("'options' must be an object");
                 }
-                message.options = *options;
+                auto document = PayloadToJson(*options);
+                if (!document) {
+                    return std::unexpected(document.error());
+                }
+                message.options = std::move(*document);
             }
-            if (const Json* isPublic = FindJsonMember(root, "public")) {
-                if (!isPublic->is_boolean()) {
+            if (const Optional<JsonView> isPublic = FindParam(root, "public")) {
+                if (!isPublic->IsBool()) {
                     return BadMessage("'public' must be a boolean");
                 }
-                message.isPublic = isPublic->get<bool>();
+                message.isPublic = isPublic->AsBool().value_or(false);
             }
             return ClientMessage(std::move(message));
         }
 
-        [[nodiscard]] std::expected<ClientMessage, ControlError> ParseListRooms(const Json& root) {
+        [[nodiscard]] std::expected<ClientMessage, ControlError> ParseListRooms(JsonView root) {
             auto game = RequireGameName(root);
             if (!game) {
                 return std::unexpected(game.error());
@@ -164,13 +201,13 @@ namespace BECore {
             return ClientMessage(ListRoomsMessage{std::move(*game)});
         }
 
-        [[nodiscard]] std::expected<ClientMessage, ControlError> ParseJoinRoom(const Json& root) {
+        [[nodiscard]] std::expected<ClientMessage, ControlError> ParseJoinRoom(JsonView root) {
             auto rawCode = RequireString(root, "code");
             if (!rawCode) {
                 return std::unexpected(rawCode.error());
             }
-            const bool hasName = FindJsonMember(root, "name") != nullptr;
-            const bool hasToken = FindJsonMember(root, "token") != nullptr;
+            const bool hasName = FindParam(root, "name").has_value();
+            const bool hasToken = FindParam(root, "token").has_value();
             if (hasName == hasToken) {
                 return BadMessage("'join_room' needs exactly one of 'name' and 'token'");
             }
@@ -199,26 +236,30 @@ namespace BECore {
             return ClientMessage(std::move(message));
         }
 
-        [[nodiscard]] std::expected<ClientMessage, ControlError> ParseChooseSeat(const Json& root) {
-            const auto seat = GetJsonInt(root, "seat");
+        [[nodiscard]] std::expected<ClientMessage, ControlError> ParseChooseSeat(JsonView root) {
+            const auto seat = GetParamInt(root, "seat");
             if (!seat) {
                 return BadMessage("'seat' must be an integer");
             }
             return ClientMessage(ChooseSeatMessage{*seat});
         }
 
-        [[nodiscard]] std::expected<ClientMessage, ControlError> ParseAction(const Json& root) {
-            const auto version = GetJsonInt(root, "version");
+        [[nodiscard]] std::expected<ClientMessage, ControlError> ParseAction(JsonView root) {
+            const auto version = GetParamInt(root, "version");
             if (!version || *version < 0) {
                 return BadMessage("'version' must be a non-negative integer");
             }
-            const Json* action = FindJsonMember(root, "action");
-            if (action == nullptr || !action->is_object()) {
+            const Optional<JsonView> action = FindParam(root, "action");
+            if (!action || !action->IsObject()) {
                 return BadMessage("'action' must be an object");
+            }
+            auto document = PayloadToJson(*action);
+            if (!document) {
+                return std::unexpected(document.error());
             }
             ActionMessage message;
             message.version = static_cast<uint64_t>(*version);
-            message.action = *action;
+            message.action = std::move(*document);
             return ClientMessage(std::move(message));
         }
 
@@ -249,24 +290,24 @@ namespace BECore {
         }
 
         /// An integer member in [min, max]
-        [[nodiscard]] std::expected<int64_t, ControlError> RequireInt(const Json& root, StringView key, int64_t min, int64_t max) {
-            const auto value = GetJsonInt(root, key);
+        [[nodiscard]] std::expected<int64_t, ControlError> RequireInt(JsonView root, StringView key, int64_t min, int64_t max) {
+            const auto value = GetParamInt(root, key);
             if (!value || *value < min || *value > max) {
                 return BadMessage(Format("'{}' must be an integer from {} to {}", key, min, max));
             }
             return *value;
         }
 
-        [[nodiscard]] std::expected<bool, ControlError> RequireBool(const Json& root, StringView key) {
-            const auto value = GetJsonBool(root, key);
+        [[nodiscard]] std::expected<bool, ControlError> RequireBool(JsonView root, StringView key) {
+            const auto value = GetParamBool(root, key);
             if (!value) {
                 return BadMessage(Format("'{}' must be a boolean", key));
             }
             return *value;
         }
 
-        [[nodiscard]] std::expected<LobbySeat, ControlError> ParseLobbySeat(const Json& entry) {
-            if (!entry.is_object()) {
+        [[nodiscard]] std::expected<LobbySeat, ControlError> ParseLobbySeat(JsonView entry) {
+            if (!entry.IsObject()) {
                 return BadMessage("a seat of 'seats' must be an object");
             }
             LobbySeat seat;
@@ -299,7 +340,7 @@ namespace BECore {
             return seat;
         }
 
-        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseJoined(const Json& root) {
+        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseJoined(JsonView root) {
             JoinedMessage message;
             auto room = RequireString(root, "room");
             if (!room) {
@@ -343,7 +384,7 @@ namespace BECore {
             return kept;
         }
 
-        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseLobby(const Json& root) {
+        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseLobby(JsonView root) {
             LobbyMessage message;
             auto room = RequireString(root, "room");
             if (!room) {
@@ -369,29 +410,33 @@ namespace BECore {
                 return std::unexpected(host.error());
             }
             message.hostSeat = static_cast<int>(*host);
-            const Json* seats = FindJsonMember(root, "seats");
-            if (seats == nullptr || !seats->is_array() || seats->size() > RoomLimits::kMaxLobbySeats) {
+            const Optional<JsonView> seats = FindParam(root, "seats");
+            if (!seats || !seats->IsArray() || seats->Size() > RoomLimits::kMaxLobbySeats) {
                 return BadMessage(Format("'seats' must be an array of at most {} seats", RoomLimits::kMaxLobbySeats));
             }
-            message.seats.reserve(seats->size());
-            for (const Json& entry : *seats) {
+            message.seats.reserve(seats->Size());
+            for (const JsonView entry : seats->Items()) {
                 auto seat = ParseLobbySeat(entry);
                 if (!seat) {
                     return std::unexpected(seat.error());
                 }
                 message.seats.push_back(std::move(*seat));
             }
-            if (const Json* options = FindJsonMember(root, "options"); options != nullptr) {
-                if (!options->is_object() || options->size() > RoomLimits::kMaxLobbyOptions) {
+            if (const Optional<JsonView> options = FindParam(root, "options")) {
+                if (!options->IsObject() || options->Size() > RoomLimits::kMaxLobbyOptions) {
                     return BadMessage(Format("'options' must be an object of at most {} members", RoomLimits::kMaxLobbyOptions));
                 }
-                message.options = PublicOptionValues(*options);
+                const auto document = PayloadToJson(*options);
+                if (!document) {
+                    return std::unexpected(document.error());
+                }
+                message.options = PublicOptionValues(*document);
             }
             return ServerMessage(std::move(message));
         }
 
-        [[nodiscard]] std::expected<RoomListing, ControlError> ParseRoomListing(const Json& entry) {
-            if (!entry.is_object()) {
+        [[nodiscard]] std::expected<RoomListing, ControlError> ParseRoomListing(JsonView entry) {
+            if (!entry.IsObject()) {
                 return BadMessage("an entry of 'rooms' must be an object");
             }
             RoomListing listing;
@@ -423,21 +468,25 @@ namespace BECore {
                 return std::unexpected(started.error());
             }
             listing.started = *started;
-            if (const Json* options = FindJsonMember(entry, "options"); options != nullptr) {
-                if (!options->is_object() || options->size() > RoomLimits::kMaxLobbyOptions) {
+            if (const Optional<JsonView> options = FindParam(entry, "options")) {
+                if (!options->IsObject() || options->Size() > RoomLimits::kMaxLobbyOptions) {
                     return BadMessage(Format("'options' must be an object of at most {} members", RoomLimits::kMaxLobbyOptions));
                 }
-                for (auto it = options->begin(); it != options->end(); ++it) {
+                auto document = PayloadToJson(*options);
+                if (!document) {
+                    return std::unexpected(document.error());
+                }
+                for (auto it = document->begin(); it != document->end(); ++it) {
                     if (!it.value().is_boolean() && !it.value().is_number_integer()) {
                         return BadMessage("'options' may hold only booleans and integers");
                     }
                 }
-                listing.options = *options;
+                listing.options = std::move(*document);
             }
             return listing;
         }
 
-        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseRoomList(const Json& root) {
+        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseRoomList(JsonView root) {
             RoomListMessage message;
             auto game = RequireString(root, "game");
             if (!game) {
@@ -449,12 +498,12 @@ namespace BECore {
                 return std::unexpected(more.error());
             }
             message.more = *more;
-            const Json* rooms = FindJsonMember(root, "rooms");
-            if (rooms == nullptr || !rooms->is_array() || rooms->size() > RoomLimits::kMaxListedRooms) {
+            const Optional<JsonView> rooms = FindParam(root, "rooms");
+            if (!rooms || !rooms->IsArray() || rooms->Size() > RoomLimits::kMaxListedRooms) {
                 return BadMessage(Format("'rooms' must be an array of at most {} rooms", RoomLimits::kMaxListedRooms));
             }
-            message.rooms.reserve(rooms->size());
-            for (const Json& entry : *rooms) {
+            message.rooms.reserve(rooms->Size());
+            for (const JsonView entry : rooms->Items()) {
                 auto listing = ParseRoomListing(entry);
                 if (!listing) {
                     return std::unexpected(listing.error());
@@ -464,7 +513,7 @@ namespace BECore {
             return ServerMessage(std::move(message));
         }
 
-        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseView(const Json& root) {
+        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseView(JsonView root) {
             ViewMessage message;
             auto room = RequireString(root, "room");
             if (!room) {
@@ -486,17 +535,25 @@ namespace BECore {
                 return std::unexpected(finished.error());
             }
             message.finished = *finished;
-            const Json* view = FindJsonMember(root, "view");
-            const Json* actions = FindJsonMember(root, "actions");
-            if (view == nullptr || actions == nullptr) {
+            const Optional<JsonView> view = FindParam(root, "view");
+            const Optional<JsonView> actions = FindParam(root, "actions");
+            if (!view || !actions) {
                 return BadMessage("'view' and 'actions' must be there");
             }
-            message.view = *view;
-            message.actions = *actions;
+            auto viewDocument = PayloadToJson(*view);
+            if (!viewDocument) {
+                return std::unexpected(viewDocument.error());
+            }
+            auto actionsDocument = PayloadToJson(*actions);
+            if (!actionsDocument) {
+                return std::unexpected(actionsDocument.error());
+            }
+            message.view = std::move(*viewDocument);
+            message.actions = std::move(*actionsDocument);
             return ServerMessage(std::move(message));
         }
 
-        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseError(const Json& root) {
+        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseError(JsonView root) {
             ErrorMessage message;
             auto code = RequireString(root, "code");
             if (!code) {
@@ -508,7 +565,7 @@ namespace BECore {
                 return std::unexpected(text.error());
             }
             message.message = std::move(*text);
-            if (FindJsonMember(root, "ref") != nullptr) {
+            if (FindParam(root, "ref")) {
                 auto ref = RequireString(root, "ref");
                 if (!ref) {
                     return std::unexpected(ref.error());
@@ -518,7 +575,7 @@ namespace BECore {
             return ServerMessage(std::move(message));
         }
 
-        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseLeft(const Json& root) {
+        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseLeft(JsonView root) {
             auto reason = RequireString(root, "reason");
             if (!reason) {
                 return std::unexpected(reason.error());
@@ -529,57 +586,49 @@ namespace BECore {
     }  // namespace
 
     std::expected<ClientMessage, ControlError> ParseClientMessage(StringView text, size_t maxBytes) {
-        if (text.size() > maxBytes) {
-            return Fail(RoomErrors::kMessageTooLarge, Format("a message is at most {} bytes", maxBytes));
-        }
-        // The JSON lexer takes a NUL byte for the end of the input and would ignore what follows it
-        if (text.find('\0') != StringView::npos) {
-            return BadMessage("the message must not contain a NUL byte");
-        }
-        if (IsJsonNestedDeeperThan(text, RoomLimits::kMaxClientJsonDepth)) {
-            return BadMessage(Format("the message nests deeper than {} levels", RoomLimits::kMaxClientJsonDepth));
-        }
-        const auto parsed = ParseJson(text);
+        JsonTape tape;
+        return ParseClientMessage(tape, text, maxBytes);
+    }
+
+    std::expected<ClientMessage, ControlError> ParseClientMessage(JsonTape& tape, StringView text, size_t maxBytes) {
+        const auto parsed = TapeMessage(tape, text, maxBytes, RoomLimits::kMaxClientJsonDepth);
         if (!parsed) {
-            return BadMessage("the message is not valid JSON");
+            return std::unexpected(parsed.error());
         }
-        const Json& root = *parsed;
-        if (!root.is_object()) {
-            return BadMessage("the message must be a JSON object");
-        }
-        const auto version = GetJsonInt(root, "v");
+        const JsonView root = *parsed;
+        const auto version = GetParamInt(root, "v");
         if (!version) {
             return BadMessage("'v' must be an integer");
         }
         if (*version != kRoomProtocolVersion) {
             return Fail(RoomErrors::kUnsupportedVersion, Format("the server speaks protocol version {}", kRoomProtocolVersion));
         }
-        const auto type = GetJsonString(root, "type");
-        if (!type) {
+        const Optional<JsonView> type = FindParam(root, "type");
+        if (!type || !type->IsString()) {
             return BadMessage("'type' must be a string");
         }
-        if (*type == RoomMessageTypes::kCreateRoom) {
+        if (type->TextEquals(RoomMessageTypes::kCreateRoom)) {
             return ParseCreateRoom(root);
         }
-        if (*type == RoomMessageTypes::kJoinRoom) {
+        if (type->TextEquals(RoomMessageTypes::kJoinRoom)) {
             return ParseJoinRoom(root);
         }
-        if (*type == RoomMessageTypes::kChooseSeat) {
+        if (type->TextEquals(RoomMessageTypes::kChooseSeat)) {
             return ParseChooseSeat(root);
         }
-        if (*type == RoomMessageTypes::kStart) {
+        if (type->TextEquals(RoomMessageTypes::kStart)) {
             return ClientMessage(StartMessage{});
         }
-        if (*type == RoomMessageTypes::kAction) {
+        if (type->TextEquals(RoomMessageTypes::kAction)) {
             return ParseAction(root);
         }
-        if (*type == RoomMessageTypes::kLeave) {
+        if (type->TextEquals(RoomMessageTypes::kLeave)) {
             return ClientMessage(LeaveMessage{});
         }
-        if (*type == RoomMessageTypes::kPing) {
+        if (type->TextEquals(RoomMessageTypes::kPing)) {
             return ClientMessage(PingMessage{});
         }
-        if (*type == RoomMessageTypes::kListRooms) {
+        if (type->TextEquals(RoomMessageTypes::kListRooms)) {
             return ParseListRooms(root);
         }
         return BadMessage("unknown message type");
@@ -854,56 +903,51 @@ namespace BECore {
     }
 
     std::expected<ServerMessage, ControlError> ParseServerMessage(StringView text, size_t maxBytes) {
-        if (text.size() > maxBytes) {
-            return Fail(RoomErrors::kMessageTooLarge, Format("a message is at most {} bytes", maxBytes));
-        }
-        if (text.find('\0') != StringView::npos) {
-            return BadMessage("the message must not contain a NUL byte");
-        }
-        if (IsJsonNestedDeeperThan(text, RoomLimits::kMaxServerJsonDepth)) {
-            return BadMessage(Format("the message nests deeper than {} levels", RoomLimits::kMaxServerJsonDepth));
-        }
-        const auto parsed = ParseJson(text);
+        JsonTape tape;
+        return ParseServerMessage(tape, text, maxBytes);
+    }
+
+    std::expected<ServerMessage, ControlError> ParseServerMessage(JsonTape& tape, StringView text, size_t maxBytes) {
+        const auto parsed = TapeMessage(tape, text, maxBytes, RoomLimits::kMaxServerJsonDepth);
         if (!parsed) {
-            return BadMessage("the message is not valid JSON");
+            return std::unexpected(parsed.error());
         }
-        const Json& root = *parsed;
-        if (!root.is_object()) {
-            return BadMessage("the message must be a JSON object");
-        }
-        const auto version = GetJsonInt(root, "v");
+        const JsonView root = *parsed;
+        const auto version = GetParamInt(root, "v");
         if (!version) {
             return BadMessage("'v' must be an integer");
         }
         if (*version != kRoomProtocolVersion) {
             return Fail(RoomErrors::kUnsupportedVersion, Format("this client speaks protocol version {}", kRoomProtocolVersion));
         }
-        auto type = GetJsonString(root, "type");
-        if (!type) {
+        const Optional<JsonView> type = FindParam(root, "type");
+        if (!type || !type->IsString()) {
             return BadMessage("'type' must be a string");
         }
-        if (*type == RoomMessageTypes::kJoined) {
+        if (type->TextEquals(RoomMessageTypes::kJoined)) {
             return ParseJoined(root);
         }
-        if (*type == RoomMessageTypes::kLobby) {
+        if (type->TextEquals(RoomMessageTypes::kLobby)) {
             return ParseLobby(root);
         }
-        if (*type == RoomMessageTypes::kView) {
+        if (type->TextEquals(RoomMessageTypes::kView)) {
             return ParseView(root);
         }
-        if (*type == RoomMessageTypes::kError) {
+        if (type->TextEquals(RoomMessageTypes::kError)) {
             return ParseError(root);
         }
-        if (*type == RoomMessageTypes::kLeft) {
+        if (type->TextEquals(RoomMessageTypes::kLeft)) {
             return ParseLeft(root);
         }
-        if (*type == RoomMessageTypes::kPong) {
+        if (type->TextEquals(RoomMessageTypes::kPong)) {
             return ServerMessage(PongMessage{});
         }
-        if (*type == RoomMessageTypes::kRooms) {
+        if (type->TextEquals(RoomMessageTypes::kRooms)) {
             return ParseRoomList(root);
         }
-        return ServerMessage(UnknownServerMessage{std::move(*type)});
+        UnknownServerMessage unknown;
+        type->ReadText(unknown.type);
+        return ServerMessage(std::move(unknown));
     }
 
     StringView GetServerMessageType(const ServerMessage& message) {

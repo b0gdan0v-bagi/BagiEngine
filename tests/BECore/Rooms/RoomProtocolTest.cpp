@@ -1099,4 +1099,97 @@ namespace BECore::Tests {
         EXPECT_EQ(ServerErrorCodeOf(withNul), "bad_message");
     }
 
+    // ---- What the tape reads differently from the DOM ----------------------------------------------------------------------------
+
+    TEST(RoomProtocolTest, OfTwoEqualKeysTheFirstCounts) {
+        const auto parsed = ParseClientMessage(R"({"v":1,"type":"choose_seat","seat":2,"seat":3})");
+        const auto* message = As<ChooseSeatMessage>(parsed);
+        ASSERT_NE(message, nullptr);
+        EXPECT_EQ(message->seat, 2);
+    }
+
+    TEST(RoomProtocolTest, AKeyWrittenWithAnEscapeIsTheKeyOfThatName) {
+        EXPECT_EQ(ErrorCodeOfText(R"({"v":1,"\u0074ype":"ping"})"), "<ok>");
+        EXPECT_EQ(ServerErrorCodeOf(R"({"v":1,"\u0074ype":"pong"})"), "<ok>");
+    }
+
+    TEST(RoomProtocolTest, AByteOrderMarkIsNotValidJson) {
+        const String bom = "\xEF\xBB\xBF";
+        const auto client = ParseClientMessage(bom + String(kPlainPing));
+        ASSERT_FALSE(client.has_value());
+        EXPECT_EQ(client.error().code, RoomErrors::kBadMessage);
+        EXPECT_EQ(client.error().message, "the message is not valid JSON");
+        EXPECT_EQ(ServerErrorCodeOf(bom + R"({"v":1,"type":"pong"})"), RoomErrors::kBadMessage);
+    }
+
+    TEST(RoomProtocolTest, ANumberThatIsNoInt64IsRefusedByAnIntegerField) {
+        // `1e999` is valid JSON now; every field that wants an integer still says so
+        for (const char* seat : {"1e999", "1.0", "1e2", "99999999999999999999"}) {
+            const auto parsed = ParseClientMessage(Message("choose_seat", Format(R"("seat":{})", seat)));
+            ASSERT_FALSE(parsed.has_value()) << seat;
+            EXPECT_EQ(parsed.error().code, RoomErrors::kBadMessage) << seat;
+            EXPECT_EQ(parsed.error().message, "'seat' must be an integer") << seat;
+        }
+        EXPECT_EQ(ErrorCodeOfText(R"({"v":1e999,"type":"ping"})"), RoomErrors::kBadMessage);
+        const auto negativeZero = ParseClientMessage(Message("choose_seat", R"("seat":-0)"));
+        const auto* message = As<ChooseSeatMessage>(negativeZero);
+        ASSERT_NE(message, nullptr);
+        EXPECT_EQ(message->seat, 0);
+    }
+
+    TEST(RoomProtocolTest, OneTapeReadsALongRunOfDifferentMessagesLikeAFreshOne) {
+        const String longName = Repeat('n', 30);
+        const Vector<String> inputs = {
+            String(kPlainPing),
+            Message("create_room", R"("game":"g","name":"Ann","options":{"a":[1,2,{"b":null}]},"public":true)"),
+            R"({"v":1,"type":"ping")",
+            Message("join_room", R"("code":"abcde","name":"Bob")"),
+            Message("join_room", R"("code":"abcde","name":"Bob","token":"x")"),
+            Message("action", R"("version":4,"action":{"move":[1,2]})"),
+            Message("action", R"("version":-1,"action":{})"),
+            "[]",
+            Message("create_room", Format(R"("game":"g","name":"{}")", longName)),
+            Message("choose_seat", R"("seat":2)"),
+            Message("list_rooms", R"("game":"g")"),
+            R"({"v":2,"type":"ping"})",
+            String(),
+            Message("start"),
+        };
+        JsonTape tape;
+        for (int round = 0; round < 3; ++round) {
+            for (const String& input : inputs) {
+                const auto shared = ParseClientMessage(tape, input);
+                const auto fresh = ParseClientMessage(input);
+                ASSERT_EQ(shared.has_value(), fresh.has_value()) << input.c_str();
+                if (shared) {
+                    EXPECT_EQ(SerializeClientMessage(*shared), SerializeClientMessage(*fresh)) << input.c_str();
+                } else {
+                    EXPECT_EQ(shared.error().code, fresh.error().code) << input.c_str();
+                    EXPECT_EQ(shared.error().message, fresh.error().message) << input.c_str();
+                }
+            }
+        }
+        const Vector<String> serverInputs = {
+            R"({"v":1,"type":"pong"})",
+            MakeErrorMessage("bad_message", "no", "ping"),
+            MakeLeftMessage("left"),
+            R"({"v":1,"type":"left"})",
+            R"({"v":1,"type":"view","room":"ABCDE","seat":0,"version":1,"finished":false,"view":{"x":[1]},"actions":[{"a":1}]})",
+            R"({"v":1,"type":"new_thing","x":1})",
+            "{",
+        };
+        for (int round = 0; round < 3; ++round) {
+            for (const String& input : serverInputs) {
+                const auto shared = ParseServerMessage(tape, input);
+                const auto fresh = ParseServerMessage(input);
+                ASSERT_EQ(shared.has_value(), fresh.has_value()) << input.c_str();
+                if (shared) {
+                    EXPECT_EQ(shared->index(), fresh->index()) << input.c_str();
+                } else {
+                    EXPECT_EQ(shared.error().message, fresh.error().message) << input.c_str();
+                }
+            }
+        }
+    }
+
 }  // namespace BECore::Tests

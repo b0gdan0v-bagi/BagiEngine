@@ -106,8 +106,25 @@ namespace BECore::Fuzz {
                 a);
         }
 
+        /// One tape for the whole run of inputs, as a connection's handler keeps it: its answers must be those of a fresh tape
+        JsonTape& SharedTape() {
+            thread_local JsonTape tape;
+            return tape;
+        }
+
+        bool SameRefusal(const ControlError& a, const ControlError& b) {
+            return a.code == b.code && a.message == b.message;
+        }
+
         void CheckClientMessage(StringView text, size_t maxBytes) {
             const auto parsed = ParseClientMessage(text, maxBytes);
+            const auto shared = ParseClientMessage(SharedTape(), text, maxBytes);
+            FUZZ_CHECK(shared.has_value() == parsed.has_value());
+            if (!parsed.has_value()) {
+                FUZZ_CHECK(SameRefusal(shared.error(), parsed.error()));
+            } else {
+                FUZZ_CHECK(SameClientMessage(*shared, *parsed));
+            }
             if (!parsed.has_value()) {
                 FUZZ_CHECK(IsTidyRefusal(parsed.error(), &IsClientRefusalCode));
                 FUZZ_CHECK((text.size() > maxBytes) == (parsed.error().code == RoomErrors::kMessageTooLarge));
@@ -184,6 +201,13 @@ namespace BECore::Fuzz {
 
         void CheckServerMessage(StringView text, size_t maxBytes) {
             const auto parsed = ParseServerMessage(text, maxBytes);
+            const auto shared = ParseServerMessage(SharedTape(), text, maxBytes);
+            FUZZ_CHECK(shared.has_value() == parsed.has_value());
+            if (!parsed.has_value()) {
+                FUZZ_CHECK(SameRefusal(shared.error(), parsed.error()));
+            } else {
+                FUZZ_CHECK(shared->index() == parsed->index() && RebuildServerText(*shared) == RebuildServerText(*parsed));
+            }
             if (!parsed.has_value()) {
                 FUZZ_CHECK(IsTidyRefusal(parsed.error(), &IsServerRefusalCode));
                 FUZZ_CHECK((text.size() > maxBytes) == (parsed.error().code == RoomErrors::kMessageTooLarge));

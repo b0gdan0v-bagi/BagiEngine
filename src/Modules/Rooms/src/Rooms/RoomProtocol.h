@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonTape.h>
 #include <Games/SeatedAnswers.h>
 #include <Rooms/RoomLimits.h>
 #include <Rooms/RoomTypes.h>
@@ -98,10 +99,17 @@ namespace BECore {
      * `token`: `bad_message`. A name that SanitizePlayerName refuses: `bad_name`. A `code` that is not a room code: `unknown_room`
      * (a code that could not exist is the same answer as one that does not). A `token` that is not well formed: `bad_token`.
      *
+     * Differences from the DOM it read before: of two equal keys the first counts, a byte order mark is `bad_message`, and a key written with an
+     * escape matches its name.
+     *
      * @param text The message exactly as it came from the transport.
      * @param maxBytes The size limit (kMaxMessageBytes by default).
      */
     [[nodiscard]] std::expected<ClientMessage, ControlError> ParseClientMessage(StringView text, size_t maxBytes = RoomLimits::kMaxMessageBytes);
+
+    /// The same over a tape of the caller's, which a connection's handler keeps so a message of a known shape allocates no tokens. @p tape borrows
+    /// @p text and is used only during the call: the result owns its texts
+    [[nodiscard]] std::expected<ClientMessage, ControlError> ParseClientMessage(JsonTape& tape, StringView text, size_t maxBytes = RoomLimits::kMaxMessageBytes);
 
     /// The `type` of a parsed message
     [[nodiscard]] StringView GetClientMessageType(const ClientMessage& message);
@@ -272,6 +280,9 @@ namespace BECore {
      * `type` is UnknownServerMessage. A string is copied, never interned into a PoolString.
      */
     [[nodiscard]] std::expected<ServerMessage, ControlError> ParseServerMessage(StringView text, size_t maxBytes = RoomLimits::kMaxServerMessageBytes);
+
+    /// The same over a tape of the caller's (see the overload of ParseClientMessage)
+    [[nodiscard]] std::expected<ServerMessage, ControlError> ParseServerMessage(JsonTape& tape, StringView text, size_t maxBytes = RoomLimits::kMaxServerMessageBytes);
 
     /// The `type` of a parsed server message (for the log)
     [[nodiscard]] StringView GetServerMessageType(const ServerMessage& message);
