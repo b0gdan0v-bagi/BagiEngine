@@ -1,4 +1,3 @@
-#include <BECore/Control/Json.h>
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/Ring/FrozenTrace.h>
 #include <BECore/Profiler/Ring/SpikeCapture.h>
@@ -6,6 +5,7 @@
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
+#include <Common/TraceDoc.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -65,21 +65,12 @@ namespace BECore::Tests {
             return snapshot;
         }
 
-        String Member(const Json& event, const char* key) {
-            const auto value = GetJsonString(event, key);
-            return value ? *value : String();
+        String Member(JsonView event, const char* key) {
+            return StringOf(event, key);
         }
 
-        Json ParseTrace(const String& trace) {
-            auto parsed = ParseJson(trace);
-            EXPECT_TRUE(parsed.has_value()) << trace;
-            return parsed ? *parsed : Json::object();
-        }
-
-        Json EventsOf(const Json& trace) {
-            const Json* events = FindJsonMember(trace, "traceEvents");
-            EXPECT_NE(events, nullptr);
-            return events != nullptr ? *events : Json::array();
+        TraceDoc ParseTrace(const String& trace) {
+            return TraceDoc(StringView(trace.c_str(), trace.size()));
         }
 
         /// A snapshot with a spike of @p length ticks as frame 3 after three steady frames; the spike holds Outer with Inner inside
@@ -295,19 +286,18 @@ namespace BECore::Tests {
         capture.Update(snapshot);
         ASSERT_EQ(capture.GetSpikes().size(), 2u);
 
-        const Json trace = ParseTrace(WriteFrozenTraceJson(capture.GetSpikes()));
-        const Json events = EventsOf(trace);
+        const TraceDoc trace = ParseTrace(WriteFrozenTraceJson(capture.GetSpikes()));
         Map<int64_t, int> depth;
         size_t begins = 0;
         size_t ends = 0;
         size_t threadNames = 0;
         size_t frameMarks = 0;
         double lastTs = -1.0;
-        for (const Json& event : events) {
+        for (const JsonView event : trace) {
             const String phase = Member(event, "ph");
-            const int64_t tid = GetJsonInt(event, "tid").value_or(-1);
+            const int64_t tid = IntOf(event, "tid").value_or(-1);
             if (phase == "B" || phase == "E") {
-                const double ts = GetJsonNumber(event, "ts").value_or(-1.0);
+                const double ts = NumberOf(event, "ts");
                 EXPECT_GE(ts, lastTs) << "the events of every thread together are in time order";
                 lastTs = ts;
                 depth[tid] += phase == "B" ? 1 : -1;
@@ -325,22 +315,22 @@ namespace BECore::Tests {
         EXPECT_EQ(depth[1], 0);
         EXPECT_EQ(threadNames, 1u);
         EXPECT_EQ(frameMarks, 2u);
-        const Json* other = FindJsonMember(trace, "otherData");
-        ASSERT_NE(other, nullptr);
-        EXPECT_EQ(GetJsonInt(*other, "frozenFrames"), 2);
+        const JsonView other = MemberOf(trace.Root(), "otherData");
+        ASSERT_TRUE(other.IsObject());
+        EXPECT_EQ(IntOf(other, "frozenFrames"), 2);
     }
 
     TEST(FrozenTraceTest, TheNamesAreEscapedAndTheTimeStartsAtTheEarliestFrame) {
         SpikeCapture capture;
         capture.SetSettings(AbsoluteSettings(50.0));
         capture.Update(WithASpike(80));
-        const Json events = EventsOf(ParseTrace(WriteFrozenTraceJson(capture.GetSpikes())));
+        const TraceDoc events = ParseTrace(WriteFrozenTraceJson(capture.GetSpikes()));
         bool foundInner = false;
         double firstTs = -1.0;
-        for (const Json& event : events) {
+        for (const JsonView event : events) {
             if (Member(event, "ph") == "B") {
                 if (firstTs < 0.0) {
-                    firstTs = GetJsonNumber(event, "ts").value_or(-1.0);
+                    firstTs = NumberOf(event, "ts");
                 }
                 if (Member(event, "name") == "Inner \"quoted\"\\") {
                     foundInner = true;
@@ -352,11 +342,11 @@ namespace BECore::Tests {
     }
 
     TEST(FrozenTraceTest, AnEmptyListIsAValidTrace) {
-        const Json trace = ParseTrace(WriteFrozenTraceJson({}));
-        EXPECT_TRUE(EventsOf(trace).empty());
-        const Json* other = FindJsonMember(trace, "otherData");
-        ASSERT_NE(other, nullptr);
-        EXPECT_EQ(GetJsonInt(*other, "frozenFrames"), 0);
+        const TraceDoc trace = ParseTrace(WriteFrozenTraceJson({}));
+        EXPECT_EQ(trace.size(), 0u);
+        const JsonView other = MemberOf(trace.Root(), "otherData");
+        ASSERT_TRUE(other.IsObject());
+        EXPECT_EQ(IntOf(other, "frozenFrames"), 0);
     }
 
     TEST(FrozenTraceTest, TheFileHoldsTheSameTextAndAnUnwritablePathIsAnError) {

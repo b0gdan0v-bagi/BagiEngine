@@ -1,6 +1,5 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/RendererManager.h>
@@ -226,26 +225,19 @@ namespace BECore::Tests {
                 SDLCaptureTest::TearDown();
             }
 
-            void Post(const char* method, const Json& params = Json()) {
-                Json request = Json::object();
-                request["id"] = ++lastId;
-                request["method"] = method;
-                if (!params.is_null()) {
-                    request["params"] = params;
-                }
-                service.Post(DumpJson(request), [this](String text) {
+            void Post(const char* method, StringView paramsText = {}) {
+                service.Post(MakeRequestText(++lastId, method, paramsText), [this](String text) {
                     lastText = text;
-                    auto parsed = ParseJson(text);
-                    responses.push_back(parsed ? std::move(*parsed) : Json());
+                    responses.emplace_back(StringView(text.c_str(), text.size()));
                 });
             }
 
-            const Json* Result(size_t index) const {
-                return index < responses.size() ? FindJsonMember(responses[index], "result") : nullptr;
+            JsonView Result(size_t index) const {
+                return index < responses.size() ? responses[index].Result() : JsonView();
             }
 
             ControlService service;
-            Vector<Json> responses;
+            Vector<ControlReply> responses;
             String lastText;  // the text of the newest response, as the transport got it
             IntrusivePtr<IRenderer> previousRenderer;
             int64_t lastId = 0;
@@ -1048,12 +1040,12 @@ namespace BECore::Tests {
         service.EndFrame();
 
         ASSERT_EQ(responses.size(), 1u);
-        ASSERT_NE(Result(0), nullptr);
-        const auto base64 = GetJsonString(Require(Result(0)), "png_base64");
-        ASSERT_TRUE(base64.has_value());
-        EXPECT_TRUE(StringView(base64->data(), base64->size()).starts_with(kPngBase64Prefix));
-        const int64_t width = GetJsonInt(Require(Result(0)), "width").value_or(0);
-        const int64_t height = GetJsonInt(Require(Result(0)), "height").value_or(0);
+        ASSERT_TRUE(Result(0).IsObject());
+        ASSERT_TRUE(MemberOf(Result(0), "png_base64").IsString());
+        const String base64 = StringOf(Result(0), "png_base64");
+        EXPECT_TRUE(StringView(base64.c_str(), base64.size()).starts_with(kPngBase64Prefix));
+        const int64_t width = IntOf(Result(0), "width").value_or(0);
+        const int64_t height = IntOf(Result(0), "height").value_or(0);
         EXPECT_EQ(width, 1024);  // the window of the engine config is 1920 by 1080, cut to the default 1024
         EXPECT_EQ(height, 576);
     }
@@ -1074,22 +1066,20 @@ namespace BECore::Tests {
         ASSERT_NE(width, String::npos);
         EXPECT_LT(height, png);
         EXPECT_LT(png, width);
-        EXPECT_EQ(Require(Result(0)).size(), 3u);
+        EXPECT_EQ(Result(0).Size(), 3u);
     }
 
     TEST_F(ScreenshotControlTest, MaxSizeSetsTheLongerSide) {
         DrawFrame();
-        Json params = Json::object();
-        params["maxSize"] = 200;
-        Post("screenshot", params);
+        Post("screenshot", R"({"maxSize":200})");
         service.Drain();
         renderer->Present();
         service.EndFrame();
 
         ASSERT_EQ(responses.size(), 1u);
-        ASSERT_NE(Result(0), nullptr);
-        EXPECT_EQ(GetJsonInt(Require(Result(0)), "width").value_or(0), 200);
-        EXPECT_EQ(GetJsonInt(Require(Result(0)), "height").value_or(0), 113);
+        ASSERT_TRUE(Result(0).IsObject());
+        EXPECT_EQ(IntOf(Result(0), "width").value_or(0), 200);
+        EXPECT_EQ(IntOf(Result(0), "height").value_or(0), 113);
     }
 
     TEST_F(ScreenshotControlTest, AScreenshotIsOfTheSimulatedOutputSize) {
@@ -1104,64 +1094,52 @@ namespace BECore::Tests {
             service.EndFrame();
 
             ASSERT_EQ(responses.size(), 1u);
-            ASSERT_NE(Result(0), nullptr);
-            EXPECT_EQ(GetJsonInt(Require(Result(0)), "width").value_or(0), expectedWidth);
-            EXPECT_EQ(GetJsonInt(Require(Result(0)), "height").value_or(0), expectedHeight);
+            ASSERT_TRUE(Result(0).IsObject());
+            EXPECT_EQ(IntOf(Result(0), "width").value_or(0), expectedWidth);
+            EXPECT_EQ(IntOf(Result(0), "height").value_or(0), expectedHeight);
         }
     }
 
     TEST_F(ScreenshotControlTest, MaxSizeOutOfRangeIsRefusedAndAsksForNoFrame) {
         service.SetManualClock(true);
-        Json tooSmall = Json::object();
-        tooSmall["maxSize"] = static_cast<int64_t>(kMinScreenshotSize) - 1;
-        Json tooLarge = Json::object();
-        tooLarge["maxSize"] = static_cast<int64_t>(kMaxScreenshotSize) + 1;
-        Json fractional = Json::object();
-        fractional["maxSize"] = 100.5;
-        Json text = Json::object();
-        text["maxSize"] = "big";
-        Json nothing = Json::object();
-        nothing["maxSize"] = nullptr;
-
-        for (const Json& params : {tooSmall, tooLarge, fractional, text, nothing}) {
+        const String tooSmall = Format(R"({{"maxSize":{}}})", static_cast<int64_t>(kMinScreenshotSize) - 1);
+        const String tooLarge = Format(R"({{"maxSize":{}}})", static_cast<int64_t>(kMaxScreenshotSize) + 1);
+        for (const StringView params : {StringView(tooSmall.c_str(), tooSmall.size()), StringView(tooLarge.c_str(), tooLarge.size()), StringView(R"({"maxSize":100.5})"),
+                                        StringView(R"({"maxSize":"big"})"), StringView(R"({"maxSize":null})")}) {
             Post("screenshot", params);
         }
         service.Drain();
 
         ASSERT_EQ(responses.size(), 5u);
-        for (const Json& response : responses) {
-            EXPECT_EQ(ErrorCode(response), "invalid_params");
+        for (const ControlReply& response : responses) {
+            EXPECT_EQ(response.ErrorCode(), "invalid_params");
         }
         EXPECT_FALSE(service.IsStepDue());
     }
 
     TEST_F(ScreenshotControlTest, AMaxSizePastADoubleIsInvalidParamsNotAParseError) {
         service.SetManualClock(true);
-        service.Post(R"({"id":1,"method":"screenshot","params":{"maxSize":1e999}})", [this](String text) {
-            auto parsed = ParseJson(text);
-            responses.push_back(parsed ? std::move(*parsed) : Json());
-        });
+        service.Post(R"({"id":1,"method":"screenshot","params":{"maxSize":1e999}})", [this](String text) { responses.emplace_back(StringView(text.c_str(), text.size())); });
         service.Drain();
 
         ASSERT_EQ(responses.size(), 1u);
-        EXPECT_EQ(ErrorCode(responses[0]), "invalid_params");
+        EXPECT_EQ(responses[0].ErrorCode(), "invalid_params");
         EXPECT_FALSE(service.IsStepDue());
     }
 
     TEST_F(ScreenshotControlTest, TheLargestAndSmallestSizesAreAccepted) {
         for (const uint32_t size : {kMinScreenshotSize, kMaxScreenshotSize}) {
             DrawFrame();
-            Json params = Json::object();
-            params["maxSize"] = size;
-            Post("screenshot", params);
+            const String params = Format(R"({{"maxSize":{}}})", size);
+            Post("screenshot", StringView(params.c_str(), params.size()));
             service.Drain();
             renderer->Present();
             service.EndFrame();
         }
 
         ASSERT_EQ(responses.size(), 2u);
-        EXPECT_EQ(GetJsonInt(Require(Result(0)), "width").value_or(0), static_cast<int64_t>(kMinScreenshotSize));
-        EXPECT_NE(Result(1), nullptr);
+        EXPECT_EQ(IntOf(Result(0), "width").value_or(0), static_cast<int64_t>(kMinScreenshotSize));
+        EXPECT_TRUE(Result(1).IsObject());
     }
 
     TEST_F(ScreenshotControlTest, OnTheManualClockAScreenshotIsOneFrameOfZeroSeconds) {
@@ -1177,7 +1155,7 @@ namespace BECore::Tests {
         service.EndFrame();
         EXPECT_FALSE(service.IsStepDue());
         ASSERT_EQ(responses.size(), 1u);
-        EXPECT_NE(Result(0), nullptr);
+        EXPECT_TRUE(Result(0).IsObject());
     }
 
     TEST_F(ScreenshotControlTest, ScreenshotFailsWhenNoFrameWasPresented) {
@@ -1187,7 +1165,7 @@ namespace BECore::Tests {
         service.EndFrame();  // the frame ended without a present
 
         ASSERT_EQ(responses.size(), 1u);
-        EXPECT_EQ(ErrorCode(responses[0]), "capture_failed");
+        EXPECT_EQ(responses[0].ErrorCode(), "capture_failed");
     }
 
     TEST_F(ScreenshotControlTest, ScreenshotFailsAtOnceWhereTheRendererCannotCapture) {
@@ -1196,7 +1174,7 @@ namespace BECore::Tests {
         service.Drain();
 
         ASSERT_EQ(responses.size(), 1u);  // refused in the handler: no frame is waited for
-        EXPECT_EQ(ErrorCode(responses[0]), "capture_failed");
+        EXPECT_EQ(responses[0].ErrorCode(), "capture_failed");
         EXPECT_FALSE(service.IsStepDue());
     }
 
@@ -1206,11 +1184,16 @@ namespace BECore::Tests {
         service.Drain();
 
         ASSERT_EQ(responses.size(), 1u);
-        EXPECT_EQ(ErrorCode(responses[0]), "capture_failed");
+        EXPECT_EQ(responses[0].ErrorCode(), "capture_failed");
     }
 
     TEST_F(ScreenshotControlTest, ARequestBehindAScreenshotWaitsForItsFrame) {
-        service.RegisterHandler("after", [](ControlCall& call) { call.Reply(Json::object()); });
+        service.RegisterHandler("after", [](ControlCall& call) {
+            call.Reply([](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.EndObject();
+            });
+        });
         DrawFrame();
         Post("screenshot");
         Post("after");
@@ -1222,8 +1205,8 @@ namespace BECore::Tests {
         service.Drain();
 
         ASSERT_EQ(responses.size(), 2u);
-        EXPECT_NE(Result(0), nullptr);
-        EXPECT_EQ(GetJsonInt(responses[1], "id").value_or(0), 2);
+        EXPECT_TRUE(Result(0).IsObject());
+        EXPECT_EQ(responses[1].IdText(), "2");
     }
 
 }  // namespace BECore::Tests
