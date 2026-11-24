@@ -56,7 +56,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            _dir = TestTempDirectory("cfg_hot");
+            _dir = Path(TestTempDirectory("cfg_hot"));
             MakeEmptyDirectory(_dir);
             WriteFile(_dir / "HotConfig.xml", kHotText);
             WriteFile(_dir / "OtherConfig.xml", kOtherText);
@@ -77,7 +77,7 @@ namespace BECore::Tests {
         }
 
         /// Posts @p path and lets the settle window pass
-        void PostAndSettle(const std::filesystem::path& path) {
+        void PostAndSettle(const Path& path) {
             _fake->Emit(path);
             _watcher.Update(_now);
             _now = After(_now);
@@ -89,11 +89,11 @@ namespace BECore::Tests {
             return value ? String(value->data(), value->size()) : String();
         }
 
-        std::filesystem::path HotPath() const {
+        Path HotPath() const {
             return _dir / "HotConfig.xml";
         }
 
-        std::filesystem::path _dir;
+        Path _dir;
         FileSystem _fileSystem;
         ConfigManager _manager{_fileSystem};
         FileWatcher _watcher{_fileSystem};
@@ -116,14 +116,13 @@ namespace BECore::Tests {
     TEST_F(ConfigHotReloadTest, ARenameOverSaveReloadsTheConfigOnce) {
         StartOnFake();
         ChangeRecorder recorder;
-        const std::filesystem::path temp = _dir / "HotConfig.xml.tmp";
+        const Path temp = _dir / "HotConfig.xml.tmp";
 
         WriteFile(temp, "<HotConfig value=\"three\"/>\n");
         _fake->Emit(temp);
         _watcher.Update(_now);
-        std::error_code error;
-        std::filesystem::rename(temp, HotPath(), error);
-        ASSERT_FALSE(error) << error.message();
+        const auto renamed = RenameFile(temp, HotPath());
+        ASSERT_TRUE(renamed) << renamed.error().c_str();
         PostAndSettle(HotPath());
 
         ASSERT_EQ(recorder.names.size(), 1u);
@@ -172,9 +171,8 @@ namespace BECore::Tests {
         ChangeRecorder recorder;
         WriteFile(_dir / "NewConfig.xml", "<NewConfig/>\n");
         WriteFile(_dir / "notes.txt", "text");
-        std::error_code error;
-        std::filesystem::remove(_dir / "OtherConfig.xml", error);
-        ASSERT_FALSE(error) << error.message();
+        const auto removed = RemoveFile(_dir / "OtherConfig.xml");
+        ASSERT_TRUE(removed) << removed.error().c_str();
 
         _fake->Emit(_dir / "NewConfig.xml");
         _fake->Emit(_dir / "notes.txt");

@@ -219,9 +219,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(ConfigDiagnosticsTest, AFileOpenedByOpenDeserializerStaysOff) {
-        const std::filesystem::path dir = TestTempDirectory("BagiConfigDiagnostics");
-        std::filesystem::remove_all(dir);
-        std::filesystem::create_directories(dir);
+        const Path dir = Path(TestTempDirectory("BagiConfigDiagnostics"));
+        MakeEmptyDirectory(dir);
         WriteFile(dir / "probe.xml", "<root/>");
         const PoolString mount = "BagiConfigDiagnosticsTest"_intern;
         ASSERT_TRUE(CoreManager::GetFileSystem().Mount(mount, dir));
@@ -231,8 +230,7 @@ namespace BECore::Tests {
         EXPECT_EQ((*opened)->GetDiagnostics(), DiagnosticsMode::Off);
 
         CoreManager::GetFileSystem().Unmount(mount);
-        std::error_code ec;
-        std::filesystem::remove_all(dir, ec);
+        RemoveDirectory(dir);
     }
 
 }  // namespace BECore::Tests

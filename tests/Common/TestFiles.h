@@ -83,7 +83,8 @@ namespace BECore::Tests {
         return info && info->kind == FileKind::Directory;
     }
 
-    /// Removes the file or symbolic link @p path; one that is not there is no failure, any other error fails the test
+    /// Removes the file, or the symbolic link to a file, @p path (a link to a folder is RemoveDirectory's, as RemoveFile refuses it); one that
+    /// is not there is no failure, any other error fails the test
     inline void RemoveFileIfPresent(const Path& path) {
         if (!PathExists(path) && !IsSymbolicLink(path)) {
             return;

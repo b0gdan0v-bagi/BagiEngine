@@ -3,6 +3,7 @@
 #include <BECore/Reflection/ReaderLimits.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -26,8 +27,8 @@ namespace BECore::Tests {
         class XmlDocumentTest : public ::testing::Test {
         protected:
             /// A path below the case's own folder, which the fixture clears first and removes after
-            std::filesystem::path PathOf(const char* name) const {
-                return std::filesystem::path(ToStd(_folder.PathOf(name)));
+            Path PathOf(const char* name) const {
+                return Path(_folder.PathOf(name));
             }
 
             /// @p text loaded as a document and saved to the case's file, which is then read back
@@ -39,7 +40,7 @@ namespace BECore::Tests {
             }
 
             TestTempFolder _folder{"XmlDocumentTest"};
-            std::filesystem::path _path{PathOf("document.xml")};
+            Path _path{PathOf("document.xml")};
         };
 
     }  // namespace
@@ -101,13 +102,13 @@ namespace BECore::Tests {
         ASSERT_TRUE(document.LoadFromFile(_path));
         EXPECT_EQ(document.GetRoot().Name(), "root");
 
-        const std::filesystem::path copy = PathOf("copy.xml");
+        const Path copy = PathOf("copy.xml");
         ASSERT_TRUE(document.SaveToFile(copy));
         EXPECT_EQ(ReadFile(copy), withMark);
     }
 
     TEST_F(XmlDocumentTest, AFileThatCannotBeReadWholeDoesNotLoad) {
-        const std::filesystem::path folder = PathOf("folder");
+        const Path folder = PathOf("folder");
         MakeDirectory(folder);
         WriteFile(PathOf("empty.xml"), "");
         String tooBig = "<root><!--";
@@ -124,11 +125,11 @@ namespace BECore::Tests {
     TEST_F(XmlDocumentTest, ASaveCreatesTheMissingFoldersAndFailsOnAFolder) {
         XmlDocument document;
         ASSERT_TRUE(document.LoadFromString("<root />"));
-        const std::filesystem::path nested = PathOf("inner/deeper/a.xml");
+        const Path nested = PathOf("inner/deeper/a.xml");
         ASSERT_TRUE(document.SaveToFile(nested));
-        EXPECT_TRUE(std::filesystem::exists(nested));
+        EXPECT_TRUE(IsFile(nested));
 
-        const std::filesystem::path folder = PathOf("folder");
+        const Path folder = PathOf("folder");
         MakeDirectory(folder);
         EXPECT_FALSE(document.SaveToFile(folder));
     }
@@ -136,7 +137,7 @@ namespace BECore::Tests {
     TEST_F(XmlDocumentTest, ASaveMakesAMissingFolderWithANonAsciiName) {
         XmlDocument document;
         ASSERT_TRUE(document.LoadFromString("<root />"));
-        const Path file = Path(PathOf("caf\xC3\xA9")) / "Conf\xC3\xA9.xml";
+        const Path file = PathOf("caf\xC3\xA9") / "Conf\xC3\xA9.xml";
         ASSERT_TRUE(document.SaveToFile(file));
 
         XmlDocument loaded;
@@ -190,9 +191,12 @@ namespace BECore::Tests {
             return lines;
         }
 
-        /// A time far from now, so that a write shows in the modification time at any clock resolution
-        std::filesystem::file_time_type LongAgo() {
-            return std::filesystem::file_time_type::clock::now() - std::chrono::hours(24 * 30);
+        /// Sets the write time of @p path far in the past, so that a write shows in the modification time at any clock resolution,
+        /// and returns the time the file system reports
+        int64_t SetLongAgo(const Path& path) {
+            SetWriteTime(path, -std::chrono::hours(24 * 30));
+            const Optional<FileInfo> info = GetFileInfo(path);
+            return info ? info->modifyTimeNs : 0;
         }
 
     }  // namespace
@@ -200,15 +204,14 @@ namespace BECore::Tests {
     TEST_F(XmlDocumentTest, AHandLaidFileSavedUnchangedIsLeftAloneByteForByteAndInTime) {
         for (const StringView text : {kHandLaidLibrary, kFourSpaceConfig}) {
             WriteFile(_path, text);
-            const auto before = LongAgo();
-            std::filesystem::last_write_time(_path, before);
+            const int64_t before = SetLongAgo(_path);
 
             XmlDocument document;
             ASSERT_TRUE(document.LoadFromFile(_path));
             ASSERT_TRUE(document.SaveToFile(_path));
 
             EXPECT_EQ(ReadFile(_path), String(text));
-            EXPECT_EQ(std::filesystem::last_write_time(_path), before);
+            EXPECT_EQ(GetFileInfo(_path)->modifyTimeNs, before);
         }
     }
 
@@ -270,13 +273,12 @@ namespace BECore::Tests {
         const String canonical = ReadFile(_path);
         EXPECT_EQ(canonical, "<root>\n  <a x=\"1\" />\n  <b y=\"2\" />\n</root>\n");
 
-        const auto before = LongAgo();
-        std::filesystem::last_write_time(_path, before);
+        const int64_t before = SetLongAgo(_path);
         XmlDocument again;
         ASSERT_TRUE(again.LoadFromFile(_path));
         ASSERT_TRUE(again.SaveToFile(_path));
         EXPECT_EQ(ReadFile(_path), canonical);
-        EXPECT_EQ(std::filesystem::last_write_time(_path), before);
+        EXPECT_EQ(GetFileInfo(_path)->modifyTimeNs, before);
     }
 
     TEST_F(XmlDocumentTest, AFileChangedOnDiskAfterTheLoadIsOverwrittenByTheDocument) {
