@@ -199,6 +199,28 @@ namespace BECore {
         return path.substr(start);
     }
 
+    bool PathIsUnder(StringView path, StringView root) {
+        if (root.empty()) {
+            return false;
+        }
+        const Parts pathParts = Split(path);
+        const Parts rootParts = Split(root);
+        if (CompareBytes(path.substr(0, pathParts.rootNameEnd), root.substr(0, rootParts.rootNameEnd)) != 0 || pathParts.hasRootDirectory != rootParts.hasRootDirectory) {
+            return false;
+        }
+        NameCursor pathNames(path.substr(pathParts.relativeBegin));
+        NameCursor rootNames(root.substr(rootParts.relativeBegin));
+        StringView rootName;
+        StringView pathName;
+        // The empty name a trailing separator adds is the root's last: it ends the walk like running out of names does
+        while (rootNames.Next(rootName) && !rootName.empty()) {
+            if (!pathNames.Next(pathName) || CompareBytes(pathName, rootName) != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     int PathCompare(StringView left, StringView right) {
         const Parts leftParts = Split(left);
         const Parts rightParts = Split(right);

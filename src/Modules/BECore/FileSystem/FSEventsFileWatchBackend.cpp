@@ -22,11 +22,6 @@ namespace BECore {
 
         void DoNothing(void* /*context*/) {}
 
-        /// Whether @p path is @p root or lies below it; both lexically normal
-        bool IsUnder(const Path& path, const Path& root) {
-            return path == root || !path.Relative(root).Empty();
-        }
-
         /// A watched directory in the two forms it has: the one the facade gave and the one FSEvents reports
         struct Watch {
             Path reported;
@@ -209,7 +204,7 @@ namespace BECore {
                     const Path path = Path(StringView(paths[i])).LexicallyNormal();
                     const bool lostEvents = (flags[i] & kLostEventsFlags) != 0;
                     for (const Watch& watch : snapshot.watches) {
-                        if (!IsUnder(path, watch.real)) {
+                        if (!path.IsUnder(watch.real)) {
                             continue;
                         }
                         if (lostEvents) {

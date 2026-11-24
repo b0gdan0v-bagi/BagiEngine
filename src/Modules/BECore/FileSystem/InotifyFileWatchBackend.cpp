@@ -27,11 +27,6 @@ namespace BECore {
             bool recursive = false;
         };
 
-        /// Whether @p dir is @p top or lies below it
-        bool IsAtOrBelow(const Path& dir, const Path& top) {
-            return dir == top || !dir.Relative(top).Empty();
-        }
-
         /**
          * One inotify descriptor and one reader thread for every watched directory. inotify is not recursive, so a recursive directory
          * gets a watch per subfolder, and a folder that appears later is watched when its CREATE arrives (and its files, which may have
@@ -210,7 +205,7 @@ namespace BECore {
             /// With _mutex held: the watches of a folder that was moved out of the tree follow it to its new place, where they would post paths of the old one
             void DropTree(const Path& top) {
                 for (size_t i = _watched.size(); i-- > 0;) {
-                    if (IsAtOrBelow(_watched[i].dir, top)) {
+                    if (_watched[i].dir.IsUnder(top)) {
                         inotify_rm_watch(_inotifyFd, _watched[i].wd);
                         _watched.erase(_watched.begin() + static_cast<ptrdiff_t>(i));
                     }

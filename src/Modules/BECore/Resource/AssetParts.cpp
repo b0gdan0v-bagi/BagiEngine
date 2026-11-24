@@ -205,7 +205,7 @@ namespace BECore {
             const Path file = folder / PathFilename(splitPath);
             const Optional<String>& text = texts->Get(part);
             if (!text) {
-                (void)RemoveFile(file);  // a part that never was there is not an error
+                static_cast<void>(RemoveFile(file));  // a part that never was there is not an error
             } else if (!WriteText(file, *text)) {
                 LOG_ERROR("SplitAssetFile: cannot write '{}'", file.View());
                 written = false;

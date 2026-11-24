@@ -288,6 +288,43 @@ namespace BECore::Tests {
         }
     }
 
+    TEST(PathTest, IsUnderIsTheRootItselfOrAnythingBelowItByWholeNames) {
+        struct Row {
+            StringView path;
+            StringView root;
+            bool under;
+        };
+        const Vector<Row> rows{
+            {"/a/b", "/a/b", true},
+            {"/a/b/c", "/a/b", true},
+            {"/a/b/c/d", "/a/b", true},
+            {"/a/bc", "/a/b", false},
+            {"/a", "/a/b", false},
+            {"/a/b/", "/a/b", true},
+            {"/a/b", "/a/b/", true},
+            {"/a/b/", "/a/b/", true},
+            {"/a/b/c", "/a/b/", true},
+            {"/a/bc", "/a/b/", false},
+            {"/x/y", "/", true},
+            {"/", "/", true},
+            {"x/y", "/", false},
+            {"/a/b", "a/b", false},
+            {"a/b/c", "a/b", true},
+            {"a/b", "a", true},
+            {"a", "a/b", false},
+            {"/a/b", "", false},
+            {"", "", false},
+            {"/é/ü/ñ", "/é/ü", true},
+            {"/é/üñ", "/é/ü", false},
+            {"/日本/語/名前", "/日本/語/", true},
+        };
+        for (const Row& row : rows) {
+            SCOPED_TRACE(Format("{} under {}", row.path, row.root).c_str());
+            EXPECT_EQ(PathIsUnder(row.path, row.root), row.under);
+            EXPECT_EQ(Path(row.path).IsUnder(Path(row.root)), row.under);
+        }
+    }
+
     TEST(PathTest, ReplaceExtension) {
         struct Row {
             StringView text;

@@ -39,6 +39,12 @@ namespace BECore {
     [[nodiscard]] StringView PathRelativeTo(StringView path, StringView base);
 
     /**
+     * Whether @p path is @p root or lies below it, name by name (`/a/bc` is not under `/a/b`); a trailing separator on either side does not
+     * matter, and an empty @p root matches nothing. Like `PathRelativeTo`, both must be in the same form (see `Path::LexicallyNormal`).
+     */
+    [[nodiscard]] bool PathIsUnder(StringView path, StringView root);
+
+    /**
      * The order of `std::filesystem::path::compare`: the root name, then a root directory after none, then the names one by one, each byte by
      * byte as unsigned values. `a/b` comes before `a-b` and `a.txt`, which a comparison of the whole text would put after them, and `a//b`
      * equals `a/b`. A trailing separator is a last empty name: `a` comes before `a/`. Negative, zero or positive.
@@ -110,6 +116,10 @@ namespace BECore {
         }
         [[nodiscard]] Path Relative(const Path& base) const {
             return Path(PathRelativeTo(View(), base.View()));
+        }
+        /// This path is @p root or lies below it (`PathIsUnder`)
+        [[nodiscard]] bool IsUnder(const Path& root) const {
+            return PathIsUnder(View(), root.View());
         }
 
         /// The path with its extension replaced by @p extension (a dot is put in front when it has none, an empty one removes it)

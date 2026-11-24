@@ -218,7 +218,7 @@ namespace BECore {
             const HashMap<String, StemFiles> stems = ScanStems(files);
             const Path outLayer = outDir / Format("{}{}", kLayerFolderPrefix, layerIndex) / kConfigFolder;
             // A failure here shows again as the failure of the first file that needs the folder
-            (void)CreateDirectories(outLayer);
+            static_cast<void>(CreateDirectories(outLayer));
 
             for (const Path& relative : files) {
                 CookRow row;
