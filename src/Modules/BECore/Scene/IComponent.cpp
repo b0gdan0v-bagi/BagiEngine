@@ -6,6 +6,9 @@
 
 namespace BECore {
 
+    // The scene's update list holds no flag per component, so the class must not grow (a one-byte member makes it 136 bytes).
+    static_assert(sizeof(IComponent) == 128);
+
     Scene& IComponent::GetScene() const {
         ASSERT(_scene != nullptr);
         return *_scene;
@@ -18,6 +21,11 @@ namespace BECore {
 
     bool IComponent::IsSceneActive() const {
         return _scene != nullptr && _scene->IsActive();
+    }
+
+    void IComponent::RegisterSceneUpdate(SceneUpdateKind kind, SceneUpdateInvoker invoke) {
+        ASSERT(_scene != nullptr);
+        _scene->AddUpdater(kind, *this, invoke, {});
     }
 
 }  // namespace BECore

@@ -73,6 +73,10 @@ namespace BECore {
         auto it = eastl::find_if(_components.begin(), _components.end(), [&typeName](const IntrusivePtr<IComponent>& comp) { return PoolString::Intern(comp->GetTypeMeta().typeName) == typeName; });
 
         if (it != _components.end()) {
+            // Before the erase: it may drop the last reference
+            if (_scene) {
+                _scene->RemoveUpdaters(**it, {});
+            }
             _components.erase(it);
             if (_scene) {
                 _scene->ComponentsChanged({});

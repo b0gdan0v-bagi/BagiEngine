@@ -7,7 +7,6 @@
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
-#include <Events/SceneEvents.h>
 #include <entt/entt.hpp>
 #include <gtest/gtest.h>
 
@@ -127,7 +126,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(counter);
 
         ASSERT_TRUE(_scene->MoveNode(a, &Node("B")));
-        SceneEvents::SceneUpdateEvent::Emit();
+        _manager->UpdateAll();
 
         EXPECT_EQ(a.GetEntity(), entity);
         EXPECT_EQ(counter->updateCount, 1);
@@ -203,7 +202,7 @@ namespace BECore::Tests {
         }
 
         // OnAttached ran once for the copy's counter: one update, one count; the original's own count is its own
-        SceneEvents::SceneUpdateEvent::Emit();
+        _manager->UpdateAll();
         EXPECT_EQ(Require(copy->GetComponent<SceneEventCounter>()).updateCount, 1);
         EXPECT_EQ(Require(a.GetComponent<SceneEventCounter>()).updateCount, 1);
 

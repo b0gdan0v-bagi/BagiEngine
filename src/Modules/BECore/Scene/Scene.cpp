@@ -39,11 +39,21 @@ namespace BECore {
             SceneEvents::SceneViewChangedEvent::Emit(this, GetActiveView());
         }
         const Time& time = CoreManager::GetTime();
+        // Read once: a handler that switches the active scene does not cut the pass in progress
+        const bool active = IsActive();
+        const SceneEvents::SceneFixedUpdateEvent fixedEvent(time.GetFixedDeltaTime());
         for (uint32_t step = 0; step < time.GetFixedStepCount(); ++step) {
             BE_PROFILE_SCOPE("SceneFixedUpdateEvent");
+            if (active) {
+                _fixedUpdaters.Run(&fixedEvent);
+            }
             SceneEvents::SceneFixedUpdateEvent::Emit(time.GetFixedDeltaTime());
         }
         BE_PROFILE_SCOPE("SceneUpdateEvent");
+        if (active) {
+            const SceneEvents::SceneUpdateEvent frameEvent(time.GetDeltaTime());
+            _frameUpdaters.Run(&frameEvent);
+        }
         SceneEvents::SceneUpdateEvent::Emit(time.GetDeltaTime());
     }
 
@@ -391,9 +401,37 @@ namespace BECore {
         DestroyEntities(node);
     }
 
+    void Scene::AddUpdater(SceneUpdateKind kind, IComponent& component, SceneUpdateInvoker invoke, PassKey<IComponent>) {
+        GetUpdateList(kind).Add(component, invoke);
+    }
+
+    void Scene::RemoveUpdaters(IComponent& component, PassKey<SceneNode>) {
+        DropUpdaters(component);
+    }
+
+    void Scene::DropUpdaters(IComponent& component) {
+        // The lists scan every entry: a scene with no updating component pays nothing for an edit
+        if (_frameUpdaters.IsEmpty() && _fixedUpdaters.IsEmpty()) {
+            return;
+        }
+        _frameUpdaters.Remove(component);
+        _fixedUpdaters.Remove(component);
+    }
+
+    size_t Scene::GetUpdaterCount(SceneUpdateKind kind) const {
+        return kind == SceneUpdateKind::Frame ? _frameUpdaters.GetCount() : _fixedUpdaters.GetCount();
+    }
+
+    SceneUpdateList& Scene::GetUpdateList(SceneUpdateKind kind) {
+        return kind == SceneUpdateKind::Frame ? _frameUpdaters : _fixedUpdaters;
+    }
+
     void Scene::DestroyEntities(SceneNode& node) {
         for (const auto& child : node.GetChildren()) {
             DestroyEntities(*child);
+        }
+        for (const auto& component : node.GetComponents()) {
+            DropUpdaters(*component);
         }
         if (_registry->valid(node._entity)) {
             _registry->destroy(node._entity);

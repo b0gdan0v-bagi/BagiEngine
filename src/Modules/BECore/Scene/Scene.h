@@ -9,6 +9,7 @@
 #include <BECore/Scene/SceneDrawList.h>
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/Scene/SceneNodeFiles.h>
+#include <BECore/Scene/SceneUpdateList.h>
 #include <BECore/Scene/SceneView.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/PassKey.h>
@@ -21,6 +22,7 @@ namespace BECore {
 
     class SceneManager;
     class SceneDrawSystem;
+    class IComponent;
 
     class Scene : public RefCounted {
         BE_CLASS(Scene, FACTORY_BASE)
@@ -31,7 +33,13 @@ namespace BECore {
         void Initialize();
 
         /**
-         * @brief Emit SceneFixedUpdateEvent once per fixed step due this frame, then SceneUpdateEvent.
+         * @brief Update the scene: first the fixed step lists once per fixed step due this frame, then the frame list.
+         *
+         * Each pass runs the update list of the scene (components that registered with SubscribeInScene of SceneFixedUpdateEvent or
+         * SceneUpdateEvent; see IComponent::OnAttached()) and then emits the event for the plain subscribers, which are not scene bound. The
+         * lists run only while the scene is active, read once at the start: an inactive scene updates no component, and a handler that
+         * switches the active scene does not cut the pass. Last registered runs first; a component a handler adds first runs in the next pass,
+         * one a handler removes (node or component) and that has not run yet does not run.
          *
          * Reads the frame from CoreManager::GetTime(), so call it once per frame, after Time advanced. First it sends
          * SceneEvents::SceneViewChangedEvent when the active view changed since the last send (decided in Draw(), announced here).
@@ -208,6 +216,15 @@ namespace BECore {
         /// Called by SceneNode::RemoveChild() only: destroys the entity of @p node and of its descendants and resets their GetEntity() to entt::null.
         void DestroyNodeEntities(SceneNode& node, PassKey<SceneNode>);
 
+        /// Called by IComponent::SubscribeInScene() only, through RegisterSceneUpdate(): @p component joins the update list of @p kind
+        void AddUpdater(SceneUpdateKind kind, IComponent& component, SceneUpdateInvoker invoke, PassKey<IComponent>);
+
+        /// Called by SceneNode::RemoveComponent() only, before the component can die: @p component leaves both update lists
+        void RemoveUpdaters(IComponent& component, PassKey<SceneNode>);
+
+        /// How many components will be called by the list of @p kind in its next run
+        size_t GetUpdaterCount(SceneUpdateKind kind) const;
+
         /// Called by SceneNode::SetLayer() only: the ranks of the last pass no longer hold
         void NodeLayerChanged(PassKey<SceneNode>);
 
@@ -238,6 +255,8 @@ namespace BECore {
     private:
         bool IsLiveNode(const SceneNode& node) const;
         void DestroyEntities(SceneNode& node);
+        SceneUpdateList& GetUpdateList(SceneUpdateKind kind);
+        void DropUpdaters(IComponent& component);
         void PickView(float outputWidth, float outputHeight);
 
         /// A node was added, removed, moved or changed its layer: both the ranks and the draw list are stale
@@ -261,6 +280,8 @@ namespace BECore {
         bool _drawing = false;         // a draw pass is running: the hooks that make the list stale must not be called
         uint32_t _drawListBuilds = 0;
         SceneDrawList _drawList;
+        SceneUpdateList _frameUpdaters;
+        SceneUpdateList _fixedUpdaters;
         bool _drawListValid = false;  // what the draw list was built from still holds: cleared by every edit of the tree, of the components of a node and of the editor flags
     };
 
