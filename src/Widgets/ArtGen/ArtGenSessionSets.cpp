@@ -1,6 +1,8 @@
+#include <BECore/Control/ControlParams.h>
+#include <BECore/Control/JsonTape.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/File/File.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
-#include <Widgets/ArtGen/ArtGenInterimJson.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/ArtGenSessionControl.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetStore.h>
@@ -193,7 +195,7 @@ namespace BECore {
         if (set.processing || IsLegacyAccepted(set)) {
             return set.processing;
         }
-        const ArtGenImageSettings settings = ImageSettingsOf(set.presetData, StringView(set.preset));
+        const ArtGenImageSettings settings = ImageSettingsOf(StringView(set.presetData), StringView(set.preset));
         if (settings.IsIdentity()) {
             return Optional<ArtGenSetProcessing>{};
         }
@@ -303,9 +305,9 @@ namespace BECore {
         if (_gameRoot.empty()) {
             return std::unexpected(String("no game root to keep the set in"));
         }
-        const bool draft = !request.presetData.is_null();
+        const bool draft = !request.presetData.empty();
         if (draft) {
-            if (auto shape = Detail::ArtGenReadDom(request.presetData, [](JsonView view) { return CheckArtGenPresetShape(view); }); !shape) {
+            if (auto shape = CheckArtGenPresetText(StringView(request.presetData)); !shape) {
                 return std::unexpected(Format("the draft is not a preset: {}", shape.error()));
             }
             if (request.preset.empty()) {
@@ -372,7 +374,7 @@ namespace BECore {
         set.kind = String(kKindImage);
         set.kind = KindOfSet(set);
         // Like the frame and the reference, the group is taken now: editing the preset later does not move the set's sprites
-        const String group = request.atlas ? *request.atlas : AtlasOf(set.presetData, StringView(set.preset));
+        const String group = request.atlas ? *request.atlas : AtlasOf(StringView(set.presetData), StringView(set.preset));
         if (!group.empty()) {
             if (!IsValidSpriteName(group)) {
                 return std::unexpected(String("'atlas' is an atlas group name of 1 to 64 of A-Z a-z 0-9 _ -, or \"\" for none"));
@@ -408,8 +410,13 @@ namespace BECore {
     }
 
     String ArtGenSession::KindOfSet(const ArtGenSet& set) const {
-        if (!set.presetData.is_null()) {
-            const ArtGenWorkflow* workflow = FindWorkflow(StringView(GetJsonString(set.presetData, "workflow").value_or(String())));
+        if (!set.presetData.empty()) {
+            JsonTape tape;
+            String workflowName;
+            if (tape.Parse(StringView(set.presetData))) {
+                workflowName = GetParamString(JsonView(tape, 0), "workflow").value_or(String());
+            }
+            const ArtGenWorkflow* workflow = FindWorkflow(workflowName);
             return workflow != nullptr ? workflow->kind : set.kind;
         }
         const ArtGenPreset* known = FindPreset(set.preset);
@@ -740,7 +747,7 @@ namespace BECore {
         ArtGenImagePlan plan = PlanOf(set->processing, set->atlas, false);
         if (!set->processing && !IsLegacyAccepted(*set)) {
             // Not accepted as a whole yet: the preset's settings, a frame of this image's own. A legacy set keeps the identity plan
-            plan.settings = ImageSettingsOf(set->presetData, StringView(set->preset));
+            plan.settings = ImageSettingsOf(StringView(set->presetData), StringView(set->preset));
         }
         return _acceptor(*variant, sprite, plan, nullptr);
     }
@@ -812,7 +819,7 @@ namespace BECore {
         if (preset != nullptr && preset->is_string()) {
             request.preset = StringOr(params, "preset");
         } else if (preset != nullptr && preset->is_object()) {
-            request.presetData = *preset;
+            request.presetData = DumpJson(*preset);  // Interim: WP 5
             request.preset = StringOr(params, "presetName");
         } else {
             return std::unexpected(InvalidParams("'preset' must be a name or a preset object"));
@@ -879,8 +886,8 @@ namespace BECore {
         return reply;
     }
 
-    // By hand: the answer is the manifest file (`ArtGenSetToJson`) with `state` added, and the manifest holds a `Json` payload (ArtGenSet.h)
-    std::expected<Json, ControlError> ArtGenSession::HandleSet(const Json& params) {
+    // By hand: the answer is the manifest (`WriteArtGenSet`) with `state` added, and the manifest holds a draft's text
+    std::expected<String, ControlError> ArtGenSession::HandleSet(const Json& params) {
         const auto name = GetJsonString(params, "set");
         if (!name) {
             return std::unexpected(InvalidParams("'set' (string) is required"));
@@ -889,8 +896,9 @@ namespace BECore {
         if (set == nullptr) {
             return std::unexpected(MakeError(kNoSetCode, Format("no set named '{}'", *name)));
         }
-        Json reply = ArtGenSetToJson(*set);
-        reply["state"] = ToJsonString(String(StateNameOf(*set)));
+        String reply;
+        JsonWriter writer(reply);
+        WriteArtGenSet(writer, *set, StateNameOf(*set));
         return reply;
     }
 

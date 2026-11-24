@@ -4,6 +4,7 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/Types/Types.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <expected>
@@ -50,14 +51,16 @@ namespace BECore::ArtGenControl {
         return GetJsonString(holder, "value");
     }
 
-    /// Wraps a handler of the session as a control method: a value is the reply, an error the failure. A handler answers a `Json` document (a payload that stays by hand,
-    /// src/Widgets/ArtGen/CLAUDE.md, "The contract") or a reflected struct of ArtGenAnswers.h, which writes itself
+    /// Wraps a handler of the session as a control method: a value is the reply, an error the failure. A handler answers the compact text of a
+    /// document written by hand (a `String`, src/Widgets/ArtGen/CLAUDE.md, "The contract"), a `Json` or a reflected struct of ArtGenAnswers.h, which writes itself
     template <auto Method>
     void Register(ControlService& service, ArtGenSession& session, StringView name) {
         service.RegisterHandler(name, [&session](ControlCall& call) {
             auto result = (session.*Method)(call.ParamsJson());
             if (result) {
-                if constexpr (std::is_same_v<std::remove_cvref_t<decltype(*result)>, Json>) {
+                if constexpr (std::is_same_v<std::remove_cvref_t<decltype(*result)>, String>) {
+                    call.Reply([&text = *result](JsonWriter& writer) { writer.Raw(text); });
+                } else if constexpr (std::is_same_v<std::remove_cvref_t<decltype(*result)>, Json>) {
                     call.Reply(std::move(*result));
                 } else {
                     call.ReplyObject(*result);

@@ -111,6 +111,14 @@ namespace BECore {
         return text;
     }
 
+    std::expected<void, String> CheckArtGenPresetText(StringView text) {
+        JsonTape tape;
+        if (!tape.Parse(text)) {
+            return std::unexpected(String("a preset is a JSON object"));
+        }
+        return CheckArtGenPresetShape(JsonView(tape, 0));
+    }
+
     std::expected<void, String> CheckArtGenPresetShape(JsonView preset) {
         if (!preset.IsObject()) {
             return std::unexpected(String("a preset is a JSON object"));

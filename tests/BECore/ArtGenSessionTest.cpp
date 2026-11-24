@@ -551,7 +551,7 @@ namespace BECore::Tests {
         params["subject"] = "knight";
         params["count"] = 1;
         ASSERT_TRUE(GetJsonInt(Result(Call("artgen_generate", params)), "id").has_value());
-        EXPECT_EQ(session.GetRun().presetData, DraftPreset());
+        EXPECT_EQ(session.GetRun().presetData, DumpJson(DraftPreset()));
 
         const Json poll = Call("artgen_poll", CatalogPoll());
         const Json* request = FindJsonMember(Result(poll), "request");
@@ -562,10 +562,37 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonBool(Require(FindJsonMember(Result(state), "run")), "draft"), Optional<bool>(true));
     }
 
+    TEST_F(ArtGenSessionTest, TheRequestOfAPollIsCompactSortedWithTheDraftsTextInIt) {
+        const String draft = R"({"preset":1,"prompt":"a {subject}","workflow":"sdxl_basic"})";
+        ASSERT_TRUE(session.RequestDraft("wood", draft, "knight", 2, Optional<int64_t>(3), false, ArtGenReference{"init", "x.png", Optional<double>(0.25)}).has_value());
+        const auto reply = session.HandlePoll(ReadyPoll());
+        ASSERT_TRUE(reply.has_value());
+        EXPECT_EQ(*reply, Format(R"({{"gameRoot":"D:/Games/Chess","request":{{"count":2,"id":{},"preset":{},"presetName":"wood","reference":{{"image":"x.png","mode":"init","weight":0.25}},)"
+                                 R"("seed":3,"subject":"knight"}}}})",
+                                 session.GetRun().id, draft));
+
+        Json done = Report(session.GetRun().id);
+        done["status"] = "ok";
+        Call("artgen_done", done);
+        ASSERT_TRUE(session.Request("wood", "rook", 1, Optional<int64_t>()).has_value());
+        const auto byName = session.HandlePoll(ReadyPoll());
+        ASSERT_TRUE(byName.has_value());
+        EXPECT_EQ(*byName, Format(R"({{"gameRoot":"D:/Games/Chess","request":{{"count":1,"id":{},"preset":"wood","seed":null,"subject":"rook"}}}})", session.GetRun().id));
+    }
+
+    TEST_F(ArtGenSessionTest, ADraftTextThatIsNotAPresetObjectIsRefused) {
+        for (const StringView text : {StringView(""), StringView("not json"), StringView("[1]"), StringView("3")}) {
+            const auto refused = session.RequestDraft("wood", text, "knight", 1, Optional<int64_t>());
+            ASSERT_FALSE(refused.has_value()) << String(text).c_str();
+            EXPECT_NE(refused.error().find("a preset is a JSON object"), String::npos) << refused.error().c_str();
+            EXPECT_FALSE(session.SavePreset("ok", text).has_value()) << String(text).c_str();
+        }
+    }
+
     TEST_F(ArtGenSessionTest, ADraftThatIsNotAPresetIsRefusedHere) {
         Json noPrompt = DraftPreset();
         noPrompt.erase("prompt");
-        auto refused = session.RequestDraft("wood", noPrompt, "knight", 1, Optional<int64_t>());
+        auto refused = session.RequestDraft("wood", DumpJson(noPrompt), "knight", 1, Optional<int64_t>());
         ASSERT_FALSE(refused.has_value());
         EXPECT_NE(refused.error().find("\"prompt\" is required"), String::npos) << refused.error().c_str();
         Json params = Object();
@@ -625,11 +652,11 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, SaveRefusesABadNameOrAShapeThatIsNotAPreset) {
-        EXPECT_FALSE(session.SavePreset("../escape", DraftPreset()).has_value());
-        EXPECT_FALSE(session.SavePreset("", DraftPreset()).has_value());
+        EXPECT_FALSE(session.SavePreset("../escape", DumpJson(DraftPreset())).has_value());
+        EXPECT_FALSE(session.SavePreset("", DumpJson(DraftPreset())).has_value());
         Json badSize = DraftPreset();
         badSize["size"] = Json::array({0, 10});
-        EXPECT_FALSE(session.SavePreset("ok", badSize).has_value());
+        EXPECT_FALSE(session.SavePreset("ok", DumpJson(badSize)).has_value());
         Json params = Object();
         params["name"] = "ok";
         EXPECT_EQ(ErrorCode(Call("artgen_save_preset", params)), "invalid_params");
@@ -742,7 +769,7 @@ namespace BECore::Tests {
         Call("artgen_poll", ImagePoll(Json{{"maxSize", 64}}));
         Json draft = DraftPreset();
         draft["accept"] = Json{{"padding", 9}};
-        ASSERT_TRUE(session.RequestDraft("wood", draft, "knight", 1, Optional<int64_t>(3)).has_value());
+        ASSERT_TRUE(session.RequestDraft("wood", DumpJson(draft), "knight", 1, Optional<int64_t>(3)).has_value());
         Call("artgen_poll", ImagePoll(Json{{"maxSize", 64}}));
         Json image = Report(session.GetRun().id);
         image["seed"] = 3;
@@ -812,7 +839,7 @@ namespace BECore::Tests {
         Call("artgen_poll", AtlasPoll("saved"));
         Json draft = DraftPreset();
         draft["atlas"] = "icons";
-        ASSERT_TRUE(session.RequestDraft("wood", draft, "knight", 1, Optional<int64_t>(3)).has_value());
+        ASSERT_TRUE(session.RequestDraft("wood", DumpJson(draft), "knight", 1, Optional<int64_t>(3)).has_value());
         Call("artgen_poll", AtlasPoll("saved"));
         Json image = Report(session.GetRun().id);
         image["seed"] = 3;
@@ -825,7 +852,7 @@ namespace BECore::Tests {
         done["status"] = "ok";
         Call("artgen_done", done);
         draft.erase("atlas");
-        ASSERT_TRUE(session.RequestDraft("wood", draft, "knight", 1, Optional<int64_t>(3)).has_value());
+        ASSERT_TRUE(session.RequestDraft("wood", DumpJson(draft), "knight", 1, Optional<int64_t>(3)).has_value());
         image = Report(session.GetRun().id);
         image["seed"] = 3;
         image["path"] = "D:/out/knight_3.png";
@@ -963,7 +990,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, ADraftTakesAReferenceToo) {
-        const auto id = session.RequestDraft("wood", Json{{"preset", 1}, {"workflow", "sdxl_basic"}, {"prompt", "{subject}"}}, "rook", 1, Optional<int64_t>(), false,
+        const auto id = session.RequestDraft("wood", R"({"preset":1,"prompt":"{subject}","workflow":"sdxl_basic"})", "rook", 1, Optional<int64_t>(), false,
                                              ArtGenReference{"init", "artgen/out/x.png", Optional<double>()});
         ASSERT_TRUE(id.has_value()) << id.error().c_str();
         const Json poll = Call("artgen_poll", ReadyPoll());

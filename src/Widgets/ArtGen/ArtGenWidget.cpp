@@ -13,7 +13,6 @@
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenAtlasAccept.h>
 #include <Widgets/ArtGen/ArtGenDrag.h>
-#include <Widgets/ArtGen/ArtGenInterimJson.h>
 #include <Widgets/ArtGen/ArtGenLaunch.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/ArtGenVerdict.h>
@@ -453,8 +452,7 @@ namespace BECore {
             const Optional<int64_t> seed = _randomSeed ? Optional<int64_t>() : Optional<int64_t>(_seed);
             // A saved preset goes by name, so its provenance names the file; anything else goes inline as a draft
             const Optional<ArtGenReference> reference = images ? session.GetReferenceSlot() : Optional<ArtGenReference>();
-            // Interim: the session takes a `Json` draft until WP 4
-            auto result = _form.IsDirty() ? session.RequestDraft(StringView(_form.name), Detail::ArtGenDraftOf(_form.ToJsonText()), StringView(_subject), _count, seed, _keepVariants, reference)
+            auto result = _form.IsDirty() ? session.RequestDraft(StringView(_form.name), StringView(_form.ToJsonText()), StringView(_subject), _count, seed, _keepVariants, reference)
                                           : session.Request(StringView(_form.GetBaseName()), StringView(_subject), _count, seed, _keepVariants, reference);
             _requestError = result ? String() : result.error();
         }
@@ -586,8 +584,7 @@ namespace BECore {
     }
 
     void ArtGenWidget::SaveForm(ArtGenSession& session, StringView name) {
-        // Interim: the session takes a `Json` draft until WP 4
-        auto saved = session.SavePreset(name, Detail::ArtGenDraftOf(_form.ToJsonText()));
+        auto saved = session.SavePreset(name, StringView(_form.ToJsonText()));
         _formMessageIsError = !saved.has_value();
         if (saved) {
             std::snprintf(_form.name, sizeof(_form.name), "%.*s", static_cast<int>(name.size()), name.data());

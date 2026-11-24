@@ -1,7 +1,9 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/File/File.h>
 #include <Common/ControlTestSupport.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/TempPath.h>
@@ -17,6 +19,14 @@ namespace BECore::Tests {
 
         constexpr int kFrameGuard = 100;
         constexpr int64_t kSetSeed = 40;
+
+        /// The manifest `WriteArtGenSet` writes, as a DOM to compare with the answers the oracle `Call` parses
+        Json ManifestJson(const ArtGenSet& set) {
+            String text;
+            JsonWriter writer(text);
+            WriteArtGenSet(writer, set);
+            return Require(ParseJson(text));
+        }
 
         Json ReadyPoll() {
             Json preset = Json::object();
@@ -379,7 +389,8 @@ namespace BECore::Tests {
         /// The manifest as it is on disk now
         ArtGenSet OnDisk(StringView set) const {
             const auto text = ReadTextFile(ManifestPath(_root, set));
-            return Require(ArtGenSetFromJson(Require(ParseJson(Require(text)))));
+            const JsonDoc doc{StringView(Require(text))};
+            return Require(ReadArtGenSet(doc));
         }
 
         static ArtGenSetJobState StateOf(const ArtGenSet& set, size_t job) {
@@ -738,7 +749,7 @@ namespace BECore::Tests {
         EXPECT_NE(refused.error().find("broken"), String::npos);
 
         request.preset = "form";
-        request.presetData = Json::object();
+        request.presetData = "{}";
         const auto notPreset = session.EnqueueSet(request);
         ASSERT_FALSE(notPreset.has_value());
         EXPECT_NE(notPreset.error().find("not a preset"), String::npos);
@@ -747,7 +758,7 @@ namespace BECore::Tests {
     TEST_F(ArtGenSetSessionTest, ADraftTravelsInlineWithEveryJob) {
         ArtGenSetRequest request;
         request.preset = "form";
-        request.presetData = Require(ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}"})"));
+        request.presetData = R"({"preset":1,"prompt":"{subject}","title":"form","workflow":"txt2img"})";
         request.subjects = Require(ParseArtGenSubjects("a"));
         request.name = "drafted";
         request.seed = 3;
@@ -881,7 +892,7 @@ namespace BECore::Tests {
             EXPECT_EQ(GetJsonString(answer, "state"), Optional<String>("Active"));
             Json withoutState = answer;
             withoutState.erase("state");
-            EXPECT_EQ(withoutState, ArtGenSetToJson(OnDisk("shown")));
+            EXPECT_EQ(withoutState, ManifestJson(OnDisk("shown")));
         }
         Finish(*RequestOf(Poll()), "ok");
         Finish(*RequestOf(Poll()), "failed", "boom");
@@ -889,7 +900,7 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString(answer, "state"), Optional<String>("Complete"));
         Json withoutState = answer;
         withoutState.erase("state");
-        EXPECT_EQ(withoutState, ArtGenSetToJson(OnDisk("shown")));
+        EXPECT_EQ(withoutState, ManifestJson(OnDisk("shown")));
         const Json* jobs = FindJsonMember(answer, "jobs");
         ASSERT_NE(jobs, nullptr);
         ASSERT_EQ(jobs->size(), 2u);
@@ -1526,7 +1537,7 @@ namespace BECore::Tests {
         EXPECT_NE(write.error.find(Format("the row still names seed {}", kSetSeed + 1)), String::npos) << write.error.c_str();
         const Json refused = Call("artgen_pick", pick);
         EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
-        EXPECT_EQ(ArtGenSetToJson(OnDisk("fail")), ArtGenSetToJson(before));
+        EXPECT_EQ(ManifestJson(OnDisk("fail")), ManifestJson(before));
         EXPECT_EQ(Require(session.FindSet("fail")).jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
 
         gFailOn.clear();
@@ -1767,7 +1778,7 @@ namespace BECore::Tests {
         EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
         EXPECT_NE(ErrorMessage(refused).find("'second'"), String::npos) << ErrorMessage(refused).c_str();
         EXPECT_TRUE(gAccepted.empty()) << "the game's file was not written";
-        EXPECT_EQ(ArtGenSetToJson(OnDisk("first")), ArtGenSetToJson(before));
+        EXPECT_EQ(ManifestJson(OnDisk("first")), ManifestJson(before));
 
         EXPECT_EQ(session.PickVariant("first", "b", kSetSeed), ArtGenSetEdit::Ok) << "a row nobody replaced switches as before";
         gAccepted.clear();
@@ -2137,13 +2148,13 @@ namespace BECore::Tests {
         Call("artgen_poll", PollWithWoodAtlas("saved"));
         ArtGenSetRequest request;
         request.preset = "form";
-        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","atlas":"drafted"})").value();
+        request.presetData = R"({"atlas":"drafted","preset":1,"prompt":"{subject}","title":"form","workflow":"txt2img"})";
         request.subjects = ParseArtGenSubjects("a").value();
         request.name = "with_group";
         ASSERT_TRUE(session.EnqueueSet(request).has_value());
         EXPECT_EQ(session.FindSet("with_group")->atlas, "drafted");
 
-        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}"})").value();
+        request.presetData = R"({"preset":1,"prompt":"{subject}","title":"form","workflow":"txt2img"})";
         request.preset = "wood";
         request.name = "without_group";
         ASSERT_TRUE(session.EnqueueSet(request).has_value());
@@ -2492,7 +2503,7 @@ namespace BECore::Tests {
     TEST_F(ArtGenSetSessionTest, TheFrameOfAnAcceptAllUsesTheSettingsOfTheSetsDraft) {
         ArtGenSetRequest request;
         request.preset = "form";
-        request.presetData = Require(ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","accept":{"trim":true,"padding":7,"maxSize":128}})"));
+        request.presetData = R"({"accept":{"maxSize":128,"padding":7,"trim":true},"preset":1,"prompt":"{subject}","title":"form","workflow":"txt2img"})";
         request.subjects = Require(ParseArtGenSubjects("a"));
         request.count = 2;
         request.seed = kSetSeed;
@@ -2615,7 +2626,7 @@ namespace BECore::Tests {
     TEST_F(ArtGenSetSessionTest, SettingsThatChangeNothingNeedNoFrame) {
         ArtGenSetRequest request;
         request.preset = "form";
-        request.presetData = Require(ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","accept":{"trim":false,"maxSize":0}})"));
+        request.presetData = R"({"accept":{"maxSize":0,"trim":false},"preset":1,"prompt":"{subject}","title":"form","workflow":"txt2img"})";
         request.subjects = Require(ParseArtGenSubjects("a"));
         request.count = 2;
         request.seed = kSetSeed;
@@ -3398,7 +3409,7 @@ namespace BECore::Tests {
         EXPECT_EQ(gPlans[0].atlas, "pieces");
         EXPECT_FALSE(gPlans[0].deferPack);
 
-        EXPECT_EQ(ArtGenSetToJson(OnDisk("framed")), ArtGenSetToJson(before)) << "no pick, no accepted, nothing in the manifest";
+        EXPECT_EQ(ManifestJson(OnDisk("framed")), ManifestJson(before)) << "no pick, no accepted, nothing in the manifest";
         EXPECT_EQ(session.FindSet("framed")->jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
         EXPECT_EQ(session.FindSet("framed")->jobs[0].accepted->as, "a");
     }
@@ -3406,7 +3417,7 @@ namespace BECore::Tests {
     TEST_F(ArtGenSetSessionTest, ADroppedVariantOfASetNotAcceptedYetUsesThePresetsSettingsAndAFrameOfItsOwn) {
         ArtGenSetRequest request;
         request.preset = "form";
-        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","accept":{"trim":true,"padding":7,"maxSize":128}})").value();
+        request.presetData = R"({"accept":{"maxSize":128,"padding":7,"trim":true},"preset":1,"prompt":"{subject}","title":"form","workflow":"txt2img"})";
         request.subjects = ParseArtGenSubjects("a").value();
         request.count = 2;
         request.seed = kSetSeed;
@@ -3430,7 +3441,7 @@ namespace BECore::Tests {
     TEST_F(ArtGenSetSessionTest, ADroppedVariantOfALegacySetKeepsTheIdentityPlanEvenWhenThePresetTrims) {
         ArtGenSetRequest request;
         request.preset = "form";
-        request.presetData = ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}","accept":{"trim":true,"padding":7,"maxSize":128}})").value();
+        request.presetData = R"({"accept":{"maxSize":128,"padding":7,"trim":true},"preset":1,"prompt":"{subject}","title":"form","workflow":"txt2img"})";
         request.subjects = ParseArtGenSubjects("a\nb").value();
         request.count = 2;
         request.seed = kSetSeed;

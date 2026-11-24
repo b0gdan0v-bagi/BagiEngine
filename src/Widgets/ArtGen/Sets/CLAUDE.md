@@ -6,7 +6,7 @@ A **set** is one preset applied to a list of subjects: one **job** per subject, 
 
 | File | Purpose |
 |------|---------|
-| `ArtGenSet.{h,cpp}` | `ArtGenSet`, `ArtGenSetJob`, `ArtGenSetVariant`, `ArtGenSetJobState`; the subject-line rules; the panel's row helpers; the manifest to and from JSON; the counting helpers, live and kept (`IsLive`, `AlternativesOf`, `KeepJob`) |
+| `ArtGenSet.{h,cpp}` | `ArtGenSet`, `ArtGenSetJob`, `ArtGenSetVariant`, `ArtGenSetJobState`; the subject-line rules; the panel's row helpers; the manifest written and read (`WriteArtGenSet`, `ReadArtGenSet`); the counting helpers, live and kept (`IsLive`, `AlternativesOf`, `KeepJob`) |
 | `ArtGenSetStore.{h,cpp}` | The sets on disk, no session: `WriteManifest`, `LoadSets`, the manifest's relative paths |
 | `ArtGenSetPanel.{h,cpp}` | The Set tab of the Generate panel, ImGui over the session |
 
@@ -24,7 +24,7 @@ A **set** is one preset applied to a list of subjects: one **job** per subject, 
 
 ## The manifest
 
-`<game root>/artgen/out/<set>/manifest.json`, format `kArtGenManifestFormat` (1). Only `WriteManifest` writes it (the session calls it at every change of a job); readers use `ArtGenSetFromJson`.
+`<game root>/artgen/out/<set>/manifest.json`, format `kArtGenManifestFormat` (1). Only `WriteManifest` writes it (the session calls it at every change of a job); it is written by `WriteArtGenSet` (keys in byte order, the draft's text as it is) and read by `ReadArtGenSet` over a `JsonTape`.
 
 ```
 {"manifest": 1, "set", "created", "kind" ("image"|"audio"), "preset", "presetData" (a draft's content, else null),
@@ -42,7 +42,7 @@ A **set** is one preset applied to a list of subjects: one **job** per subject, 
 
 A job with `accepted` and not `kept` is **live**: the game holds its pick and the other variants are alternatives to switch to. `kept` is written always; a manifest from before it existed has `accepted` without the key and reads as **kept**, so nothing becomes live by itself. `KeepJob` fixes a live job (`kept`, the date, the variants cut to the pick; the files stay on disk).
 
-`file` and `provenance` are relative to the set folder with `/`, so the folder can be moved. Reading is checked (`Control/Json.h`): a wrong type, a bad or duplicate job name, an unknown job state, a `pick` that is not a seed of the job's variants, or a `manifest` number other than 1 is an error that says where (`jobs[2].variants[0]: 'seed' must be an integer`), never an abort; unknown keys are ignored, so a later format 1 writer can add keys; a job without `more` reads as none.
+`file` and `provenance` are relative to the set folder with `/`, so the folder can be moved. Reading is checked (`ControlParams.h`; of two equal keys the first is read, a UTF-8 BOM of the file is skipped before the tape): a wrong type, a bad or duplicate job name, an unknown job state, a `pick` that is not a seed of the job's variants, or a `manifest` number other than 1 is an error that says where (`jobs[2].variants[0]: 'seed' must be an integer`), never an abort; unknown keys are ignored, so a later format 1 writer can add keys; a job without `more` reads as none.
 
 ## On disk
 

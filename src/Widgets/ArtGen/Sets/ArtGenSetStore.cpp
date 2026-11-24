@@ -1,7 +1,9 @@
 #include "ArtGenSetStore.h"
 
+#include <BECore/Control/JsonTape.h>
 #include <BECore/File/File.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/ArtGen/ArtGenFileText.h>
 
 namespace BECore {
 
@@ -36,11 +38,11 @@ namespace BECore {
             if (!text) {
                 return std::unexpected(text.error());
             }
-            auto parsed = ParseJson(*text);
-            if (!parsed) {
+            JsonTape tape;
+            if (auto parsed = tape.Parse(WithoutUtf8Bom(StringView(*text))); !parsed) {
                 return std::unexpected(Format("not JSON: {}", parsed.error().message));
             }
-            auto set = ArtGenSetFromJson(*parsed);
+            auto set = ReadArtGenSet(JsonView(tape, 0));
             if (!set) {
                 return std::unexpected(set.error());
             }
@@ -75,7 +77,11 @@ namespace BECore {
         if (!IsValidSpriteName(set.name)) {
             return std::unexpected(Format("'{}' is not a valid set name", set.name));
         }
-        String text = DumpJson(ArtGenSetToJson(set));
+        String text;
+        {
+            JsonWriter writer(text);
+            WriteArtGenSet(writer, set);
+        }
         text += '\n';
         return WriteFileAtomically(ManifestPath(gameRoot, set.name), text);
     }

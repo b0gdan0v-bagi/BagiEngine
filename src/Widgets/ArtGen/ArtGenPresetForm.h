@@ -56,6 +56,8 @@ namespace BECore {
     /// Checks the shape the C++ side owns before a save: an object with `preset` 1, `workflow` and `prompt` text, `size` [w, h] of positive
     /// integers, `params` an object, `accept` image settings in range, `reference` the shape of `ReadArtGenReference`. Everything else (does the workflow have the input) is the service's to say
     [[nodiscard]] std::expected<void, String> CheckArtGenPresetShape(JsonView preset);
+    /// CheckArtGenPresetShape() of a document's text; text that is not JSON is "a preset is a JSON object" too, as any other value that is not an object
+    [[nodiscard]] std::expected<void, String> CheckArtGenPresetText(StringView text);
 
     /**
      * @brief The preset form of the Generate panel without ImGui: the fields of one preset, its params as overrides of the workflow's
