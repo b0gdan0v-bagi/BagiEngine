@@ -225,9 +225,8 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
             _fileManager.Reset();
             CoreManager::GetUIEnvironment().SetSettings(_savedSettings);
             CoreManager::GetTime().Reset();
-            if (!_directory.empty()) {
-                std::error_code error;
-                std::filesystem::remove_all(_directory, error);
+            if (!_directory.Empty()) {
+                RemoveDirectory(_directory);
             }
             CoreManager::GetUIVars().Clear();
             CoreManager::GetRendererManager().SetRenderer({});
@@ -258,31 +257,28 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         }
 
         /// An empty directory of the running test and process (TestTempDirectory), removed in TearDown
-        std::filesystem::path MakeDirectory() {
+        Path MakeTestDirectory() {
             _directory = TestTempDirectory("BagiRmlUiHostTest");
-            std::error_code error;
-            std::filesystem::remove_all(_directory, error);
-            std::filesystem::create_directories(_directory, error);
+            MakeEmptyDirectory(_directory);
             return _directory;
         }
 
         /// Writes a file and moves its time two seconds on, so an edit is seen whatever the resolution of the file system's clock
-        static void Write(const std::filesystem::path& path, const char* text) {
+        static void Write(const Path& path, const char* text) {
             // In place, not atomically: the watcher of the folder must see one changed file, not a temporary and its rename
-            auto file = File::Open(PathToUtf8(path), FileMode::Write);
-            ASSERT_TRUE(file.has_value()) << "could not open " << path.string();
-            ASSERT_TRUE(file->Write(StringView(text)).has_value()) << "could not write " << path.string();
-            ASSERT_TRUE(file->Close().has_value()) << "could not write " << path.string();
-            std::error_code error;
-            std::filesystem::last_write_time(path, std::filesystem::file_time_type::clock::now() + std::chrono::seconds(++_edits * 2), error);
+            auto file = File::Open(path, FileMode::Write);
+            ASSERT_TRUE(file.has_value()) << "could not open " << path.CStr();
+            ASSERT_TRUE(file->Write(StringView(text)).has_value()) << "could not write " << path.CStr();
+            ASSERT_TRUE(file->Close().has_value()) << "could not write " << path.CStr();
+            SetWriteTime(path, std::chrono::seconds(++_edits * 2));
         }
 
         /// A scene with one RmlUiDocumentComponent whose `source` is @p source (a real path), drawn in the output of the fixture's renderer
-        IntrusivePtr<RmlUiDocumentComponent> OpenFile(const std::filesystem::path& source) {
+        IntrusivePtr<RmlUiDocumentComponent> OpenFile(const Path& source) {
             const String scene = Format(R"(<SceneManager><scenes><scene type="Scene" name="File"><nodes><node name="Doc"><components>
   <component type="RmlUiDocumentComponent" space="Screen" scaleMode="ConstantPixelSize" source="{}"/>
 </components></node></nodes></scene></scenes></SceneManager>)",
-                                        source.generic_string());
+                                        String(source.View()));
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(scene));
             _fileManager = New<SceneManager>();
@@ -309,7 +305,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         IntrusivePtr<SceneManager> _manager;
         IntrusivePtr<SceneManager> _fileManager;
         UISettings _savedSettings;
-        std::filesystem::path _directory;
+        Path _directory;
         static inline int _edits = 0;
     };
 
@@ -848,7 +844,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
     // ---- a document in a file ---------------------------------------------------------------------------------------------------
 
     TEST_F(RmlUiHostTest, ADocumentIsLoadedFromAFileWithItsStylesheet) {
-        const auto directory = MakeDirectory();
+        const auto directory = MakeTestDirectory();
         Write(directory / "menu.rml", R"(<rml><head><link type="text/rcss" href="menu.rcss"/></head><body><div id="box"></div></body></rml>)");
         Write(directory / "menu.rcss", "body { width: 100%; height: 100%; } #box { position: absolute; left: 12dp; top: 34dp; width: 56dp; height: 78dp; background-color: #123456; }");
 
@@ -877,7 +873,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
     }  // namespace
 
     TEST_F(RmlUiHostTest, AChangedStylesheetLoadsTheDocumentAgain) {
-        const auto directory = MakeDirectory();
+        const auto directory = MakeTestDirectory();
         Write(directory / "menu.rml", kBoxDocument);
         Write(directory / "menu.rcss", BoxStyle(12).c_str());
         auto doc = OpenFile(directory / "menu.rml");
@@ -894,7 +890,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
     }
 
     TEST_F(RmlUiHostTest, AChangedDocumentFileLoadsTheDocumentAgain) {
-        const auto directory = MakeDirectory();
+        const auto directory = MakeTestDirectory();
         Write(directory / "menu.rml", kBoxDocument);
         Write(directory / "menu.rcss", BoxStyle(12).c_str());
         auto doc = OpenFile(directory / "menu.rml");
@@ -908,9 +904,8 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
     }
 
     TEST_F(RmlUiHostTest, ADocumentInANonAsciiFolderIsStaleAfterAWriteAndNotAfterTheReload) {
-        const auto directory = MakeDirectory() / "caf\xC3\xA9";
-        std::error_code error;
-        ASSERT_TRUE(std::filesystem::create_directories(directory, error)) << error.message();
+        const auto directory = MakeTestDirectory() / "caf\xC3\xA9";
+        MakeDirectory(directory);
         Write(directory / "menu.rml", kBoxDocument);
         Write(directory / "menu.rcss", BoxStyle(12).c_str());
         auto doc = OpenFile(directory / "menu.rml");
@@ -927,7 +922,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
     }
 
     TEST_F(RmlUiHostTest, ADocumentThatHasNotChangedIsLeftAlone) {
-        const auto directory = MakeDirectory();
+        const auto directory = MakeTestDirectory();
         Write(directory / "menu.rml", kBoxDocument);
         Write(directory / "menu.rcss", BoxStyle(12).c_str());
         auto doc = OpenFile(directory / "menu.rml");
@@ -940,15 +935,15 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
 
     // RmlUi's parser takes nearly any text for a document, so a load fails only when the file cannot be read
     TEST_F(RmlUiHostTest, ADocumentThatCannotBeReadKeepsTheOldOneOnScreen) {
-        const auto directory = MakeDirectory();
+        const auto directory = MakeTestDirectory();
         Write(directory / "menu.rml", kBoxDocument);
         Write(directory / "menu.rcss", BoxStyle(12).c_str());
         auto doc = OpenFile(directory / "menu.rml");
         DrawFile();
         Rml::ElementDocument* before = doc->GetDocument();
 
-        std::error_code error;
-        ASSERT_TRUE(std::filesystem::remove(directory / "menu.rml", error)) << error.message();
+        const auto removed = RemoveFile(directory / "menu.rml");
+        ASSERT_TRUE(removed.has_value()) << removed.error().c_str();
         EXPECT_FALSE(doc->ReloadIfChanged()) << "a file that is gone (an editor saves by deleting and renaming) is not a change yet";
         EXPECT_FALSE(doc->Reload());
 
@@ -964,7 +959,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
     }
 
     TEST_F(RmlUiHostTest, AFileThatIsWrittenLaterIsNoticed) {
-        const auto directory = MakeDirectory();
+        const auto directory = MakeTestDirectory();
         auto doc = OpenFile(directory / "late.rml");
         ASSERT_EQ(doc->GetDocument(), nullptr);
 
@@ -981,7 +976,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         UISettings settings = _savedSettings;
         settings.hotReloadInterval = 0.5f;
         CoreManager::GetUIEnvironment().SetSettings(settings);
-        const auto directory = MakeDirectory();
+        const auto directory = MakeTestDirectory();
         Write(directory / "menu.rml", kBoxDocument);
         Write(directory / "menu.rcss", BoxStyle(12).c_str());
         auto doc = OpenFile(directory / "menu.rml");
@@ -1003,7 +998,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         UISettings settings = _savedSettings;
         settings.hotReloadInterval = 0.0f;
         CoreManager::GetUIEnvironment().SetSettings(settings);
-        const auto directory = MakeDirectory();
+        const auto directory = MakeTestDirectory();
         Write(directory / "menu.rml", kBoxDocument);
         Write(directory / "menu.rcss", BoxStyle(12).c_str());
         auto doc = OpenFile(directory / "menu.rml");
@@ -1020,7 +1015,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
     }
 
     TEST_F(RmlUiHostTest, AReloadKeepsTheVariablesAndTheActions) {
-        const auto directory = MakeDirectory();
+        const auto directory = MakeTestDirectory();
         constexpr const char* markup = R"(<rml><head><style>body {{ width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color: white; pointer-events: none; }}
 #play {{ position: absolute; left: {}dp; top: 100dp; width: 120dp; height: 40dp; background-color: #285a3c; pointer-events: auto; }}</style></head>
 <body data-model="vars"><button id="play" data-action="GamePlay">Score {{{{vars.score}}}}</button></body></rml>)";
@@ -1048,7 +1043,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
     }
 
     TEST_F(RmlUiHostTest, MarkupFromCodeIsNotReplacedByTheFiles) {
-        const auto directory = MakeDirectory();
+        const auto directory = MakeTestDirectory();
         Write(directory / "menu.rml", kBoxDocument);
         Write(directory / "menu.rcss", BoxStyle(12).c_str());
         auto doc = OpenFile(directory / "menu.rml");
