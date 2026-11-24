@@ -2,7 +2,7 @@
 
 ## CoreManager
 
-Central service locator (`GameManager/CoreManager.h`): one static getter per subsystem (`GetFileSystem()`, `GetConfigManager()`, `GetLoggerManager()`, `GetResourceManager()`, `GetTaskManager()`, `GetSceneManager()`, `GetWidgetManager()`, `GetRenderer()`, `GetTextureLibrary()`, `GetTime()`, `GetTweens()`, `GetFrameStats()`, `GetFileWatcher()`, ...). A new global service goes here, not into another `Singleton`. Every service is held by pointer and only forward-declared (compile time): a file that uses what a getter returns includes that service's header itself (`Time/Time.h` for `GetTime()`, ...); member order is construction order. `GetCommandLine()` is the program's arguments (`Application/CommandLine.h`: `FindValue("--name")`, `HasFlag`), filled by `Application::SetArguments`: a game reads its flags there, never from `Application`, so a test can set them.
+Central service locator (`GameManager/CoreManager.h`): one static getter per subsystem (`GetFileSystem()`, `GetConfigManager()`, `GetLoggerManager()`, `GetResourceManager()`, `GetTaskManager()`, `GetSceneManager()`, `GetWidgetManager()`, `GetRenderer()`, `GetTextureLibrary()`, `GetTime()`, `GetTweens()`, `GetFrameStats()`, `GetFileWatcher()`, ...). A new global service goes here, not into another `Singleton`. Every service is held by pointer and only forward-declared (compile time): a file that uses what a getter returns includes that service's header itself (`Time/Time.h` for `GetTime()`, ...); member order is construction order. `GetCommandLine()` is the program's arguments (`Application/CommandLine.h`: `FindValue("--name")`, `HasFlag`), filled by `Application::SetArguments`: a game reads its flags there, never from `Application`, so a test can set them; a reflected struct reads them through `CommandLineDeserializer`.
 
 **Lifecycle** (called from `Application`, each takes `PassKey<Application>`):
 
@@ -42,7 +42,7 @@ A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` wi
 - Two widgets own global state and give it back when destroyed: `ImGuiWidget` shuts ImGui down (waits for the GPU first), `ViewportWidget` clears the safe-area override of `UIEnvironment` and releases its render target.
 - **Lost at a switch:** unsaved edits of the editor panels (staged config changes), a mouse button pressed in the viewport and not yet released, the forced view variant of the viewport (its size, safe area and overlays are an editor setting and come back), the selection of the scene editor. Nothing remembers the last mode between runs; the mode at start is the config's.
 - With `--headless` the chord is ignored with one warning (there is no window for an editor).
-- Proven by `WidgetManagerTest` (the order of events with fake widgets, no GPU). Not proven in the tests: the real ImGui and Vulkan teardown and rebuild; the owner checks it by hand (switch ten times, quit in Editor mode, no Vulkan validation errors).
+- Proven by `WidgetManagerTest` (the order of events with fake widgets, no GPU). The real ImGui and Vulkan teardown is checked by hand (switch ten times, quit in Editor mode).
 
 ## Frame order and time
 
