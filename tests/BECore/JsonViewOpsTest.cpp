@@ -1,7 +1,6 @@
-// Operations on a JsonView (Control/JsonViewOps.h): equality, copy into a writer and JSON Pointer. The DOM (Json.h) is the reference: every
-// answer is checked against what `Json` gives for the same text.
+// Operations on a JsonView (Control/JsonViewOps.h): equality, copy into a writer and JSON Pointer. The expected texts were taken from what the DOM (nlohmann's
+// `Json`, the reference these operations replaced) gave for the same text.
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonViewOps.h>
 #include <Common/AllocCheck.h>
 #include <Common/JsonDoc.h>
@@ -26,16 +25,8 @@ namespace BECore::Tests {
             return equal;
         }
 
-        /// What the DOM says of the same two texts
-        bool DomEqual(StringView a, StringView b) {
-            const auto left = ParseJson(a);
-            const auto right = ParseJson(b);
-            return left && right && *left == *right;
-        }
-
         void ExpectSame(StringView a, StringView b, bool expected) {
             EXPECT_EQ(Equal(a, b), expected) << String(a.data(), a.size()).c_str() << " against " << String(b.data(), b.size()).c_str();
-            EXPECT_EQ(DomEqual(a, b), expected) << "the DOM disagrees: " << String(a.data(), a.size()).c_str() << " against " << String(b.data(), b.size()).c_str();
         }
 
         String Written(JsonView value) {
@@ -57,14 +48,6 @@ namespace BECore::Tests {
                 return Format("error: {}", found.error().message);
             }
             return found->has_value() ? Written(**found) : String("absent");
-        }
-
-        String DomPointerResult(const Json& document, StringView pointer) {
-            const auto found = FindJsonPointer(document, pointer);
-            if (!found) {
-                return Format("error: {}", found.error().message);
-            }
-            return *found == nullptr ? String("absent") : DumpJson(**found);
         }
 
     }  // namespace
@@ -153,44 +136,50 @@ namespace BECore::Tests {
         EXPECT_FALSE(JsonEquals(right.Root(), left.Root()));
     }
 
-    TEST(JsonViewOpsTest, WriteJsonWritesWhatTheDomDumps) {
-        const Vector<String> corpus = {
-            "null",
-            "true",
-            "false",
-            "0",
-            "-0",
-            "-17",
-            "9223372036854775807",
-            "-9223372036854775808",
-            "18446744073709551615",
-            "123456789012345678901234567890",
-            "1.5",
-            "1.0",
-            "0.1",
-            "1E5",
-            "1e20",
-            "-2.5e-7",
-            "5e-324",
-            R"("")",
-            R"("plain")",
-            R"("tab\tnewline\nquote\"slash\\\/")",
-            R"("\u0001\u001f\u007f")",
-            R"("é中😀")",
-            "\"\xC3\xA9 and \xF0\x9F\x98\x80\"",
-            "[]",
-            "{}",
-            R"([1,[2,[3,[]]],{"k":[null]}])",
-            R"({"a":1,"b":[1.5,-2,18446744073709551615],"c":{"d":"x","e":{}},"s":"line\n"})",
-            R"({"A":1,"a\"b":3,"é":2})",
+    TEST(JsonViewOpsTest, WriteJsonWritesWhatTheDomDumped) {
+        struct Case {
+            StringView text;
+            StringView written;
+        };
+        // Numbers are written the way the engine's writer writes them: `-0` is `0`, `1E5` is `100000.0`, a number past 64 bits is a double
+        const Case corpus[] = {
+            {"null", "null"},
+            {"true", "true"},
+            {"false", "false"},
+            {"0", "0"},
+            {"-0", "0"},
+            {"-17", "-17"},
+            {"9223372036854775807", "9223372036854775807"},
+            {"-9223372036854775808", "-9223372036854775808"},
+            {"18446744073709551615", "18446744073709551615"},
+            {"123456789012345678901234567890", "1.2345678901234568e+29"},
+            {"1.5", "1.5"},
+            {"1.0", "1.0"},
+            {"0.1", "0.1"},
+            {"1E5", "100000.0"},
+            {"1e20", "1e+20"},
+            {"-2.5e-7", "-2.5e-07"},
+            {"5e-324", "5e-324"},
+            {"\"\"", "\"\""},
+            {"\"plain\"", "\"plain\""},
+            {"\"tab\\tnewline\\nquote\\\"slash\\\\\\/\"", "\"tab\\tnewline\\nquote\\\"slash\\\\/\""},
+            {"\"\\u0001\\u001f\\u007f\"", "\"\\u0001\\u001f\x7F"
+                                          "\""},
+            {"\"é中😀\"", "\"é中😀\""},
+            {"\"é and 😀\"", "\"é and 😀\""},
+            {"[]", "[]"},
+            {"{}", "{}"},
+            {"[1,[2,[3,[]]],{\"k\":[null]}]", "[1,[2,[3,[]]],{\"k\":[null]}]"},
+            {"{\"a\":1,\"b\":[1.5,-2,18446744073709551615],\"c\":{\"d\":\"x\",\"e\":{}},\"s\":\"line\\n\"}",
+             "{\"a\":1,\"b\":[1.5,-2,18446744073709551615],\"c\":{\"d\":\"x\",\"e\":{}},\"s\":\"line\\n\"}"},
+            {"{\"A\":1,\"a\\\"b\":3,\"é\":2}", "{\"A\":1,\"a\\\"b\":3,\"é\":2}"},
         };
 
-        for (const String& text : corpus) {
-            const JsonDoc doc(View(text));
-            ASSERT_TRUE(doc.IsParsed()) << text.c_str();
-            const auto dom = ParseJson(View(text));
-            ASSERT_TRUE(dom.has_value()) << text.c_str();
-            EXPECT_EQ(Written(doc.Root()), DumpJson(*dom)) << text.c_str();
+        for (const Case& item : corpus) {
+            const JsonDoc doc(item.text);
+            ASSERT_TRUE(doc.IsParsed()) << String(item.text.data(), item.text.size()).c_str();
+            const String written = Written(doc.Root());
+            EXPECT_EQ(written, String(item.written.data(), item.written.size())) << String(item.text.data(), item.text.size()).c_str();
         }
     }
 
@@ -252,27 +241,36 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(JsonViewOpsTest, WriteJsonSortedWritesTheBytesTheDomDumps) {
-        const Vector<String> corpus = {
-            "null",
-            "[]",
-            "{}",
-            R"([3,{"b":1,"a":[{"z":0,"y":{"d":1,"c":2}}]},"x"])",
-            R"({"b":2,"a":1,"c":{"z":[],"y":{},"x":[{"q":1,"p":2}]}})",
-            R"({"B":1,"a":2,"A":3,"":4,"ab":5,"a ":6})",
-            R"({"é":1,"z":2,"\u00e9x":3,"e":4})",
-            R"({"a\"b":1,"a\nb":2,"a\\b":3,"\u0001":4})",
-            R"({"n":-0.5,"big":18446744073709551615,"f":1e20,"s":"tab\tq\"","t":true,"u":null})",
-            R"({"\u0000":1,"\u0000a":2,"a":3})",
+    TEST(JsonViewOpsTest, WriteJsonSortedWritesTheBytesTheDomDumped) {
+        struct Case {
+            StringView text;
+            StringView compact;
+            StringView indented;
+        };
+        const Case corpus[] = {
+            {"null", "null", "null"},
+            {"[]", "[]", "[]"},
+            {"{}", "{}", "{}"},
+            {"[3,{\"b\":1,\"a\":[{\"z\":0,\"y\":{\"d\":1,\"c\":2}}]},\"x\"]", "[3,{\"a\":[{\"y\":{\"c\":2,\"d\":1},\"z\":0}],\"b\":1},\"x\"]",
+             "[\n  3,\n  {\n    \"a\": [\n      {\n        \"y\": {\n          \"c\": 2,\n          \"d\": 1\n        },\n        \"z\": 0\n      }\n    ],\n    \"b\": 1\n  },\n  \"x\"\n]"},
+            {"{\"b\":2,\"a\":1,\"c\":{\"z\":[],\"y\":{},\"x\":[{\"q\":1,\"p\":2}]}}", "{\"a\":1,\"b\":2,\"c\":{\"x\":[{\"p\":2,\"q\":1}],\"y\":{},\"z\":[]}}",
+             "{\n  \"a\": 1,\n  \"b\": 2,\n  \"c\": {\n    \"x\": [\n      {\n        \"p\": 2,\n        \"q\": 1\n      }\n    ],\n    \"y\": {},\n    \"z\": []\n  }\n}"},
+            {"{\"B\":1,\"a\":2,\"A\":3,\"\":4,\"ab\":5,\"a \":6}", "{\"\":4,\"A\":3,\"B\":1,\"a\":2,\"a \":6,\"ab\":5}",
+             "{\n  \"\": 4,\n  \"A\": 3,\n  \"B\": 1,\n  \"a\": 2,\n  \"a \": 6,\n  \"ab\": 5\n}"},
+            {"{\"é\":1,\"z\":2,\"éx\":3,\"e\":4}", "{\"e\":4,\"z\":2,\"é\":1,\"éx\":3}", "{\n  \"e\": 4,\n  \"z\": 2,\n  \"é\": 1,\n  \"éx\": 3\n}"},
+            {"{\"a\\\"b\":1,\"a\\nb\":2,\"a\\\\b\":3,\"\\u0001\":4}", "{\"\\u0001\":4,\"a\\nb\":2,\"a\\\"b\":1,\"a\\\\b\":3}",
+             "{\n  \"\\u0001\": 4,\n  \"a\\nb\": 2,\n  \"a\\\"b\": 1,\n  \"a\\\\b\": 3\n}"},
+            {"{\"n\":-0.5,\"big\":18446744073709551615,\"f\":1e20,\"s\":\"tab\\tq\\\"\",\"t\":true,\"u\":null}",
+             "{\"big\":18446744073709551615,\"f\":1e+20,\"n\":-0.5,\"s\":\"tab\\tq\\\"\",\"t\":true,\"u\":null}",
+             "{\n  \"big\": 18446744073709551615,\n  \"f\": 1e+20,\n  \"n\": -0.5,\n  \"s\": \"tab\\tq\\\"\",\n  \"t\": true,\n  \"u\": null\n}"},
+            {"{\"\\u0000\":1,\"\\u0000a\":2,\"a\":3}", "{\"\\u0000\":1,\"\\u0000a\":2,\"a\":3}", "{\n  \"\\u0000\": 1,\n  \"\\u0000a\": 2,\n  \"a\": 3\n}"},
         };
 
-        for (const String& text : corpus) {
-            const JsonDoc doc(View(text));
-            ASSERT_TRUE(doc.IsParsed()) << text.c_str();
-            const auto dom = ParseJson(View(text));
-            ASSERT_TRUE(dom.has_value()) << text.c_str();
-            EXPECT_EQ(WrittenSorted(doc.Root(), JsonWriter::kCompact), DumpJson(*dom)) << text.c_str();
-            EXPECT_EQ(WrittenSorted(doc.Root(), 2), DumpJson(*dom, 2)) << text.c_str();
+        for (const Case& item : corpus) {
+            const JsonDoc doc(item.text);
+            ASSERT_TRUE(doc.IsParsed()) << String(item.text.data(), item.text.size()).c_str();
+            EXPECT_EQ(WrittenSorted(doc.Root(), JsonWriter::kCompact), String(item.compact.data(), item.compact.size())) << String(item.text.data(), item.text.size()).c_str();
+            EXPECT_EQ(WrittenSorted(doc.Root(), 2), String(item.indented.data(), item.indented.size())) << String(item.text.data(), item.text.size()).c_str();
         }
     }
 
@@ -314,18 +312,49 @@ namespace BECore::Tests {
         EXPECT_NE(out.find("null"), String::npos);
     }
 
-    TEST(JsonViewOpsTest, PointerAnswersAsTheDomOverloadDoes) {
+    TEST(JsonViewOpsTest, PointerAnswersAsTheDomOverloadDid) {
         const JsonDoc document = PointerDocument();
-        const auto dom = ParseJson(document.Text());
-        ASSERT_TRUE(dom.has_value());
-        const Vector<String> pointers = {
-            "",         "/",         "/a",       "/a/b/0",   "/a/b/1/c",    "/a~1b",      "/m~0n",     "/0", "/list/2", "/missing", "/a/missing/x", "/list/3", "/list/99999999999999999999999999",
-            "/s/x",     "/list/0/x", "/eA",      "a",        "a/b",         "/a~",        "/a~2",      "~",  "/~x",     "/list/0x", "/list/01",     "/list/-", "/list/",
-            "/list/+1", "/list/1.5", "/list/ 1", "/list/-1", "/missing/x~", "/list/9/x~", "/list/9/-",
+        struct Case {
+            StringView pointer;
+            StringView expected;
+        };
+        const Case cases[] = {
+            {"/", "3"},
+            {"/a", "{\"b\":[10,{\"c\":\"deep\"},20]}"},
+            {"/a/b/0", "10"},
+            {"/a/b/1/c", "\"deep\""},
+            {"/a~1b", "1"},
+            {"/m~0n", "2"},
+            {"/0", "\"zero\""},
+            {"/list/2", "3"},
+            {"/missing", "absent"},
+            {"/a/missing/x", "absent"},
+            {"/list/3", "absent"},
+            {"/list/99999999999999999999999999", "absent"},
+            {"/s/x", "absent"},
+            {"/list/0/x", "absent"},
+            {"/eA", "\"escaped key\""},
+            {"a", "error: bad JSON pointer: it must be empty or start with `/`"},
+            {"a/b", "error: bad JSON pointer: it must be empty or start with `/`"},
+            {"/a~", "error: bad JSON pointer: `~` must be followed by 0 or 1"},
+            {"/a~2", "error: bad JSON pointer: `~` must be followed by 0 or 1"},
+            {"~", "error: bad JSON pointer: it must be empty or start with `/`"},
+            {"/~x", "error: bad JSON pointer: `~` must be followed by 0 or 1"},
+            {"/list/0x", "error: bad JSON pointer: an array index is 0 or digits without a leading zero"},
+            {"/list/01", "error: bad JSON pointer: an array index is 0 or digits without a leading zero"},
+            {"/list/-", "error: bad JSON pointer: `-` names the element after the last one, which cannot be read"},
+            {"/list/", "error: bad JSON pointer: an array index is 0 or digits without a leading zero"},
+            {"/list/+1", "error: bad JSON pointer: an array index is 0 or digits without a leading zero"},
+            {"/list/1.5", "error: bad JSON pointer: an array index is 0 or digits without a leading zero"},
+            {"/list/ 1", "error: bad JSON pointer: an array index is 0 or digits without a leading zero"},
+            {"/list/-1", "error: bad JSON pointer: an array index is 0 or digits without a leading zero"},
+            {"/missing/x~", "error: bad JSON pointer: `~` must be followed by 0 or 1"},
+            {"/list/9/x~", "error: bad JSON pointer: `~` must be followed by 0 or 1"},
+            {"/list/9/-", "absent"},
         };
 
-        for (const String& pointer : pointers) {
-            EXPECT_EQ(ViewPointerResult(document.Root(), View(pointer)), DomPointerResult(*dom, View(pointer))) << pointer.c_str();
+        for (const Case& item : cases) {
+            EXPECT_EQ(ViewPointerResult(document.Root(), item.pointer), String(item.expected.data(), item.expected.size())) << String(item.pointer.data(), item.pointer.size()).c_str();
         }
     }
 
@@ -362,17 +391,34 @@ namespace BECore::Tests {
         EXPECT_FALSE(FindJsonPointer(JsonView(), "a").has_value());
     }
 
-    TEST(JsonViewOpsTest, CheckPointerJudgesTheSyntaxAsTheDomOverloadDoesOnAnEmptyObject) {
-        const Json empty = Json::object();
-        const Vector<String> pointers = {"", "/", "/a", "/a/0/b", "/a~0~1", "a", "a/b", "/a~", "/a~2", "~", "/~x", "/list/-", "/list/01"};
+    TEST(JsonViewOpsTest, CheckPointerJudgesTheSyntaxOnly) {
+        struct Case {
+            StringView pointer;
+            StringView message;  // empty: the pointer is fine
+        };
+        const Case cases[] = {
+            {"", ""},
+            {"/", ""},
+            {"/a", ""},
+            {"/a/0/b", ""},
+            {"/a~0~1", ""},
+            {"a", "bad JSON pointer: it must be empty or start with `/`"},
+            {"a/b", "bad JSON pointer: it must be empty or start with `/`"},
+            {"/a~", "bad JSON pointer: `~` must be followed by 0 or 1"},
+            {"/a~2", "bad JSON pointer: `~` must be followed by 0 or 1"},
+            {"~", "bad JSON pointer: it must be empty or start with `/`"},
+            {"/~x", "bad JSON pointer: `~` must be followed by 0 or 1"},
+            {"/list/-", ""},
+            {"/list/01", ""},
+        };
 
-        for (const String& pointer : pointers) {
-            const auto checked = CheckJsonPointer(View(pointer));
-            const auto found = FindJsonPointer(empty, View(pointer));
-            ASSERT_EQ(checked.has_value(), found.has_value()) << pointer.c_str();
+        for (const Case& item : cases) {
+            const auto checked = CheckJsonPointer(item.pointer);
+            const String name(item.pointer.data(), item.pointer.size());
+            ASSERT_EQ(checked.has_value(), item.message.empty()) << name.c_str();
             if (!checked) {
-                EXPECT_EQ(checked.error().code, ControlErrors::kInvalidParams) << pointer.c_str();
-                EXPECT_EQ(checked.error().message, found.error().message) << pointer.c_str();
+                EXPECT_EQ(checked.error().code, ControlErrors::kInvalidParams) << name.c_str();
+                EXPECT_EQ(checked.error().message, String(item.message.data(), item.message.size())) << name.c_str();
             }
         }
     }

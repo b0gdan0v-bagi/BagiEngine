@@ -1,6 +1,5 @@
-// JsonMemberMap (Control/JsonMemberMap.h): the bytes of Write() are the contract, judged against what the DOM dumps for the same members.
+// JsonMemberMap (Control/JsonMemberMap.h): the bytes of Write() are the contract: the members in byte order, the layout nlohmann's dump gave.
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonMemberMap.h>
 #include <Common/JsonDoc.h>
 #include <Common/Printers.h>
@@ -87,16 +86,15 @@ namespace BECore::Tests {
         EXPECT_EQ(Written(map), R"({"a\"b":1})");
     }
 
-    TEST(JsonMemberMapTest, WriteIsWhatTheDomDumpsForTheSameMembers) {
+    TEST(JsonMemberMapTest, WriteIsWhatTheDomDumpedForTheSameMembers) {
         const char* const text = R"({"version":3,"fontScale":1.1,"x":{"b":[1,{"d":null,"c":"é"}],"a":{}},"list":[],"name":"line\n\"q\""})";
         const JsonDoc doc(text);
         JsonMemberMap map;
         map.Assign(doc.Root(), {});
-        const auto dom = ParseJson(text);
-        ASSERT_TRUE(dom.has_value());
 
-        EXPECT_EQ(Written(map), DumpJson(*dom));
-        EXPECT_EQ(Written(map, 2), DumpJson(*dom, 2));
+        EXPECT_EQ(Written(map), R"({"fontScale":1.1,"list":[],"name":"line\n\"q\"","version":3,"x":{"a":{},"b":[1,{"c":"é","d":null}]}})");
+        EXPECT_EQ(Written(map, 2), "{\n  \"fontScale\": 1.1,\n  \"list\": [],\n  \"name\": \"line\\n\\\"q\\\"\",\n  \"version\": 3,\n  \"x\": {\n    \"a\": {},\n    \"b\": [\n      1,\n      {\n     "
+                                   "   \"c\": \"é\",\n        \"d\": null\n      }\n    ]\n  }\n}");
     }
 
     TEST(JsonMemberMapTest, SetWithStoresWhatTheCallbackWrites) {

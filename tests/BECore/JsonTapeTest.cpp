@@ -1,7 +1,6 @@
-// JsonTape (Control/JsonTape.h): the tokens of a text and the grammar it refuses. The grammar is the one of `ParseJson` (the DOM it replaces),
-// so the accepted and refused texts below are checked against it as well.
+// JsonTape (Control/JsonTape.h): the tokens of a text and the grammar it refuses. The accepted and refused texts below were checked against `ParseJson`
+// (the DOM the tape replaced) when it was in the tree, and `.claude/rules/json-tape.md` lists where the two differ.
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonTape.h>
 #include <BECore/Reflection/ReaderLimits.h>
 #include <Common/AllocCheck.h>
@@ -21,18 +20,16 @@ namespace BECore::Tests {
             return tape.Parse(text).has_value();
         }
 
-        /// Both the tape and the DOM refuse @p text, and the tape is empty afterwards
+        /// The tape refuses @p text and is empty afterwards
         void ExpectRefused(StringView text) {
             JsonTape tape;
             const auto result = tape.Parse(text);
             EXPECT_FALSE(result.has_value()) << Printable(text);
             EXPECT_TRUE(tape.Empty()) << Printable(text);
-            EXPECT_FALSE(ParseJson(text).has_value()) << "the DOM accepts " << Printable(text);
         }
 
         void ExpectAccepted(StringView text) {
             EXPECT_TRUE(Accepts(text)) << Printable(text);
-            EXPECT_TRUE(ParseJson(text).has_value()) << "the DOM refuses " << Printable(text);
         }
 
         StringView Slice(const JsonTape& tape, size_t index) {
@@ -202,7 +199,7 @@ namespace BECore::Tests {
     }
 
     TEST(JsonTapeTest, ANumberBeyondADoubleIsStillANumber) {
-        // The DOM refuses it; the tape leaves the judgement to the reader that knows the target (JsonView)
+        // The tape leaves the judgement to the reader that knows the target (JsonView)
         EXPECT_TRUE(Accepts("1e999"));
         EXPECT_TRUE(Accepts("-1e999"));
     }
@@ -296,6 +293,20 @@ namespace BECore::Tests {
             objects.append("{\"a\":");
         }
         EXPECT_FALSE(Accepts(objects));
+    }
+
+    TEST(JsonTapeTest, NestingScanCountsBracketsOutsideStringsOnly) {
+        EXPECT_FALSE(IsJsonNestedDeeperThan("", 0));
+        EXPECT_FALSE(IsJsonNestedDeeperThan("[[[]]]", 3));
+        EXPECT_TRUE(IsJsonNestedDeeperThan("[[[]]]", 2));
+        EXPECT_TRUE(IsJsonNestedDeeperThan(R"({"a":{"b":[1]}})", 2));
+        EXPECT_FALSE(IsJsonNestedDeeperThan(R"({"a":{"b":[1]}})", 3));
+        // Brackets inside a string, an escaped quote inside a string, and siblings do not add up
+        EXPECT_FALSE(IsJsonNestedDeeperThan(R"({"a":"[[[[[[","b":"\"[[[["})", 1));
+        EXPECT_FALSE(IsJsonNestedDeeperThan("[[],[],[],[[]]]", 3));
+        // Closers with nothing open are ignored, not counted below zero
+        EXPECT_FALSE(IsJsonNestedDeeperThan("]]]]][[[", 3));
+        EXPECT_TRUE(IsJsonNestedDeeperThan(Nested(1 << 20), 128));
     }
 
     TEST(JsonTapeTest, TheTapeIsEmptyAfterAFailureAndReusable) {

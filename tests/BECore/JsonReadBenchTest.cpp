@@ -1,11 +1,9 @@
-// What reading a message costs by the two paths that exist while the callers move off the DOM: `ParseJson` and a `JsonDeserializer` over the DOM (the
-// bridge, which writes the DOM as text and parses it again), and one kept `JsonDeserializer` that loads the text and reads from the tape. Both read
-// into the same object, so the container capacities the object keeps are the same on both sides. Prints one line per case and asserts nothing about
-// time; the allocations need macos-profile.
+// What reading a message costs through one kept `JsonDeserializer`: it loads the text and reads from the tape into one object. Prints one line per case and
+// asserts nothing about time; the allocations need macos-profile. The numbers of the DOM path it replaced (`ParseJson` and a reader over the DOM) are in the
+// notes of the entry `json-deserializer` (the measurement of stage 4).
 //
 // Run by hand: `BagiEngineTests --gtest_also_run_disabled_tests --gtest_filter=JsonReadBenchTest.DISABLED_*`
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
 #include <BECore/JsonReadBenchTypes.h>
 #include <Common/AllocCheck.h>
@@ -49,23 +47,14 @@ namespace BECore::Tests {
             std::cout << "JsonRead " << name << ' ' << path << " allocs=" << measure.allocs << " bytes=" << measure.bytes << " us=" << measure.microseconds << std::endl;
         }
 
-        /// Reads @p text into one @p T by each path and prints the two lines
+        /// Reads @p text into one @p T and prints the line
         template <typename T>
         void Compare(const char* name, StringView text) {
-            T viaDom;
-            Print(name, "dom", MeasureRead([&] {
-                      auto parsed = ParseJson(text);
-                      EXPECT_TRUE(parsed.has_value());
-                      JsonDeserializer reader(*parsed);
-                      viaDom.Deserialize(reader);
-                      EXPECT_FALSE(reader.HasErrors());
-                  }));
-
-            T viaTape;
+            T value;
             JsonDeserializer reader;
             Print(name, "tape", MeasureRead([&] {
                       EXPECT_TRUE(reader.Load(text));
-                      viaTape.Deserialize(reader);
+                      value.Deserialize(reader);
                       EXPECT_FALSE(reader.HasErrors());
                   }));
         }

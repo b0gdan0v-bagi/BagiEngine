@@ -1,17 +1,19 @@
-// The helpers of the generated writer (Control/JsonWriteReflect.h): every text they write is compared with `JsonSerializer` + `DumpJson` of the same
-// value, the DOM path they replace (the bridge's own cases pin literal text). The types are written by hand here (the generated ones are in the tests of the generator).
+// The helpers of the generated writer (Control/JsonWriteReflect.h): the text they write is pinned as a literal, keys in byte order. The literals were taken
+// from `JsonSerializer` + `DumpJson` of the same value (the DOM path the writer replaced). The types are written by hand here (the generated ones are in the
+// tests of the generator).
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
-#include <BECore/Control/JsonSerializer.h>
+#include <BECore/Control/JsonViewOps.h>
 #include <BECore/Control/JsonWriteReflect.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/JsonWriteReflectTypes.h>
 #include <BECore/Math/Vec2.h>
 #include <BECore/Reflection/TextView.h>
 #include <Common/AllocCheck.h>
+#include <Common/JsonDoc.h>
 #include <Common/Require.h>
 #include <Common/ScratchScopeFixture.h>
+#include <Common/SerializedText.h>
 #include <Generated/JsonWriteReflectTypes.gen.hpp>
 #include <cfloat>
 #include <gtest/gtest.h>
@@ -25,14 +27,6 @@ namespace BECore::Tests {
 
         constexpr Array<int, 2> kIndents = {JsonWriter::kCompact, 2};
 
-        /// The DOM path: what `Serialize` saves into a JsonSerializer, dumped
-        template <typename T>
-        String Reference(const T& object, int indent) {
-            JsonSerializer serializer;
-            object.Serialize(serializer);
-            return DumpJson(serializer.Take(), indent);
-        }
-
         template <typename T>
         String Written(const T& object, int indent) {
             String out;
@@ -42,10 +36,22 @@ namespace BECore::Tests {
             return out;
         }
 
+        /// The text of @p text copied into a writer of @p indent: the layouts of one document differ in white space only
+        String Relaid(StringView text, int indent) {
+            const JsonDoc doc(text);
+            String out;
+            JsonWriter writer(out, indent);
+            WriteJson(writer, doc.Root());
+            return out;
+        }
+
+        /// The compact text of @p object is @p expected, and the indented one is the same document laid out again
         template <typename T>
-        void ExpectSameAsDom(const T& object) {
+        void ExpectWrites(const T& object, StringView expected) {
+            const String compact = Written(object, JsonWriter::kCompact);
+            ASSERT_EQ(compact, String(expected.data(), expected.size()));
             for (const int indent : kIndents) {
-                ASSERT_EQ(Written(object, indent), Reference(object, indent)) << "indent " << indent;
+                ASSERT_EQ(Written(object, indent), Relaid(expected, indent)) << "indent " << indent;
             }
         }
 
@@ -69,8 +75,15 @@ namespace BECore::Tests {
         };
 
         template <typename T>
-        void ExpectFieldSameAsDom(const T& value) {
-            ExpectSameAsDom(Field<T>{value});
+        void ExpectFieldWrites(const T& value, StringView expected) {
+            ExpectWrites(Field<T>{value}, expected);
+        }
+
+        /// A string field written as a `String`, a `FixedString` and a `PoolString` is one text
+        void ExpectStringField(const String& text, StringView expected) {
+            ExpectFieldWrites<String>(text, expected);
+            ExpectFieldWrites<FixedString<8>>(FixedString<8>(text.data(), text.size()), expected);
+            ExpectFieldWrites<PoolString>(PoolString::Intern(StringView(text.data(), text.size())), expected);
         }
 
         struct Inner {
@@ -105,7 +118,7 @@ namespace BECore::Tests {
             }
         };
 
-        /// An element of this class collapses to a scalar on the DOM path
+        /// An element of this class collapses to a scalar
         struct OneValue {
             int32_t value = 0;
 
@@ -262,130 +275,158 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST(JsonWriteReflectTest, IntegersOfEveryWidthKeepTheirLimits) {
-        ExpectFieldSameAsDom<int8_t>(std::numeric_limits<int8_t>::min());
-        ExpectFieldSameAsDom<int8_t>(std::numeric_limits<int8_t>::max());
-        ExpectFieldSameAsDom<uint8_t>(std::numeric_limits<uint8_t>::max());
-        ExpectFieldSameAsDom<int16_t>(std::numeric_limits<int16_t>::min());
-        ExpectFieldSameAsDom<uint16_t>(std::numeric_limits<uint16_t>::max());
-        ExpectFieldSameAsDom<int32_t>(std::numeric_limits<int32_t>::min());
-        ExpectFieldSameAsDom<uint32_t>(std::numeric_limits<uint32_t>::max());
-        ExpectFieldSameAsDom<int64_t>(std::numeric_limits<int64_t>::min());
-        ExpectFieldSameAsDom<int64_t>(std::numeric_limits<int64_t>::max());
-        ExpectFieldSameAsDom<uint64_t>(std::numeric_limits<uint64_t>::max());
-        ExpectFieldSameAsDom<int32_t>(0);
-        ExpectFieldSameAsDom<bool>(true);
-        ExpectFieldSameAsDom<bool>(false);
+        ExpectFieldWrites<int8_t>(std::numeric_limits<int8_t>::min(), R"({"field":-128})");
+        ExpectFieldWrites<int8_t>(std::numeric_limits<int8_t>::max(), R"({"field":127})");
+        ExpectFieldWrites<uint8_t>(std::numeric_limits<uint8_t>::max(), R"({"field":255})");
+        ExpectFieldWrites<int16_t>(std::numeric_limits<int16_t>::min(), R"({"field":-32768})");
+        ExpectFieldWrites<uint16_t>(std::numeric_limits<uint16_t>::max(), R"({"field":65535})");
+        ExpectFieldWrites<int32_t>(std::numeric_limits<int32_t>::min(), R"({"field":-2147483648})");
+        ExpectFieldWrites<uint32_t>(std::numeric_limits<uint32_t>::max(), R"({"field":4294967295})");
+        ExpectFieldWrites<int64_t>(std::numeric_limits<int64_t>::min(), R"({"field":-9223372036854775808})");
+        ExpectFieldWrites<int64_t>(std::numeric_limits<int64_t>::max(), R"({"field":9223372036854775807})");
+        ExpectFieldWrites<uint64_t>(std::numeric_limits<uint64_t>::max(), R"({"field":18446744073709551615})");
+        ExpectFieldWrites<int32_t>(0, R"({"field":0})");
+        ExpectFieldWrites<bool>(true, R"({"field":true})");
+        ExpectFieldWrites<bool>(false, R"({"field":false})");
     }
 
     TEST(JsonWriteReflectTest, FloatsWriteTheShortestTextAndNonFiniteIsNull) {
-        for (const float value : {0.0f, -0.0f, 0.1f, 1.0f, -2.5f, 16777216.0f, FLT_MIN, FLT_MAX, std::numeric_limits<float>::denorm_min(), std::numeric_limits<float>::quiet_NaN(),
-                                  std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()}) {
-            ExpectFieldSameAsDom<float>(value);
-        }
-        for (const double value : {0.0, -0.0, 0.1, 1.0, 3.0, 1e300, 1e-300, 123456789012345678.0, DBL_MIN, DBL_MAX, std::numeric_limits<double>::denorm_min(), std::numeric_limits<double>::quiet_NaN(),
-                                   std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity()}) {
-            ExpectFieldSameAsDom<double>(value);
-        }
+        ExpectFieldWrites<float>(0.0f, R"({"field":0.0})");
+        ExpectFieldWrites<float>(-0.0f, R"({"field":-0.0})");
+        ExpectFieldWrites<float>(0.1f, R"({"field":0.1})");
+        ExpectFieldWrites<float>(1.0f, R"({"field":1.0})");
+        ExpectFieldWrites<float>(-2.5f, R"({"field":-2.5})");
+        ExpectFieldWrites<float>(16777216.0f, R"({"field":16777216.0})");
+        ExpectFieldWrites<float>(FLT_MIN, R"({"field":1.1754944e-38})");
+        ExpectFieldWrites<float>(FLT_MAX, R"({"field":3.4028235e+38})");
+        ExpectFieldWrites<float>(std::numeric_limits<float>::denorm_min(), R"({"field":1e-45})");
+        ExpectFieldWrites<float>(std::numeric_limits<float>::quiet_NaN(), R"({"field":null})");
+        ExpectFieldWrites<float>(std::numeric_limits<float>::infinity(), R"({"field":null})");
+        ExpectFieldWrites<float>(-std::numeric_limits<float>::infinity(), R"({"field":null})");
+        ExpectFieldWrites<double>(0.0, R"({"field":0.0})");
+        ExpectFieldWrites<double>(-0.0, R"({"field":-0.0})");
+        ExpectFieldWrites<double>(0.1, R"({"field":0.1})");
+        ExpectFieldWrites<double>(1.0, R"({"field":1.0})");
+        ExpectFieldWrites<double>(3.0, R"({"field":3.0})");
+        ExpectFieldWrites<double>(1e300, R"({"field":1e+300})");
+        ExpectFieldWrites<double>(1e-300, R"({"field":1e-300})");
+        ExpectFieldWrites<double>(123456789012345678.0, R"({"field":1.2345678901234568e+17})");
+        ExpectFieldWrites<double>(DBL_MIN, R"({"field":2.2250738585072014e-308})");
+        ExpectFieldWrites<double>(DBL_MAX, R"({"field":1.7976931348623157e+308})");
+        ExpectFieldWrites<double>(std::numeric_limits<double>::denorm_min(), R"({"field":5e-324})");
+        ExpectFieldWrites<double>(std::numeric_limits<double>::quiet_NaN(), R"({"field":null})");
+        ExpectFieldWrites<double>(std::numeric_limits<double>::infinity(), R"({"field":null})");
+        ExpectFieldWrites<double>(-std::numeric_limits<double>::infinity(), R"({"field":null})");
     }
 
     TEST(JsonWriteReflectTest, StringsEscapeAndReplaceInvalidUtf8) {
         const String everyByte = EveryByte();
-        for (const String& text : {String(), String("plain"), String("a\"b\\c\n\t\r\b\f/"), String("\xC3\xA9\xE2\x82\xAC\xF0\x9F\x98\x80"), String("\xC3\x28\xE2\x82\xF0\x9F\xFF"), everyByte}) {
-            ExpectFieldSameAsDom<String>(text);
-            ExpectFieldSameAsDom<FixedString<8>>(FixedString<8>(text.data(), text.size()));
-            ExpectFieldSameAsDom<PoolString>(PoolString::Intern(StringView(text.data(), text.size())));
-        }
+        ExpectStringField(String(), R"({"field":""})");
+        ExpectStringField(String("plain"), R"({"field":"plain"})");
+        ExpectStringField(String("a\"b\\c\n\t\r\b\f/"), R"({"field":"a\"b\\c\n\t\r\b\f/"})");
+        ExpectStringField(String("\xC3\xA9\xE2\x82\xAC\xF0\x9F\x98\x80"), R"({"field":"é€😀"})");
+        ExpectStringField(String("\xC3\x28\xE2\x82\xF0\x9F\xFF"), R"({"field":"�(���"})");
+        ExpectStringField(
+            everyByte,
+            R"({"field":"\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n)"
+            R"(\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f !\"#$%&'()*+,)"
+            R"(-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~��������������������������������������������������������������������������������������������������������������������������������"})");
     }
 
     TEST(JsonWriteReflectTest, AnEnumIsItsName) {
-        for (const WriteMode mode : {WriteMode::Off, WriteMode::On, WriteMode::Automatic}) {
-            ExpectFieldSameAsDom<WriteMode>(mode);
-        }
+        ExpectFieldWrites<WriteMode>(WriteMode::Off, R"({"field":"Off"})");
+        ExpectFieldWrites<WriteMode>(WriteMode::On, R"({"field":"On"})");
+        ExpectFieldWrites<WriteMode>(WriteMode::Automatic, R"({"field":"Automatic"})");
     }
 
     TEST(JsonWriteReflectTest, ANestedObjectIsAMemberObjectEvenWhenEmpty) {
-        ExpectFieldSameAsDom<Inner>(MakeInner(3, "x"));
-        ExpectFieldSameAsDom<Empty>(Empty{});
+        ExpectFieldWrites<Inner>(MakeInner(3, "x"), R"({"field":{"count":3,"name":"x"}})");
+        ExpectFieldWrites<Empty>(Empty{}, R"({"field":{}})");
     }
 
     TEST(JsonWriteReflectTest, AnEmptyOptionalWritesNoMemberAndASetOneWritesItsValue) {
-        ExpectFieldSameAsDom<Optional<int32_t>>(std::nullopt);
-        ExpectFieldSameAsDom<Optional<int32_t>>(0);
-        ExpectFieldSameAsDom<Optional<String>>(String("set"));
-        ExpectFieldSameAsDom<Optional<Inner>>(MakeInner(1, "a"));
-        ExpectFieldSameAsDom<Optional<Optional<int32_t>>>(Optional<int32_t>(5));
-        ExpectFieldSameAsDom<Optional<Vector<Inner>>>(Vector<Inner>{MakeInner(1, "a"), MakeInner(2, "b")});
-        ExpectFieldSameAsDom<Optional<Vec2>>(std::nullopt);
-        ExpectFieldSameAsDom<Optional<Vec2>>(Vec2{1.0f, 2.0f});
+        ExpectFieldWrites<Optional<int32_t>>(std::nullopt, R"({})");
+        ExpectFieldWrites<Optional<int32_t>>(0, R"({"field":0})");
+        ExpectFieldWrites<Optional<String>>(String("set"), R"({"field":"set"})");
+        ExpectFieldWrites<Optional<Inner>>(MakeInner(1, "a"), R"({"field":{"count":1,"name":"a"}})");
+        ExpectFieldWrites<Optional<Optional<int32_t>>>(Optional<int32_t>(5), R"({"field":5})");
+        ExpectFieldWrites<Optional<Vector<Inner>>>(Vector<Inner>{MakeInner(1, "a"), MakeInner(2, "b")}, R"({"field":[{"count":1,"name":"a"},{"count":2,"name":"b"}]})");
+        ExpectFieldWrites<Optional<Vec2>>(std::nullopt, R"({})");
+        ExpectFieldWrites<Optional<Vec2>>(Vec2{1.0f, 2.0f}, R"({"field":{"x":1.0,"y":2.0}})");
     }
 
     TEST(JsonWriteReflectTest, SequencesOfScalarsAreArraysOfTheScalar) {
-        ExpectFieldSameAsDom<Vector<int32_t>>({1, -2, 3});
-        ExpectFieldSameAsDom<Vector<int32_t>>({});
-        ExpectFieldSameAsDom<Vector<bool>>({true, false});
-        ExpectFieldSameAsDom<Vector<double>>({0.1, 1e300, std::numeric_limits<double>::infinity()});
-        ExpectFieldSameAsDom<Vector<float>>({0.1f, std::numeric_limits<float>::quiet_NaN()});
-        ExpectFieldSameAsDom<Vector<String>>({String("a"), String(), String("\xFF\"")});
-        ExpectFieldSameAsDom<Vector<PoolString>>({"one"_intern, "two"_intern});
-        ExpectFieldSameAsDom<FixedVector<int32_t, 4>>({1, 2, 3, 4});
-        ExpectFieldSameAsDom<FixedVector<int32_t, 4>>({});
-        ExpectFieldSameAsDom<SmallVector<String, 2>>({String("x"), String("y"), String("z")});
-        ExpectFieldSameAsDom<Array<int64_t, 3>>({std::numeric_limits<int64_t>::min(), 0, std::numeric_limits<int64_t>::max()});
-        ExpectFieldSameAsDom<Array<uint8_t, 0>>({});
+        ExpectFieldWrites<Vector<int32_t>>({1, -2, 3}, R"({"field":[1,-2,3]})");
+        ExpectFieldWrites<Vector<int32_t>>({}, R"({"field":[]})");
+        ExpectFieldWrites<Vector<bool>>({true, false}, R"({"field":[true,false]})");
+        ExpectFieldWrites<Vector<double>>({0.1, 1e300, std::numeric_limits<double>::infinity()}, R"({"field":[0.1,1e+300,null]})");
+        ExpectFieldWrites<Vector<float>>({0.1f, std::numeric_limits<float>::quiet_NaN()}, R"({"field":[0.1,null]})");
+        ExpectFieldWrites<Vector<String>>({String("a"), String(), String("\xFF\"")}, R"({"field":["a","","�\""]})");
+        ExpectFieldWrites<Vector<PoolString>>({"one"_intern, "two"_intern}, R"({"field":["one","two"]})");
+        ExpectFieldWrites<FixedVector<int32_t, 4>>({1, 2, 3, 4}, R"({"field":[1,2,3,4]})");
+        ExpectFieldWrites<FixedVector<int32_t, 4>>({}, R"({"field":[]})");
+        ExpectFieldWrites<SmallVector<String, 2>>({String("x"), String("y"), String("z")}, R"({"field":["x","y","z"]})");
+        ExpectFieldWrites<Array<int64_t, 3>>({std::numeric_limits<int64_t>::min(), 0, std::numeric_limits<int64_t>::max()}, R"({"field":[-9223372036854775808,0,9223372036854775807]})");
+        ExpectFieldWrites<Array<uint8_t, 0>>({}, R"({"field":[]})");
     }
 
     TEST(JsonWriteReflectTest, SequencesOfObjectsWithTwoFieldsAreArraysOfObjects) {
-        ExpectFieldSameAsDom<Vector<Inner>>({MakeInner(1, "a"), MakeInner(2, "\xFF")});
-        ExpectFieldSameAsDom<Vector<Inner>>({});
-        ExpectFieldSameAsDom<FixedVector<Inner, 3>>({MakeInner(7, "s")});
-        ExpectFieldSameAsDom<Array<Inner, 2>>({MakeInner(1, "a"), MakeInner(2, "b")});
+        ExpectFieldWrites<Vector<Inner>>({MakeInner(1, "a"), MakeInner(2, "\xFF")}, R"({"field":[{"count":1,"name":"a"},{"count":2,"name":"�"}]})");
+        ExpectFieldWrites<Vector<Inner>>({}, R"({"field":[]})");
+        ExpectFieldWrites<FixedVector<Inner, 3>>({MakeInner(7, "s")}, R"({"field":[{"count":7,"name":"s"}]})");
+        ExpectFieldWrites<Array<Inner, 2>>({MakeInner(1, "a"), MakeInner(2, "b")}, R"({"field":[{"count":1,"name":"a"},{"count":2,"name":"b"}]})");
     }
 
-    TEST(JsonWriteReflectTest, AnElementThatHoldsOnlyValueCollapsesToTheScalarLikeTheDomPath) {
-        ExpectFieldSameAsDom<Vector<OneValue>>({OneValue{1}, OneValue{-2}});
-        ExpectFieldSameAsDom<Vector<OneValue>>({});
-        ExpectFieldSameAsDom<Array<OneValue, 2>>({OneValue{3}, OneValue{4}});
+    TEST(JsonWriteReflectTest, AnElementThatHoldsOnlyValueCollapsesToTheScalarAndIsPinned) {
+        ExpectFieldWrites<Vector<OneValue>>({OneValue{1}, OneValue{-2}}, R"({"field":[1,-2]})");
+        ExpectFieldWrites<Vector<OneValue>>({}, R"({"field":[]})");
+        ExpectFieldWrites<Array<OneValue, 2>>({OneValue{3}, OneValue{4}}, R"({"field":[3,4]})");
         EXPECT_EQ(Written(Field<Vector<OneValue>>{{OneValue{1}, OneValue{2}}}, JsonWriter::kCompact), "{\"field\":[1,2]}");
         // An element of no fields is an empty object on both paths
-        ExpectFieldSameAsDom<Vector<Empty>>({Empty{}, Empty{}});
+        ExpectFieldWrites<Vector<Empty>>({Empty{}, Empty{}}, R"({"field":[{},{}]})");
     }
 
     TEST(JsonWriteReflectTest, TypesThatStayOnTheBridgeWriteTheSameBytes) {
-        ExpectFieldSameAsDom<HashMap<String, int32_t>>({{"b", 2}, {"a", 1}, {"c", 3}});
-        ExpectFieldSameAsDom<HashMap<String, int32_t>>({});
-        ExpectFieldSameAsDom<Variant<std::monostate, int32_t, String>>(std::monostate{});
-        ExpectFieldSameAsDom<Variant<std::monostate, int32_t, String>>(int32_t{4});
-        ExpectFieldSameAsDom<Variant<std::monostate, int32_t, String>>(String("v"));
-        ExpectFieldSameAsDom<Pair<int32_t, String>>({1, "one"});
-        ExpectFieldSameAsDom<Vec2>(Vec2{0.1f, -3.5f});
-        ExpectFieldSameAsDom<Vector<Vec2>>({Vec2{1.0f, 2.0f}, Vec2{0.1f, 0.2f}});
-        ExpectFieldSameAsDom<Vector<Vec2>>({});
+        ExpectFieldWrites<HashMap<String, int32_t>>({{"b", 2}, {"a", 1}, {"c", 3}}, R"({"field":[{"key":"a","value":1},{"key":"b","value":2},{"key":"c","value":3}]})");
+        ExpectFieldWrites<HashMap<String, int32_t>>({}, R"({"field":[]})");
+        ExpectFieldWrites<Variant<std::monostate, int32_t, String>>(std::monostate{}, R"({"field":{"index":0}})");
+        ExpectFieldWrites<Variant<std::monostate, int32_t, String>>(int32_t{4}, R"({"field":{"index":1,"value":4}})");
+        ExpectFieldWrites<Variant<std::monostate, int32_t, String>>(String("v"), R"({"field":{"index":2,"value":"v"}})");
+        ExpectFieldWrites<Pair<int32_t, String>>({1, "one"}, R"({"field":{"first":1,"second":"one"}})");
+        ExpectFieldWrites<Vec2>(Vec2{0.1f, -3.5f}, R"({"field":{"x":0.1,"y":-3.5}})");
+        ExpectFieldWrites<Vector<Vec2>>({Vec2{1.0f, 2.0f}, Vec2{0.1f, 0.2f}}, R"({"field":[{"x":1.0,"y":2.0},{"x":0.1,"y":0.2}]})");
+        ExpectFieldWrites<Vector<Vec2>>({}, R"({"field":[]})");
     }
 
     TEST(JsonWriteReflectTest, AClassWithEveryNativeShapeIsWrittenInSortedOrder) {
-        ExpectSameAsDom(Native{});
-        ExpectSameAsDom(MakeNative());
+        ExpectWrites(Native{}, R"({"active":false,"array":[0,0,0],"count":0,"fixedList":[],"inner":{"count":0,"name":""},"list":[],"mode":"Off","name":"","objects":[],"pool":"",)"
+                               R"("ratio":0.0,"scale":0.0,"text":""})");
+        ExpectWrites(MakeNative(), R"({"active":true,"array":[-1,0,1],"count":-7,"fixedList":[4,3,2],"inner":{"count":5,"name":"five"},"list":[1,2,3,4,5],"mode":"Automatic",)"
+                                   R"("name":"café \"quoted\"\n","objects":[{"count":1,"name":"one"},{"count":2,"name":""}],"optional":12,"pool":"pooled","ratio":0.1,"scale":1e+300,)"
+                                   R"("text":"fixed"})");
         Native empty = MakeNative();
         empty.optional.reset();
         empty.list.clear();
         empty.objects.clear();
         empty.fixedList.clear();
-        ExpectSameAsDom(empty);
+        ExpectWrites(empty, R"({"active":true,"array":[-1,0,1],"count":-7,"fixedList":[],"inner":{"count":5,"name":"five"},"list":[],"mode":"Automatic","name":"café \"quoted\"\n",)"
+                            R"("objects":[],"pool":"pooled","ratio":0.1,"scale":1e+300,"text":"fixed"})");
     }
 
     TEST(JsonWriteReflectTest, AClassWithEveryBridgedShapeIsWrittenInSortedOrder) {
-        ExpectSameAsDom(Bridged{});
-        ExpectSameAsDom(MakeBridged());
+        ExpectWrites(Bridged{}, R"({"choice":{"index":0},"map":[],"ones":[],"pair":{"first":0,"second":""},"points":[]})");
+        ExpectWrites(MakeBridged(), R"({"choice":{"index":2,"value":"text"},"map":[{"key":"a","value":1},{"key":"b","value":2}],"maybePoint":{"x":1.5,"y":-2.0},"ones":[3,4],)"
+                                    R"("pair":{"first":9,"second":"nine"},"points":[{"x":0.1,"y":0.2},{"x":3.0,"y":4.0}]})");
     }
 
-    TEST(JsonWriteReflectTest, TheWholeObjectBridgeEqualsTheDomPath) {
+    TEST(JsonWriteReflectTest, TheWholeObjectBridgeIsPinned) {
         const Native native = MakeNative();
         for (const int indent : kIndents) {
             String out;
             JsonWriter writer(out, indent);
             JsonWrite::WriteSerializedObject(writer, [&](ISerializer& s) { native.Serialize(s); });
             EXPECT_TRUE(writer.IsComplete());
-            EXPECT_EQ(out, Reference(native, indent));
+            EXPECT_EQ(out, Written(native, indent));
         }
     }
 
@@ -461,7 +502,7 @@ namespace BECore::Tests {
     }
 
     // =========================================================================
-    // The generated WriteJson (JsonWriteReflectTypes.h) against the DOM path
+    // The generated WriteJson (JsonWriteReflectTypes.h) pinned as literals
     // =========================================================================
 
     namespace {
@@ -645,13 +686,12 @@ namespace BECore::Tests {
         template <typename T>
         T ReadBack(const T& original) {
             const String text = Written(original, JsonWriter::kCompact);
-            const auto parsed = ParseJson(text);
             T result;
-            if (!parsed.has_value()) {
+            JsonDeserializer reader;
+            if (!reader.Load(text)) {
                 ADD_FAILURE() << "does not parse: " << text.c_str();
                 return result;
             }
-            JsonDeserializer reader(*parsed);
             result.Deserialize(reader);
             EXPECT_FALSE(reader.HasErrors()) << text.c_str();
             return result;
@@ -689,10 +729,19 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(JsonWriteReflectTest, GeneratedScalarsEqualTheDomPath) {
-        ExpectSameAsDom(JsonWriteScalars{});
-        ExpectSameAsDom(MakeScalars());
-        ExpectSameAsDom(MakeHostileScalars());
+    TEST(JsonWriteReflectTest, GeneratedScalarsArePinned) {
+        ExpectWrites(JsonWriteScalars{}, R"({"active":false,"byte":0,"count":0,"fixedName":"","mode":"Off","name":"","pool":"","ratio":0.0,"scale":0.0,"shortValue":0,"signed64":0,"tiny":0,)"
+                                         R"("unsigned32":0,"unsigned64":0,"unsignedShort":0})");
+        ExpectWrites(MakeScalars(), R"({"active":true,"byte":255,"count":-2147483648,"fixedName":"fixed","mode":"Automatic","name":"café \"quoted\" \\ \t\n/","pool":"pooled","ratio":0.1,)"
+                                    R"("scale":1e+300,"shortValue":-32768,"signed64":-9223372036854775808,"tiny":-128,"unsigned32":4294967295,"unsigned64":18446744073709551615,)"
+                                    R"("unsignedShort":65535})");
+        ExpectWrites(
+            MakeHostileScalars(),
+            R"({"active":true,"byte":255,"count":-2147483648,"fixedName":"fixed","mode":"Automatic",)"
+            R"("name":"\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f !\"#$%&'()*+,)"
+            R"(-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~��������������������������������������������������������������������������������������������������������������������������������",)"
+            R"("pool":"pooled","ratio":null,"scale":null,"shortValue":-32768,"signed64":-9223372036854775808,"tiny":-128,"unsigned32":4294967295,)"
+            R"("unsigned64":18446744073709551615,"unsignedShort":65535})");
     }
 
     TEST(JsonWriteReflectTest, GeneratedKeysAreSortedAndWithoutTheLeadingUnderscore) {
@@ -705,16 +754,20 @@ namespace BECore::Tests {
         EXPECT_LT(active, unsigned64);
     }
 
-    TEST(JsonWriteReflectTest, GeneratedNestedShapesEqualTheDomPath) {
-        ExpectSameAsDom(JsonWriteNested{});
-        ExpectSameAsDom(MakeNested());
+    TEST(JsonWriteReflectTest, GeneratedNestedShapesArePinned) {
+        ExpectWrites(JsonWriteNested{}, R"({"empty":{},"fixedNumbers":[],"fixedObjects":[],"inner":{"count":0,"name":""},"none":[],"numbers":[],"objects":[],"reals":[],"triple":[0,0,0],)"
+                                        R"("words":[]})");
+        ExpectWrites(MakeNested(), R"({"empty":{},"fixedNumbers":[4,3,2],"fixedObjects":[{"count":7,"name":"s"}],"inner":{"count":5,"name":"five"},"maybeCount":0,"maybeInner":{"count":9,)"
+                                   R"("name":"nine"},"maybeText":"set","none":[],"numbers":[1,2,3,4,5],"objects":[{"count":1,"name":"a"},{"count":-2,"name":"b\n"}],"reals":[0.1,2.5,)"
+                                   R"(-1e-09],"triple":[-1,0,1],"words":["x","","quote\""]})");
         JsonWriteNested emptied = MakeNested();
         emptied.maybeCount.reset();
         emptied.maybeInner.reset();
         emptied.maybeText.reset();
         emptied.objects.clear();
         emptied.fixedNumbers.clear();
-        ExpectSameAsDom(emptied);
+        ExpectWrites(emptied, R"({"empty":{},"fixedNumbers":[],"fixedObjects":[{"count":7,"name":"s"}],"inner":{"count":5,"name":"five"},"none":[],"numbers":[1,2,3,4,5],"objects":[],)"
+                              R"("reals":[0.1,2.5,-1e-09],"triple":[-1,0,1],"words":["x","","quote\""]})");
     }
 
     TEST(JsonWriteReflectTest, GeneratedEmptyOptionalsLeaveTheirMembersOutAndEmptyObjectsStay) {
@@ -725,35 +778,59 @@ namespace BECore::Tests {
         EXPECT_NE(text.find("\"none\":[]"), String::npos);
     }
 
-    TEST(JsonWriteReflectTest, GeneratedElementOfOneValueCollapsesLikeTheDomPath) {
+    TEST(JsonWriteReflectTest, GeneratedElementOfOneValueCollapsesAndIsPinned) {
         JsonWriteOneValueList value;
         value.ones.resize(2);
         value.ones[0].value = 1;
         value.ones[1].value = -2;
         value.single.value = 7;
-        ExpectSameAsDom(value);
-        ExpectSameAsDom(JsonWriteOneValueList{});
+        ExpectWrites(value, R"({"ones":[1,-2],"single":{"value":7}})");
+        ExpectWrites(JsonWriteOneValueList{}, R"({"ones":[],"single":{"value":0}})");
         EXPECT_NE(Written(value, JsonWriter::kCompact).find("\"ones\":[1,-2]"), String::npos);
     }
 
-    TEST(JsonWriteReflectTest, GeneratedBridgedFieldsEqualTheDomPath) {
-        ExpectSameAsDom(JsonWriteBridged{});
-        ExpectSameAsDom(MakeGeneratedBridged());
+    TEST(JsonWriteReflectTest, GeneratedBridgedFieldsArePinned) {
+        ExpectWrites(JsonWriteBridged{}, R"({"choice":{"index":0},"pair":{"first":0,"second":""},"points":[],"table":[]})");
+        ExpectWrites(MakeGeneratedBridged(), R"({"choice":{"index":2,"value":"text"},"maybePoint":{"x":3.0,"y":4.0},"pair":{"first":3,"second":"three"},"points":[{"x":1.0,"y":2.0},{"x":0.1,)"
+                                             R"("y":0.2}],"table":[{"key":"a","value":1},{"key":"b","value":2}]})");
     }
 
-    TEST(JsonWriteReflectTest, MathTypesAndSequencesOfThemEqualTheDomPath) {
-        ExpectSameAsDom(JsonWriteMathFields{});
-        ExpectSameAsDom(MakeMath());
+    TEST(JsonWriteReflectTest, MathTypesAndSequencesOfThemArePinned) {
+        ExpectWrites(JsonWriteMathFields{},
+                     R"({"color":{"a":0,"b":0,"g":0,"r":0},"colors":[],"ivec2":{"x":0,"y":0},"points":[],"quat":{"w":1.0,"x":0.0,"y":0.0,"z":0.0},)"
+                     R"("rect":{"h":0.0,"w":0.0,"x":0.0,"y":0.0},"rects":[],"vec2":{"x":0.0,"y":0.0},"vec3":{"x":0.0,"y":0.0,"z":0.0},"vec4":{"w":0.0,"x":0.0,"y":0.0,"z":0.0}})");
+        ExpectWrites(MakeMath(), R"({"color":{"a":128,"b":7,"g":0,"r":255},"colors":[{"a":4,"b":3,"g":2,"r":1},{"a":255,"b":255,"g":255,"r":255}],"ivec2":{"x":-3,"y":4},)"
+                                 R"("maybeQuat":{"w":0.0,"x":0.0,"y":0.0,"z":1.0},"points":[{"x":0.1,"y":0.2},{"x":1e+20,"y":-1e-20}],"quat":{"w":0.5,"x":0.5,"y":0.5,"z":0.5},)"
+                                 R"("rect":{"h":4.0,"w":3.5,"x":1.0,"y":2.0},"rects":[{"h":1.0,"w":1.0,"x":0.0,"y":0.0}],"vec2":{"x":0.1,"y":-2.5},"vec3":{"x":1.0,"y":2.0,"z":3.0},)"
+                                 R"("vec4":{"w":4.0,"x":1.0,"y":2.0,"z":3.0}})");
         const String text = Written(MakeMath(), JsonWriter::kCompact);
         EXPECT_NE(text.find("\"color\":{\"a\":128,\"b\":7,\"g\":0,\"r\":255}"), String::npos);
         EXPECT_NE(text.find("\"quat\":{\"w\":0.5,\"x\":0.5,\"y\":0.5,\"z\":0.5}"), String::npos);
         EXPECT_NE(text.find("\"rect\":{\"h\":4.0,\"w\":3.5,\"x\":1.0,\"y\":2.0}"), String::npos);
     }
 
-    TEST(JsonWriteReflectTest, MapsOfEveryNativeShapeEqualTheDomPath) {
-        ExpectSameAsDom(JsonWriteMaps{});
-        ExpectSameAsDom(MakeMaps());
-        ExpectSameAsDom(MakeBigMap());
+    TEST(JsonWriteReflectTest, MapsOfEveryNativeShapeArePinned) {
+        ExpectWrites(JsonWriteMaps{}, R"({"empties":[],"fixedTable":[],"flags":[],"keyed":[],"names":[],"none":[],"numbers":[],"objects":[],"ordered":[]})");
+        ExpectWrites(MakeMaps(), R"({"empties":[{"key":"e"}],"fixedTable":[{"key":"x","value":0.1},{"key":"y","value":1.5}],"flags":[{"key":1,"value":false},{"key":3,"value":true}],)"
+                                 R"("keyed":[{"key":"own","zed":9},{"key":"","zed":0}],"names":[{"key":-1,"value":"minus"},{"key":2,"value":"two"},{"key":10,"value":"ten"}],"none":[],)"
+                                 R"("numbers":[{"key":"","value":4},{"key":"alpha","value":2},{"key":"mid","value":3},{"key":"zeta","value":1}],"objects":[{"count":1,"key":"a",)"
+                                 R"("name":"one"},{"count":2,"key":"b","name":"two"},{"count":3,"key":"c","name":""}],"ordered":[{"count":6,"key":"p","name":"p"},{"count":5,"key":"q",)"
+                                 R"("name":"q"}]})");
+        ExpectWrites(MakeBigMap(), R"({"empties":[],"fixedTable":[],"flags":[],"keyed":[],"names":[{"key":-20,"value":"n0"},{"key":-19,"value":"n37"},{"key":-18,"value":"n34"},{"key":-17,)"
+                                   R"("value":"n31"},{"key":-16,"value":"n28"},{"key":-15,"value":"n25"},{"key":-14,"value":"n22"},{"key":-13,"value":"n19"},{"key":-12,"value":"n16"},)"
+                                   R"({"key":-11,"value":"n13"},{"key":-10,"value":"n10"},{"key":-9,"value":"n7"},{"key":-8,"value":"n4"},{"key":-7,"value":"n1"},{"key":-6,"value":"n38"},)"
+                                   R"({"key":-5,"value":"n35"},{"key":-4,"value":"n32"},{"key":-3,"value":"n29"},{"key":-2,"value":"n26"},{"key":-1,"value":"n23"},{"key":0,"value":"n20"},)"
+                                   R"({"key":1,"value":"n17"},{"key":2,"value":"n14"},{"key":3,"value":"n11"},{"key":4,"value":"n8"},{"key":5,"value":"n5"},{"key":6,"value":"n2"},{"key":7,)"
+                                   R"("value":"n39"},{"key":8,"value":"n36"},{"key":9,"value":"n33"},{"key":10,"value":"n30"},{"key":11,"value":"n27"},{"key":12,"value":"n24"},{"key":13,)"
+                                   R"("value":"n21"},{"key":14,"value":"n18"},{"key":15,"value":"n15"},{"key":16,"value":"n12"},{"key":17,"value":"n9"},{"key":18,"value":"n6"},{"key":19,)"
+                                   R"("value":"n3"}],"none":[],"numbers":[{"key":"k0","value":0},{"key":"k1","value":23},{"key":"k10","value":30},{"key":"k11","value":13},{"key":"k12",)"
+                                   R"("value":36},{"key":"k13","value":19},{"key":"k14","value":2},{"key":"k15","value":25},{"key":"k16","value":8},{"key":"k17","value":31},{"key":"k18",)"
+                                   R"("value":14},{"key":"k19","value":37},{"key":"k2","value":6},{"key":"k20","value":20},{"key":"k21","value":3},{"key":"k22","value":26},{"key":"k23",)"
+                                   R"("value":9},{"key":"k24","value":32},{"key":"k25","value":15},{"key":"k26","value":38},{"key":"k27","value":21},{"key":"k28","value":4},{"key":"k29",)"
+                                   R"("value":27},{"key":"k3","value":29},{"key":"k30","value":10},{"key":"k31","value":33},{"key":"k32","value":16},{"key":"k33","value":39},{"key":"k34",)"
+                                   R"("value":22},{"key":"k35","value":5},{"key":"k36","value":28},{"key":"k37","value":11},{"key":"k38","value":34},{"key":"k39","value":17},{"key":"k4",)"
+                                   R"("value":12},{"key":"k5","value":35},{"key":"k6","value":18},{"key":"k7","value":1},{"key":"k8","value":24},{"key":"k9","value":7}],"objects":[],)"
+                                   R"("ordered":[]})");
     }
 
     TEST(JsonWriteReflectTest, AMapEntryWhoseValueHasAMemberNamedKeyKeepsTheValuesMember) {
@@ -761,9 +838,12 @@ namespace BECore::Tests {
         EXPECT_NE(text.find("\"keyed\":[{\"key\":\"own\",\"zed\":9},{\"key\":\"\",\"zed\":0}]"), String::npos);
     }
 
-    TEST(JsonWriteReflectTest, PairsAndVariantsEqualTheDomPath) {
-        ExpectSameAsDom(JsonWritePairsAndVariants{});
-        ExpectSameAsDom(MakePairsAndVariants());
+    TEST(JsonWriteReflectTest, PairsAndVariantsArePinned) {
+        ExpectWrites(JsonWritePairsAndVariants{}, R"({"choice":{"index":0},"emptyChoice":{"index":0},"maybeAndList":{"second":[]},"number":{"index":0,"value":false},"numberAndText":{"first":0,)"
+                                                  R"("second":""},"objectAndPoint":{"first":{"count":0,"name":""},"second":{"x":0.0,"y":0.0}},"shapes":{"index":0,"value":{"x":0.0,"y":0.0}}})");
+        ExpectWrites(MakePairsAndVariants(), R"({"choice":{"index":3,"value":{"count":4,"name":"inner"}},"emptyChoice":{"index":0},"maybeAndList":{"second":[1,2]},"maybePair":{"first":1,"second":2},)"
+                                             R"("number":{"index":1,"value":2.5},"numberAndText":{"first":7,"second":"seven"},"objectAndPoint":{"first":{"count":1,"name":"in"},"second":{"x":0.1,)"
+                                             R"("y":0.2}},"shapes":{"index":1,"value":[5,6]}})");
         JsonWritePairsAndVariants other = MakePairsAndVariants();
         other.choice = String("text");
         other.emptyChoice = 3;
@@ -771,10 +851,14 @@ namespace BECore::Tests {
         other.maybeAndList = {Optional<int32_t>{4}, Vector<int32_t>{}};
         other.number = true;
         other.maybePair.reset();
-        ExpectSameAsDom(other);
+        ExpectWrites(other, R"({"choice":{"index":2,"value":"text"},"emptyChoice":{"index":1,"value":3},"maybeAndList":{"first":4,"second":[]},"number":{"index":0,"value":true},)"
+                            R"("numberAndText":{"first":7,"second":"seven"},"objectAndPoint":{"first":{"count":1,"name":"in"},"second":{"x":0.1,"y":0.2}},"shapes":{"index":2,)"
+                            R"("value":{"first":8,"second":9}}})");
         other.choice = std::monostate{};
         other.shapes = Vec2{1.0f, 2.0f};
-        ExpectSameAsDom(other);
+        ExpectWrites(other, R"({"choice":{"index":0},"emptyChoice":{"index":1,"value":3},"maybeAndList":{"first":4,"second":[]},"number":{"index":0,"value":true},)"
+                            R"("numberAndText":{"first":7,"second":"seven"},"objectAndPoint":{"first":{"count":1,"name":"in"},"second":{"x":0.1,"y":0.2}},"shapes":{"index":0,)"
+                            R"("value":{"x":1.0,"y":2.0}}})");
     }
 
     TEST(JsonWriteReflectTest, MathPairAndVariantFieldsAreWrittenWithoutAllocations) {
@@ -784,8 +868,11 @@ namespace BECore::Tests {
     }
 
     TEST(JsonWriteReflectTest, GeneratedChildInterleavesTheKeysOfItsParent) {
-        ExpectSameAsDom(JsonWriteChild{});
-        ExpectSameAsDom(MakeChild());
+        ExpectWrites(JsonWriteChild{}, R"({"active":false,"byte":0,"count":0,"extra":0,"fixedName":"","label":"","mode":"Off","name":"","pool":"","ratio":0.0,"scale":0.0,"shortValue":0,)"
+                                       R"("signed64":0,"tiny":0,"unsigned32":0,"unsigned64":0,"unsignedShort":0})");
+        ExpectWrites(MakeChild(), R"({"active":true,"byte":255,"count":-2147483648,"extra":42,"fixedName":"fixed","label":"child","mode":"Automatic","name":"café \"quoted\" \\ \t\n/",)"
+                                  R"("pool":"pooled","ratio":0.1,"scale":1e+300,"shortValue":-32768,"signed64":-9223372036854775808,"tiny":-128,"unsigned32":4294967295,)"
+                                  R"("unsigned64":18446744073709551615,"unsignedShort":65535})");
         const String text = Written(MakeChild(), JsonWriter::kCompact);
         const size_t extra = text.find("\"extra\"");
         const size_t label = text.find("\"label\"");
@@ -798,17 +885,17 @@ namespace BECore::Tests {
     }
 
     TEST(JsonWriteReflectTest, AChainOfThreeMergesTheKeysOfAllItsLevels) {
-        ExpectSameAsDom(JsonWriteChainBase{});
-        ExpectSameAsDom(JsonWriteChainMid{});
-        ExpectSameAsDom(JsonWriteChainLeaf{});
-        ExpectSameAsDom(MakeLeaf());
+        ExpectWrites(JsonWriteChainBase{}, R"({"a":3,"g":4,"hidden":5,"m":2,"same":1})");
+        ExpectWrites(JsonWriteChainMid{}, R"({"a":3,"b":"","e":"","g":4,"hidden":5,"m":2,"same":""})");
+        ExpectWrites(JsonWriteChainLeaf{}, R"({"0first":false,"a":3,"b":"","c":6,"e":"","g":4,"hidden":5,"m":[],"same":"","z":[]})");
+        ExpectWrites(MakeLeaf(), R"({"0first":true,"a":3,"b":"b","c":6,"e":"e","g":4,"hidden":50,"m":[1,2],"maybe":12,"same":"mid","z":[{"count":1,"name":"z"},{"count":2,"name":"y"}]})");
         JsonWriteChainMid mid;
         mid.e = "mid only";
         mid.maybe = 1;
-        ExpectSameAsDom(mid);
+        ExpectWrites(mid, R"({"a":3,"b":"","e":"mid only","g":4,"hidden":5,"m":2,"maybe":1,"same":""})");
         JsonWriteChainLeaf bare = MakeLeaf();
         bare.maybe.reset();
-        ExpectSameAsDom(bare);
+        ExpectWrites(bare, R"({"0first":true,"a":3,"b":"b","c":6,"e":"e","g":4,"hidden":50,"m":[1,2],"same":"mid","z":[{"count":1,"name":"z"},{"count":2,"name":"y"}]})");
     }
 
     TEST(JsonWriteReflectTest, TheMostDerivedLevelHoldsAKeyThatSeveralLevelsHave) {
@@ -821,11 +908,11 @@ namespace BECore::Tests {
     }
 
     TEST(JsonWriteReflectTest, AParentWithNoFieldsAndAMiddleLevelWithNoFieldsDoNotBreakTheMerge) {
-        ExpectSameAsDom(JsonWriteChildOfEmpty{});
-        ExpectSameAsDom(JsonWriteChainEmptyMid{});
+        ExpectWrites(JsonWriteChildOfEmpty{}, R"({"value1":10,"value2":9})");
+        ExpectWrites(JsonWriteChainEmptyMid{}, R"({"a":3,"g":4,"hidden":5,"m":2,"same":1})");
         JsonWriteChainEmptyLeaf leaf;
         leaf.SetHidden(3);
-        ExpectSameAsDom(leaf);
+        ExpectWrites(leaf, R"({"a":8,"f":7,"g":4,"hidden":3,"m":2,"same":1})");
         EXPECT_NE(Written(leaf, JsonWriter::kCompact).find("\"a\":8"), String::npos);
     }
 
@@ -833,7 +920,7 @@ namespace BECore::Tests {
         JsonWriteChildBefore value;
         value.name = "n";
         value.count = 2;
-        ExpectSameAsDom(value);
+        ExpectWrites(value, R"({"aaa":11,"count":2,"name":"n"})");
         EXPECT_EQ(Written(value, JsonWriter::kCompact), "{\"aaa\":11,\"count\":2,\"name\":\"n\"}");
     }
 
@@ -864,21 +951,21 @@ namespace BECore::Tests {
         auto early = New<JsonWritePtrEarly>();
         early->alpha = 4;
         JsonWritePtrHolder holder = MakeHolder(early);
-        ExpectSameAsDom(holder);
+        ExpectWrites(holder, R"({"factory":{"alpha":4,"label":"lbl","type":"JsonWritePtrEarly"}})");
         EXPECT_NE(Written(holder, JsonWriter::kCompact).find("\"factory\":{\"alpha\":4,\"label\":\"lbl\",\"type\":\"JsonWritePtrEarly\"}"), String::npos);
 
         auto late = New<JsonWritePtrLate>();
         late->zeta = 5;
         holder = MakeHolder(late);
-        ExpectSameAsDom(holder);
+        ExpectWrites(holder, R"({"factory":{"label":"lbl","type":"JsonWritePtrLate","zeta":5}})");
         EXPECT_NE(Written(holder, JsonWriter::kCompact).find("\"factory\":{\"label\":\"lbl\",\"type\":\"JsonWritePtrLate\",\"zeta\":5}"), String::npos);
     }
 
-    TEST(JsonWriteReflectTest, AMemberNamedTypeReplacesTheClassNameAsOnTheDomPath) {
+    TEST(JsonWriteReflectTest, AMemberNamedTypeReplacesTheClassNameAndIsPinned) {
         auto same = New<JsonWritePtrSame>();
         same->type = "mine";
         JsonWritePtrHolder holder = MakeHolder(same);
-        ExpectSameAsDom(holder);
+        ExpectWrites(holder, R"({"factory":{"label":"lbl","type":"mine"}})");
         const String text = Written(holder, JsonWriter::kCompact);
         EXPECT_NE(text.find("\"type\":\"mine\""), String::npos);
         EXPECT_EQ(text.find("JsonWritePtrSame"), String::npos);
@@ -886,7 +973,7 @@ namespace BECore::Tests {
 
     TEST(JsonWriteReflectTest, ANullPointerWritesNoMemberAndAPlainPointerWritesItsDynamicObject) {
         JsonWritePtrHolder holder;
-        ExpectSameAsDom(holder);
+        ExpectWrites(holder, R"({})");
         EXPECT_EQ(Written(holder, JsonWriter::kCompact), "{}");
 
         auto child = New<JsonWritePtrPlainChild>();
@@ -895,7 +982,7 @@ namespace BECore::Tests {
         child->extra = 8;
         child->_count = 9;
         holder.plain = child;
-        ExpectSameAsDom(holder);
+        ExpectWrites(holder, R"({"plain":{"count":9,"extra":8,"id":3,"name":"n"}})");
         const String text = Written(holder, JsonWriter::kCompact);
         EXPECT_NE(text.find("\"plain\":{\"count\":9,\"extra\":8,\"id\":3,\"name\":\"n\"}"), String::npos);
     }
@@ -907,7 +994,7 @@ namespace BECore::Tests {
         holder.list.push_back(early);
         holder.list.emplace_back();
         holder.list.push_back(New<JsonWritePtrLate>());
-        ExpectSameAsDom(holder);
+        ExpectWrites(holder, R"({"list":[{"alpha":1,"enabled":true,"label":"","type":"JsonWritePtrEarly"},{"enabled":true,"label":"","type":"JsonWritePtrLate","zeta":0}]})");
         EXPECT_NE(Written(holder, JsonWriter::kCompact).find("\"enabled\":true"), String::npos);
     }
 
@@ -923,15 +1010,15 @@ namespace BECore::Tests {
         ExpectSecondWriteAllocatesNothing(holder);
     }
 
-    TEST(JsonWriteReflectTest, GeneratedEventEqualsTheDomPath) {
+    TEST(JsonWriteReflectTest, GeneratedEventIsPinned) {
         JsonWriteEvent event;
         event.text = "event \"text\"";
         event.id = -3;
         event.weight = kAwkwardFloat;
-        ExpectSameAsDom(event);
+        ExpectWrites(event, R"({"id":-3,"text":"event \"text\"","weight":0.1})");
         event.optionalId = 8;
-        ExpectSameAsDom(event);
-        ExpectSameAsDom(JsonWriteEvent{});
+        ExpectWrites(event, R"({"id":-3,"optionalId":8,"text":"event \"text\"","weight":0.1})");
+        ExpectWrites(JsonWriteEvent{}, R"({"id":0,"text":"","weight":0.0})");
     }
 
     TEST(JsonWriteReflectTest, GeneratedWriteOfAClassWithNoFieldsIsAnEmptyObject) {
@@ -1052,14 +1139,15 @@ namespace BECore::Tests {
     TEST_F(JsonWriteArenaTest, TheArenaShapeSerializesTheBytesOfItsHeapTwin) {
         const ArenaTwin arena = MakeArenaTwin();
         const HeapTwin heap = MakeHeapTwin();
-        for (const int indent : kIndents) {
-            EXPECT_EQ(Reference(arena, indent), Reference(heap, indent)) << "indent " << indent;
-        }
+        EXPECT_EQ(SerializedText(arena), SerializedText(heap));
     }
 
-    TEST_F(JsonWriteArenaTest, TheArenaShapeWrittenByTheGeneratedWriterEqualsTheDomPath) {
-        ExpectSameAsDom(MakeArenaTwin());
-        ExpectSameAsDom(ArenaTwin{});
+    TEST_F(JsonWriteArenaTest, TheArenaShapeWrittenByTheGeneratedWriterIsPinned) {
+        ExpectWrites(MakeArenaTwin(), R"({"items":[{"label":"another word that is longer than the inline buffer","rank":0},{"label":"another word that is longer than the inline buffer",)"
+                                      R"("rank":1}],"maybeText":"another word that is longer than the inline buffer","maybeWords":["another word that is longer than the inline buffer"],)"
+                                      R"("numbers":[7,4000000000],"pools":["ArenaPoolOne","ArenaPoolTwo"],"text":"a text well past the small-string buffer of twenty-three bytes",)"
+                                      R"("words":["a text well past the small-string buffer of twenty-three bytes","q\"uote\n"]})");
+        ExpectWrites(ArenaTwin{}, R"({"items":[],"numbers":[],"pools":[],"text":"","words":[]})");
     }
 
     TEST_F(JsonWriteArenaTest, TheArenaShapeReadsBackIntoTheSameObject) {
@@ -1144,14 +1232,13 @@ namespace BECore::Tests {
     TEST_F(JsonWriteViewTest, TheViewShapeSerializesTheBytesOfItsHeapTwin) {
         const ViewTwin views = MakeViewTwin();
         const ViewHeapTwin heap = MakeViewHeapTwin();
-        for (const int indent : kIndents) {
-            EXPECT_EQ(Reference(views, indent), Reference(heap, indent)) << "indent " << indent;
-        }
+        EXPECT_EQ(SerializedText(views), SerializedText(heap));
     }
 
-    TEST_F(JsonWriteViewTest, TheViewShapeWrittenByTheGeneratedWriterEqualsTheDomPath) {
-        ExpectSameAsDom(MakeViewTwin());
-        ExpectSameAsDom(ViewTwin{});
+    TEST_F(JsonWriteViewTest, TheViewShapeWrittenByTheGeneratedWriterIsPinned) {
+        ExpectWrites(MakeViewTwin(), R"({"maybeText":"q\"uote\n","maybeWords":["a text kept elsewhere, longer than the small-string buffer"],"text":"a text kept elsewhere,)"
+                                     R"( longer than the small-string buffer","words":["a text kept elsewhere, longer than the small-string buffer","q\"uote\n"]})");
+        ExpectWrites(ViewTwin{}, R"({"text":"","words":[]})");
     }
 
     TEST_F(JsonWriteViewTest, ReadingLeavesTheViewsAlone) {
