@@ -2,6 +2,8 @@
 
 #include <BECore/Audio/AudioDecode.h>
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonView.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/Types/Types.h>
 #include <cstdint>
 #include <expected>
@@ -29,10 +31,16 @@ namespace BECore {
         [[nodiscard]] bool operator==(const ArtGenSoundSettings&) const = default;
     };
 
-    /// The settings as `artgen_accept` takes them and the provenance records them: `{mono, trimDb|null, maxSeconds, sampleRate, fadeInMs,
-    /// fadeOutMs, peakDb|null}`: a value inside a `Json` record, which is why it stays a document
+    /// The settings as `artgen_accept` takes them and the provenance records them: `{fadeInMs, fadeOutMs, maxSeconds, mono, peakDb|null,
+    /// sampleRate, trimDb|null}`: a value inside a record. The floats are written as the `double`s the DOM stored (`0.1f` is
+    /// `0.10000000149011612`), which is what the files of a game hold
+    void WriteArtGenSoundSettings(JsonWriter& writer, const ArtGenSoundSettings& settings);
+    /// Reads what WriteArtGenSoundSettings writes; a missing key keeps the default, a wrong type, a number that is not finite or a value out of
+    /// range is the error
+    [[nodiscard]] std::expected<ArtGenSoundSettings, String> ReadArtGenSoundSettings(JsonView value);
+
+    // Interim: goes with the last caller (WP 7)
     [[nodiscard]] Json ArtGenSoundSettingsToJson(const ArtGenSoundSettings& settings);
-    /// Reads what ArtGenSoundSettingsToJson writes; a missing key keeps the default, a wrong type or a value out of range is the error
     [[nodiscard]] std::expected<ArtGenSoundSettings, String> ArtGenSoundSettingsFromJson(const Json& json);
 
     /// Averages the channels (`mono`), trims the silence at both ends, cuts at `maxSeconds`, resamples linearly, fades in and out (the last

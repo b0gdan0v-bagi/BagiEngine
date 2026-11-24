@@ -941,8 +941,14 @@ namespace BECore::Tests {
     TEST_F(ArtGenSessionTest, TheReferenceOfAnAnswerIsWrittenAsTheFileWritesIt) {
         const ArtGenReference withWeight{"style", "assets/artgen/pawn.png", Optional<double>(0.8)};
         const ArtGenReference withoutWeight{"init", "sketches/rook.png", Optional<double>()};
-        EXPECT_EQ(AnswerText(MakeArtGenReferenceAnswer(withWeight)), ArtGenReferenceToJson(withWeight));
-        EXPECT_EQ(AnswerText(MakeArtGenReferenceAnswer(withoutWeight)), ArtGenReferenceToJson(withoutWeight));
+        const auto fileText = [](const ArtGenReference& reference) {
+            String text;
+            JsonWriter writer(text);
+            WriteArtGenReference(writer, reference);
+            return text;
+        };
+        EXPECT_EQ(AnswerString(MakeArtGenReferenceAnswer(withWeight)), fileText(withWeight));
+        EXPECT_EQ(AnswerString(MakeArtGenReferenceAnswer(withoutWeight)), fileText(withoutWeight));
     }
 
     TEST_F(ArtGenSessionTest, TheStateOfARunHasItsSeedOnlyWhenTheRequestNamedOne) {

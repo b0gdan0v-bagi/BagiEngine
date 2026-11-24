@@ -1,6 +1,8 @@
 #include "ArtGenReference.h"
 
+#include <BECore/Control/ControlParams.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/ArtGen/ArtGenInterimJson.h>
 
 namespace BECore {
 
@@ -75,38 +77,46 @@ namespace BECore {
 
     }  // namespace
 
-    Json ArtGenReferenceToJson(const ArtGenReference& reference) {
-        Json json = Json::object();
-        json["mode"] = MakeJsonString(StringView(reference.mode.data(), reference.mode.size()));
-        json["image"] = MakeJsonString(StringView(reference.image.data(), reference.image.size()));
+    void WriteArtGenReference(JsonWriter& writer, const ArtGenReference& reference) {
+        writer.BeginObject();
+        writer.Member(kImageKey, StringView(reference.image.data(), reference.image.size()));
+        writer.Member(kModeKey, StringView(reference.mode.data(), reference.mode.size()));
         if (reference.weight) {
-            json["weight"] = *reference.weight;
+            writer.Member(kWeightKey, *reference.weight);
         }
-        return json;
+        writer.EndObject();
     }
 
-    std::expected<ArtGenReference, String> ReadArtGenReference(const Json& value) {
-        if (!value.is_object()) {
+    std::expected<ArtGenReference, String> ReadArtGenReference(JsonView value) {
+        if (!value.IsObject()) {
             return std::unexpected(String("'reference' must be an object"));
         }
         ArtGenReference reference;
-        if (const auto mode = GetJsonString(value, kModeKey); mode && !mode->empty()) {
+        if (const auto mode = GetParamString(value, kModeKey); mode && !mode->empty()) {
             reference.mode = *mode;
         } else {
             return std::unexpected(String("'reference.mode' must be a non-empty string"));
         }
-        if (const auto image = GetJsonString(value, kImageKey); image && !image->empty()) {
+        if (const auto image = GetParamString(value, kImageKey); image && !image->empty()) {
             reference.image = *image;
         } else {
             return std::unexpected(String("'reference.image' must be a non-empty string"));
         }
-        if (const Json* weight = FindJsonMember(value, kWeightKey); weight != nullptr && !weight->is_null()) {
-            reference.weight = GetJsonNumber(value, kWeightKey);
+        if (const Optional<JsonView> weight = FindParam(value, kWeightKey); weight && !weight->IsNull()) {
+            reference.weight = GetParamNumber(value, kWeightKey);
             if (!reference.weight) {
                 return std::unexpected(String("'reference.weight' must be a number"));
             }
         }
         return reference;
+    }
+
+    Json ArtGenReferenceToJson(const ArtGenReference& reference) {
+        return Detail::ArtGenDomOf([&](JsonWriter& writer) { WriteArtGenReference(writer, reference); });
+    }
+
+    std::expected<ArtGenReference, String> ReadArtGenReference(const Json& value) {
+        return Detail::ArtGenReadDom(value, [](JsonView view) { return ReadArtGenReference(view); });
     }
 
     ArtGenReference ArtGenReferenceOfFile(StringView gameRoot, StringView realPath, StringView mode) {

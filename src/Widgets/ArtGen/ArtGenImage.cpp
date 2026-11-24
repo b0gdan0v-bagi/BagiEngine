@@ -1,9 +1,11 @@
 #include "ArtGenImage.h"
 
+#include <BECore/Control/ControlParams.h>
 #include <BECore/File/File.h>
 #include <BECore/Utils/ScopeGuard.h>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
+#include <Widgets/ArtGen/ArtGenInterimJson.h>
 #include <Widgets/TextureEditor/SpriteImage.h>
 #include <cmath>
 
@@ -27,12 +29,13 @@ namespace BECore {
             return {};
         }
 
-        std::expected<int32_t, String> WholeNumber(const Json& json, StringView key, int32_t fallback) {
-            const Json* value = FindJsonMember(json, key);
-            if (value == nullptr) {
+        /// An integer that fits `int32_t`: `5.0` and `1e1` are not whole numbers here, as they were not to the DOM's `is_number_integer`
+        std::expected<int32_t, String> WholeNumber(JsonView object, StringView key, int32_t fallback) {
+            const Optional<JsonView> value = FindParam(object, key);
+            if (!value) {
                 return fallback;
             }
-            const Optional<int64_t> number = GetJsonInt(json, key);
+            const Optional<int64_t> number = value->AsInt64();
             if (!number || *number < INT32_MIN || *number > INT32_MAX) {
                 return std::unexpected(Format("\"{}\" must be a whole number", key));
             }
@@ -65,33 +68,34 @@ namespace BECore {
 
     }  // namespace
 
-    Json ArtGenImageSettingsToJson(const ArtGenImageSettings& settings) {
-        Json json = Json::object();
-        json["trim"] = settings.trim;
-        json["padding"] = settings.padding;
-        json["maxSize"] = settings.maxSize;
-        return json;
+    void WriteArtGenImageSettings(JsonWriter& writer, const ArtGenImageSettings& settings) {
+        writer.BeginObject();
+        writer.Member("maxSize", settings.maxSize);
+        writer.Member("padding", settings.padding);
+        writer.Member("trim", settings.trim);
+        writer.EndObject();
     }
 
-    std::expected<ArtGenImageSettings, String> ArtGenImageSettingsFromJson(const Json& json) {
+    std::expected<ArtGenImageSettings, String> ReadArtGenImageSettings(JsonView value) {
         ArtGenImageSettings settings;
-        if (json.is_null()) {
+        if (!value.IsValid() || value.IsNull()) {
             return settings;
         }
-        if (!json.is_object()) {
+        if (!value.IsObject()) {
             return std::unexpected(String("the image settings must be an object"));
         }
-        if (const Json* trim = FindJsonMember(json, "trim"); trim != nullptr) {
-            if (!trim->is_boolean()) {
+        if (const Optional<JsonView> trim = FindParam(value, "trim")) {
+            const Optional<bool> flag = trim->AsBool();
+            if (!flag) {
                 return std::unexpected(String("\"trim\" must be a boolean"));
             }
-            settings.trim = trim->get<bool>();
+            settings.trim = *flag;
         }
-        auto padding = WholeNumber(json, "padding", settings.padding);
+        auto padding = WholeNumber(value, "padding", settings.padding);
         if (!padding) {
             return std::unexpected(padding.error());
         }
-        auto maxSize = WholeNumber(json, "maxSize", settings.maxSize);
+        auto maxSize = WholeNumber(value, "maxSize", settings.maxSize);
         if (!maxSize) {
             return std::unexpected(maxSize.error());
         }
@@ -101,6 +105,14 @@ namespace BECore {
             return std::unexpected(checked.error());
         }
         return settings;
+    }
+
+    Json ArtGenImageSettingsToJson(const ArtGenImageSettings& settings) {
+        return Detail::ArtGenDomOf([&](JsonWriter& writer) { WriteArtGenImageSettings(writer, settings); });
+    }
+
+    std::expected<ArtGenImageSettings, String> ArtGenImageSettingsFromJson(const Json& json) {
+        return Detail::ArtGenReadDom(json, [](JsonView view) { return ReadArtGenImageSettings(view); });
     }
 
     Optional<ArtGenIntRect> DrawnBounds(const ArtGenPixels& pixels) {
@@ -185,19 +197,19 @@ namespace BECore {
         return inner.x >= frame.x && inner.y >= frame.y && inner.x + inner.w <= frame.x + frame.w && inner.y + inner.h <= frame.y + frame.h;
     }
 
-    Json ArtGenImageFrameToJson(const ArtGenImageFrame& frame) {
-        Json json = Json::object();
-        json["x"] = frame.x;
-        json["y"] = frame.y;
-        json["w"] = frame.w;
-        json["h"] = frame.h;
-        json["outWidth"] = frame.outWidth;
-        json["outHeight"] = frame.outHeight;
-        return json;
+    void WriteArtGenImageFrame(JsonWriter& writer, const ArtGenImageFrame& frame) {
+        writer.BeginObject();
+        writer.Member("h", frame.h);
+        writer.Member("outHeight", frame.outHeight);
+        writer.Member("outWidth", frame.outWidth);
+        writer.Member("w", frame.w);
+        writer.Member("x", frame.x);
+        writer.Member("y", frame.y);
+        writer.EndObject();
     }
 
-    std::expected<ArtGenImageFrame, String> ArtGenImageFrameFromJson(const Json& json) {
-        if (!json.is_object()) {
+    std::expected<ArtGenImageFrame, String> ReadArtGenImageFrame(JsonView value) {
+        if (!value.IsObject()) {
             return std::unexpected(String("the frame must be an object"));
         }
         ArtGenImageFrame frame;
@@ -208,22 +220,30 @@ namespace BECore {
         };
         for (const Member& member : {Member{"x", &frame.x, 0}, Member{"y", &frame.y, 0}, Member{"w", &frame.w, 1}, Member{"h", &frame.h, 1}, Member{"outWidth", &frame.outWidth, 1},
                                      Member{"outHeight", &frame.outHeight, 1}}) {
-            if (FindJsonMember(json, member.key) == nullptr) {
+            if (!FindParam(value, member.key)) {
                 return std::unexpected(Format("the frame has no \"{}\"", member.key));
             }
-            auto value = WholeNumber(json, member.key, 0);
-            if (!value) {
-                return std::unexpected(value.error());
+            auto number = WholeNumber(value, member.key, 0);
+            if (!number) {
+                return std::unexpected(number.error());
             }
-            if (*value < member.least) {
+            if (*number < member.least) {
                 return std::unexpected(Format("the frame's \"{}\" must be {} or more", member.key, member.least));
             }
-            *member.target = *value;
+            *member.target = *number;
         }
         if (frame.outWidth > frame.w || frame.outHeight > frame.h) {
             return std::unexpected(String("the frame's output is bigger than its crop"));
         }
         return frame;
+    }
+
+    Json ArtGenImageFrameToJson(const ArtGenImageFrame& frame) {
+        return Detail::ArtGenDomOf([&](JsonWriter& writer) { WriteArtGenImageFrame(writer, frame); });
+    }
+
+    std::expected<ArtGenImageFrame, String> ArtGenImageFrameFromJson(const Json& json) {
+        return Detail::ArtGenReadDom(json, [](JsonView view) { return ReadArtGenImageFrame(view); });
     }
 
     std::expected<ArtGenPixels, String> ProcessArtGenImage(const ArtGenPixels& pixels, const ArtGenImageFrame& frame) {
