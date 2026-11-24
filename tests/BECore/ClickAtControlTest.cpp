@@ -1,5 +1,4 @@
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/InputControl.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -86,8 +85,8 @@ namespace BECore::Tests {
             Vector<PoolString> _actions;
         };
 
-        double Number(const Json& object, StringView key) {
-            return GetJsonNumber(object, key).value_or(-12345.0);
+        double Number(JsonView object, StringView key) {
+            return MemberOf(object, key).AsDouble().value_or(-12345.0);
         }
 
     }  // namespace
@@ -125,46 +124,21 @@ namespace BECore::Tests {
             _manager->DrawAll();
         }
 
-        Json Call(const Json& params) {
-            Json request = Json::object();
-            request["id"] = ++_nextId;
-            request["method"] = "click_at";
-            request["params"] = params;
-            Json response;
-            _service.Post(DumpJson(request), [&response](String text) {
-                auto parsed = ParseJson(text);
-                response = parsed ? std::move(*parsed) : Json();
-            });
-            _service.Drain();
-            return response;
+        /// One request whose params are the text as written: a value no `double` can hold (`1e999`), an escaped key or value and a null stand in the text
+        ControlReply Call(StringView paramsText) {
+            return CallControlText(_service, ++_nextId, "click_at", paramsText);
         }
 
-        /// One request whose params are the text as written, which a `Json` cannot hold (`1e999`, an escaped key or value)
-        Json CallText(StringView paramsText) {
-            Json response;
-            _service.Post(Format(R"({{"id":{},"method":"click_at","params":{}}})", ++_nextId, paramsText), [&response](String text) {
-                auto parsed = ParseJson(text);
-                response = parsed ? std::move(*parsed) : Json();
-            });
-            _service.Drain();
-            return response;
+        static String At(double x, double y) {
+            return Format(R"({{"x":{},"y":{}}})", x, y);
         }
 
-        static Json At(double x, double y) {
-            Json params = Json::object();
-            params["x"] = x;
-            params["y"] = y;
-            return params;
+        static JsonView Result(const ControlReply& response) {
+            return response.Result();
         }
 
-        static const Json& Result(const Json& response) {
-            static const Json kEmpty = Json::object();
-            const Json* result = FindJsonMember(response, "result");
-            return result != nullptr ? *result : kEmpty;
-        }
-
-        static bool Consumed(const Json& response) {
-            return GetJsonBool(Result(response), "consumed").value_or(false);
+        static bool Consumed(const ControlReply& response) {
+            return BoolOf(Result(response), "consumed").value_or(false);
         }
 
         ControlService _service;
@@ -185,9 +159,9 @@ namespace BECore::Tests {
         Show("Plain");
         Recorder recorder;
 
-        const Json response = Call(At(200.0, 150.0));
+        const ControlReply response = Call(At(200.0, 150.0));
 
-        ASSERT_TRUE(IsOk(response));
+        ASSERT_TRUE(response.IsOk());
         EXPECT_TRUE(Consumed(response));
         EXPECT_EQ(recorder.Count("ClickAtButton"), 1);
         EXPECT_EQ(recorder.downs, 0) << "a target took the press, the game got no raw event";
@@ -199,9 +173,9 @@ namespace BECore::Tests {
         Show("Plain");
         Recorder recorder;
 
-        const Json response = Call(At(10.0, 10.0));
+        const ControlReply response = Call(At(10.0, 10.0));
 
-        ASSERT_TRUE(IsOk(response));
+        ASSERT_TRUE(response.IsOk());
         EXPECT_FALSE(Consumed(response));
         EXPECT_EQ(recorder.Total(), 0u);
         EXPECT_EQ(recorder.downs, 1);
@@ -210,9 +184,9 @@ namespace BECore::Tests {
     TEST_F(ClickAtControlTest, TheAnswerEchoesAFloatCoordinateAsTheDoubleItWidensTo) {
         Show("Plain");
 
-        const Json response = Call(At(0.1, 0.1));
+        const ControlReply response = Call(At(0.1, 0.1));
 
-        ASSERT_TRUE(IsOk(response));
+        ASSERT_TRUE(response.IsOk());
         EXPECT_EQ(Number(Result(response), "x"), static_cast<double>(0.1f));
         EXPECT_EQ(Number(Result(response), "outputY"), static_cast<double>(0.1f));
     }
@@ -220,12 +194,10 @@ namespace BECore::Tests {
     TEST_F(ClickAtControlTest, ASceneUnitClickIsMappedThroughTheViewFitOfTheLastDraw) {
         Show("Fitted");
         Recorder recorder;
-        Json params = At(150.0, 75.0);  // the middle of the button in scene units
-        params["space"] = "scene";
 
-        const Json response = Call(params);
+        const ControlReply response = Call(R"({"x":150.0,"y":75.0,"space":"scene"})");  // the middle of the button in scene units
 
-        ASSERT_TRUE(IsOk(response));
+        ASSERT_TRUE(response.IsOk());
         EXPECT_TRUE(Consumed(response));
         EXPECT_EQ(recorder.Count("ClickAtFitted"), 1);
         EXPECT_NEAR(Number(Result(response), "x"), 150.0, kTolerance) << "the answer repeats the point as given";
@@ -237,9 +209,9 @@ namespace BECore::Tests {
         Show("Fitted");
         Recorder recorder;
 
-        const Json response = Call(At(150.0, 75.0));
+        const ControlReply response = Call(At(150.0, 75.0));
 
-        ASSERT_TRUE(IsOk(response));
+        ASSERT_TRUE(response.IsOk());
         EXPECT_FALSE(Consumed(response));
         EXPECT_EQ(recorder.Count("ClickAtFitted"), 0);
     }
@@ -260,17 +232,14 @@ namespace BECore::Tests {
     TEST_F(ClickAtControlTest, TheButtonAndThePointerAreThoseOfTheRequest) {
         Show("Plain");
         Recorder recorder;
-        Json params = At(10.0, 10.0);
-        params["button"] = "right";
-        params["which"] = kOtherPointer;
 
-        ASSERT_TRUE(IsOk(Call(params)));
+        ASSERT_TRUE(Call(Format(R"({{"x":10.0,"y":10.0,"button":"right","which":{}}})", kOtherPointer)).IsOk());
 
         EXPECT_EQ(recorder.downs, 1);
         EXPECT_EQ(recorder.lastButton, SDL_BUTTON_RIGHT);
         EXPECT_EQ(recorder.lastWhich, kOtherPointer);
 
-        EXPECT_TRUE(IsOk(Call(At(10.0, 10.0))));
+        EXPECT_TRUE(Call(At(10.0, 10.0)).IsOk());
         EXPECT_EQ(recorder.lastButton, SDL_BUTTON_LEFT) << "left and the control pointer by default";
         EXPECT_EQ(recorder.lastWhich, kControlPointerId);
     }
@@ -278,33 +247,32 @@ namespace BECore::Tests {
     TEST_F(ClickAtControlTest, ABadParameterIsRefusedBeforeAnythingIsPressed) {
         Show("Plain");
         Recorder recorder;
-        Json badSpace = At(200.0, 150.0);
-        badSpace["space"] = "world";
-        Json badButton = At(200.0, 150.0);
-        badButton["button"] = "left-ish";
-        Json negativeWhich = At(200.0, 150.0);
-        negativeWhich["which"] = -1;
-        Json fractionalWhich = At(200.0, 150.0);
-        fractionalWhich["which"] = 1.5;
-        Json missingY = Json::object();
-        missingY["x"] = 200.0;
-        Json textX = At(200.0, 150.0);
-        textX["x"] = "200";
+        // an infinity has no JSON text: the wire carries null for it
+        const StringView badParams[] = {
+            R"({"x":null,"y":150.0})",
+            R"({"x":200.0,"y":1000000000000.0})",
+            R"({"x":200.0})",
+            R"({"x":"200","y":150.0})",
+            R"({"x":200.0,"y":150.0,"space":"world"})",
+            R"({"x":200.0,"y":150.0,"button":"left-ish"})",
+            R"({"x":200.0,"y":150.0,"which":-1})",
+            R"({"x":200.0,"y":150.0,"which":1.5})",
+        };
 
-        for (const Json& params : {At(std::numeric_limits<double>::infinity(), 150.0), At(200.0, 1.0e12), missingY, textX, badSpace, badButton, negativeWhich, fractionalWhich}) {
-            EXPECT_EQ(ErrorCode(Call(params)), "invalid_params") << DumpJson(params);
+        for (const StringView params : badParams) {
+            EXPECT_EQ(Call(params).ErrorCode(), "invalid_params") << String(params).c_str();
         }
         EXPECT_EQ(recorder.Total(), 0u);
         EXPECT_EQ(recorder.downs, 0);
     }
 
-    TEST_F(ClickAtControlTest, TextThatTheDomCouldNotHoldIsReadByTheTape) {
+    TEST_F(ClickAtControlTest, TextThatNoDoubleCanHoldIsReadByTheTape) {
         Show("Plain");
         Recorder recorder;
 
-        EXPECT_EQ(ErrorCode(CallText(R"({"x":1e999,"y":150})")), "invalid_params") << "a coordinate past a double is refused as not finite, not as a parse error";
+        EXPECT_EQ(Call(R"({"x":1e999,"y":150})").ErrorCode(), "invalid_params") << "a coordinate past a double is refused as not finite, not as a parse error";
 
-        ASSERT_TRUE(IsOk(CallText(R"({"x":10,"y":10,"button":"r\u0069ght","which":-0})")));
+        ASSERT_TRUE(Call(R"({"x":10,"y":10,"button":"r\u0069ght","which":-0})").IsOk());
         EXPECT_EQ(recorder.lastButton, SDL_BUTTON_RIGHT) << "an escape in a string value is decoded";
         EXPECT_EQ(recorder.lastWhich, 0u) << "-0 is the pointer 0";
     }
@@ -317,11 +285,9 @@ namespace BECore::Tests {
         bare->Initialize();
         ASSERT_EQ(bare->GetActiveScene(), nullptr);
         EngineEnvironment::UseSceneManager(bare);
-        Json params = At(10.0, 10.0);
-        params["space"] = "scene";
 
-        EXPECT_EQ(ErrorCode(Call(params)), "no_scene");
-        EXPECT_TRUE(IsOk(Call(At(10.0, 10.0)))) << "a click in output pixels needs no scene";
+        EXPECT_EQ(Call(R"({"x":10.0,"y":10.0,"space":"scene"})").ErrorCode(), "no_scene");
+        EXPECT_TRUE(Call(At(10.0, 10.0)).IsOk()) << "a click in output pixels needs no scene";
     }
 
 }  // namespace BECore::Tests

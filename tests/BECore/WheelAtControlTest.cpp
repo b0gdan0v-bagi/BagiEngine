@@ -1,5 +1,4 @@
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/InputControl.h>
 #include <BECore/Input/UIInput.h>
@@ -45,19 +44,6 @@ namespace BECore::Tests {
             }
         };
 
-        Json Params(double x, double y) {
-            Json params = Json::object();
-            params["x"] = x;
-            params["y"] = y;
-            return params;
-        }
-
-        const Json& Result(const Json& response) {
-            static const Json kEmpty = Json::object();
-            const Json* result = FindJsonMember(response, "result");
-            return result != nullptr ? *result : kEmpty;
-        }
-
     }  // namespace
 
     class WheelAtControlTest : public ::testing::Test {
@@ -84,8 +70,8 @@ namespace BECore::Tests {
             return *_handler;
         }
 
-        Json Call(const Json& params) {
-            return CallControl(_service, ++_nextId, "wheel_at", params);
+        ControlReply Call(StringView paramsText) {
+            return CallControlText(_service, ++_nextId, "wheel_at", paramsText);
         }
 
         ControlService _service;
@@ -104,14 +90,9 @@ namespace BECore::Tests {
 
     TEST_F(WheelAtControlTest, AHandlerGetsThePositionAndTheAmountAsAsked) {
         WheelHandler& handler = Install(true);
-        Json params = Params(150.5, 40.0);
-        params["dx"] = 2.0;
-        params["dy"] = -3.0;
-        params["which"] = kOtherPointer;
+        const ControlReply response = Call(R"({"x":150.5,"y":40.0,"dx":2.0,"dy":-3.0,"which":7})");
 
-        const Json response = Call(params);
-
-        ASSERT_TRUE(IsOk(response));
+        ASSERT_TRUE(response.IsOk());
         ASSERT_EQ(handler.handled, 1);
         EXPECT_FLOAT_EQ(handler.last.mouse_x, 150.5f);
         EXPECT_FLOAT_EQ(handler.last.mouse_y, 40.0f);
@@ -119,17 +100,14 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(handler.last.y, -3.0f);
         EXPECT_EQ(handler.last.direction, SDL_MOUSEWHEEL_NORMAL);
         EXPECT_EQ(handler.last.which, kOtherPointer);
-        EXPECT_NEAR(GetJsonNumber(Result(response), "x").value_or(-1.0), 150.5, kTolerance);
-        EXPECT_NEAR(GetJsonNumber(Result(response), "y").value_or(-1.0), 40.0, kTolerance);
+        EXPECT_NEAR(NumberOf(response.Result(), "x"), 150.5, kTolerance);
+        EXPECT_NEAR(NumberOf(response.Result(), "y"), 40.0, kTolerance);
     }
 
     TEST_F(WheelAtControlTest, FlippedArrivesAsTheFlippedDirection) {
         WheelHandler& handler = Install(true);
-        Json params = Params(150.0, 40.0);
-        params["dy"] = 1.0;
-        params["flipped"] = true;
 
-        ASSERT_TRUE(IsOk(Call(params)));
+        ASSERT_TRUE(Call(R"({"x":150.0,"y":40.0,"dy":1.0,"flipped":true})").IsOk());
 
         EXPECT_EQ(handler.last.direction, SDL_MOUSEWHEEL_FLIPPED);
         EXPECT_FLOAT_EQ(handler.last.x, 0.0f) << "an absent amount is 0";
@@ -137,66 +115,51 @@ namespace BECore::Tests {
 
     TEST_F(WheelAtControlTest, AHandlerThatTakesItKeepsItFromGameCode) {
         WheelHandler& handler = Install(true);
-        Json params = Params(150.0, 40.0);
-        params["dy"] = 1.0;
 
-        const Json response = Call(params);
+        const ControlReply response = Call(R"({"x":150.0,"y":40.0,"dy":1.0})");
 
-        EXPECT_TRUE(GetJsonBool(Result(response), "consumed").value_or(false));
+        EXPECT_TRUE(BoolOf(response.Result(), "consumed").value_or(false));
         EXPECT_EQ(handler.raw, 0);
     }
 
     TEST_F(WheelAtControlTest, AHandlerThatDeclinesLetsTheRawEventThrough) {
         WheelHandler& handler = Install(false);
-        Json params = Params(150.0, 40.0);
-        params["dy"] = 1.0;
 
-        const Json response = Call(params);
+        const ControlReply response = Call(R"({"x":150.0,"y":40.0,"dy":1.0})");
 
-        ASSERT_TRUE(IsOk(response));
-        EXPECT_FALSE(GetJsonBool(Result(response), "consumed").value_or(true));
+        ASSERT_TRUE(response.IsOk());
+        EXPECT_FALSE(BoolOf(response.Result(), "consumed").value_or(true));
         EXPECT_EQ(handler.raw, 1);
     }
 
     TEST_F(WheelAtControlTest, APointOutsideTheHandlerIsNotAskedAndReachesGameCode) {
         WheelHandler& handler = Install(true);
-        Json params = Params(kHandlerRight + 50.0, 40.0);
-        params["dy"] = 1.0;
 
-        const Json response = Call(params);
+        const ControlReply response = Call(R"({"x":350.0,"y":40.0,"dy":1.0})");  // right of kHandlerRight
 
-        EXPECT_FALSE(GetJsonBool(Result(response), "consumed").value_or(true));
+        EXPECT_FALSE(BoolOf(response.Result(), "consumed").value_or(true));
         EXPECT_EQ(handler.handled, 0);
         EXPECT_EQ(handler.raw, 1);
     }
 
     TEST_F(WheelAtControlTest, BadParametersAreInvalidAndSendNothing) {
         WheelHandler& handler = Install(true);
-        const double inf = std::numeric_limits<double>::infinity();
-        Json missingY = Json::object();
-        missingY["x"] = 150.0;
-        missingY["dy"] = 1.0;
-        Json nan = Params(150.0, 40.0);
-        nan["dy"] = std::numeric_limits<double>::quiet_NaN();
-        Json huge = Params(150.0, 40.0);
-        huge["dx"] = inf;
-        Json badX = Params(150.0, 40.0);
-        badX["x"] = "left";
-        badX["dy"] = 1.0;
-        Json badFlipped = Params(150.0, 40.0);
-        badFlipped["dy"] = 1.0;
-        badFlipped["flipped"] = "yes";
-        Json badWhich = Params(150.0, 40.0);
-        badWhich["dy"] = 1.0;
-        badWhich["which"] = -1;
-        Json noAmount = Params(150.0, 40.0);
-        Json badDx = Params(150.0, 40.0);
-        badDx["dx"] = "a lot";
+        // a NaN or an infinity has no JSON text: the wire carries null for it
+        const StringView badParams[] = {
+            R"({"x":150.0,"dy":1.0})",
+            R"({"x":150.0,"y":40.0,"dy":null})",
+            R"({"x":150.0,"y":40.0,"dx":null})",
+            R"({"x":"left","y":40.0,"dy":1.0})",
+            R"({"x":150.0,"y":40.0,"dy":1.0,"flipped":"yes"})",
+            R"({"x":150.0,"y":40.0,"dy":1.0,"which":-1})",
+            R"({"x":150.0,"y":40.0})",
+            R"({"x":150.0,"y":40.0,"dx":"a lot"})",
+        };
 
-        for (const Json& params : {missingY, nan, huge, badX, badFlipped, badWhich, noAmount, badDx}) {
-            const Json response = Call(params);
-            EXPECT_FALSE(IsOk(response)) << DumpJson(params).c_str();
-            EXPECT_EQ(ErrorCode(response), "invalid_params") << DumpJson(params).c_str();
+        for (const StringView params : badParams) {
+            const ControlReply response = Call(params);
+            EXPECT_FALSE(response.IsOk()) << String(params).c_str();
+            EXPECT_EQ(response.ErrorCode(), "invalid_params") << String(params).c_str();
         }
         EXPECT_EQ(handler.handled, 0);
         EXPECT_EQ(handler.raw, 0);
