@@ -27,7 +27,7 @@ namespace BECore {
         return text;
     }
 
-    /// Whether two texts are the same JSON value, as `Json::operator==` judged the documents: the key order and the form of a number do not matter;
+    /// Whether two texts are the same JSON value, as JsonEquals judges them: the key order and the form of a number do not matter;
     /// a text that is not JSON equals no valid one. Tapes both texts, so it is not for a per-frame compare
     [[nodiscard]] inline bool SameJsonText(StringView a, StringView b) {
         JsonTape tapeA;

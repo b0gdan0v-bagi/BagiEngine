@@ -1,5 +1,4 @@
-// The helpers of the generated writer (Control/JsonWriteReflect.h): the text they write is pinned as a literal, keys in byte order. The literals were taken
-// from `JsonSerializer` + `DumpJson` of the same value (the DOM path the writer replaced). The types are written by hand here (the generated ones are in the
+// The helpers of the generated writer (Control/JsonWriteReflect.h): the text they write is pinned as a literal, keys in byte order. The types are written by hand here (the generated ones are in the
 // tests of the generator).
 
 #include <BECore/Control/JsonDeserializer.h>

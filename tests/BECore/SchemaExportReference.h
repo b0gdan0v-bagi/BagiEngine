@@ -9,9 +9,8 @@
 
 namespace BECore::Tests {
 
-    // The registry as JSON text the way `SchemaExport.cpp` built it before the reflected answers (a `Json` DOM, copied word for word, with the two changes of the
-    // protocol: a type with no parent has no `parent`, and the method flag is `isConst`), now written by hand with a `JsonWriter`, every object with its keys in byte
-    // order as the DOM sorted them. The text of the reflected answers is compared with these, so the generated writer has an oracle that shares none of its code.
+    // The registry as JSON text, written by hand with a `JsonWriter` (a type with no parent has no `parent`, the method flag is `isConst`), every object with its keys in byte
+    // order. The text of the reflected answers is compared with these, so the generated writer has an oracle that shares none of its code.
 
     inline void WriteReferenceTypeDesc(JsonWriter& writer, const TypeDesc& desc);
 

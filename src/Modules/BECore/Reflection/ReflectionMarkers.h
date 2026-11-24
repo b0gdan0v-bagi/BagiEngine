@@ -8,7 +8,7 @@
  *
  * The generated `Generated/<Stem>.gen.hpp` is included by the class's own .cpp only: it holds non-template definitions,
  * so other callers of Serialize / Deserialize / WriteJson link against them without including it. `WriteJson` writes the object
- * `Serialize` saves into a JsonSerializer, as the same bytes; a `BE_CLASS` also has `WriteJsonMembers`, which a class with a reflected parent
+ * `Serialize` saves, keys sorted; a `BE_CLASS` also has `WriteJsonMembers`, which a class with a reflected parent
  * merges with the members of the classes above it (Control/JsonWriteReflect.h).
  */
 
@@ -90,7 +90,7 @@ public:                                                                         
     virtual void Serialize(::BECore::ISerializer& s) const;                                                                                                                                            \
     /** @brief Deserialize all reflected fields from IDeserializer (read/load) */                                                                                                                      \
     virtual void Deserialize(::BECore::IDeserializer& d);                                                                                                                                              \
-    /** @brief Write the reflected fields as one JSON object (keys sorted: the bytes of JsonSerializer) */                                                                                             \
+    /** @brief Write the reflected fields as one JSON object (keys sorted, as `Serialize` saves them) */                                                                                               \
     virtual void WriteJson(::BECore::JsonWriter& w) const;                                                                                                                                             \
     /** @brief Write the members of this class into the object a JsonWriter has open, merged by key with @p outer, the classes below it (JsonWriteReflect.h) */                                        \
     virtual void WriteJsonMembers(::BECore::JsonWriter& w, ::BECore::JsonWrite::MemberMerge* outer) const;                                                                                             \
@@ -125,7 +125,7 @@ public:                                                                         
     void Serialize(::BECore::ISerializer& s) const;                                                                                                                                                    \
     /** @brief Deserialize all reflected fields from IDeserializer (read/load) */                                                                                                                      \
     void Deserialize(::BECore::IDeserializer& d);                                                                                                                                                      \
-    /** @brief Write the reflected fields as one JSON object (keys sorted: the bytes of JsonSerializer) */                                                                                             \
+    /** @brief Write the reflected fields as one JSON object (keys sorted, as `Serialize` saves them) */                                                                                               \
     void WriteJson(::BECore::JsonWriter& w) const;                                                                                                                                                     \
                                                                                                                                                                                                        \
 private:                                                                                                                                                                                               \

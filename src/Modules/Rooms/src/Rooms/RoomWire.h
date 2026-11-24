@@ -15,7 +15,7 @@ namespace BECore {
     // Wire structs, not the plain structs of `RoomProtocol.h`: those are aggregates that clients and the fuzz seeds brace-initialise and that the readers fill after
     // checking untrusted input, while a `BE_CLASS` has a virtual and the wire names differ (`kind` is lower case text, `name` and `connected` only for a human).
     // A game's own document (`view`, `actions`, `action`, `options`) is a `JsonPayload` that borrows what the writer's caller holds (the compact text of the
-    // message struct, a `Json` of a test fixture): a wire struct is a local of the `Append*Message` that fills it and never outlives that document.
+    // message struct, a fixture of a test): a wire struct is a local of the `Append*Message` that fills it and never outlives that document.
     // The texts are `TextView`s of what the writer's caller passes in (its arguments, the `LobbySnapshot`, `RoomListMessage` or `ClientMessage`) or of static names
     // (`RoomMessageTypes::k*`, `GetPhaseName`, `GetSeatKindName`), all alive for the whole call, and the two lists are `ArenaVector`s on the scratch scope the
     // `Append*Message` opens above the struct (`Reflection/CLAUDE.md`, "Answers on the scratch arena"). A view is never read back, so no wire struct is parsed into. `options` of `lobby` and of a

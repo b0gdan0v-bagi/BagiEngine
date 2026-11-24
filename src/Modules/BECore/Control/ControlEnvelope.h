@@ -8,7 +8,7 @@
 
 namespace BECore {
 
-    // The three envelopes of the wire as reflected structs: the generated `WriteJson` writes the keys in alphabetical order, as a `Json` object keeps them.
+    // The three envelopes of the wire as reflected structs: the generated `WriteJson` writes the keys in alphabetical order.
     // They are locals of the writer: every `JsonPayload` in them is a view of the client's `id` or of the handler's callback, and the texts are views of the error or the event name of the writer.
 
     /// The error of a failed call: `error` of the error envelope, and the `error` of a failed entry of `batch`. A view of the `ControlError` it was made

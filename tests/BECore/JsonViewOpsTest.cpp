@@ -1,5 +1,4 @@
-// Operations on a JsonView (Control/JsonViewOps.h): equality, copy into a writer and JSON Pointer. The expected texts were taken from what the DOM (nlohmann's
-// `Json`, the reference these operations replaced) gave for the same text.
+// Operations on a JsonView (Control/JsonViewOps.h): equality, copy into a writer and JSON Pointer. The expected texts are literals: the bytes and answers are the contract.
 
 #include <BECore/Control/JsonViewOps.h>
 #include <Common/AllocCheck.h>
@@ -86,7 +85,7 @@ namespace BECore::Tests {
     }
 
     TEST(JsonViewOpsTest, ASignedAndAnUnsignedBeyondInt64AreNeverEqual) {
-        // The DOM wraps the unsigned around and calls -1 equal to 18446744073709551615
+        // A reader that wrapped the unsigned around would call -1 equal to 18446744073709551615
         EXPECT_FALSE(Equal("-1", "18446744073709551615"));
     }
 

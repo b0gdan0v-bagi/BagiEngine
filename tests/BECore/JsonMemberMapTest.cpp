@@ -1,4 +1,4 @@
-// JsonMemberMap (Control/JsonMemberMap.h): the bytes of Write() are the contract: the members in byte order, the layout nlohmann's dump gave.
+// JsonMemberMap (Control/JsonMemberMap.h): the bytes of Write() are the contract: the members in byte order, compact.
 
 #include <BECore/Control/JsonMemberMap.h>
 #include <Common/JsonDoc.h>

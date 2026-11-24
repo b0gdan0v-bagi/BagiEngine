@@ -7,7 +7,7 @@
 namespace BECore {
 
     // What an `ISeatedGame` answers, as the game's own `BE_CLASS` structs derived from these bases (`Games/CLAUDE.md`, "Seats"). The room holds a
-    // `UniquePtr` to the base and writes it through the virtual generated `WriteJson`, so it needs no game type and builds no `Json`; the keys of
+    // `UniquePtr` to the base and writes it through the virtual generated `WriteJson`, so it needs no game type and builds no tree; the keys of
     // the base and of the derived struct merge in sorted order. The bases have no field: they are the type the registry lists the game's structs under.
     // Plain `Vector` / `String` fields, never the arena types: the room carries the answer from the game to the hub across calls.
 

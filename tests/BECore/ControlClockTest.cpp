@@ -26,7 +26,7 @@ namespace BECore::Tests {
             return text;
         }
 
-        /// The clock after the two frames of the fixture, as the DOM path dumped it (the float of the fixed step widened to a double)
+        /// The clock after the two frames of the fixture, as the wire writes it (the float of the fixed step widened to a double)
         constexpr StringView kClockText = R"({"deltaTime":0.125,"fixedDeltaTime":0.01666666753590107,"frame":2,"totalTime":0.25})";
 
         class ControlClockTest : public ::testing::Test {

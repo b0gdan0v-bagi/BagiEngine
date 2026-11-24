@@ -6,7 +6,7 @@
 namespace BECore {
 
     /**
-     * @brief Checked readers of the `params` of a control call, the ones `GetJson*` are over a `Json`
+     * @brief Checked readers of the `params` of a control call
      *
      * @p params is the view a handler got from `ControlCall`: an object. Any other value, an absent key or a value of the wrong type reads as
      * nothing and never asserts, because the text is a client's. A handler that has to tell "absent" from "wrong type" asks FindParam first

@@ -1,5 +1,5 @@
-// The text of the small built-in answers (`ping`, `status`, `step`, `pause`, `resume`): written with JsonWriter, and pinned to the bytes the `Json` DOM wrote
-// before it (so a drift of a key or of a number's text fails here).
+// The text of the small built-in answers (`ping`, `status`, `step`, `pause`, `resume`): written with JsonWriter, and pinned as literal bytes
+// (so a drift of a key or of a number's text fails here).
 
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlCall.h>

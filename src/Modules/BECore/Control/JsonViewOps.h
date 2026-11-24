@@ -8,7 +8,7 @@
 namespace BECore {
 
     /**
-     * @brief Whether two values of tapes are the same JSON value, as `Json::operator==` judged the documents the games compared.
+     * @brief Whether two values of tapes are the same JSON value, as the games compare their documents.
      *
      * Objects are equal when they have the same member count and every member of @p a is found in @p b with an equal value, so the order of the
      * keys does not matter; arrays item by item; strings by their decoded text (an escape equals the character it stands for); numbers by value
@@ -31,7 +31,7 @@ namespace BECore {
     void WriteJson(JsonWriter& writer, JsonView value);
 
     /**
-     * @brief WriteJson() with the members of every object in byte order of the decoded key: the bytes `Json::dump()` wrote (the DOM sorted its keys).
+     * @brief WriteJson() with the members of every object in byte order of the decoded key: the bytes of every file the engine writes.
      *
      * For the files an editor writes and the params a person types, where the bytes are a contract. Of two equal keys the first is written. Copies
      * the keys of each object into a scratch of its own, so it is for files and typed commands, never a hot path.
@@ -41,7 +41,7 @@ namespace BECore {
     /**
      * @brief The value that the JSON pointer @p pointer (RFC 6901) names in @p document, or nullopt when the path leads nowhere.
      *
-     * The same answers and messages as FindJsonPointer(const Json&, ...) of Json.h: a missing key, an index past the end and a step through a scalar
+     * A missing key, an index past the end and a step through a scalar
      * are absent; text that is not a pointer is an `invalid_params` error, whatever @p document is. The empty pointer names @p document itself.
      */
     [[nodiscard]] std::expected<Optional<JsonView>, ControlError> FindJsonPointer(JsonView document, StringView pointer);

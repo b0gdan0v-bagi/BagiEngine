@@ -10,7 +10,7 @@ namespace BECore {
     /// The insets of @p safe inside a window of @p width by @p height window units; rounding never makes one negative
     [[nodiscard]] WindowInsets SafeAreaInsets(const Rect& safe, int width, int height);
 
-    /// The safe area of the window as `status` and `set_window` answer it, in window units; the floats are widened to double, which is what the `Json` DOM stored
+    /// The safe area of the window as `status` and `set_window` answer it, in window units; the floats are widened to double, as the clock's are
     struct ControlWindowInsets {
         BE_CLASS(ControlWindowInsets)
 

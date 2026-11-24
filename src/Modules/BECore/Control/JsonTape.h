@@ -32,7 +32,7 @@ namespace BECore {
     /**
      * @brief The tokens of one JSON text, made in one pass with no recursion: the document the JSON readers walk instead of a DOM.
      *
-     * The grammar is RFC 8259 and the one nlohmann's `parse` accepts: a single value with whitespace around it; no trailing comma, leading zero,
+     * The grammar is RFC 8259: a single value with whitespace around it; no trailing comma, leading zero,
      * `+`, `NaN` or comment; no control character in a string; only the legal escapes, a `\u` surrogate pair joined and a lone surrogate refused;
      * UTF-8 in a string checked. The differences are the nesting (at most ReaderLimits::kMaxJsonNesting open containers), the size
      * (ReaderLimits::kMaxJsonDocumentBytes) and a UTF-8 byte order mark, which is refused.
@@ -75,8 +75,8 @@ namespace BECore {
     };
 
     /// True when `[` and `{` outside strings nest deeper than @p maxDepth. A scan that does not recurse and does not judge the syntax (the parser does).
-    /// A DOM parse (ParseJson) accepts any depth, but copying, comparing and dumping a DOM recurse once per level and can overflow a reader thread's stack,
-    /// so a reader of outside text that keeps or copies it as a DOM checks the depth first
+    /// The tape needs no such check (it is iterative and stops at ReaderLimits::kMaxJsonNesting); a transport uses it to refuse a deep request before
+    /// anything else reads it, because a reader that recurses once per level can overflow a reader thread's stack
     [[nodiscard]] bool IsJsonNestedDeeperThan(StringView text, size_t maxDepth);
 
 }  // namespace BECore

@@ -7,7 +7,7 @@
 namespace BECore {
 
     // The answers of DemoCardGame: `BE_CLASS` structs of plain `Vector` / `String` fields (the room carries them from the game to the hub, so no arena
-    // type). Their keys are the wire's: the tests compare the written text with a hand-built `Json` reference.
+    // type). Their keys are the wire's: the tests compare the written text with a hand-written reference.
 
     /// A card on the table and the seat that played it
     struct DemoTablePlay {

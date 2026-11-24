@@ -18,8 +18,8 @@ namespace BECore {
         // clang-format off
         /// The UTF-8 decoder of nlohmann's `serializer::decode`: Copyright (c) 2008-2009 Bjoern Hoehrmann <bjoern@hoehrmann.de>, MIT (the licence
         /// text is in the header of JsonDoubleText.cpp), http://bjoern.hoehrmann.de/utf-8/decoder/dfa/. 256 byte classes, then the transitions
-        /// of every state. The replacement of broken sequences below follows nlohmann's `dump_escaped` step by step, so the number of U+FFFD
-        /// for each kind of broken sequence is the one the DOM writer gave
+        /// of every state. The replacement of broken sequences below follows the decoder's states step by step, so the number of U+FFFD
+        /// for each kind of broken sequence is fixed (the tests pin it)
         constexpr Array<uint8_t, 400> kUtf8Dfa = {{
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -332,7 +332,7 @@ namespace BECore {
             WriteDouble(value);
             return;
         }
-        // The shortest text that reads back to the same float, taken as a double, as JsonSerializer does: the double of 0.1f is 0.10000000149011612
+        // The shortest text that reads back to the same float, taken as a double, as the serializers do: the double of 0.1f is 0.10000000149011612
         Array<char, kFloatTextBytes> text{};
         const auto written = std::to_chars(text.data(), text.data() + text.size(), value);
         double shortest = static_cast<double>(value);

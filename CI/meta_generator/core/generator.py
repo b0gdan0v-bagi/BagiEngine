@@ -64,8 +64,8 @@ def format_field_attributes(attrs: FieldAttrs) -> str:
 def json_write_fields(fields) -> List[dict]:
     """The fields the generated WriteJson writes: in the sorted order of their serialized names, one per name.
 
-    The serialized name is the field name without its leading underscore. JsonSerializer keeps its members in a sorted map and assigns
-    by key, so the object it writes has the keys in sorted order and, for two fields of one serialized name, the later declared one.
+    The serialized name is the field name without its leading underscore. The object Serialize saves has the keys in sorted order (a later write of a name replaces an earlier one), so the writer
+    writes them sorted too and, for two fields of one serialized name, the later declared one.
     """
     by_key = {}
     for f in fields:

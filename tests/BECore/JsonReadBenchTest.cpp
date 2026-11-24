@@ -1,6 +1,6 @@
 // What reading a message costs through one kept `JsonDeserializer`: it loads the text and reads from the tape into one object. Prints one line per case and
-// asserts nothing about time; the allocations need macos-profile. The numbers of the DOM path it replaced (`ParseJson` and a reader over the DOM) are in the
-// notes of the entry `json-deserializer` (the measurement of stage 4).
+// asserts nothing about time; the allocations need macos-profile. The numbers of the DOM path it replaced are in the
+// notes of the entry `json-deserializer`.
 //
 // Run by hand: `BagiEngineTests --gtest_also_run_disabled_tests --gtest_filter=JsonReadBenchTest.DISABLED_*`
 

@@ -1,5 +1,5 @@
 // get_state, list_actions and the state_changed push write through the writing forms of IControllableGame (WriteState, WriteActions): the bytes are
-// those the same documents had as a `Json` (keys in byte order).
+// pinned as literals (keys in byte order).
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>

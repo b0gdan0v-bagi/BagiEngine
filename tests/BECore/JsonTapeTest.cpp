@@ -1,5 +1,4 @@
-// JsonTape (Control/JsonTape.h): the tokens of a text and the grammar it refuses. The accepted and refused texts below were checked against `ParseJson`
-// (the DOM the tape replaced) when it was in the tree, and `.claude/rules/json-tape.md` lists where the two differ.
+// JsonTape (Control/JsonTape.h): the tokens of a text and the grammar it refuses. `.claude/rules/json-tape.md` lists the rules of the reader.
 
 #include <BECore/Control/JsonTape.h>
 #include <BECore/Reflection/ReaderLimits.h>

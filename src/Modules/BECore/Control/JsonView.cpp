@@ -230,7 +230,7 @@ namespace BECore {
         if (const Optional<double> value = StringUtils::ParseNumber<double>(text)) {
             return value;
         }
-        // from_chars refuses a value out of the range of double. nlohmann's strtod gives infinity or zero for it, and the caller decides
+        // from_chars refuses a value out of the range of double. `strtod` gives infinity or zero for it, and the caller decides
         // what an infinite number means; a text is copied only on this path, which no real message takes
         if (text.size() > kMaxFallbackNumberBytes) {
             return std::nullopt;

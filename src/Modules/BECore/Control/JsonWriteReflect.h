@@ -15,7 +15,7 @@
  * @file JsonWriteReflect.h
  * @brief What the generated `WriteJson` of a `BE_CLASS` / `BE_EVENT` calls: one reflected field written straight into a JsonWriter.
  *
- * The text is the one `JsonSerializer` + `DumpJson` give for the same value (keys sorted, the shapes of Reflection/CLAUDE.md, "JSON shapes of
+ * The text is what `Serialize` saves for the same value (keys sorted, the shapes of Reflection/CLAUDE.md, "JSON shapes of
  * the reflection pair"); the generator sorts the keys, these helpers write the values.
  *
  * **Native** (nothing allocates beyond the growth of the caller's String, the sorted scratch of a large hash map aside): numbers and `bool`, strings (`String`, `FixedString`, any
@@ -36,7 +36,7 @@
  * A class with a reflected parent is native: its members merge with its parent's (MemberMerge). A member that writes nothing (an empty `Optional`, a null
  * pointer) hides a member of the same key in a parent, and in a factory object the `type` the pointer writes, where the DOM path keeps that one.
  *
- * This header must stay light, it is included by every generated file: the Json type lives in JsonWriteReflect.cpp, never include Json.h here.
+ * This header must stay light, it is included by every generated file: the bridge's tape and serializer live in JsonWriteReflect.cpp, never include them here.
  */
 
 namespace BECore::JsonWrite {
@@ -61,8 +61,8 @@ namespace BECore::JsonWrite {
         {T::GetStaticFieldCount()}->std::convertible_to<size_t>;
     };
 
-    /// The members of `JsonSerializer`'s Write set. A type outside it (a `char`, a `long` on a platform where it is no `int64_t`) does not compile on the DOM
-    /// path either, so it is not widened here
+    /// The members of the Write set of `Serialize`. A type outside it (a `char`, a `long` on a platform where it is no `int64_t`) does not compile through
+    /// the bridge either, so it is not widened here
     template <typename T>
     concept IsJsonNumber = std::same_as<T, bool> || std::same_as<T, int8_t> || std::same_as<T, uint8_t> || std::same_as<T, int16_t> || std::same_as<T, uint16_t> || std::same_as<T, int32_t> ||
                            std::same_as<T, uint32_t> || std::same_as<T, int64_t> || std::same_as<T, uint64_t> || std::same_as<T, float> || std::same_as<T, double>;
@@ -116,7 +116,7 @@ namespace BECore::JsonWrite {
     /**
      * @brief The members of one derived level of a class chain, waiting to be written between those of the classes above it.
      *
-     * `JsonSerializer` of a class with a reflected parent gets one object: the parent's members first, then the child's, by key, so the keys come out
+     * `Serialize` of a class with a reflected parent saves one object: the parent's members first, then the child's, by key, so the keys come out
      * sorted over the whole chain and a key that child and parent both have holds the child's value. A streaming writer cannot sort, so the
      * generated `WriteJsonMembers` of the root class (the one with no reflected parent) writes its sorted members, and before each one asks its
      * @c outer (the level just below it) to write what sorts before that key. The level of a derived class holds its sorted keys and a

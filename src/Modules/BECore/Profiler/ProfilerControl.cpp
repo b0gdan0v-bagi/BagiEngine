@@ -21,7 +21,7 @@ namespace BECore {
         constexpr int64_t kDefaultTopZones = 20;
         constexpr int64_t kMaxTopZones = 1000;
 
-        /// Writes an object of @p count members whose names @p nameOf gives in no particular order, in byte order of the names as a `Json` object keeps them
+        /// Writes an object of @p count members whose names @p nameOf gives in no particular order, in byte order of the names
         /// (the bytes a client has always seen). Up to kInlineMembers names sort on the stack
         template <typename TName, typename TWrite>
         void WriteMembersByName(JsonWriter& writer, size_t count, TName nameOf, TWrite writeValue) {

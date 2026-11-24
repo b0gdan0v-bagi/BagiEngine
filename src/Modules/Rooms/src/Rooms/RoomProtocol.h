@@ -194,9 +194,9 @@ namespace BECore {
         bool more = false;
     };
 
-    // Every Append*Message appends to @p out and never clears it, like AppendJson; Make*Message returns the same text in a new String. Each writer opens
+    // Every Append*Message appends to @p out and never clears it; Make*Message returns the same text in a new String. Each writer opens
     // a scratch scope of its own for the wire struct's lists, so the heap `String` of the caller is the only memory that outlives it. The keys of
-    // a message are in alphabetical order on purpose: those are the bytes the `Json` DOM wrote before, and a client of another language may
+    // a message are in alphabetical order on purpose: those are the bytes of every message the protocol has written, and a client of another language may
     // rely on them, so a change of the order is a protocol decision of the owner.
 
     /// `joined {room, player, token, seat, host}`. The token is a secret: this message goes to its owner only.

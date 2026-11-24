@@ -1,4 +1,4 @@
-"""The WriteJson that the template writes (reflection.gen.hpp.j2): the same object JsonSerializer saves, key by key."""
+"""The WriteJson that the template writes (reflection.gen.hpp.j2): the object Serialize saves, key by key."""
 
 import textwrap
 

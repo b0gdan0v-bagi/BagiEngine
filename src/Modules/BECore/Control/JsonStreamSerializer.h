@@ -14,7 +14,7 @@ namespace BECore {
     /**
      * @brief Writes what `Ser::Save` and the generated `Serialize` give straight into a `JsonWriter`: no DOM
      *
-     * The shapes are those of `JsonSerializer` (Reflection/CLAUDE.md, "JSON shapes of the reflection pair"): Write and WriteAttribute are the same
+     * The shapes are the ones of the reflection pair (Reflection/CLAUDE.md, "JSON shapes of the reflection pair"): Write and WriteAttribute are the same
      * member, BeginObject a member object, BeginArray an array member whose elements are objects, and an element that holds only a scalar `value`
      * is that scalar. The document is one object written into the place the writer is at; Finish() closes it.
      *

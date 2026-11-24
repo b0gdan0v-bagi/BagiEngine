@@ -27,13 +27,13 @@ ctest --preset macos-debug-all       # every test (build-project.md, "Tests")
 BECore → Events → TaskSystem → RemoteControl → SDL / Vulkan → Games → Rooms → RoomClient → RoomServer → Runtime (src/Application, src/Widgets) → game → executable
 ```
 
-**Stack:** CMake 3.31+ / Ninja, SDL3, ImGui, EnTT, EASTL, pugixml, nlohmann/json (control API only), stb, dr_flac, fmt, GoogleTest.
+**Stack:** CMake 3.31+ / Ninja, SDL3, ImGui, EnTT, EASTL, pugixml, stb, dr_flac, fmt, GoogleTest.
 
 ```
 src/Application/  the application loop (RuntimeModule)
 src/Widgets/      editor panels and frame widgets, no game UI (.claude/rules/widgets-module.md)
 src/Modules/      engine modules; RoomServer only with ENGINE_WITH_REMOTE_CONTROL, RmlUiHost only with ENGINE_UI_RMLUI
-                  vendored, never edited, left out of searches: EABase, EnTT, fmt, imgui, nlohmann, pugixml, RmlUi, stb, dr_libs, tracy
+                  vendored, never edited, left out of searches: EABase, EnTT, fmt, imgui, pugixml, RmlUi, stb, dr_libs, tracy
 config/, assets/  engine content; a game's file of the same name wins (FileSystem/CLAUDE.md)
 tools/            Python and helper tools (tools/CLAUDE.md)
 ```

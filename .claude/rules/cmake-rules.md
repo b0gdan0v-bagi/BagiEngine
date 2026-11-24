@@ -26,7 +26,6 @@ These are included directly via `add_subdirectory()`:
 | pugixml | `src/Modules/pugixml/` | XML parsing |
 | ImGui | `src/Modules/imgui/` | Immediate mode GUI |
 | fmt | `src/Modules/fmt/` | Formatting library |
-| nlohmann/json | `src/Modules/nlohmann/` | JSON for the external control API; the `nlohmann_json` target defines `JSON_NOEXCEPTION` (use it only through `BECore/Control/Json.h`) |
 | stb | `src/Modules/stb/` | `stb_truetype.h` for glyph metrics and rasterization (INTERFACE target `stb`; the implementation is compiled only in `BECore/Text/Font.cpp`; trusted font files only) |
 | RmlUi | `src/Modules/RmlUi/` | RmlUi 6.3 core (MIT), the third candidate for authoring UI screens. STATIC target `rmlui_core` (alias `RmlUi::Core`), added only when `ENGINE_UI_RMLUI=ON` and after the `ENGINE_NO_EXCEPTIONS` block (like GoogleTest). Its CMake file replaces the upstream ones; `RMLUI_FONT_ENGINE` is `none` by default (the host installs `RmlUiFontEngine` over the engine's `Font`, so no FreeType is needed) or `freetype` (RmlUi's own engine, needs FreeType installed; the host does not use it). The module `RmlUiHost` (`src/Modules/RmlUiHost/`) is its host |
 | Tracy client | `src/Modules/tracy/` | Tracy Profiler v0.15.0 client (BSD-3), only with `ENGINE_PROFILER_TRACY=ON`: `public/TracyClient.cpp` is a source of `BECoreModule` (no target of its own) compiled with the Tracy definitions and without the PCH, like the one file that includes it, `Profiler/Backends/TracyProfilerBackend.cpp` (filtered out of the glob otherwise). Version and viewer: its `README.md` |
@@ -60,7 +59,7 @@ These are included directly via `add_subdirectory()`:
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/EABase)
 
 # 2. SDL3 (git submodule), then SDL_image, then Vulkan-Headers
-# 3. Other vendored libraries: EnTT, pugixml, imgui, fmt, nlohmann, stb
+# 3. Other vendored libraries: EnTT, pugixml, imgui, fmt, stb, dr_libs
 # 4. GoogleTest (if ENGINE_BUILD_TESTS) -- after the ENGINE_NO_EXCEPTIONS block, see below
 # 5. Reflection functions (add_reflection_target, be_add_game_reflection)
 # 6. Engine modules (BECore first!)

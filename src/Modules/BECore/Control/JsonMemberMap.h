@@ -13,7 +13,7 @@ namespace BECore {
      * know and writes back, or that is made from `key=value` words.
      *
      * A value is kept as the text of one JSON value, so a nested document costs no tree and survives a round trip untouched in meaning; Write()
-     * writes it again with its objects sorted, the bytes `Json::dump()` gave. For files and typed commands, never a hot path: every call may allocate.
+     * writes it again with its objects sorted (keys in byte order). For files and typed commands, never a hot path: every call may allocate.
      *
      * Copyable and movable (it holds only strings).
      */

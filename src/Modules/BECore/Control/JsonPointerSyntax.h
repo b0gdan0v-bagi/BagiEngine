@@ -5,7 +5,7 @@
 
 namespace BECore::Detail {
 
-    /// The syntax of an RFC 6901 pointer, shared by the two FindJsonPointer overloads (the DOM's in Json.h and the view's in JsonViewOps.h) so
+    /// The syntax of an RFC 6901 pointer, shared by FindJsonPointer and CheckJsonPointer (JsonViewOps.h) so
     /// they answer the same errors with the same messages.
     inline constexpr char kPointerSeparator = '/';
 

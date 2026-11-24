@@ -1,6 +1,5 @@
 // Disabled benchmarks of the writer paths (`.claude/rules/perf-project.md`): allocations and time of a message written with `JsonWriter`. The numbers of the DOM
-// path they replaced (a `Json` document, `dump`, a copy into the transport's `String`) are in the notes of the entry `json-deserializer` (the measurement of
-// stage 4); nothing here builds a DOM any more.
+// path they replaced are in the notes of the entry `json-deserializer`.
 
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlCall.h>

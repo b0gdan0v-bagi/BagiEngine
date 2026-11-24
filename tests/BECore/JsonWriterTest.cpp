@@ -1,6 +1,5 @@
-// JsonWriter (Control/JsonWriter.h): the bytes it writes, pinned as literal texts. The expected texts were taken from nlohmann's
-// `dump(indent, ' ', false, error_handler_t::replace)`, which the writer is byte-identical to; the exhaustive and the random cases pin a digest of
-// everything written, taken from the same oracle.
+// JsonWriter (Control/JsonWriter.h): the bytes it writes, pinned as literal texts. The exhaustive and the random cases pin a digest of
+// everything written.
 
 #include <BECore/Assert/AssertEvent.h>
 #include <BECore/Control/JsonWriter.h>
@@ -204,7 +203,7 @@ namespace BECore::Tests {
         }
     }
 
-    // The digests below were taken from nlohmann's dump of the same strings while it was in the tree: any change of a byte written for any of them changes it
+    // Any change of a byte written for any of the inputs below changes its digest
     TEST(JsonWriterTest, EveryByteAndEveryPairOfBytesAreWrittenAsTheDomDumpedThem) {
         Digest digest;
         for (int first = 0; first < 256; ++first) {
