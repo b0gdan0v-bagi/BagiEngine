@@ -8,7 +8,7 @@
 
 namespace BECore {
 
-    /// A filled rect at the node's transform. It holds the field; SceneDrawSystem draws it from the registry (SceneRenderData.h).
+    /// A filled rect at the node's transform. It holds the fields; SceneDrawSystem draws it from them at draw time.
     class QuadRendererComponent : public IComponent {
         BE_CLASS(QuadRendererComponent, ICON = square)
     public:
@@ -16,6 +16,9 @@ namespace BECore {
 
         QuadRendererComponent() = default;
         ~QuadRendererComponent() override = default;
+        bool HasOnDraw() const override {
+            return false;
+        }
 
         BE_REFLECT_FIELD Color _color{255, 0, 0, 255};
         BE_REFLECT_FIELD BlendMode _blend = BlendMode::Alpha;  ///< how the quad blends with what is behind it; Alpha is straight alpha

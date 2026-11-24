@@ -8,7 +8,6 @@
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneDrawSystem.h>
-#include <BECore/Scene/SceneRenderData.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
 #include <Generated/SceneDrawSystemTest.gen.hpp>
@@ -562,14 +561,12 @@ namespace BECore::Tests {
         EXPECT_FALSE(registry.get<SceneDrawItem>(b->GetEntity()).hidden);
     }
 
-    TEST_F(SceneDrawSystemTest, TheMirrorOfAHiddenNodeIsStillSynced) {
+    TEST_F(SceneDrawSystemTest, AFieldChangedWhileANodeIsHiddenShowsWhenItIsShownAgain) {
         auto node = AddQuad(*_scene, nullptr, "A", 1.0f);
         node->SetEditorFlags(EditorFlags::Hidden);
 
-        // The mirror of a hidden node is still synced, so showing it again needs no extra frame
         Require(node->GetComponent<TransformComponent>())._x = 7.0f;
-        Draw();
-        EXPECT_EQ(_scene->GetRegistry().get<TransformData>(node->GetEntity()).x, 7.0f);
+        EXPECT_TRUE(Draw().empty());
 
         node->SetEditorFlags(EditorFlags::None);
         EXPECT_EQ(Draw(), (Vector<float>{7.0f}));

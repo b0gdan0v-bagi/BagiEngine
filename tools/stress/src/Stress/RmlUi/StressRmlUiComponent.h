@@ -52,6 +52,11 @@ namespace BECore::Stress {
         StressRmlUiComponent();
         ~StressRmlUiComponent() override;
 
+        /// It has no OnDraw(): its panels draw through the RmlUi host
+        bool HasOnDraw() const override {
+            return false;
+        }
+
         void OnAttached() override;
 
         /// The file of the panel, a virtual path; call it before the first update (the panel is made then). Empty (the default) is `assets/ui/stress_rmlui.rml`

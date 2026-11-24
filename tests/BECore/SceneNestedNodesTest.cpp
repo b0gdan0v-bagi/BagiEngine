@@ -6,7 +6,6 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
-#include <Events/SceneEvents.h>
 #include <entt/entt.hpp>
 #include <gtest/gtest.h>
 
@@ -97,7 +96,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(nested);
 
         // The counter subscribes in OnAttached: a second OnAttached would count an update twice
-        SceneEvents::SceneUpdateEvent::Emit();
+        _manager->UpdateAll();
 
         EXPECT_EQ(top->updateCount, 1);
         EXPECT_EQ(nested->updateCount, 1);

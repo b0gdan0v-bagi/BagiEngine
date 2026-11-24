@@ -19,7 +19,7 @@ namespace BECore {
     Scene::~Scene() = default;
 
     void Scene::Initialize() {
-        _drawRanksValid = false;
+        InvalidateDrawOrder();
         _rootNode = BECore::New<SceneNode>();
         _rootNode->_name = "Root"_intern;
         _rootNode->_scene = this;
@@ -39,11 +39,21 @@ namespace BECore {
             SceneEvents::SceneViewChangedEvent::Emit(this, GetActiveView());
         }
         const Time& time = CoreManager::GetTime();
+        // Read once: a handler that switches the active scene does not cut the pass in progress
+        const bool active = IsActive();
+        const SceneEvents::SceneFixedUpdateEvent fixedEvent(time.GetFixedDeltaTime());
         for (uint32_t step = 0; step < time.GetFixedStepCount(); ++step) {
             BE_PROFILE_SCOPE("SceneFixedUpdateEvent");
+            if (active) {
+                _fixedUpdaters.Run(&fixedEvent);
+            }
             SceneEvents::SceneFixedUpdateEvent::Emit(time.GetFixedDeltaTime());
         }
         BE_PROFILE_SCOPE("SceneUpdateEvent");
+        if (active) {
+            const SceneEvents::SceneUpdateEvent frameEvent(time.GetDeltaTime());
+            _frameUpdaters.Run(&frameEvent);
+        }
         SceneEvents::SceneUpdateEvent::Emit(time.GetDeltaTime());
     }
 
@@ -128,11 +138,48 @@ namespace BECore {
     }
 
     void Scene::NodeLayerChanged(PassKey<SceneNode>) {
+        InvalidateDrawOrder();
+    }
+
+    void Scene::ComponentsChanged(PassKey<SceneNode>) {
+        ASSERT(!_drawing, "A component was added or removed while the scene was drawing");
+        _drawListValid = false;
+    }
+
+    void Scene::EditorFlagsChanged(PassKey<SceneNode>) {
+        ASSERT(!_drawing, "The editor flags of a node were changed while the scene was drawing");
+        _drawListValid = false;
+    }
+
+    bool Scene::IsDrawListValid() const {
+        return _drawListValid;
+    }
+
+    void Scene::InvalidateDrawOrder() {
+        ASSERT(!_drawing, "A node was added, removed, moved or put on another layer while the scene was drawing");
         _drawRanksValid = false;
+        _drawListValid = false;
     }
 
     void Scene::DrawRanksWritten(PassKey<SceneDrawSystem>) {
         _drawRanksValid = true;
+    }
+
+    uint32_t Scene::GetDrawListBuilds() const {
+        return _drawListBuilds;
+    }
+
+    SceneDrawList& Scene::GetDrawList(PassKey<SceneDrawSystem>) {
+        return _drawList;
+    }
+
+    void Scene::DrawListBuilt(PassKey<SceneDrawSystem>) {
+        _drawListValid = true;
+        ++_drawListBuilds;
+    }
+
+    void Scene::SetDrawing(bool drawing, PassKey<SceneDrawSystem>) {
+        _drawing = drawing;
     }
 
     void Scene::PickView(float outputWidth, float outputHeight) {
@@ -215,7 +262,7 @@ namespace BECore {
     }
 
     IntrusivePtr<SceneNode> Scene::CreateNode(PoolString name, SceneNode* parent) {
-        _drawRanksValid = false;
+        InvalidateDrawOrder();
         auto node = BECore::New<SceneNode>();
         node->_name = name;
         node->_entity = _registry->create();
@@ -252,7 +299,7 @@ namespace BECore {
         }
 
         auto node = DeserializeNode(expanded.document_element(), Format("{} instance of {}", _name.CStr(), ref));
-        _drawRanksValid = false;
+        InvalidateDrawOrder();
         node->WireToScene(this, target);
         const size_t place = eastl::min(index, target->_children.size());
         target->_children.insert(target->_children.begin() + static_cast<ptrdiff_t>(place), node);
@@ -282,7 +329,7 @@ namespace BECore {
             return false;
         }
 
-        _drawRanksValid = false;
+        InvalidateDrawOrder();
         auto& oldSiblings = node._parent->_children;
         const auto it = eastl::find_if(oldSiblings.begin(), oldSiblings.end(), [&node](const IntrusivePtr<SceneNode>& child) { return child.Get() == &node; });
         if (it == oldSiblings.end()) {
@@ -329,7 +376,7 @@ namespace BECore {
         copy->SetName(FreeSiblingName(*parent, Format("{} (copy", node.GetName().CStr()), ")"));
         copy->SetSourceRef(node.GetSourceRef());
 
-        _drawRanksValid = false;
+        InvalidateDrawOrder();
         copy->WireToScene(this, parent);
         const auto at = eastl::find_if(parent->_children.begin(), parent->_children.end(), [&node](const IntrusivePtr<SceneNode>& child) { return child.Get() == &node; });
         parent->_children.insert(at == parent->_children.end() ? at : at + 1, copy);
@@ -350,13 +397,49 @@ namespace BECore {
     }
 
     void Scene::DestroyNodeEntities(SceneNode& node, PassKey<SceneNode>) {
-        _drawRanksValid = false;
+        InvalidateDrawOrder();
         DestroyEntities(node);
+    }
+
+    void Scene::AddUpdater(SceneUpdateKind kind, IComponent& component, SceneUpdateInvoker invoke, PassKey<IComponent>) {
+        // A node that RemoveChild() took out keeps its scene (and so does a child made under it), but no exit of the list would ever reach its components
+        const SceneNode* top = &component.GetNode();
+        while (top->_parent != nullptr) {
+            top = top->_parent;
+        }
+        if (top != _rootNode.Get()) {
+            return;
+        }
+        GetUpdateList(kind).Add(component, invoke);
+    }
+
+    void Scene::RemoveUpdaters(IComponent& component, PassKey<SceneNode>) {
+        DropUpdaters(component);
+    }
+
+    void Scene::DropUpdaters(IComponent& component) {
+        // The lists scan every entry: a scene with no updating component pays nothing for an edit
+        if (_frameUpdaters.IsEmpty() && _fixedUpdaters.IsEmpty()) {
+            return;
+        }
+        _frameUpdaters.Remove(component);
+        _fixedUpdaters.Remove(component);
+    }
+
+    size_t Scene::GetUpdaterCount(SceneUpdateKind kind) const {
+        return kind == SceneUpdateKind::Frame ? _frameUpdaters.GetCount() : _fixedUpdaters.GetCount();
+    }
+
+    SceneUpdateList& Scene::GetUpdateList(SceneUpdateKind kind) {
+        return kind == SceneUpdateKind::Frame ? _frameUpdaters : _fixedUpdaters;
     }
 
     void Scene::DestroyEntities(SceneNode& node) {
         for (const auto& child : node.GetChildren()) {
             DestroyEntities(*child);
+        }
+        for (const auto& component : node.GetComponents()) {
+            DropUpdaters(*component);
         }
         if (_registry->valid(node._entity)) {
             _registry->destroy(node._entity);

@@ -16,6 +16,9 @@ namespace BECore {
 
         TransformComponent() = default;
         ~TransformComponent() override = default;
+        bool HasOnDraw() const override {
+            return false;
+        }
 
         BE_REFLECT_FIELD float _x = 0.0f;
         BE_REFLECT_FIELD float _y = 0.0f;

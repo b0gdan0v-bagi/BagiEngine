@@ -16,6 +16,9 @@ namespace BECore {
 
         SpriteRendererComponent() = default;
         ~SpriteRendererComponent() override = default;
+        bool HasOnDraw() const override {
+            return false;
+        }
 
         BE_REFLECT_FIELD PoolString _spriteId;
         BE_REFLECT_FIELD PoolString _texturePath;
@@ -42,7 +45,7 @@ namespace BECore {
          */
         void SetTexture(IntrusivePtr<ITexture> texture);
 
-        /// The texture handle (empty when the sprite has none), for SceneDrawSystem to mirror into SpriteDrawData.
+        /// The texture handle (empty when the sprite has none), read by SceneDrawSystem at draw time.
         const ResourceHandle<ITexture>& GetTexture() const {
             return _texture;
         }

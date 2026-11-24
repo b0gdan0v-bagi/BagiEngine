@@ -18,8 +18,8 @@ namespace BECore::Stress {
 
     /**
      * @brief The scene `StressEntities`: `StressState::GetCount()` child nodes of this node, each with a `TransformComponent` and one running
-     *        tween that moves it on a circle of its own. No node has a renderer component, so nothing is drawn: the scene costs the update
-     *        of the nodes, the tweens and the draw system's walk.
+     *        tween that moves it on a circle of its own. No node has a renderer component, so the scene's draw list is empty and
+     *        the scene costs the update of the nodes and the tweens.
      *
      * The nodes are made like `StressSpritesComponent`'s, when `StressState::Version()` moved. A tween's `onComplete` starts it again, and a restart
      * is a `TweenManager::Start` (a handle), so a frame in which some tween ends allocates; at the benchmark counts that is every frame.
@@ -31,6 +31,9 @@ namespace BECore::Stress {
     public:
         StressEntitiesComponent() = default;
         ~StressEntitiesComponent() override = default;
+        bool HasOnDraw() const override {
+            return false;
+        }
 
         void OnAttached() override;
 

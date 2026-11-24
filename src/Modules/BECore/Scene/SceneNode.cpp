@@ -62,6 +62,9 @@ namespace BECore {
         component->_scene = _scene;
         component->_node = this;
         _components.push_back(component);
+        if (_scene) {
+            _scene->ComponentsChanged({});
+        }
         component->Initialize();
         component->OnAttached();
     }
@@ -70,7 +73,14 @@ namespace BECore {
         auto it = eastl::find_if(_components.begin(), _components.end(), [&typeName](const IntrusivePtr<IComponent>& comp) { return PoolString::Intern(comp->GetTypeMeta().typeName) == typeName; });
 
         if (it != _components.end()) {
+            // Before the erase: it may drop the last reference
+            if (_scene) {
+                _scene->RemoveUpdaters(**it, {});
+            }
             _components.erase(it);
+            if (_scene) {
+                _scene->ComponentsChanged({});
+            }
         }
     }
 
@@ -131,6 +141,9 @@ namespace BECore {
     }
 
     void SceneNode::SetEditorFlags(EditorFlags flags) {
+        if (_scene && flags != _editorFlags) {
+            _scene->EditorFlagsChanged({});
+        }
         _editorFlags = flags;
     }
 

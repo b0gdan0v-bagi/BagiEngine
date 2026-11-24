@@ -15,7 +15,6 @@
 #include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
-#include <Events/SceneEvents.h>
 #include <entt/entt.hpp>
 #include <gtest/gtest.h>
 
@@ -254,7 +253,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(counter);
         EXPECT_EQ(counter->updateCount, 0);
 
-        SceneEvents::SceneUpdateEvent::Emit();
+        _manager->UpdateAll();
 
         EXPECT_EQ(counter->updateCount, 1);
     }

@@ -19,6 +19,9 @@ namespace BECore {
     public:
         ClipRectComponent() = default;
         ~ClipRectComponent() override = default;
+        bool HasOnDraw() const override {
+            return false;
+        }
     };
 
 }  // namespace BECore

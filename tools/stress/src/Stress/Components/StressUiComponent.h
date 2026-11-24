@@ -27,6 +27,9 @@ namespace BECore::Stress {
     public:
         StressUiComponent() = default;
         ~StressUiComponent() override = default;
+        bool HasOnDraw() const override {
+            return false;
+        }
 
         void OnAttached() override;
 

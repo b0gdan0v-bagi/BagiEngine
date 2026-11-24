@@ -18,6 +18,21 @@ namespace BECore::Tests {
 
     namespace {
 
+        /// A plain Subscribe: not bound to a scene, so it hears the event Scene::Update() emits after its lists
+        class UpdateEventRecorder : public SubscriptionHolder {
+        public:
+            UpdateEventRecorder() {
+                Subscribe<SceneEvents::SceneUpdateEvent, &UpdateEventRecorder::OnUpdate>(this);
+            }
+
+            int count = 0;
+
+        private:
+            void OnUpdate(const SceneEvents::SceneUpdateEvent&) {
+                ++count;
+            }
+        };
+
         // Position of the next OnDraw call in the draw pass; the fixture resets it before every test.
         int g_nextDrawIndex = 0;
 
@@ -233,17 +248,39 @@ namespace BECore::Tests {
         EXPECT_EQ(b->updateCount, 1);
     }
 
-    TEST_F(SceneEventsTest, EventEmittedOutsideTheManagerStillReachesOnlyTheActiveScene) {
+    TEST_F(SceneEventsTest, SceneUpdateReachesOnlyTheComponentsOfTheSceneItRuns) {
         ASSERT_NO_FATAL_FAILURE(LoadScenes(kCountingScenesXml));
         auto a = GetProbeComponent<SceneEventCounter>("A"_intern);
         auto b = GetProbeComponent<SceneEventCounter>("B"_intern);
         ASSERT_TRUE(a);
         ASSERT_TRUE(b);
 
-        SceneEvents::SceneUpdateEvent::Emit();
-
+        GetScene("A"_intern).Update();
         EXPECT_EQ(a->updateCount, 1);
         EXPECT_EQ(b->updateCount, 0);
+
+        // Scene B is not the active one: a direct Update() calls no component of it
+        GetScene("B"_intern).Update();
+        EXPECT_EQ(b->updateCount, 0);
+    }
+
+    TEST_F(SceneEventsTest, AHandEmitReachesNoSceneBoundUpdateHandler) {
+        ASSERT_NO_FATAL_FAILURE(LoadScenes(kCountingScenesXml));
+        auto a = GetProbeComponent<SceneEventCounter>("A"_intern);
+        ASSERT_TRUE(a);
+
+        SceneEvents::SceneUpdateEvent::Emit();
+
+        EXPECT_EQ(a->updateCount, 0);
+    }
+
+    TEST_F(SceneEventsTest, APlainSubscriberStillReceivesTheEventFromSceneUpdate) {
+        ASSERT_NO_FATAL_FAILURE(LoadScenes(kCountingScenesXml));
+        UpdateEventRecorder recorder;
+
+        _manager->UpdateAll();
+
+        EXPECT_EQ(recorder.count, 1);
     }
 
     TEST_F(SceneEventsTest, ClickEmitsOnlyTheActiveScenesAction) {

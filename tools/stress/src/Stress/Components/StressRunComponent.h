@@ -44,6 +44,9 @@ namespace BECore::Stress {
 
         StressRunComponent() = default;
         ~StressRunComponent() override = default;
+        bool HasOnDraw() const override {
+            return false;
+        }
 
         void OnAttached() override;
 
