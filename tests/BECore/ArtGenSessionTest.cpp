@@ -525,14 +525,16 @@ namespace BECore::Tests {
         const ArtGenPreset* sprite = session.FindPreset("sprite");
         ASSERT_NE(sprite, nullptr);
         EXPECT_EQ(sprite->source, "engine");
-        EXPECT_EQ(GetJsonString(sprite->data, "workflow"), Optional<String>("sdxl_cutout"));
+        EXPECT_EQ(sprite->data, R"({"preset":1,"prompt":"{subject}","workflow":"sdxl_cutout"})");
         const ArtGenWorkflow* basic = session.FindWorkflow("sdxl_basic");
         ASSERT_NE(basic, nullptr);
         const ArtGenWorkflowInput* sampler = basic->FindInput("sampler");
         ASSERT_NE(sampler, nullptr);
-        EXPECT_EQ(sampler->defaultValue, Json("euler"));
-        EXPECT_EQ(sampler->choices, Json::array({"euler", "ddim"}));
-        EXPECT_EQ(Require(basic->FindInput("steps")).defaultValue, Json(25));
+        EXPECT_EQ(sampler->defaultValue, ArtGenInputValue::FromText("euler"));
+        ASSERT_EQ(sampler->choices.size(), 2u);
+        EXPECT_EQ(sampler->choices[0], ArtGenInputValue::FromText("euler"));
+        EXPECT_EQ(sampler->choices[1], ArtGenInputValue::FromText("ddim"));
+        EXPECT_EQ(Require(basic->FindInput("steps")).defaultValue, ArtGenInputValue::FromInteger(25));
         EXPECT_EQ(Require(session.FindWorkflow("broken")).error, "no inputs");
 
         // The same lists again change nothing the panel draws

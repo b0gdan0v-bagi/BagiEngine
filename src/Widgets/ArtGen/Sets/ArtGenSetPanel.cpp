@@ -5,6 +5,7 @@
 #include <BECore/Resource/ResourceManager.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenDrag.h>
+#include <Widgets/ArtGen/ArtGenInterimJson.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/Reference/ArtGenReference.h>
@@ -323,7 +324,8 @@ namespace BECore {
                 // A saved preset goes by name, so its provenance names the file; anything else goes inline as a draft
                 if (form.preset.IsDirty()) {
                     request.preset = String(form.preset.name);
-                    request.presetData = form.preset.ToJson();
+                    // Interim: a set keeps a `Json` draft until WP 4
+                    request.presetData = Detail::ArtGenDraftOf(form.preset.ToJsonText());
                 } else {
                     request.preset = form.preset.GetBaseName();
                 }

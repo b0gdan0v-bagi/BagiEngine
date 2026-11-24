@@ -1,5 +1,6 @@
 #include <BECore/File/File.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/ArtGen/ArtGenInterimJson.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/ArtGenSessionControl.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetStore.h>
@@ -304,7 +305,7 @@ namespace BECore {
         }
         const bool draft = !request.presetData.is_null();
         if (draft) {
-            if (auto shape = CheckArtGenPresetShape(request.presetData); !shape) {
+            if (auto shape = Detail::ArtGenReadDom(request.presetData, [](JsonView view) { return CheckArtGenPresetShape(view); }); !shape) {
                 return std::unexpected(Format("the draft is not a preset: {}", shape.error()));
             }
             if (request.preset.empty()) {

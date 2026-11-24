@@ -8,6 +8,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNode.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/ArtGen/ArtGenInterimJson.h>
 #include <Widgets/ArtGen/ArtGenSessionControl.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
 #include <chrono>
@@ -51,10 +52,12 @@ namespace BECore {
     }
 
     ArtGenImageSettings ArtGenSession::ImageSettingsOf(const Json& presetData, StringView preset) const {
+        Json savedData;  // Interim: the saved preset's text as a DOM, until the drafts are text (WP 4)
         const Json* data = &presetData;
         if (presetData.is_null()) {
             const ArtGenPreset* saved = FindPreset(preset);
-            data = saved != nullptr ? &saved->data : nullptr;
+            savedData = saved != nullptr ? Detail::ArtGenDraftOf(StringView(saved->data)) : Json();
+            data = &savedData;
         }
         const Json* accept = data != nullptr ? FindJsonMember(*data, "accept") : nullptr;
         if (accept == nullptr) {
@@ -68,10 +71,12 @@ namespace BECore {
     }
 
     String ArtGenSession::AtlasOf(const Json& presetData, StringView preset) const {
+        Json savedData;  // Interim: the saved preset's text as a DOM, until the drafts are text (WP 4)
         const Json* data = &presetData;
         if (presetData.is_null()) {
             const ArtGenPreset* saved = FindPreset(preset);
-            data = saved != nullptr ? &saved->data : nullptr;
+            savedData = saved != nullptr ? Detail::ArtGenDraftOf(StringView(saved->data)) : Json();
+            data = &savedData;
         }
         const Optional<String> group = data != nullptr ? GetJsonString(*data, "atlas") : Optional<String>();
         return group && IsValidSpriteName(StringView(*group)) ? *group : String();
@@ -195,7 +200,7 @@ namespace BECore {
 
     std::expected<uint32_t, String> ArtGenSession::RequestDraft(StringView name, const Json& preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants,
                                                                 Optional<ArtGenReference> reference) {
-        if (auto shape = CheckArtGenPresetShape(preset); !shape) {
+        if (auto shape = Detail::ArtGenReadDom(preset, [](JsonView view) { return CheckArtGenPresetShape(view); }); !shape) {
             return std::unexpected(Format("the draft is not a preset: {}", shape.error()));
         }
         return Queue(name.empty() ? StringView("draft") : name, preset, subject, count, seed, keepVariants, std::move(reference));
@@ -315,7 +320,7 @@ namespace BECore {
         if (!IsValidSpriteName(name)) {
             return std::unexpected(String("a preset name is 1 to 64 of A-Z a-z 0-9 _ -"));
         }
-        if (auto shape = CheckArtGenPresetShape(preset); !shape) {
+        if (auto shape = Detail::ArtGenReadDom(preset, [](JsonView view) { return CheckArtGenPresetShape(view); }); !shape) {
             return std::unexpected(shape.error());
         }
         if (_gameRoot.empty()) {
@@ -326,7 +331,7 @@ namespace BECore {
             return std::unexpected(Format("cannot make {}: {}", folder.View(), made.error()));
         }
         const Path path = folder / Format("{}.json", name);
-        if (auto written = WriteFileAtomically(path, FormatArtGenPresetFile(preset)); !written) {
+        if (auto written = WriteFileAtomically(path, Detail::ArtGenReadDom(preset, [](JsonView view) { return FormatArtGenPresetFile(view); })); !written) {
             return std::unexpected(written.error());
         }
         // Shown at once as the game's own; the service checks it at the look the next poll asks for
@@ -337,7 +342,7 @@ namespace BECore {
         if (const ArtGenWorkflow* workflow = FindWorkflow(StringView(GetJsonString(preset, "workflow").value_or(String()))); workflow != nullptr) {
             saved.kind = workflow->kind;
         }
-        saved.data = preset;
+        saved.data = DumpJson(preset);  // Interim: WP 4
         auto existing = std::find_if(_status.presets.begin(), _status.presets.end(), [&](const ArtGenPreset& known) { return StringView(known.name) == name; });
         if (existing != _status.presets.end()) {
             *existing = std::move(saved);
@@ -487,7 +492,7 @@ namespace BECore {
             preset.kind = StringOr(item, "kind", "image");
             preset.error = StringOr(item, "error");
             if (const Json* data = FindJsonMember(item, "preset"); data != nullptr && data->is_object()) {
-                preset.data = *data;
+                preset.data = DumpJson(*data);  // Interim: WP 5
             }
             if (!preset.name.empty()) {
                 _status.presets.push_back(std::move(preset));
@@ -509,10 +514,12 @@ namespace BECore {
                     input.name = String(FromStd(name));
                     if (described.is_object()) {
                         if (const Json* value = FindJsonMember(described, "default"); value != nullptr) {
-                            input.defaultValue = *value;
+                            input.defaultValue = Detail::ArtGenReadDom(*value, [](JsonView view) { return ArtGenInputValue::Read(view); });  // Interim: WP 5
                         }
                         if (const Json* choices = FindJsonMember(described, "choices"); choices != nullptr && choices->is_array()) {
-                            input.choices = *choices;
+                            for (const Json& choice : *choices) {
+                                input.choices.push_back(Detail::ArtGenReadDom(choice, [](JsonView view) { return ArtGenInputValue::Read(view); }));  // Interim: WP 5
+                            }
                         }
                     }
                     workflow.inputs.push_back(std::move(input));

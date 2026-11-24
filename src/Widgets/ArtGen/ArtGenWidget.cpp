@@ -13,6 +13,7 @@
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenAtlasAccept.h>
 #include <Widgets/ArtGen/ArtGenDrag.h>
+#include <Widgets/ArtGen/ArtGenInterimJson.h>
 #include <Widgets/ArtGen/ArtGenLaunch.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/ArtGenVerdict.h>
@@ -90,22 +91,6 @@ namespace BECore {
                 const float low = std::clamp(waveform[i * 2], -1.0f, 1.0f);
                 const float high = std::clamp(waveform[i * 2 + 1], -1.0f, 1.0f);
                 drawList->AddLine(ImVec2(x, middle - high * half), ImVec2(x, middle - low * half + 1.0f), color);
-            }
-        }
-
-        /// A JSON value as the form shows it: a string without quotes, anything else as JSON
-        void FormatJsonValue(const Json& value, char* out, size_t size) {
-            if (value.is_string()) {
-                const auto& text = value.get_ref<const std::string&>();  //-NoStd: nlohmann holds a std::string
-                std::snprintf(out, size, "%.*s", static_cast<int>(text.size()), text.data());
-            } else if (value.is_number_integer()) {
-                std::snprintf(out, size, "%lld", static_cast<long long>(value.get<int64_t>()));
-            } else if (value.is_number_float()) {
-                std::snprintf(out, size, "%g", value.get<double>());
-            } else if (value.is_boolean()) {
-                std::snprintf(out, size, "%s", value.get<bool>() ? "true" : "false");
-            } else {
-                out[0] = '\0';
             }
         }
 
@@ -468,7 +453,8 @@ namespace BECore {
             const Optional<int64_t> seed = _randomSeed ? Optional<int64_t>() : Optional<int64_t>(_seed);
             // A saved preset goes by name, so its provenance names the file; anything else goes inline as a draft
             const Optional<ArtGenReference> reference = images ? session.GetReferenceSlot() : Optional<ArtGenReference>();
-            auto result = _form.IsDirty() ? session.RequestDraft(StringView(_form.name), _form.ToJson(), StringView(_subject), _count, seed, _keepVariants, reference)
+            // Interim: the session takes a `Json` draft until WP 4
+            auto result = _form.IsDirty() ? session.RequestDraft(StringView(_form.name), Detail::ArtGenDraftOf(_form.ToJsonText()), StringView(_subject), _count, seed, _keepVariants, reference)
                                           : session.Request(StringView(_form.GetBaseName()), StringView(_subject), _count, seed, _keepVariants, reference);
             _requestError = result ? String() : result.error();
         }
@@ -501,7 +487,7 @@ namespace BECore {
         if (_form.IsEmpty()) {
             // The first preset that loads, else a new one on the first workflow, once the service has said what there is
             for (const auto& preset : presets) {
-                if (preset.error.empty() && preset.data.is_object()) {
+                if (preset.error.empty() && !preset.data.empty()) {
                     _form.Load(preset);
                     break;
                 }
@@ -518,7 +504,7 @@ namespace BECore {
                 char label[192];
                 std::snprintf(label, sizeof(label), "%s%s%s  (%s%s)", preset.error.empty() ? "" : ICON_LC_CIRCLE_ALERT " ", StringView(preset.kind) == kKindAudio ? ICON_LC_AUDIO_LINES " " : "",
                               preset.title.c_str(), preset.name.c_str(), preset.source == "engine" ? ", engine" : "");
-                ImGui::BeginDisabled(!preset.data.is_object());
+                ImGui::BeginDisabled(preset.data.empty());
                 if (ImGui::Selectable(label, preset.name == _form.GetBaseName())) {
                     // Picking another preset drops what the form had unsaved
                     _form.Load(preset);
@@ -600,7 +586,8 @@ namespace BECore {
     }
 
     void ArtGenWidget::SaveForm(ArtGenSession& session, StringView name) {
-        auto saved = session.SavePreset(name, _form.ToJson());
+        // Interim: the session takes a `Json` draft until WP 4
+        auto saved = session.SavePreset(name, Detail::ArtGenDraftOf(_form.ToJsonText()));
         _formMessageIsError = !saved.has_value();
         if (saved) {
             std::snprintf(_form.name, sizeof(_form.name), "%.*s", static_cast<int>(name.size()), name.data());
@@ -755,7 +742,7 @@ namespace BECore {
     void ArtGenWidget::DrawSizeFields(const ArtGenWorkflow& workflow) {
         const auto defaultOf = [&](StringView name) {
             const ArtGenWorkflowInput* input = workflow.FindInput(name);
-            return input != nullptr && input->defaultValue.is_number_integer() ? static_cast<int32_t>(input->defaultValue.get<int64_t>()) : 0;
+            return input != nullptr && input->defaultValue.kind == ArtGenInputKind::Integer ? static_cast<int32_t>(input->defaultValue.integer) : 0;
         };
         int32_t size[2] = {_form.width > 0 ? _form.width : defaultOf("width"), _form.height > 0 ? _form.height : defaultOf("height")};
         bool changed = false;
@@ -775,45 +762,45 @@ namespace BECore {
     }
 
     void ArtGenWidget::DrawInputField(const ArtGenWorkflowInput& input) {
-        const Json* override = _form.FindParam(StringView(input.name));
-        const Json& value = override != nullptr ? *override : input.defaultValue;
+        const ArtGenInputValue* override = _form.FindParam(StringView(input.name));
+        const ArtGenInputValue& value = override != nullptr ? *override : input.defaultValue;
         const char* label = input.name.c_str();
         ImGui::PushID(label);
-        if (input.choices.is_array() && !input.choices.empty()) {
+        if (!input.choices.empty()) {
             char current[160];
-            FormatJsonValue(value, current, sizeof(current));
+            value.ToText(current, sizeof(current));
             if (ImGui::BeginCombo(label, current)) {
-                for (const Json& choice : input.choices) {
+                for (const ArtGenInputValue& choice : input.choices) {
                     char text[160];
-                    FormatJsonValue(choice, text, sizeof(text));
+                    choice.ToText(text, sizeof(text));
                     if (ImGui::Selectable(text, choice == value)) {
                         _form.SetParam(StringView(input.name), choice);
                     }
                 }
                 ImGui::EndCombo();
             }
-        } else if (value.is_boolean()) {
-            bool flag = value.get<bool>();
+        } else if (value.kind == ArtGenInputKind::Bool) {
+            bool flag = value.flag;
             if (ImGui::Checkbox(label, &flag)) {
-                _form.SetParam(StringView(input.name), Json(flag));
+                _form.SetParam(StringView(input.name), ArtGenInputValue::FromBool(flag));
             }
-        } else if (value.is_number_integer()) {
-            int64_t number = value.get<int64_t>();
+        } else if (value.kind == ArtGenInputKind::Integer) {
+            int64_t number = value.integer;
             ScopedMonoFont mono;
             if (ImGui::InputScalar(label, ImGuiDataType_S64, &number)) {
-                _form.SetParam(StringView(input.name), Json(number));
+                _form.SetParam(StringView(input.name), ArtGenInputValue::FromInteger(number));
             }
-        } else if (value.is_number_float()) {
-            double number = value.get<double>();
+        } else if (value.kind == ArtGenInputKind::Number) {
+            double number = value.number;
             ScopedMonoFont mono;
             if (ImGui::InputDouble(label, &number, 0.0, 0.0, "%.3f")) {
-                _form.SetParam(StringView(input.name), Json(number));
+                _form.SetParam(StringView(input.name), ArtGenInputValue::FromNumber(number));
             }
         } else {
             char text[kInputTextSize];
-            FormatJsonValue(value, text, sizeof(text));
+            value.ToText(text, sizeof(text));
             if (ImGui::InputText(label, text, sizeof(text))) {
-                _form.SetParam(StringView(input.name), MakeJsonString(StringView(text)));
+                _form.SetParam(StringView(input.name), ArtGenInputValue::FromText(StringView(text)));
             }
         }
         ItemTooltip(override != nullptr ? "Set by this preset" : "The workflow's own value");
