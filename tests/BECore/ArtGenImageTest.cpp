@@ -344,9 +344,9 @@ namespace BECore::Tests {
 
     TEST(ArtGenImageTest, APngWrittenUnderANonAsciiFolderReadsBackAndLeavesNoTemporary) {
         TestTempFolder folder("ArtGenImageUtf8");
-        const std::filesystem::path file = std::filesystem::path(ToStd(folder.PathOf("caf\xC3\xA9"))) / "pi\xC3\xA8"
-                                                                                                        "ce.png";
-        std::filesystem::create_directories(file.parent_path());
+        const Path file = Path(folder.PathOf("caf\xC3\xA9")) / "pi\xC3\xA8"
+                                                               "ce.png";
+        MakeDirectory(file.Parent());
         ArtGenPixels pixels = MakePixels(3, 2);
         SetPixel(pixels, 2, 1, {10, 20, 30, 200});
 
@@ -355,7 +355,7 @@ namespace BECore::Tests {
         const auto loaded = ReadArtGenPng(file);
         ASSERT_TRUE(loaded.has_value()) << loaded.error().c_str();
         EXPECT_TRUE(loaded->rgba == pixels.rgba);
-        EXPECT_FALSE(std::filesystem::exists(std::filesystem::path(file) += ".tmp"));
+        EXPECT_FALSE(PathExists(Path(Format("{}.tmp", file.View()))));
         EXPECT_FALSE(ReadArtGenPng(Path(folder.PathOf("missing.png"))).has_value());
     }
 

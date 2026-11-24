@@ -10,7 +10,6 @@
 #include <Widgets/TextureEditor/SpriteAtlas.h>
 #include <Widgets/TextureEditor/SpriteImage.h>
 #include <cstdint>
-#include <filesystem>
 #include <gtest/gtest.h>
 #include <utility>
 
@@ -66,7 +65,7 @@ namespace BECore::Tests {
     class ArtGenGameFolder {
     public:
         /// @p tempPrefix names the folder (`TestTempDirectory`), so two test files never share one
-        explicit ArtGenGameFolder(const String& tempPrefix) : _root(TestTempDirectory(tempPrefix)), _resolver{_root} {
+        explicit ArtGenGameFolder(const String& tempPrefix) : _root(Path(TestTempDirectory(tempPrefix))), _resolver{_root} {
             MakeEmptyDirectory(_root / "assets" / "artgen");
         }
         ~ArtGenGameFolder() {
@@ -75,7 +74,7 @@ namespace BECore::Tests {
         ArtGenGameFolder(const ArtGenGameFolder&) = delete;
         ArtGenGameFolder& operator=(const ArtGenGameFolder&) = delete;
 
-        [[nodiscard]] std::filesystem::path Resolve(StringView virtualPath) const {
+        [[nodiscard]] Path Resolve(StringView virtualPath) const {
             return _resolver(virtualPath);
         }
 
@@ -100,7 +99,7 @@ namespace BECore::Tests {
         }
 
         [[nodiscard]] bool Exists(StringView virtualPath) const {
-            return std::filesystem::exists(Resolve(virtualPath));
+            return PathExists(Resolve(virtualPath));
         }
 
         [[nodiscard]] RgbaImage Atlas(StringView virtualPath) const {
@@ -111,14 +110,14 @@ namespace BECore::Tests {
 
     private:
         struct Resolver {
-            std::filesystem::path root;
+            Path root;
 
-            std::filesystem::path operator()(StringView virtualPath) const {
-                return root / ToStd(virtualPath);
+            Path operator()(StringView virtualPath) const {
+                return root / virtualPath;
             }
         };
 
-        std::filesystem::path _root;
+        Path _root;
         Resolver _resolver;
     };
 
