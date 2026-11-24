@@ -268,11 +268,13 @@ namespace BECore::Tests {
         constexpr uint64_t kVersion = 42;
         const Json view = MakeSeatView();
         const Json actions = MakeSeatActions();
+        const String viewText = DumpJson(view);
+        const String actionsText = DumpJson(actions);
         const LobbySnapshot lobby = MakeBenchLobby();
         const RoomListMessage list = MakeBenchRoomList();
 
         Print(kPrefix, "view-dom", MeasureRoomDom([&] { return RoomMessageReference::MakeViewMessage(kRoom, 1, kVersion, false, view, actions); }));
-        Print(kPrefix, "view-writer", MeasureRoomWriter([&](String& out) { AppendViewMessage(out, kRoom, 1, kVersion, false, view, actions); }));
+        Print(kPrefix, "view-writer", MeasureRoomWriter([&](String& out) { AppendViewMessage(out, kRoom, 1, kVersion, false, viewText, actionsText); }));
         Print(kPrefix, "lobby-dom", MeasureRoomDom([&] { return RoomMessageReference::MakeLobbyMessage(lobby); }));
         Print(kPrefix, "lobby-writer", MeasureRoomWriter([&](String& out) { AppendLobbyMessage(out, lobby); }));
         Print(kPrefix, "rooms-dom", MeasureRoomDom([&] { return RoomMessageReference::MakeRoomListMessage(list); }));

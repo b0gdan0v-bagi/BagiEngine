@@ -76,7 +76,7 @@ namespace BECore {
               Connected,       // the transport opened
               Joined,          // `joined`: a room was created or entered
               LobbyChanged,    // GetLobby() changed
-              ViewChanged,     // GetView() / GetActions() changed
+              ViewChanged,     // GetViewText() / GetActionsText() changed
               Error,           // `error` from the server, or a bad server message: code, message, ref
               Left,            // `left`: no longer in the room, code is the reason
               ConnectionLost,  // the connection of a room ended: willRetry says whether the client will bring it back (else Closed follows)
@@ -116,7 +116,7 @@ namespace BECore {
      * @brief The client of a room server: hosts or joins a room, follows the lobby and the view, sends the player's actions.
      *
      * A game component owns one and calls Poll() once per frame **on the main thread**, then DrainEvents(); no callback ever comes from
-     * a network thread, so nothing is locked. The client keeps `view` and `actions` as the server sent them (Json) and reads no game: the
+     * a network thread, so nothing is locked. The client keeps `view` and `actions` as compact JSON text and reads no game: the
      * server is authoritative and the client only tells the game when something changed. The commands are asked of the server and their
      * outcome comes as events (`Joined`, `Error`, ...); a command returns an error itself only when it cannot be sent at all.
      *
@@ -235,12 +235,12 @@ namespace BECore {
             return _hasView;
         }
 
-        /// What the game says this seat sees and may send, as the server sent it; empty objects before the first `view`
-        [[nodiscard]] const Json& GetView() const {
+        /// What the game says this seat sees and may send, as the compact JSON text of the server's value; `{}` and `[]` before the first `view`
+        [[nodiscard]] const String& GetViewText() const {
             return _view;
         }
 
-        [[nodiscard]] const Json& GetActions() const {
+        [[nodiscard]] const String& GetActionsText() const {
             return _actions;
         }
 
@@ -346,8 +346,8 @@ namespace BECore {
         bool _hasView = false;
         /// Reads the server's texts and checks the documents the caller passes in; nothing keeps a view of it
         JsonTape _tape;
-        Json _view = Json::object();
-        Json _actions = Json::array();
+        String _view = "{}";
+        String _actions = "[]";
         uint64_t _viewVersion = 0;
         bool _finished = false;
         RoomSession _session;

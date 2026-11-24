@@ -545,7 +545,7 @@ namespace BECore::Tests {
         play["type"] = "play";
         actions.push_back(play);
 
-        const Json message = ParseOrNull(MakeViewMessage("ABCDE", 1, 42, false, view, actions));
+        const Json message = ParseOrNull(MakeViewMessage("ABCDE", 1, 42, false, DumpJson(view), DumpJson(actions)));
         EXPECT_EQ(GetJsonString(message, "type"), "view");
         EXPECT_EQ(GetJsonString(message, "room"), "ABCDE");
         EXPECT_EQ(GetJsonInt(message, "seat"), 1);
@@ -586,7 +586,7 @@ namespace BECore::Tests {
         const Vector<String> messages = {
             MakeJoinedMessage("ABCDE", 1, "t", 0, false),
             MakeLobbyMessage(LobbySnapshot{}),
-            MakeViewMessage("ABCDE", 0, 0, false, Json::object(), Json::array()),
+            MakeViewMessage("ABCDE", 0, 0, false, "{}", "[]"),
             MakeErrorMessage("x", "y"),
             MakeLeftMessage("z"),
             MakePongMessage(),
@@ -734,16 +734,25 @@ namespace BECore::Tests {
         play["card"] = 2;
         const Json actions = Json::array({play});
 
-        const auto parsed = ParseServerMessage(MakeViewMessage("ABCDE", 1, 42, true, view, actions));
+        const auto parsed = ParseServerMessage(MakeViewMessage("ABCDE", 1, 42, true, DumpJson(view), DumpJson(actions)));
         const auto* read = ServerAs<ViewMessage>(parsed);
         ASSERT_NE(read, nullptr);
         EXPECT_EQ(read->room, "ABCDE");
         EXPECT_EQ(read->seat, 1);
         EXPECT_EQ(read->version, 42u);
         EXPECT_TRUE(read->finished);
-        EXPECT_EQ(read->view, view);
-        EXPECT_EQ(read->actions, actions);
+        EXPECT_EQ(read->view, DumpJson(view));
+        EXPECT_EQ(read->actions, DumpJson(actions));
         EXPECT_EQ(GetServerMessageType(*parsed), "view");
+    }
+
+    TEST(RoomProtocolTest, AViewIsKeptAsCompactTextOfTheServersValuesInTheirOrder) {
+        const auto parsed =
+            ParseServerMessage(R"({ "v" : 1, "type" : "view", "room" : "ABCDE", "seat" : 0, "version" : 1, "finished" : false, "view" : { "z" : [ 1, "a\"b" ], "a" : { } }, "actions" : [ ] })");
+        const auto* read = ServerAs<ViewMessage>(parsed);
+        ASSERT_NE(read, nullptr);
+        EXPECT_EQ(read->view, R"({"z":[1,"a\"b"],"a":{}})");
+        EXPECT_EQ(read->actions, "[]");
     }
 
     TEST(RoomProtocolTest, ParseServerMessageReadsErrorsWithAndWithoutRef) {
@@ -941,13 +950,13 @@ namespace BECore::Tests {
         }
         Json view = Json::object();
         view["hand"] = hand;
-        const String text = MakeViewMessage("ABCDE", 0, 5, false, view, Json::array());
+        const String text = MakeViewMessage("ABCDE", 0, 5, false, DumpJson(view), "[]");
         ASSERT_GT(text.size(), RoomLimits::kMaxMessageBytes);
         ASSERT_LT(text.size(), RoomLimits::kMaxServerMessageBytes);
         const auto parsedView = ParseServerMessage(text);
         const auto* read = ServerAs<ViewMessage>(parsedView);
         ASSERT_NE(read, nullptr);
-        EXPECT_EQ(read->view, view);
+        EXPECT_EQ(read->view, DumpJson(view));
     }
 
     // ---- `rooms`: the answer to list_rooms ----------------------------------------------------------------------------------------

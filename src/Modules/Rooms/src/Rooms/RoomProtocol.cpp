@@ -161,16 +161,6 @@ namespace BECore {
             return text.empty() ? kEmptyDocument : StringView(text.data(), text.size());
         }
 
-        /// The bridge of the `view` and `actions` of a `ViewMessage`, which are still a `Json`: removed with their text form (the next step of the slice).
-        /// A document the tape accepted and the DOM refuses (`1e999`) is the `bad_message` it was before the tape
-        [[nodiscard]] std::expected<Json, ControlError> PayloadToJson(JsonView payload) {
-            auto parsed = ParseJson(payload.Raw());
-            if (!parsed) {
-                return BadMessage("the message is not valid JSON");
-            }
-            return std::move(*parsed);
-        }
-
         /// A document as compact text: what a message keeps of the game's `options` and `action` (blanks of the client's text are dropped)
         [[nodiscard]] String CompactText(JsonView document) {
             String text;
@@ -545,16 +535,8 @@ namespace BECore {
             if (!view || !actions) {
                 return BadMessage("'view' and 'actions' must be there");
             }
-            auto viewDocument = PayloadToJson(*view);
-            if (!viewDocument) {
-                return std::unexpected(viewDocument.error());
-            }
-            auto actionsDocument = PayloadToJson(*actions);
-            if (!actionsDocument) {
-                return std::unexpected(actionsDocument.error());
-            }
-            message.view = std::move(*viewDocument);
-            message.actions = std::move(*actionsDocument);
+            message.view = CompactText(*view);
+            message.actions = CompactText(*actions);
             return ServerMessage(std::move(message));
         }
 
@@ -831,23 +813,23 @@ namespace BECore {
         return out;
     }
 
-    void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions) {
+    void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, StringView viewJson, StringView actionsJson) {
         ScratchScope scratch;
         RoomWireView wire;
-        wire.actions = JsonPayload::Borrowed(actions);
+        wire.actions = JsonPayload::Text(actionsJson);
         wire.finished = finished;
         wire.room = TextView(room);
         wire.seat = seat;
         wire.version = version;
-        wire.view = JsonPayload::Borrowed(view);
+        wire.view = JsonPayload::Text(viewJson);
         JsonWriter writer(out);
         wire.WriteJson(writer);
         EXPECT(writer.IsComplete());
     }
 
-    String MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions) {
+    String MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, StringView viewJson, StringView actionsJson) {
         String out;
-        AppendViewMessage(out, room, seat, version, finished, view, actions);
+        AppendViewMessage(out, room, seat, version, finished, viewJson, actionsJson);
         return out;
     }
 

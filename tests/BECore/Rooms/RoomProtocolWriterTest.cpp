@@ -14,7 +14,6 @@ namespace BECore::Tests {
 
         constexpr StringView kRoomCode = "ABCDE";
         constexpr StringView kToken = "0123456789abcdef0123456789abcdef";
-        constexpr size_t kDeepLevels = 300;
         constexpr int kFullSeatCount = 8;
 
         /// Every escape of JSON, a quote, a backslash, control characters, non-ASCII text and bytes that are not UTF-8
@@ -29,16 +28,6 @@ namespace BECore::Tests {
                 String("bad \xC3( \xFF \xE2\x82 \xED\xA0\x80 end"),
             };
             return texts;
-        }
-
-        Json MakeDeepArray(size_t levels) {
-            Json value = Json::array();
-            for (size_t i = 1; i < levels; ++i) {
-                Json outer = Json::array();
-                outer.push_back(std::move(value));
-                value = std::move(outer);
-            }
-            return value;
         }
 
         /// Invalid UTF-8 in a string does not read back as it was written (the writer replaces it), so a value that is read back leaves it out
@@ -100,7 +89,7 @@ namespace BECore::Tests {
         }
 
         void ExpectView(StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions) {
-            EXPECT_EQ(MakeViewMessage(room, seat, version, finished, view, actions), RoomMessageReference::MakeViewMessage(room, seat, version, finished, view, actions));
+            EXPECT_EQ(MakeViewMessage(room, seat, version, finished, DumpJson(view), DumpJson(actions)), RoomMessageReference::MakeViewMessage(room, seat, version, finished, view, actions));
         }
 
         constexpr StringView kLongGame = "a game whose name is longer than the small string";
@@ -114,8 +103,8 @@ namespace BECore::Tests {
         struct LongMessages {
             LobbySnapshot lobby = MakeLobby(kLongLobbySeats);
             RoomListMessage list = MakeRoomList(kLongListedRooms);
-            Json view = Json{{"hand", Json::array({1, 2, 3})}, {"table", MakeJsonString(String(kLongText))}};
-            Json actions = Json::array({Json{{"play", 1}}, Json{{"pass", true}}});
+            String view = DumpJson(Json{{"hand", Json::array({1, 2, 3})}, {"table", MakeJsonString(String(kLongText))}});
+            String actions = DumpJson(Json::array({Json{{"play", 1}}, Json{{"pass", true}}}));
             ClientMessage create = CreateRoomMessage{String(kLongGame), String(kLongText), DumpJson(Json{{"rounds", 3}}), true};
             ClientMessage join = JoinRoomMessage{String(kRoomCode), String(), String(kLongToken)};
             ClientMessage listRooms = ListRoomsMessage{String(kLongGame)};
@@ -165,7 +154,7 @@ namespace BECore::Tests {
 
         const Json view = Json{{"hand", Json::array({1, 2})}, {"turn", 1}};
         const Json actions = Json::array({Json{{"type", "play"}}});
-        EXPECT_EQ(MakeViewMessage(kRoomCode, 1, 5, false, view, actions),
+        EXPECT_EQ(MakeViewMessage(kRoomCode, 1, 5, false, DumpJson(view), DumpJson(actions)),
                   R"({"actions":[{"type":"play"}],"finished":false,"room":"ABCDE","seat":1,"type":"view","v":1,"version":5,"view":{"hand":[1,2],"turn":1}})");
 
         RoomListMessage list = MakeRoomList(2);
@@ -246,8 +235,11 @@ namespace BECore::Tests {
         // a view and actions of another shape than the contract says are written as they are
         ExpectView(kRoomCode, 0, 0, false, Json(nullptr), Json::object());
         ExpectView(kRoomCode, 0, 0, false, Json::array({1}), Json(5));
-        // the cut of a container that is too deep is the same on both paths
-        ExpectView(kRoomCode, 0, 0, false, MakeDeepArray(kDeepLevels), MakeDeepArray(kDeepLevels));
+    }
+
+    TEST(RoomProtocolWriterTest, TheTextOverloadOfAViewWritesEachValueAsGiven) {
+        EXPECT_EQ(MakeViewMessage(kRoomCode, 1, 5, false, R"({ "turn" : 1 })", "[ ]"),
+                  R"({"actions":[ ],"finished":false,"room":"ABCDE","seat":1,"type":"view","v":1,"version":5,"view":{ "turn" : 1 }})");
     }
 
     TEST(RoomProtocolWriterTest, ATypedViewIsTheSameBytesAsTheJsonOverloadGivenTheEqualDocument) {
@@ -261,7 +253,7 @@ namespace BECore::Tests {
             viewJson["turn"] = 4;
             Json actionsJson = Json::array();
             SeatedActionList<AnswerAction> actions;
-            EXPECT_EQ(MakeViewMessage(kRoomCode, 2, 9, false, view, actions), MakeViewMessage(kRoomCode, 2, 9, false, viewJson, actionsJson)) << "an empty list stays an array";
+            EXPECT_EQ(MakeViewMessage(kRoomCode, 2, 9, false, view, actions), MakeViewMessage(kRoomCode, 2, 9, false, DumpJson(viewJson), DumpJson(actionsJson))) << "an empty list stays an array";
 
             for (int32_t i = 0; i < 2; ++i) {
                 AnswerPoint& point = view.points.emplace_back();
@@ -274,13 +266,13 @@ namespace BECore::Tests {
                 actions.Add(std::move(action));
                 actionsJson.push_back(Json{{"card", i + 10}, {"type", MakeJsonString(name)}});
             }
-            EXPECT_EQ(MakeViewMessage(kRoomCode, 2, 9, true, view, actions), MakeViewMessage(kRoomCode, 2, 9, true, viewJson, actionsJson));
+            EXPECT_EQ(MakeViewMessage(kRoomCode, 2, 9, true, view, actions), MakeViewMessage(kRoomCode, 2, 9, true, DumpJson(viewJson), DumpJson(actionsJson)));
 
             String appended = "kept:";
             const size_t scratchBefore = ScratchArena::Get().GetBytesUsed();
             AppendViewMessage(appended, kRoomCode, 2, 9, true, view, actions);
             EXPECT_EQ(ScratchArena::Get().GetBytesUsed(), scratchBefore);
-            EXPECT_EQ(appended, Format("kept:{}", MakeViewMessage(kRoomCode, 2, 9, true, viewJson, actionsJson)));
+            EXPECT_EQ(appended, Format("kept:{}", MakeViewMessage(kRoomCode, 2, 9, true, DumpJson(viewJson), DumpJson(actionsJson))));
         }
     }
 
@@ -295,7 +287,7 @@ namespace BECore::Tests {
         }
         EXPECT_EQ(MakeJoinedMessage(kRoomCode, kMaxPlayer, kToken, kMinSeat, true), RoomMessageReference::MakeJoinedMessage(kRoomCode, kMaxPlayer, kToken, kMinSeat, true));
         EXPECT_EQ(MakeJoinedMessage(kRoomCode, 0, kToken, kMaxSeat, false), RoomMessageReference::MakeJoinedMessage(kRoomCode, 0, kToken, kMaxSeat, false));
-        EXPECT_NE(MakeViewMessage(kRoomCode, 0, kMaxVersion, false, Json::object(), Json::array()).find("18446744073709551615"), String::npos);
+        EXPECT_NE(MakeViewMessage(kRoomCode, 0, kMaxVersion, false, "{}", "[]").find("18446744073709551615"), String::npos);
     }
 
     TEST(RoomProtocolWriterTest, AppendKeepsWhatTheStringHoldsAndTheMakeFunctionsReturnTheSameBytes) {
@@ -317,10 +309,10 @@ namespace BECore::Tests {
                  AppendLobbyMessage(out, lobby);
                  return out;
              }()},
-            {MakeViewMessage(kRoomCode, 1, 5, false, view, actions),
+            {MakeViewMessage(kRoomCode, 1, 5, false, DumpJson(view), DumpJson(actions)),
              [&] {
                  String out;
-                 AppendViewMessage(out, kRoomCode, 1, 5, false, view, actions);
+                 AppendViewMessage(out, kRoomCode, 1, 5, false, DumpJson(view), DumpJson(actions));
                  return out;
              }()},
             {MakeRoomListMessage(list),
@@ -392,15 +384,15 @@ namespace BECore::Tests {
         constexpr uint64_t kMaxReadableVersion = std::numeric_limits<int64_t>::max();
         const Json view = Json{{"hand", Json::array({1, 2})}, {"big", 1e300}, {"unsigned", std::numeric_limits<uint64_t>::max()}};
         const Json actions = Json::array({Json{{"type", "play"}}});
-        const auto viewParsed = ParseServerMessage(MakeViewMessage(kRoomCode, 4, kMaxReadableVersion, true, view, actions));
+        const auto viewParsed = ParseServerMessage(MakeViewMessage(kRoomCode, 4, kMaxReadableVersion, true, DumpJson(view), DumpJson(actions)));
         ASSERT_TRUE(viewParsed.has_value());
         const auto* viewMessage = std::get_if<ViewMessage>(&*viewParsed);
         ASSERT_NE(viewMessage, nullptr);
         EXPECT_EQ(viewMessage->seat, 4);
         EXPECT_EQ(viewMessage->version, kMaxReadableVersion);
         EXPECT_TRUE(viewMessage->finished);
-        EXPECT_EQ(viewMessage->view, view);
-        EXPECT_EQ(viewMessage->actions, actions);
+        EXPECT_EQ(viewMessage->view, DumpJson(view));
+        EXPECT_EQ(viewMessage->actions, DumpJson(actions));
 
         RoomListMessage list = MakeRoomList(3);
         list.more = true;

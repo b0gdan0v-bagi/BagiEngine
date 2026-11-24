@@ -85,8 +85,8 @@ namespace BECore::Fuzz {
             view["turn"] = 1;
             Json actions = Json::array();
             actions.push_back(card);
-            server("server-view.bin", MakeViewMessage("ABCDE", 1, 7, false, view, actions));
-            server("server-view-small-limit.bin", MakeViewMessage("ABCDE", 1, 7, false, view, actions), 1);
+            server("server-view.bin", MakeViewMessage("ABCDE", 1, 7, false, DumpJson(view), DumpJson(actions)));
+            server("server-view-small-limit.bin", MakeViewMessage("ABCDE", 1, 7, false, DumpJson(view), DumpJson(actions)), 1);
             server("server-error.bin", MakeErrorMessage(RoomErrors::kNotYourTurn, "it is not your turn", RoomMessageTypes::kAction));
             server("server-left.bin", MakeLeftMessage("closed"));
             server("server-pong.bin", MakePongMessage());

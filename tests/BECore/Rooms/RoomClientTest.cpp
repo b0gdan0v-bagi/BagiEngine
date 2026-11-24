@@ -36,7 +36,7 @@ namespace BECore::Tests {
 
         String View(uint64_t version, int seat = 0, bool finished = false) {
             Json view = Json::object({{"hand", Json::array({1, 2, 3})}});
-            return MakeViewMessage(kRoom, seat, version, finished, view, Json::array({OneAction()}));
+            return MakeViewMessage(kRoom, seat, version, finished, DumpJson(view), DumpJson(Json::array({OneAction()})));
         }
 
         /// A RoomClient over fake transports, with a manual clock and the events it has reported so far
@@ -176,8 +176,8 @@ namespace BECore::Tests {
         EXPECT_TRUE(_client->HasView());
         EXPECT_EQ(_client->GetViewVersion(), 7u);
         EXPECT_FALSE(_client->IsFinished());
-        EXPECT_EQ(_client->GetView(), Json::object({{"hand", Json::array({1, 2, 3})}}));
-        EXPECT_EQ(_client->GetActions(), Json::array({OneAction()}));
+        EXPECT_EQ(_client->GetViewText(), R"({"hand":[1,2,3]})");
+        EXPECT_EQ(_client->GetActionsText(), R"([{"card":4,"type":"play"}])");
 
         const Vector<RoomClientEventKind> expected = {Kind::Connected, Kind::Joined, Kind::LobbyChanged, Kind::ViewChanged};
         EXPECT_EQ(Kinds(), expected);
@@ -403,7 +403,7 @@ namespace BECore::Tests {
         Receive(link, MakeLobbyMessage(other));
         EXPECT_EQ(_client->GetLobby().room, kRoom);
         EXPECT_EQ(_client->GetLobby().seats.size(), lobbySeats);
-        Receive(link, MakeViewMessage("FGHJK", 1, 4, false, Json::object(), Json::array()));
+        Receive(link, MakeViewMessage("FGHJK", 1, 4, false, "{}", "[]"));
         EXPECT_FALSE(_client->HasView());
     }
 

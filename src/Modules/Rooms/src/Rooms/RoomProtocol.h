@@ -1,6 +1,5 @@
 #pragma once
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonTape.h>
 #include <BECore/Control/JsonView.h>
 #include <Games/SeatedAnswers.h>
@@ -209,13 +208,14 @@ namespace BECore {
     [[nodiscard]] String MakeLobbyMessage(const LobbySnapshot& lobby);
 
     /// `view {room, seat, version, finished, view, actions}`: what the game says the seat sees and may send now (no hidden information
-    /// of the others: the game's contract). @p view and @p actions are written as they are, an @p actions that is no array too.
-    void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions);
-    [[nodiscard]] String MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions);
+    /// of the others: the game's contract). @p viewJson and @p actionsJson are each exactly one JSON value, written as they are (compact
+    /// text stays compact, blanks stay blanks), an @p actionsJson that is no array too; a text that is no value makes no valid message.
+    void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, StringView viewJson, StringView actionsJson);
+    [[nodiscard]] String MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, StringView viewJson, StringView actionsJson);
 
-    /// The same message from the typed answers of a game: @p view and @p actions are written by their generated `WriteJson` straight into the message, so no `Json`
-    /// tree is built on the way to the wire, and the bytes are those of the `Json` overload given the equal document. This is the form the room and the hub use;
-    /// the `Json` overload is for what a test or a client fixture builds by hand.
+    /// The same message from the typed answers of a game: @p view and @p actions are written by their generated `WriteJson` straight into the message, and the
+    /// bytes are those of the text overload given the equal compact documents. This is the form the room and the hub use; the text overload is for what a
+    /// test or a client fixture holds as text.
     void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, const SeatedView& view, const SeatedActions& actions);
     [[nodiscard]] String MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, const SeatedView& view, const SeatedActions& actions);
 
@@ -250,14 +250,14 @@ namespace BECore {
     /// `lobby`, as the client reads it
     using LobbyMessage = LobbySnapshot;
 
-    /// `view`, as the client reads it. @c view and @c actions are the game's own JSON, kept as the server sent them.
+    /// `view`, as the client reads it. @c view and @c actions are the game's own JSON, kept as compact text of one value each (the server's blanks are dropped).
     struct ViewMessage {
         String room;
         int seat = 0;
         uint64_t version = 0;
         bool finished = false;
-        Json view = Json::object();
-        Json actions = Json::array();
+        String view = "{}";
+        String actions = "[]";
     };
 
     /// `error`

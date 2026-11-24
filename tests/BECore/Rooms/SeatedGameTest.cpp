@@ -405,7 +405,8 @@ namespace BECore::Tests {
                 const ReceivedMessage* message = client.Last(RoomMessageTypes::kView);
                 ASSERT_NE(message, nullptr) << "step " << step;
                 const uint64_t version = game->GetStateVersion();
-                EXPECT_EQ(message->text, MakeViewMessage(client.roomCode, client.seat, version, game->IsFinished(), ReferenceView(*game, client.seat, table), ReferenceActions(*game, client.seat)))
+                EXPECT_EQ(message->text, MakeViewMessage(client.roomCode, client.seat, version, game->IsFinished(), DumpJson(ReferenceView(*game, client.seat, table)),
+                                                         DumpJson(ReferenceActions(*game, client.seat))))
                     << "step " << step << ", seat " << client.seat;
             }
             if (game->IsFinished()) {

@@ -540,8 +540,8 @@ namespace BECore {
         _lobby = {};
         _roomList = {};
         _hasView = false;
-        _view = Json::object();
-        _actions = Json::array();
+        _view = "{}";
+        _actions = "[]";
         _viewVersion = 0;
         _finished = false;
     }
