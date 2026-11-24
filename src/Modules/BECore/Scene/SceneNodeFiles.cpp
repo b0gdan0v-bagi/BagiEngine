@@ -1,6 +1,7 @@
 #include "SceneNodeFiles.h"
 
 #include <BECore/Config/ContentVersion.h>
+#include <BECore/File/File.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/SchemaHash.h>
@@ -154,13 +155,19 @@ namespace BECore {
 
         /// Parses @p file into @p out and checks that its document element is a node that is not a reference itself and, when
         /// @p versionLabel is not empty, that its content version is the engine's (the label names the file in the message)
-        bool ReadNodeFile(const std::filesystem::path& file, pugi::xml_document& out, String& error, StringView versionLabel = {}) {
-            std::error_code ec;
-            if (file.empty() || !std::filesystem::is_regular_file(file, ec)) {
-                error = ec ? Format("the node file cannot be read: {}", ec.message()) : String{"the node file does not exist"};
+        bool ReadNodeFile(const Path& file, pugi::xml_document& out, String& error, StringView versionLabel = {}) {
+            const Optional<FileInfo> info = file.Empty() ? Optional<FileInfo>{} : GetFileInfo(file);
+            if (!info || info->kind != FileKind::File) {
+                error = info ? "the node file cannot be read: it is not a regular file" : "the node file does not exist";
                 return false;
             }
-            const pugi::xml_parse_result parsed = out.load_file(file.c_str());
+            // load_file(const char*) is the ANSI code page on Windows, which a UTF-8 path is not
+            const std::expected<Vector<uint8_t>, String> bytes = ReadFileBytes(file);
+            if (!bytes) {
+                error = Format("the node file does not parse: {}", bytes.error());
+                return false;
+            }
+            const pugi::xml_parse_result parsed = out.load_buffer(bytes->data(), bytes->size(), pugi::parse_default, pugi::encoding_auto);
             if (!parsed) {
                 error = Format("the node file does not parse: {}", parsed.description());
                 return false;
@@ -185,7 +192,7 @@ namespace BECore {
 
         /// Reads the cooked node file @p file into @p out as the `<node>` element of the same node, so the overrides and the
         /// instantiation work on it as on a file written by hand. @p label names the file in the messages
-        bool ReadNodeFileBinary(const std::filesystem::path& file, StringView label, pugi::xml_document& out, String& error) {
+        bool ReadNodeFileBinary(const Path& file, StringView label, pugi::xml_document& out, String& error) {
             BinaryDeserializer reader;
             if (!reader.LoadFromFile(file)) {
                 const auto& errors = reader.GetErrors();
@@ -208,27 +215,31 @@ namespace BECore {
 
         /// What of a node file one layer holds: the path of its `.xml`, of its `.bin`, none or both
         struct NodeFileInLayer {
-            std::filesystem::path xml;
-            std::filesystem::path binary;
+            Path xml;
+            Path binary;
         };
 
-        NodeFileInLayer FindInLayer(const std::filesystem::path& layer, StringView ref) {
-            const std::filesystem::path stem = layer / std::filesystem::path(ToStd(ref));
+        bool IsRegularFile(const Path& path) {
+            const Optional<FileInfo> info = GetFileInfo(path);
+            return info && info->kind == FileKind::File;
+        }
+
+        NodeFileInLayer FindInLayer(const Path& layer, StringView ref) {
+            const Path stem = layer / ref;
             NodeFileInLayer found;
-            std::error_code ec;
-            const std::filesystem::path xml = std::filesystem::path(stem) += kNodeFileExtension.data();
-            const std::filesystem::path binary = std::filesystem::path(stem) += kNodeBinaryExtension.data();
-            if (std::filesystem::is_regular_file(xml, ec)) {
+            const Path xml(Format("{}{}", stem.View(), kNodeFileExtension));
+            const Path binary(Format("{}{}", stem.View(), kNodeBinaryExtension));
+            if (IsRegularFile(xml)) {
                 found.xml = xml;
             }
-            if (std::filesystem::is_regular_file(binary, ec)) {
+            if (IsRegularFile(binary)) {
                 found.binary = binary;
             }
             return found;
         }
 
-        std::filesystem::path FileOf(const std::filesystem::path& baseDirectory, StringView ref) {
-            return baseDirectory / (std::filesystem::path(ToStd(ref)) += kNodeFileExtension.data());
+        Path FileOf(const Path& baseDirectory, StringView ref) {
+            return baseDirectory / Format("{}{}", ref, kNodeFileExtension);
         }
 
         /// What one call of ExpandNodeReferences learned of one node file: the parsed document or why it failed. The
@@ -370,7 +381,7 @@ namespace BECore {
         return result;
     }
 
-    NodeFileLoader MakeDirectoryNodeLoader(std::filesystem::path baseDirectory) {
+    NodeFileLoader MakeDirectoryNodeLoader(Path baseDirectory) {
         return [baseDirectory = eastl::move(baseDirectory)](StringView ref, pugi::xml_document& out, String& error) {
             if (!IsValidNodeRef(ref)) {
                 error = "not a valid reference";
@@ -386,17 +397,17 @@ namespace BECore {
                 error = "not a valid reference";
                 return false;
             }
-            const Vector<std::filesystem::path> layers = fs.GetMountLayers(MountPoints::config);
+            const Vector<Path> layers = fs.GetMountLayers(MountPoints::config);
             for (auto layer = layers.rbegin(); layer != layers.rend(); ++layer) {
                 const NodeFileInLayer found = FindInLayer(*layer, ref);
-                if (!found.xml.empty() && !found.binary.empty()) {
-                    error = Format("'{}' and '{}' are both node files of one reference: keep one", found.xml.string(), found.binary.string());
+                if (!found.xml.Empty() && !found.binary.Empty()) {
+                    error = Format("'{}' and '{}' are both node files of one reference: keep one", found.xml.View(), found.binary.View());
                     return false;
                 }
-                if (!found.binary.empty()) {
+                if (!found.binary.Empty()) {
                     return ReadNodeFileBinary(found.binary, Format("{}/{}{}", kNodeFilesMountPoint, ref, kNodeBinaryExtension), out, error);
                 }
-                if (!found.xml.empty()) {
+                if (!found.xml.Empty()) {
                     const String virtualPath = Format("{}/{}{}", kNodeFilesMountPoint, ref, kNodeFileExtension);
                     return ReadNodeFile(found.xml, out, error, virtualPath);
                 }
@@ -407,21 +418,31 @@ namespace BECore {
         };
     }
 
-    NodeExpansion LoadSceneDocument(const std::filesystem::path& sceneConfigFile, pugi::xml_document& out) {
+    NodeExpansion LoadSceneDocument(const Path& sceneConfigFile, pugi::xml_document& out) {
         NodeExpansion result;
         out.reset();
-        std::error_code ec;
-        if (!std::filesystem::is_regular_file(sceneConfigFile, ec)) {
-            result.errors.push_back(ec ? Format("scene file '{}' cannot be read: {}", sceneConfigFile.string(), ec.message()) : Format("scene file '{}' does not exist", sceneConfigFile.string()));
+        const Optional<FileInfo> info = GetFileInfo(sceneConfigFile);
+        if (!info) {
+            result.errors.push_back(Format("scene file '{}' does not exist", sceneConfigFile.View()));
             return result;
         }
-        const pugi::xml_parse_result parsed = out.load_file(sceneConfigFile.c_str());
+        if (info->kind != FileKind::File) {
+            result.errors.push_back(Format("scene file '{}' cannot be read: it is not a regular file", sceneConfigFile.View()));
+            return result;
+        }
+        // load_file(const char*) is the ANSI code page on Windows, which a UTF-8 path is not
+        const std::expected<Vector<uint8_t>, String> bytes = ReadFileBytes(sceneConfigFile);
+        if (!bytes) {
+            result.errors.push_back(Format("scene file '{}' cannot be read: {}", sceneConfigFile.View(), bytes.error()));
+            return result;
+        }
+        const pugi::xml_parse_result parsed = out.load_buffer(bytes->data(), bytes->size(), pugi::parse_default, pugi::encoding_auto);
         if (!parsed) {
             out.reset();
-            result.errors.push_back(Format("scene file '{}' does not parse: {}", sceneConfigFile.string(), parsed.description()));
+            result.errors.push_back(Format("scene file '{}' does not parse: {}", sceneConfigFile.View(), parsed.description()));
             return result;
         }
-        return ExpandNodeReferences(out.document_element(), MakeDirectoryNodeLoader(sceneConfigFile.parent_path()));
+        return ExpandNodeReferences(out.document_element(), MakeDirectoryNodeLoader(sceneConfigFile.Parent()));
     }
 
 }  // namespace BECore

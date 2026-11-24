@@ -3,6 +3,7 @@
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/Config/ContentVersion.h>
 #include <BECore/Config/XmlDocument.h>
+#include <BECore/File/File.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/SchemaHash.h>
@@ -24,16 +25,17 @@ namespace BECore {
         constexpr StringView kEndOfText = "<end of text>";
         constexpr StringView kEllipsis = "...";
 
-        String Generic(const std::filesystem::path& path) {
-            return FromStdString(path.generic_string());
-        }
-
         void Fail(CookReport& report, size_t layer, StringView path, String message) {
             CookRow& row = report.rows.emplace_back();
             row.layer = layer;
             row.path = String(path);
             row.outcome = CookOutcome::Failed;
             row.messages.push_back(eastl::move(message));
+        }
+
+        bool IsDirectory(const Path& path) {
+            const Optional<FileInfo> info = GetFileInfo(path);
+            return info.has_value() && info->kind == FileKind::Directory;
         }
 
         Vector<StringView> SplitLines(StringView text) {
@@ -65,16 +67,12 @@ namespace BECore {
             return Format("'{}{}'", line.substr(0, kMaxQuotedLineLength), kEllipsis);
         }
 
-        std::filesystem::path CookedLayerFolder(const std::filesystem::path& cookedDir, size_t layer) {
-            return cookedDir / Format("{}{}", kLayerFolderPrefix, layer).c_str() / kConfigFolder.data();
-        }
-
-        std::filesystem::path WithExtension(std::filesystem::path path, StringView extension) {
-            return path.replace_extension(extension.data());
+        Path CookedLayerFolder(const Path& cookedDir, size_t layer) {
+            return cookedDir / Format("{}{}", kLayerFolderPrefix, layer) / kConfigFolder;
         }
 
         /// The reason a `.bin` is refused: the checks `ConfigManager` makes of a file it loads, with the message of the first that fails
-        String RefusalReason(const std::filesystem::path& path) {
+        String RefusalReason(const Path& path) {
             Vector<uint8_t> bytes;
             if (const std::expected<void, StringView> read = ReadBinaryDocumentFile(path, bytes); !read.has_value()) {
                 return String(read.error());
@@ -84,8 +82,7 @@ namespace BECore {
                 const auto& errors = reader.GetErrors();
                 return errors.empty() ? String("the file is not a binary document") : errors.front().errorMessage;
             }
-            const std::string source = path.string();  //-NoStd: the path API's own text
-            if (const auto stamp = CheckContentStamp(reader, StringView(source.data(), source.size())); !stamp) {
+            if (const auto stamp = CheckContentStamp(reader, path.View()); !stamp) {
                 return stamp.error();
             }
             return "ConfigManager did not load the file";
@@ -93,7 +90,7 @@ namespace BECore {
 
         /// What `ConfigManager` makes of the cooked layer: a file system of its own over that one folder, so a file is read the way the game reads a layer
         struct CookedLayerView {
-            explicit CookedLayerView(const std::filesystem::path& folder) {
+            explicit CookedLayerView(const Path& folder) {
                 _fileSystem.Mount(MountPoints::config, folder);
                 _configs.Initialize();
             }
@@ -132,38 +129,37 @@ namespace BECore {
         /// The files of one source layer and of its cooked layer, and the reading of both
         class LayerVerifier {
         public:
-            LayerVerifier(const FileSystem& sourceFs, size_t layerIndex, const std::filesystem::path& sourceLayer, const std::filesystem::path& cookedLayer, const ContentCookRegistry& registry,
-                          CookReport& report)
+            LayerVerifier(const FileSystem& sourceFs, size_t layerIndex, const Path& sourceLayer, const Path& cookedLayer, const ContentCookRegistry& registry, CookReport& report)
                 : _sourceFs(sourceFs), _layerIndex(layerIndex), _sourceLayer(sourceLayer), _cookedLayer(cookedLayer), _registry(registry), _report(report) {
                 _sourceOnly.Mount(MountPoints::config, sourceLayer);
             }
 
             void Run() {
                 String error;
-                const Vector<std::filesystem::path> sourceFiles = ListContentFiles(_sourceLayer, error);
-                const Vector<std::filesystem::path> cookedFiles = error.empty() ? ListContentFiles(_cookedLayer, error) : Vector<std::filesystem::path>{};
+                const Vector<Path> sourceFiles = ListContentFiles(_sourceLayer, error);
+                const Vector<Path> cookedFiles = error.empty() ? ListContentFiles(_cookedLayer, error) : Vector<Path>{};
                 if (!error.empty()) {
                     Fail(_report, _layerIndex, "", eastl::move(error));
                     return;
                 }
                 HashMap<String, bool> cookedMatched;
                 bool anyBinary = false;
-                for (const std::filesystem::path& file : cookedFiles) {
-                    cookedMatched[Generic(file)] = false;
-                    anyBinary = anyBinary || file.extension() == kBinaryExtension.data();
+                for (const Path& file : cookedFiles) {
+                    cookedMatched[String(file.View())] = false;
+                    anyBinary = anyBinary || PathExtension(file.View()) == kBinaryExtension;
                 }
                 if (anyBinary) {
                     _cooked = MakeUnique<CookedLayerView>(_cookedLayer);
                 }
 
-                for (const std::filesystem::path& relative : sourceFiles) {
+                for (const Path& relative : sourceFiles) {
                     CookRow row;
                     row.layer = _layerIndex;
-                    row.path = Generic(relative);
-                    const bool isXml = relative.extension() == kXmlExtension.data();
-                    const std::filesystem::path cookedForm = isXml ? WithExtension(relative, kBinaryExtension) : relative;
-                    const auto asBinary = cookedMatched.find(Generic(cookedForm));
-                    const auto asCopy = cookedMatched.find(Generic(relative));
+                    row.path = String(relative.View());
+                    const bool isXml = PathExtension(relative.View()) == kXmlExtension;
+                    const Path cookedForm = isXml ? relative.ReplaceExtension(kBinaryExtension) : relative;
+                    const auto asBinary = cookedMatched.find(String(cookedForm.View()));
+                    const auto asCopy = cookedMatched.find(String(relative.View()));
                     if (isXml && asBinary != cookedMatched.end()) {
                         asBinary->second = true;
                         if (asCopy != cookedMatched.end()) {
@@ -183,15 +179,15 @@ namespace BECore {
                     }
                     _report.rows.push_back(eastl::move(row));
                 }
-                for (const std::filesystem::path& file : cookedFiles) {
-                    if (!cookedMatched[Generic(file)]) {
-                        Fail(_report, _layerIndex, Generic(file), "the cooked layer has this file but the source layer has nothing it is made from: the cook did not write it");
+                for (const Path& file : cookedFiles) {
+                    if (!cookedMatched[String(file.View())]) {
+                        Fail(_report, _layerIndex, file.View(), "the cooked layer has this file but the source layer has nothing it is made from: the cook did not write it");
                     }
                 }
             }
 
         private:
-            void VerifyCopy(const std::filesystem::path& relative, Vector<String>& messages) const {
+            void VerifyCopy(const Path& relative, Vector<String>& messages) const {
                 const Optional<String> source = XmlDocument::ReadFileBytes(_sourceLayer / relative);
                 const Optional<String> copy = XmlDocument::ReadFileBytes(_cookedLayer / relative);
                 if (!source || !copy) {
@@ -202,8 +198,8 @@ namespace BECore {
             }
 
             /// Compares the cooked form of the `.xml` @p relative with what it reads as; every difference is one message
-            void VerifyCookedFile(const std::filesystem::path& relative, Vector<String>& messages) {
-                const String stem = FromStdString(relative.stem().string());
+            void VerifyCookedFile(const Path& relative, Vector<String>& messages) {
+                const String stem(PathStem(relative.View()));
                 XmlDocument document;
                 if (!document.LoadFromFile(_sourceLayer / relative)) {
                     messages.push_back("the source file does not parse");
@@ -218,7 +214,7 @@ namespace BECore {
                         return;
                     }
                 } else {
-                    const std::filesystem::path cookedFile = _cookedLayer / WithExtension(relative, kBinaryExtension);
+                    const Path cookedFile = _cookedLayer / relative.ReplaceExtension(kBinaryExtension);
                     if (!CookedIsLoaded(stem, cookedFile, messages)) {
                         return;
                     }
@@ -234,23 +230,22 @@ namespace BECore {
             }
 
             /// True when `ConfigManager` loaded @p cookedFile as the config @p stem; else the reason is in @p messages
-            bool CookedIsLoaded(StringView stem, const std::filesystem::path& cookedFile, Vector<String>& messages) {
+            bool CookedIsLoaded(StringView stem, const Path& cookedFile, Vector<String>& messages) {
                 ConfigManager& configs = _cooked->Configs();
                 if (!configs.HasConfig(stem)) {
                     messages.push_back(Format("ConfigManager refuses the cooked file: {}", RefusalReason(cookedFile)));
                     return false;
                 }
-                std::error_code ec;
-                if (!configs.IsBinaryConfig(stem) || !std::filesystem::equivalent(configs.GetConfigFilePath(PoolString::Intern(stem)), cookedFile, ec)) {
+                if (!configs.IsBinaryConfig(stem) || !IsSameFile(configs.GetConfigFilePath(PoolString::Intern(stem)).View(), cookedFile.View()).value_or(false)) {
                     messages.push_back(Format("the stem '{}' is read from {}: another file of the cooked layer has the same stem and ConfigManager keeps that one", stem,
-                                              configs.GetConfigFilePath(PoolString::Intern(stem)).string()));
+                                              configs.GetConfigFilePath(PoolString::Intern(stem)).View()));
                     return false;
                 }
                 return true;
             }
 
-            bool NodesText(const std::filesystem::path& relative, String& sourceText, String& cookedText, Vector<String>& messages) const {
-                const String ref = Generic(WithExtension(relative, ""));
+            bool NodesText(const Path& relative, String& sourceText, String& cookedText, Vector<String>& messages) const {
+                const String ref(relative.ReplaceExtension("").View());
                 if (!IsValidNodeRef(ref)) {
                     messages.push_back(Format("'{}' is not a valid node reference, so no scene can load this file", ref));
                     return false;
@@ -306,8 +301,8 @@ namespace BECore {
 
             const FileSystem& _sourceFs;
             size_t _layerIndex;
-            std::filesystem::path _sourceLayer;
-            std::filesystem::path _cookedLayer;
+            Path _sourceLayer;
+            Path _cookedLayer;
             const ContentCookRegistry& _registry;
             CookReport& _report;
             FileSystem _sourceOnly;
@@ -334,25 +329,23 @@ namespace BECore {
         return Format("line {}: source {}, cooked {} ({} {} differ)", first + 1, QuoteLine(a, first), QuoteLine(b, first), count, count == 1 ? "line" : "lines");
     }
 
-    CookReport VerifyCooked(const FileSystem& sourceFs, const std::filesystem::path& cookedDir, const ContentCookRegistry& registry) {
+    CookReport VerifyCooked(const FileSystem& sourceFs, const Path& cookedDir, const ContentCookRegistry& registry) {
         CookReport report;
-        const Vector<std::filesystem::path> layers = sourceFs.GetMountLayers(MountPoints::config);
+        const Vector<Path> layers = sourceFs.GetMountLayers(MountPoints::config);
         if (layers.empty()) {
             Fail(report, 0, "", "the file system has no 'config' layer");
             return report;
         }
         for (size_t layerIndex = 0; layerIndex < layers.size(); ++layerIndex) {
-            const std::filesystem::path cookedLayer = CookedLayerFolder(cookedDir, layerIndex);
-            std::error_code ec;
-            if (!std::filesystem::is_directory(cookedLayer, ec)) {
-                Fail(report, layerIndex, "", Format("the cooked layer '{}' does not exist: run the cook first", cookedLayer.string()));
+            const Path cookedLayer = CookedLayerFolder(cookedDir, layerIndex);
+            if (!IsDirectory(cookedLayer)) {
+                Fail(report, layerIndex, "", Format("the cooked layer '{}' does not exist: run the cook first", cookedLayer.View()));
                 continue;
             }
             LayerVerifier(sourceFs, layerIndex, layers[layerIndex], cookedLayer, registry, report).Run();
         }
-        std::error_code ec;
-        if (const std::filesystem::path extra = CookedLayerFolder(cookedDir, layers.size()); std::filesystem::is_directory(extra, ec)) {
-            Fail(report, layers.size(), "", Format("'{}' is a cooked layer that has no source layer: the cook was made of other content", extra.string()));
+        if (const Path extra = CookedLayerFolder(cookedDir, layers.size()); IsDirectory(extra)) {
+            Fail(report, layers.size(), "", Format("'{}' is a cooked layer that has no source layer: the cook was made of other content", extra.View()));
         }
         return report;
     }

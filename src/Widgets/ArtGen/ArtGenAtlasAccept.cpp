@@ -60,7 +60,7 @@ namespace BECore {
                                                         FunctionRef<bool()> save) {
         const PoolString name = PoolString::Intern(sprite);
         const PoolString texturePath = PoolString::Intern(copied.texturePath);
-        const String png = Format("{}", copied.pngFile.generic_string());
+        const String png(copied.pngFile.View());
 
         auto entry = AcceptedSpriteEntryInGroup(library, name, texturePath, copied.width, copied.height, group);
         if (!entry) {
@@ -95,8 +95,8 @@ namespace BECore {
     std::expected<ArtGenAtlasAnswer, ControlError> PackAtlasForControl(StringView group) {
         auto fail = [](const String& message) { return std::unexpected(ControlError{String("artgen_accept_failed"), message}); };
         auto& files = CoreManager::GetFileSystem();
-        const std::filesystem::path assetsDir = files.GetMountedPath(MountPoints::assets);
-        if (assetsDir.empty()) {
+        const Path assetsDir = files.GetMountedPath(MountPoints::assets);
+        if (assetsDir.Empty()) {
             return fail(String("the game has no assets folder"));
         }
         auto& library = CoreManager::GetTextureLibrary();

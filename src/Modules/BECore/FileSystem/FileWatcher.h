@@ -11,7 +11,6 @@
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <atomic>
 #include <cstdint>
-#include <filesystem>
 
 namespace BECore {
 
@@ -151,14 +150,14 @@ namespace BECore {
             String virtualPath;
             PoolString virtualName;  ///< the reported path of a file watch
             PoolString consumer;
-            Vector<std::filesystem::path> targets;      ///< the file (or the folder) in each layer, absolute and normalised
-            Vector<std::filesystem::path> directories;  ///< what this watch holds in the backend
+            Vector<Path> targets;      ///< the file (or the folder) in each layer, absolute and normalised
+            Vector<Path> directories;  ///< what this watch holds in the backend
             FileWatchCallback callback;
         };
 
         /// A directory several watches share: the backend sees it once, recursive while any user wants it so
         struct DirectoryUse {
-            std::filesystem::path path;
+            Path path;
             int uses = 0;
             int recursiveUses = 0;
         };
@@ -171,9 +170,9 @@ namespace BECore {
 
         /// The write time and size of a file at the last look; the baseline of Rescan
         struct FileState {
-            std::filesystem::path path;
-            std::filesystem::file_time_type writeTime{};
-            uintmax_t size = 0;
+            Path path;
+            int64_t writeTimeNs = 0;
+            uint64_t size = 0;
             bool byApply = false;  ///< set by Apply, cleared by a native delivery: a late notice of the stream for the same state is not delivered again
         };
         using FileStates = HashMap<String, FileState>;  ///< by the normalised real path
@@ -186,12 +185,12 @@ namespace BECore {
             Vector<PoolString> consumers;
         };
 
-        void Post(const std::filesystem::path& realPath) override;
+        void Post(const Path& realPath) override;
 
         FileWatchHandle MakeWatch(StringView virtualPath, bool folder, FileWatchCallback callback, StringView consumer);
-        void AcquireDirectory(const std::filesystem::path& directory, bool recursive);
-        void ReleaseDirectory(const std::filesystem::path& directory, bool recursive);
-        void RouteChange(const std::filesystem::path& realPath, double nowSeconds);
+        void AcquireDirectory(const Path& directory, bool recursive);
+        void ReleaseDirectory(const Path& directory, bool recursive);
+        void RouteChange(const Path& realPath, double nowSeconds);
         void Schedule(uint64_t watchId, PoolString virtualPath, double nowSeconds);
         void Deliver(double nowSeconds);
         [[nodiscard]] Watch* FindWatch(uint64_t id) const;
@@ -200,17 +199,17 @@ namespace BECore {
         void SweepDeadWatches();
 
         /// Whether @p path (normalised) is a file @p watch reports; @p virtualPath is the path it reports it by
-        [[nodiscard]] static bool Matches(const Watch& watch, const std::filesystem::path& path, PoolString& virtualPath);
+        [[nodiscard]] static bool Matches(const Watch& watch, const Path& path, PoolString& virtualPath);
         /// Whether @p path is below a target of @p watch; unlike Matches it interns nothing
-        [[nodiscard]] static bool Covers(const Watch& watch, const std::filesystem::path& path);
+        [[nodiscard]] static bool Covers(const Watch& watch, const Path& path);
         /// Whether Apply delivered the state the files of @p virtualPath have now, so a notice of the stream for it has nothing to add
         [[nodiscard]] bool IsAppliedAndUnchanged(const Watch& watch, StringView virtualPath) const;
         /// The file of @p virtualPath in each layer of @p watch
-        [[nodiscard]] static Vector<std::filesystem::path> LayerFiles(const Watch& watch, StringView virtualPath);
+        [[nodiscard]] static Vector<Path> LayerFiles(const Watch& watch, StringView virtualPath);
         static void CollectFiles(const Watch& watch, FileStates& out);
         [[nodiscard]] Vector<Detected> Detect() const;
         /// Makes the baseline of @p realPath what the disk says now
-        void RefreshBaseline(const std::filesystem::path& realPath, bool byApply);
+        void RefreshBaseline(const Path& realPath, bool byApply);
         void RefreshBaseline(const Watch& watch, StringView virtualPath, bool byApply);
         /// Remembers the files of a new watch that no other watch knew
         void SnapshotWatch(const Watch& watch);
@@ -226,12 +225,12 @@ namespace BECore {
         Vector<DirectoryUse> _directories;
         Vector<Pending> _pending;
         Vector<Pending> _due;
-        FileStates _baseline;                    ///< the files the watches cover, as they were at Start or at their last delivery
-        Vector<std::filesystem::path> _routing;  ///< the posts being routed; a member so Update keeps its capacity
+        FileStates _baseline;   ///< the files the watches cover, as they were at Start or at their last delivery
+        Vector<Path> _routing;  ///< the posts being routed; a member so Update keeps its capacity
 
         Mutex _queueMutex{BE_LOCK_SITE("File watch queue")};
-        Vector<std::filesystem::path> _incoming;  ///< posted from any thread, guarded by _queueMutex
-        std::atomic<bool> _hasPosts{false};       ///< lets Update skip the lock when nothing was posted
+        Vector<Path> _incoming;              ///< posted from any thread, guarded by _queueMutex
+        std::atomic<bool> _hasPosts{false};  ///< lets Update skip the lock when nothing was posted
     };
 
 }  // namespace BECore

@@ -1,17 +1,16 @@
 #pragma once
 
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
+#include <BECore/File/Path.h>
 #include <BECore/Format/Format.h>
 #include <BECore/Types/Types.h>
-#include <filesystem>
 
 namespace BECore::Tests {
 
     /// The text of config/@p name of the engine, read from the source tree; empty when there is none
     inline String ReadShippedConfig(StringView name) {
-        const std::filesystem::path file = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "config" / std::string(name.data(), name.size());  //-NoStd: a path
-        auto text = ReadTextFile(PathToUtf8(file));
+        const Path file = Path(__FILE__).Parent().Parent().Parent() / "config" / name;
+        auto text = ReadTextFile(file);
         return text ? std::move(*text) : String();
     }
 

@@ -1,8 +1,8 @@
 #pragma once
 
+#include <BECore/File/File.h>
+#include <BECore/File/Path.h>
 #include <BECore/RefCounted/RefCounted.h>
-#include <filesystem>
-#include <system_error>
 
 namespace BECore {
 
@@ -12,7 +12,7 @@ namespace BECore {
         virtual ~IFileWatchSink() = default;
 
         /// A file or a folder at @p realPath changed. Any thread, never blocks on the main thread; the facade filters and coalesces
-        virtual void Post(const std::filesystem::path& realPath) = 0;
+        virtual void Post(const Path& realPath) = 0;
     };
 
     /**
@@ -28,10 +28,10 @@ namespace BECore {
         ~IFileWatchBackend() override = default;
 
         /// Starts reporting changes of @p realPath (an existing directory, absolute and normalised). Called once per directory until RemoveDirectory
-        virtual void AddDirectory(const std::filesystem::path& realPath, bool recursive) = 0;
+        virtual void AddDirectory(const Path& realPath, bool recursive) = 0;
 
         /// Stops reporting @p realPath; what was posted already stays posted
-        virtual void RemoveDirectory(const std::filesystem::path& realPath) = 0;
+        virtual void RemoveDirectory(const Path& realPath) = 0;
 
         /// The facade sets itself before the first AddDirectory and clears the sink (nullptr) after Shutdown()
         virtual void SetSink(IFileWatchSink* sink) = 0;
@@ -48,16 +48,11 @@ namespace BECore {
      * The facade routes files, not folders, so posting the folder itself would tell it nothing. Errors end the walk quietly: a folder
      * that vanished is a change the backend reports anyway.
      */
-    inline void PostTree(IFileWatchSink& sink, const std::filesystem::path& dir, bool recursive) {
-        std::error_code error;
-        std::filesystem::recursive_directory_iterator it(dir, error);  //-NoStd: the rare rescan after an overflow, no engine type walks a folder
-        const std::filesystem::recursive_directory_iterator end;       //-NoStd: same
-        for (; !error && it != end; it.increment(error)) {
-            sink.Post(it->path());
-            if (!recursive) {
-                it.disable_recursion_pending();
-            }
-        }
+    inline void PostTree(IFileWatchSink& sink, const Path& dir, bool recursive) {
+        static_cast<void>(WalkDirectory(dir.View(), recursive ? WalkMode::Tree : WalkMode::Folder, [&](StringView relative, FileKind /*kind*/) {
+            sink.Post(dir / relative);
+            return true;
+        }));
     }
 
 }  // namespace BECore

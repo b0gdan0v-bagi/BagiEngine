@@ -40,7 +40,7 @@ namespace BECore {
 
         /// Which corners an outline visits and how much of each. A closed path is the whole box; the highlight is the top: the second half of the top-left
         /// arc and the first half of the top-right one.
-        struct Path {
+        struct OutlinePath {
             bool closed = true;
             bool topHalves = false;
         };
@@ -91,7 +91,7 @@ namespace BECore {
             int last = 0;
         };
 
-        [[nodiscard]] StepRange VisitedSteps(const Path& path, int corner, int segments) {
+        [[nodiscard]] StepRange VisitedSteps(const OutlinePath& path, int corner, int segments) {
             if (!path.topHalves) {
                 return {0, segments};
             }
@@ -174,8 +174,8 @@ namespace BECore {
          * bounding boxes would all be the whole box). @p colorOf gives the colour of a point before the ring's alpha is applied.
          */
         template <typename VertexList, typename IndexList, typename ColorFn>
-        void AppendRings(VertexList& vertices, IndexList& indices, const Rect& rect, const UICorners& corners, const Ring* rings, int ringCount, const Path& path, bool roundOutwards, bool fillCore,
-                         float pixelsPerUnit, float cornerSagitta, ColorFn&& colorOf) {
+        void AppendRings(VertexList& vertices, IndexList& indices, const Rect& rect, const UICorners& corners, const Ring* rings, int ringCount, const OutlinePath& path, bool roundOutwards,
+                         bool fillCore, float pixelsPerUnit, float cornerSagitta, ColorFn&& colorOf) {
             const UICorners baseCorners = corners.Clamped(rect.w, rect.h);
             const float halfShortSide = std::min(rect.w, rect.h) * 0.5f;
 
@@ -342,7 +342,7 @@ namespace BECore {
         const float axisStart = vertical ? rect.y + coreInset : rect.x + coreInset;
         const float axisLength = (vertical ? rect.h : rect.w) - 2.0f * coreInset;
 
-        AppendRings(vertices, indices, rect, corners, rings, 2, Path{}, false, true, pixelsPerUnit, UIBoxMesh::kCornerSagittaPixels, [&](const PointInfo& point) {
+        AppendRings(vertices, indices, rect, corners, rings, 2, OutlinePath{}, false, true, pixelsPerUnit, UIBoxMesh::kCornerSagittaPixels, [&](const PointInfo& point) {
             if (!hasGradient) {
                 return color;
             }
@@ -366,7 +366,7 @@ namespace BECore {
 
         Ring rings[kMaxRings];
         const int ringCount = MakeStrokeRings(0.0f, -width, feather, rings);
-        AppendRings(vertices, indices, rect, corners, rings, ringCount, Path{}, false, false, pixelsPerUnit, UIBoxMesh::kCornerSagittaPixels, [&](const PointInfo&) { return color; });
+        AppendRings(vertices, indices, rect, corners, rings, ringCount, OutlinePath{}, false, false, pixelsPerUnit, UIBoxMesh::kCornerSagittaPixels, [&](const PointInfo&) { return color; });
     }
 
     template <typename VertexList, typename IndexList>
@@ -396,7 +396,7 @@ namespace BECore {
         if (blur < feather) {
             const float inset = std::min(feather * 0.5f, std::min(base.w, base.h) * 0.5f);
             const Ring rings[2] = {{feather * 0.5f, 0.0f}, {-inset, 1.0f}};
-            AppendRings(vertices, indices, base, baseCorners, rings, 2, Path{}, false, true, pixelsPerUnit, sagitta, flat);
+            AppendRings(vertices, indices, base, baseCorners, rings, 2, OutlinePath{}, false, true, pixelsPerUnit, sagitta, flat);
             return;
         }
 
@@ -408,7 +408,7 @@ namespace BECore {
             const float offset = std::max(blur * (1.0f - 2.0f * static_cast<float>(i) / static_cast<float>(steps)), -halfShortSide);
             rings[i] = {offset, Smoothstep((blur - offset) / (2.0f * blur))};
         }
-        AppendRings(vertices, indices, base, baseCorners, rings, steps + 1, Path{}, true, true, pixelsPerUnit, sagitta, flat);
+        AppendRings(vertices, indices, base, baseCorners, rings, steps + 1, OutlinePath{}, true, true, pixelsPerUnit, sagitta, flat);
     }
 
     template <typename VertexList, typename IndexList>
@@ -424,7 +424,7 @@ namespace BECore {
         // The line is moved in by half a feather so that its soft outer edge stays inside the shape
         Ring rings[kMaxRings];
         const int ringCount = MakeStrokeRings(-feather * 0.5f, -feather * 0.5f - kHighlightWidth, feather, rings);
-        Path path;
+        OutlinePath path;
         path.closed = false;
         path.topHalves = true;
 

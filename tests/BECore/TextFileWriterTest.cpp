@@ -1,4 +1,3 @@
-#include <BECore/File/FilePath.h>
 #include <BECore/File/TextFileWriter.h>
 #include <Common/AllocCheck.h>
 #include <Common/Printers.h>
@@ -188,18 +187,15 @@ namespace BECore::Tests {
         EXPECT_FALSE(writer.HasError());
     }
 
-    TEST(PathToUtf8Test, NonAsciiPathKeepsItsUtf8BytesAndOpensAsAFile) {
-        const TestTempFolder folder{"BagiPathToUtf8Test"};
-        const std::filesystem::path path = std::filesystem::path(ToStd(folder.PathOf("").c_str())) / u8"файл.txt";
+    TEST_F(TextFileWriterTest, NonAsciiPathKeepsItsUtf8BytesAndOpensAsAFile) {
+        const Path path = _folder.PathOf("файл.txt");
 
-        const String utf8 = PathToUtf8(path);
-
-        EXPECT_NE(utf8.find("\xD1\x84\xD0\xB0\xD0\xB9\xD0\xBB.txt"), String::npos) << utf8;
+        EXPECT_NE(path.View().find("\xD1\x84\xD0\xB0\xD0\xB9\xD0\xBB.txt"), StringView::npos) << path.CStr();
         TextFileWriter<kSmall> writer;
-        ASSERT_TRUE(writer.Open(utf8, FileMode::Write).has_value());
+        ASSERT_TRUE(writer.Open(path, FileMode::Write).has_value());
         writer.Append("ok");
         ASSERT_TRUE(writer.Close().has_value());
-        EXPECT_TRUE(GetFileInfo(utf8).has_value());
+        EXPECT_TRUE(GetFileInfo(path).has_value());
     }
 
 }  // namespace BECore::Tests

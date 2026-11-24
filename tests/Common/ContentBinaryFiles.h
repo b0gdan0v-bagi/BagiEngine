@@ -1,12 +1,12 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/Reflection/BinaryFormat.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/SchemaHash.h>
 #include <BECore/Types/Types.h>
 #include <Common/TestFiles.h>
 #include <cstdint>
-#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -41,13 +41,13 @@ namespace BECore::Tests {
     }
 
     /// Writes @p bytes to @p file, making the folders above it
-    inline void WriteContentBytes(const std::filesystem::path& file, const Vector<uint8_t>& bytes) {
+    inline void WriteContentBytes(const Path& file, const Vector<uint8_t>& bytes) {
         WriteFile(file, StringView(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
     }
 
     /// Writes the cooked file of @p object to @p file (`<folder>/config/<Name>.bin`): stamped for @p rootTypeName
     template <typename T>
-    void WriteContentBin(const std::filesystem::path& file, StringView rootTypeName, const T& object) {
+    void WriteContentBin(const Path& file, StringView rootTypeName, const T& object) {
         WriteContentBytes(file, StampedContentBytes(rootTypeName, object));
     }
 

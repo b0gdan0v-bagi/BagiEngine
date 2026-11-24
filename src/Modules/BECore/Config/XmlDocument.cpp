@@ -3,7 +3,6 @@
 #include <BECore/Config/StringXmlWriter.h>
 #include <BECore/Config/XmlLayoutMerge.h>
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/Memory/ScratchArena.h>
 #include <BECore/Reflection/ReaderLimits.h>
 
@@ -66,16 +65,16 @@ namespace BECore {
 
     }  // namespace
 
-    Optional<String> XmlDocument::ReadFileBytes(const std::filesystem::path& path) {
-        auto text = ReadTextFile(PathToUtf8(path), ReaderLimits::kMaxXmlDocumentBytes);
+    Optional<String> XmlDocument::ReadFileBytes(const Path& path) {
+        auto text = ReadTextFile(path, ReaderLimits::kMaxXmlDocumentBytes);
         if (!text) {
             return std::nullopt;
         }
         return eastl::move(*text);
     }
 
-    Optional<StringView> XmlDocument::ReadFileInto(const std::filesystem::path& path, LinearArena& arena, size_t maxBytes) {
-        auto file = File::Open(PathToUtf8(path), FileMode::Read);
+    Optional<StringView> XmlDocument::ReadFileInto(const Path& path, LinearArena& arena, size_t maxBytes) {
+        auto file = File::Open(path, FileMode::Read);
         if (!file) {
             return std::nullopt;
         }
@@ -92,7 +91,7 @@ namespace BECore {
         return StringView{bytes, static_cast<size_t>(*size)};
     }
 
-    bool XmlDocument::LoadFromFile(const std::filesystem::path& filepath) {
+    bool XmlDocument::LoadFromFile(const Path& filepath) {
         // One read: the file that cannot be opened (missing, a folder) or is over the limit does not load, and the byte-order
         // mark comes from the same bytes the parser sees
         const Optional<String> bytes = ReadFileBytes(filepath);
@@ -119,9 +118,9 @@ namespace BECore {
         return SerializeCanonical(_doc, _hasByteOrderMark);
     }
 
-    bool XmlDocument::SaveToFile(const std::filesystem::path& filepath) const {
-        const auto parentPath = filepath.parent_path();
-        if (!parentPath.empty() && !CreateDirectories(PathToUtf8(parentPath))) {
+    bool XmlDocument::SaveToFile(const Path& filepath) const {
+        const Path parentPath = filepath.Parent();
+        if (!parentPath.Empty() && !CreateDirectories(parentPath)) {
             return false;
         }
 
@@ -134,7 +133,7 @@ namespace BECore {
         // canonical texts on the heap (pugixml's allocator, and Strings the comparison with the DOM needs)
         {
             ScratchScope scratch;
-            const auto read = ReadFileBytesScratch(PathToUtf8(filepath), scratch.GetArena(), kMaxScratchSaveBytes, ReaderLimits::kMaxXmlDocumentBytes);
+            const auto read = ReadFileBytesScratch(filepath, scratch.GetArena(), kMaxScratchSaveBytes, ReaderLimits::kMaxXmlDocumentBytes);
             const Span<const uint8_t> bytes = read ? read->Bytes() : Span<const uint8_t>{};
             const StringView onDisk(reinterpret_cast<const char*>(bytes.data()), bytes.size());
             text = SerializeCanonical(_doc, _hasByteOrderMark, onDisk.size());
@@ -152,7 +151,7 @@ namespace BECore {
         }
 
         // In place: a watcher of the folder sees one change of the file, not a temp file and a rename. Every File mode is binary
-        auto out = File::Open(PathToUtf8(filepath), FileMode::Write);
+        auto out = File::Open(filepath, FileMode::Write);
         return out && out->Write(StringView(text)) && out->Close().has_value();
     }
 

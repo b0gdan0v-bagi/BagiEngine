@@ -1,10 +1,10 @@
 #pragma once
 
 #include <BECore/Control/Json.h>
+#include <BECore/File/Path.h>
 #include <BECore/Types/Types.h>
 #include <cstdint>
 #include <expected>
-#include <filesystem>
 
 namespace BECore {
 
@@ -110,9 +110,9 @@ namespace BECore {
     };
 
     /// Decodes a PNG (any format `LoadRgbaImage` reads) into 8-bit straight RGBA; `hasAlpha` follows the file's format
-    [[nodiscard]] std::expected<ArtGenPixels, String> ReadArtGenPng(const std::filesystem::path& file);
+    [[nodiscard]] std::expected<ArtGenPixels, String> ReadArtGenPng(const Path& file);
 
     /// Writes @p pixels as an RGBA PNG to a temporary file beside @p file and renames it over, so a failure keeps the old file
-    [[nodiscard]] std::expected<void, String> WriteArtGenPng(const std::filesystem::path& file, const ArtGenPixels& pixels);
+    [[nodiscard]] std::expected<void, String> WriteArtGenPng(const Path& file, const ArtGenPixels& pixels);
 
 }  // namespace BECore

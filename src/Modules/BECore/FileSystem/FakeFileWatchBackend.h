@@ -10,16 +10,16 @@ namespace BECore {
     class FakeFileWatchBackend : public IFileWatchBackend {
     public:
         struct Added {
-            std::filesystem::path path;
+            Path path;
             bool recursive = false;
         };
 
-        void AddDirectory(const std::filesystem::path& realPath, bool recursive) override {
+        void AddDirectory(const Path& realPath, bool recursive) override {
             _added.push_back({realPath, recursive});
             _directories.push_back(realPath);
         }
 
-        void RemoveDirectory(const std::filesystem::path& realPath) override {
+        void RemoveDirectory(const Path& realPath) override {
             _removed.push_back(realPath);
             _directories.erase(eastl::remove(_directories.begin(), _directories.end(), realPath), _directories.end());
         }
@@ -37,7 +37,7 @@ namespace BECore {
         }
 
         /// What the platform would report for a change of @p realPath. Posts even for a path that no directory covers: filtering is the facade's job
-        void Emit(const std::filesystem::path& realPath) {
+        void Emit(const Path& realPath) {
             if (_sink != nullptr) {
                 _sink->Post(realPath);
             }
@@ -47,12 +47,12 @@ namespace BECore {
             return _added;
         }
 
-        [[nodiscard]] const Vector<std::filesystem::path>& RemovedDirectories() const {
+        [[nodiscard]] const Vector<Path>& RemovedDirectories() const {
             return _removed;
         }
 
         /// The directories added and not removed yet
-        [[nodiscard]] const Vector<std::filesystem::path>& Directories() const {
+        [[nodiscard]] const Vector<Path>& Directories() const {
             return _directories;
         }
 
@@ -71,8 +71,8 @@ namespace BECore {
     private:
         IFileWatchSink* _sink = nullptr;
         Vector<Added> _added;
-        Vector<std::filesystem::path> _removed;
-        Vector<std::filesystem::path> _directories;
+        Vector<Path> _removed;
+        Vector<Path> _directories;
         int _shutdownCount = 0;
         double _lastTick = 0.0;
     };

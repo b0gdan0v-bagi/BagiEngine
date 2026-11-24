@@ -1,9 +1,9 @@
 #pragma once
 
 #include <BECore/Config/XmlDocument.h>
+#include <BECore/File/Path.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Types/Types.h>
-#include <filesystem>
 #include <utility>
 
 namespace BECore {
@@ -16,9 +16,9 @@ namespace BECore {
         static XmlConfig Create();
 
         [[nodiscard]] bool LoadFromVirtualPath(StringView virtualPath) const;
-        [[nodiscard]] bool LoadFromFile(const std::filesystem::path& filepath) const;
+        [[nodiscard]] bool LoadFromFile(const Path& filepath) const;
         [[nodiscard]] bool LoadFromString(StringView xmlContent) const;
-        [[nodiscard]] bool SaveToFile(const std::filesystem::path& filepath) const;
+        [[nodiscard]] bool SaveToFile(const Path& filepath) const;
         [[nodiscard]] bool IsLoaded() const;
 
         [[nodiscard]] XmlNode GetRoot() const;

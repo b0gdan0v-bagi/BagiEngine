@@ -2,13 +2,14 @@
 
 #include <BECore/Config/ContentVersion.h>
 #include <BECore/Config/XmlNode.h>
+#include <BECore/File/Path.h>
 #include <BECore/Format/Format.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Scene/SceneNodeFiles.h>
 #include <BECore/Types/Types.h>
 #include <Common/Printers.h>
+#include <Common/TestFiles.h>
 #include <algorithm>
-#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -34,11 +35,11 @@ namespace BECore::Tests {
 
         /// Loads `<folder>/<stem>.xml` through @p reader under the mode Error and appends one message per error and per warning.
         /// A SceneManager root has its node references expanded from the folder first, as the scene loader does.
-        inline void ReadOne(const std::filesystem::path& folder, const ConfigReader& reader, Vector<String>& messages) {
+        inline void ReadOne(const Path& folder, const ConfigReader& reader, Vector<String>& messages) {
             const String file = Format("{}.xml", reader.stem);
-            const std::filesystem::path path = folder / ToStd(file);
+            const Path path = folder / file;
             pugi::xml_document document;
-            if (!document.load_file(path.c_str())) {
+            if (!document.load_file(path.CStr())) {
                 messages.push_back(Format("{}: the file does not parse", file));
                 return;
             }
@@ -79,15 +80,16 @@ namespace BECore::Tests {
      * A `SceneManager` file has its node references expanded from the folder first; a content file's `contentVersion` is known.
      * No gtest macros here, so a test can assert the output on a folder it seeded.
      */
-    inline Vector<String> FindConfigFindings(const std::filesystem::path& folder, Span<const ConfigReader> readers, Span<const HandReadConfig> byHand) {
+    inline Vector<String> FindConfigFindings(const Path& folder, Span<const ConfigReader> readers, Span<const HandReadConfig> byHand) {
         Vector<String> messages;
         Vector<String> stems;
-        std::error_code ec;
-        for (std::filesystem::directory_iterator it(folder, ec), end; !ec && it != end; it.increment(ec)) {  //-NoStd: a test lists a folder
-            if (it->is_regular_file(ec) && it->path().extension() == ".xml") {
-                stems.push_back(FromStdString(it->path().stem().string()));
+        [[maybe_unused]] const auto walked = WalkDirectory(folder, WalkMode::Folder, [&](StringView relativePath, FileKind kind) {
+            const Path entry(relativePath);
+            if (kind == FileKind::File && entry.Extension().View() == ".xml") {
+                stems.push_back(String(entry.Stem().View()));
             }
-        }
+            return true;
+        });
         std::ranges::sort(stems);
 
         const auto isReader = [&](StringView stem) { return std::ranges::any_of(readers, [&](const ConfigReader& reader) { return reader.stem == stem; }); };
@@ -120,8 +122,8 @@ namespace BECore::Tests {
      * again on a subfolder it reads through other files. The reader of a file whose keys another reader also takes
      * calls `NoteKnownKey` on the deserializer for them: the mode is never turned off.
      */
-    inline void ExpectConfigFilesClean(const std::filesystem::path& folder, Span<const ConfigReader> readers, Span<const HandReadConfig> byHand) {
-        EXPECT_TRUE(std::filesystem::is_directory(folder)) << "no folder " << folder.string();
+    inline void ExpectConfigFilesClean(const Path& folder, Span<const ConfigReader> readers, Span<const HandReadConfig> byHand) {
+        EXPECT_TRUE(IsFolder(folder)) << "no folder " << folder.CStr();
         for (const String& message : FindConfigFindings(folder, readers, byHand)) {
             ADD_FAILURE() << message;
         }

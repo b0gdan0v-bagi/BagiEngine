@@ -1,5 +1,6 @@
 #if defined(_WIN32)
 
+#include <BECore/File/File.h>
 #include <BECore/FileSystem/IFileWatchBackend.h>
 #include <BECore/FileSystem/PlatformFileWatchBackend.h>
 
@@ -20,10 +21,24 @@ namespace BECore {
 
         constexpr DWORD kNotifyFilter = FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME | FILE_NOTIFY_CHANGE_SIZE | FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_CREATION;
 
+        /// Room for the UTF-16 form of a path without the heap; a longer one moves there
+        constexpr size_t kInlineWideChars = 260;
+
+        /// The UTF-16 text of a UTF-8 path with the terminating zero that CreateFileW needs
+        SmallVector<wchar_t, kInlineWideChars> ToWide(StringView path) {
+            SmallVector<wchar_t, kInlineWideChars> wide;
+            const int length = path.empty() ? 0 : MultiByteToWideChar(CP_UTF8, 0, path.data(), static_cast<int>(path.size()), nullptr, 0);
+            wide.resize(static_cast<size_t>(length) + 1, L'\0');
+            if (length > 0) {
+                MultiByteToWideChar(CP_UTF8, 0, path.data(), static_cast<int>(path.size()), wide.data(), length);
+            }
+            return wide;
+        }
+
         /// One watched directory. The completion key of its handle is the address of this object, so it must stay at its address and
         /// must not be freed while an operation on it is pending (RemoveDirectory waits for the completion)
         struct Dir {
-            std::filesystem::path root;
+            Path root;
             bool recursive = false;
             HANDLE handle = INVALID_HANDLE_VALUE;
             OVERLAPPED overlapped{};
@@ -44,7 +59,7 @@ namespace BECore {
                 Shutdown();
             }
 
-            void AddDirectory(const std::filesystem::path& realPath, bool recursive) override {
+            void AddDirectory(const Path& realPath, bool recursive) override {
                 RemoveDirectory(realPath);
                 LockGuard lock(_mutex);
                 if (!Start()) {
@@ -53,7 +68,7 @@ namespace BECore {
                 UniquePtr<Dir> dir = MakeUnique<Dir>();
                 dir->root = realPath;
                 dir->recursive = recursive;
-                dir->handle = CreateFileW(realPath.c_str(), FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                dir->handle = CreateFileW(ToWide(realPath.View()).data(), FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
                                           FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, nullptr);
                 if (dir->handle == INVALID_HANDLE_VALUE) {
                     LOG_WARNING("File watch: cannot open a directory, error {}", static_cast<uint32_t>(GetLastError()));
@@ -67,7 +82,7 @@ namespace BECore {
                 _dirs.push_back(eastl::move(dir));
             }
 
-            void RemoveDirectory(const std::filesystem::path& realPath) override {
+            void RemoveDirectory(const Path& realPath) override {
                 UniqueLock lock(_mutex);
                 for (size_t i = 0; i < _dirs.size(); ++i) {
                     Dir& dir = *_dirs[i];
@@ -140,7 +155,7 @@ namespace BECore {
                 return dir.pending;
             }
 
-            void Post(const std::filesystem::path& path) const {
+            void Post(const Path& path) const {
                 if (_sink != nullptr) {
                     _sink->Post(path);
                 }
@@ -152,7 +167,7 @@ namespace BECore {
                 while (offset < bytes) {
                     const FILE_NOTIFY_INFORMATION* info = reinterpret_cast<const FILE_NOTIFY_INFORMATION*>(dir.buffer + offset);
                     const WCHAR* name = info->FileName;
-                    Post(dir.root / std::filesystem::path(name, name + info->FileNameLength / sizeof(WCHAR)));
+                    Post(dir.root / WideToUtf8(name, info->FileNameLength / sizeof(WCHAR)));
                     if (info->NextEntryOffset == 0) {
                         return;
                     }

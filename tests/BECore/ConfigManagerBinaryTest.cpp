@@ -120,8 +120,8 @@ namespace BECore::Tests {
             return root;
         }
 
-        std::filesystem::path _lower;
-        std::filesystem::path _upper;
+        Path _lower;
+        Path _upper;
         FileSystem _fileSystem;
         ConfigManager _manager{_fileSystem};
         FileWatcher _watcher{_fileSystem};
@@ -176,6 +176,18 @@ namespace BECore::Tests {
         EXPECT_FALSE(_manager.IsBinaryConfig("Other"));
         EXPECT_FALSE(_manager.GetConfig("Other").IsEmpty());
         EXPECT_EQ(_manager.GetConfigFilePath("Other"_intern), _upper / "Other.xml");
+    }
+
+    TEST_F(ConfigManagerBinaryTest, ALayerFolderAndFilesWithNonAsciiNamesAreScannedAndLoaded) {
+        const Path folder = _lower / "caf\xC3\xA9";
+        WriteFile(folder / "Conf\xC3\xA9.xml", "<Conf/>\n");
+        WriteContentBin(folder / "Bin\xC3\xA9.bin", kRootName, MakeRoot());
+        Start();
+
+        EXPECT_TRUE(_manager.HasConfig("Conf\xC3\xA9"_intern));
+        EXPECT_EQ(_manager.GetConfigFilePath("Conf\xC3\xA9"_intern), folder / "Conf\xC3\xA9.xml");
+        EXPECT_TRUE(_manager.IsBinaryConfig("Bin\xC3\xA9"));
+        EXPECT_EQ(_manager.GetConfigFilePath("Bin\xC3\xA9"_intern), folder / "Bin\xC3\xA9.bin");
     }
 
     TEST_F(ConfigManagerBinaryTest, AnXmlAndABinOfOneStemInOneLayerLeaveTheConfigAbsent) {
@@ -283,7 +295,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ConfigManagerBinaryTest, SaveAndReloadOfABinConfigFailAndChangeNothing) {
-        const std::filesystem::path file = _lower / "BinaryProbe.bin";
+        const Path file = _lower / "BinaryProbe.bin";
         WriteContentBin(file, kRootName, MakeRoot());
         const Vector<uint8_t> before = ReadFileBytes(file);
         Start();
@@ -301,7 +313,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ConfigManagerBinaryTest, AChangedBinUnderTheWatcherPostsNoEventAndNoFailure) {
-        const std::filesystem::path file = _lower / "BinaryProbe.bin";
+        const Path file = _lower / "BinaryProbe.bin";
         WriteContentBin(file, kRootName, MakeRoot(7));
         WriteFile(_lower / "Plain.xml", "<Plain value=\"one\"/>\n");
         Start();
@@ -319,7 +331,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Read().id, 7) << "the loaded bytes are the ones read at start";
 
         // An XML config beside it still reloads
-        const std::filesystem::path plain = _lower / "Plain.xml";
+        const Path plain = _lower / "Plain.xml";
         WriteFile(plain, "<Plain value=\"two\"/>\n");
         fake->Emit(plain);
         _watcher.Update(kWatchTime + 4.0 * kFileWatchSettleSeconds);

@@ -1,7 +1,6 @@
 #include "SaveGame.h"
 
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/Memory/ScratchArena.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
@@ -47,8 +46,8 @@ namespace BECore {
         constexpr size_t kMaxScratchSaveBytes = size_t{256} * 1024;
 
         /// The bytes of the slot file: in @p arena up to kMaxScratchSaveBytes (valid until the caller's ScratchScope ends), else on the heap
-        std::expected<ScratchFileBytes, SaveError> ReadSlotScratch(const std::filesystem::path& path, LinearArena& arena) {
-            auto bytes = ReadFileBytesScratch(PathToUtf8(path), arena, kMaxScratchSaveBytes, ReaderLimits::kMaxBinaryStreamBytes);
+        std::expected<ScratchFileBytes, SaveError> ReadSlotScratch(const Path& path, LinearArena& arena) {
+            auto bytes = ReadFileBytesScratch(path, arena, kMaxScratchSaveBytes, ReaderLimits::kMaxBinaryStreamBytes);
             if (!bytes) {
                 return MakeError(SaveErrorKind::ReadFailed, std::move(bytes.error()));
             }
@@ -79,20 +78,21 @@ namespace BECore {
 
     SaveGameService::SaveGameService(FileSystem& fileSystem) : _fileSystem(fileSystem) {}
 
-    bool SaveGameService::Initialize(const std::filesystem::path& directory) {
-        if (directory.empty()) {
+    bool SaveGameService::Initialize(const Path& directory) {
+        if (directory.Empty()) {
             return false;
         }
 
-        std::error_code ec;
-        std::filesystem::path absolute = std::filesystem::absolute(directory, ec).lexically_normal();
-        if (ec) {
+        // Not AbsoluteNormalPath: it keeps a relative path when the working folder is unknown, and a relative save folder is no save folder
+        std::expected<String, String> absoluteText = AbsolutePath(directory.View());
+        if (!absoluteText) {
             return false;
         }
+        Path absolute(eastl::move(*absoluteText));
 
-        std::filesystem::create_directories(absolute, ec);
-        if (ec || !std::filesystem::is_directory(absolute, ec)) {
-            LOG_ERROR("SaveGameService: cannot use '{}' as the save folder", absolute.string());
+        const Optional<FileInfo> info = CreateDirectories(absolute.View()) ? GetFileInfo(absolute.View()) : Optional<FileInfo>{};
+        if (!info || info->kind != FileKind::Directory) {
+            LOG_ERROR("SaveGameService: cannot use '{}' as the save folder", absolute.View());
             return false;
         }
 
@@ -100,7 +100,7 @@ namespace BECore {
         const PoolString mountPoint = SaveMount::point;
         _fileSystem.Unmount(mountPoint);
         _initialized = _fileSystem.Mount(mountPoint, absolute);
-        _directory = _initialized ? std::move(absolute) : std::filesystem::path{};
+        _directory = _initialized ? eastl::move(absolute) : Path{};
         return _initialized;
     }
 
@@ -108,20 +108,16 @@ namespace BECore {
         return !slot.empty() && slot.size() <= kMaxSlotNameLength && eastl::all_of(slot.begin(), slot.end(), IsSlotNameCharacter);
     }
 
-    std::filesystem::path SaveGameService::MakePath(StringView slot, StringView suffix) const {
-        //-NoStd: a std::filesystem path is built from it
-        std::string name = ToStdString(slot);
-        name.append(suffix.data(), suffix.size());
-        return _directory / name;
+    Path SaveGameService::MakePath(StringView slot, StringView suffix) const {
+        return _directory / Format("{}{}", slot, suffix);
     }
 
-    std::filesystem::path SaveGameService::ResolveSlot(StringView slot) const {
+    Path SaveGameService::ResolveSlot(StringView slot) const {
         const String virtualPath = Format("{}/{}{}", kSaveMountPoint, slot, kSaveExtension);
-        std::filesystem::path resolved = _fileSystem.ResolvePath(virtualPath);
+        Path resolved = _fileSystem.ResolvePath(virtualPath);
 
         // ResolvePath falls back to the content roots and the working directory: a file of the same relative path there is not a save
-        std::error_code ec;
-        if (resolved.empty() || !std::filesystem::equivalent(resolved.parent_path(), _directory, ec)) {
+        if (resolved.Empty() || !IsSameFile(resolved.Parent().View(), _directory.View()).value_or(false)) {
             return {};
         }
         return resolved;
@@ -140,8 +136,8 @@ namespace BECore {
             return MakeError(SaveErrorKind::WriteFailed, Format("The save for slot '{}' is {} bytes, over the limit of {}", slot, bytes.size(), ReaderLimits::kMaxBinaryStreamBytes));
         }
 
-        const std::filesystem::path target = MakePath(slot, kSaveExtension);
-        auto written = WriteFileAtomically(PathToUtf8(target), Span<const uint8_t>(bytes.data(), bytes.size()));
+        const Path target = MakePath(slot, kSaveExtension);
+        auto written = WriteFileAtomically(target, Span<const uint8_t>(bytes.data(), bytes.size()));
         if (!written) {
             return MakeError(SaveErrorKind::WriteFailed, std::move(written.error()));
         }
@@ -149,7 +145,7 @@ namespace BECore {
         return {};
     }
 
-    std::expected<std::filesystem::path, SaveError> SaveGameService::FindSlotFile(StringView slot) const {
+    std::expected<Path, SaveError> SaveGameService::FindSlotFile(StringView slot) const {
         if (!_initialized) {
             return NotInitializedError();
         }
@@ -157,8 +153,8 @@ namespace BECore {
             return InvalidSlotNameError(slot);
         }
 
-        std::filesystem::path path = ResolveSlot(slot);
-        if (path.empty()) {
+        Path path = ResolveSlot(slot);
+        if (path.Empty()) {
             return MakeError(SaveErrorKind::NotFound, Format("No save in slot '{}'", slot));
         }
         return path;
@@ -170,7 +166,7 @@ namespace BECore {
             return std::unexpected(path.error());
         }
 
-        auto bytes = ReadFileBytes(PathToUtf8(*path), ReaderLimits::kMaxBinaryStreamBytes);
+        auto bytes = ReadFileBytes(*path, ReaderLimits::kMaxBinaryStreamBytes);
         if (!bytes) {
             return MakeError(SaveErrorKind::ReadFailed, std::move(bytes.error()));
         }
@@ -255,17 +251,19 @@ namespace BECore {
         if (!_initialized || !IsValidSlotName(slot)) {
             return false;
         }
-        std::error_code ec;
-        const std::filesystem::path path = ResolveSlot(slot);
-        return !path.empty() && std::filesystem::is_regular_file(path, ec);
+        const Path path = ResolveSlot(slot);
+        if (path.Empty()) {
+            return false;
+        }
+        const Optional<FileInfo> info = GetFileInfo(path.View());
+        return info && info->kind == FileKind::File;
     }
 
     bool SaveGameService::Delete(StringView slot) {
         if (!Exists(slot)) {
             return false;
         }
-        std::error_code ec;
-        const bool removed = std::filesystem::remove(ResolveSlot(slot), ec) && !ec;
+        const bool removed = RemoveFile(ResolveSlot(slot).View()).has_value();
         if (removed) {
             NotifySaveChanged();
         }

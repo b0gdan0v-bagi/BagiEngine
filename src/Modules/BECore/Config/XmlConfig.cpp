@@ -15,14 +15,14 @@ namespace BECore {
         if (!_doc) {
             return false;
         }
-        std::filesystem::path resolvedPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
-        if (resolvedPath.empty()) {
+        const Path resolvedPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
+        if (resolvedPath.Empty()) {
             return false;
         }
         return _doc->LoadFromFile(resolvedPath);
     }
 
-    bool XmlConfig::LoadFromFile(const std::filesystem::path& filepath) const {
+    bool XmlConfig::LoadFromFile(const Path& filepath) const {
         if (!_doc) {
             return false;
         }
@@ -36,7 +36,7 @@ namespace BECore {
         return _doc->LoadFromString(xmlContent);
     }
 
-    bool XmlConfig::SaveToFile(const std::filesystem::path& filepath) const {
+    bool XmlConfig::SaveToFile(const Path& filepath) const {
         if (!_doc) {
             return false;
         }

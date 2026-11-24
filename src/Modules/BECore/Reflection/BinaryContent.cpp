@@ -1,5 +1,4 @@
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/PoolString/PoolBlock.h>
 #include <BECore/Reflection/BinaryContent.h>
 #include <BECore/Reflection/ReaderLimits.h>
@@ -138,9 +137,8 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<BinaryContent, String> LoadContentFile(const std::filesystem::path& path, BinaryContentOptions options) {
-        const String utf8Path = PathToUtf8(path);
-        const Optional<FileInfo> info = GetFileInfo(utf8Path);
+    std::expected<BinaryContent, String> LoadContentFile(const Path& path, BinaryContentOptions options) {
+        const Optional<FileInfo> info = GetFileInfo(path);
         if (!info) {
             return Refuse("Failed to open content file");
         }
@@ -151,7 +149,7 @@ namespace BECore {
             return Refuse("Content file is larger than the limit");
         }
 
-        std::expected<File, String> file = File::Open(utf8Path, FileMode::Read);
+        std::expected<File, String> file = File::Open(path, FileMode::Read);
         if (!file) {
             return std::unexpected(file.error());
         }

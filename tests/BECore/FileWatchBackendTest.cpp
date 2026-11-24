@@ -7,8 +7,8 @@
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Common/Wait.h>
+#include <EASTL/sort.h>
 #include <chrono>
-#include <filesystem>
 #include <gtest/gtest.h>
 #include <thread>
 
@@ -19,20 +19,26 @@ namespace BECore::Tests {
         /// Collects what a backend posts; a native backend posts from its own thread
         class RecordingSink : public IFileWatchSink {
         public:
-            void Post(const std::filesystem::path& realPath) override {
+            void Post(const Path& realPath) override {
                 LockGuard lock(_mutex);
-                _posted.push_back(realPath.lexically_normal());
+                _posted.push_back(realPath.LexicallyNormal());
             }
 
-            [[nodiscard]] bool Has(const std::filesystem::path& path) const {
+            [[nodiscard]] bool Has(const Path& path) const {
                 LockGuard lock(_mutex);
-                const std::filesystem::path wanted = path.lexically_normal();
-                for (const std::filesystem::path& posted : _posted) {
+                const Path wanted = path.LexicallyNormal();
+                for (const Path& posted : _posted) {
                     if (posted == wanted) {
                         return true;
                     }
                 }
                 return false;
+            }
+
+            /// Every post in the order it came
+            [[nodiscard]] Vector<Path> Posted() const {
+                LockGuard lock(_mutex);
+                return _posted;
             }
 
             [[nodiscard]] size_t Count() const {
@@ -47,14 +53,14 @@ namespace BECore::Tests {
 
         private:
             mutable Mutex _mutex{BE_LOCK_SITE("Recording file watch sink")};
-            Vector<std::filesystem::path> _posted;
+            Vector<Path> _posted;
         };
 
         /// A folder of the test, a backend over it and the clock that drives its Tick; the same cases run on every backend of the platform
         class BackendHarness {
         public:
             explicit BackendHarness(IntrusivePtr<IFileWatchBackend> backend, bool mayDropEvents = false)
-                : _backend(std::move(backend)), _mayDropEvents(mayDropEvents), _dir(std::filesystem::absolute(TestTempDirectory("fwb")).lexically_normal()) {
+                : _backend(std::move(backend)), _mayDropEvents(mayDropEvents), _dir(TestTempDirectory("fwb").LexicallyNormal()) {
                 MakeEmptyDirectory(_dir);
                 _backend->SetSink(&_sink);
             }
@@ -68,7 +74,7 @@ namespace BECore::Tests {
             BackendHarness(const BackendHarness&) = delete;
             BackendHarness& operator=(const BackendHarness&) = delete;
 
-            [[nodiscard]] const std::filesystem::path& Dir() const {
+            [[nodiscard]] const Path& Dir() const {
                 return _dir;
             }
 
@@ -81,10 +87,9 @@ namespace BECore::Tests {
             }
 
             /// Writes the file and moves its write time forward by a step of its own, so a rewrite of the same size is a change on a file system with coarse time too
-            void Write(const std::filesystem::path& path, StringView text) {
+            void Write(const Path& path, StringView text) {
                 WriteFile(path, text);
-                std::error_code error;
-                std::filesystem::last_write_time(path, std::filesystem::file_time_type::clock::now() + std::chrono::seconds(2 * ++_writes), error);
+                SetWriteTime(path, std::chrono::seconds(2 * ++_writes));
             }
 
             /// Whether the platform may lose events without a word (fseventsd under a storm of file events): a missing post then is no verdict on the backend
@@ -99,7 +104,7 @@ namespace BECore::Tests {
             }
 
             /// Pumps until @p path is posted; false when it never is. A platform that drops events is not waited on for the whole limit: its case skips
-            bool WaitForPost(const std::filesystem::path& path) {
+            bool WaitForPost(const Path& path) {
                 constexpr std::chrono::milliseconds kDroppedEventsLimit{10000};
                 return WaitUntil(
                     [this, &path] {
@@ -110,7 +115,7 @@ namespace BECore::Tests {
             }
 
             /// Whether @p path stays unposted after a short pause (a negative check can only wait, load only weakens it)
-            bool StaysQuiet(const std::filesystem::path& path) {
+            bool StaysQuiet(const Path& path) {
                 Pump();
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 Pump();
@@ -120,7 +125,7 @@ namespace BECore::Tests {
         private:
             IntrusivePtr<IFileWatchBackend> _backend;
             bool _mayDropEvents = false;
-            std::filesystem::path _dir;
+            Path _dir;
             RecordingSink _sink;
             double _clock = 0.0;
             int _writes = 0;
@@ -133,7 +138,7 @@ namespace BECore::Tests {
             if ((harness).MayDropEvents()) {                                                                                                                                                           \
                 GTEST_SKIP() << "the platform delivered no event (fseventsd under a storm of events)";                                                                                                 \
             }                                                                                                                                                                                          \
-            FAIL() << "no post for " << (path);                                                                                                                                                        \
+            FAIL() << "no post for " << (path).CStr();                                                                                                                                                 \
         }                                                                                                                                                                                              \
     } while (false)
 
@@ -210,13 +215,13 @@ namespace BECore::Tests {
 
     TYPED_TEST(FileWatchBackendContractTest, AFileWrittenAfterTheWatchIsPosted) {
         this->H().Backend().AddDirectory(this->H().Dir(), false);
-        const std::filesystem::path file = this->H().Dir() / "a.xml";
+        const Path file = this->H().Dir() / "a.xml";
         this->H().Write(file, "one");
         ASSERT_POSTED(this->H(), file);
     }
 
     TYPED_TEST(FileWatchBackendContractTest, ARewriteIsPostedAgain) {
-        const std::filesystem::path file = this->H().Dir() / "a.xml";
+        const Path file = this->H().Dir() / "a.xml";
         this->H().Write(file, "one");
         this->H().Backend().AddDirectory(this->H().Dir(), false);
         this->H().Write(file, "two");
@@ -227,42 +232,49 @@ namespace BECore::Tests {
         ASSERT_POSTED(this->H(), file);
     }
 
+    TYPED_TEST(FileWatchBackendContractTest, AFileWithANonAsciiNameInASubfolderIsPostedUnderItsOwnName) {
+        const Path folder = this->H().Dir() / "Папка_é";
+        MakeDirectory(folder);
+        this->H().Backend().AddDirectory(this->H().Dir(), true);
+        const Path file = folder / "данные_é.xml";
+        this->H().Write(file, "pixels");
+        ASSERT_POSTED(this->H(), file);
+    }
+
     TYPED_TEST(FileWatchBackendContractTest, ARenameOverTheFileIsPostedForTheTarget) {
-        const std::filesystem::path file = this->H().Dir() / "a.xml";
+        const Path file = this->H().Dir() / "a.xml";
         this->H().Write(file, "one");
         this->H().Backend().AddDirectory(this->H().Dir(), false);
 
-        const std::filesystem::path temp = this->H().Dir() / "a.xml.tmp";
+        const Path temp = this->H().Dir() / "a.xml.tmp";
         this->H().Write(temp, "replacement");
-        std::error_code error;
-        std::filesystem::rename(temp, file, error);
-        ASSERT_FALSE(error) << error.message();
+        const auto renamed = RenameFile(temp, file);
+        ASSERT_TRUE(renamed.has_value()) << renamed.error().c_str();
         ASSERT_POSTED(this->H(), file);
     }
 
     TYPED_TEST(FileWatchBackendContractTest, AFileInASubfolderOfARecursiveDirectoryIsPosted) {
         MakeDirectory(this->H().Dir() / "sub");
         this->H().Backend().AddDirectory(this->H().Dir(), true);
-        const std::filesystem::path file = this->H().Dir() / "sub" / "x.png";
+        const Path file = this->H().Dir() / "sub" / "x.png";
         this->H().Write(file, "pixels");
         ASSERT_POSTED(this->H(), file);
     }
 
     TYPED_TEST(FileWatchBackendContractTest, ARemovedFileIsPosted) {
-        const std::filesystem::path file = this->H().Dir() / "a.xml";
+        const Path file = this->H().Dir() / "a.xml";
         this->H().Write(file, "one");
         this->H().Backend().AddDirectory(this->H().Dir(), false);
 
-        std::error_code error;
-        std::filesystem::remove(file, error);
-        ASSERT_FALSE(error) << error.message();
+        const auto removed = RemoveFile(file);
+        ASSERT_TRUE(removed.has_value()) << removed.error().c_str();
         ASSERT_POSTED(this->H(), file);
     }
 
     TYPED_TEST(FileWatchBackendContractTest, ARemovedDirectoryPostsNothingMore) {
         this->H().Backend().AddDirectory(this->H().Dir(), false);
         this->H().Backend().RemoveDirectory(this->H().Dir());
-        const std::filesystem::path file = this->H().Dir() / "a.xml";
+        const Path file = this->H().Dir() / "a.xml";
         this->H().Write(file, "one");
         EXPECT_TRUE(this->H().StaysQuiet(file));
     }
@@ -270,13 +282,13 @@ namespace BECore::Tests {
     TYPED_TEST(FileWatchBackendContractTest, AShutdownBackendPostsNothingMore) {
         this->H().Backend().AddDirectory(this->H().Dir(), false);
         this->H().Backend().Shutdown();
-        const std::filesystem::path file = this->H().Dir() / "a.xml";
+        const Path file = this->H().Dir() / "a.xml";
         this->H().Write(file, "one");
         EXPECT_TRUE(this->H().StaysQuiet(file));
     }
 
     TYPED_TEST(FileWatchBackendContractTest, ADirectoryRemovedUnderTheWatchIsSurvivedAndWatchedAgainWhenItComesBack) {
-        const std::filesystem::path file = this->H().Dir() / "a.xml";
+        const Path file = this->H().Dir() / "a.xml";
         this->H().Write(file, "one");
         this->H().Backend().AddDirectory(this->H().Dir(), false);
 
@@ -316,16 +328,15 @@ namespace BECore::Tests {
     };
 
     TEST_F(FileWatchBackendFSEventsTest, APathBehindASymlinkIsPostedInTheFormItWasAdded) {
-        const std::filesystem::path link = H().Dir().parent_path() / (H().Dir().filename().string() + "_link");
-        std::error_code error;
-        std::filesystem::create_directory_symlink(H().Dir(), link, error);
-        ASSERT_FALSE(error) << error.message();
+        const Path link = H().Dir().Parent() / Format("{}_link", H().Dir().Filename().CStr());
+        CreateSymlink(link, H().Dir());
+        ASSERT_TRUE(IsSymbolicLink(link));
 
         H().Backend().AddDirectory(link, false);
         H().Write(H().Dir() / "a.xml", "one");
-        const std::filesystem::path linked = link / "a.xml";
+        const Path linked = link / "a.xml";
         const bool posted = H().WaitForPost(linked);
-        std::filesystem::remove(link, error);
+        RemoveDirectory(link);  // removes the link of a folder as a link, never the folder
         if (!posted && H().MayDropEvents()) {
             GTEST_SKIP() << "the platform delivered no event (fseventsd under a storm of events)";
         }
@@ -334,10 +345,8 @@ namespace BECore::Tests {
 
     TEST_F(FileWatchBackendFSEventsTest, TheDirectoryItselfIsNeverPosted) {
         H().Backend().AddDirectory(H().Dir(), false);
-        std::error_code error;
-        std::filesystem::last_write_time(H().Dir(), std::filesystem::file_time_type::clock::now() + std::chrono::seconds(30), error);
-        ASSERT_FALSE(error) << error.message();
-        const std::filesystem::path file = H().Dir() / "a.xml";
+        SetWriteTime(H().Dir(), std::chrono::seconds(30));
+        const Path file = H().Dir() / "a.xml";
         H().Write(file, "one");
         ASSERT_POSTED(H(), file);
         EXPECT_FALSE(H().Sink().Has(H().Dir()));
@@ -346,9 +355,9 @@ namespace BECore::Tests {
     TEST_F(FileWatchBackendFSEventsTest, ANonRecursiveDirectoryDoesNotReportItsSubfolders) {
         MakeDirectory(H().Dir() / "sub");
         H().Backend().AddDirectory(H().Dir(), false);
-        const std::filesystem::path deep = H().Dir() / "sub" / "x.png";
+        const Path deep = H().Dir() / "sub" / "x.png";
         H().Write(deep, "pixels");
-        const std::filesystem::path shallow = H().Dir() / "a.xml";
+        const Path shallow = H().Dir() / "a.xml";
         H().Write(shallow, "one");
         ASSERT_POSTED(H(), shallow);
         EXPECT_FALSE(H().Sink().Has(deep));
@@ -365,7 +374,7 @@ namespace BECore::Tests {
             WriteFile(Dir() / "sub" / "b.xml", "two");
         }
 
-        std::filesystem::path Dir() const {
+        Path Dir() const {
             return TestTempDirectory("fwt");
         }
 
@@ -383,6 +392,23 @@ namespace BECore::Tests {
         PostTree(_sink, Dir(), false);
         EXPECT_TRUE(_sink.Has(Dir() / "a.xml"));
         EXPECT_FALSE(_sink.Has(Dir() / "sub" / "b.xml"));
+    }
+
+    TEST_F(FileWatchPostTreeTest, ThePostsAreTheFolderJoinedToTheNamesBelowIt) {
+        WriteFile(Dir() / "Папка_é" / "данные_é.xml", "three");
+
+        PostTree(_sink, Dir(), true);
+
+        Vector<Path> posted = _sink.Posted();
+        eastl::sort(posted.begin(), posted.end());
+        const Path dir = Dir();
+        EXPECT_EQ(posted, (Vector<Path>{dir / "a.xml", dir / "sub", dir / "sub" / "b.xml", dir / "Папка_é", dir / "Папка_é" / "данные_é.xml"}));
+    }
+
+    TEST_F(FileWatchPostTreeTest, AFolderThatCannotBeListedPostsNothing) {
+        PostTree(_sink, Dir() / "missing", true);
+
+        EXPECT_EQ(_sink.Count(), 0u);
     }
 
     /// The polling backend alone: its clock is a parameter, so these cases never sleep or wait
@@ -406,7 +432,7 @@ namespace BECore::Tests {
     TEST_F(FileWatchBackendPollingTest, ATickInsideTheIntervalDoesNotLook) {
         H().Backend().AddDirectory(H().Dir(), false);
         H().Backend().Tick(0.0);
-        const std::filesystem::path file = H().Dir() / "a.xml";
+        const Path file = H().Dir() / "a.xml";
         H().Write(file, "one");
 
         H().Backend().Tick(kPollIntervalSeconds / 2);

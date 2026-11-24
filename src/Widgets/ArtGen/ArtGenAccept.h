@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/Json.h>
+#include <BECore/File/Path.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Resource/TextureLibrary.h>
 #include <BECore/Types/Types.h>
@@ -12,7 +13,6 @@
 #include <Widgets/TextureEditor/SpriteAtlas.h>
 #include <cstdint>
 #include <expected>
-#include <filesystem>
 
 namespace BECore {
 
@@ -30,13 +30,13 @@ namespace BECore {
     [[nodiscard]] String ArtGenGameFile(StringView name, StringView kind);
 
     /// The pixel size from the IHDR chunk of a PNG file, or empty when the file is not a PNG
-    [[nodiscard]] Optional<Pair<uint32_t, uint32_t>> ReadPngSize(const std::filesystem::path& file);
+    [[nodiscard]] Optional<Pair<uint32_t, uint32_t>> ReadPngSize(const Path& file);
 
     /// What CopyVariantIntoAssets wrote
     struct ArtGenCopied {
         String texturePath;  // the virtual path a TextureLibrary entry names: "assets/artgen/<sprite>.png"
-        std::filesystem::path pngFile;
-        std::filesystem::path provenanceFile;
+        Path pngFile;
+        Path provenanceFile;
         uint32_t width = 0;  // the written file's size
         uint32_t height = 0;
         ArtGenIntRect crop;  // the part of the source that was kept
@@ -56,8 +56,7 @@ namespace BECore {
      * A variant with no provenance file (@p provenance empty or missing) leaves none of an earlier accept of the name: the identity plan
      * removes it (a missing file is fine, a failed removal is an error), the other plans write a record with `accepted` only.
      */
-    std::expected<ArtGenCopied, String> CopyVariantIntoAssets(const std::filesystem::path& png, const std::filesystem::path& provenance, const std::filesystem::path& assetsDir, StringView sprite,
-                                                              const ArtGenImagePlan& plan);
+    std::expected<ArtGenCopied, String> CopyVariantIntoAssets(const Path& png, const Path& provenance, const Path& assetsDir, StringView sprite, const ArtGenImagePlan& plan);
 
     /**
      * @brief The cache step of an accept: calls @p evict with the picture's path and, for a repacked sprite, the atlas's path. @p evict is
@@ -227,8 +226,8 @@ namespace BECore {
     /// What WriteSoundIntoAssets wrote
     struct ArtGenSoundWritten {
         String clipPath;  // the virtual path a game plays: "assets/..."
-        std::filesystem::path wavFile;
-        std::filesystem::path provenanceFile;
+        Path wavFile;
+        Path provenanceFile;
         AudioFormat format;
         double seconds = 0.0;
         float peakDb = 0.0f;
@@ -239,8 +238,8 @@ namespace BECore {
      * @p assetsDir (the game's top `assets` layer) at @p target, with `<file>.artgen.json`: the generation's provenance plus `accepted`
      * (the settings, the source file, the result). No services: the caller names the folder.
      */
-    std::expected<ArtGenSoundWritten, String> WriteSoundIntoAssets(const std::filesystem::path& sourceFile, const std::filesystem::path& provenance, const std::filesystem::path& assetsDir,
-                                                                   const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings);
+    std::expected<ArtGenSoundWritten, String> WriteSoundIntoAssets(const Path& sourceFile, const Path& provenance, const Path& assetsDir, const ArtGenSoundTarget& target,
+                                                                   const ArtGenSoundSettings& settings);
 
     /// Calls ReloadClip on every AudioSourceComponent under @p root whose clip is @p clip; returns how many
     uint32_t ReloadAudioSourcesUsing(SceneNode& root, PoolString clip);
@@ -269,12 +268,12 @@ namespace BECore {
     std::expected<ArtGenImageFrame, String> MeasureFrameForControl(const Vector<String>& pngFiles, const ArtGenImageSettings& settings);
 
     /// The provenance file beside a game's image or clip: the file's name with its extension replaced by `.artgen.json`
-    [[nodiscard]] std::filesystem::path ProvenanceFileOf(const std::filesystem::path& mediaFile);
+    [[nodiscard]] Path ProvenanceFileOf(const Path& mediaFile);
 
     /// Adds `"kept": {"seed", "date"}` to the provenance file @p file (replacing an earlier one), the rest of it as it was, written atomically;
     /// a missing or unreadable file is an error that names it. The provenance records of an accept are by hand too: they merge into the
     /// document the service wrote, whose other keys stay as they are
-    std::expected<void, String> MarkProvenanceKept(const std::filesystem::path& file, int64_t seed, StringView date);
+    std::expected<void, String> MarkProvenanceKept(const Path& file, int64_t seed, StringView date);
 
     /**
      * @brief The editor's ArtGenSession::Keeper: MarkProvenanceKept on the game's file of the sprite or clip @p name (@p kind `image` or

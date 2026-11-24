@@ -2,16 +2,16 @@
 
 #include <BECore/Audio/AudioClip.h>
 #include <BECore/Audio/AudioManager.h>
+#include <BECore/File/Path.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/PoolString/StaticPoolString.h>
 #include <BECore/Types/Types.h>
-#include <filesystem>
 
 namespace BECore::Tests {
 
     /// The sound files the audio tests mount or decode, read from the source tree
-    inline std::filesystem::path AudioFixtureFolder() {
-        return std::filesystem::path(__FILE__).parent_path() / "AudioData";
+    inline Path AudioFixtureFolder() {
+        return Path(__FILE__).Parent() / "AudioData";
     }
 
     /// A short decoded clip under @p path, for a test of what plays it rather than of what it sounds like

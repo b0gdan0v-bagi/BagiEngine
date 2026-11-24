@@ -86,13 +86,11 @@ namespace BECore::Tests {
         class TempGame {
         public:
             TempGame() : _root(TestTempDirectory("SpriteAtlasPreview")), _resolver{_root} {
-                std::error_code ignored;
-                std::filesystem::remove_all(_root, ignored);
-                std::filesystem::create_directories(_root / "assets", ignored);
+                RemoveDirectory(_root);
+                MakeDirectory(_root / "assets");
             }
             ~TempGame() {
-                std::error_code ignored;
-                std::filesystem::remove_all(_root, ignored);
+                RemoveDirectory(_root);
             }
             TempGame(const TempGame&) = delete;
             TempGame& operator=(const TempGame&) = delete;
@@ -102,27 +100,26 @@ namespace BECore::Tests {
                 return AtlasIo{_root / "assets", _resolver};
             }
 
-            [[nodiscard]] std::filesystem::path Resolve(StringView virtualPath) const {
+            [[nodiscard]] Path Resolve(StringView virtualPath) const {
                 return _resolver(virtualPath);
             }
 
             void SavePng(const char* virtualPath, const RgbaImage& image) const {
-                const std::filesystem::path file = Resolve(virtualPath);
-                std::error_code ignored;
-                std::filesystem::create_directories(file.parent_path(), ignored);
+                const Path file = Resolve(virtualPath);
+                MakeDirectory(file.Parent());
                 ASSERT_TRUE(SaveRgbaPng(file, image).has_value());
             }
 
         private:
             struct Resolver {
-                std::filesystem::path root;
+                Path root;
 
-                std::filesystem::path operator()(StringView virtualPath) const {
-                    return root / ToStd(virtualPath);
+                Path operator()(StringView virtualPath) const {
+                    return root / virtualPath;
                 }
             };
 
-            std::filesystem::path _root;
+            Path _root;
             Resolver _resolver;
         };
 

@@ -1,8 +1,8 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/Types/Types.h>
 #include <cstddef>
-#include <filesystem>
 
 namespace BECore {
 
@@ -25,6 +25,6 @@ namespace BECore {
      * (`gitdir: <path>`, the shape in a submodule or a worktree; a relative path is taken from the folder of that file) is followed.
      * Reads only `HEAD`, never throws; a shipped build has no repository above its content and gets an empty string.
      */
-    [[nodiscard]] String ReadGitBranch(const std::filesystem::path& startDirectory);
+    [[nodiscard]] String ReadGitBranch(const Path& startDirectory);
 
 }  // namespace BECore

@@ -77,29 +77,25 @@ namespace BECore::Tests {
         void SetUp() override {
             // One directory per test: ctest runs the tests in parallel processes, and SetUp clears the directory
             _dir = TestTempDirectory("BagiEngineConfigEditorSaveTest");
-            std::error_code error;
-            std::filesystem::remove_all(_dir, error);
-            std::filesystem::create_directories(_dir, error);
-            ASSERT_FALSE(error) << _dir.generic_string() << ": " << error.message();
+            MakeEmptyDirectory(_dir);
         }
 
         void TearDown() override {
             // The registry is a process-wide singleton: drop what a case registered
             ConfigFieldSchema::DestroyInstance();
-            std::error_code ignored;
-            std::filesystem::remove_all(_dir, ignored);
+            RemoveDirectory(_dir);
         }
 
-        std::filesystem::path SavedPath() const {
+        Path SavedPath() const {
             return _dir / "LoggerConfig.xml";
         }
 
         /// The file of the first sink once its type is FileSink (the shipped OutputSink has no file of its own)
-        std::filesystem::path FirstLogPath() const {
+        Path FirstLogPath() const {
             return _dir / "first.log";
         }
 
-        std::filesystem::path EngineLogPath() const {
+        Path EngineLogPath() const {
             return _dir / "engine.log";
         }
 
@@ -108,8 +104,8 @@ namespace BECore::Tests {
         /// defaults, so a save that loses an attribute shows. The first sink carries a `filename` that OutputSink ignores:
         /// the editor changes its type to FileSink as well, and it must not fall back to ./engine.log.
         String TemplateText() const {
-            const String firstLog = FromStdString(FirstLogPath().generic_string());
-            const String engineLog = FromStdString(EngineLogPath().generic_string());
+            const String firstLog = String(FirstLogPath().View());
+            const String engineLog = String(EngineLogPath().View());
             return Format(R"(<?xml version="1.0" encoding="UTF-8"?>
 <root>
     <!-- Logger Sinks Configuration -->
@@ -158,7 +154,7 @@ namespace BECore::Tests {
         }
 
     private:
-        std::filesystem::path _dir;
+        Path _dir;
     };
 
     TEST_F(ConfigEditorSaveTest, EveryOfferedSinkTypeSurvivesEditSaveReload) {
@@ -232,9 +228,7 @@ namespace BECore::Tests {
                 EXPECT_EQ(reloadedAttributeCount, attributeCount) << "sink " << i;
             }
 
-            std::error_code error;
-            std::filesystem::remove(EngineLogPath(), error);
-            ASSERT_FALSE(error) << error.message();
+            RemoveFileIfPresent(EngineLogPath());
             const auto manager = New<LoggerManager>();
             manager->Deserialize(saved);
 
@@ -250,7 +244,7 @@ namespace BECore::Tests {
             const auto* fileSink = dynamic_cast<const FileSink*>(&second);
             ASSERT_NE(fileSink, nullptr);
             EXPECT_TRUE(fileSink->IsOpen());
-            EXPECT_TRUE(std::filesystem::exists(EngineLogPath(), error));
+            EXPECT_TRUE(PathExists(EngineLogPath()));
         }
     }
 
@@ -432,7 +426,7 @@ namespace BECore::Tests {
             _widget->GetStagedChanges().Set(String{kValueKey.data(), kValueKey.size()}, root.GetPugiNode().attribute("value"), value);
         }
 
-        std::filesystem::path _dir;
+        Path _dir;
         FileSystem _fileSystem;
         ConfigManager _manager{_fileSystem};
         IntrusivePtr<ConfigEditorWidget> _widget;

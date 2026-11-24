@@ -2,9 +2,9 @@
 
 #include <BECore/Cook/ContentCook.h>
 #include <BECore/Cook/ContentCooker.h>
+#include <BECore/File/Path.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/Types/Types.h>
-#include <filesystem>
 
 namespace BECore {
 
@@ -34,7 +34,7 @@ namespace BECore {
      *
      * @param registry The cookers the cook used (the engine's own is `ContentCookRegistry::GetInstance()`)
      */
-    CookReport VerifyCooked(const FileSystem& sourceFs, const std::filesystem::path& cookedDir, const ContentCookRegistry& registry);
+    CookReport VerifyCooked(const FileSystem& sourceFs, const Path& cookedDir, const ContentCookRegistry& registry);
 
     /// The longest line `DescribeDifference` quotes; a longer one is cut and ends in `...`
     inline constexpr size_t kMaxQuotedLineLength = 160;

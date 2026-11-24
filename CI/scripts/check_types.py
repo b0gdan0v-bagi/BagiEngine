@@ -124,6 +124,7 @@ RULES: Tuple[Rule, ...] = (
     Rule("async", qualified("async"), "use the `TaskManager` (TaskSystem/CLAUDE.md), or " + MARK_ADVICE),
     Rule("format", qualified("v?format", "std"), "use `Format` (Format/CLAUDE.md), or " + MARK_ADVICE),
     Rule("stable-sort", qualified("stable_sort|inplace_merge|stable_partition"), "allocates a buffer; " + MARK_ADVICE),
+    Rule("path", re.compile(r"(?<![\w:])(?:::)?(?P<name>std::filesystem::(?:path|u8path))\b"), "use `Path` (BECore/File/Path.h, File/CLAUDE.md), or " + MARK_ADVICE),
     Rule("directory-iterator", re.compile(r"(?<![\w:])(?:::)?(?P<name>std::filesystem::(?:recursive_)?directory_iterator)\b"), "allocates per entry; " + MARK_ADVICE),
     Rule("fmt", re.compile(r"(?<![\w:])(?:::)?(?P<name>fmt::)(?=\w)"), "use the name of the format layer (Format/CLAUDE.md), or " + MARK_ADVICE),
     # threading primitives: the engine's own are in BECore/Threading (Threading/CLAUDE.md)

@@ -96,7 +96,7 @@ namespace BECore::Tests {
 
         void SetUp() override {
             ASSERT_TRUE(CoreManager::GetFileSystem().Mount("test_audio_scratch"_intern, AudioFixtureFolder()));
-            ASSERT_TRUE(CoreManager::GetFileSystem().Mount("test_audio_scratch_big"_intern, std::filesystem::path(_folder.PathOf("big.wav").c_str()).parent_path()));
+            ASSERT_TRUE(CoreManager::GetFileSystem().Mount("test_audio_scratch_big"_intern, Path(_folder.PathOf("big.wav")).Parent()));
         }
 
         void TearDown() override {

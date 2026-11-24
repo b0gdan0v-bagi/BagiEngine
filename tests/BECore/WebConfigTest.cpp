@@ -18,14 +18,14 @@ namespace BECore::Tests {
     namespace {
 
         /// web/config/<fileName> under the engine's content root, the checkout the test was built from
-        std::filesystem::path WebConfigPath(const char* fileName) {
-            return std::filesystem::path(BagiContentRoots::kEngine) / "web" / "config" / fileName;
+        Path WebConfigPath(const char* fileName) {
+            return Path(StringView(BagiContentRoots::kEngine)) / "web" / "config" / fileName;
         }
 
         /// The first child of the root of an XML file with the given name, or an empty node
         pugi::xml_node FirstChildOfRoot(pugi::xml_document& document, const char* fileName, const char* childName) {
-            const std::filesystem::path path = WebConfigPath(fileName);
-            EXPECT_TRUE(document.load_file(path.c_str())) << path;
+            const Path path = WebConfigPath(fileName);
+            EXPECT_TRUE(document.load_file(path.CStr())) << path.CStr();
             return document.child("root").child(childName);
         }
 
@@ -34,16 +34,16 @@ namespace BECore::Tests {
     TEST(WebConfigTest, TheThreeFilesExistAndParse) {
         for (const char* fileName : {"ApplicationConfig.xml", "SDLWindowConfig.xml", "LoggerConfig.xml"}) {
             SCOPED_TRACE(fileName);
-            const std::filesystem::path path = WebConfigPath(fileName);
+            const Path path = WebConfigPath(fileName);
             pugi::xml_document document;
-            const pugi::xml_parse_result result = document.load_file(path.c_str());
-            EXPECT_TRUE(result) << path << ": " << result.description();
+            const pugi::xml_parse_result result = document.load_file(path.CStr());
+            EXPECT_TRUE(result) << path.CStr() << ": " << result.description();
             EXPECT_TRUE(document.child("root"));
         }
     }
 
     TEST(WebConfigTest, ApplicationConfigAsksForTheSdlRendererInGameMode) {
-        const std::filesystem::path path = WebConfigPath("ApplicationConfig.xml");
+        const Path path = WebConfigPath("ApplicationConfig.xml");
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromFile(path));
 
@@ -73,7 +73,7 @@ namespace BECore::Tests {
     }
 
     TEST(WebConfigTest, LoggerWritesToTheConsoleOnlyWithoutColors) {
-        const std::filesystem::path path = WebConfigPath("LoggerConfig.xml");
+        const Path path = WebConfigPath("LoggerConfig.xml");
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromFile(path));
 

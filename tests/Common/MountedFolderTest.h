@@ -7,7 +7,6 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
-#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -42,7 +41,7 @@ namespace BECore::Tests {
             return Format("{}/{}", _mountPoint, fileName);
         }
 
-        std::filesystem::path _dir;
+        Path _dir;
 
     private:
         const char* _mountPoint;

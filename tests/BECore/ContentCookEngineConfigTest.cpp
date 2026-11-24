@@ -36,8 +36,8 @@ namespace BECore::Tests {
         /// Cookers that no file of the engine's `config/` feeds: a game's file or a library the engine ships none of
         constexpr Array<StringView, 2> kWithoutShippedFile = {"GamesConfig", "TextureLibrary"};
 
-        std::filesystem::path EngineConfig() {
-            return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "config";
+        Path EngineConfig() {
+            return Path(__FILE__).Parent().Parent().Parent() / "config";
         }
 
         template <typename T>
@@ -75,11 +75,11 @@ namespace BECore::Tests {
     protected:
         void SetUp() override {
             String error;
-            for (const std::filesystem::path& file : ListContentFiles(EngineConfig(), error)) {
-                const String stem = FromStdString(file.stem().string());
+            for (const Path& file : ListContentFiles(EngineConfig(), error)) {
+                const String stem(PathStem(file.View()));
                 _shipped.push_back(stem);
                 if (!IsListed(kApplicationOnly, stem)) {
-                    _tree.Write(0, Generic(file), ReadFile(EngineConfig() / file));
+                    _tree.Write(0, file.View(), ReadFile(EngineConfig() / file.View()));
                 }
             }
             ASSERT_TRUE(error.empty()) << error.c_str();
@@ -88,10 +88,6 @@ namespace BECore::Tests {
 
         bool IsShipped(StringView stem) const {
             return std::find(_shipped.begin(), _shipped.end(), String(stem)) != _shipped.end();
-        }
-
-        static String Generic(const std::filesystem::path& path) {
-            return FromStdString(path.generic_string());
         }
 
         CookTestTree _tree;
@@ -105,7 +101,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(verified.Ok()) << verified.ToText().c_str();
 
         for (const CookRow& row : verified.rows) {
-            const String stem = FromStdString(std::filesystem::path(row.path.c_str()).stem().string());
+            const String stem(Path(StringView(row.path)).Stem().View());
             if (row.outcome == CookOutcome::Copied) {
                 EXPECT_TRUE(IsListed(kCopied, stem)) << row.path.c_str() << " is copied but no reader cooks it and no reason is listed here: register a cooker or list it";
             } else {

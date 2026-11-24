@@ -157,7 +157,7 @@ namespace BECore {
         }
 
         const auto filePath = configManager.GetConfigFilePath(_selectedConfig);
-        const auto filePathStr = filePath.string();
+        const String filePathStr(filePath.View());
 
         ImGui::TextUnformatted(_selectedConfig.CStr());
         if (!filePathStr.empty()) {

@@ -44,10 +44,9 @@ namespace BECore::Tests {
         }
 
         /// Writes the file and moves its write time forward by a step of its own, so a rewrite of the same size is a change on a file system with coarse time too
-        void Write(const std::filesystem::path& path, StringView text) {
+        void Write(const Path& path, StringView text) {
             WriteFile(path, text);
-            std::error_code error;
-            std::filesystem::last_write_time(path, std::filesystem::file_time_type::clock::now() + std::chrono::seconds(2 * ++_writes), error);
+            SetWriteTime(path, std::chrono::seconds(2 * ++_writes));
         }
 
         /// Files of the lower layer that exist before the watch, then the watch of the whole folder
@@ -76,8 +75,8 @@ namespace BECore::Tests {
             return paths;
         }
 
-        std::filesystem::path _lower;
-        std::filesystem::path _upper;
+        Path _lower;
+        Path _upper;
         FileSystem _fileSystem;
         FileWatcher _watcher{_fileSystem};
         IntrusivePtr<FakeFileWatchBackend> _fake;
@@ -91,8 +90,8 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(WatchFolder());
         Write(_lower / "a.xml", "one, rewritten");
         Write(_lower / "c.xml", "three");
-        std::error_code error;
-        ASSERT_TRUE(std::filesystem::remove(_lower / "b.xml", error)) << error.message();
+        const auto removed = RemoveFile(_lower / "b.xml");
+        ASSERT_TRUE(removed.has_value()) << removed.error().c_str();
 
         const Vector<PendingFileChange> changes = _watcher.Rescan();
 
@@ -110,6 +109,29 @@ namespace BECore::Tests {
         _watcher.Update(After(0.0));
         EXPECT_TRUE(_seen.empty()) << "a rescan only looks";
         EXPECT_EQ(_watcher.Rescan().size(), 3u) << "and looking again changes nothing";
+    }
+
+    TEST_F(FileWatcherRescanTest, ARescanListsNonAsciiFilesOfNestedFoldersInTheOrderOfTheirVirtualPaths) {
+        ASSERT_NO_FATAL_FAILURE(WatchFolder());
+        const Path folder = _lower / "Папка_é";
+        Write(folder / "б_é.xml", "one");
+        Write(folder / "в_é.xml", "two");
+        static_cast<void>(_watcher.Apply());  // moves the baseline over the two files
+        _seen.clear();
+
+        Write(folder / "б_é.xml", "one, rewritten");
+        ASSERT_TRUE(RemoveFile(folder / "в_é.xml").has_value());
+        Write(folder / "вложенная_é" / "г_é.xml", "three");
+
+        const Vector<PendingFileChange> changes = _watcher.Rescan();
+
+        ASSERT_EQ(changes.size(), 3u);
+        EXPECT_EQ(changes[0].virtualPath, "fwrtest/Папка_é/б_é.xml"_intern);
+        EXPECT_EQ(changes[0].kind, FileChangeKind::Changed);
+        EXPECT_EQ(changes[1].virtualPath, "fwrtest/Папка_é/в_é.xml"_intern);
+        EXPECT_EQ(changes[1].kind, FileChangeKind::Removed);
+        EXPECT_EQ(changes[2].virtualPath, "fwrtest/Папка_é/вложенная_é/г_é.xml"_intern);
+        EXPECT_EQ(changes[2].kind, FileChangeKind::Added);
     }
 
     TEST_F(FileWatcherRescanTest, ApplyDeliversEachChangeOnceAndARescanAfterwardsListsNothing) {

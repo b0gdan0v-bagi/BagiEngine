@@ -1,5 +1,6 @@
 #include "ArtGenReferencePanel.h"
 
+#include <BECore/File/File.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
@@ -11,7 +12,6 @@
 #include <Widgets/ImGuiTheme.h>
 #include <cstdio>
 #include <imgui.h>
-#include <system_error>
 
 namespace BECore {
 
@@ -153,9 +153,9 @@ namespace BECore {
             const StringView mode = slot ? StringView(slot->mode) : kShapeMode;
             const StringView root(session.GetGameRoot());
             Optional<ArtGenReference> typed = ArtGenReferenceOfTypedPath(root, StringView(_typedPath), mode);
-            std::error_code error;
             const String file = typed ? ArtGenReferenceFilePath(root, StringView(typed->image)) : String();
-            _fileMissing = !typed || !std::filesystem::is_regular_file(std::filesystem::path(ToStd(StringView(file))), error);  //-NoStd: std::filesystem::path takes a std::string
+            const auto info = typed ? GetFileInfo(Path(file)) : Optional<FileInfo>();
+            _fileMissing = !info || info->kind != FileKind::File;
             if (!_fileMissing) {
                 session.SetReferenceSlot(std::move(*typed));
             }

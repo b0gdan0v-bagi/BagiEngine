@@ -39,8 +39,8 @@ namespace BECore {
         }
 
         if (EndsWith(virtualPath, kBinaryExtension)) {
-            const std::filesystem::path realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
-            if (realPath.empty()) {
+            const Path realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
+            if (realPath.Empty()) {
                 return Error(Format("Failed to resolve virtual path '{}'", virtualPath));
             }
             auto deserializer = MakeUnique<BinaryDeserializer>();

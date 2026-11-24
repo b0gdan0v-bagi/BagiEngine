@@ -1,11 +1,10 @@
 #if defined(__APPLE__)
 
+#include <BECore/File/File.h>
 #include <BECore/FileSystem/IFileWatchBackend.h>
 #include <BECore/FileSystem/PlatformFileWatchBackend.h>
 #include <CoreServices/CoreServices.h>
 #include <dispatch/dispatch.h>
-#include <iterator>
-#include <system_error>
 
 namespace BECore {
 
@@ -23,21 +22,10 @@ namespace BECore {
 
         void DoNothing(void* /*context*/) {}
 
-        /// Whether @p path is @p root or lies below it
-        bool IsUnder(const std::filesystem::path& path, const std::filesystem::path& root) {
-            auto pathPart = path.begin();
-            for (auto rootPart = root.begin(); rootPart != root.end(); ++rootPart, ++pathPart) {
-                if (pathPart == path.end() || *pathPart != *rootPart) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
         /// A watched directory in the two forms it has: the one the facade gave and the one FSEvents reports
         struct Watch {
-            std::filesystem::path reported;
-            std::filesystem::path real;
+            Path reported;
+            Path real;
             bool recursive = false;
         };
 
@@ -53,19 +41,17 @@ namespace BECore {
         };
 
         /// Posts every file below @p realDir (a folder of @p watch) in the form the facade added, as many as the watch reaches
-        void PostSubtree(IFileWatchSink& sink, const Watch& watch, const std::filesystem::path& realDir) {
+        void PostSubtree(IFileWatchSink& sink, const Watch& watch, const Path& realDir) {
             if (!watch.recursive && realDir != watch.real) {
                 return;
             }
-            std::error_code error;
-            std::filesystem::recursive_directory_iterator it(realDir, error);  //-NoStd: the rare rescan after lost events, no engine type walks a folder
-            const std::filesystem::recursive_directory_iterator end;           //-NoStd: same
-            for (; !error && it != end; it.increment(error)) {
-                sink.Post((watch.reported / it->path().lexically_relative(watch.real)).lexically_normal());
-                if (!watch.recursive) {
-                    it.disable_recursion_pending();
-                }
-            }
+            // What lies below the watched directory, to be appended to the form the facade added
+            const Path below = realDir.Relative(watch.real);
+            const Path top = below.Empty() ? watch.reported : watch.reported / below;
+            static_cast<void>(WalkDirectory(realDir.View(), watch.recursive ? WalkMode::Tree : WalkMode::Folder, [&](StringView relative, FileKind /*kind*/) {
+                sink.Post((top / relative).LexicallyNormal());
+                return true;
+            }));
         }
 
         /**
@@ -81,7 +67,7 @@ namespace BECore {
                 Shutdown();
             }
 
-            void AddDirectory(const std::filesystem::path& realPath, bool recursive) override {
+            void AddDirectory(const Path& realPath, bool recursive) override {
                 Watch* known = nullptr;
                 for (Watch& watch : _watches) {
                     if (watch.reported == realPath) {
@@ -94,16 +80,13 @@ namespace BECore {
                 }
                 // FSEvents names a file by its real path (/private/var for /var), so what it says is matched against the real form of the directory
                 // and told to the facade in the form it was given
-                std::error_code error;
-                known->real = std::filesystem::canonical(realPath, error);
-                if (error) {
-                    known->real = realPath.lexically_normal();
-                }
+                std::expected<String, String> canonical = CanonicalPath(realPath.View());
+                known->real = canonical ? Path(eastl::move(*canonical)) : realPath.LexicallyNormal();
                 known->recursive = recursive;
                 Rebuild();
             }
 
-            void RemoveDirectory(const std::filesystem::path& realPath) override {
+            void RemoveDirectory(const Path& realPath) override {
                 for (size_t i = 0; i < _watches.size(); ++i) {
                     if (_watches[i].reported == realPath) {
                         _watches.erase(_watches.begin() + static_cast<ptrdiff_t>(i));
@@ -166,7 +149,9 @@ namespace BECore {
 
                 CFMutableArrayRef paths = CFArrayCreateMutable(kCFAllocatorDefault, static_cast<CFIndex>(_watches.size()), &kCFTypeArrayCallBacks);
                 for (const Watch& watch : _watches) {
-                    CFStringRef path = CFStringCreateWithFileSystemRepresentation(kCFAllocatorDefault, watch.real.c_str());
+                    // A Path has no terminating zero of its own to hand out
+                    const String realText(watch.real.View().data(), watch.real.View().size());
+                    CFStringRef path = CFStringCreateWithFileSystemRepresentation(kCFAllocatorDefault, realText.c_str());
                     if (path != nullptr) {
                         CFArrayAppendValue(paths, path);
                         CFRelease(path);
@@ -216,10 +201,10 @@ namespace BECore {
                 }
                 const char* const* paths = static_cast<const char* const*>(eventPaths);
                 for (size_t i = 0; i < count; ++i) {
-                    const std::filesystem::path path = std::filesystem::path(paths[i]).lexically_normal();
+                    const Path path = Path(StringView(paths[i])).LexicallyNormal();
                     const bool lostEvents = (flags[i] & kLostEventsFlags) != 0;
                     for (const Watch& watch : snapshot.watches) {
-                        if (!IsUnder(path, watch.real)) {
+                        if (!path.IsUnder(watch.real)) {
                             continue;
                         }
                         if (lostEvents) {
@@ -228,14 +213,14 @@ namespace BECore {
                             continue;
                         }
                         // The directory itself changes whenever something in it does and says nothing the event of the file did not
-                        const std::filesystem::path relative = path.lexically_relative(watch.real);
-                        if (relative.empty() || relative == ".") {
+                        const Path relative = path.Relative(watch.real);
+                        if (relative.Empty()) {
                             continue;
                         }
-                        if (!watch.recursive && std::distance(relative.begin(), relative.end()) > 1) {
+                        if (!watch.recursive && relative.View().find('/') != StringView::npos) {
                             continue;
                         }
-                        snapshot.sink->Post((watch.reported / relative).lexically_normal());
+                        snapshot.sink->Post((watch.reported / relative).LexicallyNormal());
                     }
                 }
             }

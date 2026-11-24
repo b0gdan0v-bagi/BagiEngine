@@ -2,7 +2,6 @@
 
 #include <BECore/Control/Json.h>
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 
 namespace BECore {
 
@@ -125,11 +124,11 @@ namespace BECore {
         return FailedVerdict(FindJsonMember(*checks, "failed"));
     }
 
-    ArtGenVerdict ReadArtGenVerdict(const std::filesystem::path& provenanceFile) {
-        if (provenanceFile.empty()) {
+    ArtGenVerdict ReadArtGenVerdict(const Path& provenanceFile) {
+        if (provenanceFile.Empty()) {
             return {};
         }
-        const auto text = ReadTextFile(PathToUtf8(provenanceFile));
+        const auto text = ReadTextFile(provenanceFile);
         if (!text) {
             return {};
         }

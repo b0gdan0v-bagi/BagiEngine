@@ -114,7 +114,7 @@ namespace BECore::Tests {
             }
         }
 
-        std::filesystem::path _folder;
+        Path _folder;
         FileSystem _fileSystem;
     };
 
