@@ -1,5 +1,5 @@
-#include <BECore/Control/Json.h>
 #include <BECore/GameControlTest.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Common/TestText.h>
 #include <Widgets/GamePanel/GamePanelModel.h>
@@ -13,10 +13,10 @@ namespace BECore::Tests {
             return {text.data(), text.size()};
         }
 
-        Json ParseOrFail(StringView text) {
-            auto parsed = ParseJson(text);
-            EXPECT_TRUE(parsed.has_value());
-            return parsed ? std::move(*parsed) : Json();
+        String LabelOf(StringView action) {
+            const JsonDoc doc(action);
+            EXPECT_TRUE(doc.IsParsed());
+            return FormatGameActionLabel(doc);
         }
 
     }  // namespace
@@ -40,6 +40,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(model.GetStateText(), "\"counter\": 0"));
         ASSERT_EQ(model.GetActions().size(), 1u);
         EXPECT_EQ(ViewOf(model.GetActions()[0].label), "inc");
+        EXPECT_EQ(ViewOf(model.GetActions()[0].action), "{\"type\":\"inc\"}");
         ASSERT_EQ(model.GetVisibleActions().size(), 1u);
     }
 
@@ -137,12 +138,59 @@ namespace BECore::Tests {
     }
 
     TEST(GamePanelModelTest, ActionLabelsUseTheConsoleSyntax) {
-        EXPECT_EQ(ViewOf(FormatGameActionLabel(ParseOrFail(R"({"type":"set_count","count":50})"))), "set_count count=50");
-        EXPECT_EQ(ViewOf(FormatGameActionLabel(ParseOrFail(R"({"type":"set_scene","scene":"ui"})"))), "set_scene scene=ui");
+        EXPECT_EQ(ViewOf(LabelOf(R"({"type":"set_count","count":50})")), "set_count count=50");
+        EXPECT_EQ(ViewOf(LabelOf(R"({"type":"set_scene","scene":"ui"})")), "set_scene scene=ui");
         // A string that reads as JSON or holds a blank keeps its quotes, so the label reads back as the same action
-        EXPECT_EQ(ViewOf(FormatGameActionLabel(ParseOrFail(R"({"type":"say","text":"a b"})"))), "say text=\"a b\"");
-        EXPECT_EQ(ViewOf(FormatGameActionLabel(ParseOrFail(R"({"type":"say","text":"true"})"))), "say text=\"true\"");
-        EXPECT_EQ(ViewOf(FormatGameActionLabel(ParseOrFail(R"({"move":"e2e4"})"))), "{\"move\":\"e2e4\"}");
+        EXPECT_EQ(ViewOf(LabelOf(R"({"type":"say","text":"a b"})")), "say text=\"a b\"");
+        EXPECT_EQ(ViewOf(LabelOf(R"({"type":"say","text":"true"})")), "say text=\"true\"");
+        EXPECT_EQ(ViewOf(LabelOf(R"({"type":"say","text":"5"})")), "say text=\"5\"");
+        EXPECT_EQ(ViewOf(LabelOf(R"({"move":"e2e4"})")), "{\"move\":\"e2e4\"}");
+    }
+
+    TEST(GamePanelModelTest, ALabelListsTheOtherMembersInKeyOrderAfterTheType) {
+        EXPECT_EQ(ViewOf(LabelOf(R"({"zeta":1,"type":"go","alpha":"x","mid":[1,2]})")), "go alpha=x mid=[1,2] zeta=1");
+        EXPECT_EQ(ViewOf(LabelOf(R"({"type":"go","pos":{"x":1,"y":2}})")), "go pos={\"x\":1,\"y\":2}");
+    }
+
+    TEST(GamePanelModelTest, OfRepeatedKeysOfAnActionTheFirstCounts) {
+        EXPECT_EQ(ViewOf(LabelOf(R"({"type":"go","a":1,"a":2})")), "go a=1");
+    }
+
+    TEST(GamePanelModelTest, AnActionWithoutAStringTypeIsItsText) {
+        EXPECT_EQ(ViewOf(LabelOf(R"({"type":5,"a":1})")), "{\"type\":5,\"a\":1}");
+        EXPECT_EQ(ViewOf(LabelOf("[1,2]")), "[1,2]");
+    }
+
+    TEST(GamePanelModelTest, AMethodThatReturnsAnObjectShowsItAsWritten) {
+        FakeControllableGame game;
+        game.counter = 3;
+        GamePanelModel model;
+        model.Sync(&game);
+        const Vector<GamePanelMethod>& methods = model.GetMethods();
+        size_t index = methods.size();
+        for (size_t i = 0; i < methods.size(); ++i) {
+            if (methods[i].name == "Report") {
+                index = i;
+            }
+        }
+        ASSERT_LT(index, methods.size());
+
+        model.Call(index, "scale=2");
+        EXPECT_FALSE(model.IsLastResultError()) << model.GetLastResult().c_str();
+        EXPECT_EQ(ViewOf(model.GetLastResult()), "{\"total\":6,\"label\":\"counter\"}");
+    }
+
+    TEST(GamePanelModelTest, AMethodThatReturnsNothingShowsOk) {
+        FakeControllableGame game;
+        GamePanelModel model;
+        model.Sync(&game);
+        const Vector<GamePanelMethod>& methods = model.GetMethods();
+        for (size_t i = 0; i < methods.size(); ++i) {
+            if (methods[i].name == "AddToCounter") {
+                model.Call(i, "amount=1");
+                EXPECT_EQ(ViewOf(model.GetLastResult()), "ok");
+            }
+        }
     }
 
 }  // namespace BECore::Tests

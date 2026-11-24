@@ -6,6 +6,14 @@
 
 namespace BECore::Tests {
 
+    /// What FakeControllableGame::Report returns: an object whose fields are not in key order, so the order a result is shown in is visible
+    struct CounterReport {
+        BE_CLASS(CounterReport)
+
+        BE_REFLECT_FIELD int32_t total = 0;
+        BE_REFLECT_FIELD String label;
+    };
+
     /**
      * @brief A game that a controller can drive: a counter with one action, "inc".
      *
@@ -33,6 +41,9 @@ namespace BECore::Tests {
 
         /// Adds @p amount to the counter and moves the version: the reflected method the editor's Game panel calls in its test
         BE_FUNCTION void AddToCounter(int32_t amount);
+
+        /// A method that answers an object
+        BE_FUNCTION CounterReport Report(int32_t scale) const;
 
         int counter = 0;
         uint64_t version = 0;

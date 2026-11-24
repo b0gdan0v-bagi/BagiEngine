@@ -117,6 +117,13 @@ namespace BECore::Tests {
         ++version;
     }
 
+    CounterReport FakeControllableGame::Report(int32_t scale) const {
+        CounterReport report;
+        report.total = counter * scale;
+        report.label = "counter";
+        return report;
+    }
+
     PoolString FakePlainGame::GetName() const {
         return "FakePlain"_intern;
     }
