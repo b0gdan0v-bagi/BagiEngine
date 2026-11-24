@@ -2,7 +2,6 @@
 
 #include <BECore/Audio/AudioClip.h>
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Memory/ScratchArena.h>
@@ -36,7 +35,7 @@ namespace BECore {
             if (realPath.Empty()) {
                 return std::unexpected(Format("cannot open '{}'", path.ToStringView()));
             }
-            return PathToUtf8(realPath);
+            return String(realPath.View());
         }
 
     }  // namespace

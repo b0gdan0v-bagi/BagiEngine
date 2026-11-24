@@ -2,7 +2,6 @@
 
 #include <BECore/Types/Types.h>
 #include <compare>
-#include <filesystem>  //-NoStd: transitional bridge of the entry engine-path-type, removed in its last stage
 #include <type_traits>
 
 namespace BECore {
@@ -76,10 +75,6 @@ namespace BECore {
         Path(String&& text) : _text(eastl::move(text)) {
             ToGenericSeparators();
         }
-
-        /// The only place where the two path types meet: the bridge of the migration to `Path`, which its last stage deletes. UTF-8 both ways.
-        Path(const std::filesystem::path& path);  //-NoStd: transitional bridge
-        operator std::filesystem::path() const;   //-NoStd: transitional bridge
 
         [[nodiscard]] StringView View() const {
             return StringView(_text.data(), _text.size());
