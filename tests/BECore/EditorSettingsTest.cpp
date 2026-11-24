@@ -1,6 +1,7 @@
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonView.h>
 #include <BECore/File/File.h>
 #include <BECore/Utils/ScopeGuard.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
@@ -15,6 +16,37 @@ namespace BECore::Tests {
         constexpr KeyChord kCtrlK{ImGuiKey_K, kChordModCtrl};
         constexpr KeyChord kCtrlP{ImGuiKey_P, kChordModCtrl};
         constexpr KeyChord kCtrlS{ImGuiKey_S, kChordModCtrl};
+
+        /// A written file read back through its own tape; it fails the test when the text is not JSON
+        class JsonFile {
+        public:
+            explicit JsonFile(const String& text) : _doc(MakeUnique<JsonDoc>(StringView(text.c_str(), text.size()))) {
+                EXPECT_TRUE(_doc->IsParsed()) << text.c_str();
+            }
+
+            [[nodiscard]] JsonView Root() const {
+                return _doc->Root();
+            }
+
+        private:
+            UniquePtr<JsonDoc> _doc;
+        };
+
+        /// The value at @p path, each step a member of the one before; a view that is not valid when one is missing
+        JsonView Under(const JsonFile& file, std::initializer_list<StringView> path) {
+            JsonView at = file.Root();
+            for (const StringView key : path) {
+                at = at.Find(key).value_or(JsonView());
+            }
+            return at;
+        }
+
+        /// The decoded text of the string at @p path; empty when there is none
+        String TextUnder(const JsonFile& file, std::initializer_list<StringView> path) {
+            String text;
+            Under(file, path).ReadText(text);
+            return text;
+        }
 
         // A folder of its own per test and per process, made empty and removed at the end
         class EditorSettingsTest : public ::testing::Test {
@@ -40,11 +72,8 @@ namespace BECore::Tests {
                 return PathExists(_directory / name);
             }
 
-            [[nodiscard]] Json ReadJsonFile(const char* name) const {
-                const String text = ReadFile(name);
-                auto parsed = ParseJson(text);
-                EXPECT_TRUE(parsed.has_value()) << name;
-                return parsed ? *parsed : Json::object();
+            [[nodiscard]] JsonFile ReadJsonFile(const char* name) const {
+                return JsonFile(ReadFile(name));
             }
 
             Path _directory;
@@ -77,7 +106,7 @@ namespace BECore::Tests {
         EditorSettings reader(_directory);
         reader.Load();
         EXPECT_EQ(reader.GetPreferences(), changed);
-        EXPECT_EQ(ReadJsonFile("preferences.json")["version"], 1);
+        EXPECT_EQ(Under(ReadJsonFile("preferences.json"), {"version"}).AsInt64(), 1);
     }
 
     TEST_F(EditorSettingsTest, HotkeysRoundTrip) {
@@ -101,20 +130,25 @@ namespace BECore::Tests {
         ASSERT_EQ(settings.GetHotkeys().Assign(kSceneSave, kCtrlK).status, AssignStatus::Assigned);
         ASSERT_TRUE(settings.SaveHotkeys());
 
-        const Json file = ReadJsonFile("hotkeys.json");
-        ASSERT_TRUE(file["bindings"].is_object());
-        EXPECT_EQ(file["bindings"].size(), 1u);  // file.quit had no default chord, so unbinding it changes nothing
-        EXPECT_EQ(file["bindings"]["scene.save"], "Ctrl+K");
+        const JsonFile file = ReadJsonFile("hotkeys.json");
+        ASSERT_TRUE(Under(file, {"bindings"}).IsObject());
+        EXPECT_EQ(Under(file, {"bindings"}).Size(), 1u);  // file.quit had no default chord, so unbinding it changes nothing
+        EXPECT_EQ(TextUnder(file, {"bindings", "scene.save"}), "Ctrl+K");
 
         ASSERT_TRUE(settings.GetHotkeys().Unbind(kViewPreferences));
         ASSERT_TRUE(settings.SaveHotkeys());
-        const Json again = ReadJsonFile("hotkeys.json");
-        EXPECT_EQ(again["bindings"].size(), 2u);
-        EXPECT_EQ(again["bindings"]["view.preferences"], "");
+        const JsonFile again = ReadJsonFile("hotkeys.json");
+        EXPECT_EQ(Under(again, {"bindings"}).Size(), 2u);
+        EXPECT_EQ(TextUnder(again, {"bindings", "view.preferences"}), "");
+        EXPECT_TRUE(Under(again, {"bindings", "view.preferences"}).IsString());
 
         settings.GetHotkeys().ResetAll();
         ASSERT_TRUE(settings.SaveHotkeys());
-        EXPECT_TRUE(ReadJsonFile("hotkeys.json")["bindings"].empty());
+        {
+            const JsonFile file = ReadJsonFile("hotkeys.json");
+            ASSERT_TRUE(Under(file, {"bindings"}).IsObject());
+            EXPECT_EQ(Under(file, {"bindings"}).Size(), 0u);
+        }
     }
 
     TEST_F(EditorSettingsTest, AnEntryEqualToTheDefaultIsNotWrittenBack) {
@@ -123,7 +157,11 @@ namespace BECore::Tests {
         settings.Load();
         EXPECT_EQ(settings.GetHotkeys().GetChord(kSceneSave), kCtrlS);
         ASSERT_TRUE(settings.SaveHotkeys());
-        EXPECT_TRUE(ReadJsonFile("hotkeys.json")["bindings"].empty());
+        {
+            const JsonFile file = ReadJsonFile("hotkeys.json");
+            ASSERT_TRUE(Under(file, {"bindings"}).IsObject());
+            EXPECT_EQ(Under(file, {"bindings"}).Size(), 0u);
+        }
     }
 
     TEST_F(EditorSettingsTest, ValuesAreClamped) {
@@ -166,7 +204,7 @@ namespace BECore::Tests {
         settings.Load();
         ASSERT_TRUE(settings.SavePreferences());
         EXPECT_EQ(ReadFile("preferences.json.bad"), garbage);
-        EXPECT_FALSE(ReadJsonFile("preferences.json").contains("theme"));
+        EXPECT_FALSE(Under(ReadJsonFile("preferences.json"), {"theme"}).IsValid());
 
         WriteFile("preferences.json.bad", "kept");
         ASSERT_TRUE(settings.SavePreferences());
@@ -225,14 +263,14 @@ namespace BECore::Tests {
         ASSERT_TRUE(settings.SavePreferences());
         ASSERT_TRUE(settings.SaveHotkeys());
 
-        const Json preferences = ReadJsonFile("preferences.json");
-        EXPECT_EQ(preferences["futureOption"]["a"][1], 2);
-        EXPECT_EQ(preferences["zoom"], 7);
-        EXPECT_EQ(preferences["theme"], "Classic");
-        const Json hotkeys = ReadJsonFile("hotkeys.json");
-        EXPECT_EQ(hotkeys["extra"], "x");
-        EXPECT_EQ(hotkeys["bindings"]["future.command"], "Ctrl+J");
-        EXPECT_EQ(hotkeys["bindings"]["scene.save"], "Ctrl+K");
+        const JsonFile preferences = ReadJsonFile("preferences.json");
+        EXPECT_EQ(ItemAt(Under(preferences, {"futureOption", "a"}), 1).AsInt64(), 2);
+        EXPECT_EQ(Under(preferences, {"zoom"}).AsInt64(), 7);
+        EXPECT_EQ(TextUnder(preferences, {"theme"}), "Classic");
+        const JsonFile hotkeys = ReadJsonFile("hotkeys.json");
+        EXPECT_EQ(TextUnder(hotkeys, {"extra"}), "x");
+        EXPECT_EQ(TextUnder(hotkeys, {"bindings", "future.command"}), "Ctrl+J");
+        EXPECT_EQ(TextUnder(hotkeys, {"bindings", "scene.save"}), "Ctrl+K");
     }
 
     // An old file with a `theme` key loads: the key is kept and written back as it was, never applied (one theme, ImGuiTheme.h)
@@ -245,9 +283,9 @@ namespace BECore::Tests {
         EXPECT_EQ(settings.GetPreferences(), expected);
 
         ASSERT_TRUE(settings.SavePreferences());
-        const Json file = ReadJsonFile("preferences.json");
-        EXPECT_EQ(file["theme"], "Classic");
-        EXPECT_EQ(file["fontScale"], 1.5);
+        const JsonFile file = ReadJsonFile("preferences.json");
+        EXPECT_EQ(TextUnder(file, {"theme"}), "Classic");
+        EXPECT_EQ(Under(file, {"fontScale"}).AsDouble(), 1.5);
     }
 
     // ---- The viewport's preview choice ("viewportPreview" in preferences.json)
@@ -276,10 +314,10 @@ namespace BECore::Tests {
         writer.SetPreferences(changed);
         ASSERT_TRUE(writer.SavePreferences());
 
-        const Json file = ReadJsonFile("preferences.json");
-        EXPECT_EQ(file["viewportPreview"]["device"], ToStdString(StringView(devices[1].name.data(), devices[1].name.size())));
-        EXPECT_EQ(file["viewportPreview"]["aspect"], "Wide16x9");
-        EXPECT_EQ(file["viewportPreview"]["safeArea"], "SideInsets");
+        const JsonFile file = ReadJsonFile("preferences.json");
+        EXPECT_EQ(TextUnder(file, {"viewportPreview", "device"}), String(devices[1].name.data(), devices[1].name.size()));
+        EXPECT_EQ(TextUnder(file, {"viewportPreview", "aspect"}), "Wide16x9");
+        EXPECT_EQ(TextUnder(file, {"viewportPreview", "safeArea"}), "SideInsets");
 
         EditorSettings reader(_directory);
         reader.Load();
@@ -341,9 +379,9 @@ namespace BECore::Tests {
         settings.Load();
         EXPECT_TRUE(settings.GetPreferences().viewportPreview.overlays.viewBounds);
         ASSERT_TRUE(settings.SavePreferences());
-        const Json file = ReadJsonFile("preferences.json");
-        EXPECT_EQ(file["viewportPreview"]["future"]["a"], 1);
-        EXPECT_EQ(file["viewportPreview"]["overlayViewBounds"], true);
+        const JsonFile file = ReadJsonFile("preferences.json");
+        EXPECT_EQ(Under(file, {"viewportPreview", "future", "a"}).AsInt64(), 1);
+        EXPECT_EQ(Under(file, {"viewportPreview", "overlayViewBounds"}).AsBool(), true);
     }
 
     TEST_F(EditorSettingsTest, TheUIDebugOverlayKeysAreKnownAndAreWrittenBack) {
@@ -357,13 +395,13 @@ namespace BECore::Tests {
         EXPECT_EQ(settings.GetPreferences().viewportPreview.overlays, expected);
 
         ASSERT_TRUE(settings.SavePreferences());
-        const Json object = ReadJsonFile("preferences.json")["viewportPreview"];
-        EXPECT_EQ(object["overlayElementRects"], false);
-        EXPECT_EQ(object["overlayAnchors"], true);
-        EXPECT_EQ(object["overlayDesignRect"], false);
-        EXPECT_EQ(object["overlayFindings"], true);
-        EXPECT_EQ(object["overlayTouchTargets"], true);
-        EXPECT_EQ(object["overlayViewBounds"], false);
+        const JsonFile file = ReadJsonFile("preferences.json");
+        EXPECT_EQ(Under(file, {"viewportPreview", "overlayElementRects"}).AsBool(), false);
+        EXPECT_EQ(Under(file, {"viewportPreview", "overlayAnchors"}).AsBool(), true);
+        EXPECT_EQ(Under(file, {"viewportPreview", "overlayDesignRect"}).AsBool(), false);
+        EXPECT_EQ(Under(file, {"viewportPreview", "overlayFindings"}).AsBool(), true);
+        EXPECT_EQ(Under(file, {"viewportPreview", "overlayTouchTargets"}).AsBool(), true);
+        EXPECT_EQ(Under(file, {"viewportPreview", "overlayViewBounds"}).AsBool(), false);
     }
 
     TEST_F(EditorSettingsTest, AnOldFileGainsOnlyTheKeysOfLaterBuilds) {
@@ -377,17 +415,21 @@ namespace BECore::Tests {
         EXPECT_EQ(settings.GetPreferences(), expected);
 
         ASSERT_TRUE(settings.SavePreferences());
-        Json file = ReadJsonFile("preferences.json");
-        ASSERT_TRUE(file.contains("viewportPreview"));
-        file.erase("viewportPreview");
-        EXPECT_EQ(file["viewportInputMode"], "play");
-        file.erase("viewportInputMode");
-        EXPECT_EQ(file["externalEditor"], "");
-        file.erase("externalEditor");
-        EXPECT_TRUE(file["consoleHistory"].is_array());
-        file.erase("consoleHistory");
-        const Json oldFile = *ParseJson(R"({"version":1,"theme":"Classic","fontScale":1.5,"viewportGrid":true,"viewportGridStep":16,"futureOption":7})");
-        EXPECT_EQ(file, oldFile);
+        const JsonFile file = ReadJsonFile("preferences.json");
+        // The keys the old file had keep their values, the four of later builds are added, and nothing else is
+        ASSERT_TRUE(file.Root().IsObject());
+        EXPECT_EQ(file.Root().Size(), 10u);
+        EXPECT_EQ(Under(file, {"version"}).AsInt64(), 1);
+        EXPECT_EQ(TextUnder(file, {"theme"}), "Classic");
+        EXPECT_EQ(Under(file, {"fontScale"}).AsDouble(), 1.5);
+        EXPECT_EQ(Under(file, {"viewportGrid"}).AsBool(), true);
+        EXPECT_EQ(Under(file, {"viewportGridStep"}).AsInt64(), 16);
+        EXPECT_EQ(Under(file, {"futureOption"}).AsInt64(), 7);
+        EXPECT_TRUE(Under(file, {"viewportPreview"}).IsObject());
+        EXPECT_EQ(TextUnder(file, {"viewportInputMode"}), "play");
+        EXPECT_EQ(TextUnder(file, {"externalEditor"}), "");
+        EXPECT_TRUE(Under(file, {"externalEditor"}).IsString());
+        EXPECT_TRUE(Under(file, {"consoleHistory"}).IsArray());
     }
 
     TEST_F(EditorSettingsTest, TheViewportInputModeIsPlayWhenTheKeyIsMissing) {
@@ -403,7 +445,7 @@ namespace BECore::Tests {
         EditorSettings writer(_directory);
         writer.SetPreferences(changed);
         ASSERT_TRUE(writer.SavePreferences());
-        EXPECT_EQ(ReadJsonFile("preferences.json")["viewportInputMode"], "edit");
+        EXPECT_EQ(TextUnder(ReadJsonFile("preferences.json"), {"viewportInputMode"}), "edit");
 
         EditorSettings reader(_directory);
         reader.Load();
@@ -440,10 +482,10 @@ namespace BECore::Tests {
         writer.SetPreferences(changed);
         ASSERT_TRUE(writer.SavePreferences());
 
-        const Json file = ReadJsonFile("preferences.json");
-        EXPECT_EQ(file["externalEditor"], "cmd /c code -g {file}:{line}");
-        ASSERT_TRUE(file["consoleHistory"].is_array());
-        EXPECT_EQ(file["consoleHistory"].size(), 3u);
+        const JsonFile file = ReadJsonFile("preferences.json");
+        EXPECT_EQ(TextUnder(file, {"externalEditor"}), "cmd /c code -g {file}:{line}");
+        ASSERT_TRUE(Under(file, {"consoleHistory"}).IsArray());
+        EXPECT_EQ(Under(file, {"consoleHistory"}).Size(), 3u);
 
         EditorSettings reader(_directory);
         reader.Load();
@@ -479,10 +521,10 @@ namespace BECore::Tests {
         settings.Load();
         ASSERT_TRUE(settings.SavePreferences());
 
-        const Json file = ReadJsonFile("preferences.json");
-        EXPECT_EQ(file["futureOption"]["a"], 1);
-        EXPECT_EQ(file["externalEditor"], "code");
-        EXPECT_EQ(file["consoleHistory"].size(), 1u);
+        const JsonFile file = ReadJsonFile("preferences.json");
+        EXPECT_EQ(Under(file, {"futureOption", "a"}).AsInt64(), 1);
+        EXPECT_EQ(TextUnder(file, {"externalEditor"}), "code");
+        EXPECT_EQ(Under(file, {"consoleHistory"}).Size(), 1u);
 
         // Every key the file had is written once: the unknown keys that are carried over do not repeat a known one
         const String text = ReadFile("preferences.json");
@@ -506,7 +548,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(settings.SaveHotkeys());
         EXPECT_FALSE(Exists("preferences.json.bad"));
         EXPECT_FALSE(Exists("hotkeys.json.bad"));
-        EXPECT_EQ(ReadJsonFile("preferences.json")["futureOption"], 3);
+        EXPECT_EQ(Under(ReadJsonFile("preferences.json"), {"futureOption"}).AsInt64(), 3);
     }
 
     // The tape reads a number past a double as valid and an integer written as `5.0` as a number: a field takes neither
@@ -529,10 +571,10 @@ namespace BECore::Tests {
         EXPECT_EQ(settings.GetHotkeys().GetChord(kSceneSave), kCtrlK);
 
         ASSERT_TRUE(settings.SaveHotkeys());
-        EXPECT_EQ(ReadJsonFile("hotkeys.json")["bindings"]["future.command"], "Ctrl+J");
+        EXPECT_EQ(TextUnder(ReadJsonFile("hotkeys.json"), {"bindings", "future.command"}), "Ctrl+J");
     }
 
-    // The bytes of the files are what the DOM wrote: keys sorted at every level, indent 2, a newline at the end, a float as the double of the float
+    // The bytes of the files are what the first writer made: keys sorted at every level, indent 2, a newline at the end, a float as the double of the float
     TEST_F(EditorSettingsTest, PreferencesAreWrittenWithTheBytesTheyAlwaysHad) {
         WriteFile("preferences.json", R"({"zeta":{"b":1,"a":[1,{"y":"\u00e9\n","x":null}]},"theme":"Classic","viewportPreview":{"future":[]}})");
         EditorSettings settings(_directory);
@@ -589,8 +631,6 @@ namespace BECore::Tests {
   }
 }
 )EXPECTED");
-        // The DOM is the oracle of the layout
-        EXPECT_EQ(DumpJson(ReadJsonFile("preferences.json"), 2) + "\n", text);
 
         preferences.fontScale = 0.75f;
         settings.SetPreferences(preferences);
@@ -619,7 +659,6 @@ namespace BECore::Tests {
   "version": 1
 }
 )EXPECTED");
-        EXPECT_EQ(DumpJson(ReadJsonFile("hotkeys.json"), 2) + "\n", text);
     }
 
     TEST_F(EditorSettingsTest, AnExternalEditorOverTheLimitIsCutAtACharacter) {

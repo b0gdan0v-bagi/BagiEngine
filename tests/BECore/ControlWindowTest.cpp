@@ -2,7 +2,6 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlWindow.h>
 #include <BECore/Control/ControlWindowStatus.h>
-#include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/MainWindow/MainWindowManager.h>
@@ -90,20 +89,18 @@ namespace BECore::Tests {
             Vector<WindowSimulation> _simulations;
         };
 
-        Json SizeOf(int64_t width, int64_t height) {
-            Json params = Json::object();
-            params["width"] = width;
-            params["height"] = height;
-            return params;
+        /// The params of `set_window` with a size and @p more, a text of further members that starts with a comma
+        String SizeOf(int64_t width, int64_t height, StringView more = {}) {
+            return Format(R"({{"height":{},"width":{}{}}})", height, width, more);
         }
 
-        Json SafeAreaOf(const Json& top, const Json& right, const Json& bottom, const Json& left) {
-            Json safeArea = Json::object();
-            safeArea["top"] = top;
-            safeArea["right"] = right;
-            safeArea["bottom"] = bottom;
-            safeArea["left"] = left;
-            return safeArea;
+        String SafeAreaOf(int64_t top, int64_t right, int64_t bottom, int64_t left) {
+            return Format(R"({{"bottom":{},"left":{},"right":{},"top":{}}})", bottom, left, right, top);
+        }
+
+        /// The members after the size: `,"safeArea":<insets>`
+        String WithSafeArea(const String& insets) {
+            return Format(R"(,"safeArea":{})", insets);
         }
 
         constexpr float kStartUserScale = 1.25f;
@@ -142,12 +139,10 @@ namespace BECore::Tests {
         }
 
         /// Posts the request and runs the frame it arrives in; true when the answer came with it, so a deferred call is not
-        bool Send(StringView method, const Json& params = Json()) {
+        bool Send(StringView method, const String& params = String()) {
             const size_t before = responses.size();
-            service.Post(MakeRequest(static_cast<int64_t>(before) + 1, method, params), [this](String reply) {
-                auto parsed = ParseJson(reply);
-                responses.push_back(parsed ? std::move(*parsed) : Json());
-            });
+            service.Post(MakeRequestText(static_cast<int64_t>(before) + 1, method, StringView(params.c_str(), params.size())),
+                         [this](String reply) { responses.emplace_back(StringView(reply.c_str(), reply.size())); });
             service.Drain();
             return responses.size() > before;
         }
@@ -158,31 +153,31 @@ namespace BECore::Tests {
         }
 
         /// A call that waits one frame; its answer is in `Last()` afterwards
-        void Call(StringView method, const Json& params = Json()) {
+        void Call(StringView method, const String& params = String()) {
             if (!Send(method, params)) {
                 EndFrame();
             }
         }
 
-        [[nodiscard]] const Json& Last() const {
-            static const Json kNone = Json::object();
+        [[nodiscard]] const ControlReply& Last() const {
+            static const ControlReply kNone;
             return responses.empty() ? kNone : responses.back();
         }
 
         [[nodiscard]] bool LastIsOk() const {
-            return GetJsonBool(Last(), "ok").value_or(false);
+            return Last().IsOk();
         }
 
         [[nodiscard]] String LastErrorCode() const {
-            return StringOf(FindJsonMember(Last(), "error"), "code");
+            return Last().ErrorCode();
         }
 
         [[nodiscard]] String LastErrorMessage() const {
-            return StringOf(FindJsonMember(Last(), "error"), "message");
+            return Last().ErrorMessage();
         }
 
-        [[nodiscard]] const Json* LastResult() const {
-            return FindJsonMember(Last(), "result");
+        [[nodiscard]] JsonView LastResult() const {
+            return Last().Result();
         }
 
         [[nodiscard]] static float UserScale() {
@@ -192,7 +187,7 @@ namespace BECore::Tests {
         ControlService service;
         IntrusivePtr<FakeWindow> window;
         IntrusivePtr<RecordingRenderer> renderer;
-        Vector<Json> responses;
+        Vector<ControlReply> responses;
 
     private:
         IntrusivePtr<IMainWindow> _previousWindow;
@@ -201,10 +196,7 @@ namespace BECore::Tests {
     };
 
     TEST_F(ControlWindowTest, AValidCallGivesTheWindowTheMergedValuesAndAnswersAfterOneFrame) {
-        Json params = SizeOf(480, 320);
-        params["density"] = 2.0;
-        params["userScale"] = 1.5;
-        params["safeArea"] = SafeAreaOf(40, 10, 20, 30);
+        const String params = SizeOf(480, 320, Format(R"(,"density":2.0,"safeArea":{},"userScale":1.5)", SafeAreaOf(40, 10, 20, 30)));
 
         EXPECT_FALSE(Send("set_window", params));
         EXPECT_TRUE(responses.empty());
@@ -219,18 +211,18 @@ namespace BECore::Tests {
         EndFrame();
         ASSERT_EQ(responses.size(), 1u);
         ASSERT_TRUE(LastIsOk());
-        const Json* result = LastResult();
-        ASSERT_NE(result, nullptr);
+        const JsonView result = LastResult();
+        ASSERT_TRUE(result.IsObject());
         EXPECT_EQ(NumberOf(result, "width"), 480.0);
         EXPECT_EQ(NumberOf(result, "height"), 320.0);
         EXPECT_EQ(NumberOf(result, "density"), 2.0);
         EXPECT_EQ(NumberOf(result, "userScale"), 1.5);
-        const Json* safeArea = FindJsonMember(*result, "safeArea");
+        const JsonView safeArea = MemberOf(result, "safeArea");
         EXPECT_EQ(NumberOf(safeArea, "top"), 40.0);
         EXPECT_EQ(NumberOf(safeArea, "right"), 10.0);
         EXPECT_EQ(NumberOf(safeArea, "bottom"), 20.0);
         EXPECT_EQ(NumberOf(safeArea, "left"), 30.0);
-        EXPECT_TRUE(GetJsonBool(*result, "headless").value_or(false));
+        EXPECT_TRUE(BoolOf(result, "headless").value_or(false));
     }
 
     TEST_F(ControlWindowTest, LeftOutValuesKeepTheirCurrentValue) {
@@ -259,9 +251,7 @@ namespace BECore::Tests {
         current.safeArea = {10.0f, 20.0f, 30.0f, 40.0f};
         window->SetCurrent(current);
 
-        Json params = SizeOf(600, 400);
-        params["safeArea"] = SafeAreaOf(0, 0, 0, 0);
-        Call("set_window", params);
+        Call("set_window", SizeOf(600, 400, WithSafeArea(SafeAreaOf(0, 0, 0, 0))));
         ASSERT_TRUE(LastIsOk()) << LastErrorMessage().c_str();
         EXPECT_EQ(window->Simulations().back().safeArea, WindowInsets{});
     }
@@ -269,7 +259,7 @@ namespace BECore::Tests {
     TEST_F(ControlWindowTest, EachBoundIsInvalidParamsAndAppliesNothing) {
         struct Bad {
             const char* what;
-            Json params;
+            String params;
             const char* field;
         };
         Vector<Bad> bad;
@@ -278,40 +268,20 @@ namespace BECore::Tests {
         bad.push_back({"width 4097", SizeOf(4097, 300), "width"});
         bad.push_back({"height 4097", SizeOf(300, 4097), "height"});
         bad.push_back({"a width that does not fit an int", SizeOf(int64_t{1} << 40, 300), "width"});
-        {
-            Json params = SizeOf(300, 300);
-            params["density"] = 0.49;
-            bad.push_back({"density 0.49", params, "density"});
-            params["density"] = 4.01;
-            bad.push_back({"density 4.01", params, "density"});
-        }
-        {
-            Json params = SizeOf(4096, 300);
-            params["density"] = 3.0;
-            bad.push_back({"an output of 12288 pixels", params, "width"});
-        }
-        {
-            Json params = SizeOf(300, 300);
-            params["userScale"] = 0.49;
-            bad.push_back({"user scale 0.49", params, "userScale"});
-            params["userScale"] = 3.01;
-            bad.push_back({"user scale 3.01", params, "userScale"});
-        }
-        {
-            Json params = SizeOf(300, 300);
-            params["safeArea"] = SafeAreaOf(-1, 0, 0, 0);
-            bad.push_back({"a negative inset", params, "safeArea.top"});
-            params["safeArea"] = SafeAreaOf(0, 150, 0, 150);
-            bad.push_back({"insets that fill the width", params, "safeArea.left"});
-            params["safeArea"] = SafeAreaOf(150, 0, 150, 0);
-            bad.push_back({"insets that fill the height", params, "safeArea.top"});
-        }
+        bad.push_back({"density 0.49", SizeOf(300, 300, R"(,"density":0.49)"), "density"});
+        bad.push_back({"density 4.01", SizeOf(300, 300, R"(,"density":4.01)"), "density"});
+        bad.push_back({"an output of 12288 pixels", SizeOf(4096, 300, R"(,"density":3.0)"), "width"});
+        bad.push_back({"user scale 0.49", SizeOf(300, 300, R"(,"userScale":0.49)"), "userScale"});
+        bad.push_back({"user scale 3.01", SizeOf(300, 300, R"(,"userScale":3.01)"), "userScale"});
+        bad.push_back({"a negative inset", SizeOf(300, 300, WithSafeArea(SafeAreaOf(-1, 0, 0, 0))), "safeArea.top"});
+        bad.push_back({"insets that fill the width", SizeOf(300, 300, WithSafeArea(SafeAreaOf(0, 150, 0, 150))), "safeArea.left"});
+        bad.push_back({"insets that fill the height", SizeOf(300, 300, WithSafeArea(SafeAreaOf(150, 0, 150, 0))), "safeArea.top"});
 
         for (const Bad& entry : bad) {
             // A user scale in range would be applied if the window part were the only one checked late
-            Json params = entry.params;
-            if (FindJsonMember(params, "userScale") == nullptr) {
-                params["userScale"] = 2.0;
+            String params = entry.params;
+            if (params.find("userScale") == String::npos) {
+                params.insert(params.size() - 1, R"(,"userScale":2.0)");
             }
             Call("set_window", params);
             EXPECT_FALSE(LastIsOk()) << entry.what;
@@ -323,28 +293,19 @@ namespace BECore::Tests {
     }
 
     TEST_F(ControlWindowTest, ABadShapeIsInvalidParams) {
-        Json fractional = Json::object();
-        fractional["width"] = 480.5;
-        fractional["height"] = 300;
-        Json textual = SizeOf(480, 300);
-        textual["width"] = "480";
-        Json badDensity = SizeOf(480, 300);
-        badDensity["density"] = "2";
-        Json badScale = SizeOf(480, 300);
-        badScale["userScale"] = true;
-        Json notAnObject = SizeOf(480, 300);
-        notAnObject["safeArea"] = 40;
-        Json missingMember = SizeOf(480, 300);
-        missingMember["safeArea"] = SafeAreaOf(1, 2, 3, 4);
-        missingMember["safeArea"].erase("left");
-        Json textualInset = SizeOf(480, 300);
-        textualInset["safeArea"] = SafeAreaOf(1, 2, 3, "4");
-
-        const Json requests[] = {Json::object(), fractional, textual, badDensity, badScale, notAnObject, missingMember, textualInset};
-        for (const Json& params : requests) {
+        const String missingMember = SizeOf(480, 300, R"(,"safeArea":{"bottom":3,"right":2,"top":1})");
+        const String requests[] = {R"({})",
+                                   R"({"height":300,"width":480.5})",
+                                   R"({"height":300,"width":"480"})",
+                                   SizeOf(480, 300, R"(,"density":"2")"),
+                                   SizeOf(480, 300, R"(,"userScale":true)"),
+                                   SizeOf(480, 300, R"(,"safeArea":40)"),
+                                   missingMember,
+                                   SizeOf(480, 300, R"(,"safeArea":{"bottom":3,"left":"4","right":2,"top":1})")};
+        for (const String& params : requests) {
             Call("set_window", params);
-            EXPECT_EQ(LastErrorCode(), "invalid_params") << DumpJson(params).c_str();
-            EXPECT_TRUE(window->Simulations().empty()) << DumpJson(params).c_str();
+            EXPECT_EQ(LastErrorCode(), "invalid_params") << params.c_str();
+            EXPECT_TRUE(window->Simulations().empty()) << params.c_str();
         }
 
         Call("set_window", missingMember);
@@ -353,10 +314,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(ControlWindowTest, AnInsetPastADoubleIsInvalidParamsNotAParseError) {
-        service.Post(R"({"id":1,"method":"set_window","params":{"width":480,"height":300,"safeArea":{"top":1e999,"right":0,"bottom":0,"left":0}}})", [this](String reply) {
-            auto parsed = ParseJson(reply);
-            responses.push_back(parsed ? std::move(*parsed) : Json());
-        });
+        service.Post(R"({"id":1,"method":"set_window","params":{"width":480,"height":300,"safeArea":{"top":1e999,"right":0,"bottom":0,"left":0}}})",
+                     [this](String reply) { responses.emplace_back(StringView(reply.c_str(), reply.size())); });
         service.Drain();
 
         EXPECT_EQ(LastErrorCode(), "invalid_params");
@@ -365,18 +324,14 @@ namespace BECore::Tests {
     }
 
     TEST_F(ControlWindowTest, AHeightThatIsMissingIsInvalidParams) {
-        Json params = Json::object();
-        params["width"] = 480;
-        Call("set_window", params);
+        Call("set_window", R"({"width":480})");
         EXPECT_EQ(LastErrorCode(), "invalid_params");
         EXPECT_NE(LastErrorMessage().find("height"), String::npos) << LastErrorMessage().c_str();
     }
 
     TEST_F(ControlWindowTest, AWindowThatRefusesIsInvalidParamsAndKeepsTheUserScale) {
         window->RefuseWith("the driver said no");
-        Json params = SizeOf(480, 300);
-        params["userScale"] = 2.0;
-        Call("set_window", params);
+        Call("set_window", SizeOf(480, 300, R"(,"userScale":2.0)"));
         EXPECT_EQ(LastErrorCode(), "invalid_params");
         EXPECT_NE(LastErrorMessage().find("the driver said no"), String::npos) << LastErrorMessage().c_str();
         EXPECT_FLOAT_EQ(UserScale(), kStartUserScale);
@@ -384,9 +339,7 @@ namespace BECore::Tests {
 
     TEST_F(ControlWindowTest, ARealWindowIsNotHeadlessAndNothingChanges) {
         UseWindow(false);
-        Json params = SizeOf(480, 300);
-        params["userScale"] = 2.0;
-        Call("set_window", params);
+        Call("set_window", SizeOf(480, 300, R"(,"userScale":2.0)"));
         EXPECT_EQ(LastErrorCode(), "not_headless");
         EXPECT_NE(LastErrorMessage().find("headless"), String::npos) << LastErrorMessage().c_str();
         EXPECT_TRUE(window->Simulations().empty());
@@ -412,10 +365,10 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(Send("status"));
         ASSERT_TRUE(LastIsOk());
-        const Json* status = LastResult();
-        ASSERT_NE(status, nullptr);
-        const Json* shown = FindJsonMember(*status, "window");
-        ASSERT_NE(shown, nullptr);
+        const JsonView status = LastResult();
+        ASSERT_TRUE(status.IsObject());
+        const JsonView shown = MemberOf(status, "window");
+        ASSERT_TRUE(shown.IsObject());
         EXPECT_EQ(NumberOf(shown, "width"), 480.0);
         EXPECT_EQ(NumberOf(shown, "height"), 320.0);
         EXPECT_EQ(NumberOf(shown, "density"), 2.0);
@@ -423,15 +376,15 @@ namespace BECore::Tests {
         EXPECT_EQ(NumberOf(shown, "outputWidth"), 960.0);
         EXPECT_EQ(NumberOf(shown, "outputHeight"), 640.0);
         EXPECT_EQ(NumberOf(shown, "userScale"), static_cast<double>(kStartUserScale));
-        EXPECT_TRUE(GetJsonBool(*shown, "headless").value_or(false));
-        const Json* safeArea = FindJsonMember(*shown, "safeArea");
+        EXPECT_TRUE(BoolOf(shown, "headless").value_or(false));
+        const JsonView safeArea = MemberOf(shown, "safeArea");
         EXPECT_EQ(NumberOf(safeArea, "top"), 40.0);
         EXPECT_EQ(NumberOf(safeArea, "right"), 10.0);
         EXPECT_EQ(NumberOf(safeArea, "bottom"), 20.0);
         EXPECT_EQ(NumberOf(safeArea, "left"), 30.0);
     }
 
-    TEST_F(ControlWindowTest, TheWrittenWindowStatusIsTheTextOfTheDomItReplaced) {
+    TEST_F(ControlWindowTest, TheWrittenWindowStatusKeepsItsBytes) {
         WindowSimulation current;
         current.width = 480;
         current.height = 320;
@@ -441,73 +394,58 @@ namespace BECore::Tests {
         renderer->width = 960.0f;
         renderer->height = 640.0f;
 
-        Json insets = Json::object();
-        insets["top"] = 40.0;
-        insets["right"] = 10.0;
-        insets["bottom"] = 20.0;
-        insets["left"] = 30.0;
-        Json expected = Json::object();
-        expected["width"] = 480;
-        expected["height"] = 320;
-        expected["density"] = 2.0;
-        expected["displayScale"] = 1.0;
-        expected["safeArea"] = std::move(insets);
-        expected["outputWidth"] = 960;
-        expected["outputHeight"] = 640;
-        expected["userScale"] = static_cast<double>(kStartUserScale);
-        expected["headless"] = true;
-
         String written;
         JsonWriter writer(written);
         ControlWindowStatus::Read().WriteJson(writer);
 
-        EXPECT_EQ(written, DumpJson(expected));
+        EXPECT_EQ(
+            written,
+            R"({"density":2.0,"displayScale":1.0,"headless":true,"height":320,"outputHeight":640,"outputWidth":960,"safeArea":{"bottom":20.0,"left":30.0,"right":10.0,"top":40.0},"userScale":1.25,"width":480})");
     }
 
     TEST_F(ControlWindowTest, StatusTellsARealWindowToo) {
         UseWindow(false);
         ASSERT_TRUE(Send("status"));
-        const Json* shown = FindJsonMember(*LastResult(), "window");
-        ASSERT_NE(shown, nullptr);
+        const JsonView shown = MemberOf(LastResult(), "window");
+        ASSERT_TRUE(shown.IsObject());
         EXPECT_EQ(NumberOf(shown, "width"), 800.0);
-        EXPECT_FALSE(GetJsonBool(*shown, "headless").value_or(true));
+        EXPECT_FALSE(BoolOf(shown, "headless").value_or(true));
     }
 
     TEST_F(ControlWindowTest, StatusWithoutAWindowOrRendererKeepsTheShape) {
         CoreManager::GetMainWindowManager().SetMainWindow({});
         CoreManager::GetRendererManager().SetRenderer({});
         ASSERT_TRUE(Send("status"));
-        const Json* shown = FindJsonMember(*LastResult(), "window");
-        ASSERT_NE(shown, nullptr);
+        const JsonView shown = MemberOf(LastResult(), "window");
+        ASSERT_TRUE(shown.IsObject());
         EXPECT_EQ(NumberOf(shown, "width"), 0.0);
         EXPECT_EQ(NumberOf(shown, "outputWidth"), 0.0);
         EXPECT_EQ(NumberOf(shown, "density"), 1.0);
-        EXPECT_FALSE(GetJsonBool(*shown, "headless").value_or(true));
-        EXPECT_NE(FindJsonMember(*shown, "safeArea"), nullptr);
+        EXPECT_FALSE(BoolOf(shown, "headless").value_or(true));
+        EXPECT_TRUE(shown.Find("safeArea").has_value());
     }
 
     TEST_F(ControlWindowTest, ListMethodsListsSetWindowWithItsParameters) {
         ASSERT_TRUE(Send("list_methods"));
-        const Json* methods = FindJsonMember(*LastResult(), "methods");
-        ASSERT_NE(methods, nullptr);
-        ASSERT_TRUE(methods->is_array());
+        const JsonView methods = MemberOf(LastResult(), "methods");
+        ASSERT_TRUE(methods.IsArray());
 
-        const Json* found = nullptr;
-        for (const Json& method : *methods) {
-            if (StringOf(&method, "name") == "set_window") {
-                found = &method;
+        JsonView found;
+        for (const JsonView method : methods.Items()) {
+            if (StringOf(method, "name") == "set_window") {
+                found = method;
             }
         }
-        ASSERT_NE(found, nullptr);
+        ASSERT_TRUE(found.IsObject());
         EXPECT_FALSE(StringOf(found, "summary").empty());
-        const Json* params = FindJsonMember(*found, "params");
-        ASSERT_NE(params, nullptr);
+        const JsonView params = MemberOf(found, "params");
+        ASSERT_TRUE(params.IsArray());
         Vector<String> names;
         Vector<String> required;
-        for (const Json& param : *params) {
-            names.push_back(StringOf(&param, "name"));
-            if (GetJsonBool(param, "required").value_or(false)) {
-                required.push_back(StringOf(&param, "name"));
+        for (const JsonView param : params.Items()) {
+            names.push_back(StringOf(param, "name"));
+            if (BoolOf(param, "required").value_or(false)) {
+                required.push_back(StringOf(param, "name"));
             }
         }
         EXPECT_EQ(names, (Vector<String>{"width", "height", "density", "userScale", "safeArea"}));

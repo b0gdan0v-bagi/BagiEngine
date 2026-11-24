@@ -2,9 +2,9 @@
 
 #include "MethodCallTest.h"
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
-#include <BECore/Control/JsonSerializer.h>
+#include <BECore/Control/JsonStreamSerializer.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/Reflection/MethodCall.h>
 #include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Reflection/TypedRef.h>
@@ -58,21 +58,42 @@ namespace BECore::Tests {
             String result;
         };
 
+        /// What a method writes, as the text of one JSON object
+        class ResultText {
+        public:
+            ISerializer& Serializer() {
+                return _serializer;
+            }
+
+            String Take() {
+                _serializer.Finish();
+                return _text;
+            }
+
+        private:
+            String _text;
+            JsonWriter _writer{_text};
+            JsonStreamSerializer _serializer{_writer};
+        };
+
+        /// A reader over the JSON text @p argumentsJson; the test fails when it does not parse
+        void LoadArguments(JsonDeserializer& reader, StringView argumentsJson) {
+            EXPECT_TRUE(reader.Load(argumentsJson)) << String(argumentsJson).c_str();
+        }
+
         /// Calls @p method with the arguments of the JSON text; the result is the JSON text of what the method wrote
         Outcome Call(TypedRef ref, StringView method, StringView argumentsJson) {
-            auto parsed = ParseJson(argumentsJson);
-            EXPECT_TRUE(parsed.has_value()) << String(argumentsJson).c_str();
-            const Json arguments = parsed ? std::move(*parsed) : Json::object();
-            JsonDeserializer reader(arguments);
-            JsonSerializer writer;
-            const auto outcome = CallMethod(ref, method, reader, writer);
+            JsonDeserializer reader;
+            LoadArguments(reader, argumentsJson);
+            ResultText writer;
+            const auto outcome = CallMethod(ref, method, reader, writer.Serializer());
             Outcome made;
             made.ran = outcome.has_value();
             if (!outcome.has_value()) {
                 made.status = outcome.error().status;
                 made.message = outcome.error().message;
             }
-            made.result = DumpJson(writer.Take());
+            made.result = writer.Take();
             return made;
         }
 
@@ -202,24 +223,24 @@ namespace BECore::Tests {
 
     TEST(MethodCallTest, ArgumentsThatAlreadyCarryAnErrorAreRefusedBeforeTheMethodRuns) {
         McCounter counter;
-        const Json arguments = Json::object();
-        JsonDeserializer reader(arguments);
+        JsonDeserializer reader;
+        LoadArguments(reader, "{}");
         reader.ReportError("earlier", "Something went wrong");
-        JsonSerializer writer;
-        const auto outcome = CallMethod(Ref(counter), "Reset", reader, writer);
+        ResultText writer;
+        const auto outcome = CallMethod(Ref(counter), "Reset", reader, writer.Serializer());
         ASSERT_FALSE(outcome.has_value());
         EXPECT_EQ(outcome.error().status, CallStatus::bad_arguments);
         EXPECT_TRUE(Contains(outcome.error().message, "earlier")) << outcome.error().message.c_str();
     }
 
     TEST(MethodCallTest, TheSettingsOfTheReaderComeBackAfterTheCall) {
-        const Json arguments = Json::object();
         McCounter counter;
         {
-            JsonDeserializer reader(arguments);
-            JsonSerializer writer;
+            JsonDeserializer reader;
+            LoadArguments(reader, "{}");
+            ResultText writer;
             reader.SetDiagnostics(DiagnosticsMode::Warn);
-            ASSERT_TRUE(CallMethod(Ref(counter), "Reset", reader, writer).has_value());
+            ASSERT_TRUE(CallMethod(Ref(counter), "Reset", reader, writer.Serializer()).has_value());
             EXPECT_EQ(reader.GetDiagnostics(), DiagnosticsMode::Warn);
             EXPECT_TRUE(reader.IsStrictValues());
         }
@@ -280,10 +301,10 @@ namespace BECore::Tests {
         EXPECT_EQ(control.message.find('\n'), String::npos);
         EXPECT_EQ(control.message.find('\x01'), String::npos);
 
-        const Json arguments = Json::object();
-        JsonDeserializer reader(arguments);
-        JsonSerializer writer;
-        const auto nothing = CallMethod(TypedRef{}, "Reset", reader, writer);
+        JsonDeserializer reader;
+        LoadArguments(reader, "{}");
+        ResultText writer;
+        const auto nothing = CallMethod(TypedRef{}, "Reset", reader, writer.Serializer());
         ASSERT_FALSE(nothing.has_value());
         EXPECT_EQ(nothing.error().status, CallStatus::unknown_method);
     }
@@ -364,21 +385,19 @@ namespace BECore::Tests {
         EXPECT_EQ(found.owner->Name(), "McBase");
         EXPECT_EQ(found.offset, Require(registry.OffsetOfBase(*ref.type, *found.owner)));
 
-        Json arguments = Json::object();
-        arguments["by"] = 4;
-        JsonDeserializer reader(arguments);
-        JsonSerializer writer;
-        const auto outcome = CallMethod(ref, "Bump", reader, writer, registry);
+        JsonDeserializer reader;
+        LoadArguments(reader, R"({"by":4})");
+        ResultText writer;
+        const auto outcome = CallMethod(ref, "Bump", reader, writer.Serializer(), registry);
         ASSERT_TRUE(outcome.has_value()) << outcome.error().message.c_str();
         EXPECT_EQ(shifted.baseValue, 5);
-        EXPECT_EQ(DumpJson(writer.Take()), R"({"result":5})");
+        EXPECT_EQ(writer.Take(), R"({"result":5})");
 
-        Json twice = Json::object();
-        twice["value"] = 5;
-        JsonDeserializer twiceReader(twice);
-        JsonSerializer twiceWriter;
-        ASSERT_TRUE(CallMethod(ref, "Twice", twiceReader, twiceWriter, registry).has_value());
-        EXPECT_EQ(DumpJson(twiceWriter.Take()), R"({"result":25})");
+        JsonDeserializer twiceReader;
+        LoadArguments(twiceReader, R"({"value":5})");
+        ResultText twiceWriter;
+        ASSERT_TRUE(CallMethod(ref, "Twice", twiceReader, twiceWriter.Serializer(), registry).has_value());
+        EXPECT_EQ(twiceWriter.Take(), R"({"result":25})");
     }
 
     // -------------------------------------------------------------------------

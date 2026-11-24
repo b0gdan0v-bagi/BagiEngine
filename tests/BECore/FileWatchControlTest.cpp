@@ -1,13 +1,11 @@
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/FileSystem/FakeFileWatchBackend.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/FileWatchControl.h>
 #include <BECore/FileSystem/FileWatcher.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/Memory/ScratchArena.h>
-#include <BECore/RefCounted/New.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -60,27 +58,11 @@ namespace BECore::Tests {
             SetWriteTime(HotPath(), std::chrono::seconds(2 * ++_writes));
         }
 
-        /// Posts the request and runs it; a deferred answer arrives with the end of a frame, so @p frames of them are run. Returns the whole response
-        Json Call(StringView method, const Json& params = Json(), int frames = 0) {
-            Json response;
-            _service.Post(MakeRequest(1, method, params), [&response](String text) {
-                auto parsed = ParseJson(text);
-                response = parsed ? std::move(*parsed) : Json();
-            });
-            _service.Drain();
-            for (int i = 0; i < frames; ++i) {
-                _service.EndFrame();
-            }
-            return response;
-        }
-
-        /// Like Call, with the params as the text written, which a `Json` cannot hold (an escaped path)
-        Json CallText(StringView method, StringView paramsText, int frames) {
-            Json response;
-            _service.Post(Format(R"({{"id":1,"method":"{}","params":{}}})", method, paramsText), [&response](String text) {
-                auto parsed = ParseJson(text);
-                response = parsed ? std::move(*parsed) : Json();
-            });
+        /// Posts the request (with @p paramsText as written, so an escaped path stays escaped) and runs it; a deferred answer arrives with the end of
+        /// a frame, so @p frames of them are run. Returns the whole response, an empty one when none came
+        ControlReply Call(StringView method, StringView paramsText = {}, int frames = 0) {
+            ControlReply response;
+            _service.Post(MakeRequestText(1, method, paramsText), [&response](String text) { response = ControlReply(StringView(text.c_str(), text.size())); });
             _service.Drain();
             for (int i = 0; i < frames; ++i) {
                 _service.EndFrame();
@@ -106,76 +88,82 @@ namespace BECore::Tests {
     };
 
     TEST_F(FileWatchControlTest, BothMethodsAnswerNotWatchingWhileTheWatcherIsNotRunning) {
-        EXPECT_EQ(ErrorCode(Call("files_rescan")), "not_watching");
-        EXPECT_EQ(ErrorCode(Call("files_apply")), "not_watching");
+        EXPECT_EQ(Call("files_rescan").ErrorCode(), "not_watching");
+        EXPECT_EQ(Call("files_apply").ErrorCode(), "not_watching");
     }
 
     TEST_F(FileWatchControlTest, ApplyTakesOnlyAListOfStringsAsPaths) {
         StartWatching();
         for (const char* text : {R"({"paths": "config/HotConfig.xml"})", R"({"paths": [1]})", R"({"paths": {}})"}) {
-            const auto params = ParseJson(text);
-            ASSERT_TRUE(params.has_value());
-            EXPECT_EQ(ErrorCode(Call("files_apply", *params)), "invalid_params") << text;
+            EXPECT_EQ(Call("files_apply", text).ErrorCode(), "invalid_params") << text;
         }
     }
 
     TEST_F(FileWatchControlTest, AnEscapedPathIsDecodedBeforeItIsApplied) {
         StartWatching();
         EditHot("<HotConfig value=\"two\"/>\n");
-        ASSERT_TRUE(IsOk(Call("files_rescan")));
+        ASSERT_TRUE(Call("files_rescan").IsOk());
 
-        const Json applied = CallText("files_apply", R"({"paths":["config\/HotConfig.xml"]})", 1);
+        const ControlReply applied = Call("files_apply", R"({"paths":["config\/HotConfig.xml"]})", 1);
 
-        ASSERT_TRUE(IsOk(applied));
+        ASSERT_TRUE(applied.IsOk());
         EXPECT_EQ(HotValue(), "two");
     }
 
     TEST_F(FileWatchControlTest, ARescanOfAnUntouchedFolderListsNothing) {
         StartWatching();
-        const Json response = Call("files_rescan");
-        ASSERT_TRUE(IsOk(response));
-        const Json* result = FindJsonMember(response, "result");
-        ASSERT_NE(result, nullptr);
-        EXPECT_EQ(DumpJson(*result), "{\"changes\":[]}");
+        const ControlReply response = Call("files_rescan");
+        ASSERT_TRUE(response.IsOk());
+        ASSERT_TRUE(response.Result().IsObject());
+        EXPECT_EQ(response.Result().Raw(), R"({"changes":[]})");
     }
 
     TEST_F(FileWatchControlTest, AClientEditsAConfigOnDiskLooksAtItAppliesItAndSeesTheNewValue) {
         StartWatching();
         EditHot("<HotConfig value=\"two\"/>\n");
 
-        const Json looked = Call("files_rescan");
-        ASSERT_TRUE(IsOk(looked));
-        const Json* changes = FindJsonMember(*FindJsonMember(looked, "result"), "changes");
-        ASSERT_NE(changes, nullptr);
-        ASSERT_EQ(changes->size(), 1u);
-        EXPECT_EQ(StringOf(&(*changes)[0], "path"), kHotPath);
-        EXPECT_EQ(StringOf(&(*changes)[0], "kind"), "changed");
-        const Json* consumers = FindJsonMember((*changes)[0], "consumers");
-        ASSERT_NE(consumers, nullptr);
-        ASSERT_EQ(consumers->size(), 1u);
+        const ControlReply looked = Call("files_rescan");
+        ASSERT_TRUE(looked.IsOk());
+        const JsonView changes = MemberOf(looked.Result(), "changes");
+        ASSERT_TRUE(changes.IsArray());
+        ASSERT_EQ(changes.Size(), 1u);
+        EXPECT_EQ(StringOf(ItemAt(changes, 0), "path"), kHotPath);
+        EXPECT_EQ(StringOf(ItemAt(changes, 0), "kind"), "changed");
+        const JsonView consumers = MemberOf(ItemAt(changes, 0), "consumers");
+        ASSERT_TRUE(consumers.IsArray());
+        ASSERT_EQ(consumers.Size(), 1u);
         EXPECT_EQ(HotValue(), "one") << "looking delivers nothing";
 
-        Json params = Json::object();
-        params["paths"] = Json::array({MakeJsonString(String(kHotPath))});
-        const Json applied = Call("files_apply", params, 1);
-        ASSERT_TRUE(IsOk(applied));
-        const Json* items = FindJsonMember(*FindJsonMember(applied, "result"), "applied");
-        ASSERT_NE(items, nullptr);
-        ASSERT_EQ(items->size(), 1u);
-        EXPECT_EQ(BoolOf(&(*items)[0], "ok"), Optional<bool>(true));
+        String params;
+        {
+            JsonWriter writer(params);
+            writer.BeginObject();
+            writer.Key("paths");
+            writer.BeginArray();
+            writer.Value(StringView(kHotPath));
+            writer.EndArray();
+            writer.EndObject();
+        }
+        const ControlReply applied = Call("files_apply", StringView(params.c_str(), params.size()), 1);
+        ASSERT_TRUE(applied.IsOk());
+        const JsonView items = MemberOf(applied.Result(), "applied");
+        ASSERT_TRUE(items.IsArray());
+        ASSERT_EQ(items.Size(), 1u);
+        EXPECT_EQ(BoolOf(ItemAt(items, 0), "ok"), Optional<bool>(true));
         EXPECT_EQ(HotValue(), "two");
 
-        const Json again = Call("files_rescan");
-        EXPECT_TRUE(FindJsonMember(*FindJsonMember(again, "result"), "changes")->empty());
+        const ControlReply again = Call("files_rescan");
+        ASSERT_TRUE(MemberOf(again.Result(), "changes").IsArray());
+        EXPECT_EQ(MemberOf(again.Result(), "changes").Size(), 0u);
     }
 
     TEST_F(FileWatchControlTest, ApplyAnswersOnlyAfterAFrameHasEnded) {
         StartWatching();
         EditHot("<HotConfig value=\"two\"/>\n");
 
-        const Json early = Call("files_apply", Json(), 0);
+        const ControlReply early = Call("files_apply", {}, 0);
 
-        EXPECT_TRUE(early.is_null()) << "the delivery ran, the answer waits for the frame";
+        EXPECT_TRUE(early.Text().empty()) << "the delivery ran, the answer waits for the frame";
         EXPECT_EQ(HotValue(), "two");
         _service.EndFrame();
     }
@@ -184,14 +172,14 @@ namespace BECore::Tests {
         StartWatching();
         EditHot(kBrokenText);
 
-        const Json applied = Call("files_apply", Json(), 1);
+        const ControlReply applied = Call("files_apply", {}, 1);
 
-        ASSERT_TRUE(IsOk(applied));
-        const Json* items = FindJsonMember(*FindJsonMember(applied, "result"), "applied");
-        ASSERT_NE(items, nullptr);
-        ASSERT_EQ(items->size(), 1u);
-        EXPECT_EQ(BoolOf(&(*items)[0], "ok"), Optional<bool>(false));
-        EXPECT_FALSE(StringOf(&(*items)[0], "error").empty());
+        ASSERT_TRUE(applied.IsOk());
+        const JsonView items = MemberOf(applied.Result(), "applied");
+        ASSERT_TRUE(items.IsArray());
+        ASSERT_EQ(items.Size(), 1u);
+        EXPECT_EQ(BoolOf(ItemAt(items, 0), "ok"), Optional<bool>(false));
+        EXPECT_FALSE(StringOf(ItemAt(items, 0), "error").empty());
         EXPECT_EQ(HotValue(), "one");
     }
 
@@ -200,22 +188,22 @@ namespace BECore::Tests {
         EditHot(kBrokenText);
         const size_t usedBefore = ScratchArena::Get().GetBytesUsed();
 
-        const Json applied = Call("files_apply", Json(), 1);
+        const ControlReply applied = Call("files_apply", {}, 1);
 
         // The handler's scope ended before the frame: an answer built there and captured would read freed arena memory (the Debug free pattern) instead of these
-        ASSERT_TRUE(IsOk(applied));
-        const Json* items = FindJsonMember(*FindJsonMember(applied, "result"), "applied");
-        ASSERT_NE(items, nullptr);
-        ASSERT_EQ(items->size(), 1u);
-        const Json& item = (*items)[0];
-        EXPECT_EQ(StringOf(&item, "path"), kHotPath);
-        EXPECT_EQ(BoolOf(&item, "ok"), Optional<bool>(false));
-        EXPECT_FALSE(StringOf(&item, "error").empty());
-        const Json* consumers = FindJsonMember(item, "consumers");
-        ASSERT_NE(consumers, nullptr);
-        ASSERT_EQ(consumers->size(), 1u);
-        EXPECT_TRUE((*consumers)[0].is_string());
-        EXPECT_NE(DumpJson((*consumers)[0]), "\"\"");
+        ASSERT_TRUE(applied.IsOk());
+        const JsonView items = MemberOf(applied.Result(), "applied");
+        ASSERT_TRUE(items.IsArray());
+        ASSERT_EQ(items.Size(), 1u);
+        const JsonView item = ItemAt(items, 0);
+        EXPECT_EQ(StringOf(item, "path"), kHotPath);
+        EXPECT_EQ(BoolOf(item, "ok"), Optional<bool>(false));
+        EXPECT_FALSE(StringOf(item, "error").empty());
+        const JsonView consumers = MemberOf(item, "consumers");
+        ASSERT_TRUE(consumers.IsArray());
+        ASSERT_EQ(consumers.Size(), 1u);
+        EXPECT_TRUE(ItemAt(consumers, 0).IsString());
+        EXPECT_NE(ItemAt(consumers, 0).Raw(), R"("")");
         EXPECT_EQ(ScratchArena::Get().GetBytesUsed(), usedBefore) << "the answer's memory went back with its scope";
     }
 
