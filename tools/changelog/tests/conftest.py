@@ -44,13 +44,13 @@ class Tree:
         if not create:
             return
         (root / changelog.VERSION_HEADER).parent.mkdir(parents=True)
-        (root / changelog.VERSION_HEADER).write_text(VERSION_HEADER_TEXT, encoding="utf-8")
+        (root / changelog.VERSION_HEADER).write_text(VERSION_HEADER_TEXT, encoding="utf-8", newline="\n")
         (root / changelog.CONTENT_VERSION_HEADER).parent.mkdir(parents=True)
-        (root / changelog.CONTENT_VERSION_HEADER).write_text(CONTENT_VERSION_TEXT, encoding="utf-8")
+        (root / changelog.CONTENT_VERSION_HEADER).write_text(CONTENT_VERSION_TEXT, encoding="utf-8", newline="\n")
 
     def draft(self, text: str, name: str = "draft.md") -> Path:
         path = self.root.parent / name
-        path.write_text(text, encoding="utf-8")
+        path.write_text(text, encoding="utf-8", newline="\n")
         return path
 
     def add(self, text: str, bump: str = "auto", date: str = "2026-11-15") -> int:

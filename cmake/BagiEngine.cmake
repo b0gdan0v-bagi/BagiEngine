@@ -174,6 +174,9 @@ if(ENGINE_NO_EXCEPTIONS)
     message(STATUS "C++ exceptions: DISABLED")
     add_compile_definitions(ENGINE_NO_EXCEPTIONS=1)
     add_compile_definitions(EASTL_EXCEPTIONS_ENABLED=0)
+    # fmt guesses from __EXCEPTIONS (GCC, Clang) or _HAS_EXCEPTIONS (the MSVC library, which says 1 whatever the flags): with Clang for
+    # MSVC it picked `try`, which -fno-exceptions refuses outside a system header (a header checked alone, BagiHeadersStandalone)
+    add_compile_definitions(FMT_EXCEPTIONS=0)
 
     if(NOT MSVC)
         add_compile_options(-fno-exceptions)

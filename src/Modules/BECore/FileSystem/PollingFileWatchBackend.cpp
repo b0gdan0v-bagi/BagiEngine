@@ -2,6 +2,7 @@
 
 #include <BECore/File/File.h>
 #include <EASTL/sort.h>
+#include <chrono>
 
 namespace BECore {
 
@@ -58,6 +59,7 @@ namespace BECore {
 
     void PollingFileWatchBackend::Poll(Watched& watched) {
         bool listAgain = false;
+        const int64_t unsettledSinceNs = watched.listedAtNs - kFolderStampUnsettledNs;
         for (Entry& entry : watched.entries) {
             const int64_t lastTimeNs = entry.writeTimeNs;
             const uint64_t lastSize = entry.size;
@@ -75,7 +77,7 @@ namespace BECore {
                 entry.present = true;  // the watched folder itself came back
                 listAgain = true;
             } else if (entry.directory) {
-                listAgain = listAgain || entry.writeTimeNs != lastTimeNs;
+                listAgain = listAgain || entry.writeTimeNs != lastTimeNs || entry.writeTimeNs >= unsettledSinceNs;
             } else if (entry.writeTimeNs != lastTimeNs || entry.size != lastSize) {
                 Report(entry.path);
             }
@@ -86,6 +88,8 @@ namespace BECore {
     }
 
     void PollingFileWatchBackend::Rescan(Watched& watched, bool reportNewFiles) {
+        // The system clock counts from the Unix epoch, as modifyTimeNs does
+        watched.listedAtNs = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         Vector<Entry> fresh;
         Entry& root = fresh.emplace_back();
         root.path = watched.root;

@@ -348,6 +348,24 @@ Entry: `font-atlas-scratch`. Bump: patch.
 
 - Building a font atlas keeps its temporaries, and stb_truetype's, in the thread's scratch arena and rasterizes straight into the page: about 8 times fewer heap allocations per atlas, the same pixels. Showing a scene again builds no atlas (a test guards it).
 
+## 0.10.3 - 2026-11-23 - changelog.py refuses the entry id of an alltests entry (upper-case letters: alltests-BagiHeadersStandalone)
+
+Entry: `changelog-entry-id-case`. Bump: patch.
+
+### Changed
+
+- `changelog.py` takes an `Entry` id with upper-case letters (the `alltests-<ctest name>` entries); an underscore and the rest stay refused. `check` names the version header in posix form on every platform, and the tool's tests pass on Windows.
+  Adapt: nothing.
+
+## 0.10.2 - 2026-11-23 - alltests: BagiHeadersStandalone fails
+
+Entry: `alltests-BagiHeadersStandalone`. Bump: patch.
+
+### Changed
+
+- With `ENGINE_NO_EXCEPTIONS` (the default) the engine defines `FMT_EXCEPTIONS=0` for every target, beside `EASTL_EXCEPTIONS_ENABLED=0`. fmt took `_HAS_EXCEPTIONS` of the MSVC library (1 whatever the flags) for the truth, so with Clang on Windows it used `try`, which `-fno-exceptions` refuses outside a system header: the build compiled only through CMake's PCH wrapper, and `BagiHeadersStandalone` failed for every header on Windows. On macOS, Linux and the web nothing changes (fmt already chose 0 there).
+  Adapt: configure again (a definition of every target: a full rebuild). A game target compiled outside `cmake/BagiEngine.cmake` defines `FMT_EXCEPTIONS=0` too.
+
 ## 0.10.1 - 2026-11-23 - Allocation profiler: the trace writer pollutes traces, library blocks are unnamed, no size histogram, no trace in the room server
 
 Entry: `room-server-alloc-trace`. Bump: patch.
@@ -395,6 +413,44 @@ Entry: `values-compile-scratch`. Bump: patch.
 
 - Compiling a formula or an effect keeps its temporaries (tokens, syntax tree, checker and lowering tables, builder code) in the thread's scratch arena: about 42 % fewer heap allocations per compile, at content load and on every editor edit of a formula.
 - The program pool keeps the code and constants of interned programs in one arena of its own instead of two heap vectors per program (fewer heap blocks; the held bytes grow by the arena's first chunk).
+
+## 0.9.4 - 2026-11-23 - Windows: RoomClientSocketTest.AServerThatStopsIsRetriedUntilTheGiveUpTime sees 2 connections in the give-up time, not 3
+
+Entry: `room-client-retry-test-windows`. Bump: patch.
+
+### Changed
+
+- `RoomClientSocketTest.AServerThatStopsIsRetriedUntilTheGiveUpTime` asks for at least one retry after the server stopped, not 3 connections in 700 ms: Windows answers a connect to a closed loopback port after about 2 s of its own retries. The client itself is unchanged (it gives up on its own clock while a connect hangs).
+  Adapt: nothing; a game's test of reconnects on Windows does not count on a refused loopback connect being fast.
+
+## 0.9.3 - 2026-11-23 - Windows: ProgramInstructionInfoTest.EveryRowReadsExactlyTheRegistersItsChangeMoves crashes BagiEngineTests (Shard0)
+
+Entry: `program-instruction-info-crash-windows`. Bump: patch.
+
+### Changed
+
+- `ProgramInstructionInfoTest` no longer reads past the operand slots of a case (4 slots, 8 loaded registers): EASTL's bounds check, on in a Windows Debug build, broke into the debugger and `BagiEngineTests.Shard0` failed in every Windows ctest.
+  Adapt: nothing.
+
+## 0.9.2 - 2026-11-23 - Windows: the polling file watch misses a file created in the same clock tick as the last listing (FileWatchBackendPollingTest flaky)
+
+Entry: `polling-filewatch-windows-dir-mtime`. Bump: patch.
+
+### Changed
+
+- `PollingFileWatchBackend` lists a folder again at every poll while its write time is within `kFolderStampUnsettledSeconds` (2 s) of the moment it was last listed: a file system stamps a folder from a coarse clock (NTFS from the system tick, FAT in 2 s steps), so a file made right after a listing could leave the stamp unchanged and was never reported. A quiet folder still costs stats only and allocates nothing.
+  Adapt: nothing; a game's allocation test over the polling backend ages its freshly made folders first (`std::filesystem::last_write_time`), or it sees the listing.
+
+## 0.9.1 - 2026-11-23 - Windows file watch: BECoreModule does not compile (the windows.h macro RemoveDirectory) and Shutdown hangs
+
+Entry: `windows-filewatch-removedirectory`. Bump: patch.
+
+### Changed
+
+- `WindowsFileWatchBackend.cpp` undefines the `windows.h` macro `RemoveDirectory` after the include, so its override of `IFileWatchBackend::RemoveDirectory` is not renamed to `RemoveDirectoryW`: `BECoreModule` compiles on Windows again (broken since `file-watcher`).
+  Adapt: nothing; a game's own code that includes `windows.h` and names a method `RemoveDirectory` undefines the macro the same way.
+- The Windows file watch backend's `Shutdown` no longer hangs: it cancels every pending read and waits until the reader thread took each completion before it stops the thread (it waited on the directory handle, which a read completed through the port does not signal). A Debug build of a game on Windows (`fileWatch` `Auto` watches there) no longer hangs at exit.
+  Adapt: nothing.
 
 ## 0.9.0 - 2026-11-23 - Compile time: CoreManager.h includes every manager and EnTT sits in every TU through the event headers
 
