@@ -9,6 +9,7 @@ namespace BECore {
 
         constexpr StringView kFlagPrefix = "--";
         constexpr char kWordSeparator = '-';
+        constexpr char kValueSeparator = '=';
         constexpr StringView kNeedsValue = "needs a value";
         constexpr StringView kHoldsOneValue = "a flag holds one value";
 
@@ -69,7 +70,61 @@ namespace BECore {
         if (flag.empty()) {
             return std::nullopt;
         }
+        if (GetDiagnostics() != DiagnosticsMode::Off) {
+            NoteAsked(flag);
+        }
         return _line.Find(flag);
+    }
+
+    void CommandLineDeserializer::NoteAsked(StringView flag) {
+        if (!IsAsked(flag)) {
+            _askedFlags.emplace_back(flag.data(), flag.size());
+        }
+    }
+
+    void CommandLineDeserializer::NoteKnownKey(StringView name) {
+        if (GetDiagnostics() == DiagnosticsMode::Off || !IsFlagKey(name)) {
+            return;
+        }
+        FlagBuffer buffer;
+        const StringView flag = MakeFlagName(name, buffer);
+        if (!flag.empty()) {
+            NoteAsked(flag);
+        }
+    }
+
+    bool CommandLineDeserializer::IsAsked(StringView flag) const {
+        for (const String& asked : _askedFlags) {
+            if (StringView(asked) == flag) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool CommandLineDeserializer::FindingsFull() const {
+        const size_t recorded = GetDiagnostics() == DiagnosticsMode::Warn ? GetWarnings().size() : _errors.size();
+        return recorded >= ReaderLimits::kMaxRecordedErrors;
+    }
+
+    void CommandLineDeserializer::FinishLoad() {
+        if (GetDiagnostics() == DiagnosticsMode::Off) {
+            return;
+        }
+        for (const String& argument : _line.GetArguments()) {
+            if (FindingsFull()) {
+                return;
+            }
+            const StringView view(argument);
+            const StringView name = view.substr(0, view.find(kValueSeparator));
+            if (!name.starts_with(kFlagPrefix) || name.size() == kFlagPrefix.size() || IsAsked(name)) {
+                continue;
+            }
+            const String hint = MakeDidYouMeanHint(name, {&_askedFlags});
+            if (!hint.empty()) {
+                ReportFinding(name, Format("Unknown flag '{}'{}", CutText(name, ReaderLimits::kMaxQuotedValueBytes), hint));
+            }
+        }
     }
 
     bool CommandLineDeserializer::HasKey(StringView name) const {

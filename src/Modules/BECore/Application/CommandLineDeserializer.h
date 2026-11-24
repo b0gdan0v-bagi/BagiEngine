@@ -30,6 +30,10 @@ namespace BECore {
      * number is `--x=<number>` of the field's type, and a bare number flag is the error `needs a value`; a `String` or `PoolString` takes
      * the text after the `=`, which may be empty (a bare one is `needs a value` too). An error is recorded under the **flag** (`--x`),
      * not the key, so the message can be shown to the person who typed it. A repeated flag is read once, its first form wins.
+     *
+     * With diagnostics `Warn` (or `Error`), FinishLoad() reports an argument that starts with `--`, that nothing asked for, and whose
+     * name is near an asked flag, as a typo (`Unknown flag '--contol-port', did you mean '--control-port'?`). Any other unknown argument
+     * is silent: a game has flags the engine does not know.
      */
     class CommandLineDeserializer final : public IDeserializer {
     public:
@@ -145,6 +149,9 @@ namespace BECore {
 
         /// Whether the flag of @p name is on the command line (in either form)
         bool HasKey(StringView name) const override;
+        void NoteKnownKey(StringView name) override;
+        /// Reports the typos of flags under the diagnostics mode; call it once, after the load
+        void FinishLoad() override;
 
         bool HasErrors() const override;
         const Vector<DeserializeError>& GetErrors() const override;
@@ -157,8 +164,13 @@ namespace BECore {
     private:
         bool IsFlagKey(StringView key) const;
 
-        /// The argument of the flag of @p key; empty for a key that is no flag of this reader or has no argument
+        /// The argument of the flag of @p key; empty for a key that is no flag of this reader or has no argument. Notes the flag as asked
+        /// when the diagnostics are on
         Optional<CommandLineArgument> Lookup(StringView key);
+
+        void NoteAsked(StringView flag);
+        bool IsAsked(StringView flag) const;
+        bool FindingsFull() const;
 
         template <typename T>
         bool ReadFlag(StringView key, T& outValue);
@@ -171,6 +183,8 @@ namespace BECore {
 
         const CommandLine& _line;
         Span<const StringView> _keys;
+        /// The flags asked, only while the diagnostics are on (FinishLoad compares the unknown arguments with them)
+        Vector<String> _askedFlags;
         Vector<DeserializeError> _errors;
     };
 

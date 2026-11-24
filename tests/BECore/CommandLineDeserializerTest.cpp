@@ -147,9 +147,9 @@ namespace BECore::Tests {
     }
 
     TEST(CommandLineDeserializerTest, ABareFlagThatNeedsAValueIsAnError) {
-        ProbeReading reading({"--port", "--label", "--name", "--scale"});
+        ProbeReading reading({"--port", "--label", "--title", "--scale"});
         reading.Load();
-        for (const StringView flag : {"--port", "--label", "--name", "--scale"}) {
+        for (const StringView flag : {"--port", "--label", "--title", "--scale"}) {
             EXPECT_EQ(Require(reading.ErrorAt(flag)).errorMessage, "needs a value") << String(flag).c_str();
         }
         EXPECT_EQ(reading.Value()._port, 7);
@@ -164,18 +164,18 @@ namespace BECore::Tests {
     }
 
     TEST(CommandLineDeserializerTest, APoolStringFieldIsInterned) {
-        ProbeReading reading({"--name=hero"});
+        ProbeReading reading({"--title=hero"});
         reading.Load();
         EXPECT_FALSE(reading.Reader().HasErrors());
-        EXPECT_EQ(reading.Value()._name, PoolString::Intern(StringView("hero")));
+        EXPECT_EQ(reading.Value()._title, PoolString::Intern(StringView("hero")));
     }
 
     TEST(CommandLineDeserializerTest, APoolStringOverTheLimitIsRefused) {
         const String longName(ReaderLimits::kMaxPoolStringBytes + 1, 'n');
-        ProbeReading reading({Format("--name={}", longName)});
+        ProbeReading reading({Format("--title={}", longName)});
         reading.Load();
-        EXPECT_TRUE(reading.ErrorAt("--name") != nullptr);
-        EXPECT_TRUE(reading.Value()._name.Empty());
+        EXPECT_TRUE(reading.ErrorAt("--title") != nullptr);
+        EXPECT_TRUE(reading.Value()._title.Empty());
     }
 
     TEST(CommandLineDeserializerTest, ARepeatedFlagTakesItsFirstForm) {
@@ -290,6 +290,124 @@ namespace BECore::Tests {
         EXPECT_EQ(config._controlPort, 9100);
         EXPECT_FALSE(config._headless);
         EXPECT_EQ(config._type, "Game");
+    }
+
+    namespace {
+
+        /// A probe reading with the diagnostics set, its warnings or errors as `path: message`
+        class Diagnosed {
+        public:
+            Diagnosed(const Args& args, DiagnosticsMode mode) : _reading(args) {
+                _reading.Reader().SetDiagnostics(mode);
+                _reading.Load();
+            }
+
+            ProbeReading& Reading() {
+                return _reading;
+            }
+
+            Vector<String> Warnings() {
+                return Describe(_reading.Reader().GetWarnings());
+            }
+
+            Vector<String> Errors() {
+                return Describe(_reading.Reader().GetErrors());
+            }
+
+        private:
+            static Vector<String> Describe(const Vector<DeserializeError>& list) {
+                Vector<String> lines;
+                for (const DeserializeError& error : list) {
+                    lines.push_back(Format("{}: {}", error.path, error.errorMessage));
+                }
+                return lines;
+            }
+
+            ProbeReading _reading;
+        };
+
+    }  // namespace
+
+    TEST(CommandLineDeserializerTest, ANearMissOfAnAskedFlagIsAWarningWithAHint) {
+        Diagnosed run({"--prot=9", "--levelcount=2"}, DiagnosticsMode::Warn);
+        const Vector<String> warnings = run.Warnings();
+        ASSERT_EQ(warnings.size(), 2u);
+        EXPECT_EQ(warnings[0], "--prot: Unknown flag '--prot', did you mean '--port'?");
+        EXPECT_EQ(warnings[1], "--levelcount: Unknown flag '--levelcount', did you mean '--level-count'?");
+        EXPECT_FALSE(run.Reading().Reader().HasErrors());
+    }
+
+    TEST(CommandLineDeserializerTest, AFlagTheEngineCannotKnowIsSilent) {
+        Diagnosed run({"--editor", "--game", "--seed=3", "--difficulty=2", "--strict-config", "--", "--=1", "positional"}, DiagnosticsMode::Warn);
+        for (const String& warning : run.Warnings()) {
+            ADD_FAILURE() << warning.c_str();
+        }
+        EXPECT_FALSE(run.Reading().Reader().HasErrors());
+    }
+
+    TEST(CommandLineDeserializerTest, AnAskedFlagIsNeverAnUnknownFlag) {
+        Diagnosed run({"--port=9", "--enabled", "--label="}, DiagnosticsMode::Warn);
+        EXPECT_TRUE(run.Warnings().empty());
+    }
+
+    TEST(CommandLineDeserializerTest, OffRecordsNothingAndReadsTheSame) {
+        const Args args = {"--prot=9", "--port=12", "--level-count=x"};
+        Diagnosed off(args, DiagnosticsMode::Off);
+        Diagnosed warn(args, DiagnosticsMode::Warn);
+        EXPECT_TRUE(off.Reading().Reader().GetWarnings().empty());
+        EXPECT_EQ(warn.Warnings().size(), 1u);
+        EXPECT_EQ(off.Reading().Value()._port, 12);
+        EXPECT_EQ(warn.Reading().Value()._port, 12);
+        EXPECT_EQ(off.Errors(), warn.Errors());
+        EXPECT_EQ(off.Errors().size(), 1u);
+    }
+
+    TEST(CommandLineDeserializerTest, UnderErrorTheNearMissIsAnError) {
+        Diagnosed run({"--prot=9"}, DiagnosticsMode::Error);
+        EXPECT_TRUE(run.Reading().Reader().GetWarnings().empty());
+        const Vector<String> errors = run.Errors();
+        ASSERT_EQ(errors.size(), 1u);
+        EXPECT_EQ(errors[0], "--prot: Unknown flag '--prot', did you mean '--port'?");
+    }
+
+    TEST(CommandLineDeserializerTest, OnlyTheFlagsOfTheKeyListAreAsked) {
+        const StringView keys[] = {"port"};
+        CommandLine line;
+        line.Set(Args{"--enabeld"});
+        CommandLineDeserializer reader(line, keys);
+        reader.SetDiagnostics(DiagnosticsMode::Warn);
+        FlagProbe probe;
+        probe.Deserialize(reader);
+        reader.FinishLoad();
+        EXPECT_TRUE(reader.GetWarnings().empty());
+    }
+
+    TEST(CommandLineDeserializerTest, AVeryLongArgumentIsCutInTheWarning) {
+        const String longName = String("--prot") + String(ReaderLimits::kMaxErrorTextBytes * 4, 'x');
+        Diagnosed run({longName}, DiagnosticsMode::Warn);
+        for (const DeserializeError& warning : run.Reading().Reader().GetWarnings()) {
+            EXPECT_LE(warning.path.size(), ReaderLimits::kMaxErrorTextBytes);
+            EXPECT_LE(warning.errorMessage.size(), ReaderLimits::kMaxErrorTextBytes);
+        }
+    }
+
+    TEST(CommandLineDeserializerTest, ManyTyposKeepTheLimitOfRecordedWarnings) {
+        Args args;
+        for (size_t i = 0; i < ReaderLimits::kMaxRecordedErrors * 2; ++i) {
+            args.push_back("--prot=1");
+        }
+        Diagnosed run(args, DiagnosticsMode::Warn);
+        EXPECT_LE(run.Reading().Reader().GetWarnings().size(), ReaderLimits::kMaxRecordedErrors);
+    }
+
+    TEST(CommandLineDeserializerTest, OffAllocatesNothingPerLookup) {
+        CommandLine line;
+        line.Set(Args{"--port=9000"});
+        CommandLineDeserializer reader(line);
+        uint16_t port = 0;
+        const auto read = [&] { reader.ReadAttribute("port", port); };
+        read();
+        ExpectNoAllocations(read);
     }
 
 }  // namespace BECore::Tests

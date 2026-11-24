@@ -18,7 +18,7 @@ namespace BECore::Tests {
         BE_REFLECT_FIELD int32_t _levelCount = -1;
         BE_REFLECT_FIELD float _scale = 1.0f;
         BE_REFLECT_FIELD String _label = "keep";
-        BE_REFLECT_FIELD PoolString _name;
+        BE_REFLECT_FIELD PoolString _title;
     };
 
     struct FlagProbeInner {
