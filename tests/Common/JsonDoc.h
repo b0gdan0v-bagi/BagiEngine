@@ -6,6 +6,17 @@
 
 namespace BECore::Tests {
 
+    /// The @p index-th element of an array view; a view that is not valid (and reads as nothing) when there is none
+    [[nodiscard]] inline JsonView ItemAt(JsonView array, size_t index) {
+        size_t position = 0;
+        for (const JsonView item : array.Items()) {
+            if (position++ == index) {
+                return item;
+            }
+        }
+        return JsonView();
+    }
+
     /// A JSON text with its own tape, so a test can hand a `JsonView` of a literal to the code under test. It keeps a copy of the text (the tape
     /// borrows it), so it is neither copied nor moved; a temporary lives until the end of the full expression that uses its view.
     class JsonDoc {

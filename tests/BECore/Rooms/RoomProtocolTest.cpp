@@ -1,3 +1,5 @@
+#include <BECore/Control/ControlParams.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Rooms/RoomErrors.h>
 #include <Rooms/RoomProtocol.h>
@@ -30,11 +32,6 @@ namespace BECore::Tests {
             }
             text.append("}");
             return text;
-        }
-
-        Json ParseOrNull(const String& text) {
-            auto parsed = ParseJson(text);
-            return parsed ? *parsed : Json();
         }
 
         template <typename T>
@@ -163,10 +160,10 @@ namespace BECore::Tests {
         CreateRoomMessage create;
         create.game = "g";
         create.name = "Bob";
-        EXPECT_EQ(FindJsonMember(ParseOrNull(SerializeClientMessage(create)), "public"), nullptr);
+        EXPECT_FALSE(FindParam(JsonDoc(SerializeClientMessage(create)).Root(), "public").has_value());
         create.isPublic = true;
-        const Json written = ParseOrNull(SerializeClientMessage(create));
-        EXPECT_EQ(GetJsonBool(written, "public"), true);
+        const JsonDoc written(SerializeClientMessage(create));
+        EXPECT_EQ(GetParamBool(written.Root(), "public"), true);
         const auto parsed = ParseClientMessage(SerializeClientMessage(create));
         ASSERT_NE(As<CreateRoomMessage>(parsed), nullptr);
         EXPECT_TRUE(As<CreateRoomMessage>(parsed)->isPublic);
@@ -177,7 +174,7 @@ namespace BECore::Tests {
         const auto* message = As<ListRoomsMessage>(parsed);
         ASSERT_NE(message, nullptr);
         EXPECT_EQ(message->game, "mahjong");
-        EXPECT_EQ(ParseOrNull(SerializeClientMessage(*parsed)), ParseOrNull(Message("list_rooms", R"("game":"mahjong")")));
+        EXPECT_EQ(SerializeClientMessage(*parsed), R"({"game":"mahjong","type":"list_rooms","v":1})");
         EXPECT_NE(As<ListRoomsMessage>(ParseClientMessage(Message("list_rooms", Format(R"("game":"{}","name":5,"public":"x")", Repeat('g', RoomLimits::kMaxGameNameBytes))))), nullptr);
     }
 
@@ -461,14 +458,14 @@ namespace BECore::Tests {
     // ---- Server messages ----------------------------------------------------------------------------------------------------------
 
     TEST(RoomProtocolTest, JoinedMessage) {
-        const Json message = ParseOrNull(MakeJoinedMessage("ABCDE", 3, "00112233445566778899aabbccddeeff", 2, true));
-        EXPECT_EQ(GetJsonInt(message, "v"), 1);
-        EXPECT_EQ(GetJsonString(message, "type"), "joined");
-        EXPECT_EQ(GetJsonString(message, "room"), "ABCDE");
-        EXPECT_EQ(GetJsonInt(message, "player"), 3);
-        EXPECT_EQ(GetJsonString(message, "token"), "00112233445566778899aabbccddeeff");
-        EXPECT_EQ(GetJsonInt(message, "seat"), 2);
-        EXPECT_EQ(GetJsonBool(message, "host"), true);
+        const JsonDoc message(MakeJoinedMessage("ABCDE", 3, "00112233445566778899aabbccddeeff", 2, true));
+        EXPECT_EQ(GetParamInt(message.Root(), "v"), 1);
+        EXPECT_EQ(GetParamString(message.Root(), "type"), "joined");
+        EXPECT_EQ(GetParamString(message.Root(), "room"), "ABCDE");
+        EXPECT_EQ(GetParamInt(message.Root(), "player"), 3);
+        EXPECT_EQ(GetParamString(message.Root(), "token"), "00112233445566778899aabbccddeeff");
+        EXPECT_EQ(GetParamInt(message.Root(), "seat"), 2);
+        EXPECT_EQ(GetParamBool(message.Root(), "host"), true);
     }
 
     TEST(RoomProtocolTest, LobbyMessage) {
@@ -482,31 +479,31 @@ namespace BECore::Tests {
         lobby.seats.push_back(LobbySeat{2, SeatKind::Computer, "ignored", true});
         lobby.seats.push_back(LobbySeat{3, SeatKind::Empty, {}, false});
 
-        const Json message = ParseOrNull(MakeLobbyMessage(lobby));
-        EXPECT_EQ(GetJsonString(message, "type"), "lobby");
-        EXPECT_EQ(GetJsonString(message, "room"), "ABCDE");
-        EXPECT_EQ(GetJsonString(message, "game"), "fake");
-        EXPECT_EQ(GetJsonString(message, "phase"), "lobby");
-        EXPECT_EQ(GetJsonInt(message, "host"), 0);
-        const Json* seats = FindJsonMember(message, "seats");
-        ASSERT_NE(seats, nullptr);
-        ASSERT_TRUE(seats->is_array());
-        ASSERT_EQ(seats->size(), 4u);
+        const JsonDoc message(MakeLobbyMessage(lobby));
+        EXPECT_EQ(GetParamString(message.Root(), "type"), "lobby");
+        EXPECT_EQ(GetParamString(message.Root(), "room"), "ABCDE");
+        EXPECT_EQ(GetParamString(message.Root(), "game"), "fake");
+        EXPECT_EQ(GetParamString(message.Root(), "phase"), "lobby");
+        EXPECT_EQ(GetParamInt(message.Root(), "host"), 0);
+        const Optional<JsonView> seats = FindParam(message.Root(), "seats");
+        ASSERT_TRUE(seats.has_value());
+        ASSERT_TRUE(seats->IsArray());
+        ASSERT_EQ(seats->Size(), 4u);
 
-        const Json& ann = (*seats)[0];
-        EXPECT_EQ(GetJsonString(ann, "kind"), "human");
-        EXPECT_EQ(GetJsonString(ann, "name"), "Ann");
-        EXPECT_EQ(GetJsonBool(ann, "connected"), true);
-        const Json& bob = (*seats)[1];
-        EXPECT_EQ(GetJsonBool(bob, "connected"), false);
-        const Json& computer = (*seats)[2];
-        EXPECT_EQ(GetJsonString(computer, "kind"), "computer");
-        EXPECT_EQ(FindJsonMember(computer, "name"), nullptr);
-        EXPECT_EQ(FindJsonMember(computer, "connected"), nullptr);
-        const Json& empty = (*seats)[3];
-        EXPECT_EQ(GetJsonString(empty, "kind"), "empty");
-        EXPECT_EQ(GetJsonInt(empty, "seat"), 3);
-        EXPECT_EQ(FindJsonMember(empty, "name"), nullptr);
+        const JsonView ann = ItemAt(*seats, 0);
+        EXPECT_EQ(GetParamString(ann, "kind"), "human");
+        EXPECT_EQ(GetParamString(ann, "name"), "Ann");
+        EXPECT_EQ(GetParamBool(ann, "connected"), true);
+        const JsonView bob = ItemAt(*seats, 1);
+        EXPECT_EQ(GetParamBool(bob, "connected"), false);
+        const JsonView computer = ItemAt(*seats, 2);
+        EXPECT_EQ(GetParamString(computer, "kind"), "computer");
+        EXPECT_FALSE(FindParam(computer, "name").has_value());
+        EXPECT_FALSE(FindParam(computer, "connected").has_value());
+        const JsonView empty = ItemAt(*seats, 3);
+        EXPECT_EQ(GetParamString(empty, "kind"), "empty");
+        EXPECT_EQ(GetParamInt(empty, "seat"), 3);
+        EXPECT_FALSE(FindParam(empty, "name").has_value());
     }
 
     TEST(RoomProtocolTest, LobbyPhasesAndNoHost) {
@@ -517,9 +514,9 @@ namespace BECore::Tests {
         for (const auto& [phase, name] :
              {Pair<RoomPhase, const char*>{RoomPhase::Lobby, "lobby"}, Pair<RoomPhase, const char*>{RoomPhase::Playing, "playing"}, Pair<RoomPhase, const char*>{RoomPhase::Finished, "finished"}}) {
             lobby.phase = phase;
-            const Json message = ParseOrNull(MakeLobbyMessage(lobby));
-            EXPECT_EQ(GetJsonString(message, "phase"), String(name));
-            EXPECT_EQ(GetJsonInt(message, "host"), -1);
+            const JsonDoc message(MakeLobbyMessage(lobby));
+            EXPECT_EQ(GetParamString(message.Root(), "phase"), String(name));
+            EXPECT_EQ(GetParamInt(message.Root(), "host"), -1);
         }
     }
 
@@ -529,12 +526,12 @@ namespace BECore::Tests {
         lobby.game = "fake";
         lobby.seats.push_back(LobbySeat{0, SeatKind::Human, "bad\xC3\x28name", true});
         const String text = MakeLobbyMessage(lobby);
-        const auto parsed = ParseJson(text);
-        ASSERT_TRUE(parsed.has_value()) << text.c_str();
-        const Json* seats = FindJsonMember(*parsed, "seats");
-        ASSERT_NE(seats, nullptr);
-        ASSERT_EQ(seats->size(), 1u);
-        EXPECT_TRUE(GetJsonString((*seats)[0], "name").has_value());
+        const JsonDoc parsed(text);
+        ASSERT_TRUE(parsed.IsParsed()) << text.c_str();
+        const Optional<JsonView> seats = FindParam(parsed.Root(), "seats");
+        ASSERT_TRUE(seats.has_value());
+        ASSERT_EQ(seats->Size(), 1u);
+        EXPECT_TRUE(GetParamString(ItemAt(*seats, 0), "name").has_value());
     }
 
     TEST(RoomProtocolTest, ViewMessage) {
@@ -545,41 +542,41 @@ namespace BECore::Tests {
         play["type"] = "play";
         actions.push_back(play);
 
-        const Json message = ParseOrNull(MakeViewMessage("ABCDE", 1, 42, false, DumpJson(view), DumpJson(actions)));
-        EXPECT_EQ(GetJsonString(message, "type"), "view");
-        EXPECT_EQ(GetJsonString(message, "room"), "ABCDE");
-        EXPECT_EQ(GetJsonInt(message, "seat"), 1);
-        EXPECT_EQ(GetJsonInt(message, "version"), 42);
-        EXPECT_EQ(GetJsonBool(message, "finished"), false);
-        const Json* viewMember = FindJsonMember(message, "view");
-        ASSERT_NE(viewMember, nullptr);
-        EXPECT_EQ(GetJsonInt(*viewMember, "turn"), 1);
-        const Json* actionsMember = FindJsonMember(message, "actions");
-        ASSERT_NE(actionsMember, nullptr);
-        ASSERT_TRUE(actionsMember->is_array());
-        EXPECT_EQ(actionsMember->size(), 1u);
+        const JsonDoc message(MakeViewMessage("ABCDE", 1, 42, false, DumpJson(view), DumpJson(actions)));
+        EXPECT_EQ(GetParamString(message.Root(), "type"), "view");
+        EXPECT_EQ(GetParamString(message.Root(), "room"), "ABCDE");
+        EXPECT_EQ(GetParamInt(message.Root(), "seat"), 1);
+        EXPECT_EQ(GetParamInt(message.Root(), "version"), 42);
+        EXPECT_EQ(GetParamBool(message.Root(), "finished"), false);
+        const Optional<JsonView> viewMember = FindParam(message.Root(), "view");
+        ASSERT_TRUE(viewMember.has_value());
+        EXPECT_EQ(GetParamInt(*viewMember, "turn"), 1);
+        const Optional<JsonView> actionsMember = FindParam(message.Root(), "actions");
+        ASSERT_TRUE(actionsMember.has_value());
+        ASSERT_TRUE(actionsMember->IsArray());
+        EXPECT_EQ(actionsMember->Size(), 1u);
     }
 
     TEST(RoomProtocolTest, ErrorMessage) {
-        const Json plain = ParseOrNull(MakeErrorMessage("bad_message", "nope"));
-        EXPECT_EQ(GetJsonString(plain, "type"), "error");
-        EXPECT_EQ(GetJsonString(plain, "code"), "bad_message");
-        EXPECT_EQ(GetJsonString(plain, "message"), "nope");
-        EXPECT_EQ(FindJsonMember(plain, "ref"), nullptr);
+        const JsonDoc plain(MakeErrorMessage("bad_message", "nope"));
+        EXPECT_EQ(GetParamString(plain.Root(), "type"), "error");
+        EXPECT_EQ(GetParamString(plain.Root(), "code"), "bad_message");
+        EXPECT_EQ(GetParamString(plain.Root(), "message"), "nope");
+        EXPECT_FALSE(FindParam(plain.Root(), "ref").has_value());
 
-        const Json withRef = ParseOrNull(MakeErrorMessage("not_host", "only the host starts", "start"));
-        EXPECT_EQ(GetJsonString(withRef, "ref"), "start");
+        const JsonDoc withRef(MakeErrorMessage("not_host", "only the host starts", "start"));
+        EXPECT_EQ(GetParamString(withRef.Root(), "ref"), "start");
     }
 
     TEST(RoomProtocolTest, LeftAndPong) {
-        const Json left = ParseOrNull(MakeLeftMessage("replaced"));
-        EXPECT_EQ(GetJsonString(left, "type"), "left");
-        EXPECT_EQ(GetJsonString(left, "reason"), "replaced");
-        EXPECT_EQ(GetJsonInt(left, "v"), 1);
+        const JsonDoc left(MakeLeftMessage("replaced"));
+        EXPECT_EQ(GetParamString(left.Root(), "type"), "left");
+        EXPECT_EQ(GetParamString(left.Root(), "reason"), "replaced");
+        EXPECT_EQ(GetParamInt(left.Root(), "v"), 1);
 
-        const Json pong = ParseOrNull(MakePongMessage());
-        EXPECT_EQ(GetJsonString(pong, "type"), "pong");
-        EXPECT_EQ(GetJsonInt(pong, "v"), 1);
+        const JsonDoc pong(MakePongMessage());
+        EXPECT_EQ(GetParamString(pong.Root(), "type"), "pong");
+        EXPECT_EQ(GetParamInt(pong.Root(), "v"), 1);
     }
 
     TEST(RoomProtocolTest, EveryServerMessageCarriesTheVersionAndAType) {
@@ -593,9 +590,9 @@ namespace BECore::Tests {
             MakeRoomListMessage(RoomListMessage{}),
         };
         for (const String& text : messages) {
-            const Json message = ParseOrNull(text);
-            EXPECT_EQ(GetJsonInt(message, "v"), kRoomProtocolVersion) << text.c_str();
-            EXPECT_TRUE(GetJsonString(message, "type").has_value()) << text.c_str();
+            const JsonDoc message(text);
+            EXPECT_EQ(GetParamInt(message.Root(), "v"), kRoomProtocolVersion) << text.c_str();
+            EXPECT_TRUE(GetParamString(message.Root(), "type").has_value()) << text.c_str();
         }
     }
 
@@ -685,7 +682,7 @@ namespace BECore::Tests {
         lobby.room = "ABCDE";
         lobby.game = "fake";
         lobby.seats.push_back(LobbySeat{0, SeatKind::Human, "Ann", true});
-        EXPECT_EQ(FindJsonMember(ParseOrNull(MakeLobbyMessage(lobby)), "options"), nullptr);
+        EXPECT_FALSE(FindParam(JsonDoc(MakeLobbyMessage(lobby)).Root(), "options").has_value());
 
         lobby.options = R"({"hands":8,"hintsAllowed":true})";
         const auto parsed = ParseServerMessage(MakeLobbyMessage(lobby));
@@ -993,12 +990,13 @@ namespace BECore::Tests {
         list.more = true;
 
         const String text = MakeRoomListMessage(list);
-        const Json json = ParseOrNull(text);
-        EXPECT_EQ(GetJsonString(json, "type"), "rooms");
-        EXPECT_EQ(GetJsonInt(json, "v"), 1);
-        ASSERT_TRUE(json["rooms"].is_array());
-        EXPECT_EQ(FindJsonMember(json["rooms"][0], "options"), nullptr);
-        EXPECT_NE(FindJsonMember(json["rooms"][1], "options"), nullptr);
+        const JsonDoc json(text);
+        EXPECT_EQ(GetParamString(json.Root(), "type"), "rooms");
+        EXPECT_EQ(GetParamInt(json.Root(), "v"), 1);
+        const Optional<JsonView> listed = FindParam(json.Root(), "rooms");
+        ASSERT_TRUE(listed && listed->IsArray());
+        EXPECT_FALSE(FindParam(ItemAt(*listed, 0), "options").has_value());
+        EXPECT_TRUE(FindParam(ItemAt(*listed, 1), "options").has_value());
 
         const auto parsed = ParseServerMessage(text);
         const auto* read = ServerAs<RoomListMessage>(parsed);

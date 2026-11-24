@@ -37,27 +37,27 @@ namespace BECore::Tests {
     }
 
     /// The `view.table` of the last view of the client; null when it has none
-    inline const Json* LastTable(const RoomSocketClient& client) {
+    inline Optional<JsonView> LastTable(const RoomSocketClient& client) {
         const ReceivedMessage* view = LastOf(client, RoomMessageTypes::kView);
-        const Json* inner = view ? FindJsonMember(view->json, "view") : nullptr;
-        const Json* table = inner ? FindJsonMember(*inner, "table") : nullptr;
-        return table && table->is_array() ? table : nullptr;
+        const Optional<JsonView> inner = view ? view->Find("view") : std::nullopt;
+        const Optional<JsonView> table = inner ? FindParam(*inner, "table") : std::nullopt;
+        return table && table->IsArray() ? table : std::nullopt;
     }
 
     inline int TableSize(const RoomSocketClient& client) {
-        const Json* table = LastTable(client);
-        return table ? static_cast<int>(table->size()) : -1;
+        const Optional<JsonView> table = LastTable(client);
+        return table ? static_cast<int>(table->Size()) : -1;
     }
 
     inline bool HasActions(const RoomSocketClient& client) {
         const ReceivedMessage* view = LastOf(client, RoomMessageTypes::kView);
-        const Json* actions = view ? FindJsonMember(view->json, "actions") : nullptr;
-        return actions && actions->is_array() && !actions->empty();
+        const Optional<JsonView> actions = view ? view->Find("actions") : std::nullopt;
+        return actions && actions->IsArray() && actions->Size() > 0;
     }
 
     inline bool SeesTheEnd(const RoomSocketClient& client) {
         const ReceivedMessage* view = LastOf(client, RoomMessageTypes::kView);
-        return view && GetJsonBool(view->json, "finished").value_or(false);
+        return view && view->GetBool("finished");
     }
 
     /// Reads whatever has arrived
@@ -87,7 +87,7 @@ namespace BECore::Tests {
             }
             ActionMessage action;
             action.version = version;
-            action.action = DumpJson(Require(FindJsonMember(view->json, "actions"))[0]);
+            action.action = String((*Require(view->Find("actions")).Items().begin()).Raw());
             _client.Send(action);
             _acted = true;
             _actedVersion = version;
@@ -139,22 +139,22 @@ namespace BECore::Tests {
     /// The end of a hand: the last view of the client is `finished` and shows every card played in the hand once
     inline void ExpectEveryCardPlayed(const RoomSocketClient& client) {
         ASSERT_TRUE(SeesTheEnd(client));
-        const Json* table = LastTable(client);
-        ASSERT_NE(table, nullptr);
-        const Vector<String> ids = FindCardIds(FromStd(table->dump()));
+        const Optional<JsonView> table = LastTable(client);
+        ASSERT_TRUE(table.has_value());
+        const Vector<String> ids = FindCardIds(String(table->Raw()));
         EXPECT_EQ(ids.size(), static_cast<size_t>(DemoCardGame::kTotalPlays));
         EXPECT_EQ(Set<String>(ids.begin(), ids.end()).size(), static_cast<size_t>(DemoCardGame::kTotalPlays));
     }
 
     /// True when @p lobby shows a human seat that is not connected
     inline bool HasAwayHuman(const ReceivedMessage& lobby) {
-        const Json* seats = FindJsonMember(lobby.json, "seats");
-        if (!seats || !seats->is_array()) {
+        const Optional<JsonView> seats = lobby.Find("seats");
+        if (!seats || !seats->IsArray()) {
             return false;
         }
-        for (const Json& seat : *seats) {
-            const Json* connected = FindJsonMember(seat, "connected");
-            if (GetJsonString(seat, "kind").value_or("") == "human" && connected && connected->is_boolean() && !connected->get<bool>()) {
+        for (const JsonView seat : seats->Items()) {
+            const Optional<bool> connected = GetParamBool(seat, "connected");
+            if (GetParamString(seat, "kind").value_or("") == "human" && connected && !*connected) {
                 return true;
             }
         }

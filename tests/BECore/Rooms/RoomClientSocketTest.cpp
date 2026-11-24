@@ -4,6 +4,7 @@
 #include <BECore/Rooms/RoomTestTimings.h>
 #include <BECore/Rooms/TestRandom.h>
 #include <BECore/WebSocketTestClient.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/SharedPtr.h>
@@ -92,8 +93,8 @@ namespace BECore::Tests {
                     return false;
                 }
                 if (event.kind == RoomTransportEventKind::Text) {
-                    const auto parsed = ParseJson(event.text);
-                    _tap.types.push_back(parsed ? GetJsonString(*parsed, "type").value_or(String()) : String("?"));
+                    const JsonDoc document(StringView(event.text.data(), event.text.size()));
+                    _tap.types.push_back(document.IsParsed() ? GetParamString(document.Root(), "type").value_or(String()) : String("?"));
                 }
                 return true;
             }

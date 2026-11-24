@@ -1,12 +1,15 @@
 #pragma once
 
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Format/Format.h>
 #include <BECore/Rooms/FakeSeatedGame.h>
 #include <BECore/Rooms/RoomTestTimings.h>
 #include <BECore/Rooms/TestRandom.h>
 #include <BECore/Rooms/WireJudge.h>
 #include <BECore/Types/Types.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
+#include <Common/SharedPtr.h>
 #include <Rooms/RoomErrors.h>
 #include <Rooms/RoomHub.h>
 #include <Rooms/RoomProtocol.h>
@@ -19,19 +22,43 @@
 
 namespace BECore::Tests {
 
+    /// A text a client received and the tape that reads it; the copies of a message share the one document
     struct ReceivedMessage {
         String text;
-        Json json;
+        SharedPtr<const JsonDoc> doc;
         String type;
 
+        /// The parsed text; not valid when the text was not JSON (or the message is a stand-in of `Require`)
+        [[nodiscard]] JsonView Root() const {
+            return doc ? doc->Root() : JsonView();
+        }
+
+        [[nodiscard]] Optional<JsonView> Find(StringView key) const {
+            return FindParam(Root(), key);
+        }
+
         [[nodiscard]] String GetString(StringView key) const {
-            return GetJsonString(json, key).value_or(String());
+            return GetParamString(Root(), key).value_or(String());
         }
 
         [[nodiscard]] int64_t GetInt(StringView key, int64_t fallback = -1000) const {
-            return GetJsonInt(json, key).value_or(fallback);
+            return GetParamInt(Root(), key).value_or(fallback);
+        }
+
+        [[nodiscard]] bool GetBool(StringView key, bool fallback = false) const {
+            return GetParamBool(Root(), key).value_or(fallback);
         }
     };
+
+    /// What a client holds of one text the server sent: the text, its document and its `type`. A text that is not JSON fails the test
+    [[nodiscard]] inline ReceivedMessage ReadReceivedMessage(String text) {
+        ReceivedMessage message;
+        message.doc = MakeShared<const JsonDoc>(StringView(text.data(), text.size()));
+        EXPECT_TRUE(message.doc->IsParsed()) << "the server sent text that is not JSON: " << text.c_str();
+        message.type = GetParamString(message.Root(), "type").value_or(String());
+        message.text = std::move(text);
+        return message;
+    }
 
     // What the hub harness's TestClient and the socket tests' RoomSocketClient both read from the messages they received
 
@@ -251,13 +278,13 @@ namespace BECore::Tests {
             if (!view) {
                 return false;
             }
-            const Json* actions = FindJsonMember(view->json, "actions");
-            if (!actions || !actions->is_array() || actions->empty()) {
+            const Optional<JsonView> actions = view->Find("actions");
+            if (!actions || !actions->IsArray() || actions->Size() == 0) {
                 return false;
             }
             ActionMessage action;
             action.version = static_cast<uint64_t>(view->GetInt("version", 0));
-            action.action = DumpJson((*actions)[0]);
+            action.action = String((*actions->Items().begin()).Raw());
             Send(id, action);
             return true;
         }
@@ -295,14 +322,7 @@ namespace BECore::Tests {
 
         void OnSent(ConnectionId id, String text) {
             TestClient& client = Client(id);
-            ReceivedMessage message;
-            message.text = text;
-            auto parsed = ParseJson(text);
-            EXPECT_TRUE(parsed.has_value()) << "the hub sent text that is not JSON: " << text.c_str();
-            if (parsed) {
-                message.json = std::move(*parsed);
-                message.type = GetJsonString(message.json, "type").value_or(String());
-            }
+            ReceivedMessage message = ReadReceivedMessage(text);
             if (message.type == RoomMessageTypes::kJoined) {
                 client.roomCode = message.GetString("room");
                 client.seat = static_cast<int>(message.GetInt("seat"));
@@ -374,15 +394,15 @@ namespace BECore::Tests {
     /// The last view the client got says the hand is over
     [[nodiscard]] inline bool IsFinishedFor(HubHarness& harness, ConnectionId id) {
         const ReceivedMessage* view = harness.Client(id).Last(RoomMessageTypes::kView);
-        return view && GetJsonBool(view->json, "finished").value_or(false);
+        return view && view->GetBool("finished");
     }
 
     /// The first of @p humans whose last view offers an action (the one whose turn it is), or 0
     [[nodiscard]] inline ConnectionId FindHumanOnTurn(HubHarness& harness, const Vector<ConnectionId>& humans) {
         for (const ConnectionId id : humans) {
             const ReceivedMessage* view = harness.Client(id).Last(RoomMessageTypes::kView);
-            const Json* actions = view ? FindJsonMember(view->json, "actions") : nullptr;
-            if (actions && actions->is_array() && !actions->empty()) {
+            const Optional<JsonView> actions = view ? view->Find("actions") : std::nullopt;
+            if (actions && actions->IsArray() && actions->Size() > 0) {
                 return id;
             }
         }

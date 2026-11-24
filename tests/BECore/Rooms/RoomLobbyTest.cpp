@@ -247,7 +247,7 @@ namespace BECore::Tests {
         EXPECT_EQ(lobby.seats[3].kind, SeatKind::Empty);
         // It is a valid lobby message
         const String text = MakeLobbyMessage(lobby);
-        EXPECT_TRUE(ParseJson(text).has_value());
+        EXPECT_TRUE(JsonDoc(text).IsParsed());
     }
 
 }  // namespace BECore::Tests

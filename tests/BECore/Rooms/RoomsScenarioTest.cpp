@@ -10,9 +10,9 @@ namespace BECore::Tests {
         /// The number of cards on the table in the last view the client got (-1 when it has no view)
         int TableSize(HubHarness& harness, ConnectionId id) {
             const ReceivedMessage* view = harness.Client(id).Last(RoomMessageTypes::kView);
-            const Json* inner = view ? FindJsonMember(view->json, "view") : nullptr;
-            const Json* table = inner ? FindJsonMember(*inner, "table") : nullptr;
-            return table && table->is_array() ? static_cast<int>(table->size()) : -1;
+            const Optional<JsonView> inner = view ? view->Find("view") : std::nullopt;
+            const Optional<JsonView> table = inner ? FindParam(*inner, "table") : std::nullopt;
+            return table && table->IsArray() ? static_cast<int>(table->Size()) : -1;
         }
 
         void RunFourSeatHand(bool leaky) {

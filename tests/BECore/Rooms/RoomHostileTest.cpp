@@ -433,10 +433,10 @@ namespace BECore::Tests {
                 if (message.type != RoomMessageTypes::kLobby) {
                     continue;
                 }
-                const Json* seats = FindJsonMember(message.json, "seats");
-                ASSERT_NE(seats, nullptr);
-                for (const Json& seat : *seats) {
-                    const String name = GetJsonString(seat, "name").value_or(String());
+                const Optional<JsonView> seats = message.Find("seats");
+                ASSERT_TRUE(seats.has_value());
+                for (const JsonView seat : seats->Items()) {
+                    const String name = GetParamString(seat, "name").value_or(String());
                     EXPECT_TRUE(name.empty() || name == "Host" || name == "Guest") << name.c_str();
                 }
             }

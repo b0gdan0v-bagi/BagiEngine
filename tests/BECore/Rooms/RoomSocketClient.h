@@ -101,14 +101,7 @@ namespace BECore::Tests {
                 }
                 _binaryFrames += frame->opcode == WebSocketOpcode::kBinary ? 1 : 0;
             }
-            ReceivedMessage message;
-            message.text = String(frame->payload.data(), frame->payload.size());
-            auto parsed = ParseJson(message.text);
-            EXPECT_TRUE(parsed.has_value()) << "the server sent text that is not JSON: " << frame->payload;
-            if (parsed) {
-                message.json = std::move(*parsed);
-                message.type = GetJsonString(message.json, "type").value_or(String());
-            }
+            ReceivedMessage message = ReadReceivedMessage(String(frame->payload.data(), frame->payload.size()));
             _received.push_back(message);
             ++_cursor;
             if (message.type == RoomMessageTypes::kJoined) {

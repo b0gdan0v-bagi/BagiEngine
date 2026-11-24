@@ -35,10 +35,10 @@ namespace BECore::Tests {
         /// The humans a `lobby` message lists
         int CountHumans(const ReceivedMessage& lobby) {
             int humans = 0;
-            const Json* seats = FindJsonMember(lobby.json, "seats");
-            if (seats && seats->is_array()) {
-                for (const Json& seat : *seats) {
-                    humans += GetJsonString(seat, "kind").value_or("") == "human" ? 1 : 0;
+            const Optional<JsonView> seats = lobby.Find("seats");
+            if (seats && seats->IsArray()) {
+                for (const JsonView seat : seats->Items()) {
+                    humans += GetParamString(seat, "kind").value_or("") == "human" ? 1 : 0;
                 }
             }
             return humans;

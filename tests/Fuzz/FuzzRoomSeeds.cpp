@@ -1,3 +1,5 @@
+#include <BECore/Control/ControlParams.h>
+#include <Common/JsonDoc.h>
 #include <Fuzz/FuzzRoomInput.h>
 #include <Fuzz/FuzzSeeds.h>
 #include <RoomServer/DemoCardGame.h>
@@ -159,10 +161,10 @@ namespace BECore::Fuzz {
             /// The member plays the first action its last view offers; nothing when it has none
             void PlayFirstAction(uint8_t number) {
                 const Known& known = _known[number];
-                if (!known.actions.is_array() || known.actions.empty()) {
+                if (known.firstAction.empty()) {
                     return;
                 }
-                Send(number, ActionMessage{known.version, DumpJson(known.actions[0])});
+                Send(number, ActionMessage{known.version, known.firstAction});
             }
 
             [[nodiscard]] const String& RoomOf(uint8_t number) {
@@ -188,31 +190,35 @@ namespace BECore::Fuzz {
                 String token;
                 String listed;
                 uint64_t version = 0;
-                Json actions = Json::array();
+                /// The text of the first action of the last view; empty when it offered none
+                String firstAction;
             };
 
             HubSink MakeSink() {
                 HubSink sink;
                 sink.send = [this](ConnectionId id, String text) {
-                    const auto parsed = ParseJson(text);
-                    if (!parsed) {
+                    const Tests::JsonDoc parsed(text);
+                    if (!parsed.IsParsed()) {
                         return;
                     }
+                    const JsonView root = parsed.Root();
                     Known& known = _known[static_cast<uint8_t>(id - 1)];
-                    const auto type = GetJsonString(*parsed, "type").value_or(String());
+                    const auto type = GetParamString(root, "type").value_or(String());
                     if (type == RoomMessageTypes::kJoined) {
-                        known.room = GetJsonString(*parsed, "room").value_or(String());
-                        known.token = GetJsonString(*parsed, "token").value_or(String());
+                        known.room = GetParamString(root, "room").value_or(String());
+                        known.token = GetParamString(root, "token").value_or(String());
                     } else if (type == RoomMessageTypes::kRooms) {
                         known.listed.clear();
-                        const Json* rooms = FindJsonMember(*parsed, "rooms");
-                        if (rooms && rooms->is_array() && !rooms->empty()) {
-                            known.listed = GetJsonString((*rooms)[0], "room").value_or(String());
+                        const Optional<JsonView> rooms = FindParam(root, "rooms");
+                        if (rooms && rooms->IsArray() && rooms->Size() > 0) {
+                            known.listed = GetParamString(Tests::ItemAt(*rooms, 0), "room").value_or(String());
                         }
                     } else if (type == RoomMessageTypes::kView) {
-                        known.version = static_cast<uint64_t>(GetJsonInt(*parsed, "version").value_or(0));
-                        if (const Json* actions = FindJsonMember(*parsed, "actions")) {
-                            known.actions = *actions;
+                        known.version = static_cast<uint64_t>(GetParamInt(root, "version").value_or(0));
+                        known.firstAction.clear();
+                        const Optional<JsonView> actions = FindParam(root, "actions");
+                        if (actions && actions->IsArray() && actions->Size() > 0) {
+                            known.firstAction = String(Tests::ItemAt(*actions, 0).Raw());
                         }
                     }
                 };
