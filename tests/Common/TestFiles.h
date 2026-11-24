@@ -3,6 +3,7 @@
 #include <BECore/File/File.h>
 #include <BECore/File/Path.h>
 #include <BECore/Types/Types.h>
+#include <Common/NativePath.h>
 #include <chrono>
 #include <filesystem>
 #include <gtest/gtest.h>
@@ -97,10 +98,9 @@ namespace BECore::Tests {
 
     /// The system temp folder: the file layer knows no folder of the OS
     inline Path SystemTempDirectory() {
-        std::error_code error;                                                             //-NoStd: the one std::filesystem boundary of the tests
-        const std::filesystem::path folder = std::filesystem::temp_directory_path(error);  //-NoStd: the one std::filesystem boundary of the tests
-        EXPECT_FALSE(error) << "no system temp folder: " << error.message();               //-NoStd: the one std::filesystem boundary of the tests
-        return Path(folder);                                                               //-NoStd: the one std::filesystem boundary of the tests
+        Path folder = SystemTempFolder();
+        EXPECT_FALSE(folder.Empty()) << "no system temp folder";
+        return folder;
     }
 
     /// Sets the write time of @p path to now plus @p fromNow (a negative value is the past), on the clock `std::filesystem` reads, so a
@@ -108,7 +108,7 @@ namespace BECore::Tests {
     /// compares `GetFileInfo(path)->modifyTimeNs` before and after an operation, never the number it set here: the clocks differ in resolution
     inline void SetWriteTime(const Path& path, std::chrono::nanoseconds fromNow) {
         using Clock = std::filesystem::file_time_type::clock;                                                 //-NoStd: the one std::filesystem boundary of the tests
-        const std::filesystem::path native = path;                                                            //-NoStd: the one std::filesystem boundary of the tests
+        const std::filesystem::path native = NativePath(path);                                                //-NoStd: the one std::filesystem boundary of the tests
         const auto when = Clock::now() + std::chrono::duration_cast<Clock::duration>(fromNow);                //-NoStd: the one std::filesystem boundary of the tests
         std::error_code error;                                                                                //-NoStd: the one std::filesystem boundary of the tests
         std::filesystem::last_write_time(native, when, error);                                                //-NoStd: the one std::filesystem boundary of the tests
@@ -117,9 +117,9 @@ namespace BECore::Tests {
 
     /// Makes the symbolic link @p link to @p target, a folder link when @p target is a folder; the layer reads links but makes none
     inline void CreateSymlink(const Path& link, const Path& target) {
-        const std::filesystem::path nativeLink = link;      //-NoStd: the one std::filesystem boundary of the tests
-        const std::filesystem::path nativeTarget = target;  //-NoStd: the one std::filesystem boundary of the tests
-        std::error_code error;                              //-NoStd: the one std::filesystem boundary of the tests
+        const std::filesystem::path nativeLink = NativePath(link);      //-NoStd: the one std::filesystem boundary of the tests
+        const std::filesystem::path nativeTarget = NativePath(target);  //-NoStd: the one std::filesystem boundary of the tests
+        std::error_code error;                                          //-NoStd: the one std::filesystem boundary of the tests
         if (IsFolder(target)) {
             std::filesystem::create_directory_symlink(nativeTarget, nativeLink, error);  //-NoStd: the one std::filesystem boundary of the tests
         } else {
@@ -130,7 +130,7 @@ namespace BECore::Tests {
 
     /// Sets the size of the file @p path to @p size without writing the bytes (sparse), for a limit check on a file nobody could afford to write
     inline void ResizeFile(const Path& path, uint64_t size) {
-        const std::filesystem::path native = path;                                             //-NoStd: the one std::filesystem boundary of the tests
+        const std::filesystem::path native = NativePath(path);                                 //-NoStd: the one std::filesystem boundary of the tests
         std::error_code error;                                                                 //-NoStd: the one std::filesystem boundary of the tests
         std::filesystem::resize_file(native, size, error);                                     //-NoStd: the one std::filesystem boundary of the tests
         EXPECT_FALSE(error) << "could not resize " << path.CStr() << ": " << error.message();  //-NoStd: the one std::filesystem boundary of the tests
@@ -144,7 +144,7 @@ namespace BECore::Tests {
             std::error_code error;                                                                  //-NoStd: the one std::filesystem boundary of the tests
             _previous = std::filesystem::current_path(error);                                       //-NoStd: the one std::filesystem boundary of the tests
             EXPECT_FALSE(error) << "no working folder: " << error.message();                        //-NoStd: the one std::filesystem boundary of the tests
-            const std::filesystem::path native = folder;                                            //-NoStd: the one std::filesystem boundary of the tests
+            const std::filesystem::path native = NativePath(folder);                                //-NoStd: the one std::filesystem boundary of the tests
             std::filesystem::current_path(native, error);                                           //-NoStd: the one std::filesystem boundary of the tests
             EXPECT_FALSE(error) << "could not enter " << folder.CStr() << ": " << error.message();  //-NoStd: the one std::filesystem boundary of the tests
         }
@@ -170,7 +170,7 @@ namespace BECore::Tests {
     }
 
     inline String OsCanonical(const Path& path) {
-        const std::filesystem::path native = path;                                                 //-NoStd: the one std::filesystem boundary of the tests
+        const std::filesystem::path native = NativePath(path);                                     //-NoStd: the one std::filesystem boundary of the tests
         std::error_code error;                                                                     //-NoStd: the one std::filesystem boundary of the tests
         const std::filesystem::path result = std::filesystem::canonical(native, error);            //-NoStd: the one std::filesystem boundary of the tests
         EXPECT_FALSE(error) << "no canonical form of " << path.CStr() << ": " << error.message();  //-NoStd: the one std::filesystem boundary of the tests
@@ -178,7 +178,7 @@ namespace BECore::Tests {
     }
 
     inline String OsWeaklyCanonical(const Path& path) {
-        const std::filesystem::path native = path;                                                        //-NoStd: the one std::filesystem boundary of the tests
+        const std::filesystem::path native = NativePath(path);                                            //-NoStd: the one std::filesystem boundary of the tests
         std::error_code error;                                                                            //-NoStd: the one std::filesystem boundary of the tests
         const std::filesystem::path result = std::filesystem::weakly_canonical(native, error);            //-NoStd: the one std::filesystem boundary of the tests
         EXPECT_FALSE(error) << "no weakly canonical form of " << path.CStr() << ": " << error.message();  //-NoStd: the one std::filesystem boundary of the tests

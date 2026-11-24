@@ -1,5 +1,6 @@
 #include <BECore/File/FilePath.h>
 #include <BECore/File/Path.h>
+#include <Common/NativePath.h>
 #include <Common/Printers.h>
 
 namespace BECore::Tests {
@@ -352,6 +353,14 @@ namespace BECore::Tests {
             const Path back(asStd);
             EXPECT_EQ(back.View(), text);
             EXPECT_TRUE(back == path);
+        }
+    }
+
+    TEST(PathTest, NativePathRoundTripKeepsNonAsciiNames) {
+        for (const StringView text : {StringView("dir/file.txt"), StringView("/папка/файл.тхт"), StringView("日本/語.日本"), StringView("é/ü.ñ"), StringView("")}) {
+            SCOPED_TRACE(String(text).c_str());
+            const Path path(text);
+            EXPECT_TRUE(FromNativePath(NativePath(path)) == path);
         }
     }
 
