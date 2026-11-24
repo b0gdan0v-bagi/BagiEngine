@@ -6,12 +6,23 @@ namespace BECore::Detail {
 
     namespace {
 
-        constexpr size_t kBlockAlignment = __STDCPP_DEFAULT_NEW_ALIGNMENT__;
-        // A frame is aligned for the default `operator new` only: the promise has no aligned form
-        static_assert(kBlockAlignment == 16);
+        constexpr size_t kBlockAlignment = TaskMemory::kBlockAlignment;
 
         constexpr size_t kClassSizes[TaskMemory::kClassCount] = {64, 96, 128, 192, 256, 384, 512, 768, 1024};
         static_assert(kClassSizes[TaskMemory::kClassCount - 1] == TaskMemory::kMaxPooledSize);
+
+        // The alignment is the target's (16 on desktop, 8 on wasm32), so what the pools need is the contract, not the number: a power of two that a
+        // pointer fits in, and a block of every class that keeps the next block aligned too
+        constexpr bool AllClassSizesAreMultiplesOf(size_t alignment) {
+            for (const size_t size : kClassSizes) {
+                if (size % alignment != 0) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        static_assert((kBlockAlignment & (kBlockAlignment - 1)) == 0 && kBlockAlignment >= alignof(void*));
+        static_assert(AllClassSizesAreMultiplesOf(kBlockAlignment));
 
         // Immortal: a task may be destroyed by a static destructor after the pools would have been
         constinit Immortal<ConcurrentBlockPool> gPools[TaskMemory::kClassCount] = {

@@ -303,6 +303,17 @@ namespace BECore::Tests {
         EXPECT_EQ(SessionRecorder::GetInstance().GetEntryCount(), 0u);
     }
 
+    TEST_F(SessionRecorderTest, AStartWithAViewOfALongerStringOpensTheNamedFile) {
+        const String longer = PathText() + ".extra";
+        const StringView shortName = StringView(longer).substr(0, longer.size() - 6);
+
+        ASSERT_TRUE(SessionRecorder::GetInstance().Start(shortName, *GameManager::GetInstance().GetActive(), {}).has_value());
+        SessionRecorder::GetInstance().Stop();
+
+        EXPECT_TRUE(std::filesystem::exists(_path));
+        EXPECT_FALSE(std::filesystem::exists(std::filesystem::path(longer.c_str())));
+    }
+
     TEST_F(SessionRecorderTest, TheControlMethodsAndTheDirectCallsWriteTheSameFile) {
         ASSERT_TRUE(StartRecording().has_value());
         ASSERT_TRUE(Call("reset", R"({"seed":5})").IsOk());

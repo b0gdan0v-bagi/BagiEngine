@@ -309,6 +309,18 @@ Entry: `xml-load-scratch`. Bump: patch.
 - An XML scene or config load allocates about 40 times less (a scene of 600 groups: 32.5k allocations and 44.6 MB before, 739 and 2.9 MB now): the scopes of Warn mode keep their name lists in an arena of the deserializer, field and factory type names are read as views, arrays walk a cursor instead of building an element list, the config file is read into scratch and `XmlSerializer` copies no names.
 - `ExpandNodeReferences` asks its loader once per distinct referenced file in a call, a failure too; every reference to a file that did not load still gets its own error. Adapt: a game's loader that counted calls per reference counts distinct files now.
 
+## 0.11.2 - 2026-11-23 - Engine 0.8.4 does not build for the web and for Linux: TaskMemory alignment assert, SessionRecorder ofstream::open(string_view)
+
+Entry: `web-linux-build-breaks`. Bump: patch.
+
+### Added
+
+- `TaskMemory::kBlockAlignment` in `TaskSystem/TaskMemory.h`: the alignment of every task block, the default `operator new` alignment of the target (16 on 64-bit, 8 on wasm32).
+
+### Changed
+
+- The engine compiles again for the web (Emscripten, wasm32) and for Linux with libstdc++: `TaskMemory` asserts the target's own alignment instead of 16, and `SessionRecorder` opens its file from a null-terminated copy of the path.
+
 ## 0.11.1 - 2026-11-23 - Subscriptions, event awaiters, timer links and tween waiters allocate on first use; MoveOnlyFunction heap path uncounted
 
 Entry: `events-awaiters-inline`. Bump: patch.
