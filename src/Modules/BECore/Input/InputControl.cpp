@@ -72,6 +72,54 @@ namespace BECore {
             return static_cast<uint32_t>(*value);
         }
 
+        /// A wheel amount: absent is 0, present has to be finite and not beyond the click range
+        Optional<float> ReadWheelAmount(const Json& params, StringView key) {
+            if (FindJsonMember(params, key) == nullptr) {
+                return 0.0f;
+            }
+            return ReadCoordinate(params, key);
+        }
+
+        void HandleWheelAt(ControlCall& call) {
+            const Json& params = call.Params();
+            const auto x = ReadCoordinate(params, "x");
+            const auto y = ReadCoordinate(params, "y");
+            if (!x || !y) {
+                call.Fail(ControlErrors::kInvalidParams, "'x' and 'y' have to be finite numbers");
+                return;
+            }
+            const auto dx = ReadWheelAmount(params, "dx");
+            const auto dy = ReadWheelAmount(params, "dy");
+            if (!dx || !dy) {
+                call.Fail(ControlErrors::kInvalidParams, "'dx' and 'dy' have to be finite numbers");
+                return;
+            }
+            if (FindJsonMember(params, "dx") == nullptr && FindJsonMember(params, "dy") == nullptr) {
+                call.Fail(ControlErrors::kInvalidParams, "'dx' or 'dy' is needed: a wheel of nothing is a mistake");
+                return;
+            }
+            bool flipped = false;
+            if (FindJsonMember(params, "flipped") != nullptr) {
+                const auto value = GetJsonBool(params, "flipped");
+                if (!value) {
+                    call.Fail(ControlErrors::kInvalidParams, "'flipped' has to be true or false");
+                    return;
+                }
+                flipped = *value;
+            }
+            const auto which = ReadWhich(params);
+            if (!which) {
+                call.Fail(ControlErrors::kInvalidParams, "'which' has to be a pointer id, an integer from 0 to 4294967295");
+                return;
+            }
+
+            InputWheelAnswer answer;
+            answer.consumed = WheelOutputPoint(CoreManager::GetUIInput(), *x, *y, *dx, *dy, flipped, *which);
+            answer.x = static_cast<double>(*x);
+            answer.y = static_cast<double>(*y);
+            call.ReplyObject(answer);
+        }
+
         void HandleClickAt(ControlCall& call) {
             const Json& params = call.Params();
             const auto x = ReadCoordinate(params, "x");
@@ -140,6 +188,18 @@ namespace BECore {
         return click;
     }
 
+    bool WheelOutputPoint(UIInput& input, float x, float y, float dx, float dy, bool flipped, uint32_t which) {
+        SDL_MouseWheelEvent event{};
+        event.type = SDL_EVENT_MOUSE_WHEEL;
+        event.which = which;
+        event.x = dx;
+        event.y = dy;
+        event.direction = flipped ? SDL_MOUSEWHEEL_FLIPPED : SDL_MOUSEWHEEL_NORMAL;
+        event.mouse_x = x;
+        event.mouse_y = y;
+        return input.DispatchMouseWheel(event);
+    }
+
     void RegisterInputControl(ControlService& service) {
         service.RegisterHandler("click_at", HandleClickAt);
         service.DescribeMethod("click_at", {"Clicks at a point as a person does, with no element name: a scene target or a canvas under the point takes it",
@@ -147,6 +207,14 @@ namespace BECore {
                                              {"y", "number", true, "The vertical position"},
                                              {"space", "string", false, "\"output\" (default): render output pixels; \"scene\": scene units of the active scene"},
                                              {"button", "string", false, "\"left\" (default), \"right\" or \"middle\""},
+                                             {"which", "number", false, "The pointer id, default 0"}}});
+        service.RegisterHandler("wheel_at", HandleWheelAt);
+        service.DescribeMethod("wheel_at", {"Turns the mouse wheel at a point in output pixels: a scrollable document or a canvas under the point may take it",
+                                            {{"x", "number", true, "The horizontal position, output pixels"},
+                                             {"y", "number", true, "The vertical position, output pixels"},
+                                             {"dx", "number", false, "The horizontal amount as SDL gives it, positive to the right; dx or dy is needed"},
+                                             {"dy", "number", false, "The vertical amount as SDL gives it, positive away from the user (up); dx or dy is needed"},
+                                             {"flipped", "boolean", false, "true: the event says SDL_MOUSEWHEEL_FLIPPED (the values are opposite)"},
                                              {"which", "number", false, "The pointer id, default 0"}}});
     }
 

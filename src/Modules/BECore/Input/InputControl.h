@@ -22,8 +22,14 @@ namespace BECore {
     /// Moves the pointer to the output pixel (@p x, @p y), presses @p button and releases it through @p input, as a person does
     PointClick ClickOutputPoint(UIInput& input, float x, float y, uint8_t button, uint32_t which);
 
+    /// Turns the wheel by (@p dx, @p dy) with the pointer at the output pixel (@p x, @p y) through @p input; @p flipped is SDL's `SDL_MOUSEWHEEL_FLIPPED`. The pointer is not moved first:
+    /// a wheel carries its own position, and a person's wheel does not move the pointer. @return whether a handler took it
+    bool WheelOutputPoint(UIInput& input, float x, float y, float dx, float dy, bool flipped, uint32_t which);
+
     /**
-     * @brief Registers the control API method `click_at`: a click at a point, through `UIInput`, with no element name.
+     * @brief Registers the control API methods `click_at` and `wheel_at`.
+     *
+     * `click_at`: a click at a point, through `UIInput`, with no element name.: a click at a point, through `UIInput`, with no element name.
      *
      * | Method | Params | Result |
      * |--------|--------|--------|
@@ -34,6 +40,14 @@ namespace BECore {
      * (`step` a frame first; `no_scene` when there is none). A number that is not finite, or outside +-kMaxClickCoordinate, is `invalid_params`, checked before
      * anything is pressed. "consumed" says whether a handler took the press: a scene target (`ClickableComponent`, a game's `PointerTargetComponent`) or a
      * canvas. A press that nobody takes reaches game code as the raw mouse events. The answer comes after the click.
+     *
+     * | Method | Params | Result |
+     * |--------|--------|--------|
+     * | wheel_at | {"x", "y": output pixels; "dx"?, "dy"?: numbers, at least one; "flipped"?: bool; "which"?: pointer id} | {"x", "y", "consumed"}; error `invalid_params` |
+     *
+     * One wheel event through `UIInput::DispatchMouseWheel` at the point, as SDL gives it: `dx` positive to the right, `dy` positive away from the user (up); "flipped" is
+     * `SDL_MOUSEWHEEL_FLIPPED`, where SDL reports the values opposite. "consumed" says whether a handler took it (a scrollable document, a canvas); otherwise it
+     * reaches game code as the raw `MouseWheelEvent`. Every number is checked before anything is sent.
      *
      * Registering twice replaces the handler.
      */
