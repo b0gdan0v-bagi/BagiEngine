@@ -248,8 +248,8 @@ namespace BECore::Tests {
 
     TEST(ChromeTraceBackendTest, WriteFileReportsAnUnwritablePath) {
         ChromeTraceBackend recorder;
-        const std::filesystem::path missing = TestTempDirectory("profiler") / "no-such-folder" / "trace.json";
-        const String missingPath(missing.string().c_str());
+        const Path missing = Path(TestTempDirectory("profiler")) / "no-such-folder" / "trace.json";
+        const String missingPath(missing.View());
         const auto written = recorder.WriteFile(missingPath);
         ASSERT_FALSE(written.has_value());
         EXPECT_NE(written.error().find(missingPath), String::npos);
@@ -280,7 +280,7 @@ namespace BECore::Tests {
         const TestTempFolder folder("profiler_chunks");
         const String path = folder.PathOf("trace.json");
         ASSERT_TRUE(recorder.WriteFile(path).has_value());
-        const String text = ReadFile(std::filesystem::path(path.c_str()));
+        const String text = ReadFile(path);
         ASSERT_GT(text.size(), 4 * ChromeTraceBackend::kWriteChunkBytes);
         EXPECT_EQ(WithoutAllocTables(text), WithoutAllocTables(recorder.WriteJson()));
         ExpectBalanced(ParseEvents(text));
@@ -291,7 +291,7 @@ namespace BECore::Tests {
         const TestTempFolder folder("profiler_empty");
         const String path = folder.PathOf("trace.json");
         ASSERT_TRUE(recorder.WriteFile(path).has_value());
-        EXPECT_EQ(WithoutAllocTables(ReadFile(std::filesystem::path(path.c_str()))), WithoutAllocTables(recorder.WriteJson()));
+        EXPECT_EQ(WithoutAllocTables(ReadFile(path)), WithoutAllocTables(recorder.WriteJson()));
     }
 
     TEST(ChromeTraceJsonTest, WriteTextFileWritesTheBytesAndNamesAnUnwritablePath) {
@@ -300,7 +300,7 @@ namespace BECore::Tests {
         const String text("one\r\ntwo\n\0three", 15);
         const String path = folder.PathOf("out.json");
         ASSERT_TRUE(WriteTextFile(path, text).has_value());
-        EXPECT_EQ(ReadFile(std::filesystem::path(path.c_str())), text);
+        EXPECT_EQ(ReadFile(path), text);
 
         const String missing = folder.PathOf("no-such-folder/out.json");
         const auto refused = WriteTextFile(missing, text);
@@ -391,11 +391,11 @@ namespace BECore::Tests {
     }
 
     TEST(ScopedTraceTest, WritesTheZonesOfItsScope) {
-        const std::filesystem::path folder = TestTempDirectory("profiler");
+        const Path folder(TestTempDirectory("profiler"));
         MakeDirectory(folder);
-        const std::filesystem::path file = folder / "trace.json";
+        const Path file = folder / "trace.json";
         {
-            ScopedTrace trace(String(file.string().c_str()));
+            ScopedTrace trace(file.View());
             EXPECT_EQ(EarlyReturn(false), 2);
         }
         EXPECT_EQ(Profiler::GetBackend(), nullptr);

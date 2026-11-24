@@ -25,7 +25,6 @@
 #include <Common/ZoneAllocReport.h>
 #include <algorithm>
 #include <chrono>
-#include <filesystem>
 #include <gtest/gtest.h>
 #include <iostream>
 
@@ -531,7 +530,7 @@ namespace BECore::Tests {
         LoadMeasure MeasureBinSource(BinSource source) {
             const uint32_t salt = NextSalt();
             const AssetFile file = MakeFile(FileFormat::Binary, salt, kSpriteCount);
-            const std::filesystem::path path = TestTempPath(Format("asset_load_bin_{}", salt));
+            const Path path(TestTempPath(Format("asset_load_bin_{}", salt)));
             if (source == BinSource::File) {
                 WriteFile(path, StringView(reinterpret_cast<const char*>(file.binary.data()), file.binary.size()));
             }
@@ -559,8 +558,7 @@ namespace BECore::Tests {
                     return !deserializer.HasErrors();
                 },
                 loaded);
-            std::error_code ignored;
-            std::filesystem::remove(path, ignored);
+            RemoveFileIfPresent(path);
             if (!loaded || library.GetAll().size() != kSpriteCount) {
                 ADD_FAILURE() << "the benchmark file did not load";
                 return LoadMeasure{};
@@ -604,8 +602,8 @@ namespace BECore::Tests {
             SceneFixture() : SceneFixture("BagiAssetLoadScene", SceneText(), SceneHudFile()) {}
 
             /// @p hudFile is the node file `kSceneHudRef` names; empty for a scene with no reference
-            SceneFixture(const String& dirPrefix, String text, StringView hudFile) : _dir(TestTempDirectory(dirPrefix)), _text(eastl::move(text)) {
-                std::filesystem::remove_all(_dir);
+            SceneFixture(const String& dirPrefix, String text, StringView hudFile) : _dir(Path(TestTempDirectory(dirPrefix))), _text(eastl::move(text)) {
+                RemoveDirectory(_dir);
                 if (!hudFile.empty()) {
                     WriteFile(_dir / "nodes" / "AssetLoadHud.xml", hudFile);
                 }
@@ -618,8 +616,7 @@ namespace BECore::Tests {
             }
 
             ~SceneFixture() {
-                std::error_code ignored;
-                std::filesystem::remove_all(_dir, ignored);
+                RemoveDirectory(_dir);
             }
 
             SceneFixture(const SceneFixture&) = delete;
@@ -688,7 +685,7 @@ namespace BECore::Tests {
             }
 
         private:
-            std::filesystem::path _dir;
+            Path _dir;
             String _text;
             Vector<uint8_t> _binary;
         };
@@ -988,14 +985,13 @@ namespace BECore::Tests {
     TEST(AssetLoadAllocTest, TheBinaryFileSourceReadsTheSameLibraryAsTheBufferSource) {
         const uint32_t salt = NextSalt();
         const AssetFile file = MakeFile(FileFormat::Binary, salt, kSpriteCount);
-        const std::filesystem::path path = TestTempPath(Format("asset_load_source_{}", salt));
+        const Path path(TestTempPath(Format("asset_load_source_{}", salt)));
         WriteFile(path, StringView(reinterpret_cast<const char*>(file.binary.data()), file.binary.size()));
 
         TextureLibrary fromFile;
         BinaryDeserializer deserializer;
         const bool opened = deserializer.LoadFromFile(path);
-        std::error_code ignored;
-        std::filesystem::remove(path, ignored);
+        RemoveFileIfPresent(path);
         ASSERT_TRUE(opened);
         fromFile.Load(deserializer);
         ASSERT_FALSE(deserializer.HasErrors());

@@ -152,13 +152,13 @@ namespace BECore::Tests {
 
     TEST(RingTraceExportTest, TheFileHoldsTheSameTextAndAnUnwritablePathIsAnError) {
         const RingSnapshot snapshot = TenFrames();
-        const std::filesystem::path path = TestTempPath("ring_trace").replace_extension(".json");
-        const auto written = WriteRingTraceFile(StringView(path.string().c_str()), snapshot, 0.05);
+        const Path path = Path(TestTempPath("ring_trace")).ReplaceExtension(".json");
+        const auto written = WriteRingTraceFile(path.View(), snapshot, 0.05);
         ASSERT_TRUE(written.has_value());
         EXPECT_EQ(ReadFile(path), WriteRingTraceJson(snapshot, 0.05));
-        std::filesystem::remove(path);
+        RemoveFileIfPresent(path);
 
-        const auto refused = WriteRingTraceFile(StringView((path / "no" / "such" / "dir.json").string().c_str()), snapshot, 0.05);
+        const auto refused = WriteRingTraceFile((path / "no" / "such" / "dir.json").View(), snapshot, 0.05);
         ASSERT_FALSE(refused.has_value());
         EXPECT_NE(refused.error().find("cannot write"), String::npos);
     }

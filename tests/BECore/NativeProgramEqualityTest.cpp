@@ -348,15 +348,16 @@ namespace BECore::Tests {
         /// The file the build wrote for this executable: the build folder is the working directory of ctest, and the folder above `bin` is it when the executable is started by hand
         Optional<String> ReadGeneratedFile() {
             constexpr char kRelative[] = "Generated/BagiEngineTests.native.cpp";
-            Vector<std::filesystem::path> candidates{std::filesystem::path(kRelative)};
+            Vector<Path> candidates{Path(kRelative)};
             const auto& arguments = testing::internal::GetArgvs();
             if (!arguments.empty()) {
-                std::error_code error;
-                const std::filesystem::path executable = std::filesystem::weakly_canonical(arguments.front(), error);
-                candidates.push_back(executable.parent_path().parent_path() / kRelative);
+                const auto executable = WeaklyCanonicalPath(arguments.front().c_str());
+                if (executable.has_value()) {
+                    candidates.push_back(Path(*executable).Parent().Parent() / kRelative);
+                }
             }
-            for (const std::filesystem::path& path : candidates) {
-                if (std::filesystem::exists(path)) {
+            for (const Path& path : candidates) {
+                if (PathExists(path)) {
                     return ReadFile(path);
                 }
             }

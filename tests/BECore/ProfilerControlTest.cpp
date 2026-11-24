@@ -16,6 +16,7 @@
 #include <Common/AllocCheck.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -239,21 +240,20 @@ namespace BECore::Tests {
     TEST_F(ProfilerControlGoldenTest, ProfilerDumpAnswersThePathAndTheDroppedCount) {
         IProfilerBackend* const previous = Profiler::GetPrimaryBackend();
         Profiler::SetBackend(&Profiler::GetChromeTrace());
-        const std::filesystem::path file = TestTempPath("ProfilerDump caf\xC3\xA9").filename();
+        const Path file = Path(TestTempPath("ProfilerDump caf\xC3\xA9")).Filename();
         Json params = Json::object();
-        params["path"] = file.string();
+        params["path"] = ToStdString(file.View());
 
         const String text = Ask(service, "profiler_dump", params);
 
         Profiler::SetBackend(previous);
-        std::error_code ignored;
-        const bool written = std::filesystem::remove(file, ignored);
-        EXPECT_TRUE(written);
+        EXPECT_TRUE(PathExists(file));
+        RemoveFileIfPresent(file);
         ExpectCanonical(text);
         String shown = text;
-        const size_t pathAt = shown.find(file.string().c_str());
+        const size_t pathAt = shown.find(file.CStr());
         ASSERT_NE(pathAt, String::npos);
-        shown.replace(pathAt, file.string().size(), "FILE");
+        shown.replace(pathAt, file.View().size(), "FILE");
         EXPECT_EQ(MaskIntegers(shown), R"json({"id":N,"ok":true,"result":{"dropped":N,"path":"FILE"}})json");
     }
 

@@ -27,7 +27,7 @@ namespace BECore::Tests {
         constexpr int kPngSide = 8;
 
         Vector<uint8_t> ReadFixture(const char* name) {
-            const std::filesystem::path path = AudioFixtureFolder() / name;
+            const Path path = AudioFixtureFolder() / name;
             return ReadFileBytes(path);
         }
 
@@ -178,12 +178,11 @@ namespace BECore::Tests {
         if constexpr (!AllocTracker::kEnabled) {
             GTEST_SKIP() << kNoAllocTracker;
         }
-        const std::filesystem::path path = TestTempDirectory("AllocRouting").concat(".png");
+        const Path path = Path(TestTempDirectory("AllocRouting")).ReplaceExtension(".png");
         {
             SDL_Surface* surface = SDL_CreateSurface(kPngSide, kPngSide, SDL_PIXELFORMAT_RGBA32);
             ASSERT_NE(surface, nullptr);
-            const auto utf8 = path.u8string();  //-NoStd: SDL_image takes the path as UTF-8 chars
-            const bool saved = IMG_SavePNG(surface, reinterpret_cast<const char*>(utf8.c_str()));
+            const bool saved = IMG_SavePNG(surface, path.CStr());
             SDL_DestroySurface(surface);
             ASSERT_TRUE(saved);
         }
@@ -192,8 +191,7 @@ namespace BECore::Tests {
         const uint64_t namedBefore = NamedCount(AllocSource::Stb);
         const auto image = ReadImageFile(path);
         const AllocSourceTotals after = AllocTracker::GetSourceTotals(AllocSource::Stb);
-        std::error_code ignored;
-        std::filesystem::remove(path, ignored);
+        RemoveFileIfPresent(path);
 
         ASSERT_TRUE(image.has_value());
         EXPECT_GT(after.count, before.count);

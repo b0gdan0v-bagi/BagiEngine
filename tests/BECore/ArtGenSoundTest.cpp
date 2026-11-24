@@ -41,7 +41,7 @@ namespace BECore::Tests {
         }
 
         Path Fixture(const char* name) {
-            return Path(AudioFixtureFolder()) / name;
+            return AudioFixtureFolder() / name;
         }
 
     }  // namespace
