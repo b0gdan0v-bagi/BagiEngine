@@ -4,6 +4,7 @@
 #include <BECore/Control/JsonTape.h>
 #include <BECore/Control/JsonViewOps.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/ArtGen/ArtGenFileText.h>
 
 namespace BECore {
 
@@ -41,15 +42,6 @@ namespace BECore {
             first = *numbers[0];
             second = *numbers[1];
             return true;
-        }
-
-        /// Whether two texts are the same JSON value, as `Json::operator==` judged the documents: the key order and the form of a number do not matter
-        bool SameContent(const String& a, const String& b) {
-            JsonTape tapeA;
-            JsonTape tapeB;
-            static_cast<void>(tapeA.Parse(ViewOf(a)));
-            static_cast<void>(tapeB.Parse(ViewOf(b)));
-            return JsonEquals(JsonView(tapeA, 0), JsonView(tapeB, 0));
         }
 
     }  // namespace
@@ -353,7 +345,7 @@ namespace BECore {
     bool ArtGenPresetForm::IsDirty() const {
         if (_dirtyRevision != _revision) {
             _dirtyRevision = _revision;
-            _dirty = _base.empty() || !SameContent(ToJsonText(), _base) || ViewOf(_baseName) != StringView(name);
+            _dirty = _base.empty() || !SameJsonText(ToJsonText(), ViewOf(_base)) || ViewOf(_baseName) != StringView(name);
         }
         return _dirty;
     }

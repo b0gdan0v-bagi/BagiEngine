@@ -39,8 +39,13 @@ namespace BECore {
         /// @p size (a terminating NUL included) by cutting
         void ToText(char* out, size_t size) const;
 
-        /// What `Json::operator==` judged: `1` equals `1.0`, `Other` values are equal as JSON, values of other kinds are not
+        /// What `Json::operator==` judged: `1` equals `1.0`, `Other` values are equal as JSON, values of other
+        /// kinds are not
         [[nodiscard]] bool operator==(const ArtGenInputValue& other) const;
+
+        /// `operator==` that never parses: two `Other` values compare as the compact sorted text `Read` stores, so `[1]` and `[1.0]` differ. For what
+        /// the panel compares every frame (the selected choice of an open combo)
+        [[nodiscard]] bool SameStored(const ArtGenInputValue& other) const;
     };
 
 }  // namespace BECore

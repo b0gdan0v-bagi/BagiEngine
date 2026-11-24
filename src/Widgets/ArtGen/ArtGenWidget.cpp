@@ -770,7 +770,7 @@ namespace BECore {
                 for (const ArtGenInputValue& choice : input.choices) {
                     char text[160];
                     choice.ToText(text, sizeof(text));
-                    if (ImGui::Selectable(text, choice == value)) {
+                    if (ImGui::Selectable(text, choice.SameStored(value))) {
                         _form.SetParam(StringView(input.name), choice);
                     }
                 }

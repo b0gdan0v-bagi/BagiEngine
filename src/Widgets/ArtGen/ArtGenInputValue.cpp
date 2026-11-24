@@ -1,30 +1,10 @@
 #include "ArtGenInputValue.h"
 
-#include <BECore/Control/JsonTape.h>
 #include <BECore/Control/JsonViewOps.h>
+#include <Widgets/ArtGen/ArtGenFileText.h>
 #include <cstdio>
 
 namespace BECore {
-
-    namespace {
-
-        String SortedTextOf(JsonView value) {
-            String text;
-            JsonWriter writer(text);
-            WriteJsonSorted(writer, value);
-            return text;
-        }
-
-        /// Whether two texts of JSON values are the same value; a text that is not JSON equals no valid one
-        bool SameJson(const String& a, const String& b) {
-            JsonTape tapeA;
-            JsonTape tapeB;
-            static_cast<void>(tapeA.Parse(StringView(a)));
-            static_cast<void>(tapeB.Parse(StringView(b)));
-            return JsonEquals(JsonView(tapeA, 0), JsonView(tapeB, 0));
-        }
-
-    }  // namespace
 
     ArtGenInputValue ArtGenInputValue::FromBool(bool value) {
         ArtGenInputValue result;
@@ -125,6 +105,13 @@ namespace BECore {
         }
     }
 
+    bool ArtGenInputValue::SameStored(const ArtGenInputValue& other) const {
+        if (kind == ArtGenInputKind::Other && other.kind == ArtGenInputKind::Other) {
+            return text == other.text;
+        }
+        return *this == other;
+    }
+
     bool ArtGenInputValue::operator==(const ArtGenInputValue& other) const {
         const bool numeric = kind == ArtGenInputKind::Integer || kind == ArtGenInputKind::Number;
         const bool otherNumeric = other.kind == ArtGenInputKind::Integer || other.kind == ArtGenInputKind::Number;
@@ -147,7 +134,7 @@ namespace BECore {
             case ArtGenInputKind::Text:
                 return text == other.text;
             case ArtGenInputKind::Other:
-                return SameJson(text, other.text);
+                return text == other.text || SameJsonText(text, other.text);
             case ArtGenInputKind::Integer:
             case ArtGenInputKind::Number:
                 break;

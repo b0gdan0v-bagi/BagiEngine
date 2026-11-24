@@ -8,6 +8,7 @@
 #include <BECore/Control/JsonViewOps.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/Types/Types.h>
+#include <Widgets/ArtGen/ArtGenFileText.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <expected>
 #include <type_traits>
@@ -48,15 +49,6 @@ namespace BECore::ArtGenControl {
         if (!value.ReadText(text)) {
             return std::nullopt;
         }
-        return text;
-    }
-
-    /// The compact text of a draft preset a handler got in a call, keys in byte order at every level: the form the session keeps and the manifest
-    /// writes (`WriteJsonSorted`), so one draft is one text whatever order the client wrote it in
-    inline String SortedTextOf(JsonView value) {
-        String text;
-        JsonWriter writer(text);
-        WriteJsonSorted(writer, value);
         return text;
     }
 
