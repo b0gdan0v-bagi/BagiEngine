@@ -229,7 +229,7 @@ namespace BECore::Tests {
             for (int i = 0; i < kFloodSockets; ++i) {
                 RoomSocketClient& flooder = *flooders[static_cast<size_t>(i)];
                 if (i % 2 == 0) {
-                    flooder.Send(CreateRoomMessage{"cards", Format("Flood{}", i), Json::object()});
+                    flooder.Send(CreateRoomMessage{"cards", Format("Flood{}", i), String()});
                 } else {
                     flooder.JoinByName(table[0]->roomCode, Format("Flood{}", i));
                 }

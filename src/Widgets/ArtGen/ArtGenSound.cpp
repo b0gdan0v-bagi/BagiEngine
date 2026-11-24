@@ -1,6 +1,6 @@
 #include "ArtGenSound.h"
 
-#include <algorithm>
+#include <BECore/Control/ControlParams.h>
 #include <cmath>
 
 namespace BECore {
@@ -123,29 +123,40 @@ namespace BECore {
             return std::isfinite(value) && value >= low && value <= high;
         }
 
-        std::expected<Optional<float>, String> OptionalNumber(const Json& json, StringView key, Optional<float> fallback) {
-            const Json* value = FindJsonMember(json, key);
-            if (value == nullptr) {
-                return fallback;
+        /// @p value as a float; the error says what @p key must be. `1e999` is a valid number to the tape (the DOM refused the document), so a number
+        /// that is not finite is refused here
+        std::expected<float, String> FiniteFloat(JsonView value, StringView key, StringView expected) {
+            const Optional<double> number = value.AsDouble();
+            if (!number) {
+                return std::unexpected(Format("\"{}\" must be {}", key, expected));
             }
-            if (value->is_null()) {
-                return Optional<float>();
+            if (!std::isfinite(*number)) {
+                return std::unexpected(Format("\"{}\" must be a finite number", key));
             }
-            if (!value->is_number()) {
-                return std::unexpected(Format("\"{}\" must be a number or null", key));
-            }
-            return Optional<float>(value->get<float>());
+            return static_cast<float>(*number);
         }
 
-        std::expected<float, String> Number(const Json& json, StringView key, float fallback) {
-            const Json* value = FindJsonMember(json, key);
-            if (value == nullptr) {
+        std::expected<Optional<float>, String> OptionalNumber(JsonView object, StringView key, Optional<float> fallback) {
+            const Optional<JsonView> value = FindParam(object, key);
+            if (!value) {
                 return fallback;
             }
-            if (!value->is_number()) {
-                return std::unexpected(Format("\"{}\" must be a number", key));
+            if (value->IsNull()) {
+                return Optional<float>();
             }
-            return value->get<float>();
+            const auto number = FiniteFloat(*value, key, "a number or null");
+            if (!number) {
+                return std::unexpected(number.error());
+            }
+            return Optional<float>(*number);
+        }
+
+        std::expected<float, String> Number(JsonView object, StringView key, float fallback) {
+            const Optional<JsonView> value = FindParam(object, key);
+            if (!value) {
+                return fallback;
+            }
+            return FiniteFloat(*value, key, "a number");
         }
 
         std::expected<void, String> Check(const ArtGenSoundSettings& settings) {
@@ -169,37 +180,46 @@ namespace BECore {
 
     }  // namespace
 
-    Json ArtGenSoundSettingsToJson(const ArtGenSoundSettings& settings) {
-        Json json = Json::object();
-        json["mono"] = settings.mono;
-        json["trimDb"] = settings.trimDb ? Json(*settings.trimDb) : Json();
-        json["maxSeconds"] = settings.maxSeconds;
-        json["sampleRate"] = settings.sampleRate;
-        json["fadeInMs"] = settings.fadeInMs;
-        json["fadeOutMs"] = settings.fadeOutMs;
-        json["peakDb"] = settings.peakDb ? Json(*settings.peakDb) : Json();
-        return json;
+    void WriteArtGenSoundSettings(JsonWriter& writer, const ArtGenSoundSettings& settings) {
+        const auto optionalDouble = [&writer](StringView key, const Optional<float>& value) {
+            writer.Key(key);
+            if (value) {
+                writer.Value(static_cast<double>(*value));
+            } else {
+                writer.Null();
+            }
+        };
+        writer.BeginObject();
+        writer.Member("fadeInMs", static_cast<double>(settings.fadeInMs));
+        writer.Member("fadeOutMs", static_cast<double>(settings.fadeOutMs));
+        writer.Member("maxSeconds", static_cast<double>(settings.maxSeconds));
+        writer.Member("mono", settings.mono);
+        optionalDouble("peakDb", settings.peakDb);
+        writer.Member("sampleRate", settings.sampleRate);
+        optionalDouble("trimDb", settings.trimDb);
+        writer.EndObject();
     }
 
-    std::expected<ArtGenSoundSettings, String> ArtGenSoundSettingsFromJson(const Json& json) {
+    std::expected<ArtGenSoundSettings, String> ReadArtGenSoundSettings(JsonView value) {
         ArtGenSoundSettings settings;
-        if (json.is_null()) {
+        if (!value.IsValid() || value.IsNull()) {
             return settings;
         }
-        if (!json.is_object()) {
+        if (!value.IsObject()) {
             return std::unexpected(String("the sound settings must be an object"));
         }
-        if (const Json* mono = FindJsonMember(json, "mono"); mono != nullptr) {
-            if (!mono->is_boolean()) {
+        if (const Optional<JsonView> mono = FindParam(value, "mono")) {
+            const Optional<bool> flag = mono->AsBool();
+            if (!flag) {
                 return std::unexpected(String("\"mono\" must be a boolean"));
             }
-            settings.mono = mono->get<bool>();
+            settings.mono = *flag;
         }
-        auto trim = OptionalNumber(json, "trimDb", settings.trimDb);
-        auto peak = OptionalNumber(json, "peakDb", settings.peakDb);
-        auto maxSeconds = Number(json, "maxSeconds", settings.maxSeconds);
-        auto fadeIn = Number(json, "fadeInMs", settings.fadeInMs);
-        auto fadeOut = Number(json, "fadeOutMs", settings.fadeOutMs);
+        auto trim = OptionalNumber(value, "trimDb", settings.trimDb);
+        auto peak = OptionalNumber(value, "peakDb", settings.peakDb);
+        auto maxSeconds = Number(value, "maxSeconds", settings.maxSeconds);
+        auto fadeIn = Number(value, "fadeInMs", settings.fadeInMs);
+        auto fadeOut = Number(value, "fadeOutMs", settings.fadeOutMs);
         for (const String* error :
              {trim ? nullptr : &trim.error(), peak ? nullptr : &peak.error(), maxSeconds ? nullptr : &maxSeconds.error(), fadeIn ? nullptr : &fadeIn.error(), fadeOut ? nullptr : &fadeOut.error()}) {
             if (error != nullptr) {
@@ -211,11 +231,12 @@ namespace BECore {
         settings.maxSeconds = *maxSeconds;
         settings.fadeInMs = *fadeIn;
         settings.fadeOutMs = *fadeOut;
-        if (const Json* rate = FindJsonMember(json, "sampleRate"); rate != nullptr) {
-            if (!rate->is_number_unsigned() && !(rate->is_number_integer() && rate->get<int64_t>() >= 0)) {
+        if (const Optional<JsonView> rate = FindParam(value, "sampleRate")) {
+            const Optional<uint64_t> whole = rate->AsUint64();
+            if (!whole) {
                 return std::unexpected(String("\"sampleRate\" must be a whole number"));
             }
-            settings.sampleRate = static_cast<uint32_t>(std::min<uint64_t>(rate->get<uint64_t>(), UINT32_MAX));
+            settings.sampleRate = static_cast<uint32_t>(std::min<uint64_t>(*whole, UINT32_MAX));
         }
         if (auto checked = Check(settings); !checked) {
             return std::unexpected(checked.error());

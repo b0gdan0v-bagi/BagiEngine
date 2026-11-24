@@ -1,10 +1,13 @@
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonViewOps.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/ReplayTestGame.h>
 #include <BECore/Time/Time.h>
+#include <Common/ControlTestSupport.h>
+#include <Common/ControlledCalls.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
@@ -45,11 +48,6 @@ namespace BECore::Tests {
                 return *GameManager::GetInstance().GetActive()->Cast<ReplayTestGame>();
             }
 
-            static Json Params(StringView text) {
-                auto parsed = ParseJson(text);
-                return parsed ? std::move(*parsed) : Json();
-            }
-
             [[nodiscard]] String PathText() const {
                 return String(_path.View());
             }
@@ -76,20 +74,8 @@ namespace BECore::Tests {
             }
 
             /// A control request the way a client sends it, answered on the spot
-            static Json Call(StringView method, const Json& params) {
-                Json request = Json::object();
-                request["id"] = 1;
-                request["method"] = ToStdString(method);
-                request["params"] = params;
-                Json response;
-                CoreManager::GetControlService().Post(DumpJson(request), [&response](String text) {
-                    auto parsed = ParseJson(text);
-                    if (parsed) {
-                        response = std::move(*parsed);
-                    }
-                });
-                CoreManager::GetControlService().Drain();
-                return response;
+            static ControlReply Call(StringView method, StringView paramsText) {
+                return CallControlText(CoreManager::GetControlService(), 1, method, paramsText);
             }
 
             Path _path;
@@ -101,10 +87,10 @@ namespace BECore::Tests {
         ASSERT_TRUE(StartRecording("three calls").has_value());
         IControllableGame& game = Game();
 
-        ASSERT_TRUE(ControlledReset(game, Params(R"({})")).has_value());
-        const auto rolled = ControlledAction(game, Params(R"({"type":"roll"})"));
-        ASSERT_TRUE(rolled.has_value());
-        ASSERT_TRUE(ControlledSetState(game, Params(R"({"rolls":[2,3]})")).has_value());
+        ASSERT_TRUE(ControlledReset(game, JsonDoc(R"({})")).has_value());
+        String rolled;
+        ASSERT_TRUE(ControlledAction(game, JsonDoc(R"({"type":"roll"})"), rolled).has_value());
+        ASSERT_TRUE(ControlledSetState(game, JsonDoc(R"({"rolls":[2,3]})")).has_value());
         EXPECT_EQ(SessionRecorder::GetInstance().GetEntryCount(), 3u);
         SessionRecorder::GetInstance().Stop();
 
@@ -113,48 +99,97 @@ namespace BECore::Tests {
         EXPECT_EQ(replay.header.title, "three calls");
         ASSERT_EQ(replay.entries.size(), 3u);
         EXPECT_EQ(replay.entries[0].op, ReplayOp::Reset);
-        EXPECT_EQ(replay.entries[0].params, Params(R"({"seed":1000})"));  // what the game drew, not what the caller sent
+        EXPECT_EQ(replay.entries[0].params, R"({"seed":1000})");  // what the game drew, not what the caller sent
         EXPECT_EQ(replay.entries[1].op, ReplayOp::Action);
-        EXPECT_EQ(replay.entries[1].params, Params(R"({"type":"roll"})"));
+        EXPECT_EQ(replay.entries[1].params, R"({"type":"roll"})");
         ASSERT_TRUE(replay.entries[1].outcome.has_value());
-        EXPECT_EQ(*replay.entries[1].outcome, *rolled);
+        EXPECT_EQ(*replay.entries[1].outcome, rolled);
         EXPECT_EQ(replay.entries[2].op, ReplayOp::State);
-        EXPECT_EQ(replay.entries[2].params, Params(R"({"rolls":[2,3]})"));
+        EXPECT_EQ(replay.entries[2].params, R"({"rolls":[2,3]})");
+    }
+
+    TEST_F(SessionRecorderTest, ParamsWithAnEscapeAndANestedArrayAreRecordedAsTheyWereSent) {
+        ASSERT_TRUE(StartRecording().has_value());
+        const JsonDoc action(R"({ "type" : "roll", "note" : "a\u0041\n\"q\"", "list" : [1, [2, {"k": null}], 2.5] })");
+        SessionRecorder& recorder = SessionRecorder::GetInstance();
+
+        recorder.ReportReset(R"({"seed":1})");
+        recorder.ReportAction(action.Root(), R"({"value":4})");
+        recorder.Stop();
+
+        const ParsedReplay replay = ParseRecording();
+        ASSERT_EQ(replay.entries.size(), 2u);
+        EXPECT_EQ(replay.entries[1].params, R"({"type":"roll","note":"aA\n\"q\"","list":[1,[2,{"k":null}],2.5]})");
+        const JsonDoc readBack(StringView(replay.entries[1].params.c_str(), replay.entries[1].params.size()));
+        EXPECT_TRUE(JsonEquals(readBack.Root(), action.Root()));
+    }
+
+    TEST_F(SessionRecorderTest, ParamsThatAreNotAnObjectAreRecordedAsAnEmptyObject) {
+        ASSERT_TRUE(StartRecording().has_value());
+        SessionRecorder& recorder = SessionRecorder::GetInstance();
+
+        recorder.ReportReset(R"({"seed":1})");
+        recorder.ReportSetState(JsonDoc("[1,2]"));
+        recorder.Stop();
+
+        const ParsedReplay replay = ParseRecording();
+        ASSERT_EQ(replay.entries.size(), 2u);
+        EXPECT_EQ(replay.entries[1].params, "{}");
     }
 
     TEST_F(SessionRecorderTest, TheSeedOfTheCallerIsWhatTheFileHolds) {
         ASSERT_TRUE(StartRecording().has_value());
 
-        ASSERT_TRUE(ControlledReset(Game(), Params(R"({"seed":77})")).has_value());
+        ASSERT_TRUE(ControlledReset(Game(), JsonDoc(R"({"seed":77})")).has_value());
         SessionRecorder::GetInstance().Stop();
 
-        EXPECT_EQ(ParseRecording().entries.at(0).params, Params(R"({"seed":77})"));
+        EXPECT_EQ(ParseRecording().entries.at(0).params, R"({"seed":77})");
     }
 
     TEST_F(SessionRecorderTest, ARefusedCallIsNotWritten) {
         ASSERT_TRUE(StartRecording().has_value());
         IControllableGame& game = Game();
-        ASSERT_TRUE(ControlledReset(game, Params(R"({"seed":1})")).has_value());
-        ASSERT_TRUE(ControlledAction(game, Params(R"({"type":"arm"})")).has_value());
+        ASSERT_TRUE(ControlledReset(game, JsonDoc(R"({"seed":1})")).has_value());
+        ASSERT_TRUE(ControlledAction(game, JsonDoc(R"({"type":"arm"})")).has_value());
 
-        EXPECT_FALSE(ControlledAction(game, Params(R"({"type":"roll"})")).has_value());  // locked
-        EXPECT_FALSE(ControlledAction(game, Params(R"({"type":5})")).has_value());       // malformed
-        EXPECT_FALSE(ControlledSetState(game, Params(R"({"rolls":"x"})")).has_value());
-        EXPECT_FALSE(ControlledReset(game, Params(R"({"seed":"x"})")).has_value());
+        EXPECT_FALSE(ControlledAction(game, JsonDoc(R"({"type":"roll"})")).has_value());  // locked
+        EXPECT_FALSE(ControlledAction(game, JsonDoc(R"({"type":5})")).has_value());       // malformed
+        EXPECT_FALSE(ControlledSetState(game, JsonDoc(R"({"rolls":"x"})")).has_value());
+        EXPECT_FALSE(ControlledReset(game, JsonDoc(R"({"seed":"x"})")).has_value());
 
         EXPECT_EQ(SessionRecorder::GetInstance().GetEntryCount(), 2u);
+    }
+
+    TEST_F(SessionRecorderTest, AnActionThatWroteNoOutcomeIsRefusedAndNotWritten) {
+        class SilentGame : public ReplayTestGame {
+        public:
+            std::expected<void, ControlError> PerformAction(JsonView, JsonWriter&) override {
+                return {};
+            }
+        };
+        ASSERT_TRUE(StartRecording().has_value());
+        SilentGame silent;
+        ASSERT_TRUE(ControlledReset(silent, JsonDoc(R"({"seed":1})")).has_value());
+        String outcome = "stale";
+
+        const auto performed = ControlledAction(silent, JsonDoc(R"({"type":"roll"})"), outcome);
+
+        ASSERT_FALSE(performed.has_value());
+        EXPECT_EQ(performed.error().code, String(ControlErrors::kInternalError));
+        EXPECT_TRUE(outcome.empty());
+        EXPECT_EQ(SessionRecorder::GetInstance().GetEntryCount(), 1u);
     }
 
     TEST_F(SessionRecorderTest, ACallBeforeTheFirstResetIsDropped) {
         ASSERT_TRUE(StartRecording().has_value());
         IControllableGame& game = Game();
 
-        ASSERT_TRUE(ControlledAction(game, Params(R"({"type":"roll"})")).has_value());
-        ASSERT_TRUE(ControlledSetState(game, Params(R"({"rolls":[1]})")).has_value());
+        ASSERT_TRUE(ControlledAction(game, JsonDoc(R"({"type":"roll"})")).has_value());
+        ASSERT_TRUE(ControlledSetState(game, JsonDoc(R"({"rolls":[1]})")).has_value());
         EXPECT_EQ(SessionRecorder::GetInstance().GetEntryCount(), 0u);
 
-        ASSERT_TRUE(ControlledReset(game, Params(R"({"seed":3})")).has_value());
-        ASSERT_TRUE(ControlledAction(game, Params(R"({"type":"roll"})")).has_value());
+        ASSERT_TRUE(ControlledReset(game, JsonDoc(R"({"seed":3})")).has_value());
+        ASSERT_TRUE(ControlledAction(game, JsonDoc(R"({"type":"roll"})")).has_value());
         SessionRecorder::GetInstance().Stop();
 
         const ParsedReplay replay = ParseRecording();
@@ -166,12 +201,12 @@ namespace BECore::Tests {
         IControllableGame& game = Game();
         AdvanceFrames(3);  // before the recording: not part of any gap
         ASSERT_TRUE(StartRecording().has_value());
-        ASSERT_TRUE(ControlledReset(game, Params(R"({"seed":1})")).has_value());
+        ASSERT_TRUE(ControlledReset(game, JsonDoc(R"({"seed":1})")).has_value());
         AdvanceFrames(2);
-        ASSERT_TRUE(ControlledAction(game, Params(R"({"type":"roll"})")).has_value());
-        ASSERT_TRUE(ControlledAction(game, Params(R"({"type":"roll"})")).has_value());
+        ASSERT_TRUE(ControlledAction(game, JsonDoc(R"({"type":"roll"})")).has_value());
+        ASSERT_TRUE(ControlledAction(game, JsonDoc(R"({"type":"roll"})")).has_value());
         AdvanceFrames(1);
-        ASSERT_TRUE(ControlledAction(game, Params(R"({"type":"roll"})")).has_value());
+        ASSERT_TRUE(ControlledAction(game, JsonDoc(R"({"type":"roll"})")).has_value());
         SessionRecorder::GetInstance().Stop();
 
         const ParsedReplay replay = ParseRecording();
@@ -186,9 +221,9 @@ namespace BECore::Tests {
         IControllableGame& game = Game();
         ASSERT_TRUE(StartRecording().has_value());
         AdvanceFrames(4);
-        ASSERT_TRUE(ControlledReset(game, Params(R"({"seed":1})")).has_value());
+        ASSERT_TRUE(ControlledReset(game, JsonDoc(R"({"seed":1})")).has_value());
         CoreManager::GetTime().Reset();
-        ASSERT_TRUE(ControlledAction(game, Params(R"({"type":"roll"})")).has_value());
+        ASSERT_TRUE(ControlledAction(game, JsonDoc(R"({"type":"roll"})")).has_value());
         SessionRecorder::GetInstance().Stop();
 
         EXPECT_EQ(ParseRecording().entries.at(1).gap, (ReplayGap{0, 0.0}));
@@ -197,14 +232,14 @@ namespace BECore::Tests {
     TEST_F(SessionRecorderTest, StopLeavesAFileThatReadsBackAndEndsTheRecording) {
         ASSERT_TRUE(StartRecording().has_value());
         EXPECT_TRUE(SessionRecorder::GetInstance().IsRecording());
-        ASSERT_TRUE(ControlledReset(Game(), Params(R"({"seed":1})")).has_value());
+        ASSERT_TRUE(ControlledReset(Game(), JsonDoc(R"({"seed":1})")).has_value());
 
         EXPECT_EQ(SessionRecorder::GetInstance().Stop(), 1u);
 
         EXPECT_FALSE(SessionRecorder::GetInstance().IsRecording());
         EXPECT_EQ(SessionRecorder::GetInstance().GetEntryCount(), 1u);
         EXPECT_EQ(ParseRecording().entries.size(), 1u);
-        ASSERT_TRUE(ControlledAction(Game(), Params(R"({"type":"roll"})")).has_value());  // after the end: not written
+        ASSERT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());  // after the end: not written
         EXPECT_EQ(ParseRecording().entries.size(), 1u);
         EXPECT_EQ(SessionRecorder::GetInstance().Stop(), 1u);
     }
@@ -212,7 +247,7 @@ namespace BECore::Tests {
     TEST_F(SessionRecorderTest, TheFileIsOnDiskAfterEveryEntry) {
         ASSERT_TRUE(StartRecording().has_value());
 
-        ASSERT_TRUE(ControlledReset(Game(), Params(R"({"seed":1})")).has_value());
+        ASSERT_TRUE(ControlledReset(Game(), JsonDoc(R"({"seed":1})")).has_value());
 
         EXPECT_EQ(ParseRecording().entries.size(), 1u);  // read while the recording still runs
     }
@@ -238,15 +273,15 @@ namespace BECore::Tests {
         ASSERT_FALSE(started.has_value());
         EXPECT_EQ(started.error().code, String(ControlErrors::kInvalidParams));
         EXPECT_FALSE(SessionRecorder::GetInstance().IsRecording());
-        EXPECT_TRUE(ControlledReset(Game(), Params(R"({"seed":1})")).has_value());
-        EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"roll"})")).has_value());
+        EXPECT_TRUE(ControlledReset(Game(), JsonDoc(R"({"seed":1})")).has_value());
+        EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
         EXPECT_EQ(SessionRecorder::GetInstance().GetEntryCount(), 0u);
         EXPECT_FALSE(SessionRecorder::GetInstance().Start("", *GameManager::GetInstance().GetActive()).has_value());
     }
 
     TEST_F(SessionRecorderTest, ASecondStartWhileRecordingIsRefusedAndKeepsTheFirst) {
         ASSERT_TRUE(StartRecording().has_value());
-        ASSERT_TRUE(ControlledReset(Game(), Params(R"({"seed":1})")).has_value());
+        ASSERT_TRUE(ControlledReset(Game(), JsonDoc(R"({"seed":1})")).has_value());
 
         const auto again = StartRecording();
 
@@ -258,7 +293,7 @@ namespace BECore::Tests {
 
     TEST_F(SessionRecorderTest, AStartReplacesTheFileOfAnEarlierRecording) {
         ASSERT_TRUE(StartRecording().has_value());
-        ASSERT_TRUE(ControlledReset(Game(), Params(R"({"seed":1})")).has_value());
+        ASSERT_TRUE(ControlledReset(Game(), JsonDoc(R"({"seed":1})")).has_value());
         SessionRecorder::GetInstance().Stop();
 
         ASSERT_TRUE(StartRecording().has_value());
@@ -270,17 +305,17 @@ namespace BECore::Tests {
 
     TEST_F(SessionRecorderTest, TheControlMethodsAndTheDirectCallsWriteTheSameFile) {
         ASSERT_TRUE(StartRecording().has_value());
-        ASSERT_TRUE(GetJsonBool(Call("reset", Params(R"({"seed":5})")), "ok").value_or(false));
-        ASSERT_TRUE(GetJsonBool(Call("perform_action", Params(R"({"type":"roll"})")), "ok").value_or(false));
-        ASSERT_TRUE(GetJsonBool(Call("set_state", Params(R"({"rolls":[4]})")), "ok").value_or(false));
-        EXPECT_FALSE(GetJsonBool(Call("perform_action", Params(R"({"type":"jump"})")), "ok").value_or(true));
+        ASSERT_TRUE(Call("reset", R"({"seed":5})").IsOk());
+        ASSERT_TRUE(Call("perform_action", R"({"type":"roll"})").IsOk());
+        ASSERT_TRUE(Call("set_state", R"({"rolls":[4]})").IsOk());
+        EXPECT_FALSE(Call("perform_action", R"({"type":"jump"})").IsOk());
         SessionRecorder::GetInstance().Stop();
         const String throughMethods = ReadRecording();
 
         ASSERT_TRUE(StartRecording().has_value());
-        ASSERT_TRUE(ControlledReset(Game(), Params(R"({"seed":5})")).has_value());
-        ASSERT_TRUE(ControlledAction(Game(), Params(R"({"type":"roll"})")).has_value());
-        ASSERT_TRUE(ControlledSetState(Game(), Params(R"({"rolls":[4]})")).has_value());
+        ASSERT_TRUE(ControlledReset(Game(), JsonDoc(R"({"seed":5})")).has_value());
+        ASSERT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
+        ASSERT_TRUE(ControlledSetState(Game(), JsonDoc(R"({"rolls":[4]})")).has_value());
         SessionRecorder::GetInstance().Stop();
 
         EXPECT_EQ(ReadRecording(), throughMethods);
@@ -288,10 +323,10 @@ namespace BECore::Tests {
 
     TEST_F(SessionRecorderTest, SwitchingGameEndsTheRecordingButSwitchingToTheActiveOneDoesNot) {
         ASSERT_TRUE(StartRecording().has_value());
-        ASSERT_TRUE(GetJsonBool(Call("switch_game", Params(R"({"name":"ReplayTest"})")), "ok").value_or(false));
+        ASSERT_TRUE(Call("switch_game", R"({"name":"ReplayTest"})").IsOk());
         EXPECT_TRUE(SessionRecorder::GetInstance().IsRecording());
 
-        ASSERT_TRUE(GetJsonBool(Call("switch_game", Params(R"({"name":"FakePlain"})")), "ok").value_or(false));
+        ASSERT_TRUE(Call("switch_game", R"({"name":"FakePlain"})").IsOk());
 
         EXPECT_FALSE(SessionRecorder::GetInstance().IsRecording());
     }
@@ -299,8 +334,8 @@ namespace BECore::Tests {
     TEST_F(SessionRecorderTest, AGameThatIsNotRecordingCostsTheCallersNothing) {
         EXPECT_FALSE(SessionRecorder::GetInstance().IsRecording());
 
-        EXPECT_TRUE(ControlledReset(Game(), Params(R"({})")).has_value());
-        EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"roll"})")).has_value());
+        EXPECT_TRUE(ControlledReset(Game(), JsonDoc(R"({})")).has_value());
+        EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
 
         EXPECT_EQ(SessionRecorder::GetInstance().GetEntryCount(), 0u);
         EXPECT_FALSE(PathExists(_path));

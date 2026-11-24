@@ -1,9 +1,8 @@
-// get_state, list_actions and the state_changed push write through the writing forms of IControllableGame (WriteState, WriteActions): the bytes of the
-// default form, of an overriding form and of the old path through GetState() / GetActions() are the same.
+// get_state, list_actions and the state_changed push write through the writing forms of IControllableGame (WriteState, WriteActions): the bytes are
+// pinned as literals (keys in byte order).
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/GameControlTest.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/ClassMeta.h>
@@ -51,7 +50,7 @@ namespace BECore::Tests {
             /// The text of the answer to @p method
             String Ask(StringView method) {
                 String text;
-                service.Post(MakeRequest(kRequestId, method), [&text](const String& reply) { text = reply; });
+                service.Post(MakeRequestText(kRequestId, method), [&text](const String& reply) { text = reply; });
                 service.Drain();
                 return text;
             }
@@ -61,20 +60,14 @@ namespace BECore::Tests {
                 service.SetEventSink([this](const String& text) { pushes.emplace_back(text.c_str(), text.size()); });
             }
 
-            /// The old path: GetState() / GetActions() as a `Json` document, the text a `Reply(Json)` of it makes
-            static String ReferenceReply(const char* member, const Json& value) {
-                Json result = Json::object();
-                result["game"] = "FakeControllable";
-                result[member] = value;
-                result["version"] = Fake().version;
-                return MakeOkResponse(Json(kRequestId), std::move(result));
+            /// The answer to get_state with the counter of the fake and the version it has now
+            static String StateReply(int counter) {
+                return Format(R"({{"id":{},"ok":true,"result":{{"game":"FakeControllable","state":{{"counter":{}}},"version":{}}}}})", kRequestId, counter, Fake().version);
             }
 
-            static String ReferencePush(const Json& data) {
-                Json event = Json::object();
-                event["data"] = data;
-                event["event"] = "state_changed";
-                return DumpJson(event);
+            /// The answer to list_actions
+            static String ActionsReply() {
+                return Format(R"({{"id":{},"ok":true,"result":{{"actions":[{{"type":"inc"}}],"game":"FakeControllable","version":{}}}}})", kRequestId, Fake().version);
             }
 
             ControlService service;
@@ -84,24 +77,15 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST_F(GameControlWriterTest, GetStateAndListActionsAreTheBytesOfTheJsonPathForTheDefaultAndTheOverridingForm) {
-        for (const bool handWritten : {false, true}) {
-            Fake().handWritten = handWritten;
-            Fake().counter = 9;
-            ++Fake().version;
+    TEST_F(GameControlWriterTest, GetStateAndListActionsAreTheBytesTheDocumentsHadAsAJson) {
+        Fake().counter = 9;
+        ++Fake().version;
 
-            EXPECT_EQ(Ask("get_state"), ReferenceReply("state", *Fake().GetState())) << "handWritten " << handWritten;
-            EXPECT_EQ(Ask("list_actions"), ReferenceReply("actions", *Fake().GetActions())) << "handWritten " << handWritten;
-        }
+        EXPECT_EQ(Ask("get_state"), StateReply(9));
+        EXPECT_EQ(Ask("list_actions"), ActionsReply());
     }
 
-    TEST_F(GameControlWriterTest, TheOverridingFormIsTheOneCalledAndTheDefaultIsNotCounted) {
-        Ask("get_state");
-        Ask("list_actions");
-        EXPECT_EQ(Fake().writeStateCalls, 0);
-        EXPECT_EQ(Fake().writeActionsCalls, 0);
-
-        Fake().handWritten = true;
+    TEST_F(GameControlWriterTest, EachRequestCallsTheWritingFormOnce) {
         Ask("get_state");
         Ask("list_actions");
         Ask("list_actions");
@@ -113,32 +97,22 @@ namespace BECore::Tests {
     TEST_F(GameControlWriterTest, AnErrorFromTheWritingFormIsTheErrorReplyWithNothingOfWhatWasWritten) {
         Fake().failWrites = true;
 
-        EXPECT_EQ(Ask("get_state"), MakeErrorResponse(Json(kRequestId), MakeControlError("write_failed", "the state cannot be written")));
-        EXPECT_EQ(Ask("list_actions"), MakeErrorResponse(Json(kRequestId), MakeControlError("write_failed", "the actions cannot be written")));
+        EXPECT_EQ(Ask("get_state"), MakeErrorResponse(ToString(kRequestId), MakeControlError("write_failed", "the state cannot be written")));
+        EXPECT_EQ(Ask("list_actions"), MakeErrorResponse(ToString(kRequestId), MakeControlError("write_failed", "the actions cannot be written")));
 
         Fake().failWrites = false;  // the scratch of the service is intact after the rollbacks
-        EXPECT_EQ(Ask("get_state"), ReferenceReply("state", *Fake().GetState()));
+        EXPECT_EQ(Ask("get_state"), StateReply(0));
     }
 
-    TEST_F(GameControlWriterTest, ThePushIsTheBytesOfTheJsonPathForTheDefaultAndTheOverridingForm) {
+    TEST_F(GameControlWriterTest, ThePushIsTheBytesTheEventHadAsAJson) {
         CollectPushes();
         service.EndFrame();  // the first look only records the version
 
-        Vector<String> references;
-        for (const bool handWritten : {false, true}) {
-            Fake().handWritten = handWritten;
-            Fake().AddToCounter(3);
-            Json data = Json::object();
-            data["game"] = "FakeControllable";
-            data["state"] = *Fake().GetState();
-            data["version"] = Fake().version;
-            references.push_back(ReferencePush(data));
-            service.EndFrame();
-        }
+        Fake().AddToCounter(3);
+        service.EndFrame();
 
-        ASSERT_EQ(pushes.size(), 2u);
-        EXPECT_EQ(pushes[0], references[0]);
-        EXPECT_EQ(pushes[1], references[1]);
+        ASSERT_EQ(pushes.size(), 1u);
+        EXPECT_EQ(pushes[0], Format(R"({{"data":{{"game":"FakeControllable","state":{{"counter":3}},"version":{}}},"event":"state_changed"}})", Fake().version));
     }
 
     TEST_F(GameControlWriterTest, AStateThatFailsLeavesStateOutOfThePushAndThePushStillGoes) {
@@ -153,23 +127,9 @@ namespace BECore::Tests {
         EXPECT_EQ(pushes[0], String(R"({"data":{"game":"FakeControllable","version":1},"event":"state_changed"})"));
     }
 
-    TEST_F(GameControlWriterTest, AnObserverOfRunUntilStillSeesStateChangedWithAJsonDataThatHasTheState) {
-        Fake().handWritten = true;
+    TEST_F(GameControlWriterTest, AnObserverOfRunUntilSeesStateChangedWithTheState) {
         service.EndFrame();  // records the version
-        service.Post(MakeRequest(1, "run_until",
-                                 [] {
-                                     Json equal = Json::object();
-                                     equal["game"] = "FakeControllable";
-                                     Json event = Json::object();
-                                     event["name"] = "state_changed";
-                                     event["equal"] = std::move(equal);
-                                     Json condition = Json::object();
-                                     condition["event"] = std::move(event);
-                                     Json params = Json::object();
-                                     params["condition"] = std::move(condition);
-                                     params["maxFrames"] = 3;
-                                     return params;
-                                 }()),
+        service.Post(MakeRequestText(1, "run_until", R"({"condition":{"event":{"equal":{"game":"FakeControllable"},"name":"state_changed"}},"maxFrames":3})"),
                      [this](const String& text) { answers.emplace_back(text.c_str(), text.size()); });
         service.Drain();
         ASSERT_TRUE(answers.empty());  // deferred until a frame ends
@@ -178,20 +138,17 @@ namespace BECore::Tests {
         service.EndFrame();
 
         ASSERT_EQ(answers.size(), 1u);
-        const auto answer = ParseJson(answers[0]);
-        ASSERT_TRUE(answer.has_value());
-        const Json* result = FindJsonMember(*answer, "result");
-        ASSERT_NE(result, nullptr);
-        EXPECT_EQ(BoolOf(result, "met"), true);
-        EXPECT_EQ(StringOf(result, "reason"), String("event"));
+        const ControlReply answer(StringView(answers[0].c_str(), answers[0].size()));
+        ASSERT_TRUE(answer.Result().IsObject());
+        EXPECT_EQ(BoolOf(answer.Result(), "met"), true);
+        EXPECT_EQ(StringOf(answer.Result(), "reason"), String("event"));
     }
 
-    TEST_F(GameControlWriterTest, AnObserverGetsTheStateAsAJson) {
-        Fake().handWritten = true;
-        Vector<Json> seen;
-        const auto id = service.AddPublishObserver([&seen](StringView event, const Json& data) {
+    TEST_F(GameControlWriterTest, AnObserverGetsTheStateAsAView) {
+        Vector<ControlReply> seen;  // the data of each event, kept as a document of its own: the view is valid for the call only
+        const auto id = service.AddPublishObserver([&seen](StringView event, JsonView data) {
             if (event == GameControlEvents::kStateChanged) {
-                seen.push_back(data);
+                seen.emplace_back(data.Raw());
             }
         });
         service.EndFrame();
@@ -201,10 +158,10 @@ namespace BECore::Tests {
         service.RemovePublishObserver(id);
 
         ASSERT_EQ(seen.size(), 1u);
-        const Json* state = FindJsonMember(seen[0], "state");
-        ASSERT_NE(state, nullptr);
-        EXPECT_EQ(GetJsonInt(*state, "counter").value_or(-1), 6);
-        EXPECT_EQ(StringOf(&seen[0], "game"), String("FakeControllable"));
+        const JsonView state = MemberOf(seen[0].View(), "state");
+        ASSERT_TRUE(state.IsObject());
+        EXPECT_EQ(IntOf(state, "counter").value_or(-1), 6);
+        EXPECT_EQ(StringOf(seen[0].View(), "game"), String("FakeControllable"));
     }
 
     TEST_F(GameControlWriterTest, AGameThatCannotBeControlledPushesNothing) {
@@ -220,7 +177,6 @@ namespace BECore::Tests {
     TEST_F(GameControlWriterTest, ASecondPushOfAnOverridingFormIntoTheKeptScratchAllocatesNothing) {
         size_t sent = 0;
         service.SetEventSink([&sent](const String& text) { sent += text.size(); });
-        Fake().handWritten = true;
         service.EndFrame();
         Fake().AddToCounter(1);
         service.EndFrame();  // grows the scratches
@@ -235,8 +191,7 @@ namespace BECore::Tests {
     TEST_F(GameControlWriterTest, ASecondGetStateIntoTheKeptScratchAllocatesNothing) {
         size_t sent = 0;
         const auto count = [&sent](const String& text) { sent += text.size(); };
-        Fake().handWritten = true;
-        const String request = MakeRequest(kRequestId, "get_state");
+        const String request = MakeRequestText(kRequestId, "get_state");
         service.Post(request, count);
         service.Drain();  // grows the scratch
         service.Post(request, count);

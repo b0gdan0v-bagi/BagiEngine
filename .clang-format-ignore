@@ -7,7 +7,6 @@ src/Modules/EABase
 src/Modules/EnTT
 src/Modules/fmt
 src/Modules/imgui
-src/Modules/nlohmann
 src/Modules/pugixml
 src/Modules/RmlUi
 src/Modules/tracy

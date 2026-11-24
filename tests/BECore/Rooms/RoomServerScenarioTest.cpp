@@ -145,8 +145,7 @@ namespace BECore::Tests {
         // Seat 1 starts, so the guest plays first, the others follow, and the host plays before the guest's second turn
         constexpr int kGuestSeat = 1;
         constexpr int kTableAtTheDrop = 4;
-        Json options = Json::object();
-        options["firstSeat"] = kGuestSeat;
+        const String options = Format(R"({{"firstSeat":{}}})", kGuestSeat);
         Clients clients;
         ASSERT_NO_FATAL_FAILURE(OpenTable(port, "cards", kHumansOfAPair, clients, options));
         RoomSocketClient& host = *clients[0];
@@ -345,8 +344,8 @@ namespace BECore::Tests {
         auto open = RoomSocketClient::Connect(port);
         auto closed = RoomSocketClient::Connect(port);
         ASSERT_TRUE(open.has_value() && closed.has_value());
-        open->Send(CreateRoomMessage{"cards", "OpenHost", Json::object(), true});
-        closed->Send(CreateRoomMessage{"cards", "ClosedHost", Json::object()});
+        open->Send(CreateRoomMessage{"cards", "OpenHost", String(), true});
+        closed->Send(CreateRoomMessage{"cards", "ClosedHost", String()});
         ASSERT_TRUE(open->WaitFor(RoomMessageTypes::kLobby).has_value());
         ASSERT_TRUE(closed->WaitFor(RoomMessageTypes::kLobby).has_value());
 

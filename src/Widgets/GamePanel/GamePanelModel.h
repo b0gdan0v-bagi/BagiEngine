@@ -1,6 +1,6 @@
 #pragma once
 
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonView.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Types/Types.h>
 #include <cstddef>
@@ -11,10 +11,10 @@ namespace BECore {
     class IGame;
     class IControllableGame;
 
-    /// One element of IControllableGame::GetActions(): its label and the object PerformAction takes as is
+    /// One element of IControllableGame::WriteActions(): its label and the text of the object PerformActionText takes as it is
     struct GamePanelAction {
         String label;
-        Json action;
+        String action;
     };
 
     /// One `BE_FUNCTION` of the active game's type or of an ancestor (the nearest wins a name)
@@ -54,7 +54,7 @@ namespace BECore {
             return _stateVersion;
         }
 
-        /// The state as indented JSON, or `code: message` when GetState() failed; empty for a game that is not controllable
+        /// The state as indented JSON, or `code: message` when WriteState() failed; empty for a game that is not controllable
         [[nodiscard]] const String& GetStateText() const {
             return _stateText;
         }
@@ -87,7 +87,8 @@ namespace BECore {
          */
         void Call(size_t index, StringView arguments);
 
-        /// The text of the last Perform, Reset or Call: the outcome as JSON, `ok`, or the error
+        /// The text of the last Perform, Reset or Call: the outcome as JSON, `ok`, or the error. A returned object shows its keys in the order the
+        /// method wrote them (the stream serializer cannot sort)
         [[nodiscard]] const String& GetLastResult() const {
             return _lastResult;
         }
@@ -123,7 +124,8 @@ namespace BECore {
         uint64_t _version = 0;
     };
 
-    /// The label of an action: `type key=value ...` when it is an object with a string `type` (the Console's syntax), else its compact JSON
-    [[nodiscard]] String FormatGameActionLabel(const Json& action);
+    /// The label of an action: `type key=value ...` when it is an object with a string `type` (the Console's syntax, the other members in byte
+    /// order of their keys), else its text as written
+    [[nodiscard]] String FormatGameActionLabel(JsonView action);
 
 }  // namespace BECore

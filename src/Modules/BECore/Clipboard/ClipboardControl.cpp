@@ -3,8 +3,8 @@
 #include <BECore/Clipboard/Clipboard.h>
 #include <BECore/Clipboard/ClipboardAnswers.h>
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 
 namespace BECore {
@@ -65,7 +65,7 @@ namespace BECore {
         }
 
         void HandleSet(ControlCall& call) {
-            const auto text = GetJsonString(call.Params(), "text");
+            const auto text = GetParamString(call.Params(), "text");
             if (!text) {
                 call.Fail(ControlErrors::kInvalidParams, "'text' has to be a string");
                 return;
@@ -97,7 +97,7 @@ namespace BECore {
             auto waiting = MakeUnique<Waiting>();
             waiting->isDone = []() { return !CoreManager::GetClipboard().HasPending(); };
             // An empty answer, like `quit`: the paste itself reaches the game as `PasteEvent`
-            waiting->finish = [](ControlCall& done) { done.Reply(Json::object()); };
+            waiting->finish = [](ControlCall& done) { done.ReplyEmpty(); };
             Await(call, std::move(waiting));
         }
 

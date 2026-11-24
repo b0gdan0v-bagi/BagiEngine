@@ -1,12 +1,18 @@
 #include "ArtGenSession.h"
 
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/Control/JsonMemberMap.h>
+#include <BECore/Control/JsonTape.h>
+#include <BECore/Control/JsonViewOps.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/File/File.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNode.h>
+#include <EASTL/sort.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenSessionControl.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
@@ -50,35 +56,41 @@ namespace BECore {
         return nullptr;
     }
 
-    ArtGenImageSettings ArtGenSession::ImageSettingsOf(const Json& presetData, StringView preset) const {
-        const Json* data = &presetData;
-        if (presetData.is_null()) {
-            const ArtGenPreset* saved = FindPreset(preset);
-            data = saved != nullptr ? &saved->data : nullptr;
+    StringView ArtGenSession::PresetTextOf(StringView presetData, StringView preset) const {
+        if (!presetData.empty()) {
+            return presetData;
         }
-        const Json* accept = data != nullptr ? FindJsonMember(*data, "accept") : nullptr;
-        if (accept == nullptr) {
+        const ArtGenPreset* saved = FindPreset(preset);
+        return saved != nullptr ? StringView(saved->data) : StringView();
+    }
+
+    ArtGenImageSettings ArtGenSession::ImageSettingsOf(StringView presetData, StringView preset) const {
+        JsonTape tape;
+        if (!tape.Parse(PresetTextOf(presetData, preset))) {
             return {};
         }
-        return ArtGenImageSettingsFromJson(*accept).value_or(ArtGenImageSettings{});
+        const Optional<JsonView> accept = FindParam(JsonView(tape, 0), "accept");
+        if (!accept) {
+            return {};
+        }
+        return ReadArtGenImageSettings(*accept).value_or(ArtGenImageSettings{});
     }
 
     ArtGenImageSettings ArtGenSession::ImageSettingsOfRun() const {
-        return ImageSettingsOf(_run.presetData, StringView(_run.preset));
+        return ImageSettingsOf(StringView(_run.presetData), StringView(_run.preset));
     }
 
-    String ArtGenSession::AtlasOf(const Json& presetData, StringView preset) const {
-        const Json* data = &presetData;
-        if (presetData.is_null()) {
-            const ArtGenPreset* saved = FindPreset(preset);
-            data = saved != nullptr ? &saved->data : nullptr;
+    String ArtGenSession::AtlasOf(StringView presetData, StringView preset) const {
+        JsonTape tape;
+        if (!tape.Parse(PresetTextOf(presetData, preset))) {
+            return {};
         }
-        const Optional<String> group = data != nullptr ? GetJsonString(*data, "atlas") : Optional<String>();
+        const Optional<String> group = GetParamString(JsonView(tape, 0), "atlas");
         return group && IsValidSpriteName(StringView(*group)) ? *group : String();
     }
 
     String ArtGenSession::AtlasOfRun() const {
-        return AtlasOf(_run.presetData, StringView(_run.preset));
+        return AtlasOf(StringView(_run.presetData), StringView(_run.preset));
     }
 
     std::expected<ArtGenAcceptAnswer, ControlError> ArtGenSession::Accept(int64_t seed, StringView sprite, bool useOnSelected, const ArtGenImageSettings* settings, const String* atlas) {
@@ -190,15 +202,15 @@ namespace BECore {
                 return std::unexpected(Format("the preset '{}' is broken: {}", preset, known.error));
             }
         }
-        return Queue(preset, Json(), subject, count, seed, keepVariants, std::move(reference));
+        return Queue(preset, String(), subject, count, seed, keepVariants, std::move(reference));
     }
 
-    std::expected<uint32_t, String> ArtGenSession::RequestDraft(StringView name, const Json& preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants,
+    std::expected<uint32_t, String> ArtGenSession::RequestDraft(StringView name, StringView presetText, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants,
                                                                 Optional<ArtGenReference> reference) {
-        if (auto shape = CheckArtGenPresetShape(preset); !shape) {
+        if (auto shape = CheckArtGenPresetText(presetText); !shape) {
             return std::unexpected(Format("the draft is not a preset: {}", shape.error()));
         }
-        return Queue(name.empty() ? StringView("draft") : name, preset, subject, count, seed, keepVariants, std::move(reference));
+        return Queue(name.empty() ? StringView("draft") : name, String(presetText), subject, count, seed, keepVariants, std::move(reference));
     }
 
     void ArtGenSession::SetReferenceSlot(ArtGenReference reference) {
@@ -216,7 +228,7 @@ namespace BECore {
         }
     }
 
-    std::expected<uint32_t, String> ArtGenSession::Queue(StringView preset, Json presetData, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants,
+    std::expected<uint32_t, String> ArtGenSession::Queue(StringView preset, String presetData, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants,
                                                          Optional<ArtGenReference> reference) {
         if (IsBusy()) {
             return std::unexpected(String("a run is in work; cancel it or wait"));
@@ -311,10 +323,15 @@ namespace BECore {
         return nullptr;
     }
 
-    std::expected<String, String> ArtGenSession::SavePreset(StringView name, const Json& preset) {
+    std::expected<String, String> ArtGenSession::SavePreset(StringView name, StringView presetText) {
         if (!IsValidSpriteName(name)) {
             return std::unexpected(String("a preset name is 1 to 64 of A-Z a-z 0-9 _ -"));
         }
+        JsonTape tape;
+        if (!tape.Parse(presetText)) {
+            return std::unexpected(String("a preset is a JSON object"));
+        }
+        const JsonView preset(tape, 0);
         if (auto shape = CheckArtGenPresetShape(preset); !shape) {
             return std::unexpected(shape.error());
         }
@@ -332,12 +349,12 @@ namespace BECore {
         // Shown at once as the game's own; the service checks it at the look the next poll asks for
         ArtGenPreset saved;
         saved.name = String(name);
-        saved.title = GetJsonString(preset, "title").value_or(saved.name);
+        saved.title = GetParamString(preset, "title").value_or(saved.name);
         saved.source = "game";
-        if (const ArtGenWorkflow* workflow = FindWorkflow(StringView(GetJsonString(preset, "workflow").value_or(String()))); workflow != nullptr) {
+        if (const ArtGenWorkflow* workflow = FindWorkflow(StringView(GetParamString(preset, "workflow").value_or(String()))); workflow != nullptr) {
             saved.kind = workflow->kind;
         }
-        saved.data = preset;
+        saved.data = String(presetText);
         auto existing = std::find_if(_status.presets.begin(), _status.presets.end(), [&](const ArtGenPreset& known) { return StringView(known.name) == name; });
         if (existing != _status.presets.end()) {
             *existing = std::move(saved);
@@ -382,16 +399,16 @@ namespace BECore {
         return IsServiceConnected() && StringView(_status.state) == kGeneratorReady;
     }
 
-    // By hand (ArtGenSession.h, `HandlePoll`): `request.preset` is a name or an inline draft document, a `Json` payload in the middle of the reply
-    std::expected<Json, ControlError> ArtGenSession::HandlePoll(const Json& params) {
-        if (!params.is_object()) {
+    // By hand (ArtGenSession.h, `HandlePoll`): `request.preset` is a name or the text of an inline draft in the middle of the reply
+    std::expected<String, ControlError> ArtGenSession::HandlePoll(JsonView params) {
+        if (!params.IsObject()) {
             return std::unexpected(InvalidParams("params must be an object"));
         }
         ArtGenServiceStatus status;
         status.state = StringOr(params, "state", kGeneratorReady);
         status.reason = StringOr(params, "reason");
         status.generator = StringOr(params, "generator");
-        status.startedHere = GetJsonBool(params, "startedHere").value_or(false);
+        status.startedHere = GetParamBool(params, "startedHere").value_or(false);
         const bool wasConnected = IsServiceConnected();
         const bool changed = status.state != _status.state || status.reason != _status.reason || status.generator != _status.generator || status.startedHere != _status.startedHere;
         status.presets = std::move(_status.presets);
@@ -404,16 +421,15 @@ namespace BECore {
             ++_version;
         }
 
-        Json reply = Json::object();
-        reply["gameRoot"] = ToJsonString(_gameRoot);
-        if (_refreshCatalog) {
-            _refreshCatalog = false;
-            reply["refresh"] = true;
-        }
-        if (_stopService) {
+        // What the reply says is decided first and written once, so its keys come out in byte order whatever the order of the decisions
+        const bool refresh = std::exchange(_refreshCatalog, false);
+        const bool shutdown = std::exchange(_stopService, false);
+        bool sendRequest = false;
+        bool sendSetup = false;
+        Optional<uint32_t> cancel;
+        Optional<uint32_t> setupCancel;
+        if (shutdown) {
             // The service exits on this answer and reports nothing more: what it was doing ends here, and it is gone at once
-            _stopService = false;
-            reply["shutdown"] = true;
             if (_run.state == ArtGenRunState::Running) {
                 _run.state = ArtGenRunState::Cancelled;
                 _run.step = 0;
@@ -426,58 +442,120 @@ namespace BECore {
             }
             _lastPollSeconds = -1.0;
             ++_version;
-            return reply;
+        } else {
+            PumpSets();
+            if (_run.state == ArtGenRunState::Queued) {
+                sendRequest = true;
+                _run.state = ArtGenRunState::Running;
+                ++_version;
+            } else if (_run.state == ArtGenRunState::Running && _run.cancelRequested) {
+                cancel = _run.id;
+            }
+            if (_setup.state == ArtGenSetupState::Queued) {
+                sendSetup = true;
+                _setup.state = ArtGenSetupState::Running;
+                ++_version;
+            } else if (_setup.state == ArtGenSetupState::Running && _setup.cancelRequested) {
+                setupCancel = _setup.id;
+            }
         }
-        PumpSets();
-        if (_run.state == ArtGenRunState::Queued) {
-            Json request = Json::object();
-            request["id"] = _run.id;
-            request["preset"] = _run.presetData.is_null() ? ToJsonString(_run.preset) : _run.presetData;
-            if (!_run.presetData.is_null()) {
-                request["presetName"] = ToJsonString(_run.preset);
-            }
-            request["subject"] = ToJsonString(_run.subject);
-            request["count"] = _run.count;
-            request["seed"] = _run.seed ? Json(*_run.seed) : Json();
-            if (_run.reference) {
-                request["reference"] = ArtGenReferenceToJson(*_run.reference);
-            }
+
+        String reply;
+        JsonWriter writer(reply);
+        writer.BeginObject();
+        if (cancel) {
+            writer.Member("cancel", *cancel);
+        }
+        writer.Member("gameRoot", StringView(_gameRoot));
+        if (refresh) {
+            writer.Member("refresh", true);
+        }
+        if (sendRequest) {
+            const bool draft = !_run.presetData.empty();
+            writer.Key("request");
+            writer.BeginObject();
+            writer.Member("count", _run.count);
+            writer.Member("id", _run.id);
             if (!_run.outDir.empty()) {
-                request["outDir"] = ToJsonString(_run.outDir);
-                request["name"] = ToJsonString(_run.name);
+                writer.Member("name", StringView(_run.name));
+                writer.Member("outDir", StringView(_run.outDir));
             }
-            reply["request"] = std::move(request);
-            _run.state = ArtGenRunState::Running;
-            ++_version;
-        } else if (_run.state == ArtGenRunState::Running && _run.cancelRequested) {
-            reply["cancel"] = _run.id;
+            writer.Key("preset");
+            if (draft) {
+                writer.Raw(StringView(_run.presetData));
+            } else {
+                writer.Value(StringView(_run.preset));
+            }
+            if (draft) {
+                writer.Member("presetName", StringView(_run.preset));
+            }
+            if (_run.reference) {
+                writer.Key("reference");
+                WriteArtGenReference(writer, *_run.reference);
+            }
+            writer.Key("seed");
+            if (_run.seed) {
+                writer.Value(*_run.seed);
+            } else {
+                writer.Null();
+            }
+            writer.Member("subject", StringView(_run.subject));
+            writer.EndObject();
         }
-        if (_setup.state == ArtGenSetupState::Queued) {
-            Json setup = Json::object();
-            setup["id"] = _setup.id;
-            setup["action"] = ToStdString(EnumUtils<ArtGenSetupAction>::ToString(_setup.action));
-            reply["setup"] = std::move(setup);
-            _setup.state = ArtGenSetupState::Running;
-            ++_version;
-        } else if (_setup.state == ArtGenSetupState::Running && _setup.cancelRequested) {
-            reply["setupCancel"] = _setup.id;
+        if (sendSetup) {
+            writer.Key("setup");
+            writer.BeginObject();
+            writer.Member("action", EnumUtils<ArtGenSetupAction>::ToString(_setup.action));
+            writer.Member("id", _setup.id);
+            writer.EndObject();
         }
+        if (setupCancel) {
+            writer.Member("setupCancel", *setupCancel);
+        }
+        if (shutdown) {
+            writer.Member("shutdown", true);
+        }
+        writer.EndObject();
         return reply;
     }
 
-    void ArtGenSession::ReadCatalog(const Json& params) {
-        Json catalog = Json::object();
-        for (const StringView key : {StringView("presets"), StringView("workflows")}) {
-            const Json* list = FindJsonMember(params, key);
-            catalog[ToStdString(key)] = list != nullptr && list->is_array() ? *list : Json::array();
+    namespace {
+
+        /// The raw text of the list @p key of a poll; `[]` when it is absent or not a list, as the old document said
+        StringView CatalogListText(JsonView params, StringView key, JsonView& list) {
+            const Optional<JsonView> member = FindParam(params, key);
+            if (member && member->IsArray()) {
+                list = *member;
+                return member->Raw();
+            }
+            list = JsonView();
+            return "[]";
         }
-        if (catalog == _catalog) {
-            return;  // the service sends the lists every poll; they change rarely
+
+        /// An input of a workflow: its name, in the order of the bytes of the name, the first of equal names
+        struct CatalogInput {
+            String name;
+            JsonView described;
+            size_t order = 0;
+        };
+
+    }  // namespace
+
+    void ArtGenSession::ReadCatalog(JsonView params) {
+        JsonView presets;
+        JsonView workflows;
+        const StringView presetsText = CatalogListText(params, "presets", presets);
+        const StringView workflowsText = CatalogListText(params, "workflows", workflows);
+        // The service sends the lists every poll and they change rarely: the same bytes are not read again. A list that only differs in its
+        // formatting is read again, which bumps the version and is harmless
+        if (presetsText == StringView(_catalogPresets) && workflowsText == StringView(_catalogWorkflows)) {
+            return;
         }
-        _catalog = std::move(catalog);
+        _catalogPresets.assign(presetsText.data(), presetsText.size());
+        _catalogWorkflows.assign(workflowsText.data(), workflowsText.size());
         _status.presets.clear();
-        for (const Json& item : _catalog["presets"]) {
-            if (!item.is_object()) {
+        for (const JsonView item : presets.Items()) {
+            if (!item.IsObject()) {
                 continue;
             }
             ArtGenPreset preset;
@@ -486,16 +564,16 @@ namespace BECore {
             preset.source = StringOr(item, "source", "game");
             preset.kind = StringOr(item, "kind", "image");
             preset.error = StringOr(item, "error");
-            if (const Json* data = FindJsonMember(item, "preset"); data != nullptr && data->is_object()) {
-                preset.data = *data;
+            if (const Optional<JsonView> data = FindParam(item, "preset"); data && data->IsObject()) {
+                preset.data = SortedTextOf(*data);
             }
             if (!preset.name.empty()) {
                 _status.presets.push_back(std::move(preset));
             }
         }
         _status.workflows.clear();
-        for (const Json& item : _catalog["workflows"]) {
-            if (!item.is_object()) {
+        for (const JsonView item : workflows.Items()) {
+            if (!item.IsObject()) {
                 continue;
             }
             ArtGenWorkflow workflow;
@@ -503,16 +581,35 @@ namespace BECore {
             workflow.source = StringOr(item, "source", "engine");
             workflow.kind = StringOr(item, "kind", "image");
             workflow.error = StringOr(item, "error");
-            if (const Json* inputs = FindJsonMember(item, "inputs"); inputs != nullptr && inputs->is_object()) {
-                for (const auto& [name, described] : inputs->items()) {
+            if (const Optional<JsonView> inputs = FindParam(item, "inputs"); inputs && inputs->IsObject()) {
+                // The form lists the inputs in the order of their names, not of the document
+                Vector<CatalogInput> ordered;
+                ordered.reserve(inputs->Size());
+                for (const JsonMember member : inputs->Members()) {
+                    CatalogInput& entry = ordered.emplace_back();
+                    member.key.ReadText(entry.name);
+                    entry.described = member.value;
+                    entry.order = ordered.size();
+                }
+                eastl::sort(ordered.begin(), ordered.end(), [](const CatalogInput& a, const CatalogInput& b) {
+                    const int byName = StringView(a.name).compare(StringView(b.name));
+                    return byName != 0 ? byName < 0 : a.order < b.order;
+                });
+                for (size_t i = 0; i < ordered.size(); ++i) {
+                    if (i > 0 && ordered[i].name == ordered[i - 1].name) {
+                        continue;
+                    }
                     ArtGenWorkflowInput input;
-                    input.name = String(FromStd(name));
-                    if (described.is_object()) {
-                        if (const Json* value = FindJsonMember(described, "default"); value != nullptr) {
-                            input.defaultValue = *value;
+                    input.name = ordered[i].name;
+                    const JsonView described = ordered[i].described;
+                    if (described.IsObject()) {
+                        if (const Optional<JsonView> value = FindParam(described, "default")) {
+                            input.defaultValue = ArtGenInputValue::Read(*value);
                         }
-                        if (const Json* choices = FindJsonMember(described, "choices"); choices != nullptr && choices->is_array()) {
-                            input.choices = *choices;
+                        if (const Optional<JsonView> choices = FindParam(described, "choices"); choices && choices->IsArray()) {
+                            for (const JsonView choice : choices->Items()) {
+                                input.choices.push_back(ArtGenInputValue::Read(choice));
+                            }
                         }
                     }
                     workflow.inputs.push_back(std::move(input));
@@ -525,28 +622,28 @@ namespace BECore {
         ++_version;
     }
 
-    ArtGenRun* ArtGenSession::RunOf(const Json& params) {
-        const auto id = GetJsonInt(params, "id");
+    ArtGenRun* ArtGenSession::RunOf(JsonView params) {
+        const auto id = GetParamInt(params, "id");
         if (id && _run.state == ArtGenRunState::Running && *id == static_cast<int64_t>(_run.id)) {
             return &_run;
         }
         return nullptr;
     }
 
-    std::expected<ArtGenStaleAnswer, ControlError> ArtGenSession::HandleProgress(const Json& params) {
+    std::expected<ArtGenStaleAnswer, ControlError> ArtGenSession::HandleProgress(JsonView params) {
         ArtGenRun* run = RunOf(params);
         ArtGenStaleAnswer reply;
         reply.stale = run == nullptr;
         if (run != nullptr) {
-            run->image = static_cast<int32_t>(GetJsonInt(params, "image").value_or(run->image));
-            run->step = static_cast<int32_t>(GetJsonInt(params, "step").value_or(0));
-            run->steps = static_cast<int32_t>(GetJsonInt(params, "steps").value_or(0));
+            run->image = static_cast<int32_t>(GetParamInt(params, "image").value_or(run->image));
+            run->step = static_cast<int32_t>(GetParamInt(params, "step").value_or(0));
+            run->steps = static_cast<int32_t>(GetParamInt(params, "steps").value_or(0));
             ++_version;
         }
         return reply;
     }
 
-    std::expected<ArtGenStaleAnswer, ControlError> ArtGenSession::HandleImage(const Json& params) {
+    std::expected<ArtGenStaleAnswer, ControlError> ArtGenSession::HandleImage(JsonView params) {
         ArtGenRun* run = RunOf(params);
         ArtGenStaleAnswer reply;
         reply.stale = run == nullptr;
@@ -557,7 +654,7 @@ namespace BECore {
         variant.path = StringOr(params, "path");
         variant.provenancePath = StringOr(params, "provenance");
         variant.kind = StringOr(params, "kind", "image");
-        const auto seed = GetJsonInt(params, "seed");
+        const auto seed = GetParamInt(params, "seed");
         if (variant.path.empty() || !seed) {
             return std::unexpected(InvalidParams("'path' (string) and 'seed' (integer) are required"));
         }
@@ -570,7 +667,7 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<ArtGenStaleAnswer, ControlError> ArtGenSession::HandleDone(const Json& params) {
+    std::expected<ArtGenStaleAnswer, ControlError> ArtGenSession::HandleDone(JsonView params) {
         ArtGenRun* run = RunOf(params);
         ArtGenStaleAnswer reply;
         reply.stale = run == nullptr;
@@ -595,36 +692,35 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<ArtGenQueuedAnswer, ControlError> ArtGenSession::HandleGenerate(const Json& params) {
-        const Json* presetJson = FindJsonMember(params, "preset");
-        const auto preset = GetJsonString(params, "preset");
-        const auto subject = GetJsonString(params, "subject");
-        const bool draft = presetJson != nullptr && presetJson->is_object();
+    std::expected<ArtGenQueuedAnswer, ControlError> ArtGenSession::HandleGenerate(JsonView params) {
+        const Optional<JsonView> presetJson = FindParam(params, "preset");
+        const auto preset = GetParamString(params, "preset");
+        const auto subject = GetParamString(params, "subject");
+        const bool draft = presetJson && presetJson->IsObject();
         if ((!preset && !draft) || !subject) {
             return std::unexpected(InvalidParams("'preset' must be a name or a preset object and 'subject' a string"));
         }
-        const Json* countJson = FindJsonMember(params, "count");
-        const auto count = countJson != nullptr ? GetJsonInt(params, "count") : Optional<int64_t>(4);
+        const auto count = FindParam(params, "count") ? GetParamInt(params, "count") : Optional<int64_t>(4);
         if (!count) {
             return std::unexpected(InvalidParams("'count' must be an integer"));
         }
         Optional<int64_t> seed;
-        if (const Json* seedJson = FindJsonMember(params, "seed"); seedJson != nullptr && !seedJson->is_null()) {
-            seed = GetJsonInt(params, "seed");
+        if (IsGiven(params, "seed")) {
+            seed = GetParamInt(params, "seed");
             if (!seed) {
                 return std::unexpected(InvalidParams("'seed' must be an integer"));
             }
         }
         Optional<ArtGenReference> reference;
         if (IsGiven(params, "reference")) {
-            auto read = ReadArtGenReference(*FindJsonMember(params, "reference"));
+            auto read = ReadArtGenReference(*FindParam(params, "reference"));
             if (!read) {
                 return std::unexpected(InvalidParams(read.error()));
             }
             reference = std::move(*read);
         }
         const int32_t clamped = *count > kMaxCount || *count < 0 ? 0 : static_cast<int32_t>(*count);
-        auto id = draft ? RequestDraft(GetJsonString(params, "presetName").value_or(String()), *presetJson, *subject, clamped, seed, false, std::move(reference))
+        auto id = draft ? RequestDraft(GetParamString(params, "presetName").value_or(String()), SortedTextOf(*presetJson), *subject, clamped, seed, false, std::move(reference))
                         : Request(*preset, *subject, clamped, seed, false, std::move(reference));
         if (!id) {
             const StringView code = IsBusy() ? kBusyCode : ControlErrors::kInvalidParams;
@@ -636,50 +732,65 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<ArtGenAcceptAnswer, ControlError> ArtGenSession::HandleAccept(const Json& params) {
-        const auto seed = GetJsonInt(params, "seed");
+    std::expected<ArtGenAcceptAnswer, ControlError> ArtGenSession::HandleAccept(JsonView params) {
+        const auto seed = GetParamInt(params, "seed");
         if (!seed) {
             return std::unexpected(InvalidParams("'seed' (integer) is required"));
         }
-        const Json* use = FindJsonMember(params, "useOnSelected");
-        if (use != nullptr && !use->is_boolean()) {
+        const Optional<JsonView> use = FindParam(params, "useOnSelected");
+        if (use && !use->IsBool()) {
             return std::unexpected(InvalidParams("'useOnSelected' must be a boolean"));
         }
-        const bool useOnSelected = use != nullptr && use->get<bool>();
+        const bool useOnSelected = use && use->AsBool().value_or(false);
         const ArtGenVariant* variant = FindVariant(*seed);
         if (variant != nullptr && variant->IsAudio()) {
             ArtGenSoundTarget target;
-            target.name = GetJsonString(params, "name").value_or(String());
-            target.clip = GetJsonString(params, "clip").value_or(String());
-            const Json* soundJson = FindJsonMember(params, "sound");
-            auto settings = ArtGenSoundSettingsFromJson(soundJson != nullptr ? *soundJson : Json());
+            target.name = GetParamString(params, "name").value_or(String());
+            target.clip = GetParamString(params, "clip").value_or(String());
+            const Optional<JsonView> soundJson = FindParam(params, "sound");
+            auto settings = ReadArtGenSoundSettings(soundJson ? *soundJson : JsonView());
             if (!settings) {
                 return std::unexpected(InvalidParams(settings.error()));
             }
             return AcceptSound(*seed, target, *settings, useOnSelected);
         }
-        const auto sprite = GetJsonString(params, "sprite");
+        const auto sprite = GetParamString(params, "sprite");
         if (!sprite) {
             return std::unexpected(InvalidParams("'sprite' (string) is required for an image"));
         }
         ArtGenImageSettings settings = ImageSettingsOfRun();
-        if (const Json* image = FindJsonMember(params, "image"); image != nullptr && !image->is_null()) {
-            if (!image->is_object()) {
+        if (const Optional<JsonView> image = FindParam(params, "image"); image && !image->IsNull()) {
+            if (!image->IsObject()) {
                 return std::unexpected(InvalidParams("'image' must be an object {trim, padding, maxSize}"));
             }
-            Json merged = ArtGenImageSettingsToJson(settings);
-            for (const auto& [key, value] : image->items()) {
-                merged[key] = value;
+            // The call's keys over the preset's settings: the settings as a record (`JsonMemberMap`, keys in byte order) take each key of the call
+            // as its value, then are read like any record, so a key the call leaves out keeps the preset's and a bad one names itself
+            JsonMemberMap merged;
+            String base;
+            JsonWriter baseWriter(base);
+            WriteArtGenImageSettings(baseWriter, settings);
+            JsonTape baseTape;
+            static_cast<void>(baseTape.Parse(base));
+            merged.Assign(JsonView(baseTape, 0), {});
+            for (const JsonMember member : image->Members()) {
+                String key;
+                member.key.ReadText(key);
+                merged.Set(key, member.value.Raw());
             }
-            auto parsed = ArtGenImageSettingsFromJson(merged);
+            String mergedText;
+            JsonWriter mergedWriter(mergedText);
+            merged.Write(mergedWriter);
+            JsonTape mergedTape;
+            static_cast<void>(mergedTape.Parse(mergedText));
+            auto parsed = ReadArtGenImageSettings(JsonView(mergedTape, 0));
             if (!parsed) {
                 return std::unexpected(InvalidParams(Format("'image': {}", parsed.error())));
             }
             settings = *parsed;
         }
         String atlas = AtlasOfRun();
-        if (const Json* group = FindJsonMember(params, "atlas"); group != nullptr && !group->is_null()) {
-            const auto name = GetJsonString(params, "atlas");
+        if (IsGiven(params, "atlas")) {
+            const auto name = GetParamString(params, "atlas");
             if (!name || (!name->empty() && !IsValidSpriteName(StringView(*name)))) {
                 return std::unexpected(InvalidParams("'atlas' must be an atlas group name (1 to 64 of A-Z a-z 0-9 _ -) or \"\" for none"));
             }
@@ -688,8 +799,8 @@ namespace BECore {
         return Accept(*seed, *sprite, useOnSelected, &settings, &atlas);
     }
 
-    std::expected<ArtGenStaleAnswer, ControlError> ArtGenSession::HandleSetupReport(const Json& params) {
-        const auto id = GetJsonInt(params, "id");
+    std::expected<ArtGenStaleAnswer, ControlError> ArtGenSession::HandleSetupReport(JsonView params) {
+        const auto id = GetParamInt(params, "id");
         const bool current = id && _setup.state == ArtGenSetupState::Running && *id == static_cast<int64_t>(_setup.id);
         ArtGenStaleAnswer reply;
         reply.stale = !current;
@@ -701,11 +812,11 @@ namespace BECore {
             _setup.platform = StringOr(params, "platform");
             _setup.platformNote = StringOr(params, "note");
             _setup.root = StringOr(params, "root");
-            _setup.downloadBytes = GetJsonInt(params, "downloadBytes").value_or(0);
+            _setup.downloadBytes = GetParamInt(params, "downloadBytes").value_or(0);
             _setup.plan.clear();
-            if (const Json* steps = FindJsonMember(params, "steps"); steps != nullptr && steps->is_array()) {
-                for (const Json& item : *steps) {
-                    if (!item.is_object()) {
+            if (const Optional<JsonView> steps = FindParam(params, "steps"); steps && steps->IsArray()) {
+                for (const JsonView item : steps->Items()) {
+                    if (!item.IsObject()) {
                         continue;
                     }
                     ArtGenSetupStep step;
@@ -713,7 +824,7 @@ namespace BECore {
                     step.dest = StringOr(item, "dest");
                     step.state = StringOr(item, "state");
                     step.licence = StringOr(item, "licence");
-                    step.size = GetJsonInt(item, "size").value_or(0);
+                    step.size = GetParamInt(item, "size").value_or(0);
                     _setup.plan.push_back(std::move(step));
                 }
             }
@@ -722,16 +833,16 @@ namespace BECore {
             _setup.done = 0;
             _setup.total = 0;
         } else if (event == "progress") {
-            _setup.done = GetJsonInt(params, "done").value_or(0);
-            _setup.total = GetJsonInt(params, "total").value_or(0);
+            _setup.done = GetParamInt(params, "done").value_or(0);
+            _setup.total = GetParamInt(params, "total").value_or(0);
         } else if (event == "log") {
             _setup.log = StringOr(params, "text");
         } else if (event == "done") {
-            const Json* ok = FindJsonMember(params, "ok");
-            if (ok == nullptr || !ok->is_boolean()) {
+            const Optional<JsonView> ok = FindParam(params, "ok");
+            if (!ok || !ok->IsBool()) {
                 return std::unexpected(InvalidParams("'ok' (boolean) is required with the event done"));
             }
-            const bool succeeded = ok->get<bool>();
+            const bool succeeded = ok->AsBool().value_or(false);
             _setup.state = succeeded ? ArtGenSetupState::Done : ArtGenSetupState::Failed;
             _setup.error = succeeded ? String() : StringOr(params, "error", "the service gave no reason");
             _setup.current.clear();
@@ -742,8 +853,8 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<ArtGenSetupQueuedAnswer, ControlError> ArtGenSession::HandleSetup(const Json& params) {
-        const auto name = GetJsonString(params, "action");
+    std::expected<ArtGenSetupQueuedAnswer, ControlError> ArtGenSession::HandleSetup(JsonView params) {
+        const auto name = GetParamString(params, "action");
         if (!name) {
             return std::unexpected(InvalidParams("'action' must be a string"));
         }
@@ -768,13 +879,13 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<ArtGenSavedAnswer, ControlError> ArtGenSession::HandleSavePreset(const Json& params) {
-        const auto name = GetJsonString(params, "name");
-        const Json* preset = FindJsonMember(params, "preset");
-        if (!name || preset == nullptr) {
+    std::expected<ArtGenSavedAnswer, ControlError> ArtGenSession::HandleSavePreset(JsonView params) {
+        const auto name = GetParamString(params, "name");
+        const Optional<JsonView> preset = FindParam(params, "preset");
+        if (!name || !preset) {
             return std::unexpected(InvalidParams("'name' (string) and 'preset' (object) are required"));
         }
-        auto saved = SavePreset(*name, *preset);
+        auto saved = SavePreset(*name, SortedTextOf(*preset));
         if (!saved) {
             return std::unexpected(InvalidParams(saved.error()));
         }
@@ -783,7 +894,7 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<ArtGenCancelAnswer, ControlError> ArtGenSession::HandleCancel(const Json& params) {
+    std::expected<ArtGenCancelAnswer, ControlError> ArtGenSession::HandleCancel(JsonView params) {
         if (IsGiven(params, "job") || IsGiven(params, "set") || IsGiven(params, "all")) {
             return CancelFromParams(params);
         }
@@ -829,7 +940,7 @@ namespace BECore {
         run.id = _run.id;
         run.state = String(EnumUtils<ArtGenRunState>::ToString(_run.state));
         run.preset = _run.preset;
-        run.draft = !_run.presetData.is_null();
+        run.draft = !_run.presetData.empty();
         run.subject = _run.subject;
         run.count = _run.count;
         run.seed = _run.seed;

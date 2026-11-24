@@ -1,6 +1,7 @@
 #include "UIControl.h"
 
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -475,14 +476,15 @@ namespace BECore {
         };
 
         void HandleUIClick(ControlCall& call) {
-            const auto nameText = GetJsonString(call.Params(), "name");
+            const JsonView params = call.Params();
+            const auto nameText = GetParamString(params, "name");
             if (!nameText || nameText->empty()) {
                 call.Fail(ControlErrors::kInvalidParams, "'name' has to be the name of an element");
                 return;
             }
             Optional<PoolString> onlyNode;
-            if (FindJsonMember(call.Params(), "canvas") != nullptr) {
-                const auto nodeText = GetJsonString(call.Params(), "canvas");
+            if (FindParam(params, "canvas")) {
+                const auto nodeText = GetParamString(params, "canvas");
                 if (!nodeText) {
                     call.Fail(ControlErrors::kInvalidParams, "'canvas' has to be the name of a scene node");
                     return;
@@ -491,8 +493,8 @@ namespace BECore {
                 onlyNode = PoolString::Find(StringView(nodeText->c_str(), nodeText->size())).value_or(PoolString{});
             }
             float at = kDefaultAt;
-            if (FindJsonMember(call.Params(), "at") != nullptr) {
-                const auto atNumber = GetJsonNumber(call.Params(), "at");
+            if (FindParam(params, "at")) {
+                const auto atNumber = GetParamNumber(params, "at");
                 if (!atNumber || !(*atNumber >= 0.0 && *atNumber <= 1.0)) {
                     call.Fail(ControlErrors::kInvalidParams, "'at' has to be a number from 0 to 1 (the horizontal position inside the element)");
                     return;

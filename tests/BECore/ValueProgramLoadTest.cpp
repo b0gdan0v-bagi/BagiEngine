@@ -3,9 +3,7 @@
 
 #include <BECore/Animation/Lerp.h>
 #include <BECore/Config/ConfigFactory.h>
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
-#include <BECore/Control/JsonSerializer.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -16,6 +14,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/LogRecorder.h>
 #include <Common/Printers.h>
+#include <Common/SerializedText.h>
 #include <cmath>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -311,14 +310,14 @@ namespace BECore::Tests {
     }
 
     TEST(ValueProgramLoadTest, JsonReadsTheObjectWithExpr) {
-        const auto parsed = ParseJson(R"x({"context": [{"name": "caster", "type": "ValueUnitStats"}, {"name": "cast", "type": "ValueCastInfo"}],
+        const StringView text(R"x({"context": [{"name": "caster", "type": "ValueUnitStats"}, {"name": "cast", "type": "ValueCastInfo"}],
                                           "damage": {"expr": "caster.attack * (100 + cast.level * 10) / 100"}, "total": {"expr": "caster.score / 3 + 1"},
                                           "power": {"expr": "lerp(caster.speed, cast.power, 0.25)"}, "precise": {"expr": "caster.precise * 2 + sqrt(2.0)"},
                                           "ready": {"expr": "caster.alive && cast.level > 2"}})x");
-        ASSERT_TRUE(parsed.has_value());
         ValueFormulaDocument document;
         const ValueLinkScope scope(kDocumentName);
-        JsonDeserializer reader(*parsed);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(text));
         document.Deserialize(reader);
         EXPECT_FALSE(reader.HasErrors()) << ReportsOf(reader).c_str();
         ExpectFormulasEqualPlainCode(document);
@@ -448,13 +447,12 @@ namespace BECore::Tests {
         ExpectSameTypedDocument(fromBinary, document);
         ExpectTypedFormulasEqualPlainCode(fromBinary);
 
-        JsonSerializer serializer;
-        document.Serialize(serializer);
-        const Json json = serializer.Take();
+        const String json = SerializedText(document);
         ValueFormulaDocument fromJson;
         {
             const ValueLinkScope scope(kDocumentName);
-            JsonDeserializer reader(json);
+            JsonDeserializer reader;
+            ASSERT_TRUE(reader.Load(json));
             fromJson.Deserialize(reader);
             EXPECT_FALSE(reader.HasErrors()) << ReportsOf(reader).c_str();
         }
@@ -463,15 +461,15 @@ namespace BECore::Tests {
     }
 
     TEST(ValueProgramLoadTest, JsonReadsTheObjectWithExprOfEveryType) {
-        const auto parsed = ParseJson(R"x({"context": [{"name": "caster", "type": "ValueUnitStats"}, {"name": "cast", "type": "ValueCastInfo"}],
+        const StringView text(R"x({"context": [{"name": "caster", "type": "ValueUnitStats"}, {"name": "cast", "type": "ValueCastInfo"}],
                                           "shift": {"expr": "caster.position * 2 + vec2(1, 0)"}, "aim": {"expr": "caster.velocity * 2 + cast.target"},
                                           "plane": {"expr": "caster.plane / 2 + vec4(1, 2, 3, 4)"}, "cell": {"expr": "ivec2(caster.cell.x + 1, 2)"},
                                           "facing": {"expr": "lerp(caster.facing, quat(0, 0, 1, 0), 0.25)"}, "tint": {"expr": "lerp(caster.tint, color(0, 0, 0, 255), 0.5)"},
                                           "element": {"expr": "select(caster.alive, Fire, caster.element)"}, "label": {"expr": "select(caster.alive, 'burn', 'chill')"}})x");
-        ASSERT_TRUE(parsed.has_value());
         ValueFormulaDocument document;
         const ValueLinkScope scope(kDocumentName);
-        JsonDeserializer reader(*parsed);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(text));
         document.Deserialize(reader);
         EXPECT_FALSE(reader.HasErrors()) << ReportsOf(reader).c_str();
         ExpectTypedFormulasEqualPlainCode(document);
@@ -503,13 +501,12 @@ namespace BECore::Tests {
         }
         ExpectFoldedConstants(fromBinary);
 
-        JsonSerializer serializer;
-        document.Serialize(serializer);
-        const Json json = serializer.Take();
+        const String json = SerializedText(document);
         ValueFormulaDocument fromJson;
         {
             const ValueLinkScope scope(kDocumentName);
-            JsonDeserializer reader(json);
+            JsonDeserializer reader;
+            ASSERT_TRUE(reader.Load(json));
             fromJson.Deserialize(reader);
             EXPECT_FALSE(reader.HasErrors()) << ReportsOf(reader).c_str();
         }
@@ -576,10 +573,10 @@ namespace BECore::Tests {
         EXPECT_TRUE(HasText(binaryReports, "ValuePoint")) << binaryReports.c_str();
         EXPECT_TRUE(fromBinary.spot.IsConst());
 
-        const auto parsed = ParseJson(R"({"spot": {"expr": "caster.spawn"}})");
-        ASSERT_TRUE(parsed.has_value());
+        const StringView text(R"({"spot": {"expr": "caster.spawn"}})");
         ValueFormulaDocument fromJson;
-        JsonDeserializer reader(*parsed);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(text));
         fromJson.Deserialize(reader);
         EXPECT_TRUE(reader.HasErrors());
         EXPECT_TRUE(fromJson.spot.IsConst());
@@ -723,12 +720,12 @@ namespace BECore::Tests {
         EXPECT_TRUE(skill.damage.IsConst());
         EXPECT_EQ(skill.damage.GetConst(), 7);
 
-        const auto parsed = ParseJson(R"({"damage": {"expr": 5}})");
-        ASSERT_TRUE(parsed.has_value());
+        const StringView text(R"({"damage": {"expr": 5}})");
         ValueSkill fromJson;
         {
             const ValueLinkScope scope(world.declaration);
-            JsonDeserializer reader(*parsed);
+            JsonDeserializer reader;
+            ASSERT_TRUE(reader.Load(text));
             fromJson.Deserialize(reader);
             EXPECT_TRUE(reader.HasErrors());
         }

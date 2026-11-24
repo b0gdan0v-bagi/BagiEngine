@@ -1,9 +1,7 @@
 // A script as a field of a content type (Values/Effects/EffectScriptAccessor.h): `<onTick script="..."/>` read from XML, binary and JSON, saved again, and the line a mistake gives. The
 // document is `EffectsDocument` of EffectsDocument.h (its generated code is included here); the context objects are those of ValueTestTypes.h and ProgramDomainTypes.h.
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
-#include <BECore/Control/JsonSerializer.h>
 #include <BECore/EffectsDocument.h>
 #include <BECore/EffectsToys.h>
 #include <BECore/ProgramDomainTypes.h>
@@ -17,6 +15,7 @@
 #include <BECore/Values/Programs/Program.h>
 #include <BECore/Values/ValueLinkScope.h>
 #include <Common/Printers.h>
+#include <Common/SerializedText.h>
 #include <Common/Wait.h>
 #include <Generated/EffectsDocument.gen.hpp>
 #include <atomic>
@@ -199,14 +198,13 @@ namespace BECore::Tests {
         EXPECT_EQ(fromBinary.onTick, document.onTick);
         ExpectScriptsRunLikePlainCode(fromBinary);
 
-        JsonSerializer serializer;
-        document.Serialize(serializer);
-        const Json json = serializer.Take();
+        const String json = SerializedText(document);
         EffectsDocument fromJson;
         {
             ValueLinkScope scope(kDocumentName);
             scope.UseWriteTargets(host.targets);
-            JsonDeserializer reader(json);
+            JsonDeserializer reader;
+            ASSERT_TRUE(reader.Load(json));
             fromJson.Deserialize(reader);
             EXPECT_FALSE(reader.HasErrors()) << ReportsOf(reader).c_str();
         }
@@ -216,14 +214,14 @@ namespace BECore::Tests {
 
     TEST(EffectsLoadTest, JsonReadsTheObjectWithAScript) {
         Host host;
-        const auto parsed = ParseJson(R"x({"context": [{"name": "caster", "type": "ValueUnitStats"}, {"name": "cast", "type": "ValueCastInfo"}, {"name": "board", "type": "DomainBoard"}],
+        const StringView text = R"x({"context": [{"name": "caster", "type": "ValueUnitStats"}, {"name": "cast", "type": "ValueCastInfo"}, {"name": "board", "type": "DomainBoard"}],
                                           "onTick": {"script": "if (caster.attack > 10) { caster.attack -= 1; emit FxCount(caster.attack); } else { caster.alive = false; }"},
-                                          "onExpire": {"script": "caster.score = 7; board.turn++;"}})x");
-        ASSERT_TRUE(parsed.has_value());
+                                          "onExpire": {"script": "caster.score = 7; board.turn++;"}})x";
         EffectsDocument document;
         ValueLinkScope scope(kDocumentName);
         scope.UseWriteTargets(host.targets);
-        JsonDeserializer reader(*parsed);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(text));
         document.Deserialize(reader);
         EXPECT_FALSE(reader.HasErrors()) << ReportsOf(reader).c_str();
         ExpectScriptsRunLikePlainCode(document);

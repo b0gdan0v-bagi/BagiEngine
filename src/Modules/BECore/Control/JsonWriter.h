@@ -7,15 +7,14 @@
 namespace BECore {
 
     /**
-     * @brief A streaming JSON writer that appends to a caller's String: no DOM, no temporary string.
+     * @brief A streaming JSON writer that appends to a caller's String, with no temporary string.
      *
      * The writer allocates nothing itself; only the growth of the output String can, so a message of the same shape written into a String
-     * that kept its capacity allocates nothing. The text is byte-identical to `nlohmann::json::dump(indent, ' ', false, error_handler_t::replace)`
-     * of the same document: the escapes, the replacement of invalid UTF-8, the integers, `float` and `double` text, `null` for a value that is
-     * not finite, and the layout of both the compact and the indented form.
+     * that kept its capacity allocates nothing. The bytes are the contract (the tests pin them as literals): the escapes, the replacement of invalid UTF-8, the integers, `float` and `double` text,
+     * `null` for a value that is not finite, and the layout of both the compact and the indented form.
      *
-     * Commas, the colon and the indentation are the writer's. The `Json` DOM keeps its object keys in alphabetical order, so a message written by
-     * hand writes its keys in that order too when its bytes have to stay the same as the DOM path's (Control/CLAUDE.md, "JSON rules").
+     * Commas, the colon and the indentation are the writer's. Reflected objects write their keys in byte order, so a message written by
+     * hand writes its keys in that order too when its bytes have to match theirs (Control/CLAUDE.md, "JSON rules").
      *
      * Misuse (a Begin past kMaxDepth, an End with nothing open or of the other kind, a Key outside an object or while a value is due, a Value in
      * an object without a Key, a second root value) is a bug of the engine's own code, never of a client: it is an `EXPECT`, the call is ignored

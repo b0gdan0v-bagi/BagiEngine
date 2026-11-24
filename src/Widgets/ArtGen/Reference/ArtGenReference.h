@@ -1,6 +1,7 @@
 #pragma once
 
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonView.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/Types/Types.h>
 #include <expected>
 
@@ -38,12 +39,12 @@ namespace BECore {
         bool operator==(const ArtGenReference& other) const = default;
     };
 
-    /// `{"mode", "image"}` and `weight` when there is one: the writer of a preset or a manifest file. The answers of `artgen_state` write the same keys through
+    /// `{image, mode}` and `weight` when there is one: the writer of a preset or a manifest file. The answers of `artgen_state` write the same keys through
     /// `ArtGenReferenceAnswer` (ArtGenAnswers.h); a test holds the two texts equal
-    [[nodiscard]] Json ArtGenReferenceToJson(const ArtGenReference& reference);
+    void WriteArtGenReference(JsonWriter& writer, const ArtGenReference& reference);
 
     /// The reference of a JSON value, or the error that names the key (`reference.mode`, ...). A null `weight` counts as absent
-    [[nodiscard]] std::expected<ArtGenReference, String> ReadArtGenReference(const Json& value);
+    [[nodiscard]] std::expected<ArtGenReference, String> ReadArtGenReference(JsonView value);
 
     /// The reference to the file @p realPath (@p mode, the default weight): its path relative to @p gameRoot with `/` when it lies inside it
     /// (a game folder moves, a relative path stays right), else the absolute path with `/`. Backslashes of a Windows path are turned

@@ -1,6 +1,7 @@
 #include "ProfilerControl.h"
 
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/File/Path.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -20,7 +21,7 @@ namespace BECore {
         constexpr int64_t kDefaultTopZones = 20;
         constexpr int64_t kMaxTopZones = 1000;
 
-        /// Writes an object of @p count members whose names @p nameOf gives in no particular order, in byte order of the names as a `Json` object keeps them
+        /// Writes an object of @p count members whose names @p nameOf gives in no particular order, in byte order of the names
         /// (the bytes a client has always seen). Up to kInlineMembers names sort on the stack
         template <typename TName, typename TWrite>
         void WriteMembersByName(JsonWriter& writer, size_t count, TName nameOf, TWrite writeValue) {
@@ -68,11 +69,11 @@ namespace BECore {
         }
 
         /// A positive integer member of at most @p max, or @p fallback when absent
-        std::expected<int64_t, ControlError> ReadCount(const Json& params, StringView key, int64_t fallback, int64_t max) {
-            if (FindJsonMember(params, key) == nullptr) {
+        std::expected<int64_t, ControlError> ReadCount(JsonView params, StringView key, int64_t fallback, int64_t max) {
+            if (!FindParam(params, key)) {
                 return fallback;
             }
-            const auto value = GetJsonInt(params, key);
+            const auto value = GetParamInt(params, key);
             if (!value || *value < 1 || *value > max) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'{}' has to be an integer from 1 to {}", key, max)));
             }
@@ -168,8 +169,9 @@ namespace BECore {
 
         void HandleProfilerDump(ControlCall& call) {
             String path(kDefaultTracePath.data(), kDefaultTracePath.size());
-            if (FindJsonMember(call.Params(), "path") != nullptr) {
-                const auto given = GetJsonString(call.Params(), "path");
+            const JsonView params = call.Params();
+            if (FindParam(params, "path")) {
+                const auto given = GetParamString(params, "path");
                 if (!given || !IsSafeRelativePath(*given)) {
                     call.Fail(ControlErrors::kInvalidParams, "'path' has to be a relative file name without '..'");
                     return;
@@ -200,8 +202,8 @@ namespace BECore {
                 return;
             }
             bool reset = false;
-            if (FindJsonMember(call.Params(), "reset") != nullptr) {
-                const auto value = GetJsonBool(call.Params(), "reset");
+            if (FindParam(call.Params(), "reset")) {
+                const auto value = GetParamBool(call.Params(), "reset");
                 if (!value) {
                     call.Fail(ControlErrors::kInvalidParams, "'reset' has to be a boolean");
                     return;

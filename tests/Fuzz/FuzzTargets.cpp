@@ -11,7 +11,7 @@ namespace BECore::Fuzz {
             {"BinaryDeserializer", &FuzzBinaryDeserializer, "binary", 1},
             {"BinaryContent", &FuzzBinaryContent, "binary_content", 1},
             {"XmlDeserializer", &FuzzXmlDeserializer, "xml", 2},
-            {"JsonDeserializer", &FuzzJsonDeserializer, "json", 2},
+            {"JsonDeserializer", &FuzzJsonDeserializer, "json", 5},
             {"SaveEnvelope", &FuzzSaveEnvelope, "save", 10},
             {"SceneNode", &FuzzSceneNode, "scene", 1},
             {"WebSocketFrame", &FuzzWebSocketFrame, "ws_frame", 1},

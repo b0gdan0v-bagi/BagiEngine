@@ -323,7 +323,7 @@ namespace BECore {
                 // A saved preset goes by name, so its provenance names the file; anything else goes inline as a draft
                 if (form.preset.IsDirty()) {
                     request.preset = String(form.preset.name);
-                    request.presetData = form.preset.ToJson();
+                    request.presetData = form.preset.ToJsonText();
                 } else {
                     request.preset = form.preset.GetBaseName();
                 }

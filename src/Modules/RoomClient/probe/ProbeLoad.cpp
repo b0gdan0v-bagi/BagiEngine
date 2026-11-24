@@ -17,6 +17,16 @@ namespace BECore {
 
     }  // namespace
 
+    StringView FirstActionText(JsonTape& tape, StringView actionsText) {
+        if (!tape.Parse(actionsText) || !JsonView(tape, 0).IsArray()) {
+            return {};
+        }
+        for (const JsonView action : JsonView(tape, 0).Items()) {
+            return action.Raw();
+        }
+        return {};
+    }
+
     ProbeClient::ProbeClient(String url, String game, String name, uint64_t wantedActions)
         : _client(MakeSettings()), _pace(kPaceBurst, kPaceRatePerSecond), _url(std::move(url)), _game(std::move(game)), _name(std::move(name)), _wantedActions(wantedActions) {}
 
@@ -94,13 +104,13 @@ namespace BECore {
         }
 
         // Its turn: the view carries actions, and one version is answered once
-        const Json& actions = _client.GetActions();
-        if (_client.HasView() && actions.is_array() && !actions.empty() && _client.GetViewVersion() != _actedVersion) {
+        const StringView action = FirstActionText(_tape, _client.GetActionsText());
+        if (_client.HasView() && !action.empty() && _client.GetViewVersion() != _actedVersion) {
             if (!_pace.TryTake(now)) {
                 return ProbeStep::Running;
             }
             _actedVersion = _client.GetViewVersion();
-            if (const auto result = _client.SendAction(actions.front()); !result) {
+            if (const auto result = _client.SendAction(action); !result) {
                 return Fail(Format("{}: {}", result.error().code, result.error().message));
             }
             ++_actions;

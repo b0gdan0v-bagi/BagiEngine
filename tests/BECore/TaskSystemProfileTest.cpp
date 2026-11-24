@@ -1,8 +1,8 @@
-#include <BECore/Control/Json.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
 #include <BECore/Profiler/IProfilerBackend.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Require.h>
+#include <Common/TraceDoc.h>
 #include <Common/Wait.h>
 #include <TaskSystem/Awaitables.h>
 #include <TaskSystem/Task.h>
@@ -195,31 +195,30 @@ namespace BECore::Tests {
             pool.Shutdown();
         }
 
-        auto parsed = ParseJson(recorder.WriteJson());
-        ASSERT_TRUE(parsed.has_value());
-        const Json* events = FindJsonMember(*parsed, "traceEvents");
-        ASSERT_NE(events, nullptr);
+        const String written = recorder.WriteJson();
+        const TraceDoc trace{StringView(written.c_str(), written.size())};
+        ASSERT_TRUE(trace.Events().IsArray());
 
         Vector<Pair<String, int64_t>> names;         // thread name, tid
         Vector<Pair<int64_t, int64_t>> sortIndexes;  // tid, sort index
         Vector<String> counters;
-        for (const Json& event : *events) {
-            const auto name = GetJsonString(event, "name");
-            const auto phase = GetJsonString(event, "ph");
-            if (!name || !phase) {
+        for (const JsonView event : trace) {
+            if (!MemberOf(event, "name").IsString() || !MemberOf(event, "ph").IsString()) {
                 continue;
             }
-            if (*phase == "C") {
-                counters.push_back(*name);
+            const String name = StringOf(event, "name");
+            const String phase = StringOf(event, "ph");
+            if (phase == "C") {
+                counters.push_back(name);
             }
-            const Json* args = FindJsonMember(event, "args");
-            if (args == nullptr) {
+            const JsonView args = MemberOf(event, "args");
+            if (!args.IsObject()) {
                 continue;
             }
-            if (*name == "thread_name") {
-                names.emplace_back(*GetJsonString(*args, "name"), GetJsonInt(event, "tid").value_or(-1));
-            } else if (*name == "thread_sort_index") {
-                sortIndexes.emplace_back(GetJsonInt(event, "tid").value_or(-1), GetJsonInt(*args, "sort_index").value_or(-1));
+            if (name == "thread_name") {
+                names.emplace_back(StringOf(args, "name"), IntOf(event, "tid").value_or(-1));
+            } else if (name == "thread_sort_index") {
+                sortIndexes.emplace_back(IntOf(event, "tid").value_or(-1), IntOf(args, "sort_index").value_or(-1));
             }
         }
 

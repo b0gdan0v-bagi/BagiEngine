@@ -1,6 +1,6 @@
 #pragma once
 
-#include <BECore/Control/JsonFwd.h>
+#include <BECore/Control/JsonView.h>
 #include <BECore/File/Path.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
@@ -27,9 +27,9 @@ namespace BECore {
      *
      * `passed` true is Passed, false is Failed (the tip names the failed checks in words), null is Unreadable (the tip has the
      * service's error). Anything the editor cannot read, a record without `checks` included, is None: the editor claims nothing it
-     * cannot read. Pure; reads the JSON with the checked helpers only.
+     * cannot read. Pure; reads the view with the checked helpers only.
      */
-    [[nodiscard]] ArtGenVerdict ArtGenVerdictFromProvenance(const Json& provenance);
+    [[nodiscard]] ArtGenVerdict ArtGenVerdictFromProvenance(JsonView provenance);
 
     /// The verdict of the provenance file @p provenanceFile; an empty path, a missing file or text that is not JSON is None. Logs nothing
     /// (a gone file is the Set tab's gap, not a warning)

@@ -1,9 +1,10 @@
-#include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Random/Rng.h>
 #include <BECore/ReplayTestGame.h>
 #include <BECore/Time/Time.h>
+#include <Common/ControlledCalls.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Common/ReplayCheck.h>
 #include <Common/TempPath.h>
@@ -23,6 +24,10 @@ namespace BECore::Tests {
         constexpr int kLockFrames = 2;          // kFrameSeconds * kLockFrames is the lock of `arm`
         constexpr StringView kGameName = "ReplayTest";
         constexpr int kDieFaces = 6;
+        StringView View(const String& text) {
+            return StringView(text.c_str(), text.size());
+        }
+
         constexpr int kSeed = 8;  // its draws are 5, 6, 2: the last differs from the 6s that `state` sets
 
         /// The committed recording of ReplayTestGame: read-only data of the repository
@@ -55,11 +60,6 @@ namespace BECore::Tests {
                 return *GameManager::GetInstance().GetActive()->Cast<ReplayTestGame>();
             }
 
-            static Json Params(StringView text) {
-                auto parsed = ParseJson(text);
-                return parsed ? std::move(*parsed) : Json();
-            }
-
             static void Frame() {
                 CoreManager::GetTime().Advance(kFrameSeconds);
                 Game().Update(kFrameSeconds);
@@ -72,16 +72,16 @@ namespace BECore::Tests {
             /// The session of the committed file: reset, roll, arm, a wait of the lock, roll, set_state, roll
             String RecordSession() {
                 EXPECT_TRUE(SessionRecorder::GetInstance().Start(_path.View(), *GameManager::GetInstance().GetActive(), "replay test game").has_value());
-                EXPECT_TRUE(ControlledReset(Game(), Params(Format("{{\"seed\":{}}}", kSeed))).has_value());
+                EXPECT_TRUE(ControlledReset(Game(), JsonDoc(Format("{{\"seed\":{}}}", kSeed))).has_value());
                 Frame();
-                EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"roll"})")).has_value());
-                EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"arm"})")).has_value());
+                EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
+                EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"arm"})")).has_value());
                 for (int i = 0; i < kLockFrames; ++i) {
                     Frame();
                 }
-                EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"roll"})")).has_value());
-                EXPECT_TRUE(ControlledSetState(Game(), Params(R"({"rolls":[6,6]})")).has_value());
-                EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"roll"})")).has_value());
+                EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
+                EXPECT_TRUE(ControlledSetState(Game(), JsonDoc(R"({"rolls":[6,6]})")).has_value());
+                EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
                 SessionRecorder::GetInstance().Stop();
                 return ReadFile(_path);
             }
@@ -123,20 +123,17 @@ namespace BECore::Tests {
         [[maybe_unused]] const int first = rng.UniformInt(1, kDieFaces);
         [[maybe_unused]] const int second = rng.UniformInt(1, kDieFaces);
         const int last = rng.UniformInt(1, kDieFaces);
-        Json expected = Json::object();
-        expected["seed"] = kSeed;
-        expected["rolls"] = Json::array({6, 6, last});
-        expected["locked"] = false;
+        const String expected = Format("{{\"seed\":{},\"rolls\":[6,6,{}],\"locked\":false}}", kSeed, last);
 
-        EXPECT_REPLAY_FINAL_STATE(played, CommittedReplay(), expected, step);
+        EXPECT_REPLAY_FINAL_STATE(played, CommittedReplay(), View(expected), step);
     }
 
     TEST_F(ReplayCheckTest, AFinalStateThatDiffersFailsTheTest) {
         ReplayTestGame played;
         const auto step = [&played](double seconds) { Step(played, seconds); };
-        const Json wrong = Params(Format("{{\"seed\":{},\"rolls\":[1],\"locked\":false}}", kSeed));
+        const String wrong = Format("{{\"seed\":{},\"rolls\":[1],\"locked\":false}}", kSeed);
 
-        EXPECT_NONFATAL_FAILURE(EXPECT_REPLAY_FINAL_STATE(played, CommittedReplay(), wrong, step), "the state after");
+        EXPECT_NONFATAL_FAILURE(EXPECT_REPLAY_FINAL_STATE(played, CommittedReplay(), View(wrong), step), "the state after");
     }
 
     TEST_F(ReplayCheckTest, ADefaultFrameLeavesTheGameAloneSoATimerThatNeedsItIsTheFirstMismatch) {
@@ -184,7 +181,7 @@ namespace BECore::Tests {
             }
         } game;
 
-        EXPECT_NONFATAL_FAILURE(EXPECT_REPLAY_FINAL_STATE(game, CommittedReplay(), Json::object()), "cannot be controlled");
+        EXPECT_NONFATAL_FAILURE(EXPECT_REPLAY_FINAL_STATE(game, CommittedReplay(), "{}"), "cannot be controlled");
     }
 
 }  // namespace BECore::Tests

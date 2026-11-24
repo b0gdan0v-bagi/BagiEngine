@@ -90,7 +90,7 @@ namespace BECore {
 
     // The boundary with std:: and third-party APIs: the views copy nothing; the pair that makes a string copies and is named so.
 
-    /// The same characters as a std::string_view (for std::from_chars, nlohmann, SDL wrappers, ...).
+    /// The same characters as a std::string_view (for std::from_chars, SDL wrappers, ...).
     [[nodiscard]] constexpr std::string_view ToStd(StringView view) noexcept {
         return std::string_view{view.data(), view.size()};
     }

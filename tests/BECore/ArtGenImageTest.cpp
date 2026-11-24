@@ -1,3 +1,4 @@
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Widgets/ArtGen/ArtGenImage.h>
@@ -282,64 +283,106 @@ namespace BECore::Tests {
         EXPECT_FALSE(Settings(false, 0, 64).IsIdentity());
     }
 
+    namespace {
+
+        String SettingsText(const ArtGenImageSettings& settings) {
+            String text;
+            JsonWriter writer(text);
+            WriteArtGenImageSettings(writer, settings);
+            return text;
+        }
+
+        String FrameText(const ArtGenImageFrame& frame) {
+            String text;
+            JsonWriter writer(text);
+            WriteArtGenImageFrame(writer, frame);
+            return text;
+        }
+
+    }  // namespace
+
     TEST(ArtGenImageTest, ASettingsJsonWithMissingKeysKeepsTheDefaults) {
-        const auto empty = ArtGenImageSettingsFromJson(Json::object());
+        const auto empty = ReadArtGenImageSettings(JsonDoc("{}"));
         ASSERT_TRUE(empty.has_value());
         EXPECT_EQ(*empty, ArtGenImageSettings{});
-        const auto none = ArtGenImageSettingsFromJson(Json());
+        const auto none = ReadArtGenImageSettings(JsonDoc("null"));
         ASSERT_TRUE(none.has_value());
         EXPECT_EQ(*none, ArtGenImageSettings{});
+        const auto noDocument = ReadArtGenImageSettings(JsonView());
+        ASSERT_TRUE(noDocument.has_value());
+        EXPECT_EQ(*noDocument, ArtGenImageSettings{});
 
-        const auto partial = ArtGenImageSettingsFromJson(*ParseJson(StringView("{\"padding\": 5}")));
+        const auto partial = ReadArtGenImageSettings(JsonDoc("{\"padding\": 5}"));
         ASSERT_TRUE(partial.has_value());
         EXPECT_EQ(partial->padding, 5);
         EXPECT_TRUE(partial->trim);
         EXPECT_EQ(partial->maxSize, 256);
     }
 
+    TEST(ArtGenImageTest, TheSettingsAreWrittenWithTheirKeysInByteOrder) {
+        EXPECT_EQ(SettingsText(Settings(false, 12, 1024)), R"({"maxSize":1024,"padding":12,"trim":false})");
+    }
+
     TEST(ArtGenImageTest, ASettingsJsonRoundTrips) {
         const ArtGenImageSettings settings = Settings(false, 12, 1024);
-        const auto back = ArtGenImageSettingsFromJson(ArtGenImageSettingsToJson(settings));
+        const String text = SettingsText(settings);
+        const auto back = ReadArtGenImageSettings(JsonDoc(text));
         ASSERT_TRUE(back.has_value());
         EXPECT_EQ(*back, settings);
     }
 
     TEST(ArtGenImageTest, ABadSettingsJsonNamesTheKey) {
         auto expectError = [](StringView text, StringView key) {
-            const auto parsed = ParseJson(text);
-            ASSERT_TRUE(parsed.has_value());
-            const auto settings = ArtGenImageSettingsFromJson(*parsed);
+            const auto settings = ReadArtGenImageSettings(JsonDoc(text));
             ASSERT_FALSE(settings.has_value()) << text.data();
             EXPECT_NE(settings.error().find(String(key.data(), key.size())), String::npos) << settings.error().c_str();
         };
         expectError("{\"trim\": 1}", "trim");
+        expectError("{\"trim\": null}", "trim");
         expectError("{\"padding\": \"2\"}", "padding");
         expectError("{\"padding\": 1.5}", "padding");
+        expectError("{\"padding\": 5.0}", "padding");
         expectError("{\"padding\": 26}", "padding");
         expectError("{\"padding\": -1}", "padding");
+        expectError("{\"padding\": 99999999999}", "padding");
         expectError("{\"maxSize\": 15}", "maxSize");
         expectError("{\"maxSize\": 4097}", "maxSize");
         expectError("{\"maxSize\": null}", "maxSize");
-        const auto notObject = ArtGenImageSettingsFromJson(*ParseJson(StringView("[1]")));
-        EXPECT_FALSE(notObject.has_value());
+        const auto notObject = ReadArtGenImageSettings(JsonDoc("[1]"));
+        ASSERT_FALSE(notObject.has_value());
+        EXPECT_EQ(notObject.error(), "the image settings must be an object");
+    }
+
+    TEST(ArtGenImageTest, AnUnknownKeyOfTheSettingsIsIgnored) {
+        const auto settings = ReadArtGenImageSettings(JsonDoc("{\"padding\": 3, \"colour\": \"red\"}"));
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_EQ(settings->padding, 3);
     }
 
     TEST(ArtGenImageTest, MaxSizeZeroAndTheLimitsAreAccepted) {
-        EXPECT_TRUE(ArtGenImageSettingsFromJson(*ParseJson(StringView("{\"maxSize\": 0, \"padding\": 0}"))).has_value());
-        EXPECT_TRUE(ArtGenImageSettingsFromJson(*ParseJson(StringView("{\"maxSize\": 16, \"padding\": 25}"))).has_value());
-        EXPECT_TRUE(ArtGenImageSettingsFromJson(*ParseJson(StringView("{\"maxSize\": 4096}"))).has_value());
+        EXPECT_TRUE(ReadArtGenImageSettings(JsonDoc("{\"maxSize\": 0, \"padding\": 0}")).has_value());
+        EXPECT_TRUE(ReadArtGenImageSettings(JsonDoc("{\"maxSize\": 16, \"padding\": 25}")).has_value());
+        EXPECT_TRUE(ReadArtGenImageSettings(JsonDoc("{\"maxSize\": 4096}")).has_value());
     }
 
     TEST(ArtGenImageTest, AFrameJsonRoundTripsAndABadOneIsRefused) {
         const ArtGenImageFrame frame{4, 5, 100, 80, 50, 40};
-        const auto back = ArtGenImageFrameFromJson(ArtGenImageFrameToJson(frame));
+        EXPECT_EQ(FrameText(frame), R"({"h":80,"outHeight":40,"outWidth":50,"w":100,"x":4,"y":5})");
+        const String text = FrameText(frame);
+        const auto back = ReadArtGenImageFrame(JsonDoc(text));
         ASSERT_TRUE(back.has_value());
         EXPECT_EQ(*back, frame);
 
-        EXPECT_FALSE(ArtGenImageFrameFromJson(*ParseJson(StringView("{\"x\": 0, \"y\": 0, \"w\": 10, \"h\": 10, \"outWidth\": 10}"))).has_value());
-        EXPECT_FALSE(ArtGenImageFrameFromJson(*ParseJson(StringView("{\"x\": -1, \"y\": 0, \"w\": 10, \"h\": 10, \"outWidth\": 10, \"outHeight\": 10}"))).has_value());
-        EXPECT_FALSE(ArtGenImageFrameFromJson(*ParseJson(StringView("{\"x\": 0, \"y\": 0, \"w\": 10, \"h\": 10, \"outWidth\": 20, \"outHeight\": 10}"))).has_value());
-        EXPECT_FALSE(ArtGenImageFrameFromJson(Json::array()).has_value());
+        EXPECT_FALSE(ReadArtGenImageFrame(JsonDoc("{\"x\": 0, \"y\": 0, \"w\": 10, \"h\": 10, \"outWidth\": 10}")).has_value());
+        EXPECT_FALSE(ReadArtGenImageFrame(JsonDoc("{\"x\": -1, \"y\": 0, \"w\": 10, \"h\": 10, \"outWidth\": 10, \"outHeight\": 10}")).has_value());
+        EXPECT_FALSE(ReadArtGenImageFrame(JsonDoc("{\"x\": 0, \"y\": 0, \"w\": 10, \"h\": 10, \"outWidth\": 20, \"outHeight\": 10}")).has_value());
+        EXPECT_FALSE(ReadArtGenImageFrame(JsonDoc("{\"x\": 0, \"y\": 0, \"w\": 10.0, \"h\": 10, \"outWidth\": 10, \"outHeight\": 10}")).has_value());
+        const auto notObject = ReadArtGenImageFrame(JsonDoc("[]"));
+        ASSERT_FALSE(notObject.has_value());
+        EXPECT_EQ(notObject.error(), "the frame must be an object");
+        const auto missing = ReadArtGenImageFrame(JsonDoc("{\"x\": 0}"));
+        ASSERT_FALSE(missing.has_value());
+        EXPECT_EQ(missing.error(), "the frame has no \"y\"");
     }
 
     TEST(ArtGenImageTest, APngWrittenUnderANonAsciiFolderReadsBackAndLeavesNoTemporary) {

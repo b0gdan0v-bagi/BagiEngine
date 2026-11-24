@@ -26,14 +26,14 @@ namespace BECore::Tests {
         PoolString GetSceneName() const override;
         IControllableGame* AsControllable() override;
 
-        std::expected<Json, ControlError> GetState() const override;
-        std::expected<Json, ControlError> GetActions() const override;
-        std::expected<Json, ControlError> PerformAction(const Json& action) override;
-        std::expected<void, ControlError> Reset(const Json& options) override;
-        std::expected<void, ControlError> SetState(const Json& state) override;
+        std::expected<void, ControlError> WriteState(JsonWriter& writer) const override;
+        std::expected<void, ControlError> WriteActions(JsonWriter& writer) const override;
+        std::expected<void, ControlError> PerformAction(JsonView action, JsonWriter& outcome) override;
+        std::expected<void, ControlError> Reset(JsonView options) override;
+        std::expected<void, ControlError> SetState(JsonView state) override;
         uint64_t GetStateVersion() const override;
         bool IsReplayable() const override;
-        Json GetReplayStart() const override;
+        std::expected<void, ControlError> WriteReplayStart(JsonWriter& writer) const override;
 
         /// Lets @p seconds of game time pass: the part of the frame that a game's timers run in
         void Update(double seconds);

@@ -6,7 +6,7 @@ A run may start from a picture: `reference` is `{"mode": "init", "image": "<path
 
 | File | Purpose |
 |------|---------|
-| `ArtGenReference.{h,cpp}` | No ImGui: `ArtGenReference`, `ArtGenReferenceToJson`, `ReadArtGenReference` (the shape check), `kArtGenReferenceModes` (the table of modes) and `ArtGenReferenceModeOf`, the builders `ArtGenReferenceOfFile` and `ArtGenReferenceOfSprite` (both take the mode, `init` by default), `ArtGenReferenceOfVariant` (none for a sound) and `ArtGenReferenceOfTypedPath`, and the panel's helpers (`ArtGenReferenceFilePath`, `ArtGenReferenceFileName`, `ArtGenReferenceDefaultWeight`) |
+| `ArtGenReference.{h,cpp}` | No ImGui: `ArtGenReference`, `WriteArtGenReference`, `ReadArtGenReference` (the shape check, over a `JsonView`), `kArtGenReferenceModes` (the table of modes) and `ArtGenReferenceModeOf`, the builders `ArtGenReferenceOfFile` and `ArtGenReferenceOfSprite` (both take the mode, `init` by default), `ArtGenReferenceOfVariant` (none for a sound) and `ArtGenReferenceOfTypedPath`, and the panel's helpers (`ArtGenReferenceFilePath`, `ArtGenReferenceFileName`, `ArtGenReferenceDefaultWeight`) |
 | `ArtGenReferencePanel.{h,cpp}` | ImGui: the Reference section of the Generate tab over the session's slot, and the form's Reference subsection (`DrawPresetReference`) |
 
 ## What the editor holds

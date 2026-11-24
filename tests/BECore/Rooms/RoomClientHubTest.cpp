@@ -61,7 +61,7 @@ namespace BECore::Tests {
             }
 
             /// The host makes a room of @p game and everybody else joins it; the client of every player is in the room afterwards
-            void MakeLobby(StringView game, size_t humans, const Json& options = Json::object()) {
+            void MakeLobby(StringView game, size_t humans, StringView options = "{}") {
                 Player& host = AddPlayer();
                 ASSERT_TRUE(host.client->Host(kUrl, game, "P0", options).has_value());
                 ASSERT_TRUE(StepUntil([&] { return host.client->IsInRoom(); }));
@@ -172,7 +172,7 @@ namespace BECore::Tests {
 
     TEST_F(RoomClientHubTest, APublicRoomIsListedAndJoinedFromTheListOnTheSameConnectionAndAHandIsPlayed) {
         Player& host = AddPlayer();
-        ASSERT_TRUE(host.client->Host(kUrl, "cards", "P0", Json::object(), true).has_value());
+        ASSERT_TRUE(host.client->Host(kUrl, "cards", "P0", "{}", true).has_value());
         ASSERT_TRUE(StepUntil([&] { return host.client->IsInRoom(); }));
 
         Player& browser = AddPlayer();
@@ -234,7 +234,7 @@ namespace BECore::Tests {
     TEST_F(RoomClientHubTest, AClientThatReturnsAfterTheGraceFindsAComputerHasPlayedItsSeat) {
         ResetWorld(HubWorld::MakeSettings(seconds(1)));
         // Seat 0 moves first, so the hand stalls at seat 1 as soon as the client of seat 1 is gone
-        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 2, Json::object({{"firstSeat", 0}})));
+        ASSERT_NO_FATAL_FAILURE(MakeLobby("cards", 2, R"({"firstSeat":0})"));
         Player& away = *_players[1];
         Player& other = *_players[0];
         const String token = away.client->GetSession().token;

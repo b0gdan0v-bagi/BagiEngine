@@ -1,83 +1,86 @@
 #pragma once
 
 #include <BECore/Control/ControlRoots.h>
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonPayload.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/Control/SchemaExport.h>
 #include <BECore/Reflection/TypeRegistry.h>
 #include <EASTL/sort.h>
 
 namespace BECore::Tests {
 
-    // The registry as JSON the way `SchemaExport.cpp` built it before the reflected answers: a `Json` DOM, copied word for word, with the two changes of the protocol
-    // (a type with no parent has no `parent`, and the method flag is `isConst`). The text of the reflected answers is compared with `DumpJson` of these.
+    // The registry as JSON text, written by hand with a `JsonWriter` (a type with no parent has no `parent`, the method flag is `isConst`), every object with its keys in byte
+    // order. The text of the reflected answers is compared with these, so the generated writer has an oracle that shares none of its code.
 
-    inline Json ReferenceTypeDescJson(const TypeDesc& desc);
+    inline void WriteReferenceTypeDesc(JsonWriter& writer, const TypeDesc& desc);
 
-    inline Json ReferenceAttributesJson(const FieldAttributes& attributes) {
-        Json json = Json::object();
+    inline void WriteReferenceAttributes(JsonWriter& writer, const FieldAttributes& attributes) {
+        writer.BeginObject();
+        if (attributes.hidden) {
+            writer.Member("hidden", true);
+        }
         if (attributes.hasRange) {
-            json["range"] = Json::array({attributes.rangeMin, attributes.rangeMax});
-        }
-        if (attributes.step != 0.0) {
-            json["step"] = attributes.step;
-        }
-        if (!attributes.tooltip.empty()) {
-            json["tooltip"] = MakeJsonString(attributes.tooltip);
+            writer.Key("range");
+            writer.BeginArray();
+            writer.Value(attributes.rangeMin);
+            writer.Value(attributes.rangeMax);
+            writer.EndArray();
         }
         if (attributes.readOnly) {
-            json["readonly"] = true;
-        }
-        if (attributes.hidden) {
-            json["hidden"] = true;
+            writer.Member("readonly", true);
         }
         if (attributes.required) {
-            json["required"] = true;
+            writer.Member("required", true);
         }
-        return json;
+        if (attributes.step != 0.0) {
+            writer.Member("step", attributes.step);
+        }
+        if (!attributes.tooltip.empty()) {
+            writer.Member("tooltip", StringView(attributes.tooltip));
+        }
+        writer.EndObject();
     }
 
-    inline Json ReferenceFieldJson(const FieldDesc& field) {
-        Json json = Json::object();
-        json["name"] = MakeJsonString(field.name);
-        json["type"] = field.type != nullptr ? ReferenceTypeDescJson(*field.type) : ReferenceTypeDescJson(TypeDesc{});
-        json["attributes"] = ReferenceAttributesJson(field.attributes);
-        return json;
+    inline void WriteReferenceTypeOrEmpty(JsonWriter& writer, const TypeDesc* type) {
+        WriteReferenceTypeDesc(writer, type != nullptr ? *type : TypeDesc{});
     }
 
-    inline Json ReferenceMethodJson(const MethodDesc& method) {
-        Json json = Json::object();
-        json["name"] = MakeJsonString(method.name);
-        json["isConst"] = method.isConst;
-        json["callable"] = method.callable;
-        Json params = Json::array();
+    /// A field entry; @p owner is the type that declares it, written for the fields of `describe_type`
+    inline void WriteReferenceField(JsonWriter& writer, const FieldDesc& field, const TypeInfo* owner = nullptr) {
+        writer.BeginObject();
+        writer.Key("attributes");
+        WriteReferenceAttributes(writer, field.attributes);
+        writer.Member("name", StringView(field.name));
+        if (owner != nullptr) {
+            writer.Member("owner", owner->Name());
+        }
+        writer.Key("type");
+        WriteReferenceTypeOrEmpty(writer, field.type);
+        writer.EndObject();
+    }
+
+    inline void WriteReferenceMethod(JsonWriter& writer, const MethodDesc& method) {
+        writer.BeginObject();
+        writer.Member("callable", method.callable);
+        writer.Member("isConst", method.isConst);
+        writer.Member("name", StringView(method.name));
+        writer.Key("params");
+        writer.BeginArray();
         for (const ParamDesc& param : method.params) {
-            Json entry = Json::object();
-            entry["name"] = MakeJsonString(param.name);
-            entry["type"] = param.type != nullptr ? ReferenceTypeDescJson(*param.type) : ReferenceTypeDescJson(TypeDesc{});
-            params.push_back(std::move(entry));
+            writer.BeginObject();
+            writer.Member("name", StringView(param.name));
+            writer.Key("type");
+            WriteReferenceTypeOrEmpty(writer, param.type);
+            writer.EndObject();
         }
-        json["params"] = std::move(params);
-        json["result"] = method.result != nullptr ? ReferenceTypeDescJson(*method.result) : ReferenceTypeDescJson(TypeDesc{});
-        return json;
+        writer.EndArray();
+        writer.Key("result");
+        WriteReferenceTypeOrEmpty(writer, method.result);
+        writer.EndObject();
     }
 
     inline bool ReferenceIsCreatable(const TypeInfo& info) {
         return info.create != nullptr;
-    }
-
-    /// The members the type entry and the `list_types` entry share
-    inline Json ReferenceTypeHeadJson(const TypeInfo& info, const TypeRegistry& registry) {
-        Json json = Json::object();
-        json["name"] = MakeJsonString(info.Name());
-        if (const TypeInfo* parent = registry.Parent(info); parent != nullptr) {
-            json["parent"] = MakeJsonString(parent->Name());
-        }
-        json["abstract"] = info.isAbstract;
-        json["creatable"] = ReferenceIsCreatable(info);
-        json["purpose"] = MakeJsonString(PurposeName(info.meta.purpose));
-        json["icon"] = MakeJsonString(info.meta.icon);
-        return json;
     }
 
     inline Vector<const TypeInfo*> ReferenceSortedByName(const Vector<const TypeInfo*>& infos) {
@@ -86,16 +89,143 @@ namespace BECore::Tests {
         return sorted;
     }
 
-    inline Json ReferenceNamesOf(const Vector<const TypeInfo*>& infos) {
-        Json names = Json::array();
+    inline void WriteReferenceNames(JsonWriter& writer, const Vector<const TypeInfo*>& infos) {
+        writer.BeginArray();
         for (const TypeInfo* info : infos) {
-            names.push_back(MakeJsonString(info->Name()));
+            writer.Value(info->Name());
         }
-        return names;
+        writer.EndArray();
     }
 
-    inline Json ReferenceFactoriesJson(const TypeRegistry& registry) {
-        Json factories = Json::array();
+    /// The members of a type entry that come after `creatable`: `factoryBase`, `fields`, `icon`, `methods`, `name`, `parent`, `purpose`
+    inline void WriteReferenceTypeEntryMembers(JsonWriter& writer, const TypeInfo& info, const TypeRegistry& registry) {
+        if (info.factoryBase != 0) {
+            if (const TypeInfo* base = registry.Find(info.factoryBase); base != nullptr) {
+                writer.Member("factoryBase", base->Name());
+            }
+        }
+        writer.Key("fields");
+        writer.BeginArray();
+        for (const FieldDesc& field : info.fields) {
+            WriteReferenceField(writer, field);
+        }
+        writer.EndArray();
+        writer.Member("icon", StringView(info.meta.icon));
+        writer.Key("methods");
+        writer.BeginArray();
+        for (const MethodDesc& method : info.methods) {
+            WriteReferenceMethod(writer, method);
+        }
+        writer.EndArray();
+        writer.Member("name", info.Name());
+        if (const TypeInfo* parent = registry.Parent(info); parent != nullptr) {
+            writer.Member("parent", parent->Name());
+        }
+        writer.Member("purpose", PurposeName(info.meta.purpose));
+    }
+
+    inline void WriteReferenceTypeEntry(JsonWriter& writer, const TypeInfo& info, const TypeRegistry& registry) {
+        writer.BeginObject();
+        writer.Member("abstract", info.isAbstract);
+        writer.Member("creatable", ReferenceIsCreatable(info));
+        WriteReferenceTypeEntryMembers(writer, info, registry);
+        writer.EndObject();
+    }
+
+    inline void WriteReferenceDescribeType(JsonWriter& writer, const TypeInfo& info, const TypeRegistry& registry) {
+        writer.BeginObject();
+        writer.Member("abstract", info.isAbstract);
+        writer.Key("allFields");
+        writer.BeginArray();
+        for (const FieldRef& ref : registry.AllFields(info)) {
+            WriteReferenceField(writer, *ref.field, ref.owner);
+        }
+        writer.EndArray();
+        writer.Key("bases");
+        writer.BeginArray();
+        for (const TypeInfo* base : registry.Bases(info)) {
+            writer.Value(base->Name());
+        }
+        writer.EndArray();
+        writer.Member("creatable", ReferenceIsCreatable(info));
+        writer.Key("derived");
+        WriteReferenceNames(writer, registry.Derived(info, false));
+        WriteReferenceTypeEntryMembers(writer, info, registry);
+        writer.EndObject();
+    }
+
+    inline void WriteReferenceListTypes(JsonWriter& writer, const TypeRegistry& registry, const ListTypesFilter& filter) {
+        const Vector<const TypeInfo*>& source = filter.base != nullptr ? registry.Derived(*filter.base, filter.recursive) : registry.All();
+
+        writer.BeginObject();
+        writer.Key("types");
+        writer.BeginArray();
+        for (const TypeInfo* info : ReferenceSortedByName(source)) {
+            if (filter.creatableOnly && !ReferenceIsCreatable(*info)) {
+                continue;
+            }
+            writer.BeginObject();
+            writer.Member("abstract", info->isAbstract);
+            writer.Member("creatable", ReferenceIsCreatable(*info));
+            writer.Member("fields", info->fields.size());
+            writer.Member("icon", StringView(info->meta.icon));
+            writer.Member("methods", info->methods.size());
+            writer.Member("name", info->Name());
+            if (const TypeInfo* parent = registry.Parent(*info); parent != nullptr) {
+                writer.Member("parent", parent->Name());
+            }
+            writer.Member("purpose", PurposeName(info->meta.purpose));
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.EndObject();
+    }
+
+    inline void WriteReferenceTypeDesc(JsonWriter& writer, const TypeDesc& desc) {
+        writer.BeginObject();
+        if (desc.kind == TypeKind::Variant) {
+            writer.Key("alternatives");
+            writer.BeginArray();
+            for (const TypeDesc* alternative : desc.alternatives) {
+                WriteReferenceTypeDesc(writer, *alternative);
+            }
+            writer.EndArray();
+        }
+        if (desc.capacity != 0) {
+            writer.Member("capacity", desc.capacity);
+        }
+        if (desc.element != nullptr) {
+            writer.Key("element");
+            WriteReferenceTypeDesc(writer, *desc.element);
+        }
+        if (desc.key != nullptr) {
+            writer.Key("key");
+            WriteReferenceTypeDesc(writer, *desc.key);
+        }
+        const bool isAny = desc.kind == TypeKind::Opaque && desc.opaqueHash == DescribeType<JsonPayload>().opaqueHash;
+        writer.Member("kind", isAny ? StringView("any") : TypeKindName(desc.kind));
+        if ((desc.kind == TypeKind::Object || desc.kind == TypeKind::Pointer) && !desc.ObjectName().empty()) {
+            writer.Member("object", desc.ObjectName());
+        }
+        if (desc.kind == TypeKind::List || desc.kind == TypeKind::Map) {
+            writer.Member("resizable", desc.resizable);
+        }
+        if (desc.kind == TypeKind::Enum) {
+            writer.Key("values");
+            writer.BeginArray();
+            for (const StringView name : desc.names) {
+                writer.Value(name);
+            }
+            writer.EndArray();
+        }
+        writer.EndObject();
+    }
+
+    inline void WriteReferenceSchema(JsonWriter& writer, const TypeRegistry& registry, const ControlRoots& roots) {
+        writer.BeginObject();
+
+        writer.Key("factories");
+        writer.BeginArray();
         for (const TypeInfo* base : registry.FactoryBases()) {
             Vector<const TypeInfo*> members;
             for (const TypeInfo* info : registry.All()) {
@@ -103,150 +233,61 @@ namespace BECore::Tests {
                     members.push_back(info);
                 }
             }
-            Json entry = Json::object();
-            entry["base"] = MakeJsonString(base->Name());
+            writer.BeginObject();
+            writer.Member("base", base->Name());
+            writer.Key("derived");
+            WriteReferenceNames(writer, ReferenceSortedByName(members));
             const StringView elementName = registry.FactoryElementName(*base);
             if (!elementName.empty()) {
-                entry["elementName"] = MakeJsonString(elementName);
+                writer.Member("elementName", elementName);
             }
-            entry["derived"] = ReferenceNamesOf(ReferenceSortedByName(members));
-            factories.push_back(std::move(entry));
+            writer.EndObject();
         }
-        return factories;
-    }
+        writer.EndArray();
 
-    inline Json ReferenceRootsJson(const ControlRoots& roots) {
-        Json json = Json::array();
+        writer.Key("roots");
+        writer.BeginArray();
         for (const String& name : roots.Names()) {
-            Json entry = Json::object();
-            entry["name"] = MakeJsonString(name);
-            const TypedRef object = roots.Resolve(name);
-            if (object) {
-                entry["type"] = MakeJsonString(object.type->Name());
+            writer.BeginObject();
+            writer.Member("name", StringView(name));
+            if (const TypedRef object = roots.Resolve(name)) {
+                writer.Member("type", object.type->Name());
             }
-            json.push_back(std::move(entry));
+            writer.EndObject();
         }
-        return json;
-    }
+        writer.EndArray();
 
-    Json ReferenceTypeDescJson(const TypeDesc& desc) {
-        Json json = Json::object();
-        json["kind"] = MakeJsonString(TypeKindName(desc.kind));
-        if (desc.kind == TypeKind::Opaque && desc.opaqueHash == DescribeType<JsonPayload>().opaqueHash) {
-            json["kind"] = "any";
-        }
-        switch (desc.kind) {
-            case TypeKind::Object:
-            case TypeKind::Pointer:
-                if (!desc.ObjectName().empty()) {
-                    json["object"] = MakeJsonString(desc.ObjectName());
-                }
-                break;
-            case TypeKind::Enum: {
-                Json values = Json::array();
-                for (const StringView name : desc.names) {
-                    values.push_back(MakeJsonString(name));
-                }
-                json["values"] = std::move(values);
-                break;
-            }
-            case TypeKind::List:
-            case TypeKind::Map:
-                json["resizable"] = desc.resizable;
-                break;
-            case TypeKind::Variant: {
-                Json alternatives = Json::array();
-                for (const TypeDesc* alternative : desc.alternatives) {
-                    alternatives.push_back(ReferenceTypeDescJson(*alternative));
-                }
-                json["alternatives"] = std::move(alternatives);
-                break;
-            }
-            default:
-                break;
-        }
-        if (desc.element != nullptr) {
-            json["element"] = ReferenceTypeDescJson(*desc.element);
-        }
-        if (desc.key != nullptr) {
-            json["key"] = ReferenceTypeDescJson(*desc.key);
-        }
-        if (desc.capacity != 0) {
-            json["capacity"] = desc.capacity;
-        }
-        return json;
-    }
-
-    Json ReferenceTypeEntryJson(const TypeInfo& info, const TypeRegistry& registry) {
-        Json json = ReferenceTypeHeadJson(info, registry);
-        if (info.factoryBase != 0) {
-            const TypeInfo* base = registry.Find(info.factoryBase);
-            if (base != nullptr) {
-                json["factoryBase"] = MakeJsonString(base->Name());
-            }
-        }
-        Json fields = Json::array();
-        for (const FieldDesc& field : info.fields) {
-            fields.push_back(ReferenceFieldJson(field));
-        }
-        json["fields"] = std::move(fields);
-        Json methods = Json::array();
-        for (const MethodDesc& method : info.methods) {
-            methods.push_back(ReferenceMethodJson(method));
-        }
-        json["methods"] = std::move(methods);
-        return json;
-    }
-
-    Json ReferenceDescribeTypeJson(const TypeInfo& info, const TypeRegistry& registry) {
-        Json json = ReferenceTypeEntryJson(info, registry);
-
-        Json bases = Json::array();
-        for (const TypeInfo* base : registry.Bases(info)) {
-            bases.push_back(MakeJsonString(base->Name()));
-        }
-        json["bases"] = std::move(bases);
-        json["derived"] = ReferenceNamesOf(registry.Derived(info, false));
-
-        Json allFields = Json::array();
-        for (const FieldRef& ref : registry.AllFields(info)) {
-            Json entry = ReferenceFieldJson(*ref.field);
-            entry["owner"] = MakeJsonString(ref.owner->Name());
-            allFields.push_back(std::move(entry));
-        }
-        json["allFields"] = std::move(allFields);
-        return json;
-    }
-
-    Json ReferenceListTypesJson(const TypeRegistry& registry, const ListTypesFilter& filter) {
-        const Vector<const TypeInfo*>& source = filter.base != nullptr ? registry.Derived(*filter.base, filter.recursive) : registry.All();
-
-        Json types = Json::array();
-        for (const TypeInfo* info : ReferenceSortedByName(source)) {
-            if (filter.creatableOnly && !ReferenceIsCreatable(*info)) {
-                continue;
-            }
-            Json entry = ReferenceTypeHeadJson(*info, registry);
-            entry["fields"] = info->fields.size();
-            entry["methods"] = info->methods.size();
-            types.push_back(std::move(entry));
-        }
-        Json json = Json::object();
-        json["types"] = std::move(types);
-        return json;
-    }
-
-    Json ReferenceBuildSchemaJson(const TypeRegistry& registry, const ControlRoots& roots) {
-        Json types = Json::array();
+        writer.Key("types");
+        writer.BeginArray();
         for (const TypeInfo* info : ReferenceSortedByName(registry.All())) {
-            types.push_back(ReferenceTypeEntryJson(*info, registry));
+            WriteReferenceTypeEntry(writer, *info, registry);
         }
-        Json json = Json::object();
-        json["version"] = kSchemaVersion;
-        json["types"] = std::move(types);
-        json["factories"] = ReferenceFactoriesJson(registry);
-        json["roots"] = ReferenceRootsJson(roots);
-        return json;
+        writer.EndArray();
+
+        writer.Member("version", kSchemaVersion);
+        writer.EndObject();
+    }
+
+    /// The reference documents as text; the `String` is what `WrittenText` of the answer is compared with
+    inline String ReferenceSchemaText(const TypeRegistry& registry, const ControlRoots& roots) {
+        String text;
+        JsonWriter writer(text);
+        WriteReferenceSchema(writer, registry, roots);
+        return text;
+    }
+
+    inline String ReferenceDescribeTypeText(const TypeInfo& info, const TypeRegistry& registry) {
+        String text;
+        JsonWriter writer(text);
+        WriteReferenceDescribeType(writer, info, registry);
+        return text;
+    }
+
+    inline String ReferenceListTypesText(const TypeRegistry& registry, const ListTypesFilter& filter) {
+        String text;
+        JsonWriter writer(text);
+        WriteReferenceListTypes(writer, registry, filter);
+        return text;
     }
 
 }  // namespace BECore::Tests

@@ -1,9 +1,7 @@
 // `expr` over a game's registered types in content (Values/ValueAccessor.h, Values/Programs/Domain/CLAUDE.md): a `Value<DomainBits256>` field read from XML, binary and JSON,
 // saved again, and the line a mistake gives. The document is `DomainDocument` of ProgramDomainDocument.h (its generated code is included here); the operations are the toy ones.
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
-#include <BECore/Control/JsonSerializer.h>
 #include <BECore/ProgramDomainDocument.h>
 #include <BECore/ProgramDomainTypes.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
@@ -14,6 +12,7 @@
 #include <BECore/Values/ValueLinkScope.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
+#include <Common/SerializedText.h>
 #include <Common/TestText.h>
 #include <Generated/ProgramDomainDocument.gen.hpp>
 #include <gtest/gtest.h>
@@ -210,13 +209,12 @@ namespace BECore::Tests {
         ExpectSameFormulas(fromBinary, document);
         ExpectFormulasEqualPlainCode(fromBinary);
 
-        JsonSerializer serializer;
-        document.Serialize(serializer);
-        const Json json = serializer.Take();
+        const String json = SerializedText(document);
         DomainDocument fromJson;
         {
             const ValueLinkScope scope(kDocumentName);
-            JsonDeserializer reader(json);
+            JsonDeserializer reader;
+            ASSERT_TRUE(reader.Load(json));
             fromJson.Deserialize(reader);
             EXPECT_FALSE(reader.HasErrors()) << ReportsOf(reader).c_str();
         }
@@ -226,14 +224,14 @@ namespace BECore::Tests {
 
     TEST(ProgramDomainLoadTest, JsonReadsTheObjectWithExprOfARegisteredType) {
         static_cast<void>(RegisterDomainToys());
-        const auto parsed = ParseJson(R"x({"context": [{"name": "caster", "type": "DomainBoard"}, {"name": "cast", "type": "DomainBoard"}],
+        const StringView text(R"x({"context": [{"name": "caster", "type": "DomainBoard"}, {"name": "cast", "type": "DomainBoard"}],
                                           "blocked": {"expr": "and_mask(caster.walls, shift(cast.walls, East))"}, "reach": {"expr": "or_mask(shift(caster.walls, South), cast.walls)"},
                                           "crowd": {"expr": "popcount(and_mask(caster.walls, cast.walls)) + caster.turn"},
                                           "open": {"expr": "any(and_mask(caster.walls, cast.walls)) && cast.turn > 1"}})x");
-        ASSERT_TRUE(parsed.has_value());
         DomainDocument document;
         const ValueLinkScope scope(kDocumentName);
-        JsonDeserializer reader(*parsed);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(text));
         document.Deserialize(reader);
         EXPECT_FALSE(reader.HasErrors()) << ReportsOf(reader).c_str();
         ExpectFormulasEqualPlainCode(document);

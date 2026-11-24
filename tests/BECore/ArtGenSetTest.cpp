@@ -1,4 +1,7 @@
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonWriter.h>
+#include <Common/ControlTestSupport.h>
+#include <Common/JsonDoc.h>
+#include <Common/JsonEdit.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/TestText.h>
@@ -37,10 +40,27 @@ namespace BECore::Tests {
             return set;
         }
 
-        Json Manifest(StringView text) {
-            auto parsed = ParseJson(text);
-            EXPECT_TRUE(parsed.has_value());
-            return parsed ? *parsed : Json();
+        /// The manifest `WriteArtGenSet` writes: a test makes a manifest with one defect out of it with `JsonWith` / `JsonWithout`
+        String ManifestOf(const ArtGenSet& set) {
+            String text;
+            JsonWriter writer(text);
+            WriteArtGenSet(writer, set);
+            return text;
+        }
+
+        std::expected<ArtGenSet, String> ReadText(StringView manifest) {
+            const JsonDoc doc{manifest};
+            return ReadArtGenSet(doc);
+        }
+
+        std::expected<ArtGenSet, String> ReadText(const String& manifest) {
+            return ReadText(StringView(manifest.c_str(), manifest.size()));
+        }
+
+        /// The text of the member @p key of a manifest as it is written; empty when there is none
+        String MemberText(const String& manifest, StringView key) {
+            const JsonDoc doc{StringView(manifest.c_str(), manifest.size())};
+            return RawOf(doc.Root(), key);
         }
 
         constexpr StringView kMinimalManifest = R"({"manifest":1,"set":"s","kind":"image","preset":"p","count":2,"seed":7,"jobs":[{"name":"a","subject":"x","state":"Pending","variants":[]}]})";
@@ -54,12 +74,13 @@ namespace BECore::Tests {
 
     TEST(ArtGenSetTest, JsonRoundTrip) {
         const ArtGenSet set = MakeSet();
-        const Json json = ArtGenSetToJson(set);
-        EXPECT_EQ(GetJsonInt(json, "manifest"), kArtGenManifestFormat);
+        const String text = ManifestOf(set);
+        const JsonDoc json{StringView(text.c_str(), text.size())};
+        EXPECT_EQ(IntOf(json.Root(), "manifest"), Optional<int64_t>(kArtGenManifestFormat));
 
-        const auto back = ArtGenSetFromJson(json);
+        const auto back = ReadText(text);
         ASSERT_TRUE(back.has_value()) << back.error();
-        EXPECT_EQ(ArtGenSetToJson(*back), json);
+        EXPECT_EQ(ManifestOf(*back), text);
         EXPECT_EQ(back->name, set.name);
         EXPECT_EQ(back->seed, 4242);
         ASSERT_EQ(back->jobs.size(), 2u);
@@ -75,50 +96,119 @@ namespace BECore::Tests {
         for (const bool kept : {false, true}) {
             ArtGenSet set = MakeSet();
             set.jobs[0].accepted->kept = kept;
-            const Json json = ArtGenSetToJson(set);
-            EXPECT_EQ(GetJsonBool((Require(FindJsonMember(json, "jobs")))[0]["accepted"], "kept"), Optional<bool>(kept));
-            const auto back = ArtGenSetFromJson(json);
+            const String text = ManifestOf(set);
+            const JsonDoc json{StringView(text.c_str(), text.size())};
+            EXPECT_EQ(BoolOf(MemberOf(ItemAt(MemberOf(json.Root(), "jobs"), 0), "accepted"), "kept"), Optional<bool>(kept));
+            const auto back = ReadText(text);
             ASSERT_TRUE(back.has_value()) << back.error();
             EXPECT_EQ(back->jobs[0].accepted->kept, kept);
         }
     }
 
     TEST(ArtGenSetTest, AManifestWithoutKeptReadsAsKept) {
-        Json json = ArtGenSetToJson(MakeSet());
-        json["jobs"][0]["accepted"].erase("kept");
-        const auto set = ArtGenSetFromJson(json);
+        const auto set = ReadText(JsonWithout(ManifestOf(MakeSet()), "/jobs/0/accepted/kept"));
         ASSERT_TRUE(set.has_value()) << set.error();
         EXPECT_TRUE(set->jobs[0].accepted->kept);
         EXPECT_FALSE(IsLive(set->jobs[0]));
     }
 
     TEST(ArtGenSetTest, KeptOfAWrongTypeNamesTheAcceptedObject) {
-        for (const Json& value : {Json("yes"), Json(1), Json(nullptr)}) {
-            Json json = ArtGenSetToJson(MakeSet());
-            json["jobs"][0]["accepted"]["kept"] = value;
-            const String error = ErrorOf(ArtGenSetFromJson(json));
+        for (const StringView value : {StringView(R"("yes")"), StringView("1"), StringView("null")}) {
+            const String error = ErrorOf(ReadText(JsonWith(ManifestOf(MakeSet()), "/jobs/0/accepted/kept", value)));
             EXPECT_TRUE(Contains(error, "jobs[0].accepted")) << error;
             EXPECT_TRUE(Contains(error, "'kept'")) << error;
         }
     }
 
+    TEST(ArtGenSetTest, TheManifestBytesAreCompactSortedAndCarryTheDraftAsItIs) {
+        ArtGenSet set;
+        set.name = "s";
+        set.created = "2026-11-17T12:34:56Z";
+        set.kind = "image";
+        set.preset = "form";
+        set.presetData = R"({"prompt":"p","workflow":"w"})";
+        set.count = 2;
+        set.seed = 7;
+        set.atlas = "pieces";
+        set.reference = ArtGenReference{"style", "a.png", Optional<double>(0.5)};
+        set.processing = ArtGenSetProcessing{ArtGenImageSettings{true, 5, 128}, ArtGenImageFrame{1, 2, 10, 12, 5, 6}};
+        ArtGenSetJob job;
+        job.name = "a";
+        job.subject = "x \"y\"";
+        job.state = ArtGenSetJobState::Done;
+        job.variants.push_back({7, "a/a_7.png", "a/a_7.artgen.json", "image"});
+        job.pick = 7;
+        job.accepted = ArtGenSetAccepted{"a", "2026-11-17T13:00:00Z", true};
+        job.more = ArtGenSetMore{9, 3};
+        set.jobs.push_back(std::move(job));
+
+        String text;
+        {
+            JsonWriter writer(text);
+            WriteArtGenSet(writer, set, StringView("Complete"));
+        }
+        EXPECT_EQ(text, R"({"atlas":"pieces","count":2,"created":"2026-11-17T12:34:56Z","jobs":[{"accepted":{"as":"a","date":"2026-11-17T13:00:00Z","kept":true},"error":"",)"
+                        R"("more":{"count":3,"seed":9},"name":"a","pick":7,"state":"Done","subject":"x \"y\"","variants":[{"file":"a/a_7.png","kind":"image",)"
+                        R"("provenance":"a/a_7.artgen.json","seed":7}]}],"kind":"image","manifest":1,"preset":"form","presetData":{"prompt":"p","workflow":"w"},)"
+                        R"("processing":{"frame":{"h":12,"outHeight":6,"outWidth":5,"w":10,"x":1,"y":2},"settings":{"maxSize":128,"padding":5,"trim":true}},)"
+                        R"("reference":{"image":"a.png","mode":"style","weight":0.5},"seed":7,"set":"s","state":"Complete"})");
+
+        const JsonDoc doc{StringView(text)};
+        const auto back = ReadArtGenSet(doc);
+        ASSERT_TRUE(back.has_value()) << back.error();
+        EXPECT_EQ(back->presetData, set.presetData);
+        ASSERT_TRUE(back->jobs[0].more.has_value());
+        EXPECT_EQ(back->jobs[0].more->seed, 9);
+        EXPECT_EQ(back->jobs[0].more->count, 3);
+        EXPECT_EQ(back->processing, set.processing);
+        EXPECT_EQ(back->reference, set.reference);
+    }
+
+    TEST(ArtGenSetTest, ADraftIsKeptAsItsSortedCompactText) {
+        const JsonDoc doc{R"({"manifest":1,"set":"s","kind":"image","preset":"p","count":2,"seed":7,"presetData":{ "b" : [1, 2], "a" : {"y":1,"x":2} },)"
+                          R"("jobs":[{"name":"a","subject":"x","state":"Pending"}]})"};
+        const auto set = ReadArtGenSet(doc);
+        ASSERT_TRUE(set.has_value()) << set.error();
+        EXPECT_EQ(set->presetData, R"({"a":{"x":2,"y":1},"b":[1,2]})");
+    }
+
+    TEST(ArtGenSetTest, OfTwoEqualKeysTheFirstIsRead) {
+        const JsonDoc doc{R"({"manifest":1,"set":"first","set":"second","kind":"image","preset":"p","count":2,"seed":7,)"
+                          R"("jobs":[{"name":"a","subject":"x","state":"Pending"}]})"};
+        const auto set = ReadArtGenSet(doc);
+        ASSERT_TRUE(set.has_value()) << set.error();
+        EXPECT_EQ(set->name, "first");
+    }
+
+    TEST(ArtGenSetTest, ADraftThatIsNotAnObjectIsRefused) {
+        for (const StringView draft : {StringView("3"), StringView("[]"), StringView("\"x\"")}) {
+            const String text = Format(R"({{"manifest":1,"set":"s","kind":"image","preset":"p","count":2,"seed":7,"presetData":{},"jobs":[{{"name":"a","subject":"x","state":"Pending"}}]}})", draft);
+            const JsonDoc doc{StringView(text)};
+            EXPECT_TRUE(Contains(ErrorOf(ReadArtGenSet(doc)), "'presetData' must be an object or null")) << String(draft).c_str();
+        }
+    }
+
+    TEST(ArtGenSetTest, AnInvalidViewIsNotAManifest) {
+        EXPECT_TRUE(Contains(ErrorOf(ReadArtGenSet(JsonDoc("{not json"))), "not a JSON object"));
+    }
+
     TEST(ArtGenSetTest, JsonKeepsADraftsPresetData) {
         ArtGenSet set = MakeSet();
-        set.presetData = Manifest(R"({"workflow":"w","prompt":"p"})");
-        const auto back = ArtGenSetFromJson(ArtGenSetToJson(set));
+        set.presetData = R"({"prompt":"p","workflow":"w"})";
+        const auto back = ReadText(ManifestOf(set));
         ASSERT_TRUE(back.has_value()) << back.error();
         EXPECT_EQ(back->presetData, set.presetData);
 
-        const auto byName = ArtGenSetFromJson(ArtGenSetToJson(MakeSet()));
+        const auto byName = ReadText(ManifestOf(MakeSet()));
         ASSERT_TRUE(byName.has_value());
-        EXPECT_TRUE(byName->presetData.is_null());
-        EXPECT_TRUE(Require(FindJsonMember(ArtGenSetToJson(MakeSet()), "presetData")).is_null());
+        EXPECT_TRUE(byName->presetData.empty());
+        EXPECT_EQ(MemberText(ManifestOf(MakeSet()), "presetData"), "null");
     }
 
     TEST(ArtGenSetTest, ProcessingRoundTripsAndAManifestWithoutItReadsAsNone) {
         ArtGenSet set = MakeSet();
-        EXPECT_TRUE(Require(FindJsonMember(ArtGenSetToJson(set), "processing")).is_null());
-        const auto without = ArtGenSetFromJson(ArtGenSetToJson(set));
+        EXPECT_EQ(MemberText(ManifestOf(set), "processing"), "null");
+        const auto without = ReadText(ManifestOf(set));
         ASSERT_TRUE(without.has_value()) << without.error();
         EXPECT_FALSE(without->processing.has_value());
         ArtGenSet untouched = MakeSet();
@@ -128,12 +218,13 @@ namespace BECore::Tests {
 
         set.processing = ArtGenSetProcessing{ArtGenImageSettings{true, 5, 128}, ArtGenImageFrame{10, 20, 300, 400, 96, 128}};
         EXPECT_FALSE(IsLegacyAccepted(set));
-        const Json json = ArtGenSetToJson(set);
-        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(Require(FindJsonMember(json, "processing")), "frame")), "outHeight"), Optional<int64_t>(128));
-        const auto back = ArtGenSetFromJson(json);
+        const String text = ManifestOf(set);
+        const JsonDoc json{StringView(text.c_str(), text.size())};
+        EXPECT_EQ(IntOf(MemberOf(MemberOf(json.Root(), "processing"), "frame"), "outHeight"), Optional<int64_t>(128));
+        const auto back = ReadText(text);
         ASSERT_TRUE(back.has_value()) << back.error();
         EXPECT_EQ(back->processing, set.processing);
-        EXPECT_EQ(ArtGenSetToJson(*back), json);
+        EXPECT_EQ(ManifestOf(*back), text);
     }
 
     TEST(ArtGenSetTest, AProcessingOfTheWrongShapeIsAnErrorThatSaysWhere) {
@@ -146,44 +237,41 @@ namespace BECore::Tests {
                                    Case{R"({"settings":{},"frame":{"x":0,"y":0,"w":10,"h":10,"outWidth":50,"outHeight":5}})", "manifest.processing.frame:"},
                                    Case{R"({"settings":{},"frame":{"x":0,"y":0,"w":"wide","h":10,"outWidth":5,"outHeight":5}})", "manifest.processing.frame:"}};
         for (const Case& item : cases) {
-            Json json = ArtGenSetToJson(MakeSet());
-            json["processing"] = Manifest(item.processing);
-            const String error = ErrorOf(ArtGenSetFromJson(json));
+            const String error = ErrorOf(ReadText(JsonWith(ManifestOf(MakeSet()), "/processing", item.processing)));
             EXPECT_TRUE(Contains(error, item.where)) << item.processing << " -> " << error;
         }
     }
 
     TEST(ArtGenSetTest, AReferenceRoundTripsWithAndWithoutAWeight) {
         ArtGenSet set = MakeSet();
-        EXPECT_TRUE(FindJsonMember(ArtGenSetToJson(set), "reference")->is_null()) << "no reference: the key is there, null";
+        EXPECT_EQ(MemberText(ManifestOf(set), "reference"), "null") << "no reference: the key is there, null";
 
         for (const Optional<double> weight : {Optional<double>(), Optional<double>(0.6)}) {
             set.reference = ArtGenReference{"style", "assets/artgen/white_knight.png", weight};
-            const Json json = ArtGenSetToJson(set);
-            EXPECT_EQ(GetJsonString(*FindJsonMember(json, "reference"), "mode"), Optional<String>("style"));
-            EXPECT_EQ(FindJsonMember(*FindJsonMember(json, "reference"), "weight") != nullptr, weight.has_value());
-            const auto back = ArtGenSetFromJson(json);
+            const String text = ManifestOf(set);
+            const JsonDoc json{StringView(text.c_str(), text.size())};
+            EXPECT_EQ(StringOf(MemberOf(json.Root(), "reference"), "mode"), "style");
+            EXPECT_EQ(MemberOf(json.Root(), "reference").Find("weight").has_value(), weight.has_value());
+            const auto back = ReadText(text);
             ASSERT_TRUE(back.has_value()) << back.error();
             EXPECT_EQ(back->reference, set.reference);
-            EXPECT_EQ(ArtGenSetToJson(*back), json);
+            EXPECT_EQ(ManifestOf(*back), text);
         }
     }
 
     TEST(ArtGenSetTest, AManifestWithoutAReferenceOrWithANullOneReadsAsNone) {
-        Json json = ArtGenSetToJson(MakeSet());
-        json.erase("reference");
-        const auto without = ArtGenSetFromJson(json);
+        const String withoutText = JsonWithout(ManifestOf(MakeSet()), "/reference");
+        const auto without = ReadText(withoutText);
         ASSERT_TRUE(without.has_value()) << without.error();
         EXPECT_FALSE(without->reference.has_value());
         EXPECT_EQ(kArtGenManifestFormat, 1) << "an additive key: the format number stays";
 
-        const auto minimal = ArtGenSetFromJson(Manifest(kMinimalManifest));
+        const auto minimal = ReadText(kMinimalManifest);
         ASSERT_TRUE(minimal.has_value()) << minimal.error();
         EXPECT_FALSE(minimal->reference.has_value());
-        EXPECT_TRUE(FindJsonMember(ArtGenSetToJson(*minimal), "reference")->is_null()) << "rewritten as none, nothing invented";
+        EXPECT_EQ(MemberText(ManifestOf(*minimal), "reference"), "null") << "rewritten as none, nothing invented";
 
-        json["reference"] = Json(nullptr);
-        const auto nulled = ArtGenSetFromJson(json);
+        const auto nulled = ReadText(JsonWith(withoutText, "/reference", "null"));
         ASSERT_TRUE(nulled.has_value()) << nulled.error();
         EXPECT_FALSE(nulled->reference.has_value());
     }
@@ -196,9 +284,7 @@ namespace BECore::Tests {
         const Array<Case, 5> cases{Case{R"("yes")", "'reference'"}, Case{R"({"image":"a.png"})", "'reference.mode'"}, Case{R"({"mode":"init"})", "'reference.image'"},
                                    Case{R"({"mode":"style","image":""})", "'reference.image'"}, Case{R"({"mode":"style","image":"a.png","weight":"x"})", "'reference.weight'"}};
         for (const Case& item : cases) {
-            Json json = ArtGenSetToJson(MakeSet());
-            json["reference"] = Manifest(item.reference);
-            const String error = ErrorOf(ArtGenSetFromJson(json));
+            const String error = ErrorOf(ReadText(JsonWith(ManifestOf(MakeSet()), "/reference", item.reference)));
             EXPECT_TRUE(Contains(error, "manifest: ")) << error;
             EXPECT_TRUE(Contains(error, item.where)) << item.reference << " -> " << error;
         }
@@ -206,54 +292,52 @@ namespace BECore::Tests {
 
     TEST(ArtGenSetTest, AnAtlasGroupRoundTripsAndNoGroupIsWrittenAsNull) {
         ArtGenSet set = MakeSet();
-        EXPECT_TRUE(FindJsonMember(ArtGenSetToJson(set), "atlas")->is_null()) << "no group: the key is there, null";
+        EXPECT_EQ(MemberText(ManifestOf(set), "atlas"), "null") << "no group: the key is there, null";
 
         set.atlas = "pieces";
-        const Json json = ArtGenSetToJson(set);
-        EXPECT_EQ(*FindJsonMember(json, "atlas"), Json("pieces"));
-        const auto back = ArtGenSetFromJson(json);
+        const String text = ManifestOf(set);
+        EXPECT_EQ(MemberText(text, "atlas"), R"("pieces")");
+        const auto back = ReadText(text);
         ASSERT_TRUE(back.has_value()) << back.error();
         EXPECT_EQ(back->atlas, "pieces");
-        EXPECT_EQ(ArtGenSetToJson(*back), json);
+        EXPECT_EQ(ManifestOf(*back), text);
     }
 
     TEST(ArtGenSetTest, AManifestFromBeforeAtlasesOrWithANullOneReadsAsNoGroup) {
-        Json json = ArtGenSetToJson(MakeSet());
-        json.erase("atlas");
-        const auto without = ArtGenSetFromJson(json);
+        const String withoutText = JsonWithout(ManifestOf(MakeSet()), "/atlas");
+        const auto without = ReadText(withoutText);
         ASSERT_TRUE(without.has_value()) << without.error();
         EXPECT_TRUE(without->atlas.empty());
 
-        const auto minimal = ArtGenSetFromJson(Manifest(kMinimalManifest));
+        const auto minimal = ReadText(kMinimalManifest);
         ASSERT_TRUE(minimal.has_value()) << minimal.error();
         EXPECT_TRUE(minimal->atlas.empty());
-        EXPECT_TRUE(FindJsonMember(ArtGenSetToJson(*minimal), "atlas")->is_null()) << "rewritten as none, nothing invented";
+        EXPECT_EQ(MemberText(ManifestOf(*minimal), "atlas"), "null") << "rewritten as none, nothing invented";
 
-        json["atlas"] = Json(nullptr);
-        const auto nulled = ArtGenSetFromJson(json);
+        const auto nulled = ReadText(JsonWith(withoutText, "/atlas", "null"));
         ASSERT_TRUE(nulled.has_value()) << nulled.error();
         EXPECT_TRUE(nulled->atlas.empty());
     }
 
     TEST(ArtGenSetTest, AnAtlasGroupThatIsNotAGroupNameIsAnErrorThatNamesTheKey) {
         for (const char* bad : {"5", R"("")", R"("a b")", R"("../x")", "[]", "true"}) {
-            Json json = ArtGenSetToJson(MakeSet());
-            json["atlas"] = Manifest(bad);
-            const String error = ErrorOf(ArtGenSetFromJson(json));
+            const String error = ErrorOf(ReadText(JsonWith(ManifestOf(MakeSet()), "/atlas", bad)));
             EXPECT_TRUE(Contains(error, "manifest: ")) << error;
             EXPECT_TRUE(Contains(error, "'atlas'")) << bad << " -> " << error;
         }
     }
 
     TEST(ArtGenSetTest, PathsInTheManifestUseForwardSlashes) {
-        const Json json = ArtGenSetToJson(MakeSet());
-        const Json& variant = (Require(FindJsonMember(json, "jobs")))[0]["variants"][0];
-        EXPECT_EQ(GetJsonString(variant, "file"), "white_knight/white_knight_4242.png");
-        EXPECT_EQ(GetJsonString(variant, "file")->find('\\'), String::npos);
+        const String text = ManifestOf(MakeSet());
+        const JsonDoc json{StringView(text.c_str(), text.size())};
+        const JsonView variant = ItemAt(MemberOf(ItemAt(MemberOf(json.Root(), "jobs"), 0), "variants"), 0);
+        const String file = StringOf(variant, "file");
+        EXPECT_EQ(file, "white_knight/white_knight_4242.png");
+        EXPECT_EQ(file.find('\\'), String::npos);
     }
 
     TEST(ArtGenSetTest, MinimalManifestReads) {
-        const auto set = ArtGenSetFromJson(Manifest(kMinimalManifest));
+        const auto set = ReadText(kMinimalManifest);
         ASSERT_TRUE(set.has_value()) << set.error();
         EXPECT_EQ(set->jobs.size(), 1u);
         EXPECT_EQ(set->jobs[0].state, ArtGenSetJobState::Pending);
@@ -261,44 +345,37 @@ namespace BECore::Tests {
     }
 
     TEST(ArtGenSetTest, UnknownKeysAreIgnored) {
-        Json json = Manifest(kMinimalManifest);
-        json["future"] = 1;
-        json["jobs"][0]["note"] = "x";
-        EXPECT_TRUE(ArtGenSetFromJson(json).has_value());
+        const String future = JsonWith(kMinimalManifest, "/future", "1");
+        EXPECT_TRUE(ReadText(JsonWith(future, "/jobs/0/note", R"("x")")).has_value());
     }
 
     TEST(ArtGenSetTest, UnknownFormatNumberIsRefused) {
-        Json json = Manifest(kMinimalManifest);
-        json["manifest"] = 2;
-        EXPECT_TRUE(Contains(ErrorOf(ArtGenSetFromJson(json)), "format 2"));
-        json.erase("manifest");
-        EXPECT_FALSE(ArtGenSetFromJson(json).has_value());
-        EXPECT_FALSE(ArtGenSetFromJson(Json::array()).has_value());
+        EXPECT_TRUE(Contains(ErrorOf(ReadText(JsonWith(kMinimalManifest, "/manifest", "2"))), "format 2"));
+        EXPECT_FALSE(ReadText(JsonWithout(kMinimalManifest, "/manifest")).has_value());
+        EXPECT_FALSE(ReadText(StringView("[]")).has_value());
     }
 
     TEST(ArtGenSetTest, WrongTypesAreErrorsNotAborts) {
         struct Case {
             const char* path;
-            Json value;
+            const char* value;
             const char* mentions;
         };
         const Case cases[] = {
-            {"set", Json(5), "'set'"},
-            {"set", Json("bad name!"), "not a valid set name"},
-            {"kind", Json("video"), "kind"},
-            {"count", Json("4"), "'count'"},
-            {"count", Json(0), "'count'"},
-            {"count", Json(17), "'count'"},
-            {"seed", Json(1.5), "'seed'"},
-            {"preset", Json(3), "'preset'"},
-            {"presetData", Json(3), "presetData"},
-            {"jobs", Json("x"), "'jobs'"},
-            {"jobs", Json::array(), "'jobs'"},
+            {"/set", "5", "'set'"},
+            {"/set", R"("bad name!")", "not a valid set name"},
+            {"/kind", R"("video")", "kind"},
+            {"/count", R"("4")", "'count'"},
+            {"/count", "0", "'count'"},
+            {"/count", "17", "'count'"},
+            {"/seed", "1.5", "'seed'"},
+            {"/preset", "3", "'preset'"},
+            {"/presetData", "3", "presetData"},
+            {"/jobs", R"("x")", "'jobs'"},
+            {"/jobs", "[]", "'jobs'"},
         };
         for (const auto& item : cases) {
-            Json json = Manifest(kMinimalManifest);
-            json[item.path] = item.value;
-            const String error = ErrorOf(ArtGenSetFromJson(json));
+            const String error = ErrorOf(ReadText(JsonWith(kMinimalManifest, item.path, item.value)));
             EXPECT_TRUE(Contains(error, item.mentions)) << item.path << ": " << error;
         }
     }
@@ -306,45 +383,41 @@ namespace BECore::Tests {
     TEST(ArtGenSetTest, WrongJobMembersNameTheJob) {
         struct Case {
             const char* member;
-            Json value;
+            const char* value;
             const char* mentions;
         };
         const Case cases[] = {
-            {"name", Json(3), "jobs[0]: 'name'"},
-            {"name", Json("a b"), "not a valid name"},
-            {"subject", Json(nullptr), "'subject'"},
-            {"state", Json("Sleeping"), "unknown state 'Sleeping'"},
-            {"state", Json(1), "'state'"},
-            {"error", Json(1), "'error'"},
-            {"variants", Json("x"), "'variants'"},
-            {"variants", Json::array({Json(1)}), "jobs[0].variants[0]: must be an object"},
-            {"variants", Json::parse(R"([{"seed":"1","file":"a.png"}])"), "'seed'"},
-            {"variants", Json::parse(R"([{"seed":1}])"), "'file'"},
-            {"variants", Json::parse(R"([{"seed":1,"file":"a.png","kind":"video"}])"), "kind"},
-            {"pick", Json("x"), "'pick'"},
-            {"pick", Json(99), "not a seed"},
-            {"accepted", Json(1), "'accepted'"},
-            {"accepted", Json::parse(R"({"date":"x"})"), "'as'"},
+            {"name", "3", "jobs[0]: 'name'"},
+            {"name", R"("a b")", "not a valid name"},
+            {"subject", "null", "'subject'"},
+            {"state", R"("Sleeping")", "unknown state 'Sleeping'"},
+            {"state", "1", "'state'"},
+            {"error", "1", "'error'"},
+            {"variants", R"("x")", "'variants'"},
+            {"variants", "[1]", "jobs[0].variants[0]: must be an object"},
+            {"variants", R"([{"seed":"1","file":"a.png"}])", "'seed'"},
+            {"variants", R"([{"seed":1}])", "'file'"},
+            {"variants", R"([{"seed":1,"file":"a.png","kind":"video"}])", "kind"},
+            {"pick", R"("x")", "'pick'"},
+            {"pick", "99", "not a seed"},
+            {"accepted", "1", "'accepted'"},
+            {"accepted", R"({"date":"x"})", "'as'"},
         };
         for (const auto& item : cases) {
-            Json json = Manifest(kMinimalManifest);
-            json["jobs"][0][item.member] = item.value;
-            const String error = ErrorOf(ArtGenSetFromJson(json));
+            const String error = ErrorOf(ReadText(JsonWith(kMinimalManifest, Format("/jobs/0/{}", item.member), item.value)));
             EXPECT_TRUE(Contains(error, item.mentions)) << item.member << ": " << error;
         }
     }
 
     TEST(ArtGenSetTest, DuplicateJobNamesAreRefused) {
-        Json json = Manifest(kMinimalManifest);
-        json["jobs"].push_back(json["jobs"][0]);
-        EXPECT_TRUE(Contains(ErrorOf(ArtGenSetFromJson(json)), "used twice"));
+        const JsonDoc minimal{kMinimalManifest};
+        const String twice = JsonWith(kMinimalManifest, "/jobs/-", ItemAt(MemberOf(minimal.Root(), "jobs"), 0).Raw());
+        EXPECT_TRUE(Contains(ErrorOf(ReadText(twice)), "used twice"));
     }
 
     TEST(ArtGenSetTest, APickOfAVariantReads) {
-        Json json = Manifest(kMinimalManifest);
-        json["jobs"][0]["variants"] = Json::parse(R"([{"seed":5,"file":"a/a_5.png","provenance":"a/a_5.artgen.json"}])");
-        json["jobs"][0]["pick"] = 5;
-        const auto set = ArtGenSetFromJson(json);
+        const String withVariant = JsonWith(kMinimalManifest, "/jobs/0/variants", R"([{"seed":5,"file":"a/a_5.png","provenance":"a/a_5.artgen.json"}])");
+        const auto set = ReadText(JsonWith(withVariant, "/jobs/0/pick", "5"));
         ASSERT_TRUE(set.has_value()) << set.error();
         EXPECT_EQ(set->jobs[0].pick, Optional<int64_t>(5));
     }
@@ -660,7 +733,7 @@ namespace BECore::Tests {
         EXPECT_EQ(job.variants[0].seed, 4243);
         EXPECT_EQ(job.pick, Optional<int64_t>(4243));
 
-        const auto back = ArtGenSetFromJson(ArtGenSetToJson(set));
+        const auto back = ReadText(ManifestOf(set));
         ASSERT_TRUE(back.has_value()) << back.error();
         EXPECT_EQ(back->jobs[0].variants.size(), 1u);
     }
@@ -681,29 +754,31 @@ namespace BECore::Tests {
 
     TEST(ArtGenSetTest, MoreRoundTripsWithAndWithout) {
         ArtGenSet set = MakeSet();
-        const Json plain = ArtGenSetToJson(set);
-        ASSERT_TRUE(plain["jobs"][0].contains("more"));
-        EXPECT_TRUE(plain["jobs"][0]["more"].is_null());
-        const auto readPlain = ArtGenSetFromJson(plain);
+        const String plain = ManifestOf(set);
+        const JsonDoc plainDoc{StringView(plain.c_str(), plain.size())};
+        EXPECT_TRUE(MemberOf(ItemAt(MemberOf(plainDoc.Root(), "jobs"), 0), "more").IsNull()) << "the key is there, null";
+        const auto readPlain = ReadText(plain);
         ASSERT_TRUE(readPlain.has_value()) << readPlain.error();
         EXPECT_FALSE(readPlain->jobs[0].more.has_value());
 
         set.jobs[0].state = ArtGenSetJobState::Pending;
         set.jobs[0].more = ArtGenSetMore{9000, 5};
-        const Json json = ArtGenSetToJson(set);
-        EXPECT_EQ(GetJsonInt(json["jobs"][0]["more"], "seed"), 9000);
-        EXPECT_EQ(GetJsonInt(json["jobs"][0]["more"], "count"), 5);
-        const auto back = ArtGenSetFromJson(json);
+        const String text = ManifestOf(set);
+        const JsonDoc json{StringView(text.c_str(), text.size())};
+        const JsonView more = MemberOf(ItemAt(MemberOf(json.Root(), "jobs"), 0), "more");
+        EXPECT_EQ(IntOf(more, "seed"), Optional<int64_t>(9000));
+        EXPECT_EQ(IntOf(more, "count"), Optional<int64_t>(5));
+        const auto back = ReadText(text);
         ASSERT_TRUE(back.has_value()) << back.error();
         ASSERT_TRUE(back->jobs[0].more.has_value());
         EXPECT_EQ(back->jobs[0].more->seed, 9000);
         EXPECT_EQ(back->jobs[0].more->count, 5);
-        EXPECT_EQ(ArtGenSetToJson(*back), json);
+        EXPECT_EQ(ManifestOf(*back), text);
         EXPECT_FALSE(back->jobs[1].more.has_value());
     }
 
     TEST(ArtGenSetTest, AManifestWithoutMoreReadsAsNone) {
-        const auto set = ArtGenSetFromJson(Manifest(kMinimalManifest));
+        const auto set = ReadText(kMinimalManifest);
         ASSERT_TRUE(set.has_value()) << set.error();
         EXPECT_FALSE(set->jobs[0].more.has_value());
     }
@@ -721,9 +796,7 @@ namespace BECore::Tests {
             {R"({"seed":5})", "'count' must be an integer"},
         };
         for (const auto& item : cases) {
-            Json json = Manifest(kMinimalManifest);
-            json["jobs"][0]["more"] = Manifest(item.more);
-            const String error = ErrorOf(ArtGenSetFromJson(json));
+            const String error = ErrorOf(ReadText(JsonWith(kMinimalManifest, "/jobs/0/more", item.more)));
             EXPECT_TRUE(Contains(error, "jobs[0].more")) << item.more << " -> " << error;
             EXPECT_TRUE(Contains(error, item.mentions)) << item.more << " -> " << error;
         }

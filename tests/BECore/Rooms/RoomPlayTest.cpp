@@ -1,8 +1,11 @@
 #include <BECore/Rooms/FakeSeatedGame.h>
 #include <BECore/Rooms/RoomTestTimings.h>
 #include <BECore/Rooms/TestRandom.h>
+#include <Common/AssertBridge.h>
+#include <Common/JsonDoc.h>
 #include <Common/LogRecorder.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/SharedPtr.h>
 #include <Rooms/Room.h>
 #include <Rooms/RoomErrors.h>
@@ -45,10 +48,8 @@ namespace BECore::Tests {
             return test;
         }
 
-        Json FirstSeatOptions(int seat) {
-            Json options = Json::object();
-            options["firstSeat"] = seat;
-            return options;
+        JsonDoc FirstSeatOptions(int seat) {
+            return JsonDoc(Format(R"({{"firstSeat":{}}})", seat));
         }
 
         template <typename T>
@@ -113,7 +114,7 @@ namespace BECore::Tests {
     TEST(RoomPlayTest, NothingToDoBeforeTheStart) {
         TestRoom test = MakeTestRoom(1);
         const PlayerId player = test.members[0].player;
-        EXPECT_EQ(CodeOf(test.room.PerformAction(player, 0, CardAction("c0_0"))), RoomErrors::kNotStarted);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(player, 0, CardActionDoc("c0_0"))), RoomErrors::kNotStarted);
         EXPECT_EQ(CodeOf(test.room.GetSeatView(player)), RoomErrors::kNotStarted);
         EXPECT_EQ(CodeOf(test.room.GetSeatActions(player)), RoomErrors::kNotStarted);
         EXPECT_EQ(CodeOf(test.room.GetSeatView(77)), RoomErrors::kNotInRoom);
@@ -168,21 +169,21 @@ namespace BECore::Tests {
         EXPECT_EQ((*test.room.GetSeatActions(b))->Count(), 0u);
 
         // Off turn, a card of another seat, a malformed action, a stale version: nothing changes
-        EXPECT_EQ(CodeOf(test.room.PerformAction(b, version, CardAction("c1_0"))), RoomErrors::kNotYourTurn);
-        EXPECT_EQ(CodeOf(test.room.PerformAction(a, version, CardAction("c1_0"))), RoomErrors::kIllegalAction);
-        EXPECT_EQ(CodeOf(test.room.PerformAction(a, version, Json::object())), ControlErrors::kInvalidParams);
-        EXPECT_EQ(CodeOf(test.room.PerformAction(a, version + 1, CardAction("c0_0"))), RoomErrors::kStaleAction);
-        EXPECT_EQ(CodeOf(test.room.PerformAction(a, 0, CardAction("c0_0"))), RoomErrors::kStaleAction);
-        EXPECT_EQ(CodeOf(test.room.PerformAction(88, version, CardAction("c0_0"))), RoomErrors::kNotInRoom);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(b, version, CardActionDoc("c1_0"))), RoomErrors::kNotYourTurn);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(a, version, CardActionDoc("c1_0"))), RoomErrors::kIllegalAction);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(a, version, JsonDoc("{}"))), ControlErrors::kInvalidParams);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(a, version + 1, CardActionDoc("c0_0"))), RoomErrors::kStaleAction);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(a, 0, CardActionDoc("c0_0"))), RoomErrors::kStaleAction);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(88, version, CardActionDoc("c0_0"))), RoomErrors::kNotInRoom);
         EXPECT_EQ(test.room.GetGameVersion(), version);
         EXPECT_EQ(test.Game().GetPlayCount(), 0);
 
-        const auto outcome = test.room.PerformAction(a, version, CardAction("c0_1"));
+        const auto outcome = test.room.PerformAction(a, version, CardActionDoc("c0_1"));
         ASSERT_TRUE(outcome.has_value());
         EXPECT_GT(test.room.GetGameVersion(), version);
         EXPECT_EQ(test.Game().GetPlayCount(), 1);
         // The old version is stale now
-        EXPECT_EQ(CodeOf(test.room.PerformAction(b, version, CardAction("c1_0"))), RoomErrors::kStaleAction);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(b, version, CardActionDoc("c1_0"))), RoomErrors::kStaleAction);
         ExpectViewsDoNotLeak(test);
     }
 
@@ -199,7 +200,7 @@ namespace BECore::Tests {
         const auto inside = After(std::chrono::seconds(29));
         EXPECT_FALSE(test.room.IsSeatComputerControlled(0, inside));
         EXPECT_FALSE(test.room.StepComputers(inside));
-        EXPECT_EQ(CodeOf(test.room.PerformAction(a, test.room.GetGameVersion(), CardAction("c0_0"))), RoomErrors::kNotYourTurn);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(a, test.room.GetGameVersion(), CardActionDoc("c0_0"))), RoomErrors::kNotYourTurn);
         EXPECT_EQ(test.Game().GetPlayCount(), 0);
 
         // After the grace a computer plays the lowest card of the seat
@@ -232,7 +233,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(test.room.IsSeatComputerControlled(0, late));
         EXPECT_FALSE(test.room.StepComputers(late));
         EXPECT_TRUE(test.room.GetLobbySnapshot().seats[0].connected);
-        EXPECT_EQ(CodeOf(test.room.PerformAction(a, test.room.GetGameVersion(), CardAction("c0_0"))), "<ok>");
+        EXPECT_EQ(CodeOf(test.room.PerformAction(a, test.room.GetGameVersion(), CardActionDoc("c0_0"))), "<ok>");
         EXPECT_EQ(test.Game().GetPlayCount(), 1);
         // A return that changes nothing does not move the revision
         const uint64_t after = test.room.GetLobbyRevision();
@@ -282,7 +283,8 @@ namespace BECore::Tests {
                 const auto actions = test.room.GetSeatActions(player);
                 ASSERT_TRUE(actions.has_value());
                 if ((*actions)->Count() != 0) {
-                    const auto result = test.room.PerformAction(player, test.room.GetGameVersion(), ActionsJson(**actions)[0]);
+                    const JsonDoc listed(ActionsText(**actions));
+                    const auto result = test.room.PerformAction(player, test.room.GetGameVersion(), ItemAt(listed.Root(), 0));
                     EXPECT_TRUE(result.has_value());
                     ExpectViewsDoNotLeak(test);
                 }
@@ -295,7 +297,7 @@ namespace BECore::Tests {
         EXPECT_EQ(test.room.GetLobbySnapshot().phase, RoomPhase::Finished);
         EXPECT_EQ((*test.room.GetSeatActions(a))->Count(), 0u);
         EXPECT_FALSE(test.room.StepComputers(now + std::chrono::seconds(5)));
-        EXPECT_EQ(CodeOf(test.room.PerformAction(a, test.room.GetGameVersion(), CardAction("c0_0"))), RoomErrors::kNotYourTurn);
+        EXPECT_EQ(CodeOf(test.room.PerformAction(a, test.room.GetGameVersion(), CardActionDoc("c0_0"))), RoomErrors::kNotYourTurn);
     }
 
     TEST(RoomPlayTest, ComputersWaitForTheDelay) {
@@ -371,15 +373,56 @@ namespace BECore::Tests {
         /// A game whose computer proposes an action the game itself refuses (a bug of an adapter)
         class StubbornGame : public FakeSeatedGame {
         public:
-            Optional<Json> ChooseComputerAction(int seat) const override {
+            bool ChooseComputerAction(int seat, JsonWriter& action) const override {
                 ++proposals;
-                return CardAction(Format("c{}_0", (seat + 1) % kSeatCount));
+                action.Raw(CardActionText(Format("c{}_0", (seat + 1) % kSeatCount)));
+                return true;
             }
 
             mutable int proposals = 0;
         };
 
     }  // namespace
+
+    namespace {
+
+        /// Remembers the documents the room handed to the game, as compact text
+        class DocumentRecorder : public FakeSeatedGame {
+        public:
+            std::expected<void, ControlError> Start(uint64_t seed, JsonView options) override {
+                startOptions = String(options.Raw().data(), options.Raw().size());
+                return FakeSeatedGame::Start(seed, options);
+            }
+
+            std::expected<UniquePtr<SeatedOutcome>, ControlError> PerformSeatAction(int seat, JsonView action) override {
+                lastAction = String(action.Raw().data(), action.Raw().size());
+                return FakeSeatedGame::PerformSeatAction(seat, action);
+            }
+
+            String startOptions;
+            String lastAction;
+        };
+
+    }  // namespace
+
+    TEST(RoomPlayTest, TheGameReceivesTheDocumentsAsTheClientSentThemWithoutBlanks) {
+        auto game = MakeShared<DocumentRecorder*>(nullptr);
+        SeatedGameFactory factory = [game]() -> UniquePtr<ISeatedGame> {
+            auto made = MakeUnique<DocumentRecorder>();
+            *game = made.get();
+            return made;
+        };
+        Room room("ABCDE", SeatedGameInfo{"fake", 4}, MakeSequence(5), std::move(factory), NoComputerDelayTimings());
+        const auto joined = room.AddMember("Ann", kNow);
+        ASSERT_TRUE(joined.has_value());
+        // An escape and a nested array arrive as they were written
+        const JsonDoc options(R"({"firstSeat":0,"note":"a\"b\u00e9","list":[1,[2,{"k":null}]]})");
+        ASSERT_TRUE(room.Start(joined->player, kNow, options).has_value());
+        EXPECT_EQ((*game)->startOptions, String(options.Text().data(), options.Text().size()));
+        const String move = CardActionText("c0_0");
+        EXPECT_TRUE(room.PerformAction(joined->player, room.GetGameVersion(), JsonDoc(move)).has_value());
+        EXPECT_EQ((*game)->lastAction, move);
+    }
 
     TEST(RoomPlayTest, ARefusedComputerMoveIsNotRetriedAndChangesNothing) {
         auto game = MakeShared<StubbornGame*>(nullptr);
@@ -404,6 +447,77 @@ namespace BECore::Tests {
         EXPECT_EQ((*game)->proposals, 1);
         EXPECT_EQ(room.GetGameVersion(), version);
         EXPECT_EQ(room.GetPhase(), RoomPhase::Playing);
+    }
+
+    namespace {
+
+        /// A game whose computer reports success with a document that is not one complete object, as a game with a bug would
+        class BrokenWriterGame : public DocumentRecorder {
+        public:
+            enum class Fault { Nothing, TwoValues, HalfAnObject };
+
+            bool ChooseComputerAction(int, JsonWriter& action) const override {
+                ++proposals;
+                switch (fault) {
+                    case Fault::Nothing:
+                        break;
+                    case Fault::TwoValues:
+                        action.Value(1);
+                        action.Value(2);
+                        break;
+                    case Fault::HalfAnObject:
+                        action.BeginObject();
+                        break;
+                }
+                return true;
+            }
+
+            Fault fault = Fault::Nothing;
+            mutable int proposals = 0;
+        };
+
+    }  // namespace
+
+    TEST(RoomPlayTest, AComputerActionThatIsNotOneCompleteObjectIsSkippedLoggedAndMovesNothing) {
+        for (const auto fault : {BrokenWriterGame::Fault::Nothing, BrokenWriterGame::Fault::TwoValues, BrokenWriterGame::Fault::HalfAnObject}) {
+            auto game = MakeShared<BrokenWriterGame*>(nullptr);
+            SeatedGameFactory factory = [game, fault]() -> UniquePtr<ISeatedGame> {
+                auto made = MakeUnique<BrokenWriterGame>();
+                made->fault = fault;
+                *game = made.get();
+                return made;
+            };
+            Room room("ABCDE", SeatedGameInfo{"fake", 4}, MakeSequence(5), std::move(factory), NoComputerDelayTimings());
+            const auto joined = room.AddMember("Ann", kNow);
+            ASSERT_TRUE(joined.has_value());
+            ASSERT_TRUE(room.Start(joined->player, kNow, FirstSeatOptions(1)).has_value());
+            const uint64_t version = room.GetGameVersion();
+            const LogRecorder log;
+            AssertBridge::Capture capture;
+            EXPECT_FALSE(room.StepComputers(kNow));
+            LogEvent::Flush();
+            EXPECT_EQ(log.Messages(LogLevel::Error, {}).size(), 3u) << "one line per computer seat that was tried";
+            EXPECT_EQ((*game)->proposals, 3);
+            EXPECT_TRUE((*game)->lastAction.empty()) << "the game never got an action";
+            EXPECT_EQ(room.GetGameVersion(), version);
+        }
+    }
+
+    TEST(RoomPlayTest, AComputerActionReachesTheGameAsTheTextAPersonWouldSend) {
+        auto game = MakeShared<DocumentRecorder*>(nullptr);
+        SeatedGameFactory factory = [game]() -> UniquePtr<ISeatedGame> {
+            auto made = MakeUnique<DocumentRecorder>();
+            *game = made.get();
+            return made;
+        };
+        Room room("ABCDE", SeatedGameInfo{"fake", 4}, MakeSequence(5), std::move(factory), NoComputerDelayTimings());
+        const auto joined = room.AddMember("Ann", kNow);
+        ASSERT_TRUE(joined.has_value());
+        ASSERT_TRUE(room.Start(joined->player, kNow, FirstSeatOptions(1)).has_value());
+        const Optional<String> chosen = ChooseComputerText(**game, 1);
+        ASSERT_TRUE(chosen.has_value());
+        ASSERT_TRUE(room.StepComputers(kNow));
+        EXPECT_EQ((*game)->lastAction, *chosen);
     }
 
     TEST(RoomPlayTest, AReturningMemberBecomesHostWhenNoConnectedHumanWasLeft) {

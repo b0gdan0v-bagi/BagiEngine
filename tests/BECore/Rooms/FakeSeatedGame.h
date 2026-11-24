@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/JsonWriter.h>
+#include <Common/JsonDoc.h>
 #include <RoomServer/DemoCardGame.h>
 
 namespace BECore::Tests {
@@ -11,18 +12,44 @@ namespace BECore::Tests {
     /// The negative control: the same game whose view also carries every hand ("allHands"). A leak check must catch it
     using LeakyFakeSeatedGame = LeakyDemoCardGame;
 
-    /// The action of the game that plays @p card
-    [[nodiscard]] inline Json CardAction(const String& card) {
-        Json action = Json::object();
-        action["type"] = "play";
-        action["card"] = card.c_str();
-        return action;
+    /// The action of the game that plays @p card, as the compact text a client sends (the keys in byte order), and as the document a room is handed
+    [[nodiscard]] inline String CardActionText(const String& card) {
+        String text;
+        JsonWriter writer(text);
+        writer.BeginObject();
+        writer.Member("card", card);
+        writer.Member("type", "play");
+        writer.EndObject();
+        return text;
+    }
+    [[nodiscard]] inline JsonDoc CardActionDoc(const String& card) {
+        return JsonDoc(CardActionText(card));
     }
 
-    /// The answers of a seated game as the `Json` they are written as: what the old tests read, and what a client of the wire sees
-    [[nodiscard]] Json ViewJson(const SeatedView& view);
-    [[nodiscard]] Json ActionsJson(const SeatedActions& actions);
-    [[nodiscard]] Json OutcomeJson(const SeatedOutcome& outcome);
+    /// The calls into `ISeatedGame` that take a view, driven by a text: the text is taped for the call only
+    [[nodiscard]] inline std::expected<void, ControlError> StartText(ISeatedGame& game, uint64_t seed, StringView options) {
+        const JsonDoc document(options);
+        return game.Start(seed, document);
+    }
+    [[nodiscard]] inline std::expected<UniquePtr<SeatedOutcome>, ControlError> PerformText(ISeatedGame& game, int seat, StringView action) {
+        const JsonDoc document(action);
+        return game.PerformSeatAction(seat, document);
+    }
+
+    /// The text the computer of @p seat writes, or nullopt when the game says the seat cannot act (then nothing counts of what it wrote)
+    [[nodiscard]] inline Optional<String> ChooseComputerText(const ISeatedGame& game, int seat) {
+        String text;
+        JsonWriter writer(text);
+        if (!game.ChooseComputerAction(seat, writer) || !writer.IsComplete()) {
+            return std::nullopt;
+        }
+        return text;
+    }
+
+    /// The answers of a seated game as the compact text they are written as: what a client of the wire sees
+    [[nodiscard]] String ViewText(const SeatedView& view);
+    [[nodiscard]] String ActionsText(const SeatedActions& actions);
+    [[nodiscard]] String OutcomeText(const SeatedOutcome& outcome);
 
     /// The compact text of an answer of a game, or `<error>` for an error (for a leak check and a failure message)
     [[nodiscard]] String Dump(const std::expected<UniquePtr<SeatedView>, ControlError>& view);

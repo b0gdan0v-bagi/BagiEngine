@@ -1,6 +1,7 @@
 #pragma once
 
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonView.h>
+#include <BECore/Control/JsonWriter.h>
 #include <Games/IControllableGame.h>
 #include <Games/SeatedAnswers.h>
 
@@ -26,12 +27,12 @@ namespace BECore {
      *
      * The answers are the game's own `BE_CLASS` structs derived from SeatedView, SeatedAction and SeatedOutcome (Games/SeatedAnswers.h);
      * the server writes them through the generated `WriteJson` and needs no game type. A view holds no hidden part of another seat in any
-     * field. ChooseComputerAction() stays `Json`: its one consumer is PerformSeatAction(), whose input is the client's `Json`, so a
-     * computer has no second way in.
+     * field. ChooseComputerAction() writes the action as the text a client would send: the room tapes it and hands the view to
+     * PerformSeatAction(), so a computer has no second way in.
      *
      * Everything that comes from a client (the seat number of a message, `options`, `action`) is untrusted: read it with the
-     * checked helpers of BECore/Control/Json.h, never with the throwing accessors of nlohmann (BECore/Control/CLAUDE.md), range-check
-     * numbers as int64_t before narrowing and answer a bad value with an error, not an assert. A seat number may be any
+     * checked helpers of BECore/Control/ControlParams.h (`GetParamString`, `GetParamInt`, `FindParam`), range-check numbers as
+     * int64_t before narrowing and answer a bad value with an error, not an assert. A seat number may be any
      * integer: the methods answer invalid_seat for one outside the range.
      *
      * One thread at a time: the server serializes every call. Not a BE_CLASS: no scene, no reflection; a game is created by name
@@ -47,10 +48,11 @@ namespace BECore {
         /**
          * @brief Starts a new game (deals, sets the first turn). The same seed gives the same game.
          *
-         * @param options An object whose members are the game's (rules variant, ...); it comes from a client and may be empty.
+         * @param options An object whose members are the game's (rules variant, ...); it comes from a client and may be empty. A view
+         *        valid for the call only: copy what is kept.
          * @return invalid_params for a member that is malformed; the game is then unchanged.
          */
-        virtual std::expected<void, ControlError> Start(uint64_t seed, const Json& options) = 0;
+        virtual std::expected<void, ControlError> Start(uint64_t seed, JsonView options) = 0;
 
         /**
          * @brief What @p seat may see now: its own hidden parts, public parts, the count of the hidden parts of the others.
@@ -71,19 +73,20 @@ namespace BECore {
         /**
          * @brief Applies @p action for @p seat after checking it is the seat's to make.
          *
-         * @param action An object from a client. Malformed (no `type`, wrong types): invalid_params.
+         * @param action An object from a client, a view valid for the call only. Malformed (no `type`, wrong types): invalid_params.
          * @return What the action did (public information only, it may be sent to every seat), or an error:
          *         not_your_turn when the seat cannot act now, illegal_action when the action is well-formed but the rules
          *         refuse it (including a card that belongs to another seat). Nothing changes on an error.
          */
-        virtual std::expected<UniquePtr<SeatedOutcome>, ControlError> PerformSeatAction(int seat, const Json& action) = 0;
+        virtual std::expected<UniquePtr<SeatedOutcome>, ControlError> PerformSeatAction(int seat, JsonView action) = 0;
 
         /**
-         * @brief The action a computer would send for @p seat now, or nullopt when the seat cannot act now (or is out of range).
+         * @brief Writes the action a computer would send for @p seat now: exactly one complete object, the same text a client would send.
          *
-         * It has to be accepted by PerformSeatAction() for the same seat.
+         * @return false when the seat cannot act now or is out of range; whatever was written is then dropped. What is written has to be
+         *         accepted by PerformSeatAction() for the same seat.
          */
-        [[nodiscard]] virtual Optional<Json> ChooseComputerAction(int seat) const = 0;
+        [[nodiscard]] virtual bool ChooseComputerAction(int seat, JsonWriter& action) const = 0;
 
         /// True once the game is over; then no seat has an action
         [[nodiscard]] virtual bool IsFinished() const = 0;

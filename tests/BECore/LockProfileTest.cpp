@@ -1,10 +1,10 @@
-#include <BECore/Control/Json.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
 #include <BECore/Profiler/ProfilerClock.h>
 #include <BECore/Profiler/Ring/FrameRingBackend.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/SharedMutex.h>
 #include <Common/ProfilerTestSupport.h>
+#include <Common/TraceDoc.h>
 #include <Common/Wait.h>
 #include <chrono>
 #include <gtest/gtest.h>
@@ -122,28 +122,22 @@ namespace BECore::Tests {
         /// The zones named @p name of a Chrome trace, matched B to E per thread; also fails the test when a thread's B and E do not nest
         Vector<WaitZone> FindZones(const String& trace, const char* name) {
             Vector<WaitZone> found;
-            auto parsed = ParseJson(trace);
-            EXPECT_TRUE(parsed.has_value());
-            const Json* events = parsed ? FindJsonMember(*parsed, "traceEvents") : nullptr;
-            if (events == nullptr) {
-                return found;
-            }
+            const TraceDoc doc{StringView(trace.c_str(), trace.size())};
             struct Open {
                 bool wanted;
                 double begin;
             };
             Map<int64_t, Vector<Open>> open;
-            for (const Json& event : *events) {
-                const auto phase = GetJsonString(event, "ph");
-                if (!phase || (*phase != "B" && *phase != "E")) {
+            for (const JsonView event : doc) {
+                const String phase = StringOf(event, "ph");
+                if (phase != "B" && phase != "E") {
                     continue;
                 }
-                const int64_t tid = GetJsonInt(event, "tid").value_or(-1);
-                const double ts = GetJsonNumber(event, "ts").value_or(-1.0);
+                const int64_t tid = IntOf(event, "tid").value_or(-1);
+                const double ts = NumberOf(event, "ts");
                 Vector<Open>& stack = open[tid];
-                if (*phase == "B") {
-                    const auto eventName = GetJsonString(event, "name");
-                    stack.push_back({eventName && *eventName == name, ts});
+                if (phase == "B") {
+                    stack.push_back({StringOf(event, "name") == name, ts});
                 } else {
                     EXPECT_FALSE(stack.empty()) << "an E without its B on thread " << tid;
                     if (stack.empty()) {

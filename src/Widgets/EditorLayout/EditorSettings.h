@@ -1,6 +1,6 @@
 #pragma once
 
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonMemberMap.h>
 #include <BECore/File/Path.h>
 #include <BECore/Types/Types.h>
 #include <BECore/UI/UIPreview.h>
@@ -112,18 +112,18 @@ namespace BECore {
     private:
         void LoadPreferences();
         void LoadHotkeys();
-        bool Save(const Path& path, const Json& content, bool& unreadable);
+        bool Save(const Path& path, const JsonMemberMap& content, bool& unreadable);
 
         Path _directory;
         EditorPreferences _preferences;
         HotkeyMap _hotkeys;
         String _lastSaveError;
 
-        // Members of the files that this build does not read, written back on save (JSON objects)
-        Json _extraPreferences = Json::object();
-        Json _extraViewportPreview = Json::object();  // members of the "viewportPreview" object that this build does not read
-        Json _extraHotkeys = Json::object();
-        Json _unknownBindings = Json::object();
+        // Members of the files that this build does not read, written back on save
+        JsonMemberMap _extraPreferences;
+        JsonMemberMap _extraViewportPreview;  // members of the "viewportPreview" object that this build does not read
+        JsonMemberMap _extraHotkeys;
+        JsonMemberMap _unknownBindings;
         bool _preferencesUnreadable = false;
         bool _hotkeysUnreadable = false;
     };

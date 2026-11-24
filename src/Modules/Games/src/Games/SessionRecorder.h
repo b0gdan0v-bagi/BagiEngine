@@ -1,7 +1,8 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
-#include <BECore/Control/JsonFwd.h>
+#include <BECore/Control/JsonTape.h>
+#include <BECore/Control/JsonView.h>
 #include <BECore/File/File.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/Singleton.h>
@@ -41,24 +42,26 @@ namespace BECore {
         /// Entries written by the running recording, or by the last one after it has ended
         [[nodiscard]] size_t GetEntryCount() const;
 
-        /// @p startParams are IControllableGame::GetReplayStart() after the reset, not what the caller asked for
-        void ReportReset(const Json& startParams);
+        /// @p startParamsText is the JSON text IControllableGame::WriteReplayStart() gives after the reset, not what the caller asked for. It is read
+        /// for the call only; nothing of it is kept
+        void ReportReset(StringView startParamsText);
 
-        /// @p action as the game was given it, @p outcome what PerformAction answered
-        void ReportAction(const Json& action, const Json& outcome);
+        /// @p action as the game was given it, @p outcomeText the one value PerformAction wrote. Both are written into the line at once, no copy is made
+        void ReportAction(JsonView action, StringView outcomeText);
 
-        void ReportSetState(const Json& state);
+        void ReportSetState(JsonView state);
 
     private:
         SessionRecorder() = default;
 
-        void Write(ReplayOp op, const Json& params, const Json* outcome);
+        void Write(ReplayOp op, JsonView params, Optional<StringView> outcomeText);
         void Fail(StringView what);
         bool WriteLineAndFlush();
         void Close();
 
         File _file;
-        String _line;  // the entry being written; keeps its capacity
+        String _line;         // the entry being written; keeps its capacity
+        JsonTape _startTape;  // the start params of a reset, which arrive as text
         bool _recording = false;
         bool _started = false;  ///< A reset has been written: the file has a state to act on
         bool _warnedDropped = false;

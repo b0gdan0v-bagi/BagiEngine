@@ -1,9 +1,9 @@
 // The reflected surface of StressGame: what the control API's by-name methods reach under the root `game`.
 
 #include <BECore/Application/CommandLine.h>
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
-#include <BECore/Control/JsonSerializer.h>
+#include <BECore/Control/JsonStreamSerializer.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/MethodCall.h>
 #include <BECore/Reflection/PropertyAccess.h>
@@ -32,16 +32,17 @@ namespace BECore::Stress::Tests {
 
             /// Calls @p method with the arguments of the JSON text and returns the JSON text of the result
             std::expected<String, CallError> Call(StringView method, StringView argumentsJson) {
-                const auto parsed = ParseJson(argumentsJson);
-                EXPECT_TRUE(parsed.has_value());
-                const Json arguments = parsed ? *parsed : Json::object();
-                JsonDeserializer reader(arguments);
-                JsonSerializer writer;
+                JsonDeserializer reader;
+                EXPECT_TRUE(reader.Load(argumentsJson));
+                String result;
+                JsonWriter resultWriter(result);
+                JsonStreamSerializer writer(resultWriter);
                 const auto outcome = CallMethod(_ref, method, reader, writer);
                 if (!outcome) {
                     return std::unexpected(outcome.error());
                 }
-                return DumpJson(writer.Take());
+                writer.Finish();
+                return result;
             }
 
             IntrusivePtr<StressGame> _game;

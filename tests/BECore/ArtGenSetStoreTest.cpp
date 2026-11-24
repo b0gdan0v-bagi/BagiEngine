@@ -1,3 +1,4 @@
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/File/File.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
@@ -26,6 +27,13 @@ namespace BECore::Tests {
                 set.jobs.push_back(std::move(job));
             }
             return set;
+        }
+
+        String ManifestText(const ArtGenSet& set) {
+            String text;
+            JsonWriter writer(text);
+            WriteArtGenSet(writer, set);
+            return text;
         }
 
         class ArtGenSetStoreTest : public ::testing::Test {
@@ -70,7 +78,19 @@ namespace BECore::Tests {
 
         const Vector<ArtGenSet> loaded = LoadSets(_root);
         ASSERT_EQ(loaded.size(), 1u);
-        EXPECT_EQ(ArtGenSetToJson(loaded[0]), ArtGenSetToJson(set));
+        EXPECT_EQ(ManifestText(loaded[0]), ManifestText(set));
+    }
+
+    TEST_F(ArtGenSetStoreTest, ThePathOfTheWriterIsTheTextOfTheManifestAndANewlineAndABomIsSkippedOnRead) {
+        const ArtGenSet set = MakeSet("knights", "2026-11-17T10:00:00Z");
+        ASSERT_TRUE(WriteManifest(_root, set).has_value());
+        const String written = Read(ManifestPath(_root, "knights"));
+        EXPECT_EQ(written, ManifestText(set) + "\n");
+
+        Write(ManifestPath(_root, "knights"), "\xEF\xBB\xBF" + written);
+        const Vector<ArtGenSet> loaded = LoadSets(_root);
+        ASSERT_EQ(loaded.size(), 1u) << "a manifest saved by a Windows editor still loads";
+        EXPECT_EQ(ManifestText(loaded[0]), ManifestText(set));
     }
 
     TEST_F(ArtGenSetStoreTest, WriteReplacesTheManifest) {

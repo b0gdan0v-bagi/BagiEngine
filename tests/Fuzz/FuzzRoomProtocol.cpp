@@ -106,8 +106,31 @@ namespace BECore::Fuzz {
                 a);
         }
 
+        /// What a message keeps of a game's document: the compact text of one object
+        bool IsObjectText(const String& text) {
+            JsonTape tape;
+            return tape.Parse(text).has_value() && JsonView(tape, 0).IsObject();
+        }
+
+        /// One tape for the whole run of inputs, as a connection's handler keeps it: its answers must be those of a fresh tape
+        JsonTape& SharedTape() {
+            thread_local JsonTape tape;
+            return tape;
+        }
+
+        bool SameRefusal(const ControlError& a, const ControlError& b) {
+            return a.code == b.code && a.message == b.message;
+        }
+
         void CheckClientMessage(StringView text, size_t maxBytes) {
             const auto parsed = ParseClientMessage(text, maxBytes);
+            const auto shared = ParseClientMessage(SharedTape(), text, maxBytes);
+            FUZZ_CHECK(shared.has_value() == parsed.has_value());
+            if (!parsed.has_value()) {
+                FUZZ_CHECK(SameRefusal(shared.error(), parsed.error()));
+            } else {
+                FUZZ_CHECK(SameClientMessage(*shared, *parsed));
+            }
             if (!parsed.has_value()) {
                 FUZZ_CHECK(IsTidyRefusal(parsed.error(), &IsClientRefusalCode));
                 FUZZ_CHECK((text.size() > maxBytes) == (parsed.error().code == RoomErrors::kMessageTooLarge));
@@ -127,14 +150,14 @@ namespace BECore::Fuzz {
             if (const auto* create = std::get_if<CreateRoomMessage>(&*parsed)) {
                 FUZZ_CHECK(!create->game.empty() && create->game.size() <= RoomLimits::kMaxGameNameBytes);
                 FUZZ_CHECK(SanitizePlayerName(create->name) == Optional<String>(create->name));
-                FUZZ_CHECK(create->options.is_object());
+                FUZZ_CHECK(IsObjectText(create->options));
             } else if (const auto* join = std::get_if<JoinRoomMessage>(&*parsed)) {
                 FUZZ_CHECK(join->code.size() == RoomLimits::kRoomCodeLength);
                 FUZZ_CHECK(join->name.empty() != join->token.empty());
                 FUZZ_CHECK(join->token.empty() || join->token.size() == RoomLimits::kTokenLength);
                 FUZZ_CHECK(join->name.empty() || SanitizePlayerName(join->name) == Optional<String>(join->name));
             } else if (const auto* action = std::get_if<ActionMessage>(&*parsed)) {
-                FUZZ_CHECK(action->action.is_object());
+                FUZZ_CHECK(IsObjectText(action->action));
             } else if (const auto* list = std::get_if<ListRoomsMessage>(&*parsed)) {
                 FUZZ_CHECK(!list->game.empty() && list->game.size() <= RoomLimits::kMaxGameNameBytes);
             }
@@ -175,15 +198,28 @@ namespace BECore::Fuzz {
                 FUZZ_CHECK(NormalizeRoomCode(listing.room) == Optional<String>(listing.room));
                 FUZZ_CHECK(listing.seats >= 1 && static_cast<size_t>(listing.seats) <= RoomLimits::kMaxLobbySeats);
                 FUZZ_CHECK(listing.taken >= 0 && listing.taken <= listing.seats);
-                FUZZ_CHECK(listing.options.is_object() && listing.options.size() <= RoomLimits::kMaxLobbyOptions);
-                for (auto it = listing.options.begin(); it != listing.options.end(); ++it) {
-                    FUZZ_CHECK(it->is_boolean() || it->is_number_integer());
+                if (listing.options.empty()) {
+                    continue;
+                }
+                JsonTape tape;
+                FUZZ_CHECK(tape.Parse(listing.options).has_value());
+                const JsonView options(tape, 0);
+                FUZZ_CHECK(options.IsObject() && options.Size() <= RoomLimits::kMaxLobbyOptions);
+                for (const JsonMember member : options.Members()) {
+                    FUZZ_CHECK(IsPublicOptionValue(member.value));
                 }
             }
         }
 
         void CheckServerMessage(StringView text, size_t maxBytes) {
             const auto parsed = ParseServerMessage(text, maxBytes);
+            const auto shared = ParseServerMessage(SharedTape(), text, maxBytes);
+            FUZZ_CHECK(shared.has_value() == parsed.has_value());
+            if (!parsed.has_value()) {
+                FUZZ_CHECK(SameRefusal(shared.error(), parsed.error()));
+            } else {
+                FUZZ_CHECK(shared->index() == parsed->index() && RebuildServerText(*shared) == RebuildServerText(*parsed));
+            }
             if (!parsed.has_value()) {
                 FUZZ_CHECK(IsTidyRefusal(parsed.error(), &IsServerRefusalCode));
                 FUZZ_CHECK((text.size() > maxBytes) == (parsed.error().code == RoomErrors::kMessageTooLarge));

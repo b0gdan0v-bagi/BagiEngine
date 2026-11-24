@@ -9,7 +9,7 @@ namespace BECore {
     /**
      * @brief The clock as `status`, `step` and `run_until` answer it; an answer that carries the clock derives this struct (its own keys merge with these, sorted).
      *
-     * The floats of `Time` are widened to double: that is what the `Json` DOM stored and so the text clients have always seen.
+     * The floats of `Time` are widened to double: the text clients have always seen.
      */
     struct ControlClock {
         BE_CLASS(ControlClock)

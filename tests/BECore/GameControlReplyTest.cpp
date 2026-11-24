@@ -3,7 +3,6 @@
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/GameControlTest.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/ClassMeta.h>
@@ -52,17 +51,17 @@ namespace BECore::Tests {
             }
 
             /// Posts one request and returns the text of the answer ({} while it is deferred)
-            String Ask(StringView method, const Json& params = Json()) {
+            String Ask(StringView method, StringView paramsText = {}) {
                 String text;
-                service.Post(MakeRequest(++lastId, method, params), [&text](const String& reply) { text = reply; });
+                service.Post(MakeRequestText(++lastId, method, paramsText), [&text](const String& reply) { text = reply; });
                 service.Drain();
                 return text;
             }
 
             /// Posts a deferred request and plays real-clock frames until it is answered
-            String AskAndWait(StringView method, const Json& params) {
+            String AskAndWait(StringView method, StringView paramsText) {
                 String text;
-                service.Post(MakeRequest(++lastId, method, params), [&text](const String& reply) { text = reply; });
+                service.Post(MakeRequestText(++lastId, method, paramsText), [&text](const String& reply) { text = reply; });
                 constexpr int kGuard = 100;
                 for (int frame = 0; frame < kGuard && text.empty(); ++frame) {
                     CoreManager::GetTime().Advance(kFrameSeconds);
@@ -72,24 +71,9 @@ namespace BECore::Tests {
                 return text;
             }
 
-            static Json Condition(StringView key, Json value) {
-                Json condition = Json::object();
-                condition[ToStdString(key)] = std::move(value);
-                return condition;
-            }
-
-            static Json PointerCondition(StringView pointer, Json equals) {
-                Json condition = Json::object();
-                condition["pointer"] = ToStdString(pointer);
-                condition["equals"] = std::move(equals);
-                return condition;
-            }
-
-            static Json RunUntilParams(Json condition, int64_t maxFrames) {
-                Json params = Json::object();
-                params["condition"] = std::move(condition);
-                params["maxFrames"] = maxFrames;
-                return params;
+            /// The `params` of run_until over @p conditionText (a JSON object)
+            static String RunUntilParams(StringView conditionText, int64_t maxFrames) {
+                return Format(R"({{"condition":{},"maxFrames":{}}})", conditionText, maxFrames);
             }
 
             ControlService service;
@@ -120,19 +104,13 @@ namespace BECore::Tests {
     }
 
     TEST_F(GameControlReplyTest, SwitchGameAnswersTheNewActiveGame) {
-        Json params = Json::object();
-        params["name"] = "FakePlain";
-
-        const String text = Ask("switch_game", params);
+        const String text = Ask("switch_game", R"({"name":"FakePlain"})");
 
         EXPECT_TRUE(Same(text, R"json({"id":1,"ok":true,"result":{"active":"FakePlain"}})json")) << text.c_str();
     }
 
     TEST_F(GameControlReplyTest, ResetAnswersTheGameAndTheNewVersion) {
-        Json params = Json::object();
-        params["start"] = 4;
-
-        const String controllable = Ask("reset", params);
+        const String controllable = Ask("reset", R"({"start":4})");
         GameManager::GetInstance().SwitchTo("FakePlain"_intern);
         const String plain = Ask("reset");
 
@@ -141,20 +119,14 @@ namespace BECore::Tests {
     }
 
     TEST_F(GameControlReplyTest, SetStateAnswersTheGameAndTheNewVersion) {
-        Json state = Json::object();
-        state["counter"] = 41;
-
-        const String text = Ask("set_state", state);
+        const String text = Ask("set_state", R"({"counter":41})");
 
         EXPECT_TRUE(Same(text, R"json({"id":1,"ok":true,"result":{"game":"FakeControllable","version":1}})json")) << text.c_str();
     }
 
     TEST_F(GameControlReplyTest, PerformActionAnswersTheOutcomeAndTheVersionAfterTheAction) {
-        Json action = Json::object();
-        action["type"] = "inc";
-
-        const String first = Ask("perform_action", action);
-        const String second = Ask("perform_action", action);
+        const String first = Ask("perform_action", R"({"type":"inc"})");
+        const String second = Ask("perform_action", R"({"type":"inc"})");
 
         EXPECT_TRUE(Same(first, R"json({"id":1,"ok":true,"result":{"game":"FakeControllable","outcome":{"counter":1},"version":1}})json")) << first.c_str();
         EXPECT_TRUE(Same(second, R"json({"id":2,"ok":true,"result":{"game":"FakeControllable","outcome":{"counter":2},"version":2}})json")) << second.c_str();
@@ -163,7 +135,7 @@ namespace BECore::Tests {
     TEST_F(GameControlReplyTest, RunUntilAnswersTheClockAndTheGameWhenAPointerIsMet) {
         Fake().counter = 7;
 
-        const String text = Ask("run_until", RunUntilParams(PointerCondition("/state/counter", 7), 5));
+        const String text = Ask("run_until", RunUntilParams(R"({"equals":7,"pointer":"/state/counter"})", 5));
 
         EXPECT_TRUE(Same(
             text,
@@ -175,7 +147,7 @@ namespace BECore::Tests {
         CoreManager::GetTime().Advance(kFrameSeconds);
         service.SetFrameEndHook("test", [this] { ++Fake().version; });
 
-        const String text = AskAndWait("run_until", RunUntilParams(Condition("versionMoved", true), 5));
+        const String text = AskAndWait("run_until", RunUntilParams(R"({"versionMoved":true})", 5));
 
         EXPECT_TRUE(Same(
             text,
@@ -184,7 +156,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(GameControlReplyTest, RunUntilAtTheFrameLimitAnswersMetFalse) {
-        const String text = AskAndWait("run_until", RunUntilParams(PointerCondition("/state/counter", 99), 2));
+        const String text = AskAndWait("run_until", RunUntilParams(R"({"equals":99,"pointer":"/state/counter"})", 2));
 
         EXPECT_TRUE(Same(
             text,
@@ -194,10 +166,8 @@ namespace BECore::Tests {
 
     TEST_F(GameControlReplyTest, RunUntilWithoutAnActiveGameLeavesTheGameOut) {
         GameManager::GetInstance().Shutdown();
-        Json event = Json::object();
-        event["name"] = "never_pushed";
 
-        const String text = AskAndWait("run_until", RunUntilParams(Condition("event", event), 2));
+        const String text = AskAndWait("run_until", RunUntilParams(R"({"event":{"name":"never_pushed"}})", 2));
 
         EXPECT_TRUE(Same(text, R"json({"id":1,"ok":true,"result":{"deltaTime":0.015625,"fixedDeltaTime":0.01666666753590107,"frame":2,"frames":2,"met":false,"totalTime":0.03125}})json"))
             << text.c_str();
@@ -205,8 +175,9 @@ namespace BECore::Tests {
 
     TEST_F(GameControlReplyTest, TheEnvelopeOfPerformActionAllocatesNothingBeyondTheActionItself) {
         service.RegisterHandler("action_only", [](ControlCall& call) {
-            if (auto outcome = ControlledAction(Fake(), call.Params()); !outcome) {
-                call.Fail(outcome.error());
+            String outcome;
+            if (const auto performed = ControlledAction(Fake(), call.Params(), outcome); !performed) {
+                call.Fail(performed.error());
                 return;
             }
             call.Reply([](JsonWriter& writer) {
@@ -214,12 +185,10 @@ namespace BECore::Tests {
                 writer.EndObject();
             });
         });
-        Json action = Json::object();
-        action["type"] = "inc";
         // Post() parses the request, Drain() makes the call and the game builds its outcome: all of it is the same for both methods, so only the writing of
         // the answer differs. A first round of each has grown the reply buffer
         const auto drained = [&](StringView method) {
-            service.Post(MakeRequest(1, method, action), [](const String&) {});
+            service.Post(MakeRequestText(1, method, R"({"type":"inc"})"), [](const String&) {});
             return CountAllocations([this] { service.Drain(); });
         };
         drained("perform_action");

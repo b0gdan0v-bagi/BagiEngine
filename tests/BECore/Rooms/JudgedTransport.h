@@ -1,7 +1,9 @@
 #pragma once
 
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Format/Format.h>
 #include <BECore/Rooms/WireJudge.h>
+#include <Common/JsonDoc.h>
 #include <Common/SharedPtr.h>
 #include <RoomClient/RoomTransport.h>
 #include <Rooms/RoomProtocol.h>
@@ -53,15 +55,15 @@ namespace BECore::Tests {
     private:
         void Judge(const String& text) {
             ++_log->texts;
-            const auto parsed = ParseJson(text);
-            const String type = parsed ? GetJsonString(*parsed, "type").value_or(String()) : String();
-            if (parsed && (type == RoomMessageTypes::kJoined || type == RoomMessageTypes::kView)) {
-                _log->seat = static_cast<int>(GetJsonInt(*parsed, "seat").value_or(-1));
+            const JsonDoc document(text);
+            const String type = GetParamString(document.Root(), "type").value_or(String());
+            if (document.IsParsed() && (type == RoomMessageTypes::kJoined || type == RoomMessageTypes::kView)) {
+                _log->seat = static_cast<int>(GetParamInt(document.Root(), "seat").value_or(-1));
             }
             for (const String& id : FindLeakedCardIds(text, _log->seat)) {
                 _log->leaks.push_back(Format("{} in {}", id, text));
             }
-            if (parsed && type == RoomMessageTypes::kLeft) {
+            if (document.IsParsed() && type == RoomMessageTypes::kLeft) {
                 _log->seat = -1;
             }
         }

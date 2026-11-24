@@ -1,6 +1,7 @@
 #pragma once
 
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonView.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <Widgets/ArtGen/ArtGenImage.h>
@@ -80,8 +81,8 @@ namespace BECore {
         String name;     // the folder under `artgen/out/`
         String created;  // `ArtGenTimestamp`, UTC
         String kind = "image";
-        String preset;    // the preset's name, or the form's name of a draft
-        Json presetData;  // a draft's content; null when the preset is used by name
+        String preset;      // the preset's name, or the form's name of a draft
+        String presetData;  // a draft's content: the compact text of one JSON object, keys sorted; empty when the preset is used by name
         int32_t count = kArtGenSetDefaultCount;
         int64_t seed = 0;  // the first seed of every job
         Vector<ArtGenSetJob> jobs;
@@ -142,14 +143,15 @@ namespace BECore {
     /// two accepts of one name within it would tie). An empty or unparsable @p latestOther changes nothing
     [[nodiscard]] String ArtGenAcceptDate(std::chrono::system_clock::time_point now, StringView latestOther);
 
-    /// The manifest of @p set (Sets/CLAUDE.md, "The manifest"). A document by hand, and so is `artgen_set` that answers it: it is a file that holds
-    /// `presetData`, a `Json` payload, and writes `null` for "none", which `ArtGenSetFromJson` reads back. A reflected leaf type for a `Json`
-    /// payload does not exist; one would let both go
-    [[nodiscard]] Json ArtGenSetToJson(const ArtGenSet& set);
+    /// Writes the manifest of @p set (Sets/CLAUDE.md, "The manifest") as one object, keys in byte order at every level (the bytes the DOM's `dump()` gave).
+    /// By hand because the draft is the text of a document in the middle of it: `presetData` is `Raw` when set, else `null`. @p state is the
+    /// `artgen_set` answer's member, written at its sorted place after `set`
+    void WriteArtGenSet(JsonWriter& writer, const ArtGenSet& set, Optional<StringView> state = {});
 
     /// A set from a manifest. Checked reads: a wrong type, an unknown `manifest` number, a bad name, a pick that is not a variant are an error
-    /// that says where, never an abort; unknown keys are ignored
-    [[nodiscard]] std::expected<ArtGenSet, String> ArtGenSetFromJson(const Json& manifest);
+    /// that says where, never an abort; unknown keys are ignored, of two equal keys the first is read. `presetData` must be an object or null
+    /// and is kept as its compact sorted text
+    [[nodiscard]] std::expected<ArtGenSet, String> ReadArtGenSet(JsonView manifest);
 
     /// True while a job is Pending or Running
     [[nodiscard]] bool IsActive(const ArtGenSet& set);

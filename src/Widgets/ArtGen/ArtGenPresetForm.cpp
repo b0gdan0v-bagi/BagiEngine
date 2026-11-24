@@ -1,6 +1,10 @@
 #include "ArtGenPresetForm.h"
 
+#include <BECore/Control/ControlParams.h>
+#include <BECore/Control/JsonTape.h>
+#include <BECore/Control/JsonViewOps.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
+#include <Widgets/ArtGen/ArtGenFileText.h>
 
 namespace BECore {
 
@@ -22,12 +26,22 @@ namespace BECore {
             return StringView(text.data(), text.size());
         }
 
-        String StringOf(const Json& value) {
-            return value.is_string() ? String(FromStd(value.get_ref<const std::string&>())) : String();  //-NoStd: nlohmann holds a std::string
-        }
-
-        bool IsPositiveInt(const Json& value) {
-            return value.is_number_integer() && value.get<int64_t>() > 0;
+        /// `[width, height]` of two positive integers
+        bool ReadSizePair(JsonView value, int64_t& first, int64_t& second) {
+            if (!value.IsArray() || value.Size() != 2) {
+                return false;
+            }
+            Optional<int64_t> numbers[2];
+            size_t index = 0;
+            for (const JsonView item : value.Items()) {
+                numbers[index++] = item.AsInt64();
+            }
+            if (!numbers[0] || !numbers[1] || *numbers[0] <= 0 || *numbers[1] <= 0) {
+                return false;
+            }
+            first = *numbers[0];
+            second = *numbers[1];
+            return true;
         }
 
     }  // namespace
@@ -53,66 +67,84 @@ namespace BECore {
         return std::find(std::begin(kServiceInputs), std::end(kServiceInputs), input) != std::end(kServiceInputs);
     }
 
-    String FormatArtGenPresetFile(const Json& preset) {
+    String FormatArtGenPresetFile(JsonView preset) {
         String text = "{\n";
         bool first = true;
-        auto put = [&](const std::string& key, const Json& value) {  //-NoStd: the keys of a nlohmann object
+        const auto put = [&](StringView key, JsonView value) {
             text += first ? "  " : ",\n  ";
             first = false;
-            text += DumpJson(Json(key));
+            {
+                JsonWriter keyWriter(text);
+                keyWriter.Value(key);
+            }
             text += ": ";
-            text += DumpJson(value);
+            JsonWriter valueWriter(text);
+            WriteJsonSorted(valueWriter, value);
         };
         for (const StringView key : kFileOrder) {
-            const Json* value = FindJsonMember(preset, key);
-            if (value != nullptr) {
-                put(std::string(key.data(), key.size()), *value);  //-NoStd: a nlohmann key
+            if (const Optional<JsonView> value = FindParam(preset, key)) {
+                put(key, *value);
             }
         }
-        for (const auto& [key, value] : preset.items()) {
-            const StringView name(key.data(), key.size());
-            if (std::find(std::begin(kFileOrder), std::end(kFileOrder), name) == std::end(kFileOrder)) {
-                put(key, value);
+        Vector<String> others;
+        for (const JsonMember member : preset.Members()) {
+            String key;
+            member.key.ReadText(key);
+            if (std::find(std::begin(kFileOrder), std::end(kFileOrder), StringView(key)) == std::end(kFileOrder)) {
+                others.push_back(std::move(key));
             }
+        }
+        std::sort(others.begin(), others.end());
+        others.erase(std::unique(others.begin(), others.end()), others.end());
+        for (const String& key : others) {
+            put(StringView(key), *FindParam(preset, StringView(key)));
         }
         text += "\n}\n";
         return text;
     }
 
-    std::expected<void, String> CheckArtGenPresetShape(const Json& preset) {
-        if (!preset.is_object()) {
+    std::expected<void, String> CheckArtGenPresetText(StringView text) {
+        JsonTape tape;
+        if (!tape.Parse(text)) {
             return std::unexpected(String("a preset is a JSON object"));
         }
-        const auto format = GetJsonInt(preset, "preset");
+        return CheckArtGenPresetShape(JsonView(tape, 0));
+    }
+
+    std::expected<void, String> CheckArtGenPresetShape(JsonView preset) {
+        if (!preset.IsObject()) {
+            return std::unexpected(String("a preset is a JSON object"));
+        }
+        const auto format = GetParamInt(preset, "preset");
         if (!format || *format != ArtGenPresetForm::kFormat) {
             return std::unexpected(Format("\"preset\" must be {} (the format version)", ArtGenPresetForm::kFormat));
         }
         for (const StringView key : {StringView("workflow"), StringView("prompt")}) {
-            const auto value = GetJsonString(preset, key);
+            const auto value = GetParamString(preset, key);
             if (!value || value->empty()) {
                 return std::unexpected(Format("\"{}\" is required", key));
             }
         }
-        if (const Json* size = FindJsonMember(preset, "size"); size != nullptr) {
-            if (!size->is_array() || size->size() != 2 || !IsPositiveInt((*size)[0]) || !IsPositiveInt((*size)[1])) {
+        if (const Optional<JsonView> size = FindParam(preset, "size")) {
+            if (int64_t sideX = 0, sideY = 0; !ReadSizePair(*size, sideX, sideY)) {
                 return std::unexpected(String("\"size\" must be [width, height] of positive integers"));
             }
         }
-        if (const Json* params = FindJsonMember(preset, "params"); params != nullptr && !params->is_object()) {
+        if (const Optional<JsonView> params = FindParam(preset, "params"); params && !params->IsObject()) {
             return std::unexpected(String("\"params\" must be an object"));
         }
-        if (const Json* accept = FindJsonMember(preset, "accept"); accept != nullptr) {
-            if (const auto settings = ArtGenImageSettingsFromJson(*accept); !settings) {
+        if (const Optional<JsonView> accept = FindParam(preset, "accept")) {
+            if (const auto settings = ReadArtGenImageSettings(*accept); !settings) {
                 return std::unexpected(Format("\"accept\": {}", settings.error()));
             }
         }
-        if (FindJsonMember(preset, "atlas") != nullptr) {
-            const auto group = GetJsonString(preset, "atlas");
+        if (FindParam(preset, "atlas")) {
+            const auto group = GetParamString(preset, "atlas");
             if (!group || !IsValidSpriteName(StringView(*group))) {
                 return std::unexpected(String("\"atlas\" must be an atlas group name: 1 to 64 of A-Z a-z 0-9 _ -"));
             }
         }
-        if (const Json* reference = FindJsonMember(preset, "reference"); reference != nullptr) {
+        if (const Optional<JsonView> reference = FindParam(preset, "reference")) {
             if (const auto read = ReadArtGenReference(*reference); !read) {
                 return std::unexpected(read.error());
             }
@@ -120,102 +152,139 @@ namespace BECore {
         return {};
     }
 
-    bool ArtGenPresetForm::ReadAccept(const Json& value) {
-        const auto settings = ArtGenImageSettingsFromJson(value);
+    bool ArtGenPresetForm::ReadAccept(JsonView value) {
+        const auto settings = ReadArtGenImageSettings(value);
         if (!settings) {
             return false;
         }
         _accept = _acceptLoaded = *settings;
         _acceptInFile = true;
-        _acceptAsLoaded = value;
+        _acceptAsLoaded = String(value.Raw());
         return true;
     }
 
-    bool ArtGenPresetForm::ReadReference(const Json& value) {
+    bool ArtGenPresetForm::ReadReference(JsonView value) {
         auto reference = ReadArtGenReference(value);
         if (!reference) {
             return false;
         }
         _reference = _referenceLoaded = std::move(*reference);
-        _referenceAsLoaded = value;
+        _referenceAsLoaded = String(value.Raw());
         return true;
     }
 
-    void ArtGenPresetForm::FromJson(const Json& data) {
+    void ArtGenPresetForm::FromText(StringView data) {
+        JsonTape tape;
+        if (!tape.Parse(data)) {
+            FromView(JsonView());
+            return;
+        }
+        FromView(JsonView(tape, 0));
+    }
+
+    void ArtGenPresetForm::FromView(JsonView data) {
         name[0] = title[0] = prompt[0] = negative[0] = '\0';
         width = height = 0;
         _workflow.clear();
         _params.clear();
-        _extra = Json::object();
+        _extra.Clear();
         _accept = {};
         _acceptInFile = false;
-        _acceptAsLoaded = Json();
+        _acceptAsLoaded.clear();
         _acceptLoaded = {};
         _reference.reset();
-        _referenceAsLoaded = Json();
+        _referenceAsLoaded.clear();
         _referenceLoaded.reset();
-        if (!data.is_object()) {
+        if (!data.IsObject()) {
             return;
         }
-        for (const auto& [key, value] : data.items()) {
-            const StringView field(key.data(), key.size());
-            if (field == "title") {
-                CopyText(title, sizeof(title), ViewOf(StringOf(value)));
-            } else if (field == "workflow") {
-                _workflow = StringOf(value);
-            } else if (field == "prompt") {
-                CopyText(prompt, sizeof(prompt), ViewOf(StringOf(value)));
-            } else if (field == "negative") {
-                CopyText(negative, sizeof(negative), ViewOf(StringOf(value)));
-            } else if (field == "size" && value.is_array() && value.size() == 2 && IsPositiveInt(value[0]) && IsPositiveInt(value[1])) {
-                width = static_cast<int32_t>(std::min<int64_t>(value[0].get<int64_t>(), INT32_MAX));
-                height = static_cast<int32_t>(std::min<int64_t>(value[1].get<int64_t>(), INT32_MAX));
-            } else if (field == "params" && value.is_object()) {
-                for (const auto& [param, paramValue] : value.items()) {
-                    SetParam(StringView(param.data(), param.size()), paramValue);
-                }
-            } else if (field == "accept" && value.is_object() && ReadAccept(value)) {
-                continue;
-            } else if (field == "reference" && ReadReference(value)) {
-                continue;
-            } else if (field != "preset") {
-                _extra[key] = value;
+        // Every key but the ones the form owns outright is kept; a key the form shows is taken out again below once it reads
+        _extra.Assign(data, {"preset", "title", "workflow", "prompt", "negative"});
+        const auto copyText = [&](StringView key, char* out, size_t size) {
+            String text;
+            if (const Optional<JsonView> value = data.Find(key)) {
+                value->ReadText(text);
             }
+            CopyText(out, size, ViewOf(text));
+        };
+        copyText("title", title, sizeof(title));
+        copyText("prompt", prompt, sizeof(prompt));
+        copyText("negative", negative, sizeof(negative));
+        if (const Optional<JsonView> workflow = data.Find("workflow")) {
+            workflow->ReadText(_workflow);
+        }
+        const Optional<JsonView> size = data.Find("size");
+        if (int64_t sideX = 0, sideY = 0; size && ReadSizePair(*size, sideX, sideY)) {
+            width = static_cast<int32_t>(std::min<int64_t>(sideX, INT32_MAX));
+            height = static_cast<int32_t>(std::min<int64_t>(sideY, INT32_MAX));
+            _extra.Erase("size");
+        }
+        if (const Optional<JsonView> params = data.Find("params"); params && params->IsObject()) {
+            for (const JsonMember member : params->Members()) {
+                String param;
+                member.key.ReadText(param);
+                if (FindParam(StringView(param)) == nullptr) {
+                    SetParam(StringView(param), ArtGenInputValue::Read(member.value));
+                }
+            }
+            _extra.Erase("params");
+        }
+        if (const Optional<JsonView> accept = data.Find("accept"); accept && accept->IsObject() && ReadAccept(*accept)) {
+            _extra.Erase("accept");
+        }
+        if (const Optional<JsonView> reference = data.Find("reference"); reference && ReadReference(*reference)) {
+            _extra.Erase("reference");
         }
     }
 
-    Json ArtGenPresetForm::ToJson() const {
-        Json data = _extra;
-        data["preset"] = kFormat;
+    String ArtGenPresetForm::ToJsonText() const {
+        JsonMemberMap data = _extra;
+        data.SetWith("preset", [](JsonWriter& writer) { writer.Value(ArtGenPresetForm::kFormat); });
         if (title[0] != '\0') {
-            data["title"] = MakeJsonString(StringView(title));
+            data.SetWith("title", [&](JsonWriter& writer) { writer.Value(StringView(title)); });
         }
-        data["workflow"] = MakeJsonString(ViewOf(_workflow));
-        data["prompt"] = MakeJsonString(StringView(prompt));
+        data.SetWith("workflow", [&](JsonWriter& writer) { writer.Value(ViewOf(_workflow)); });
+        data.SetWith("prompt", [&](JsonWriter& writer) { writer.Value(StringView(prompt)); });
         if (negative[0] != '\0') {
-            data["negative"] = MakeJsonString(StringView(negative));
+            data.SetWith("negative", [&](JsonWriter& writer) { writer.Value(StringView(negative)); });
         }
         if (width > 0 && height > 0) {
-            data["size"] = Json::array({width, height});
+            data.SetWith("size", [&](JsonWriter& writer) {
+                writer.BeginArray();
+                writer.Value(width);
+                writer.Value(height);
+                writer.EndArray();
+            });
         }
         if (!_params.empty()) {
-            Json params = Json::object();
+            JsonMemberMap params;
             for (const auto& param : _params) {
-                params[ToStdString(param.name)] = param.value;
+                params.SetWith(ViewOf(param.name), [&](JsonWriter& writer) { param.value.Write(writer); });
             }
-            data["params"] = std::move(params);
+            data.SetWith("params", [&](JsonWriter& writer) { params.Write(writer); });
         }
         if (HasImageAccept()) {
-            data["accept"] = (_acceptInFile && _accept == _acceptLoaded) ? _acceptAsLoaded : ArtGenImageSettingsToJson(_accept);
+            if (_acceptInFile && _accept == _acceptLoaded) {
+                data.Set("accept", ViewOf(_acceptAsLoaded));
+            } else {
+                data.SetWith("accept", [&](JsonWriter& writer) { WriteArtGenImageSettings(writer, _accept); });
+            }
         }
         if (_reference) {
-            data["reference"] = (_referenceLoaded && *_reference == *_referenceLoaded) ? _referenceAsLoaded : ArtGenReferenceToJson(*_reference);
+            if (_referenceLoaded && *_reference == *_referenceLoaded) {
+                data.Set("reference", ViewOf(_referenceAsLoaded));
+            } else {
+                data.SetWith("reference", [&](JsonWriter& writer) { WriteArtGenReference(writer, *_reference); });
+            }
         }
-        return data;
+        String text;
+        JsonWriter writer(text);
+        data.Write(writer);
+        return text;
     }
 
     void ArtGenPresetForm::Load(const ArtGenPreset& preset) {
-        FromJson(preset.data);
+        FromText(ViewOf(preset.data));
         CopyText(name, sizeof(name), ViewOf(preset.name));
         _base = preset.data;
         _baseName = preset.name;
@@ -224,11 +293,11 @@ namespace BECore {
     }
 
     void ArtGenPresetForm::New(StringView workflow) {
-        FromJson(Json::object());
+        FromView(JsonView());
         CopyText(name, sizeof(name), "new_preset");
         _workflow = String(workflow);
         CopyText(prompt, sizeof(prompt), "{subject}");
-        _base = Json();
+        _base.clear();
         _baseName.clear();
         _baseSource.clear();
         Touch();
@@ -240,29 +309,33 @@ namespace BECore {
             std::memcpy(name + length, kCopySuffix.data(), kCopySuffix.size());
             name[length + kCopySuffix.size()] = '\0';
         }
-        _base = Json();
+        _base.clear();
         _baseName.clear();
         _baseSource.clear();
         Touch();
     }
 
     void ArtGenPresetForm::Revert() {
-        if (!_base.is_null()) {
+        if (!_base.empty()) {
             const String baseName = _baseName;
-            FromJson(_base);
+            FromText(ViewOf(_base));
             CopyText(name, sizeof(name), ViewOf(baseName));
             Touch();
         }
     }
 
     void ArtGenPresetForm::MarkSaved() {
-        _base = ToJson();
-        if (const Json* accept = FindJsonMember(_base, "accept"); accept != nullptr) {
-            ReadAccept(*accept);
-        }
-        _referenceLoaded.reset();
-        if (const Json* reference = FindJsonMember(_base, "reference"); reference != nullptr) {
-            ReadReference(*reference);
+        _base = ToJsonText();
+        JsonTape tape;
+        if (tape.Parse(ViewOf(_base))) {
+            const JsonView saved(tape, 0);
+            if (const Optional<JsonView> accept = saved.Find("accept")) {
+                ReadAccept(*accept);
+            }
+            _referenceLoaded.reset();
+            if (const Optional<JsonView> reference = saved.Find("reference")) {
+                ReadReference(*reference);
+            }
         }
         _baseName = String(name);
         _baseSource = "game";
@@ -272,7 +345,7 @@ namespace BECore {
     bool ArtGenPresetForm::IsDirty() const {
         if (_dirtyRevision != _revision) {
             _dirtyRevision = _revision;
-            _dirty = _base.is_null() || ToJson() != _base || ViewOf(_baseName) != StringView(name);
+            _dirty = _base.empty() || !SameJsonText(ToJsonText(), ViewOf(_base)) || ViewOf(_baseName) != StringView(name);
         }
         return _dirty;
     }
@@ -300,7 +373,7 @@ namespace BECore {
         if (HasImageAccept()) {
             _accept = {};
             _acceptInFile = false;
-            _acceptAsLoaded = Json();
+            _acceptAsLoaded.clear();
             Touch();
         }
     }
@@ -308,7 +381,7 @@ namespace BECore {
     void ArtGenPresetForm::SetReference(const ArtGenReference& reference) {
         if (_reference != reference || HasUnreadableReference()) {
             _reference = reference;
-            _extra.erase("reference");
+            _extra.Erase("reference");
             Touch();
         }
     }
@@ -316,12 +389,12 @@ namespace BECore {
     void ArtGenPresetForm::ClearReference() {
         if (_reference || HasUnreadableReference()) {
             _reference.reset();
-            _extra.erase("reference");
+            _extra.Erase("reference");
             Touch();
         }
     }
 
-    const Json* ArtGenPresetForm::FindParam(StringView input) const {
+    const ArtGenInputValue* ArtGenPresetForm::FindParam(StringView input) const {
         for (const auto& param : _params) {
             if (ViewOf(param.name) == input) {
                 return &param.value;
@@ -330,7 +403,7 @@ namespace BECore {
         return nullptr;
     }
 
-    void ArtGenPresetForm::SetParam(StringView input, Json value) {
+    void ArtGenPresetForm::SetParam(StringView input, ArtGenInputValue value) {
         Param* slot = nullptr;
         for (auto& param : _params) {
             if (ViewOf(param.name) == input) {

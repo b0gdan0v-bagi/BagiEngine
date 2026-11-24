@@ -6,12 +6,12 @@
 
 namespace BECore {
 
-    std::expected<void, ControlError> TryAppendOkResponse(String& out, const Json& id, WriteResultFn writeResult) {
+    std::expected<void, ControlError> TryAppendOkResponse(String& out, StringView id, WriteResultFn writeResult) {
         const size_t start = out.size();
         ScratchScope scratch;  // the envelope may hold arena members; this also runs on a posting thread (a request after Shutdown), and a scope ends where it began
         JsonWriter writer(out);
         ControlOkEnvelope envelope;
-        envelope.id = JsonPayload::Borrowed(id);
+        envelope.id = JsonPayload::Text(id);
         envelope.result = JsonPayload::Streamed(writeResult);
         envelope.WriteJson(writer);
         std::expected<void, ControlError> written;
@@ -26,7 +26,7 @@ namespace BECore {
         return written;
     }
 
-    bool AppendOkResponse(String& out, const Json& id, FunctionRef<void(JsonWriter&)> writeResult) {
+    bool AppendOkResponse(String& out, StringView id, FunctionRef<void(JsonWriter&)> writeResult) {
         return TryAppendOkResponse(out, id,
                                    [&writeResult](JsonWriter& writer) -> std::expected<void, ControlError> {
                                        writeResult(writer);
@@ -35,47 +35,41 @@ namespace BECore {
             .has_value();
     }
 
-    void AppendErrorResponse(String& out, const Json& id, const ControlError& error) {
+    void AppendErrorResponse(String& out, StringView id, const ControlError& error) {
         ScratchScope scratch;  // as in TryAppendOkResponse
         JsonWriter writer(out);
         ControlErrorEnvelope envelope;
         envelope.error.code = TextView(error.code);
         envelope.error.message = TextView(error.message);
-        envelope.id = JsonPayload::Borrowed(id);
+        envelope.id = JsonPayload::Text(id);
         envelope.WriteJson(writer);
     }
 
-    String MakeOkResponse(const Json& id, Json result) {
-        String text;
-        const bool written = AppendOkResponse(text, id, [&result](JsonWriter& writer) { WriteJson(writer, result); });
-        EXPECT(written, "MakeOkResponse: the writer of a Json value wrote no complete value");
-        return text;
-    }
-
-    String MakeErrorResponse(const Json& id, const ControlError& error) {
+    String MakeErrorResponse(StringView id, const ControlError& error) {
         String text;
         AppendErrorResponse(text, id, error);
         return text;
     }
 
-    ControlCall::ControlCall(PassKey<ControlService>, ControlService& service, String method, Json id, Json params, ControlReplyFn reply)
-        : _service(&service), _method(std::move(method)), _id(std::move(id)), _params(std::move(params)), _reply(std::move(reply)) {}
+    JsonView EmptyParamsView() {
+        static const JsonTape tape = [] {
+            JsonTape made;
+            const auto parsed = made.Parse("{}");
+            EXPECT(parsed.has_value(), "ControlCall: the empty params did not tokenize");
+            return made;
+        }();
+        return JsonView(tape, 0);
+    }
 
-    ControlCall::ControlCall(PassKey<ControlService>, String method, Json params) : _method(std::move(method)), _params(std::move(params)), _capturing(true) {}
+    ControlCall::ControlCall(PassKey<ControlService>, ControlService& service, String method, RequestBuffersPtr buffers, StringView id, JsonView params, ControlReplyFn reply)
+        : _service(&service), _buffers(std::move(buffers)), _method(std::move(method)), _id(id), _params(params), _reply(std::move(reply)) {}
 
-    void ControlCall::Reply(Json result) {
-        EXPECT(!_answered, "ControlCall: the call is already answered");
-        if (_answered) {
-            return;
-        }
-        _answered = true;
-        if (_capturing) {
-            _captured = ControlAnswer(std::move(result));
-            return;
-        }
-        _service->SendOk(_reply, _id, [&result](JsonWriter& writer) -> std::expected<void, ControlError> {
-            WriteJson(writer, result);
-            return {};
+    ControlCall::ControlCall(PassKey<ControlService>, String method, JsonView params) : _method(std::move(method)), _params(params), _capturing(true) {}
+
+    void ControlCall::ReplyEmpty() {
+        Reply([](JsonWriter& writer) {
+            writer.BeginObject();
+            writer.EndObject();
         });
     }
 
@@ -97,7 +91,7 @@ namespace BECore {
             return;
         }
 
-        // A nested call keeps its answer as a value, so the written text is read back; the value is the writer's own output, not a client's
+        // A nested call keeps the text the handler wrote as its answer
         String text;
         JsonWriter writer(text);
         const std::expected<void, ControlError> written = writeResult(writer);
@@ -109,9 +103,8 @@ namespace BECore {
             _captured = std::unexpected(*failure);
             return;
         }
-        auto parsed = ParseJson(text);
-        if (writer.IsComplete() && parsed) {
-            _captured = ControlAnswer(std::move(*parsed));
+        if (writer.IsComplete()) {
+            _captured = ControlAnswer(std::move(text));
         } else {
             _captured = std::unexpected(MakeControlError(ControlErrors::kInternalError, "the handler wrote a result that is not one JSON value"));
         }

@@ -1,6 +1,6 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonViewOps.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Memory/BlockPool.h>
@@ -28,8 +28,8 @@ namespace BECore::Tests {
         }
 
         /// Sends one request and runs the main-thread side; the response
-        Json Call(StringView method, const Json& params = Json::object()) {
-            return CallControl(service, 1, method, params);
+        ControlReply Call(StringView method, StringView paramsText = R"({})") {
+            return CallControlText(service, 1, method, paramsText);
         }
 
         ControlService service;
@@ -46,9 +46,9 @@ namespace BECore::Tests {
         constexpr uint64_t kNsPerMs = 1'000'000;
 
         /// The raw text of the answer: the tests below pin its bytes
-        String Ask(ControlService& service, StringView method, const Json& params = Json::object()) {
+        String Ask(ControlService& service, StringView method, StringView paramsText = R"({})") {
             String text;
-            service.Post(MakeRequest(1, method, params), [&text](const String& reply) { text = reply; });
+            service.Post(MakeRequestText(1, method, paramsText), [&text](const String& reply) { text = reply; });
             service.Drain();
             return text;
         }
@@ -91,11 +91,15 @@ namespace BECore::Tests {
             return open == String::npos || close == String::npos ? String() : String(text.substr(open, close - open + 1));
         }
 
-        /// A reply is written in the order the `Json` object keeps: its text is the canonical dump of its own parse
+        /// A reply is written with the keys of every object in byte order and each number in the writer's form: its text is what the same document
+        /// written again in sorted order gives
         void ExpectCanonical(const String& text) {
-            const auto parsed = ParseJson(text);
-            ASSERT_TRUE(parsed.has_value());
-            EXPECT_EQ(DumpJson(*parsed), text);
+            const JsonDoc doc(StringView(text.c_str(), text.size()));
+            ASSERT_TRUE(doc.IsParsed());
+            String again;
+            JsonWriter writer(again);
+            WriteJsonSorted(writer, doc.Root());
+            EXPECT_EQ(again, text);
         }
 
     }  // namespace
@@ -152,8 +156,7 @@ namespace BECore::Tests {
         AddFrame(1);
         AddFrame(2);
         AddFrame(3);
-        Json params = Json::object();
-        params["frames"] = 3;
+        const StringView params = R"({"frames":3})";
 
         const String text = Ask(service, "frame_stats", params);
 
@@ -188,8 +191,7 @@ namespace BECore::Tests {
         AllocTracker::ResetZoneStats();
         AllocTracker::AddZone(kSmall, 3, 30);
         AllocTracker::AddZone(kBig, 5, 500);
-        Json params = Json::object();
-        params["reset"] = true;
+        const StringView params = R"({"reset":true})";
 
         const String text = Ask(service, "zone_allocs", params);
 
@@ -207,8 +209,7 @@ namespace BECore::Tests {
         AllocTracker::ResetZoneStats();
         AllocTracker::AddZone(kSmall, 1, 10);
         AllocTracker::AddZone(kBig, 1, 1000);
-        Json params = Json::object();
-        params["top"] = 1;
+        const StringView params = R"({"top":1})";
 
         const String text = Ask(service, "zone_allocs", params);
 
@@ -223,9 +224,7 @@ namespace BECore::Tests {
         AllocTracker::ResetZoneStats();
         AllocTracker::AddZone(kSmall, 1, 10);
         AllocTracker::AddZone(kBig, 1, 1000);
-        Json params = Json::object();
-        params["top"] = 1;
-        params["reset"] = true;
+        const StringView params = R"({"reset":true,"top":1})";
 
         const String text = Ask(service, "zone_allocs", params);
 
@@ -241,10 +240,15 @@ namespace BECore::Tests {
         IProfilerBackend* const previous = Profiler::GetPrimaryBackend();
         Profiler::SetBackend(&Profiler::GetChromeTrace());
         const Path file = TestTempPath("ProfilerDump caf\xC3\xA9").Filename();
-        Json params = Json::object();
-        params["path"] = ToStdString(file.View());
+        String params;
+        {
+            JsonWriter writer(params);
+            writer.BeginObject();
+            writer.Member("path", file.View());
+            writer.EndObject();
+        }
 
-        const String text = Ask(service, "profiler_dump", params);
+        const String text = Ask(service, "profiler_dump", StringView(params.c_str(), params.size()));
 
         Profiler::SetBackend(previous);
         EXPECT_TRUE(PathExists(file));
@@ -263,9 +267,12 @@ namespace BECore::Tests {
         }
         static constexpr const char* kRefused = "has to be a relative file name";
         const auto refused = [this](const String& path) {
-            Json params = Json::object();
-            params["path"] = path.c_str();
-            return Ask(service, "profiler_dump", params).find(kRefused) != String::npos;
+            String params;
+            JsonWriter writer(params);
+            writer.BeginObject();
+            writer.Member("path", StringView(path.c_str(), path.size()));
+            writer.EndObject();
+            return Ask(service, "profiler_dump", StringView(params.c_str(), params.size())).find(kRefused) != String::npos;
         };
 
         // An accepted path goes on to the backend check, which answers that nothing is recording
@@ -295,7 +302,7 @@ namespace BECore::Tests {
         });
         AddFrame(1);
         const auto drained = [this](StringView method) {
-            service.Post(MakeRequest(1, method), [](const String&) {});
+            service.Post(MakeRequestText(1, method), [](const String&) {});
             return CountAllocations([this] { service.Drain(); });
         };
         drained("frame_stats");
@@ -361,28 +368,27 @@ namespace BECore::Tests {
             collector.BeginFrame();
             collector.EndFrame(RenderCounters{.drawCalls = 4, .triangles = 8}, AllocTracker::GetTotals());
         }
-        Json params = Json::object();
-        params["frames"] = 2;
-        const Json response = Call("frame_stats", params);
-        const Json* result = FindJsonMember(response, "result");
-        ASSERT_NE(result, nullptr);
-        const Json* frames = FindJsonMember(*result, "frames");
-        ASSERT_NE(frames, nullptr);
-        ASSERT_EQ(frames->size(), 2u);
-        const Json& last = (*frames)[1];
-        EXPECT_EQ(GetJsonInt(last, "drawCalls"), 4);
-        EXPECT_EQ(GetJsonInt(last, "triangles"), 8);
+        const StringView params = R"({"frames":2})";
+        const ControlReply response = Call("frame_stats", params);
+        const JsonView result = response.Result();
+        ASSERT_TRUE(result.IsObject());
+        const JsonView frames = MemberOf(result, "frames");
+        ASSERT_TRUE(frames.IsArray());
+        ASSERT_EQ(frames.Size(), 2u);
+        const JsonView last = ItemAt(frames, 1);
+        EXPECT_EQ(IntOf(last, "drawCalls"), 4);
+        EXPECT_EQ(IntOf(last, "triangles"), 8);
         for (const char* key : {"frame", "paused", "frameMs", "cpuMs", "stagesMs", "textureSwitches", "allocCount", "allocBytes", "liveBytes", "arenaUsedBytes", "arenaPeakBytes", "arenaOverflows",
                                 "poolLiveBlocks", "poolPageBytes", "counters", "tagAllocCount", "tagLiveBytes"}) {
-            EXPECT_NE(FindJsonMember(last, key), nullptr) << key;
+            EXPECT_TRUE(last.Find(key).has_value()) << key;
         }
         for (size_t i = 0; i < kMemTagCount; ++i) {
             const StringView name = EnumUtils<MemTag>::ToString(static_cast<MemTag>(i));
-            EXPECT_NE(FindJsonMember(Require(FindJsonMember(last, "tagAllocCount")), name), nullptr) << ToStdString(name);
-            EXPECT_NE(FindJsonMember(Require(FindJsonMember(last, "tagLiveBytes")), name), nullptr) << ToStdString(name);
+            EXPECT_TRUE(MemberOf(last, "tagAllocCount").Find(name).has_value()) << ToStdString(name);
+            EXPECT_TRUE(MemberOf(last, "tagLiveBytes").Find(name).has_value()) << ToStdString(name);
         }
-        EXPECT_NE(FindJsonMember(Require(FindJsonMember(last, "stagesMs")), "SceneDraw"), nullptr);
-        EXPECT_EQ(GetJsonBool(*result, "allocTracking"), AllocTracker::kEnabled);
+        EXPECT_TRUE(MemberOf(last, "stagesMs").Find("SceneDraw").has_value());
+        EXPECT_EQ(BoolOf(result, "allocTracking"), AllocTracker::kEnabled);
     }
 
     TEST_F(ProfilerControlTest, FrameStatsListTheArenasWithTheirCounters) {
@@ -394,21 +400,21 @@ namespace BECore::Tests {
         collector.BeginFrame();
         collector.EndFrame({}, AllocTracker::GetTotals());
 
-        const Json response = Call("frame_stats");
-        const Json* arenas = FindJsonMember(Require(FindJsonMember(response, "result")), "arenas");
-        ASSERT_NE(arenas, nullptr);
-        const Json* mine = nullptr;
-        for (const Json& described : *arenas) {
-            if (GetJsonString(described, "name").value_or(String()) == kName) {
-                mine = &described;
+        const ControlReply response = Call("frame_stats");
+        const JsonView arenas = MemberOf(response.Result(), "arenas");
+        ASSERT_TRUE(arenas.IsArray());
+        JsonView mine;
+        for (const JsonView described : arenas.Items()) {
+            if (StringOf(described, "name") == kName) {
+                mine = described;
             }
         }
-        ASSERT_NE(mine, nullptr);
-        EXPECT_EQ(GetJsonInt(*mine, "used"), static_cast<int64_t>(kBytes));
-        EXPECT_EQ(GetJsonInt(*mine, "peak"), static_cast<int64_t>(kBytes));
-        EXPECT_EQ(GetJsonInt(*mine, "chunks"), 1);
-        EXPECT_EQ(GetJsonInt(*mine, "overflows"), 0);
-        EXPECT_GE(GetJsonInt(*mine, "capacity"), static_cast<int64_t>(kBytes));
+        ASSERT_TRUE(mine.IsObject());
+        EXPECT_EQ(IntOf(mine, "used"), static_cast<int64_t>(kBytes));
+        EXPECT_EQ(IntOf(mine, "peak"), static_cast<int64_t>(kBytes));
+        EXPECT_EQ(IntOf(mine, "chunks"), 1);
+        EXPECT_EQ(IntOf(mine, "overflows"), 0);
+        EXPECT_GE(IntOf(mine, "capacity"), static_cast<int64_t>(kBytes));
     }
 
     TEST_F(ProfilerControlTest, FrameStatsListEveryTagInTheOrderOfTheEnum) {
@@ -422,23 +428,23 @@ namespace BECore::Tests {
         collector.BeginFrame();
         collector.EndFrame({}, AllocTracker::GetTotals());
 
-        const Json response = Call("frame_stats");
-        const Json* tags = FindJsonMember(Require(FindJsonMember(response, "result")), "tags");
-        ASSERT_NE(tags, nullptr);
-        ASSERT_EQ(tags->size(), kMemTagCount);
+        const ControlReply response = Call("frame_stats");
+        const JsonView tags = MemberOf(response.Result(), "tags");
+        ASSERT_TRUE(tags.IsArray());
+        ASSERT_EQ(tags.Size(), kMemTagCount);
         for (size_t i = 0; i < kMemTagCount; ++i) {
-            const Json& described = (*tags)[i];
-            EXPECT_EQ(GetJsonString(described, "tag").value_or(String()), EnumUtils<MemTag>::ToString(static_cast<MemTag>(i)));
+            const JsonView described = ItemAt(tags, i);
+            EXPECT_EQ(StringOf(described, "tag"), EnumUtils<MemTag>::ToString(static_cast<MemTag>(i)));
             for (const char* key : {"liveBytes", "peakLiveBytes", "count", "frees"}) {
-                EXPECT_NE(FindJsonMember(described, key), nullptr) << key;
+                EXPECT_TRUE(described.Find(key).has_value()) << key;
             }
         }
-        const Json& scene = (*tags)[+MemTag::Scene];
+        const JsonView scene = ItemAt(tags, +MemTag::Scene);
         if constexpr (AllocTracker::kEnabled) {
-            EXPECT_GE(GetJsonInt(scene, "liveBytes").value_or(0), static_cast<int64_t>(kBlockBytes));
-            EXPECT_GE(GetJsonInt(scene, "count").value_or(0), 1);
+            EXPECT_GE(IntOf(scene, "liveBytes").value_or(0), static_cast<int64_t>(kBlockBytes));
+            EXPECT_GE(IntOf(scene, "count").value_or(0), 1);
         } else {
-            EXPECT_EQ(GetJsonInt(scene, "liveBytes"), 0);
+            EXPECT_EQ(IntOf(scene, "liveBytes"), 0);
         }
         ::operator delete(block);
     }
@@ -454,21 +460,21 @@ namespace BECore::Tests {
         collector.BeginFrame();
         collector.EndFrame({}, AllocTracker::GetTotals());
 
-        const Json response = Call("frame_stats");
-        const Json* pools = FindJsonMember(Require(FindJsonMember(response, "result")), "pools");
-        ASSERT_NE(pools, nullptr);
-        const Json* mine = nullptr;
-        for (const Json& described : *pools) {
-            if (GetJsonString(described, "name").value_or(String()) == kName) {
-                mine = &described;
+        const ControlReply response = Call("frame_stats");
+        const JsonView pools = MemberOf(response.Result(), "pools");
+        ASSERT_TRUE(pools.IsArray());
+        JsonView mine;
+        for (const JsonView described : pools.Items()) {
+            if (StringOf(described, "name") == kName) {
+                mine = described;
             }
         }
-        ASSERT_NE(mine, nullptr);
-        EXPECT_EQ(GetJsonInt(*mine, "blockSize"), static_cast<int64_t>(pool.GetBlockSize()));
-        EXPECT_EQ(GetJsonInt(*mine, "live"), 1);
-        EXPECT_EQ(GetJsonInt(*mine, "peak"), 2);
-        EXPECT_EQ(GetJsonInt(*mine, "pages"), 1);
-        EXPECT_EQ(GetJsonInt(*mine, "allocations"), 2);
+        ASSERT_TRUE(mine.IsObject());
+        EXPECT_EQ(IntOf(mine, "blockSize"), static_cast<int64_t>(pool.GetBlockSize()));
+        EXPECT_EQ(IntOf(mine, "live"), 1);
+        EXPECT_EQ(IntOf(mine, "peak"), 2);
+        EXPECT_EQ(IntOf(mine, "pages"), 1);
+        EXPECT_EQ(IntOf(mine, "allocations"), 2);
         pool.Deallocate(first);
     }
 
@@ -479,58 +485,48 @@ namespace BECore::Tests {
         collector.BeginFrame(true);
         collector.EndFrame({}, AllocTracker::GetTotals());
 
-        Json params = Json::object();
-        params["frames"] = 2;
-        const Json response = Call("frame_stats", params);
-        const Json* frames = FindJsonMember(Require(FindJsonMember(response, "result")), "frames");
-        ASSERT_NE(frames, nullptr);
-        ASSERT_EQ(frames->size(), 2u);
-        EXPECT_EQ(GetJsonBool((*frames)[0], "paused"), false);
-        EXPECT_EQ(GetJsonBool((*frames)[1], "paused"), true);
+        const StringView params = R"({"frames":2})";
+        const ControlReply response = Call("frame_stats", params);
+        const JsonView frames = MemberOf(response.Result(), "frames");
+        ASSERT_TRUE(frames.IsArray());
+        ASSERT_EQ(frames.Size(), 2u);
+        EXPECT_EQ(BoolOf(ItemAt(frames, 0), "paused"), false);
+        EXPECT_EQ(BoolOf(ItemAt(frames, 1), "paused"), true);
     }
 
     TEST_F(ProfilerControlTest, InvalidParamsAreRejected) {
-        Json zero = Json::object();
-        zero["frames"] = 0;
-        EXPECT_EQ(ErrorCode(Call("frame_stats", zero)), "invalid_params");
-        Json text = Json::object();
-        text["frames"] = "3";
-        EXPECT_EQ(ErrorCode(Call("frame_stats", text)), "invalid_params");
+        EXPECT_EQ(Call("frame_stats", R"({"frames":0})").ErrorCode(), "invalid_params");
+        EXPECT_EQ(Call("frame_stats", R"({"frames":"3"})").ErrorCode(), "invalid_params");
 
         for (const char* path : {"../trace.json", "/tmp/trace.json", ""}) {
-            Json params = Json::object();
-            params["path"] = path;
-            EXPECT_EQ(ErrorCode(Call("profiler_dump", params)), "invalid_params") << path;
+            String params;
+            JsonWriter writer(params);
+            writer.BeginObject();
+            writer.Member("path", path);
+            writer.EndObject();
+            EXPECT_EQ(Call("profiler_dump", StringView(params.c_str(), params.size())).ErrorCode(), "invalid_params") << path;
         }
-        Json top = Json::object();
-        top["top"] = 0;
-        EXPECT_EQ(ErrorCode(Call("zone_allocs", top)), "invalid_params");
-        Json reset = Json::object();
-        reset["reset"] = 1;
-        EXPECT_EQ(ErrorCode(Call("zone_allocs", reset)), "invalid_params");
+        EXPECT_EQ(Call("zone_allocs", R"({"top":0})").ErrorCode(), "invalid_params");
+        EXPECT_EQ(Call("zone_allocs", R"({"reset":1})").ErrorCode(), "invalid_params");
     }
 
     TEST_F(ProfilerControlTest, DumpNeedsTheChromeTraceRecording) {
         Profiler::SetBackend(nullptr);
-        EXPECT_EQ(ErrorCode(Call("profiler_dump")), "not_recording");
+        EXPECT_EQ(Call("profiler_dump").ErrorCode(), "not_recording");
     }
 
     TEST_F(ProfilerControlTest, ZoneAllocsAnswersTheTotalsAndTheZones) {
-        const Json response = Call("zone_allocs");
-        const Json* result = FindJsonMember(response, "result");
-        ASSERT_NE(result, nullptr);
-        EXPECT_EQ(GetJsonBool(*result, "enabled"), AllocTracker::kEnabled);
-        ASSERT_NE(FindJsonMember(*result, "zones"), nullptr);
-        const Json* names = FindJsonMember(*result, "names");
-        ASSERT_NE(names, nullptr);
-        EXPECT_TRUE(names->is_array());
-        const Json* sizes = FindJsonMember(*result, "sizes");
-        ASSERT_NE(sizes, nullptr);
-        EXPECT_TRUE(sizes->is_array());
-        const Json* totals = FindJsonMember(*result, "totals");
-        ASSERT_NE(totals, nullptr);
+        const ControlReply response = Call("zone_allocs");
+        const JsonView result = response.Result();
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_EQ(BoolOf(result, "enabled"), AllocTracker::kEnabled);
+        EXPECT_TRUE(result.Find("zones").has_value());
+        EXPECT_TRUE(MemberOf(result, "names").IsArray());
+        EXPECT_TRUE(MemberOf(result, "sizes").IsArray());
+        const JsonView totals = MemberOf(result, "totals");
+        ASSERT_TRUE(totals.IsObject());
         for (const char* key : {"count", "bytes", "frees", "liveBytes", "peakLiveBytes", "largest", "noAllocViolations"}) {
-            EXPECT_NE(FindJsonMember(*totals, key), nullptr) << key;
+            EXPECT_TRUE(totals.Find(key).has_value()) << key;
         }
     }
 
@@ -540,32 +536,24 @@ namespace BECore::Tests {
 
         constexpr size_t kInts = 100;
 
-        /// The `names` row of the zone @p zone and allocation name @p name in the answer of zone_allocs, or nullptr
-        const Json* FindNameRow(const Json& result, const char* zone, const char* name) {
-            const Json* names = FindJsonMember(result, "names");
-            if (names == nullptr) {
-                return nullptr;
-            }
-            for (const Json& row : *names) {
-                if (GetJsonString(row, "zone") == String(zone) && GetJsonString(row, "name") == String(name)) {
-                    return &row;
+        /// The row of @p array whose `zone` is @p zone and, when @p name is not null, whose `name` is @p name; a view that is not valid when none
+        JsonView FindRow(JsonView array, const char* zone, const char* name) {
+            for (const JsonView row : array.Items()) {
+                if (StringOf(row, "zone") == zone && (name == nullptr || StringOf(row, "name") == name)) {
+                    return row;
                 }
             }
-            return nullptr;
+            return JsonView();
         }
 
-        /// The `sizes` row of the zone @p zone in the answer of zone_allocs, or nullptr
-        const Json* FindSizeRow(const Json& result, const char* zone) {
-            const Json* sizes = FindJsonMember(result, "sizes");
-            if (sizes == nullptr) {
-                return nullptr;
-            }
-            for (const Json& row : *sizes) {
-                if (GetJsonString(row, "zone") == String(zone)) {
-                    return &row;
-                }
-            }
-            return nullptr;
+        /// The `names` row of the zone @p zone and allocation name @p name in the answer of zone_allocs
+        JsonView FindNameRow(JsonView result, const char* zone, const char* name) {
+            return FindRow(MemberOf(result, "names"), zone, name);
+        }
+
+        /// The `sizes` row of the zone @p zone in the answer of zone_allocs
+        JsonView FindSizeRow(JsonView result, const char* zone) {
+            return FindRow(MemberOf(result, "sizes"), zone, nullptr);
         }
 
         /// Allocates @p bytes in a container, so the optimizer keeps the call
@@ -590,27 +578,27 @@ namespace BECore::Tests {
                 AllocateBytes(kBigBlock);
             }
         }
-        const Json response = Call("zone_allocs");
-        const Json* result = FindJsonMember(response, "result");
-        ASSERT_NE(result, nullptr);
+        const ControlReply response = Call("zone_allocs");
+        const JsonView result = response.Result();
+        ASSERT_TRUE(result.IsObject());
 
-        const Json* outer = FindSizeRow(*result, "ControlSizesOuter");
-        ASSERT_NE(outer, nullptr);
-        EXPECT_EQ(GetJsonInt(*outer, "allocs"), 1);
-        const Json* outerBuckets = FindJsonMember(*outer, "buckets");
-        ASSERT_NE(outerBuckets, nullptr);
-        ASSERT_EQ(outerBuckets->size(), 1u);
-        EXPECT_EQ(GetJsonInt((*outerBuckets)[0], "upTo"), static_cast<int64_t>(SizeBucketBound(SizeBucket(kSmallBlock))));
-        EXPECT_EQ(GetJsonInt((*outerBuckets)[0], "allocs"), 1);
+        const JsonView outer = FindSizeRow(result, "ControlSizesOuter");
+        ASSERT_TRUE(outer.IsObject());
+        EXPECT_EQ(IntOf(outer, "allocs"), 1);
+        const JsonView outerBuckets = MemberOf(outer, "buckets");
+        ASSERT_TRUE(outerBuckets.IsArray());
+        ASSERT_EQ(outerBuckets.Size(), 1u);
+        EXPECT_EQ(IntOf(ItemAt(outerBuckets, 0), "upTo"), static_cast<int64_t>(SizeBucketBound(SizeBucket(kSmallBlock))));
+        EXPECT_EQ(IntOf(ItemAt(outerBuckets, 0), "allocs"), 1);
 
-        const Json* inner = FindSizeRow(*result, "ControlSizesInner");
-        ASSERT_NE(inner, nullptr);
-        EXPECT_EQ(GetJsonInt(*inner, "allocs"), 2);
-        const Json* innerBuckets = FindJsonMember(*inner, "buckets");
-        ASSERT_NE(innerBuckets, nullptr);
-        ASSERT_EQ(innerBuckets->size(), 1u);
-        EXPECT_EQ(GetJsonInt((*innerBuckets)[0], "upTo"), static_cast<int64_t>(SizeBucketBound(SizeBucket(kBigBlock))));
-        EXPECT_EQ(GetJsonInt((*innerBuckets)[0], "allocs"), 2);
+        const JsonView inner = FindSizeRow(result, "ControlSizesInner");
+        ASSERT_TRUE(inner.IsObject());
+        EXPECT_EQ(IntOf(inner, "allocs"), 2);
+        const JsonView innerBuckets = MemberOf(inner, "buckets");
+        ASSERT_TRUE(innerBuckets.IsArray());
+        ASSERT_EQ(innerBuckets.Size(), 1u);
+        EXPECT_EQ(IntOf(ItemAt(innerBuckets, 0), "upTo"), static_cast<int64_t>(SizeBucketBound(SizeBucket(kBigBlock))));
+        EXPECT_EQ(IntOf(ItemAt(innerBuckets, 0), "allocs"), 2);
     }
 
     TEST_F(ProfilerControlTest, ZoneAllocsTopLimitsTheSizesAndResetEmptiesThem) {
@@ -624,43 +612,35 @@ namespace BECore::Tests {
             BE_PROFILE_SCOPE("ControlSizesFew");
             AllocateBytes(kSmallBlock);
         }
-        Json limited = Json::object();
-        limited["top"] = 1;
-        const Json first = Call("zone_allocs", limited);
-        const Json* limitedResult = FindJsonMember(first, "result");
-        ASSERT_NE(limitedResult, nullptr);
-        const Json* limitedSizes = FindJsonMember(*limitedResult, "sizes");
-        ASSERT_NE(limitedSizes, nullptr);
-        ASSERT_EQ(limitedSizes->size(), 1u);
+        const ControlReply first = Call("zone_allocs", R"({"top":1})");
+        const JsonView limitedSizes = MemberOf(first.Result(), "sizes");
+        ASSERT_TRUE(limitedSizes.IsArray());
+        ASSERT_EQ(limitedSizes.Size(), 1u);
 
         // The most allocations first (the test's own work outside every zone may lead, so the order is read between its two zones)
-        const Json all = Call("zone_allocs");
-        const Json* allResult = FindJsonMember(all, "result");
-        ASSERT_NE(allResult, nullptr);
-        const Json* allSizes = FindJsonMember(*allResult, "sizes");
-        ASSERT_NE(allSizes, nullptr);
-        size_t manyAt = allSizes->size();
-        size_t fewAt = allSizes->size();
-        for (size_t i = 0; i < allSizes->size(); ++i) {
-            const Optional<String> zone = GetJsonString((*allSizes)[i], "zone");
-            manyAt = zone == String("ControlSizesMany") ? i : manyAt;
-            fewAt = zone == String("ControlSizesFew") ? i : fewAt;
+        const ControlReply all = Call("zone_allocs");
+        const JsonView allSizes = MemberOf(all.Result(), "sizes");
+        ASSERT_TRUE(allSizes.IsArray());
+        size_t manyAt = allSizes.Size();
+        size_t fewAt = allSizes.Size();
+        size_t position = 0;
+        for (const JsonView row : allSizes.Items()) {
+            const String zone = StringOf(row, "zone");
+            manyAt = zone == "ControlSizesMany" ? position : manyAt;
+            fewAt = zone == "ControlSizesFew" ? position : fewAt;
+            ++position;
         }
-        ASSERT_LT(manyAt, allSizes->size());
+        ASSERT_LT(manyAt, allSizes.Size());
         EXPECT_LT(manyAt, fewAt);
 
-        Json clearing = Json::object();
-        clearing["reset"] = true;
-        const Json before = Call("zone_allocs", clearing);
-        const Json* beforeResult = FindJsonMember(before, "result");
-        ASSERT_NE(beforeResult, nullptr);
-        EXPECT_NE(FindSizeRow(*beforeResult, "ControlSizesFew"), nullptr);
+        const ControlReply before = Call("zone_allocs", R"({"reset":true})");
+        ASSERT_TRUE(before.Result().IsObject());
+        EXPECT_TRUE(FindSizeRow(before.Result(), "ControlSizesFew").IsObject());
 
-        const Json after = Call("zone_allocs");
-        const Json* afterResult = FindJsonMember(after, "result");
-        ASSERT_NE(afterResult, nullptr);
-        EXPECT_EQ(FindSizeRow(*afterResult, "ControlSizesFew"), nullptr);
-        EXPECT_EQ(FindSizeRow(*afterResult, "ControlSizesMany"), nullptr);
+        const ControlReply after = Call("zone_allocs");
+        ASSERT_TRUE(after.Result().IsObject());
+        EXPECT_FALSE(FindSizeRow(after.Result(), "ControlSizesFew").IsValid());
+        EXPECT_FALSE(FindSizeRow(after.Result(), "ControlSizesMany").IsValid());
     }
 
     TEST_F(ProfilerControlTest, ZoneAllocsNamesTheContainerThatAllocated) {
@@ -671,13 +651,13 @@ namespace BECore::Tests {
             values.get_allocator().set_name("ControlNamed");
             values.reserve(kInts);
         }
-        const Json response = Call("zone_allocs");
-        const Json* result = FindJsonMember(response, "result");
-        ASSERT_NE(result, nullptr);
-        const Json* row = FindNameRow(*result, "ControlNamesZone", "ControlNamed");
-        ASSERT_NE(row, nullptr);
-        EXPECT_EQ(GetJsonInt(*row, "allocs"), 1);
-        EXPECT_EQ(GetJsonInt(*row, "bytes"), static_cast<int64_t>(kInts * sizeof(int)));
+        const ControlReply response = Call("zone_allocs");
+        const JsonView result = response.Result();
+        ASSERT_TRUE(result.IsObject());
+        const JsonView row = FindNameRow(result, "ControlNamesZone", "ControlNamed");
+        ASSERT_TRUE(row.IsObject());
+        EXPECT_EQ(IntOf(row, "allocs"), 1);
+        EXPECT_EQ(IntOf(row, "bytes"), static_cast<int64_t>(kInts * sizeof(int)));
     }
 
     TEST_F(ProfilerControlTest, ZoneAllocsTopLimitsTheNamesAndResetEmptiesThem) {
@@ -691,41 +671,31 @@ namespace BECore::Tests {
             small.get_allocator().set_name("ControlSmall");
             small.reserve(kInts);
         }
-        Json limited = Json::object();
-        limited["top"] = 1;
-        const Json first = Call("zone_allocs", limited);
-        const Json* limitedResult = FindJsonMember(first, "result");
-        ASSERT_NE(limitedResult, nullptr);
-        const Json* limitedNames = FindJsonMember(*limitedResult, "names");
-        ASSERT_NE(limitedNames, nullptr);
-        EXPECT_EQ(limitedNames->size(), 1u);
+        const ControlReply first = Call("zone_allocs", R"({"top":1})");
+        const JsonView limitedNames = MemberOf(first.Result(), "names");
+        ASSERT_TRUE(limitedNames.IsArray());
+        EXPECT_EQ(limitedNames.Size(), 1u);
 
-        Json clearing = Json::object();
-        clearing["reset"] = true;
-        const Json before = Call("zone_allocs", clearing);
-        const Json* beforeResult = FindJsonMember(before, "result");
-        ASSERT_NE(beforeResult, nullptr);
-        EXPECT_NE(FindNameRow(*beforeResult, "ControlTopZone", "ControlBig"), nullptr);
-        EXPECT_NE(FindNameRow(*beforeResult, "ControlTopZone", "ControlSmall"), nullptr);
+        const ControlReply before = Call("zone_allocs", R"({"reset":true})");
+        ASSERT_TRUE(before.Result().IsObject());
+        EXPECT_TRUE(FindNameRow(before.Result(), "ControlTopZone", "ControlBig").IsObject());
+        EXPECT_TRUE(FindNameRow(before.Result(), "ControlTopZone", "ControlSmall").IsObject());
 
-        const Json after = Call("zone_allocs");
-        const Json* afterResult = FindJsonMember(after, "result");
-        ASSERT_NE(afterResult, nullptr);
-        EXPECT_EQ(FindNameRow(*afterResult, "ControlTopZone", "ControlBig"), nullptr);
+        const ControlReply after = Call("zone_allocs");
+        ASSERT_TRUE(after.Result().IsObject());
+        EXPECT_FALSE(FindNameRow(after.Result(), "ControlTopZone", "ControlBig").IsValid());
     }
 
 #else
 
     TEST_F(ProfilerControlTest, ZoneAllocsHasNoNamesWithoutTheOption) {
-        const Json response = Call("zone_allocs");
-        const Json* result = FindJsonMember(response, "result");
-        ASSERT_NE(result, nullptr);
-        const Json* names = FindJsonMember(*result, "names");
-        ASSERT_NE(names, nullptr);
-        EXPECT_TRUE(names->empty());
-        const Json* sizes = FindJsonMember(*result, "sizes");
-        ASSERT_NE(sizes, nullptr);
-        EXPECT_TRUE(sizes->empty());
+        const ControlReply response = Call("zone_allocs");
+        const JsonView result = response.Result();
+        ASSERT_TRUE(result.IsObject());
+        ASSERT_TRUE(MemberOf(result, "names").IsArray());
+        EXPECT_EQ(MemberOf(result, "names").Size(), 0u);
+        ASSERT_TRUE(MemberOf(result, "sizes").IsArray());
+        EXPECT_EQ(MemberOf(result, "sizes").Size(), 0u);
     }
 
 #endif

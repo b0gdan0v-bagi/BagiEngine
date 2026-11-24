@@ -3,7 +3,9 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlEnvelope.h>
 #include <BECore/Control/ControlLog.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlRoots.h>
+#include <BECore/Control/JsonView.h>
 #include <BECore/Memory/Pooled.h>
 #include <BECore/Memory/ScratchArena.h>
 #include <EASTL/sort.h>
@@ -15,8 +17,12 @@ namespace BECore {
         /// A method name from a client is echoed in an error message; keep the message short
         constexpr size_t kMaxEchoedMethodLength = 64;
 
-        /// A reply buffer that grew past this (a screenshot as text) is released after its message, so one large answer does not keep its memory for good
+        /// A reply buffer that grew past this (a screenshot as text) is released after its message, so one large answer does not keep its memory for good;
+        /// the same limit keeps a request's text and tokens off the free list
         constexpr size_t kMaxKeptScratchBytes = 1024 * 1024;
+
+        /// How many pairs of request buffers wait for the next request; more than the posting threads of a transport that are ever busy at once
+        constexpr size_t kMaxFreeBuffers = 16;
 
         /// The buffer a message is written into: the service's scratch when it is free, else a local one (a send from inside a send). Marks the scratch busy
         /// for the lease's life, so the text handed to a callback is never overwritten while the callback runs
@@ -60,15 +66,49 @@ namespace BECore {
     struct ControlService::Request {
         BE_POOLED(ControlService::Request)  // made on a reader thread, freed on the main one
 
+        RequestBuffersPtr buffers;  // owns the text that `id` and `params` point into; null when the request was refused before the copy
         String method;
-        Json id;
-        Json params = Json::object();
+        StringView id = kNullId;  // the id as written, once it is read; null before
+        JsonView params = EmptyParamsView();
         Optional<ControlError> error;  // found while parsing; answered when the request's turn comes
         ControlReplyFn reply;
     };
 
-    ControlService::ControlService() : _roots(MakeUnique<ControlRoots>()), _log(MakeUnique<ControlLog>()) {}
+    ControlService::ControlService() : _roots(MakeUnique<ControlRoots>()), _log(MakeUnique<ControlLog>()) {
+        _freeBuffers.reserve(kMaxFreeBuffers);
+    }
     ControlService::~ControlService() = default;
+
+    void RequestBuffersDeleter::operator()(RequestBuffers* buffers) const {
+        service->RecycleBuffers(UniquePtr<RequestBuffers>(buffers));
+    }
+
+    RequestBuffersPtr ControlService::AcquireBuffers() {
+        UniquePtr<RequestBuffers> buffers;
+        {
+            LockGuard lock(_buffersMutex);
+            if (!_freeBuffers.empty()) {
+                buffers = std::move(_freeBuffers.back());
+                _freeBuffers.pop_back();
+            }
+        }
+        if (!buffers) {
+            buffers = MakeUnique<RequestBuffers>();
+        }
+        return RequestBuffersPtr(buffers.release(), RequestBuffersDeleter{this});
+    }
+
+    void ControlService::RecycleBuffers(UniquePtr<RequestBuffers> buffers) {
+        if (buffers->text.capacity() > kMaxKeptScratchBytes || buffers->tape.Tokens().capacity() * sizeof(JsonToken) > kMaxKeptScratchBytes) {
+            return;
+        }
+        // The tape still points into the text it read; the next Parse replaces both before anything reads them
+        buffers->text.clear();
+        LockGuard lock(_buffersMutex);
+        if (_freeBuffers.size() < kMaxFreeBuffers) {
+            _freeBuffers.push_back(std::move(buffers));
+        }
+    }
 
     void ControlService::ParseRequest(StringView text, Request& request) {
         if (text.size() > kMaxRequestBytes) {
@@ -76,47 +116,50 @@ namespace BECore {
             return;
         }
 
-        // Before the parse: copying a deep value recurses on the stack of the posting thread, and so does the destructor of the document
-        if (IsJsonNestedDeeperThan(text, kMaxRequestDepth)) {
+        request.buffers = AcquireBuffers();
+        RequestBuffers& buffers = *request.buffers;
+        buffers.text.assign(text.data(), text.size());
+
+        // Before the tape: the nest a client may send is the protocol's (invalid_request), the tape's own limit is looser and would answer parse_error
+        if (IsJsonNestedDeeperThan(buffers.text, kMaxRequestDepth)) {
             request.error = MakeControlError(ControlErrors::kInvalidRequest, Format("the request nests deeper than {} levels", kMaxRequestDepth));
             return;
         }
 
-        auto parsed = ParseJson(text);
-        if (!parsed) {
-            request.error = std::move(parsed.error());
+        if (const auto parsed = buffers.tape.Parse(buffers.text); !parsed) {
+            request.error = MakeControlError(ControlErrors::kParseError, Format("the text is not valid JSON: {} at offset {}", parsed.error().message, parsed.error().offset));
             return;
         }
-        Json& message = *parsed;
-        if (!message.is_object()) {
+        const JsonView message(buffers.tape, 0);
+        if (!message.IsObject()) {
             request.error = MakeControlError(ControlErrors::kInvalidRequest, "the request has to be a JSON object");
             return;
         }
 
         // The id comes first so that every later error can be answered with it
-        Json* id = FindJsonMember(message, "id");
-        if (id == nullptr || !(id->is_string() || id->is_number_integer())) {
+        const Optional<JsonView> id = FindParam(message, "id");
+        if (!id || !(id->IsString() || (id->IsInteger() && (id->AsInt64() || id->AsUint64())))) {
             request.error = MakeControlError(ControlErrors::kInvalidRequest, "'id' has to be an integer or a string");
             return;
         }
-        request.id = std::move(*id);
+        request.id = id->Raw();
 
-        auto method = GetJsonString(message, "method");
+        auto method = GetParamString(message, "method");
         if (!method || method->empty()) {
             request.error = MakeControlError(ControlErrors::kInvalidRequest, "'method' has to be a non-empty string");
             return;
         }
         request.method = std::move(*method);
 
-        Json* params = FindJsonMember(message, "params");
-        if (params == nullptr || params->is_null()) {
+        const Optional<JsonView> params = FindParam(message, "params");
+        if (!params || params->IsNull()) {
             return;
         }
-        if (!params->is_object()) {
+        if (!params->IsObject()) {
             request.error = MakeControlError(ControlErrors::kInvalidParams, "'params' has to be an object");
             return;
         }
-        request.params = std::move(*params);
+        request.params = *params;
     }
 
     void ControlService::Post(StringView requestText, ControlReplyFn reply) {
@@ -137,7 +180,7 @@ namespace BECore {
         request->reply(MakeErrorResponse(request->id, MakeControlError(ControlErrors::kShuttingDown, "the application is shutting down")));
     }
 
-    void ControlService::SendOk(ControlReplyFn& reply, const Json& id, WriteResultFn writeResult) {
+    void ControlService::SendOk(ControlReplyFn& reply, StringView id, WriteResultFn writeResult) {
         ScratchLease lease(_replyScratch, _replyScratchBusy);
         const std::expected<void, ControlError> written = TryAppendOkResponse(lease.Text(), id, writeResult);
         if (!written) {
@@ -146,7 +189,7 @@ namespace BECore {
         reply(lease.Text());
     }
 
-    void ControlService::SendError(ControlReplyFn& reply, const Json& id, const ControlError& error) {
+    void ControlService::SendError(ControlReplyFn& reply, StringView id, const ControlError& error) {
         ScratchLease lease(_replyScratch, _replyScratchBusy);
         AppendErrorResponse(lease.Text(), id, error);
         reply(lease.Text());
@@ -218,7 +261,7 @@ namespace BECore {
         }
     }
 
-    void ControlService::NotifyPublishObservers(StringView event, const Json& data) {
+    void ControlService::NotifyPublishObservers(StringView event, JsonView data) {
         _notifyingObservers = true;
         const size_t count = _publishObservers.size();  // an observer added by an observer waits for the next Publish
         for (size_t i = 0; i < count; ++i) {
@@ -229,32 +272,6 @@ namespace BECore {
         }
         _notifyingObservers = false;
         PrunePublishObservers();
-    }
-
-    void ControlService::Publish(StringView event, const Json& data) {
-        if (!_publishObservers.empty() && !_notifyingObservers) {
-            NotifyPublishObservers(event, data);
-        }
-        if (!_eventSink) {
-            return;
-        }
-
-        // The running sink is moved out like a running handler: it may set another sink, and its capture must live until it returns
-        const uint64_t generation = _eventSinkGeneration;
-        EventSink sink = std::move(_eventSink);
-        {
-            ScratchLease lease(_publishScratch, _publishScratchBusy);
-            ScratchScope scratch;  // the envelope's arena members die with the push
-            JsonWriter writer(lease.Text());
-            ControlPushEnvelope envelope;
-            envelope.data = JsonPayload::Borrowed(data);
-            envelope.event = TextView(event);
-            envelope.WriteJson(writer);
-            sink(lease.Text());
-        }
-        if (_eventSinkGeneration == generation) {
-            _eventSink = std::move(sink);
-        }
     }
 
     void ControlService::Publish(StringView event, FunctionRef<void(JsonWriter&)> writeData) {
@@ -271,11 +288,10 @@ namespace BECore {
                 return;  // the data could not be written: a push has no one to answer with the error
             }
             EXPECT(writer.IsComplete(), "ControlService::Publish: the data is not one JSON value");
-            auto parsed = ParseJson(observed);
-            if (!writer.IsComplete() || !parsed) {
+            if (!writer.IsComplete() || !_observedTape.Parse(observed)) {
                 return;
             }
-            NotifyPublishObservers(event, *parsed);
+            NotifyPublishObservers(event, JsonView(_observedTape, 0));
             if (!_eventSink) {
                 return;
             }
@@ -358,7 +374,7 @@ namespace BECore {
             return;
         }
 
-        auto call = MakeUnique<ControlCall>(PassKey<ControlService>{}, *this, std::move(request.method), std::move(request.id), std::move(request.params), std::move(request.reply));
+        auto call = MakeUnique<ControlCall>(PassKey<ControlService>{}, *this, std::move(request.method), std::move(request.buffers), request.id, request.params, std::move(request.reply));
         InvokeHandler(entry->second, *call);
         Settle(std::move(call));
     }
@@ -379,7 +395,7 @@ namespace BECore {
         }
     }
 
-    Optional<ControlAnswer> ControlService::RunNested(ControlCall& outer, StringView method, Json params, NestedContinuation&& onAnswer) {
+    Optional<ControlAnswer> ControlService::RunNested(ControlCall& outer, StringView method, JsonView params, NestedContinuation&& onAnswer) {
         EXPECT(!outer.IsAnswered() && outer._deferFrames == 0, "ControlService::RunNested: the outer call is already answered or deferred");
 
         const auto entry = _handlers.find(method);
@@ -392,7 +408,7 @@ namespace BECore {
             return std::unexpected(MakeControlError(ControlErrors::kInternalError, Format("'{}' cannot run inside itself", entry->first)));
         }
 
-        auto nested = MakeUnique<ControlCall>(PassKey<ControlService>{}, String(method), std::move(params));
+        auto nested = MakeUnique<ControlCall>(PassKey<ControlService>{}, String(method), params);
         InvokeHandler(entry->second, *nested);
         return AwaitNested(outer, nested, onAnswer);
     }

@@ -1,4 +1,3 @@
-#include <BECore/Control/Json.h>
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
@@ -8,7 +7,9 @@
 #include <BECore/Rooms/RoomTableDriver.h>
 #include <BECore/Rooms/RoomTestTimings.h>
 #include <BECore/Rooms/TestRandom.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/LogRecorder.h>
+#include <Common/TraceDoc.h>
 #include <Common/Wait.h>
 #include <RoomServer/RoomWebSocketServer.h>
 #include <Rooms/RoomErrors.h>
@@ -35,10 +36,10 @@ namespace BECore::Tests {
         /// The humans a `lobby` message lists
         int CountHumans(const ReceivedMessage& lobby) {
             int humans = 0;
-            const Json* seats = FindJsonMember(lobby.json, "seats");
-            if (seats && seats->is_array()) {
-                for (const Json& seat : *seats) {
-                    humans += GetJsonString(seat, "kind").value_or("") == "human" ? 1 : 0;
+            const Optional<JsonView> seats = lobby.Find("seats");
+            if (seats && seats->IsArray()) {
+                for (const JsonView seat : seats->Items()) {
+                    humans += GetParamString(seat, "kind").value_or("") == "human" ? 1 : 0;
                 }
             }
             return humans;
@@ -1010,27 +1011,22 @@ namespace BECore::Tests {
 
             /// Checks that every thread's B and E events pair up, and returns where each zone ran
             ZoneThreads ReadTrace() const {
-                const auto parsed = ParseJson(recorder.WriteJson());
-                const Json* events = parsed ? FindJsonMember(*parsed, "traceEvents") : nullptr;
-                EXPECT_NE(events, nullptr);
+                const TraceDoc trace(recorder.WriteJson());
                 ZoneThreads result;
-                if (events == nullptr) {
-                    return result;
-                }
                 Map<int64_t, String> threadNames;
-                for (const Json& event : *events) {
-                    const Json* args = FindJsonMember(event, "args");
-                    if (GetJsonString(event, "name") == "thread_name" && args != nullptr) {
-                        threadNames[GetJsonInt(event, "tid").value_or(-1)] = GetJsonString(*args, "name").value_or("");
+                for (const JsonView event : trace) {
+                    const JsonView args = MemberOf(event, "args");
+                    if (StringOf(event, "name") == "thread_name" && args.IsObject()) {
+                        threadNames[IntOf(event, "tid").value_or(-1)] = StringOf(args, "name");
                     }
                 }
                 Map<int64_t, int> depth;
-                for (const Json& event : *events) {
-                    const String phase = GetJsonString(event, "ph").value_or("");
-                    const int64_t tid = GetJsonInt(event, "tid").value_or(-1);
+                for (const JsonView event : trace) {
+                    const String phase = StringOf(event, "ph");
+                    const int64_t tid = IntOf(event, "tid").value_or(-1);
                     if (phase == "B") {
                         ++depth[tid];
-                        result[GetJsonString(event, "name").value_or("")].insert(threadNames[tid]);
+                        result[StringOf(event, "name")].insert(threadNames[tid]);
                     } else if (phase == "E") {
                         EXPECT_GT(depth[tid]--, 0) << "an E without its B on thread " << tid;
                     }

@@ -94,7 +94,6 @@ target_link_libraries(BECoreModule PUBLIC
     EASTL
     fmt
     EnTT
-    nlohmann_json
     stb
     dr_libs
     SDL3-shared

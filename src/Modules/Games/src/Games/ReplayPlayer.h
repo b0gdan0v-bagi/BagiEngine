@@ -1,7 +1,7 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonTape.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <Games/ReplayFile.h>
@@ -25,10 +25,11 @@ namespace BECore {
     struct ReplayMismatch {
         size_t index = 0;   ///< 0-based position among the entries of the file
         ReplayEntry entry;  ///< As the file holds it, `line` included
+        String entryText;   ///< The entry as a line of the file (FormatReplayEntry), made once when the mismatch is found
         ReplayMismatchKind kind = ReplayMismatchKind::Refused;
         Optional<ControlError> error;  ///< `Refused`: what the game answered
-        Optional<Json> expected;       ///< `OutcomeDiffers`: the outcome of the file; `StartDiffers`: the params of the entry
-        Optional<Json> actual;         ///< `OutcomeDiffers`: what the game answered; `StartDiffers`: IControllableGame::GetReplayStart()
+        Optional<String> expected;     ///< JSON text; `OutcomeDiffers`: the outcome of the file; `StartDiffers`: the params of the entry
+        Optional<String> actual;       ///< JSON text; `OutcomeDiffers`: what the game answered; `StartDiffers`: the replay start of the game
     };
 
     /// The result of applying one entry: success, or the mismatch that ends the replay
@@ -59,17 +60,27 @@ namespace BECore {
         ReplayStep Apply(IControllableGame& game);
 
     private:
+        ReplayStep ApplyReset(IControllableGame& game, size_t index, const ReplayEntry& entry);
+        ReplayStep ApplyAction(IControllableGame& game, size_t index, const ReplayEntry& entry);
+        ReplayStep ApplyState(IControllableGame& game, size_t index, const ReplayEntry& entry);
+
         ParsedReplay _replay;
         size_t _next = 0;
         bool _stopped = false;
+
+        // What one Apply() reads and writes; the texts and tapes keep their capacity from entry to entry, and each tape is parsed again at every use
+        JsonTape _paramsTape;    ///< The entry's params, handed to the game
+        JsonTape _expectedTape;  ///< The entry's outcome, the file's side of the comparison
+        JsonTape _actualTape;    ///< What the game wrote (the outcome, or the replay start)
+        String _actualText;
     };
 
     /**
-     * @brief The mismatch as the answer of the control method `replay` carries it.
+     * @brief The mismatch as the answer of the control method `replay` carries it, written to JSON text.
      *
-     * {index, line, kind, entry (as a line of the file holds it), error? ({code, message}), expected?, actual?}. The control method answers the same document from the
-     * reflected `ReplayMismatchAnswer` (ReplayAnswers.h); this DOM is for the tests and helpers that read it, and `ReplayWireTest` keeps the two equal.
+     * {index, line, kind, entry (as a line of the file holds it), error? ({code, message}), expected?, actual?}: the reflected `ReplayMismatchAnswer`
+     * (ReplayAnswers.h) that the control method answers, for the tests and helpers that read the text. Defined in ReplayAnswers.cpp.
      */
-    [[nodiscard]] Json ReplayMismatchJson(const ReplayMismatch& mismatch);
+    [[nodiscard]] String ReplayMismatchText(const ReplayMismatch& mismatch);
 
 }  // namespace BECore

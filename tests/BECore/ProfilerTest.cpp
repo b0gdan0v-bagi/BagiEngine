@@ -1,4 +1,3 @@
-#include <BECore/Control/Json.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
 #include <BECore/Profiler/Backends/ChromeTraceJson.h>
 #include <BECore/Profiler/ProfilerClock.h>
@@ -8,6 +7,7 @@
 #include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
+#include <Common/TraceDoc.h>
 #include <chrono>
 #include <cstdio>
 #include <gtest/gtest.h>
@@ -26,27 +26,19 @@ namespace BECore::Tests {
         constexpr ProfileSite kOuterSite{"Outer", "Test", "ProfilerTest.cpp", 1, 0};
         constexpr ProfileSite kInnerSite{"Inner \"quoted\"\\", "Test", "C:\\dir\\ProfilerTest.cpp", 2, 0};
 
-        String Member(const Json& event, const char* key) {
-            const auto value = GetJsonString(event, key);
-            return value ? *value : String();
+        String Member(JsonView event, const char* key) {
+            return StringOf(event, key);
         }
 
         /// The events of a trace, parsed back (fails the test when the JSON is not valid)
-        Json ParseEvents(const String& trace) {
-            auto parsed = ParseJson(trace);
-            EXPECT_TRUE(parsed.has_value()) << trace;
-            if (!parsed) {
-                return Json::array();
-            }
-            const Json* events = FindJsonMember(*parsed, "traceEvents");
-            EXPECT_NE(events, nullptr);
-            return events != nullptr ? *events : Json::array();
+        TraceDoc ParseEvents(const String& trace) {
+            return TraceDoc(StringView(trace.c_str(), trace.size()));
         }
 
-        size_t CountPhase(const Json& events, const char* phase, Optional<int64_t> tid = std::nullopt) {
+        size_t CountPhase(const TraceDoc& events, const char* phase, Optional<int64_t> tid = std::nullopt) {
             size_t count = 0;
-            for (const Json& event : events) {
-                if (Member(event, "ph") == phase && (!tid || GetJsonInt(event, "tid") == tid)) {
+            for (const JsonView event : events) {
+                if (Member(event, "ph") == phase && (!tid || IntOf(event, "tid") == tid)) {
                     ++count;
                 }
             }
@@ -54,16 +46,16 @@ namespace BECore::Tests {
         }
 
         /// Every thread's B and E events nest, in the order of their time stamps
-        void ExpectBalanced(const Json& events) {
+        void ExpectBalanced(const TraceDoc& events) {
             Map<int64_t, int> depth;
             Map<int64_t, double> lastTs;
-            for (const Json& event : events) {
+            for (const JsonView event : events) {
                 const String phase = Member(event, "ph");
                 if (phase != "B" && phase != "E") {
                     continue;
                 }
-                const int64_t tid = GetJsonInt(event, "tid").value_or(-1);
-                const double ts = GetJsonNumber(event, "ts").value_or(-1.0);
+                const int64_t tid = IntOf(event, "tid").value_or(-1);
+                const double ts = NumberOf(event, "ts");
                 EXPECT_GE(ts, lastTs[tid]);
                 lastTs[tid] = ts;
                 depth[tid] += phase == "B" ? 1 : -1;
@@ -157,7 +149,7 @@ namespace BECore::Tests {
         recorder.EndZone(outer, kOuterSite, {});
         recorder.FrameMark();
 
-        const Json events = ParseEvents(recorder.WriteJson());
+        const TraceDoc events = ParseEvents(recorder.WriteJson());
         ExpectBalanced(events);
         ASSERT_EQ(CountPhase(events, "B"), 2u);
         EXPECT_EQ(CountPhase(events, "E"), 2u);
@@ -165,15 +157,15 @@ namespace BECore::Tests {
         EXPECT_EQ(CountPhase(events, "i"), 1u);
 
         Vector<String> begun;
-        for (const Json& event : events) {
+        for (const JsonView event : events) {
             const String phase = Member(event, "ph");
             if (phase == "B") {
                 begun.push_back(Member(event, "name"));
             } else if (phase == "C") {
                 EXPECT_EQ(Member(event, "name"), "Score");
-                EXPECT_EQ(GetJsonNumber(Require(FindJsonMember(event, "args")), "value"), 2.5);
+                EXPECT_EQ(NumberOf(MemberOf(event, "args"), "value"), 2.5);
             } else if (phase == "M") {
-                EXPECT_EQ(Member(Require(FindJsonMember(event, "args")), "name"), "Test main");
+                EXPECT_EQ(Member(MemberOf(event, "args"), "name"), "Test main");
             }
         }
         EXPECT_EQ(begun, (Vector<String>{"Outer", "Inner \"quoted\"\\"}));
@@ -185,7 +177,7 @@ namespace BECore::Tests {
         recorder.BeginZone(kOuterSite);
         recorder.BeginZone(kInnerSite);
 
-        const Json events = ParseEvents(recorder.WriteJson());
+        const TraceDoc events = ParseEvents(recorder.WriteJson());
         EXPECT_EQ(CountPhase(events, "B"), 2u);
         ExpectBalanced(events);
     }
@@ -199,7 +191,7 @@ namespace BECore::Tests {
         recorder.EndZone(after, kInnerSite, {});
         recorder.EndZone(before, kOuterSite, {});  // its B is not in the trace: dropped too
 
-        const Json events = ParseEvents(recorder.WriteJson());
+        const TraceDoc events = ParseEvents(recorder.WriteJson());
         EXPECT_EQ(CountPhase(events, "B"), 1u);
         EXPECT_EQ(CountPhase(events, "E"), 1u);
         EXPECT_EQ(CountPhase(events, "i"), 0u);
@@ -231,7 +223,7 @@ namespace BECore::Tests {
         for (std::thread& thread : threads) {
             thread.join();
         }
-        const Json events = ParseEvents(recorder.WriteJson());
+        const TraceDoc events = ParseEvents(recorder.WriteJson());
         ExpectBalanced(events);
         EXPECT_EQ(CountPhase(events, "B"), static_cast<size_t>(kThreads * kZonesPerThread * 2));
         EXPECT_EQ(recorder.GetDroppedCount(), 0u);
@@ -351,7 +343,7 @@ namespace BECore::Tests {
             BE_PROFILE_COUNTER("Value", 3);
             BE_PROFILE_FRAME();
         }
-        const Json events = ParseEvents(recorder.WriteJson());
+        const TraceDoc events = ParseEvents(recorder.WriteJson());
         ExpectBalanced(events);
         // EarlyReturn twice, Late once, three loops, the lambda, five levels of Recurse
         EXPECT_EQ(CountPhase(events, "B"), 2u + 1u + 3u + 1u + 5u);
@@ -372,7 +364,7 @@ namespace BECore::Tests {
         EXPECT_EQ(EarlyReturn(false), 2);
         BE_PROFILE_FRAME();
 
-        const Json events = ParseEvents(recorder.WriteJson());
+        const TraceDoc events = ParseEvents(recorder.WriteJson());
         EXPECT_EQ(CountPhase(events, "B"), recorded);
         EXPECT_EQ(CountPhase(events, "i"), 0u);
     }
@@ -400,7 +392,7 @@ namespace BECore::Tests {
         }
         EXPECT_EQ(Profiler::GetBackend(), nullptr);
         const String text = ReadFile(file);
-        const Json events = ParseEvents(text);
+        const TraceDoc events = ParseEvents(text);
         // The function and `Late`, and the zone of the write itself, which is open inside its own file
         EXPECT_EQ(CountPhase(events, "B"), 3u);
         EXPECT_NE(text.find("\"name\":\"Trace write\""), String::npos);
@@ -423,7 +415,7 @@ namespace BECore::Tests {
         }
         Profiler::SetBackend(nullptr);
         EXPECT_EQ(evaluated, 0);
-        const Json events = ParseEvents(recorder.WriteJson());
+        const TraceDoc events = ParseEvents(recorder.WriteJson());
         EXPECT_EQ(events.size(), 0u);
     }
 

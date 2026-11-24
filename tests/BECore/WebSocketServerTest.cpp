@@ -1,6 +1,7 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/WebSocketTestClient.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/Printers.h>
 #include <RemoteControl/WebSocketFrame.h>
 #include <RemoteControl/WebSocketHandshake.h>
@@ -23,6 +24,11 @@ namespace BECore::Tests {
         using TestClient = WebSocketTestClient;
         constexpr WebSocketMask kMask = kClientMask;
 
+        void WriteEmptyObject(JsonWriter& writer) {
+            writer.BeginObject();
+            writer.EndObject();
+        }
+
         String Request(int64_t id, StringView method, StringView paramsJson = "{}") {
             return Format("{{\"id\":{},\"method\":\"{}\",\"params\":{}}}", id, method, paramsJson);
         }
@@ -32,22 +38,19 @@ namespace BECore::Tests {
             bool ok = false;
             int64_t id = -1;
             String errorCode;
-            Json json;
+            ControlReply reply;
         };
 
         Response ParseResponse(const String& text) {
             Response response;
-            auto parsed = ParseJson(text);
-            if (!parsed) {
+            response.reply = ControlReply(StringView(text.c_str(), text.size()));
+            if (!response.reply.View().IsObject()) {
                 ADD_FAILURE() << "the response is not JSON: " << text;
                 return response;
             }
-            response.json = std::move(*parsed);
-            response.ok = GetJsonBool(response.json, "ok").value_or(false);
-            response.id = GetJsonInt(response.json, "id").value_or(-1);
-            if (const Json* error = FindJsonMember(response.json, "error")) {
-                response.errorCode = GetJsonString(*error, "code").value_or("");
-            }
+            response.ok = response.reply.IsOk();
+            response.id = IntOf(response.reply.View(), "id").value_or(-1);
+            response.errorCode = response.reply.ErrorCode();
             return response;
         }
 
@@ -55,13 +58,15 @@ namespace BECore::Tests {
         protected:
             void SetUp() override {
                 service.RegisterHandler("ping", [](ControlCall& call) {
-                    Json result = Json::object();
-                    result["pong"] = true;
-                    call.Reply(std::move(result));
+                    call.Reply([](JsonWriter& writer) {
+                        writer.BeginObject();
+                        writer.Member("pong", true);
+                        writer.EndObject();
+                    });
                 });
                 service.RegisterHandler("echo", [this](ControlCall& call) {
                     ++echoCalls;
-                    call.Reply(call.Params());
+                    call.Reply([&call](JsonWriter& writer) { writer.Raw(call.Params().Raw()); });
                 });
             }
 
@@ -187,9 +192,9 @@ namespace BECore::Tests {
         const Response response = Call(*client, Request(7, "ping"));
         EXPECT_TRUE(response.ok);
         EXPECT_EQ(response.id, 7);
-        const Json* result = FindJsonMember(response.json, "result");
-        ASSERT_NE(result, nullptr);
-        EXPECT_TRUE(GetJsonBool(*result, "pong").value_or(false));
+        const JsonView result = response.reply.Result();
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_TRUE(BoolOf(result, "pong").value_or(false));
     }
 
     TEST_F(WebSocketServerTest, UnknownMethodIsAnErrorResponseAndTheConnectionLives) {
@@ -439,20 +444,22 @@ namespace BECore::Tests {
         ASSERT_TRUE(first.has_value());
         ASSERT_TRUE(second.has_value());
 
-        Json data = Json::object();
-        data["version"] = 5;
-        service.Publish("state_changed", data);
+        service.Publish("state_changed", [](JsonWriter& writer) {
+            writer.BeginObject();
+            writer.Member("version", 5);
+            writer.EndObject();
+        });
 
         for (TestClient* client : {&*first, &*second}) {
             const auto frame = client->WaitForFrame();
             ASSERT_TRUE(frame.has_value());
             EXPECT_EQ(frame->opcode, WebSocketOpcode::kText);
-            const auto event = ParseJson(frame->payload);
-            ASSERT_TRUE(event.has_value());
-            EXPECT_EQ(GetJsonString(*event, "event").value_or(""), "state_changed");
-            const Json* eventData = FindJsonMember(*event, "data");
-            ASSERT_NE(eventData, nullptr);
-            EXPECT_EQ(GetJsonInt(*eventData, "version").value_or(-1), 5);
+            const ControlReply event(StringView(frame->payload.c_str(), frame->payload.size()));
+            ASSERT_TRUE(event.View().IsObject());
+            EXPECT_EQ(StringOf(event.View(), "event"), "state_changed");
+            const JsonView eventData = MemberOf(event.View(), "data");
+            ASSERT_TRUE(eventData.IsObject());
+            EXPECT_EQ(IntOf(eventData, "version").value_or(-1), 5);
         }
     }
 
@@ -461,18 +468,18 @@ namespace BECore::Tests {
         auto client = Connect(port);
         ASSERT_TRUE(client.has_value());
 
-        service.Publish("first", Json::object());
+        service.Publish("first", WriteEmptyObject);
         client->SendText(Request(7, "ping"));
-        service.Publish("second", Json::object());
+        service.Publish("second", WriteEmptyObject);
 
         // The request is answered only when the main thread drains, which the waiting client does after both events are queued
         Vector<String> seen;
         for (int i = 0; i < 3; ++i) {
             const auto frame = client->WaitForFrame();
             ASSERT_TRUE(frame.has_value());
-            const auto parsed = ParseJson(frame->payload);
-            ASSERT_TRUE(parsed.has_value());
-            seen.push_back(GetJsonString(*parsed, "event").value_or(Format("response:{}", GetJsonInt(*parsed, "id").value_or(-1))));
+            const ControlReply parsed(StringView(frame->payload.c_str(), frame->payload.size()));
+            ASSERT_TRUE(parsed.View().IsObject());
+            seen.push_back(parsed.View().Find("event") ? StringOf(parsed.View(), "event") : Format("response:{}", IntOf(parsed.View(), "id").value_or(-1)));
         }
         EXPECT_EQ(seen, (Vector<String>{"first", "second", "response:7"}));
     }
@@ -483,7 +490,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
 
         server.Stop();
-        service.Publish("state_changed", Json::object());  // the sink is gone: nothing to send to, nothing to crash
+        service.Publish("state_changed", WriteEmptyObject);  // the sink is gone: nothing to send to, nothing to crash
         EXPECT_TRUE(client->WaitForEndOfStream());
     }
 

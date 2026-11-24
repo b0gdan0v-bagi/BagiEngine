@@ -1,6 +1,7 @@
 #pragma once
 
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonTape.h>
+#include <BECore/Control/JsonView.h>
 #include <Games/SeatedAnswers.h>
 #include <Rooms/RoomLimits.h>
 #include <Rooms/RoomTypes.h>
@@ -38,8 +39,8 @@ namespace BECore {
         String game;
         /// Already sanitised (SanitizePlayerName)
         String name;
-        /// An object (empty when the client sent none); the game reads it in Start(), untrusted
-        Json options = Json::object();
+        /// The compact text of an object (`{}` when the client sent none; empty is written as `{}`); the game reads it in Start(), untrusted
+        String options;
         /// The host's wish that the room is listed for `list_rooms`; absent means false (the code is then known to its members only)
         bool isPublic = false;
     };
@@ -69,7 +70,8 @@ namespace BECore {
     /// `action {version, action}`: @c version is the game version the client saw; @c action is an object for the game, untrusted
     struct ActionMessage {
         uint64_t version = 0;
-        Json action = Json::object();
+        /// The compact text of an object (empty is written as `{}`)
+        String action;
     };
 
     /// `leave {}`
@@ -98,10 +100,30 @@ namespace BECore {
      * `token`: `bad_message`. A name that SanitizePlayerName refuses: `bad_name`. A `code` that is not a room code: `unknown_room`
      * (a code that could not exist is the same answer as one that does not). A `token` that is not well formed: `bad_token`.
      *
+     * Differences from the DOM it read before: of two equal keys the first counts, a byte order mark is `bad_message`, and a key written with an
+     * escape matches its name.
+     *
      * @param text The message exactly as it came from the transport.
      * @param maxBytes The size limit (kMaxMessageBytes by default).
      */
     [[nodiscard]] std::expected<ClientMessage, ControlError> ParseClientMessage(StringView text, size_t maxBytes = RoomLimits::kMaxMessageBytes);
+
+    /// The same over a tape of the caller's, which a connection's handler keeps so a message of a known shape allocates no tokens. @p tape borrows
+    /// @p text and is used only during the call: the result owns its texts
+    [[nodiscard]] std::expected<ClientMessage, ControlError> ParseClientMessage(JsonTape& tape, StringView text, size_t maxBytes = RoomLimits::kMaxMessageBytes);
+
+    /// A public option of a room: a key and its value, a boolean or an integer (`IsPublicOptionValue`)
+    struct PublicOptionRef {
+        String key;
+        JsonView value;
+    };
+
+    /// Whether @p value may stand in the public options of a room: a boolean, or an integer that fits 64 bits, signed or not
+    [[nodiscard]] bool IsPublicOptionValue(JsonView value);
+
+    /// Appends the options as the compact text of an object in alphabetical key order (of two equal keys the first of the document) to @p out,
+    /// which is never cleared; nothing at all for no options. @p options is sorted; the values are written from their views
+    void AppendPublicOptions(String& out, Vector<PublicOptionRef>& options);
 
     /// The `type` of a parsed message
     [[nodiscard]] StringView GetClientMessageType(const ClientMessage& message);
@@ -143,9 +165,9 @@ namespace BECore {
         /// The seat of the host, or -1 when no human is left
         int hostSeat = -1;
         Vector<LobbySeat> seats;
-        /// The public options of the room (`SeatedGameInfo::publicOptions`): an object of booleans and integers, empty when the game
-        /// names none. Not written when empty; a reader keeps only boolean and integer members.
-        Json options = Json::object();
+        /// The public options of the room (`SeatedGameInfo::publicOptions`): the compact text of an object of booleans and integers, keys in alphabetical
+        /// order; empty when the game names none. Not written when empty; a reader keeps only boolean and integer members.
+        String options;
     };
 
     /// One room in a `rooms` message
@@ -159,8 +181,8 @@ namespace BECore {
         /// The seat count of the game
         int seats = 0;
         bool started = false;
-        /// The public options of the room, as the `lobby` message carries them; not written when empty
-        Json options = Json::object();
+        /// The public options of the room, as the `lobby` message carries them (the text of an object, empty for none); not written when empty
+        String options;
     };
 
     /// What a `rooms` message says: the answer to `list_rooms`, as plain data
@@ -172,9 +194,9 @@ namespace BECore {
         bool more = false;
     };
 
-    // Every Append*Message appends to @p out and never clears it, like AppendJson; Make*Message returns the same text in a new String. Each writer opens
+    // Every Append*Message appends to @p out and never clears it; Make*Message returns the same text in a new String. Each writer opens
     // a scratch scope of its own for the wire struct's lists, so the heap `String` of the caller is the only memory that outlives it. The keys of
-    // a message are in alphabetical order on purpose: those are the bytes the `Json` DOM wrote before, and a client of another language may
+    // a message are in alphabetical order on purpose: those are the bytes of every message the protocol has written, and a client of another language may
     // rely on them, so a change of the order is a protocol decision of the owner.
 
     /// `joined {room, player, token, seat, host}`. The token is a secret: this message goes to its owner only.
@@ -186,13 +208,14 @@ namespace BECore {
     [[nodiscard]] String MakeLobbyMessage(const LobbySnapshot& lobby);
 
     /// `view {room, seat, version, finished, view, actions}`: what the game says the seat sees and may send now (no hidden information
-    /// of the others: the game's contract). @p view and @p actions are written as they are, an @p actions that is no array too.
-    void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions);
-    [[nodiscard]] String MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions);
+    /// of the others: the game's contract). @p viewJson and @p actionsJson are each exactly one JSON value, written as they are (compact
+    /// text stays compact, blanks stay blanks), an @p actionsJson that is no array too; a text that is no value makes no valid message.
+    void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, StringView viewJson, StringView actionsJson);
+    [[nodiscard]] String MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, StringView viewJson, StringView actionsJson);
 
-    /// The same message from the typed answers of a game: @p view and @p actions are written by their generated `WriteJson` straight into the message, so no `Json`
-    /// tree is built on the way to the wire, and the bytes are those of the `Json` overload given the equal document. This is the form the room and the hub use;
-    /// the `Json` overload is for what a test or a client fixture builds by hand.
+    /// The same message from the typed answers of a game: @p view and @p actions are written by their generated `WriteJson` straight into the message, and the
+    /// bytes are those of the text overload given the equal compact documents. This is the form the room and the hub use; the text overload is for what a
+    /// test or a client fixture holds as text.
     void AppendViewMessage(String& out, StringView room, int seat, uint64_t version, bool finished, const SeatedView& view, const SeatedActions& actions);
     [[nodiscard]] String MakeViewMessage(StringView room, int seat, uint64_t version, bool finished, const SeatedView& view, const SeatedActions& actions);
 
@@ -227,14 +250,14 @@ namespace BECore {
     /// `lobby`, as the client reads it
     using LobbyMessage = LobbySnapshot;
 
-    /// `view`, as the client reads it. @c view and @c actions are the game's own JSON, kept as the server sent them.
+    /// `view`, as the client reads it. @c view and @c actions are the game's own JSON, kept as compact text of one value each (the server's blanks are dropped).
     struct ViewMessage {
         String room;
         int seat = 0;
         uint64_t version = 0;
         bool finished = false;
-        Json view = Json::object();
-        Json actions = Json::array();
+        String view = "{}";
+        String actions = "[]";
     };
 
     /// `error`
@@ -272,6 +295,9 @@ namespace BECore {
      * `type` is UnknownServerMessage. A string is copied, never interned into a PoolString.
      */
     [[nodiscard]] std::expected<ServerMessage, ControlError> ParseServerMessage(StringView text, size_t maxBytes = RoomLimits::kMaxServerMessageBytes);
+
+    /// The same over a tape of the caller's (see the overload of ParseClientMessage)
+    [[nodiscard]] std::expected<ServerMessage, ControlError> ParseServerMessage(JsonTape& tape, StringView text, size_t maxBytes = RoomLimits::kMaxServerMessageBytes);
 
     /// The `type` of a parsed server message (for the log)
     [[nodiscard]] StringView GetServerMessageType(const ServerMessage& message);

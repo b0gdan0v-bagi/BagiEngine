@@ -1,7 +1,7 @@
 // The heap cost of the names JsonDeserializer keeps for its unknown-key findings: they sit in the reader's own arena.
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
+#include <BECore/Control/JsonWriter.h>
 #include <Common/AllocCheck.h>
 #include <gtest/gtest.h>
 
@@ -20,20 +20,27 @@ namespace BECore::Tests {
             return Format("key{}", index);
         }
 
-        /// {"key0":0, ..., "obj0":{"key0":0, ...}, ...}: 10 root keys and 4 objects of 5 keys, 30 asked names in all
-        Json MakeTree() {
-            Json root = Json::object();
+        /// {"key0":0, ..., "obj0":{"key0":0, ...}, ...}: 10 root keys and 4 objects of 5 keys, 30 asked names in all; @p extra is one more root key
+        String MakeTree(StringView extra = {}) {
+            String text;
+            JsonWriter writer(text);
+            writer.BeginObject();
             for (size_t i = 0; i < kRootKeys; ++i) {
-                root[KeyName(i).c_str()] = static_cast<int32_t>(i);
+                writer.Member(KeyName(i), static_cast<int32_t>(i));
             }
             for (size_t object = 0; object < kNestedObjects; ++object) {
-                Json child = Json::object();
+                writer.Key(Format("obj{}", object));
+                writer.BeginObject();
                 for (size_t i = 0; i < kNestedKeys; ++i) {
-                    child[KeyName(i).c_str()] = static_cast<int32_t>(i);
+                    writer.Member(KeyName(i), static_cast<int32_t>(i));
                 }
-                root[Format("obj{}", object).c_str()] = std::move(child);
+                writer.EndObject();
             }
-            return root;
+            if (!extra.empty()) {
+                writer.Member(extra, 1);
+            }
+            writer.EndObject();
+            return text;
         }
 
         void ReadTree(JsonDeserializer& reader) {
@@ -58,12 +65,14 @@ namespace BECore::Tests {
         if constexpr (!AllocTracker::kEnabled) {
             GTEST_SKIP() << kNoAllocTracker;
         }
-        const Json document = MakeTree();
+        const String document = MakeTree();
         {
-            JsonDeserializer warmUp(document);
+            JsonDeserializer warmUp;
+            ASSERT_TRUE(warmUp.Load(document));
             ReadTree(warmUp);
         }
-        JsonDeserializer reader(document);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
         reader.SetDiagnostics(DiagnosticsMode::Warn);
 
         const AllocCount counted = CountAllocations([&] { ReadTree(reader); });
@@ -73,8 +82,9 @@ namespace BECore::Tests {
     }
 
     TEST(JsonScratchTest, ADeserializerWithDiagnosticsOffAllocatesNothingForNames) {
-        const Json document = MakeTree();
-        JsonDeserializer reader(document);
+        const String document = MakeTree();
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
 
         ReadTree(reader);  // the first read pays for what the formatter and the JSON lookup set up once
 
@@ -82,9 +92,9 @@ namespace BECore::Tests {
     }
 
     TEST(JsonScratchTest, ANearMissNextToAnAskedKeyStillGetsItsHint) {
-        Json root = MakeTree();
-        root["key1x"] = 1;
-        JsonDeserializer reader(root);
+        const String document = MakeTree("key1x");
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
         reader.SetDiagnostics(DiagnosticsMode::Warn);
 
         ReadTree(reader);

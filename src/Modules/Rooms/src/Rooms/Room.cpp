@@ -126,7 +126,7 @@ namespace BECore {
         }
     }
 
-    std::expected<void, ControlError> Room::Start(PlayerId host, RoomTime now, const Json& options) {
+    std::expected<void, ControlError> Room::Start(PlayerId host, RoomTime now, JsonView options) {
         if (!HasMember(host)) {
             return std::unexpected(MakeError(RoomErrors::kNotInRoom, "You are not in this room"));
         }
@@ -139,6 +139,13 @@ namespace BECore {
         UniquePtr<ISeatedGame> game = _factory ? _factory() : nullptr;
         if (!game || game->GetSeatCount() != _info.seatCount) {
             return std::unexpected(MakeError(RoomErrors::kInternalError, "The game could not be created"));
+        }
+        if (!options.IsValid()) {
+            _scratchText = "{}";
+            if (!_scratchTape.Parse(_scratchText)) {
+                return std::unexpected(MakeError(RoomErrors::kInternalError, "The game could not be created"));
+            }
+            options = JsonView(_scratchTape, 0);
         }
         if (auto started = game->Start(_random(), options); !started) {
             return std::unexpected(std::move(started.error()));
@@ -162,7 +169,7 @@ namespace BECore {
         return _game ? _game->GetStateVersion() : 0;
     }
 
-    std::expected<UniquePtr<SeatedOutcome>, ControlError> Room::PerformAction(PlayerId player, uint64_t version, const Json& action) {
+    std::expected<UniquePtr<SeatedOutcome>, ControlError> Room::PerformAction(PlayerId player, uint64_t version, JsonView action) {
         const Member* member = FindMember(player);
         if (!member) {
             return std::unexpected(MakeError(RoomErrors::kNotInRoom, "You are not in this room"));
@@ -256,11 +263,18 @@ namespace BECore {
             if (!IsSeatComputerControlled(seat, now)) {
                 continue;
             }
-            const Optional<Json> action = _game->ChooseComputerAction(seat);
-            if (!action) {
+            _scratchText.clear();
+            JsonWriter writer(_scratchText);
+            if (!_game->ChooseComputerAction(seat, writer)) {
                 continue;
             }
-            if (auto performed = _game->PerformSeatAction(seat, *action); !performed) {
+            // The text goes through the tape like a person's action, so a game that writes nothing, two values or half an object is
+            // skipped instead of reaching PerformSeatAction
+            if (!writer.IsComplete() || !_scratchTape.Parse(_scratchText)) {
+                LOG_ERROR("Room: the game wrote no complete action for the computer of seat {}", seat);
+                continue;
+            }
+            if (auto performed = _game->PerformSeatAction(seat, JsonView(_scratchTape, 0)); !performed) {
                 // No room code, name or game message in the log: the platform's log is not a place for them
                 LOG_ERROR("Room: the game refused the computer's action for seat {}: {}", seat, performed.error().code);
                 return false;
@@ -354,18 +368,21 @@ namespace BECore {
         return FindMember(player) != nullptr;
     }
 
-    void Room::SetLobbyOptions(const Json& options) {
-        Json kept = Json::object();
-        if (options.is_object()) {
-            for (const String& key : _info.publicOptions) {
-                if (kept.size() >= RoomLimits::kMaxLobbyOptions) {
+    void Room::SetLobbyOptions(JsonView options) {
+        String kept;
+        if (options.IsObject()) {
+            Vector<PublicOptionRef> found;
+            for (const String& name : _info.publicOptions) {
+                if (found.size() >= RoomLimits::kMaxLobbyOptions) {
                     break;
                 }
-                const Json* value = FindJsonMember(options, key);
-                if (value != nullptr && (value->is_boolean() || value->is_number_integer())) {
-                    kept[ToStdString(key)] = *value;
+                const Optional<JsonView> value = options.Find(StringView(name.data(), name.size()));
+                const bool listed = std::any_of(found.begin(), found.end(), [&name](const PublicOptionRef& option) { return option.key == name; });
+                if (value && IsPublicOptionValue(*value) && !listed) {
+                    found.push_back({name, *value});
                 }
             }
+            AppendPublicOptions(kept, found);
         }
         if (kept != _lobbyOptions) {
             _lobbyOptions = std::move(kept);

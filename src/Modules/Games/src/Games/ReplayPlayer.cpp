@@ -1,5 +1,7 @@
 #include "ReplayPlayer.h"
 
+#include <BECore/Control/JsonViewOps.h>
+#include <BECore/Control/JsonWriter.h>
 #include <Games/IControllableGame.h>
 
 namespace BECore {
@@ -10,6 +12,7 @@ namespace BECore {
             ReplayMismatch mismatch;
             mismatch.index = index;
             mismatch.entry = entry;
+            mismatch.entryText = FormatReplayEntry(entry);
             mismatch.kind = kind;
             return mismatch;
         }
@@ -20,48 +23,29 @@ namespace BECore {
             return mismatch;
         }
 
-        ReplayStep ApplyReset(IControllableGame& game, size_t index, const ReplayEntry& entry) {
-            if (auto reset = game.Reset(entry.params); !reset) {
-                return std::unexpected(MakeRefused(index, entry, std::move(reset.error())));
+        /// The text of an entry is JSON a tape accepted when the file was read; one made by hand that is not is refused like a call the game refused
+        std::expected<JsonView, ReplayMismatch> TapeEntryText(size_t index, const ReplayEntry& entry, const String& text, JsonTape& tape) {
+            if (const auto parsed = tape.Parse(StringView(text)); !parsed) {
+                return std::unexpected(MakeRefused(index, entry, MakeControlError(ControlErrors::kInvalidParams, Format("the entry holds no JSON: {}", parsed.error().message))));
             }
-            // A game that took another seed than the file asks for plays another game from here on
-            Json start = game.GetReplayStart();
-            if (start != entry.params) {
-                ReplayMismatch mismatch = MakeMismatch(index, entry, ReplayMismatchKind::StartDiffers);
-                mismatch.expected = entry.params;
-                mismatch.actual = std::move(start);
-                return std::unexpected(std::move(mismatch));
-            }
-            return {};
+            return JsonView(tape, 0);
         }
 
-        ReplayStep ApplyAction(IControllableGame& game, size_t index, const ReplayEntry& entry) {
-            auto outcome = game.PerformAction(entry.params);
-            if (!outcome) {
-                return std::unexpected(MakeRefused(index, entry, std::move(outcome.error())));
+        /// Runs @p write on a writer over @p text (cleared first) and tapes what it wrote; the error is what the game answered, or `internal_error` for an incomplete value
+        template <typename TWrite>
+        std::expected<JsonView, ControlError> WriteAndTape(String& text, JsonTape& tape, TWrite&& write) {
+            text.clear();
+            JsonWriter writer(text);
+            if (auto written = write(writer); !written) {
+                return std::unexpected(std::move(written.error()));
             }
-            // A file without an outcome (written by hand) checks only that the action is accepted
-            if (entry.outcome && *entry.outcome != *outcome) {
-                ReplayMismatch mismatch = MakeMismatch(index, entry, ReplayMismatchKind::OutcomeDiffers);
-                mismatch.expected = *entry.outcome;
-                mismatch.actual = std::move(*outcome);
-                return std::unexpected(std::move(mismatch));
+            if (!writer.IsComplete()) {
+                return std::unexpected(MakeControlError(ControlErrors::kInternalError, "the game answered with no complete value"));
             }
-            return {};
-        }
-
-        ReplayStep ApplyState(IControllableGame& game, size_t index, const ReplayEntry& entry) {
-            if (auto loaded = game.SetState(entry.params); !loaded) {
-                return std::unexpected(MakeRefused(index, entry, std::move(loaded.error())));
+            if (const auto parsed = tape.Parse(StringView(text)); !parsed) {
+                return std::unexpected(MakeControlError(ControlErrors::kInternalError, Format("the game wrote no readable value: {}", parsed.error().message)));
             }
-            return {};
-        }
-
-        Json ErrorJson(const ControlError& error) {
-            Json result = Json::object();
-            result["code"] = MakeJsonString(error.code);
-            result["message"] = MakeJsonString(error.message);
-            return result;
+            return JsonView(tape, 0);
         }
 
     }  // namespace
@@ -104,6 +88,64 @@ namespace BECore {
         return IsDone() ? ReplayGap{} : _replay.entries[_next].gap;
     }
 
+    ReplayStep ReplayPlayer::ApplyReset(IControllableGame& game, size_t index, const ReplayEntry& entry) {
+        const auto params = TapeEntryText(index, entry, entry.params, _paramsTape);
+        if (!params) {
+            return std::unexpected(params.error());
+        }
+        if (auto reset = game.Reset(*params); !reset) {
+            return std::unexpected(MakeRefused(index, entry, std::move(reset.error())));
+        }
+        // A game that took another seed than the file asks for plays another game from here on
+        const auto start = WriteAndTape(_actualText, _actualTape, [&](JsonWriter& writer) { return game.WriteReplayStart(writer); });
+        if (!start) {
+            return std::unexpected(MakeRefused(index, entry, start.error()));
+        }
+        if (!JsonEquals(*start, *params)) {
+            ReplayMismatch mismatch = MakeMismatch(index, entry, ReplayMismatchKind::StartDiffers);
+            mismatch.expected = entry.params;
+            mismatch.actual = _actualText;
+            return std::unexpected(std::move(mismatch));
+        }
+        return {};
+    }
+
+    ReplayStep ReplayPlayer::ApplyAction(IControllableGame& game, size_t index, const ReplayEntry& entry) {
+        const auto params = TapeEntryText(index, entry, entry.params, _paramsTape);
+        if (!params) {
+            return std::unexpected(params.error());
+        }
+        const auto outcome = WriteAndTape(_actualText, _actualTape, [&](JsonWriter& writer) { return game.PerformAction(*params, writer); });
+        if (!outcome) {
+            return std::unexpected(MakeRefused(index, entry, outcome.error()));
+        }
+        // A file without an outcome (written by hand) checks only that the action is accepted
+        if (entry.outcome) {
+            const auto expected = TapeEntryText(index, entry, *entry.outcome, _expectedTape);
+            if (!expected) {
+                return std::unexpected(expected.error());
+            }
+            if (!JsonEquals(*expected, *outcome)) {
+                ReplayMismatch mismatch = MakeMismatch(index, entry, ReplayMismatchKind::OutcomeDiffers);
+                mismatch.expected = *entry.outcome;
+                mismatch.actual = _actualText;
+                return std::unexpected(std::move(mismatch));
+            }
+        }
+        return {};
+    }
+
+    ReplayStep ReplayPlayer::ApplyState(IControllableGame& game, size_t index, const ReplayEntry& entry) {
+        const auto params = TapeEntryText(index, entry, entry.params, _paramsTape);
+        if (!params) {
+            return std::unexpected(params.error());
+        }
+        if (auto loaded = game.SetState(*params); !loaded) {
+            return std::unexpected(MakeRefused(index, entry, std::move(loaded.error())));
+        }
+        return {};
+    }
+
     ReplayStep ReplayPlayer::Apply(IControllableGame& game) {
         ASSERT(!IsDone());
         const size_t index = _next;
@@ -127,27 +169,6 @@ namespace BECore {
             _stopped = true;
         }
         return step;
-    }
-
-    Json ReplayMismatchJson(const ReplayMismatch& mismatch) {
-        Json result = Json::object();
-        result["index"] = mismatch.index;
-        result["line"] = mismatch.entry.line;
-        result["kind"] = MakeJsonString(ReplayMismatchKindName(mismatch.kind));
-        // The shape of a line of the file, so a person can find the entry by what they see there
-        if (auto entry = ParseJson(FormatReplayEntry(mismatch.entry))) {
-            result["entry"] = std::move(*entry);
-        }
-        if (mismatch.error) {
-            result["error"] = ErrorJson(*mismatch.error);
-        }
-        if (mismatch.expected) {
-            result["expected"] = *mismatch.expected;
-        }
-        if (mismatch.actual) {
-            result["actual"] = *mismatch.actual;
-        }
-        return result;
     }
 
 }  // namespace BECore

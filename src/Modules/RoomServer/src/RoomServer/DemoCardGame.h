@@ -7,7 +7,7 @@
 namespace BECore {
 
     // The answers of DemoCardGame: `BE_CLASS` structs of plain `Vector` / `String` fields (the room carries them from the game to the hub, so no arena
-    // type). Their keys are the wire's: the tests compare the written text with a hand-built `Json` reference.
+    // type). Their keys are the wire's: the tests compare the written text with a hand-written reference.
 
     /// A card on the table and the seat that played it
     struct DemoTablePlay {
@@ -85,11 +85,11 @@ namespace BECore {
         ~DemoCardGame() override = default;
 
         int GetSeatCount() const override;
-        std::expected<void, ControlError> Start(uint64_t seed, const Json& options) override;
+        std::expected<void, ControlError> Start(uint64_t seed, JsonView options) override;
         std::expected<UniquePtr<SeatedView>, ControlError> GetSeatView(int seat) const override;
         std::expected<UniquePtr<SeatedActions>, ControlError> GetSeatActions(int seat) const override;
-        std::expected<UniquePtr<SeatedOutcome>, ControlError> PerformSeatAction(int seat, const Json& action) override;
-        Optional<Json> ChooseComputerAction(int seat) const override;
+        std::expected<UniquePtr<SeatedOutcome>, ControlError> PerformSeatAction(int seat, JsonView action) override;
+        bool ChooseComputerAction(int seat, JsonWriter& action) const override;
         bool IsFinished() const override;
         uint64_t GetStateVersion() const override;
 

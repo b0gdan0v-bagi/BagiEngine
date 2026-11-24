@@ -4,6 +4,7 @@
 #include <BECore/Rooms/RoomTestTimings.h>
 #include <BECore/Rooms/TestRandom.h>
 #include <BECore/WebSocketTestClient.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/SharedPtr.h>
@@ -92,8 +93,8 @@ namespace BECore::Tests {
                     return false;
                 }
                 if (event.kind == RoomTransportEventKind::Text) {
-                    const auto parsed = ParseJson(event.text);
-                    _tap.types.push_back(parsed ? GetJsonString(*parsed, "type").value_or(String()) : String("?"));
+                    const JsonDoc document(StringView(event.text.data(), event.text.size()));
+                    _tap.types.push_back(document.IsParsed() ? GetParamString(document.Root(), "type").value_or(String()) : String("?"));
                 }
                 return true;
             }
@@ -201,7 +202,7 @@ namespace BECore::Tests {
 
             /// The first player hosts a room of @p game, the others join it (each with fresh settings that @p tuneGuest may change);
             /// everybody is in the room afterwards, nobody has started
-            void MakeTable(StringView game, size_t humans, const Json& options = Json::object(), FunctionRef<void(RoomClientSettings&)> tuneGuest = [](RoomClientSettings&) {}) {
+            void MakeTable(StringView game, size_t humans, StringView options = "{}", FunctionRef<void(RoomClientSettings&)> tuneGuest = [](RoomClientSettings&) {}) {
                 Player& host = AddPlayer();
                 ASSERT_TRUE(host.client->Host(url, game, "P0", options).has_value());
                 ASSERT_TRUE(WaitFor([&] { return host.client->IsInRoom(); }, kShortLimit));
@@ -309,7 +310,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(StartServer(std::move(settings)));
 
         // Seat 0 moves first, and seat 1 does not play until the test lets it: the hand stalls at seat 1 when the client is cut
-        ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2, Json::object({{"firstSeat", 0}})));
+        ASSERT_NO_FATAL_FAILURE(MakeTable("cards", 2, R"({"firstSeat":0})"));
         Player& host = *players[0];
         Player& away = *players[1];
         const String token = away.client->GetSession().token;

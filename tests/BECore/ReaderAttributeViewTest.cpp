@@ -1,6 +1,5 @@
 // IDeserializer::ReadAttributeView: the text of an attribute as a view, the same in every reader.
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
@@ -52,9 +51,9 @@ namespace BECore::Tests {
         ExpectViews(binary, "binary");
         binary.EndObject();
 
-        const auto parsed = ParseJson(Format(R"({{"item":{{"shortType":"{}","longType":"{}"}}}})", kShort, kLong));
-        ASSERT_TRUE(parsed.has_value());
-        JsonDeserializer json(*parsed);
+        const String text = Format(R"({{"item":{{"shortType":"{}","longType":"{}"}}}})", kShort, kLong);
+        JsonDeserializer json;
+        ASSERT_TRUE(json.Load(text));
         ASSERT_TRUE(json.BeginObject("item"));
         ExpectViews(json, "json");
         json.EndObject();

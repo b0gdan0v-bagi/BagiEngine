@@ -1,12 +1,11 @@
-// JsonWriter (Control/JsonWriter.h): every text it writes is compared with `nlohmann::json::dump(indent, ' ', false, error_handler_t::replace)` of the same
-// document, the DOM path it replaces.
+// JsonWriter (Control/JsonWriter.h): the bytes it writes, pinned as literal texts. The exhaustive and the random cases pin a digest of
+// everything written.
 
 #include <BECore/Assert/AssertEvent.h>
-#include <BECore/Control/Json.h>
-#include <BECore/Control/JsonSerializer.h>
 #include <BECore/Control/JsonWriter.h>
 #include <Common/AllocCheck.h>
 #include <Common/AssertBridge.h>
+#include <Common/JsonDoc.h>
 #include <bit>
 #include <cfloat>
 #include <gtest/gtest.h>
@@ -21,16 +20,10 @@ namespace BECore::Tests {
         constexpr uint64_t kSeed = 0x5EEDB0B5ULL;
         constexpr size_t kRandomDoubles = 100000;
         constexpr size_t kRandomStrings = 20000;
+        constexpr size_t kRandomFloats = 20000;
 
-        /// What the DOM path writes for @p value
-        String Reference(const Json& value, int indent) {
-            const std::string text = value.dump(indent, ' ', false, Json::error_handler_t::replace);  //-NoStd: the reference is nlohmann's own dump
-            return String(text.c_str(), text.size());
-        }
-
-        Json StringJson(StringView text) {
-            return Json(std::string(text.data(), text.size()));  //-NoStd: a Json string holds std::string
-        }
+        /// U+FFFD, which stands for each `@` of an expected text (no test text has an `@` of its own)
+        constexpr StringView kReplacement = "\xEF\xBF\xBD";
 
         template <typename TWrite>
         String Written(int indent, TWrite&& write) {
@@ -41,22 +34,55 @@ namespace BECore::Tests {
             return out;
         }
 
-        void ExpectStringMatches(StringView text) {
-            const Json reference = StringJson(text);
+        String Replaced(StringView pattern) {
+            String out;
+            for (const char c : pattern) {
+                if (c == '@') {
+                    out.append(kReplacement.data(), kReplacement.size());
+                } else {
+                    out.push_back(c);
+                }
+            }
+            return out;
+        }
+
+        /// The text as a string value is @p expected in every layout (a scalar has no layout); an `@` of @p expected is U+FFFD
+        void ExpectString(StringView text, StringView expected) {
             for (const int indent : kIndents) {
                 const String written = Written(indent, [&](JsonWriter& w) { w.Value(text); });
-                ASSERT_EQ(written, Reference(reference, indent)) << "a string of " << text.size() << " bytes, first byte " << (text.empty() ? 0 : static_cast<uint8_t>(text[0]));
+                ASSERT_EQ(written, Replaced(expected)) << "a string of " << text.size() << " bytes, first byte " << (text.empty() ? 0 : static_cast<uint8_t>(text[0]));
             }
         }
 
         template <typename T>
-        void ExpectNumberMatches(T value) {
-            const Json reference(value);
+        void ExpectNumber(T value, StringView expected) {
             for (const int indent : kIndents) {
                 const String written = Written(indent, [&](JsonWriter& w) { w.Value(value); });
-                ASSERT_EQ(written, Reference(reference, indent));
+                ASSERT_EQ(written, String(expected.data(), expected.size()));
             }
         }
+
+        /// FNV-1a over what was written, with a NUL (which no written text holds: it is escaped) between the texts
+        class Digest {
+        public:
+            void Add(const String& text) {
+                for (const char c : text) {
+                    Mix(static_cast<uint8_t>(c));
+                }
+                Mix(0);
+            }
+
+            [[nodiscard]] uint64_t Value() const {
+                return _hash;
+            }
+
+        private:
+            void Mix(uint8_t byte) {
+                _hash = (_hash ^ byte) * 0x100000001B3ULL;
+            }
+
+            uint64_t _hash = 0xCBF29CE484222325ULL;
+        };
 
         String Bytes(std::initializer_list<uint8_t> bytes) {
             String text;
@@ -97,34 +123,39 @@ namespace BECore::Tests {
             w.EndObject();
         }
 
-        Json NestedJson() {
-            Json doc = Json::object();
-            doc["a"] = Json::array({1, Json::array(), Json::object()});
-            doc["b"] = Json::object({{"c", "x"}, {"d", Json::array({true, nullptr, 1.5})}});
-            doc["e"] = Json::object();
-            doc["f"] = Json::array();
-            return doc;
-        }
+        /// The text of a control character 0 to 31 inside a string
+        constexpr Array<StringView, 32> kControlEscapes = {R"(\u0000)", R"(\u0001)", R"(\u0002)", R"(\u0003)", R"(\u0004)", R"(\u0005)", R"(\u0006)", R"(\u0007)",
+                                                           R"(\b)",     R"(\t)",     R"(\n)",     R"(\u000b)", R"(\f)",     R"(\r)",     R"(\u000e)", R"(\u000f)",
+                                                           R"(\u0010)", R"(\u0011)", R"(\u0012)", R"(\u0013)", R"(\u0014)", R"(\u0015)", R"(\u0016)", R"(\u0017)",
+                                                           R"(\u0018)", R"(\u0019)", R"(\u001a)", R"(\u001b)", R"(\u001c)", R"(\u001d)", R"(\u001e)", R"(\u001f)"};
 
     }  // namespace
 
-    TEST(JsonWriterTest, EscapesAndControlCharactersMatchDump) {
-        ExpectStringMatches("");
-        ExpectStringMatches("plain text 123");
-        ExpectStringMatches("quote \" backslash \\ slash / tab \t newline \n return \r backspace \b formfeed \f");
-        ExpectStringMatches("\x7f DEL stays, \xC3\xA9 \xE2\x82\xAC \xF0\x9F\x98\x80 and \xEF\xBF\xBD stay as they are");
+    TEST(JsonWriterTest, EscapesAndControlCharactersAreWrittenAsJsonSays) {
+        ExpectString("", R"("")");
+        ExpectString("plain text 123", R"("plain text 123")");
+        ExpectString("quote \" backslash \\ slash / tab \t newline \n return \r backspace \b formfeed \f", R"("quote \" backslash \\ slash / tab \t newline \n return \r backspace \b formfeed \f")");
+        ExpectString("\x7f DEL stays, \xC3\xA9 \xE2\x82\xAC \xF0\x9F\x98\x80 and \xEF\xBF\xBD stay as they are",
+                     "\"\x7f DEL stays, \xC3\xA9 \xE2\x82\xAC \xF0\x9F\x98\x80 and \xEF\xBF\xBD stay as they are\"");
         for (int c = 0; c < 0x20; ++c) {
             const char single[] = {static_cast<char>(c), 0};
-            ExpectStringMatches(StringView(single, 1));
-            ExpectStringMatches(Format("a{}b", StringView(single, 1)));
+            const StringView escape = kControlEscapes[static_cast<size_t>(c)];
+            ExpectString(StringView(single, 1), Format("\"{}\"", escape));
+            ExpectString(Format("a{}b", StringView(single, 1)), Format("\"a{}b\"", escape));
         }
         String longText;
+        String longExpected = "\"";
         for (int i = 0; i < 4000; ++i) {
             longText.append("line \"");
             longText.push_back(static_cast<char>(i % 0x20));
             longText.append("\" \xC3\xA9\n");
+            const StringView escape = kControlEscapes[static_cast<size_t>(i % 0x20)];
+            longExpected.append("line \\\"");
+            longExpected.append(escape.data(), escape.size());
+            longExpected.append("\\\" \xC3\xA9\\n");
         }
-        ExpectStringMatches(longText);
+        longExpected.push_back('"');
+        ExpectString(longText, longExpected);
     }
 
     TEST(JsonWriterTest, HexEscapesAreLowerCase) {
@@ -136,138 +167,160 @@ namespace BECore::Tests {
         EXPECT_EQ(Written(JsonWriter::kCompact, [&](JsonWriter& w) { w.Value(StringView(text)); }), String("\"a\\u0000b\""));
     }
 
-    TEST(JsonWriterTest, InvalidUtf8IsReplacedLikeDump) {
-        const Vector<String> cases = {
-            Bytes({0x80}),                          // lone continuation
-            Bytes({0x61, 0x80, 0x62}),              //
-            Bytes({0xBF, 0xBF, 0xBF}),              //
-            Bytes({0xC0, 0x80}),                    // overlong NUL
-            Bytes({0xC1, 0xBF}),                    // overlong
-            Bytes({0xE0, 0x80, 0x80}),              // overlong three bytes
-            Bytes({0xE0, 0x9F, 0xBF}),              //
-            Bytes({0xF0, 0x80, 0x80, 0x80}),        // overlong four bytes
-            Bytes({0xF0, 0x8F, 0xBF, 0xBF}),        //
-            Bytes({0xED, 0xA0, 0x80}),              // surrogate D800
-            Bytes({0xED, 0xBF, 0xBF}),              // surrogate DFFF
-            Bytes({0xF4, 0x90, 0x80, 0x80}),        // above U+10FFFF
-            Bytes({0xC3}),                          // truncated at the end
-            Bytes({0x61, 0xE2, 0x82}),              //
-            Bytes({0xF0, 0x9F, 0x98}),              //
-            Bytes({0xE2, 0x82, 0x61}),              // sequence cut by an ASCII byte
-            Bytes({0xE2, 0xE2, 0x82, 0xAC}),        // a lead inside a sequence starts a new one
-            Bytes({0xC3, 0xC3, 0xA9}),              //
-            Bytes({0xF8, 0x88, 0x80, 0x80, 0x80}),  // five-byte form
-            Bytes({0xFC, 0x84, 0x80, 0x80, 0x80, 0x80}),
+    TEST(JsonWriterTest, InvalidUtf8IsReplacedByOneReplacementCharacterPerByteOfARefusedSequence) {
+        struct Case {
+            String bytes;
+            StringView expected;
         };
-        for (const String& text : cases) {
-            ExpectStringMatches(text);
+        const Vector<Case> cases = {
+            {Bytes({0x80}), R"("@")"},                                     // lone continuation
+            {Bytes({0x61, 0x80, 0x62}), R"("a@b")"},                       //
+            {Bytes({0xBF, 0xBF, 0xBF}), R"("@@@")"},                       //
+            {Bytes({0xC0, 0x80}), R"("@@")"},                              // overlong NUL
+            {Bytes({0xC1, 0xBF}), R"("@@")"},                              // overlong
+            {Bytes({0xE0, 0x80, 0x80}), R"("@@@")"},                       // overlong three bytes
+            {Bytes({0xE0, 0x9F, 0xBF}), R"("@@@")"},                       //
+            {Bytes({0xF0, 0x80, 0x80, 0x80}), R"("@@@@")"},                // overlong four bytes
+            {Bytes({0xF0, 0x8F, 0xBF, 0xBF}), R"("@@@@")"},                //
+            {Bytes({0xED, 0xA0, 0x80}), R"("@@@")"},                       // surrogate D800
+            {Bytes({0xED, 0xBF, 0xBF}), R"("@@@")"},                       // surrogate DFFF
+            {Bytes({0xF4, 0x90, 0x80, 0x80}), R"("@@@@")"},                // above U+10FFFF
+            {Bytes({0xC3}), R"("@")"},                                     // truncated at the end
+            {Bytes({0x61, 0xE2, 0x82}), R"("a@")"},                        // the truncated sequence is one replacement
+            {Bytes({0xF0, 0x9F, 0x98}), R"("@")"},                         //
+            {Bytes({0xE2, 0x82, 0x61}), R"("@a")"},                        // sequence cut by an ASCII byte
+            {Bytes({0xE2, 0xE2, 0x82, 0xAC}), "\"@\xE2\x82\xAC\""},        // a lead inside a sequence starts a new one
+            {Bytes({0xC3, 0xC3, 0xA9}), "\"@\xC3\xA9\""},                  //
+            {Bytes({0xF8, 0x88, 0x80, 0x80, 0x80}), R"("@@@@@")"},         // five-byte form
+            {Bytes({0xFC, 0x84, 0x80, 0x80, 0x80, 0x80}), R"("@@@@@@")"},  //
+        };
+        for (const Case& item : cases) {
+            ExpectString(item.bytes, item.expected);
         }
         for (int byte = 0xF5; byte <= 0xFF; ++byte) {
-            ExpectStringMatches(Bytes({static_cast<uint8_t>(byte)}));
-            ExpectStringMatches(Bytes({0x61, static_cast<uint8_t>(byte), 0x62}));
+            ExpectString(Bytes({static_cast<uint8_t>(byte)}), R"("@")");
+            ExpectString(Bytes({0x61, static_cast<uint8_t>(byte), 0x62}), R"("a@b")");
         }
     }
 
-    TEST(JsonWriterTest, EveryByteAndEveryPairOfBytesMatchDump) {
+    // Any change of a byte written for any of the inputs below changes its digest
+    TEST(JsonWriterTest, EveryByteAndEveryPairOfBytesAreWrittenAsTheDomDumpedThem) {
+        Digest digest;
         for (int first = 0; first < 256; ++first) {
-            ExpectStringMatches(Bytes({0x61, static_cast<uint8_t>(first), 0x62}));
+            digest.Add(Written(JsonWriter::kCompact, [&](JsonWriter& w) { w.Value(StringView(Bytes({0x61, static_cast<uint8_t>(first), 0x62}))); }));
             for (int second = 0; second < 256; ++second) {
                 const String text = Bytes({static_cast<uint8_t>(first), static_cast<uint8_t>(second)});
-                const String written = Written(JsonWriter::kCompact, [&](JsonWriter& w) { w.Value(StringView(text)); });
-                ASSERT_EQ(written, Reference(StringJson(text), JsonWriter::kCompact)) << first << " " << second;
+                digest.Add(Written(JsonWriter::kCompact, [&](JsonWriter& w) { w.Value(StringView(text)); }));
             }
         }
+        EXPECT_EQ(digest.Value(), 0x6D58DE7BE4AD41C3ULL);
     }
 
-    TEST(JsonWriterTest, RandomByteStringsMatchDump) {
+    TEST(JsonWriterTest, RandomByteStringsAreWrittenAsTheDomDumpedThem) {
         std::mt19937_64 random(kSeed);
         // The bytes that matter to the decoder, plus a few that do not
         constexpr Array<uint8_t, 24> alphabet = {0x00, 0x22, 0x41, 0x5C, 0x7F, 0x80, 0x8F, 0x90, 0xA0, 0xBF, 0xC0, 0xC2, 0xDF, 0xE0, 0xE1, 0xED, 0xEF, 0xF0, 0xF1, 0xF4, 0xF5, 0xFF, 0x0A, 0x1F};
+        Digest digest;
         for (size_t n = 0; n < kRandomStrings; ++n) {
             String text;
             const size_t length = random() % 12;
             for (size_t i = 0; i < length; ++i) {
                 text.push_back(static_cast<char>(alphabet[random() % alphabet.size()]));
             }
-            const String written = Written(JsonWriter::kCompact, [&](JsonWriter& w) { w.Value(StringView(text)); });
-            ASSERT_EQ(written, Reference(StringJson(text), JsonWriter::kCompact)) << "case " << n;
+            digest.Add(Written(JsonWriter::kCompact, [&](JsonWriter& w) { w.Value(StringView(text)); }));
         }
+        EXPECT_EQ(digest.Value(), 0xF01F844E30D4FA4ULL);
+    }
+
+    TEST(JsonWriterTest, AStringReadsBackAsItWasWritten) {
+        constexpr char kText[] = "quote \" backslash \\ newline \n tab \t unicode \xc3\xa9 \xe2\x82\xac nul \0 end";
+        const String original(kText, sizeof(kText) - 1);
+        const String text = Written(JsonWriter::kCompact, [&](JsonWriter& w) { w.Value(StringView(original.data(), original.size())); });
+
+        const JsonDoc doc(text);
+        ASSERT_TRUE(doc.IsParsed());
+        String decoded;
+        ASSERT_TRUE(doc.Root().ReadText(decoded));
+        EXPECT_EQ(decoded, original);
     }
 
     TEST(JsonWriterTest, KeysAreEscapedLikeStrings) {
         const String key = "k\"\\\n\xff";
-        Json doc = Json::object();
-        doc[std::string(key.c_str(), key.size())] = 1;  //-NoStd: a Json key is std::string
-        for (const int indent : kIndents) {
-            EXPECT_EQ(Written(indent,
+        constexpr StringView kExpected[] = {
+            "{\"k\\\"\\\\\\n\xEF\xBF\xBD\":1}",        "{\n\"k\\\"\\\\\\n\xEF\xBF\xBD\": 1\n}",     "{\n \"k\\\"\\\\\\n\xEF\xBF\xBD\": 1\n}",
+            "{\n  \"k\\\"\\\\\\n\xEF\xBF\xBD\": 1\n}", "{\n    \"k\\\"\\\\\\n\xEF\xBF\xBD\": 1\n}",
+        };
+        for (size_t i = 0; i < kIndents.size(); ++i) {
+            EXPECT_EQ(Written(kIndents[i],
                               [&](JsonWriter& w) {
                                   w.BeginObject();
                                   w.Member(StringView(key), 1);
                                   w.EndObject();
                               }),
-                      Reference(doc, indent));
+                      String(kExpected[i].data(), kExpected[i].size()))
+                << "indent " << kIndents[i];
         }
     }
 
-    TEST(JsonWriterTest, IntegersMatchDumpAtTheLimitsOfEveryWidth) {
-        ExpectNumberMatches<int8_t>(std::numeric_limits<int8_t>::min());
-        ExpectNumberMatches<int8_t>(std::numeric_limits<int8_t>::max());
-        ExpectNumberMatches<uint8_t>(std::numeric_limits<uint8_t>::max());
-        ExpectNumberMatches<int16_t>(std::numeric_limits<int16_t>::min());
-        ExpectNumberMatches<int16_t>(std::numeric_limits<int16_t>::max());
-        ExpectNumberMatches<uint16_t>(std::numeric_limits<uint16_t>::max());
-        ExpectNumberMatches<int32_t>(std::numeric_limits<int32_t>::min());
-        ExpectNumberMatches<int32_t>(std::numeric_limits<int32_t>::max());
-        ExpectNumberMatches<uint32_t>(std::numeric_limits<uint32_t>::max());
-        ExpectNumberMatches<int64_t>(std::numeric_limits<int64_t>::min());
-        ExpectNumberMatches<int64_t>(std::numeric_limits<int64_t>::max());
-        ExpectNumberMatches<uint64_t>(std::numeric_limits<uint64_t>::max());
-        ExpectNumberMatches<uint64_t>(static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1);
-        ExpectNumberMatches<int>(0);
-        ExpectNumberMatches<int>(-1);
-        ExpectNumberMatches<unsigned>(0);
-        ExpectNumberMatches<size_t>(123456789);
+    TEST(JsonWriterTest, IntegersAreExactAtTheLimitsOfEveryWidth) {
+        ExpectNumber<int8_t>(std::numeric_limits<int8_t>::min(), "-128");
+        ExpectNumber<int8_t>(std::numeric_limits<int8_t>::max(), "127");
+        ExpectNumber<uint8_t>(std::numeric_limits<uint8_t>::max(), "255");
+        ExpectNumber<int16_t>(std::numeric_limits<int16_t>::min(), "-32768");
+        ExpectNumber<int16_t>(std::numeric_limits<int16_t>::max(), "32767");
+        ExpectNumber<uint16_t>(std::numeric_limits<uint16_t>::max(), "65535");
+        ExpectNumber<int32_t>(std::numeric_limits<int32_t>::min(), "-2147483648");
+        ExpectNumber<int32_t>(std::numeric_limits<int32_t>::max(), "2147483647");
+        ExpectNumber<uint32_t>(std::numeric_limits<uint32_t>::max(), "4294967295");
+        ExpectNumber<int64_t>(std::numeric_limits<int64_t>::min(), "-9223372036854775808");
+        ExpectNumber<int64_t>(std::numeric_limits<int64_t>::max(), "9223372036854775807");
+        ExpectNumber<uint64_t>(std::numeric_limits<uint64_t>::max(), "18446744073709551615");
+        ExpectNumber<uint64_t>(static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1, "9223372036854775808");
+        ExpectNumber<int>(0, "0");
+        ExpectNumber<int>(-1, "-1");
+        ExpectNumber<unsigned>(0, "0");
+        ExpectNumber<size_t>(123456789, "123456789");
     }
 
-    TEST(JsonWriterTest, DoublesMatchDumpForAFixedBattery) {
-        const double battery[] = {0.0,
-                                  -0.0,
-                                  1.0,
-                                  -1.0,
-                                  0.1,
-                                  -0.1,
-                                  0.5,
-                                  1.5,
-                                  100.0,
-                                  1e-5,
-                                  1e-7,
-                                  1e15,
-                                  1e16,
-                                  1e17,
-                                  123456789012345678.0,
-                                  9007199254740993.0,
-                                  5e-324,
-                                  2.2250738585072014e-308,
-                                  DBL_MAX,
-                                  -DBL_MAX,
-                                  DBL_EPSILON,
-                                  3.141592653589793,
-                                  2.718281828459045,
-                                  1.0 / 3.0,
-                                  0.30000000000000004,
-                                  4503599627370496.0,
-                                  1e21,
-                                  1e22,
-                                  1e23,
-                                  123456.789e3,
-                                  0.000123456};
-        for (const double value : battery) {
-            ExpectNumberMatches(value);
-        }
+    TEST(JsonWriterTest, DoublesAreWrittenAsTheDomDumpedThem) {
+        ExpectNumber(0.0, "0.0");
+        ExpectNumber(-0.0, "-0.0");
+        ExpectNumber(1.0, "1.0");
+        ExpectNumber(-1.0, "-1.0");
+        ExpectNumber(0.1, "0.1");
+        ExpectNumber(-0.1, "-0.1");
+        ExpectNumber(0.5, "0.5");
+        ExpectNumber(1.5, "1.5");
+        ExpectNumber(100.0, "100.0");
+        ExpectNumber(1e-5, "1e-05");
+        ExpectNumber(1e-7, "1e-07");
+        ExpectNumber(1e15, "1e+15");
+        ExpectNumber(1e16, "1e+16");
+        ExpectNumber(1e17, "1e+17");
+        ExpectNumber(123456789012345678.0, "1.2345678901234568e+17");
+        ExpectNumber(9007199254740993.0, "9.007199254740992e+15");
+        ExpectNumber(5e-324, "5e-324");
+        ExpectNumber(2.2250738585072014e-308, "2.2250738585072014e-308");
+        ExpectNumber(DBL_MAX, "1.7976931348623157e+308");
+        ExpectNumber(-DBL_MAX, "-1.7976931348623157e+308");
+        ExpectNumber(DBL_EPSILON, "2.220446049250313e-16");
+        ExpectNumber(3.141592653589793, "3.141592653589793");
+        ExpectNumber(2.718281828459045, "2.718281828459045");
+        ExpectNumber(1.0 / 3.0, "0.3333333333333333");
+        ExpectNumber(0.30000000000000004, "0.30000000000000004");
+        ExpectNumber(4503599627370496.0, "4.503599627370496e+15");
+        ExpectNumber(1e21, "1e+21");
+        ExpectNumber(1e22, "1e+22");
+        ExpectNumber(1e23, "9.999999999999999e+22");
+        ExpectNumber(123456.789e3, "123456789.0");
+        ExpectNumber(0.000123456, "0.000123456");
+
+        Digest digest;
         for (int exponent = -1074; exponent <= 1023; exponent += 7) {
-            ExpectNumberMatches(std::ldexp(1.0, exponent));
-            ExpectNumberMatches(-std::ldexp(1.5, exponent));
+            digest.Add(Written(JsonWriter::kCompact, [&](JsonWriter& w) { w.Value(std::ldexp(1.0, exponent)); }));
+            digest.Add(Written(JsonWriter::kCompact, [&](JsonWriter& w) { w.Value(-std::ldexp(1.5, exponent)); }));
         }
+        EXPECT_EQ(digest.Value(), 0xAFCA89D41637777BULL);
     }
 
     TEST(JsonWriterTest, IntegralDoublesKeepTheirPointZero) {
@@ -278,16 +331,16 @@ namespace BECore::Tests {
     TEST(JsonWriterTest, NonFiniteIsNull) {
         for (const double value : {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity()}) {
             EXPECT_EQ(Written(JsonWriter::kCompact, [&](JsonWriter& w) { w.Value(value); }), String("null"));
-            ExpectNumberMatches(value);
         }
         for (const float value : {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()}) {
             EXPECT_EQ(Written(JsonWriter::kCompact, [&](JsonWriter& w) { w.Value(value); }), String("null"));
         }
     }
 
-    TEST(JsonWriterTest, RandomDoublesMatchDump) {
+    TEST(JsonWriterTest, RandomDoublesAreWrittenAsTheDomDumpedThem) {
         std::mt19937_64 random(kSeed);
         size_t checked = 0;
+        Digest digest;
         for (size_t n = 0; n < kRandomDoubles; ++n) {
             const double value =
                 (n % 3 == 0) ? std::bit_cast<double>(random())
@@ -296,10 +349,10 @@ namespace BECore::Tests {
                 continue;
             }
             ++checked;
-            const String written = Written(JsonWriter::kCompact, [&](JsonWriter& w) { w.Value(value); });
-            ASSERT_EQ(written, Reference(Json(value), JsonWriter::kCompact)) << "case " << n;
+            digest.Add(Written(JsonWriter::kCompact, [&](JsonWriter& w) { w.Value(value); }));
         }
         EXPECT_GT(checked, kRandomDoubles * 9 / 10);
+        EXPECT_EQ(digest.Value(), 0x84C625E3F3E4681AULL);
     }
 
     TEST(JsonWriterTest, FloatsAreTheShortestTextThatReadsBackAsTheFloat) {
@@ -313,25 +366,22 @@ namespace BECore::Tests {
         EXPECT_EQ(writeFloat(FLT_MIN), String("1.1754944e-38"));
     }
 
-    TEST(JsonWriterTest, FloatsEqualWhatJsonSerializerWrites) {
+    // The digest was taken from the DOM serializer's dump of the same floats (the text the stream serializer writes through `Value(float)`)
+    TEST(JsonWriterTest, RandomFloatsAreWrittenAsTheDomSerializerDumpedThem) {
         std::mt19937_64 random(kSeed);
-        for (size_t n = 0; n < 20000; ++n) {
+        Digest digest;
+        for (size_t n = 0; n < kRandomFloats; ++n) {
             const float value = std::bit_cast<float>(static_cast<uint32_t>(random()));
-            JsonSerializer serializer;
-            serializer.Write("v", value);
-            const Json doc = serializer.Take();
-            const Json* member = FindJsonMember(doc, "v");
-            ASSERT_NE(member, nullptr);
-            const String written = Written(JsonWriter::kCompact, [&](JsonWriter& w) { w.Value(value); });
-            ASSERT_EQ(written, Reference(*member, JsonWriter::kCompact)) << "case " << n;
+            digest.Add(Written(JsonWriter::kCompact, [&](JsonWriter& w) { w.Value(value); }));
         }
+        EXPECT_EQ(digest.Value(), 0x42799561EE588C70ULL);
     }
 
     TEST(JsonWriterTest, ScalarsAtTheRoot) {
-        EXPECT_EQ(Written(2, [](JsonWriter& w) { w.Null(); }), Reference(Json(nullptr), 2));
-        EXPECT_EQ(Written(2, [](JsonWriter& w) { w.Value(true); }), Reference(Json(true), 2));
-        EXPECT_EQ(Written(2, [](JsonWriter& w) { w.Value(false); }), Reference(Json(false), 2));
-        EXPECT_EQ(Written(2, [](JsonWriter& w) { w.Value("text"); }), Reference(Json("text"), 2));
+        EXPECT_EQ(Written(2, [](JsonWriter& w) { w.Null(); }), String("null"));
+        EXPECT_EQ(Written(2, [](JsonWriter& w) { w.Value(true); }), String("true"));
+        EXPECT_EQ(Written(2, [](JsonWriter& w) { w.Value(false); }), String("false"));
+        EXPECT_EQ(Written(2, [](JsonWriter& w) { w.Value("text"); }), String(R"("text")"));
         EXPECT_EQ(Written(JsonWriter::kCompact, [](JsonWriter& w) { w.Raw("{\"x\":1}"); }), String("{\"x\":1}"));
     }
 
@@ -340,10 +390,17 @@ namespace BECore::Tests {
         EXPECT_EQ(Written(JsonWriter::kCompact, [&](JsonWriter& w) { w.Value(name); }), String("\"json_writer_pool_text_4c1f\""));
     }
 
-    TEST(JsonWriterTest, NestedContainersMatchDumpInEveryLayout) {
-        const Json reference = NestedJson();
-        for (const int indent : kIndents) {
-            EXPECT_EQ(Written(indent, [](JsonWriter& w) { WriteNested(w); }), Reference(reference, indent)) << "indent " << indent;
+    TEST(JsonWriterTest, NestedContainersAreWrittenInEveryLayout) {
+        constexpr StringView kExpected[] = {
+            R"({"a":[1,[],{}],"b":{"c":"x","d":[true,null,1.5]},"e":{},"f":[]})",
+            "{\n\"a\": [\n1,\n[],\n{}\n],\n\"b\": {\n\"c\": \"x\",\n\"d\": [\ntrue,\nnull,\n1.5\n]\n},\n\"e\": {},\n\"f\": []\n}",
+            "{\n \"a\": [\n  1,\n  [],\n  {}\n ],\n \"b\": {\n  \"c\": \"x\",\n  \"d\": [\n   true,\n   null,\n   1.5\n  ]\n },\n \"e\": {},\n \"f\": []\n}",
+            "{\n  \"a\": [\n    1,\n    [],\n    {}\n  ],\n  \"b\": {\n    \"c\": \"x\",\n    \"d\": [\n      true,\n      null,\n      1.5\n    ]\n  },\n  \"e\": {},\n  \"f\": []\n}",
+            "{\n    \"a\": [\n        1,\n        [],\n        {}\n    ],\n    \"b\": {\n        \"c\": \"x\",\n        \"d\": [\n            true,\n            null,\n            1.5\n        ]\n   "
+            " },\n    \"e\": {},\n    \"f\": []\n}",
+        };
+        for (size_t i = 0; i < kIndents.size(); ++i) {
+            EXPECT_EQ(Written(kIndents[i], [](JsonWriter& w) { WriteNested(w); }), String(kExpected[i].data(), kExpected[i].size())) << "indent " << kIndents[i];
         }
     }
 
@@ -364,13 +421,16 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(JsonWriterTest, ArraysOfScalarsAndObjectsMatchDump) {
-        Json reference = Json::array();
-        reference.push_back(Json::object({{"id", 1}, {"name", "a"}}));
-        reference.push_back(Json::object({{"id", 2}, {"name", "b"}}));
-        reference.push_back("tail");
-        for (const int indent : kIndents) {
-            const String written = Written(indent, [](JsonWriter& w) {
+    TEST(JsonWriterTest, ArraysOfScalarsAndObjectsAreWrittenInEveryLayout) {
+        constexpr StringView kExpected[] = {
+            R"([{"id":1,"name":"a"},{"id":2,"name":"b"},"tail"])",
+            "[\n{\n\"id\": 1,\n\"name\": \"a\"\n},\n{\n\"id\": 2,\n\"name\": \"b\"\n},\n\"tail\"\n]",
+            "[\n {\n  \"id\": 1,\n  \"name\": \"a\"\n },\n {\n  \"id\": 2,\n  \"name\": \"b\"\n },\n \"tail\"\n]",
+            "[\n  {\n    \"id\": 1,\n    \"name\": \"a\"\n  },\n  {\n    \"id\": 2,\n    \"name\": \"b\"\n  },\n  \"tail\"\n]",
+            "[\n    {\n        \"id\": 1,\n        \"name\": \"a\"\n    },\n    {\n        \"id\": 2,\n        \"name\": \"b\"\n    },\n    \"tail\"\n]",
+        };
+        for (size_t i = 0; i < kIndents.size(); ++i) {
+            const String written = Written(kIndents[i], [](JsonWriter& w) {
                 w.BeginArray();
                 w.BeginObject();
                 w.Member("id", 1);
@@ -383,7 +443,7 @@ namespace BECore::Tests {
                 w.Value("tail");
                 w.EndArray();
             });
-            EXPECT_EQ(written, Reference(reference, indent)) << "indent " << indent;
+            EXPECT_EQ(written, String(kExpected[i].data(), kExpected[i].size())) << "indent " << kIndents[i];
         }
     }
 

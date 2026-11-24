@@ -1,7 +1,9 @@
 #include "ArtGenVerdict.h"
 
-#include <BECore/Control/Json.h>
+#include <BECore/Control/ControlParams.h>
+#include <BECore/Control/JsonTape.h>
 #include <BECore/File/File.h>
+#include <Widgets/ArtGen/ArtGenFileText.h>
 
 namespace BECore {
 
@@ -53,20 +55,21 @@ namespace BECore {
             out.append(text.data(), text.size());
         }
 
-        Vector<String> FailedNamesOf(const Json* failed) {
+        Vector<String> FailedNamesOf(const Optional<JsonView>& failed) {
             Vector<String> names;
-            if (failed == nullptr || !failed->is_array()) {
+            if (!failed || !failed->IsArray()) {
                 return names;
             }
-            for (const Json& item : *failed) {
-                if (item.is_string()) {
-                    names.push_back(String(FromStd(item.get_ref<const std::string&>())));  //-NoStd: nlohmann holds a std::string
+            for (const JsonView item : failed->Items()) {
+                String name;
+                if (item.ReadText(name)) {
+                    names.push_back(eastl::move(name));
                 }
             }
             return names;
         }
 
-        ArtGenVerdict FailedVerdict(const Json* failed) {
+        ArtGenVerdict FailedVerdict(const Optional<JsonView>& failed) {
             const Vector<String> names = FailedNamesOf(failed);
             ArtGenVerdict verdict{ArtGenVerdictKind::Failed, String(kFailedTip)};
             if (names.empty()) {
@@ -91,9 +94,9 @@ namespace BECore {
             return verdict;
         }
 
-        ArtGenVerdict UnreadableVerdict(const Json& checks) {
+        ArtGenVerdict UnreadableVerdict(JsonView checks) {
             ArtGenVerdict verdict{ArtGenVerdictKind::Unreadable, String(kUnreadableTip)};
-            if (const Optional<String> error = GetJsonString(checks, "error"); error && !error->empty()) {
+            if (const Optional<String> error = GetParamString(checks, "error"); error && !error->empty()) {
                 Append(verdict.tip, ": ");
                 Append(verdict.tip, CutAtCharacter(StringView(error->data(), error->size()), kMaxVerdictError));
             }
@@ -102,26 +105,26 @@ namespace BECore {
 
     }  // namespace
 
-    ArtGenVerdict ArtGenVerdictFromProvenance(const Json& provenance) {
-        const Json* checks = FindJsonMember(provenance, "checks");
-        if (checks == nullptr || !checks->is_object()) {
+    ArtGenVerdict ArtGenVerdictFromProvenance(JsonView provenance) {
+        const Optional<JsonView> checks = FindParam(provenance, "checks");
+        if (!checks || !checks->IsObject()) {
             return {};
         }
-        const Json* passed = FindJsonMember(*checks, "passed");
-        if (passed == nullptr) {
+        const Optional<JsonView> passed = FindParam(*checks, "passed");
+        if (!passed) {
             return {};
         }
-        if (passed->is_null()) {
+        if (passed->IsNull()) {
             return UnreadableVerdict(*checks);
         }
-        const Optional<bool> value = GetJsonBool(*checks, "passed");
+        const Optional<bool> value = GetParamBool(*checks, "passed");
         if (!value) {
             return {};
         }
         if (*value) {
             return {ArtGenVerdictKind::Passed, String(kPassedTip)};
         }
-        return FailedVerdict(FindJsonMember(*checks, "failed"));
+        return FailedVerdict(FindParam(*checks, "failed"));
     }
 
     ArtGenVerdict ReadArtGenVerdict(const Path& provenanceFile) {
@@ -132,11 +135,11 @@ namespace BECore {
         if (!text) {
             return {};
         }
-        const auto parsed = ParseJson(*text);
-        if (!parsed) {
+        JsonTape tape;
+        if (!tape.Parse(WithoutUtf8Bom(StringView(text->data(), text->size())))) {
             return {};
         }
-        return ArtGenVerdictFromProvenance(*parsed);
+        return ArtGenVerdictFromProvenance(JsonView(tape, 0));
     }
 
 }  // namespace BECore

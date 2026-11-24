@@ -15,29 +15,53 @@ namespace BECore::Tests {
             return text;
         }
 
-        Json FramesOf(int64_t frames) {
-            Json params = Json::object();
-            params["frames"] = frames;
-            return params;
+        String FramesOf(int64_t frames) {
+            return Format(R"({{"frames":{}}})", frames);
         }
 
-        /// One entry of the `calls` of a batch
-        Json CallOf(StringView method, Json params = Json()) {
-            Json call = Json::object();
-            call["method"] = ToStdString(method);
-            if (!params.is_null()) {
-                call["params"] = std::move(params);
+        /// One entry of the `calls` of a batch; a null (empty) @p paramsText is left out
+        String CallOf(StringView method, StringView paramsText = {}) {
+            String text;
+            JsonWriter writer(text);
+            writer.BeginObject();
+            writer.Member("method", method);
+            if (!paramsText.empty()) {
+                writer.Key("params");
+                writer.Raw(paramsText);
             }
-            return call;
+            writer.EndObject();
+            return text;
         }
 
-        Json BatchOf(Json calls, bool continueOnError = false) {
-            Json params = Json::object();
-            params["calls"] = std::move(calls);
+        /// The text of an array of the given elements (each already JSON text)
+        String ArrayOf(const Vector<String>& elements) {
+            String text("[");
+            for (size_t index = 0; index < elements.size(); ++index) {
+                if (index != 0) {
+                    text += ',';
+                }
+                text += elements[index];
+            }
+            text += ']';
+            return text;
+        }
+
+        /// The `params` of a batch over @p callsText (the text of the array of calls)
+        String BatchOf(StringView callsText, bool continueOnError = false) {
+            String text;
+            JsonWriter writer(text);
+            writer.BeginObject();
+            writer.Key("calls");
+            writer.Raw(callsText);
             if (continueOnError) {
-                params["continueOnError"] = true;
+                writer.Member("continueOnError", true);
             }
-            return params;
+            writer.EndObject();
+            return text;
+        }
+
+        String BatchOf(const Vector<String>& calls, bool continueOnError = false) {
+            return BatchOf(ArrayOf(calls), continueOnError);
         }
 
         /// Counts the QuitEvents that a `quit` emits
@@ -55,7 +79,7 @@ namespace BECore::Tests {
         /// A call to run inside the outer handler of a test
         struct NestedStep {
             String method;
-            Json params = Json::object();
+            String params = "{}";
         };
 
         class ControlBatchTest : public ::testing::Test {
@@ -72,7 +96,7 @@ namespace BECore::Tests {
                 });
                 service.RegisterHandler("count", [this](ControlCall& call) {
                     order.push_back("count");
-                    call.Reply(Json::object());
+                    call.ReplyEmpty();
                 });
                 service.RegisterHandler("fail", [this](ControlCall& call) {
                     order.push_back("fail");
@@ -88,8 +112,7 @@ namespace BECore::Tests {
             ControlReplyFn Collect() {
                 return [this](const String& text) {
                     raw.push_back(text);
-                    auto parsed = ParseJson(text);
-                    responses.push_back(parsed ? std::move(*parsed) : Json());
+                    responses.emplace_back(StringView(text.c_str(), text.size()));
                 };
             }
 
@@ -100,7 +123,7 @@ namespace BECore::Tests {
             void RunPlan(ControlCall& outer) {
                 while (next < plan.size()) {
                     const NestedStep& step = plan[next++];
-                    auto answer = service.RunNested(outer, View(step.method), step.params, [this](ControlCall& again, ControlAnswer later) {
+                    auto answer = service.RunNested(outer, View(step.method), ParamsOf(step), [this](ControlCall& again, ControlAnswer later) {
                         order.push_back("continued");
                         answers.push_back(std::move(later));
                         RunPlan(again);
@@ -110,9 +133,24 @@ namespace BECore::Tests {
                     }
                     answers.push_back(std::move(*answer));
                 }
-                Json result = Json::object();
-                result["ran"] = static_cast<int64_t>(answers.size());
-                outer.Reply(std::move(result));
+                outer.Reply([ran = answers.size()](JsonWriter& writer) {
+                    writer.BeginObject();
+                    writer.Member("ran", static_cast<int64_t>(ran));
+                    writer.EndObject();
+                });
+            }
+
+            /// The params of @p step as a view of a tape that lives as long as the test: a nested call that defers keeps its view until the outer call is answered
+            JsonView ParamsOf(const NestedStep& step) {
+                RequestBuffers& buffers = *tapes.emplace_back(MakeUnique<RequestBuffers>());
+                buffers.text = step.params;
+                EXPECT_TRUE(buffers.tape.Parse(buffers.text).has_value());
+                return JsonView(buffers.tape, 0);
+            }
+
+            /// The answer of a nested call as a reply; an empty one (nothing is valid) when it is an error
+            static ControlReply Parsed(const ControlAnswer& answer) {
+                return answer ? ControlReply(StringView(answer->c_str(), answer->size())) : ControlReply();
             }
 
             /// The application loop of the manual clock: a frame runs while a step is due. Returns how many ran
@@ -128,29 +166,27 @@ namespace BECore::Tests {
                 return frames;
             }
 
-            const Json* ResultOf(size_t index) const {
-                return index < responses.size() ? FindJsonMember(responses[index], "result") : nullptr;
+            JsonView ResultOf(size_t index) const {
+                return index < responses.size() ? responses[index].Result() : JsonView();
             }
 
-            /// The entry @p index of `results` in the answer to the request @p response, or null
-            const Json* EntryOf(size_t response, size_t index) const {
-                const Json* result = ResultOf(response);
-                const Json* results = result != nullptr ? FindJsonMember(*result, "results") : nullptr;
-                return results != nullptr && results->is_array() && index < results->size() ? &(*results)[index] : nullptr;
+            /// The entry @p index of `results` in the answer to the request @p response; not valid when there is none
+            JsonView EntryOf(size_t response, size_t index) const {
+                return ItemAt(MemberOf(ResultOf(response), "results"), index);
             }
 
             size_t ResultCount(size_t response) const {
-                const Json* result = ResultOf(response);
-                const Json* results = result != nullptr ? FindJsonMember(*result, "results") : nullptr;
-                return results != nullptr && results->is_array() ? results->size() : 0;
+                const JsonView results = MemberOf(ResultOf(response), "results");
+                return results.IsArray() ? results.Size() : 0;
             }
 
             ControlService service;
-            Vector<Json> responses;
+            Vector<ControlReply> responses;
             Vector<String> raw;  // the reply texts as they were sent
             Vector<String> order;
             Vector<NestedStep> plan;
             Vector<ControlAnswer> answers;
+            Vector<UniquePtr<RequestBuffers>> tapes;
             size_t next = 0;
         };
 
@@ -158,23 +194,23 @@ namespace BECore::Tests {
 
     TEST_F(ControlBatchTest, NestedCallThatAnswersAtOnceNeedsNoFrame) {
         plan = {{"ping"}, {"count"}};
-        Post(MakeRequest(1, "outer"));
+        Post(MakeRequestText(1, "outer"));
         service.Drain();
 
         ASSERT_EQ(responses.size(), 1u);
-        EXPECT_TRUE(IsOk(responses[0]));
-        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(responses[0], "result")), "ran").value_or(-1), 2);
+        EXPECT_TRUE(responses[0].IsOk());
+        EXPECT_EQ(IntOf(ResultOf(0), "ran").value_or(-1), 2);
         EXPECT_FALSE(service.IsStepDue());
         ASSERT_EQ(answers.size(), 2u);
         ASSERT_TRUE(answers[0].has_value());
-        EXPECT_TRUE(GetJsonBool(*answers[0], "pong").value_or(false));
+        EXPECT_TRUE(BoolOf(Parsed(answers[0]).View(), "pong").value_or(false));
         EXPECT_EQ(order, (Vector<String>{"outer", "count"}));
     }
 
     TEST_F(ControlBatchTest, NestedCallStepDefersTheOuterAndHoldsTheRequestsBehindIt) {
         plan = {{"ping"}, {"step", FramesOf(3)}, {"count"}};
-        Post(MakeRequest(1, "outer"));
-        Post(MakeRequest(2, "count"));
+        Post(MakeRequestText(1, "outer"));
+        Post(MakeRequestText(2, "count"));
         service.Drain();
 
         EXPECT_TRUE(responses.empty());
@@ -183,37 +219,35 @@ namespace BECore::Tests {
 
         EXPECT_EQ(RunDueFrames(), 3);
         ASSERT_EQ(responses.size(), 1u);  // the outer is answered; the request behind it is still in the inbox
-        EXPECT_EQ(IdOf(responses[0]), 1);
-        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(responses[0], "result")), "ran").value_or(-1), 3);
+        EXPECT_EQ(responses[0].IdText(), "1");
+        EXPECT_EQ(IntOf(ResultOf(0), "ran").value_or(-1), 3);
         ASSERT_EQ(answers.size(), 3u);
         ASSERT_TRUE(answers[1].has_value());
-        EXPECT_NE(FindJsonMember(*answers[1], "frame"), nullptr);  // the answer of `step`
+        EXPECT_TRUE(MemberOf(Parsed(answers[1]).View(), "frame").IsValid());  // the answer of `step`
         EXPECT_EQ(order, (Vector<String>{"outer", "continued", "count"}));
 
         service.Drain();
         ASSERT_EQ(responses.size(), 2u);
-        EXPECT_EQ(IdOf(responses[1]), 2);
+        EXPECT_EQ(responses[1].IdText(), "2");
     }
 
     TEST_F(ControlBatchTest, NestedCallCanDeferASecondTimeFromTheContinuation) {
         plan = {{"step", FramesOf(2)}, {"step", FramesOf(3)}, {"count"}};
-        Post(MakeRequest(1, "outer"));
+        Post(MakeRequestText(1, "outer"));
         service.Drain();
 
         EXPECT_EQ(RunDueFrames(), 5);
         ASSERT_EQ(responses.size(), 1u);
-        EXPECT_TRUE(IsOk(responses[0]));
-        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(responses[0], "result")), "ran").value_or(-1), 3);
+        EXPECT_TRUE(responses[0].IsOk());
+        EXPECT_EQ(IntOf(ResultOf(0), "ran").value_or(-1), 3);
         EXPECT_EQ(order, (Vector<String>{"outer", "continued", "continued", "count"}));
         EXPECT_FALSE(service.IsStepDue());
     }
 
     TEST_F(ControlBatchTest, NestedCallStepKeepsTheSecondsOfItsFrames) {
         constexpr double kSeconds = 0.25;
-        Json params = FramesOf(2);
-        params["dt"] = kSeconds;
-        plan = {{"step", params}};
-        Post(MakeRequest(1, "outer"));
+        plan = {{"step", Format(R"({{"dt":{},"frames":2}})", kSeconds)}};
+        Post(MakeRequestText(1, "outer"));
         service.Drain();
 
         ASSERT_TRUE(service.IsStepDue());
@@ -224,7 +258,7 @@ namespace BECore::Tests {
 
     TEST_F(ControlBatchTest, NestedCallToAnUnknownMethodIsAnErrorValue) {
         plan = {{"nope"}, {"ping"}};
-        Post(MakeRequest(1, "outer"));
+        Post(MakeRequestText(1, "outer"));
         service.Drain();
 
         ASSERT_EQ(answers.size(), 2u);
@@ -232,12 +266,12 @@ namespace BECore::Tests {
         EXPECT_EQ(answers[0].error().code, ControlErrors::kUnknownMethod);
         EXPECT_TRUE(answers[1].has_value());
         ASSERT_EQ(responses.size(), 1u);
-        EXPECT_TRUE(IsOk(responses[0]));
+        EXPECT_TRUE(responses[0].IsOk());
     }
 
     TEST_F(ControlBatchTest, NestedCallWithoutAnAnswerIsAnInternalError) {
         plan = {{"silent"}, {"ping"}};
-        Post(MakeRequest(1, "outer"));
+        Post(MakeRequestText(1, "outer"));
         service.Drain();
 
         ASSERT_EQ(answers.size(), 2u);
@@ -249,7 +283,7 @@ namespace BECore::Tests {
 
     TEST_F(ControlBatchTest, NestedCallOfTheRunningMethodIsRefused) {
         plan = {{"outer"}};
-        Post(MakeRequest(1, "outer"));
+        Post(MakeRequestText(1, "outer"));
         service.Drain();
 
         ASSERT_EQ(answers.size(), 1u);
@@ -266,12 +300,12 @@ namespace BECore::Tests {
             ++replacedRuns;
             service.RegisterHandler("swap", [&replacementRuns](ControlCall& again) {
                 ++replacementRuns;
-                again.Reply(Json::object());
+                again.ReplyEmpty();
             });
-            call.Reply(Json::object());
+            call.ReplyEmpty();
         });
         plan = {{"swap"}, {"swap"}};
-        Post(MakeRequest(1, "outer"));
+        Post(MakeRequestText(1, "outer"));
         service.Drain();
 
         EXPECT_EQ(replacedRuns, 1);
@@ -283,16 +317,16 @@ namespace BECore::Tests {
 
     TEST_F(ControlBatchTest, NestedCallShutdownAnswersTheOuterAndFreesTheState) {
         plan = {{"step", FramesOf(5)}, {"count"}};
-        Post(MakeRequest(1, "outer"));
-        Post(MakeRequest(2, "count"));
+        Post(MakeRequestText(1, "outer"));
+        Post(MakeRequestText(2, "count"));
         service.Drain();
         ASSERT_TRUE(service.IsStepDue());
 
         service.Shutdown();
 
         ASSERT_EQ(responses.size(), 2u);
-        EXPECT_EQ(ErrorCode(responses[0]), ControlErrors::kShuttingDown);
-        EXPECT_EQ(ErrorCode(responses[1]), ControlErrors::kShuttingDown);
+        EXPECT_EQ(responses[0].ErrorCode(), ControlErrors::kShuttingDown);
+        EXPECT_EQ(responses[1].ErrorCode(), ControlErrors::kShuttingDown);
         EXPECT_TRUE(answers.empty());  // the continuation did not run
         EXPECT_EQ(order, (Vector<String>{"outer"}));
         EXPECT_FALSE(service.IsStepDue());
@@ -311,128 +345,120 @@ namespace BECore::Tests {
             },
             /*bypassBarrier=*/true);
         plan.clear();
-        Post(MakeRequest(1, "step", FramesOf(4)));
-        Post(MakeRequest(2, "bypass"));
+        Post(MakeRequestText(1, "step", FramesOf(4)));
+        Post(MakeRequestText(2, "bypass"));
         service.Drain();
 
         ASSERT_EQ(responses.size(), 1u);
-        EXPECT_EQ(IdOf(responses[0]), 2);
-        EXPECT_EQ(ErrorCode(responses[0]), ControlErrors::kInternalError);
+        EXPECT_EQ(responses[0].IdText(), "2");
+        EXPECT_EQ(responses[0].ErrorCode(), ControlErrors::kInternalError);
         EXPECT_EQ(RunDueFrames(), 4);  // the step that was pending runs on undisturbed
         EXPECT_EQ(responses.size(), 2u);
     }
 
     TEST_F(ControlBatchTest, BatchAnswersEveryCallInOrder) {
-        Post(MakeRequest(1, "batch", BatchOf(Json::array({CallOf("ping"), CallOf("count"), CallOf("status")}))));
+        Post(MakeRequestText(1, "batch", BatchOf(Vector<String>{CallOf("ping"), CallOf("count"), CallOf("status")})));
         service.Drain();
 
         ASSERT_EQ(responses.size(), 1u);
-        EXPECT_TRUE(IsOk(responses[0]));
+        EXPECT_TRUE(responses[0].IsOk());
         ASSERT_EQ(ResultCount(0), 3u);
-        EXPECT_TRUE(GetJsonBool(Require(FindJsonMember(*EntryOf(0, 0), "result")), "pong").value_or(false));
-        EXPECT_TRUE(GetJsonBool(*EntryOf(0, 1), "ok").value_or(false));
-        EXPECT_NE(FindJsonMember(Require(FindJsonMember(*EntryOf(0, 2), "result")), "frame"), nullptr);
-        EXPECT_EQ(FindJsonMember(*ResultOf(0), "stopped"), nullptr);
+        EXPECT_TRUE(BoolOf(MemberOf(EntryOf(0, 0), "result"), "pong").value_or(false));
+        EXPECT_TRUE(BoolOf(EntryOf(0, 1), "ok").value_or(false));
+        EXPECT_TRUE(MemberOf(MemberOf(EntryOf(0, 2), "result"), "frame").IsValid());
+        EXPECT_FALSE(MemberOf(ResultOf(0), "stopped").IsValid());
     }
 
     TEST_F(ControlBatchTest, BatchStopsAtTheFirstError) {
-        Post(MakeRequest(1, "batch", BatchOf(Json::array({CallOf("count"), CallOf("fail"), CallOf("count"), CallOf("count")}))));
+        Post(MakeRequestText(1, "batch", BatchOf(Vector<String>{CallOf("count"), CallOf("fail"), CallOf("count"), CallOf("count")})));
         service.Drain();
 
         ASSERT_EQ(responses.size(), 1u);
-        EXPECT_TRUE(IsOk(responses[0]));  // the request is fine whatever its calls answered
+        EXPECT_TRUE(responses[0].IsOk());  // the request is fine whatever its calls answered
         ASSERT_EQ(ResultCount(0), 2u);
-        EXPECT_FALSE(GetJsonBool(*EntryOf(0, 1), "ok").value_or(true));
-        EXPECT_EQ(GetJsonString(Require(FindJsonMember(*EntryOf(0, 1), "error")), "code").value_or(""), "boom");
-        EXPECT_EQ(GetJsonString(Require(FindJsonMember(*EntryOf(0, 1), "error")), "message").value_or(""), "it failed");
-        EXPECT_EQ(GetJsonInt(*ResultOf(0), "stopped").value_or(-1), 1);
+        EXPECT_FALSE(BoolOf(EntryOf(0, 1), "ok").value_or(true));
+        EXPECT_EQ(StringOf(MemberOf(EntryOf(0, 1), "error"), "code"), "boom");
+        EXPECT_EQ(StringOf(MemberOf(EntryOf(0, 1), "error"), "message"), "it failed");
+        EXPECT_EQ(IntOf(ResultOf(0), "stopped").value_or(-1), 1);
         EXPECT_EQ(order, (Vector<String>{"count", "fail"}));
     }
 
     TEST_F(ControlBatchTest, BatchWithContinueOnErrorRunsEveryCall) {
-        Post(MakeRequest(1, "batch", BatchOf(Json::array({CallOf("count"), CallOf("fail"), CallOf("nope"), CallOf("count")}), /*continueOnError=*/true)));
+        Post(MakeRequestText(1, "batch", BatchOf(Vector<String>{CallOf("count"), CallOf("fail"), CallOf("nope"), CallOf("count")}, /*continueOnError=*/true)));
         service.Drain();
 
         ASSERT_EQ(ResultCount(0), 4u);
-        EXPECT_EQ(FindJsonMember(*ResultOf(0), "stopped"), nullptr);
-        EXPECT_EQ(GetJsonString(Require(FindJsonMember(*EntryOf(0, 2), "error")), "code").value_or(""), ControlErrors::kUnknownMethod);
-        EXPECT_TRUE(GetJsonBool(*EntryOf(0, 3), "ok").value_or(false));
+        EXPECT_FALSE(MemberOf(ResultOf(0), "stopped").IsValid());
+        EXPECT_EQ(StringOf(MemberOf(EntryOf(0, 2), "error"), "code"), ControlErrors::kUnknownMethod);
+        EXPECT_TRUE(BoolOf(EntryOf(0, 3), "ok").value_or(false));
         EXPECT_EQ(order, (Vector<String>{"count", "fail", "count"}));
     }
 
     TEST_F(ControlBatchTest, UnknownMethodEndsTheBatchWithItsOwnError) {
-        Post(MakeRequest(1, "batch", BatchOf(Json::array({CallOf("nope"), CallOf("count")}))));
+        Post(MakeRequestText(1, "batch", BatchOf(Vector<String>{CallOf("nope"), CallOf("count")})));
         service.Drain();
 
         ASSERT_EQ(ResultCount(0), 1u);
-        EXPECT_EQ(GetJsonString(Require(FindJsonMember(*EntryOf(0, 0), "error")), "code").value_or(""), ControlErrors::kUnknownMethod);
-        EXPECT_EQ(GetJsonInt(*ResultOf(0), "stopped").value_or(-1), 0);
+        EXPECT_EQ(StringOf(MemberOf(EntryOf(0, 0), "error"), "code"), ControlErrors::kUnknownMethod);
+        EXPECT_EQ(IntOf(ResultOf(0), "stopped").value_or(-1), 0);
         EXPECT_TRUE(order.empty());
     }
 
     TEST_F(ControlBatchTest, BatchAndQuitAreRefusedInsideABatch) {
         QuitCounter quits;
         quits.Subscribe<ApplicationEvents::QuitEvent, &QuitCounter::OnQuit>(&quits);
-        const Json inner = BatchOf(Json::array({CallOf("count")}));
-        Post(MakeRequest(1, "batch", BatchOf(Json::array({CallOf("batch", inner), CallOf("quit"), CallOf("count")}), /*continueOnError=*/true)));
+        const String inner = BatchOf(Vector<String>{CallOf("count")});
+        Post(MakeRequestText(1, "batch", BatchOf(Vector<String>{CallOf("batch", inner), CallOf("quit"), CallOf("count")}, /*continueOnError=*/true)));
         service.Drain();
 
         ASSERT_EQ(ResultCount(0), 3u);
         for (size_t index = 0; index < 2; ++index) {
-            EXPECT_FALSE(GetJsonBool(*EntryOf(0, index), "ok").value_or(true));
-            EXPECT_EQ(GetJsonString(Require(FindJsonMember(*EntryOf(0, index), "error")), "code").value_or(""), ControlErrors::kInvalidParams);
+            EXPECT_FALSE(BoolOf(EntryOf(0, index), "ok").value_or(true));
+            EXPECT_EQ(StringOf(MemberOf(EntryOf(0, index), "error"), "code"), ControlErrors::kInvalidParams);
         }
         EXPECT_EQ(quits.count, 0);
         EXPECT_EQ(order, (Vector<String>{"count"}));  // the inner batch did not run either
     }
 
     TEST_F(ControlBatchTest, BatchWithABadShapeIsInvalidParamsAndRunsNothing) {
-        Json tooMany = Json::array();
+        Vector<String> tooMany;
         for (size_t index = 0; index <= kMaxBatchCalls; ++index) {
             tooMany.push_back(CallOf("count"));
         }
-        Json emptyMethod = Json::array({CallOf("count"), CallOf("")});
-        Json notAnObject = Json::array({CallOf("count"), "count"});
-        Json noMethod = Json::array({CallOf("count"), Json::object()});
-        Json methodNotAString = Json::array({CallOf("count"), Json::object({{"method", 5}})});
-        Json paramsNotAnObject = Json::array({CallOf("count"), Json::object({{"method", "count"}, {"params", Json::array({1})}})});
 
-        Vector<Json> badParams;
-        badParams.push_back(Json::object());                         // no calls
-        badParams.push_back(BatchOf(Json::array()));                 // empty
-        badParams.push_back(BatchOf(std::move(tooMany)));            // over the limit
-        badParams.push_back(BatchOf(Json::object()));                // not an array
-        badParams.push_back(BatchOf("count"));                       // a string
-        badParams.push_back(BatchOf(std::move(emptyMethod)));        // method ""
-        badParams.push_back(BatchOf(std::move(notAnObject)));        // an entry that is a string
-        badParams.push_back(BatchOf(std::move(noMethod)));           // an entry without a method
-        badParams.push_back(BatchOf(std::move(methodNotAString)));   // method 5
-        badParams.push_back(BatchOf(std::move(paramsNotAnObject)));  // params [1]
-        Json badFlag = BatchOf(Json::array({CallOf("count")}));
-        badFlag["continueOnError"] = "yes";
-        badParams.push_back(std::move(badFlag));
+        const Vector<String> badParams = {
+            "{}",                                                                            // no calls
+            BatchOf(Vector<String>{}),                                                       // empty
+            BatchOf(tooMany),                                                                // over the limit
+            BatchOf(R"({})"),                                                                // not an array
+            BatchOf(R"("count")"),                                                           // a string
+            BatchOf(Vector<String>{CallOf("count"), CallOf("")}),                            // method ""
+            BatchOf(Vector<String>{CallOf("count"), R"("count")"}),                          // an entry that is a string
+            BatchOf(Vector<String>{CallOf("count"), "{}"}),                                  // an entry without a method
+            BatchOf(Vector<String>{CallOf("count"), R"({"method":5})"}),                     // method 5
+            BatchOf(Vector<String>{CallOf("count"), R"({"method":"count","params":[1]})"}),  // params [1]
+            R"({"calls":[{"method":"count"}],"continueOnError":"yes"})",                     // a flag that is not a boolean
+        };
 
         int64_t id = 0;
-        for (const Json& params : badParams) {
-            Post(MakeRequest(++id, "batch", params));
+        for (const String& params : badParams) {
+            Post(MakeRequestText(++id, "batch", params));
         }
         service.Drain();
 
         ASSERT_EQ(responses.size(), badParams.size());
         for (size_t index = 0; index < responses.size(); ++index) {
-            EXPECT_EQ(ErrorCode(responses[index]), ControlErrors::kInvalidParams) << "request " << index;
+            EXPECT_EQ(responses[index].ErrorCode(), ControlErrors::kInvalidParams) << "request " << index;
         }
         EXPECT_TRUE(order.empty());
     }
 
     TEST_F(ControlBatchTest, BatchAcceptsTheMostCallsAndNullParams) {
-        Json calls = Json::array();
+        Vector<String> calls;
         for (size_t index = 0; index < kMaxBatchCalls; ++index) {
-            Json call = CallOf("count");
-            call["params"] = Json();  // like a request, null params are none
-            calls.push_back(std::move(call));
+            calls.push_back(CallOf("count", "null"));  // like a request, null params are none
         }
-        Post(MakeRequest(1, "batch", BatchOf(std::move(calls))));
+        Post(MakeRequestText(1, "batch", BatchOf(calls)));
         service.Drain();
 
         ASSERT_EQ(responses.size(), 1u);
@@ -441,16 +467,16 @@ namespace BECore::Tests {
     }
 
     TEST_F(ControlBatchTest, BatchPassesTheParamsOfEveryCall) {
-        Post(MakeRequest(1, "batch", BatchOf(Json::array({CallOf("step", FramesOf(0))}))));
+        Post(MakeRequestText(1, "batch", BatchOf(Vector<String>{CallOf("step", FramesOf(0))})));
         service.Drain();
 
         ASSERT_EQ(ResultCount(0), 1u);  // `step` refused its own parameters; the batch carried them
-        EXPECT_EQ(GetJsonString(Require(FindJsonMember(*EntryOf(0, 0), "error")), "code").value_or(""), ControlErrors::kInvalidParams);
+        EXPECT_EQ(StringOf(MemberOf(EntryOf(0, 0), "error"), "code"), ControlErrors::kInvalidParams);
     }
 
     TEST_F(ControlBatchTest, StepInTheMiddleHoldsTheCallsBehindIt) {
-        Post(MakeRequest(1, "batch", BatchOf(Json::array({CallOf("count"), CallOf("step", FramesOf(2)), CallOf("count")}))));
-        Post(MakeRequest(2, "count"));
+        Post(MakeRequestText(1, "batch", BatchOf(Vector<String>{CallOf("count"), CallOf("step", FramesOf(2)), CallOf("count")})));
+        Post(MakeRequestText(2, "count"));
         service.Drain();
 
         EXPECT_TRUE(responses.empty());
@@ -459,30 +485,30 @@ namespace BECore::Tests {
 
         EXPECT_EQ(RunDueFrames(), 2);
         ASSERT_EQ(responses.size(), 1u);
-        EXPECT_EQ(IdOf(responses[0]), 1);
+        EXPECT_EQ(responses[0].IdText(), "1");
         EXPECT_EQ(ResultCount(0), 3u);
         EXPECT_EQ(order, (Vector<String>{"count", "count"}));  // the request behind the batch sees the state after the whole batch
 
         service.Drain();
         ASSERT_EQ(responses.size(), 2u);
-        EXPECT_EQ(IdOf(responses[1]), 2);
+        EXPECT_EQ(responses[1].IdText(), "2");
         EXPECT_EQ(order, (Vector<String>{"count", "count", "count"}));
     }
 
     TEST_F(ControlBatchTest, BatchThatEndsWithAStepAnswersWithItsClock) {
-        Post(MakeRequest(1, "batch", BatchOf(Json::array({CallOf("count"), CallOf("step", FramesOf(3))}))));
+        Post(MakeRequestText(1, "batch", BatchOf(Vector<String>{CallOf("count"), CallOf("step", FramesOf(3))})));
         service.Drain();
 
         EXPECT_EQ(RunDueFrames(), 3);
         ASSERT_EQ(responses.size(), 1u);
         ASSERT_EQ(ResultCount(0), 2u);
-        const Json* clock = FindJsonMember(*EntryOf(0, 1), "result");
-        ASSERT_NE(clock, nullptr);
-        EXPECT_EQ(GetJsonInt(*clock, "frame").value_or(-1), static_cast<int64_t>(CoreManager::GetTime().GetFrameCount()));
+        const JsonView clock = MemberOf(EntryOf(0, 1), "result");
+        ASSERT_TRUE(clock.IsObject());
+        EXPECT_EQ(IntOf(clock, "frame").value_or(-1), static_cast<int64_t>(CoreManager::GetTime().GetFrameCount()));
     }
 
     TEST_F(ControlBatchTest, BatchWithSeveralStepsWaitsForAllTheirFrames) {
-        Post(MakeRequest(1, "batch", BatchOf(Json::array({CallOf("step", FramesOf(2)), CallOf("count"), CallOf("step", FramesOf(3)), CallOf("count")}))));
+        Post(MakeRequestText(1, "batch", BatchOf(Vector<String>{CallOf("step", FramesOf(2)), CallOf("count"), CallOf("step", FramesOf(3)), CallOf("count")})));
         service.Drain();
 
         EXPECT_EQ(RunDueFrames(), 5);
@@ -492,27 +518,27 @@ namespace BECore::Tests {
     }
 
     TEST_F(ControlBatchTest, ErrorAfterAStepStopsTheBatch) {
-        Post(MakeRequest(1, "batch", BatchOf(Json::array({CallOf("step", FramesOf(2)), CallOf("fail"), CallOf("count")}))));
+        Post(MakeRequestText(1, "batch", BatchOf(Vector<String>{CallOf("step", FramesOf(2)), CallOf("fail"), CallOf("count")})));
         service.Drain();
 
         EXPECT_EQ(RunDueFrames(), 2);
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_EQ(ResultCount(0), 2u);
-        EXPECT_EQ(GetJsonInt(*ResultOf(0), "stopped").value_or(-1), 1);
+        EXPECT_EQ(IntOf(ResultOf(0), "stopped").value_or(-1), 1);
         EXPECT_EQ(order, (Vector<String>{"fail"}));
     }
 
     TEST_F(ControlBatchTest, ShutdownDuringABatchAnswersItAndRunsNothingMore) {
-        Post(MakeRequest(1, "batch", BatchOf(Json::array({CallOf("step", FramesOf(5)), CallOf("count")}))));
-        Post(MakeRequest(2, "count"));
+        Post(MakeRequestText(1, "batch", BatchOf(Vector<String>{CallOf("step", FramesOf(5)), CallOf("count")})));
+        Post(MakeRequestText(2, "count"));
         service.Drain();
         ASSERT_TRUE(service.IsStepDue());
 
         service.Shutdown();
 
         ASSERT_EQ(responses.size(), 2u);
-        EXPECT_EQ(ErrorCode(responses[0]), ControlErrors::kShuttingDown);
-        EXPECT_EQ(ErrorCode(responses[1]), ControlErrors::kShuttingDown);
+        EXPECT_EQ(responses[0].ErrorCode(), ControlErrors::kShuttingDown);
+        EXPECT_EQ(responses[1].ErrorCode(), ControlErrors::kShuttingDown);
         EXPECT_TRUE(order.empty());
     }
 
@@ -525,14 +551,10 @@ namespace BECore::Tests {
                 writer.EndObject();
             });
         });
-        Json calls = Json::array();
-        calls.push_back(CallOf("ping"));
-        calls.push_back(CallOf("echo_text"));
-        calls.push_back(CallOf("fail"));
-        calls.push_back(CallOf("ping"));
-        Post(MakeRequest(1, "batch", BatchOf(calls)));
-        Post(MakeRequest(2, "batch", BatchOf(calls, true)));
-        Post(MakeRequest(3, "batch", BatchOf(Json::array({CallOf("ping")}))));
+        const Vector<String> calls = {CallOf("ping"), CallOf("echo_text"), CallOf("fail"), CallOf("ping")};
+        Post(MakeRequestText(1, "batch", BatchOf(calls)));
+        Post(MakeRequestText(2, "batch", BatchOf(calls, true)));
+        Post(MakeRequestText(3, "batch", BatchOf(Vector<String>{CallOf("ping")})));
         service.Drain();
 
         ExpectTexts(

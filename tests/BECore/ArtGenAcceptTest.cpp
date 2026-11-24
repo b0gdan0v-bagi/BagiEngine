@@ -1,7 +1,10 @@
 #include <BECore/ArtGenAnswerText.h>
+#include <BECore/Control/JsonViewOps.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/Resource/IResource.h>
 #include <BECore/Resource/ResourceCache.h>
 #include <Common/ArtGenTestSupport.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/TempPath.h>
@@ -500,14 +503,14 @@ namespace BECore::Tests {
         written.height = 32;
         written.changed = {"queen"_intern, "rook"_intern};
 
-        const Json reply = AnswerText(MakeArtGenAtlasAnswer(written));
+        const ControlReply reply = AnswerReply(MakeArtGenAtlasAnswer(written));
 
-        ASSERT_TRUE(reply.is_object());
-        EXPECT_EQ(GetJsonString(reply, "name").value_or(String()), "ui");
-        EXPECT_EQ(GetJsonString(reply, "texturePath").value_or(String()), "assets/atlases/ui.png");
-        EXPECT_EQ(GetJsonInt(reply, "width").value_or(0), 64);
-        EXPECT_EQ(GetJsonInt(reply, "height").value_or(0), 32);
-        EXPECT_EQ(GetJsonInt(reply, "members").value_or(0), 2);
+        ASSERT_TRUE(reply.View().IsObject());
+        EXPECT_EQ(StringOf(reply.View(), "name"), "ui");
+        EXPECT_EQ(StringOf(reply.View(), "texturePath"), "assets/atlases/ui.png");
+        EXPECT_EQ(IntOf(reply.View(), "width").value_or(0), 64);
+        EXPECT_EQ(IntOf(reply.View(), "height").value_or(0), 32);
+        EXPECT_EQ(IntOf(reply.View(), "members").value_or(0), 2);
     }
 
     TEST(ArtGenAcceptIntoLibraryTest, TheWrittenAtlasNamesItsGroup) {
@@ -753,7 +756,7 @@ namespace BECore::Tests {
         EXPECT_EQ(processed->pngFile, assets / "artgen" / "king.png");
         EXPECT_TRUE(ReadPngSize(processed->pngFile).has_value());
         EXPECT_FALSE(PathExists(Path(Format("{}.tmp", processed->pngFile.View()))));
-        EXPECT_TRUE(ParseJson(StringView(ReadFile(processed->provenanceFile))).has_value());
+        EXPECT_TRUE(JsonDoc(StringView(ReadFile(processed->provenanceFile))).IsParsed());
     }
 
     TEST_F(ArtGenAcceptTest, AnIdentityAcceptWithNoProvenanceRemovesTheOldRecordOfTheName) {
@@ -775,14 +778,93 @@ namespace BECore::Tests {
         ASSERT_TRUE(copied.has_value());
         ASSERT_TRUE(MarkProvenanceKept(copied->provenanceFile, 7, "2026-11-17T10:00:00Z").has_value());
 
-        const auto record = ParseJson(StringView(ReadFile(copied->provenanceFile)));
-        ASSERT_TRUE(record.has_value());
-        EXPECT_EQ(GetJsonInt(*record, "seed").value_or(-1), 7);
-        EXPECT_EQ(GetJsonString(*record, "preset").value_or(String()), "gem");
-        const Json* kept = FindJsonMember(*record, "kept");
-        ASSERT_NE(kept, nullptr);
-        EXPECT_EQ(GetJsonInt(*kept, "seed").value_or(-1), 7);
-        EXPECT_EQ(GetJsonString(*kept, "date").value_or(String()), "2026-11-17T10:00:00Z");
+        const JsonDoc record(StringView(ReadFile(copied->provenanceFile)));
+        ASSERT_TRUE(record.IsParsed());
+        EXPECT_EQ(IntOf(record.Root(), "seed").value_or(-1), 7);
+        EXPECT_EQ(StringOf(record.Root(), "preset"), "gem");
+        const JsonView kept = MemberOf(record.Root(), "kept");
+        ASSERT_TRUE(kept.IsObject());
+        EXPECT_EQ(IntOf(kept, "seed").value_or(-1), 7);
+        EXPECT_EQ(StringOf(kept, "date"), "2026-11-17T10:00:00Z");
+    }
+
+    TEST_F(ArtGenAcceptTest, AnAcceptAndAKeepWriteTheRecordByteForByteAndLeaveTheServicesKeysUntouched) {
+        // The service's keys are in no order and one holds a nested object and an exponent: they come back sorted at every level, the `accepted` and `kept` records are
+        // new, and `seed` is read back from the record
+        WriteFile(provenance, R"({"seed": 7, "zeta": {"b": [1, 2.5], "a": "x"}, "checks": {"passed": true}, "alpha": 1e2})");
+        const auto source = folder / "out" / "real.png";
+        ASSERT_NO_FATAL_FAILURE(WriteRealPng(source, 512, 512, {10, 20, 100, 200}));
+        const auto copied = CopyVariantIntoAssets(source, provenance, folder / "assets", "queen", ArtGenImagePlan{});
+        ASSERT_TRUE(copied.has_value()) << copied.error().c_str();
+        ASSERT_TRUE(MarkProvenanceKept(copied->provenanceFile, 7, "2026-11-17T10:00:00Z").has_value());
+
+        const String expected = Format(R"({{
+  "accepted": {{
+    "crop": {{
+      "h": 208,
+      "w": 108,
+      "x": 6,
+      "y": 16
+    }},
+    "frame": "sprite",
+    "processing": {{
+      "maxSize": 256,
+      "padding": 2,
+      "trim": true
+    }},
+    "scale": 1.0,
+    "seed": 7,
+    "size": [
+      108,
+      208
+    ],
+    "source": "{}",
+    "sprite": "queen"
+  }},
+  "alpha": 100.0,
+  "checks": {{
+    "passed": true
+  }},
+  "kept": {{
+    "date": "2026-11-17T10:00:00Z",
+    "seed": 7
+  }},
+  "seed": 7,
+  "zeta": {{
+    "a": "x",
+    "b": [
+      1,
+      2.5
+    ]
+  }}
+}}
+)",
+                                       source.View());
+        EXPECT_EQ(ReadFile(copied->provenanceFile), expected);
+    }
+
+    TEST_F(ArtGenAcceptTest, AnAcceptWithoutASeedInTheRecordWritesANull) {
+        const auto source = folder / "out" / "real.png";
+        ASSERT_NO_FATAL_FAILURE(WriteRealPng(source, 512, 512, {10, 20, 100, 200}));
+        WriteFile(provenance, R"({"seed": "seven"})");
+        const auto copied = CopyVariantIntoAssets(source, provenance, folder / "assets", "queen", ArtGenImagePlan{});
+        ASSERT_TRUE(copied.has_value()) << copied.error().c_str();
+        const String text = ReadFile(copied->provenanceFile);
+        EXPECT_NE(text.find("\"seed\": null,"), String::npos) << text.c_str();
+        EXPECT_NE(text.find("\"seed\": \"seven\""), String::npos) << "the service's own seed stays as it was";
+    }
+
+    TEST_F(ArtGenAcceptTest, ARecordSavedWithAByteOrderMarkIsMergedInto) {
+        const auto source = folder / "out" / "real.png";
+        ASSERT_NO_FATAL_FAILURE(WriteRealPng(source, 512, 512, {10, 20, 100, 200}));
+        WriteFile(provenance, "\xEF\xBB\xBF{\"preset\": \"gem\"}");
+        const auto copied = CopyVariantIntoAssets(source, provenance, folder / "assets", "queen", ArtGenImagePlan{});
+        ASSERT_TRUE(copied.has_value()) << copied.error().c_str();
+        EXPECT_NE(ReadFile(copied->provenanceFile).find("\"preset\": \"gem\""), String::npos);
+
+        WriteFile(copied->provenanceFile, "\xEF\xBB\xBF{\"preset\": \"gem\"}");
+        ASSERT_TRUE(MarkProvenanceKept(copied->provenanceFile, 7, "2026-11-17T10:00:00Z").has_value());
+        EXPECT_EQ(ReadFile(copied->provenanceFile), "{\n  \"kept\": {\n    \"date\": \"2026-11-17T10:00:00Z\",\n    \"seed\": 7\n  },\n  \"preset\": \"gem\"\n}\n");
     }
 
     TEST_F(ArtGenAcceptTest, ASecondKeptReplacesTheFirst) {
@@ -791,12 +873,12 @@ namespace BECore::Tests {
         ASSERT_TRUE(MarkProvenanceKept(copied->provenanceFile, 7, "2026-11-17T10:00:00Z").has_value());
         ASSERT_TRUE(MarkProvenanceKept(copied->provenanceFile, 9, "2026-11-17T11:00:00Z").has_value());
 
-        const auto record = ParseJson(StringView(ReadFile(copied->provenanceFile)));
-        ASSERT_TRUE(record.has_value());
-        const Json* kept = FindJsonMember(*record, "kept");
-        ASSERT_NE(kept, nullptr);
-        EXPECT_EQ(GetJsonInt(*kept, "seed").value_or(-1), 9);
-        EXPECT_EQ(GetJsonString(*kept, "date").value_or(String()), "2026-11-17T11:00:00Z");
+        const JsonDoc record(StringView(ReadFile(copied->provenanceFile)));
+        ASSERT_TRUE(record.IsParsed());
+        const JsonView kept = MemberOf(record.Root(), "kept");
+        ASSERT_TRUE(kept.IsObject());
+        EXPECT_EQ(IntOf(kept, "seed").value_or(-1), 9);
+        EXPECT_EQ(StringOf(kept, "date"), "2026-11-17T11:00:00Z");
     }
 
     TEST_F(ArtGenAcceptTest, TheGameFileIsWhereAcceptWritesIt) {
@@ -856,11 +938,11 @@ namespace BECore::Tests {
         RemoveFileIfPresent(provenance);
         const auto second = CopyVariantIntoAssets(source, provenance, folder / "assets", "queen", ArtGenImagePlan{});
         ASSERT_TRUE(second.has_value()) << second.error().c_str();
-        const auto record = ParseJson(StringView(ReadFile(second->provenanceFile)));
-        ASSERT_TRUE(record.has_value());
-        EXPECT_NE(FindJsonMember(*record, "accepted"), nullptr);
-        EXPECT_EQ(FindJsonMember(*record, "kept"), nullptr);
-        EXPECT_EQ(FindJsonMember(*record, "seed"), nullptr) << "the earlier variant's seed is not carried over";
+        const JsonDoc record(StringView(ReadFile(second->provenanceFile)));
+        ASSERT_TRUE(record.IsParsed());
+        EXPECT_TRUE(record.Root().Find("accepted").has_value());
+        EXPECT_FALSE(record.Root().Find("kept").has_value());
+        EXPECT_FALSE(record.Root().Find("seed").has_value()) << "the earlier variant's seed is not carried over";
     }
 
     namespace {
@@ -1002,27 +1084,26 @@ namespace BECore::Tests {
         const auto copied = CopyVariantIntoAssets(source, provenance, folder / "assets", "queen", ArtGenImagePlan{});
         ASSERT_TRUE(copied.has_value()) << copied.error().c_str();
 
-        const auto record = ParseJson(StringView(ReadFile(copied->provenanceFile)));
-        ASSERT_TRUE(record.has_value());
-        EXPECT_EQ(GetJsonString(*record, "preset").value_or(String()), "gem");
-        const Json* accepted = FindJsonMember(*record, "accepted");
-        ASSERT_NE(accepted, nullptr);
-        EXPECT_EQ(GetJsonString(*accepted, "sprite").value_or(String()), "queen");
-        EXPECT_EQ(GetJsonString(*accepted, "source").value_or(String()), String(source.View()));
-        EXPECT_EQ(GetJsonInt(*accepted, "seed").value_or(-1), 7);
-        EXPECT_EQ(GetJsonString(*accepted, "frame").value_or(String()), "sprite");
-        const Json* processing = FindJsonMember(*accepted, "processing");
-        ASSERT_NE(processing, nullptr);
-        EXPECT_EQ(GetJsonBool(*processing, "trim").value_or(false), true);
-        EXPECT_EQ(GetJsonInt(*processing, "maxSize").value_or(-1), 256);
-        const Json* crop = FindJsonMember(*accepted, "crop");
-        ASSERT_NE(crop, nullptr);
-        EXPECT_EQ(GetJsonInt(*crop, "w").value_or(-1), 108);
-        EXPECT_EQ(GetJsonNumber(*accepted, "scale").value_or(0.0), copied->scale);
-        const Json* size = FindJsonMember(*accepted, "size");
-        ASSERT_NE(size, nullptr);
-        ASSERT_TRUE(size->is_array());
-        EXPECT_EQ(size->size(), 2u);
+        const JsonDoc record(StringView(ReadFile(copied->provenanceFile)));
+        ASSERT_TRUE(record.IsParsed());
+        EXPECT_EQ(StringOf(record.Root(), "preset"), "gem");
+        const JsonView accepted = MemberOf(record.Root(), "accepted");
+        ASSERT_TRUE(accepted.IsObject());
+        EXPECT_EQ(StringOf(accepted, "sprite"), "queen");
+        EXPECT_EQ(StringOf(accepted, "source"), String(source.View()));
+        EXPECT_EQ(IntOf(accepted, "seed").value_or(-1), 7);
+        EXPECT_EQ(StringOf(accepted, "frame"), "sprite");
+        const JsonView processing = MemberOf(accepted, "processing");
+        ASSERT_TRUE(processing.IsObject());
+        EXPECT_EQ(BoolOf(processing, "trim").value_or(false), true);
+        EXPECT_EQ(IntOf(processing, "maxSize").value_or(-1), 256);
+        const JsonView crop = MemberOf(accepted, "crop");
+        ASSERT_TRUE(crop.IsObject());
+        EXPECT_EQ(IntOf(crop, "w").value_or(-1), 108);
+        EXPECT_EQ(MemberOf(accepted, "scale").AsDouble().value_or(0.0), copied->scale);
+        const JsonView size = MemberOf(accepted, "size");
+        ASSERT_TRUE(size.IsArray());
+        EXPECT_EQ(size.Size(), 2u);
     }
 
     TEST_F(ArtGenAcceptTest, TheAnswersProcessingSaysWhatTheProvenanceRecords) {
@@ -1037,20 +1118,31 @@ namespace BECore::Tests {
         for (const ArtGenImagePlan& plan : {own, framed}) {
             const auto copied = CopyVariantIntoAssets(source, provenance, folder / "assets", "queen", plan);
             ASSERT_TRUE(copied.has_value()) << copied.error().c_str();
-            const auto record = ParseJson(StringView(ReadFile(copied->provenanceFile)));
-            ASSERT_TRUE(record.has_value());
-            const Json& accepted = Require(FindJsonMember(*record, "accepted"));
+            const JsonDoc record(StringView(ReadFile(copied->provenanceFile)));
+            ASSERT_TRUE(record.IsParsed());
+            const JsonView accepted = MemberOf(record.Root(), "accepted");
+            ASSERT_TRUE(accepted.IsObject());
 
-            const Json answer = AnswerText(MakeArtGenProcessingAnswer(*copied));
+            const ControlReply answer = AnswerReply(MakeArtGenProcessingAnswer(*copied));
 
             for (const StringView key : {"crop", "scale", "size", "frame"}) {
-                EXPECT_EQ(Require(FindJsonMember(answer, key)), Require(FindJsonMember(accepted, key))) << key.data();
+                const Optional<JsonView> fromAnswer = answer.View().Find(key);
+                const Optional<JsonView> fromFile = accepted.Find(key);
+                ASSERT_TRUE(fromAnswer.has_value() && fromFile.has_value()) << key.data();
+                EXPECT_TRUE(JsonEquals(*fromAnswer, *fromFile)) << key.data();
             }
             // The settings are what the file writer says, so the two cannot drift
-            for (const auto& [key, value] : ArtGenImageSettingsToJson(copied->settings).items()) {
-                EXPECT_EQ(Require(FindJsonMember(answer, key.c_str())), value) << key.c_str();
+            String settingsText;
+            JsonWriter settingsWriter(settingsText);
+            WriteArtGenImageSettings(settingsWriter, copied->settings);
+            const JsonDoc settings{StringView(settingsText)};
+            ASSERT_TRUE(settings.IsParsed());
+            for (const JsonMember member : settings.Root().Members()) {
+                const Optional<JsonView> fromAnswer = answer.View().Find(member.key.Text().value_or(StringView()));
+                ASSERT_TRUE(fromAnswer.has_value()) << settingsText.c_str();
+                EXPECT_TRUE(JsonEquals(*fromAnswer, member.value)) << settingsText.c_str();
             }
-            EXPECT_EQ(answer.size(), 7u) << "the settings and the placement, nothing else";
+            EXPECT_EQ(answer.View().Size(), 7u) << "the settings and the placement, nothing else";
         }
     }
 
@@ -1090,9 +1182,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(firstSize.has_value());
         ASSERT_TRUE(secondSize.has_value());
         EXPECT_EQ(*firstSize, *secondSize);
-        const auto record = ParseJson(StringView(ReadFile(second->provenanceFile)));
-        ASSERT_TRUE(record.has_value());
-        EXPECT_EQ(GetJsonString(Require(FindJsonMember(*record, "accepted")), "frame").value_or(String()), "set");
+        const JsonDoc record(StringView(ReadFile(second->provenanceFile)));
+        ASSERT_TRUE(record.IsParsed());
+        EXPECT_EQ(StringOf(MemberOf(record.Root(), "accepted"), "frame"), "set");
     }
 
     TEST_F(ArtGenAcceptTest, AnImageWithNothingDrawnIsRefusedAndWritesNothing) {

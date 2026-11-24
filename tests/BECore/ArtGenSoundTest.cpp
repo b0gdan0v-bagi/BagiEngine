@@ -1,7 +1,9 @@
+#include <BECore/ArtGenAnswerText.h>
 #include <BECore/Audio/AudioDecode.h>
 #include <BECore/AudioTestSupport.h>
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/File/File.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/TempPath.h>
@@ -14,6 +16,13 @@
 namespace BECore::Tests {
 
     namespace {
+
+        String SoundSettingsText(const ArtGenSoundSettings& settings) {
+            String text;
+            JsonWriter writer(text);
+            WriteArtGenSoundSettings(writer, settings);
+            return text;
+        }
 
         constexpr uint32_t kRate = 1000;  // a sample a millisecond keeps the numbers readable
 
@@ -112,20 +121,48 @@ namespace BECore::Tests {
         EXPECT_FALSE(ProcessArtGenSound(DecodedAudio{}, Plain()).has_value());
     }
 
+    TEST(ArtGenSoundTest, TheSettingsAreWrittenAsTheDoublesTheDomStored) {
+        ArtGenSoundSettings settings;
+        settings.trimDb.reset();
+        settings.fadeInMs = 0.1f;
+        settings.peakDb = -0.5f;
+        EXPECT_EQ(SoundSettingsText(settings), R"({"fadeInMs":0.10000000149011612,"fadeOutMs":30.0,"maxSeconds":0.0,"mono":true,"peakDb":-0.5,"sampleRate":0,"trimDb":null})");
+        EXPECT_EQ(SoundSettingsText(ArtGenSoundSettings{}), R"({"fadeInMs":5.0,"fadeOutMs":30.0,"maxSeconds":0.0,"mono":true,"peakDb":-1.0,"sampleRate":0,"trimDb":-50.0})");
+    }
+
     TEST(ArtGenSoundTest, TheSettingsRoundTripThroughJsonAndBadOnesAreNamed) {
         ArtGenSoundSettings settings;
         settings.trimDb.reset();
         settings.sampleRate = 11025;
         settings.maxSeconds = 1.5f;
-        const auto back = ArtGenSoundSettingsFromJson(ArtGenSoundSettingsToJson(settings));
+        settings.fadeInMs = 0.1f;
+        const String text = SoundSettingsText(settings);
+        const auto back = ReadArtGenSoundSettings(JsonDoc(text));
         ASSERT_TRUE(back.has_value()) << back.error().c_str();
         EXPECT_EQ(*back, settings);
-        EXPECT_EQ(*ArtGenSoundSettingsFromJson(Json()), ArtGenSoundSettings{}) << "no settings are the defaults";
-        EXPECT_EQ(ArtGenSoundSettingsFromJson(Json{{"mono", 1}}).error(), "\"mono\" must be a boolean");
-        EXPECT_FALSE(ArtGenSoundSettingsFromJson(Json{{"peakDb", 3}}).has_value());
-        EXPECT_FALSE(ArtGenSoundSettingsFromJson(Json{{"sampleRate", 10}}).has_value());
-        EXPECT_FALSE(ArtGenSoundSettingsFromJson(Json{{"trimDb", "loud"}}).has_value());
-        EXPECT_FALSE(ArtGenSoundSettingsFromJson(Json::array()).has_value());
+        EXPECT_EQ(*ReadArtGenSoundSettings(JsonDoc("null")), ArtGenSoundSettings{}) << "no settings are the defaults";
+        EXPECT_EQ(*ReadArtGenSoundSettings(JsonView()), ArtGenSoundSettings{});
+        EXPECT_EQ(*ReadArtGenSoundSettings(JsonDoc("{\"unknown\": 1}")), ArtGenSoundSettings{}) << "an unknown key is ignored";
+        EXPECT_EQ(ReadArtGenSoundSettings(JsonDoc("{\"mono\": 1}")).error(), "\"mono\" must be a boolean");
+        EXPECT_EQ(ReadArtGenSoundSettings(JsonDoc("[]")).error(), "the sound settings must be an object");
+        EXPECT_FALSE(ReadArtGenSoundSettings(JsonDoc("{\"peakDb\": 3}")).has_value());
+        EXPECT_FALSE(ReadArtGenSoundSettings(JsonDoc("{\"sampleRate\": 10}")).has_value());
+        EXPECT_FALSE(ReadArtGenSoundSettings(JsonDoc("{\"trimDb\": \"loud\"}")).has_value());
+        EXPECT_EQ(ReadArtGenSoundSettings(JsonDoc("{\"maxSeconds\": null}")).error(), "\"maxSeconds\" must be a number");
+        EXPECT_EQ(ReadArtGenSoundSettings(JsonDoc("{\"peakDb\": \"x\"}")).error(), "\"peakDb\" must be a number or null");
+    }
+
+    TEST(ArtGenSoundTest, ANumberThatIsNotFiniteIsRefused) {
+        EXPECT_EQ(ReadArtGenSoundSettings(JsonDoc("{\"maxSeconds\": 1e999}")).error(), "\"maxSeconds\" must be a finite number");
+        EXPECT_EQ(ReadArtGenSoundSettings(JsonDoc("{\"trimDb\": -1e999}")).error(), "\"trimDb\" must be a finite number");
+        EXPECT_FALSE(ReadArtGenSoundSettings(JsonDoc("{\"fadeOutMs\": 1e300}")).has_value()) << "too big for a float: the range check refuses it";
+    }
+
+    TEST(ArtGenSoundTest, TheSampleRateIsAWholeNumberClampedToTheLimit) {
+        EXPECT_EQ(ReadArtGenSoundSettings(JsonDoc("{\"sampleRate\": 22050}"))->sampleRate, 22050u);
+        EXPECT_EQ(ReadArtGenSoundSettings(JsonDoc("{\"sampleRate\": 22050.0}")).error(), "\"sampleRate\" must be a whole number");
+        EXPECT_EQ(ReadArtGenSoundSettings(JsonDoc("{\"sampleRate\": -1}")).error(), "\"sampleRate\" must be a whole number");
+        EXPECT_FALSE(ReadArtGenSoundSettings(JsonDoc("{\"sampleRate\": 99999999999}")).has_value()) << "clamped to 32 bits, then out of the range of rates";
     }
 
     TEST(ArtGenSoundTest, TheWaveformHasALowAndAHighPerBucket) {
@@ -180,13 +217,33 @@ namespace BECore::Tests {
 
         const auto text = ReadTextFile(written->provenanceFile);
         ASSERT_TRUE(text.has_value()) << text.error().c_str();
-        const auto provenance = ParseJson(*text);
-        ASSERT_TRUE(provenance.has_value());
-        EXPECT_EQ(GetJsonInt(*provenance, "seed"), Optional<int64_t>(4)) << "the generation's record is kept";
-        const Json* accepted = FindJsonMember(*provenance, "accepted");
-        ASSERT_NE(accepted, nullptr);
-        EXPECT_EQ(GetJsonString(*accepted, "clip"), Optional<String>("assets/artgen/knock.wav"));
-        EXPECT_EQ(Require(FindJsonMember(*accepted, "processing")), ArtGenSoundSettingsToJson(ArtGenSoundSettings{}));
+        const JsonDoc provenance{StringView(*text)};
+        ASSERT_TRUE(provenance.IsParsed());
+        EXPECT_EQ(IntOf(provenance.Root(), "seed"), Optional<int64_t>(4)) << "the generation's record is kept";
+        const JsonView accepted = MemberOf(provenance.Root(), "accepted");
+        ASSERT_TRUE(accepted.IsObject());
+        EXPECT_EQ(StringOf(accepted, "clip"), "assets/artgen/knock.wav");
+        EXPECT_EQ(SortedTextOf(MemberOf(accepted, "processing")), SoundSettingsText(ArtGenSoundSettings{}));
+    }
+
+    TEST_F(ArtGenSoundAcceptTest, TheRecordIsWrittenSortedAndMeasuresAreDoublesNotShortestFloats) {
+        ArtGenSoundTarget target;
+        target.name = "knock";
+        const auto written = WriteSoundIntoAssets(Fixture("mono-24bit.flac"), _provenance, _root / "assets", target, ArtGenSoundSettings{});
+        ASSERT_TRUE(written.has_value()) << written.error().c_str();
+
+        const auto doubleText = [](double value) {
+            String text;
+            JsonWriter writer(text);
+            writer.Value(value);
+            return text;
+        };
+        const String text = ReadFile(written->provenanceFile);
+        EXPECT_TRUE(StringView(text).starts_with("{\n  \"accepted\": {\n    \"channels\": 1,\n    \"clip\": \"assets/artgen/knock.wav\",\n    \"peakDb\": "));
+        // A float widened to a double prints all its digits, as the DOM stored it
+        EXPECT_NE(text.find(Format("\"peakDb\": {},\n", doubleText(static_cast<double>(written->peakDb)))), String::npos) << text.c_str();
+        EXPECT_NE(text.find(Format("\"seconds\": {},\n", doubleText(written->seconds))), String::npos) << text.c_str();
+        EXPECT_TRUE(StringView(text).ends_with("  },\n  \"preset\": \"knock\",\n  \"seed\": 4\n}\n")) << text.c_str();
     }
 
     TEST_F(ArtGenSoundAcceptTest, AClipOfTheGameIsReplacedAndTheWavDecodes) {

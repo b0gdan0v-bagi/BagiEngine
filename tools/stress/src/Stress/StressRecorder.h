@@ -95,7 +95,7 @@ namespace BECore::Stress {
 
     /**
      * @brief The one JSON line of a fixed run, no newline: the keys sorted (as `headless_frames.py` writes with `sort_keys`), numbers as plain
-     *        decimals; the keys are listed in `CLAUDE.md`, "Fixed mode". Written by hand: the app does not link nlohmann/json.
+     *        decimals; the keys are listed in `CLAUDE.md`, "Fixed mode". Written by hand because the line has a fixed set of keys of plain numbers: it needs no writer state and no escaping.
      */
     String FormatJsonLine(const StressSummary& summary, const StressRunContext& context);
 

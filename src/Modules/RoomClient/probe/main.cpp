@@ -2,7 +2,6 @@
 // with the first action it is offered, and exits 0 when the game is over. tools/rooms/smoke.py runs it against BagiRoomServer; a game's
 // component does the same per frame instead of in a loop (RoomClient/CLAUDE.md, "A component in ten lines")
 
-#include <BECore/Control/Json.h>
 #include <BECore/Logger/ConsoleSink.h>
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/ProfilerSettings.h>
@@ -124,6 +123,7 @@ namespace {
         bool started = false;
         bool sawView = false;
         uint64_t actedVersion = 0;
+        JsonTape actionsTape;
         const auto deadline = std::chrono::steady_clock::now() + kTimeLimit;
 
         while (std::chrono::steady_clock::now() < deadline) {
@@ -167,10 +167,10 @@ namespace {
             }
 
             // Its turn: the view carries actions, and one version is answered once
-            const Json& actions = client.GetActions();
-            if (client.HasView() && actions.is_array() && !actions.empty() && client.GetViewVersion() != actedVersion) {
+            const StringView action = FirstActionText(actionsTape, client.GetActionsText());
+            if (client.HasView() && !action.empty() && client.GetViewVersion() != actedVersion) {
                 actedVersion = client.GetViewVersion();
-                if (const auto result = client.SendAction(actions.front()); !result) {
+                if (const auto result = client.SendAction(action); !result) {
                     return Fail(Format("{}: {}", result.error().code, result.error().message));
                 }
             }

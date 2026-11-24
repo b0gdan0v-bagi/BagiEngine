@@ -1,6 +1,5 @@
 #include <BECore/Config/ContentVersion.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -14,6 +13,7 @@
 #include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIVars.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -144,10 +144,6 @@ namespace BECore::Tests {
             return PanelNode("PanelC", 1, 10, 20, PanelElements("C"));
         }
 
-        const Json* Member(const Json& object, StringView key) {
-            return FindJsonMember(object, key);
-        }
-
         /// GetDrawRank of every child of the scene root, in scene order
         Vector<int32_t> DrawRanks(Scene& scene) {
             Vector<int32_t> ranks;
@@ -250,11 +246,8 @@ namespace BECore::Tests {
             _renderer->ClearCalls();
             manager->DrawAll();
 
-            Json request = Json::object();
-            request["id"] = 1;
-            request["method"] = "ui_tree";
             String answer;
-            _service.Post(DumpJson(request), [&answer](String text) { answer = text; });
+            _service.Post(MakeRequestText(1, "ui_tree"), [&answer](String text) { answer = text; });
             _service.Drain();
             EngineEnvironment::UseSceneManager({});
             return answer;

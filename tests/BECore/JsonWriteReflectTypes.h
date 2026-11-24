@@ -22,7 +22,7 @@ namespace BECore {
 
     // =========================================================================
     // Reflected test data of the generated writer (WriteJson). The .gen.hpp is included in JsonWriteReflectTest.cpp only.
-    // Fields are declared out of alphabetical order on purpose: the writer sorts the keys like JsonSerializer does.
+    // Fields are declared out of alphabetical order on purpose: the writer sorts the keys in byte order.
     // =========================================================================
 
     namespace JsonWriteTestData {
@@ -88,7 +88,7 @@ namespace BECore {
             BE_REFLECT_FIELD Vector<int32_t> none;
         };
 
-        /// A one-member element of a list collapses to its scalar on the DOM path; the writer bridges the field
+        /// A one-member element of a list collapses to its scalar; the writer bridges the field
         struct JsonWriteOneValue {
             BE_CLASS(JsonWriteOneValue)
 
@@ -271,7 +271,7 @@ namespace BECore {
             BE_REFLECT_FIELD int32_t zeta = 0;
         };
 
-        /// Has a member named `type`: the DOM path lets it replace the class name
+        /// Has a member named `type`: it replaces the class name
         class JsonWritePtrSame : public JsonWritePtrBase {
             BE_CLASS(JsonWritePtrSame)
         public:

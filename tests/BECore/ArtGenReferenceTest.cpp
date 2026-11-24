@@ -1,4 +1,5 @@
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonWriter.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Widgets/ArtGen/Reference/ArtGenReference.h>
@@ -8,76 +9,73 @@ namespace BECore::Tests {
 
     namespace {
 
-        Json ReferenceJson() {
-            return Json{{"mode", "init"}, {"image", "assets/artgen/rook.png"}, {"weight", 0.4}};
+        constexpr StringView kReferenceText = R"({"image":"assets/artgen/rook.png","mode":"init","weight":0.4})";
+
+        String ErrorOf(StringView text) {
+            const auto read = ReadArtGenReference(JsonDoc(text));
+            return read ? String() : read.error();
         }
 
-        String ErrorOf(const Json& value) {
-            const auto read = ReadArtGenReference(value);
-            return read ? String() : read.error();
+        String ReferenceText(const ArtGenReference& reference) {
+            String text;
+            JsonWriter writer(text);
+            WriteArtGenReference(writer, reference);
+            return text;
         }
 
     }  // namespace
 
     TEST(ArtGenReferenceTest, AReferenceReadFromJsonWritesBackTheSame) {
-        const auto read = ReadArtGenReference(ReferenceJson());
+        const auto read = ReadArtGenReference(JsonDoc(kReferenceText));
         ASSERT_TRUE(read.has_value());
         EXPECT_EQ(read->mode, "init");
         EXPECT_EQ(read->image, "assets/artgen/rook.png");
         EXPECT_EQ(read->weight, Optional<double>(0.4));
-        EXPECT_EQ(ArtGenReferenceToJson(*read), ReferenceJson());
+        EXPECT_EQ(ReferenceText(*read), String(kReferenceText));
     }
 
     TEST(ArtGenReferenceTest, AMissingOrNullWeightIsLeftOutOfTheJson) {
-        Json json = ReferenceJson();
-        json.erase("weight");
-        auto read = ReadArtGenReference(json);
+        auto read = ReadArtGenReference(JsonDoc(R"({"image":"a.png","mode":"style"})"));
         ASSERT_TRUE(read.has_value());
         EXPECT_FALSE(read->weight.has_value());
-        EXPECT_EQ(FindJsonMember(ArtGenReferenceToJson(*read), "weight"), nullptr);
+        EXPECT_EQ(ReferenceText(*read), R"({"image":"a.png","mode":"style"})");
 
-        json["weight"] = Json();
-        read = ReadArtGenReference(json);
+        read = ReadArtGenReference(JsonDoc(R"({"image":"a.png","mode":"style","weight":null})"));
         ASSERT_TRUE(read.has_value());
         EXPECT_FALSE(read->weight.has_value());
     }
 
     TEST(ArtGenReferenceTest, AnIntegerWeightIsANumber) {
-        Json json = ReferenceJson();
-        json["weight"] = 1;
-        const auto read = ReadArtGenReference(json);
+        const auto read = ReadArtGenReference(JsonDoc(R"({"image":"a.png","mode":"init","weight":1})"));
         ASSERT_TRUE(read.has_value());
         EXPECT_EQ(read->weight, Optional<double>(1.0));
+        EXPECT_EQ(ReferenceText(*read), R"({"image":"a.png","mode":"init","weight":1.0})");
+    }
+
+    TEST(ArtGenReferenceTest, TheTextOfAStringIsEscapedAndDecoded) {
+        const auto read = ReadArtGenReference(JsonDoc(R"({"image":"a \"b\"\\c.png","mode":"init"})"));
+        ASSERT_TRUE(read.has_value());
+        EXPECT_EQ(read->image, "a \"b\"\\c.png");
+        EXPECT_EQ(ReferenceText(*read), R"({"image":"a \"b\"\\c.png","mode":"init"})");
     }
 
     TEST(ArtGenReferenceTest, ShapeErrorsNameTheKey) {
-        EXPECT_NE(ErrorOf(Json::array()).find("'reference' must be an object"), String::npos);
-        EXPECT_NE(ErrorOf(Json::object()).find("reference.mode"), String::npos);
+        EXPECT_NE(ErrorOf("[]").find("'reference' must be an object"), String::npos);
+        EXPECT_NE(ErrorOf("{}").find("reference.mode"), String::npos);
 
-        Json json = ReferenceJson();
-        json["mode"] = 3;
-        EXPECT_NE(ErrorOf(json).find("reference.mode"), String::npos);
-        json["mode"] = "";
-        EXPECT_NE(ErrorOf(json).find("reference.mode"), String::npos);
+        EXPECT_NE(ErrorOf(R"({"image":"a.png","mode":3})").find("reference.mode"), String::npos);
+        EXPECT_NE(ErrorOf(R"({"image":"a.png","mode":""})").find("reference.mode"), String::npos);
 
-        json = ReferenceJson();
-        json.erase("image");
-        EXPECT_NE(ErrorOf(json).find("reference.image"), String::npos);
-        json["image"] = "";
-        EXPECT_NE(ErrorOf(json).find("reference.image"), String::npos);
-        json["image"] = 7;
-        EXPECT_NE(ErrorOf(json).find("reference.image"), String::npos);
+        EXPECT_NE(ErrorOf(R"({"mode":"init"})").find("reference.image"), String::npos);
+        EXPECT_NE(ErrorOf(R"({"image":"","mode":"init"})").find("reference.image"), String::npos);
+        EXPECT_NE(ErrorOf(R"({"image":7,"mode":"init"})").find("reference.image"), String::npos);
 
-        json = ReferenceJson();
-        json["weight"] = "x";
-        EXPECT_NE(ErrorOf(json).find("reference.weight"), String::npos);
+        EXPECT_NE(ErrorOf(R"({"image":"a.png","mode":"init","weight":"x"})").find("reference.weight"), String::npos);
+        EXPECT_NE(ErrorOf(R"({"image":"a.png","mode":"init","weight":1e999})").find("reference.weight"), String::npos) << "a number that is not finite";
     }
 
     TEST(ArtGenReferenceTest, TheServiceNotTheShapeCheckJudgesTheModeAndTheRange) {
-        Json json = ReferenceJson();
-        json["mode"] = "style";
-        json["weight"] = 7.5;
-        EXPECT_TRUE(ReadArtGenReference(json).has_value());
+        EXPECT_TRUE(ReadArtGenReference(JsonDoc(R"({"image":"a.png","mode":"style","weight":7.5})")).has_value());
     }
 
     TEST(ArtGenReferenceTest, AFileInsideTheGameRootIsRelativeWithSlashes) {

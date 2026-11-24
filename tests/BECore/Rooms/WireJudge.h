@@ -1,7 +1,8 @@
 #pragma once
 
-#include <BECore/Control/Json.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Format/Format.h>
+#include <Common/JsonDoc.h>
 #include <algorithm>
 
 namespace BECore::Tests {
@@ -50,11 +51,12 @@ namespace BECore::Tests {
     /// The card ids @p text names that the client of @p seat (-1: a client that has no seat yet) may not know, in order
     inline Vector<String> FindLeakedCardIds(StringView text, int seat) {
         Vector<String> allowedTable;
-        if (const auto parsed = ParseJson(text); parsed && parsed->is_object()) {
-            const Json* view = FindJsonMember(*parsed, "view");
-            const Json* table = view && view->is_object() ? FindJsonMember(*view, "table") : nullptr;
+        const JsonDoc document(text);
+        if (document.Root().IsObject()) {
+            const Optional<JsonView> view = FindParam(document.Root(), "view");
+            const Optional<JsonView> table = view && view->IsObject() ? FindParam(*view, "table") : std::nullopt;
             if (table) {
-                allowedTable = FindCardIds(FromStd(table->dump()));
+                allowedTable = FindCardIds(table->Raw());
             }
         }
         const String ownPrefix = seat >= 0 ? Format("c{}_", seat) : String();

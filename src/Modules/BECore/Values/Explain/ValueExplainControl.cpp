@@ -1,9 +1,10 @@
 #include "ValueExplainControl.h"
 
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/Control/ReflectionControl.h>
 #include <BECore/Reflection/CompiledPath.h>
 #include <BECore/Values/Explain/ValueContextRegistry.h>
@@ -38,8 +39,8 @@ namespace BECore {
         }
 
         /// A mistake of the request: a name that is not text
-        std::expected<String, ControlError> ReadText(const Json& params, StringView key) {
-            Optional<String> text = GetJsonString(params, key);
+        std::expected<String, ControlError> ReadText(JsonView params, StringView key) {
+            Optional<String> text = GetParamString(params, key);
             if (!text.has_value()) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'{}' has to be a string", key)));
             }
@@ -84,52 +85,79 @@ namespace BECore {
         }
 
         // By hand on purpose: the tree of a long loop nests deeper than `JsonWriter::kMaxDepth`, which a reflected node (the generated writer
-        // asserts there) cannot take; the DOM cuts such a branch to `null`. A bound on the depth would change the answer, so it stays a DOM.
+        // asserts there) cannot take. A branch deeper than the writer is written as `null`, as `WriteJson` cuts a container that would pass it;
+        // the keys are in alphabetical order, as the DOM wrote them.
 
-        /// The tree as nested `{source, label, value, type, children}`; @p budget counts the nodes still allowed, and a cut sets @p cut
-        Json NodeJson(const ProgramTrace& trace, uint32_t index, uint32_t& budget, bool& cut) {
+        /// A container that would pass the depth of the writer is written as `null` and its children are only counted, so the budget and the cut
+        /// flag do not depend on how deep the writer is
+        JsonWriter* OpenContainer(JsonWriter* writer) {
+            if (writer == nullptr) {
+                return nullptr;
+            }
+            if (writer->GetDepth() >= JsonWriter::kMaxDepth) {
+                writer->Null();
+                return nullptr;
+            }
+            return writer;
+        }
+
+        /// The tree as nested `{children, label, source, type, value}`; @p budget counts the nodes still allowed, and a cut sets @p cut.
+        /// A null @p writer walks the node for the budget and the cut alone
+        void WriteNode(JsonWriter* writer, const ProgramTrace& trace, uint32_t index, uint32_t& budget, bool& cut) {
             const TraceNode& node = trace.nodes[index];
-            Json json = Json::object();
-            json["source"] = MakeJsonString(EnumUtils<TraceStepKind>::ToString(node.kind));
-            json["label"] = MakeJsonString(node.label);
-            json["value"] = MakeJsonString(FormatNodeValue(node));
-            json["type"] = MakeJsonString(EnumUtils<ProgramType>::ToString(node.type));
-            Json children = Json::array();
+            JsonWriter* object = OpenContainer(writer);
+            if (object != nullptr) {
+                object->BeginObject();
+                object->Key("children");
+            }
+            JsonWriter* children = OpenContainer(object);
+            if (children != nullptr) {
+                children->BeginArray();
+            }
             for (const uint32_t child : trace.Children(node)) {
                 if (budget == 0) {
                     cut = true;
                     break;
                 }
                 --budget;
-                children.push_back(NodeJson(trace, child, budget, cut));
+                WriteNode(children, trace, child, budget, cut);
             }
-            json["children"] = std::move(children);
-            return json;
+            if (children != nullptr) {
+                children->EndArray();
+            }
+            if (object != nullptr) {
+                object->Member("label", node.label);
+                object->Member("source", EnumUtils<TraceStepKind>::ToString(node.kind));
+                object->Member("type", EnumUtils<ProgramType>::ToString(node.type));
+                object->Member("value", FormatNodeValue(node));
+                object->EndObject();
+            }
         }
 
-        Json ExplanationJson(const ValueExplanation& explanation) {
-            Json json = Json::object();
-            json["kind"] = MakeJsonString(EnumUtils<ValueKind>::ToString(explanation.kind));
-            json["source"] = MakeJsonString(explanation.source);
-            json["has_value"] = explanation.hasValue;
-            if (explanation.hasValue) {
-                json["value"] = MakeJsonString(explanation.valueText);
-            } else {
-                json["why"] = MakeJsonString(explanation.why);
-            }
+        void WriteExplanation(JsonWriter& writer, const ValueExplanation& explanation) {
+            writer.BeginObject();
+            writer.Member("has_value", explanation.hasValue);
+            writer.Member("kind", EnumUtils<ValueKind>::ToString(explanation.kind));
+            writer.Member("source", explanation.source);
+            bool cut = false;
             if (explanation.trace.root != kNoTraceNode && explanation.trace.root < explanation.trace.nodes.size()) {
                 uint32_t budget = kMaxFormattedLines - 1;
-                bool cut = false;
-                json["trace"] = NodeJson(explanation.trace, explanation.trace.root, budget, cut);
+                writer.Key("trace");
+                WriteNode(&writer, explanation.trace, explanation.trace.root, budget, cut);
                 if (cut || explanation.trace.truncated) {
-                    json["truncated"] = true;
+                    writer.Member("truncated", true);
                 }
             }
-            return json;
+            if (explanation.hasValue) {
+                writer.Member("value", explanation.valueText);
+            } else {
+                writer.Member("why", explanation.why);
+            }
+            writer.EndObject();
         }
 
         void HandleExplainValue(ControlCall& call, const ControlService& service) {
-            const Json& params = call.Params();
+            const JsonView params = call.Params();
             const auto rootName = ReadText(params, "root");
             if (!rootName) {
                 call.Fail(rootName.error());
@@ -141,7 +169,7 @@ namespace BECore {
                 return;
             }
             Optional<String> contextName;
-            if (FindJsonMember(params, "context") != nullptr) {
+            if (FindParam(params, "context")) {
                 const auto named = ReadText(params, "context");
                 if (!named) {
                     call.Fail(named.error());
@@ -173,10 +201,11 @@ namespace BECore {
                 explanation.valueText.clear();
                 explanation.trace = ProgramTrace();
                 explanation.why = provider == nullptr ? String(kNoContextWhy) : Format("the context '{}' has no objects now", contextName.value_or(String(kDefaultContextName)));
-                call.Reply(ExplanationJson(explanation));
+                call.Reply([&](JsonWriter& writer) { WriteExplanation(writer, explanation); });
                 return;
             }
-            call.Reply(ExplanationJson(target->explain(target->value, context->context, *context->declaration)));
+            const ValueExplanation explanation = target->explain(target->value, context->context, *context->declaration);
+            call.Reply([&](JsonWriter& writer) { WriteExplanation(writer, explanation); });
         }
 
     }  // namespace

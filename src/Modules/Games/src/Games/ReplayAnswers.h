@@ -29,10 +29,10 @@ namespace BECore {
     struct ReplayMismatch;
 
     /**
-     * @brief The first entry of a replay that differs, as `replay` answers it; the shape `ReplayMismatchJson` also gives.
+     * @brief The first entry of a replay that differs, as `replay` answers it; ReplayMismatchText writes the same document to text.
      *
-     * `entry` is the entry as a line of the file holds it (owned: it is rebuilt from the parsed entry). `kind`, `expected` and `actual` are views of the
-     * `ReplayMismatch` they were filled from (`kind` of a static name), which has to outlive every write.
+     * Every member is a view of the `ReplayMismatch` it was filled from (`entry` of its `entryText`, `kind` of a static name), which has to outlive
+     * every write.
      */
     struct ReplayMismatchAnswer {
         BE_CLASS(ReplayMismatchAnswer)

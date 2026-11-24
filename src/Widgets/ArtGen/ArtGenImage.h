@@ -1,6 +1,7 @@
 #pragma once
 
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonView.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/File/Path.h>
 #include <BECore/Types/Types.h>
 #include <cstdint>
@@ -43,11 +44,11 @@ namespace BECore {
         }
     };
 
-    /// `{trim, padding, maxSize}`: a value inside a `Json` record (a preset, the provenance, the parameters of `artgen_accept`), not an answer of its own
-    [[nodiscard]] Json ArtGenImageSettingsToJson(const ArtGenImageSettings& settings);
-    /// Reads what ArtGenImageSettingsToJson writes; null is the defaults, a missing key keeps the default, a wrong type or a value out of
-    /// range is the error and names the key
-    [[nodiscard]] std::expected<ArtGenImageSettings, String> ArtGenImageSettingsFromJson(const Json& json);
+    /// `{maxSize, padding, trim}`: a value inside a record (a preset, the provenance, the parameters of `artgen_accept`), not an answer of its own
+    void WriteArtGenImageSettings(JsonWriter& writer, const ArtGenImageSettings& settings);
+    /// Reads what WriteArtGenImageSettings writes; a view that is not valid or `null` is the defaults, a missing key keeps the default, a wrong
+    /// type or a value out of range is the error and names the key
+    [[nodiscard]] std::expected<ArtGenImageSettings, String> ReadArtGenImageSettings(JsonView value);
 
     struct ArtGenIntRect {
         int32_t x = 0;
@@ -88,9 +89,9 @@ namespace BECore {
     /// Whether @p inner lies wholly inside the frame's crop
     [[nodiscard]] bool FrameContains(const ArtGenImageFrame& frame, const ArtGenIntRect& inner);
 
-    /// `{x, y, w, h, outWidth, outHeight}`: a value inside a `Json` record, like ArtGenImageSettingsToJson
-    [[nodiscard]] Json ArtGenImageFrameToJson(const ArtGenImageFrame& frame);
-    [[nodiscard]] std::expected<ArtGenImageFrame, String> ArtGenImageFrameFromJson(const Json& json);
+    /// `{h, outHeight, outWidth, w, x, y}`: a value inside a record, like WriteArtGenImageSettings
+    void WriteArtGenImageFrame(JsonWriter& writer, const ArtGenImageFrame& frame);
+    [[nodiscard]] std::expected<ArtGenImageFrame, String> ReadArtGenImageFrame(JsonView value);
 
     /**
      * @brief Crops @p pixels to @p frame and scales the crop to the frame's output size with an area average over premultiplied alpha (so an

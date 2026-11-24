@@ -2,9 +2,7 @@
 // shorthand, binary and JSON, the values that link against what a document declared, the refusals, and what a scope leaves behind.
 // The reflected document types are those of ValueTestTypes.h (their generated code is included in ValueContextTest.cpp).
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
-#include <BECore/Control/JsonSerializer.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -185,23 +183,23 @@ namespace BECore::Tests {
     }
 
     TEST(ValueContextLoadTest, JsonReadsTheListFormAndAPlainScalar) {
-        const auto parsed = ParseJson(R"({"context": [{"name": "caster", "type": "ValueUnitStats"}, {"name": "cast", "type": "ValueCastInfo"}],
+        const StringView text(R"({"context": [{"name": "caster", "type": "ValueUnitStats"}, {"name": "cast", "type": "ValueCastInfo"}],
                                           "damage": {"from": "caster.attack"}, "power": {"from": "cast.power"}, "aim": {"from": "caster.velocity"}})");
-        ASSERT_TRUE(parsed.has_value());
         ValueDocument document;
         const ValueLinkScope scope(kDocumentName);
-        JsonDeserializer reader(*parsed);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(text));
         document.Deserialize(reader);
         EXPECT_FALSE(reader.HasErrors()) << ReportsOf(reader).c_str();
         ExpectValuesReadTheMembers(document);
     }
 
     TEST(ValueContextLoadTest, JsonHasNoShorthand) {
-        const auto parsed = ParseJson(R"({"context": {"caster": "ValueUnitStats"}, "damage": 3})");
-        ASSERT_TRUE(parsed.has_value());
+        const StringView text(R"({"context": {"caster": "ValueUnitStats"}, "damage": 3})");
         ValueDocument document;
         const ValueLinkScope scope(kDocumentName);
-        JsonDeserializer reader(*parsed);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(text));
         document.Deserialize(reader);
         EXPECT_TRUE(reader.HasErrors());
         ExpectNothingInstalled(document);

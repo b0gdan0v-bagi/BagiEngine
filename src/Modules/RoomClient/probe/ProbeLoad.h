@@ -7,6 +7,10 @@ namespace BECore {
 
     CORE_ENUM(ProbeStep, uint8_t, Running, Done, Failed)
 
+    /// The text of the first action of @p actionsText, the `actions` of a view; empty when it is no array or holds none. The result is a view of @p actionsText
+    /// and the tape borrows it, so both outlive the use
+    [[nodiscard]] StringView FirstActionText(JsonTape& tape, StringView actionsText);
+
     /**
      * @brief One client of the load mode: hosts a room, starts it, plays the first action of every turn, and when the hand ends leaves
      * and hosts the next one on the same connection, until it has sent the wanted number of actions.
@@ -46,6 +50,7 @@ namespace BECore {
         RoomClient _client;
         RateLimiter _pace;
         Vector<RoomClientEvent> _events;
+        JsonTape _tape;
         String _url;
         String _game;
         String _name;

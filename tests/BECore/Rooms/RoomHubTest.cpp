@@ -106,7 +106,7 @@ namespace BECore::Tests {
         /// Three members in one room of the fake game; what they were sent so far is cleared
         void MakeRoomOfThree(ReferenceSinkWorld& world) {
             world.Connect(1);
-            world.Send(1, CreateRoomMessage{"fake", "P0", Json::object(), false});
+            world.Send(1, CreateRoomMessage{"fake", "P0", String(), false});
             ASSERT_FALSE(world.sent.empty());
             const auto joined = ParseServerMessage(world.sent.front().text);
             ASSERT_TRUE(joined.has_value());
@@ -233,7 +233,7 @@ namespace BECore::Tests {
         const ReceivedMessage* joined = ann.Last(RoomMessageTypes::kJoined);
         ASSERT_NE(joined, nullptr);
         EXPECT_EQ(joined->GetInt("seat"), 0);
-        EXPECT_TRUE(GetJsonBool(joined->json, "host").value_or(false));
+        EXPECT_TRUE(joined->GetBool("host"));
         EXPECT_EQ(joined->GetString("room").size(), RoomLimits::kRoomCodeLength);
         EXPECT_EQ(ann.token.size(), RoomLimits::kTokenLength);
         EXPECT_TRUE(harness.Hub().HasRoom(ann.roomCode));
@@ -249,15 +249,15 @@ namespace BECore::Tests {
         TestClient& bob = harness.Client(guest);
         EXPECT_EQ(bob.Types(), "joined,lobby");
         EXPECT_EQ(Require(bob.Last(RoomMessageTypes::kJoined)).GetInt("seat"), 1);
-        EXPECT_FALSE(GetJsonBool(Require(bob.Last(RoomMessageTypes::kJoined)).json, "host").value_or(true));
+        EXPECT_FALSE(Require(bob.Last(RoomMessageTypes::kJoined)).GetBool("host", true));
         // The host was told about the new member
         EXPECT_EQ(ann.Types(), "joined,lobby,lobby");
-        const Json* seats = FindJsonMember(Require(ann.Last(RoomMessageTypes::kLobby)).json, "seats");
-        ASSERT_NE(seats, nullptr);
-        ASSERT_EQ(seats->size(), 4u);
-        EXPECT_EQ(GetJsonString((*seats)[1], "kind").value_or(String()), "human");
-        EXPECT_EQ(GetJsonString((*seats)[1], "name").value_or(String()), "Bob");
-        EXPECT_EQ(GetJsonString((*seats)[2], "kind").value_or(String()), "empty");
+        const Optional<JsonView> seats = Require(ann.Last(RoomMessageTypes::kLobby)).Find("seats");
+        ASSERT_TRUE(seats.has_value());
+        ASSERT_EQ(seats->Size(), 4u);
+        EXPECT_EQ(GetParamString(ItemAt(*seats, 1), "kind").value_or(String()), "human");
+        EXPECT_EQ(GetParamString(ItemAt(*seats, 1), "name").value_or(String()), "Bob");
+        EXPECT_EQ(GetParamString(ItemAt(*seats, 2), "kind").value_or(String()), "empty");
     }
 
     TEST(RoomHubTest, TwoRoomsOfOneHubDrawFromTheOneSourceInOrder) {
@@ -279,36 +279,39 @@ namespace BECore::Tests {
         EXPECT_EQ(harness.Client(second).token, secondToken);
     }
 
+    TEST(RoomHubTest, ThePublicOptionsAreWrittenAlphabeticalWhateverOrderAndBlanksTheClientUsed) {
+        HubHarness harness;
+        const ConnectionId host = harness.Connect();
+        harness.SendText(host, "{\"v\":1,\"type\":\"create_room\",\"game\":\"fake-public\",\"name\":\"Ann\",\n \"options\" : { \"open\" : true ,\n \"secret\":7, \"count\" : 3 }}");
+        const ReceivedMessage* lobby = harness.Client(host).Last(RoomMessageTypes::kLobby);
+        ASSERT_NE(lobby, nullptr);
+        EXPECT_NE(lobby->text.find(R"("options":{"count":3,"open":true},)"), String::npos) << lobby->text.c_str();
+    }
+
     TEST(RoomHubTest, TheLobbyShowsEveryMemberThePublicOptionsOfTheRoomAndNothingElse) {
         HubHarness harness;
         const ConnectionId host = harness.Connect();
-        Json options = Json::object();
-        options["open"] = true;
-        options["count"] = 3;
-        options["secret"] = 7;      // not public
-        options["label"] = "text";  // not public
-        harness.Create(host, "Ann", "fake-public", options);
+        // "secret" and "label" are not public
+        constexpr StringView kOptions = R"({"count":3,"label":"text","open":true,"secret":7})";
+        harness.Create(host, "Ann", "fake-public", kOptions);
         const ConnectionId guest = harness.Connect();
         harness.JoinByName(guest, harness.Client(host).roomCode, "Bob");
 
-        Json expected = Json::object();
-        expected["open"] = true;
-        expected["count"] = 3;
         for (const ConnectionId id : {host, guest}) {
             const ReceivedMessage* lobby = harness.Client(id).Last(RoomMessageTypes::kLobby);
             ASSERT_NE(lobby, nullptr);
-            const Json* shown = FindJsonMember(lobby->json, "options");
-            ASSERT_NE(shown, nullptr) << "connection " << id;
-            EXPECT_EQ(*shown, expected) << "connection " << id;
+            const Optional<JsonView> shown = lobby->Find("options");
+            ASSERT_TRUE(shown.has_value()) << "connection " << id;
+            EXPECT_EQ(shown->Raw(), R"({"count":3,"open":true})") << "connection " << id;
         }
 
         // A game that names no public option sends none
         HubHarness plain;
         const ConnectionId alone = plain.Connect();
-        plain.Create(alone, "Ann", "fake", options);
+        plain.Create(alone, "Ann", "fake", kOptions);
         const ReceivedMessage* lobby = plain.Client(alone).Last(RoomMessageTypes::kLobby);
         ASSERT_NE(lobby, nullptr);
-        EXPECT_EQ(FindJsonMember(lobby->json, "options"), nullptr);
+        EXPECT_FALSE(lobby->Find("options").has_value());
     }
 
     TEST(RoomHubTest, LobbyIsSentOnlyWhenSomethingChanged) {
@@ -357,7 +360,7 @@ namespace BECore::Tests {
         EXPECT_EQ(harness.Client(stranger).LastErrorCode(), RoomErrors::kNotInRoom);
         harness.Leave(stranger);
         EXPECT_EQ(harness.Client(stranger).LastErrorCode(), RoomErrors::kNotInRoom);
-        harness.Send(stranger, ActionMessage{0, Json::object()});
+        harness.Send(stranger, ActionMessage{0, String()});
         EXPECT_EQ(harness.Client(stranger).LastErrorCode(), RoomErrors::kNotInRoom);
         harness.Create(stranger, "Zed", "no_such_game");
         EXPECT_EQ(harness.Client(stranger).LastErrorCode(), RoomErrors::kUnknownGame);
@@ -384,7 +387,7 @@ namespace BECore::Tests {
         // Wrong role, wrong time
         harness.Start(ids[1]);
         EXPECT_EQ(harness.Client(ids[1]).LastErrorCode(), RoomErrors::kNotHost);
-        harness.Send(ids[1], ActionMessage{0, CardAction("c1_0")});
+        harness.Send(ids[1], ActionMessage{0, CardActionText("c1_0")});
         EXPECT_EQ(harness.Client(ids[1]).LastErrorCode(), RoomErrors::kNotStarted);
         harness.Start(ids[0]);
         EXPECT_EQ(harness.Client(ids[0]).LastErrorCode(), "");
@@ -406,12 +409,12 @@ namespace BECore::Tests {
         const int turnSeat = harness.Client(onTurn).seat;
         const int otherSeat = harness.Client(other).seat;
         // A card nobody holds: the game quotes what the client sent in its error, so a hidden card would be echoed back
-        harness.Send(onTurn, ActionMessage{version, CardAction("c9_9")});
+        harness.Send(onTurn, ActionMessage{version, CardActionText("c9_9")});
         EXPECT_EQ(harness.Client(onTurn).LastErrorCode(), RoomErrors::kIllegalAction);
-        harness.Send(other, ActionMessage{version, CardAction(Format("c{}_0", otherSeat))});
+        harness.Send(other, ActionMessage{version, CardActionText(Format("c{}_0", otherSeat))});
         EXPECT_EQ(harness.Client(other).LastErrorCode(), RoomErrors::kNotYourTurn);
         const size_t viewsBefore = harness.Client(onTurn).Count(RoomMessageTypes::kView);
-        harness.Send(onTurn, ActionMessage{version + 7, CardAction(Format("c{}_0", turnSeat))});
+        harness.Send(onTurn, ActionMessage{version + 7, CardActionText(Format("c{}_0", turnSeat))});
         EXPECT_EQ(harness.Client(onTurn).LastErrorCode(), RoomErrors::kStaleAction);
         // The current view comes again after a stale action
         EXPECT_EQ(harness.Client(onTurn).Count(RoomMessageTypes::kView), viewsBefore + 1);
@@ -595,9 +598,9 @@ namespace BECore::Tests {
             const ReceivedMessage* lobby = harness.Client(id).Last(RoomMessageTypes::kLobby);
             ASSERT_NE(lobby, nullptr);
             EXPECT_EQ(lobby->GetInt("host"), 1);
-            const Json* seats = FindJsonMember(lobby->json, "seats");
-            ASSERT_NE(seats, nullptr);
-            EXPECT_EQ(GetJsonString((*seats)[0], "kind").value_or(String()), "empty");
+            const Optional<JsonView> seats = lobby->Find("seats");
+            ASSERT_TRUE(seats.has_value());
+            EXPECT_EQ(GetParamString(ItemAt(*seats, 0), "kind").value_or(String()), "empty");
         }
         EXPECT_EQ(harness.Hub().GetRoomCount(), 1u);
         // The new host can start
@@ -656,10 +659,10 @@ namespace BECore::Tests {
         EXPECT_EQ(now.seat, 1);
         EXPECT_EQ(now.token, token);
         // Still two members: the seat did not move and nobody was added
-        const Json* seats = FindJsonMember(Require(now.Last(RoomMessageTypes::kLobby)).json, "seats");
-        ASSERT_NE(seats, nullptr);
-        EXPECT_EQ(GetJsonString((*seats)[1], "name").value_or(String()), "P1");
-        EXPECT_EQ(GetJsonString((*seats)[2], "kind").value_or(String()), "empty");
+        const Optional<JsonView> seats = Require(now.Last(RoomMessageTypes::kLobby)).Find("seats");
+        ASSERT_TRUE(seats.has_value());
+        EXPECT_EQ(GetParamString(ItemAt(*seats, 1), "name").value_or(String()), "P1");
+        EXPECT_EQ(GetParamString(ItemAt(*seats, 2), "kind").value_or(String()), "empty");
         EXPECT_EQ(harness.Hub().GetConnectionCount(), 2u);
 
         // The old connection's disconnect later changes nothing
@@ -685,10 +688,10 @@ namespace BECore::Tests {
         for (const ConnectionId id : ids) {
             EXPECT_EQ(harness.Client(id).Types(), "lobby,view");
         }
-        const Json* seats = FindJsonMember(Require(harness.Client(ids[0]).Last(RoomMessageTypes::kLobby)).json, "seats");
-        ASSERT_NE(seats, nullptr);
-        EXPECT_EQ(GetJsonString((*seats)[2], "kind").value_or(String()), "computer");
-        EXPECT_EQ(GetJsonString((*seats)[3], "kind").value_or(String()), "computer");
+        const Optional<JsonView> seats = Require(harness.Client(ids[0]).Last(RoomMessageTypes::kLobby)).Find("seats");
+        ASSERT_TRUE(seats.has_value());
+        EXPECT_EQ(GetParamString(ItemAt(*seats, 2), "kind").value_or(String()), "computer");
+        EXPECT_EQ(GetParamString(ItemAt(*seats, 3), "kind").value_or(String()), "computer");
 
         bool finished = false;
         for (int step = 0; step < 200 && !finished; ++step) {
@@ -697,13 +700,13 @@ namespace BECore::Tests {
                 harness.PlayFirstAction(id);
             }
             const ReceivedMessage* view = harness.Client(ids[0]).Last(RoomMessageTypes::kView);
-            finished = view && GetJsonBool(view->json, "finished").value_or(false);
+            finished = view && view->GetBool("finished");
         }
         ASSERT_TRUE(finished);
         for (const ConnectionId id : ids) {
             const ReceivedMessage* view = harness.Client(id).Last(RoomMessageTypes::kView);
             ASSERT_NE(view, nullptr);
-            EXPECT_TRUE(GetJsonBool(view->json, "finished").value_or(false));
+            EXPECT_TRUE(view->GetBool("finished"));
             EXPECT_EQ(harness.Client(id).LastErrorCode(), "");
         }
         EXPECT_EQ(harness.GetLeakCount(), 0u);
@@ -731,9 +734,9 @@ namespace BECore::Tests {
         harness.Disconnect(ids[1]);
         const ReceivedMessage* lobby = harness.Client(ids[0]).Last(RoomMessageTypes::kLobby);
         ASSERT_NE(lobby, nullptr);
-        const Json* seats = FindJsonMember(lobby->json, "seats");
-        ASSERT_NE(seats, nullptr);
-        EXPECT_FALSE(GetJsonBool((*seats)[1], "connected").value_or(true));
+        const Optional<JsonView> seats = lobby->Find("seats");
+        ASSERT_TRUE(seats.has_value());
+        EXPECT_FALSE(GetParamBool(ItemAt(*seats, 1), "connected").value_or(true));
         EXPECT_EQ(harness.Hub().GetRoomCount(), 1u);
 
         const ConnectionId back = harness.Connect();
@@ -741,7 +744,7 @@ namespace BECore::Tests {
         const TestClient& returned = harness.Client(back);
         EXPECT_EQ(returned.Types(), "joined,lobby,view");
         EXPECT_EQ(returned.seat, 1);
-        EXPECT_TRUE(GetJsonBool((Require(FindJsonMember(Require(harness.Client(ids[0]).Last(RoomMessageTypes::kLobby)).json, "seats")))[1], "connected").value_or(false));
+        EXPECT_TRUE(GetParamBool(ItemAt(Require(harness.Client(ids[0]).Last(RoomMessageTypes::kLobby)).Find("seats").value_or(JsonView()), 1), "connected").value_or(false));
 
         // After leaving for good the token is no use
         harness.Leave(back);
@@ -786,7 +789,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(game->IsFinished());
         // No view carried a hidden card, and the clients learn of the computer's moves through the version of the view
         EXPECT_EQ(harness.GetLeakCount(), 0u);
-        EXPECT_TRUE(GetJsonBool(Require(host.Last(RoomMessageTypes::kView)).json, "finished").value_or(false));
+        EXPECT_TRUE(Require(host.Last(RoomMessageTypes::kView)).GetBool("finished"));
     }
 
     // ---- Limits per address, the failed-join budgets, the lobby timeout ------------------------------------------------------------

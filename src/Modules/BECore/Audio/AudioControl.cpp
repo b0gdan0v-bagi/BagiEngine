@@ -3,8 +3,8 @@
 #include <BECore/Audio/AudioControlAnswers.h>
 #include <BECore/Audio/AudioManager.h>
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/Reflection/ClassMeta.h>
 
 namespace BECore {
@@ -87,8 +87,8 @@ namespace BECore {
         }
 
         void HandleSet(ControlCall& call, AudioManager& manager) {
-            const Json& params = call.Params();
-            const auto busName = GetJsonString(params, "bus");
+            const JsonView params = call.Params();
+            const auto busName = GetParamString(params, "bus");
             Optional<AudioBus> bus;
             bool master = false;
             if (busName && StringView(*busName) == kMasterKey) {
@@ -104,10 +104,10 @@ namespace BECore {
                 call.Fail(ControlErrors::kInvalidParams, "'bus' has to be \"master\", \"sfx\", \"music\" or \"ui\"");
                 return;
             }
-            const bool hasVolume = FindJsonMember(params, "volume") != nullptr;
-            const bool hasMuted = FindJsonMember(params, "muted") != nullptr;
-            const auto volume = GetJsonNumber(params, "volume");
-            const auto muted = GetJsonBool(params, "muted");
+            const bool hasVolume = FindParam(params, "volume").has_value();
+            const bool hasMuted = FindParam(params, "muted").has_value();
+            const auto volume = GetParamNumber(params, "volume");
+            const auto muted = GetParamBool(params, "muted");
             if ((hasVolume && !volume) || (hasMuted && !muted)) {
                 call.Fail(ControlErrors::kInvalidParams, "'volume' has to be a number and 'muted' a boolean");
                 return;

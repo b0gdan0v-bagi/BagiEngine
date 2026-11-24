@@ -1,8 +1,10 @@
 #pragma once
 
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonMemberMap.h>
+#include <BECore/Control/JsonView.h>
 #include <BECore/Types/Types.h>
 #include <Widgets/ArtGen/ArtGenImage.h>
+#include <Widgets/ArtGen/ArtGenInputValue.h>
 #include <Widgets/ArtGen/Reference/ArtGenReference.h>
 #include <cstdint>
 #include <expected>
@@ -12,8 +14,8 @@ namespace BECore {
     /// One named input of a workflow as the service described it: the graph's own value and, for a combo, what the generator offers
     struct ArtGenWorkflowInput {
         String name;
-        Json defaultValue;
-        Json choices;  // an array, or null for a free value
+        ArtGenInputValue defaultValue;
+        Vector<ArtGenInputValue> choices;  // empty: a free value
     };
 
     /// A workflow the game can use (tools/artgen/artgen_preset.py `Workflow.describe`); a broken one carries its error
@@ -33,27 +35,29 @@ namespace BECore {
     };
 
     /// A style preset the service reported: the game's file, an engine starter (`source` "engine"), or a broken file with its error. `data`
-    /// is the preset's JSON as written (null when the file is not JSON)
+    /// is the preset's JSON as written, compact with the keys in byte order (empty when the file is not JSON)
     struct ArtGenPreset {
         String name;
         String title;
         String source;
         String kind;  // "image" or "audio": its workflow's
         String error;
-        Json data;
+        String data;
     };
 
     /// The named inputs the service fills itself, never a param of a preset (tools/artgen/CLAUDE.md, "Presets")
     [[nodiscard]] bool IsArtGenServiceInput(StringView input);
 
     /// A preset as the text of its file: the keys in the order of the docs (preset, title, workflow, prompt, negative, size, params, accept,
-    /// then `reference`, then any other), two-space indented, a newline at the end. By hand: a file, with the keys of the docs in their order and
-    /// the keys the form does not know
-    [[nodiscard]] String FormatArtGenPresetFile(const Json& preset);
+    /// then `reference`, then any other in byte order), each value compact with its keys in byte order, two-space indented, a newline at the end.
+    /// By hand: a file with the keys of the docs in their order, which no writer of the keys in byte order gives
+    [[nodiscard]] String FormatArtGenPresetFile(JsonView preset);
 
     /// Checks the shape the C++ side owns before a save: an object with `preset` 1, `workflow` and `prompt` text, `size` [w, h] of positive
     /// integers, `params` an object, `accept` image settings in range, `reference` the shape of `ReadArtGenReference`. Everything else (does the workflow have the input) is the service's to say
-    [[nodiscard]] std::expected<void, String> CheckArtGenPresetShape(const Json& preset);
+    [[nodiscard]] std::expected<void, String> CheckArtGenPresetShape(JsonView preset);
+    /// CheckArtGenPresetShape() of a document's text; text that is not JSON is "a preset is a JSON object" too, as any other value that is not an object
+    [[nodiscard]] std::expected<void, String> CheckArtGenPresetText(StringView text);
 
     /**
      * @brief The preset form of the Generate panel without ImGui: the fields of one preset, its params as overrides of the workflow's
@@ -74,7 +78,7 @@ namespace BECore {
         /// One override of a workflow input
         struct Param {
             String name;
-            Json value;
+            ArtGenInputValue value;
         };
 
         /// Takes @p preset as the saved state: its name, source and content
@@ -88,8 +92,9 @@ namespace BECore {
         /// The content now written to `<game>/artgen/presets/<name>.json`: it is the saved state, of the game
         void MarkSaved();
 
-        /// The preset file's document: the keys of the form on top of `_extra`, the keys of the file that the form does not know and keeps as they were
-        [[nodiscard]] Json ToJson() const;
+        /// The preset file's document as compact text with the keys in byte order: the keys of the form on top of `_extra`, the keys of the file that
+        /// the form does not know and keeps as they were
+        [[nodiscard]] String ToJsonText() const;
         /// The content differs from what it was loaded with, or it was never saved
         [[nodiscard]] bool IsDirty() const;
         [[nodiscard]] bool HasBase() const {
@@ -113,8 +118,8 @@ namespace BECore {
         void SetWorkflow(StringView workflow, const ArtGenWorkflow* described);
 
         /// The override of @p input, or null (the workflow's default applies)
-        [[nodiscard]] const Json* FindParam(StringView input) const;
-        void SetParam(StringView input, Json value);
+        [[nodiscard]] const ArtGenInputValue* FindParam(StringView input) const;
+        void SetParam(StringView input, ArtGenInputValue value);
         void ClearParam(StringView input);
         [[nodiscard]] const Vector<Param>& GetParams() const {
             return _params;
@@ -141,7 +146,7 @@ namespace BECore {
         void ClearReference();
         /// The file has a `reference` that does not read as one: kept as it is until it is replaced or removed
         [[nodiscard]] bool HasUnreadableReference() const {
-            return _extra.contains("reference");
+            return _extra.Contains("reference");
         }
 
         /// Call after an edit of a field: the dirty check is made again only then
@@ -157,23 +162,25 @@ namespace BECore {
         int32_t height = 0;
 
     private:
-        void FromJson(const Json& data);
+        /// Takes the preset object @p data (the text of a JSON object; anything else is an empty form)
+        void FromText(StringView data);
+        void FromView(JsonView data);
         /// Takes a valid `accept` object; false (nothing changed) for one that is not, which the caller keeps among the extra keys
-        bool ReadAccept(const Json& value);
+        bool ReadAccept(JsonView value);
         /// The same for `reference`
-        bool ReadReference(const Json& value);
+        bool ReadReference(JsonView value);
 
         String _workflow;
         Vector<Param> _params;
-        Json _extra = Json::object();  // keys of the file the form does not show, a malformed `accept` or `reference` among them
+        JsonMemberMap _extra;  // keys of the file the form does not show, a malformed `accept` or `reference` among them
         ArtGenImageSettings _accept;
         bool _acceptInFile = false;         // the loaded file had a valid `accept`, or the person set one
-        Json _acceptAsLoaded;               // its text, written back while the settings are as loaded, so an untouched file stays as it was
+        String _acceptAsLoaded;             // its text, written back while the settings are as loaded, so an untouched file stays as it was
         ArtGenImageSettings _acceptLoaded;  // the settings _acceptAsLoaded reads as
         Optional<ArtGenReference> _reference;
-        Json _referenceAsLoaded;                     // the file's own text of `reference` (a null weight, other keys), written back while _reference is as loaded
+        String _referenceAsLoaded;                   // the file's own text of `reference` (a null weight, other keys), written back while _reference is as loaded
         Optional<ArtGenReference> _referenceLoaded;  // what _referenceAsLoaded reads as
-        Json _base;                                  // the saved content; null for a new one
+        String _base;                                // the saved content as ToJsonText() wrote it; empty for a new one
         String _baseName;
         String _baseSource;
         uint64_t _revision = 0;

@@ -1,14 +1,19 @@
-#include <BECore/Control/Json.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/ReplayTestGame.h>
 #include <BECore/Time/Time.h>
+#include <Common/ControlTestSupport.h>
+#include <Common/ControlledCalls.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Games/GameControl.h>
 #include <Games/GameManager.h>
+#include <Games/GameText.h>
 #include <Games/ReplayFile.h>
 #include <Games/ReplayPlayer.h>
 #include <Games/SessionRecorder.h>
@@ -46,11 +51,6 @@ namespace BECore::Tests {
                 return *GameManager::GetInstance().GetActive()->Cast<ReplayTestGame>();
             }
 
-            static Json Params(StringView text) {
-                auto parsed = ParseJson(text);
-                return parsed ? std::move(*parsed) : Json();
-            }
-
             /// One frame of game time on the recorded game, the way an application loop would pass it
             static void Frame() {
                 CoreManager::GetTime().Advance(kFrameSeconds);
@@ -64,16 +64,16 @@ namespace BECore::Tests {
             /// reset, roll, arm, a wait of the lock, roll, set_state, roll: the arm / timer gap is in the file (6 entries)
             String RecordSession() {
                 EXPECT_TRUE(SessionRecorder::GetInstance().Start(_path.View(), *GameManager::GetInstance().GetActive(), "session").has_value());
-                EXPECT_TRUE(ControlledReset(Game(), Params(R"({"seed":21})")).has_value());
+                EXPECT_TRUE(ControlledReset(Game(), JsonDoc(R"({"seed":21})")).has_value());
                 Frame();
-                EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"roll"})")).has_value());
-                EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"arm"})")).has_value());
+                EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
+                EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"arm"})")).has_value());
                 for (int i = 0; i < kLockFrames; ++i) {
                     Frame();
                 }
-                EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"roll"})")).has_value());
-                EXPECT_TRUE(ControlledSetState(Game(), Params(R"({"rolls":[6,6]})")).has_value());
-                EXPECT_TRUE(ControlledAction(Game(), Params(R"({"type":"roll"})")).has_value());
+                EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
+                EXPECT_TRUE(ControlledSetState(Game(), JsonDoc(R"({"rolls":[6,6]})")).has_value());
+                EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
                 SessionRecorder::GetInstance().Stop();
                 return ReadRecording();
             }
@@ -103,8 +103,9 @@ namespace BECore::Tests {
 
     TEST_F(ReplayPlayerTest, ARecordedSessionReplaysToTheSameState) {
         const String text = RecordSession();
-        const Json recordedState = *Game().GetState();
-        ASSERT_EQ(recordedState["rolls"].size(), 3u);
+        const String recordedState = *StateText(Game());
+        const JsonDoc recorded(recordedState);
+        ASSERT_EQ(Require(FindParam(recorded, "rolls")).Size(), 3u);
 
         ReplayPlayer player;
         ASSERT_TRUE(player.Load(text, "ReplayTest").has_value());
@@ -112,9 +113,9 @@ namespace BECore::Tests {
         ReplayTestGame fresh;
         const ReplayStep result = Play(player, fresh);
 
-        EXPECT_TRUE(result.has_value()) << (result ? "" : DumpJson(ReplayMismatchJson(result.error())).c_str());
+        EXPECT_TRUE(result.has_value()) << (result ? "" : ReplayMismatchText(result.error()).c_str());
         EXPECT_TRUE(player.IsDone());
-        EXPECT_EQ(*fresh.GetState(), recordedState);
+        EXPECT_EQ(*StateText(fresh), recordedState);
     }
 
     TEST_F(ReplayPlayerTest, ThePlayerAnswersTheGapOfTheNextEntryAndIsDoneAtTheEnd) {
@@ -154,8 +155,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(parsed.has_value());
         ReplayEntry& roll = parsed->entries.at(1);
         ASSERT_TRUE(roll.outcome.has_value());
-        const int value = static_cast<int>(GetJsonInt(*roll.outcome, "value").value_or(0));
-        (*roll.outcome)["value"] = value % 6 + 1;
+        const JsonDoc original(StringView(roll.outcome->c_str(), roll.outcome->size()));
+        const int value = static_cast<int>(GetParamInt(original.Root(), "value").value_or(0));
+        roll.outcome = Format("{{\"value\":{}}}", value % 6 + 1);
         String edited = Format("{}\n", FormatReplayHeader(parsed->header));
         for (const ReplayEntry& entry : parsed->entries) {
             AppendFormat(edited, "{}\n", FormatReplayEntry(entry));
@@ -174,7 +176,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(mismatch.expected.has_value());
         ASSERT_TRUE(mismatch.actual.has_value());
         EXPECT_EQ(*mismatch.expected, *roll.outcome);
-        EXPECT_EQ(GetJsonInt(*mismatch.actual, "value"), value);
+        const JsonDoc actual(StringView(mismatch.actual->c_str(), mismatch.actual->size()));
+        EXPECT_EQ(GetParamInt(actual.Root(), "value"), value);
         EXPECT_FALSE(mismatch.error.has_value());
     }
 
@@ -190,15 +193,16 @@ namespace BECore::Tests {
         ReplayTestGame fresh;
 
         EXPECT_TRUE(Play(player, fresh).has_value());
-        EXPECT_EQ(fresh.GetState()->at("rolls").size(), 1u);
+        const JsonDoc state(*StateText(fresh));
+        EXPECT_EQ(Require(FindParam(state, "rolls")).Size(), 1u);
     }
 
     TEST_F(ReplayPlayerTest, AGameThatTakesAnotherStartIsStartDiffers) {
         // A game that drew its own seed for the reset: the file asks for 21, the game answers another one
         class StubbornGame : public ReplayTestGame {
         public:
-            std::expected<void, ControlError> Reset(const Json&) override {
-                return ReplayTestGame::Reset(Json::object());
+            std::expected<void, ControlError> Reset(JsonView) override {
+                return ReplayTestGame::Reset(JsonDoc("{}"));
             }
         };
         ReplayPlayer player;
@@ -214,8 +218,27 @@ namespace BECore::Tests {
         EXPECT_EQ(mismatch.entry.line, 2u);
         ASSERT_TRUE(mismatch.expected.has_value());
         ASSERT_TRUE(mismatch.actual.has_value());
-        EXPECT_EQ(*mismatch.expected, Params(R"({"seed":21})"));
+        EXPECT_EQ(*mismatch.expected, R"({"seed":21})");
         EXPECT_NE(*mismatch.actual, *mismatch.expected);
+    }
+
+    TEST_F(ReplayPlayerTest, AGameThatAcceptsAnActionWithoutAnOutcomeIsRefusedAsInternalError) {
+        class SilentGame : public ReplayTestGame {
+        public:
+            std::expected<void, ControlError> PerformAction(JsonView, JsonWriter&) override {
+                return {};
+            }
+        };
+        ReplayPlayer player;
+        ASSERT_TRUE(player.Load(RecordSession(), "ReplayTest").has_value());
+        SilentGame silent;
+
+        const ReplayStep result = Play(player, silent);
+
+        ASSERT_FALSE(result.has_value());
+        EXPECT_EQ(result.error().kind, ReplayMismatchKind::Refused);
+        ASSERT_TRUE(result.error().error.has_value());
+        EXPECT_EQ(result.error().error->code, String(ControlErrors::kInternalError));
     }
 
     TEST_F(ReplayPlayerTest, AResetTheGameRefusesIsRefused) {
@@ -270,18 +293,20 @@ namespace BECore::Tests {
         const ReplayStep result = Play(player, fresh, false);
         ASSERT_FALSE(result.has_value());
 
-        const Json answer = ReplayMismatchJson(result.error());
+        const JsonDoc parsed(ReplayMismatchText(result.error()));
+        ASSERT_TRUE(parsed.IsParsed());
+        const JsonView answer = parsed.Root();
 
-        EXPECT_EQ(GetJsonInt(answer, "index"), 3);
-        EXPECT_EQ(GetJsonInt(answer, "line"), 5);
-        EXPECT_EQ(GetJsonString(answer, "kind"), "refused");
-        const Json* entry = FindJsonMember(answer, "entry");
-        ASSERT_NE(entry, nullptr);
-        EXPECT_EQ(GetJsonString(*entry, "op"), "action");
-        const Json* error = FindJsonMember(answer, "error");
-        ASSERT_NE(error, nullptr);
-        EXPECT_EQ(GetJsonString(*error, "code"), "illegal_action");
-        EXPECT_EQ(FindJsonMember(answer, "expected"), nullptr);
+        EXPECT_EQ(IntOf(answer, "index"), 3);
+        EXPECT_EQ(IntOf(answer, "line"), 5);
+        EXPECT_EQ(StringOf(answer, "kind"), "refused");
+        const JsonView entry = MemberOf(answer, "entry");
+        ASSERT_TRUE(entry.IsObject());
+        EXPECT_EQ(StringOf(entry, "op"), "action");
+        const JsonView error = MemberOf(answer, "error");
+        ASSERT_TRUE(error.IsObject());
+        EXPECT_EQ(StringOf(error, "code"), "illegal_action");
+        EXPECT_FALSE(MemberOf(answer, "expected").IsValid());
     }
 
 }  // namespace BECore::Tests

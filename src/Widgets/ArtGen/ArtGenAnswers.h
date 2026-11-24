@@ -7,7 +7,7 @@
 
 namespace BECore {
 
-    // The answers of the `artgen_*` control methods, written by the generated `WriteJson` (`ControlCall::ReplyObject`). What stays a `Json` document by hand and why:
+    // The answers of the `artgen_*` control methods, written by the generated `WriteJson` (`ControlCall::ReplyObject`). What is written by hand and why:
     // src/Widgets/ArtGen/CLAUDE.md, "The contract". An empty `Optional` writes no member, so a member that is absent never means anything else.
 
     /// `artgen_progress`, `artgen_image`, `artgen_done` and `artgen_setup_report`: `stale` is true when the report is not for the run or the setup in work
@@ -49,8 +49,8 @@ namespace BECore {
         BE_REFLECT_FIELD Optional<String> state;
     };
 
-    /// The reference picture of a run or a set: the same keys and values as `ArtGenReferenceToJson` writes into a preset or a manifest file (a test holds them equal);
-    /// the file keeps its own writer: it is a `Json` that `ReadArtGenReference` parses back. `weight` is absent when unset, in both
+    /// The reference picture of a run or a set: the same keys and values as `WriteArtGenReference` writes into a preset or a manifest file (a test holds them equal);
+    /// the file keeps its own writer, which `ReadArtGenReference` reads back. `weight` is absent when unset, in both
     struct ArtGenReferenceAnswer {
         BE_CLASS(ArtGenReferenceAnswer)
 
@@ -82,7 +82,7 @@ namespace BECore {
         BE_REFLECT_FIELD int32_t y = 0;
     };
 
-    /// The `processing` of an image accept: the settings it was made with (`ArtGenImageSettingsToJson`'s keys) and the placement of the written
+    /// The `processing` of an image accept: the settings it was made with (`WriteArtGenImageSettings`'s keys) and the placement of the written
     /// picture (`crop`, `scale`, `size` as `[width, height]`, `frame`: `set` when the crop came from the frame of a set, else `sprite`). The files
     /// keep their writers (they read back what they wrote): a test holds the two equal
     struct ArtGenProcessingAnswer {

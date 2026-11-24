@@ -1,6 +1,5 @@
 #include "SessionRecorder.h"
 
-#include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Time/Time.h>
 #include <BECore/Utils/EngineVersion.h>
@@ -60,19 +59,24 @@ namespace BECore {
         return _entryCount;
     }
 
-    void SessionRecorder::ReportReset(const Json& startParams) {
-        Write(ReplayOp::Reset, startParams, nullptr);
+    void SessionRecorder::ReportReset(StringView startParamsText) {
+        if (!_recording) {
+            return;
+        }
+        // A text that does not tape is recorded as `{}`: the file keeps its shape and the replay then reports a start that differs
+        const bool parsed = _startTape.Parse(startParamsText).has_value();
+        Write(ReplayOp::Reset, parsed ? JsonView(_startTape, 0) : JsonView(), std::nullopt);
     }
 
-    void SessionRecorder::ReportAction(const Json& action, const Json& outcome) {
-        Write(ReplayOp::Action, action, &outcome);
+    void SessionRecorder::ReportAction(JsonView action, StringView outcomeText) {
+        Write(ReplayOp::Action, action, outcomeText);
     }
 
-    void SessionRecorder::ReportSetState(const Json& state) {
-        Write(ReplayOp::State, state, nullptr);
+    void SessionRecorder::ReportSetState(JsonView state) {
+        Write(ReplayOp::State, state, std::nullopt);
     }
 
-    void SessionRecorder::Write(ReplayOp op, const Json& params, const Json* outcome) {
+    void SessionRecorder::Write(ReplayOp op, JsonView params, Optional<StringView> outcomeText) {
         if (!_recording) {
             return;
         }
@@ -87,19 +91,14 @@ namespace BECore {
         const Time& time = CoreManager::GetTime();
         const uint64_t frame = time.GetFrameCount();
         const double seconds = time.GetTotalTime();
-        ReplayEntry entry;
-        entry.op = op;
-        entry.params = params.is_object() ? params : Json::object();
-        if (outcome != nullptr) {
-            entry.outcome = *outcome;
-        }
+        ReplayGap gap;
         // A clock that went back (a Time::Reset) is a gap of nothing, not a negative one
         if (_started && frame >= _lastFrame && seconds >= _lastSeconds) {
-            entry.gap = ReplayGap{frame - _lastFrame, frame == _lastFrame ? 0.0 : seconds - _lastSeconds};
+            gap = ReplayGap{frame - _lastFrame, frame == _lastFrame ? 0.0 : seconds - _lastSeconds};
         }
 
         _line.clear();
-        AppendReplayEntry(_line, entry);
+        AppendReplayEntry(_line, op, params, outcomeText, gap);
         _line.push_back('\n');
         if (!WriteLineAndFlush()) {
             Fail("an entry");

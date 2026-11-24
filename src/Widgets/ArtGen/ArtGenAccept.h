@@ -1,7 +1,6 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
-#include <BECore/Control/Json.h>
 #include <BECore/File/Path.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Resource/TextureLibrary.h>

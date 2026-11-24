@@ -2,7 +2,6 @@
 #include <BECore/Clipboard/ClipboardControl.h>
 #include <BECore/Clipboard/FakeClipboard.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Time/Time.h>
 #include <Common/ControlTestSupport.h>
@@ -14,10 +13,14 @@ namespace BECore::Tests {
 
     namespace {
 
-        Json TextParams(StringView text) {
-            Json params = Json::object();
-            params["text"] = ToStdString(text);
-            return params;
+        /// A `clipboard_set` request of @p text
+        String SetRequest(int64_t id, StringView text) {
+            String params;
+            JsonWriter writer(params);
+            writer.BeginObject();
+            writer.Member("text", text);
+            writer.EndObject();
+            return MakeRequestText(id, "clipboard_set", StringView(params.c_str(), params.size()));
         }
 
         constexpr int kFrameGuard = 1000;  // a loop that does not end would hang the test run
@@ -48,10 +51,7 @@ namespace BECore::Tests {
         }
 
         void Post(const String& text) {
-            service.Post(text, [this](String reply) {
-                auto parsed = ParseJson(reply);
-                responses.push_back(parsed ? std::move(*parsed) : Json());
-            });
+            service.Post(text, [this](String reply) { responses.emplace_back(StringView(reply.c_str(), reply.size())); });
         }
 
         /// The order of CoreManager::OnGameCycle: the clipboard answers, then the requests run, then the frame ends. Returns the frames it took
@@ -66,19 +66,16 @@ namespace BECore::Tests {
             return frames;
         }
 
-        const Json* ResultOf(size_t index) const {
-            return index < responses.size() ? FindJsonMember(responses[index], "result") : nullptr;
+        JsonView ResultOf(size_t index) const {
+            return index < responses.size() ? responses[index].Result() : JsonView();
         }
 
         String ErrorCode(size_t index) const {
-            if (index >= responses.size()) {
-                return {};
-            }
-            return StringOf(FindJsonMember(responses[index], "error"), "code");
+            return index < responses.size() ? responses[index].ErrorCode() : String();
         }
 
         ControlService service;
-        Vector<Json> responses;
+        Vector<ControlReply> responses;
 
     private:
         IntrusivePtr<FakeClipboard> _fake;
@@ -86,15 +83,15 @@ namespace BECore::Tests {
     };
 
     TEST_F(ClipboardControlTest, SetThenGetGivesTheTextBack) {
-        Post(MakeRequest(1, "clipboard_set", TextParams("room 4711")));
-        Post(MakeRequest(2, "clipboard_get"));
+        Post(SetRequest(1, "room 4711"));
+        Post(MakeRequestText(2, "clipboard_get"));
         RunFramesUntilAnswered(2);
 
         ASSERT_EQ(responses.size(), 2u);
-        ASSERT_NE(ResultOf(0), nullptr);
-        EXPECT_EQ(GetJsonBool(*ResultOf(0), "ok"), Optional<bool>(true));
+        ASSERT_TRUE(ResultOf(0).IsObject());
+        EXPECT_EQ(BoolOf(ResultOf(0), "ok"), Optional<bool>(true));
         EXPECT_EQ(Fake().Content(), "room 4711");
-        ASSERT_NE(ResultOf(1), nullptr);
+        ASSERT_TRUE(ResultOf(1).IsObject());
         EXPECT_EQ(StringOf(ResultOf(1), "status"), "ok");
         EXPECT_EQ(StringOf(ResultOf(1), "text"), "room 4711");
     }
@@ -105,20 +102,20 @@ namespace BECore::Tests {
             responses.clear();
             const String text(size, 'x');
             Fake().SetContent(text);
-            Post(MakeRequest(1, "clipboard_get"));
+            Post(MakeRequestText(1, "clipboard_get"));
             RunFramesUntilAnswered(1);
 
-            ASSERT_NE(ResultOf(0), nullptr) << size;
+            ASSERT_TRUE(ResultOf(0).IsObject()) << size;
             EXPECT_EQ(StringOf(ResultOf(0), "status"), "ok") << size;
             EXPECT_EQ(StringOf(ResultOf(0), "text"), text) << size;
         }
     }
 
     TEST_F(ClipboardControlTest, GetOnAnEmptyClipboardIsEmpty) {
-        Post(MakeRequest(1, "clipboard_get"));
+        Post(MakeRequestText(1, "clipboard_get"));
         RunFramesUntilAnswered(1);
 
-        ASSERT_NE(ResultOf(0), nullptr);
+        ASSERT_TRUE(ResultOf(0).IsObject());
         EXPECT_EQ(StringOf(ResultOf(0), "status"), "empty");
         EXPECT_EQ(StringOf(ResultOf(0), "text"), "");
     }
@@ -126,11 +123,11 @@ namespace BECore::Tests {
     TEST_F(ClipboardControlTest, GetWaitsForADeferredRead) {
         Fake().SetContent("slow");
         Fake().SetDeferred(5);
-        Post(MakeRequest(1, "clipboard_get"));
+        Post(MakeRequestText(1, "clipboard_get"));
         const int frames = RunFramesUntilAnswered(1);
 
         EXPECT_GT(frames, 5);
-        ASSERT_NE(ResultOf(0), nullptr);
+        ASSERT_TRUE(ResultOf(0).IsObject());
         EXPECT_EQ(StringOf(ResultOf(0), "status"), "ok");
         EXPECT_EQ(StringOf(ResultOf(0), "text"), "slow");
     }
@@ -138,29 +135,29 @@ namespace BECore::Tests {
     TEST_F(ClipboardControlTest, GetOfARefusedClipboardIsRefused) {
         Fake().SetContent("secret");
         Fake().SetRefuse(true);
-        Post(MakeRequest(1, "clipboard_get"));
+        Post(MakeRequestText(1, "clipboard_get"));
         RunFramesUntilAnswered(1);
 
-        ASSERT_NE(ResultOf(0), nullptr);
+        ASSERT_TRUE(ResultOf(0).IsObject());
         EXPECT_EQ(StringOf(ResultOf(0), "status"), "refused");
         EXPECT_EQ(StringOf(ResultOf(0), "text"), "");
     }
 
     TEST_F(ClipboardControlTest, WithNoBackendTheAnswerIsUnavailableAndSetIsNotOk) {
         CoreManager::GetClipboard().SetBackend({});
-        Post(MakeRequest(1, "clipboard_get"));
-        Post(MakeRequest(2, "clipboard_set", TextParams("x")));
+        Post(MakeRequestText(1, "clipboard_get"));
+        Post(SetRequest(2, "x"));
         RunFramesUntilAnswered(2);
 
         ASSERT_EQ(responses.size(), 2u);
         EXPECT_EQ(StringOf(ResultOf(0), "status"), "unavailable");
-        ASSERT_NE(ResultOf(1), nullptr);
-        EXPECT_EQ(GetJsonBool(*ResultOf(1), "ok"), Optional<bool>(false));
+        ASSERT_TRUE(ResultOf(1).IsObject());
+        EXPECT_EQ(BoolOf(ResultOf(1), "ok"), Optional<bool>(false));
     }
 
     TEST_F(ClipboardControlTest, AGetThatNeverArrivesFailsWithATimeout) {
         Fake().SetDeferred(static_cast<int>(kMaxClipboardWaitFrames) * 2);
-        Post(MakeRequest(1, "clipboard_get"));
+        Post(MakeRequestText(1, "clipboard_get"));
         const int frames = RunFramesUntilAnswered(1);
 
         EXPECT_EQ(ErrorCode(0), "clipboard_timeout");
@@ -168,10 +165,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(ClipboardControlTest, SetWithoutAStringTextIsInvalidParams) {
-        Json notAString = Json::object();
-        notAString["text"] = 5;
-        Post(MakeRequest(1, "clipboard_set"));
-        Post(MakeRequest(2, "clipboard_set", notAString));
+        Post(MakeRequestText(1, "clipboard_set"));
+        Post(MakeRequestText(2, "clipboard_set", R"({"text":5})"));
         RunFramesUntilAnswered(2);
 
         ASSERT_EQ(responses.size(), 2u);
@@ -183,7 +178,7 @@ namespace BECore::Tests {
     TEST_F(ClipboardControlTest, PasteGivesOnePasteEventBeforeTheAnswer) {
         PasteRecorder recorder;
         Fake().SetContent("ABC");
-        Post(MakeRequest(1, "clipboard_paste"));
+        Post(MakeRequestText(1, "clipboard_paste"));
         RunFramesUntilAnswered(1);
 
         ASSERT_EQ(responses.size(), 1u);
@@ -193,7 +188,7 @@ namespace BECore::Tests {
 
     TEST_F(ClipboardControlTest, PasteOfAnEmptyClipboardEmitsNothing) {
         PasteRecorder recorder;
-        Post(MakeRequest(1, "clipboard_paste"));
+        Post(MakeRequestText(1, "clipboard_paste"));
         RunFramesUntilAnswered(1);
 
         ASSERT_EQ(responses.size(), 1u);
@@ -207,7 +202,7 @@ namespace BECore::Tests {
         service.SetPause(&pause);
         Fake().SetContent("manual");
         Fake().SetDeferred(2);
-        Post(MakeRequest(1, "clipboard_get"));
+        Post(MakeRequestText(1, "clipboard_get"));
 
         // The loop of the application: the idle cycle drains, a frame runs only while a deferred call is due
         for (int pass = 0; pass < kFrameGuard && responses.empty(); ++pass) {

@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlBuiltinAnswers.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlLog.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlWindow.h>
 #include <BECore/Control/ControlWindowStatus.h>
@@ -15,26 +16,37 @@
 
 namespace BECore {
 
-    std::expected<uint32_t, ControlError> ReadControlFrames(const Json& params, StringView key, uint32_t fallback) {
-        if (FindJsonMember(params, key) == nullptr) {
-            return fallback;
+    namespace {
+
+        /// The one body of both overloads: @p present tells an absent key (the fallback) from a present one of the wrong type
+        std::expected<uint32_t, ControlError> CheckFrames(bool present, Optional<int64_t> frames, StringView key, uint32_t fallback) {
+            if (!present) {
+                return fallback;
+            }
+            if (!frames || *frames < 1 || *frames > kMaxStepFrames) {
+                return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'{}' has to be an integer from 1 to {}", key, kMaxStepFrames)));
+            }
+            return static_cast<uint32_t>(*frames);
         }
-        const auto frames = GetJsonInt(params, key);
-        if (!frames || *frames < 1 || *frames > kMaxStepFrames) {
-            return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'{}' has to be an integer from 1 to {}", key, kMaxStepFrames)));
+
+        std::expected<double, ControlError> CheckFrameSeconds(bool present, Optional<double> seconds) {
+            if (!present) {
+                return kDefaultStepSeconds;
+            }
+            if (!seconds || !(*seconds >= 0.0 && *seconds <= Time::kMaxFrameTime)) {  // written so that NaN fails too
+                return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'dt' has to be a number of seconds from 0 to {}", Time::kMaxFrameTime)));
+            }
+            return *seconds;
         }
-        return static_cast<uint32_t>(*frames);
+
+    }  // namespace
+
+    std::expected<uint32_t, ControlError> ReadControlFrames(JsonView params, StringView key, uint32_t fallback) {
+        return CheckFrames(FindParam(params, key).has_value(), GetParamInt(params, key), key, fallback);
     }
 
-    std::expected<double, ControlError> ReadControlFrameSeconds(const Json& params) {
-        if (FindJsonMember(params, "dt") == nullptr) {
-            return kDefaultStepSeconds;
-        }
-        const auto seconds = GetJsonNumber(params, "dt");
-        if (!seconds || !(*seconds >= 0.0 && *seconds <= Time::kMaxFrameTime)) {  // written so that NaN fails too
-            return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'dt' has to be a number of seconds from 0 to {}", Time::kMaxFrameTime)));
-        }
-        return *seconds;
+    std::expected<double, ControlError> ReadControlFrameSeconds(JsonView params) {
+        return CheckFrameSeconds(FindParam(params, "dt").has_value(), GetParamNumber(params, "dt"));
     }
 
     namespace {
@@ -147,11 +159,11 @@ namespace BECore {
         }
 
         /// The `level` filter of log_since and log_subscribe: "warning" (the default) or "error"
-        std::expected<LogLevel, ControlError> ReadLogLevel(const Json& params) {
-            if (FindJsonMember(params, "level") == nullptr) {
+        std::expected<LogLevel, ControlError> ReadLogLevel(JsonView params) {
+            if (!FindParam(params, "level")) {
                 return LogLevel::Warning;
             }
-            const auto name = GetJsonString(params, "level");
+            const auto name = GetParamString(params, "level");
             if (name && *name == LogLevelNames::warning.View()) {
                 return LogLevel::Warning;
             }
@@ -189,7 +201,7 @@ namespace BECore {
         }
 
         void HandleLogSince(ControlCall& call, const ControlService& service) {
-            const auto mark = GetJsonInt(call.Params(), "mark");
+            const auto mark = GetParamInt(call.Params(), "mark");
             if (!mark || *mark < 0) {
                 call.Fail(ControlErrors::kInvalidParams, "'mark' has to be an integer, 0 or more (the mark of log_mark)");
                 return;
@@ -225,7 +237,7 @@ namespace BECore {
         }
 
         void HandleLogSubscribe(ControlCall& call, ControlService& service) {
-            const auto enabled = GetJsonBool(call.Params(), "enabled");
+            const auto enabled = GetParamBool(call.Params(), "enabled");
             if (!enabled) {
                 call.Fail(ControlErrors::kInvalidParams, "'enabled' has to be a boolean");
                 return;
@@ -287,7 +299,7 @@ namespace BECore {
         /// One call of a `batch`, checked before anything runs
         struct BatchEntry {
             String method;
-            Json params;
+            JsonView params;  // into the tape of the batch call itself, which lives until the batch is answered
         };
 
         /// The state of a `batch` that is running. It lives in the continuation of the call that waits for frames, not in the handler, which has returned by then
@@ -313,32 +325,32 @@ namespace BECore {
         };
 
         /// The calls of a batch as the client sent them, or the error to answer with. Nothing is built from a bad shape
-        std::expected<BatchState, ControlError> ReadBatch(const Json& params) {
-            const Json* calls = FindJsonMember(params, "calls");
-            if (calls == nullptr || !calls->is_array() || calls->empty() || calls->size() > kMaxBatchCalls) {
+        std::expected<BatchState, ControlError> ReadBatch(JsonView params) {
+            const Optional<JsonView> calls = FindParam(params, "calls");
+            if (!calls || !calls->IsArray() || calls->Size() == 0 || calls->Size() > kMaxBatchCalls) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'calls' has to be an array of 1 to {} calls", kMaxBatchCalls)));
             }
 
             BatchState state;
-            if (FindJsonMember(params, "continueOnError") != nullptr) {
-                const auto continueOnError = GetJsonBool(params, "continueOnError");
+            if (FindParam(params, "continueOnError")) {
+                const auto continueOnError = GetParamBool(params, "continueOnError");
                 if (!continueOnError) {
                     return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'continueOnError' has to be a boolean"));
                 }
                 state.continueOnError = *continueOnError;
             }
 
-            state.entries.reserve(calls->size());
-            for (const Json& call : *calls) {
-                auto method = GetJsonString(call, "method");
-                if (!call.is_object() || !method || method->empty()) {
+            state.entries.reserve(calls->Size());
+            for (const JsonView call : calls->Items()) {
+                auto method = GetParamString(call, "method");
+                if (!call.IsObject() || !method || method->empty()) {
                     return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "every call of 'calls' has to be an object with a non-empty string 'method'"));
                 }
-                const Json* callParams = FindJsonMember(call, "params");
-                if (callParams != nullptr && !callParams->is_null() && !callParams->is_object()) {
+                const Optional<JsonView> callParams = FindParam(call, "params");
+                if (callParams && !callParams->IsNull() && !callParams->IsObject()) {
                     return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'params' of a call has to be an object"));
                 }
-                state.entries.push_back(BatchEntry{std::move(*method), callParams != nullptr && callParams->is_object() ? *callParams : Json::object()});
+                state.entries.push_back(BatchEntry{std::move(*method), callParams && callParams->IsObject() ? *callParams : EmptyParamsView()});
             }
             return state;
         }
@@ -370,7 +382,7 @@ namespace BECore {
                 ControlBatchResult& row = answer.results.emplace_back();
                 row.ok = done.has_value();
                 if (done) {
-                    row.result = JsonPayload::Borrowed(*done);
+                    row.result = JsonPayload::Text(*done);
                 } else {
                     ControlErrorAnswer error;
                     error.code = TextView(done.error().code);
@@ -395,7 +407,7 @@ namespace BECore {
 
         void HandleQuit(ControlCall& call) {
             // The answer first: it is queued for the transport before the application starts to stop
-            call.Reply(Json::object());
+            call.ReplyEmpty();
             ApplicationEvents::QuitEvent::Emit();
         }
 

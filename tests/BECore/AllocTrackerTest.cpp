@@ -1,10 +1,10 @@
-#include <BECore/Control/Json.h>
 #include <BECore/Memory/MemTag.h>
 #include <BECore/Profiler/Alloc/AllocRouting.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
 #include <Common/Require.h>
 #include <Common/TempPath.h>
+#include <Common/TraceDoc.h>
 #include <chrono>
 #include <cstdio>
 #include <gtest/gtest.h>
@@ -456,15 +456,14 @@ namespace BECore::Tests {
             ::operator delete(::operator new(kBlock));
         }
         Profiler::SetBackend(nullptr);
-        const auto parsed = ParseJson(recorder.WriteJson());
-        ASSERT_TRUE(parsed.has_value());
+        const TraceDoc trace(recorder.WriteJson());
         bool found = false;
-        for (const Json& event : Require(FindJsonMember(*parsed, "traceEvents"))) {
-            if (GetJsonString(event, "ph") == String("E")) {
-                const Json* args = FindJsonMember(event, "args");
-                ASSERT_NE(args, nullptr);
-                EXPECT_EQ(GetJsonInt(*args, "allocs"), 1);
-                EXPECT_EQ(GetJsonInt(*args, "bytes"), static_cast<int64_t>(kBlock));
+        for (const JsonView event : trace) {
+            if (StringOf(event, "ph") == "E") {
+                const JsonView args = MemberOf(event, "args");
+                ASSERT_TRUE(args.IsObject());
+                EXPECT_EQ(IntOf(args, "allocs"), 1);
+                EXPECT_EQ(IntOf(args, "bytes"), static_cast<int64_t>(kBlock));
                 found = true;
             }
         }
@@ -483,19 +482,16 @@ namespace BECore::Tests {
             bigger.reserve(kBlock);
         }
         ChromeTraceBackend recorder;
-        const auto parsed = ParseJson(recorder.WriteJson());
-        ASSERT_TRUE(parsed.has_value());
-        const Json* other = FindJsonMember(*parsed, "otherData");
-        ASSERT_NE(other, nullptr);
-        const Json* rows = FindJsonMember(*other, "allocSizes");
-        ASSERT_NE(rows, nullptr);
-        const Json* traced = nullptr;
-        for (const Json& row : *rows) {
-            if (GetJsonString(row, "zone") == String("TraceSizesZone")) {
-                traced = &row;
+        const TraceDoc trace(recorder.WriteJson());
+        const JsonView rows = MemberOf(MemberOf(trace.Root(), "otherData"), "allocSizes");
+        ASSERT_TRUE(rows.IsArray());
+        JsonView traced;
+        for (const JsonView row : rows.Items()) {
+            if (StringOf(row, "zone") == "TraceSizesZone") {
+                traced = row;
             }
         }
-        ASSERT_NE(traced, nullptr);
+        ASSERT_TRUE(traced.IsObject());
 
         const AllocSizeStats* expected = nullptr;
         const Vector<AllocSizeStats> sizes = AllocTracker::GetSizeStats();
@@ -505,20 +501,20 @@ namespace BECore::Tests {
             }
         }
         ASSERT_NE(expected, nullptr);
-        EXPECT_EQ(GetJsonInt(*traced, "allocs"), static_cast<int64_t>(expected->allocs));
+        EXPECT_EQ(IntOf(traced, "allocs"), static_cast<int64_t>(expected->allocs));
         EXPECT_EQ(expected->allocs, 3u);
-        const Json* buckets = FindJsonMember(*traced, "buckets");
-        ASSERT_NE(buckets, nullptr);
+        const JsonView buckets = MemberOf(traced, "buckets");
+        ASSERT_TRUE(buckets.IsArray());
         size_t nonEmpty = 0;
         for (uint32_t bucket = 0; bucket < kSizeBuckets; ++bucket) {
             nonEmpty += expected->buckets[bucket] != 0 ? 1 : 0;
         }
-        ASSERT_EQ(buckets->size(), nonEmpty);
+        ASSERT_EQ(buckets.Size(), nonEmpty);
         size_t index = 0;
         for (uint32_t bucket = 0; bucket < kSizeBuckets; ++bucket) {
             if (expected->buckets[bucket] != 0) {
-                EXPECT_EQ(GetJsonInt((*buckets)[index], "upTo"), static_cast<int64_t>(SizeBucketBound(bucket)));
-                EXPECT_EQ(GetJsonInt((*buckets)[index], "allocs"), static_cast<int64_t>(expected->buckets[bucket]));
+                EXPECT_EQ(IntOf(ItemAt(buckets, index), "upTo"), static_cast<int64_t>(SizeBucketBound(bucket)));
+                EXPECT_EQ(IntOf(ItemAt(buckets, index), "allocs"), static_cast<int64_t>(expected->buckets[bucket]));
                 ++index;
             }
         }
@@ -772,17 +768,14 @@ namespace BECore::Tests {
             values.reserve(kInts);
         }
         Profiler::SetBackend(nullptr);
-        const auto parsed = ParseJson(recorder.WriteJson());
-        ASSERT_TRUE(parsed.has_value());
-        const Json* other = FindJsonMember(*parsed, "otherData");
-        ASSERT_NE(other, nullptr);
-        const Json* rows = FindJsonMember(*other, "allocNames");
-        ASSERT_NE(rows, nullptr);
+        const TraceDoc trace(recorder.WriteJson());
+        const JsonView rows = MemberOf(MemberOf(trace.Root(), "otherData"), "allocNames");
+        ASSERT_TRUE(rows.IsArray());
         bool found = false;
-        for (const Json& row : *rows) {
-            if (GetJsonString(row, "zone") == String("TraceNameZone") && GetJsonString(row, "name") == String("TraceNamed")) {
-                EXPECT_EQ(GetJsonInt(row, "allocs"), 1);
-                EXPECT_EQ(GetJsonInt(row, "bytes"), static_cast<int64_t>(kInts * sizeof(int)));
+        for (const JsonView row : rows.Items()) {
+            if (StringOf(row, "zone") == "TraceNameZone" && StringOf(row, "name") == "TraceNamed") {
+                EXPECT_EQ(IntOf(row, "allocs"), 1);
+                EXPECT_EQ(IntOf(row, "bytes"), static_cast<int64_t>(kInts * sizeof(int)));
                 found = true;
             }
         }

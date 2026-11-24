@@ -1,5 +1,7 @@
 #include "ArtGenSet.h"
 
+#include <BECore/Control/ControlParams.h>
+#include <BECore/Control/JsonViewOps.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <cstdio>
 
@@ -61,31 +63,36 @@ namespace BECore {
 
         using Where = String;
 
-        std::expected<String, String> RequireString(const Json& object, StringView key, const Where& where) {
-            if (auto value = GetJsonString(object, key)) {
+        std::expected<String, String> RequireString(JsonView object, StringView key, const Where& where) {
+            if (auto value = GetParamString(object, key)) {
                 return *value;
             }
             return std::unexpected(Format("{}: '{}' must be a string", where, key));
         }
 
-        std::expected<int64_t, String> RequireInt(const Json& object, StringView key, const Where& where) {
-            if (auto value = GetJsonInt(object, key)) {
+        std::expected<int64_t, String> RequireInt(JsonView object, StringView key, const Where& where) {
+            if (auto value = GetParamInt(object, key)) {
                 return *value;
             }
             return std::unexpected(Format("{}: '{}' must be an integer", where, key));
         }
 
+        /// The member @p key, unless it is absent or null
+        Optional<JsonView> FindGiven(JsonView object, StringView key) {
+            const Optional<JsonView> member = FindParam(object, key);
+            return member && !member->IsNull() ? member : Optional<JsonView>();
+        }
+
         /// A member that may be absent or null, but when present must be a string
-        std::expected<String, String> OptionalString(const Json& object, StringView key, const Where& where) {
-            const Json* member = FindJsonMember(object, key);
-            if (member == nullptr || member->is_null()) {
+        std::expected<String, String> OptionalString(JsonView object, StringView key, const Where& where) {
+            if (!FindGiven(object, key)) {
                 return String();
             }
             return RequireString(object, key, where);
         }
 
-        std::expected<ArtGenSetVariant, String> ReadVariant(const Json& item, const Where& where) {
-            if (!item.is_object()) {
+        std::expected<ArtGenSetVariant, String> ReadVariant(JsonView item, const Where& where) {
+            if (!item.IsObject()) {
                 return std::unexpected(Format("{}: must be an object", where));
             }
             ArtGenSetVariant variant;
@@ -121,13 +128,13 @@ namespace BECore {
         }
 
         /// The `more` of a job: absent or null is none
-        std::expected<Optional<ArtGenSetMore>, String> ReadMore(const Json& item, const Where& where) {
-            const Json* member = FindJsonMember(item, "more");
-            if (member == nullptr || member->is_null()) {
+        std::expected<Optional<ArtGenSetMore>, String> ReadMore(JsonView item, const Where& where) {
+            const Optional<JsonView> member = FindGiven(item, "more");
+            if (!member) {
                 return Optional<ArtGenSetMore>();
             }
             const Where moreWhere = Format("{}.more", where);
-            if (!member->is_object()) {
+            if (!member->IsObject()) {
                 return std::unexpected(Format("{}: must be an object or null", moreWhere));
             }
             auto seed = RequireInt(*member, "seed", moreWhere);
@@ -147,8 +154,8 @@ namespace BECore {
             return Optional<ArtGenSetMore>(ArtGenSetMore{*seed, static_cast<int32_t>(*count)});
         }
 
-        std::expected<ArtGenSetJob, String> ReadJob(const Json& item, const Where& where) {
-            if (!item.is_object()) {
+        std::expected<ArtGenSetJob, String> ReadJob(JsonView item, const Where& where) {
+            if (!item.IsObject()) {
                 return std::unexpected(Format("{}: must be an object", where));
             }
             ArtGenSetJob job;
@@ -180,13 +187,13 @@ namespace BECore {
             job.state = *parsedState;
             job.error = std::move(*error);
 
-            const Json* variants = FindJsonMember(item, "variants");
-            if (variants != nullptr && !variants->is_null()) {
-                if (!variants->is_array()) {
+            if (const Optional<JsonView> variants = FindGiven(item, "variants")) {
+                if (!variants->IsArray()) {
                     return std::unexpected(Format("{}: 'variants' must be an array", where));
                 }
-                for (size_t index = 0; index < variants->size(); ++index) {
-                    auto variant = ReadVariant((*variants)[index], Format("{}.variants[{}]", where, index));
+                size_t index = 0;
+                for (const JsonView entry : variants->Items()) {
+                    auto variant = ReadVariant(entry, Format("{}.variants[{}]", where, index++));
                     if (!variant) {
                         return std::unexpected(variant.error());
                     }
@@ -194,9 +201,8 @@ namespace BECore {
                 }
             }
 
-            const Json* pick = FindJsonMember(item, "pick");
-            if (pick != nullptr && !pick->is_null()) {
-                const auto seed = GetJsonInt(item, "pick");
+            if (FindGiven(item, "pick")) {
+                const auto seed = GetParamInt(item, "pick");
                 if (!seed) {
                     return std::unexpected(Format("{}: 'pick' must be an integer or null", where));
                 }
@@ -206,9 +212,8 @@ namespace BECore {
                 job.pick = *seed;
             }
 
-            const Json* accepted = FindJsonMember(item, "accepted");
-            if (accepted != nullptr && !accepted->is_null()) {
-                if (!accepted->is_object()) {
+            if (const Optional<JsonView> accepted = FindGiven(item, "accepted")) {
+                if (!accepted->IsObject()) {
                     return std::unexpected(Format("{}: 'accepted' must be an object or null", where));
                 }
                 const Where acceptedWhere = Format("{}.accepted", where);
@@ -222,8 +227,8 @@ namespace BECore {
                 }
                 // A manifest of before Keep existed has no key: its rows were accepted with no alternatives in play, so they read as kept
                 bool kept = true;
-                if (const Json* keptMember = FindJsonMember(*accepted, "kept"); keptMember != nullptr) {
-                    const auto parsed = GetJsonBool(*accepted, "kept");
+                if (FindParam(*accepted, "kept")) {
+                    const auto parsed = GetParamBool(*accepted, "kept");
                     if (!parsed) {
                         return std::unexpected(Format("{}: 'kept' must be a boolean", acceptedWhere));
                     }
@@ -240,21 +245,21 @@ namespace BECore {
             return job;
         }
 
-        std::expected<ArtGenSetProcessing, String> ReadProcessing(const Json& item) {
+        std::expected<ArtGenSetProcessing, String> ReadProcessing(JsonView item) {
             const Where where = "manifest.processing";
-            if (!item.is_object()) {
+            if (!item.IsObject()) {
                 return std::unexpected(Format("{}: must be an object or null", where));
             }
-            const Json* settings = FindJsonMember(item, "settings");
-            const Json* frame = FindJsonMember(item, "frame");
-            if (settings == nullptr || frame == nullptr) {
+            const Optional<JsonView> settings = FindParam(item, "settings");
+            const Optional<JsonView> frame = FindParam(item, "frame");
+            if (!settings || !frame) {
                 return std::unexpected(Format("{}: needs 'settings' and 'frame'", where));
             }
-            auto readSettings = ArtGenImageSettingsFromJson(*settings);
+            auto readSettings = ReadArtGenImageSettings(*settings);
             if (!readSettings) {
                 return std::unexpected(Format("{}.settings: {}", where, readSettings.error()));
             }
-            auto readFrame = ArtGenImageFrameFromJson(*frame);
+            auto readFrame = ReadArtGenImageFrame(*frame);
             if (!readFrame) {
                 return std::unexpected(Format("{}.frame: {}", where, readFrame.error()));
             }
@@ -482,74 +487,103 @@ namespace BECore {
         return Format("{}-{:04}{:02}{:02}-{:02}{:02}{:02}{}", prefix, civil.year, civil.month, civil.day, civil.hour, civil.minute, civil.second, attemptSuffix);
     }
 
-    Json ArtGenSetToJson(const ArtGenSet& set) {
-        Json manifest = Json::object();
-        manifest["manifest"] = kArtGenManifestFormat;
-        manifest["set"] = MakeJsonString(set.name);
-        manifest["created"] = MakeJsonString(set.created);
-        manifest["kind"] = MakeJsonString(set.kind);
-        manifest["preset"] = MakeJsonString(set.preset);
-        manifest["presetData"] = set.presetData.is_object() ? set.presetData : Json(nullptr);
-        manifest["count"] = set.count;
-        manifest["seed"] = set.seed;
-
-        Json jobs = Json::array();
-        for (const ArtGenSetJob& job : set.jobs) {
-            Json row = Json::object();
-            row["name"] = MakeJsonString(job.name);
-            row["subject"] = MakeJsonString(job.subject);
-            row["state"] = MakeJsonString(EnumUtils<ArtGenSetJobState>::ToString(job.state));
-            row["error"] = MakeJsonString(job.error);
-            Json variants = Json::array();
-            for (const ArtGenSetVariant& variant : job.variants) {
-                Json entry = Json::object();
-                entry["seed"] = variant.seed;
-                entry["file"] = MakeJsonString(variant.file);
-                entry["provenance"] = MakeJsonString(variant.provenance);
-                entry["kind"] = MakeJsonString(variant.kind);
-                variants.push_back(std::move(entry));
-            }
-            row["variants"] = std::move(variants);
-            row["pick"] = job.pick ? Json(*job.pick) : Json(nullptr);
-            if (job.accepted) {
-                Json accepted = Json::object();
-                accepted["as"] = MakeJsonString(job.accepted->as);
-                accepted["date"] = MakeJsonString(job.accepted->date);
-                accepted["kept"] = job.accepted->kept;
-                row["accepted"] = std::move(accepted);
-            } else {
-                row["accepted"] = Json(nullptr);
-            }
-            if (job.more) {
-                Json more = Json::object();
-                more["seed"] = job.more->seed;
-                more["count"] = job.more->count;
-                row["more"] = std::move(more);
-            } else {
-                row["more"] = Json(nullptr);
-            }
-            jobs.push_back(std::move(row));
-        }
-        manifest["jobs"] = std::move(jobs);
-        if (set.processing) {
-            Json processing = Json::object();
-            processing["settings"] = ArtGenImageSettingsToJson(set.processing->settings);
-            processing["frame"] = ArtGenImageFrameToJson(set.processing->frame);
-            manifest["processing"] = std::move(processing);
+    void WriteArtGenSet(JsonWriter& writer, const ArtGenSet& set, Optional<StringView> state) {
+        writer.BeginObject();
+        writer.Key("atlas");
+        if (set.atlas.empty()) {
+            writer.Null();
         } else {
-            manifest["processing"] = Json(nullptr);
+            writer.Value(StringView(set.atlas));
         }
-        manifest["reference"] = set.reference ? ArtGenReferenceToJson(*set.reference) : Json(nullptr);
-        manifest["atlas"] = set.atlas.empty() ? Json(nullptr) : MakeJsonString(set.atlas);
-        return manifest;
+        writer.Member("count", set.count);
+        writer.Member("created", StringView(set.created));
+        writer.Key("jobs");
+        writer.BeginArray();
+        for (const ArtGenSetJob& job : set.jobs) {
+            writer.BeginObject();
+            writer.Key("accepted");
+            if (job.accepted) {
+                writer.BeginObject();
+                writer.Member("as", StringView(job.accepted->as));
+                writer.Member("date", StringView(job.accepted->date));
+                writer.Member("kept", job.accepted->kept);
+                writer.EndObject();
+            } else {
+                writer.Null();
+            }
+            writer.Member("error", StringView(job.error));
+            writer.Key("more");
+            if (job.more) {
+                writer.BeginObject();
+                writer.Member("count", job.more->count);
+                writer.Member("seed", job.more->seed);
+                writer.EndObject();
+            } else {
+                writer.Null();
+            }
+            writer.Member("name", StringView(job.name));
+            writer.Key("pick");
+            if (job.pick) {
+                writer.Value(*job.pick);
+            } else {
+                writer.Null();
+            }
+            writer.Member("state", EnumUtils<ArtGenSetJobState>::ToString(job.state));
+            writer.Member("subject", StringView(job.subject));
+            writer.Key("variants");
+            writer.BeginArray();
+            for (const ArtGenSetVariant& variant : job.variants) {
+                writer.BeginObject();
+                writer.Member("file", StringView(variant.file));
+                writer.Member("kind", StringView(variant.kind));
+                writer.Member("provenance", StringView(variant.provenance));
+                writer.Member("seed", variant.seed);
+                writer.EndObject();
+            }
+            writer.EndArray();
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.Member("kind", StringView(set.kind));
+        writer.Member("manifest", kArtGenManifestFormat);
+        writer.Member("preset", StringView(set.preset));
+        writer.Key("presetData");
+        if (set.presetData.empty()) {
+            writer.Null();
+        } else {
+            writer.Raw(StringView(set.presetData));
+        }
+        writer.Key("processing");
+        if (set.processing) {
+            writer.BeginObject();
+            writer.Key("frame");
+            WriteArtGenImageFrame(writer, set.processing->frame);
+            writer.Key("settings");
+            WriteArtGenImageSettings(writer, set.processing->settings);
+            writer.EndObject();
+        } else {
+            writer.Null();
+        }
+        writer.Key("reference");
+        if (set.reference) {
+            WriteArtGenReference(writer, *set.reference);
+        } else {
+            writer.Null();
+        }
+        writer.Member("seed", set.seed);
+        writer.Member("set", StringView(set.name));
+        if (state) {
+            writer.Member("state", *state);
+        }
+        writer.EndObject();
     }
 
-    std::expected<ArtGenSet, String> ArtGenSetFromJson(const Json& manifest) {
+    std::expected<ArtGenSet, String> ReadArtGenSet(JsonView manifest) {
         const Where top = "manifest";
-        if (!manifest.is_object()) {
+        if (!manifest.IsObject()) {
             return std::unexpected(String("manifest: not a JSON object"));
         }
-        const auto format = GetJsonInt(manifest, "manifest");
+        const auto format = GetParamInt(manifest, "manifest");
         if (!format) {
             return std::unexpected(String("manifest: 'manifest' (the format number) must be an integer"));
         }
@@ -598,23 +632,24 @@ namespace BECore {
         set.count = static_cast<int32_t>(*count);
         set.seed = *seed;
 
-        const Json* presetData = FindJsonMember(manifest, "presetData");
-        if (presetData != nullptr && !presetData->is_null()) {
-            if (!presetData->is_object()) {
+        if (const Optional<JsonView> presetData = FindGiven(manifest, "presetData")) {
+            if (!presetData->IsObject()) {
                 return std::unexpected(String("manifest: 'presetData' must be an object or null"));
             }
-            set.presetData = *presetData;
+            JsonWriter writer(set.presetData);
+            WriteJsonSorted(writer, *presetData);
         }
 
-        const Json* jobs = FindJsonMember(manifest, "jobs");
-        if (jobs == nullptr || !jobs->is_array()) {
+        const Optional<JsonView> jobs = FindParam(manifest, "jobs");
+        if (!jobs || !jobs->IsArray()) {
             return std::unexpected(String("manifest: 'jobs' must be an array"));
         }
-        if (jobs->empty() || jobs->size() > static_cast<size_t>(kMaxSetJobs)) {
+        if (jobs->Size() == 0 || jobs->Size() > static_cast<size_t>(kMaxSetJobs)) {
             return std::unexpected(Format("manifest: 'jobs' must hold 1 to {} jobs", kMaxSetJobs));
         }
-        for (size_t index = 0; index < jobs->size(); ++index) {
-            auto job = ReadJob((*jobs)[index], Format("jobs[{}]", index));
+        size_t index = 0;
+        for (const JsonView entry : jobs->Items()) {
+            auto job = ReadJob(entry, Format("jobs[{}]", index));
             if (!job) {
                 return std::unexpected(job.error());
             }
@@ -622,10 +657,10 @@ namespace BECore {
                 return std::unexpected(Format("jobs[{}]: the name '{}' is used twice", index, job->name));
             }
             set.jobs.push_back(std::move(*job));
+            ++index;
         }
 
-        const Json* processing = FindJsonMember(manifest, "processing");
-        if (processing != nullptr && !processing->is_null()) {
+        if (const Optional<JsonView> processing = FindGiven(manifest, "processing")) {
             auto read = ReadProcessing(*processing);
             if (!read) {
                 return std::unexpected(read.error());
@@ -633,8 +668,7 @@ namespace BECore {
             set.processing = *read;
         }
 
-        const Json* reference = FindJsonMember(manifest, "reference");
-        if (reference != nullptr && !reference->is_null()) {
+        if (const Optional<JsonView> reference = FindGiven(manifest, "reference")) {
             auto read = ReadArtGenReference(*reference);
             if (!read) {
                 return std::unexpected(Format("manifest: {}", read.error()));
@@ -643,8 +677,7 @@ namespace BECore {
         }
 
         // Absent in a manifest from before atlases (the format number stays 1: the key is additive)
-        const Json* atlas = FindJsonMember(manifest, "atlas");
-        if (atlas != nullptr && !atlas->is_null()) {
+        if (FindGiven(manifest, "atlas")) {
             auto group = RequireString(manifest, "atlas", top);
             if (!group) {
                 return std::unexpected(group.error());

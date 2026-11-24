@@ -1,4 +1,6 @@
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Rooms/WireJudge.h>
+#include <Common/JsonDoc.h>
 #include <Fuzz/FuzzRoomInput.h>
 #include <Fuzz/FuzzTargets.h>
 #include <RoomServer/DemoCardGame.h>
@@ -140,18 +142,18 @@ namespace BECore::Fuzz {
             void Judge(ConnectionId id, const String& text) {
                 ConnectionModel& connection = _connections[id];
 
-                const auto parsed = ParseJson(text);
-                FUZZ_CHECK(parsed.has_value() && parsed->is_object());
-                FUZZ_CHECK(GetJsonInt(*parsed, "v") == Optional<int64_t>(kRoomProtocolVersion));
-                const auto type = GetJsonString(*parsed, "type");
+                const Tests::JsonDoc parsed(text);
+                FUZZ_CHECK(parsed.IsParsed() && parsed.Root().IsObject());
+                FUZZ_CHECK(GetParamInt(parsed.Root(), "v") == Optional<int64_t>(kRoomProtocolVersion));
+                const auto type = GetParamString(parsed.Root(), "type");
                 FUZZ_CHECK(type.has_value() && !type->empty());
 
                 if (*type == RoomMessageTypes::kJoined) {
-                    OnJoined(connection, *parsed);
+                    OnJoined(connection, parsed.Root());
                 } else if (*type == RoomMessageTypes::kView) {
-                    OnView(connection, *parsed);
+                    OnView(connection, parsed.Root());
                 } else if (*type == RoomMessageTypes::kRooms) {
-                    OnRooms(connection, *parsed);
+                    OnRooms(connection, parsed.Root());
                 } else if (*type == RoomMessageTypes::kLeft) {
                     connection.room.clear();
                     connection.joinedSeat = -1;
@@ -173,11 +175,11 @@ namespace BECore::Fuzz {
                 }
             }
 
-            void OnJoined(ConnectionModel& connection, const Json& message) {
-                const auto room = GetJsonString(message, "room");
-                const auto token = GetJsonString(message, "token");
-                const auto player = GetJsonInt(message, "player");
-                const auto seat = GetJsonInt(message, "seat");
+            void OnJoined(ConnectionModel& connection, JsonView message) {
+                const auto room = GetParamString(message, "room");
+                const auto token = GetParamString(message, "token");
+                const auto player = GetParamInt(message, "player");
+                const auto seat = GetParamInt(message, "seat");
                 FUZZ_CHECK(room && token && player && seat);
                 FUZZ_CHECK(IsWellFormedToken(*token));
                 FUZZ_CHECK(*seat >= 0 && *seat < DemoCardGame::kSeatCount);
@@ -208,29 +210,29 @@ namespace BECore::Fuzz {
 
             /// A list goes to a connection in no room, holds only rooms that their host made public (a private code is told to its members and nobody else), and
             /// nothing the hub could not offer: the cap, a free seat, a lobby (the demo game lists no started room)
-            void OnRooms(const ConnectionModel& connection, const Json& message) {
+            void OnRooms(const ConnectionModel& connection, JsonView message) {
                 FUZZ_CHECK(connection.room.empty());
-                FUZZ_CHECK(GetJsonString(message, "game") == Optional<String>("demo"));
-                const Json* rooms = FindJsonMember(message, "rooms");
-                FUZZ_CHECK(rooms != nullptr && rooms->is_array() && rooms->size() <= RoomLimits::kMaxListedRooms);
+                FUZZ_CHECK(GetParamString(message, "game") == Optional<String>("demo"));
+                const Optional<JsonView> rooms = FindParam(message, "rooms");
+                FUZZ_CHECK(rooms && rooms->IsArray() && rooms->Size() <= RoomLimits::kMaxListedRooms);
                 HashSet<String> seen;
-                for (const Json& entry : *rooms) {
-                    const auto code = GetJsonString(entry, "room");
-                    const auto taken = GetJsonInt(entry, "taken");
-                    const auto seats = GetJsonInt(entry, "seats");
+                for (const JsonView entry : rooms->Items()) {
+                    const auto code = GetParamString(entry, "room");
+                    const auto taken = GetParamInt(entry, "taken");
+                    const auto seats = GetParamInt(entry, "seats");
                     FUZZ_CHECK(code && taken && seats);
                     FUZZ_CHECK(_publicRooms.find(*code) != _publicRooms.end());
                     FUZZ_CHECK(_hub.HasRoom(*code));
                     FUZZ_CHECK(seen.insert(*code).second);
                     FUZZ_CHECK(*seats == DemoCardGame::kSeatCount);
                     FUZZ_CHECK(*taken >= 0 && *taken < *seats);
-                    FUZZ_CHECK(GetJsonString(entry, "host").has_value());
-                    FUZZ_CHECK(GetJsonBool(entry, "started") == Optional<bool>(false));
+                    FUZZ_CHECK(GetParamString(entry, "host").has_value());
+                    FUZZ_CHECK(GetParamBool(entry, "started") == Optional<bool>(false));
                 }
             }
 
-            void OnView(ConnectionModel& connection, const Json& message) {
-                const auto seat = GetJsonInt(message, "seat");
+            void OnView(ConnectionModel& connection, JsonView message) {
+                const auto seat = GetParamInt(message, "seat");
                 FUZZ_CHECK(seat && *seat >= 0 && *seat < DemoCardGame::kSeatCount);
                 const int viewSeat = static_cast<int>(*seat);
                 // The seat of a member moves only by its own `choose_seat`, and not at all once the game has started

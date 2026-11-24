@@ -76,7 +76,7 @@ namespace BECore {
               Connected,       // the transport opened
               Joined,          // `joined`: a room was created or entered
               LobbyChanged,    // GetLobby() changed
-              ViewChanged,     // GetView() / GetActions() changed
+              ViewChanged,     // GetViewText() / GetActionsText() changed
               Error,           // `error` from the server, or a bad server message: code, message, ref
               Left,            // `left`: no longer in the room, code is the reason
               ConnectionLost,  // the connection of a room ended: willRetry says whether the client will bring it back (else Closed follows)
@@ -116,7 +116,7 @@ namespace BECore {
      * @brief The client of a room server: hosts or joins a room, follows the lobby and the view, sends the player's actions.
      *
      * A game component owns one and calls Poll() once per frame **on the main thread**, then DrainEvents(); no callback ever comes from
-     * a network thread, so nothing is locked. The client keeps `view` and `actions` as the server sent them (Json) and reads no game: the
+     * a network thread, so nothing is locked. The client keeps `view` and `actions` as compact JSON text and reads no game: the
      * server is authoritative and the client only tells the game when something changed. The commands are asked of the server and their
      * outcome comes as events (`Joined`, `Error`, ...); a command returns an error itself only when it cannot be sent at all.
      *
@@ -141,10 +141,10 @@ namespace BECore {
         RoomClient(const RoomClient&) = delete;
         RoomClient& operator=(const RoomClient&) = delete;
 
-        /// Opens a connection to @p url and creates a room of @p game with the player @p name; @p options go to the game's Start() (an
-        /// object). @p isPublic asks the server to list the room for ListRooms() (a server that does not know the member keeps the room
+        /// Opens a connection to @p url and creates a room of @p game with the player @p name; @p optionsJson, the text of one JSON object, goes to the game's
+        /// Start() (`invalid_params` for any other text, before any connection). @p isPublic asks the server to list the room for ListRooms() (a server that does not know the member keeps the room
         /// private). `wrong_state` unless Disconnected, or Connected to the same @p url with no room and no request pending
-        [[nodiscard]] std::expected<void, ControlError> Host(StringView url, StringView game, StringView name, const Json& options = Json::object(), bool isPublic = false);
+        [[nodiscard]] std::expected<void, ControlError> Host(StringView url, StringView game, StringView name, StringView optionsJson = "{}", bool isPublic = false);
 
         /// Opens a connection to @p url and enters the room @p code (any case) as a new member named @p name. Same states as Host().
         /// A code that cannot be a room code is `unknown_room` at once, without a connection
@@ -164,8 +164,9 @@ namespace BECore {
         [[nodiscard]] std::expected<void, ControlError> Start();
 
         /// Sends @p action to the game, stamped with the version of the last `view` (the server answers `stale_action` when the game moved
-        /// on). `wrong_state` without a room and a view. The client never sends an action again by itself
-        [[nodiscard]] std::expected<void, ControlError> SendAction(const Json& action);
+        /// on). @p actionJson is the text of one JSON object (`invalid_params` otherwise). `wrong_state` without a room and a view. The client never
+        /// sends an action again by itself
+        [[nodiscard]] std::expected<void, ControlError> SendAction(StringView actionJson);
 
         /// Asks to leave the room; the connection stays open and `left` follows. The session is forgotten at once. In a room only; while
         /// Reconnecting there is no connection to ask on, so it is Disconnect() plus the forgotten session
@@ -234,12 +235,12 @@ namespace BECore {
             return _hasView;
         }
 
-        /// What the game says this seat sees and may send, as the server sent it; empty objects before the first `view`
-        [[nodiscard]] const Json& GetView() const {
+        /// What the game says this seat sees and may send, as the compact JSON text of the server's value; `{}` and `[]` before the first `view`
+        [[nodiscard]] const String& GetViewText() const {
             return _view;
         }
 
-        [[nodiscard]] const Json& GetActions() const {
+        [[nodiscard]] const String& GetActionsText() const {
             return _actions;
         }
 
@@ -343,8 +344,10 @@ namespace BECore {
         LobbySnapshot _lobby;
         RoomListMessage _roomList;
         bool _hasView = false;
-        Json _view = Json::object();
-        Json _actions = Json::array();
+        /// Reads the server's texts and checks the documents the caller passes in; nothing keeps a view of it
+        JsonTape _tape;
+        String _view = "{}";
+        String _actions = "[]";
         uint64_t _viewVersion = 0;
         bool _finished = false;
         RoomSession _session;

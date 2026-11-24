@@ -59,7 +59,7 @@ namespace BECore::Tests {
     TEST(UiRoomScratchTest, AListOfAHubWithManyPublicRoomsKeepsItsCandidatesOffTheHeap) {
         HubHarness harness;
         for (size_t i = 0; i < kPublicRooms; ++i) {
-            harness.Create(harness.Connect(), "Host", "fake", Json::object(), true);
+            harness.Create(harness.Connect(), "Host", "fake", "{}", true);
         }
         const ConnectionId warmUp = harness.Connect();
         harness.List(warmUp);  // the first list may grow the thread's scratch arena

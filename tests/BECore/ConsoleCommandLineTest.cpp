@@ -16,7 +16,7 @@ namespace BECore::Tests {
             if (!command) {
                 return Format("error: {}", command.error());
             }
-            return Format("{} {}", command->method, DumpJson(command->params));
+            return Format("{} {}", command->method, command->params);
         }
 
         char KindLetter(ConsoleOutputKind kind) {
@@ -49,30 +49,39 @@ namespace BECore::Tests {
         class ConsoleCommandLineTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                service.RegisterHandler("ping", [](ControlCall& call) { call.Reply(Json::object()); });
-                service.RegisterHandler("status", [](ControlCall& call) { call.Reply(Json::object()); });
-                service.RegisterHandler("step", [](ControlCall& call) { call.Reply(Json::object()); });
+                service.RegisterHandler("ping", [](ControlCall& call) { call.ReplyEmpty(); });
+                service.RegisterHandler("status", [](ControlCall& call) { call.ReplyEmpty(); });
+                service.RegisterHandler("step", [](ControlCall& call) { call.ReplyEmpty(); });
                 service.DescribeMethod("step", {"Runs frames", {{"frames", "integer", false, ""}, {"dt", "number", false, ""}}});
                 service.RegisterHandler("echo", [this](ControlCall& call) {
                     ++echoCalls;
-                    lastParams = DumpJson(call.Params());
-                    Json result = Json::object();
-                    result["params"] = call.Params();
-                    call.Reply(std::move(result));
+                    const StringView params = call.Params().Raw();
+                    lastParams = String(params.data(), params.size());
+                    call.Reply([params](JsonWriter& writer) {
+                        writer.BeginObject();
+                        writer.Key("params");
+                        writer.Raw(params);
+                        writer.EndObject();
+                    });
                 });
                 service.DescribeMethod("echo", {"Answers its parameters", {{"from", "string", true, ""}, {"to", "string", true, ""}, {"flag", "boolean", false, ""}, {"format", "string", false, ""}}});
                 service.RegisterHandler("fail", [](ControlCall& call) { call.Fail(ControlErrors::kInvalidParams, "bad frames"); });
                 service.RegisterHandler("later", [](ControlCall& call) {
                     call.DeferFrames(1, [](ControlCall& done) {
-                        Json result = Json::object();
-                        result["done"] = true;
-                        done.Reply(std::move(result));
+                        done.Reply([](JsonWriter& writer) {
+                            writer.BeginObject();
+                            writer.Member("done", true);
+                            writer.EndObject();
+                        });
                     });
                 });
                 service.RegisterHandler("big", [](ControlCall& call) {
-                    Json result = Json::object();
-                    result["text"] = std::string(10000, 'a');  //-NoStd: nlohmann takes std::string
-                    call.Reply(std::move(result));
+                    const String text(10000, 'a');
+                    call.Reply([&text](JsonWriter& writer) {
+                        writer.BeginObject();
+                        writer.Member("text", StringView(text));
+                        writer.EndObject();
+                    });
                 });
             }
 
@@ -115,6 +124,23 @@ namespace BECore::Tests {
         EXPECT_EQ(Parsed("echo a=1.5 b=-2 c="), "echo {\"a\":1.5,\"b\":-2,\"c\":\"\"}");
     }
 
+    TEST_F(ConsoleCommandLineTest, TheParametersAreTheCompactTextWithSortedKeys) {
+        EXPECT_EQ(Parsed("echo {\"b\":{\"z\":1,\"a\":2},\"a\":[3,{\"y\":1,\"x\":2}]}"), "echo {\"a\":[3,{\"x\":2,\"y\":1}],\"b\":{\"a\":2,\"z\":1}}");
+        EXPECT_EQ(Parsed("echo a={\"y\": 1, \"x\": 2} b=1"), "echo {\"a\":{\"x\":2,\"y\":1},\"b\":1}");
+        EXPECT_EQ(Parsed("echo {\"\\u0061b\":1}"), "echo {\"ab\":1}");
+    }
+
+    TEST_F(ConsoleCommandLineTest, OfRepeatedKeysOfTheJsonFormTheFirstCounts) {
+        EXPECT_EQ(Parsed("echo {\"a\":1,\"a\":2}"), "echo {\"a\":1}");
+    }
+
+    TEST_F(ConsoleCommandLineTest, ANumberBeyondADoubleIsRefusedInTheJsonFormAndIsTextInTheWordForm) {
+        EXPECT_EQ(Parsed("echo {\"a\":1e999}"), "error: the parameters are not valid JSON: number overflow");
+        EXPECT_EQ(Parsed("echo {\"a\":[1,{\"b\":-1e999}]}"), "error: the parameters are not valid JSON: number overflow");
+        EXPECT_EQ(Parsed("echo a=1e999"), "echo {\"a\":\"1e999\"}");
+        EXPECT_EQ(Parsed("echo a=[1e999]"), "echo {\"a\":\"[1e999]\"}");
+    }
+
     TEST_F(ConsoleCommandLineTest, AnythingElseThanAnObjectIsRefused) {
         EXPECT_TRUE(Contains(Parsed("echo [1,2]"), "error:"));
         EXPECT_TRUE(Contains(Parsed("echo \"text\""), "error:"));
@@ -133,7 +159,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(Parsed("echo a=1}"), "unbalanced"));
         EXPECT_TRUE(Contains(Parsed("echo a=[1}"), "unbalanced"));
         EXPECT_TRUE(Contains(Parsed("echo a=\"x"), "not closed"));
-        EXPECT_TRUE(Contains(Parsed("echo a=null"), "null"));
+        EXPECT_TRUE(Contains(Parsed("echo a=null"), "cannot be null"));
         EXPECT_TRUE(Contains(Parsed("echo a b=1"), "key=value"));
         EXPECT_TRUE(Contains(Parsed("echo \"a b\"=1"), "error:"));
     }

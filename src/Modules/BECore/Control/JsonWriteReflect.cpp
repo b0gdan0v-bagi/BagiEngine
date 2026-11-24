@@ -1,7 +1,9 @@
 #include "JsonWriteReflect.h"
 
-#include <BECore/Control/Json.h>
-#include <BECore/Control/JsonSerializer.h>
+#include <BECore/Control/JsonStreamSerializer.h>
+#include <BECore/Control/JsonTape.h>
+#include <BECore/Control/JsonView.h>
+#include <BECore/Control/JsonViewOps.h>
 
 namespace BECore::JsonWrite {
 
@@ -37,28 +39,53 @@ namespace BECore::JsonWrite {
         ++_next;
     }
 
+    namespace {
+
+        /// Runs @p save into a `JsonStreamSerializer` over @p text and tapes the document; false (and the failure of @p w) when it does not tape.
+        /// The stream keeps the members in write order and the first of a repeated name; `WriteJsonSorted` then puts them in byte order.
+        bool SaveAndTape(JsonWriter& w, FunctionRef<void(ISerializer&)> save, String& text, JsonTape& tape) {
+            JsonWriter scratch(text);
+            JsonStreamSerializer serializer(scratch);
+            save(serializer);
+            serializer.Finish();
+            if (scratch.IsComplete() && tape.Parse(text).has_value()) {
+                return true;
+            }
+            w.Fail(MakeControlError(ControlErrors::kInternalError, "A serialized value did not make a JSON document"));
+            return false;
+        }
+
+    }  // namespace
+
+    // The bridge for what has no native writer: a scratch String and a tape are made on every call, so it is never a hot path (the native
+    // writers are); a type that has to be fast gets a `WriteJson` of its own.
     void WriteSerializedMember(JsonWriter& w, StringView key, FunctionRef<void(ISerializer&)> save) {
         if (!w.IsValid()) {
             return;
         }
-        JsonSerializer serializer;
-        save(serializer);
-        const Json root = serializer.Take();
-        const Json* member = FindJsonMember(root, key);
-        if (member == nullptr) {
+        String text;
+        JsonTape tape;
+        if (!SaveAndTape(w, save, text, tape)) {
+            return;
+        }
+        const Optional<JsonView> member = JsonView(tape, 0).Find(key);
+        if (!member.has_value()) {
             return;
         }
         w.Key(key);
-        WriteJson(w, *member);
+        WriteJsonSorted(w, *member);
     }
 
     void WriteSerializedObject(JsonWriter& w, FunctionRef<void(ISerializer&)> serialize) {
         if (!w.IsValid()) {
             return;
         }
-        JsonSerializer serializer;
-        serialize(serializer);
-        WriteJson(w, serializer.Take());
+        String text;
+        JsonTape tape;
+        if (!SaveAndTape(w, serialize, text, tape)) {
+            return;
+        }
+        WriteJsonSorted(w, JsonView(tape, 0));
     }
 
 }  // namespace BECore::JsonWrite

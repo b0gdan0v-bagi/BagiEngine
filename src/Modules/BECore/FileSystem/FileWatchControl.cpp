@@ -1,8 +1,8 @@
 #include "FileWatchControl.h"
 
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/FileSystem/FileWatchAnswers.h>
 #include <BECore/FileSystem/FileWatcher.h>
 
@@ -39,20 +39,21 @@ namespace BECore {
         }
 
         /// The `paths` of a request into @p paths; false when it is not a list of strings. @p present tells whether it was given
-        bool ReadPaths(const Json& params, Vector<String>& paths, bool& present) {
-            const Json* member = FindJsonMember(params, "paths");
-            present = member != nullptr;
-            if (member == nullptr) {
+        bool ReadPaths(JsonView params, Vector<String>& paths, bool& present) {
+            const Optional<JsonView> member = FindParam(params, "paths");
+            present = member.has_value();
+            if (!member) {
                 return true;
             }
-            if (!member->is_array()) {
+            if (!member->IsArray()) {
                 return false;
             }
-            for (const Json& item : *member) {
-                if (!item.is_string()) {
+            for (const JsonView item : member->Items()) {
+                String path;
+                if (!item.ReadText(path)) {
                     return false;
                 }
-                paths.push_back(FromStdString(item.get_ref<const std::string&>()));  //-NoStd: nlohmann's own string type, read once at the edge
+                paths.push_back(std::move(path));
             }
             return true;
         }

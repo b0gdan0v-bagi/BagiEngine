@@ -1,6 +1,6 @@
 #include "JsonWriter.h"
 
-#include <nlohmann/json.hpp>
+#include <BECore/Control/JsonDoubleText.h>
 
 namespace BECore {
 
@@ -8,8 +8,6 @@ namespace BECore {
 
         constexpr size_t kIntegerTextBytes = 24;
         constexpr size_t kFloatTextBytes = 32;
-        // nlohmann's dump_float buffer; the text of a double is at most 25 characters
-        constexpr size_t kDoubleTextBytes = 64;
         constexpr char kHexDigits[] = "0123456789abcdef";
         constexpr StringView kReplacement = "\xEF\xBF\xBD";
         constexpr uint8_t kMinPrintable = 0x20;
@@ -18,9 +16,10 @@ namespace BECore {
         constexpr uint8_t kUtf8Reject = 1;
 
         // clang-format off
-        /// The UTF-8 decoder of `nlohmann::detail::serializer::decode` (Bjoern Hoehrmann's DFA, MIT): 256 byte classes, then the transitions
-        /// of every state. The replacement of broken sequences below follows `dump_escaped` of the same file step by step, so the number of
-        /// U+FFFD for each kind of broken sequence is nlohmann's
+        /// The UTF-8 decoder of nlohmann's `serializer::decode`: Copyright (c) 2008-2009 Bjoern Hoehrmann <bjoern@hoehrmann.de>, MIT (the licence
+        /// text is in the header of JsonDoubleText.cpp), http://bjoern.hoehrmann.de/utf-8/decoder/dfa/. 256 byte classes, then the transitions
+        /// of every state. The replacement of broken sequences below follows the decoder's states step by step, so the number of U+FFFD
+        /// for each kind of broken sequence is fixed (the tests pin it)
         constexpr Array<uint8_t, 400> kUtf8Dfa = {{
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -318,10 +317,8 @@ namespace BECore {
         if (!std::isfinite(value)) {
             _out.append("null");
         } else {
-            // The routine of nlohmann's dump (Grisu2). It is not always the shortest text of std::to_chars, and the bytes have to be nlohmann's
-            Array<char, kDoubleTextBytes> text{};
-            const char* end = nlohmann::detail::to_chars(text.data(), text.data() + text.size(), value);
-            _out.append(text.data(), static_cast<size_t>(end - text.data()));
+            Array<char, kMaxDoubleTextBytes> text{};
+            _out.append(text.data(), WriteDoubleText(text.data(), value));
         }
         EndValue();
     }
@@ -335,7 +332,7 @@ namespace BECore {
             WriteDouble(value);
             return;
         }
-        // The shortest text that reads back to the same float, taken as a double, as JsonSerializer does: the double of 0.1f is 0.10000000149011612
+        // The shortest text that reads back to the same float, taken as a double, as the serializers do: the double of 0.1f is 0.10000000149011612
         Array<char, kFloatTextBytes> text{};
         const auto written = std::to_chars(text.data(), text.data() + text.size(), value);
         double shortest = static_cast<double>(value);

@@ -1,11 +1,14 @@
 #include "GamePanelModel.h"
 
 #include <BECore/Control/JsonDeserializer.h>
-#include <BECore/Control/JsonSerializer.h>
+#include <BECore/Control/JsonStreamSerializer.h>
+#include <BECore/Control/JsonTape.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/Reflection/MethodCall.h>
 #include <BECore/Reflection/TypeInfo.h>
 #include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Reflection/TypedRef.h>
+#include <Games/GameText.h>
 #include <Games/IControllableGame.h>
 #include <Games/IGame.h>
 #include <Widgets/Console/ConsoleCommandLine.h>
@@ -37,43 +40,62 @@ namespace BECore {
             return false;
         }
 
-        String DumpIndented(const Json& value) {
-            return DumpJson(value, kStateIndent);
-        }
-
         String FormatError(const ControlError& error) {
             return Format("{}: {}", error.code, error.message);
         }
 
-        /// A value of `key=value`: a string without blanks as itself, anything else as JSON (what ParseConsoleParams reads back)
-        void AppendValue(String& out, const Json& value) {
-            if (value.is_string()) {
-                const auto& text = value.get_ref<const Json::string_t&>();
-                if (!text.empty() && text.find_first_of(" \t\"{}[]=") == Json::string_t::npos && !ParseJson(StringView(text.data(), text.size()))) {
-                    out.append(text.data(), text.size());
+        constexpr StringView kKeyType = "type";
+        constexpr StringView kKeyResult = "result";
+        constexpr StringView kBareStopChars = " \t\"{}[]=";
+
+        /// A value of `key=value`: a string without blanks as itself, anything else as its text (what ParseConsoleParams reads back)
+        void AppendValue(String& out, JsonView value) {
+            if (value.IsString()) {
+                String text;
+                value.ReadText(text);
+                JsonTape probe;
+                if (!text.empty() && StringView(text).find_first_of(kBareStopChars) == StringView::npos && !probe.Parse(StringView(text))) {
+                    out += text;
                     return;
                 }
             }
-            out += DumpJson(value);
+            const StringView raw = value.Raw();
+            out.append(raw.data(), raw.size());
         }
+
+        struct LabelMember {
+            String key;
+            JsonView value;
+            size_t order = 0;  ///< the place in the document: of equal keys the first counts
+        };
 
     }  // namespace
 
-    String FormatGameActionLabel(const Json& action) {
-        const Json* type = FindJsonMember(action, "type");
-        if (type == nullptr || !type->is_string()) {
-            return DumpJson(action);
+    String FormatGameActionLabel(JsonView action) {
+        const Optional<JsonView> typeView = action.Find(kKeyType);
+        String label;
+        if (!typeView || !typeView->ReadText(label)) {
+            const StringView raw = action.Raw();
+            return String(raw.data(), raw.size());
         }
-        const auto& typeText = type->get_ref<const Json::string_t&>();
-        String label(typeText.data(), typeText.size());
-        for (auto it = action.begin(); it != action.end(); ++it) {
-            if (it.key() == "type") {
-                continue;
+        // The DOM kept its keys sorted; a rebuild is on a state change only, never per frame
+        Vector<LabelMember> members;
+        for (const JsonMember member : action.Members()) {
+            LabelMember entry{String(), member.value, members.size()};
+            member.key.ReadText(entry.key);
+            if (entry.key != kKeyType) {
+                members.push_back(std::move(entry));
+            }
+        }
+        eastl::sort(members.begin(), members.end(), [](const LabelMember& a, const LabelMember& b) { return a.key != b.key ? a.key < b.key : a.order < b.order; });
+        for (size_t i = 0; i < members.size(); ++i) {
+            if (i > 0 && members[i].key == members[i - 1].key) {
+                continue;  // of equal keys the first counts
             }
             label += ' ';
-            label.append(it.key().data(), it.key().size());
+            label += members[i].key;
             label += '=';
-            AppendValue(label, it.value());
+            AppendValue(label, members[i].value);
         }
         return label;
     }
@@ -105,16 +127,21 @@ namespace BECore {
         _methods.clear();
 
         if (_controllable != nullptr) {
-            if (auto state = _controllable->GetState()) {
-                _stateText = DumpIndented(*state);
-            } else {
-                _stateText = FormatError(state.error());
+            JsonWriter stateWriter(_stateText, kStateIndent);
+            auto written = _controllable->WriteState(stateWriter);
+            if (!written || !stateWriter.IsComplete()) {
+                _stateText = written ? String("internal_error: the game wrote no complete state") : FormatError(written.error());
             }
-            if (auto actions = _controllable->GetActions(); actions && actions->is_array()) {
-                _actions.reserve(actions->size());
-                for (Json& action : *actions) {
-                    String label = FormatGameActionLabel(action);
-                    _actions.push_back({std::move(label), std::move(action)});
+            // A rebuild runs when the state version moved, so a tape of its own is no cost per frame
+            if (const auto actionsText = ActionsText(*_controllable)) {
+                JsonTape tape;
+                if (tape.Parse(StringView(*actionsText))) {
+                    const JsonView actions(tape, 0);
+                    _actions.reserve(actions.Size());
+                    for (const JsonView action : actions.Items()) {
+                        const StringView raw = action.Raw();
+                        _actions.push_back({FormatGameActionLabel(action), String(raw.data(), raw.size())});
+                    }
                 }
             }
         }
@@ -182,10 +209,10 @@ namespace BECore {
             return;
         }
         // A copy: the action list is rebuilt when the version moves, which the call itself may cause on the next Sync
-        const Json action = _actions[index].action;
-        auto outcome = _controllable->PerformAction(action);
+        const String action = _actions[index].action;
+        const auto outcome = PerformActionText(*_controllable, action);
         if (outcome) {
-            SetResult(outcome->is_null() ? String(kOk) : DumpJson(*outcome), false);
+            SetResult(*outcome == "null" ? String(kOk) : *outcome, false);
         } else {
             SetResult(FormatError(outcome.error()), true);
         }
@@ -193,7 +220,7 @@ namespace BECore {
 
     void GamePanelModel::Reset() {
         if (_controllable != nullptr) {
-            auto reset = _controllable->Reset(Json::object());
+            auto reset = ResetText(*_controllable);
             if (reset) {
                 SetResult(String(kOk), false);
             } else {
@@ -217,16 +244,27 @@ namespace BECore {
             return;
         }
         const TypeRegistry& registry = TypeRegistry::GetInstance();
-        JsonDeserializer reader(*params);
-        JsonSerializer writer;
+        JsonDeserializer reader;
+        reader.Load(StringView(*params));
+        String resultText;
+        JsonWriter resultWriter(resultText);
+        JsonStreamSerializer writer(resultWriter);
         const auto called = CallMethod(TypedRef::Of(*_game, registry), _methods[index].name, reader, writer, registry);
         if (!called) {
             SetResult(Format("{}: {}", EnumUtils<CallStatus>::ToString(called.error().status), called.error().message), true);
             return;
         }
-        const Json written = writer.Take();
-        const Json* result = FindJsonMember(written, "result");
-        SetResult(result != nullptr ? DumpJson(*result) : String(kOk), false);
+        writer.Finish();
+
+        // The result is the member `result` of the written object, which a method that returns nothing does not write
+        JsonTape resultTape;
+        if (!resultWriter.IsComplete() || !resultTape.Parse(resultText)) {
+            SetResult(String("internal_error: the result of the method cannot be written"), true);
+            return;
+        }
+        const Optional<JsonView> result = JsonView(resultTape, 0).Find(kKeyResult);
+        const StringView shown = result ? result->Raw() : kOk;
+        SetResult(String(shown.data(), shown.size()), false);
     }
 
 }  // namespace BECore

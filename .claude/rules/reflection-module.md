@@ -184,7 +184,7 @@ A base class that has no derived class in the scanned directories registers itse
 | `Is<T>()` / `Cast<T>()` | Runtime type checks (use instead of `dynamic_cast`) |
 | `ForEachFieldStatic(obj, func)` | Iterate reflected fields (mutable and const) |
 | `Serialize(ISerializer&) const` / `Deserialize(IDeserializer&)` | Write / read |
-| `WriteJson(JsonWriter&) const`, `WriteJsonMembers(w, outer) const` | The object `Serialize` saves into a `JsonSerializer`, written straight into a `JsonWriter` as the same bytes (`Control/JsonWriteReflect.h`); `WriteJsonMembers` is its members without the braces, merged by key with the classes of the chain |
+| `WriteJson(JsonWriter&) const`, `WriteJsonMembers(w, outer) const` | The object `Serialize` saves (the shapes of `JsonStreamSerializer`, keys sorted), written straight into a `JsonWriter` (`Control/JsonWriteReflect.h`); `WriteJsonMembers` is its members without the braces, merged by key with the classes of the chain |
 | `AcceptPropertyVisitor(IPropertyVisitor&)` | In-place editing |
 
 ## Extension Points

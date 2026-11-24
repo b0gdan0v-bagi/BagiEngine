@@ -12,8 +12,7 @@ namespace BECore::Stress {
      * The adapter drives the StressState that StressGame owns, handed over by reference (there is no model in a scene). A change of the
      * scene calls @p onSceneChanged, so the game switches the active scene (a test hands a counter instead of a scene manager).
      *
-     * GetState() / GetActions() and WriteState() / WriteActions() give the same document; the writing forms are what get_state and list_actions
-     * use and allocate nothing once the caller's text has grown.
+     * WriteState() and WriteActions() allocate nothing once the caller's text has grown.
      *
      * State: {"scene", "count", "language", "maxCount", "scenes": ["sprites", "entities", "ui"]}, the names as the flags spell them.
      *
@@ -33,12 +32,10 @@ namespace BECore::Stress {
     public:
         StressGameControl(StressState& state, MoveOnlyFunction<void()> onSceneChanged);
 
-        [[nodiscard]] std::expected<Json, ControlError> GetState() const override;
-        [[nodiscard]] std::expected<Json, ControlError> GetActions() const override;
         [[nodiscard]] std::expected<void, ControlError> WriteState(JsonWriter& writer) const override;
         [[nodiscard]] std::expected<void, ControlError> WriteActions(JsonWriter& writer) const override;
-        std::expected<Json, ControlError> PerformAction(const Json& action) override;
-        std::expected<void, ControlError> Reset(const Json& options) override;
+        std::expected<void, ControlError> PerformAction(JsonView action, JsonWriter& outcome) override;
+        std::expected<void, ControlError> Reset(JsonView options) override;
         [[nodiscard]] uint64_t GetStateVersion() const override;
 
     private:

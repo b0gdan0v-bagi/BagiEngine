@@ -1,3 +1,6 @@
+#include <BECore/Control/ControlParams.h>
+#include <Common/JsonDoc.h>
+#include <Fuzz/FuzzJsonText.h>
 #include <Fuzz/FuzzRoomInput.h>
 #include <Fuzz/FuzzSeeds.h>
 #include <RoomServer/DemoCardGame.h>
@@ -42,16 +45,15 @@ namespace BECore::Fuzz {
                 seeds.push_back({kRoomProtocolFolder, name, TextWithHeader(PackHeader(true, limitIndex), text)});
             };
 
-            Json options = Json::object();
-            options["firstSeat"] = 2;
-            options["rules"] = Json::array({"fast", 3, nullptr, true});
-            client("client-create-room.bin", CreateRoomMessage{String(kGame), "Ann", options});
-            client("client-create-room-name-spaces.bin", CreateRoomMessage{String(kGame), "   Bob the Builder  ", Json::object()});
-            client("client-create-room-name-utf8.bin", CreateRoomMessage{String(kGame), "Zo\xC3\xAB \xF0\x9F\x98\x80", Json::object()});
-            client("client-create-room-name-bidi.bin", CreateRoomMessage{String(kGame), "Mal\xE2\x80\xAEory", Json::object()});
-            client("client-create-room-name-too-long.bin", CreateRoomMessage{String(kGame), String(RoomLimits::kMaxNameBytes + 1, 'n'), Json::object()});
-            client("client-create-room-small-limit.bin", CreateRoomMessage{String(kGame), "Ann", options}, 1);
-            client("client-create-room-public.bin", CreateRoomMessage{String(kGame), "Ann", options, true});
+            // Game documents as the old DOM dump wrote them: the keys in byte order
+            constexpr StringView options = R"({"firstSeat":2,"rules":["fast",3,null,true]})";
+            client("client-create-room.bin", CreateRoomMessage{String(kGame), "Ann", String(options)});
+            client("client-create-room-name-spaces.bin", CreateRoomMessage{String(kGame), "   Bob the Builder  ", String()});
+            client("client-create-room-name-utf8.bin", CreateRoomMessage{String(kGame), "Zo\xC3\xAB \xF0\x9F\x98\x80", String()});
+            client("client-create-room-name-bidi.bin", CreateRoomMessage{String(kGame), "Mal\xE2\x80\xAEory", String()});
+            client("client-create-room-name-too-long.bin", CreateRoomMessage{String(kGame), String(RoomLimits::kMaxNameBytes + 1, 'n'), String()});
+            client("client-create-room-small-limit.bin", CreateRoomMessage{String(kGame), "Ann", String(options)}, 1);
+            client("client-create-room-public.bin", CreateRoomMessage{String(kGame), "Ann", String(options), true});
             client("client-list-rooms.bin", ListRoomsMessage{String(kGame)});
             JoinRoomMessage joinByName;
             joinByName.code = "ABCDE";
@@ -64,10 +66,8 @@ namespace BECore::Fuzz {
             client("client-choose-seat.bin", ChooseSeatMessage{3});
             client("client-choose-seat-negative.bin", ChooseSeatMessage{-7});
             client("client-start.bin", StartMessage{});
-            Json card = Json::object();
-            card["type"] = "play";
-            card["card"] = "c1_2";
-            client("client-action.bin", ActionMessage{12, card});
+            constexpr StringView card = R"({"card":"c1_2","type":"play"})";
+            client("client-action.bin", ActionMessage{12, String(card)});
             client("client-leave.bin", LeaveMessage{});
             client("client-ping.bin", PingMessage{});
 
@@ -80,21 +80,16 @@ namespace BECore::Fuzz {
             lobby.seats = {LobbySeat{0, SeatKind::Human, "Ann", true}, LobbySeat{1, SeatKind::Human, "Bob", false}, LobbySeat{2, SeatKind::Computer, {}, false},
                            LobbySeat{3, SeatKind::Empty, {}, false}};
             server("server-lobby.bin", MakeLobbyMessage(lobby));
-            Json view = Json::object();
-            view["hand"] = Json::array({"c1_0", "c1_1"});
-            view["turn"] = 1;
-            Json actions = Json::array();
-            actions.push_back(card);
-            server("server-view.bin", MakeViewMessage("ABCDE", 1, 7, false, view, actions));
-            server("server-view-small-limit.bin", MakeViewMessage("ABCDE", 1, 7, false, view, actions), 1);
+            constexpr StringView view = R"({"hand":["c1_0","c1_1"],"turn":1})";
+            const String actions = Format("[{}]", card);
+            server("server-view.bin", MakeViewMessage("ABCDE", 1, 7, false, String(view), actions));
+            server("server-view-small-limit.bin", MakeViewMessage("ABCDE", 1, 7, false, String(view), actions), 1);
             server("server-error.bin", MakeErrorMessage(RoomErrors::kNotYourTurn, "it is not your turn", RoomMessageTypes::kAction));
             server("server-left.bin", MakeLeftMessage("closed"));
             server("server-pong.bin", MakePongMessage());
             RoomListMessage list;
             list.game = kGame;
-            Json listedOptions = Json::object();
-            listedOptions["firstSeat"] = 2;
-            list.rooms = {RoomListing{"ABCDE", "Ann", 1, DemoCardGame::kSeatCount, false, listedOptions}, RoomListing{"FGHJK", "Bob", 3, DemoCardGame::kSeatCount, false, Json::object()}};
+            list.rooms = {RoomListing{"ABCDE", "Ann", 1, DemoCardGame::kSeatCount, false, R"({"firstSeat":2})"}, RoomListing{"FGHJK", "Bob", 3, DemoCardGame::kSeatCount, false, String()}};
             server("server-rooms.bin", MakeRoomListMessage(list));
             list.rooms.clear();
             list.more = true;
@@ -135,7 +130,7 @@ namespace BECore::Fuzz {
             }
 
             void Create(uint8_t number, StringView name, StringView game = kGame, bool isPublic = false) {
-                Send(number, CreateRoomMessage{String(game), String(name), Json::object(), isPublic});
+                Send(number, CreateRoomMessage{String(game), String(name), String(), isPublic});
             }
 
             void List(uint8_t number, StringView game = kGame) {
@@ -159,10 +154,10 @@ namespace BECore::Fuzz {
             /// The member plays the first action its last view offers; nothing when it has none
             void PlayFirstAction(uint8_t number) {
                 const Known& known = _known[number];
-                if (!known.actions.is_array() || known.actions.empty()) {
+                if (known.firstAction.empty()) {
                     return;
                 }
-                Send(number, ActionMessage{known.version, known.actions[0]});
+                Send(number, ActionMessage{known.version, known.firstAction});
             }
 
             [[nodiscard]] const String& RoomOf(uint8_t number) {
@@ -188,31 +183,35 @@ namespace BECore::Fuzz {
                 String token;
                 String listed;
                 uint64_t version = 0;
-                Json actions = Json::array();
+                /// The text of the first action of the last view; empty when it offered none
+                String firstAction;
             };
 
             HubSink MakeSink() {
                 HubSink sink;
                 sink.send = [this](ConnectionId id, String text) {
-                    const auto parsed = ParseJson(text);
-                    if (!parsed) {
+                    const Tests::JsonDoc parsed(text);
+                    if (!parsed.IsParsed()) {
                         return;
                     }
+                    const JsonView root = parsed.Root();
                     Known& known = _known[static_cast<uint8_t>(id - 1)];
-                    const auto type = GetJsonString(*parsed, "type").value_or(String());
+                    const auto type = GetParamString(root, "type").value_or(String());
                     if (type == RoomMessageTypes::kJoined) {
-                        known.room = GetJsonString(*parsed, "room").value_or(String());
-                        known.token = GetJsonString(*parsed, "token").value_or(String());
+                        known.room = GetParamString(root, "room").value_or(String());
+                        known.token = GetParamString(root, "token").value_or(String());
                     } else if (type == RoomMessageTypes::kRooms) {
                         known.listed.clear();
-                        const Json* rooms = FindJsonMember(*parsed, "rooms");
-                        if (rooms && rooms->is_array() && !rooms->empty()) {
-                            known.listed = GetJsonString((*rooms)[0], "room").value_or(String());
+                        const Optional<JsonView> rooms = FindParam(root, "rooms");
+                        if (rooms && rooms->IsArray() && rooms->Size() > 0) {
+                            known.listed = GetParamString(Tests::ItemAt(*rooms, 0), "room").value_or(String());
                         }
                     } else if (type == RoomMessageTypes::kView) {
-                        known.version = static_cast<uint64_t>(GetJsonInt(*parsed, "version").value_or(0));
-                        if (const Json* actions = FindJsonMember(*parsed, "actions")) {
-                            known.actions = *actions;
+                        known.version = static_cast<uint64_t>(GetParamInt(root, "version").value_or(0));
+                        known.firstAction.clear();
+                        const Optional<JsonView> actions = FindParam(root, "actions");
+                        if (actions && actions->IsArray() && actions->Size() > 0) {
+                            known.firstAction = String(Tests::ItemAt(*actions, 0).Raw());
                         }
                     }
                 };
@@ -283,7 +282,7 @@ namespace BECore::Fuzz {
             recorder.Create(1, "Host", "nogame");
             recorder.Send(1, StartMessage{});
             recorder.Send(1, ChooseSeatMessage{9});
-            recorder.Send(1, ActionMessage{0, Json::object()});
+            recorder.Send(1, ActionMessage{0, String()});
             recorder.Send(1, LeaveMessage{});
             recorder.Create(1, "Host");
             const String code = recorder.RoomOf(1);
@@ -295,17 +294,12 @@ namespace BECore::Fuzz {
             recorder.Send(1, ChooseSeatMessage{1});
             recorder.Send(1, StartMessage{});
             recorder.Send(1, ChooseSeatMessage{2});
-            recorder.Send(1, ActionMessage{99, Json::object()});
-            Json card = Json::object();
-            card["type"] = "play";
-            card["card"] = "c3_0";
-            recorder.Send(1, ActionMessage{0, card});
+            recorder.Send(1, ActionMessage{99, String()});
+            recorder.Send(1, ActionMessage{0, R"({"card":"c3_0","type":"play"})"});
             recorder.Connect(3);
             recorder.JoinByName(3, code, "Late");
             recorder.JoinByToken(3, code, String(RoomLimits::kTokenLength, '0'));
-            Json padding = Json::object();
-            padding["pad"] = String(kBigOptionsBytes, 'x').c_str();
-            recorder.Send(3, CreateRoomMessage{String(kGame), "Big", padding});
+            recorder.Send(3, CreateRoomMessage{String(kGame), "Big", Format(R"({{"pad":"{}"}})", String(kBigOptionsBytes, 'x'))});
             recorder.Tick(kLongPause);
             return recorder.TakeBytes();
         }
@@ -360,92 +354,79 @@ namespace BECore::Fuzz {
         // control_request: every method of the API with parameters as the tools send them
         // =============================================================================
 
-        FuzzBytes Request(const Json& id, StringView method, const Json& params = Json()) {
-            Json request = Json::object();
-            request["id"] = id;
-            request["method"] = MakeJsonString(method);
-            if (!params.is_null()) {
-                request["params"] = params;
-            }
-            const String text = DumpJson(request);
-            return FuzzBytes(text.begin(), text.end());
-        }
-
-        Json Params(std::initializer_list<Pair<const char*, Json>> members) {
-            Json params = Json::object();
-            for (const auto& [key, value] : members) {
-                params[key] = value;
-            }
-            return params;
+        /// One request; @p id and @p params are JSON text (empty @p params: the request has none). The keys are written in byte order, as the DOM dump did
+        FuzzBytes Request(StringView id, StringView method, StringView params = StringView()) {
+            const String request = params.empty() ? Format(R"({{"id":{},"method":"{}"}})", id, method) : Format(R"({{"id":{},"method":"{}","params":{}}})", id, method, params);
+            return TextBytes(SortedText(request));
         }
 
         constexpr int kNestedWithinLimit = 30;
         constexpr int kBeyondRequestDepth = 70;
 
         /// A `ProbeNode` holding @p depth nodes in a chain, each one a level of object and a level of array
-        Json NodeChain(int depth) {
-            Json node = Params({{"id", 1}});
+        String NodeChain(int depth) {
+            String text;
             for (int level = 0; level < depth; ++level) {
-                Json parent = Params({{"id", level}});
-                parent["children"] = Json::array({std::move(node)});
-                node = std::move(parent);
+                text += R"({"children":[)";
             }
-            return node;
+            text += R"({"id":1})";
+            for (int level = 0; level < depth; ++level) {
+                text += Format(R"(],"id":{}}})", level);
+            }
+            return text;
         }
 
         void AddControlSeeds(Vector<FuzzSeedFile>& seeds) {
             const auto add = [&seeds](const char* name, FuzzBytes bytes) { seeds.push_back({kControlRequestFolder, name, std::move(bytes)}); };
-            add("ping.bin", Request(1, "ping"));
-            add("status.bin", Request(2, "status"));
-            add("step.bin", Request(3, "step", Params({{"frames", 3}, {"dt", 0.016}})));
-            add("step-bad-frames.bin", Request(4, "step", Params({{"frames", 1.5}})));
-            add("log-mark.bin", Request(40, "log_mark"));
-            add("log-since.bin", Request(41, "log_since", Params({{"mark", 0}, {"level", "error"}})));
-            add("log-since-bad-mark.bin", Request(42, "log_since", Params({{"mark", -1}, {"level", "info"}})));
-            add("log-subscribe.bin", Request(43, "log_subscribe", Params({{"enabled", true}, {"level", "warning"}})));
+            add("ping.bin", Request("1", "ping"));
+            add("status.bin", Request("2", "status"));
+            add("step.bin", Request("3", "step", R"({"frames":3,"dt":0.016})"));
+            add("step-bad-frames.bin", Request("4", "step", R"({"frames":1.5})"));
+            add("log-mark.bin", Request("40", "log_mark"));
+            add("log-since.bin", Request("41", "log_since", R"({"mark":0,"level":"error"})"));
+            add("log-since-bad-mark.bin", Request("42", "log_since", R"({"mark":-1,"level":"info"})"));
+            add("log-subscribe.bin", Request("43", "log_subscribe", R"({"enabled":true,"level":"warning"})"));
             add("batch.bin",
-                Request(44, "batch",
-                        Params({{"calls", Json::array({Params({{"method", "ping"}}), Params({{"method", "status"}, {"params", Json::object()}}),
-                                                       Params({{"method", "batch"}, {"params", Params({{"calls", Json::array({Params({{"method", "ping"}})})}})}}), Params({{"method", "quit"}})})},
-                                {"continueOnError", true}})));
-            add("batch-step.bin", Request(45, "batch", Params({{"calls", Json::array({Params({{"method", "step"}, {"params", Params({{"frames", 2}})}}), Params({{"method", "get_state"}})})}})));
-            add("batch-bad-entry.bin", Request(46, "batch", Params({{"calls", Json::array({Params({{"method", "ping"}}), "status", Params({{"method", 7}})})}})));
-            add("pause.bin", Request(5, "pause"));
-            add("resume.bin", Request(6, "resume"));
-            add("quit.bin", Request("quit-1", "quit"));
-            add("list-games.bin", Request(7, "list_games"));
-            add("switch-game.bin", Request(8, "switch_game", Params({{"name", "Stress"}})));
-            add("reset.bin", Request(9, "reset", Params({{"seed", 42}})));
-            add("get-state.bin", Request(10, "get_state"));
-            add("list-actions.bin", Request(11, "list_actions"));
-            add("perform-action.bin", Request(12, "perform_action", Params({{"type", "swap"}, {"from", Json::array({0, 1})}, {"to", Json::array({0, 2})}})));
-            add("set-state.bin", Request(13, "set_state", Params({{"fen", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}})));
-            add("screenshot.bin", Request(14, "screenshot", Params({{"maxSize", 256}})));
-            add("ui-tree.bin", Request(15, "ui_tree"));
-            add("ui-click.bin", Request(16, "ui_click", Params({{"name", "PlayButton"}, {"canvas", "Hud"}, {"at", 0.5}})));
-            add("frame-stats.bin", Request(17, "frame_stats", Params({{"frames", 10}})));
-            add("profiler-dump.bin", Request(18, "profiler_dump", Params({{"path", "trace.json"}})));
-            add("zone-allocs.bin", Request(19, "zone_allocs", Params({{"top", 5}, {"reset", false}})));
-            add("list-types.bin", Request(22, "list_types", Params({{"base", "IWidget"}, {"recursive", false}, {"creatable", true}})));
-            add("list-types-bad-flag.bin", Request(23, "list_types", Params({{"base", 5}, {"recursive", "yes"}})));
-            add("describe-type.bin", Request(24, "describe_type", Params({{"name", "ProbeState"}})));
-            add("describe-type-unknown.bin", Request(25, "describe_type", Params({{"name", "NoSuchType"}})));
-            add("schema.bin", Request(26, "schema"));
-            add("get-property.bin", Request(27, "get_property", Params({{"root", "state"}, {"path", "leaves[0].label"}})));
-            add("get-property-bad-path.bin", Request(28, "get_property", Params({{"root", "state"}, {"path", "tree.children[99999999999999999999]..x"}})));
-            add("set-property.bin", Request(29, "set_property", Params({{"root", "state"}, {"path", "i32"}, {"value", 7}})));
-            add("set-property-bad-value.bin", Request(30, "set_property", Params({{"root", "state"}, {"path", "i8"}, {"value", Json::array({1, 2})}})));
-            add("set-property-huge.bin", Request(31, "set_property", Params({{"root", "state"}, {"path", "u64"}, {"value", std::numeric_limits<uint64_t>::max()}})));
-            add("set-property-interning.bin", Request(32, "set_property", Params({{"root", "state"}, {"path", "name"}, {"value", "fuzz_seed_name"}})));
-            add("call-method.bin", Request(33, "call_method", Params({{"root", "probe"}, {"method", "Total"}, {"arguments", Params({{"numbers", Json::array({1, 2, 3})}})}})));
-            add("call-method-bad-argument.bin", Request(34, "call_method", Params({{"root", "probe"}, {"method", "Echo"}, {"arguments", Params({{"text", 5}, {"extra", true}})}})));
-            add("call-method-deep.bin", Request(35, "call_method", Params({{"root", "probe"}, {"method", "Leaves"}, {"arguments", Params({{"node", NodeChain(kBeyondRequestDepth)}})}})));
-            add("call-method-nested.bin", Request(38, "call_method", Params({{"root", "probe"}, {"method", "Leaves"}, {"arguments", Params({{"node", NodeChain(kNestedWithinLimit)}})}})));
-            add("call-method-unknown-root.bin", Request(36, "call_method", Params({{"root", "nowhere"}, {"method", "Touch"}})));
-            add("call-method-game-root.bin", Request(37, "call_method", Params({{"root", "game"}, {"method", "Anything"}})));
-            add("unknown-method.bin", Request(20, "no_such_method", Params({{"x", Json::object()}})));
-            add("params-not-an-object.bin", Request(21, "ping", Json::array({1, 2})));
-            add("id-is-a-float.bin", Request(1.5, "ping"));
+                Request("44", "batch",
+                        R"({"calls":[{"method":"ping"},{"method":"status","params":{}},{"method":"batch","params":{"calls":[{"method":"ping"}]}},{"method":"quit"}],"continueOnError":true})"));
+            add("batch-step.bin", Request("45", "batch", R"({"calls":[{"method":"step","params":{"frames":2}},{"method":"get_state"}]})"));
+            add("batch-bad-entry.bin", Request("46", "batch", R"({"calls":[{"method":"ping"},"status",{"method":7}]})"));
+            add("pause.bin", Request("5", "pause"));
+            add("resume.bin", Request("6", "resume"));
+            add("quit.bin", Request(R"("quit-1")", "quit"));
+            add("list-games.bin", Request("7", "list_games"));
+            add("switch-game.bin", Request("8", "switch_game", R"({"name":"Stress"})"));
+            add("reset.bin", Request("9", "reset", R"({"seed":42})"));
+            add("get-state.bin", Request("10", "get_state"));
+            add("list-actions.bin", Request("11", "list_actions"));
+            add("perform-action.bin", Request("12", "perform_action", R"({"type":"swap","from":[0,1],"to":[0,2]})"));
+            add("set-state.bin", Request("13", "set_state", R"({"fen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"})"));
+            add("screenshot.bin", Request("14", "screenshot", R"({"maxSize":256})"));
+            add("ui-tree.bin", Request("15", "ui_tree"));
+            add("ui-click.bin", Request("16", "ui_click", R"({"name":"PlayButton","canvas":"Hud","at":0.5})"));
+            add("frame-stats.bin", Request("17", "frame_stats", R"({"frames":10})"));
+            add("profiler-dump.bin", Request("18", "profiler_dump", R"({"path":"trace.json"})"));
+            add("zone-allocs.bin", Request("19", "zone_allocs", R"({"top":5,"reset":false})"));
+            add("list-types.bin", Request("22", "list_types", R"({"base":"IWidget","recursive":false,"creatable":true})"));
+            add("list-types-bad-flag.bin", Request("23", "list_types", R"({"base":5,"recursive":"yes"})"));
+            add("describe-type.bin", Request("24", "describe_type", R"({"name":"ProbeState"})"));
+            add("describe-type-unknown.bin", Request("25", "describe_type", R"({"name":"NoSuchType"})"));
+            add("schema.bin", Request("26", "schema"));
+            add("get-property.bin", Request("27", "get_property", R"({"root":"state","path":"leaves[0].label"})"));
+            add("get-property-bad-path.bin", Request("28", "get_property", R"({"root":"state","path":"tree.children[99999999999999999999]..x"})"));
+            add("set-property.bin", Request("29", "set_property", R"({"root":"state","path":"i32","value":7})"));
+            add("set-property-bad-value.bin", Request("30", "set_property", R"({"root":"state","path":"i8","value":[1,2]})"));
+            add("set-property-huge.bin", Request("31", "set_property", R"({"root":"state","path":"u64","value":18446744073709551615})"));
+            add("set-property-interning.bin", Request("32", "set_property", R"({"root":"state","path":"name","value":"fuzz_seed_name"})"));
+            add("call-method.bin", Request("33", "call_method", R"({"root":"probe","method":"Total","arguments":{"numbers":[1,2,3]}})"));
+            add("call-method-bad-argument.bin", Request("34", "call_method", R"({"root":"probe","method":"Echo","arguments":{"text":5,"extra":true}})"));
+            add("call-method-deep.bin", Request("35", "call_method", Format(R"({{"root":"probe","method":"Leaves","arguments":{{"node":{}}}}})", NodeChain(kBeyondRequestDepth))));
+            add("call-method-nested.bin", Request("38", "call_method", Format(R"({{"root":"probe","method":"Leaves","arguments":{{"node":{}}}}})", NodeChain(kNestedWithinLimit))));
+            add("call-method-unknown-root.bin", Request("36", "call_method", R"({"root":"nowhere","method":"Touch"})"));
+            add("call-method-game-root.bin", Request("37", "call_method", R"({"root":"game","method":"Anything"})"));
+            add("unknown-method.bin", Request("20", "no_such_method", R"({"x":{}})"));
+            add("params-not-an-object.bin", Request("21", "ping", "[1,2]"));
+            add("id-is-a-float.bin", Request("1.5", "ping"));
         }
 
     }  // namespace

@@ -68,7 +68,7 @@ namespace BECore::Tests {
             members.push_back(host);
         }
         const ConnectionId publicHost = harness.Connect();
-        harness.Create(publicHost, "Open", "fake", Json::object(), true);
+        harness.Create(publicHost, "Open", "fake", "{}", true);
         members.push_back(publicHost);
 
         // Many connections, each of which lists as much as it may and guesses a wrong code now and then; every one is closed in the end
@@ -176,7 +176,7 @@ namespace BECore::Tests {
         const size_t receivedAtTheLeave = harness.Client(leaver).received.size();
 
         // The others play on to the end, the leaver's seat with them, and the leaver tries to come back and to act
-        harness.Send(leaver, ActionMessage{0, CardAction("c2_0")});
+        harness.Send(leaver, ActionMessage{0, CardActionText("c2_0")});
         EXPECT_EQ(harness.Client(leaver).LastErrorCode(), RoomErrors::kNotInRoom);
         harness.JoinByToken(leaver, code, token);
         EXPECT_EQ(harness.Client(leaver).LastErrorCode(), RoomErrors::kBadToken);
@@ -232,7 +232,7 @@ namespace BECore::Tests {
         harness.JoinByName(late, code, "Late");
         EXPECT_EQ(harness.Client(late).LastErrorCode(), RoomErrors::kUnknownRoom);
         harness.Tick(seconds(5));
-        harness.Send(ids[0], ActionMessage{0, CardAction("c0_0")});
+        harness.Send(ids[0], ActionMessage{0, CardActionText("c0_0")});
         EXPECT_EQ(harness.Client(ids[0]).LastErrorCode(), RoomErrors::kNotInRoom);
         EXPECT_EQ(harness.Client(ids[0]).received.size(), sizes[0] + 1);
         EXPECT_EQ(harness.Client(ids[1]).received.size(), sizes[1]);
@@ -323,7 +323,7 @@ namespace BECore::Tests {
         // The right version and a card the seat does hold: only the turn is wrong
         ActionMessage early;
         early.version = version;
-        early.action = CardAction(Format("c{}_0", otherSeat));
+        early.action = CardActionText(Format("c{}_0", otherSeat));
         for (int i = 0; i < kReplays; ++i) {
             harness.Advance(seconds(1));
             harness.Send(other, early);
@@ -433,10 +433,10 @@ namespace BECore::Tests {
                 if (message.type != RoomMessageTypes::kLobby) {
                     continue;
                 }
-                const Json* seats = FindJsonMember(message.json, "seats");
-                ASSERT_NE(seats, nullptr);
-                for (const Json& seat : *seats) {
-                    const String name = GetJsonString(seat, "name").value_or(String());
+                const Optional<JsonView> seats = message.Find("seats");
+                ASSERT_TRUE(seats.has_value());
+                for (const JsonView seat : seats->Items()) {
+                    const String name = GetParamString(seat, "name").value_or(String());
                     EXPECT_TRUE(name.empty() || name == "Host" || name == "Guest") << name.c_str();
                 }
             }

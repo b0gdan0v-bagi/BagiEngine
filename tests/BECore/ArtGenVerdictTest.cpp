@@ -1,6 +1,7 @@
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/File/File.h>
 #include <BECore/Format/Format.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
@@ -12,9 +13,9 @@ namespace BECore::Tests {
     namespace {
 
         ArtGenVerdict VerdictOf(StringView provenance) {
-            auto parsed = ParseJson(provenance);
-            EXPECT_TRUE(parsed.has_value());
-            return parsed ? ArtGenVerdictFromProvenance(*parsed) : ArtGenVerdict{};
+            const JsonDoc doc(provenance);
+            EXPECT_TRUE(doc.IsParsed());
+            return ArtGenVerdictFromProvenance(doc);
         }
 
         bool Contains(const String& text, StringView part) {
@@ -22,12 +23,17 @@ namespace BECore::Tests {
         }
 
         ArtGenVerdict UnreadableWithError(const String& error) {
-            Json checks = Json::object();
-            checks["passed"] = nullptr;
-            checks["error"] = MakeJsonString(error);
-            Json record = Json::object();
-            record["checks"] = checks;
-            return ArtGenVerdictFromProvenance(record);
+            String text;
+            JsonWriter writer(text);
+            writer.BeginObject();
+            writer.Key("checks");
+            writer.BeginObject();
+            writer.Member("error", StringView(error));
+            writer.Key("passed");
+            writer.Null();
+            writer.EndObject();
+            writer.EndObject();
+            return VerdictOf(text);
         }
 
         /// The names of `CHECK_NAMES` in the service (`tools/artgen/artgen_checks.py`), read from the source so the list is not a hand copy
@@ -174,6 +180,12 @@ namespace BECore::Tests {
         const ArtGenVerdict verdict = ReadArtGenVerdict(file);
         EXPECT_EQ(verdict.kind, ArtGenVerdictKind::Failed);
         EXPECT_TRUE(Contains(verdict.tip, "touches the edge"));
+    }
+
+    TEST_F(ArtGenVerdictFileTest, ARecordSavedWithAByteOrderMarkIsRead) {
+        const Path file = _root / "pawn_42.artgen.json";
+        ASSERT_TRUE(WriteFileAtomically(file, Format("\xEF\xBB\xBF{}", kRealRecord)).has_value());
+        EXPECT_EQ(ReadArtGenVerdict(file).kind, ArtGenVerdictKind::Failed);
     }
 
     TEST_F(ArtGenVerdictFileTest, AMissingFileAnEmptyPathAndBrokenJsonAreNone) {

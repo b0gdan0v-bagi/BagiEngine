@@ -1,7 +1,7 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonView.h>
 #include <BECore/File/Path.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
@@ -83,8 +83,8 @@ namespace BECore {
     struct ArtGenRun {
         uint32_t id = 0;
         ArtGenRunState state = ArtGenRunState::Idle;
-        String preset;    // the name; with presetData, the name of the form the draft came from
-        Json presetData;  // a draft sent inline (the form as it is, saved or not); null: the preset by name
+        String preset;      // the name; with presetData, the name of the form the draft came from
+        String presetData;  // a draft sent inline (the form as it is, saved or not): the compact text of one object, keys sorted; empty: the preset by name
         String subject;
         int32_t count = 0;
         Optional<int64_t> seed;
@@ -104,8 +104,8 @@ namespace BECore {
 
     /// What EnqueueSet takes: one preset applied to a list of subjects
     struct ArtGenSetRequest {
-        String preset;    // a preset name; with presetData, the name of the form the draft came from
-        Json presetData;  // a draft sent inline; null: the preset by name
+        String preset;      // a preset name; with presetData, the name of the form the draft came from
+        String presetData;  // a draft sent inline, as for ArtGenRun; empty: the preset by name
         Vector<ArtGenSubject> subjects;
         int32_t count = kArtGenSetDefaultCount;
         Optional<int64_t> seed;               // the first seed of every job; none: one is drawn and recorded, so the style of the set matches
@@ -178,8 +178,9 @@ namespace BECore {
         /// @p reference is the picture the images start from (it replaces the preset's own `reference` whole); the service checks it and fails the run with the reason
         std::expected<uint32_t, String> Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants = false, Optional<ArtGenReference> reference = {});
         /// The same with the preset's content inline (the panel's form, saved or not): the service checks it as it checks a file, and the
-        /// provenance names it `draft`. @p name is the form's, for the messages; @p keepVariants is as for Request
-        std::expected<uint32_t, String> RequestDraft(StringView name, const Json& preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants = false,
+        /// provenance names it `draft`. @p name is the form's, for the messages; @p presetText is the draft's document as compact text with its keys
+        /// sorted (`ArtGenPresetForm::ToJsonText`; it goes to the service as written); @p keepVariants is as for Request
+        std::expected<uint32_t, String> RequestDraft(StringView name, StringView presetText, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants = false,
                                                      Optional<ArtGenReference> reference = {});
 
         /// The panel's reference slot: one picture for the next single run, shared by the Generate and the Set tab and kept across a switch of the
@@ -192,8 +193,9 @@ namespace BECore {
 
         /// Writes @p preset as `<game root>/artgen/presets/<name>.json` (an engine starter saved under its name becomes the game's own) and
         /// shows it at once; the service checks it at its next look (asked for in the next poll). The path, or why not: a bad name, a shape
-        /// that is not a preset (CheckArtGenPresetShape), no game root, a write that failed
-        std::expected<String, String> SavePreset(StringView name, const Json& preset);
+        /// that is not a preset (CheckArtGenPresetShape: @p presetText is not a JSON object too), no game root, a write that failed. @p presetText
+        /// is compact text with its keys sorted, as for RequestDraft
+        std::expected<String, String> SavePreset(StringView name, StringView presetText);
         /// The workflow the service described by that name, or null
         [[nodiscard]] const ArtGenWorkflow* FindWorkflow(StringView name) const;
         /// The preset the service reported by that name, or null
@@ -346,34 +348,33 @@ namespace BECore {
             return _pollCount;
         }
 
-        /// The handlers, public for the tests: each takes the params of the call and answers like the method. `HandlePoll` and `HandleSet` answer a
-        /// `Json` document by hand: `request.preset` of the poll is a preset's name or an inline draft (two types under one key, a payload in the
-        /// middle), and `artgen_set` is the manifest file (`ArtGenSetToJson`). A reflected leaf type for a `Json` payload does not
-        /// exist; one would let them go
-        std::expected<Json, ControlError> HandlePoll(const Json& params);
-        std::expected<ArtGenStaleAnswer, ControlError> HandleProgress(const Json& params);
-        std::expected<ArtGenStaleAnswer, ControlError> HandleImage(const Json& params);
-        std::expected<ArtGenStaleAnswer, ControlError> HandleDone(const Json& params);
-        std::expected<ArtGenQueuedAnswer, ControlError> HandleGenerate(const Json& params);
-        std::expected<ArtGenCancelAnswer, ControlError> HandleCancel(const Json& params);
-        std::expected<ArtGenAcceptAnswer, ControlError> HandleAccept(const Json& params);
-        std::expected<ArtGenStaleAnswer, ControlError> HandleSetupReport(const Json& params);
-        std::expected<ArtGenSetupQueuedAnswer, ControlError> HandleSetup(const Json& params);
-        std::expected<ArtGenSavedAnswer, ControlError> HandleSavePreset(const Json& params);
-        std::expected<ArtGenEnqueueAnswer, ControlError> HandleEnqueue(const Json& params);
-        std::expected<Json, ControlError> HandleSet(const Json& params);
-        std::expected<ArtGenPickAnswer, ControlError> HandlePick(const Json& params);
-        std::expected<ArtGenRetryAnswer, ControlError> HandleRetry(const Json& params);
-        std::expected<ArtGenAcceptSetAnswer, ControlError> HandleAcceptSet(const Json& params);
-        std::expected<ArtGenKeepAnswer, ControlError> HandleKeep(const Json& params);
-        std::expected<ArtGenMoreAnswer, ControlError> HandleMore(const Json& params);
+        /// The handlers, public for the tests: each takes the params of the call and answers like the method. `HandlePoll` and `HandleSet` answer the
+        /// compact text of the reply, written by hand: `request.preset` of the poll is a preset's name or an inline draft (two types under one key,
+        /// the draft's text in the middle), and `artgen_set` is the manifest (`WriteArtGenSet`) with `state`
+        std::expected<String, ControlError> HandlePoll(JsonView params);
+        std::expected<ArtGenStaleAnswer, ControlError> HandleProgress(JsonView params);
+        std::expected<ArtGenStaleAnswer, ControlError> HandleImage(JsonView params);
+        std::expected<ArtGenStaleAnswer, ControlError> HandleDone(JsonView params);
+        std::expected<ArtGenQueuedAnswer, ControlError> HandleGenerate(JsonView params);
+        std::expected<ArtGenCancelAnswer, ControlError> HandleCancel(JsonView params);
+        std::expected<ArtGenAcceptAnswer, ControlError> HandleAccept(JsonView params);
+        std::expected<ArtGenStaleAnswer, ControlError> HandleSetupReport(JsonView params);
+        std::expected<ArtGenSetupQueuedAnswer, ControlError> HandleSetup(JsonView params);
+        std::expected<ArtGenSavedAnswer, ControlError> HandleSavePreset(JsonView params);
+        std::expected<ArtGenEnqueueAnswer, ControlError> HandleEnqueue(JsonView params);
+        std::expected<String, ControlError> HandleSet(JsonView params);
+        std::expected<ArtGenPickAnswer, ControlError> HandlePick(JsonView params);
+        std::expected<ArtGenRetryAnswer, ControlError> HandleRetry(JsonView params);
+        std::expected<ArtGenAcceptSetAnswer, ControlError> HandleAcceptSet(JsonView params);
+        std::expected<ArtGenKeepAnswer, ControlError> HandleKeep(JsonView params);
+        std::expected<ArtGenMoreAnswer, ControlError> HandleMore(JsonView params);
         [[nodiscard]] ArtGenStateAnswer BuildState() const;
 
     private:
         /// The run a report of the service is about, or null when it is about an older one (a late message after a new request)
-        ArtGenRun* RunOf(const Json& params);
-        std::expected<uint32_t, String> Queue(StringView preset, Json presetData, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants, Optional<ArtGenReference> reference);
-        void ReadCatalog(const Json& params);
+        ArtGenRun* RunOf(JsonView params);
+        std::expected<uint32_t, String> Queue(StringView preset, String presetData, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants, Optional<ArtGenReference> reference);
+        void ReadCatalog(JsonView params);
         [[nodiscard]] ArtGenSet* MutableSet(StringView name);
         /// The job of `_run` while it is Running (the run is the work of a set), else null
         [[nodiscard]] ArtGenSetJob* RunningJobOfRun(ArtGenSet*& set);
@@ -381,10 +382,12 @@ namespace BECore {
         /// that holds the name (live or kept), so `FindNewerOwner` never meets a tie of two accepts within one second
         [[nodiscard]] String NewAcceptDate(const ArtGenSet& set, StringView name) const;
         void SaveSet(const ArtGenSet& set);
+        /// The document of a preset: a draft's @p presetData, else the text of the saved one by @p preset (empty when unknown)
+        [[nodiscard]] StringView PresetTextOf(StringView presetData, StringView preset) const;
         /// The image settings a preset (a draft's @p presetData, else the saved one by @p preset) asks for; a malformed `accept` is the defaults
-        [[nodiscard]] ArtGenImageSettings ImageSettingsOf(const Json& presetData, StringView preset) const;
+        [[nodiscard]] ArtGenImageSettings ImageSettingsOf(StringView presetData, StringView preset) const;
         /// The `atlas` group a preset (a draft's @p presetData, else the saved one by @p preset) names; empty when none, or when the value is not a valid name
-        [[nodiscard]] String AtlasOf(const Json& presetData, StringView preset) const;
+        [[nodiscard]] String AtlasOf(StringView presetData, StringView preset) const;
         /// What the rows of an image set are written with: the set's own processing, else (the first Accept all) one measured now over every
         /// variant of every Done job; none (the identity plan) for a legacy set or settings that change nothing. Nothing is stored here
         [[nodiscard]] std::expected<Optional<ArtGenSetProcessing>, String> ProcessingOfSet(const ArtGenSet& set, const Path& root) const;
@@ -398,7 +401,7 @@ namespace BECore {
         /// The methods of the sets (ArtGenSessionSets.cpp): the handlers and their descriptions
         void RegisterSetControl(ControlService& service);
         /// `artgen_cancel` with `job` or `set`: the one job, or the whole set
-        std::expected<ArtGenCancelAnswer, ControlError> CancelFromParams(const Json& params);
+        std::expected<ArtGenCancelAnswer, ControlError> CancelFromParams(JsonView params);
         [[nodiscard]] Vector<ArtGenSetSummaryAnswer> BuildSetSummaries() const;
 
         Clock _clock;
@@ -420,7 +423,8 @@ namespace BECore {
         uint32_t _nextId = 1;
         bool _stopService = false;
         bool _refreshCatalog = false;  // a preset was saved: the next poll asks the service to look at the files again
-        Json _catalog;                 // the presets and workflows of the last poll, so an unchanged list is not read again
+        String _catalogPresets;        // the raw text of the two lists of the last poll, so an unchanged list is not read again
+        String _catalogWorkflows;
         double _lastPollSeconds = -1.0;
         uint64_t _pollCount = 0;
         uint64_t _version = 0;

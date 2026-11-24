@@ -1,5 +1,6 @@
 #include "DemoCardGame.h"
 
+#include <BECore/Control/ControlParams.h>
 #include <Generated/DemoCardGame.gen.hpp>
 
 namespace BECore {
@@ -31,11 +32,11 @@ namespace BECore {
         return kSeatCount;
     }
 
-    std::expected<void, ControlError> DemoCardGame::Start(uint64_t seed, const Json& options) {
+    std::expected<void, ControlError> DemoCardGame::Start(uint64_t seed, JsonView options) {
         uint64_t state = seed;
         int firstSeat = static_cast<int>(NextRandom(state) % kSeatCount);
-        if (FindJsonMember(options, "firstSeat") != nullptr) {
-            const auto requested = GetJsonInt(options, "firstSeat");
+        if (FindParam(options, "firstSeat")) {
+            const auto requested = GetParamInt(options, "firstSeat");
             if (!requested || *requested < 0 || *requested >= kSeatCount) {
                 return Fail(ControlErrors::kInvalidParams, "'firstSeat' has to be an integer from 0 to 3");
             }
@@ -104,15 +105,15 @@ namespace BECore {
         return UniquePtr<SeatedActions>(std::move(actions));
     }
 
-    std::expected<UniquePtr<SeatedOutcome>, ControlError> DemoCardGame::PerformSeatAction(int seat, const Json& action) {
+    std::expected<UniquePtr<SeatedOutcome>, ControlError> DemoCardGame::PerformSeatAction(int seat, JsonView action) {
         if (!IsSeatInRange(seat)) {
             return Fail(SeatedGameErrors::kInvalidSeat, Format("seat {} is out of range", seat));
         }
-        const auto type = GetJsonString(action, "type");
+        const auto type = GetParamString(action, "type");
         if (!type) {
             return Fail(ControlErrors::kInvalidParams, "'type' has to be a string");
         }
-        const auto card = GetJsonString(action, "card");
+        const auto card = GetParamString(action, "card");
         if (!card) {
             return Fail(ControlErrors::kInvalidParams, "'card' has to be a string");
         }
@@ -138,9 +139,9 @@ namespace BECore {
         return UniquePtr<SeatedOutcome>(std::move(outcome));
     }
 
-    Optional<Json> DemoCardGame::ChooseComputerAction(int seat) const {
+    bool DemoCardGame::ChooseComputerAction(int seat, JsonWriter& action) const {
         if (!CanAct(seat) || _hands[seat].empty()) {
-            return std::nullopt;
+            return false;
         }
         const String* lowest = &_hands[seat].front();
         for (const String& card : _hands[seat]) {
@@ -148,10 +149,11 @@ namespace BECore {
                 lowest = &card;
             }
         }
-        Json action = Json::object();
-        action["type"] = "play";
-        action["card"] = lowest->c_str();
-        return action;
+        action.BeginObject();
+        action.Member("card", StringView(lowest->c_str(), lowest->size()));
+        action.Member("type", "play");
+        action.EndObject();
+        return true;
     }
 
     bool DemoCardGame::IsFinished() const {

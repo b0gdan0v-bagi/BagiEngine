@@ -225,57 +225,40 @@ namespace BECore::Tests {
             void SetUp() override {
                 LogEvent::Flush();  // lines of an earlier test in this process are not this service's
                 RegisterControlBuiltins(service);
-                service.SetEventSink([this](const String& text) {
-                    auto parsed = ParseJson(text);
-                    ASSERT_TRUE(parsed.has_value());
-                    events.push_back(std::move(*parsed));
-                });
+                service.SetEventSink([this](const String& text) { events.emplace_back(StringView(text.c_str(), text.size())); });
             }
 
-            /// Runs one request and returns its response
-            Json Call(StringView method, const Json& params = Json::object()) {
-                Json request = Json::object();
-                request["id"] = ++nextId;
-                request["method"] = ToStdString(method);
-                request["params"] = params;
-                return Run(DumpJson(request));
+            /// Runs one request and returns its response (a view of the reply kept in `responses`, so it stays valid); not valid when nothing was answered
+            JsonView Call(StringView method, StringView paramsText = "{}") {
+                return Run(MakeRequestText(++nextId, method, paramsText));
             }
 
-            Json Run(const String& text) {
+            JsonView Run(const String& text) {
                 const size_t before = responses.size();
-                service.Post(text, [this](String reply) {
-                    auto parsed = ParseJson(reply);
-                    responses.push_back(parsed ? std::move(*parsed) : Json());
-                });
+                service.Post(text, [this](String reply) { responses.emplace_back(StringView(reply.c_str(), reply.size())); });
                 service.Drain();
                 EXPECT_EQ(responses.size(), before + 1);
-                return responses.size() == before + 1 ? responses.back() : Json();
+                return responses.size() == before + 1 ? responses.back().View() : JsonView();
             }
 
-            static const Json& ResultOf(const Json& response) {
-                const Json* result = FindJsonMember(response, "result");
-                EXPECT_NE(result, nullptr);
-                static const Json kEmpty = Json::object();
-                return result != nullptr ? *result : kEmpty;
+            static JsonView ResultOf(JsonView response) {
+                const JsonView result = MemberOf(response, "result");
+                EXPECT_TRUE(result.IsValid());
+                return result;
             }
 
-            static String ErrorCodeOf(const Json& response) {
-                const Json* error = FindJsonMember(response, "error");
-                if (error == nullptr) {
-                    return {};
-                }
-                const auto code = GetJsonString(*error, "code");
-                return code ? String(code->c_str(), code->size()) : String();
+            static String ErrorCodeOf(JsonView response) {
+                return StringOf(MemberOf(response, "error"), "code");
             }
 
-            static uint64_t Number(const Json& object, StringView key) {
-                return static_cast<uint64_t>(GetJsonInt(object, key).value_or(-1));
+            static uint64_t Number(JsonView object, StringView key) {
+                return static_cast<uint64_t>(IntOf(object, key).value_or(-1));
             }
 
             /// The text of the answer as it was sent, with the clock text of every line replaced by `T`
-            String Raw(StringView method, const Json& params = Json::object()) {
+            String Raw(StringView method, StringView paramsText = "{}") {
                 String text;
-                service.Post(MakeRequest(++nextId, method, params), [&text](const String& reply) { text = reply; });
+                service.Post(MakeRequestText(++nextId, method, paramsText), [&text](const String& reply) { text = reply; });
                 service.Drain();
                 return MaskTimes(text);
             }
@@ -299,8 +282,8 @@ namespace BECore::Tests {
             }
 
             ControlService service;
-            Vector<Json> responses;
-            Vector<Json> events;
+            Vector<ControlReply> responses;
+            Vector<ControlReply> events;
             int64_t nextId = 0;
         };
 
@@ -312,60 +295,55 @@ namespace BECore::Tests {
         Warn("ControlLogTest status warning");
         Warn("ControlLogTest status error", LogLevel::Error);
 
-        const Json result = ResultOf(Call("status"));
+        const JsonView result = ResultOf(Call("status"));
 
-        const Json* log = FindJsonMember(result, "log");
-        ASSERT_NE(log, nullptr);
-        EXPECT_EQ(Number(*log, "warnings"), 1U);
-        EXPECT_EQ(Number(*log, "errors"), 1U);
+        const JsonView log = MemberOf(result, "log");
+        ASSERT_TRUE(log.IsObject());
+        EXPECT_EQ(Number(log, "warnings"), 1U);
+        EXPECT_EQ(Number(log, "errors"), 1U);
     }
 
     TEST_F(ControlLogMethodsTest, ALineLoggedInAHandlerIsCountedByTheNextStatusOfTheFrame) {
         service.RegisterHandler("noisy", [](ControlCall& call) {
             LogEvent::Emit(LogLevel::Warning, "ControlLogTest from a handler");
-            call.Reply(Json::object());
+            call.ReplyEmpty();
         });
-        Vector<Json> answers;
-        const auto collect = [&answers](String text) {
-            auto parsed = ParseJson(text);
-            answers.push_back(parsed ? std::move(*parsed) : Json());
-        };
+        Vector<ControlReply> answers;
+        const auto collect = [&answers](String text) { answers.emplace_back(StringView(text.c_str(), text.size())); };
 
         service.Post(R"({"id": 1, "method": "noisy"})", collect);
         service.Post(R"({"id": 2, "method": "status"})", collect);
         service.Drain();
 
         ASSERT_EQ(answers.size(), 2U);
-        const Json* log = FindJsonMember(ResultOf(answers[1]), "log");
-        ASSERT_NE(log, nullptr);
-        EXPECT_EQ(Number(*log, "warnings"), 1U);
+        const JsonView log = MemberOf(ResultOf(answers[1].View()), "log");
+        ASSERT_TRUE(log.IsObject());
+        EXPECT_EQ(Number(log, "warnings"), 1U);
     }
 
     TEST_F(ControlLogMethodsTest, LogMarkThenLogSinceGivesTheNewLine) {
         Warn("ControlLogTest old line");
-        const Json mark = ResultOf(Call("log_mark"));
+        const JsonView mark = ResultOf(Call("log_mark"));
         EXPECT_EQ(Number(mark, "warnings"), 1U);
         EXPECT_EQ(Number(mark, "errors"), 0U);
 
         Warn("ControlLogTest new line");
-        Json params = Json::object();
-        params["mark"] = Number(mark, "mark");
-        const Json since = ResultOf(Call("log_since", params));
+        const JsonView since = ResultOf(Call("log_since", Format(R"({{"mark":{}}})", Number(mark, "mark"))));
 
-        const Json* lines = FindJsonMember(since, "lines");
-        ASSERT_NE(lines, nullptr);
-        ASSERT_EQ(lines->size(), 1U);
-        const Json& line = (*lines)[0];
-        EXPECT_EQ(GetJsonString(line, "message").value_or(""), "ControlLogTest new line");
-        EXPECT_EQ(GetJsonString(line, "level").value_or(""), "warning");
-        EXPECT_EQ(GetJsonString(line, "time").value_or("").size(), kLogTimeLength - 1);
+        const JsonView lines = MemberOf(since, "lines");
+        ASSERT_TRUE(lines.IsArray());
+        ASSERT_EQ(lines.Size(), 1U);
+        const JsonView line = ItemAt(lines, 0);
+        EXPECT_EQ(StringOf(line, "message"), "ControlLogTest new line");
+        EXPECT_EQ(StringOf(line, "level"), "warning");
+        EXPECT_EQ(StringOf(line, "time").size(), kLogTimeLength - 1);
         EXPECT_EQ(Number(line, "sequence"), Number(mark, "mark"));
         EXPECT_EQ(Number(since, "warnings"), 1U);
         EXPECT_EQ(Number(since, "errors"), 0U);
         EXPECT_EQ(Number(since, "dropped"), 0U);
-        EXPECT_EQ(FindJsonMember(since, "truncated"), nullptr);
+        EXPECT_FALSE(MemberOf(since, "truncated").IsValid());
 
-        const Json after = ResultOf(Call("log_mark"));
+        const JsonView after = ResultOf(Call("log_mark"));
         EXPECT_EQ(Number(since, "next"), Number(after, "mark"));
     }
 
@@ -373,19 +351,16 @@ namespace BECore::Tests {
         Warn("ControlLogTest filter warning");
         Warn("ControlLogTest filter error", LogLevel::Error);
         Warn("ControlLogTest filter fatal", LogLevel::Fatal);
-        Json params = Json::object();
-        params["mark"] = 0;
 
-        const Json all = ResultOf(Call("log_since", params));
-        params["level"] = "error";
-        const Json errorsOnly = ResultOf(Call("log_since", params));
+        const JsonView all = ResultOf(Call("log_since", R"({"mark":0})"));
+        const JsonView errorsOnly = ResultOf(Call("log_since", R"({"level":"error","mark":0})"));
 
-        EXPECT_EQ(Require(FindJsonMember(all, "lines")).size(), 3U);
-        const Json* lines = FindJsonMember(errorsOnly, "lines");
-        ASSERT_NE(lines, nullptr);
-        ASSERT_EQ(lines->size(), 2U);
-        EXPECT_EQ(GetJsonString((*lines)[0], "level").value_or(""), "error");
-        EXPECT_EQ(GetJsonString((*lines)[1], "level").value_or(""), "fatal");
+        EXPECT_EQ(MemberOf(all, "lines").Size(), 3U);
+        const JsonView lines = MemberOf(errorsOnly, "lines");
+        ASSERT_TRUE(lines.IsArray());
+        ASSERT_EQ(lines.Size(), 2U);
+        EXPECT_EQ(StringOf(ItemAt(lines, 0), "level"), "error");
+        EXPECT_EQ(StringOf(ItemAt(lines, 1), "level"), "fatal");
         EXPECT_EQ(Number(errorsOnly, "warnings"), 1U);
         EXPECT_EQ(Number(errorsOnly, "errors"), 2U);
     }
@@ -393,22 +368,14 @@ namespace BECore::Tests {
     TEST_F(ControlLogMethodsTest, LogSinceRefusesBadParameters) {
         EXPECT_EQ(ErrorCodeOf(Call("log_since")), "invalid_params");
 
-        const auto since = [this](const Json& mark) {
-            Json params = Json::object();
-            params["mark"] = mark;
-            return Call("log_since", params);
-        };
-        EXPECT_EQ(ErrorCodeOf(since(-1)), "invalid_params");
-        EXPECT_EQ(ErrorCodeOf(since(1.5)), "invalid_params");
-        EXPECT_EQ(ErrorCodeOf(since("3")), "invalid_params");
-        EXPECT_EQ(ErrorCodeOf(since(Json())), "invalid_params");
+        const auto since = [this](StringView markText) { return Call("log_since", Format(R"({{"mark":{}}})", markText)); };
+        EXPECT_EQ(ErrorCodeOf(since("-1")), "invalid_params");
+        EXPECT_EQ(ErrorCodeOf(since("1.5")), "invalid_params");
+        EXPECT_EQ(ErrorCodeOf(since(R"("3")")), "invalid_params");
+        EXPECT_EQ(ErrorCodeOf(since("null")), "invalid_params");
 
-        Json params = Json::object();
-        params["mark"] = 0;
-        params["level"] = "info";
-        EXPECT_EQ(ErrorCodeOf(Call("log_since", params)), "invalid_params");
-        params["level"] = 3;
-        EXPECT_EQ(ErrorCodeOf(Call("log_since", params)), "invalid_params");
+        EXPECT_EQ(ErrorCodeOf(Call("log_since", R"({"level":"info","mark":0})")), "invalid_params");
+        EXPECT_EQ(ErrorCodeOf(Call("log_since", R"({"level":3,"mark":0})")), "invalid_params");
 
         EXPECT_EQ(ErrorCodeOf(Run(R"({"id": 99, "method": "log_since", "params": 5})")), "invalid_params");
         EXPECT_EQ(ErrorCodeOf(Run(R"({"id": 100, "method": "log_since", "params": [0]})")), "invalid_params");
@@ -419,16 +386,14 @@ namespace BECore::Tests {
         for (int i = 0; i < kLines; ++i) {
             Warn(Format("ControlLogTest cap {}", i));
         }
-        Json params = Json::object();
-        params["mark"] = 0;
 
-        const Json since = ResultOf(Call("log_since", params));
+        const JsonView since = ResultOf(Call("log_since", R"({"mark":0})"));
 
-        const Json* lines = FindJsonMember(since, "lines");
-        ASSERT_NE(lines, nullptr);
-        ASSERT_EQ(lines->size(), ControlLog::kMaxLogSinceLines);
-        EXPECT_EQ(GetJsonString(lines->back(), "message").value_or(""), Format("ControlLogTest cap {}", kLines - 1));
-        EXPECT_EQ(GetJsonBool(since, "truncated"), true);
+        const JsonView lines = MemberOf(since, "lines");
+        ASSERT_TRUE(lines.IsArray());
+        ASSERT_EQ(lines.Size(), ControlLog::kMaxLogSinceLines);
+        EXPECT_EQ(StringOf(ItemAt(lines, lines.Size() - 1), "message"), Format("ControlLogTest cap {}", kLines - 1));
+        EXPECT_EQ(BoolOf(since, "truncated"), true);
         EXPECT_EQ(Number(since, "warnings"), static_cast<uint64_t>(kLines));
     }
 
@@ -439,19 +404,12 @@ namespace BECore::Tests {
         LogEvent::Emit(LogLevel::Warning, "ControlLogTest golden warning", kSite);
         LogEvent::Emit(LogLevel::Error, "quote \" slash \\ newline \n caf\xC3\xA9 bad \xFF end");
         LogEvent::Emit(LogLevel::Fatal, "ControlLogTest golden fatal");
-        Json since = Json::object();
-        since["mark"] = 0;
-        replies.push_back(Raw("log_since", since));
-        since["level"] = "error";
-        replies.push_back(Raw("log_since", since));
+        replies.push_back(Raw("log_since", R"({"mark":0})"));
+        replies.push_back(Raw("log_since", R"({"level":"error","mark":0})"));
         replies.push_back(Raw("log_mark"));
-        Json subscribe = Json::object();
-        subscribe["enabled"] = true;
-        replies.push_back(Raw("log_subscribe", subscribe));
-        subscribe["level"] = "error";
-        replies.push_back(Raw("log_subscribe", subscribe));
-        subscribe["enabled"] = false;
-        replies.push_back(Raw("log_subscribe", subscribe));
+        replies.push_back(Raw("log_subscribe", R"({"enabled":true})"));
+        replies.push_back(Raw("log_subscribe", R"({"enabled":true,"level":"error"})"));
+        replies.push_back(Raw("log_subscribe", R"({"enabled":false,"level":"error"})"));
 
         ExpectTexts(
             replies,
@@ -466,10 +424,8 @@ namespace BECore::Tests {
         for (size_t i = 0; i < ControlLog::kMaxLogSinceLines + kSurplusLines; ++i) {
             Warn(Format("ControlLogTest golden {}", i));
         }
-        Json since = Json::object();
-        since["mark"] = 0;
 
-        const String text = Raw("log_since", since);
+        const String text = Raw("log_since", R"({"mark":0})");
 
         const size_t next = text.find("\"next\":");
         ASSERT_NE(next, String::npos);
@@ -479,9 +435,7 @@ namespace BECore::Tests {
     TEST_F(ControlLogMethodsTest, ThePushedLinesAreTheSameBytesAndTheLastOneCountsTheSkipped) {
         Vector<String> pushed;
         service.SetEventSink([&pushed](const String& text) { pushed.push_back(MaskTimes(text)); });
-        Json subscribe = Json::object();
-        subscribe["enabled"] = true;
-        Raw("log_subscribe", subscribe);
+        Raw("log_subscribe", R"({"enabled":true})");
         constexpr LogSite kSite{"src/Modules/GoldenCategory/Golden.cpp", 3};
         LogEvent::Emit(LogLevel::Warning, "ControlLogTest golden push \"quoted\" caf\xC3\xA9", kSite);
         for (size_t i = 0; i < ControlLog::kMaxLogPushPerFrame + kSurplusLines; ++i) {
@@ -510,10 +464,8 @@ namespace BECore::Tests {
             Warn(Format("ControlLogTest alloc {}", i));
         }
         LogEvent::Flush();
-        Json params = Json::object();
-        params["mark"] = 0;
         const auto drained = [&](StringView method) {
-            service.Post(MakeRequest(++nextId, method, params), [](const String&) {});
+            service.Post(MakeRequestText(++nextId, method, R"({"mark":0})"), [](const String&) {});
             return CountAllocations([this] { service.Drain(); });
         };
         drained("log_since");
@@ -538,11 +490,9 @@ namespace BECore::Tests {
     }
 
     TEST_F(ControlLogMethodsTest, SubscribedLinesArePushedOnePerEvent) {
-        Json params = Json::object();
-        params["enabled"] = true;
-        const Json answer = ResultOf(Call("log_subscribe", params));
-        EXPECT_EQ(GetJsonBool(answer, "enabled"), true);
-        EXPECT_EQ(GetJsonString(answer, "level").value_or(""), "warning");
+        const JsonView answer = ResultOf(Call("log_subscribe", R"({"enabled":true})"));
+        EXPECT_EQ(BoolOf(answer, "enabled"), true);
+        EXPECT_EQ(StringOf(answer, "level"), "warning");
 
         Warn("ControlLogTest pushed warning");
         Warn("ControlLogTest pushed error", LogLevel::Error);
@@ -550,15 +500,15 @@ namespace BECore::Tests {
         service.EndFrame();
 
         ASSERT_EQ(events.size(), 2U);
-        EXPECT_EQ(GetJsonString(events[0], "event").value_or(""), "log");
-        const Json* data = FindJsonMember(events[0], "data");
-        ASSERT_NE(data, nullptr);
-        EXPECT_EQ(GetJsonString(*data, "message").value_or(""), "ControlLogTest pushed warning");
-        EXPECT_EQ(GetJsonString(*data, "level").value_or(""), "warning");
-        EXPECT_EQ(GetJsonString(*data, "time").value_or("").size(), kLogTimeLength - 1);
-        EXPECT_NE(GetJsonInt(*data, "sequence").value_or(0), 0);
-        EXPECT_EQ(FindJsonMember(*data, "skipped"), nullptr);
-        EXPECT_EQ(GetJsonString(Require(FindJsonMember(events[1], "data")), "level").value_or(""), "error");
+        EXPECT_EQ(StringOf(events[0].View(), "event"), "log");
+        const JsonView data = MemberOf(events[0].View(), "data");
+        ASSERT_TRUE(data.IsObject());
+        EXPECT_EQ(StringOf(data, "message"), "ControlLogTest pushed warning");
+        EXPECT_EQ(StringOf(data, "level"), "warning");
+        EXPECT_EQ(StringOf(data, "time").size(), kLogTimeLength - 1);
+        EXPECT_NE(IntOf(data, "sequence").value_or(0), 0);
+        EXPECT_FALSE(MemberOf(data, "skipped").IsValid());
+        EXPECT_EQ(StringOf(MemberOf(events[1].View(), "data"), "level"), "error");
 
         service.EndFrame();
         EXPECT_EQ(events.size(), 2U);
@@ -567,9 +517,7 @@ namespace BECore::Tests {
     TEST_F(ControlLogMethodsTest, SubscribingStartsAtTheNextLine) {
         Warn("ControlLogTest before subscribing");
         LogEvent::Flush();
-        Json params = Json::object();
-        params["enabled"] = true;
-        Call("log_subscribe", params);
+        Call("log_subscribe", R"({"enabled":true})");
 
         service.EndFrame();
 
@@ -577,10 +525,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ControlLogMethodsTest, TheErrorLevelSkipsWarnings) {
-        Json params = Json::object();
-        params["enabled"] = true;
-        params["level"] = "error";
-        EXPECT_EQ(GetJsonString(ResultOf(Call("log_subscribe", params)), "level").value_or(""), "error");
+        EXPECT_EQ(StringOf(ResultOf(Call("log_subscribe", R"({"enabled":true,"level":"error"})")), "level"), "error");
 
         Warn("ControlLogTest quiet warning");
         Warn("ControlLogTest loud error", LogLevel::Error);
@@ -588,13 +533,11 @@ namespace BECore::Tests {
         service.EndFrame();
 
         ASSERT_EQ(events.size(), 1U);
-        EXPECT_EQ(GetJsonString(Require(FindJsonMember(events[0], "data")), "message").value_or(""), "ControlLogTest loud error");
+        EXPECT_EQ(StringOf(MemberOf(events[0].View(), "data"), "message"), "ControlLogTest loud error");
     }
 
     TEST_F(ControlLogMethodsTest, MoreThanTheCapInAFrameSaysHowManyWereSkipped) {
-        Json params = Json::object();
-        params["enabled"] = true;
-        Call("log_subscribe", params);
+        Call("log_subscribe", R"({"enabled":true})");
         constexpr uint32_t kLines = ControlLog::kMaxLogPushPerFrame + kSurplusLines;
         for (uint32_t i = 0; i < kLines; ++i) {
             Warn(Format("ControlLogTest burst {}", i));
@@ -605,22 +548,19 @@ namespace BECore::Tests {
 
         ASSERT_EQ(events.size(), ControlLog::kMaxLogPushPerFrame);
         for (size_t i = 0; i + 1 < events.size(); ++i) {
-            EXPECT_EQ(FindJsonMember(Require(FindJsonMember(events[i], "data")), "skipped"), nullptr);
+            EXPECT_FALSE(MemberOf(MemberOf(events[i].View(), "data"), "skipped").IsValid());
         }
-        const Json& last = Require(FindJsonMember(events.back(), "data"));
+        const JsonView last = MemberOf(events.back().View(), "data");
         EXPECT_EQ(Number(last, "skipped"), static_cast<uint64_t>(kSurplusLines));
-        EXPECT_EQ(GetJsonString(last, "message").value_or(""), Format("ControlLogTest burst {}", ControlLog::kMaxLogPushPerFrame - 1));
+        EXPECT_EQ(StringOf(last, "message"), Format("ControlLogTest burst {}", ControlLog::kMaxLogPushPerFrame - 1));
 
         service.EndFrame();
         EXPECT_EQ(events.size(), ControlLog::kMaxLogPushPerFrame);
     }
 
     TEST_F(ControlLogMethodsTest, TurningItOffStopsThePush) {
-        Json params = Json::object();
-        params["enabled"] = true;
-        Call("log_subscribe", params);
-        params["enabled"] = false;
-        EXPECT_EQ(GetJsonBool(ResultOf(Call("log_subscribe", params)), "enabled"), false);
+        Call("log_subscribe", R"({"enabled":true})");
+        EXPECT_EQ(BoolOf(ResultOf(Call("log_subscribe", R"({"enabled":false})")), "enabled"), false);
 
         Warn("ControlLogTest after unsubscribing");
         LogEvent::Flush();
@@ -629,14 +569,16 @@ namespace BECore::Tests {
         EXPECT_TRUE(events.empty());
     }
 
+    TEST_F(ControlLogMethodsTest, TextThatTheDomCouldNotHoldIsReadByTheTape) {
+        EXPECT_EQ(ErrorCodeOf(Run(R"({"id": 1, "method": "log_since", "params": {"mark": 1e999}})")), "invalid_params") << "a number past a double is refused by the reader, not at parse";
+        EXPECT_EQ(BoolOf(Run(R"({"id": 2, "method": "log_since", "params": {"mark": 0, "level": "err\u006fr"}})"), "ok"), true) << "an escape in `level` is decoded";
+        EXPECT_EQ(ErrorCodeOf(Run(R"({"id": 3, "method": "log_subscribe", "params": {"enabled": true, "level": "warn\u0069ng!"}})")), "invalid_params");
+    }
+
     TEST_F(ControlLogMethodsTest, LogSubscribeRefusesBadParameters) {
         EXPECT_EQ(ErrorCodeOf(Call("log_subscribe")), "invalid_params");
-        Json params = Json::object();
-        params["enabled"] = 1;
-        EXPECT_EQ(ErrorCodeOf(Call("log_subscribe", params)), "invalid_params");
-        params["enabled"] = true;
-        params["level"] = "debug";
-        EXPECT_EQ(ErrorCodeOf(Call("log_subscribe", params)), "invalid_params");
+        EXPECT_EQ(ErrorCodeOf(Call("log_subscribe", R"({"enabled":1})")), "invalid_params");
+        EXPECT_EQ(ErrorCodeOf(Call("log_subscribe", R"({"enabled":true,"level":"debug"})")), "invalid_params");
     }
 
     TEST_F(ControlLogMethodsTest, TheMethodsAreDescribed) {

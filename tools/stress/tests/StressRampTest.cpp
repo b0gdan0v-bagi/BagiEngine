@@ -1,4 +1,5 @@
-#include <BECore/Control/Json.h>
+#include <BECore/Control/ControlParams.h>
+#include <Common/JsonDoc.h>
 #include <Stress/RampController.h>
 #include <gtest/gtest.h>
 
@@ -258,20 +259,20 @@ namespace BECore::Stress::Tests {
 
         const String line = FormatRampLine(result, StressMeasure::Cpu, context);
 
-        const auto parsed = ParseJson(line);
-        ASSERT_TRUE(parsed.has_value()) << line.c_str();
-        EXPECT_EQ(GetJsonString(*parsed, "mode").value_or(""), "ramp");
-        EXPECT_EQ(GetJsonString(*parsed, "scene").value_or(""), "entities");
-        EXPECT_EQ(GetJsonString(*parsed, "measure").value_or(""), "cpu");
-        EXPECT_EQ(GetJsonInt(*parsed, "objectsAt60fps").value_or(0), 4321);
-        EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "budgetMs").value_or(0.0), 16.6);
-        EXPECT_EQ(GetJsonBool(*parsed, "capped"), Optional(false));
-        EXPECT_EQ(GetJsonBool(*parsed, "aborted"), Optional(false));
-        EXPECT_EQ(GetJsonBool(*parsed, "verified"), Optional(true));
-        EXPECT_EQ(GetJsonInt(*parsed, "steps").value_or(0), 17);
-        EXPECT_EQ(GetJsonInt(*parsed, "settleFrames").value_or(0), kSettleFrames);
-        EXPECT_EQ(GetJsonInt(*parsed, "measureFrames").value_or(0), kMeasureFrames);
-        EXPECT_EQ(GetJsonBool(*parsed, "manualClock"), Optional(true));
+        const BECore::Tests::JsonDoc parsed(line);
+        ASSERT_TRUE(parsed.IsParsed()) << line.c_str();
+        EXPECT_EQ(GetParamString(parsed.Root(), "mode").value_or(""), "ramp");
+        EXPECT_EQ(GetParamString(parsed.Root(), "scene").value_or(""), "entities");
+        EXPECT_EQ(GetParamString(parsed.Root(), "measure").value_or(""), "cpu");
+        EXPECT_EQ(GetParamInt(parsed.Root(), "objectsAt60fps").value_or(0), 4321);
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "budgetMs").value_or(0.0), 16.6);
+        EXPECT_EQ(GetParamBool(parsed.Root(), "capped"), Optional(false));
+        EXPECT_EQ(GetParamBool(parsed.Root(), "aborted"), Optional(false));
+        EXPECT_EQ(GetParamBool(parsed.Root(), "verified"), Optional(true));
+        EXPECT_EQ(GetParamInt(parsed.Root(), "steps").value_or(0), 17);
+        EXPECT_EQ(GetParamInt(parsed.Root(), "settleFrames").value_or(0), kSettleFrames);
+        EXPECT_EQ(GetParamInt(parsed.Root(), "measureFrames").value_or(0), kMeasureFrames);
+        EXPECT_EQ(GetParamBool(parsed.Root(), "manualClock"), Optional(true));
 
         // The keys are in byte order, one object on one line starting with a brace
         EXPECT_EQ(line.front(), '{');
@@ -284,7 +285,7 @@ namespace BECore::Stress::Tests {
             }
             at = line.find('"', end + 1);
         }
-        EXPECT_EQ(keys.size(), parsed->size());
+        EXPECT_EQ(keys.size(), parsed.Root().Size());
         for (size_t i = 1; i < keys.size(); ++i) {
             EXPECT_LT(keys[i - 1], keys[i]);
         }

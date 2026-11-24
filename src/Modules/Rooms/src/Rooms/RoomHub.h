@@ -105,8 +105,8 @@ namespace BECore {
             UniquePtr<Room> room;
             /// The order of creation (the hub counts up), so a list is oldest first whatever the hash order
             uint64_t creation = 0;
-            /// The `options` of `create_room`, handed to the game at `start`
-            Json options = Json::object();
+            /// The `options` of `create_room` as compact text, handed to the game at `start`
+            String options;
             /// The connections of the members that are connected, in the order they joined
             Vector<ConnectionId> connections;
             /// The address of the connection that created the room (empty: unknown)
@@ -117,6 +117,10 @@ namespace BECore {
             bool finished = false;
             RoomTime finishedAt{};
         };
+
+        /// The document @p text (a message's `options` or `action`, empty for `{}`) read through the hub's tape: the view is good until the next call of
+        /// a handler or of TapeDocument, and @p text must outlive it. Not valid when the text is no JSON (only a message built by hand can be)
+        [[nodiscard]] JsonView TapeDocument(StringView text);
 
         void HandleCreate(ConnectionId id, Connection& connection, const CreateRoomMessage& message, RoomTime now);
         void HandleJoin(ConnectionId id, Connection& connection, const JoinRoomMessage& message, RoomTime now);
@@ -182,6 +186,8 @@ namespace BECore {
         // Output buffers, kept so that a steady send allocates nothing: _lobbyText is the lobby text of one Flush, _sendScratch the
         // text of every other send
         String _sendScratch;
+        /// The one tape of a handler: it reads the incoming text, then the `options` or `action` text of the message for the call; nothing keeps a view of it
+        JsonTape _tape;
         String _lobbyText;
     };
 

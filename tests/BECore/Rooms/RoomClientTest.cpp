@@ -30,13 +30,10 @@ namespace BECore::Tests {
             return MakeLobbyMessage(lobby);
         }
 
-        Json OneAction() {
-            return Json::object({{"type", "play"}, {"card", 4}});
-        }
+        constexpr StringView kOneAction = R"({"card":4,"type":"play"})";
 
         String View(uint64_t version, int seat = 0, bool finished = false) {
-            Json view = Json::object({{"hand", Json::array({1, 2, 3})}});
-            return MakeViewMessage(kRoom, seat, version, finished, view, Json::array({OneAction()}));
+            return MakeViewMessage(kRoom, seat, version, finished, R"({"hand":[1,2,3]})", R"([{"card":4,"type":"play"}])");
         }
 
         /// A RoomClient over fake transports, with a manual clock and the events it has reported so far
@@ -109,8 +106,8 @@ namespace BECore::Tests {
     // ---- Host and Join ------------------------------------------------------------------------------------------------------------
 
     TEST_F(RoomClientTest, HostSendsCreateRoomAfterOpenedAndNotBefore) {
-        Json options = Json::object({{"rounds", 4}});
-        ASSERT_TRUE(_client->Host(kUrl, "cards", "Ann", options).has_value());
+        constexpr StringView kOptions = R"({"rounds":4})";
+        ASSERT_TRUE(_client->Host(kUrl, "cards", "Ann", kOptions).has_value());
         ASSERT_EQ(_transports.Count(), 1u);
         FakeLink& link = _transports.Last();
         EXPECT_EQ(link.url, kUrl);
@@ -129,7 +126,7 @@ namespace BECore::Tests {
         ASSERT_NE(create, nullptr);
         EXPECT_EQ(create->game, "cards");
         EXPECT_EQ(create->name, "Ann");
-        EXPECT_EQ(create->options, options);
+        EXPECT_EQ(create->options, kOptions);
         ASSERT_EQ(_events.size(), 1u);
         EXPECT_EQ(_events[0].kind, Kind::Connected);
     }
@@ -176,8 +173,8 @@ namespace BECore::Tests {
         EXPECT_TRUE(_client->HasView());
         EXPECT_EQ(_client->GetViewVersion(), 7u);
         EXPECT_FALSE(_client->IsFinished());
-        EXPECT_EQ(_client->GetView(), Json::object({{"hand", Json::array({1, 2, 3})}}));
-        EXPECT_EQ(_client->GetActions(), Json::array({OneAction()}));
+        EXPECT_EQ(_client->GetViewText(), R"({"hand":[1,2,3]})");
+        EXPECT_EQ(_client->GetActionsText(), R"([{"card":4,"type":"play"}])");
 
         const Vector<RoomClientEventKind> expected = {Kind::Connected, Kind::Joined, Kind::LobbyChanged, Kind::ViewChanged};
         EXPECT_EQ(Kinds(), expected);
@@ -195,7 +192,7 @@ namespace BECore::Tests {
     TEST_F(RoomClientTest, ACommandThatDoesNotFitTheStateIsWrongState) {
         EXPECT_EQ(_client->ChooseSeat(1).error().code, RoomClientErrors::kWrongState);
         EXPECT_EQ(_client->Start().error().code, RoomClientErrors::kWrongState);
-        EXPECT_EQ(_client->SendAction(OneAction()).error().code, RoomClientErrors::kWrongState);
+        EXPECT_EQ(_client->SendAction(kOneAction).error().code, RoomClientErrors::kWrongState);
         EXPECT_EQ(_client->Leave().error().code, RoomClientErrors::kWrongState);
 
         ASSERT_TRUE(_client->Host(kUrl, "cards", "Ann").has_value());
@@ -295,19 +292,19 @@ namespace BECore::Tests {
     TEST_F(RoomClientTest, SendActionStampsTheVersionOfTheLastView) {
         FakeLink& link = EnterAsHost();
         // In the room but the game has not started
-        EXPECT_EQ(_client->SendAction(OneAction()).error().code, RoomClientErrors::kWrongState);
+        EXPECT_EQ(_client->SendAction(kOneAction).error().code, RoomClientErrors::kWrongState);
 
         Receive(link, View(7));
-        ASSERT_TRUE(_client->SendAction(OneAction()).has_value());
+        ASSERT_TRUE(_client->SendAction(kOneAction).has_value());
         Receive(link, View(8));
-        ASSERT_TRUE(_client->SendAction(OneAction()).has_value());
+        ASSERT_TRUE(_client->SendAction(kOneAction).has_value());
 
         ASSERT_EQ(link.sent.size(), 3u);
         const auto first = link.ParseSent(1);
         const auto* firstAction = SentAs<ActionMessage>(first);
         ASSERT_NE(firstAction, nullptr);
         EXPECT_EQ(firstAction->version, 7u);
-        EXPECT_EQ(firstAction->action, OneAction());
+        EXPECT_EQ(firstAction->action, kOneAction);
         const auto second = link.ParseSent(2);
         const auto* secondAction = SentAs<ActionMessage>(second);
         ASSERT_NE(secondAction, nullptr);
@@ -317,7 +314,7 @@ namespace BECore::Tests {
     TEST_F(RoomClientTest, AStaleActionComesAsAnErrorThenTheFreshViewAndIsNotSentAgain) {
         FakeLink& link = EnterAsHost();
         Receive(link, View(7));
-        ASSERT_TRUE(_client->SendAction(OneAction()).has_value());
+        ASSERT_TRUE(_client->SendAction(kOneAction).has_value());
         _events.clear();
 
         link.PushText(MakeErrorMessage(RoomErrors::kStaleAction, "the game moved on", RoomMessageTypes::kAction));
@@ -403,7 +400,7 @@ namespace BECore::Tests {
         Receive(link, MakeLobbyMessage(other));
         EXPECT_EQ(_client->GetLobby().room, kRoom);
         EXPECT_EQ(_client->GetLobby().seats.size(), lobbySeats);
-        Receive(link, MakeViewMessage("FGHJK", 1, 4, false, Json::object(), Json::array()));
+        Receive(link, MakeViewMessage("FGHJK", 1, 4, false, "{}", "[]"));
         EXPECT_FALSE(_client->HasView());
     }
 
@@ -639,10 +636,10 @@ namespace BECore::Tests {
         const size_t first = link.sent.size();
 
         const String note(300, 'n');
-        const Json longAction = Json::object({{"type", "play"}, {"note", note.c_str()}});
+        const String longAction = Format(R"({{"note":"{}","type":"play"}})", note);
         ASSERT_TRUE(_client->SendAction(longAction).has_value());
         ASSERT_TRUE(_client->ChooseSeat(2).has_value());
-        ASSERT_TRUE(_client->SendAction(OneAction()).has_value());
+        ASSERT_TRUE(_client->SendAction(kOneAction).has_value());
         ASSERT_TRUE(_client->Start().has_value());
         Advance(milliseconds(10000));
         ASSERT_TRUE(_client->ChooseSeat(2).has_value());
@@ -762,7 +759,7 @@ namespace BECore::Tests {
         EXPECT_EQ(_client->GetLobby().seats.size(), 4u);
         EXPECT_FALSE(_client->IsInRoom());
         // But nothing can be sent into a room that is not there
-        EXPECT_EQ(_client->SendAction(OneAction()).error().code, RoomClientErrors::kWrongState);
+        EXPECT_EQ(_client->SendAction(kOneAction).error().code, RoomClientErrors::kWrongState);
         EXPECT_EQ(_client->ChooseSeat(1).error().code, RoomClientErrors::kWrongState);
         EXPECT_EQ(_client->Start().error().code, RoomClientErrors::kWrongState);
         EXPECT_TRUE(_client->GetSession().IsValid());
@@ -1171,7 +1168,7 @@ namespace BECore::Tests {
             second.host = "Bob";
             second.taken = 3;
             second.seats = 4;
-            second.options = Json::object({{"rounds", 4}});
+            second.options = R"({"rounds":4})";
             list.rooms.push_back(second);
             list.more = more;
             return MakeRoomListMessage(list);
@@ -1203,7 +1200,7 @@ namespace BECore::Tests {
         EXPECT_EQ(rooms.rooms[0].room, kRoom);
         EXPECT_EQ(rooms.rooms[0].host, "Ann");
         EXPECT_EQ(rooms.rooms[1].taken, 3);
-        EXPECT_EQ(rooms.rooms[1].options, Json::object({{"rounds", 4}}));
+        EXPECT_EQ(rooms.rooms[1].options, R"({"rounds":4})");
         EXPECT_TRUE(rooms.more);
         // A list is no room and no join: the state stays, and a failed join is not waited for
         EXPECT_EQ(_client->GetState(), RoomClientState::Connected);
@@ -1332,7 +1329,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(RoomClientTest, HostWithPublicSendsThePublicMember) {
-        ASSERT_TRUE(_client->Host(kUrl, "cards", "Ann", Json::object(), true).has_value());
+        ASSERT_TRUE(_client->Host(kUrl, "cards", "Ann", "{}", true).has_value());
         FakeLink& link = _transports.Last();
         link.PushOpened();
         Pump();
