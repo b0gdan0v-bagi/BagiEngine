@@ -9,6 +9,7 @@ namespace BECore::Stress {
         static constexpr auto sprites = "StressSprites"_intern;
         static constexpr auto entities = "StressEntities"_intern;
         static constexpr auto ui = "StressUi"_intern;
+        static constexpr auto rmlui = "StressRmlUi"_intern;
         static constexpr auto game = "Stress"_intern;
         static constexpr auto objectsCounter = "Stress objects"_intern;
     };

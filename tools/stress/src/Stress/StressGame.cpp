@@ -21,6 +21,10 @@ namespace BECore::Stress {
                     return StressNames::entities;
                 case StressScene::Ui:
                     return StressNames::ui;
+#ifdef STRESS_WITH_RMLUI
+                case StressScene::RmlUi:
+                    return StressNames::rmlui;
+#endif
             }
             return StressNames::sprites;
         }
@@ -57,6 +61,10 @@ namespace BECore::Stress {
     void StressGame::SetObjectCount(uint32_t count) {
         _state.SetCount(count);
         SyncStateVersion();
+    }
+
+    void StressGame::ReloadRmlUiDocuments() {
+        ++_rmlUiReloadRequests;
     }
 
     String StressGame::Describe() const {

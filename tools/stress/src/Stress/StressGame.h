@@ -37,6 +37,15 @@ namespace BECore::Stress {
         /// The scene, the count and the language of the state as one line (`scene=sprites count=100 language=en`), for a controller to compare with `get_state`
         BE_FUNCTION String Describe() const;
 
+        /// Asks the scene `rmlui` to load its documents again; the scene compares GetRmlUiReloadRequests() with the number it has served.
+        /// A method and no `perform_action`: it reaches a controller through `call_method` on the root `game` (Stress/RmlUi/CLAUDE.md). Nothing happens in another scene.
+        BE_FUNCTION void ReloadRmlUiDocuments();
+
+        /// How many times ReloadRmlUiDocuments() was called; not reflected, the scene reads it
+        uint32_t GetRmlUiReloadRequests() const {
+            return _rmlUiReloadRequests;
+        }
+
         /// Copies the version of the state into the read-only `stateVersion`; called every frame by the run component, so it follows the control API's actions
         void SyncStateVersion();
 
@@ -61,6 +70,7 @@ namespace BECore::Stress {
         /// StressState::Version() as of the last SyncStateVersion(); never written by a client
         BE_REFLECT_FIELD BE_FIELD_ATTRS(readonly, tooltip("The version of the shown state")) uint64_t _stateVersion = 0;
 
+        uint32_t _rmlUiReloadRequests = 0;
         StressSettings _settings;
         StressState _state;
         StressGameControl _control;  // after _state: it drives it

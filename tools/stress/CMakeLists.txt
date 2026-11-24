@@ -1,5 +1,5 @@
 # BagiStress
-# The engine's own 2D stress app: an IGame with no rules and three scenes (sprites, entities, ui) chosen by argument (CLAUDE.md).
+# The engine's own 2D stress app: an IGame with no rules and three scenes (sprites, entities, ui; with ENGINE_UI_RMLUI a fourth, rmlui) chosen by argument (CLAUDE.md).
 # The engine's own runnable program, in tools/. Not a game of its own repository, so there is no standalone block.
 
 be_add_module(Stress LINK
@@ -9,6 +9,12 @@ be_add_module(Stress LINK
     SDLModule
 )
 be_add_game_reflection(StressModule)
+
+# The scene `rmlui` (many RmlUi contexts: texture churn) exists only in a build with the RmlUi host; PUBLIC so StressTests and BagiStress see both
+if(TARGET RmlUiHostModule)
+    target_compile_definitions(StressModule PUBLIC STRESS_WITH_RMLUI=1)
+    target_link_libraries(StressModule PUBLIC RmlUiHostModule)
+endif()
 
 be_add_game_executable(BagiStress
     GAME_ROOT ${CMAKE_CURRENT_SOURCE_DIR}
