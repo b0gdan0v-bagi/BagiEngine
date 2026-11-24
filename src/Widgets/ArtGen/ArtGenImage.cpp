@@ -5,7 +5,6 @@
 #include <BECore/Utils/ScopeGuard.h>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
-#include <Widgets/ArtGen/ArtGenInterimJson.h>
 #include <Widgets/TextureEditor/SpriteImage.h>
 #include <cmath>
 
@@ -105,14 +104,6 @@ namespace BECore {
             return std::unexpected(checked.error());
         }
         return settings;
-    }
-
-    Json ArtGenImageSettingsToJson(const ArtGenImageSettings& settings) {
-        return Detail::ArtGenDomOf([&](JsonWriter& writer) { WriteArtGenImageSettings(writer, settings); });
-    }
-
-    std::expected<ArtGenImageSettings, String> ArtGenImageSettingsFromJson(const Json& json) {
-        return Detail::ArtGenReadDom(json, [](JsonView view) { return ReadArtGenImageSettings(view); });
     }
 
     Optional<ArtGenIntRect> DrawnBounds(const ArtGenPixels& pixels) {
@@ -236,14 +227,6 @@ namespace BECore {
             return std::unexpected(String("the frame's output is bigger than its crop"));
         }
         return frame;
-    }
-
-    Json ArtGenImageFrameToJson(const ArtGenImageFrame& frame) {
-        return Detail::ArtGenDomOf([&](JsonWriter& writer) { WriteArtGenImageFrame(writer, frame); });
-    }
-
-    std::expected<ArtGenImageFrame, String> ArtGenImageFrameFromJson(const Json& json) {
-        return Detail::ArtGenReadDom(json, [](JsonView view) { return ReadArtGenImageFrame(view); });
     }
 
     std::expected<ArtGenPixels, String> ProcessArtGenImage(const ArtGenPixels& pixels, const ArtGenImageFrame& frame) {

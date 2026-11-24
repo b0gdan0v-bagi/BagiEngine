@@ -1,6 +1,5 @@
 #pragma once
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonView.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/Types/Types.h>
@@ -46,10 +45,6 @@ namespace BECore {
 
     /// The reference of a JSON value, or the error that names the key (`reference.mode`, ...). A null `weight` counts as absent
     [[nodiscard]] std::expected<ArtGenReference, String> ReadArtGenReference(JsonView value);
-
-    // Interim: goes with the last caller (WP 7)
-    [[nodiscard]] Json ArtGenReferenceToJson(const ArtGenReference& reference);
-    [[nodiscard]] std::expected<ArtGenReference, String> ReadArtGenReference(const Json& value);
 
     /// The reference to the file @p realPath (@p mode, the default weight): its path relative to @p gameRoot with `/` when it lies inside it
     /// (a game folder moves, a relative path stays right), else the absolute path with `/`. Backslashes of a Windows path are turned

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonView.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/File/Path.h>
@@ -51,10 +50,6 @@ namespace BECore {
     /// type or a value out of range is the error and names the key
     [[nodiscard]] std::expected<ArtGenImageSettings, String> ReadArtGenImageSettings(JsonView value);
 
-    // Interim: goes with the last caller (WP 7)
-    [[nodiscard]] Json ArtGenImageSettingsToJson(const ArtGenImageSettings& settings);
-    [[nodiscard]] std::expected<ArtGenImageSettings, String> ArtGenImageSettingsFromJson(const Json& json);
-
     struct ArtGenIntRect {
         int32_t x = 0;
         int32_t y = 0;
@@ -97,10 +92,6 @@ namespace BECore {
     /// `{h, outHeight, outWidth, w, x, y}`: a value inside a record, like WriteArtGenImageSettings
     void WriteArtGenImageFrame(JsonWriter& writer, const ArtGenImageFrame& frame);
     [[nodiscard]] std::expected<ArtGenImageFrame, String> ReadArtGenImageFrame(JsonView value);
-
-    // Interim: goes with the last caller (WP 7)
-    [[nodiscard]] Json ArtGenImageFrameToJson(const ArtGenImageFrame& frame);
-    [[nodiscard]] std::expected<ArtGenImageFrame, String> ArtGenImageFrameFromJson(const Json& json);
 
     /**
      * @brief Crops @p pixels to @p frame and scales the crop to the frame's output size with an area average over premultiplied alpha (so an

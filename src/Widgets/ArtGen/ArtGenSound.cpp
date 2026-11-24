@@ -1,7 +1,6 @@
 #include "ArtGenSound.h"
 
 #include <BECore/Control/ControlParams.h>
-#include <Widgets/ArtGen/ArtGenInterimJson.h>
 #include <cmath>
 
 namespace BECore {
@@ -243,14 +242,6 @@ namespace BECore {
             return std::unexpected(checked.error());
         }
         return settings;
-    }
-
-    Json ArtGenSoundSettingsToJson(const ArtGenSoundSettings& settings) {
-        return Detail::ArtGenDomOf([&](JsonWriter& writer) { WriteArtGenSoundSettings(writer, settings); });
-    }
-
-    std::expected<ArtGenSoundSettings, String> ArtGenSoundSettingsFromJson(const Json& json) {
-        return Detail::ArtGenReadDom(json, [](JsonView view) { return ReadArtGenSoundSettings(view); });
     }
 
     AudioDecodeResult ProcessArtGenSound(const DecodedAudio& audio, const ArtGenSoundSettings& settings) {

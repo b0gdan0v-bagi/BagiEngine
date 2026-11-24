@@ -2,7 +2,6 @@
 
 #include <BECore/Control/ControlParams.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
-#include <Widgets/ArtGen/ArtGenInterimJson.h>
 
 namespace BECore {
 
@@ -109,14 +108,6 @@ namespace BECore {
             }
         }
         return reference;
-    }
-
-    Json ArtGenReferenceToJson(const ArtGenReference& reference) {
-        return Detail::ArtGenDomOf([&](JsonWriter& writer) { WriteArtGenReference(writer, reference); });
-    }
-
-    std::expected<ArtGenReference, String> ReadArtGenReference(const Json& value) {
-        return Detail::ArtGenReadDom(value, [](JsonView view) { return ReadArtGenReference(view); });
     }
 
     ArtGenReference ArtGenReferenceOfFile(StringView gameRoot, StringView realPath, StringView mode) {

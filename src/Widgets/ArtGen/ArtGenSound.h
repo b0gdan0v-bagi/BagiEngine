@@ -1,7 +1,6 @@
 #pragma once
 
 #include <BECore/Audio/AudioDecode.h>
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonView.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/Types/Types.h>
@@ -38,10 +37,6 @@ namespace BECore {
     /// Reads what WriteArtGenSoundSettings writes; a missing key keeps the default, a wrong type, a number that is not finite or a value out of
     /// range is the error
     [[nodiscard]] std::expected<ArtGenSoundSettings, String> ReadArtGenSoundSettings(JsonView value);
-
-    // Interim: goes with the last caller (WP 7)
-    [[nodiscard]] Json ArtGenSoundSettingsToJson(const ArtGenSoundSettings& settings);
-    [[nodiscard]] std::expected<ArtGenSoundSettings, String> ArtGenSoundSettingsFromJson(const Json& json);
 
     /// Averages the channels (`mono`), trims the silence at both ends, cuts at `maxSeconds`, resamples linearly, fades in and out (the last
     /// frame is silent) and brings the peak to `peakDb`, in that order; refused when nothing is left (all of it under the trim threshold)
