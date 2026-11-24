@@ -269,8 +269,8 @@ namespace BECore::Stress::Tests {
     }
 
     // RmlUi keeps one callback texture per glyph page of the font engine, and the pages are shared by every context that draws that size: a
-    // document costs a context and geometry, not a texture of its own. The textures go together when the last context goes (RmlUi's render manager)
-    TEST_F(StressRmlUiRunTest, TexturesFollowTheGlyphPagesNotTheDocumentsAndGoWithTheLastContext) {
+    // document costs a context and geometry, not a texture of its own. RmlUi releases the textures together, at its shutdown (`RmlUiRuntime`: the last holder), never with one context
+    TEST_F(StressRmlUiRunTest, TexturesFollowTheGlyphPagesNotTheDocumentsAndGoWhenRmlUiShutsDown) {
         constexpr uint32_t kMany = 40;
         StartRmlUi(1);
         Frames(2);
@@ -288,7 +288,7 @@ namespace BECore::Stress::Tests {
         BECore::Tests::EngineEnvironment::UseSceneManager({});
         _manager.Reset();
         EXPECT_EQ(RmlUiRuntime::GetInstance().GetHolderCount(), 0);
-        EXPECT_EQ(Textures(), 0u) << "the last context's removal released the textures";
+        EXPECT_EQ(Textures(), 0u) << "RmlUi's shutdown released the textures";
     }
 
     TEST_F(StressRmlUiRunTest, ASceneSwitchAwayAndBackLeavesNoDocumentOrTextureBehind) {
