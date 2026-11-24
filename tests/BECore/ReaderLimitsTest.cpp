@@ -63,12 +63,10 @@ namespace BECore::Tests {
             return false;
         }
 
-        std::filesystem::path SparseFileOfSize(const char* stem, uintmax_t size) {
-            const std::filesystem::path path = TestTempPath(stem);
+        Path SparseFileOfSize(const char* stem, uintmax_t size) {
+            const Path path = TestTempPath(stem);
             WriteFile(path, "x");
-            std::error_code ec;
-            std::filesystem::resize_file(path, size, ec);
-            EXPECT_FALSE(ec) << ec.message();
+            ResizeFile(path, size);
             return path;
         }
 
@@ -86,14 +84,13 @@ namespace BECore::Tests {
 
     TEST(ReaderLimitsTest, XmlFileThatIsNotARegularFileOrIsTooBigIsRefusedBeforeItIsRead) {
         XmlDeserializer folder;
-        EXPECT_FALSE(folder.LoadFromFile(std::filesystem::temp_directory_path()));
+        EXPECT_FALSE(folder.LoadFromFile(SystemTempDirectory()));
         EXPECT_TRUE(HasErrorContaining(folder, "not a regular file"));
 
-        const std::filesystem::path big = SparseFileOfSize("BagiReaderLimitsTest_BigXml", ReaderLimits::kMaxXmlDocumentBytes + 1);
+        const Path big = SparseFileOfSize("BagiReaderLimitsTest_BigXml", ReaderLimits::kMaxXmlDocumentBytes + 1);
         XmlDeserializer reader;
         const bool loaded = reader.LoadFromFile(big);
-        std::error_code ignored;
-        std::filesystem::remove(big, ignored);
+        RemoveFileIfPresent(big);
         EXPECT_FALSE(loaded);
         EXPECT_TRUE(HasErrorContaining(reader, "larger than the limit"));
 
@@ -115,7 +112,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(reader.Read("x", value));
         EXPECT_FALSE(reader.BeginObject("b"));
 
-        EXPECT_FALSE(reader.LoadFromFile(std::filesystem::temp_directory_path()));
+        EXPECT_FALSE(reader.LoadFromFile(SystemTempDirectory()));
         EXPECT_FALSE(reader.BeginObject("a"));
 
         // A later load starts at the root again, with no open object left over
@@ -400,14 +397,13 @@ namespace BECore::Tests {
 
     TEST(ReaderLimitsTest, BinaryFileThatIsNotARegularFileOrIsTooBigIsRefusedBeforeItIsRead) {
         BinaryDeserializer folder;
-        EXPECT_FALSE(folder.LoadFromFile(std::filesystem::temp_directory_path()));
+        EXPECT_FALSE(folder.LoadFromFile(SystemTempDirectory()));
         EXPECT_TRUE(HasErrorContaining(folder, "not a regular file"));
 
-        const std::filesystem::path big = SparseFileOfSize("BagiReaderLimitsTest_BigBinary", ReaderLimits::kMaxBinaryStreamBytes + 1);
+        const Path big = SparseFileOfSize("BagiReaderLimitsTest_BigBinary", ReaderLimits::kMaxBinaryStreamBytes + 1);
         BinaryDeserializer reader;
         const bool loaded = reader.LoadFromFile(big);
-        std::error_code ignored;
-        std::filesystem::remove(big, ignored);
+        RemoveFileIfPresent(big);
         EXPECT_FALSE(loaded);
         EXPECT_TRUE(HasErrorContaining(reader, "larger than the limit"));
     }

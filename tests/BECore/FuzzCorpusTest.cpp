@@ -144,7 +144,7 @@ namespace BECore::Tests {
 
     TEST(FuzzCorpusTest, GeneratedSeedsAreTheCommittedFiles) {
         for (const Fuzz::FuzzSeedFile& seed : Fuzz::MakeGeneratedSeeds()) {
-            const Vector<CorpusFile> files = LoadCorpus(CorpusRoot() / Path(seed.folder));  //-NoStd: seed.folder is a std::filesystem::path until FuzzSeeds.h moves (stage 6)
+            const Vector<CorpusFile> files = LoadCorpus(CorpusRoot() / seed.folder);
             const auto found = std::find_if(files.begin(), files.end(), [&](const CorpusFile& file) { return file.name == seed.name; });
             ASSERT_NE(found, files.end()) << seed.name << " is not in the corpus: run WriteSeeds";
             EXPECT_TRUE(std::equal(found->bytes.begin(), found->bytes.end(), seed.bytes.begin(), seed.bytes.end())) << seed.name << " differs from what the writers make now: run WriteSeeds";

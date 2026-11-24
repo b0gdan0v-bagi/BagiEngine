@@ -1,4 +1,6 @@
+#include <BECore/File/File.h>
 #include <BECore/Save/SaveGame.h>
+#include <Common/NativePath.h>
 #include <Fuzz/FuzzProbeAccess.h>
 #include <Fuzz/FuzzTargets.h>
 #include <random>
@@ -18,15 +20,15 @@ namespace BECore::Fuzz {
         public:
             SlotWorkspace() : _service(_fileSystem) {
                 const String tag = Format("{:08x}", std::random_device{}());
-                _directory = std::filesystem::temp_directory_path() / ToStd(Format("BagiFuzzSave_{}", tag));
-                std::error_code ignored;
-                std::filesystem::remove_all(_directory, ignored);
+                const Path temp = Tests::SystemTempFolder();
+                FUZZ_CHECK(!temp.Empty());
+                _directory = temp / Format("BagiFuzzSave_{}", tag);
+                [[maybe_unused]] const auto ignored = RemoveTree(_directory);
                 FUZZ_CHECK(_service.Initialize(_directory));
             }
 
             ~SlotWorkspace() {
-                std::error_code ignored;
-                std::filesystem::remove_all(_directory, ignored);
+                [[maybe_unused]] const auto ignored = RemoveTree(_directory);
             }
 
             SlotWorkspace(const SlotWorkspace&) = delete;
@@ -39,7 +41,7 @@ namespace BECore::Fuzz {
         private:
             FileSystem _fileSystem;
             SaveGameService _service;
-            std::filesystem::path _directory;
+            Path _directory;
         };
 
         SlotWorkspace& Workspace() {
@@ -121,7 +123,9 @@ namespace BECore::Fuzz {
 
     Vector<uint8_t> MakeSaveFileBytes(StringView game, uint32_t version) {
         const String tag = Format("{:08x}", std::random_device{}());
-        const std::filesystem::path directory = std::filesystem::temp_directory_path() / ToStd(Format("BagiFuzzSeed_{}", tag));
+        const Path temp = Tests::SystemTempFolder();
+        FUZZ_CHECK(!temp.Empty());
+        const Path directory = temp / Format("BagiFuzzSeed_{}", tag);
         Vector<uint8_t> bytes;
         {
             FileSystem fileSystem;
@@ -132,8 +136,7 @@ namespace BECore::Fuzz {
                 }
             }
         }
-        std::error_code ignored;
-        std::filesystem::remove_all(directory, ignored);
+        [[maybe_unused]] const auto ignored = RemoveTree(directory);
         return bytes;
     }
 

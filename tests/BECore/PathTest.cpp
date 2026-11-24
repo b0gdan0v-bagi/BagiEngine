@@ -1,4 +1,3 @@
-#include <BECore/File/FilePath.h>
 #include <BECore/File/Path.h>
 #include <Common/NativePath.h>
 #include <Common/Printers.h>
@@ -7,7 +6,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// What the view helpers and the members of Path give for one text; `std::filesystem::path` gives the same on POSIX (the oracle below)
+        /// What the view helpers and the members of Path give for one text; the standard library's path gives the same on POSIX (the oracle below)
         struct PathRow {
             StringView text;
             StringView parent;
@@ -59,12 +58,13 @@ namespace BECore::Tests {
 
 #ifndef _WIN32
         /// The standard library's own answer: the oracle of the table (POSIX only, the Windows rules differ and are listed apart)
-        std::filesystem::path Oracle(StringView text) {       //-NoStd: the oracle
-            return std::filesystem::path(ToStdString(text));  //-NoStd: the oracle
+        auto Oracle(StringView text) {
+            return NativePath(Path(text));
         }
 
-        String Text(const std::filesystem::path& path) {  //-NoStd: the oracle
-            return PathToUtf8(path);
+        template <typename Native>
+        String Text(const Native& path) {
+            return String(FromNativePath(path).View());
         }
 #endif
 
@@ -330,59 +330,12 @@ namespace BECore::Tests {
         EXPECT_EQ(Path(StringView("x/y")).View(), "x/y");
     }
 
-    namespace {
-
-        /// What a function of the old signatures does with its argument: they accept the other type through the bridge
-        String TakesStd(const std::filesystem::path& path) {  //-NoStd: the bridge under test
-            return PathToUtf8(path);
-        }
-
-        StringView TakesPath(const Path& path, String& keep) {
-            keep = String(path.View());
-            return keep;
-        }
-
-    }  // namespace
-
-    TEST(PathTest, StdBridgeRoundTripKeepsNonAsciiNames) {
-        for (const StringView text : {StringView("dir/file.txt"), StringView("/папка/файл.тхт"), StringView("日本/語.日本"), StringView("é/ü.ñ"), StringView("")}) {
-            SCOPED_TRACE(String(text).c_str());
-            const Path path(text);
-            const std::filesystem::path asStd = path;  //-NoStd: the bridge under test
-            EXPECT_EQ(PathToUtf8(asStd), String(text));
-            const Path back(asStd);
-            EXPECT_EQ(back.View(), text);
-            EXPECT_TRUE(back == path);
-        }
-    }
-
     TEST(PathTest, NativePathRoundTripKeepsNonAsciiNames) {
         for (const StringView text : {StringView("dir/file.txt"), StringView("/папка/файл.тхт"), StringView("日本/語.日本"), StringView("é/ü.ñ"), StringView("")}) {
             SCOPED_TRACE(String(text).c_str());
             const Path path(text);
             EXPECT_TRUE(FromNativePath(NativePath(path)) == path);
         }
-    }
-
-    TEST(PathTest, EachPathTypeIsAcceptedWhereTheOtherIsTaken) {
-        const Path path("é/ü.ñ");
-        const std::filesystem::path asStd = path;  //-NoStd: the bridge under test
-        String keep;
-
-        EXPECT_EQ(TakesStd(path), "é/ü.ñ");
-        EXPECT_EQ(TakesPath(asStd, keep), "é/ü.ñ");
-    }
-
-    TEST(PathTest, JoinWithAStdPathOnEitherSideIsNotAmbiguous) {
-        const Path base("root");
-        const std::filesystem::path stdPart("é/x");      //-NoStd: the bridge under test
-        const std::filesystem::path stdBase("rootStd");  //-NoStd: the bridge under test
-
-        EXPECT_EQ((base / stdPart).View(), "root/é/x");
-        EXPECT_EQ(PathToUtf8(stdBase / base), "rootStd/root");
-        Path accumulated = base;
-        accumulated /= stdPart;
-        EXPECT_EQ(accumulated.View(), "root/é/x");
     }
 
 #ifdef _WIN32
