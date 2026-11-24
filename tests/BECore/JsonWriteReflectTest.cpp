@@ -1,5 +1,5 @@
 // The helpers of the generated writer (Control/JsonWriteReflect.h): every text they write is compared with `JsonSerializer` + `DumpJson` of the same
-// value, the DOM path they replace. The types are written by hand here (the generated ones are in the tests of the generator).
+// value, the DOM path they replace (the bridge's own cases pin literal text). The types are written by hand here (the generated ones are in the tests of the generator).
 
 #include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
@@ -387,6 +387,44 @@ namespace BECore::Tests {
             EXPECT_TRUE(writer.IsComplete());
             EXPECT_EQ(out, Reference(native, indent));
         }
+    }
+
+    TEST(JsonWriteReflectTest, TheBridgeWritesNestedValuesInByteOrderWithoutADom) {
+        // Written in reverse order on purpose: the stream serializer keeps the order of the writes, the bridge sorts every object
+        const Inner inner{7, "in"};
+        const Vector<Inner> items = {Inner{1, "a"}, Inner{2, "b"}};
+        const Vector<int32_t> ids = {3, 1, 2};
+        const float weight = 0.1f;
+        const auto save = [&](ISerializer& s) {
+            Ser::Save(s, weight, "weight");
+            Ser::Save(s, items, "items");
+            Ser::Save(s, inner, "inner");
+            Ser::Save(s, ids, "ids");
+        };
+
+        String whole;
+        JsonWriter wholeWriter(whole);
+        JsonWrite::WriteSerializedObject(wholeWriter, save);
+        EXPECT_TRUE(wholeWriter.IsComplete());
+        EXPECT_EQ(whole, R"({"ids":[3,1,2],"inner":{"count":7,"name":"in"},"items":[{"count":1,"name":"a"},{"count":2,"name":"b"}],"weight":0.1})");
+
+        String member;
+        JsonWriter memberWriter(member);
+        memberWriter.BeginObject();
+        JsonWrite::WriteSerializedMember(memberWriter, "items", save);
+        memberWriter.EndObject();
+        EXPECT_TRUE(memberWriter.IsComplete());
+        EXPECT_EQ(member, R"({"items":[{"count":1,"name":"a"},{"count":2,"name":"b"}]})");
+    }
+
+    TEST(JsonWriteReflectTest, TheBridgeKeepsTheFirstOfTwoWritesOfOneName) {
+        String out;
+        JsonWriter writer(out);
+        JsonWrite::WriteSerializedObject(writer, [](ISerializer& s) {
+            Ser::Save(s, int32_t{1}, "twice");
+            Ser::Save(s, int32_t{2}, "twice");
+        });
+        EXPECT_EQ(out, R"({"twice":1})");
     }
 
     TEST(JsonWriteReflectTest, AMemberThatSavesNothingIsNotWritten) {

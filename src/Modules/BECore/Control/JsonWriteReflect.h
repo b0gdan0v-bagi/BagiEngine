@@ -22,7 +22,8 @@
  * `eastl::basic_string<char>`, `PoolString`), reflected enums (the name), an object that has `WriteJson` (a `JsonPayload`, the foreign JSON value of an answer, is one: JsonPayload.h), the `Math`
  * types (`JsonWriteMath.h`), a single `IntrusivePtr` of such an object (null writes no member; a factory pointer merges the member `type` into the sorted keys of the object), `Optional` of a native
  * type (an empty one writes no member), a `Pair`, a `Variant`, a map whose key is a scalar and whose value is a scalar or a `BE_CLASS`, and a `Vector` / `SmallVector` / `FixedVector` / `Array` of
- * numbers, strings, `Math` values or objects that have `WriteJson` and at least two fields. **Bridged** (the DOM path through `Ser::Save`, same bytes, allocates): every other field type.
+ * numbers, strings, `Math` values or objects that have `WriteJson` and at least two fields. **Bridged** (`Ser::Save` into a `JsonStreamSerializer`, taped and written sorted: same bytes, allocates):
+ * every other field type.
  *
  * A hash map is written in the sorted order of its accessor: the entries are sorted through pointers in a `SmallVector` of 16, which allocates only past 16 entries.
  * A map entry is the object `{key, value}`; when the value is a `BE_CLASS` its members sit in the entry itself, the `key` merged in (the object's own member `key` wins, as on the DOM path).
@@ -159,11 +160,13 @@ namespace BECore::JsonWrite {
         size_t _next = 0;
     };
 
-    /// Writes the member @p key of the open object from what @p save writes with `Ser::Save` into a `JsonSerializer`, as the DOM path would; nothing when
-    /// the member is absent (an empty `Optional`, a null pointer). @p key is the bare name. A writer that is not valid is not asked again.
+    /// Writes the member @p key of the open object from what @p save writes with `Ser::Save` into a `JsonStreamSerializer`: the document is taped
+    /// and the member copied with `WriteJsonSorted` (keys in byte order); nothing when the member is absent (an empty `Optional`, a null pointer).
+    /// @p key is the bare name. A writer that is not valid is not asked again. The bridge allocates (a scratch text and a tape per call): the
+    /// path of the types that have no native writer, never a hot path. A name written twice in one object keeps its first value.
     void WriteSerializedMember(JsonWriter& w, StringView key, FunctionRef<void(ISerializer&)> save);
 
-    /// Writes the object @p serialize saves (`Serialize(s)` of a class) as the next value, as the DOM path would
+    /// Writes the object @p serialize saves (`Serialize(s)` of a class) as the next value, the same way (and allocating the same)
     void WriteSerializedObject(JsonWriter& w, FunctionRef<void(ISerializer&)> serialize);
 
     namespace Detail {
