@@ -472,6 +472,135 @@ namespace BECore::Tests {
         }
     }
 
+    // Notepad writes a byte order mark; the tape refuses it, so the reader skips it, and a file the user edited is not moved to `.bad` by the next save
+    TEST_F(EditorSettingsTest, AFileWithAByteOrderMarkLoadsAndIsNotMovedAside) {
+        WriteFile("preferences.json", "\xEF\xBB\xBF{\"fontScale\":1.5,\"futureOption\":3}");
+        WriteFile("hotkeys.json", "\xEF\xBB\xBF{\"bindings\":{\"scene.save\":\"Ctrl+K\"}}");
+        EditorSettings settings(_directory);
+        settings.Load();
+        EXPECT_EQ(settings.GetPreferences().fontScale, 1.5f);
+        EXPECT_EQ(settings.GetHotkeys().GetChord(kSceneSave), kCtrlK);
+
+        ASSERT_TRUE(settings.SavePreferences());
+        ASSERT_TRUE(settings.SaveHotkeys());
+        EXPECT_FALSE(Exists("preferences.json.bad"));
+        EXPECT_FALSE(Exists("hotkeys.json.bad"));
+        EXPECT_EQ(ReadJsonFile("preferences.json")["futureOption"], 3);
+    }
+
+    // The tape reads a number past a double as valid and an integer written as `5.0` as a number: a field takes neither
+    TEST_F(EditorSettingsTest, ANumberPastADoubleOrAnIntegerWrittenWithAFractionIsTheWrongType) {
+        WriteFile("preferences.json", R"({"fontScale":1e999,"viewportGridStep":5.0,"viewportPreview":{"customWidth":640.0}})");
+        EditorSettings settings(_directory);
+        settings.Load();
+        EXPECT_EQ(settings.GetPreferences(), EditorPreferences{});
+        EXPECT_EQ(ReadFile("preferences.json"), R"({"fontScale":1e999,"viewportGridStep":5.0,"viewportPreview":{"customWidth":640.0}})");
+        EXPECT_FALSE(Exists("preferences.json.bad"));
+    }
+
+    TEST_F(EditorSettingsTest, OfTwoEqualKeysTheFirstIsRead) {
+        WriteFile("preferences.json", R"({"fontScale":1.5,"fontScale":1.75,"viewportGridStep":16,"viewportGridStep":64})");
+        WriteFile("hotkeys.json", R"({"bindings":{"scene.save":"Ctrl+K","scene.save":"Ctrl+P","future.command":"Ctrl+J","future.command":"Ctrl+L"}})");
+        EditorSettings settings(_directory);
+        settings.Load();
+        EXPECT_EQ(settings.GetPreferences().fontScale, 1.5f);
+        EXPECT_EQ(settings.GetPreferences().viewportGridStep, 16);
+        EXPECT_EQ(settings.GetHotkeys().GetChord(kSceneSave), kCtrlK);
+
+        ASSERT_TRUE(settings.SaveHotkeys());
+        EXPECT_EQ(ReadJsonFile("hotkeys.json")["bindings"]["future.command"], "Ctrl+J");
+    }
+
+    // The bytes of the files are what the DOM wrote: keys sorted at every level, indent 2, a newline at the end, a float as the double of the float
+    TEST_F(EditorSettingsTest, PreferencesAreWrittenWithTheBytesTheyAlwaysHad) {
+        WriteFile("preferences.json", R"({"zeta":{"b":1,"a":[1,{"y":"\u00e9\n","x":null}]},"theme":"Classic","viewportPreview":{"future":[]}})");
+        EditorSettings settings(_directory);
+        settings.Load();
+        EditorPreferences preferences = settings.GetPreferences();
+        preferences.fontScale = 1.1f;
+        preferences.viewportGridStep = 48;
+        preferences.externalEditor = "code -g {file}:{line}";
+        preferences.consoleHistory = {"ping", "say \"hi\""};
+        settings.SetPreferences(preferences);
+        ASSERT_TRUE(settings.SavePreferences());
+
+        const String text = ReadFile("preferences.json");
+        EXPECT_EQ(text, R"EXPECTED({
+  "consoleHistory": [
+    "ping",
+    "say \"hi\""
+  ],
+  "externalEditor": "code -g {file}:{line}",
+  "fontScale": 1.100000023841858,
+  "theme": "Classic",
+  "version": 1,
+  "viewportGrid": false,
+  "viewportGridStep": 48,
+  "viewportInputMode": "play",
+  "viewportPreview": {
+    "aspect": "Free",
+    "custom": false,
+    "customHeight": 844,
+    "customWidth": 390,
+    "device": "",
+    "future": [],
+    "overlayAnchors": false,
+    "overlayCanvasBounds": false,
+    "overlayDesignRect": false,
+    "overlayElementRects": false,
+    "overlayFindings": false,
+    "overlayRegions": false,
+    "overlaySafeArea": true,
+    "overlayTouchTargets": false,
+    "overlayViewBounds": false,
+    "rotated": false,
+    "safeArea": "None"
+  },
+  "zeta": {
+    "a": [
+      1,
+      {
+        "x": null,
+        "y": "é\n"
+      }
+    ],
+    "b": 1
+  }
+}
+)EXPECTED");
+        // The DOM is the oracle of the layout
+        EXPECT_EQ(DumpJson(ReadJsonFile("preferences.json"), 2) + "\n", text);
+
+        preferences.fontScale = 0.75f;
+        settings.SetPreferences(preferences);
+        ASSERT_TRUE(settings.SavePreferences());
+        EXPECT_NE(ReadFile("preferences.json").find("\"fontScale\": 0.75,"), String::npos);
+    }
+
+    TEST_F(EditorSettingsTest, HotkeysAreWrittenWithTheBytesTheyAlwaysHad) {
+        WriteFile("hotkeys.json", R"({"extra":{"b":2,"a":1},"bindings":{"future.command":"Ctrl+J"}})");
+        EditorSettings settings(_directory);
+        settings.Load();
+        ASSERT_EQ(settings.GetHotkeys().Assign(kSceneSave, kCtrlK).status, AssignStatus::Assigned);
+        ASSERT_TRUE(settings.GetHotkeys().Unbind(kFileQuit));
+        ASSERT_TRUE(settings.SaveHotkeys());
+
+        const String text = ReadFile("hotkeys.json");
+        EXPECT_EQ(text, R"EXPECTED({
+  "bindings": {
+    "future.command": "Ctrl+J",
+    "scene.save": "Ctrl+K"
+  },
+  "extra": {
+    "a": 1,
+    "b": 2
+  },
+  "version": 1
+}
+)EXPECTED");
+        EXPECT_EQ(DumpJson(ReadJsonFile("hotkeys.json"), 2) + "\n", text);
+    }
+
     TEST_F(EditorSettingsTest, AnExternalEditorOverTheLimitIsCutAtACharacter) {
         const String longText(kMaxExternalEditorLength + 40, 'x');
         WriteFile("preferences.json", Format(R"({{"externalEditor":"{}"}})", longText));
