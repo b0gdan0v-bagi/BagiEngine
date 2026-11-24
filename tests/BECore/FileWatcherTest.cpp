@@ -28,8 +28,8 @@ namespace BECore::Tests {
     class FileWatcherTest : public ::testing::Test {
     protected:
         void SetUp() override {
-            _lower = TestTempDirectory("fw_lower");
-            _upper = TestTempDirectory("fw_upper");
+            _lower = Path(TestTempDirectory("fw_lower"));
+            _upper = Path(TestTempDirectory("fw_upper"));
             MakeEmptyDirectory(_lower);
             MakeEmptyDirectory(_upper);
             _fake = New<FakeFileWatchBackend>();
@@ -55,8 +55,8 @@ namespace BECore::Tests {
             return [this](const FileChange& change) { _seen.push_back(String(change.virtualPath.ToStringView())); };
         }
 
-        std::filesystem::path _lower;
-        std::filesystem::path _upper;
+        Path _lower;
+        Path _upper;
         FileSystem _fileSystem;
         FileWatcher _watcher{_fileSystem};
         IntrusivePtr<FakeFileWatchBackend> _fake;
