@@ -1,6 +1,7 @@
 #include <BECore/Audio/AudioDecode.h>
 #include <BECore/AudioTestSupport.h>
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/File/File.h>
 #include <Common/JsonDoc.h>
 #include <Common/Printers.h>
@@ -223,6 +224,26 @@ namespace BECore::Tests {
         ASSERT_NE(accepted, nullptr);
         EXPECT_EQ(GetJsonString(*accepted, "clip"), Optional<String>("assets/artgen/knock.wav"));
         EXPECT_EQ(DumpJson(Require(FindJsonMember(*accepted, "processing"))), SoundSettingsText(ArtGenSoundSettings{}));
+    }
+
+    TEST_F(ArtGenSoundAcceptTest, TheRecordIsWrittenSortedAndMeasuresAreDoublesNotShortestFloats) {
+        ArtGenSoundTarget target;
+        target.name = "knock";
+        const auto written = WriteSoundIntoAssets(Fixture("mono-24bit.flac"), _provenance, _root / "assets", target, ArtGenSoundSettings{});
+        ASSERT_TRUE(written.has_value()) << written.error().c_str();
+
+        const auto doubleText = [](double value) {
+            String text;
+            JsonWriter writer(text);
+            writer.Value(value);
+            return text;
+        };
+        const String text = ReadFile(written->provenanceFile);
+        EXPECT_TRUE(StringView(text).starts_with("{\n  \"accepted\": {\n    \"channels\": 1,\n    \"clip\": \"assets/artgen/knock.wav\",\n    \"peakDb\": "));
+        // A float widened to a double prints all its digits, as the DOM stored it
+        EXPECT_NE(text.find(Format("\"peakDb\": {},\n", doubleText(static_cast<double>(written->peakDb)))), String::npos) << text.c_str();
+        EXPECT_NE(text.find(Format("\"seconds\": {},\n", doubleText(written->seconds))), String::npos) << text.c_str();
+        EXPECT_TRUE(StringView(text).ends_with("  },\n  \"preset\": \"knock\",\n  \"seed\": 4\n}\n")) << text.c_str();
     }
 
     TEST_F(ArtGenSoundAcceptTest, AClipOfTheGameIsReplacedAndTheWavDecodes) {

@@ -1,6 +1,8 @@
 #include "ArtGenAccept.h"
 
 #include <BECore/Audio/AudioSourceComponent.h>
+#include <BECore/Control/JsonMemberMap.h>
+#include <BECore/Control/JsonTape.h>
 #include <BECore/File/File.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/MountPoints.h>
@@ -12,6 +14,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNode.h>
 #include <Widgets/ArtGen/ArtGenAtlasAccept.h>
+#include <Widgets/ArtGen/ArtGenFileText.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
@@ -43,13 +46,41 @@ namespace BECore {
         constexpr StringView kAssetsPrefix = "assets/";
         constexpr int kProvenanceIndent = 2;
 
-        /// The `.artgen.json` file is a `Json` document by hand, like every record built around it (`accepted`, `kept`): it is the service's own record, read back and
-        /// merged into, so its other keys are a payload of another program that no struct of the engine types
-        std::expected<void, String> WriteProvenance(const Path& file, const Json& record) {
+        /// The service writes the `.artgen.json` record and Accept merges `accepted` and `kept` into it, so every other key is a payload of another program that no
+        /// struct of the engine types: the record is a map of key and value text, written back with its keys sorted
+        std::expected<void, String> WriteProvenance(const Path& file, const JsonMemberMap& record) {
             String text;
-            AppendJson(text, record, kProvenanceIndent);
+            JsonWriter writer(text, kProvenanceIndent);
+            record.Write(writer);
             text.push_back('\n');
             return WriteFileAtomically(file, text);
+        }
+
+        /// The members of the object in the record file; a missing, unreadable or non-object file is an empty record, and so is an empty path
+        JsonMemberMap ReadProvenanceRecord(const Path& file) {
+            JsonMemberMap record;
+            if (file.Empty()) {
+                return record;
+            }
+            const auto text = ReadTextFile(file);
+            if (!text) {
+                return record;
+            }
+            JsonTape tape;
+            if (tape.Parse(WithoutUtf8Bom(StringView(text->data(), text->size())))) {
+                record.Assign(JsonView(tape, 0), {});
+            }
+            return record;
+        }
+
+        /// The `seed` of the record when it is an integer that fits 64 bits
+        Optional<int64_t> SeedOf(const JsonMemberMap& record) {
+            const String* text = record.Find("seed");
+            JsonTape tape;
+            if (text == nullptr || !tape.Parse(StringView(text->data(), text->size()))) {
+                return std::nullopt;
+            }
+            return JsonView(tape, 0).AsInt64();
         }
 
         bool IsClipPart(StringView part) {
@@ -215,21 +246,21 @@ namespace BECore {
         }
 
         // The generation's record, and what Accept did to the sound, so the clip can be made again
-        Json record = Json::object();
-        if (auto text = ReadTextFile(provenance); text) {
-            if (auto parsed = ParseJson(*text); parsed && parsed->is_object()) {
-                record = std::move(*parsed);
-            }
-        }
-        Json accepted = Json::object();
-        accepted["clip"] = ToStdString(clipPath);
-        accepted["source"] = ToStdString(sourceFile.View());
-        accepted["processing"] = ArtGenSoundSettingsToJson(settings);
-        accepted["sampleRate"] = written.format.sampleRate;
-        accepted["channels"] = written.format.channels;
-        accepted["seconds"] = written.seconds;
-        accepted["peakDb"] = written.peakDb;
-        record["accepted"] = std::move(accepted);
+        JsonMemberMap record = ReadProvenanceRecord(provenance);
+        // A float is written as a double: the records on disk hold its double digits, and `Value(float)` would print the shortest float form
+        record.SetWith("accepted", [&](JsonWriter& writer) {
+            writer.BeginObject();
+            writer.Member("channels", written.format.channels);
+            writer.Member("clip", clipPath);
+            writer.Key("peakDb");
+            writer.Value(static_cast<double>(written.peakDb));
+            writer.Key("processing");
+            WriteArtGenSoundSettings(writer, settings);
+            writer.Member("sampleRate", written.format.sampleRate);
+            writer.Member("seconds", written.seconds);
+            writer.Member("source", sourceFile.View());
+            writer.EndObject();
+        });
         if (auto result = WriteProvenance(written.provenanceFile, record); !result) {
             return std::unexpected(result.error());
         }
@@ -285,42 +316,44 @@ namespace BECore {
         constexpr StringView kFrameOfSprite = "sprite";
         constexpr StringView kFrameOfSet = "set";
 
-        /// Where the written picture came from, as the provenance file records it: `{crop, scale, size, frame}`. It stays a document of its own (the file keeps its
-        /// writer and merges into what the service wrote); `MakeArtGenProcessingAnswer` is the answer's mirror of it
-        Json PlacementToJson(const ArtGenCopied& copied) {
-            Json crop = Json::object();
-            crop["x"] = copied.crop.x;
-            crop["y"] = copied.crop.y;
-            crop["w"] = copied.crop.w;
-            crop["h"] = copied.crop.h;
-            Json size = Json::array();
-            size.push_back(copied.width);
-            size.push_back(copied.height);
-            Json json = Json::object();
-            json["crop"] = std::move(crop);
-            json["scale"] = copied.scale;
-            json["size"] = std::move(size);
-            json["frame"] = ToStdString(copied.fromSet ? kFrameOfSet : kFrameOfSprite);
-            return json;
+        /// Where the written picture came from, as the provenance file records it: `crop`, `frame`, `scale` and `size`. `MakeArtGenProcessingAnswer` is the
+        /// answer's mirror of it
+        void WritePlacement(JsonMemberMap& accepted, const ArtGenCopied& copied) {
+            accepted.SetWith("crop", [&](JsonWriter& writer) {
+                writer.BeginObject();
+                writer.Member("h", copied.crop.h);
+                writer.Member("w", copied.crop.w);
+                writer.Member("x", copied.crop.x);
+                writer.Member("y", copied.crop.y);
+                writer.EndObject();
+            });
+            accepted.SetWith("frame", [&](JsonWriter& writer) { writer.Value(copied.fromSet ? kFrameOfSet : kFrameOfSprite); });
+            accepted.SetWith("scale", [&](JsonWriter& writer) { writer.Value(copied.scale); });
+            accepted.SetWith("size", [&](JsonWriter& writer) {
+                writer.BeginArray();
+                writer.Value(copied.width);
+                writer.Value(copied.height);
+                writer.EndArray();
+            });
         }
 
         /// The generation's record, and what Accept did to the picture, so the sprite can be made again
         std::expected<void, String> WriteImageProvenance(const Path& source, const Path& provenance, StringView sprite, const ArtGenCopied& copied) {
-            Json record = Json::object();
-            if (!provenance.Empty()) {
-                if (auto text = ReadTextFile(provenance); text) {
-                    if (auto parsed = ParseJson(*text); parsed && parsed->is_object()) {
-                        record = std::move(*parsed);
-                    }
+            JsonMemberMap record = ReadProvenanceRecord(provenance);
+            const Optional<int64_t> seed = SeedOf(record);
+            JsonMemberMap accepted;
+            WritePlacement(accepted, copied);
+            accepted.SetWith("sprite", [&](JsonWriter& writer) { writer.Value(sprite); });
+            accepted.SetWith("source", [&](JsonWriter& writer) { writer.Value(source.View()); });
+            accepted.SetWith("seed", [&](JsonWriter& writer) {
+                if (seed) {
+                    writer.Value(*seed);
+                } else {
+                    writer.Null();
                 }
-            }
-            const Optional<int64_t> seed = GetJsonInt(record, "seed");
-            Json accepted = PlacementToJson(copied);
-            accepted["sprite"] = ToStdString(sprite);
-            accepted["source"] = ToStdString(source.View());
-            accepted["seed"] = seed ? Json(*seed) : Json();
-            accepted["processing"] = ArtGenImageSettingsToJson(copied.settings);
-            record["accepted"] = std::move(accepted);
+            });
+            accepted.SetWith("processing", [&](JsonWriter& writer) { WriteArtGenImageSettings(writer, copied.settings); });
+            record.SetWith("accepted", [&](JsonWriter& writer) { accepted.Write(writer); });
             return WriteProvenance(copied.provenanceFile, record);
         }
 
@@ -693,15 +726,19 @@ namespace BECore {
         if (!text) {
             return std::unexpected(Format("cannot read '{}': {}", file.View(), text.error()));
         }
-        auto parsed = ParseJson(StringView(*text));
-        if (!parsed || !parsed->is_object()) {
+        JsonTape tape;
+        if (!tape.Parse(WithoutUtf8Bom(StringView(text->data(), text->size()))) || !JsonView(tape, 0).IsObject()) {
             return std::unexpected(Format("'{}' is not a JSON object", file.View()));
         }
-        Json kept = Json::object();
-        kept["seed"] = seed;
-        kept["date"] = ToStdString(date);
-        (*parsed)["kept"] = std::move(kept);
-        return WriteProvenance(file, *parsed);
+        JsonMemberMap record;
+        record.Assign(JsonView(tape, 0), {});
+        record.SetWith("kept", [&](JsonWriter& writer) {
+            writer.BeginObject();
+            writer.Member("date", date);
+            writer.Member("seed", seed);
+            writer.EndObject();
+        });
+        return WriteProvenance(file, record);
     }
 
     std::expected<ArtGenImageFrame, String> MeasureFrameForControl(const Vector<String>& pngFiles, const ArtGenImageSettings& settings) {

@@ -1,4 +1,5 @@
 #include <BECore/ArtGenAnswerText.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/Resource/IResource.h>
 #include <BECore/Resource/ResourceCache.h>
 #include <Common/ArtGenTestSupport.h>
@@ -785,6 +786,85 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonString(*kept, "date").value_or(String()), "2026-11-17T10:00:00Z");
     }
 
+    TEST_F(ArtGenAcceptTest, AnAcceptAndAKeepWriteTheRecordByteForByteAndLeaveTheServicesKeysUntouched) {
+        // The service's keys are in no order and one holds a nested object and an exponent: they come back sorted at every level, the `accepted` and `kept` records are
+        // new, and `seed` is read back from the record
+        WriteFile(provenance, R"({"seed": 7, "zeta": {"b": [1, 2.5], "a": "x"}, "checks": {"passed": true}, "alpha": 1e2})");
+        const auto source = folder / "out" / "real.png";
+        ASSERT_NO_FATAL_FAILURE(WriteRealPng(source, 512, 512, {10, 20, 100, 200}));
+        const auto copied = CopyVariantIntoAssets(source, provenance, folder / "assets", "queen", ArtGenImagePlan{});
+        ASSERT_TRUE(copied.has_value()) << copied.error().c_str();
+        ASSERT_TRUE(MarkProvenanceKept(copied->provenanceFile, 7, "2026-11-17T10:00:00Z").has_value());
+
+        const String expected = Format(R"({{
+  "accepted": {{
+    "crop": {{
+      "h": 208,
+      "w": 108,
+      "x": 6,
+      "y": 16
+    }},
+    "frame": "sprite",
+    "processing": {{
+      "maxSize": 256,
+      "padding": 2,
+      "trim": true
+    }},
+    "scale": 1.0,
+    "seed": 7,
+    "size": [
+      108,
+      208
+    ],
+    "source": "{}",
+    "sprite": "queen"
+  }},
+  "alpha": 100.0,
+  "checks": {{
+    "passed": true
+  }},
+  "kept": {{
+    "date": "2026-11-17T10:00:00Z",
+    "seed": 7
+  }},
+  "seed": 7,
+  "zeta": {{
+    "a": "x",
+    "b": [
+      1,
+      2.5
+    ]
+  }}
+}}
+)",
+                                       source.View());
+        EXPECT_EQ(ReadFile(copied->provenanceFile), expected);
+    }
+
+    TEST_F(ArtGenAcceptTest, AnAcceptWithoutASeedInTheRecordWritesANull) {
+        const auto source = folder / "out" / "real.png";
+        ASSERT_NO_FATAL_FAILURE(WriteRealPng(source, 512, 512, {10, 20, 100, 200}));
+        WriteFile(provenance, R"({"seed": "seven"})");
+        const auto copied = CopyVariantIntoAssets(source, provenance, folder / "assets", "queen", ArtGenImagePlan{});
+        ASSERT_TRUE(copied.has_value()) << copied.error().c_str();
+        const String text = ReadFile(copied->provenanceFile);
+        EXPECT_NE(text.find("\"seed\": null,"), String::npos) << text.c_str();
+        EXPECT_NE(text.find("\"seed\": \"seven\""), String::npos) << "the service's own seed stays as it was";
+    }
+
+    TEST_F(ArtGenAcceptTest, ARecordSavedWithAByteOrderMarkIsMergedInto) {
+        const auto source = folder / "out" / "real.png";
+        ASSERT_NO_FATAL_FAILURE(WriteRealPng(source, 512, 512, {10, 20, 100, 200}));
+        WriteFile(provenance, "\xEF\xBB\xBF{\"preset\": \"gem\"}");
+        const auto copied = CopyVariantIntoAssets(source, provenance, folder / "assets", "queen", ArtGenImagePlan{});
+        ASSERT_TRUE(copied.has_value()) << copied.error().c_str();
+        EXPECT_NE(ReadFile(copied->provenanceFile).find("\"preset\": \"gem\""), String::npos);
+
+        WriteFile(copied->provenanceFile, "\xEF\xBB\xBF{\"preset\": \"gem\"}");
+        ASSERT_TRUE(MarkProvenanceKept(copied->provenanceFile, 7, "2026-11-17T10:00:00Z").has_value());
+        EXPECT_EQ(ReadFile(copied->provenanceFile), "{\n  \"kept\": {\n    \"date\": \"2026-11-17T10:00:00Z\",\n    \"seed\": 7\n  },\n  \"preset\": \"gem\"\n}\n");
+    }
+
     TEST_F(ArtGenAcceptTest, ASecondKeptReplacesTheFirst) {
         const auto copied = CopyVariantIntoAssets(png, provenance, folder / "assets", "queen", kIdentity);
         ASSERT_TRUE(copied.has_value());
@@ -1047,7 +1127,12 @@ namespace BECore::Tests {
                 EXPECT_EQ(Require(FindJsonMember(answer, key)), Require(FindJsonMember(accepted, key))) << key.data();
             }
             // The settings are what the file writer says, so the two cannot drift
-            for (const auto& [key, value] : ArtGenImageSettingsToJson(copied->settings).items()) {
+            String settingsText;
+            JsonWriter settingsWriter(settingsText);
+            WriteArtGenImageSettings(settingsWriter, copied->settings);
+            const auto settings = ParseJson(settingsText);
+            ASSERT_TRUE(settings.has_value());
+            for (const auto& [key, value] : settings->items()) {
                 EXPECT_EQ(Require(FindJsonMember(answer, key.c_str())), value) << key.c_str();
             }
             EXPECT_EQ(answer.size(), 7u) << "the settings and the placement, nothing else";
