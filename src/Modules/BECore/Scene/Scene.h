@@ -6,6 +6,7 @@
 #include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Renderer/ViewTransform.h>
+#include <BECore/Scene/SceneDrawList.h>
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/Scene/SceneNodeFiles.h>
 #include <BECore/Scene/SceneView.h>
@@ -40,9 +41,11 @@ namespace BECore {
         /**
          * @brief Draw every component in draw order: by SceneNode::GetLayer(), then scene order (depth-first, a parent before its children).
          *
-         * SceneDrawSystem draws QuadRendererComponent and SpriteRendererComponent itself from their registry data (the first of each per node)
-         * and calls IComponent::OnDraw() of every other component; no event handler order is involved.
-         * Nothing may add or remove nodes while this runs.
+         * SceneDrawSystem walks the draw list (SceneDrawList): it draws QuadRendererComponent and SpriteRendererComponent itself (the first of
+         * each per node) and calls IComponent::OnDraw() of every other component that has one; no event handler order is involved. The list is
+         * rebuilt only when a node, a component, a layer or the editor flags changed since the last build; a field of a component is read at draw
+         * time, so a change of it shows in the next draw.
+         * Nothing may add or remove nodes or components, or change a layer or the editor flags, while this runs (checked in Debug).
          */
         void Draw();
 
@@ -51,7 +54,8 @@ namespace BECore {
          *
          * No draw needed. After a Draw() it is read from the pass (O(1)) until the tree changes (a node added, removed or moved, a layer set
          * with SceneNode::SetLayer()); then, and before the first draw, it is a walk of the tree. A layer field written without SetLayer()
-         * is seen for the asked node at once, for the ranks of the others after the next Draw(). 0 for a node that is not in this scene.
+         * is seen for the asked node at once, for the ranks of the others only after the next rebuild of the draw list (the draw order itself
+         * follows SetLayer()). 0 for a node that is not in this scene.
          */
         int32_t GetDrawRank(const SceneNode& node) const;
 
@@ -219,6 +223,18 @@ namespace BECore {
         /// Called by SceneDrawSystem::Run() only, once it has written SceneDrawItem::rank of every node
         void DrawRanksWritten(PassKey<SceneDrawSystem>);
 
+        /// How many times SceneDrawSystem rebuilt the draw list; a steady frame leaves it as it is
+        uint32_t GetDrawListBuilds() const;
+
+        /// SceneDrawSystem::Run() only: the list it fills and walks
+        SceneDrawList& GetDrawList(PassKey<SceneDrawSystem>);
+
+        /// Called by SceneDrawSystem::Run() only, once it has filled the draw list: the list holds until the next change
+        void DrawListBuilt(PassKey<SceneDrawSystem>);
+
+        /// Called by SceneDrawSystem::Run() only: true while the draw pass runs, when no node or component may change
+        void SetDrawing(bool drawing, PassKey<SceneDrawSystem>);
+
     private:
         bool IsLiveNode(const SceneNode& node) const;
         void DestroyEntities(SceneNode& node);
@@ -242,7 +258,10 @@ namespace BECore {
         bool _active = false;
         uint32_t _drawPass = 0;
         bool _drawRanksValid = false;  // SceneDrawItem::rank is what the tree says: set by the draw system, cleared by every edit of the tree
-        bool _drawListValid = false;   // what the draw list was built from still holds: cleared by every edit of the tree, of the components of a node and of the editor flags
+        bool _drawing = false;         // a draw pass is running: the hooks that make the list stale must not be called
+        uint32_t _drawListBuilds = 0;
+        SceneDrawList _drawList;
+        bool _drawListValid = false;  // what the draw list was built from still holds: cleared by every edit of the tree, of the components of a node and of the editor flags
     };
 
 }  // namespace BECore

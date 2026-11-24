@@ -28,11 +28,10 @@ namespace BECore {
          * @brief Draw this component. Called once per frame while its scene is the active one, in the draw order of Scene::Draw().
          *
          * A component that draws itself overrides it and does not subscribe to an event for drawing: the order of event handlers is not
-         * defined. QuadRendererComponent and SpriteRendererComponent have no OnDraw(): SceneDrawSystem draws them from the registry, at the
-         * place of the component in the node. Draw only, never change game state or add and remove nodes here. Do not write a
-         * TransformComponent or a renderer field (QuadRendererComponent::_color, SpriteRendererComponent::SetTexture() / ReloadTexture()):
-         * the system copied them into the registry before the first OnDraw() of the pass, so the change would show one frame late, and a
-         * texture released here would leave SpriteDrawData::texture dangling.
+         * defined. QuadRendererComponent and SpriteRendererComponent have no OnDraw(): SceneDrawSystem draws them from their fields, at the
+         * place of the component in the node. Draw only, never change game state here, and never add or remove nodes or components, set a
+         * layer or the editor flags: the draw list holds raw pointers to the components and is rebuilt only after such a change, so it
+         * would be walked while stale (checked in Debug).
          */
         virtual void OnDraw() {}
 

@@ -132,10 +132,12 @@ namespace BECore {
     }
 
     void Scene::ComponentsChanged(PassKey<SceneNode>) {
+        ASSERT(!_drawing, "A component was added or removed while the scene was drawing");
         _drawListValid = false;
     }
 
     void Scene::EditorFlagsChanged(PassKey<SceneNode>) {
+        ASSERT(!_drawing, "The editor flags of a node were changed while the scene was drawing");
         _drawListValid = false;
     }
 
@@ -144,12 +146,30 @@ namespace BECore {
     }
 
     void Scene::InvalidateDrawOrder() {
+        ASSERT(!_drawing, "A node was added, removed, moved or put on another layer while the scene was drawing");
         _drawRanksValid = false;
         _drawListValid = false;
     }
 
     void Scene::DrawRanksWritten(PassKey<SceneDrawSystem>) {
         _drawRanksValid = true;
+    }
+
+    uint32_t Scene::GetDrawListBuilds() const {
+        return _drawListBuilds;
+    }
+
+    SceneDrawList& Scene::GetDrawList(PassKey<SceneDrawSystem>) {
+        return _drawList;
+    }
+
+    void Scene::DrawListBuilt(PassKey<SceneDrawSystem>) {
+        _drawListValid = true;
+        ++_drawListBuilds;
+    }
+
+    void Scene::SetDrawing(bool drawing, PassKey<SceneDrawSystem>) {
+        _drawing = drawing;
     }
 
     void Scene::PickView(float outputWidth, float outputHeight) {
