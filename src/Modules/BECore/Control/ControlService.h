@@ -1,7 +1,6 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
-#include <BECore/Control/JsonFwd.h>
 #include <BECore/Control/JsonView.h>
 #include <BECore/Control/RequestBuffers.h>
 #include <BECore/Memory/ArenaAllocator.h>
@@ -106,12 +105,10 @@ namespace BECore {
         /// Where Publish() sends its messages (the transport); none by default
         void SetEventSink(EventSink sink);
 
-        /// Sends {"event":..,"data":..} to the event sink, if there is one. A sink may replace or clear itself; a Publish from inside the sink sends nothing
-        void Publish(StringView event, const Json& data);
-
         /**
-         * @brief Publish() with the data written by @p writeData: the same bytes as the `Json` form, no `Json` built.
+         * @brief Sends {"event":..,"data":..} to the event sink, if there is one, with the data written by @p writeData.
          *
+         * A sink may replace or clear itself; a Publish from inside the sink sends nothing.
          * Neither a sink nor an observer: returns at once and does not call @p writeData. An observer gets a view of the written data, tokenized once (so the text is written to a local String first);
          * with a sink alone the data is written in place into the publish buffer, and a second push allocates nothing. @p writeData writes exactly one value; one that does not, or whose writer
          * recorded a failure (JsonWriter::Fail), is not sent. It must not Publish itself (the nested push reaches only the observers).

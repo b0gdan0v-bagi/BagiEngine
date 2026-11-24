@@ -2,6 +2,7 @@
 
 #include <BECore/Control/JsonView.h>
 #include <BECore/Control/JsonWriter.h>
+#include <BECore/Format/Format.h>
 #include <BECore/Types/Types.h>
 #include <Common/JsonDoc.h>
 #include <gtest/gtest.h>

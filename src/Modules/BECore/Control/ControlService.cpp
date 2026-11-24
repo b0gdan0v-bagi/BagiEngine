@@ -274,11 +274,6 @@ namespace BECore {
         PrunePublishObservers();
     }
 
-    void ControlService::Publish(StringView event, const Json& data) {
-        const auto write = [&data](JsonWriter& writer) { WriteJson(writer, data); };
-        Publish(event, FunctionRef<void(JsonWriter&)>(write));
-    }
-
     void ControlService::Publish(StringView event, FunctionRef<void(JsonWriter&)> writeData) {
         const bool hasObservers = !_publishObservers.empty() && !_notifyingObservers;
         if (!hasObservers && !_eventSink) {

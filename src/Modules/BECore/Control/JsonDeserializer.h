@@ -1,6 +1,5 @@
 #pragma once
 
-#include <BECore/Control/JsonFwd.h>
 #include <BECore/Control/JsonView.h>
 #include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Memory/LinearArena.h>
@@ -13,7 +12,7 @@ namespace BECore {
      *
      * Walks the JsonTape of the text, never a DOM. Values are always strict: a bool is a JSON bool, a number a JSON number of the target's kind
      * and range, a string a JSON string, and a refusal is an error under the field's path that leaves the target as it was. The shapes it reads
-     * are those of JsonSerializer (Reflection/CLAUDE.md, "JSON shapes of the reflection pair"). A key is found among the members of the open
+     * are those of JsonStreamSerializer (Reflection/CLAUDE.md, "JSON shapes of the reflection pair"). A key is found among the members of the open
      * object whatever the order of the text, with a cursor after the last match, so a document that keeps the order of the reads costs one key
      * compare each.
      *
@@ -27,12 +26,6 @@ namespace BECore {
         /// An empty reader: every read is the error `Document root is not an object` until Load()
         JsonDeserializer();
 
-        /**
-         * @brief The interim bridge from the DOM: writes @p document as text into a string the reader keeps, and loads that
-         *
-         * Costs a dump and a parse; only tests that build a DOM call it, and the last step of the move to the tape removes it. @p document is not needed after the call.
-         */
-        explicit JsonDeserializer(const Json& document);
         ~JsonDeserializer() override;
 
         JsonDeserializer(const JsonDeserializer&) = delete;
@@ -186,8 +179,6 @@ namespace BECore {
         Vector<DeserializeError> _errors;
         JsonTape _ownTape;
         const JsonTape* _tape = &_ownTape;
-        /// The text of the Json constructor, which the tape borrows
-        String _bridgeText;
         /// A string that has escapes is decoded here before it is quoted, interned or compared; the capacity is kept between reads
         String _decoded;
     };

@@ -1,6 +1,5 @@
 #include "JsonDeserializer.h"
 
-#include <BECore/Control/Json.h>
 #include <cmath>
 
 namespace BECore {
@@ -46,11 +45,6 @@ namespace BECore {
 
     JsonDeserializer::JsonDeserializer() {
         Reset(_ownTape, JsonView());
-    }
-
-    JsonDeserializer::JsonDeserializer(const Json& document) {
-        AppendJson(_bridgeText, document);
-        Load(StringView(_bridgeText));
     }
 
     JsonDeserializer::~JsonDeserializer() = default;

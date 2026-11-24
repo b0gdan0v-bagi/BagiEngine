@@ -45,13 +45,6 @@ namespace BECore {
         envelope.WriteJson(writer);
     }
 
-    String MakeOkResponse(StringView id, Json result) {
-        String text;
-        const bool written = AppendOkResponse(text, id, [&result](JsonWriter& writer) { WriteJson(writer, result); });
-        EXPECT(written, "MakeOkResponse: the writer of a Json value wrote no complete value");
-        return text;
-    }
-
     String MakeErrorResponse(StringView id, const ControlError& error) {
         String text;
         AppendErrorResponse(text, id, error);
@@ -72,30 +65,6 @@ namespace BECore {
         : _service(&service), _buffers(std::move(buffers)), _method(std::move(method)), _id(id), _params(params), _reply(std::move(reply)) {}
 
     ControlCall::ControlCall(PassKey<ControlService>, String method, JsonView params) : _method(std::move(method)), _params(params), _capturing(true) {}
-
-    const Json& ControlCall::ParamsJson() const {
-        if (!_paramsJson) {
-            auto parsed = ParseJson(_params.Raw());
-            _paramsJson = parsed ? std::move(*parsed) : Json::object();  // the DOM refuses a number past a double that the tape took
-        }
-        return *_paramsJson;
-    }
-
-    void ControlCall::Reply(Json result) {
-        EXPECT(!_answered, "ControlCall: the call is already answered");
-        if (_answered) {
-            return;
-        }
-        _answered = true;
-        if (_capturing) {
-            _captured = ControlAnswer(DumpJson(result));
-            return;
-        }
-        _service->SendOk(_reply, _id, [&result](JsonWriter& writer) -> std::expected<void, ControlError> {
-            WriteJson(writer, result);
-            return {};
-        });
-    }
 
     void ControlCall::ReplyEmpty() {
         Reply([](JsonWriter& writer) {

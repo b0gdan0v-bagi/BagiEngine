@@ -1,29 +1,16 @@
 // WriteDoubleText (Control/JsonDoubleText.h): the text of a double is a contract of every control answer, replay file and room message.
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDoubleText.h>
-#include <bit>
 #include <cfloat>
-#include <cmath>
 #include <gtest/gtest.h>
-#include <random>
 
 namespace BECore::Tests {
 
     namespace {
 
-        constexpr uint64_t kSeed = 0xD0B1E7E57ULL;
-        constexpr size_t kRandomBitPatterns = 100000;
-
         String TextOf(double value) {
             Array<char, kMaxDoubleTextBytes> buffer{};
             return String(buffer.data(), WriteDoubleText(buffer.data(), value));
-        }
-
-        /// What the library the routine was ported from writes
-        String ReferenceTextOf(double value) {
-            const std::string text = Json(value).dump();  //-NoStd: the reference is nlohmann's own dump
-            return String(text.c_str(), text.size());
         }
 
         struct Pin {
@@ -59,32 +46,6 @@ namespace BECore::Tests {
         for (const Pin& pin : pins) {
             EXPECT_EQ(TextOf(pin.value), String(pin.text)) << pin.text;
         }
-    }
-
-    TEST(JsonDoubleTextTest, EveryPowerOfTenAndTwoMatchesTheLibrary) {
-        for (int exponent = -323; exponent <= 308; ++exponent) {
-            const double value = std::pow(10.0, exponent);
-            ASSERT_EQ(TextOf(value), ReferenceTextOf(value)) << "10^" << exponent;
-        }
-        for (int exponent = -1074; exponent <= 1023; ++exponent) {
-            const double value = std::ldexp(1.0, exponent);
-            ASSERT_EQ(TextOf(value), ReferenceTextOf(value)) << "2^" << exponent;
-            ASSERT_EQ(TextOf(-value), ReferenceTextOf(-value)) << "-2^" << exponent;
-        }
-    }
-
-    TEST(JsonDoubleTextTest, RandomBitPatternsMatchTheLibrary) {
-        std::mt19937_64 random(kSeed);
-        size_t checked = 0;
-        for (size_t n = 0; n < kRandomBitPatterns; ++n) {
-            const double value = std::bit_cast<double>(random());
-            if (!std::isfinite(value)) {
-                continue;
-            }
-            ++checked;
-            ASSERT_EQ(TextOf(value), ReferenceTextOf(value)) << "case " << n;
-        }
-        EXPECT_GT(checked, kRandomBitPatterns * 9 / 10);
     }
 
 }  // namespace BECore::Tests

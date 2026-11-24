@@ -1,6 +1,6 @@
 #pragma once
 
-#include <BECore/Control/Json.h>
+#include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonView.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/Control/RequestBuffers.h>
@@ -21,7 +21,7 @@ namespace BECore {
     [[nodiscard]] JsonView EmptyParamsView();
 
     /// Appends the response of a successful call, {"id":..,"ok":true,"result":..}, to @p out (never cleared); @p id is the JSON text of the request's id, written as it
-    /// is (`kNullId` when there is none); @p writeResult writes the one value of `result`. The keys are in alphabetical order, as a `Json` object keeps them, so the order a client sees does not
+    /// is (`kNullId` when there is none); @p writeResult writes the one value of `result`. The keys are in alphabetical order, so the order a client sees does not
     /// depend on the way a response is written. Allocates only for the growth of @p out. False when @p writeResult did not write exactly one complete value: @p out is then back to its length before
     /// the call, with nothing appended
     bool AppendOkResponse(String& out, StringView id, FunctionRef<void(JsonWriter&)> writeResult);
@@ -32,9 +32,6 @@ namespace BECore {
 
     /// Appends the response of a failed call, {"error":{"code":..,"message":..},"id":..,"ok":false}, to @p out (never cleared)
     void AppendErrorResponse(String& out, StringView id, const ControlError& error);
-
-    /// The response text of a successful call (AppendOkResponse with a `Json` result)
-    [[nodiscard]] String MakeOkResponse(StringView id, Json result);
 
     /// The response text of a failed call (AppendErrorResponse)
     [[nodiscard]] String MakeErrorResponse(StringView id, const ControlError& error);
@@ -74,12 +71,6 @@ namespace BECore {
         [[nodiscard]] JsonView Params() const {
             return _params;
         }
-
-        /// The request parameters as a DOM, parsed from Params() on first use. Interim: no caller is left in `src`, and slice 7 removes it
-        [[nodiscard]] const Json& ParamsJson() const;
-
-        /// Answers with success; @p result is written as the `result` of the response
-        void Reply(Json result);
 
         /// Answers with an empty object, `{}`
         void ReplyEmpty();
@@ -148,7 +139,6 @@ namespace BECore {
         String _method;
         StringView _id = kNullId;
         JsonView _params;
-        mutable Optional<Json> _paramsJson;  // ParamsJson(), made on first use
         ControlReplyFn _reply;
         DoneFn _done;
         uint32_t _deferFrames = 0;

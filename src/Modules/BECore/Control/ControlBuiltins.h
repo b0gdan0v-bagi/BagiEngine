@@ -1,7 +1,6 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
-#include <BECore/Control/JsonFwd.h>
 #include <BECore/Control/JsonView.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/Types/Types.h>
