@@ -2,9 +2,7 @@
 // and an element by index from XML, binary and JSON, saves them back as `expr`, evaluates them to what C++ over the hand gives, and reports a mistake as `column N: <message>` with the document
 // name; a cached result of such a formula follows the version counter of the level its list is in.
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
-#include <BECore/Control/JsonSerializer.h>
 #include <BECore/Random/Rng.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
@@ -16,6 +14,7 @@
 #include <BECore/Values/ValueLinkScope.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
+#include <Common/SerializedText.h>
 #include <Generated/ValueListMahjongTypes.gen.hpp>
 #include <algorithm>
 #include <gtest/gtest.h>
@@ -300,13 +299,12 @@ namespace BECore::Tests {
 
     TEST(ValueListLoadTest, JsonHasTheSameFormulas) {
         const ValueListMahjongDocument document = LoadedDocument(kShorthand);
-        JsonSerializer serializer;
-        document.Serialize(serializer);
-        const Json json = serializer.Take();
+        const String json = SerializedText(document);
 
         ValueListMahjongDocument loaded;
         const ValueLinkScope scope(kDocumentName);
-        JsonDeserializer reader(json);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(json));
         loaded.Deserialize(reader);
         EXPECT_FALSE(reader.HasErrors()) << ReportsOf(reader).c_str();
         ExpectSameDocument(loaded, document);

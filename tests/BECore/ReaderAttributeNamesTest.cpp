@@ -1,6 +1,5 @@
 // IDeserializer::AttributeNames: the attributes of the open scope in document order, from the XML reader only.
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
@@ -104,9 +103,8 @@ namespace BECore::Tests {
         EXPECT_EQ(NamesOf(binary), "");
         binary.EndObject();
 
-        const auto parsed = ParseJson(R"({"context":{"caster":"UnitStats"}})");
-        ASSERT_TRUE(parsed.has_value());
-        JsonDeserializer json(*parsed);
+        JsonDeserializer json;
+        ASSERT_TRUE(json.Load(R"({"context":{"caster":"UnitStats"}})"));
         EXPECT_EQ(NamesOf(json), "");
         ASSERT_TRUE(json.BeginObject("context"));
         EXPECT_EQ(NamesOf(json), "");
@@ -114,9 +112,8 @@ namespace BECore::Tests {
     }
 
     TEST(ReaderAttributeNamesTest, OnlyJsonCallsAScalarMemberScalar) {
-        const auto parsed = ParseJson(R"({"n":12,"s":"x","o":{},"a":[1],"z":null})");
-        ASSERT_TRUE(parsed.has_value());
-        JsonDeserializer json(*parsed);
+        JsonDeserializer json;
+        ASSERT_TRUE(json.Load(R"({"n":12,"s":"x","o":{},"a":[1],"z":null})"));
         EXPECT_TRUE(json.IsScalarMember("n"));
         EXPECT_TRUE(json.IsScalarMember("s"));
         EXPECT_TRUE(json.IsScalarMember("z"));

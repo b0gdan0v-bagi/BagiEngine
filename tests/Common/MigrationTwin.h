@@ -23,6 +23,7 @@
 #include <BECore/UI/UIThemes.h>
 #include <BECore/UI/UIVars.h>
 #include <BECore/Utils/FunctionRef.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -150,21 +151,21 @@ namespace BECore::Tests::MigrationTwin {
         }
     }
 
-    inline String JsonText(const Json& object, StringView key) {
-        return GetJsonString(object, key).value_or(String());
+    inline String JsonText(JsonView object, StringView key) {
+        return StringOf(object, key);
     }
 
-    inline String JsonFlag(const Json& object, StringView key) {
-        return GetJsonBool(object, key).value_or(false) ? "true" : "false";
+    inline String JsonFlag(JsonView object, StringView key) {
+        return BoolOf(object, key).value_or(false) ? "true" : "false";
     }
 
     /// The named elements of a `ui_tree` canvas (or of an element below it) as "canvasKey|name" -> @p fieldsOf of its entry; the first element of a name wins
-    inline void CollectTree(const Json& parent, const String& canvasKey, Set<String>& seen, Map<String, String>& out, FunctionRef<String(const Json&)> fieldsOf) {
-        const Json* list = FindJsonMember(parent, parent.contains("elements") ? "elements" : "children");
-        if (list == nullptr || !list->is_array()) {
+    inline void CollectTree(JsonView parent, const String& canvasKey, Set<String>& seen, Map<String, String>& out, FunctionRef<String(JsonView)> fieldsOf) {
+        const JsonView list = MemberOf(parent, parent.Find("elements") ? "elements" : "children");
+        if (!list.IsArray()) {
             return;
         }
-        for (const Json& element : *list) {
+        for (const JsonView element : list.Items()) {
             const String name = JsonText(element, "name");
             const String key = Format("{}|{}", canvasKey, name);
             if (!name.empty() && seen.insert(key).second) {
@@ -301,24 +302,18 @@ namespace BECore::Tests::MigrationTwin {
             return recorder.emitted;
         }
 
-        /// The `canvases` array of the answer of `ui_tree`; empty (and a failure) when it answers none
-        Json CallTree(const String& sceneName) {
-            Json request = Json::object();
-            request["id"] = ++_nextId;
-            request["method"] = "ui_tree";
-            Json response;
-            _service.Post(DumpJson(request), [&response](String text) {
-                auto parsed = ParseJson(text);
-                response = parsed ? std::move(*parsed) : Json();
-            });
-            _service.Drain();
-            const Json* result = FindJsonMember(response, "result");
-            const Json* list = result != nullptr ? FindJsonMember(*result, "canvases") : nullptr;
-            if (list == nullptr || !list->is_array()) {
+        /// The answer of `ui_tree`: `Canvases(reply)` is its `canvases` array, which a failing case finds empty
+        ControlReply CallTree() {
+            return CallControlText(_service, ++_nextId, "ui_tree");
+        }
+
+        /// The `canvases` array of @p reply; empty (and a failure) when it answers none
+        static JsonView Canvases(const ControlReply& reply, const String& sceneName) {
+            const JsonView list = MemberOf(reply.Result(), "canvases");
+            if (!list.IsArray()) {
                 ADD_FAILURE() << "ui_tree answers no canvases in scene " << sceneName;
-                return Json::array();
             }
-            return *list;
+            return list;
         }
 
         ControlService _service;

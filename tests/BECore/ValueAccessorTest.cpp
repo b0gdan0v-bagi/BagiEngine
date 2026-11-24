@@ -1,9 +1,7 @@
 // Loading and saving of Value<T> (Values/ValueAccessor.h): the three spellings, the link scope, the errors, XML and binary. The reflected
 // structs are those of ValueTestTypes.h (their generated code is included in ValueContextTest.cpp).
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
-#include <BECore/Control/JsonSerializer.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/PropertyVisitorDispatch.h>
@@ -14,6 +12,7 @@
 #include <BECore/Values/Value.h>
 #include <BECore/Values/ValueLinkScope.h>
 #include <Common/Printers.h>
+#include <Common/SerializedText.h>
 #include <cstring>
 #include <gtest/gtest.h>
 
@@ -109,12 +108,8 @@ namespace BECore::Tests {
         /// Loads the JSON object @p text into @p target (the load scope is the declaration when given); every error, one per line
         template <typename Struct>
         String LoadJson(StringView text, Struct& target, const ContextDecl* declaration) {
-            const auto parsed = ParseJson(text);
-            EXPECT_TRUE(parsed.has_value()) << String(text).c_str();
-            if (!parsed) {
-                return {};
-            }
-            JsonDeserializer reader(*parsed);
+            JsonDeserializer reader;
+            EXPECT_TRUE(reader.Load(text)) << String(text).c_str();
             Optional<ValueLinkScope> scope;
             if (declaration != nullptr) {
                 scope.emplace(*declaration);
@@ -525,12 +520,11 @@ namespace BECore::Tests {
     TEST(ValueAccessorTest, TheJsonRoundTripOfEveryKindIsEqual) {
         const ValueWorld world;
         const ValueSkill skill = MakeMixedSkill(world);
-        JsonSerializer serializer;
-        skill.Serialize(serializer);
-        const Json document = serializer.Take();
+        const String document = SerializedText(skill);
 
         ValueSkill loaded;
-        JsonDeserializer reader(document);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
         {
             const ValueLinkScope scope(world.declaration);
             loaded.Deserialize(reader);
@@ -541,9 +535,8 @@ namespace BECore::Tests {
 
     TEST(ValueAccessorTest, JsonDiagnosticsKnowTheValueKeys) {
         const ValueWorld world;
-        const auto parsed = ParseJson(R"({"damage":12,"scale":{"value":2},"critical":{"from":"caster.alive"},"label":{"value":"x","vlue":"y"}})");
-        ASSERT_TRUE(parsed.has_value());
-        JsonDeserializer reader(*parsed);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(R"({"damage":12,"scale":{"value":2},"critical":{"from":"caster.alive"},"label":{"value":"x","vlue":"y"}})"));
         reader.SetDiagnostics(DiagnosticsMode::Warn);
         ValueSkill skill;
         {

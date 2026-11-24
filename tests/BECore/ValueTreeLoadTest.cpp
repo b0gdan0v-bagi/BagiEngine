@@ -1,7 +1,6 @@
 // The key `tree` of a Value (Values/ValueAccessor.h, Values/Nodes): the same formula as a tree of node classes and as `expr` is one Value; XML, binary and JSON read it; a tree
 // is saved as the text it prints; the errors of the tree and of the checker. The document types are those of ValueTestTypes.h (their generated code is included in ValueContextTest.cpp).
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
@@ -296,12 +295,12 @@ namespace BECore::Tests {
     }
 
     TEST(ValueTreeLoadTest, JsonReadsATreeAndSavesItsText) {
-        const auto parsed = ParseJson(kJsonTree);
-        ASSERT_TRUE(parsed.has_value());
+        const StringView text(kJsonTree);
         ValueWorld world;
         const ValueLinkScope scope(world.declaration);
         ValueFormulaDocument document;
-        JsonDeserializer reader(*parsed);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(text));
         document.Deserialize(reader);
         EXPECT_FALSE(reader.HasErrors()) << ReportsOf(reader).c_str();
         ExpectAttackTimesTwo(document.damage);

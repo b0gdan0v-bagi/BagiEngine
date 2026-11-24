@@ -176,16 +176,16 @@ namespace BECore::Tests {
             return line;
         }
 
-        String TreeLineOf(const Json& element) {
+        String TreeLineOf(JsonView element) {
             String range;
-            if (const auto min = GetJsonNumber(element, "minValue")) {
-                range = Format("{}..{} step {}", Number(*min), Number(GetJsonNumber(element, "maxValue").value_or(0.0)), Number(GetJsonNumber(element, "step").value_or(0.0)));
+            if (const auto min = MemberOf(element, "minValue").AsDouble()) {
+                range = Format("{}..{} step {}", Number(*min), Number(MemberOf(element, "maxValue").AsDouble().value_or(0.0)), Number(MemberOf(element, "step").AsDouble().value_or(0.0)));
             }
             // A slider has no `value` (its number is `sliderValue`), so its line carries an empty one, as a control with no clicker value
             String line =
                 Format("type={}; text={}; icon={}; action={}; value={}; tooltip={}; bind={}; range={}; disabled={}", JsonText(element, "type"), JsonText(element, "text"), JsonText(element, "icon"),
                        JsonText(element, "action"), JsonText(element, "value"), JsonText(element, "tooltip"), JsonText(element, "bind"), range, JsonFlag(element, "disabled"));
-            if (FindJsonMember(element, "checked") != nullptr) {
+            if (element.Find("checked")) {
                 AppendFormat(line, "; checked={}", JsonFlag(element, "checked"));
             }
             return line;
@@ -248,7 +248,8 @@ namespace BECore::Tests {
         /// The tree answer of every named element, by name (the first of a name wins)
         Map<String, String> Tree() {
             Map<String, String> lines;
-            for (const Json& canvas : CallTree(kNodeSceneName)) {
+            const ControlReply reply = CallTree();
+            for (const JsonView canvas : Canvases(reply, kNodeSceneName).Items()) {
                 Set<String> seen;
                 CollectTree(canvas, "", seen, lines, TreeLineOf);
             }

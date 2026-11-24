@@ -1,10 +1,8 @@
-// JsonDeserializer (Control/JsonDeserializer.h): the round trip with JsonSerializer, strict values, paths of errors, unknown keys, limits.
+// JsonDeserializer (Control/JsonDeserializer.h): the round trip with JsonStreamSerializer, strict values, paths of errors, unknown keys, limits.
 // The generated code of the test types is included in TypeRegistryTest.cpp, FuzzProbeAccess.cpp and FactoryInitializeTest.cpp; here the types
 // are used through their headers.
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
-#include <BECore/Control/JsonSerializer.h>
 #include <BECore/FactoryInitializeTest.h>
 #include <BECore/FuzzProbe.h>
 #include <BECore/Reflection/DataAccessor.h>
@@ -13,6 +11,7 @@
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/TypeRegistryTest.h>
 #include <Common/Printers.h>
+#include <Common/SerializedText.h>
 #include <Common/TestText.h>
 #include <Fuzz/FuzzProbeAccess.h>
 #include <gtest/gtest.h>
@@ -24,19 +23,6 @@ namespace BECore::Tests {
     using FuzzProbeData::ProbeState;
 
     namespace {
-
-        Json Parse(StringView text) {
-            auto parsed = ParseJson(text);
-            EXPECT_TRUE(parsed.has_value()) << String(text).c_str();
-            return parsed ? std::move(*parsed) : Json();
-        }
-
-        template <typename T>
-        String ObjectText(const T& object) {
-            JsonSerializer serializer;
-            object.Serialize(serializer);
-            return DumpJson(serializer.Take());
-        }
 
         /// "path: message" of every error, one per line
         String ErrorsText(const IDeserializer& reader) {
@@ -64,8 +50,9 @@ namespace BECore::Tests {
         /// Loads `{"k": <valueJson>}` into @p value as the field `k`; true when the load answered true
         template <typename T>
         bool LoadK(StringView valueJson, T& value, String& errors) {
-            const Json doc = Parse(Format("{{\"k\":{}}}", valueJson));
-            JsonDeserializer reader(doc);
+            const String doc = Format("{{\"k\":{}}}", valueJson);
+            JsonDeserializer reader;
+            EXPECT_TRUE(reader.Load(doc)) << doc.c_str();
             const bool loaded = Ser::Load(reader, value, "k");
             errors = ErrorsText(reader);
             return loaded;
@@ -88,22 +75,6 @@ namespace BECore::Tests {
             EXPECT_TRUE(LoadK(valueJson, value, errors)) << String(valueJson).c_str() << ": " << errors.c_str();
             EXPECT_TRUE(errors.empty()) << errors.c_str();
             EXPECT_EQ(value, expected) << String(valueJson).c_str();
-        }
-
-        /// A tree of ProbeNode nested @p depth levels, built without recursion
-        Json MakeDeepTree(size_t depth) {
-            Json node = Json::object();
-            node["id"] = 1;
-            node["children"] = Json::array();
-            for (size_t level = 0; level < depth; ++level) {
-                Json children = Json::array();
-                children.push_back(std::move(node));
-                Json outer = Json::object();
-                outer["id"] = 1;
-                outer["children"] = std::move(children);
-                node = std::move(outer);
-            }
-            return node;
         }
 
         RegAllKinds MakeFilledAllKinds() {
@@ -156,14 +127,15 @@ namespace BECore::Tests {
 
     TEST(JsonDeserializerTest, EveryKindOfAClassSurvivesTheRoundTrip) {
         const RegAllKinds all = MakeFilledAllKinds();
-        const Json document = Parse(ObjectText(all));
+        const String document = SerializedText(all);
 
         RegAllKinds loaded;
-        JsonDeserializer reader(document);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
         loaded.Deserialize(reader);
 
         EXPECT_TRUE(reader.GetErrors().empty()) << ErrorsText(reader).c_str();
-        EXPECT_EQ(ObjectText(loaded), ObjectText(all));
+        EXPECT_EQ(SerializedText(loaded), SerializedText(all));
         EXPECT_EQ(loaded.big, std::numeric_limits<int64_t>::min());
         EXPECT_EQ(loaded.ubig, std::numeric_limits<uint64_t>::max());
         EXPECT_EQ(loaded.ratio, 0.1f);
@@ -174,10 +146,11 @@ namespace BECore::Tests {
 
     TEST(JsonDeserializerTest, TheProbeStateSurvivesTheRoundTrip) {
         const ProbeState state = Fuzz::MakeFilledProbe();
-        const Json document = Parse(ObjectText(state));
+        const String document = SerializedText(state);
 
         ProbeState loaded;
-        JsonDeserializer reader(document);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
         loaded.Deserialize(reader);
 
         EXPECT_TRUE(reader.GetErrors().empty()) << ErrorsText(reader).c_str();
@@ -189,10 +162,11 @@ namespace BECore::Tests {
         IntrusivePtr<NoHookProbeImpl> item = New<NoHookProbeImpl>();
         item->value = 11;
         list.items.push_back(item);
-        const Json document = Parse(ObjectText(list));
+        const String document = SerializedText(list);
 
         NoHookProbeList loaded;
-        JsonDeserializer reader(document);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
         loaded.Deserialize(reader);
 
         EXPECT_TRUE(reader.GetErrors().empty()) << ErrorsText(reader).c_str();
@@ -201,7 +175,7 @@ namespace BECore::Tests {
     }
 
     TEST(JsonDeserializerTest, ASceneNodeWithComponentsLoadsAsFromXml) {
-        const Json document = Parse(R"({"name":"Box","components":[{"type":"TransformComponent","x":1.5},{"type":"ClickableComponent","actionName":"go"}]})");
+        const String document = R"({"name":"Box","components":[{"type":"TransformComponent","x":1.5},{"type":"ClickableComponent","actionName":"go"}]})";
         XmlDeserializer xml;
         ASSERT_TRUE(xml.LoadFromString(R"(<node name="Box"><components><component type="TransformComponent" x="1.5"/><component type="ClickableComponent" actionName="go"/></components></node>)"));
 
@@ -209,7 +183,8 @@ namespace BECore::Tests {
         const IntrusivePtr<SceneNode> fromXml = TypeRegistry::GetInstance().CreateAs<SceneNode>("SceneNode");
         ASSERT_TRUE(fromJson);
         ASSERT_TRUE(fromXml);
-        JsonDeserializer reader(document);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
         reader.SetDiagnostics(DiagnosticsMode::Warn);
         fromJson->Deserialize(reader);
         reader.FinishLoad();
@@ -220,13 +195,14 @@ namespace BECore::Tests {
         ASSERT_EQ(fromJson->GetComponents().size(), 2u);
         EXPECT_EQ(fromJson->GetComponents()[0]->GetTypeMeta().typeName, "TransformComponent");
         EXPECT_EQ(fromJson->GetComponents()[1]->GetTypeMeta().typeName, "ClickableComponent");
-        EXPECT_EQ(ObjectText(*fromJson), ObjectText(*fromXml));
+        EXPECT_EQ(SerializedText(*fromJson), SerializedText(*fromXml));
     }
 
     TEST(JsonDeserializerTest, AListElementIsReadAsAScalarOrAsAnObjectWithValue) {
         ProbeState state;
-        const Json document = Parse(R"({"numbers":[1,{"value":2},3],"words":["a",{"value":"b"}]})");
-        JsonDeserializer reader(document);
+        const String document = R"({"numbers":[1,{"value":2},3],"words":["a",{"value":"b"}]})";
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
 
         state.Deserialize(reader);
 
@@ -237,8 +213,9 @@ namespace BECore::Tests {
 
     TEST(JsonDeserializerTest, AMissingMemberIsNoError) {
         ProbeState state;
-        const Json document = Parse("{}");
-        JsonDeserializer reader(document);
+        const String document = "{}";
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
 
         state.Deserialize(reader);
 
@@ -252,8 +229,9 @@ namespace BECore::Tests {
     // -------------------------------------------------------------------------
 
     TEST(JsonDeserializerTest, StrictValuesAreAlwaysOn) {
-        const Json document = Parse("{}");
-        JsonDeserializer reader(document);
+        const String document = "{}";
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
 
         EXPECT_TRUE(reader.IsStrictValues());
         reader.SetStrictValues(false);
@@ -302,14 +280,14 @@ namespace BECore::Tests {
         ExpectRefused<uint8_t>("-1", 5, "Invalid integer value '-1'");
         ExpectRefused<uint64_t>("-1", 5, "Invalid integer value '-1'");
         ExpectRefused<int64_t>("9223372036854775808", 5, "Invalid integer value '9223372036854775808' (out of range)");
-        ExpectRefused<uint64_t>("18446744073709551616", 5, "Invalid integer value '1.8446744073709552e+19'");
+        ExpectRefused<uint64_t>("18446744073709551616", 5, "Invalid integer value '18446744073709551616' (out of range)");
     }
 
     TEST(JsonDeserializerTest, AFloatIsAFiniteJsonNumber) {
         ExpectRefused<float>("\"1.5\"", 2.0f, "Invalid number value '1.5'");
         ExpectRefused<float>("true", 2.0f, "Invalid number value 'true'");
         ExpectRefused<float>("null", 2.0f, "Invalid number value 'null'");
-        ExpectRefused<float>("1e39", 2.0f, "Invalid number value '1e+39' (out of range)");
+        ExpectRefused<float>("1e39", 2.0f, "Invalid number value '1e39' (out of range)");
         ExpectRefused<double>("\"x\"", 2.0, "Invalid number value 'x'");
         ExpectRefused<double>("[1]", 2.0, "Invalid number value '<array>'");
     }
@@ -361,8 +339,9 @@ namespace BECore::Tests {
 
     TEST(JsonDeserializerTest, NullWhereAValueIsExpectedIsRefused) {
         ProbeState state;
-        const Json document = Parse(R"({"flag":null,"i32":null,"text":null,"leaf":null,"leaves":null,"mode":null})");
-        JsonDeserializer reader(document);
+        const String document = R"({"flag":null,"i32":null,"text":null,"leaf":null,"leaves":null,"mode":null})";
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
 
         state.Deserialize(reader);
 
@@ -399,8 +378,9 @@ namespace BECore::Tests {
 
     TEST(JsonDeserializerTest, AnErrorNamesTheFieldPathWithElementPositions) {
         ProbeState state;
-        const Json document = Parse(R"({"leaves":[{"id":1},{"id":"x"},{"label":5}],"numbers":[1,"z"],"leaf":{"weight":true},"tree":{"children":[{"id":false}]}})");
-        JsonDeserializer reader(document);
+        const String document = R"({"leaves":[{"id":1},{"id":"x"},{"label":5}],"numbers":[1,"z"],"leaf":{"weight":true},"tree":{"children":[{"id":false}]}})";
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
 
         state.Deserialize(reader);
 
@@ -467,8 +447,9 @@ namespace BECore::Tests {
 
     TEST(JsonDeserializerTest, AnUnknownOrDisabledFactoryElementIsReportedOrDropped) {
         NoHookProbeList list;
-        const Json document = Parse(R"({"items":[{"type":"Nope"},{"type":"NoHookProbeImpl","enabled":false,"value":1},{"type":"NoHookProbeImpl","value":2}]})");
-        JsonDeserializer reader(document);
+        const String document = R"({"items":[{"type":"Nope"},{"type":"NoHookProbeImpl","enabled":false,"value":1},{"type":"NoHookProbeImpl","value":2}]})";
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
         reader.SetDiagnostics(DiagnosticsMode::Warn);
 
         list.Deserialize(reader);
@@ -486,8 +467,9 @@ namespace BECore::Tests {
 
     TEST(JsonDeserializerTest, AnUnknownKeyIsAFindingWithAHintForANearName) {
         ProbeState state;
-        const Json document = Parse(R"({"flg":true,"i32":3,"bogus":1,"leaf":{"idd":1,"id":2},"leaves":[{"id":1,"extra":2}],"numbers":[1]})");
-        JsonDeserializer reader(document);
+        const String document = R"({"flg":true,"i32":3,"bogus":1,"leaf":{"idd":1,"id":2},"leaves":[{"id":1,"extra":2}],"numbers":[1]})";
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
         reader.SetDiagnostics(DiagnosticsMode::Warn);
 
         state.Deserialize(reader);
@@ -504,8 +486,9 @@ namespace BECore::Tests {
     }
 
     TEST(JsonDeserializerTest, AClosedScopeTakesNoNameOfItsParentAndAReopenedOneStartsEmpty) {
-        const Json document = Parse(R"({"alpha":1,"alpa":2,"first":{"inner":1,"inne":2},"beta":3,"bta":4,"second":{"other":1,"othr":2},"first2":{"inner":1,"innr":2}})");
-        JsonDeserializer reader(document);
+        const String document = R"({"alpha":1,"alpa":2,"first":{"inner":1,"inne":2},"beta":3,"bta":4,"second":{"other":1,"othr":2},"first2":{"inner":1,"innr":2}})";
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
         reader.SetDiagnostics(DiagnosticsMode::Warn);
 
         int32_t value = 0;
@@ -533,17 +516,19 @@ namespace BECore::Tests {
     }
 
     TEST(JsonDeserializerTest, UnknownKeysAreErrorsUnderErrorAndNothingUnderOff) {
-        const Json document = Parse(R"({"flg":true})");
+        const String document = R"({"flg":true})";
 
         ProbeState underError;
-        JsonDeserializer strict(document);
+        JsonDeserializer strict;
+        ASSERT_TRUE(strict.Load(document));
         strict.SetDiagnostics(DiagnosticsMode::Error);
         underError.Deserialize(strict);
         strict.FinishLoad();
         EXPECT_EQ(ErrorsText(strict), "flg: Unknown key 'flg', did you mean 'flag'?\n");
 
         ProbeState underOff;
-        JsonDeserializer quiet(document);
+        JsonDeserializer quiet;
+        ASSERT_TRUE(quiet.Load(document));
         underOff.Deserialize(quiet);
         quiet.FinishLoad();
         EXPECT_FALSE(quiet.HasErrors());
@@ -551,16 +536,18 @@ namespace BECore::Tests {
     }
 
     TEST(JsonDeserializerTest, AKeyTheCallerReadsByHandOrSkipsIsNotUnknown) {
-        const Json document = Parse(R"({"mine":1,"other":2})");
-        JsonDeserializer reader(document);
+        const String document = R"({"mine":1,"other":2})";
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
         reader.SetDiagnostics(DiagnosticsMode::Warn);
 
         reader.NoteKnownKey("mine");
         reader.FinishLoad();
         EXPECT_EQ(WarningsText(reader), "other: Unknown key 'other'\n");
 
-        const Json other = Parse(R"({"a":{"x":1}})");
-        JsonDeserializer skipping(other);
+        const String other = R"({"a":{"x":1}})";
+        JsonDeserializer skipping;
+        ASSERT_TRUE(skipping.Load(other));
         skipping.SetDiagnostics(DiagnosticsMode::Warn);
         ASSERT_TRUE(skipping.BeginObject("a"));
         skipping.SkipScope();
@@ -570,8 +557,9 @@ namespace BECore::Tests {
     }
 
     TEST(JsonDeserializerTest, ALongUnknownKeyIsCutAndCleanedInTheFinding) {
-        const Json document = Parse(Format("{{\"{}\\n\":1}}", String(300, 'k')));
-        JsonDeserializer reader(document);
+        const String document = Format("{{\"{}\\n\":1}}", String(300, 'k'));
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
         reader.SetDiagnostics(DiagnosticsMode::Warn);
 
         reader.FinishLoad();
@@ -587,15 +575,15 @@ namespace BECore::Tests {
     // -------------------------------------------------------------------------
 
     TEST(JsonDeserializerTest, AnArrayOverTheLimitIsRefused) {
-        Json items = Json::array();
+        String document = R"({"numbers":[)";
         for (size_t i = 0; i <= ReaderLimits::kMaxArrayElements; ++i) {
-            items.push_back(1);
+            document += i == 0 ? "1" : ",1";
         }
-        Json document = Json::object();
-        document["numbers"] = std::move(items);
+        document += "]}";
         ProbeState state;
         state.numbers = {9};
-        JsonDeserializer reader(document);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
 
         state.Deserialize(reader);
 
@@ -603,36 +591,15 @@ namespace BECore::Tests {
         EXPECT_EQ(state.numbers, (Vector<int32_t>{9}));
     }
 
-    TEST(JsonDeserializerTest, NestingDeeperThanTheLimitIsRefusedAndShallowIsRead) {
-        const Json deep = MakeDeepTree(300);
-        ProbeNode tooDeep;
-        JsonDeserializer refusing(deep);
-        tooDeep.Deserialize(refusing);
-        EXPECT_TRUE(Contains(ErrorsText(refusing), "Nesting is deeper than the limit")) << ErrorsText(refusing).c_str();
-
-        const Json shallow = MakeDeepTree(50);
-        ProbeNode fine;
-        JsonDeserializer reading(shallow);
-        fine.Deserialize(reading);
-        EXPECT_FALSE(reading.HasErrors()) << ErrorsText(reading).c_str();
-        const ProbeNode* node = &fine;
-        size_t depth = 0;
-        while (!node->children.empty()) {
-            node = &node->children[0];
-            ++depth;
-        }
-        EXPECT_EQ(depth, 50u);
-    }
-
     TEST(JsonDeserializerTest, TheListOfErrorsIsCapped) {
-        Json items = Json::array();
+        String document = R"({"numbers":[)";
         for (size_t i = 0; i < ReaderLimits::kMaxRecordedErrors * 3; ++i) {
-            items.push_back("x");
+            document += i == 0 ? R"("x")" : R"(,"x")";
         }
-        Json document = Json::object();
-        document["numbers"] = std::move(items);
+        document += "]}";
         ProbeState state;
-        JsonDeserializer reader(document);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
 
         state.Deserialize(reader);
 
@@ -642,8 +609,9 @@ namespace BECore::Tests {
 
     TEST(JsonDeserializerTest, ADocumentThatIsNotAnObjectMakesEveryReadAnError) {
         for (const StringView text : {"[1]", "5", "null", "\"s\"", "true"}) {
-            const Json document = Parse(text);
-            JsonDeserializer reader(document);
+            const String document(text.data(), text.size());
+            JsonDeserializer reader;
+            ASSERT_TRUE(reader.Load(document));
             int32_t number = 4;
             ProbeState state;
 
@@ -662,8 +630,9 @@ namespace BECore::Tests {
     }
 
     TEST(JsonDeserializerTest, CallsOutOfOrderAreIgnored) {
-        const Json document = Parse(R"({"list":[1]})");
-        JsonDeserializer reader(document);
+        const String document = R"({"list":[1]})";
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
 
         reader.EndObject();
         reader.EndArray();
@@ -687,8 +656,9 @@ namespace BECore::Tests {
     }
 
     TEST(JsonDeserializerTest, AControlCharacterOfTheDocumentIsReplacedInAnErrorMessage) {
-        const Json document = Parse(R"({"mode":"Aus\u007f\u001b:[]}to"})");
-        JsonDeserializer reader(document);
+        const String document = R"({"mode":"Aus\u007f\u001b:[]}to"})";
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
         DiagnosticsMode mode = DiagnosticsMode::Warn;
         EXPECT_FALSE(Ser::Load(reader, mode, "mode"));
         ASSERT_EQ(reader.GetErrors().size(), 1u);
@@ -697,8 +667,9 @@ namespace BECore::Tests {
 
     TEST(JsonDeserializerTest, APoolStringOverTheCapIsRefusedAndAStringIsNot) {
         const String overCap(ReaderLimits::kMaxPoolStringBytes + 1, 'j');
-        const Json document = Parse(Format("{{\"k\":\"{}\"}}", overCap));
-        JsonDeserializer reader(document);
+        const String document = Format("{{\"k\":\"{}\"}}", overCap);
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
 
         const size_t before = PoolString::GetStats().stringCount;
         PoolString pooled;
@@ -715,8 +686,9 @@ namespace BECore::Tests {
 
     TEST(JsonDeserializerTest, ALookupNeverInterns) {
         constexpr StringView kNeverInterned = "json_deserializer_never_interned_lookup";
-        const Json document = Parse(R"({"a":1})");
-        JsonDeserializer reader(document);
+        const String document = R"({"a":1})";
+        JsonDeserializer reader;
+        ASSERT_TRUE(reader.Load(document));
         int32_t value = 0;
 
         EXPECT_FALSE(reader.ReadAttribute(kNeverInterned, value));

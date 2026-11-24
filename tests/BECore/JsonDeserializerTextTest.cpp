@@ -1,17 +1,17 @@
-// JsonDeserializer::Load over text and over a tape (Control/JsonDeserializer.h): the document is never a Json here. JsonDeserializerTest.cpp pins the
-// rules of the values and the messages through the bridge; this file pins what only the tape reader promises: any order of keys, escapes in keys
+// JsonDeserializer::Load over text and over a tape (Control/JsonDeserializer.h): the document is text. JsonDeserializerTest.cpp pins the
+// rules of the values and the messages; this file pins what only the tape reader promises: any order of keys, escapes in keys
 // and strings, a reader that serves many documents, the findings in the document's order and that a second load of a message allocates nothing.
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
-#include <BECore/Control/JsonSerializer.h>
 #include <BECore/Control/JsonTape.h>
 #include <BECore/Control/JsonView.h>
 #include <BECore/FactoryInitializeTest.h>
 #include <BECore/FuzzProbe.h>
 #include <BECore/Reflection/ReaderLimits.h>
 #include <Common/AllocCheck.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
+#include <Common/SerializedText.h>
 #include <Common/TestText.h>
 #include <Fuzz/FuzzProbeAccess.h>
 #include <gtest/gtest.h>
@@ -34,52 +34,45 @@ namespace BECore::Tests {
             return text;
         }
 
-        template <typename T>
-        String ObjectText(const T& object) {
-            JsonSerializer serializer;
-            object.Serialize(serializer);
-            return DumpJson(serializer.Take());
-        }
-
         /// The members of every object written in the order @p reverse and @p rotate give: the document means the same, its keys come in another order
-        void AppendReordered(String& out, const Json& node, bool reverse, size_t rotate) {
-            if (node.is_array()) {
+        void AppendReordered(String& out, JsonView node, bool reverse, size_t rotate) {
+            if (node.IsArray()) {
                 out += '[';
                 bool first = true;
-                for (const Json& item : node) {
+                for (const JsonView item : node.Items()) {
                     out += first ? "" : ",";
                     first = false;
                     AppendReordered(out, item, reverse, rotate);
                 }
                 out += ']';
-            } else if (node.is_object()) {
-                Vector<Pair<String, const Json*>> members;
-                for (const auto& member : node.items()) {
-                    members.push_back({String(member.key().c_str()), &member.value()});
+            } else if (node.IsObject()) {
+                Vector<JsonMember> members;
+                for (const JsonMember member : node.Members()) {
+                    members.push_back(member);
                 }
                 out += '{';
                 bool first = true;
                 for (size_t position = 0; position < members.size(); ++position) {
                     const size_t shifted = (position + rotate) % members.size();
-                    const auto& member = members[reverse ? members.size() - 1 - shifted : shifted];
+                    const JsonMember& member = members[reverse ? members.size() - 1 - shifted : shifted];
                     out += first ? "" : ",";
                     first = false;
-                    out += DumpJson(Json(member.first.c_str()));
+                    out.append(member.key.Raw().data(), member.key.Raw().size());
                     out += ':';
-                    AppendReordered(out, *member.second, reverse, rotate);
+                    AppendReordered(out, member.value, reverse, rotate);
                 }
                 out += '}';
             } else {
-                out += DumpJson(node);
+                out.append(node.Raw().data(), node.Raw().size());
             }
         }
 
         String Reordered(StringView text, bool reverse, size_t rotate) {
-            auto parsed = ParseJson(text);
-            EXPECT_TRUE(parsed.has_value());
+            const JsonDoc parsed(text);
+            EXPECT_TRUE(parsed.IsParsed());
             String out;
-            if (parsed) {
-                AppendReordered(out, *parsed, reverse, rotate);
+            if (parsed.IsParsed()) {
+                AppendReordered(out, parsed.Root(), reverse, rotate);
             }
             return out;
         }
@@ -103,7 +96,7 @@ namespace BECore::Tests {
 
     TEST(JsonDeserializerTextTest, TheOutputOfTheSerializerAsTextSurvivesTheRoundTrip) {
         const ProbeState state = Fuzz::MakeFilledProbe();
-        const String text = ObjectText(state);
+        const String text = SerializedText(state);
 
         ProbeState loaded;
         JsonDeserializer reader;
@@ -116,7 +109,7 @@ namespace BECore::Tests {
 
     TEST(JsonDeserializerTextTest, TheOrderOfKeysDoesNotMatterAtAnyDepth) {
         const ProbeShapes shapes = Fuzz::MakeFilledShapes();
-        const String written = ObjectText(shapes);
+        const String written = SerializedText(shapes);
 
         for (const bool reverse : {false, true}) {
             for (const size_t rotate : {size_t{0}, size_t{1}, size_t{3}}) {
@@ -242,7 +235,7 @@ namespace BECore::Tests {
     }
 
     TEST(JsonDeserializerTextTest, ATapeTheCallerParsedServesManyReaders) {
-        const String text = ObjectText(Fuzz::MakeFilledProbe());
+        const String text = SerializedText(Fuzz::MakeFilledProbe());
         JsonTape tape;
         ASSERT_TRUE(tape.Parse(text).has_value());
 
