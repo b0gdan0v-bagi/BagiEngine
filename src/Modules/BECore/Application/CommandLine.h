@@ -4,6 +4,12 @@
 
 namespace BECore {
 
+    /// One argument found by name: `--name` (no value) or `--name=value` (`hasValue`, the value may be empty). The view points into the CommandLine
+    struct CommandLineArgument {
+        StringView value;
+        bool hasValue = false;
+    };
+
     /**
      * @brief The arguments of the program (without the program's name), readable by a game or a test.
      *
@@ -23,6 +29,10 @@ namespace BECore {
         /// The value of the first `--name=value` (the part after the first `=`, empty allowed); nullopt when there is none.
         /// `--name` alone has no value, and `--namesake=1` is not `--name`. The view is valid until the next Set()
         Optional<StringView> FindValue(StringView name) const;
+
+        /// The first argument that is `--name` or `--name=value`, in either form: a bare flag and a value form of one name are one flag,
+        /// and the first of them wins, as for a repeated flag. `--namesake=1` is not `--name`. The view is valid until the next Set()
+        Optional<CommandLineArgument> Find(StringView name) const;
 
         /// Whether the bare `--name` is among the arguments (`--name=value` is not a flag)
         bool HasFlag(StringView name) const;
