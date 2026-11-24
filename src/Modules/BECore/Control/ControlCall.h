@@ -76,7 +76,7 @@ namespace BECore {
         void ReplyEmpty();
 
         /**
-         * @brief Answers with success, the `result` written by @p writeResult in place: no DOM, and no allocation once the service's reply buffer has grown.
+         * @brief Answers with success, the `result` written by @p writeResult in place, with no allocation once the service's reply buffer has grown.
          *
          * @p writeResult runs before this returns and writes exactly one value (`writer` is the open writer of the response: `BeginObject()` ... `EndObject()`,
          * or a scalar). It must not answer or defer the call. The text the transport gets is valid for the reply function's call only (ControlReplyFn).

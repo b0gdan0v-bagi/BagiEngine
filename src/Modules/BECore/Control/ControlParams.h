@@ -22,7 +22,7 @@ namespace BECore {
     /// An integer member that fits `int64_t`; nullopt when absent, not an integer (`1.5`, `"3"` and a bool are not) or past 64 bits
     [[nodiscard]] Optional<int64_t> GetParamInt(JsonView params, StringView key);
 
-    /// An integer or a floating-point member that is finite (`1e999` is nothing, as the DOM refused it at parse); nullopt when absent or not a number
+    /// An integer or a floating-point member that is finite (`1e999` is nothing, the tape's parse accepts it but the read refuses it); nullopt when absent or not a number
     [[nodiscard]] Optional<double> GetParamNumber(JsonView params, StringView key);
 
     /// A boolean member; nullopt when absent or not a boolean

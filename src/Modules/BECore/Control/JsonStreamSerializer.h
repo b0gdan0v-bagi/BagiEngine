@@ -12,13 +12,13 @@ namespace BECore {
     CORE_ENUM(JsonStreamPlace, uint8_t, Skip, Pending, Write)
 
     /**
-     * @brief Writes what `Ser::Save` and the generated `Serialize` give straight into a `JsonWriter`: no DOM
+     * @brief Writes what `Ser::Save` and the generated `Serialize` give straight into a `JsonWriter`
      *
      * The shapes are the ones of the reflection pair (Reflection/CLAUDE.md, "JSON shapes of the reflection pair"): Write and WriteAttribute are the same
      * member, BeginObject a member object, BeginArray an array member whose elements are objects, and an element that holds only a scalar `value`
      * is that scalar. The document is one object written into the place the writer is at; Finish() closes it.
      *
-     * Two things differ from the DOM writer, because a stream cannot go back:
+     * Two things follow from a stream that cannot go back:
      * - the members of an object come out in the order they were written, not sorted by name;
      * - a name written twice in one object is written once: the first write stays (a repeated BeginObject / BeginArray answers false), except that
      *   a repeated scalar `value` of an element that is still held back replaces the held one.

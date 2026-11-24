@@ -26,15 +26,15 @@
  * every other field type.
  *
  * A hash map is written in the sorted order of its accessor: the entries are sorted through pointers in a `SmallVector` of 16, which allocates only past 16 entries.
- * A map entry is the object `{key, value}`; when the value is a `BE_CLASS` its members sit in the entry itself, the `key` merged in (the object's own member `key` wins, as on the DOM path).
+ * A map entry is the object `{key, value}`; when the value is a `BE_CLASS` its members sit in the entry itself, the `key` merged in (the object's own member `key` wins).
  * A map with another kind of value (a `Math` type, a variant, a pointer, an event) bridges.
  *
  * Sequences of pointers bridge as well: an element carries `type` and `enabled` and a null one still counts in the array. So do sequences of pairs, variants and maps, and a sequence of one-field
- * objects: on the DOM path an element that holds only a scalar `value` is that scalar (`[1,2,3]`), and a streaming writer cannot take a written object back. An element with two or more fields never
- * collapses. Known gap: an element with a field `value` whose other fields are all absent (an empty `Optional`, a null pointer) collapses on the DOM path and is written as an object here.
+ * objects: the bridge writes an element that holds only a scalar `value` as that scalar (`[1,2,3]`), and the native writer cannot take a written object back. An element with two or more fields never
+ * collapses. Known gap: an element with a field `value` whose other fields are all absent (an empty `Optional`, a null pointer) collapses in the bridge and is written as an object here.
  *
  * A class with a reflected parent is native: its members merge with its parent's (MemberMerge). A member that writes nothing (an empty `Optional`, a null
- * pointer) hides a member of the same key in a parent, and in a factory object the `type` the pointer writes, where the DOM path keeps that one.
+ * pointer) hides a member of the same key in a parent, and in a factory object the `type` the pointer writes, where the bridge keeps that one.
  *
  * This header must stay light, it is included by every generated file: the bridge's tape and serializer live in JsonWriteReflect.cpp, never include them here.
  */
@@ -69,7 +69,7 @@ namespace BECore::JsonWrite {
 
     namespace Detail {
 
-        /// An object of fewer fields may serialize to the single member `value`, which the DOM path writes as a scalar
+        /// An object of fewer fields may serialize to the single member `value`, which the bridge writes as a scalar
         inline constexpr size_t kFieldsThatNeverCollapse = 2;
 
         /// Written as one bare value: a number, a bool, a string of any kind (`TextTraits` is the list of the accessors, `PoolString` included)
@@ -124,14 +124,14 @@ namespace BECore::JsonWrite {
      *
      * The root level asks about its keys in increasing order, so each level walks its members once. The merge lives on the stack of the call: nothing allocates.
      * Known gap: a member that writes nothing (an empty `Optional`, a null pointer) still hides the same key of a parent,
-     * where the DOM path would keep the parent's.
+     * where the bridge keeps the parent's.
      */
     class MemberMerge {
     public:
         using WriteMember = FunctionRef<void(JsonWriter&, size_t)>;
 
         /// @p keys are the bare names of this level, sorted and unique; @p write writes member `i` of them as `SaveField` does. A derived class's level
-        /// keeps its ties; the `type` of a factory pointer yields them (the DOM path writes it first and the object's own member replaces it)
+        /// keeps its ties; the `type` of a factory pointer yields them (a member of the object itself named `type` wins over it)
         MemberMerge(const StringView* keys, size_t count, WriteMember write, MemberMerge* outer, MergeTie tie = MergeTie::ThisLevel)
             : _keys(keys), _count(count), _write(write), _outer(outer), _tie(tie) {}
 

@@ -40,7 +40,7 @@ namespace BECore {
                 }
                 return left.isUnsigned ? left.unsignedValue == right.unsignedValue : left.signedValue == right.signedValue;
             }
-            // A float on one side, or an integer beyond 64 bits: the DOM compared those as doubles too
+            // A float on one side, or an integer beyond 64 bits: those are compared as doubles
             const Optional<double> x = a.AsDouble();
             const Optional<double> y = b.AsDouble();
             return x && y && *x == *y;

@@ -10,7 +10,7 @@ namespace BECore {
     /**
      * @brief Reads a JSON document into what `Ser::Load` and the generated `Deserialize` ask for
      *
-     * Walks the JsonTape of the text, never a DOM. Values are always strict: a bool is a JSON bool, a number a JSON number of the target's kind
+     * Walks the JsonTape of the text. Values are always strict: a bool is a JSON bool, a number a JSON number of the target's kind
      * and range, a string a JSON string, and a refusal is an error under the field's path that leaves the target as it was. The shapes it reads
      * are those of JsonStreamSerializer (Reflection/CLAUDE.md, "JSON shapes of the reflection pair"). A key is found among the members of the open
      * object whatever the order of the text, with a cursor after the last match, so a document that keeps the order of the reads costs one key

@@ -78,7 +78,7 @@ namespace BECore {
         }
 
         /// A JSON value as the value of a field: a bool, an integer (`int64_t`, or `uint64_t` above its range), a finite number or a string.
-        /// An integer past 64 bits is a number, as the DOM parsed it
+        /// An integer past 64 bits is a number
         std::expected<PropertyValue, ControlError> ReadValue(JsonView params) {
             const Optional<JsonView> value = FindParam(params, "value");
             if (!value) {

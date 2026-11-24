@@ -30,7 +30,7 @@ namespace BECore {
     };
 
     /**
-     * @brief The tokens of one JSON text, made in one pass with no recursion: the document the JSON readers walk instead of a DOM.
+     * @brief The tokens of one JSON text, made in one pass with no recursion: the document the JSON readers walk.
      *
      * The grammar is RFC 8259: a single value with whitespace around it; no trailing comma, leading zero,
      * `+`, `NaN` or comment; no control character in a string; only the legal escapes, a `\u` surrogate pair joined and a lone surrogate refused;

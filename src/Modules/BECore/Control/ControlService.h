@@ -59,7 +59,7 @@ namespace BECore {
         /**
          * @brief Queues a request. Thread-safe.
          *
-         * @p requestText is copied and tokenized here, on the posting thread (`JsonTape`: no DOM); a request that is not valid is answered with an error
+         * @p requestText is copied and tokenized here, on the posting thread (`JsonTape`); a request that is not valid is answered with an error
          * when its turn comes, so the order of the answers stays the order of the requests. @p reply gets the response
          * on the main thread. After Shutdown() the request is answered at once, on the calling thread.
          */

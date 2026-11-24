@@ -7,7 +7,7 @@
 namespace BECore {
 
     /**
-     * @brief A streaming JSON writer that appends to a caller's String: no DOM, no temporary string.
+     * @brief A streaming JSON writer that appends to a caller's String, with no temporary string.
      *
      * The writer allocates nothing itself; only the growth of the output String can, so a message of the same shape written into a String
      * that kept its capacity allocates nothing. The bytes are the contract (the tests pin them as literals): the escapes, the replacement of invalid UTF-8, the integers, `float` and `double` text,

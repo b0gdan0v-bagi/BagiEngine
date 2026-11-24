@@ -15,7 +15,7 @@ namespace BECore {
      * (`1`, `1.0` and `1e0` are equal, `-0` equals `0`, a value beyond 64 bits is compared as a double). Two views that are not valid are
      * equal; one that is not valid equals no valid view.
      *
-     * Of two equal keys in one object the first counts (the tape's rule, the DOM kept the last); such an object is not guaranteed to equal
+     * Of two equal keys in one object the first counts (the tape's rule); such an object is not guaranteed to equal
      * itself, and no client document is compared with it. Allocates only to decode a string that holds an escape. Recurses once per level, at most
      * ReaderLimits::kMaxJsonNesting.
      */
