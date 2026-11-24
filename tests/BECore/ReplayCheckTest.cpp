@@ -3,6 +3,7 @@
 #include <BECore/Random/Rng.h>
 #include <BECore/ReplayTestGame.h>
 #include <BECore/Time/Time.h>
+#include <Common/ControlledCalls.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/JsonDoc.h>
 #include <Common/Printers.h>

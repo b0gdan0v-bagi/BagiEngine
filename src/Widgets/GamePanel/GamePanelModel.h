@@ -11,7 +11,7 @@ namespace BECore {
     class IGame;
     class IControllableGame;
 
-    /// One element of IControllableGame::GetActions(): its label and the object PerformAction takes as is
+    /// One element of IControllableGame::WriteActions(): its label and the object PerformAction takes as is
     struct GamePanelAction {
         String label;
         Json action;
@@ -54,7 +54,7 @@ namespace BECore {
             return _stateVersion;
         }
 
-        /// The state as indented JSON, or `code: message` when GetState() failed; empty for a game that is not controllable
+        /// The state as indented JSON, or `code: message` when WriteState() failed; empty for a game that is not controllable
         [[nodiscard]] const String& GetStateText() const {
             return _stateText;
         }

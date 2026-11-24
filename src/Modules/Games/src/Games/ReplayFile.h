@@ -38,7 +38,7 @@ namespace BECore {
     /// One accepted call of the control API
     struct ReplayEntry {
         ReplayOp op = ReplayOp::Reset;
-        /// Compact JSON text of one object: `reset`: IControllableGame::GetReplayStart(); `action`, `state`: what the caller sent
+        /// Compact JSON text of one object: `reset`: IControllableGame::WriteReplayStart(); `action`, `state`: what the caller sent
         String params = "{}";
         /// Compact JSON text of one value: what PerformAction answered; only `action` has one
         Optional<String> outcome;

@@ -5,6 +5,7 @@
 #include <Common/AllocCheck.h>
 #include <Common/ControlTestSupport.h>
 #include <Games/GameControl.h>
+#include <Games/GameText.h>
 #include <Stress/StressGameControl.h>
 #include <gtest/gtest.h>
 #include <tests/StressSceneFixture.h>
@@ -16,6 +17,17 @@ namespace BECore::Stress::Tests {
 
         String ErrorCodeOf(const ControlError& error) {
             return error.code;
+        }
+
+        /// PerformAction() of @p action, the outcome parsed; an unparsable outcome is a failure of the case
+        std::expected<Json, ControlError> Perform(IControllableGame& control, const Json& action) {
+            const auto text = PerformActionText(control, DumpJson(action));
+            if (!text) {
+                return std::unexpected(text.error());
+            }
+            auto parsed = ParseJson(StringView(*text));
+            EXPECT_TRUE(parsed.has_value());
+            return parsed ? std::move(*parsed) : Json();
         }
 
         Json ActionOf(const char* type) {
@@ -51,21 +63,23 @@ namespace BECore::Stress::Tests {
             }
 
             Json State() {
-                auto result = control.GetState();
-                EXPECT_TRUE(result.has_value());
-                return result ? *result : Json();
+                const auto text = StateText(control);
+                EXPECT_TRUE(text.has_value());
+                auto parsed = ParseJson(text ? StringView(*text) : StringView());
+                return parsed ? std::move(*parsed) : Json();
             }
 
             Json Actions() {
-                auto result = control.GetActions();
-                EXPECT_TRUE(result.has_value());
-                return result ? *result : Json();
+                const auto text = ActionsText(control);
+                EXPECT_TRUE(text.has_value());
+                auto parsed = ParseJson(text ? StringView(*text) : StringView());
+                return parsed ? std::move(*parsed) : Json();
             }
 
             /// Performs @p action and expects the error with @p code, and that nothing moved
             void ExpectRefused(const Json& action, const char* code) {
                 const uint64_t version = state.Version();
-                const auto result = control.PerformAction(action);
+                const auto result = Perform(control, action);
                 ASSERT_FALSE(result.has_value()) << action.dump();
                 EXPECT_EQ(ErrorCodeOf(result.error()), code) << action.dump();
                 EXPECT_FALSE(result.error().message.empty());
@@ -142,14 +156,14 @@ namespace BECore::Stress::Tests {
             fresh.SetCount(100);
             StressGameControl other(fresh, [] {});
             const uint64_t version = fresh.Version();
-            const auto result = other.PerformAction(action);
+            const auto result = Perform(other, action);
             EXPECT_TRUE(result.has_value()) << action.dump();
             EXPECT_GT(fresh.Version(), version) << action.dump();
         }
     }
 
     TEST_F(StressGameControlTest, ASceneChangeSwitchesTheScene) {
-        const auto result = control.PerformAction(SetScene("ui"));
+        const auto result = Perform(control, SetScene("ui"));
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(state.GetScene(), StressScene::Ui);
         EXPECT_EQ(sceneChanges, 1);
@@ -159,14 +173,14 @@ namespace BECore::Stress::Tests {
 
     TEST_F(StressGameControlTest, TheSameSceneIsAcceptedAndChangesNothing) {
         const uint64_t version = state.Version();
-        ASSERT_TRUE(control.PerformAction(SetScene("sprites")).has_value());
+        ASSERT_TRUE(Perform(control, SetScene("sprites")).has_value());
         EXPECT_EQ(state.Version(), version);
         EXPECT_EQ(sceneChanges, 0);
     }
 
     TEST_F(StressGameControlTest, AnyCountInRangeIsAccepted) {
         for (const int64_t count : {int64_t{1}, int64_t{7}, int64_t{12345}, static_cast<int64_t>(kMaxCount)}) {
-            const auto result = control.PerformAction(SetCount(count));
+            const auto result = Perform(control, SetCount(count));
             ASSERT_TRUE(result.has_value()) << count;
             EXPECT_EQ(state.GetCount(), static_cast<uint32_t>(count));
             EXPECT_EQ((*result)["count"], count);
@@ -176,14 +190,14 @@ namespace BECore::Stress::Tests {
 
     TEST_F(StressGameControlTest, TheSameCountIsAcceptedAndChangesNothing) {
         const uint64_t version = state.Version();
-        ASSERT_TRUE(control.PerformAction(SetCount(100)).has_value());
+        ASSERT_TRUE(Perform(control, SetCount(100)).has_value());
         EXPECT_EQ(state.Version(), version);
     }
 
     TEST_F(StressGameControlTest, ALanguageChangeIsAccepted) {
-        ASSERT_TRUE(control.PerformAction(SetLanguage("ru")).has_value());
+        ASSERT_TRUE(Perform(control, SetLanguage("ru")).has_value());
         EXPECT_EQ(state.GetLanguage(), StressLanguage::Ru);
-        ASSERT_TRUE(control.PerformAction(SetLanguage("en")).has_value());
+        ASSERT_TRUE(Perform(control, SetLanguage("en")).has_value());
         EXPECT_EQ(state.GetLanguage(), StressLanguage::En);
     }
 
@@ -229,7 +243,7 @@ namespace BECore::Stress::Tests {
         Actions();
         EXPECT_EQ(control.GetStateVersion(), version);
 
-        ASSERT_TRUE(control.PerformAction(SetCount(101)).has_value());
+        ASSERT_TRUE(Perform(control, SetCount(101)).has_value());
         EXPECT_GT(control.GetStateVersion(), version);
         EXPECT_EQ(control.GetStateVersion(), state.Version());
     }
@@ -237,7 +251,7 @@ namespace BECore::Stress::Tests {
     TEST_F(StressGameControlTest, ResetRestoresTheDefaults) {
         state.SetScene(StressScene::Ui);
         state.SetLanguage(StressLanguage::Ru);
-        ASSERT_TRUE(control.Reset(Json::object()).has_value());
+        ASSERT_TRUE(ResetText(control).has_value());
         EXPECT_EQ(state.GetScene(), StressScene::Sprites);
         EXPECT_EQ(state.GetCount(), kDefaultCount);
         EXPECT_EQ(state.GetLanguage(), StressLanguage::En);
@@ -248,7 +262,7 @@ namespace BECore::Stress::Tests {
         Json options = Json::object();
         options["scene"] = "entities";
         options["count"] = 777;
-        ASSERT_TRUE(control.Reset(options).has_value());
+        ASSERT_TRUE(ResetText(control, DumpJson(options)).has_value());
         EXPECT_EQ(state.GetScene(), StressScene::Entities);
         EXPECT_EQ(state.GetCount(), 777u);
         EXPECT_EQ(sceneChanges, 1);
@@ -256,7 +270,7 @@ namespace BECore::Stress::Tests {
 
     TEST_F(StressGameControlTest, ResetWithNoOptionsObjectIsTheDefaults) {
         state.SetCount(5);
-        ASSERT_TRUE(control.Reset(Json()).has_value());
+        ASSERT_TRUE(ResetText(control, "null").has_value());
         EXPECT_EQ(state.GetCount(), kDefaultCount);
     }
 
@@ -266,14 +280,14 @@ namespace BECore::Stress::Tests {
         Json options = Json::object();
         options["scene"] = "entities";
         options["count"] = 0;
-        auto result = control.Reset(options);
+        auto result = ResetText(control, DumpJson(options));
         ASSERT_FALSE(result.has_value());
         EXPECT_EQ(ErrorCodeOf(result.error()), "invalid_params");
         EXPECT_EQ(state.Version(), version);
 
         options["count"] = 5;
         options["scene"] = "3d";
-        result = control.Reset(options);
+        result = ResetText(control, DumpJson(options));
         ASSERT_FALSE(result.has_value());
         EXPECT_EQ(ErrorCodeOf(result.error()), "invalid_params");
         EXPECT_EQ(state.Version(), version);
@@ -363,7 +377,7 @@ namespace BECore::Stress::Tests {
 
     }  // namespace
 
-    TEST_F(StressGameControlServiceTest, GetStateAndListActionsAreTheTextOfTheJsonPath) {
+    TEST_F(StressGameControlServiceTest, GetStateAndListActionsWriteTheDocumentsOfTheAdapter) {
         StressGame& game = *StressGame::GetActive();
         game.GetState().SetCount(40);
         IControllableGame& control = *game.AsControllable();
@@ -375,8 +389,8 @@ namespace BECore::Stress::Tests {
             result["version"] = control.GetStateVersion();
             EXPECT_EQ(Ask(method), MakeOkResponse("1", std::move(result))) << method.data();
         };
-        expectSame("get_state", "state", *control.GetState());
-        expectSame("list_actions", "actions", *control.GetActions());
+        expectSame("get_state", "state", *ParseJson(StringView(*StateText(control))));
+        expectSame("list_actions", "actions", *ParseJson(StringView(*ActionsText(control))));
     }
 
 }  // namespace BECore::Stress::Tests

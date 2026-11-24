@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
+#include <BECore/Control/JsonTape.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <Games/ReplayFile.h>
@@ -59,9 +60,19 @@ namespace BECore {
         ReplayStep Apply(IControllableGame& game);
 
     private:
+        ReplayStep ApplyReset(IControllableGame& game, size_t index, const ReplayEntry& entry);
+        ReplayStep ApplyAction(IControllableGame& game, size_t index, const ReplayEntry& entry);
+        ReplayStep ApplyState(IControllableGame& game, size_t index, const ReplayEntry& entry);
+
         ParsedReplay _replay;
         size_t _next = 0;
         bool _stopped = false;
+
+        // What one Apply() reads and writes; the texts and tapes keep their capacity from entry to entry, and each tape is parsed again at every use
+        JsonTape _paramsTape;    ///< The entry's params, handed to the game
+        JsonTape _expectedTape;  ///< The entry's outcome, the file's side of the comparison
+        JsonTape _actualTape;    ///< What the game wrote (the outcome, or the replay start)
+        String _actualText;
     };
 
     /**

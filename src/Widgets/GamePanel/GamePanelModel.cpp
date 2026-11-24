@@ -2,10 +2,12 @@
 
 #include <BECore/Control/JsonDeserializer.h>
 #include <BECore/Control/JsonSerializer.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/Reflection/MethodCall.h>
 #include <BECore/Reflection/TypeInfo.h>
 #include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Reflection/TypedRef.h>
+#include <Games/GameText.h>
 #include <Games/IControllableGame.h>
 #include <Games/IGame.h>
 #include <Widgets/Console/ConsoleCommandLine.h>
@@ -35,10 +37,6 @@ namespace BECore {
                 }
             }
             return false;
-        }
-
-        String DumpIndented(const Json& value) {
-            return DumpJson(value, kStateIndent);
         }
 
         String FormatError(const ControlError& error) {
@@ -105,16 +103,20 @@ namespace BECore {
         _methods.clear();
 
         if (_controllable != nullptr) {
-            if (auto state = _controllable->GetState()) {
-                _stateText = DumpIndented(*state);
-            } else {
-                _stateText = FormatError(state.error());
+            JsonWriter stateWriter(_stateText, kStateIndent);
+            auto written = _controllable->WriteState(stateWriter);
+            if (!written || !stateWriter.IsComplete()) {
+                _stateText = written ? String("internal_error: the game wrote no complete state") : FormatError(written.error());
             }
-            if (auto actions = _controllable->GetActions(); actions && actions->is_array()) {
-                _actions.reserve(actions->size());
-                for (Json& action : *actions) {
-                    String label = FormatGameActionLabel(action);
-                    _actions.push_back({std::move(label), std::move(action)});
+            // The action list is a DOM here until the editor's readers move to the tape (the control API stage 5)
+            if (const auto actionsText = ActionsText(*_controllable)) {
+                auto actions = ParseJson(StringView(*actionsText));
+                if (actions && actions->is_array()) {
+                    _actions.reserve(actions->size());
+                    for (Json& action : *actions) {
+                        String label = FormatGameActionLabel(action);
+                        _actions.push_back({std::move(label), std::move(action)});
+                    }
                 }
             }
         }
@@ -182,10 +184,10 @@ namespace BECore {
             return;
         }
         // A copy: the action list is rebuilt when the version moves, which the call itself may cause on the next Sync
-        const Json action = _actions[index].action;
-        auto outcome = _controllable->PerformAction(action);
+        const String action = DumpJson(_actions[index].action);
+        const auto outcome = PerformActionText(*_controllable, action);
         if (outcome) {
-            SetResult(outcome->is_null() ? String(kOk) : DumpJson(*outcome), false);
+            SetResult(*outcome == "null" ? String(kOk) : *outcome, false);
         } else {
             SetResult(FormatError(outcome.error()), true);
         }
@@ -193,7 +195,7 @@ namespace BECore {
 
     void GamePanelModel::Reset() {
         if (_controllable != nullptr) {
-            auto reset = _controllable->Reset(Json::object());
+            auto reset = ResetText(*_controllable);
             if (reset) {
                 SetResult(String(kOk), false);
             } else {

@@ -1,6 +1,6 @@
 #include "StressGameControl.h"
 
-#include <BECore/Control/Json.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/JsonWriter.h>
 
 namespace BECore::Stress {
@@ -15,17 +15,9 @@ namespace BECore::Stress {
             return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, std::move(message)));
         }
 
-        Json SceneNames() {
-            Json names = Json::array();
-            for (const StressScene scene : EnumUtils<StressScene>::Values()) {
-                names.push_back(MakeJsonString(ToFlagValue(scene)));
-            }
-            return names;
-        }
-
         /// The scene named by member @p key of @p object, or the invalid_params error that says what is wrong with it
-        std::expected<StressScene, ControlError> ReadScene(const Json& object, StringView key) {
-            const auto name = GetJsonString(object, key);
+        std::expected<StressScene, ControlError> ReadScene(JsonView object, StringView key) {
+            const auto name = GetParamString(object, key);
             const auto scene = name ? ParseScene(*name) : std::nullopt;
             if (!scene) {
                 return InvalidParams(Format("'{}' has to be one of: sprites, entities, ui", key));
@@ -33,8 +25,8 @@ namespace BECore::Stress {
             return *scene;
         }
 
-        std::expected<StressLanguage, ControlError> ReadLanguage(const Json& object, StringView key) {
-            const auto name = GetJsonString(object, key);
+        std::expected<StressLanguage, ControlError> ReadLanguage(JsonView object, StringView key) {
+            const auto name = GetParamString(object, key);
             const auto language = name ? ParseLanguage(*name) : std::nullopt;
             if (!language) {
                 return InvalidParams(Format("'{}' has to be one of: en, ru", key));
@@ -43,32 +35,25 @@ namespace BECore::Stress {
         }
 
         /// The count in member @p key of @p object (1..kMaxCount). Checked as int64_t before the narrowing, so a huge number cannot wrap
-        std::expected<uint32_t, ControlError> ReadCount(const Json& object, StringView key) {
-            const auto count = GetJsonInt(object, key);
+        std::expected<uint32_t, ControlError> ReadCount(JsonView object, StringView key) {
+            const auto count = GetParamInt(object, key);
             if (!count || *count < 1 || *count > static_cast<int64_t>(kMaxCount)) {
                 return InvalidParams(Format("'{}' has to be an integer from 1 to {}", key, kMaxCount));
             }
             return static_cast<uint32_t>(*count);
         }
 
-        Json DescribeAction(StringView type, StringView key, Json value) {
-            Json action = Json::object();
-            action["type"] = MakeJsonString(type);
-            action[ToStdString(key)] = std::move(value);
-            return action;
-        }
-
-        Json DescribeShown(const StressState& state) {
-            Json shown = Json::object();
-            shown["scene"] = MakeJsonString(ToFlagValue(state.GetScene()));
-            shown["count"] = state.GetCount();
-            shown["language"] = MakeJsonString(ToFlagValue(state.GetLanguage()));
-            return shown;
+        void WriteShown(JsonWriter& writer, const StressState& state) {
+            writer.BeginObject();
+            writer.Member("count", state.GetCount());
+            writer.Member("language", ToFlagValue(state.GetLanguage()));
+            writer.Member("scene", ToFlagValue(state.GetScene()));
+            writer.EndObject();
         }
 
         /**
          * Tells @p visitor each listed action in the order of the list: OnScene(StressScene), OnCount(uint32_t), OnLanguage(StressLanguage). The one
-         * place that decides what is listed, so the Json and the writing form cannot drift apart.
+         * place that decides what is listed.
          */
         template <typename TVisitor>
         void VisitActions(const StressState& state, TVisitor& visitor) {
@@ -90,20 +75,6 @@ namespace BECore::Stress {
 
             visitor.OnLanguage(state.GetLanguage() == StressLanguage::En ? StressLanguage::Ru : StressLanguage::En);
         }
-
-        struct ActionsToJson {
-            void OnScene(StressScene scene) {
-                actions.push_back(DescribeAction(kSetScene, "scene", MakeJsonString(ToFlagValue(scene))));
-            }
-            void OnCount(uint32_t count) {
-                actions.push_back(DescribeAction(kSetCount, "count", count));
-            }
-            void OnLanguage(StressLanguage language) {
-                actions.push_back(DescribeAction(kSetLanguage, "language", MakeJsonString(ToFlagValue(language))));
-            }
-
-            Json actions = Json::array();
-        };
 
         /// An action is an object with its keys in alphabetical order: the argument, then `type`
         struct ActionsToWriter {
@@ -143,19 +114,6 @@ namespace BECore::Stress {
         }
     }
 
-    std::expected<Json, ControlError> StressGameControl::GetState() const {
-        Json state = DescribeShown(_state);
-        state["maxCount"] = kMaxCount;
-        state["scenes"] = SceneNames();
-        return state;
-    }
-
-    std::expected<Json, ControlError> StressGameControl::GetActions() const {
-        ActionsToJson visitor;
-        VisitActions(_state, visitor);
-        return std::move(visitor.actions);
-    }
-
     std::expected<void, ControlError> StressGameControl::WriteState(JsonWriter& writer) const {
         writer.BeginObject();
         writer.Member("count", _state.GetCount());
@@ -180,8 +138,8 @@ namespace BECore::Stress {
         return {};
     }
 
-    std::expected<Json, ControlError> StressGameControl::PerformAction(const Json& action) {
-        const auto type = GetJsonString(action, "type");
+    std::expected<void, ControlError> StressGameControl::PerformAction(JsonView action, JsonWriter& outcome) {
+        const auto type = GetParamString(action, "type");
         if (!type) {
             return InvalidParams("'type' has to be a string");
         }
@@ -207,23 +165,24 @@ namespace BECore::Stress {
         } else {
             return std::unexpected(MakeControlError(GameControlErrors::kIllegalAction, Format("unknown action type '{}'", *type)));
         }
-        return DescribeShown(_state);
+        WriteShown(outcome, _state);
+        return {};
     }
 
-    std::expected<void, ControlError> StressGameControl::Reset(const Json& options) {
+    std::expected<void, ControlError> StressGameControl::Reset(JsonView options) {
         const StressSettings defaults;
         StressScene scene = defaults.scene;
         uint32_t count = defaults.count;
 
         // Everything is checked before anything changes: a bad option leaves the state as it was
-        if (FindJsonMember(options, "scene") != nullptr) {
+        if (FindParam(options, "scene").has_value()) {
             const auto requested = ReadScene(options, "scene");
             if (!requested) {
                 return std::unexpected(requested.error());
             }
             scene = *requested;
         }
-        if (FindJsonMember(options, "count") != nullptr) {
+        if (FindParam(options, "count").has_value()) {
             const auto requested = ReadCount(options, "count");
             if (!requested) {
                 return std::unexpected(requested.error());

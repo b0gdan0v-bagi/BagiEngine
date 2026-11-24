@@ -4,13 +4,16 @@
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/ReplayTestGame.h>
 #include <BECore/Time/Time.h>
+#include <Common/ControlledCalls.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/JsonDoc.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Games/GameControl.h>
 #include <Games/GameManager.h>
+#include <Games/GameText.h>
 #include <Games/ReplayFile.h>
 #include <Games/ReplayPlayer.h>
 #include <Games/SessionRecorder.h>
@@ -107,8 +110,9 @@ namespace BECore::Tests {
 
     TEST_F(ReplayPlayerTest, ARecordedSessionReplaysToTheSameState) {
         const String text = RecordSession();
-        const Json recordedState = *Game().GetState();
-        ASSERT_EQ(recordedState["rolls"].size(), 3u);
+        const String recordedState = *StateText(Game());
+        const JsonDoc recorded(recordedState);
+        ASSERT_EQ(Require(FindParam(recorded, "rolls")).Size(), 3u);
 
         ReplayPlayer player;
         ASSERT_TRUE(player.Load(text, "ReplayTest").has_value());
@@ -118,7 +122,7 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(result.has_value()) << (result ? "" : ReplayMismatchText(result.error()).c_str());
         EXPECT_TRUE(player.IsDone());
-        EXPECT_EQ(*fresh.GetState(), recordedState);
+        EXPECT_EQ(*StateText(fresh), recordedState);
     }
 
     TEST_F(ReplayPlayerTest, ThePlayerAnswersTheGapOfTheNextEntryAndIsDoneAtTheEnd) {
@@ -196,15 +200,16 @@ namespace BECore::Tests {
         ReplayTestGame fresh;
 
         EXPECT_TRUE(Play(player, fresh).has_value());
-        EXPECT_EQ(fresh.GetState()->at("rolls").size(), 1u);
+        const JsonDoc state(*StateText(fresh));
+        EXPECT_EQ(Require(FindParam(state, "rolls")).Size(), 1u);
     }
 
     TEST_F(ReplayPlayerTest, AGameThatTakesAnotherStartIsStartDiffers) {
         // A game that drew its own seed for the reset: the file asks for 21, the game answers another one
         class StubbornGame : public ReplayTestGame {
         public:
-            std::expected<void, ControlError> Reset(const Json&) override {
-                return ReplayTestGame::Reset(Json::object());
+            std::expected<void, ControlError> Reset(JsonView) override {
+                return ReplayTestGame::Reset(JsonDoc("{}"));
             }
         };
         ReplayPlayer player;
@@ -222,6 +227,25 @@ namespace BECore::Tests {
         ASSERT_TRUE(mismatch.actual.has_value());
         EXPECT_EQ(*mismatch.expected, R"({"seed":21})");
         EXPECT_NE(*mismatch.actual, *mismatch.expected);
+    }
+
+    TEST_F(ReplayPlayerTest, AGameThatAcceptsAnActionWithoutAnOutcomeIsRefusedAsInternalError) {
+        class SilentGame : public ReplayTestGame {
+        public:
+            std::expected<void, ControlError> PerformAction(JsonView, JsonWriter&) override {
+                return {};
+            }
+        };
+        ReplayPlayer player;
+        ASSERT_TRUE(player.Load(RecordSession(), "ReplayTest").has_value());
+        SilentGame silent;
+
+        const ReplayStep result = Play(player, silent);
+
+        ASSERT_FALSE(result.has_value());
+        EXPECT_EQ(result.error().kind, ReplayMismatchKind::Refused);
+        ASSERT_TRUE(result.error().error.has_value());
+        EXPECT_EQ(result.error().error->code, String(ControlErrors::kInternalError));
     }
 
     TEST_F(ReplayPlayerTest, AResetTheGameRefusesIsRefused) {

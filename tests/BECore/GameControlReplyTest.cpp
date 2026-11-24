@@ -205,8 +205,9 @@ namespace BECore::Tests {
 
     TEST_F(GameControlReplyTest, TheEnvelopeOfPerformActionAllocatesNothingBeyondTheActionItself) {
         service.RegisterHandler("action_only", [](ControlCall& call) {
-            if (auto outcome = ControlledAction(Fake(), call.Params()); !outcome) {
-                call.Fail(outcome.error());
+            String outcome;
+            if (const auto performed = ControlledAction(Fake(), call.Params(), outcome); !performed) {
+                call.Fail(performed.error());
                 return;
             }
             call.Reply([](JsonWriter& writer) {

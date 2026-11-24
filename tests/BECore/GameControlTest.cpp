@@ -1,5 +1,6 @@
 #include "GameControlTest.h"
 
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
@@ -11,6 +12,7 @@
 #include <Common/Require.h>
 #include <Games/GameControl.h>
 #include <Games/GameManager.h>
+#include <Games/GameText.h>
 #include <Generated/GameControlTest.gen.hpp>
 #include <gtest/gtest.h>
 
@@ -32,22 +34,7 @@ namespace BECore::Tests {
         return this;
     }
 
-    std::expected<Json, ControlError> FakeControllableGame::GetState() const {
-        Json state = Json::object();
-        state["counter"] = counter;
-        return state;
-    }
-
-    std::expected<Json, ControlError> FakeControllableGame::GetActions() const {
-        Json inc = Json::object();
-        inc["type"] = "inc";
-        return Json::array({inc});
-    }
-
     std::expected<void, ControlError> FakeControllableGame::WriteState(JsonWriter& writer) const {
-        if (!handWritten && !failWrites && rawState.empty()) {
-            return IControllableGame::WriteState(writer);
-        }
         ++writeStateCalls;
         if (!rawState.empty()) {
             writer.Raw(rawState);
@@ -65,9 +52,6 @@ namespace BECore::Tests {
     }
 
     std::expected<void, ControlError> FakeControllableGame::WriteActions(JsonWriter& writer) const {
-        if (!handWritten && !failWrites) {
-            return IControllableGame::WriteActions(writer);
-        }
         ++writeActionsCalls;
         writer.BeginArray();
         if (failWrites) {
@@ -81,8 +65,8 @@ namespace BECore::Tests {
         return {};
     }
 
-    std::expected<Json, ControlError> FakeControllableGame::PerformAction(const Json& action) {
-        const auto type = GetJsonString(action, "type");
+    std::expected<void, ControlError> FakeControllableGame::PerformAction(JsonView action, JsonWriter& outcome) {
+        const auto type = GetParamString(action, "type");
         if (!type) {
             return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'type' has to be a string"));
         }
@@ -91,15 +75,19 @@ namespace BECore::Tests {
         }
         ++counter;
         ++version;
-        Json outcome = Json::object();
-        outcome["counter"] = counter;
-        return outcome;
+        if (silentAction) {
+            return {};
+        }
+        outcome.BeginObject();
+        outcome.Member("counter", counter);
+        outcome.EndObject();
+        return {};
     }
 
-    std::expected<void, ControlError> FakeControllableGame::Reset(const Json& options) {
+    std::expected<void, ControlError> FakeControllableGame::Reset(JsonView options) {
         int start = 0;
-        if (FindJsonMember(options, "start") != nullptr) {
-            const auto requested = GetJsonInt(options, "start");
+        if (FindParam(options, "start")) {
+            const auto requested = GetParamInt(options, "start");
             if (!requested) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'start' has to be an integer"));
             }
@@ -110,8 +98,8 @@ namespace BECore::Tests {
         return {};
     }
 
-    std::expected<void, ControlError> FakeControllableGame::SetState(const Json& state) {
-        const auto requested = GetJsonInt(state, "counter");
+    std::expected<void, ControlError> FakeControllableGame::SetState(JsonView state) {
+        const auto requested = GetParamInt(state, "counter");
         if (!requested) {
             return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'counter' has to be an integer"));
         }
@@ -146,16 +134,21 @@ namespace BECore::Tests {
         /// Implements only what is pure: SetState keeps its default
         class MinimalControl : public IControllableGame {
         public:
-            std::expected<Json, ControlError> GetState() const override {
-                return Json::object();
+            std::expected<void, ControlError> WriteState(JsonWriter& writer) const override {
+                writer.BeginObject();
+                writer.EndObject();
+                return {};
             }
-            std::expected<Json, ControlError> GetActions() const override {
-                return Json::array();
+            std::expected<void, ControlError> WriteActions(JsonWriter& writer) const override {
+                writer.BeginArray();
+                writer.EndArray();
+                return {};
             }
-            std::expected<Json, ControlError> PerformAction(const Json&) override {
-                return Json::object();
+            std::expected<void, ControlError> PerformAction(JsonView, JsonWriter& outcome) override {
+                outcome.Null();
+                return {};
             }
-            std::expected<void, ControlError> Reset(const Json&) override {
+            std::expected<void, ControlError> Reset(JsonView) override {
                 return {};
             }
             uint64_t GetStateVersion() const override {
@@ -247,10 +240,45 @@ namespace BECore::Tests {
     TEST(GameControlDefaultsTest, SetStateIsUnsupportedUnlessTheGameOverridesIt) {
         MinimalControl control;
 
-        const auto result = control.SetState(Json::object());
+        const auto result = SetStateText(control, "{}");
 
         ASSERT_FALSE(result.has_value());
         EXPECT_EQ(result.error().code, String(GameControlErrors::kUnsupported));
+    }
+
+    TEST(GameControlDefaultsTest, TheReplayStartIsAnEmptyObjectUnlessTheGameOverridesIt) {
+        MinimalControl control;
+
+        const auto start = ReplayStartText(control);
+
+        ASSERT_TRUE(start.has_value());
+        EXPECT_EQ(*start, String("{}"));
+    }
+
+    TEST(GameControlTextTest, TextThatIsNotJsonIsInvalidParamsWithTheMessageOfTheTape) {
+        FakeControllableGame game;
+
+        const auto action = PerformActionText(game, "{\"type\":");
+        const auto reset = ResetText(game, "nope");
+
+        ASSERT_FALSE(action.has_value());
+        EXPECT_EQ(action.error().code, String(ControlErrors::kInvalidParams));
+        EXPECT_EQ(action.error().message.substr(0, 9), String("not JSON:"));
+        ASSERT_FALSE(reset.has_value());
+        EXPECT_EQ(reset.error().code, String(ControlErrors::kInvalidParams));
+        EXPECT_EQ(game.counter, 0);
+    }
+
+    TEST(GameControlTextTest, TheOutcomeAndTheStateAreTheTextTheGameWrote) {
+        FakeControllableGame game;
+
+        const auto outcome = PerformActionText(game, R"({"type":"inc"})");
+        const auto state = StateText(game);
+
+        ASSERT_TRUE(outcome.has_value());
+        EXPECT_EQ(*outcome, String(R"({"counter":1})"));
+        ASSERT_TRUE(state.has_value());
+        EXPECT_EQ(*state, String(R"({"counter":1})"));
     }
 
     TEST(GameControlDefaultsTest, AGameIsNotControllableByDefault) {
@@ -386,6 +414,40 @@ namespace BECore::Tests {
         EXPECT_EQ(ErrorCode(illegalResponse), "illegal_action");
         EXPECT_EQ(ErrorCode(emptyResponse), "invalid_params");
         EXPECT_EQ(Find<FakeControllableGame>()->counter, 0);
+    }
+
+    TEST_F(GameControlTest, AnActionAcceptedWithoutAnOutcomeIsAnInternalError) {
+        Find<FakeControllableGame>()->silentAction = true;
+        Json action = Json::object();
+        action["type"] = "inc";
+
+        const Json response = Call("perform_action", action);
+
+        EXPECT_FALSE(Succeeded(response));
+        EXPECT_EQ(ErrorCode(response), "internal_error");
+    }
+
+    TEST_F(GameControlTest, TheParamsOfAGameAreReadDecodedAndCheckedWhateverTheTextSays) {
+        ControlService& service = CoreManager::GetControlService();
+        const auto callText = [&](StringView method, StringView paramsText) {
+            Json response;
+            service.Post(Format(R"({{"id":{},"method":"{}","params":{}}})", ++_lastId, method, paramsText), [&response](String text) {
+                auto parsed = ParseJson(text);
+                response = parsed ? std::move(*parsed) : Json();
+            });
+            service.Drain();
+            return response;
+        };
+
+        // An escape stands for its character, so the action below is "inc"
+        EXPECT_TRUE(Succeeded(callText("perform_action", R"({"type":"\u0069nc"})")));
+        EXPECT_EQ(Find<FakeControllableGame>()->counter, 1);
+
+        // An integer past 64 bits is no integer for the helper, and the game answers invalid_params instead of wrapping it
+        EXPECT_EQ(ErrorCode(callText("reset", R"({"start":18446744073709551616})")), "invalid_params");
+        EXPECT_EQ(ErrorCode(callText("reset", R"({"start":1.5})")), "invalid_params");
+        EXPECT_EQ(ErrorCode(callText("perform_action", R"({"type":["inc"]})")), "invalid_params");
+        EXPECT_EQ(Find<FakeControllableGame>()->counter, 1);
     }
 
     TEST_F(GameControlTest, PipelinedActionsRunInOrderBeforeTheStateIsRead) {

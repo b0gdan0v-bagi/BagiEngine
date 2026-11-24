@@ -9,6 +9,7 @@
 #include <BECore/Time/Time.h>
 #include <Games/GameControlAnswers.h>
 #include <Games/GameManager.h>
+#include <Games/GameText.h>
 #include <Games/IControllableGame.h>
 #include <Games/ReplayControl.h>
 #include <Games/SessionRecorder.h>
@@ -206,20 +207,20 @@ namespace BECore {
             call.ReplyObject(answer);
         }
 
-        void HandlePerformAction(ControlCall& call) {
+        /// @p outcome is the buffer of the registered handler, which keeps its capacity from call to call
+        void HandlePerformAction(ControlCall& call, String& outcome) {
             const auto active = FindActiveControllable();
             if (!active) {
                 call.Fail(active.error());
                 return;
             }
-            const auto outcome = ControlledAction(*active->control, call.Params());
-            if (!outcome) {
-                call.Fail(outcome.error());
+            if (const auto performed = ControlledAction(*active->control, call.Params(), outcome); !performed) {
+                call.Fail(performed.error());
                 return;
             }
             GameActionAnswer answer;
             answer.game = active->game->GetName();
-            answer.outcome = JsonPayload::Borrowed(*outcome);
+            answer.outcome = JsonPayload::Text(outcome);
             answer.version = active->control->GetStateVersion();  // the one after the action
             call.ReplyObject(answer);
         }
@@ -502,32 +503,40 @@ namespace BECore {
             AdvanceRunUntil(service, call, std::move(state));
         }
 
-        /// The view as a DOM for the adapter that still takes one; the DOM refuses a number past a double that the tape took, and that reads as `{}`
-        Json ToDom(JsonView value) {
-            auto parsed = ParseJson(value.Raw());
-            return parsed ? std::move(*parsed) : Json::object();
-        }
-
     }  // namespace
 
     std::expected<void, ControlError> ControlledReset(IControllableGame& game, JsonView options) {
-        auto reset = game.Reset(ToDom(options));
+        auto reset = game.Reset(options);
         if (reset && SessionRecorder::GetInstance().IsRecording()) {
-            SessionRecorder::GetInstance().ReportReset(DumpJson(game.GetReplayStart()));
+            const auto start = ReplayStartText(game);
+            if (!start) {
+                LOG_WARNING("The recording keeps no start of the game: {}", start.error().message);
+            }
+            // No text is recorded as `{}`, which a replay then reports as a start that differs
+            SessionRecorder::GetInstance().ReportReset(start ? StringView(*start) : StringView());
         }
         return reset;
     }
 
-    std::expected<Json, ControlError> ControlledAction(IControllableGame& game, JsonView action) {
-        auto outcome = game.PerformAction(ToDom(action));
-        if (outcome && SessionRecorder::GetInstance().IsRecording()) {
-            SessionRecorder::GetInstance().ReportAction(action, DumpJson(*outcome));
+    std::expected<void, ControlError> ControlledAction(IControllableGame& game, JsonView action, String& outcomeText) {
+        outcomeText.clear();
+        JsonWriter writer(outcomeText);
+        auto performed = game.PerformAction(action, writer);
+        if (performed && !writer.IsComplete()) {
+            performed = std::unexpected(MakeControlError(ControlErrors::kInternalError, "the game answered an action without one complete outcome"));
         }
-        return outcome;
+        if (!performed) {
+            outcomeText.clear();
+            return performed;
+        }
+        if (SessionRecorder::GetInstance().IsRecording()) {
+            SessionRecorder::GetInstance().ReportAction(action, outcomeText);
+        }
+        return performed;
     }
 
     std::expected<void, ControlError> ControlledSetState(IControllableGame& game, JsonView state) {
-        auto loaded = game.SetState(ToDom(state));
+        auto loaded = game.SetState(state);
         if (loaded) {
             SessionRecorder::GetInstance().ReportSetState(state);
         }
@@ -540,7 +549,7 @@ namespace BECore {
         service.RegisterHandler("reset", HandleReset);
         service.RegisterHandler("get_state", HandleGetState);
         service.RegisterHandler("list_actions", HandleListActions);
-        service.RegisterHandler("perform_action", HandlePerformAction);
+        service.RegisterHandler("perform_action", [outcome = MakeUnique<String>()](ControlCall& call) { HandlePerformAction(call, *outcome); });
         service.RegisterHandler("set_state", HandleSetState);
         service.RegisterHandler("run_until", [&service](ControlCall& call) { HandleRunUntil(call, service); });
 

@@ -8,6 +8,7 @@
 #include <BECore/Time/GamePause.h>
 #include <BECore/Time/Time.h>
 #include <Common/ControlTestSupport.h>
+#include <Common/ControlledCalls.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/JsonDoc.h>
 #include <Common/Printers.h>
@@ -17,6 +18,7 @@
 #include <Events/ApplicationEvents.h>
 #include <Games/GameControl.h>
 #include <Games/GameManager.h>
+#include <Games/GameText.h>
 #include <Games/ReplayControl.h>
 #include <Games/ReplayFile.h>
 #include <Games/SessionRecorder.h>
@@ -385,9 +387,9 @@ namespace BECore::Tests {
 
     TEST_F(ReplayPlayControlTest, ARecordedSessionReplaysToTheSameState) {
         const String text = RecordSession();
-        const Json recordedState = *Game().GetState();
-        ASSERT_TRUE(Game().Reset(Params(R"({"seed":99})")).has_value());
-        ASSERT_NE(*Game().GetState(), recordedState);
+        const String recordedState = *StateText(Game());
+        ASSERT_TRUE(ResetText(Game(), R"({"seed":99})").has_value());
+        ASSERT_NE(*StateText(Game()), recordedState);
 
         const Json& response = Replay();
 
@@ -398,7 +400,7 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonInt(*result, "entries").value_or(-1), 6);
         EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 1 + kLockFrames);
         EXPECT_EQ(KeysOf(*result), (Vector<String>{"deltaTime", "entries", "fixedDeltaTime", "frame", "frames", "ok", "totalTime"}));
-        EXPECT_EQ(*Game().GetState(), recordedState);
+        EXPECT_EQ(*StateText(Game()), recordedState);
         EXPECT_FALSE(SessionRecorder::GetInstance().IsRecording());
         EXPECT_FALSE(_service.IsStepDue());
     }

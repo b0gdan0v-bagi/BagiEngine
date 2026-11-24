@@ -1,6 +1,6 @@
 #include "ReplayTestGame.h"
 
-#include <BECore/Control/Json.h>
+#include <BECore/Control/ControlParams.h>
 #include <Generated/ReplayTestGame.gen.hpp>
 
 namespace BECore::Tests {
@@ -31,60 +31,67 @@ namespace BECore::Tests {
         return _lockSeconds > kLockEpsilon;
     }
 
-    std::expected<Json, ControlError> ReplayTestGame::GetState() const {
-        Json state = Json::object();
-        state["seed"] = _seed;
-        state["rolls"] = Json::array();
+    std::expected<void, ControlError> ReplayTestGame::WriteState(JsonWriter& writer) const {
+        writer.BeginObject();
+        writer.Member("locked", IsLocked());
+        writer.Key("rolls");
+        writer.BeginArray();
         for (const int roll : _rolls) {
-            state["rolls"].push_back(roll);
+            writer.Value(roll);
         }
-        state["locked"] = IsLocked();
-        return state;
+        writer.EndArray();
+        writer.Member("seed", _seed);
+        writer.EndObject();
+        return {};
     }
 
-    std::expected<Json, ControlError> ReplayTestGame::GetActions() const {
-        Json actions = Json::array();
-        Json roll = Json::object();
-        roll["type"] = "roll";
-        Json arm = Json::object();
-        arm["type"] = "arm";
+    std::expected<void, ControlError> ReplayTestGame::WriteActions(JsonWriter& writer) const {
+        writer.BeginArray();
         if (!IsLocked()) {
-            actions.push_back(roll);
+            writer.BeginObject();
+            writer.Member("type", "roll");
+            writer.EndObject();
         }
-        actions.push_back(arm);
-        return actions;
+        writer.BeginObject();
+        writer.Member("type", "arm");
+        writer.EndObject();
+        writer.EndArray();
+        return {};
     }
 
-    std::expected<Json, ControlError> ReplayTestGame::PerformAction(const Json& action) {
-        const auto type = GetJsonString(action, "type");
+    std::expected<void, ControlError> ReplayTestGame::PerformAction(JsonView action, JsonWriter& outcome) {
+        const auto type = GetParamString(action, "type");
         if (!type) {
             return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'type' has to be a string"));
         }
-        Json outcome = Json::object();
         if (*type == "roll") {
             if (IsLocked()) {
                 return std::unexpected(MakeControlError(GameControlErrors::kIllegalAction, "the dice are locked"));
             }
             const int value = _rng.UniformInt(1, kDieFaces);
             _rolls.push_back(value);
-            outcome["value"] = value;
+            outcome.BeginObject();
+            outcome.Member("value", value);
+            outcome.EndObject();
         } else if (*type == "arm") {
             if (IsLocked()) {
                 return std::unexpected(MakeControlError(GameControlErrors::kIllegalAction, "the dice are already locked"));
             }
             _lockSeconds = kArmSeconds;
-            outcome["locked"] = true;
+            outcome.BeginObject();
+            outcome.Member("locked", true);
+            outcome.EndObject();
         } else {
             return std::unexpected(MakeControlError(GameControlErrors::kIllegalAction, "only \"roll\" and \"arm\" are legal"));
         }
         ++_version;
-        return outcome;
+        return {};
     }
 
-    std::expected<void, ControlError> ReplayTestGame::Reset(const Json& options) {
+    std::expected<void, ControlError> ReplayTestGame::Reset(JsonView options) {
         uint64_t seed = 0;
-        if (FindJsonMember(options, "seed") != nullptr) {
-            const auto requested = GetJsonInt(options, "seed");
+        if (FindParam(options, "seed")) {
+            const auto requested = GetParamInt(options, "seed");
             if (!requested || *requested < 0) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'seed' has to be a non-negative integer"));
             }
@@ -100,17 +107,18 @@ namespace BECore::Tests {
         return {};
     }
 
-    std::expected<void, ControlError> ReplayTestGame::SetState(const Json& state) {
-        const Json* rolls = FindJsonMember(state, "rolls");
-        if (rolls == nullptr || !rolls->is_array()) {
+    std::expected<void, ControlError> ReplayTestGame::SetState(JsonView state) {
+        const Optional<JsonView> rolls = FindParam(state, "rolls");
+        if (!rolls || !rolls->IsArray()) {
             return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "'rolls' has to be an array"));
         }
         Vector<int> loaded;
-        for (const Json& roll : *rolls) {
-            if (!roll.is_number_integer() || roll.get<int64_t>() < 1 || roll.get<int64_t>() > kDieFaces) {
+        for (const JsonView roll : rolls->Items()) {
+            const Optional<int64_t> value = roll.AsInt64();
+            if (!value || *value < 1 || *value > kDieFaces) {
                 return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, "every roll has to be an integer from 1 to 6"));
             }
-            loaded.push_back(static_cast<int>(roll.get<int64_t>()));
+            loaded.push_back(static_cast<int>(*value));
         }
         _rolls = std::move(loaded);
         ++_version;
@@ -125,10 +133,11 @@ namespace BECore::Tests {
         return true;
     }
 
-    Json ReplayTestGame::GetReplayStart() const {
-        Json start = Json::object();
-        start["seed"] = _seed;
-        return start;
+    std::expected<void, ControlError> ReplayTestGame::WriteReplayStart(JsonWriter& writer) const {
+        writer.BeginObject();
+        writer.Member("seed", _seed);
+        writer.EndObject();
+        return {};
     }
 
     void ReplayTestGame::Update(double seconds) {

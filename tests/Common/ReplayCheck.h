@@ -1,6 +1,5 @@
 #pragma once
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonViewOps.h>
 #include <BECore/File/File.h>
 #include <BECore/File/FilePath.h>
@@ -11,6 +10,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
 #include <Common/Printers.h>
+#include <Games/GameText.h>
 #include <Games/IControllableGame.h>
 #include <Games/IGame.h>
 #include <Games/ReplayPlayer.h>
@@ -77,7 +77,7 @@ namespace BECore::Tests {
 
     /**
      * Plays the replay file into @p game and fails the test unless it plays through and ends in @p expectedStateJson (the JSON text of the state:
-     * `GetState()` and it are equal as values, whatever the key order). A failure names the entry, its line in the file and what differed.
+     * the state `WriteState()` writes and it are equal as values, whatever the key order). A failure names the entry, its line in the file and what differed.
      * Use through EXPECT_REPLAY_FINAL_STATE.
      */
     inline void ExpectReplayFinalState(IGame& game, const std::filesystem::path& path, StringView expectedStateJson, ReplayStepFn step = StepReplayFrame) {
@@ -90,12 +90,12 @@ namespace BECore::Tests {
             ADD_FAILURE() << played.error().message.c_str();
             return;
         }
-        const auto state = control->GetState();
+        const auto state = StateText(*control);
         if (!state) {
-            ADD_FAILURE() << "GetState failed after the replay: " << state.error().message.c_str();
+            ADD_FAILURE() << "WriteState failed after the replay: " << state.error().message.c_str();
             return;
         }
-        const String actualText = DumpJson(*state);
+        const String& actualText = *state;
         JsonTape actualTape;
         JsonTape expectedTape;
         if (!actualTape.Parse(StringView(actualText.c_str(), actualText.size())) || !expectedTape.Parse(expectedStateJson)) {
@@ -108,6 +108,6 @@ namespace BECore::Tests {
 
 }  // namespace BECore::Tests
 
-/// Plays the replay file @p path into the `IGame` @p game and compares `GetState()` with the JSON text @p expectedState; an optional fourth
+/// Plays the replay file @p path into the `IGame` @p game and compares the state of the game with the JSON text @p expectedState; an optional fourth
 /// argument is the `ReplayStepFn` of a game that has more to advance than the clock and the scene.
 #define EXPECT_REPLAY_FINAL_STATE(game, path, expectedState, ...) ::BECore::Tests::ExpectReplayFinalState(game, path, expectedState __VA_OPT__(, ) __VA_ARGS__)

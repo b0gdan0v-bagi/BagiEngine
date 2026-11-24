@@ -21,6 +21,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Games/GameControl.h>
 #include <Games/GameManager.h>
+#include <Games/GameText.h>
 #include <Games/ReplayFile.h>
 #include <Rooms/RoomProtocol.h>
 #include <chrono>
@@ -603,17 +604,18 @@ namespace BECore::Tests {
             return nullptr;
         }
 
-        /// The old `{game, outcome, version}` of perform_action as a `Json` document
+        /// The old `{game, outcome, version}` of perform_action as a `Json` document: the params and the outcome go through a tree
         void ReplyActionDom(ControlCall& call, FakeControllableGame& game) {
-            auto outcome = game.PerformAction(call.ParamsJson());
+            const auto outcome = PerformActionText(game, DumpJson(call.ParamsJson()));
             if (!outcome) {
                 call.Fail(outcome.error());
                 return;
             }
+            auto parsed = ParseJson(StringView(*outcome));
             Json result = Json::object();
             result["game"] = "FakeControllable";
             result["version"] = game.GetStateVersion();
-            result["outcome"] = std::move(*outcome);
+            result["outcome"] = parsed ? std::move(*parsed) : Json();
             call.Reply(std::move(result));
         }
 

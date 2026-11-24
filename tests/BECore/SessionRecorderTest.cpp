@@ -5,6 +5,7 @@
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/ReplayTestGame.h>
 #include <BECore/Time/Time.h>
+#include <Common/ControlledCalls.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/JsonDoc.h>
 #include <Common/Printers.h>
@@ -106,8 +107,8 @@ namespace BECore::Tests {
         IControllableGame& game = Game();
 
         ASSERT_TRUE(ControlledReset(game, JsonDoc(R"({})")).has_value());
-        const auto rolled = ControlledAction(game, JsonDoc(R"({"type":"roll"})"));
-        ASSERT_TRUE(rolled.has_value());
+        String rolled;
+        ASSERT_TRUE(ControlledAction(game, JsonDoc(R"({"type":"roll"})"), rolled).has_value());
         ASSERT_TRUE(ControlledSetState(game, JsonDoc(R"({"rolls":[2,3]})")).has_value());
         EXPECT_EQ(SessionRecorder::GetInstance().GetEntryCount(), 3u);
         SessionRecorder::GetInstance().Stop();
@@ -121,7 +122,7 @@ namespace BECore::Tests {
         EXPECT_EQ(replay.entries[1].op, ReplayOp::Action);
         EXPECT_EQ(replay.entries[1].params, R"({"type":"roll"})");
         ASSERT_TRUE(replay.entries[1].outcome.has_value());
-        EXPECT_EQ(*replay.entries[1].outcome, DumpJson(*rolled));
+        EXPECT_EQ(*replay.entries[1].outcome, rolled);
         EXPECT_EQ(replay.entries[2].op, ReplayOp::State);
         EXPECT_EQ(replay.entries[2].params, R"({"rolls":[2,3]})");
     }
@@ -176,6 +177,26 @@ namespace BECore::Tests {
         EXPECT_FALSE(ControlledReset(game, JsonDoc(R"({"seed":"x"})")).has_value());
 
         EXPECT_EQ(SessionRecorder::GetInstance().GetEntryCount(), 2u);
+    }
+
+    TEST_F(SessionRecorderTest, AnActionThatWroteNoOutcomeIsRefusedAndNotWritten) {
+        class SilentGame : public ReplayTestGame {
+        public:
+            std::expected<void, ControlError> PerformAction(JsonView, JsonWriter&) override {
+                return {};
+            }
+        };
+        ASSERT_TRUE(StartRecording().has_value());
+        SilentGame silent;
+        ASSERT_TRUE(ControlledReset(silent, JsonDoc(R"({"seed":1})")).has_value());
+        String outcome = "stale";
+
+        const auto performed = ControlledAction(silent, JsonDoc(R"({"type":"roll"})"), outcome);
+
+        ASSERT_FALSE(performed.has_value());
+        EXPECT_EQ(performed.error().code, String(ControlErrors::kInternalError));
+        EXPECT_TRUE(outcome.empty());
+        EXPECT_EQ(SessionRecorder::GetInstance().GetEntryCount(), 1u);
     }
 
     TEST_F(SessionRecorderTest, ACallBeforeTheFirstResetIsDropped) {

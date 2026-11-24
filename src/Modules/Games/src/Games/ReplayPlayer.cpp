@@ -1,6 +1,7 @@
 #include "ReplayPlayer.h"
 
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonViewOps.h>
+#include <BECore/Control/JsonWriter.h>
 #include <Games/IControllableGame.h>
 
 namespace BECore {
@@ -22,68 +23,29 @@ namespace BECore {
             return mismatch;
         }
 
-        /// The text of an entry is JSON a tape accepted when the file was read; an entry made by hand that is not is refused like a call the game refused
-        std::expected<Json, ReplayMismatch> ParseEntryText(size_t index, const ReplayEntry& entry, const String& text) {
-            auto parsed = ParseJson(StringView(text.c_str(), text.size()));
-            if (!parsed) {
-                return std::unexpected(MakeRefused(index, entry, MakeControlError(ControlErrors::kInvalidParams, "the entry holds no JSON the DOM reads")));
+        /// The text of an entry is JSON a tape accepted when the file was read; one made by hand that is not is refused like a call the game refused
+        std::expected<JsonView, ReplayMismatch> TapeEntryText(size_t index, const ReplayEntry& entry, const String& text, JsonTape& tape) {
+            if (const auto parsed = tape.Parse(StringView(text)); !parsed) {
+                return std::unexpected(MakeRefused(index, entry, MakeControlError(ControlErrors::kInvalidParams, Format("the entry holds no JSON: {}", parsed.error().message))));
             }
-            return std::move(*parsed);
+            return JsonView(tape, 0);
         }
 
-        ReplayStep ApplyReset(IControllableGame& game, size_t index, const ReplayEntry& entry) {
-            auto params = ParseEntryText(index, entry, entry.params);
-            if (!params) {
-                return std::unexpected(std::move(params.error()));
+        /// Runs @p write on a writer over @p text (cleared first) and tapes what it wrote; the error is what the game answered, or `internal_error` for an incomplete value
+        template <typename TWrite>
+        std::expected<JsonView, ControlError> WriteAndTape(String& text, JsonTape& tape, TWrite&& write) {
+            text.clear();
+            JsonWriter writer(text);
+            if (auto written = write(writer); !written) {
+                return std::unexpected(std::move(written.error()));
             }
-            if (auto reset = game.Reset(*params); !reset) {
-                return std::unexpected(MakeRefused(index, entry, std::move(reset.error())));
+            if (!writer.IsComplete()) {
+                return std::unexpected(MakeControlError(ControlErrors::kInternalError, "the game answered with no complete value"));
             }
-            // A game that took another seed than the file asks for plays another game from here on
-            Json start = game.GetReplayStart();
-            if (start != *params) {
-                ReplayMismatch mismatch = MakeMismatch(index, entry, ReplayMismatchKind::StartDiffers);
-                mismatch.expected = entry.params;
-                mismatch.actual = DumpJson(start);
-                return std::unexpected(std::move(mismatch));
+            if (const auto parsed = tape.Parse(StringView(text)); !parsed) {
+                return std::unexpected(MakeControlError(ControlErrors::kInternalError, Format("the game wrote no readable value: {}", parsed.error().message)));
             }
-            return {};
-        }
-
-        ReplayStep ApplyAction(IControllableGame& game, size_t index, const ReplayEntry& entry) {
-            auto params = ParseEntryText(index, entry, entry.params);
-            if (!params) {
-                return std::unexpected(std::move(params.error()));
-            }
-            auto outcome = game.PerformAction(*params);
-            if (!outcome) {
-                return std::unexpected(MakeRefused(index, entry, std::move(outcome.error())));
-            }
-            // A file without an outcome (written by hand) checks only that the action is accepted
-            if (entry.outcome) {
-                auto expected = ParseEntryText(index, entry, *entry.outcome);
-                if (!expected) {
-                    return std::unexpected(std::move(expected.error()));
-                }
-                if (*expected != *outcome) {
-                    ReplayMismatch mismatch = MakeMismatch(index, entry, ReplayMismatchKind::OutcomeDiffers);
-                    mismatch.expected = *entry.outcome;
-                    mismatch.actual = DumpJson(*outcome);
-                    return std::unexpected(std::move(mismatch));
-                }
-            }
-            return {};
-        }
-
-        ReplayStep ApplyState(IControllableGame& game, size_t index, const ReplayEntry& entry) {
-            auto params = ParseEntryText(index, entry, entry.params);
-            if (!params) {
-                return std::unexpected(std::move(params.error()));
-            }
-            if (auto loaded = game.SetState(*params); !loaded) {
-                return std::unexpected(MakeRefused(index, entry, std::move(loaded.error())));
-            }
-            return {};
+            return JsonView(tape, 0);
         }
 
     }  // namespace
@@ -124,6 +86,64 @@ namespace BECore {
 
     ReplayGap ReplayPlayer::PeekGap() const {
         return IsDone() ? ReplayGap{} : _replay.entries[_next].gap;
+    }
+
+    ReplayStep ReplayPlayer::ApplyReset(IControllableGame& game, size_t index, const ReplayEntry& entry) {
+        const auto params = TapeEntryText(index, entry, entry.params, _paramsTape);
+        if (!params) {
+            return std::unexpected(params.error());
+        }
+        if (auto reset = game.Reset(*params); !reset) {
+            return std::unexpected(MakeRefused(index, entry, std::move(reset.error())));
+        }
+        // A game that took another seed than the file asks for plays another game from here on
+        const auto start = WriteAndTape(_actualText, _actualTape, [&](JsonWriter& writer) { return game.WriteReplayStart(writer); });
+        if (!start) {
+            return std::unexpected(MakeRefused(index, entry, start.error()));
+        }
+        if (!JsonEquals(*start, *params)) {
+            ReplayMismatch mismatch = MakeMismatch(index, entry, ReplayMismatchKind::StartDiffers);
+            mismatch.expected = entry.params;
+            mismatch.actual = _actualText;
+            return std::unexpected(std::move(mismatch));
+        }
+        return {};
+    }
+
+    ReplayStep ReplayPlayer::ApplyAction(IControllableGame& game, size_t index, const ReplayEntry& entry) {
+        const auto params = TapeEntryText(index, entry, entry.params, _paramsTape);
+        if (!params) {
+            return std::unexpected(params.error());
+        }
+        const auto outcome = WriteAndTape(_actualText, _actualTape, [&](JsonWriter& writer) { return game.PerformAction(*params, writer); });
+        if (!outcome) {
+            return std::unexpected(MakeRefused(index, entry, outcome.error()));
+        }
+        // A file without an outcome (written by hand) checks only that the action is accepted
+        if (entry.outcome) {
+            const auto expected = TapeEntryText(index, entry, *entry.outcome, _expectedTape);
+            if (!expected) {
+                return std::unexpected(expected.error());
+            }
+            if (!JsonEquals(*expected, *outcome)) {
+                ReplayMismatch mismatch = MakeMismatch(index, entry, ReplayMismatchKind::OutcomeDiffers);
+                mismatch.expected = *entry.outcome;
+                mismatch.actual = _actualText;
+                return std::unexpected(std::move(mismatch));
+            }
+        }
+        return {};
+    }
+
+    ReplayStep ReplayPlayer::ApplyState(IControllableGame& game, size_t index, const ReplayEntry& entry) {
+        const auto params = TapeEntryText(index, entry, entry.params, _paramsTape);
+        if (!params) {
+            return std::unexpected(params.error());
+        }
+        if (auto loaded = game.SetState(*params); !loaded) {
+            return std::unexpected(MakeRefused(index, entry, std::move(loaded.error())));
+        }
+        return {};
     }
 
     ReplayStep ReplayPlayer::Apply(IControllableGame& game) {

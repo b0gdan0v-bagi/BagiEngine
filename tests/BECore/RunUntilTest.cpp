@@ -304,7 +304,6 @@ namespace BECore::Tests {
     }
 
     TEST_P(RunUntilTest, TheDocumentIsWrittenOncePerVersion) {
-        Fake()->handWritten = true;
 
         const Json* result = RunUntil(RunUntilParams(ConditionPointer("/state/counter", 9), 3));
 
