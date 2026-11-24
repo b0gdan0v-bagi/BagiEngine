@@ -145,8 +145,7 @@ namespace BECore::Tests {
         // Seat 1 starts, so the guest plays first, the others follow, and the host plays before the guest's second turn
         constexpr int kGuestSeat = 1;
         constexpr int kTableAtTheDrop = 4;
-        Json options = Json::object();
-        options["firstSeat"] = kGuestSeat;
+        const String options = Format(R"({{"firstSeat":{}}})", kGuestSeat);
         Clients clients;
         ASSERT_NO_FATAL_FAILURE(OpenTable(port, "cards", kHumansOfAPair, clients, options));
         RoomSocketClient& host = *clients[0];

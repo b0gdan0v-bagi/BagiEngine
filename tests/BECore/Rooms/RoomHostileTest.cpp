@@ -68,7 +68,7 @@ namespace BECore::Tests {
             members.push_back(host);
         }
         const ConnectionId publicHost = harness.Connect();
-        harness.Create(publicHost, "Open", "fake", Json::object(), true);
+        harness.Create(publicHost, "Open", "fake", "{}", true);
         members.push_back(publicHost);
 
         // Many connections, each of which lists as much as it may and guesses a wrong code now and then; every one is closed in the end

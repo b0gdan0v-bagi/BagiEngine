@@ -8,7 +8,7 @@
 
 namespace BECore::Tests {
 
-    // The shapes of the messages JsonReadBenchTest reads: a control request and two room messages (tests/BECore/Rooms/RoomMessageReference.h)
+    // The shapes of the messages JsonReadBenchTest reads: a control request and two room messages
 
     struct ReadBenchControlParams {
         BE_CLASS(ReadBenchControlParams)

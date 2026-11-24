@@ -208,8 +208,8 @@ namespace BECore::Tests {
             SendText(id, SerializeClientMessage(message));
         }
 
-        void Create(ConnectionId id, StringView name, StringView game = "fake", const Json& options = Json::object(), bool isPublic = false) {
-            Send(id, CreateRoomMessage{String(game), String(name), DumpJson(options), isPublic});
+        void Create(ConnectionId id, StringView name, StringView game = "fake", StringView options = "{}", bool isPublic = false) {
+            Send(id, CreateRoomMessage{String(game), String(name), String(options), isPublic});
         }
 
         void List(ConnectionId id, StringView game = "fake") {

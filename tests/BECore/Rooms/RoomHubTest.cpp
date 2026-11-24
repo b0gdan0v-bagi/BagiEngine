@@ -291,30 +291,24 @@ namespace BECore::Tests {
     TEST(RoomHubTest, TheLobbyShowsEveryMemberThePublicOptionsOfTheRoomAndNothingElse) {
         HubHarness harness;
         const ConnectionId host = harness.Connect();
-        Json options = Json::object();
-        options["open"] = true;
-        options["count"] = 3;
-        options["secret"] = 7;      // not public
-        options["label"] = "text";  // not public
-        harness.Create(host, "Ann", "fake-public", options);
+        // "secret" and "label" are not public
+        constexpr StringView kOptions = R"({"count":3,"label":"text","open":true,"secret":7})";
+        harness.Create(host, "Ann", "fake-public", kOptions);
         const ConnectionId guest = harness.Connect();
         harness.JoinByName(guest, harness.Client(host).roomCode, "Bob");
 
-        Json expected = Json::object();
-        expected["open"] = true;
-        expected["count"] = 3;
         for (const ConnectionId id : {host, guest}) {
             const ReceivedMessage* lobby = harness.Client(id).Last(RoomMessageTypes::kLobby);
             ASSERT_NE(lobby, nullptr);
             const Optional<JsonView> shown = lobby->Find("options");
             ASSERT_TRUE(shown.has_value()) << "connection " << id;
-            EXPECT_EQ(String(shown->Raw()), DumpJson(expected)) << "connection " << id;
+            EXPECT_EQ(shown->Raw(), R"({"count":3,"open":true})") << "connection " << id;
         }
 
         // A game that names no public option sends none
         HubHarness plain;
         const ConnectionId alone = plain.Connect();
-        plain.Create(alone, "Ann", "fake", options);
+        plain.Create(alone, "Ann", "fake", kOptions);
         const ReceivedMessage* lobby = plain.Client(alone).Last(RoomMessageTypes::kLobby);
         ASSERT_NE(lobby, nullptr);
         EXPECT_FALSE(lobby->Find("options").has_value());

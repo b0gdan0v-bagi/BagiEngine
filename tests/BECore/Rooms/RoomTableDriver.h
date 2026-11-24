@@ -187,13 +187,13 @@ namespace BECore::Tests {
 
     /// A room of @p game with @p humans humans, each on its own socket and each with `joined` and `lobby` read; the first is the host.
     /// @p options go to the game in `create_room`. Not started
-    inline void OpenTable(uint16_t port, StringView game, int humans, Clients& out, const Json& options = Json::object()) {
+    inline void OpenTable(uint16_t port, StringView game, int humans, Clients& out, StringView options = "{}") {
         for (int i = 0; i < humans; ++i) {
             auto client = RoomSocketClient::Connect(port);
             ASSERT_TRUE(client.has_value());
             const String name = Format("Player{}", i);
             if (i == 0) {
-                client->Send(CreateRoomMessage{String(game), name, DumpJson(options)});
+                client->Send(CreateRoomMessage{String(game), name, String(options)});
             } else {
                 client->JoinByName(out.front()->roomCode, name);
             }

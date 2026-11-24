@@ -41,9 +41,9 @@ namespace BECore::Tests {
         }
 
         /// A host makes a public room of @p game; returns the host's connection (the code is in its client)
-        ConnectionId MakePublicRoom(HubHarness& harness, StringView name, StringView game = "fake", Json options = Json::object()) {
+        ConnectionId MakePublicRoom(HubHarness& harness, StringView name, StringView game = "fake", StringView options = "{}") {
             const ConnectionId host = harness.Connect();
-            harness.Create(host, name, game, std::move(options), true);
+            harness.Create(host, name, game, options, true);
             return host;
         }
 
@@ -115,11 +115,8 @@ namespace BECore::Tests {
 
     TEST(RoomListTest, APublicRoomIsListedWithTheHostTheSeatsAndTheOptions) {
         HubHarness harness;
-        Json options = Json::object();
-        options["open"] = true;
-        options["count"] = 3;
-        options["secret"] = 9;  // not in publicOptions
-        const ConnectionId host = MakePublicRoom(harness, "Ann", "fake-public", options);
+        // "secret" is not in publicOptions
+        const ConnectionId host = MakePublicRoom(harness, "Ann", "fake-public", R"({"count":3,"open":true,"secret":9})");
         const String code = harness.Client(host).roomCode;
 
         const ConnectionId browser = Browse(harness, "fake-public");
@@ -138,10 +135,7 @@ namespace BECore::Tests {
         EXPECT_EQ(GetParamBool(entry, "started"), false);
         const Optional<JsonView> shown = FindParam(entry, "options");
         ASSERT_TRUE(shown.has_value());
-        Json expected = Json::object();
-        expected["open"] = true;
-        expected["count"] = 3;
-        EXPECT_EQ(String(shown->Raw()), DumpJson(expected));
+        EXPECT_EQ(shown->Raw(), R"({"count":3,"open":true})");
 
         // A room without public options has no `options` member; the answer reads back with the client's reader
         const ConnectionId plainHost = MakePublicRoom(harness, "Bob");
@@ -540,10 +534,7 @@ namespace BECore::Tests {
 
     TEST(RoomListTest, TheListingNamesTheHostCountsTheHumansAndKeepsTheLobbyOptions) {
         Room room("ABCDE", SeatedGameInfo{"fake", 4, {"hints"}}, MakeSequence(7));
-        Json options = Json::object();
-        options["hints"] = true;
-        options["other"] = 1;
-        room.SetLobbyOptions(JsonDoc(DumpJson(options)));
+        room.SetLobbyOptions(JsonDoc(R"({"hints":true,"other":1})"));
         EXPECT_TRUE(room.GetListing().host.empty());
         EXPECT_EQ(room.GetListing().taken, 0);
 

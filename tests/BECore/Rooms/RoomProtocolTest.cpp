@@ -1,5 +1,5 @@
 #include <BECore/Control/ControlParams.h>
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonWriter.h>
 #include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Rooms/RoomErrors.h>
@@ -536,14 +536,7 @@ namespace BECore::Tests {
     }
 
     TEST(RoomProtocolTest, ViewMessage) {
-        Json view = Json::object();
-        view["turn"] = 1;
-        Json actions = Json::array();
-        Json play = Json::object();
-        play["type"] = "play";
-        actions.push_back(play);
-
-        const JsonDoc message(MakeViewMessage("ABCDE", 1, 42, false, DumpJson(view), DumpJson(actions)));
+        const JsonDoc message(MakeViewMessage("ABCDE", 1, 42, false, R"({"turn":1})", R"([{"type":"play"}])"));
         EXPECT_EQ(GetParamString(message.Root(), "type"), "view");
         EXPECT_EQ(GetParamString(message.Root(), "room"), "ABCDE");
         EXPECT_EQ(GetParamInt(message.Root(), "seat"), 1);
@@ -724,23 +717,18 @@ namespace BECore::Tests {
     }
 
     TEST(RoomProtocolTest, ParseServerMessageReadsAViewWithNestedViewAndActions) {
-        Json view = Json::object();
-        view["hand"] = Json::array({1, 2, 3});
-        view["table"] = Json::object({{"top", Json::object({{"card", 7}})}});
-        Json play = Json::object();
-        play["type"] = "play";
-        play["card"] = 2;
-        const Json actions = Json::array({play});
+        constexpr StringView kView = R"({"hand":[1,2,3],"table":{"top":{"card":7}}})";
+        constexpr StringView kActions = R"([{"card":2,"type":"play"}])";
 
-        const auto parsed = ParseServerMessage(MakeViewMessage("ABCDE", 1, 42, true, DumpJson(view), DumpJson(actions)));
+        const auto parsed = ParseServerMessage(MakeViewMessage("ABCDE", 1, 42, true, kView, kActions));
         const auto* read = ServerAs<ViewMessage>(parsed);
         ASSERT_NE(read, nullptr);
         EXPECT_EQ(read->room, "ABCDE");
         EXPECT_EQ(read->seat, 1);
         EXPECT_EQ(read->version, 42u);
         EXPECT_TRUE(read->finished);
-        EXPECT_EQ(read->view, DumpJson(view));
-        EXPECT_EQ(read->actions, DumpJson(actions));
+        EXPECT_EQ(read->view, kView);
+        EXPECT_EQ(read->actions, kActions);
         EXPECT_EQ(GetServerMessageType(*parsed), "view");
     }
 
@@ -942,19 +930,23 @@ namespace BECore::Tests {
         const auto parsedLobby = ParseServerMessage(MakeLobbyMessage(lobby));
         ASSERT_NE(ServerAs<LobbyMessage>(parsedLobby), nullptr);
 
-        Json hand = Json::array();
+        String view;
+        JsonWriter viewWriter(view);
+        viewWriter.BeginObject();
+        viewWriter.Key("hand");
+        viewWriter.BeginArray();
         for (int i = 0; i < 20000; ++i) {
-            hand.push_back(i);
+            viewWriter.Value(i);
         }
-        Json view = Json::object();
-        view["hand"] = hand;
-        const String text = MakeViewMessage("ABCDE", 0, 5, false, DumpJson(view), "[]");
+        viewWriter.EndArray();
+        viewWriter.EndObject();
+        const String text = MakeViewMessage("ABCDE", 0, 5, false, view, "[]");
         ASSERT_GT(text.size(), RoomLimits::kMaxMessageBytes);
         ASSERT_LT(text.size(), RoomLimits::kMaxServerMessageBytes);
         const auto parsedView = ParseServerMessage(text);
         const auto* read = ServerAs<ViewMessage>(parsedView);
         ASSERT_NE(read, nullptr);
-        EXPECT_EQ(read->view, DumpJson(view));
+        EXPECT_EQ(read->view, view);
     }
 
     // ---- `rooms`: the answer to list_rooms ----------------------------------------------------------------------------------------

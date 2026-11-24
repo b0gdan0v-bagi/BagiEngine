@@ -1,5 +1,4 @@
 #include <BECore/Memory/ScratchArena.h>
-#include <BECore/Rooms/RoomMessageReference.h>
 #include <BECore/Rooms/SeatedAnswersTest.h>
 #include <BECore/Threading/Thread.h>
 #include <Common/AllocCheck.h>
@@ -23,27 +22,47 @@ namespace BECore::Tests {
                 String("plain"),
                 String("quote \" backslash \\ slash /"),
                 String("\b\f\n\r\t"),
-                String("nul \0 and \x01\x1f\x7f", 17),
+                String("nul \0 and \x01\x1f\x7f", 13),
                 String("caf\xC3\xA9 \xE2\x82\xAC \xF0\x9F\x98\x80"),
                 String("bad \xC3( \xFF \xE2\x82 \xED\xA0\x80 end"),
             };
             return texts;
         }
 
-        /// Invalid UTF-8 in a string does not read back as it was written (the writer replaces it), so a value that is read back leaves it out
-        Json MakeHardJson(bool withInvalidText = true) {
-            Json value = Json::object();
-            value["nested"] = Json{{"a", Json::array({1, 2, Json::object()})}, {"b", Json::object()}};
-            value["big"] = 1e300;
-            value["unsigned"] = std::numeric_limits<uint64_t>::max();
-            value["negative"] = std::numeric_limits<int64_t>::min();
-            if (withInvalidText) {
-                value["badText"] = MakeJsonString(String("bad \xC3( \xFF"));
-            }
-            value["null"] = nullptr;
-            value["real"] = 0.1;
-            return value;
+        /// The JSON text of each entry of HardTexts(), quotes included: the escapes of JSON, a character that is not UTF-8 replaced by U+FFFD
+        const Vector<StringView>& HardTextsWritten() {
+            static const Vector<StringView> texts = {
+                R"("")",
+                R"("plain")",
+                R"("quote \" backslash \\ slash /")",
+                R"("\b\f\n\r\t")",
+                "\"nul \\u0000 and \\u0001\\u001f\x7F\"",
+                "\"caf\xC3\xA9 \xE2\x82\xAC \xF0\x9F\x98\x80\"",
+                "\"bad \xEF\xBF\xBD( \xEF\xBF\xBD \xEF\xBF\xBD \xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBD end\"",
+            };
+            return texts;
         }
+
+        /// @p pattern with each `@` replaced by @p text: the text of a message that carries one text in several places
+        String Fill(StringView pattern, StringView text) {
+            String result;
+            for (const char c : pattern) {
+                if (c == '@') {
+                    result.append(text.data(), text.size());
+                } else {
+                    result.push_back(c);
+                }
+            }
+            return result;
+        }
+
+        /// A document with every kind of number and a nested empty object and array, as the text a game would hand over (the keys in byte order)
+        constexpr StringView kHardDocument = R"({"big":1e+300,"negative":-9223372036854775808,"nested":{"a":[1,2,{}],"b":{}},"null":null,"real":0.1,"unsigned":18446744073709551615})";
+
+        /// The same with a string of invalid UTF-8 in it (the text a game would hand over has the bytes replaced already)
+        constexpr StringView kHardDocumentWithText =
+            "{\"badText\":\"bad \xEF\xBF\xBD( "
+            "\xEF\xBF\xBD\",\"big\":1e+300,\"negative\":-9223372036854775808,\"nested\":{\"a\":[1,2,{}],\"b\":{}},\"null\":null,\"real\":0.1,\"unsigned\":18446744073709551615}";
 
         LobbySnapshot MakeLobby(int seatCount) {
             LobbySnapshot lobby;
@@ -79,19 +98,6 @@ namespace BECore::Tests {
             return list;
         }
 
-        /// Both paths must give the same text; the literal tests pin what that text is
-        void ExpectLobby(const LobbySnapshot& lobby) {
-            EXPECT_EQ(MakeLobbyMessage(lobby), RoomMessageReference::MakeLobbyMessage(lobby));
-        }
-
-        void ExpectRoomList(const RoomListMessage& list) {
-            EXPECT_EQ(MakeRoomListMessage(list), RoomMessageReference::MakeRoomListMessage(list));
-        }
-
-        void ExpectView(StringView room, int seat, uint64_t version, bool finished, const Json& view, const Json& actions) {
-            EXPECT_EQ(MakeViewMessage(room, seat, version, finished, DumpJson(view), DumpJson(actions)), RoomMessageReference::MakeViewMessage(room, seat, version, finished, view, actions));
-        }
-
         constexpr StringView kLongGame = "a game whose name is longer than the small string";
         constexpr StringView kLongToken = "0123456789abcdef0123456789abcdef";
         constexpr StringView kLongText = "a text of more than twenty-three bytes";
@@ -103,15 +109,15 @@ namespace BECore::Tests {
         struct LongMessages {
             LobbySnapshot lobby = MakeLobby(kLongLobbySeats);
             RoomListMessage list = MakeRoomList(kLongListedRooms);
-            String view = DumpJson(Json{{"hand", Json::array({1, 2, 3})}, {"table", MakeJsonString(String(kLongText))}});
-            String actions = DumpJson(Json::array({Json{{"play", 1}}, Json{{"pass", true}}}));
-            ClientMessage create = CreateRoomMessage{String(kLongGame), String(kLongText), DumpJson(Json{{"rounds", 3}}), true};
+            String view = R"({"hand":[1,2,3],"table":"a text of more than twenty-three bytes"})";
+            String actions = R"([{"pass":true},{"play":1}])";
+            ClientMessage create = CreateRoomMessage{String(kLongGame), String(kLongText), R"({"rounds":3})", true};
             ClientMessage join = JoinRoomMessage{String(kRoomCode), String(), String(kLongToken)};
             ClientMessage listRooms = ListRoomsMessage{String(kLongGame)};
 
             LongMessages() {
                 lobby.game = kLongGame;
-                lobby.options = DumpJson(Json{{"fast", true}, {"rounds", 3}});
+                lobby.options = R"({"fast":true,"rounds":3})";
                 for (LobbySeat& seat : lobby.seats) {
                     if (seat.kind == SeatKind::Human) {
                         seat.name = kLongText;
@@ -119,7 +125,7 @@ namespace BECore::Tests {
                 }
                 for (RoomListing& listing : list.rooms) {
                     listing.host = kLongText;
-                    listing.options = DumpJson(Json{{"fast", true}});
+                    listing.options = R"({"fast":true})";
                 }
             }
 
@@ -152,9 +158,7 @@ namespace BECore::Tests {
         EXPECT_EQ(MakeLobbyMessage(lobby), R"({"game":"cards","host":0,"phase":"lobby","room":"ABCDE","seats":[{"connected":true,"kind":"human","name":"Ann","seat":0},)"
                                            R"({"kind":"computer","seat":1},{"kind":"empty","seat":2},{"connected":false,"kind":"human","name":"Bob","seat":3}],"type":"lobby","v":1})");
 
-        const Json view = Json{{"hand", Json::array({1, 2})}, {"turn", 1}};
-        const Json actions = Json::array({Json{{"type", "play"}}});
-        EXPECT_EQ(MakeViewMessage(kRoomCode, 1, 5, false, DumpJson(view), DumpJson(actions)),
+        EXPECT_EQ(MakeViewMessage(kRoomCode, 1, 5, false, R"({"hand":[1,2],"turn":1})", R"([{"type":"play"}])"),
                   R"({"actions":[{"type":"play"}],"finished":false,"room":"ABCDE","seat":1,"type":"view","v":1,"version":5,"view":{"hand":[1,2],"turn":1}})");
 
         RoomListMessage list = MakeRoomList(2);
@@ -162,7 +166,7 @@ namespace BECore::Tests {
         list.rooms[0].taken = 1;
         list.rooms[1].host = "Bob";
         list.rooms[1].taken = 2;
-        list.rooms[1].options = DumpJson(Json{{"fast", true}});
+        list.rooms[1].options = R"({"fast":true})";
         EXPECT_EQ(MakeRoomListMessage(list), R"({"game":"cards","more":false,"rooms":[{"host":"Ann","room":"ABCDE","seats":4,"started":false,"taken":1},)"
                                              R"({"host":"Bob","options":{"fast":true},"room":"ABCDE","seats":4,"started":true,"taken":2}],"type":"rooms","v":1})");
 
@@ -172,69 +176,131 @@ namespace BECore::Tests {
         EXPECT_EQ(MakePongMessage(), R"({"type":"pong","v":1})");
     }
 
-    TEST(RoomProtocolWriterTest, ALobbyIsTheSameAsTheDomPathForEveryOptionsShapeAndSeatCount) {
-        for (const int seatCount : {0, 1, kFullSeatCount}) {
-            ExpectLobby(MakeLobby(seatCount));
-        }
-        LobbySnapshot lobby = MakeLobby(3);
-        lobby.options = DumpJson(Json{{"fast", true}, {"rounds", 3}});
-        ExpectLobby(lobby);
-        EXPECT_NE(MakeLobbyMessage(lobby).find(R"("options":{"fast":true,"rounds":3})"), String::npos);
+    TEST(RoomProtocolWriterTest, ALobbyIsWrittenForEveryOptionsShapeAndSeatCount) {
+        EXPECT_EQ(MakeLobbyMessage(MakeLobby(0)), R"({"game":"cards","host":0,"phase":"playing","room":"ABCDE","seats":[],"type":"lobby","v":1})");
+        EXPECT_EQ(MakeLobbyMessage(MakeLobby(1)),
+                  R"({"game":"cards","host":0,"phase":"playing","room":"ABCDE","seats":[{"connected":true,"kind":"human","name":"Player 0","seat":0}],"type":"lobby","v":1})");
+        EXPECT_EQ(MakeLobbyMessage(MakeLobby(kFullSeatCount)), R"({"game":"cards","host":0,"phase":"playing","room":"ABCDE","seats":[{"connected":true,"kind":"human","name":"Player 0","seat":0},)"
+                                                               R"({"kind":"computer","seat":1},{"kind":"empty","seat":2},{"connected":false,"kind":"human","name":"Player 3","seat":3},)"
+                                                               R"({"kind":"computer","seat":4},{"kind":"empty","seat":5},{"connected":true,"kind":"human","name":"Player 6","seat":6},)"
+                                                               R"({"kind":"computer","seat":7}],"type":"lobby","v":1})");
 
-        // no options, or an empty object, is left out, as the DOM path leaves it out
+        LobbySnapshot lobby = MakeLobby(3);
+        lobby.options = R"({"fast":true,"rounds":3})";
+        EXPECT_EQ(MakeLobbyMessage(lobby),
+                  R"({"game":"cards","host":0,"options":{"fast":true,"rounds":3},"phase":"playing","room":"ABCDE","seats":[{"connected":true,"kind":"human","name":"Player 0","seat":0},)"
+                  R"({"kind":"computer","seat":1},{"kind":"empty","seat":2}],"type":"lobby","v":1})");
+
+        // no options, or an empty object, is left out
         for (const char* options : {"", "{}"}) {
             lobby.options = options;
-            ExpectLobby(lobby);
-            EXPECT_EQ(MakeLobbyMessage(lobby).find("options"), String::npos) << options;
+            EXPECT_EQ(MakeLobbyMessage(lobby), R"({"game":"cards","host":0,"phase":"playing","room":"ABCDE","seats":[{"connected":true,"kind":"human","name":"Player 0","seat":0},)"
+                                               R"({"kind":"computer","seat":1},{"kind":"empty","seat":2}],"type":"lobby","v":1})")
+                << options;
         }
         lobby.phase = RoomPhase::Finished;
         lobby.hostSeat = -1;
-        ExpectLobby(lobby);
+        EXPECT_EQ(MakeLobbyMessage(lobby), R"({"game":"cards","host":-1,"phase":"finished","room":"ABCDE","seats":[{"connected":true,"kind":"human","name":"Player 0","seat":0},)"
+                                           R"({"kind":"computer","seat":1},{"kind":"empty","seat":2}],"type":"lobby","v":1})");
     }
 
-    TEST(RoomProtocolWriterTest, TextsWithEscapesAndInvalidUtf8AreWrittenAsTheDomPathWritesThem) {
-        for (const String& text : HardTexts()) {
+    TEST(RoomProtocolWriterTest, TextsWithEscapesAndInvalidUtf8AreWrittenEscaped) {
+        ASSERT_EQ(HardTexts().size(), HardTextsWritten().size());
+        for (size_t i = 0; i < HardTexts().size(); ++i) {
+            const String& text = HardTexts()[i];
+            const StringView written = HardTextsWritten()[i];
+            SCOPED_TRACE(i);
+
             LobbySnapshot lobby = MakeLobby(kFullSeatCount);
             lobby.room = text;
             lobby.game = text;
             for (LobbySeat& seat : lobby.seats) {
                 seat.name = text;
             }
-            ExpectLobby(lobby);
+            EXPECT_EQ(MakeLobbyMessage(lobby), Fill(R"({"game":@,"host":0,"phase":"playing","room":@,"seats":[{"connected":true,"kind":"human","name":@,"seat":0},)"
+                                                    R"({"kind":"computer","seat":1},{"kind":"empty","seat":2},{"connected":false,"kind":"human","name":@,"seat":3},)"
+                                                    R"({"kind":"computer","seat":4},{"kind":"empty","seat":5},{"connected":true,"kind":"human","name":@,"seat":6},)"
+                                                    R"({"kind":"computer","seat":7}],"type":"lobby","v":1})",
+                                                    written));
 
             RoomListMessage list = MakeRoomList(2);
             list.game = text;
             list.rooms[0].room = text;
             list.rooms[1].host = text;
-            ExpectRoomList(list);
+            EXPECT_EQ(MakeRoomListMessage(list), Fill(R"({"game":@,"more":false,"rooms":[{"host":"Host 0","room":@,"seats":4,"started":false,"taken":0},)"
+                                                      R"({"host":@,"room":"ABCDE","seats":4,"started":true,"taken":1}],"type":"rooms","v":1})",
+                                                      written));
 
-            EXPECT_EQ(MakeJoinedMessage(text, 1, text, 0, true), RoomMessageReference::MakeJoinedMessage(text, 1, text, 0, true));
-            EXPECT_EQ(MakeErrorMessage(text, text, text), RoomMessageReference::MakeErrorMessage(text, text, text));
-            EXPECT_EQ(MakeLeftMessage(text), RoomMessageReference::MakeLeftMessage(text));
-            ExpectView(text, 0, 1, false, Json(MakeJsonString(text)), Json::array({MakeJsonString(text)}));
+            EXPECT_EQ(MakeJoinedMessage(text, 1, text, 0, true), Fill(R"({"host":true,"player":1,"room":@,"seat":0,"token":@,"type":"joined","v":1})", written));
+            // an empty reference is left out
+            EXPECT_EQ(MakeErrorMessage(text, text, text),
+                      Fill(text.empty() ? StringView(R"({"code":@,"message":@,"type":"error","v":1})") : StringView(R"({"code":@,"message":@,"ref":@,"type":"error","v":1})"), written));
+            EXPECT_EQ(MakeLeftMessage(text), Fill(R"({"reason":@,"type":"left","v":1})", written));
+            EXPECT_EQ(MakeViewMessage(text, 0, 1, false, written, Format("[{}]", written)),
+                      Fill(R"({"actions":[@],"finished":false,"room":@,"seat":0,"type":"view","v":1,"version":1,"view":@})", written));
         }
     }
 
-    TEST(RoomProtocolWriterTest, ARoomListIsTheSameAsTheDomPath) {
-        ExpectRoomList(MakeRoomList(0));
+    TEST(RoomProtocolWriterTest, ARoomListIsWrittenForEveryCountAndOptionsShape) {
+        EXPECT_EQ(MakeRoomListMessage(MakeRoomList(0)), R"({"game":"cards","more":false,"rooms":[],"type":"rooms","v":1})");
         RoomListMessage list = MakeRoomList(20);
         list.more = true;
-        ExpectRoomList(list);
-        list.rooms[0].options = DumpJson(Json{{"fast", true}});
+        EXPECT_EQ(MakeRoomListMessage(list), R"({"game":"cards","more":true,"rooms":[{"host":"Host 0","room":"ABCDE","seats":4,"started":false,"taken":0},)"
+                                             R"({"host":"Host 1","room":"ABCDE","seats":4,"started":true,"taken":1},)"
+                                             R"({"host":"Host 2","room":"ABCDE","seats":4,"started":false,"taken":2},)"
+                                             R"({"host":"Host 3","room":"ABCDE","seats":4,"started":true,"taken":0},)"
+                                             R"({"host":"Host 4","room":"ABCDE","seats":4,"started":false,"taken":1},)"
+                                             R"({"host":"Host 5","room":"ABCDE","seats":4,"started":true,"taken":2},)"
+                                             R"({"host":"Host 6","room":"ABCDE","seats":4,"started":false,"taken":0},)"
+                                             R"({"host":"Host 7","room":"ABCDE","seats":4,"started":true,"taken":1},)"
+                                             R"({"host":"Host 8","room":"ABCDE","seats":4,"started":false,"taken":2},)"
+                                             R"({"host":"Host 9","room":"ABCDE","seats":4,"started":true,"taken":0},)"
+                                             R"({"host":"Host 10","room":"ABCDE","seats":4,"started":false,"taken":1},)"
+                                             R"({"host":"Host 11","room":"ABCDE","seats":4,"started":true,"taken":2},)"
+                                             R"({"host":"Host 12","room":"ABCDE","seats":4,"started":false,"taken":0},)"
+                                             R"({"host":"Host 13","room":"ABCDE","seats":4,"started":true,"taken":1},)"
+                                             R"({"host":"Host 14","room":"ABCDE","seats":4,"started":false,"taken":2},)"
+                                             R"({"host":"Host 15","room":"ABCDE","seats":4,"started":true,"taken":0},)"
+                                             R"({"host":"Host 16","room":"ABCDE","seats":4,"started":false,"taken":1},)"
+                                             R"({"host":"Host 17","room":"ABCDE","seats":4,"started":true,"taken":2},)"
+                                             R"({"host":"Host 18","room":"ABCDE","seats":4,"started":false,"taken":0},)"
+                                             R"({"host":"Host 19","room":"ABCDE","seats":4,"started":true,"taken":1}],"type":"rooms","v":1})");
+        list.rooms[0].options = R"({"fast":true})";
         list.rooms[1].options = "{}";
         list.rooms[2].options = "";
-        ExpectRoomList(list);
-        const String text = MakeRoomListMessage(list);
-        EXPECT_NE(text.find(R"("options":{"fast":true})"), String::npos);
-        EXPECT_EQ(text.find("options", text.find("options") + 1), String::npos);
+        EXPECT_EQ(MakeRoomListMessage(list), R"({"game":"cards","more":true,"rooms":[{"host":"Host 0","options":{"fast":true},"room":"ABCDE","seats":4,"started":false,"taken":0},)"
+                                             R"({"host":"Host 1","room":"ABCDE","seats":4,"started":true,"taken":1},)"
+                                             R"({"host":"Host 2","room":"ABCDE","seats":4,"started":false,"taken":2},)"
+                                             R"({"host":"Host 3","room":"ABCDE","seats":4,"started":true,"taken":0},)"
+                                             R"({"host":"Host 4","room":"ABCDE","seats":4,"started":false,"taken":1},)"
+                                             R"({"host":"Host 5","room":"ABCDE","seats":4,"started":true,"taken":2},)"
+                                             R"({"host":"Host 6","room":"ABCDE","seats":4,"started":false,"taken":0},)"
+                                             R"({"host":"Host 7","room":"ABCDE","seats":4,"started":true,"taken":1},)"
+                                             R"({"host":"Host 8","room":"ABCDE","seats":4,"started":false,"taken":2},)"
+                                             R"({"host":"Host 9","room":"ABCDE","seats":4,"started":true,"taken":0},)"
+                                             R"({"host":"Host 10","room":"ABCDE","seats":4,"started":false,"taken":1},)"
+                                             R"({"host":"Host 11","room":"ABCDE","seats":4,"started":true,"taken":2},)"
+                                             R"({"host":"Host 12","room":"ABCDE","seats":4,"started":false,"taken":0},)"
+                                             R"({"host":"Host 13","room":"ABCDE","seats":4,"started":true,"taken":1},)"
+                                             R"({"host":"Host 14","room":"ABCDE","seats":4,"started":false,"taken":2},)"
+                                             R"({"host":"Host 15","room":"ABCDE","seats":4,"started":true,"taken":0},)"
+                                             R"({"host":"Host 16","room":"ABCDE","seats":4,"started":false,"taken":1},)"
+                                             R"({"host":"Host 17","room":"ABCDE","seats":4,"started":true,"taken":2},)"
+                                             R"({"host":"Host 18","room":"ABCDE","seats":4,"started":false,"taken":0},)"
+                                             R"({"host":"Host 19","room":"ABCDE","seats":4,"started":true,"taken":1}],"type":"rooms","v":1})");
     }
 
     TEST(RoomProtocolWriterTest, AViewCarriesTheGamesJsonAsItIs) {
-        ExpectView(kRoomCode, 3, 9, true, MakeHardJson(), Json::array({MakeHardJson(), Json::object()}));
-        ExpectView(kRoomCode, 0, 0, false, Json::object(), Json::array());
+        const String hardActions = Format("[{},{}]", kHardDocumentWithText, "{}");
+        EXPECT_EQ(MakeViewMessage(kRoomCode, 3, 9, true, kHardDocumentWithText, hardActions),
+                  "{\"actions\":[{\"badText\":\"bad \xEF\xBF\xBD( "
+                  "\xEF\xBF\xBD\",\"big\":1e+300,\"negative\":-9223372036854775808,\"nested\":{\"a\":[1,2,{}],\"b\":{}},\"null\":null,\"real\":0.1,\"unsigned\":18446744073709551615},"
+                  "{}],\"finished\":true,\"room\":\"ABCDE\",\"seat\":3,\"type\":\"view\",\"v\":1,\"version\":9,\"view\":{\"badText\":\"bad \xEF\xBF\xBD( "
+                  "\xEF\xBF\xBD\",\"big\":1e+300,\"negative\":-9223372036854775808,\"nested\":{\"a\":[1,2,{}],\"b\":{}},\"null\":null,\"real\":0.1,\"unsigned\":18446744073709551615}}");
+        EXPECT_EQ(MakeViewMessage(kRoomCode, 0, 0, false, "{}", "[]"), R"({"actions":[],"finished":false,"room":"ABCDE","seat":0,"type":"view","v":1,"version":0,"view":{}})");
         // a view and actions of another shape than the contract says are written as they are
-        ExpectView(kRoomCode, 0, 0, false, Json(nullptr), Json::object());
-        ExpectView(kRoomCode, 0, 0, false, Json::array({1}), Json(5));
+        EXPECT_EQ(MakeViewMessage(kRoomCode, 0, 0, false, "null", "{}"), R"({"actions":{},"finished":false,"room":"ABCDE","seat":0,"type":"view","v":1,"version":0,"view":null})");
+        EXPECT_EQ(MakeViewMessage(kRoomCode, 0, 0, false, "[1]", "5"), R"({"actions":5,"finished":false,"room":"ABCDE","seat":0,"type":"view","v":1,"version":0,"view":[1]})");
     }
 
     TEST(RoomProtocolWriterTest, TheTextOverloadOfAViewWritesEachValueAsGiven) {
@@ -242,37 +308,39 @@ namespace BECore::Tests {
                   R"({"actions":[ ],"finished":false,"room":"ABCDE","seat":1,"type":"view","v":1,"version":5,"view":{ "turn" : 1 }})");
     }
 
-    TEST(RoomProtocolWriterTest, ATypedViewIsTheSameBytesAsTheJsonOverloadGivenTheEqualDocument) {
-        for (const String& name : HardTexts()) {
+    TEST(RoomProtocolWriterTest, ATypedViewIsTheSameBytesAsTheTextOverloadGivenTheEqualDocument) {
+        ASSERT_EQ(HardTexts().size(), HardTextsWritten().size());
+        for (size_t i = 0; i < HardTexts().size(); ++i) {
+            const String& name = HardTexts()[i];
+            const StringView written = HardTextsWritten()[i];
+            SCOPED_TRACE(i);
             AnswerView view;
             view.name = name;
             view.turn = 4;
-            Json viewJson = Json::object();
-            viewJson["name"] = MakeJsonString(name);
-            viewJson["points"] = Json::array();
-            viewJson["turn"] = 4;
-            Json actionsJson = Json::array();
             SeatedActionList<AnswerAction> actions;
-            EXPECT_EQ(MakeViewMessage(kRoomCode, 2, 9, false, view, actions), MakeViewMessage(kRoomCode, 2, 9, false, DumpJson(viewJson), DumpJson(actionsJson))) << "an empty list stays an array";
+            EXPECT_EQ(MakeViewMessage(kRoomCode, 2, 9, false, view, actions),
+                      Fill(R"({"actions":[],"finished":false,"room":"ABCDE","seat":2,"type":"view","v":1,"version":9,"view":{"name":@,"points":[],"turn":4}})", written))
+                << "an empty list stays an array";
 
-            for (int32_t i = 0; i < 2; ++i) {
+            for (int32_t n = 0; n < 2; ++n) {
                 AnswerPoint& point = view.points.emplace_back();
-                point.x = i;
-                point.y = -i;
-                viewJson["points"].push_back(Json{{"x", i}, {"y", -i}});
+                point.x = n;
+                point.y = -n;
                 AnswerAction action;
-                action.card = i + 10;
+                action.card = n + 10;
                 action.type = name;
                 actions.Add(std::move(action));
-                actionsJson.push_back(Json{{"card", i + 10}, {"type", MakeJsonString(name)}});
             }
-            EXPECT_EQ(MakeViewMessage(kRoomCode, 2, 9, true, view, actions), MakeViewMessage(kRoomCode, 2, 9, true, DumpJson(viewJson), DumpJson(actionsJson)));
+            const String expected = Fill(
+                R"({"actions":[{"card":10,"type":@},{"card":11,"type":@}],"finished":true,"room":"ABCDE","seat":2,"type":"view","v":1,"version":9,"view":{"name":@,"points":[{"x":0,"y":0},{"x":1,"y":-1}],"turn":4}})",
+                written);
+            EXPECT_EQ(MakeViewMessage(kRoomCode, 2, 9, true, view, actions), expected);
 
             String appended = "kept:";
             const size_t scratchBefore = ScratchArena::Get().GetBytesUsed();
             AppendViewMessage(appended, kRoomCode, 2, 9, true, view, actions);
             EXPECT_EQ(ScratchArena::Get().GetBytesUsed(), scratchBefore);
-            EXPECT_EQ(appended, Format("kept:{}", MakeViewMessage(kRoomCode, 2, 9, true, DumpJson(viewJson), DumpJson(actionsJson))));
+            EXPECT_EQ(appended, Format("kept:{}", expected));
         }
     }
 
@@ -281,20 +349,27 @@ namespace BECore::Tests {
         constexpr PlayerId kMaxPlayer = std::numeric_limits<PlayerId>::max();
         constexpr int kMinSeat = std::numeric_limits<int>::min();
         constexpr int kMaxSeat = std::numeric_limits<int>::max();
-        for (const uint64_t version : {uint64_t{0}, uint64_t{std::numeric_limits<int64_t>::max()}, kMaxVersion}) {
-            ExpectView(kRoomCode, kMinSeat, version, false, Json::object(), Json::array());
-            ExpectView(kRoomCode, kMaxSeat, version, true, Json::object(), Json::array());
-        }
-        EXPECT_EQ(MakeJoinedMessage(kRoomCode, kMaxPlayer, kToken, kMinSeat, true), RoomMessageReference::MakeJoinedMessage(kRoomCode, kMaxPlayer, kToken, kMinSeat, true));
-        EXPECT_EQ(MakeJoinedMessage(kRoomCode, 0, kToken, kMaxSeat, false), RoomMessageReference::MakeJoinedMessage(kRoomCode, 0, kToken, kMaxSeat, false));
-        EXPECT_NE(MakeViewMessage(kRoomCode, 0, kMaxVersion, false, "{}", "[]").find("18446744073709551615"), String::npos);
+        EXPECT_EQ(MakeViewMessage(kRoomCode, kMinSeat, 0, false, "{}", "[]"), R"({"actions":[],"finished":false,"room":"ABCDE","seat":-2147483648,"type":"view","v":1,"version":0,"view":{}})");
+        EXPECT_EQ(MakeViewMessage(kRoomCode, kMaxSeat, 0, true, "{}", "[]"), R"({"actions":[],"finished":true,"room":"ABCDE","seat":2147483647,"type":"view","v":1,"version":0,"view":{}})");
+        EXPECT_EQ(MakeViewMessage(kRoomCode, kMinSeat, std::numeric_limits<int64_t>::max(), false, "{}", "[]"),
+                  R"({"actions":[],"finished":false,"room":"ABCDE","seat":-2147483648,"type":"view","v":1,"version":9223372036854775807,"view":{}})");
+        EXPECT_EQ(MakeViewMessage(kRoomCode, kMaxSeat, std::numeric_limits<int64_t>::max(), true, "{}", "[]"),
+                  R"({"actions":[],"finished":true,"room":"ABCDE","seat":2147483647,"type":"view","v":1,"version":9223372036854775807,"view":{}})");
+        EXPECT_EQ(MakeViewMessage(kRoomCode, kMinSeat, kMaxVersion, false, "{}", "[]"),
+                  R"({"actions":[],"finished":false,"room":"ABCDE","seat":-2147483648,"type":"view","v":1,"version":18446744073709551615,"view":{}})");
+        EXPECT_EQ(MakeViewMessage(kRoomCode, kMaxSeat, kMaxVersion, true, "{}", "[]"),
+                  R"({"actions":[],"finished":true,"room":"ABCDE","seat":2147483647,"type":"view","v":1,"version":18446744073709551615,"view":{}})");
+        EXPECT_EQ(MakeJoinedMessage(kRoomCode, kMaxPlayer, kToken, kMinSeat, true),
+                  R"({"host":true,"player":4294967295,"room":"ABCDE","seat":-2147483648,"token":"0123456789abcdef0123456789abcdef","type":"joined","v":1})");
+        EXPECT_EQ(MakeJoinedMessage(kRoomCode, 0, kToken, kMaxSeat, false),
+                  R"({"host":false,"player":0,"room":"ABCDE","seat":2147483647,"token":"0123456789abcdef0123456789abcdef","type":"joined","v":1})");
     }
 
     TEST(RoomProtocolWriterTest, AppendKeepsWhatTheStringHoldsAndTheMakeFunctionsReturnTheSameBytes) {
         const LobbySnapshot lobby = MakeLobby(3);
         const RoomListMessage list = MakeRoomList(2);
-        const Json view = Json{{"hand", Json::array({1, 2})}};
-        const Json actions = Json::array({1});
+        constexpr StringView kView = R"({"hand":[1,2]})";
+        constexpr StringView kActions = "[1]";
 
         const Vector<Pair<String, String>> cases = {
             {MakeJoinedMessage(kRoomCode, 7, kToken, 2, true),
@@ -309,10 +384,10 @@ namespace BECore::Tests {
                  AppendLobbyMessage(out, lobby);
                  return out;
              }()},
-            {MakeViewMessage(kRoomCode, 1, 5, false, DumpJson(view), DumpJson(actions)),
+            {MakeViewMessage(kRoomCode, 1, 5, false, kView, kActions),
              [&] {
                  String out;
-                 AppendViewMessage(out, kRoomCode, 1, 5, false, DumpJson(view), DumpJson(actions));
+                 AppendViewMessage(out, kRoomCode, 1, 5, false, kView, kActions);
                  return out;
              }()},
             {MakeRoomListMessage(list),
@@ -363,7 +438,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(joinedMessage->host);
 
         LobbySnapshot lobby = MakeLobby(kFullSeatCount);
-        lobby.options = DumpJson(Json{{"fast", true}, {"rounds", 3}});
+        lobby.options = R"({"fast":true,"rounds":3})";
         const auto lobbyParsed = ParseServerMessage(MakeLobbyMessage(lobby));
         ASSERT_TRUE(lobbyParsed.has_value());
         const auto* lobbyMessage = std::get_if<LobbyMessage>(&*lobbyParsed);
@@ -382,21 +457,21 @@ namespace BECore::Tests {
 
         // the reader takes a version up to INT64_MAX (it is an int64 there); the writer writes any uint64_t
         constexpr uint64_t kMaxReadableVersion = std::numeric_limits<int64_t>::max();
-        const Json view = Json{{"hand", Json::array({1, 2})}, {"big", 1e300}, {"unsigned", std::numeric_limits<uint64_t>::max()}};
-        const Json actions = Json::array({Json{{"type", "play"}}});
-        const auto viewParsed = ParseServerMessage(MakeViewMessage(kRoomCode, 4, kMaxReadableVersion, true, DumpJson(view), DumpJson(actions)));
+        constexpr StringView kView = R"({"big":1e+300,"hand":[1,2],"unsigned":18446744073709551615})";
+        constexpr StringView kActions = R"([{"type":"play"}])";
+        const auto viewParsed = ParseServerMessage(MakeViewMessage(kRoomCode, 4, kMaxReadableVersion, true, kView, kActions));
         ASSERT_TRUE(viewParsed.has_value());
         const auto* viewMessage = std::get_if<ViewMessage>(&*viewParsed);
         ASSERT_NE(viewMessage, nullptr);
         EXPECT_EQ(viewMessage->seat, 4);
         EXPECT_EQ(viewMessage->version, kMaxReadableVersion);
         EXPECT_TRUE(viewMessage->finished);
-        EXPECT_EQ(viewMessage->view, DumpJson(view));
-        EXPECT_EQ(viewMessage->actions, DumpJson(actions));
+        EXPECT_EQ(viewMessage->view, kView);
+        EXPECT_EQ(viewMessage->actions, kActions);
 
         RoomListMessage list = MakeRoomList(3);
         list.more = true;
-        list.rooms[1].options = DumpJson(Json{{"fast", true}});
+        list.rooms[1].options = R"({"fast":true})";
         const auto listParsed = ParseServerMessage(MakeRoomListMessage(list));
         ASSERT_TRUE(listParsed.has_value());
         const auto* listMessage = std::get_if<RoomListMessage>(&*listParsed);
@@ -438,7 +513,7 @@ namespace BECore::Tests {
             ClientMessage createPublic = [&] {
                 CreateRoomMessage message = create;
                 message.isPublic = true;
-                message.options = DumpJson(MakeHardJson(false));
+                message.options = String(kHardDocument);
                 return message;
             }();
             JoinRoomMessage joinNew;
@@ -449,10 +524,10 @@ namespace BECore::Tests {
             joinBack.token = kToken;
             ActionMessage action;
             action.version = actionVersion;
-            action.action = DumpJson(MakeHardJson(false));
+            action.action = String(kHardDocument);
             ActionMessage smallAction;
             smallAction.version = 3;
-            smallAction.action = DumpJson(Json{{"card", 4}});
+            smallAction.action = R"({"card":4})";
             ListRoomsMessage list;
             list.game = "cards";
             return {create,      createPublic,   joinNew,       joinBack, ChooseSeatMessage{std::numeric_limits<int64_t>::min()}, ChooseSeatMessage{2}, StartMessage{}, action,
@@ -467,7 +542,7 @@ namespace BECore::Tests {
         create.name = "Ann";
         EXPECT_EQ(SerializeClientMessage(create), R"({"game":"cards","name":"Ann","options":{},"type":"create_room","v":1})");
         create.isPublic = true;
-        create.options = DumpJson(Json{{"fast", true}});
+        create.options = R"({"fast":true})";
         EXPECT_EQ(SerializeClientMessage(create), R"({"game":"cards","name":"Ann","options":{"fast":true},"public":true,"type":"create_room","v":1})");
 
         JoinRoomMessage join;
@@ -482,7 +557,7 @@ namespace BECore::Tests {
         EXPECT_EQ(SerializeClientMessage(StartMessage{}), R"({"type":"start","v":1})");
         ActionMessage action;
         action.version = 7;
-        action.action = DumpJson(Json{{"card", 4}});
+        action.action = R"({"card":4})";
         EXPECT_EQ(SerializeClientMessage(action), R"({"action":{"card":4},"type":"action","v":1,"version":7})");
         EXPECT_EQ(SerializeClientMessage(LeaveMessage{}), R"({"type":"leave","v":1})");
         EXPECT_EQ(SerializeClientMessage(PingMessage{}), R"({"type":"ping","v":1})");
@@ -491,27 +566,44 @@ namespace BECore::Tests {
         EXPECT_EQ(SerializeClientMessage(list), R"({"game":"cards","type":"list_rooms","v":1})");
     }
 
-    TEST(RoomProtocolWriterTest, ClientMessagesAreTheSameAsTheDomPath) {
-        for (const ClientMessage& message : MakeClientMessages(std::numeric_limits<uint64_t>::max())) {
-            EXPECT_EQ(SerializeClientMessage(message), RoomMessageReference::MakeClientMessage(message)) << GetClientMessageType(message).data();
+    TEST(RoomProtocolWriterTest, ClientMessagesAreWrittenForEveryKindAndText) {
+        const Vector<ClientMessage> messages = MakeClientMessages(std::numeric_limits<uint64_t>::max());
+        const Vector<StringView> expected = {
+            R"({"game":"cards","name":"Ann","options":{},"type":"create_room","v":1})",
+            R"({"game":"cards","name":"Ann","options":{"big":1e+300,"negative":-9223372036854775808,"nested":{"a":[1,2,{}],"b":{}},"null":null,"real":0.1,"unsigned":18446744073709551615},"public":true,"type":"create_room","v":1})",
+            R"({"code":"ABCDE","name":"Bob","type":"join_room","v":1})",
+            R"({"code":"ABCDE","token":"0123456789abcdef0123456789abcdef","type":"join_room","v":1})",
+            R"({"seat":-9223372036854775808,"type":"choose_seat","v":1})",
+            R"({"seat":2,"type":"choose_seat","v":1})",
+            R"({"type":"start","v":1})",
+            R"({"action":{"big":1e+300,"negative":-9223372036854775808,"nested":{"a":[1,2,{}],"b":{}},"null":null,"real":0.1,"unsigned":18446744073709551615},"type":"action","v":1,"version":18446744073709551615})",
+            R"({"action":{"card":4},"type":"action","v":1,"version":3})",
+            R"({"type":"leave","v":1})",
+            R"({"type":"ping","v":1})",
+            R"({"game":"cards","type":"list_rooms","v":1})",
+        };
+        ASSERT_EQ(messages.size(), expected.size());
+        for (size_t i = 0; i < messages.size(); ++i) {
+            EXPECT_EQ(SerializeClientMessage(messages[i]), expected[i]) << GetClientMessageType(messages[i]).data();
         }
-        for (const String& text : HardTexts()) {
+        ASSERT_EQ(HardTexts().size(), HardTextsWritten().size());
+        for (size_t i = 0; i < HardTexts().size(); ++i) {
+            const String& text = HardTexts()[i];
+            SCOPED_TRACE(i);
             CreateRoomMessage create;
             create.game = text;
             create.name = text;
             create.isPublic = true;
-            ClientMessage message = create;
-            EXPECT_EQ(SerializeClientMessage(message), RoomMessageReference::MakeClientMessage(message));
+            EXPECT_EQ(SerializeClientMessage(create), Fill(R"({"game":@,"name":@,"options":{},"public":true,"type":"create_room","v":1})", HardTextsWritten()[i]));
             JoinRoomMessage join;
             join.code = text;
             join.name = text;
-            message = join;
-            EXPECT_EQ(SerializeClientMessage(message), RoomMessageReference::MakeClientMessage(message));
+            EXPECT_EQ(SerializeClientMessage(join), Fill(R"({"code":@,"name":@,"type":"join_room","v":1})", HardTextsWritten()[i]));
         }
         // an options or an action text is written as it is, and an empty one as the empty object
         CreateRoomMessage create;
         create.options = "[1]";
-        EXPECT_EQ(SerializeClientMessage(create), RoomMessageReference::MakeClientMessage(create));
+        EXPECT_EQ(SerializeClientMessage(create), R"({"game":"","name":"","options":[1],"type":"create_room","v":1})");
         EXPECT_NE(SerializeClientMessage(CreateRoomMessage{}).find(R"("options":{})"), String::npos);
         ActionMessage action;
         EXPECT_NE(SerializeClientMessage(action).find(R"("action":{})"), String::npos);
@@ -560,8 +652,11 @@ namespace BECore::Tests {
         EXPECT_EQ(ScratchArena::Get().GetBytesUsed(), before) << "view";
         AppendClientMessage(out, messages.create);
         EXPECT_EQ(ScratchArena::Get().GetBytesUsed(), before) << "create_room";
-        EXPECT_EQ(MakeLobbyMessage(messages.lobby), RoomMessageReference::MakeLobbyMessage(messages.lobby));
+        String made = MakeLobbyMessage(messages.lobby);
         EXPECT_EQ(ScratchArena::Get().GetBytesUsed(), before) << "Make";
+        String appended;
+        AppendLobbyMessage(appended, messages.lobby);
+        EXPECT_EQ(made, appended);
     }
 
     TEST(RoomProtocolWriterTest, AnotherThreadWritesTheSameBytesAndKeepsItsOwnScratchArena) {

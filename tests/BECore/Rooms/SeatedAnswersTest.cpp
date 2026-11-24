@@ -1,6 +1,5 @@
 #include "SeatedAnswersTest.h"
 
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/Control/SchemaExport.h>
 #include <BECore/Reflection/TypeRegistry.h>
@@ -34,6 +33,17 @@ namespace BECore::Tests {
             const TypeInfo* info = registry.Find(name);
             EXPECT_NE(info, nullptr) << String(name).c_str();
             return info != nullptr ? *info : MakeTypeInfo<AnswerPoint>();
+        }
+
+        /// Whether the schema of the type @p base lists @p derived under `derived`
+        bool ListsDerived(StringView base, StringView derived, const TypeRegistry& registry) {
+            const JsonDoc described(WrittenText(DescribeTypeSchema(Require(registry, base), registry)));
+            for (const JsonView name : MemberOf(described.Root(), "derived").Items()) {
+                if (name.TextEquals(derived)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         using SeatedAnswersSchemaTest = ScratchScopeFixture;
@@ -83,41 +93,33 @@ namespace BECore::Tests {
         // The registry of the program: the types register in static initializers, so this also proves the answer bases are linked into the executable
         const TypeRegistry& registry = TypeRegistry::GetInstance();
         // Other test and game types may derive from the bases too, so each base is asked whether it lists this one
-        const auto lists = [&registry](StringView base, StringView derived) {
-            const Json described = ToJson(DescribeTypeSchema(Require(registry, base), registry));
-            const Json* names = FindJsonMember(described, "derived");
-            return names != nullptr && names->is_array() && std::find(names->begin(), names->end(), MakeJsonString(derived)) != names->end();
-        };
+        const auto lists = [&registry](StringView base, StringView derived) { return ListsDerived(base, derived, registry); };
         EXPECT_TRUE(lists("SeatedView", "AnswerView"));
         EXPECT_TRUE(lists("SeatedAction", "AnswerAction"));
         EXPECT_TRUE(lists("SeatedOutcome", "AnswerOutcome"));
 
-        const Json view = ToJson(DescribeTypeSchema(Require(registry, "AnswerView"), registry));
-        const Json* fields = FindJsonMember(view, "fields");
-        ASSERT_TRUE(fields != nullptr && fields->is_array());
-        ASSERT_EQ(fields->size(), 3U);
-        EXPECT_EQ(GetJsonString((*fields)[0], "name"), String("name"));
-        EXPECT_EQ(GetJsonString((*fields)[2], "name"), String("turn"));
+        const JsonDoc view(WrittenText(DescribeTypeSchema(Require(registry, "AnswerView"), registry)));
+        const JsonView fields = MemberOf(view.Root(), "fields");
+        ASSERT_TRUE(fields.IsArray());
+        ASSERT_EQ(fields.Size(), 3U);
+        EXPECT_EQ(StringOf(ItemAt(fields, 0), "name"), String("name"));
+        EXPECT_EQ(StringOf(ItemAt(fields, 2), "name"), String("turn"));
     }
 
     TEST_F(SeatedAnswersSchemaTest, TheDemoGamesAnswersAreListedUnderTheBases) {
         const TypeRegistry& registry = TypeRegistry::GetInstance();
-        const auto lists = [&registry](StringView base, StringView derived) {
-            const Json described = ToJson(DescribeTypeSchema(Require(registry, base), registry));
-            const Json* names = FindJsonMember(described, "derived");
-            return names != nullptr && names->is_array() && std::find(names->begin(), names->end(), MakeJsonString(derived)) != names->end();
-        };
+        const auto lists = [&registry](StringView base, StringView derived) { return ListsDerived(base, derived, registry); };
         EXPECT_TRUE(lists("SeatedView", "DemoSeatView"));
         EXPECT_TRUE(lists("SeatedAction", "DemoSeatAction"));
         EXPECT_TRUE(lists("SeatedOutcome", "DemoSeatOutcome"));
         EXPECT_TRUE(lists("DemoSeatView", "LeakyDemoSeatView"));
 
-        const Json view = ToJson(DescribeTypeSchema(Require(registry, "DemoSeatView"), registry));
-        const Json* fields = FindJsonMember(view, "fields");
-        ASSERT_TRUE(fields != nullptr && fields->is_array());
+        const JsonDoc view(WrittenText(DescribeTypeSchema(Require(registry, "DemoSeatView"), registry)));
+        const JsonView fields = MemberOf(view.Root(), "fields");
+        ASSERT_TRUE(fields.IsArray());
         Vector<String> names;
-        for (const Json& field : *fields) {
-            names.push_back(GetJsonString(field, "name").value_or(String()));
+        for (const JsonView field : fields.Items()) {
+            names.push_back(StringOf(field, "name"));
         }
         const Vector<String> expected = {"cardCounts", "finished", "hand", "seat", "table", "turn"};
         EXPECT_EQ(names, expected);

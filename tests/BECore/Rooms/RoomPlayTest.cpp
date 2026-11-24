@@ -283,7 +283,8 @@ namespace BECore::Tests {
                 const auto actions = test.room.GetSeatActions(player);
                 ASSERT_TRUE(actions.has_value());
                 if ((*actions)->Count() != 0) {
-                    const auto result = test.room.PerformAction(player, test.room.GetGameVersion(), JsonDoc(DumpJson(ActionsJson(**actions)[0])));
+                    const JsonDoc listed(ActionsText(**actions));
+                    const auto result = test.room.PerformAction(player, test.room.GetGameVersion(), ItemAt(listed.Root(), 0));
                     EXPECT_TRUE(result.has_value());
                     ExpectViewsDoNotLeak(test);
                 }

@@ -15,7 +15,6 @@
 #include <BECore/Profiler/ProfilerControl.h>
 #include <BECore/Reflection/PropertyAccess.h>
 #include <BECore/Reflection/TypedRef.h>
-#include <BECore/Rooms/RoomMessageReference.h>
 #include <Common/AllocCheck.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
@@ -273,13 +272,9 @@ namespace BECore::Tests {
         const LobbySnapshot lobby = MakeBenchLobby();
         const RoomListMessage list = MakeBenchRoomList();
 
-        Print(kPrefix, "view-dom", MeasureRoomDom([&] { return RoomMessageReference::MakeViewMessage(kRoom, 1, kVersion, false, view, actions); }));
         Print(kPrefix, "view-writer", MeasureRoomWriter([&](String& out) { AppendViewMessage(out, kRoom, 1, kVersion, false, viewText, actionsText); }));
-        Print(kPrefix, "lobby-dom", MeasureRoomDom([&] { return RoomMessageReference::MakeLobbyMessage(lobby); }));
         Print(kPrefix, "lobby-writer", MeasureRoomWriter([&](String& out) { AppendLobbyMessage(out, lobby); }));
-        Print(kPrefix, "rooms-dom", MeasureRoomDom([&] { return RoomMessageReference::MakeRoomListMessage(list); }));
         Print(kPrefix, "rooms-writer", MeasureRoomWriter([&](String& out) { AppendRoomListMessage(out, list); }));
-        Print(kPrefix, "error-dom", MeasureRoomDom([] { return RoomMessageReference::MakeErrorMessage("seat_taken", "that seat is taken", "choose_seat"); }));
         Print(kPrefix, "error-writer", MeasureRoomWriter([](String& out) { AppendErrorMessage(out, "seat_taken", "that seat is taken", "choose_seat"); }));
     }
 

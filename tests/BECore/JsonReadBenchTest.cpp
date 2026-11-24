@@ -8,9 +8,9 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
 #include <BECore/JsonReadBenchTypes.h>
-#include <BECore/Rooms/RoomMessageReference.h>
 #include <Common/AllocCheck.h>
 #include <Generated/JsonReadBenchTypes.gen.hpp>
+#include <Rooms/RoomProtocol.h>
 #include <chrono>
 #include <gtest/gtest.h>
 #include <iostream>
@@ -106,8 +106,8 @@ namespace BECore::Tests {
     }
 
     TEST(JsonReadBenchTest, DISABLED_RoomMessages) {
-        const String lobby = RoomMessageReference::MakeLobbyMessage(MakeBenchLobby());
-        const String rooms = RoomMessageReference::MakeRoomListMessage(MakeBenchRoomList());
+        const String lobby = MakeLobbyMessage(MakeBenchLobby());
+        const String rooms = MakeRoomListMessage(MakeBenchRoomList());
         Compare<ReadBenchLobby>("room-lobby", lobby);
         Compare<ReadBenchRoomList>("room-list", rooms);
     }

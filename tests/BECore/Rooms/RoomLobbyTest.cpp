@@ -1,4 +1,3 @@
-#include <BECore/Control/Json.h>
 #include <BECore/Rooms/TestRandom.h>
 #include <Common/JsonDoc.h>
 #include <Common/Printers.h>
@@ -44,20 +43,16 @@ namespace BECore::Tests {
         EXPECT_TRUE(room.GetLobbySnapshot().options.empty());
         const uint64_t before = room.GetLobbyRevision();
 
-        Json options = Json::object();
-        options["hints"] = true;
-        options["hands"] = 8;
-        options["name"] = "a string is never shown";
-        options["nested"] = Json::object();
-        options["other"] = 1;  // not public
-        room.SetLobbyOptions(JsonDoc(DumpJson(options)));
+        // "other" is not public
+        constexpr StringView kOptions = R"({"hands":8,"hints":true,"name":"a string is never shown","nested":{},"other":1})";
+        room.SetLobbyOptions(JsonDoc(kOptions));
 
         EXPECT_EQ(room.GetLobbySnapshot().options, R"({"hands":8,"hints":true})");
         EXPECT_GT(room.GetLobbyRevision(), before);
 
         // The same options again change nothing
         const uint64_t after = room.GetLobbyRevision();
-        room.SetLobbyOptions(JsonDoc(DumpJson(options)));
+        room.SetLobbyOptions(JsonDoc(kOptions));
         EXPECT_EQ(room.GetLobbyRevision(), after);
 
         // Not an object: nothing is public
