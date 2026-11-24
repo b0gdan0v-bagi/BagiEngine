@@ -57,7 +57,7 @@ A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` wi
 | 2b | Tweens | `TweenManager::Advance(dt)` | Every running tween moves by the frame time and its setters write the values, so the logic below reads them (`Animation/CLAUDE.md`) |
 | 3 | Logic | `SceneManager::UpdateAll` | `SceneFixedUpdateEvent` (zero or more, a constant step), then `SceneUpdateEvent` (once, with the frame time) |
 | 3b | Music | `AudioManager::Update(dt)` | Every kind of frame, a Held one too: the fades move by the frame time, the music is decoded ahead (`Audio/CLAUDE.md`, "Music") |
-| 4 | Render | `WidgetManager::UpdateAll`, `DrawScreenAll`, `DrawAll` | Editor: UI and `Scene::Draw()` through `ViewportWidget`, then ImGui render. Game: `Scene::Draw()` through `SceneRenderWidget::DrawScreen`. `Scene::Draw()` draws in layer order: the system draws the quad and the sprite itself from the registry and calls `IComponent::OnDraw()` of the other components (`Scene/CLAUDE.md`). Present at the end of the frame |
+| 4 | Render | `WidgetManager::UpdateAll`, `DrawScreenAll`, `DrawAll` | Editor: UI and `Scene::Draw()` through `ViewportWidget`, then ImGui render. Game: `Scene::Draw()` through `SceneRenderWidget::DrawScreen`. `Scene::Draw()` draws in layer order: the system loops over the scene's draw list: the quad and the sprite it draws itself, and it calls `IComponent::OnDraw()` of the other components (`Scene/CLAUDE.md`). Present at the end of the frame |
 
 Logic reads input and writes state; render only reads state. Do not draw from `SceneUpdateEvent` handlers and do not change game state from `OnDraw()`.
 
