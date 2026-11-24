@@ -15,7 +15,7 @@ namespace BECore::Tests {
     class AudioPreferencesTest : public ::testing::Test {
     protected:
         void SetUp() override {
-            _base = Path(TestTempDirectory("BagiAudioPreferencesTest"));
+            _base = TestTempDirectory("BagiAudioPreferencesTest");
             RemoveDirectory(_base);
             _service.emplace(_fileSystem);
             ASSERT_TRUE(_service->Initialize(_base / "saves"));

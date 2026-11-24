@@ -163,7 +163,7 @@ namespace BECore::Tests {
         /// A folder of the test with `assets/` in it, removed with the object; virtual paths resolve into it
         class TempGame {
         public:
-            TempGame() : _root(Path(TestTempDirectory("SpriteAtlas"))), _resolver{_root} {
+            TempGame() : _root(TestTempDirectory("SpriteAtlas")), _resolver{_root} {
                 RemoveDirectory(_root);
                 MakeDirectory(_root / "assets");
             }

@@ -240,7 +240,7 @@ namespace BECore::Tests {
     TEST_F(ProfilerControlGoldenTest, ProfilerDumpAnswersThePathAndTheDroppedCount) {
         IProfilerBackend* const previous = Profiler::GetPrimaryBackend();
         Profiler::SetBackend(&Profiler::GetChromeTrace());
-        const Path file = Path(TestTempPath("ProfilerDump caf\xC3\xA9")).Filename();
+        const Path file = TestTempPath("ProfilerDump caf\xC3\xA9").Filename();
         Json params = Json::object();
         params["path"] = ToStdString(file.View());
 

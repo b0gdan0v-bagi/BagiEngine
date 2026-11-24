@@ -219,7 +219,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ConfigDiagnosticsTest, AFileOpenedByOpenDeserializerStaysOff) {
-        const Path dir = Path(TestTempDirectory("BagiConfigDiagnostics"));
+        const Path dir = TestTempDirectory("BagiConfigDiagnostics");
         MakeEmptyDirectory(dir);
         WriteFile(dir / "probe.xml", "<root/>");
         const PoolString mount = "BagiConfigDiagnosticsTest"_intern;

@@ -24,7 +24,7 @@ namespace BECore::Tests {
 
     /// The helper a game's own test calls, on a folder with one file of every kind
     TEST(ContentFilesVersionTest, FindsOnlyStaleContentFiles) {
-        const Path dir = Path(TestTempDirectory("BagiContentFilesCheck"));
+        const Path dir = TestTempDirectory("BagiContentFilesCheck");
         RemoveDirectory(dir);
         WriteFile(dir / "SceneConfig.xml", Format("<SceneManager contentVersion=\"{}\"/>", kContentVersion).c_str());
         WriteFile(dir / "nodes" / "Old.xml", "<node name=\"Old\" contentVersion=\"0\"/>");

@@ -157,7 +157,7 @@ namespace BECore::Tests {
     class ArtGenVerdictFileTest : public ::testing::Test {
     protected:
         void SetUp() override {
-            _root = Path(TestTempDirectory("artgen_verdict"));
+            _root = TestTempDirectory("artgen_verdict");
             MakeEmptyDirectory(_root);
         }
 

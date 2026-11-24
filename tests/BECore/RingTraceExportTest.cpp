@@ -152,7 +152,7 @@ namespace BECore::Tests {
 
     TEST(RingTraceExportTest, TheFileHoldsTheSameTextAndAnUnwritablePathIsAnError) {
         const RingSnapshot snapshot = TenFrames();
-        const Path path = Path(TestTempPath("ring_trace")).ReplaceExtension(".json");
+        const Path path = TestTempPath("ring_trace").ReplaceExtension(".json");
         const auto written = WriteRingTraceFile(path.View(), snapshot, 0.05);
         ASSERT_TRUE(written.has_value());
         EXPECT_EQ(ReadFile(path), WriteRingTraceJson(snapshot, 0.05));

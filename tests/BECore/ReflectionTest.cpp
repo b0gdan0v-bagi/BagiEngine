@@ -1222,7 +1222,7 @@ namespace BECore::Tests {
             serializer.EndObject();
         }
 
-        const Path path = Path(TestTempPath("BagiEngineTests_BinaryFileRoundTrip"));
+        const Path path = TestTempPath("BagiEngineTests_BinaryFileRoundTrip");
         ASSERT_TRUE(serializer.SaveToFile(path));
 
         TestData::SavedGameState loaded;
@@ -1244,7 +1244,7 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, BinaryFileErrors) {
-        const Path missing = Path(TestTempPath("BagiEngineTests_DoesNotExist"));
+        const Path missing = TestTempPath("BagiEngineTests_DoesNotExist");
         RemoveFileIfPresent(missing);
 
         BinaryDeserializer deserializer;
@@ -1252,7 +1252,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(deserializer.HasErrors());
 
         // A file that is not a binary stream is rejected like a corrupt buffer
-        const Path garbage = Path(TestTempPath("BagiEngineTests_Garbage"));
+        const Path garbage = TestTempPath("BagiEngineTests_Garbage");
         WriteFile(garbage, "this is definitely not a BagiEngine binary stream");
         BinaryDeserializer fromGarbage;
         const bool loaded = fromGarbage.LoadFromFile(garbage);
@@ -1262,7 +1262,7 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, BinarySaveToFileMakesTheFolderAndReplacesTheFileWhole) {
-        const Path folder = Path(TestTempPath("BagiEngineTests_BinarySaveToFileFolder"));
+        const Path folder = TestTempPath("BagiEngineTests_BinarySaveToFileFolder");
         const Path path = folder / "inner" / "file.bin";
         RemoveDirectory(folder);
 
@@ -1286,7 +1286,7 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, BinarySaveToFileFailsWhenAFileIsInTheWay) {
-        const Path blocker = Path(TestTempPath("BagiEngineTests_BinarySaveToFileBlocker"));
+        const Path blocker = TestTempPath("BagiEngineTests_BinarySaveToFileBlocker");
         WriteFile(blocker, "x");
         const BinarySerializer serializer;
         const bool saved = serializer.SaveToFile(blocker / "file.bin");

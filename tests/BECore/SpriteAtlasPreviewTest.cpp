@@ -85,7 +85,7 @@ namespace BECore::Tests {
         /// A folder of the test with `assets/` in it, removed with the object
         class TempGame {
         public:
-            TempGame() : _root(Path(TestTempDirectory("SpriteAtlasPreview"))), _resolver{_root} {
+            TempGame() : _root(TestTempDirectory("SpriteAtlasPreview")), _resolver{_root} {
                 RemoveDirectory(_root);
                 MakeDirectory(_root / "assets");
             }

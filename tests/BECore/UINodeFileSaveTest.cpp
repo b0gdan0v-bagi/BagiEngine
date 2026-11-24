@@ -122,7 +122,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            _dir = Path(TestTempDirectory("BagiUINodeFileSaveTest"));
+            _dir = TestTempDirectory("BagiUINodeFileSaveTest");
             RemoveDirectory(_dir);
             WriteFile(_dir / "nodes" / "Hud.xml", kHudNode);
             WriteFile(_dir / "nodes" / "Seat.xml", kSeatNode);

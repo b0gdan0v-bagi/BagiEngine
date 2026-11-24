@@ -119,7 +119,7 @@ namespace BECore::Tests {
     }
 
     TEST(BinaryDeserializerTest, AFileReadsTheSameAsTheBufferOfTheSameBytes) {
-        const Path path = Path(TestTempPath("binary_deserializer_file"));
+        const Path path = TestTempPath("binary_deserializer_file");
         BinarySerializer document;
         BuildDocument(document, 50);
         const bool saved = document.SaveToFile(path);
@@ -184,7 +184,7 @@ namespace BECore::Tests {
         const Vector<uint8_t> first = MakeStream(2, "AAAA");
         const Vector<uint8_t> second = MakeStream(5, "BBBB");
         const Vector<uint8_t> third = MakeStream(1, "CCCC");
-        const Path path = Path(TestTempPath("binary_deserializer_replace"));
+        const Path path = TestTempPath("binary_deserializer_replace");
         BinarySerializer document;
         BuildDocument(document, 0, "DDDD");
         const bool saved = document.SaveToFile(path);
@@ -994,7 +994,7 @@ namespace BECore::Tests {
             ASSERT_TRUE(fromBuffer.LoadFromBuffer(bytes));
             ExpectReadsEntries(fromBuffer, tree, "buffer");
 
-            const Path path = Path(TestTempPath(Format("binary_deserializer_v{}_file", version)));
+            const Path path = TestTempPath(Format("binary_deserializer_v{}_file", version));
             WriteFile(path, StringView(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
             BinaryDeserializer fromFile;
             const bool opened = fromFile.LoadFromFile(path);

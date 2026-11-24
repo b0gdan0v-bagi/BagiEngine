@@ -56,7 +56,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            _dir = Path(TestTempDirectory("cfg_hot"));
+            _dir = TestTempDirectory("cfg_hot");
             MakeEmptyDirectory(_dir);
             WriteFile(_dir / "HotConfig.xml", kHotText);
             WriteFile(_dir / "OtherConfig.xml", kOtherText);

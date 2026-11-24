@@ -15,7 +15,7 @@ namespace BECore::Tests {
     class FileChangesModelTest : public ::testing::Test {
     protected:
         void SetUp() override {
-            _dir = Path(TestTempDirectory("fcm"));
+            _dir = TestTempDirectory("fcm");
             MakeEmptyDirectory(_dir);
             ASSERT_TRUE(_fileSystem.Mount("fcmtest"_intern, _dir));
             Write(_dir / "a.xml", "one");

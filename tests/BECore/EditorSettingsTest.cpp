@@ -20,7 +20,7 @@ namespace BECore::Tests {
         class EditorSettingsTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                _directory = Path(TestTempDirectory("EditorSettings"));
+                _directory = TestTempDirectory("EditorSettings");
                 MakeEmptyDirectory(_directory);
             }
 

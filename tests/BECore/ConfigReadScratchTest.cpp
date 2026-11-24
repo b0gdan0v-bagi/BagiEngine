@@ -35,7 +35,7 @@ namespace BECore::Tests {
     class ConfigReadScratchTest : public ::testing::Test {
     protected:
         void SetUp() override {
-            _dir = Path(TestTempDirectory("cfg_scratch"));
+            _dir = TestTempDirectory("cfg_scratch");
             MakeEmptyDirectory(_dir);
         }
 

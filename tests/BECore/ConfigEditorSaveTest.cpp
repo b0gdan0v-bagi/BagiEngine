@@ -76,7 +76,7 @@ namespace BECore::Tests {
 
         void SetUp() override {
             // One directory per test: ctest runs the tests in parallel processes, and SetUp clears the directory
-            _dir = Path(TestTempDirectory("BagiEngineConfigEditorSaveTest"));
+            _dir = TestTempDirectory("BagiEngineConfigEditorSaveTest");
             MakeEmptyDirectory(_dir);
         }
 
@@ -401,7 +401,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            _dir = Path(TestTempDirectory("cfg_editor_change"));
+            _dir = TestTempDirectory("cfg_editor_change");
             MakeEmptyDirectory(_dir);
             WriteFile(_dir / "PanelConfig.xml", kPanelText);
             WriteFile(_dir / "OtherPanelConfig.xml", kOtherPanelText);

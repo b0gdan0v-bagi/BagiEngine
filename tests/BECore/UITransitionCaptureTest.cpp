@@ -176,7 +176,7 @@ namespace BECore::Tests {
             if (folder == nullptr || image.rgba.empty()) {
                 return;
             }
-            const Path path = Path(folder) / Path(TestTempPath(Format("UITransitionCapture_{}", tag).c_str())).Filename().ReplaceExtension(".png");
+            const Path path = Path(folder) / TestTempPath(Format("UITransitionCapture_{}", tag).c_str()).Filename().ReplaceExtension(".png");
             SDL_Surface* surface = SDL_CreateSurfaceFrom(static_cast<int>(image.width), static_cast<int>(image.height), SDL_PIXELFORMAT_RGBA32, const_cast<uint8_t*>(image.rgba.data()),
                                                          static_cast<int>(image.width) * 4);
             if (surface != nullptr) {

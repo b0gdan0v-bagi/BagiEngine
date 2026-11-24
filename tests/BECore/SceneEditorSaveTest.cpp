@@ -195,7 +195,7 @@ namespace BECore::Tests {
     protected:
         void SetUp() override {
             // One directory per test: ctest runs the tests in parallel processes, and SetUp clears the directory
-            _dir = Path(TestTempDirectory("BagiEngineSceneEditorSaveTest"));
+            _dir = TestTempDirectory("BagiEngineSceneEditorSaveTest");
             RemoveDirectory(_dir);
             MakeDirectory(_dir);
         }

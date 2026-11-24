@@ -65,7 +65,7 @@ namespace BECore::Tests {
     class ArtGenGameFolder {
     public:
         /// @p tempPrefix names the folder (`TestTempDirectory`), so two test files never share one
-        explicit ArtGenGameFolder(const String& tempPrefix) : _root(Path(TestTempDirectory(tempPrefix))), _resolver{_root} {
+        explicit ArtGenGameFolder(const String& tempPrefix) : _root(TestTempDirectory(tempPrefix)), _resolver{_root} {
             MakeEmptyDirectory(_root / "assets" / "artgen");
         }
         ~ArtGenGameFolder() {

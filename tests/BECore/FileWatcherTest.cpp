@@ -28,8 +28,8 @@ namespace BECore::Tests {
     class FileWatcherTest : public ::testing::Test {
     protected:
         void SetUp() override {
-            _lower = Path(TestTempDirectory("fw_lower"));
-            _upper = Path(TestTempDirectory("fw_upper"));
+            _lower = TestTempDirectory("fw_lower");
+            _upper = TestTempDirectory("fw_upper");
             MakeEmptyDirectory(_lower);
             MakeEmptyDirectory(_upper);
             _fake = New<FakeFileWatchBackend>();

@@ -178,7 +178,7 @@ namespace BECore::Tests {
         if constexpr (!AllocTracker::kEnabled) {
             GTEST_SKIP() << kNoAllocTracker;
         }
-        const Path path = Path(TestTempDirectory("AllocRouting")).ReplaceExtension(".png");
+        const Path path = TestTempDirectory("AllocRouting").ReplaceExtension(".png");
         {
             SDL_Surface* surface = SDL_CreateSurface(kPngSide, kPngSide, SDL_PIXELFORMAT_RGBA32);
             ASSERT_NE(surface, nullptr);

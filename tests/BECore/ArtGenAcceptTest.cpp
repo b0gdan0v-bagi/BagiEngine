@@ -50,7 +50,7 @@ namespace BECore::Tests {
     class ArtGenAcceptTest : public ::testing::Test {
     protected:
         void SetUp() override {
-            folder = Path(TestTempDirectory("artgen_accept"));
+            folder = TestTempDirectory("artgen_accept");
             MakeEmptyDirectory(folder);
             MakeDirectory(folder / "out");
             MakeDirectory(folder / "assets");

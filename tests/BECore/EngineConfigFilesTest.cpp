@@ -63,7 +63,7 @@ namespace BECore::Tests {
         }
 
         Path SeededFolder() {
-            const Path dir = Path(TestTempDirectory("BagiConfigFilesCheck"));
+            const Path dir = TestTempDirectory("BagiConfigFilesCheck");
             RemoveDirectory(dir);
             return dir;
         }

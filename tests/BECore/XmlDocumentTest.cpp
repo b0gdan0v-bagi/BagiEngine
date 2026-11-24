@@ -2,6 +2,7 @@
 #include <BECore/Config/XmlNode.h>
 #include <BECore/Reflection/ReaderLimits.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <gtest/gtest.h>
@@ -211,7 +212,7 @@ namespace BECore::Tests {
             ASSERT_TRUE(document.SaveToFile(_path));
 
             EXPECT_EQ(ReadFile(_path), String(text));
-            EXPECT_EQ(GetFileInfo(_path)->modifyTimeNs, before);
+            EXPECT_EQ(Require(GetFileInfo(_path)).modifyTimeNs, before);
         }
     }
 
@@ -278,7 +279,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(again.LoadFromFile(_path));
         ASSERT_TRUE(again.SaveToFile(_path));
         EXPECT_EQ(ReadFile(_path), canonical);
-        EXPECT_EQ(GetFileInfo(_path)->modifyTimeNs, before);
+        EXPECT_EQ(Require(GetFileInfo(_path)).modifyTimeNs, before);
     }
 
     TEST_F(XmlDocumentTest, AFileChangedOnDiskAfterTheLoadIsOverwrittenByTheDocument) {

@@ -153,7 +153,7 @@ namespace BECore::Tests {
     class ArtGenSoundAcceptTest : public ::testing::Test {
     protected:
         void SetUp() override {
-            _root = Path(TestTempDirectory("artgen_sound"));
+            _root = TestTempDirectory("artgen_sound");
             RemoveDirectory(_root);
             MakeDirectory(_root / "assets" / "sounds");
             _provenance = _root / "pawn_4.artgen.json";

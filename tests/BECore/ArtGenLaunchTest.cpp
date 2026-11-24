@@ -10,7 +10,7 @@
 namespace BECore::Tests {
 
     TEST(ArtGenLaunchTest, TheBridgeIsFoundInTheFirstRootThatHasIt) {
-        const Path base = Path(TestTempDirectory("artgen_launch"));
+        const Path base = TestTempDirectory("artgen_launch");
         const Path engine = base / "engine";
         const Path game = base / "game";
         MakeDirectory(engine / "config");
@@ -27,7 +27,7 @@ namespace BECore::Tests {
     }
 
     TEST(ArtGenLaunchTest, TheBridgeIsFoundUnderANonAsciiRootAndAFolderOfThatNameIsNoScript) {
-        const Path base = Path(TestTempDirectory("artgen_launch_utf8"));
+        const Path base = TestTempDirectory("artgen_launch_utf8");
         RemoveDirectory(base);
         const Path engine = base / "caf\xC3\xA9";
         const Path game = base / "game";
@@ -61,7 +61,7 @@ namespace BECore::Tests {
     // The real start: in the background, without the standard streams of the editor (one started from the desktop has none), and the script
     // gets its arguments. A stand-in script writes them to the log path it was given.
     TEST(ArtGenLaunchTest, TheBridgeStartsInTheBackgroundAndGetsItsArguments) {
-        const Path base = Path(TestTempDirectory("artgen_launch_run"));
+        const Path base = TestTempDirectory("artgen_launch_run");
         MakeDirectory(base);
         const Path script = base / "artgen_bridge.py";
         const Path log = base / "bridge.log";

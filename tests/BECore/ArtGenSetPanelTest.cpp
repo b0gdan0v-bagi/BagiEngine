@@ -42,7 +42,7 @@ namespace BECore::Tests {
         ArtGenSetPanelTest() : session([this] { return now; }) {}
 
         void SetUp() override {
-            _root = Path(TestTempDirectory("artgen_set_panel"));
+            _root = TestTempDirectory("artgen_set_panel");
             MakeEmptyDirectory(_root);
             session.SetGameRoot(_root.View());
             form.New("workflow");

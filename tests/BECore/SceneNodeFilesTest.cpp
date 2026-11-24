@@ -108,7 +108,7 @@ namespace BECore::Tests {
     protected:
         void SetUp() override {
             // One folder per test and per process (ctest runs the tests in parallel processes)
-            _dir = Path(TestTempDirectory("BagiSceneNodeFilesTest"));
+            _dir = TestTempDirectory("BagiSceneNodeFilesTest");
             MakeEmptyDirectory(_dir);
             WriteFile(_dir / "nodes" / "Hud.xml", kHudNode);
             WriteFile(_dir / "nodes" / "B.xml", kPlainNode);

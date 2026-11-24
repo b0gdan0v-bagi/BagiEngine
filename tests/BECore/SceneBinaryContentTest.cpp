@@ -68,7 +68,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            _dir = Path(TestTempDirectory("BagiSceneBinaryContentTest"));
+            _dir = TestTempDirectory("BagiSceneBinaryContentTest");
             RemoveDirectory(_dir);
         }
 
@@ -237,7 +237,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            _dir = Path(TestTempDirectory("BagiSceneBinaryScenesTest"));
+            _dir = TestTempDirectory("BagiSceneBinaryScenesTest");
             RemoveDirectory(_dir);
             WriteFile(_dir / "nodes" / "Hud.xml", HudXml());
         }

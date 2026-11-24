@@ -10,7 +10,7 @@ namespace BECore::Tests {
         class LayoutStoreTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                _directory = Path(TestTempDirectory("LayoutStore"));
+                _directory = TestTempDirectory("LayoutStore");
                 MakeEmptyDirectory(_directory);
             }
 

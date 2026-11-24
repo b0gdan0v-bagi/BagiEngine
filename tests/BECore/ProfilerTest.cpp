@@ -248,7 +248,7 @@ namespace BECore::Tests {
 
     TEST(ChromeTraceBackendTest, WriteFileReportsAnUnwritablePath) {
         ChromeTraceBackend recorder;
-        const Path missing = Path(TestTempDirectory("profiler")) / "no-such-folder" / "trace.json";
+        const Path missing = TestTempDirectory("profiler") / "no-such-folder" / "trace.json";
         const String missingPath(missing.View());
         const auto written = recorder.WriteFile(missingPath);
         ASSERT_FALSE(written.has_value());

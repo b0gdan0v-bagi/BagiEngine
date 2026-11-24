@@ -31,7 +31,7 @@ namespace BECore::Tests {
         class ArtGenSetStoreTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                _root = Path(TestTempDirectory("artgen_set_store"));
+                _root = TestTempDirectory("artgen_set_store");
                 MakeEmptyDirectory(_root);
             }
 

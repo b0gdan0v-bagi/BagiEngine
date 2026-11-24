@@ -364,7 +364,7 @@ namespace BECore::Tests {
         capture.SetSettings(AbsoluteSettings(50.0));
         capture.Update(WithASpike(80));
 
-        const Path path = Path(TestTempPath("frozen_trace")).ReplaceExtension(".json");
+        const Path path = TestTempPath("frozen_trace").ReplaceExtension(".json");
         const auto written = WriteFrozenTraceFile(path.View(), capture.GetSpikes());
         ASSERT_TRUE(written.has_value());
         EXPECT_EQ(ReadFile(path), WriteFrozenTraceJson(capture.GetSpikes()));

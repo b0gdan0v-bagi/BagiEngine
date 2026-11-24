@@ -92,7 +92,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            _folder = Path(TestTempDirectory("texlib_bin"));
+            _folder = TestTempDirectory("texlib_bin");
             MakeEmptyDirectory(_folder);
         }
 

@@ -167,7 +167,7 @@ namespace BECore::Tests {
         ArtGenSetSessionTest() : session([this] { return now; }) {}
 
         void SetUp() override {
-            _root = Path(TestTempDirectory("artgen_set_session"));
+            _root = TestTempDirectory("artgen_set_session");
             MakeEmptyDirectory(_root);
             session.SetGameRoot(_root.View());
             session.RegisterControl(service);

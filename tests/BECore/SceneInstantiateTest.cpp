@@ -69,7 +69,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            _dir = Path(TestTempDirectory("BagiSceneInstantiateTest"));
+            _dir = TestTempDirectory("BagiSceneInstantiateTest");
             RemoveDirectory(_dir);
             WriteFile(_dir / "nodes" / "Box.xml", kBoxNode);
             WriteFile(_dir / "nodes" / "Panel.xml", kCanvasNode);

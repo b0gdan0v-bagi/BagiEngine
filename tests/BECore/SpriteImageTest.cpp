@@ -38,7 +38,7 @@ namespace BECore::Tests {
         /// A test file under the system temp folder that is removed with the object
         class TempFile {
         public:
-            explicit TempFile(const char* extension = ".png") : _path(Format("{}_{}{}", Path(TestTempDirectory("SpriteImage")).View(), ++_counter, extension)) {}
+            explicit TempFile(const char* extension = ".png") : _path(Format("{}_{}{}", TestTempDirectory("SpriteImage").View(), ++_counter, extension)) {}
             ~TempFile() {
                 RemoveFileIfPresent(_path);
             }

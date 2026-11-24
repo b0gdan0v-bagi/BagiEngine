@@ -26,7 +26,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            _dir = Path(TestTempDirectory(_mountPoint));
+            _dir = TestTempDirectory(_mountPoint);
             MakeEmptyDirectory(_dir);
             ASSERT_TRUE(CoreManager::GetFileSystem().Mount(PoolString::Intern(_mountPoint), _dir));
         }

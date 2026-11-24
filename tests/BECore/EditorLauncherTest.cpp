@@ -88,7 +88,7 @@ namespace BECore::Tests {
 
     TEST(EditorLauncherTest, ASiteIsOpenableOnlyForAnExistingAbsolutePath) {
         // The answer is cached per pointer for the life of the process, so every path asked about lives as long
-        static const String missing(Path(TestTempPath("BagiEditorLauncherMissing") / "nothing.cpp").View());
+        static const String missing((TestTempPath("BagiEditorLauncherMissing") / "nothing.cpp").View());
         EXPECT_FALSE(IsSiteOpenable(nullptr));
         EXPECT_FALSE(IsSiteOpenable("relative/path.cpp"));
         EXPECT_FALSE(IsSiteOpenable(missing.c_str()));
@@ -109,7 +109,7 @@ namespace BECore::Tests {
     }
 
     TEST(EditorLauncherTest, ASiteUnderANonAsciiFolderIsOpenable) {
-        const Path folder = Path(TestTempPath("BagiEditorLauncherUtf8")) / "caf\xC3\xA9";
+        const Path folder = TestTempPath("BagiEditorLauncherUtf8") / "caf\xC3\xA9";
         WriteFile(folder / "site.cpp", "x");
         static const String site((folder / "site.cpp").View());
         static const String missing((folder / "nothing.cpp").View());

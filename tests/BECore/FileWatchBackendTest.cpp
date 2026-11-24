@@ -60,7 +60,7 @@ namespace BECore::Tests {
         class BackendHarness {
         public:
             explicit BackendHarness(IntrusivePtr<IFileWatchBackend> backend, bool mayDropEvents = false)
-                : _backend(std::move(backend)), _mayDropEvents(mayDropEvents), _dir(Path(TestTempDirectory("fwb")).LexicallyNormal()) {
+                : _backend(std::move(backend)), _mayDropEvents(mayDropEvents), _dir(TestTempDirectory("fwb").LexicallyNormal()) {
                 MakeEmptyDirectory(_dir);
                 _backend->SetSink(&_sink);
             }
@@ -375,7 +375,7 @@ namespace BECore::Tests {
         }
 
         Path Dir() const {
-            return Path(TestTempDirectory("fwt"));
+            return TestTempDirectory("fwt");
         }
 
         Optional<TestTempFolder> _folder;

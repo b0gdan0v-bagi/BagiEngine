@@ -20,7 +20,7 @@ namespace BECore::Tests {
     class SaveFolderTest : public ::testing::Test {
     protected:
         void SetUp() override {
-            _base = Path(TestTempDirectory(Format("Bagi{}", ::testing::UnitTest::GetInstance()->current_test_info()->test_suite_name())));
+            _base = TestTempDirectory(Format("Bagi{}", ::testing::UnitTest::GetInstance()->current_test_info()->test_suite_name()));
             MakeEmptyDirectory(_base);
             ASSERT_TRUE(IsFolder(_base)) << "cannot make " << _base.CStr();
             _saves = _base / "saves";

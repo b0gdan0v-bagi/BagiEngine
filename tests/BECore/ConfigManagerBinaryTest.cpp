@@ -88,8 +88,8 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            _lower = Path(TestTempDirectory("cfg_bin_lower"));
-            _upper = Path(TestTempDirectory("cfg_bin_upper"));
+            _lower = TestTempDirectory("cfg_bin_lower");
+            _upper = TestTempDirectory("cfg_bin_upper");
             MakeEmptyDirectory(_lower);
             MakeEmptyDirectory(_upper);
         }

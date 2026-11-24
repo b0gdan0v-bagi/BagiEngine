@@ -14,7 +14,7 @@ namespace BECore::Tests {
         /// A PNG of @p pixels under the temp folder, removed with the object
         class TempPng {
         public:
-            TempPng(int width, int height, Vector<uint8_t>& pixels, const String& name = "ImageFile") : _file(Path(TestTempDirectory(name)).ReplaceExtension(".png")) {
+            TempPng(int width, int height, Vector<uint8_t>& pixels, const String& name = "ImageFile") : _file(TestTempDirectory(name).ReplaceExtension(".png")) {
                 SDL_Surface* surface = SDL_CreateSurfaceFrom(width, height, SDL_PIXELFORMAT_RGBA32, pixels.data(), width * kPixelBytes);
                 _saved = surface != nullptr && IMG_SavePNG(surface, _file.CStr());
                 SDL_DestroySurface(surface);

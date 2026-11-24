@@ -13,7 +13,7 @@ namespace BECore::Tests {
         class GitBranchTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                _root = Path(TestTempDirectory("GitBranch"));
+                _root = TestTempDirectory("GitBranch");
                 MakeEmptyDirectory(_root);
             }
 
@@ -79,7 +79,7 @@ namespace BECore::Tests {
 
     TEST_F(GitBranchTest, ReadFollowsAnAbsoluteGitdirFile) {
         WriteFile(_root / "elsewhere" / "HEAD", "ref: refs/heads/games/mahjong\n");
-        WriteFile(_root / "project" / ".git", Format("gitdir: {}\n", Path(_root / "elsewhere").View()));
+        WriteFile(_root / "project" / ".git", Format("gitdir: {}\n", (_root / "elsewhere").View()));
         EXPECT_EQ(ReadGitBranch(_root / "project"), "games/mahjong");
     }
 

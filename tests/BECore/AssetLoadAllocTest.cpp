@@ -602,7 +602,7 @@ namespace BECore::Tests {
             SceneFixture() : SceneFixture("BagiAssetLoadScene", SceneText(), SceneHudFile()) {}
 
             /// @p hudFile is the node file `kSceneHudRef` names; empty for a scene with no reference
-            SceneFixture(const String& dirPrefix, String text, StringView hudFile) : _dir(Path(TestTempDirectory(dirPrefix))), _text(eastl::move(text)) {
+            SceneFixture(const String& dirPrefix, String text, StringView hudFile) : _dir(TestTempDirectory(dirPrefix)), _text(eastl::move(text)) {
                 RemoveDirectory(_dir);
                 if (!hudFile.empty()) {
                     WriteFile(_dir / "nodes" / "AssetLoadHud.xml", hudFile);

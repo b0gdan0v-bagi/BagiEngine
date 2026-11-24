@@ -25,7 +25,7 @@ namespace BECore::Tests {
     public:
         static constexpr size_t kLayers = 2;
 
-        CookTestTree() : _root(Path(TestTempDirectory("cook"))) {
+        CookTestTree() : _root(TestTempDirectory("cook")) {
             EngineEnvironment::EnsureCoreServices();
             MakeEmptyDirectory(_root);
             for (size_t layer = 0; layer < kLayers; ++layer) {

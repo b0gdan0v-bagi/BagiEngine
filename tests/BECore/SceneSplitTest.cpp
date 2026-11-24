@@ -208,7 +208,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            _dir = Path(TestTempDirectory("BagiSceneSplitTest"));
+            _dir = TestTempDirectory("BagiSceneSplitTest");
             RemoveDirectory(_dir);
             MakeDirectory(_dir);
             for (int i = 0; i < 3; ++i) {
