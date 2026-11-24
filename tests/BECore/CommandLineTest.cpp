@@ -68,4 +68,30 @@ namespace BECore::Tests {
         EXPECT_EQ(Require(line.FindValue("--b")), "2");
     }
 
+    TEST(CommandLineTest, FindTellsABareFlagFromAValue) {
+        const CommandLine line = Make({"--bare", "--valued=7", "--empty="});
+        const CommandLineArgument bare = Require(line.Find("--bare"));
+        EXPECT_FALSE(bare.hasValue);
+        const CommandLineArgument valued = Require(line.Find("--valued"));
+        EXPECT_TRUE(valued.hasValue);
+        EXPECT_EQ(valued.value, "7");
+        const CommandLineArgument empty = Require(line.Find("--empty"));
+        EXPECT_TRUE(empty.hasValue);
+        EXPECT_TRUE(empty.value.empty());
+        EXPECT_FALSE(line.Find("--absent").has_value());
+    }
+
+    TEST(CommandLineTest, FindTakesTheFirstFormOfAName) {
+        const CommandLine bareFirst = Make({"--a", "--a=false"});
+        EXPECT_FALSE(Require(bareFirst.Find("--a")).hasValue);
+        const CommandLine valueFirst = Make({"--a=false", "--a"});
+        EXPECT_TRUE(Require(valueFirst.Find("--a")).hasValue);
+    }
+
+    TEST(CommandLineTest, FindDoesNotMatchALongerName) {
+        const CommandLine line = Make({"--control-portal=1", "--control-portal"});
+        EXPECT_FALSE(line.Find("--control-port").has_value());
+        EXPECT_FALSE(line.Find("--control").has_value());
+    }
+
 }  // namespace BECore::Tests
