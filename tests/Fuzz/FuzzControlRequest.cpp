@@ -1,7 +1,9 @@
 #include <BECore/Control/ControlBuiltins.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonTape.h>
+#include <BECore/Control/JsonView.h>
 #include <Fuzz/FuzzProbeAccess.h>
 #include <Fuzz/FuzzTargets.h>
 #include <Games/GameControl.h>
@@ -15,40 +17,45 @@ namespace BECore::Fuzz {
         /// Frames the target lets a deferred call (`step`) wait for its answer; the rest is answered by Shutdown()
         constexpr int kFramesToWait = 4;
 
-        /// The id the answer has to carry: the request's own when the request is an object with an integer or a string id, otherwise null (a request nested too deeply is
-        /// refused before anything is read from it, the id included)
-        Json ExpectedId(StringView text) {
+        constexpr StringView kNullText = "null";
+
+        /// The id the answer has to carry, as the text the request wrote it: the request's own when the request is an object with an integer or a string
+        /// id, otherwise `null` (a request nested too deeply is refused before anything is read from it, the id included)
+        String ExpectedId(StringView text) {
             if (IsJsonNestedDeeperThan(text, ControlService::kMaxRequestDepth)) {
-                return Json();
+                return String(kNullText);
             }
-            const auto request = ParseJson(text);
-            if (!request.has_value() || !request->is_object()) {
-                return Json();
+            JsonTape tape;
+            if (!tape.Parse(text).has_value() || !JsonView(tape, 0).IsObject()) {
+                return String(kNullText);
             }
-            const Json* id = FindJsonMember(*request, "id");
-            return id != nullptr && (id->is_string() || id->is_number_integer()) ? *id : Json();
+            const Optional<JsonView> id = FindParam(JsonView(tape, 0), "id");
+            const bool usable = id && (id->IsString() || (id->IsInteger() && (id->AsInt64() || id->AsUint64())));
+            return usable ? String(id->Raw()) : String(kNullText);
         }
 
-        void CheckReply(const String& reply, const Json& expectedId) {
-            const auto parsed = ParseJson(reply);
-            FUZZ_CHECK(parsed.has_value() && parsed->is_object());
-            const Json* id = FindJsonMember(*parsed, "id");
-            FUZZ_CHECK(id != nullptr && *id == expectedId);
+        void CheckReply(StringView reply, StringView expectedId) {
+            JsonTape tape;
+            FUZZ_CHECK(tape.Parse(reply).has_value());
+            const JsonView parsed(tape, 0);
+            FUZZ_CHECK(parsed.IsObject());
+            const Optional<JsonView> id = FindParam(parsed, "id");
+            FUZZ_CHECK(id.has_value() && id->Raw() == expectedId);
 
-            const auto ok = GetJsonBool(*parsed, "ok");
+            const auto ok = GetParamBool(parsed, "ok");
             FUZZ_CHECK(ok.has_value());
             if (*ok) {
-                FUZZ_CHECK(FindJsonMember(*parsed, "result") != nullptr);
-                FUZZ_CHECK(FindJsonMember(*parsed, "error") == nullptr);
+                FUZZ_CHECK(FindParam(parsed, "result").has_value());
+                FUZZ_CHECK(!FindParam(parsed, "error").has_value());
                 return;
             }
-            const Json* error = FindJsonMember(*parsed, "error");
-            FUZZ_CHECK(error != nullptr && error->is_object());
-            const auto code = GetJsonString(*error, "code");
-            const auto message = GetJsonString(*error, "message");
+            const Optional<JsonView> error = FindParam(parsed, "error");
+            FUZZ_CHECK(error && error->IsObject());
+            const auto code = GetParamString(*error, "code");
+            const auto message = GetParamString(*error, "message");
             FUZZ_CHECK(code.has_value() && !code->empty());
             FUZZ_CHECK(message.has_value());
-            FUZZ_CHECK(FindJsonMember(*parsed, "result") == nullptr);
+            FUZZ_CHECK(!FindParam(parsed, "result").has_value());
         }
 
     }  // namespace
@@ -82,11 +89,12 @@ namespace BECore::Fuzz {
         service.Shutdown();  // answers what is still deferred
 
         FUZZ_CHECK(replies.size() == 1);
-        CheckReply(replies[0], oversize ? Json() : ExpectedId(text));
+        CheckReply(replies[0], oversize ? kNullText : StringView(ExpectedId(text)));
         if (oversize) {
-            const auto parsed = ParseJson(replies[0]);
-            const Json* error = FindJsonMember(*parsed, "error");
-            FUZZ_CHECK(error != nullptr && GetJsonString(*error, "code") == Optional<String>(String(ControlErrors::kRequestTooLarge)));
+            JsonTape tape;
+            FUZZ_CHECK(tape.Parse(replies[0]).has_value());
+            const Optional<JsonView> error = FindParam(JsonView(tape, 0), "error");
+            FUZZ_CHECK(error.has_value() && GetParamString(*error, "code") == Optional<String>(String(ControlErrors::kRequestTooLarge)));
         }
     }
 

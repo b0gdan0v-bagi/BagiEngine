@@ -1,6 +1,9 @@
-#include <BECore/Control/Json.h>
-#include <BECore/Control/JsonSerializer.h>
+#include <BECore/Control/JsonTape.h>
+#include <BECore/Control/JsonView.h>
+#include <BECore/Control/JsonViewOps.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/Reflection/ReaderLimits.h>
+#include <Fuzz/FuzzJsonText.h>
 #include <Fuzz/FuzzProbeAccess.h>
 #include <Fuzz/FuzzSeeds.h>
 
@@ -19,71 +22,92 @@ namespace BECore::Fuzz {
         /// Levels of a tree whose JSON is exactly as deep as the tape accepts (ReaderLimits::kMaxJsonNesting): deeper than the DOM path takes
         constexpr size_t kLevelsAtTheTapeLimit = (ReaderLimits::kMaxJsonNesting - 2) / 2;
 
+        /// What the old DOM dump wrote: the members saved by `Serialize`, with the keys of every object in byte order
         template <typename T>
-        Json SavedJson(const T& value) {
-            JsonSerializer writer;
-            value.Serialize(writer);
-            return writer.Take();
+        String SavedJson(const T& value) {
+            return SortedText(SavedText(value));
+        }
+
+        /// @p document (an object) with the members of @p changes replacing the members of the same name, and the ones it has not appended; the values are JSON text
+        String WithMembers(StringView document, std::initializer_list<Pair<StringView, StringView>> changes) {
+            JsonTape tape;
+            FUZZ_CHECK(tape.Parse(document).has_value());
+            String text;
+            JsonWriter writer(text);
+            writer.BeginObject();
+            for (const JsonMember member : JsonView(tape, 0).Members()) {
+                const StringView key = member.key.Text().value_or(StringView());
+                const auto change = eastl::find_if(changes.begin(), changes.end(), [key](const auto& entry) { return entry.first == key; });
+                writer.Key(key);
+                if (change != changes.end()) {
+                    writer.Raw(change->second);
+                } else {
+                    WriteJson(writer, member.value);
+                }
+            }
+            for (const auto& entry : changes) {
+                if (!JsonView(tape, 0).Find(entry.first)) {
+                    writer.Key(entry.first);
+                    writer.Raw(entry.second);
+                }
+            }
+            writer.EndObject();
+            return SortedText(text);
         }
 
         /// The value of every member replaced by one of another type: an object where there was none, a string for a number, a number for a string
-        Json WithWrongTypes(const Json& saved) {
-            Json wrong = Json::object();
-            for (auto member = saved.begin(); member != saved.end(); ++member) {
-                if (member->is_string()) {
-                    wrong[member.key()] = 5;
-                } else if (member->is_number() || member->is_boolean()) {
-                    wrong[member.key()] = "text";
-                } else if (member->is_array()) {
-                    wrong[member.key()] = Json::object();
+        String WithWrongTypes(StringView saved) {
+            JsonTape tape;
+            FUZZ_CHECK(tape.Parse(saved).has_value());
+            String text;
+            JsonWriter writer(text);
+            writer.BeginObject();
+            for (const JsonMember member : JsonView(tape, 0).Members()) {
+                writer.Key(member.key.Text().value_or(StringView()));
+                if (member.value.IsString()) {
+                    writer.Value(5);
+                } else if (member.value.IsNumber() || member.value.IsBool()) {
+                    writer.Value("text");
+                } else if (member.value.IsArray()) {
+                    writer.BeginObject();
+                    writer.EndObject();
                 } else {
-                    wrong[member.key()] = Json::array({1, 2});
+                    writer.Raw("[1,2]");
                 }
             }
-            return wrong;
+            writer.EndObject();
+            return SortedText(text);
         }
 
         /// A document with a key that nothing asks for, next to a near miss of a real one
-        Json WithUnknownKeys(Json saved) {
-            saved["flagg"] = true;
-            saved["unrelated"] = Json::object({{"a", 1}});
-            return saved;
+        String WithUnknownKeys(StringView saved) {
+            return WithMembers(saved, {{"flagg", "true"}, {"unrelated", R"({"a":1})"}});
         }
 
-        Json LeafJson(int32_t id, StringView label) {
-            Json leaf = Json::object();
-            leaf["id"] = id;
-            leaf["weight"] = 0.25;
-            leaf["label"] = MakeJsonString(label);
-            return leaf;
+        String LeafJson(int32_t id, StringView label) {
+            return Format(R"({{"id":{},"label":"{}","weight":0.25}})", id, label);
         }
 
         /// A tree that is a single chain of children
-        Json ChainJson(int32_t levels) {
-            Json node = Json::object({{"id", levels}, {"children", Json::array()}});
-            for (int32_t level = levels - 1; level > 0; --level) {
-                node = Json::object({{"id", level}, {"children", Json::array({node})}});
+        String ChainJson(int32_t levels) {
+            String text;
+            for (int32_t level = 1; level < levels; ++level) {
+                text += R"({"children":[)";
             }
-            return node;
+            text += Format(R"({{"children":[],"id":{}}})", levels);
+            for (int32_t level = levels - 1; level > 0; --level) {
+                text += Format(R"(],"id":{}}})", level);
+            }
+            return text;
+        }
+
+        /// A document, written with the keys of every object in byte order as the DOM did
+        void Add(Vector<FuzzSeedFile>& seeds, const char* name, StringView document) {
+            seeds.push_back({kJsonFolder, name, TextBytes(SortedText(document))});
         }
 
         /// The arguments of the methods of `ProbeCalls`, as a client writes them
-        Json ScalarsArguments() {
-            Json arguments = Json::object();
-            arguments["flag"] = true;
-            arguments["tiny"] = -5;
-            arguments["medium"] = 500;
-            arguments["big"] = -9000000000;
-            arguments["huge"] = 18446744073709551615ull;
-            arguments["single"] = 1.5;
-            arguments["wide"] = 2.25;
-            arguments["mode"] = "On";
-            return arguments;
-        }
-
-        void Add(Vector<FuzzSeedFile>& seeds, const char* name, const Json& document) {
-            seeds.push_back({kJsonFolder, name, TextBytes(DumpJson(document))});
-        }
+        constexpr StringView kScalarsArguments = R"({"flag":true,"tiny":-5,"medium":500,"big":-9000000000,"huge":18446744073709551615,"single":1.5,"wide":2.25,"mode":"On"})";
 
         /// A document written by hand: the tape reads text the DOM would write differently (escapes, key order, repeated keys, numbers past the types)
         void AddText(Vector<FuzzSeedFile>& seeds, const char* name, StringView text) {
@@ -106,23 +130,21 @@ namespace BECore::Fuzz {
     }  // namespace
 
     void AddJsonSeeds(Vector<FuzzSeedFile>& seeds) {
-        const Json filled = SavedJson(MakeFilledProbe());
+        const String filled = SavedJson(MakeFilledProbe());
         Add(seeds, "probe-filled.json", filled);
         Add(seeds, "probe-empty.json", SavedJson(FuzzProbeData::ProbeState()));
         Add(seeds, "probe-wrong-types.json", WithWrongTypes(filled));
         Add(seeds, "probe-unknown-keys.json", WithUnknownKeys(filled));
 
-        const Json shapes = SavedJson(MakeFilledShapes());
+        const String shapes = SavedJson(MakeFilledShapes());
         Add(seeds, "shapes-filled.json", shapes);
         Add(seeds, "shapes-empty.json", SavedJson(ProbeShapes()));
         Add(seeds, "shapes-wrong-types.json", WithWrongTypes(shapes));
-        Json badVariant = shapes;
-        badVariant["choice"] = Json::object({{"index", 9}});
-        Add(seeds, "shapes-variant-index.json", badVariant);
+        Add(seeds, "shapes-variant-index.json", WithMembers(shapes, {{"choice", R"({"index":9})"}}));
 
         Add(seeds, "chain.json", ChainJson(kChainLevels));
 
-        // Written as text: DumpJson cuts a document deeper than JsonWriter::kMaxDepth, and this one is deeper on purpose
+        // Written as text: a writer cuts a document deeper than JsonWriter::kMaxDepth, and this one is deeper on purpose
         String tooDeep(kTooDeepLevels + 1, '[');
         tooDeep.append(kTooDeepLevels + 1, ']');
         seeds.push_back({kJsonFolder, "too-deep.json", TextBytes(tooDeep)});
@@ -141,13 +163,13 @@ namespace BECore::Fuzz {
         AddText(seeds, "text-nul-after-document.json", String("{\"flag\":true}\0garbage", 21));
         seeds.push_back({kJsonFolder, "nest-at-the-tape-limit.json", TextBytes(NestedTreeText(kLevelsAtTheTapeLimit))});
 
-        Add(seeds, "call-scalars.json", ScalarsArguments());
-        Add(seeds, "call-echo.json", Json::object({{"text", "hello"}, {"mode", "Auto"}}));
-        Add(seeds, "call-total.json", Json::object({{"numbers", Json::array({1, 2, 3})}}));
-        Add(seeds, "call-leaf.json", Json::object({{"first", LeafJson(1, "one")}, {"second", LeafJson(2, "two")}}));
-        Add(seeds, "call-maybe.json", Json::object({{"value", 4}}));
-        Add(seeds, "call-leaves.json", Json::object({{"leaves", Json::array({LeafJson(1, "a"), LeafJson(2, "b")})}, {"node", ChainJson(3)}}));
-        Add(seeds, "call-empty.json", Json::object());
+        Add(seeds, "call-scalars.json", kScalarsArguments);
+        Add(seeds, "call-echo.json", R"({"text":"hello","mode":"Auto"})");
+        Add(seeds, "call-total.json", R"({"numbers":[1,2,3]})");
+        Add(seeds, "call-leaf.json", Format(R"({{"first":{},"second":{}}})", LeafJson(1, "one"), LeafJson(2, "two")));
+        Add(seeds, "call-maybe.json", R"({"value":4})");
+        Add(seeds, "call-leaves.json", Format(R"({{"leaves":[{},{}],"node":{}}})", LeafJson(1, "a"), LeafJson(2, "b"), ChainJson(3)));
+        Add(seeds, "call-empty.json", "{}");
     }
 
 }  // namespace BECore::Fuzz
