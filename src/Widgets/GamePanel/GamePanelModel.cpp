@@ -219,7 +219,13 @@ namespace BECore {
             return;
         }
         const TypeRegistry& registry = TypeRegistry::GetInstance();
-        JsonDeserializer reader(*params);
+        // Interim until the Call of the next step loads the text itself: the bridge needs the DOM of the compact text
+        const auto document = ParseJson(*params);
+        if (!document) {
+            SetResult(String(document.error().message), true);
+            return;
+        }
+        JsonDeserializer reader(*document);
         JsonSerializer writer;
         const auto called = CallMethod(TypedRef::Of(*_game, registry), _methods[index].name, reader, writer, registry);
         if (!called) {

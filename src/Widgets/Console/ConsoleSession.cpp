@@ -1,7 +1,9 @@
 #include "ConsoleSession.h"
 
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonTape.h>
+#include <BECore/Control/JsonWriter.h>
 #include <Widgets/Console/ConsoleCommandLine.h>
 #include <Widgets/EditorLayout/EditorSettings.h>
 
@@ -33,19 +35,21 @@ namespace BECore {
 
         /// Prints the answer text of the control service: `result` as JSON, or `code: message`
         void PrintReply(ConsoleOutput& output, StringView replyText) {
-            const auto reply = ParseJson(replyText);
-            if (!reply) {
+            JsonTape tape;
+            if (!tape.Parse(replyText)) {
                 output.Append(ConsoleOutputKind::Error, "the answer could not be read");
                 return;
             }
-            if (GetJsonBool(*reply, "ok").value_or(false)) {
-                const Json* result = FindJsonMember(*reply, "result");
-                output.Append(ConsoleOutputKind::Result, result != nullptr ? DumpJson(*result) : String("ok"));
+            const JsonView reply(tape, 0);
+            if (GetParamBool(reply, "ok").value_or(false)) {
+                // The service wrote the answer compact, so the raw text of `result` is what the person reads
+                const Optional<JsonView> result = FindParam(reply, "result");
+                output.Append(ConsoleOutputKind::Result, result ? result->Raw() : StringView("ok"));
                 return;
             }
-            const Json* error = FindJsonMember(*reply, "error");
-            const String code = error != nullptr ? GetJsonString(*error, "code").value_or(String("error")) : String("error");
-            const String message = error != nullptr ? GetJsonString(*error, "message").value_or(String()) : String();
+            const Optional<JsonView> error = FindParam(reply, "error");
+            const String code = error ? GetParamString(*error, "code").value_or(String("error")) : String("error");
+            const String message = error ? GetParamString(*error, "message").value_or(String()) : String();
             output.Append(ConsoleOutputKind::Error, Format("{}: {}", code, message));
         }
 
@@ -153,12 +157,16 @@ namespace BECore {
             return std::nullopt;
         }
 
-        // A request, not an answer: `params` is the object the person typed, a `Json` that `ControlService::Post` takes as text
-        Json request = Json::object();
-        request["id"] = _nextId++;
-        request["method"] = ToStdString(command->method);
-        request["params"] = std::move(command->params);
-        service.Post(DumpJson(request), [output = _output](const String& answer) { PrintReply(*output, answer); });
+        // `params` is the compact text of the object the person typed, so it goes into the request as it is
+        String request;
+        JsonWriter writer(request);
+        writer.BeginObject();
+        writer.Member("id", _nextId++);
+        writer.Member("method", StringView(command->method));
+        writer.Key("params");
+        writer.Raw(command->params);
+        writer.EndObject();
+        service.Post(request, [output = _output](const String& answer) { PrintReply(*output, answer); });
 
         _history.Add(line);
         return String(line);

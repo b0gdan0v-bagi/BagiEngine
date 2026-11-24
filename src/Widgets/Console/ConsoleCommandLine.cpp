@@ -1,6 +1,10 @@
 #include "ConsoleCommandLine.h"
 
 #include <BECore/Control/ControlService.h>
+#include <BECore/Control/JsonMemberMap.h>
+#include <BECore/Control/JsonTape.h>
+#include <BECore/Control/JsonViewOps.h>
+#include <cmath>
 
 namespace BECore {
 
@@ -94,8 +98,23 @@ namespace BECore {
             return scan;
         }
 
+        /// Whether a number of @p tape is past a double (`1e999`): the tape takes it, a typed command never did
+        bool HasNumberPastDouble(const JsonTape& tape) {
+            const Vector<JsonToken>& tokens = tape.Tokens();
+            for (uint32_t i = 0; i < tokens.size(); ++i) {
+                if (tokens[i].kind != JsonKind::Integer && tokens[i].kind != JsonKind::Number) {
+                    continue;
+                }
+                const Optional<double> number = JsonView(tape, i).AsDouble();
+                if (!number || !std::isfinite(*number)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         /// Reads one `key=value` word into @p params
-        std::expected<void, String> ReadAssignment(StringView word, Json& params) {
+        std::expected<void, String> ReadAssignment(StringView word, JsonMemberMap& params) {
             const size_t equals = word.find('=');
             if (equals == StringView::npos) {
                 return std::unexpected(Format("'{}' is not key=value", word));
@@ -108,20 +127,21 @@ namespace BECore {
             if (!AllOf(key, IsKeyChar)) {
                 return std::unexpected(Format("'{}' is not a parameter name", key));
             }
-            if (FindJsonMember(params, key) != nullptr) {
+            if (params.Contains(key)) {
                 return std::unexpected(Format("'{}' is given twice", key));
             }
             if (IsJsonNestedDeeperThan(valueText, kMaxParamsDepth)) {
                 return std::unexpected(Format("the value of '{}' is nested too deep", key));
             }
-            Json value = MakeJsonString(valueText);
-            if (auto parsed = ParseJson(valueText)) {
-                if (parsed->is_null()) {
+            JsonTape tape;
+            if (tape.Parse(valueText) && !HasNumberPastDouble(tape)) {
+                if (JsonView(tape, 0).IsNull()) {
                     return std::unexpected(Format("'{}' cannot be null: leave it out", key));
                 }
-                value = std::move(*parsed);
+                params.Set(key, valueText);
+            } else {
+                params.SetWith(key, [&](JsonWriter& writer) { writer.Value(valueText); });
             }
-            params[ToStdString(key)] = std::move(value);
             return {};
         }
 
@@ -269,7 +289,7 @@ namespace BECore {
         return ConsoleCommand{String(method), std::move(*params)};
     }
 
-    std::expected<Json, String> ParseConsoleParams(StringView text) {
+    std::expected<String, String> ParseConsoleParams(StringView text) {
         const size_t restStart = SkipBlanks(text, 0);
         size_t restEnd = text.size();
         while (restEnd > restStart && IsBlank(text[restEnd - 1])) {
@@ -277,21 +297,28 @@ namespace BECore {
         }
         const StringView rest = text.substr(restStart, restEnd - restStart);
         if (rest.empty()) {
-            return Json::object();
+            return String("{}");
         }
 
         if (rest.front() == '{') {
             if (IsJsonNestedDeeperThan(rest, kMaxParamsDepth)) {
                 return std::unexpected(String("the parameters are nested too deep"));
             }
-            auto parsed = ParseJson(rest);
-            if (!parsed) {
+            JsonTape tape;
+            if (const auto parsed = tape.Parse(rest); !parsed) {
                 return std::unexpected(Format("the parameters are not valid JSON: {}", parsed.error().message));
             }
-            if (!parsed->is_object()) {
+            if (HasNumberPastDouble(tape)) {
+                return std::unexpected(String("the parameters are not valid JSON: number overflow"));
+            }
+            const JsonView root(tape, 0);
+            if (!root.IsObject()) {
                 return std::unexpected(String("the parameters have to be a JSON object"));
             }
-            return std::move(*parsed);
+            String compact;
+            JsonWriter writer(compact);
+            WriteJsonSorted(writer, root);
+            return compact;
         }
 
         const WordScan scan = ScanWords(rest);
@@ -301,13 +328,16 @@ namespace BECore {
         if (scan.open) {
             return std::unexpected(String("a quote or a bracket is not closed"));
         }
-        Json params = Json::object();
+        JsonMemberMap params;
         for (const Word& word : scan.words) {
             if (auto read = ReadAssignment(rest.substr(word.begin, word.end - word.begin), params); !read) {
                 return std::unexpected(std::move(read.error()));
             }
         }
-        return params;
+        String compact;
+        JsonWriter writer(compact);
+        params.Write(writer);
+        return compact;
     }
 
     ConsoleCompletion CompleteConsoleCommand(StringView text, Span<const ControlMethodListing> methods) {
