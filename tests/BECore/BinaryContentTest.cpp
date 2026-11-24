@@ -55,10 +55,6 @@ namespace BECore::Tests {
             }
         };
 
-        std::filesystem::path AsPath(const String& path) {
-            return std::filesystem::path(ToStd(StringView(path)));
-        }
-
         Vector<String> Fresh(size_t count) {
             Vector<String> texts;
             for (size_t i = 0; i < count; ++i) {
@@ -187,10 +183,10 @@ namespace BECore::Tests {
         const Cooked cooked = Cook(Fresh(3));
         TestTempFolder folder("BinaryContentTest");
         const String path = folder.PathOf("cooked.bin");
-        WriteFile(AsPath(path), StringView(reinterpret_cast<const char*>(cooked.bytes.data()), cooked.bytes.size()));
+        WriteFile(Path(path), StringView(reinterpret_cast<const char*>(cooked.bytes.data()), cooked.bytes.size()));
 
         const PoolStringStats before = PoolString::GetStats();
-        const auto loaded = LoadContentFile(AsPath(path), Verify(true));
+        const auto loaded = LoadContentFile(Path(path), Verify(true));
         ASSERT_TRUE(loaded.has_value()) << loaded.error().c_str();
         const PoolStringStats after = PoolString::GetStats();
 
@@ -382,7 +378,7 @@ namespace BECore::Tests {
         const Cooked cooked = Cook(Fresh(2));
         TestTempFolder folder("BinaryContentTest");
         const Path file = Path(folder.PathOf("")) / "caf\xC3\xA9" / "Cook\xC3\xA9.bin";
-        WriteFile(AsPath(String(file.View())), StringView(reinterpret_cast<const char*>(cooked.bytes.data()), cooked.bytes.size()));
+        WriteFile(file, StringView(reinterpret_cast<const char*>(cooked.bytes.data()), cooked.bytes.size()));
 
         const auto loaded = LoadContentFile(file, Verify(true));
         ASSERT_TRUE(loaded.has_value()) << loaded.error().c_str();
@@ -391,15 +387,15 @@ namespace BECore::Tests {
 
     TEST(BinaryContentTest, APathThatIsNoRegularFileOrIsMissingIsRefused) {
         TestTempFolder folder("BinaryContentTest");
-        EXPECT_FALSE(LoadContentFile(AsPath(folder.PathOf("")), Verify(true)).has_value());
-        EXPECT_FALSE(LoadContentFile(AsPath(folder.PathOf("missing.bin")), Verify(true)).has_value());
+        EXPECT_FALSE(LoadContentFile(Path(folder.PathOf("")), Verify(true)).has_value());
+        EXPECT_FALSE(LoadContentFile(Path(folder.PathOf("missing.bin")), Verify(true)).has_value());
     }
 
     TEST(BinaryContentTest, AFileOverTheStreamLimitIsRefused) {
         TestTempFolder folder("BinaryContentTest");
         const String path = folder.PathOf("big.bin");
-        WriteFile(AsPath(path), String(ReaderLimits::kMaxBinaryStreamBytes + 1, '\0'));
-        EXPECT_FALSE(LoadContentFile(AsPath(path), Verify(true)).has_value());
+        WriteFile(Path(path), String(ReaderLimits::kMaxBinaryStreamBytes + 1, '\0'));
+        EXPECT_FALSE(LoadContentFile(Path(path), Verify(true)).has_value());
     }
 
     TEST(BinaryContentTest, TextsThePoolAlreadyHadKeepTheirOlderEntries) {
@@ -431,8 +427,8 @@ namespace BECore::Tests {
 
         for (const Cooked* cooked : {static_cast<const Cooked*>(&damaged), &wrongHash}) {
             const String path = folder.PathOf("agree.bin");
-            WriteFile(AsPath(path), StringView(reinterpret_cast<const char*>(cooked->bytes.data()), cooked->bytes.size()));
-            const auto fromFile = LoadContentFile(AsPath(path), Verify(true));
+            WriteFile(Path(path), StringView(reinterpret_cast<const char*>(cooked->bytes.data()), cooked->bytes.size()));
+            const auto fromFile = LoadContentFile(Path(path), Verify(true));
             const auto fromMemory = LoadContentBytes(View(cooked->bytes), Verify(true));
             ASSERT_EQ(fromFile.has_value(), fromMemory.has_value());
             if (!fromFile.has_value()) {
@@ -442,8 +438,8 @@ namespace BECore::Tests {
 
         const Cooked good = Cook(Fresh(3));
         const String path = folder.PathOf("agree.bin");
-        WriteFile(AsPath(path), StringView(reinterpret_cast<const char*>(good.bytes.data()), good.bytes.size()));
-        const auto fromFile = LoadContentFile(AsPath(path), Verify(true));
+        WriteFile(Path(path), StringView(reinterpret_cast<const char*>(good.bytes.data()), good.bytes.size()));
+        const auto fromFile = LoadContentFile(Path(path), Verify(true));
         const auto fromMemory = LoadContentBytes(View(good.bytes), Verify(true));
         ASSERT_TRUE(fromFile.has_value());
         ASSERT_TRUE(fromMemory.has_value());

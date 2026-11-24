@@ -7,7 +7,6 @@
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
-#include <filesystem>
 #include <gtest/gtest.h>
 #include <random>
 
@@ -120,15 +119,14 @@ namespace BECore::Tests {
     }
 
     TEST(BinaryDeserializerTest, AFileReadsTheSameAsTheBufferOfTheSameBytes) {
-        const std::filesystem::path path = TestTempPath("binary_deserializer_file");
+        const Path path = Path(TestTempPath("binary_deserializer_file"));
         BinarySerializer document;
         BuildDocument(document, 50);
         const bool saved = document.SaveToFile(path);
 
         BinaryDeserializer fromFile;
         const bool fileOpened = saved && fromFile.LoadFromFile(path);
-        std::error_code ignored;
-        std::filesystem::remove(path, ignored);
+        RemoveFileIfPresent(path);
         ASSERT_TRUE(fileOpened);
         ExpectDocument(fromFile, 50);
 
@@ -186,7 +184,7 @@ namespace BECore::Tests {
         const Vector<uint8_t> first = MakeStream(2, "AAAA");
         const Vector<uint8_t> second = MakeStream(5, "BBBB");
         const Vector<uint8_t> third = MakeStream(1, "CCCC");
-        const std::filesystem::path path = TestTempPath("binary_deserializer_replace");
+        const Path path = Path(TestTempPath("binary_deserializer_replace"));
         BinarySerializer document;
         BuildDocument(document, 0, "DDDD");
         const bool saved = document.SaveToFile(path);
@@ -199,8 +197,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(deserializer.LoadFromView(third.data(), third.size()));
         ExpectDocument(deserializer, 1, "CCCC");
         const bool fileOpened = saved && deserializer.LoadFromFile(path);
-        std::error_code ignored;
-        std::filesystem::remove(path, ignored);
+        RemoveFileIfPresent(path);
         ASSERT_TRUE(fileOpened);
         ExpectDocument(deserializer, 0, "DDDD");
         ASSERT_TRUE(deserializer.LoadFromView(first.data(), first.size()));
@@ -997,12 +994,11 @@ namespace BECore::Tests {
             ASSERT_TRUE(fromBuffer.LoadFromBuffer(bytes));
             ExpectReadsEntries(fromBuffer, tree, "buffer");
 
-            const std::filesystem::path path = TestTempPath(Format("binary_deserializer_v{}_file", version));
+            const Path path = Path(TestTempPath(Format("binary_deserializer_v{}_file", version)));
             WriteFile(path, StringView(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
             BinaryDeserializer fromFile;
             const bool opened = fromFile.LoadFromFile(path);
-            std::error_code ignored;
-            std::filesystem::remove(path, ignored);
+            RemoveFileIfPresent(path);
             ASSERT_TRUE(opened);
             ExpectReadsEntries(fromFile, tree, "file");
         }

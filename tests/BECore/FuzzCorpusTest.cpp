@@ -25,8 +25,8 @@ namespace BECore::Tests {
         constexpr uint32_t kMaxStackedMutations = 3;
 
         /// The committed seeds, tests/Fuzz/corpus of the engine
-        std::filesystem::path CorpusRoot() {
-            return std::filesystem::path(BagiContentRoots::kEngine) / "tests" / "Fuzz" / "corpus";
+        Path CorpusRoot() {
+            return Path(BagiContentRoots::kEngine) / "tests" / "Fuzz" / "corpus";
         }
 
         struct CorpusFile {
@@ -57,18 +57,18 @@ namespace BECore::Tests {
         }
 
         /// The files of a corpus folder in the order of their names (the order of a directory listing is not defined)
-        Vector<CorpusFile> LoadCorpus(const std::filesystem::path& folder) {
+        Vector<CorpusFile> LoadCorpus(const Path& folder) {
             Vector<CorpusFile> files;
-            std::error_code error;
-            for (const auto& entry : std::filesystem::directory_iterator(folder, error)) {
-                if (!entry.is_regular_file()) {
-                    continue;
+            const auto walked = WalkDirectory(folder, WalkMode::Folder, [&](StringView name, FileKind kind) {
+                if (kind == FileKind::File) {
+                    CorpusFile file;
+                    file.name = String(name);
+                    file.bytes = ReadFileBytes(folder / name);
+                    files.push_back(std::move(file));
                 }
-                CorpusFile file;
-                file.name = FromStdString(entry.path().filename().string());
-                file.bytes = ReadFileBytes(entry.path());
-                files.push_back(std::move(file));
-            }
+                return true;
+            });
+            EXPECT_TRUE(walked.has_value()) << "could not list " << folder.CStr() << ": " << (walked ? "" : walked.error().c_str());
             std::sort(files.begin(), files.end(), [](const CorpusFile& a, const CorpusFile& b) { return a.name < b.name; });
             return files;
         }
@@ -106,10 +106,10 @@ namespace BECore::Tests {
 
     TEST_P(FuzzReplayTest, ReplaysTheCorpusAndMutationsOfIt) {
         const FuzzTarget& target = FindTarget(GetParam().name);
-        const std::filesystem::path folder = CorpusRoot() / target.corpusFolder;
+        const Path folder = CorpusRoot() / target.corpusFolder;
 
         const Vector<CorpusFile> files = LoadCorpus(folder);
-        ASSERT_FALSE(files.empty()) << "no seeds in " << folder.string();
+        ASSERT_FALSE(files.empty()) << "no seeds in " << folder.CStr();
 
         Vector<FuzzBytes> seeds;
         for (const CorpusFile& file : files) {
@@ -144,7 +144,7 @@ namespace BECore::Tests {
 
     TEST(FuzzCorpusTest, GeneratedSeedsAreTheCommittedFiles) {
         for (const Fuzz::FuzzSeedFile& seed : Fuzz::MakeGeneratedSeeds()) {
-            const Vector<CorpusFile> files = LoadCorpus(CorpusRoot() / seed.folder);
+            const Vector<CorpusFile> files = LoadCorpus(CorpusRoot() / Path(seed.folder));  //-NoStd: seed.folder is a std::filesystem::path until FuzzSeeds.h moves (stage 6)
             const auto found = std::find_if(files.begin(), files.end(), [&](const CorpusFile& file) { return file.name == seed.name; });
             ASSERT_NE(found, files.end()) << seed.name << " is not in the corpus: run WriteSeeds";
             EXPECT_TRUE(std::equal(found->bytes.begin(), found->bytes.end(), seed.bytes.begin(), seed.bytes.end())) << seed.name << " differs from what the writers make now: run WriteSeeds";
